@@ -1,7 +1,7 @@
 /**
  * Performance Configuration for DIVE V3 Backend
  * Phase 5 Task 5.4: Performance Optimization
- * 
+ *
  * Optimizations implemented:
  * 1. Database connection pooling
  * 2. Redis caching configuration
@@ -163,7 +163,7 @@ export const apmConfig = {
 
 /**
  * Middleware to add performance headers
- * 
+ *
  * FIXED: Set headers before response is sent, not in 'finish' event
  */
 export function performanceHeadersMiddleware(req: Request, res: Response, next: NextFunction) {
@@ -186,8 +186,7 @@ export function performanceHeadersMiddleware(req: Request, res: Response, next: 
         }
 
         // Call original end method
-        // @ts-expect-error - args is dynamically typed based on how res.end() is called
-        return originalEnd.apply(this, args);
+        return originalEnd.apply(this, args as Parameters<typeof originalEnd>);
     };
 
     next();

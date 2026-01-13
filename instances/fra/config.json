@@ -1,6 +1,6 @@
 {
   "identity": {
-    "spokeId": "spoke-fra-f9111a3e",
+    "spokeId": "spoke-fra-52abd370",
     "instanceCode": "FRA",
     "name": "France Defence Force",
     "description": "DIVE V3 Spoke Instance for France Defence Force",
@@ -45,8 +45,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2026-01-12T18:24:12Z",
-    "lastModified": "2026-01-12T18:24:12Z",
+    "createdAt": "2026-01-13T16:54:22Z",
+    "lastModified": "2026-01-13T16:54:22Z",
     "configHash": ""
   }
 }

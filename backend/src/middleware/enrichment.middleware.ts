@@ -189,6 +189,19 @@ const EMAIL_DOMAIN_COUNTRY_MAP: Record<string, string> = {
 const VALID_CLEARANCE_LEVELS = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
 
 /**
+ * Default COI memberships by country (from policy configurations)
+ * ISO 3166-1 alpha-3 country codes
+ */
+const DEFAULT_COI_BY_COUNTRY: Record<string, string[]> = {
+    'USA': ['US-ONLY', 'FVEY', 'NATO'],
+    'FRA': ['FRA-US', 'NATO', 'EU-RESTRICTED'],
+    'GBR': ['GBR-US', 'FVEY', 'NATO', 'AUKUS'],
+    'DEU': ['DEU-US', 'NATO'],
+    'CAN': ['CAN-US', 'FVEY', 'NATO'],
+    // Add other countries as needed
+};
+
+/**
  * Infer countryOfAffiliation from email address
  * @param email User's email address
  * @returns ISO 3166-1 alpha-3 country code or 'USA' (default)
@@ -430,8 +443,49 @@ export async function enrichmentMiddleware(
             }
         }
 
-        // Enrichment 3: acpCOI missing
-        if (!payload.acpCOI) {
+        // Enrichment 3: acpCOI enrichment
+        let userCoi: string[] = [];
+        if (payload.acpCOI) {
+            // Parse existing COI (handle both string and array formats)
+            if (typeof payload.acpCOI === 'string') {
+                try {
+                    userCoi = JSON.parse(payload.acpCOI);
+                } catch {
+                    // If parsing fails, treat as comma-separated string
+                    userCoi = payload.acpCOI.split(',').map((s: string) => s.trim()).filter((s: string) => s);
+                }
+            } else if (Array.isArray(payload.acpCOI)) {
+                userCoi = payload.acpCOI;
+            }
+        }
+
+        // Add default COI for the user's country if not already present
+        const countryDefaults = DEFAULT_COI_BY_COUNTRY[payload.countryOfAffiliation];
+        if (countryDefaults) {
+            const originalCoi = [...userCoi];
+            for (const defaultCoi of countryDefaults) {
+                if (!userCoi.includes(defaultCoi)) {
+                    userCoi.push(defaultCoi);
+                }
+            }
+
+            // Update payload if COI was enriched
+            if (userCoi.length !== originalCoi.length) {
+                payload.acpCOI = userCoi;  // Keep as array, not JSON string
+                enriched = true;
+                const addedCoi = userCoi.filter(coi => !originalCoi.includes(coi));
+                enrichments.push(`acpCOI added defaults: ${addedCoi.join(', ')} (for ${payload.countryOfAffiliation})`);
+
+                logger.info('enrichment', 'Added default COI memberships', {
+                    requestId,
+                    uniqueID: payload.uniqueID,
+                    country: payload.countryOfAffiliation,
+                    addedCoi,
+                    finalCoi: userCoi
+                });
+            }
+        } else if (!payload.acpCOI) {
+            // No existing COI and no defaults for this country
             payload.acpCOI = '[]';
             enriched = true;
             enrichments.push('acpCOI=[] (default)');
@@ -451,12 +505,12 @@ export async function enrichmentMiddleware(
                 originalClaims: {
                     clearance: originalClaims.clearance,
                     countryOfAffiliation: originalClaims.countryOfAffiliation,
-                    acpCOI: originalClaims.acpCOI
+                    acpCOI: Array.isArray(originalClaims.acpCOI) ? originalClaims.acpCOI : (originalClaims.acpCOI ? JSON.parse(originalClaims.acpCOI) : [])
                 },
                 enrichedClaims: {
                     clearance: payload.clearance,
                     countryOfAffiliation: payload.countryOfAffiliation,
-                    acpCOI: payload.acpCOI
+                    acpCOI: Array.isArray(payload.acpCOI) ? payload.acpCOI : (payload.acpCOI ? JSON.parse(payload.acpCOI) : [])
                 }
             });
 

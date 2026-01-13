@@ -91,13 +91,18 @@ services:
   # ==========================================================================
   # DATABASE SERVICES
   # ==========================================================================
+  # NOTE: All secrets use instance-suffixed environment variables
+  # Example: ${POSTGRES_PASSWORD_NZL} (not ${POSTGRES_PASSWORD})
+  # This ensures each spoke has isolated, unique credentials
+  # Secret management: scripts/dive-modules/spoke/pipeline/spoke-secrets.sh
+  # ==========================================================================
 
   postgres-{{INSTANCE_CODE_LOWER}}:
     image: postgres:15-alpine
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-postgres
     environment:
       POSTGRES_USER: keycloak
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_{{INSTANCE_CODE_UPPER}}}
       POSTGRES_DB: keycloak
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -116,7 +121,7 @@ services:
     environment:
       MONGO_INITDB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
       MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}
     volumes:
       - mongodb_data:/data/db
       - mongodb_config:/data/configdb  # Prevent anonymous volume creation
@@ -158,9 +163,9 @@ services:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres-{{INSTANCE_CODE_LOWER}}:5432/keycloak
       KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
-      KC_ADMIN: admin
-      KC_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD_{{INSTANCE_CODE_UPPER}}}
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_{{INSTANCE_CODE_UPPER}}}
       KC_HOSTNAME: {{IDP_HOSTNAME}}
       KC_HOSTNAME_STRICT: "false"
       KC_PROXY_HEADERS: xforwarded
@@ -175,7 +180,7 @@ services:
       # Terraform SSOT: Skip JSON import, Keycloak starts empty
       SKIP_REALM_IMPORT: "true"
       # Legacy realm import variables (kept for compatibility, but not used)
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_{{INSTANCE_CODE_UPPER}}}
       APP_URL: {{BASE_URL}}
       API_URL: {{API_URL}}
       USA_IDP_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
@@ -196,7 +201,7 @@ services:
     networks:
       - dive-internal
     healthcheck:
-      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health/ready || exit 1"]
+      test: ["CMD-SHELL", "curl -ksf https://localhost:8443/realms/master >/dev/null"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -211,12 +216,13 @@ services:
     image: openpolicyagent/opa:1.12.1
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-opa
     platform: linux/amd64
-    command: run --server --addr :8181 /policies/base /policies/entrypoints /policies/tenant /policies/org /policies/compat
+    command: run --server --addr :8181 --set=decision_logs.console=true --set=data_api_enabled=true --set=policies_api_enabled=true --set=tls_cert_file=/certs/certificate.pem --set=tls_private_key_file=/certs/key.pem /policies/base /policies/entrypoints /policies/tenant /policies/org /policies/compat
     ports:
       - "{{OPA_HOST_PORT}}:8181"
     volumes:
       - ../../policies:/policies:ro
       - ./cache/policies:/var/opa/cache
+      - ./certs:/certs:ro
     networks:
       - dive-internal
     healthcheck:
@@ -231,14 +237,25 @@ services:
       context: ../../docker
       dockerfile: opal-client.Dockerfile
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-opal-client
+    entrypoint: ["/bin/bash", "-c"]
+    command: ["/usr/local/bin/opal-entrypoint.sh"]
     environment:
       # Hub OPAL Server URL - from environment variable (required)
       OPAL_SERVER_URL: ${HUB_OPAL_URL:?HUB_OPAL_URL required - set in .env}
       # Authentication - token and public key from Hub
       OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:-}
       OPAL_AUTH_PUBLIC_KEY: ${OPAL_AUTH_PUBLIC_KEY}
-      OPAL_INLINE_OPA_ENABLED: "false"
-      OPAL_OPA_URL: http://opa-{{INSTANCE_CODE_LOWER}}:8181
+      # Use inline OPA like Hub - CRITICAL for policy synchronization
+      OPAL_INLINE_OPA_ENABLED: "true"
+      OPAL_INLINE_OPA_CONFIG: |
+        {
+          "addr": "0.0.0.0:8181",
+          "log_level": "info",
+          "log_format": "json",
+          "decision_logs": {
+            "console": true
+          }
+        }
       OPAL_SUBSCRIPTION_ID: {{SPOKE_ID}}
       # Data topics to subscribe to (must match Hub topics)
       OPAL_DATA_TOPICS: policy_data
@@ -247,27 +264,30 @@ services:
       OPAL_RECONNECT_INTERVAL: 5
       OPAL_RECONNECT_MAX_INTERVAL: 300
       OPAL_POLICY_REFRESH_INTERVAL: 60
-      # Local OPA policy/data store
-      OPAL_POLICY_STORE_URL: http://opa-{{INSTANCE_CODE_LOWER}}:8181/v1/policies
-      OPAL_DATA_STORE_URL: http://opa-{{INSTANCE_CODE_LOWER}}:8181/v1/data
+      # SSL Certificate Trust - CRITICAL for Hub OPAL server connection
+      SSL_CERT_FILE: /var/opal/certs/rootCA.pem
+      REQUESTS_CA_BUNDLE: /var/opal/certs/rootCA.pem
+      WEBSOCKET_SSL_CERT: /var/opal/certs/rootCA.pem
+    ports:
+      - "{{OPAL_OPA_PORT}}:8181"  # Expose inline OPA for backend
     volumes:
       - opal_cache:/var/opal/cache
       - ./certs:/var/opal/certs:ro
-    depends_on:
-      opa-{{INSTANCE_CODE_LOWER}}:
-        condition: service_healthy
+      - ../../instances/hub/certs:/var/opal/hub-certs:ro  # Mount Hub CA for SSL trust
     networks:
-      - dive-internal
+      - dive-internal      # Internal spoke communication
+      - dive-shared        # CRITICAL: Required for Hub OPAL server communication
     extra_hosts:
       - "localhost:host-gateway"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8181/health"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 30s
     restart: unless-stopped
     # NO profiles restriction - ALWAYS start for policy sync with Hub
+    # NO dependency on external OPA - using inline OPA
 
   # ==========================================================================
   # BACKEND API
@@ -289,20 +309,21 @@ services:
       SPOKE_ID: {{SPOKE_ID}}
       SPOKE_MODE: "true"
       # MongoDB
-      MONGODB_URI: mongodb://admin:${MONGO_PASSWORD}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/dive-v3-{{INSTANCE_CODE_LOWER}}?authSource=admin
-      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/dive-v3-{{INSTANCE_CODE_LOWER}}?authSource=admin
+      MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/dive-v3-{{INSTANCE_CODE_LOWER}}?authSource=admin
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/dive-v3-{{INSTANCE_CODE_LOWER}}?authSource=admin
       MONGODB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
       REDIS_URL: redis://redis-{{INSTANCE_CODE_LOWER}}:6379
-      # Keycloak
-      KEYCLOAK_URL: {{IDP_BASE_URL}}
+      # Keycloak (internal Docker network URL for backend API calls)
+      KEYCLOAK_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
       KEYCLOAK_REALM: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
       KEYCLOAK_ISSUER: {{IDP_BASE_URL}}/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}}
       # CRITICAL: Include Hub issuer for cross-instance federation
       TRUSTED_ISSUERS: {{IDP_BASE_URL}}/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}},https://keycloak-{{INSTANCE_CODE_LOWER}}:8443/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}},https://localhost:8443/realms/dive-v3-broker,https://keycloak:8443/realms/dive-v3-broker,https://usa-idp.dive25.com/realms/dive-v3-broker
       KEYCLOAK_ADMIN_USER: admin
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_{{INSTANCE_CODE_UPPER}}}
       # OPA
-      OPA_URL: http://opa-{{INSTANCE_CODE_LOWER}}:8181
+      # OPA - Use OPAL client's inline OPA for policy decisions
+      OPA_URL: http://opal-client-{{INSTANCE_CODE_LOWER}}:8181
       # API URL for Swagger/OpenAPI documentation
       API_URL: {{API_URL}}
       # CORS
@@ -329,7 +350,7 @@ services:
     depends_on:
       mongodb-{{INSTANCE_CODE_LOWER}}:
         condition: service_healthy
-      opa-{{INSTANCE_CODE_LOWER}}:
+      opal-client-{{INSTANCE_CODE_LOWER}}:
         condition: service_healthy
     networks:
       - dive-internal      # Internal spoke communication
@@ -359,9 +380,10 @@ services:
       CERT_FILE: certificate.pem
       BACKEND_URL: https://backend-{{INSTANCE_CODE_LOWER}}:4000
       # SECURITY: Trust mkcert CA instead of disabling TLS verification
-      NODE_EXTRA_CA_CERTS: /opt/app/certs/ca/rootCA.pem
-      OPA_URL: http://opa-{{INSTANCE_CODE_LOWER}}:8181
-      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb-{{INSTANCE_CODE_LOWER}}:27017?authSource=admin
+      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
+      # OPA - Use OPAL client's inline OPA for policy decisions
+      OPA_URL: http://opal-client-{{INSTANCE_CODE_LOWER}}:8181
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017?authSource=admin
       MONGODB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
       LOG_LEVEL: info
       KEYCLOAK_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
@@ -370,7 +392,7 @@ services:
     ports:
       - "{{KAS_HOST_PORT}}:8080"
     depends_on:
-      opa-{{INSTANCE_CODE_LOWER}}:
+      opal-client-{{INSTANCE_CODE_LOWER}}:
         condition: service_healthy
       mongodb-{{INSTANCE_CODE_LOWER}}:
         condition: service_healthy
@@ -378,7 +400,7 @@ services:
       - dive-internal
     volumes:
       - ./certs:/opt/app/certs:ro
-      - ../../certs/mkcert:/opt/app/certs/ca:ro  # mkcert root CA for TLS trust
+      - ../../certs/mkcert:/app/certs/ca:ro  # mkcert root CA for TLS trust
       - ../../kas/src:/app/src
       - kas_logs:/app/logs
       - ../../config:/app/config:ro
@@ -417,17 +439,17 @@ services:
       # Internal URL for SSR requests
       BACKEND_URL: https://backend-{{INSTANCE_CODE_LOWER}}:4000
       NEXTAUTH_URL: {{BASE_URL}}
-      NEXTAUTH_SECRET: ${AUTH_SECRET}
+      NEXTAUTH_SECRET: ${AUTH_SECRET_{{INSTANCE_CODE_UPPER}}}
       # Database for NextAuth sessions
-      DATABASE_URL: postgres://keycloak:${POSTGRES_PASSWORD}@postgres-{{INSTANCE_CODE_LOWER}}:5432/keycloak
-      # Keycloak OAuth config
-      KEYCLOAK_URL: {{IDP_BASE_URL}}
+      DATABASE_URL: postgres://keycloak:${POSTGRES_PASSWORD_{{INSTANCE_CODE_UPPER}}}@postgres-{{INSTANCE_CODE_LOWER}}:5432/keycloak
+      # Keycloak OAuth config (internal Docker network URL for SSR/API calls)
+      KEYCLOAK_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
       KEYCLOAK_REALM: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
       KEYCLOAK_CLIENT_ID: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_{{INSTANCE_CODE_UPPER}}}
       # NextAuth v5 Keycloak provider
       AUTH_KEYCLOAK_ID: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
-      AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET_{{INSTANCE_CODE_UPPER}}}
       AUTH_KEYCLOAK_ISSUER: {{IDP_BASE_URL}}/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}}
       AUTH_POST_LOGOUT_REDIRECT: {{BASE_URL}}
     ports:

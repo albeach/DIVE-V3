@@ -203,7 +203,7 @@ export NC='\033[0m'
 
 # Defaults (can be overridden by environment)
 export ENVIRONMENT="${DIVE_ENV:-local}"
-export INSTANCE="${DIVE_INSTANCE:-usa}"
+export INSTANCE="${INSTANCE:-${DIVE_INSTANCE:-usa}}"
 export GCP_PROJECT="${GCP_PROJECT:-dive25}"
 export PILOT_VM="${PILOT_VM:-dive-v3-pilot}"
 export PILOT_ZONE="${PILOT_ZONE:-us-east4-c}"
@@ -502,6 +502,58 @@ check_certs() {
 # SECRETS LOADING (used by multiple modules)
 # =============================================================================
 
+# Ensure required GCP secrets exist, generating them if necessary
+ensure_gcp_secrets_exist() {
+    local instance="${1:-usa}"
+    local inst_lc
+    inst_lc=$(echo "$instance" | tr '[:upper:]' '[:lower:]')
+    local project="${GCP_PROJECT:-dive25}"
+
+    log_step "Ensuring GCP secrets exist for $(upper "$instance")..."
+
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would check/create secrets in GCP Secret Manager"
+        return 0
+    fi
+
+    check_gcloud || { log_error "GCP authentication required"; return 1; }
+
+    # Function to generate a secure password
+    generate_secure_password() {
+        openssl rand -base64 32 | tr -d '/+=' | head -c 24
+    }
+
+    # Function to create secret if it doesn't exist
+    create_secret_if_missing() {
+        local secret_name="$1"
+        local description="$2"
+
+        if ! gcloud secrets describe "$secret_name" --project="$project" >/dev/null 2>&1; then
+            local password
+            password=$(generate_secure_password)
+            log_info "Creating GCP secret: $secret_name"
+
+            echo -n "$password" | gcloud secrets create "$secret_name" \
+                --project="$project" \
+                --data-file=- \
+                --description="$description" \
+                --labels=environment="$ENVIRONMENT",instance="$inst_lc",managed-by=dive-cli,created-by="$(whoami)@$(hostname)",created-at="$(date -u +%Y%m%d-%H%M%S)"
+        fi
+    }
+
+    # Create instance-specific secrets
+    create_secret_if_missing "dive-v3-postgres-${inst_lc}" "PostgreSQL password for ${instance} database"
+    create_secret_if_missing "dive-v3-keycloak-${inst_lc}" "Keycloak admin password for ${instance}"
+    create_secret_if_missing "dive-v3-mongodb-${inst_lc}" "MongoDB root password for ${instance}"
+    create_secret_if_missing "dive-v3-auth-secret-${inst_lc}" "JWT/Auth secret for ${instance}"
+
+    # Create shared secrets (only once)
+    create_secret_if_missing "dive-v3-keycloak-client-secret" "Shared Keycloak client secret"
+    create_secret_if_missing "dive-v3-redis-blacklist" "Shared Redis blacklist password"
+
+    log_success "All GCP secrets verified/created for $(upper "$instance")"
+}
+
 load_gcp_secrets() {
     local instance="${1:-usa}"
     # Normalize instance to lowercase for secret names (secrets use lowercase suffixes)
@@ -668,13 +720,23 @@ load_secrets() {
             fi
 
             if [ "$want_gcp" = true ]; then
-                if load_gcp_secrets "$INSTANCE"; then
-                    return 0
-                else
-                    log_warn "GCP secrets load failed; falling back to local defaults for env '$ENVIRONMENT'"
-                fi
+                ensure_gcp_secrets_exist "$INSTANCE" || return 1
+                load_gcp_secrets "$INSTANCE" || return 1
+                return 0
             fi
-            load_local_defaults
+
+            # Local development without GCP - require explicit opt-in
+            if [ "${ALLOW_INSECURE_LOCAL_DEVELOPMENT:-false}" = "true" ]; then
+                log_error "⚠️  USING INSECURE LOCAL DEVELOPMENT MODE ⚠️"
+                log_error "This should NEVER be used in shared or production environments"
+                load_local_defaults
+            else
+                log_error "No GCP Secret Manager access and ALLOW_INSECURE_LOCAL_DEVELOPMENT=false"
+                log_error "For local development without GCP:"
+                log_error "  export ALLOW_INSECURE_LOCAL_DEVELOPMENT=true"
+                log_error "  OR set up GCP authentication"
+                return 1
+            fi
             ;;
         gcp|pilot|prod|staging)
             load_gcp_secrets "$INSTANCE" || return 1
@@ -684,6 +746,78 @@ load_secrets() {
             return 1
             ;;
     esac
+}
+
+# Get the correct external ports for a spoke instance
+_get_spoke_ports() {
+    local code="$1"
+    local code_lc
+    code_lc=$(echo "$code" | tr '[:upper:]' '[:lower:]')
+
+    # Load NATO country data to get port offsets
+    if [ -z "$NATO_COUNTRIES_LOADED" ]; then
+        source "$(dirname "${BASH_SOURCE[0]}")/../nato-countries.sh" 2>/dev/null || true
+        export NATO_COUNTRIES_LOADED=1
+    fi
+
+    # Calculate port offsets (same logic as nato-countries.sh)
+    local offset=0
+    case "$code_lc" in
+        gbr) offset=1 ;;
+        fra) offset=2 ;;
+        deu) offset=3 ;;
+        can) offset=4 ;;
+        dnk) offset=5 ;;
+        pol) offset=6 ;;
+        nor) offset=7 ;;
+        esp) offset=8 ;;
+        ita) offset=9 ;;
+        bel) offset=10 ;;
+        alb) offset=11 ;;
+        hrv) offset=12 ;;
+        est) offset=13 ;;
+        lva) offset=14 ;;
+        ltu) offset=15 ;;
+        lux) offset=16 ;;
+        nld) offset=17 ;;
+        svk) offset=18 ;;
+        svn) offset=19 ;;
+        swe) offset=20 ;;
+        tur) offset=21 ;;
+        hun) offset=22 ;;
+        bgr) offset=23 ;;
+        rou) offset=24 ;;
+        prt) offset=25 ;;
+        grc) offset=26 ;;
+        isl) offset=27 ;;
+        mne) offset=28 ;;
+        cze) offset=29 ;;
+        fin) offset=30 ;;
+        nzl) offset=32 ;;  # NZL is at offset 32
+        *) offset=0 ;;      # USA and others at base ports
+    esac
+
+    # Export the calculated ports
+    export SPOKE_FRONTEND_PORT=$((3000 + offset))
+    export SPOKE_BACKEND_PORT=$((4000 + offset))
+    export SPOKE_KEYCLOAK_HTTPS_PORT=$((8443 + offset))
+    export SPOKE_KEYCLOAK_HTTP_PORT=$((8080 + offset))  # Keycloak HTTP management port
+    export SPOKE_OPA_PORT=$((8181 + offset))
+    export SPOKE_KAS_PORT=$((9000 + offset))  # Fixed: was 8080 (conflicted with Keycloak HTTP)
+    export SPOKE_POSTGRES_PORT=$((5432 + offset))
+    export SPOKE_MONGODB_PORT=$((27017 + offset))
+    export SPOKE_REDIS_PORT=$((6379 + offset))
+
+    # Output for eval
+    echo "SPOKE_FRONTEND_PORT=$SPOKE_FRONTEND_PORT"
+    echo "SPOKE_BACKEND_PORT=$SPOKE_BACKEND_PORT"
+    echo "SPOKE_KEYCLOAK_HTTPS_PORT=$SPOKE_KEYCLOAK_HTTPS_PORT"
+    echo "SPOKE_KEYCLOAK_HTTP_PORT=$SPOKE_KEYCLOAK_HTTP_PORT"  # Added HTTP port
+    echo "SPOKE_OPA_PORT=$SPOKE_OPA_PORT"
+    echo "SPOKE_KAS_PORT=$SPOKE_KAS_PORT"
+    echo "SPOKE_POSTGRES_PORT=$SPOKE_POSTGRES_PORT"
+    echo "SPOKE_MONGODB_PORT=$SPOKE_MONGODB_PORT"
+    echo "SPOKE_REDIS_PORT=$SPOKE_REDIS_PORT"
 }
 
 apply_env_profile() {

@@ -1,9 +1,9 @@
 {
   "identity": {
-    "spokeId": "spoke-nzl-ed979b41",
+    "spokeId": "spoke-nzl-cb15650d",
     "instanceCode": "NZL",
-    "name": "New Zealand",
-    "description": "DIVE V3 Spoke Instance for New Zealand",
+    "name": "NZL Instance",
+    "description": "DIVE V3 Spoke Instance for NZL",
     "country": "NZL",
     "organizationType": "government",
     "contactEmail": "admin@nzl.dive25.com"
@@ -12,11 +12,11 @@
     "hubUrl": "https://localhost:4000",
     "hubApiUrl": "https://localhost:4000/api",
     "hubOpalUrl": "https://localhost:7002",
-    "baseUrl": "https://localhost:3033",
-    "apiUrl": "https://localhost:4033",
+    "baseUrl": "https://localhost:3032",
+    "apiUrl": "https://localhost:4032",
     "idpUrl": "https://dive-spoke-nzl-keycloak:8443",
-    "idpPublicUrl": "https://localhost:8476",
-    "kasUrl": "https://localhost:10033"
+    "idpPublicUrl": "https://localhost:8475",
+    "kasUrl": "https://localhost:9032"
   },
   "certificates": {
     "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/nzl/certs/spoke.crt",
@@ -45,8 +45,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2026-01-03T07:14:28Z",
-    "lastModified": "2026-01-03T07:14:28Z",
+    "createdAt": "2026-01-13T19:46:16Z",
+    "lastModified": "2026-01-13T19:46:16Z",
     "configHash": ""
   }
 }

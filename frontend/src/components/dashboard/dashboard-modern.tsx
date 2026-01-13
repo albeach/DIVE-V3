@@ -166,6 +166,8 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
         ],
         topDenyReasons: statsData?.details?.topDenyReasons,
         decisionsByCountry: statsData?.details?.decisionsByCountry,
+        // Add all the new real data fields
+        details: statsData?.details,
       });
       setLastRefresh(new Date());
       } catch (error) {
@@ -522,14 +524,14 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
 
             {activeTab === 'authorization' && (
               <DashboardAuthorization
-                decisions={[]}
+                decisions={data.details?.recentDecisions || []}
                 stats={{
-                  totalDecisions: 0,
-                  allowedCount: 0,
-                  deniedCount: 0,
-                  avgLatencyMs: 45,
-                  topDenyReasons: data.topDenyReasons,
-                  decisionsByCountry: data.decisionsByCountry,
+                  totalDecisions: data.details?.totalDecisions || 0,
+                  allowedCount: data.details?.allowCount || 0,
+                  deniedCount: data.details?.denyCount || 0,
+                  avgLatencyMs: data.details?.avgResponseTime || 45,
+                  topDenyReasons: data.details?.topDenyReasons,
+                  decisionsByCountry: data.details?.decisionsByCountry,
                 }}
                 userClearance={clearanceLevel}
                 userCountry={country}
@@ -540,10 +542,15 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
             {activeTab === 'resources' && (
               <DashboardResources
                 stats={{
-                  totalAccessible: parseInt(data.quickStats[0]?.value?.toString() || '0') || 0,
-                  byClassification: { UNCLASSIFIED: 0, CONFIDENTIAL: 0, SECRET: 0, TOP_SECRET: 0 },
-                  recentlyAccessed: [],
-                  uploadedByUser: 0,
+                  totalAccessible: data.details?.totalDocuments || parseInt(data.quickStats[0]?.value?.toString() || '0') || 0,
+                  byClassification: {
+                    UNCLASSIFIED: (data.details?.byClassification?.UNCLASSIFIED || 0),
+                    CONFIDENTIAL: (data.details?.byClassification?.CONFIDENTIAL || 0),
+                    SECRET: (data.details?.byClassification?.SECRET || 0),
+                    TOP_SECRET: (data.details?.byClassification?.TOP_SECRET || 0)
+                  },
+                  recentlyAccessed: data.details?.recentlyAccessed || [],
+                  uploadedByUser: data.details?.uploadedByUser || 0,
                 }}
                 userClearance={clearanceLevel}
                 userCountry={country}
@@ -552,10 +559,10 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
 
             {activeTab === 'activity' && (
               <DashboardActivity
-                auditEvents={[]}
-                complianceMetrics={[]}
-                lastLogin={new Date().toISOString()}
-                sessionCount={1}
+                auditEvents={data.details?.recentAuditEvents || []}
+                complianceMetrics={data.details?.complianceMetrics || []}
+                lastLogin={data.details?.lastLogin ? new Date(data.details.lastLogin).toISOString() : new Date().toISOString()}
+                sessionCount={data.details?.sessionCount || 1}
               />
             )}
           </motion.div>

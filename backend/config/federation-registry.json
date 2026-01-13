@@ -743,6 +743,83 @@
           "protocol": "http"
         }
       }
+    },
+    "nzl": {
+      "code": "NZL",
+      "name": "New Zealand",
+      "locale": "en-NZ",
+      "type": "spoke",
+      "primary": false,
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "localhost",
+        "domain": "dive25.com",
+        "composeFile": "docker-compose.yml",
+        "projectName": "nzl"
+      },
+      "services": {
+        "frontend": {
+          "name": "frontend-nzl",
+          "containerName": "dive-spoke-nzl-frontend",
+          "internalPort": 3000,
+          "externalPort": 3033,
+          "protocol": "https",
+          "hostname": "nzl-app.dive25.com"
+        },
+        "backend": {
+          "name": "backend-nzl",
+          "containerName": "dive-spoke-nzl-backend",
+          "internalPort": 4000,
+          "externalPort": 4033,
+          "protocol": "https",
+          "hostname": "nzl-api.dive25.com"
+        },
+        "keycloak": {
+          "name": "keycloak-nzl",
+          "containerName": "dive-spoke-nzl-keycloak",
+          "internalPort": 8443,
+          "externalPort": 8476,
+          "protocol": "https",
+          "hostname": "nzl-idp.dive25.com"
+        },
+        "opa": {
+          "name": "opa-nzl",
+          "containerName": "dive-spoke-nzl-opa",
+          "internalPort": 8181,
+          "externalPort": 8214,
+          "protocol": "http",
+          "hostname": "nzl-opa.dive25.com"
+        },
+        "mongodb": {
+          "name": "mongodb-nzl",
+          "containerName": "dive-spoke-nzl-mongodb",
+          "internalPort": 27017,
+          "externalPort": 27050,
+          "protocol": "mongodb",
+          "hostname": "nzl-mongo.dive25.com"
+        },
+        "postgres": {
+          "name": "postgres-nzl",
+          "containerName": "dive-spoke-nzl-postgres",
+          "internalPort": 5432,
+          "externalPort": 5465,
+          "protocol": "postgresql",
+          "hostname": "nzl-postgres.dive25.com"
+        },
+        "kas": {
+          "name": "kas-nzl",
+          "containerName": "dive-spoke-nzl-kas",
+          "internalPort": 8080,
+          "externalPort": 10033,
+          "protocol": "https",
+          "hostname": "nzl-kas.dive25.com"
+        }
+      },
+      "mongodb": {
+        "database": "dive-v3-nzl",
+        "user": "admin"
+      }
     }
   },
   "federation": {

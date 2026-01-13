@@ -828,6 +828,10 @@ _create_protocol_mapper() {
 # tokens into local user attributes.
 ##
 _configure_idp_mappers() {
+    # #region agent log - hypothesis B: IdP mappers creation tracking
+    echo '{"id":"log_'"$(date +%s)"'_hypB","timestamp":'$(date +%s)'000,"location":"federation-link.sh:837","message":"_configure_idp_mappers called","data":{"realm":"'"$3"'","idp_alias":"'"$4"'"},"sessionId":"debug-session","runId":"debug-run-1","hypothesisId":"B"}' >> /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/.cursor/debug.log
+    # #endregion
+
     local kc_container="$1"
     local token="$2"
     local realm="$3"
@@ -838,6 +842,9 @@ _configure_idp_mappers() {
     local claims=("clearance" "countryOfAffiliation" "uniqueID" "acpCOI" "amr" "acr")
 
     for claim in "${claims[@]}"; do
+        # #region agent log - hypothesis B: IdP mapper creation attempt
+        echo '{"id":"log_'"$(date +%s)"'_hypB_create","timestamp":'$(date +%s)'000,"location":"federation-link.sh:847","message":"Creating IdP mapper","data":{"claim":"'"$claim"'","idp_alias":"'"$idp_alias"'","realm":"'"$realm"'"},"sessionId":"debug-session","runId":"debug-run-1","hypothesisId":"B"}' >> /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/.cursor/debug.log
+        # #endregion
         _create_idp_mapper "$kc_container" "$token" "$realm" "$idp_alias" "$claim" "$claim" "import-${claim}"
     done
 }
@@ -846,6 +853,10 @@ _configure_idp_mappers() {
 # Create a single IdP mapper
 ##
 _create_idp_mapper() {
+    # #region agent log - hypothesis B: IdP mapper creation start
+    echo '{"id":"log_'"$(date +%s)"'_hypB_mapper","timestamp":'$(date +%s)'000,"location":"federation-link.sh:862","message":"_create_idp_mapper called","data":{"realm":"'"$3"'","idp_alias":"'"$4"'","claim_name":"'"$5"'","mapper_name":"'"$7"'"},"sessionId":"debug-session","runId":"debug-run-1","hypothesisId":"B"}' >> /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/.cursor/debug.log
+    # #endregion
+
     local kc_container="$1"
     local token="$2"
     local realm="$3"
@@ -873,6 +884,9 @@ _create_idp_mapper() {
 
     if [ -n "$existing" ]; then
         # Update existing mapper
+        # #region agent log - hypothesis B: Updating existing IdP mapper
+        echo '{"id":"log_'"$(date +%s)"'_hypB_update","timestamp":'$(date +%s)'000,"location":"federation-link.sh:892","message":"Updating existing IdP mapper","data":{"existing":"'"$existing"'","mapper_name":"'"$mapper_name"'","realm":"'"$realm"'","idp_alias":"'"$idp_alias"'"},"sessionId":"debug-session","runId":"debug-run-1","hypothesisId":"B"}' >> /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/.cursor/debug.log
+        # #endregion
         docker exec "$kc_container" curl -sf \
             -X PUT "http://localhost:8080/admin/realms/${realm}/identity-provider/instances/${idp_alias}/mappers/${existing}" \
             -H "Authorization: Bearer $token" \
@@ -880,6 +894,9 @@ _create_idp_mapper() {
             -d "$mapper_config" >/dev/null 2>&1 || true
     else
         # Create new mapper
+        # #region agent log - hypothesis B: Creating new IdP mapper
+        echo '{"id":"log_'"$(date +%s)"'_hypB_create","timestamp":'$(date +%s)'000,"location":"federation-link.sh:899","message":"Creating new IdP mapper","data":{"mapper_name":"'"$mapper_name"'","realm":"'"$realm"'","idp_alias":"'"$idp_alias"'"},"sessionId":"debug-session","runId":"debug-run-1","hypothesisId":"B"}' >> /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/.cursor/debug.log
+        # #endregion
         docker exec "$kc_container" curl -sf \
             -X POST "http://localhost:8080/admin/realms/${realm}/identity-provider/instances/${idp_alias}/mappers" \
             -H "Authorization: Bearer $token" \
@@ -1090,7 +1107,15 @@ _get_keycloak_admin_password_ssot() {
 
     if [ -f "$env_file" ]; then
         local env_password
-        env_password=$(grep "^KEYCLOAK_ADMIN_PASSWORD" "$env_file" | cut -d'=' -f2- | tr -d '\n\r"' | sed 's/#.*//')
+        local instance_upper="${instance_code^^}"
+
+        # CRITICAL FIX: Try instance-suffixed variable first (new pipeline convention)
+        env_password=$(grep "^KEYCLOAK_ADMIN_PASSWORD_${instance_upper}=" "$env_file" | cut -d'=' -f2- | tr -d '\n\r"' | sed 's/#.*//')
+
+        # Fallback to generic variable for backward compatibility
+        if [ -z "$env_password" ]; then
+            env_password=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" "$env_file" | cut -d'=' -f2- | tr -d '\n\r"' | sed 's/#.*//')
+        fi
 
         if [ -n "$env_password" ]; then
             echo "$env_password"
@@ -1693,6 +1718,10 @@ federation_fix() {
     # ==========================================================================
     echo -e "${CYAN}Step 3: Recreating IdPs with correct configuration${NC}"
 
+    # #region agent log - hypothesis E: IdP recreation with redirect URIs
+    echo '{"id":"log_'"$(date +%s)"'_hypE","timestamp":'$(date +%s)'000,"location":"federation-link.sh:1694","message":"Recreating IdPs - should configure redirect URIs","data":{"local_code":"'"$local_code"'","remote_code":"'"$remote_code"'"},"sessionId":"debug-session","runId":"debug-run-1","hypothesisId":"E"}' >> /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/.cursor/debug.log
+    # #endregion
+
     _federation_link_direct "$local_code" "$remote_code"
     _federation_link_direct "$remote_code" "$local_code"
 
@@ -1736,6 +1765,10 @@ federation_fix() {
 # =============================================================================
 
 federation_sync_secrets() {
+    # #region agent log - hypothesis D: Client secret synchronization
+    echo '{"id":"log_'"$(date +%s)"'_hypD","timestamp":'$(date +%s)'000,"location":"federation-link.sh:1739","message":"federation_sync_secrets called","data":{"spoke_code":"'"$1"'"},"sessionId":"debug-session","runId":"debug-run-1","hypothesisId":"D"}' >> /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/.cursor/debug.log
+    # #endregion
+
     local spoke_code="${1:-}"
 
     if [ -z "$spoke_code" ]; then

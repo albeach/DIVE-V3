@@ -885,6 +885,49 @@
         "healthEndpoint": "/health",
         "requestKeyEndpoint": "/request-key"
       }
+    },
+    {
+      "kasId": "can-kas",
+      "organization": "Canada",
+      "countryCode": "CAN",
+      "kasUrl": "https://localhost:10004/api/kas",
+      "internalKasUrl": "http://kas-can:8080",
+      "authMethod": "jwt",
+      "authConfig": {
+        "jwtIssuer": "https://can-idp.dive25.com/realms/dive-v3-broker-can",
+        "jwtAudience": "dive-v3-broker"
+      },
+      "trustLevel": "high",
+      "supportedCountries": [
+        "CAN"
+      ],
+      "supportedCOIs": [
+        "NATO",
+        "NATO-COSMIC",
+        "EU-RESTRICTED"
+      ],
+      "policyTranslation": {
+        "clearanceMapping": {
+          "UNCLASSIFIED": "UNCLASSIFIED",
+          "RESTRICTED": "RESTRICTED",
+          "CONFIDENTIAL": "CONFIDENTIAL",
+          "SECRET": "SECRET",
+          "TOP_SECRET": "TOP_SECRET"
+        }
+      },
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": [
+          "key-release",
+          "policy-evaluation",
+          "audit-logging",
+          "ztdf-support"
+        ],
+        "contact": "kas-admin@can.dive25.com",
+        "lastVerified": "2026-01-13T00:56:33Z",
+        "healthEndpoint": "/health",
+        "requestKeyEndpoint": "/request-key"
+      }
     }
   ],
   "federationTrust": {
@@ -895,6 +938,7 @@
         "alb-kas",
         "bel-kas",
         "bgr-kas",
+        "can-kas",
         "cze-kas",
         "deu-kas",
         "esp-kas",
@@ -916,6 +960,7 @@
         "alb-kas",
         "bel-kas",
         "bgr-kas",
+        "can-kas",
         "cze-kas",
         "deu-kas",
         "esp-kas",
@@ -937,6 +982,7 @@
         "alb-kas",
         "bel-kas",
         "bgr-kas",
+        "can-kas",
         "cze-kas",
         "deu-kas",
         "esp-kas",
@@ -958,6 +1004,7 @@
         "alb-kas",
         "bel-kas",
         "bgr-kas",
+        "can-kas",
         "cze-kas",
         "esp-kas",
         "est-kas",
@@ -1070,6 +1117,12 @@
         "deu-kas"
       ],
       "alb-kas": [
+        "usa-kas",
+        "fra-kas",
+        "gbr-kas",
+        "deu-kas"
+      ],
+      "can-kas": [
         "usa-kas",
         "fra-kas",
         "gbr-kas",

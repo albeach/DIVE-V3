@@ -141,7 +141,7 @@ router.get('/', authenticateJWT, async (req: IAuthenticatedRequest, res: Respons
             }
 
             return {
-                id: log.requestId || log._id?.toString(),
+                id: log._id?.toString() || log.requestId || `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                 type: activityType,
                 resourceId: resourceId,
                 resourceTitle: resourceTitle,

@@ -34,7 +34,16 @@ hub_up() {
     # Ensure shared network exists
     ensure_shared_network
 
-    # Load secrets
+    # Load secrets from GCP first (updates environment and .env.hub)
+    load_gcp_secrets "usa" || {
+        log_warn "GCP secrets unavailable - using existing .env.hub"
+        if [ ! -f "${DIVE_ROOT}/.env.hub" ]; then
+            log_error ".env.hub file not found and GCP secrets unavailable - run 'hub init' first"
+            return 1
+        fi
+    }
+
+    # Load secrets from .env.hub (may have been updated above)
     if [ -f "${DIVE_ROOT}/.env.hub" ]; then
         set -a
         source "${DIVE_ROOT}/.env.hub"

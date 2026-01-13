@@ -1,6 +1,7 @@
 # Optimized multi-stage build for DIVE V3 Backend
-FROM node:20-alpine AS base
-RUN apk add --no-cache curl jq && \
+FROM node:24-alpine AS base
+# Install bash and essential tools for robust scripting and debugging
+RUN apk add --no-cache bash curl jq ca-certificates tzdata && \
     apk cache clean
 
 FROM base AS deps
@@ -44,12 +45,15 @@ RUN addgroup --system --gid 1001 nodejs && \
 
 # Copy only necessary files from builder and deps-prod
 COPY --from=builder --chown=expressjs:nodejs /app/dist ./dist
+COPY --from=builder --chown=expressjs:nodejs /app/src ./src
 COPY --from=deps-prod --chown=expressjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=expressjs:nodejs /app/package.json ./package.json
+COPY --from=builder --chown=expressjs:nodejs /app/tsconfig.json ./tsconfig.json
 
-# Create necessary directories with correct permissions
-RUN mkdir -p logs uploads/idp-themes && \
-    chown -R expressjs:nodejs /app
+# Create necessary directories and fix all permissions (including hidden files)
+RUN mkdir -p logs uploads/idp-themes config && \
+    chown -R expressjs:nodejs /app && \
+    chmod -R u+rw /app
 
 USER expressjs
 

@@ -447,6 +447,23 @@ spoke_generate_federation_health_report() {
 #   0 - All verifications passed
 #   1 - Some verifications failed
 ##
+# Check if the spoke realm exists in Keycloak
+_spoke_realm_exists() {
+    local code_lower="$1"
+    local realm_name="dive-v3-broker-${code_lower}"
+
+    # Try to query the realm via Keycloak admin API
+    if docker ps --format '{{.Names}}' | grep -q "^dive-spoke-${code_lower}-keycloak$"; then
+        # Use docker exec to check if realm exists
+        local container_name="dive-spoke-${code_lower}-keycloak"
+        # Try a simple curl to check if realm endpoint responds
+        if docker exec "$container_name" curl -ksf --max-time 5 "http://localhost:8080/realms/${realm_name}/.well-known/openid-connect-configuration" >/dev/null 2>&1; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
 spoke_enhanced_post_deployment_verification() {
     local code_lower="$1"
 
@@ -461,9 +478,14 @@ spoke_enhanced_post_deployment_verification() {
         fi
     fi
 
-    # 2. Federation health checks (new functionality)
-    if ! spoke_federation_health_check "$code_lower"; then
-        all_passed=false
+    # 2. Federation health checks (skip if realm not created yet)
+    # Only run federation checks after Terraform has created the realm and federation is set up
+    if _spoke_realm_exists "$code_lower"; then
+        if ! spoke_federation_health_check "$code_lower"; then
+            all_passed=false
+        fi
+    else
+        log_info "Skipping federation health checks (realm not created yet - will check after registration)"
     fi
 
     # 3. Generate comprehensive report

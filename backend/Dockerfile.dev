@@ -1,14 +1,14 @@
-FROM node:20-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 
-# Install curl, docker-cli, and su-exec for health checks and privilege management
-# Best practice: Use proper HTTP client instead of BusyBox wget workarounds
-RUN apk add --no-cache curl docker-cli su-exec
+# Install bash, curl, docker-cli, and su-exec for robust scripting and development
+# Best practice: Use bash for complex scripts, proper HTTP client instead of BusyBox wget
+RUN apk add --no-cache bash curl docker-cli su-exec ca-certificates tzdata jq
 
 # Install dependencies
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm install && npm install -g npm@latest
 
 # Don't copy source code - it will be mounted as volume
 # This allows hot reload during development
