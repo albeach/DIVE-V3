@@ -1,6 +1,6 @@
 /**
  * Custom Session Creation Endpoint
- * 
+ *
  * Creates a NextAuth session from custom login tokens
  * This allows custom login pages to integrate with NextAuth
  */
@@ -38,7 +38,7 @@ export async function POST(request: NextRequest) {
         // ENRICHMENT: Generate email if missing (remote IdPs may not provide)
         let email = payload.email || payload.preferred_username;
         const uniqueID = payload.uniqueID || payload.sub;
-        
+
         if (!email || email.trim() === '') {
             // If uniqueID looks like email, use it
             if (uniqueID && uniqueID.includes('@')) {
@@ -79,7 +79,7 @@ export async function POST(request: NextRequest) {
                 email,
                 emailVerified: null,
                 image: null,
-            }).returning();
+            } as any).returning();
             user = newUsers[0];
         }
 

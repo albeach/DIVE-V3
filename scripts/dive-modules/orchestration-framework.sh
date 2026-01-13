@@ -1082,6 +1082,9 @@ orch_start_metrics_collection() {
         local collection_pid=$$
         local metrics_file="${DIVE_ROOT}/logs/orchestration-metrics-${instance_code}.json"
 
+        # Ensure logs directory exists
+        mkdir -p "$(dirname "$metrics_file")"
+
         # Create metrics file
         echo "[" > "$metrics_file"
 
@@ -1104,7 +1107,13 @@ orch_start_metrics_collection() {
         done
 
         # Close JSON array
-        sed -i '$ s/,$//' "$metrics_file"
+        if grep -q "," "$metrics_file"; then
+            # Remove trailing comma from last JSON object
+            sed -i '$ s/,$//' "$metrics_file"
+        else
+            # No metrics collected, replace [ with []
+            echo "[]" > "$metrics_file"
+        fi
         echo "]" >> "$metrics_file"
 
         log_verbose "Metrics collection completed for $instance_code"

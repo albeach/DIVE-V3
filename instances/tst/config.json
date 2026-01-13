@@ -1,0 +1,52 @@
+{
+  "identity": {
+    "spokeId": "spoke-tst-b9f74527",
+    "instanceCode": "TST",
+    "name": "TST Instance",
+    "description": "DIVE V3 Spoke Instance for TST",
+    "country": "TST",
+    "organizationType": "government",
+    "contactEmail": "admin@tst.dive25.com"
+  },
+  "endpoints": {
+    "hubUrl": "https://localhost:4000",
+    "hubApiUrl": "https://localhost:4000/api",
+    "hubOpalUrl": "https://localhost:7002",
+    "baseUrl": "https://localhost:3063",
+    "apiUrl": "https://localhost:4063",
+    "idpUrl": "https://dive-spoke-tst-keycloak:8443",
+    "idpPublicUrl": "https://localhost:8506",
+    "kasUrl": "https://localhost:10063"
+  },
+  "certificates": {
+    "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/tst/certs/spoke.crt",
+    "privateKeyPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/tst/certs/spoke.key",
+    "csrPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/tst/certs/spoke.csr",
+    "caBundlePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/tst/certs/hub-ca.crt"
+  },
+  "authentication": {},
+  "federation": {
+    "status": "unregistered",
+    "requestedScopes": [
+      "policy:base",
+      "policy:tst",
+      "data:federation_matrix",
+      "data:trusted_issuers"
+    ]
+  },
+  "operational": {
+    "heartbeatIntervalMs": 30000,
+    "tokenRefreshBufferMs": 300000,
+    "offlineGracePeriodMs": 3600000,
+    "policyCachePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/tst/cache/policies",
+    "auditQueuePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/tst/cache/audit",
+    "maxAuditQueueSize": 10000,
+    "auditFlushIntervalMs": 60000
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "createdAt": "2026-01-13T19:30:07Z",
+    "lastModified": "2026-01-13T19:30:07Z",
+    "configHash": ""
+  }
+}

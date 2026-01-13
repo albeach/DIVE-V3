@@ -1190,7 +1190,7 @@
           "name": "backend-nzl",
           "containerName": "dive-spoke-nzl-backend",
           "internalPort": 4000,
-          "externalPort": 4033,
+          "externalPort": 4457,
           "protocol": "https",
           "hostname": "nzl-api.dive25.com"
         },
@@ -1206,7 +1206,7 @@
           "name": "mongodb-nzl",
           "containerName": "dive-spoke-nzl-mongodb",
           "internalPort": 27017,
-          "externalPort": 27050,
+          "externalPort": 27020,
           "protocol": "mongodb"
         }
       }

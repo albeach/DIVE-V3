@@ -315,7 +315,7 @@ export class ClearanceEquivalencyDBService {
 
             for (const [standardLevel, equivalents] of Object.entries(mappings)) {
                 const result = await this.collection.updateOne(
-                    { standardLevel },
+                    { standardLevel: standardLevel as DiveClearanceLevel },
                     {
                         $set: {
                             [`nationalEquivalents.${country}`]: equivalents,

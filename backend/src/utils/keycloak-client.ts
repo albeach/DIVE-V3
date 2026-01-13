@@ -50,11 +50,11 @@ export async function getServiceAccountToken(
       throw new Error(`Unknown service account type: ${serviceType}`);
     }
 
-    // Get service account credentials from GCP Secret Manager
-    const clientSecret = await getSecret(
-      `dive-v3-keycloak-backend-client-secret`,
-      process.env.INSTANCE_REALM || 'USA'
-    );
+    // Get service account credentials from environment
+    const clientSecret = process.env.KEYCLOAK_CLIENT_SECRET;
+    if (!clientSecret) {
+      throw new Error('KEYCLOAK_CLIENT_SECRET environment variable not set');
+    }
 
     const keycloakUrl = process.env.KEYCLOAK_URL || 'https://keycloak:8443';
     const realm = process.env.INSTANCE_REALM || 'USA';
@@ -66,7 +66,7 @@ export async function getServiceAccountToken(
         grant_type: 'client_credentials',
         client_id: serviceConfig.clientId,
         client_secret: clientSecret,
-        audience: serviceConfig.audience,
+        // audience: serviceConfig.audience, // Remove audience - not required for client_credentials
         scope: 'openid profile',
       }),
       {

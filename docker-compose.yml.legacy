@@ -402,34 +402,29 @@ services:
     restart: unless-stopped
     stop_grace_period: 30s
     environment:
+      # TLS Configuration - Use mkcert certificates from Hub
       OPAL_BROADCAST_URI: https://opal-server:7002
       OPAL_SERVER_SSL_ENABLED: "true"
-      OPAL_SERVER_SSL_CERT_PATH: /certs/server.crt
-      OPAL_SERVER_SSL_KEY_PATH: /certs/server.key
-      OPAL_SERVER_SSL_CA_PATH: /certs/ca.crt
+      OPAL_SERVER_SSL_CERT_PATH: /certs/certificate.pem
+      OPAL_SERVER_SSL_KEY_PATH: /certs/key.pem
+      OPAL_SERVER_SSL_CA_PATH: /certs/mkcert-rootCA.pem
       OPAL_SERVER_SSL_CLIENT_AUTH: "optional"
+      # JWT Authentication - Load from mounted keys
+      OPAL_AUTH_PRIVATE_KEY_PATH: /opal-keys/opal_private_key.pem
+      OPAL_AUTH_PUBLIC_KEY_PATH: /opal-keys/opal_private_key.pem.pub
+      OPAL_AUTH_JWT_ALGORITHM: RS256
+      OPAL_AUTH_JWT_AUDIENCE: https://api.opal.ac/v1/
+      OPAL_AUTH_JWT_ISSUER: https://opal.ac/
+      # Logging
       OPAL_LOG_LEVEL: INFO
       OPAL_LOG_FORMAT: json
+      # Server Configuration
       UVICORN_PORT: 7002
       UVICORN_HOST: 0.0.0.0
       OPAL_SERVER_CORS_ALLOWED_ORIGINS: '["https://localhost:3000","https://127.0.0.1:3000"]'
-    command:
-      - gunicorn
-      - -b
-      - 0.0.0.0:7002
-      - -k
-      - uvicorn.workers.UvicornWorker
-      - --keyfile
-      - /certs/server.key
-      - --certfile
-      - /certs/server.crt
-      - --ca-certs
-      - /certs/ca.crt
-      - opal_server.main:app
-      - -t
-      - "30"
-      - --keep-alive
-      - "5"
+      # Data Topics
+      OPAL_DATA_TOPICS_DEFAULT: "policy_data"
+    # Use default OPAL command (no gunicorn SSL flags needed)
     ports:
       - "7002:7002"
     networks:
@@ -438,7 +433,8 @@ services:
     volumes:
       - ./policies:/policies:ro
       - ./policies/data:/policy-data:ro
-      - ./certs/opal:/certs:ro
+      - ./instances/hub/certs:/certs:ro  # Use Hub mkcert certificates
+      - ./docker/opal-keys:/opal-keys:ro
       - opal_data_tls:/opal
     healthcheck:
       test:

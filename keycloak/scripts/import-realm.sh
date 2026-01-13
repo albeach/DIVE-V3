@@ -36,15 +36,31 @@
 
 set -e
 
+echo "[DIVE] Import script started with SKIP_REALM_IMPORT=${SKIP_REALM_IMPORT:-false}"
+
+# ============================================
+# ALWAYS LOAD MASTER BOOTSTRAP FOR TERRAFORM AUTHENTICATION
+# ============================================
+MASTER_BOOTSTRAP="${REALM_TEMPLATE_DIR}/master-bootstrap.json"
+if [ -f "${MASTER_BOOTSTRAP}" ]; then
+    mkdir -p "${REALM_IMPORT_DIR}"
+    # Substitute the admin password in the master bootstrap
+    # Use the instance-specific password variable if available, otherwise fallback
+    ADMIN_PASS="${KEYCLOAK_ADMIN_PASSWORD_FRA:-${KEYCLOAK_ADMIN_PASSWORD:-OWXYvlb9YybuNregGHWvg}}"
+    echo "[DIVE] Loading master bootstrap for Terraform authentication"
+    sed "s|\${KEYCLOAK_ADMIN_PASSWORD}|${ADMIN_PASS}|g" "${MASTER_BOOTSTRAP}" > "${REALM_IMPORT_DIR}/master-bootstrap.json"
+    echo "[DIVE] Master bootstrap prepared with admin password"
+fi
+
 # ============================================
 # TRUE SSOT: Terraform is the Single Source of Truth
 # ============================================
 if [ "${SKIP_REALM_IMPORT:-false}" = "true" ]; then
-    echo "[DIVE] Terraform SSOT Mode - Keycloak starts empty"
-    echo "[DIVE] No JSON realm import - all configuration via Terraform"
+    echo "[DIVE] Terraform SSOT Mode - Keycloak starts with master bootstrap"
+    echo "[DIVE] Admin user and admin-cli client available for Terraform"
     echo "[DIVE] Run './dive tf apply pilot' to configure the realm"
     echo "[DIVE] Starting Keycloak..."
-    exec /opt/keycloak/bin/kc.sh "$@"
+    exec /opt/keycloak/bin/kc.sh "$@" --import-realm
 fi
 
 # ============================================
@@ -58,6 +74,17 @@ echo "[DIVE] ============================================"
 
 REALM_TEMPLATE_DIR="/opt/keycloak/realm-templates"
 REALM_IMPORT_DIR="/opt/keycloak/data/import"
+
+# ALWAYS LOAD MASTER BOOTSTRAP FIRST
+MASTER_BOOTSTRAP="${REALM_TEMPLATE_DIR}/master-bootstrap.json"
+if [ -f "${MASTER_BOOTSTRAP}" ]; then
+    mkdir -p "${REALM_IMPORT_DIR}"
+    # Substitute the admin password in the master bootstrap
+    ADMIN_PASS="${KEYCLOAK_ADMIN_PASSWORD_FRA:-${KEYCLOAK_ADMIN_PASSWORD:-OWXYvlb9YybuNregGHWvg}}"
+    echo "[DIVE] Loading master bootstrap for admin access"
+    sed "s|\${KEYCLOAK_ADMIN_PASSWORD}|${ADMIN_PASS}|g" "${MASTER_BOOTSTRAP}" > "${REALM_IMPORT_DIR}/master-bootstrap.json"
+    echo "[DIVE] Master bootstrap prepared"
+fi
 
 # Check for bootstrap realm first (for Terraform SSOT)
 BOOTSTRAP_REALM="${REALM_TEMPLATE_DIR}/dive-v3-broker-${INSTANCE_CODE}-bootstrap.json"

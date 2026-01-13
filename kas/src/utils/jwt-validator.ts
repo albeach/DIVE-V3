@@ -267,28 +267,46 @@ export const verifyToken = async (token: string): Promise<IKeycloakToken> => {
         // 2. All coalition partner public IdPs (dive25.com domain)
         // 3. DEU uses prosecurity.biz domain
         // 4. Legacy/dev issuers for backward compatibility
+        // Get current realm (supports both instance-specific and base realms)
+        const currentRealm = process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
+
         const validIssuers: [string, ...string[]] = [
-            // Local instance (dynamic based on deployment)
+            // Local instance (dynamic based on deployment) - supports both formats
+            `${process.env.KEYCLOAK_URL}/realms/${currentRealm}`,
             `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,
 
             // === COALITION PARTNER IdPs (Cloudflare Tunnels) ===
-            // USA
+            // USA - supports both instance-specific and base realm names
+            'https://usa-idp.dive25.com/realms/dive-v3-broker-usa',
+            'https://usa-idp.dive25.com:8443/realms/dive-v3-broker-usa',
             'https://usa-idp.dive25.com/realms/dive-v3-broker',
             'https://usa-idp.dive25.com:8443/realms/dive-v3-broker',
             // FRA
+            'https://fra-idp.dive25.com/realms/dive-v3-broker-fra',
+            'https://fra-idp.dive25.com:8443/realms/dive-v3-broker-fra',
             'https://fra-idp.dive25.com/realms/dive-v3-broker',
             'https://fra-idp.dive25.com:8443/realms/dive-v3-broker',
             // GBR
+            'https://gbr-idp.dive25.com/realms/dive-v3-broker-gbr',
+            'https://gbr-idp.dive25.com:8443/realms/dive-v3-broker-gbr',
             'https://gbr-idp.dive25.com/realms/dive-v3-broker',
             'https://gbr-idp.dive25.com:8443/realms/dive-v3-broker',
             // DEU (uses prosecurity.biz domain)
+            'https://deu-idp.prosecurity.biz/realms/dive-v3-broker-deu',
+            'https://deu-idp.prosecurity.biz:8443/realms/dive-v3-broker-deu',
             'https://deu-idp.prosecurity.biz/realms/dive-v3-broker',
             'https://deu-idp.prosecurity.biz:8443/realms/dive-v3-broker',
 
             // === LEGACY/DEV ISSUERS ===
+            'http://localhost:8081/realms/dive-v3-broker-usa',
             'http://localhost:8081/realms/dive-v3-broker',
+            'https://localhost:8443/realms/dive-v3-broker-usa',
             'https://localhost:8443/realms/dive-v3-broker',
+            'https://keycloak:8443/realms/dive-v3-broker-usa',
+            'https://keycloak:8443/realms/dive-v3-broker',
+            'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-broker-usa',
             'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-broker',
+            'https://dev-auth.dive25.com/realms/dive-v3-broker-usa',
             'https://dev-auth.dive25.com/realms/dive-v3-broker',
         ];
 

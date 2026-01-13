@@ -13,15 +13,15 @@
 terraform {
   # GCS Backend for Production/Team Use
   # Comment out and uncomment local backend below for isolated local development
-  backend "gcs" {
-    bucket = "dive25-tfstate"
-    prefix = "pilot"
-  }
+  # backend "gcs" {
+  #   bucket = "dive25-tfstate"
+  #   prefix = "pilot"
+  # }
 
   # Local Backend for Isolated Development (uncomment if needed)
-  # backend "local" {
-  #   path = "terraform.tfstate"
-  # }
+  backend "local" {
+    path = "terraform.tfstate"
+  }
 
   required_version = ">= 1.5.0"
 }

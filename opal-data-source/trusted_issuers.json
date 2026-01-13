@@ -441,6 +441,24 @@
       "enabled": true,
       "protocol": "oidc",
       "federation_class": "LOCAL"
+    },
+    "https://localhost:/realms/dive-v3-broker-can": {
+      "tenant": "CAN",
+      "name": "CAN Keycloak (Local Dev)",
+      "country": "CAN",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
+    },
+    "https://keycloak-can:8443/realms/dive-v3-broker-can": {
+      "tenant": "CAN",
+      "name": "CAN Keycloak (Internal Docker)",
+      "country": "CAN",
+      "trust_level": "DEVELOPMENT",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "LOCAL"
     }
   },
   "_metadata": {

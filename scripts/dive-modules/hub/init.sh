@@ -123,11 +123,26 @@ _hub_generate_certs() {
     mkdir -p "${HUB_CERTS_DIR}"
     mkdir -p "${HUB_DATA_DIR}/truststores"
 
-    # Generate self-signed certificate for development
-    openssl req -x509 -newkey rsa:4096 -sha256 -days 365 -nodes \
-        -keyout "${HUB_CERTS_DIR}/key.pem" \
-        -out "${HUB_CERTS_DIR}/certificate.pem" \
-        -subj "/CN=dive-hub-keycloak" 2>/dev/null
+    # Generate comprehensive certificates with all container names
+    log_info "Generating certificates with dive-hub-* container names..."
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would run certificate generation script"
+    else
+        # Use the comprehensive certificate generation script
+        # Set COMPOSE_PROJECT_NAME to ensure dive-hub-* container names are included
+        cd "${DIVE_ROOT}"
+        COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-dive-hub}" \
+        CERT_HOST_SCOPE="${CERT_HOST_SCOPE:-full}" \
+        SKIP_CERT_REGEN_IF_PRESENT=false \
+        bash "${DIVE_ROOT}/scripts/generate-dev-certs.sh" 2>/dev/null || {
+            log_warn "Certificate generation failed, falling back to self-signed cert"
+            # Fallback to self-signed certificate
+            openssl req -x509 -newkey rsa:4096 -sha256 -days 365 -nodes \
+                -keyout "${HUB_CERTS_DIR}/key.pem" \
+                -out "${HUB_CERTS_DIR}/certificate.pem" \
+                -subj "/CN=dive-hub-keycloak" 2>/dev/null
+        }
+    fi
 
     log_success "TLS certificates generated"
 }

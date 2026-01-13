@@ -27,6 +27,12 @@ async function getDbClient(): Promise<MongoClient> {
     return mongoClient;
 }
 
+async function getAuditLogsCollection() {
+    const client = await getDbClient();
+    const db = client.db(getMongoDBName());
+    return db.collection('audit_logs');
+}
+
 /**
  * GET /api/dashboard/stats
  * Get dashboard statistics for authenticated user
@@ -77,7 +83,7 @@ router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promi
                         });
 
                         if (response.ok) {
-                            const data = await response.json();
+                            const data = await response.json() as { accessibleCount?: number; count?: number };
                             return {
                                 instance: spoke.instanceCode,
                                 count: data.accessibleCount || data.count || 0
@@ -134,6 +140,155 @@ router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promi
             });
         }
 
+        // Get recent decisions for dashboard
+        let recentDecisions: any[] = [];
+        let recentAuditEvents: any[] = [];
+        let userStats = {
+            lastLogin: null,
+            sessionCount: 1
+        };
+        let byClassification: Record<string, number> = {};
+        let recentlyAccessed: any[] = [];
+        const complianceMetrics = [
+            {
+                name: 'ACP-240 Compliance',
+                value: stats.totalDecisions > 0 ? Math.round((stats.allowCount / stats.totalDecisions) * 100) : 100,
+                status: 'compliant',
+                description: 'Authorization decisions following ACP-240 policy framework'
+            },
+            {
+                name: 'Average Latency',
+                value: `${Math.round(stats.averageLatency)}ms`,
+                status: stats.averageLatency < 200 ? 'good' : 'warning',
+                description: 'Policy decision response time'
+            },
+            {
+                name: 'Federation Health',
+                value: federatedInstances.length > 0 ? 'Active' : 'Local Only',
+                status: federatedInstances.length > 0 ? 'good' : 'neutral',
+                description: 'Cross-instance federation status'
+            }
+        ];
+
+        try {
+            // Get recent decisions for dashboard
+            const decisionsCollection = db.collection('decisions');
+            recentDecisions = await decisionsCollection
+                .find({
+                    subject: user?.uniqueID,
+                    timestamp: { $gte: oneDayAgo }
+                })
+                .sort({ timestamp: -1 })
+                .limit(10)
+                .toArray();
+        } catch (error) {
+            logger.debug('Could not fetch recent decisions', {
+                requestId,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+
+        try {
+            // Get recent audit events
+            const auditCollection = await getAuditLogsCollection();
+            recentAuditEvents = await auditCollection
+                .find({
+                    subject: user?.uniqueID,
+                    timestamp: { $gte: oneDayAgo }
+                })
+                .sort({ timestamp: -1 })
+                .limit(20)
+                .toArray();
+        } catch (error) {
+            logger.debug('Could not fetch recent audit events', {
+                requestId,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+
+        try {
+            // Get user login/session statistics
+            const auditCollection = await getAuditLogsCollection();
+            const lastLoginDoc = await auditCollection
+                .find({ subject: user?.uniqueID })
+                .sort({ timestamp: -1 })
+                .limit(1)
+                .toArray();
+
+            if (lastLoginDoc.length > 0) {
+                userStats.lastLogin = lastLoginDoc[0].timestamp;
+            }
+
+            // Count unique sessions (rough approximation)
+            const sessionCount = await auditCollection
+                .countDocuments({
+                    subject: user?.uniqueID,
+                    timestamp: { $gte: oneDayAgo }
+                });
+            userStats.sessionCount = Math.max(1, sessionCount);
+        } catch (error) {
+            logger.debug('Could not fetch user session stats', {
+                requestId,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+
+        try {
+            // Get classification breakdown
+            const classificationPipeline = [
+                {
+                    $group: {
+                        _id: "$classification",
+                        count: { $sum: 1 }
+                    }
+                }
+            ];
+            const classificationResults = await resourcesCollection.aggregate(classificationPipeline).toArray();
+            classificationResults.forEach((result: any) => {
+                byClassification[result._id || 'UNKNOWN'] = result.count;
+            });
+        } catch (error) {
+            logger.debug('Could not fetch classification breakdown', {
+                requestId,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+
+        try {
+            // Get recently accessed resources
+            const auditCollection = await getAuditLogsCollection();
+            const recentAccess = await auditCollection
+                .find({
+                    subject: user?.uniqueID,
+                    outcome: 'ALLOW',
+                    timestamp: { $gte: oneDayAgo }
+                })
+                .sort({ timestamp: -1 })
+                .limit(5)
+                .toArray();
+
+            // Get unique resource IDs and fetch their details
+            const resourceIds = [...new Set(recentAccess.map(a => a.resourceId))];
+            if (resourceIds.length > 0) {
+                const resourceDetails = await resourcesCollection
+                    .find({ resourceId: { $in: resourceIds } })
+                    .toArray();
+
+                recentlyAccessed = resourceDetails.map(resource => ({
+                    id: resource.resourceId,
+                    title: resource.title || resource.resourceId,
+                    classification: resource.classification,
+                    accessedAt: recentAccess.find(a => a.resourceId === resource.resourceId)?.timestamp,
+                    encrypted: resource.encrypted || false
+                }));
+            }
+        } catch (error) {
+            logger.debug('Could not fetch recently accessed resources', {
+                requestId,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+
         // Calculate authorization rate
         const authorizationRate = stats.totalDecisions > 0
             ? Math.round((stats.allowCount / stats.totalDecisions) * 100)
@@ -153,6 +308,19 @@ router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promi
         const federatedLabel = federatedInstances.length > 0
             ? `${federatedInstances.length} instance${federatedInstances.length > 1 ? 's' : ''}`
             : 'Local only';
+
+        logger.info('Dashboard stats completed', {
+            requestId,
+            user: user?.uniqueID,
+            totalDocuments,
+            localDocuments,
+            federatedDocuments,
+            totalDecisions: stats.totalDecisions,
+            recentDecisionsCount: recentDecisions.length,
+            recentAuditEventsCount: recentAuditEvents.length,
+            byClassificationCount: Object.keys(byClassification).length,
+            recentlyAccessedCount: recentlyAccessed.length
+        });
 
         res.status(200).json({
             success: true,
@@ -191,7 +359,16 @@ router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promi
                 topDenyReasons: stats.topDenyReasons.slice(0, 5),
                 decisionsByCountry: stats.decisionsByCountry,
                 periodStart: oneDayAgo.toISOString(),
-                periodEnd: now.toISOString()
+                periodEnd: now.toISOString(),
+                // New data for dashboard tabs
+                recentDecisions,
+                recentAuditEvents,
+                complianceMetrics,
+                lastLogin: userStats.lastLogin,
+                sessionCount: userStats.sessionCount,
+                byClassification,
+                recentlyAccessed,
+                uploadedByUser: 0 // TODO: Implement user upload tracking
             }
         });
 

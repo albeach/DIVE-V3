@@ -377,6 +377,18 @@
       "name": "POL Keycloak",
       "country": "POL",
       "trust_level": "DEVELOPMENT"
+    },
+    "https://localhost:/realms/dive-v3-broker-can": {
+      "tenant": "CAN",
+      "name": "CAN Keycloak",
+      "country": "CAN",
+      "trust_level": "DEVELOPMENT"
+    },
+    "https://keycloak-can:8443/realms/dive-v3-broker-can": {
+      "tenant": "CAN",
+      "name": "CAN Keycloak (Internal)",
+      "country": "CAN",
+      "trust_level": "DEVELOPMENT"
     }
   },
   "federation_matrix": {
@@ -384,6 +396,7 @@
       "ALB",
       "BEL",
       "BGR",
+      "CAN",
       "CZE",
       "DEU",
       "DNK",

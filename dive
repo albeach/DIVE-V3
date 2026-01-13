@@ -54,6 +54,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --instance)
             INSTANCE="$2"
+            export INSTANCE
             shift 2
             ;;
         --dry-run|-n)
@@ -154,6 +155,52 @@ case "$COMMAND" in
     secrets)
         source "${MODULES_DIR}/secrets.sh"
         module_secrets "$@"
+        ;;
+
+    # Orchestration database commands (orchestration-state-db.sh)
+    orchestration-db|orch-db|odb)
+        source "${MODULES_DIR}/orchestration-state-db.sh"
+        case "${1:-help}" in
+            migrate|migrate-state)
+                shift
+                orch_db_migrate_state_files "$@"
+                ;;
+            validate|validate-consistency)
+                shift
+                orch_db_validate_consistency "$@"
+                ;;
+            rollback|rollback-state)
+                shift
+                orch_db_rollback_state "$@"
+                ;;
+            status|db-status)
+                shift
+                if orch_db_check_connection; then
+                    echo "✅ Orchestration database is connected"
+                    state_count=$(orch_db_exec "SELECT COUNT(*) FROM deployment_states" 2>/dev/null || echo "0")
+                    echo "📊 State records: $state_count"
+                    transition_count=$(orch_db_exec "SELECT COUNT(*) FROM state_transitions" 2>/dev/null || echo "0")
+                    echo "🔄 Transition records: $transition_count"
+                else
+                    echo "❌ Orchestration database is not available"
+                fi
+                ;;
+            *)
+                echo "DIVE V3 Orchestration Database Management"
+                echo "=========================================="
+                echo ""
+                echo "Commands:"
+                echo "  ./dive orch-db migrate              Migrate existing .dive-state files to database"
+                echo "  ./dive orch-db validate             Validate consistency between files and database"
+                echo "  ./dive orch-db rollback <instance>  Rollback last state transition for instance"
+                echo "  ./dive orch-db status               Show database connection and statistics"
+                echo ""
+                echo "Examples:"
+                echo "  ./dive orch-db migrate              # Migrate all state files"
+                echo "  ./dive orch-db validate NZL         # Check consistency for NZL"
+                echo "  ./dive orch-db rollback NZL         # Rollback NZL to previous state"
+                ;;
+        esac
         ;;
 
     # Pilot VM commands (pilot.sh)

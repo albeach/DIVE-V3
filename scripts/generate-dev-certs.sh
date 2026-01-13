@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # DIVE V3 - Dynamic Development Certificate Generator
-# 
+#
 # This script automatically generates SSL certificates for all services
 # defined in docker-compose files, plus any additional hostnames.
 #
@@ -121,10 +121,10 @@ else
     for compose_file in "$PROJECT_ROOT"/docker-compose*.yml; do
         if [[ -f "$compose_file" ]]; then
             echo "  Scanning: $(basename "$compose_file")"
-            
+
             # Extract service names (they become Docker hostnames)
             services=$(grep -E "^  [a-z].*:$" "$compose_file" 2>/dev/null | sed 's/://g' | sed 's/^  //' | grep -v "^#" || true)
-            
+
             for service in $services; do
                 # Clean up service name
                 service=$(echo "$service" | tr -d ' ')
@@ -132,12 +132,20 @@ else
                     HOSTNAMES+=("$service")
                 fi
             done
-            
+
             # Extract container_name values (alternate hostnames)
             container_names=$(grep "container_name:" "$compose_file" 2>/dev/null | sed 's/.*container_name: *//' | tr -d '"' || true)
             for name in $container_names; do
                 name=$(echo "$name" | tr -d ' ')
                 if [[ -n "$name" ]]; then
+                    # Expand environment variables in container names (e.g., ${COMPOSE_PROJECT_NAME})
+                    if [[ "$name" =~ \$\{([^}]+)\} ]]; then
+                        var_name="${BASH_REMATCH[1]}"
+                        var_value="${!var_name:-}"
+                        if [[ -n "$var_value" ]]; then
+                            name="${name/\$\{$var_name\}/$var_value}"
+                        fi
+                    fi
                     HOSTNAMES+=("$name")
                 fi
             done

@@ -526,10 +526,11 @@ interface IInstanceConfig {
 }
 
 interface IKASRegistry {
-    kasServers: IKASServer[];
-    federationTrust: {
-        trustMatrix: Record<string, string[]>;
+    kasInstances: IKASServer[];  // Matches backend/config/kas-registry.json structure
+    federationTrust?: {
+        trustMatrix?: Record<string, string[]>;
     };
+    federationAgreements?: any[];
 }
 
 interface IKASServer {
@@ -795,19 +796,19 @@ async function getMongoDBConnection(config: IInstanceConfig, instanceCode: strin
 
 function getKASServersForInstance(kasRegistry: IKASRegistry, instanceCode: string): IKASServer[] {
     const servers: IKASServer[] = [];
-    const localKas = kasRegistry.kasServers.find(k => k.countryCode === instanceCode);
+    const localKas = kasRegistry.kasInstances?.find(k => k.countryCode === instanceCode);
 
     if (localKas) {
         servers.push(localKas);
     }
 
-    // Add trusted partner KAS servers
-    const trustMatrix = kasRegistry.federationTrust.trustMatrix;
+    // Add trusted partner KAS servers from trust matrix
+    const trustMatrix = kasRegistry.federationTrust?.trustMatrix;
     const localKasId = localKas?.kasId;
 
-    if (localKasId && trustMatrix[localKasId]) {
+    if (localKasId && trustMatrix && trustMatrix[localKasId]) {
         for (const partnerKasId of trustMatrix[localKasId]) {
-            const partnerKas = kasRegistry.kasServers.find(k => k.kasId === partnerKasId);
+            const partnerKas = kasRegistry.kasInstances?.find(k => k.kasId === partnerKasId);
             if (partnerKas) {
                 servers.push(partnerKas);
             }
@@ -1328,6 +1329,11 @@ async function createZTDFDocument(
     kasServers: IKASServer[],
     seedBatchId: string
 ) {
+    // Check if KAS servers are available
+    if (!kasServers || kasServers.length === 0) {
+        throw new Error(`No KAS servers configured for instance ${instanceCode}. Cannot create ZTDF documents without KAS.`);
+    }
+
     // Validate instance code is valid ISO 3166-1 alpha-3
     if (!validateCountryCode(instanceCode)) {
         throw new Error(`Invalid ISO 3166-1 alpha-3 instance code: ${instanceCode}. Must be 3 uppercase letters (e.g., USA, FRA, GBR, DEU).`);
@@ -1890,7 +1896,7 @@ async function main() {
     const federationRegistry = loadFederationRegistry();
     const kasRegistry = loadKASRegistry();
     console.log(`   Found ${Object.keys(federationRegistry.instances).length} instances`);
-    console.log(`   Found ${kasRegistry.kasServers.length} KAS servers\n`);
+    console.log(`   Found ${kasRegistry.kasInstances?.length || 0} KAS servers\n`);
 
     // Validate COI templates
     console.log('✅ Validating COI templates...');

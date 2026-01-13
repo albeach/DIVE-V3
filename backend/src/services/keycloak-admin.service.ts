@@ -13,6 +13,7 @@
 import KcAdminClient from '@keycloak/keycloak-admin-client';
 import https from 'https';
 import { logger } from '../utils/logger';
+import { getKeycloakPassword } from '../utils/gcp-secrets';
 import {
     IIdentityProviderRepresentation,
     IIdPCreateRequest,
@@ -58,6 +59,7 @@ class KeycloakAdminService {
             baseUrl: process.env.KEYCLOAK_URL || 'http://localhost:8081',
             realmName: 'master',
             requestOptions: {
+                /* @ts-expect-error - httpsAgent is supported by node-fetch */
                 httpsAgent,
             },
         });
@@ -74,17 +76,28 @@ class KeycloakAdminService {
         }
 
         const username = process.env.KEYCLOAK_ADMIN_USER || process.env.KEYCLOAK_ADMIN_USERNAME || 'admin';
-        const password = process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin';
+        // Load Keycloak admin password from GCP Secret Manager
+        const password = process.env.KEYCLOAK_ADMIN_PASSWORD;
+
+        // Always authenticate against master realm for admin operations
+        const masterAuthUrl = `${this.axios.defaults.baseURL.replace(/\/$/, '')}/realms/master/protocol/openid-connect/token`;
 
         logger.debug('Authenticating to Keycloak Admin API (direct REST)', {
             username,
             passwordSet: !!password,
-            baseUrl: this.axios.defaults.baseURL,
+            authUrl: masterAuthUrl,
             realm: 'master'
         });
 
         try {
-            const response = await this.axios.post(
+            // Use a separate axios instance for master realm authentication
+            const masterAxios = axios.create({
+                baseURL: this.axios.defaults.baseURL,
+                timeout: this.axios.defaults.timeout,
+                httpsAgent: this.axios.defaults.httpsAgent,
+            });
+
+            const response = await masterAxios.post(
                 '/realms/master/protocol/openid-connect/token',
                 new URLSearchParams({
                     grant_type: 'password',

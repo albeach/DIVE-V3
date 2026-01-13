@@ -42,6 +42,7 @@ export interface ISpokeRegistration {
   description?: string;
   baseUrl: string;
   apiUrl: string;
+  internalApiUrl?: string; // Internal Docker network API URL
   idpUrl: string;         // Internal Docker network URL (for backend validation)
   idpPublicUrl?: string;  // Public browser-accessible URL (for federation)
 

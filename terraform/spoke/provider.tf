@@ -17,10 +17,7 @@ provider "keycloak" {
   client_id = "admin-cli"
   username  = var.keycloak_admin_username
   password  = var.keycloak_admin_password
-  # Use keycloak_url if provided, otherwise fall back to idp_url
-  url = coalesce(var.keycloak_url, var.idp_url)
-
-  # Self-signed certs in local development
+  url       = coalesce(var.keycloak_url, var.idp_url)
   tls_insecure_skip_verify = true
 }
 

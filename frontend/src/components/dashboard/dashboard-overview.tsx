@@ -183,31 +183,31 @@ export function DashboardOverview({ idps, stats, loading = false }: DashboardOve
               <div className="w-6 h-6 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">1</div>
               <div>
                 <p className="font-semibold text-slate-900">Federated Authentication</p>
-                <p className="text-xs mt-1">
+                <div className="text-xs mt-1">
                   Login via your home <EducationalTooltip term="Federation">IdP</EducationalTooltip>.
                   Keycloak brokers identity across coalition partners.
-                </p>
+                </div>
               </div>
             </div>
             <div className="flex items-start gap-3 p-3 rounded-lg bg-white/60 backdrop-blur-sm">
               <div className="w-6 h-6 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">2</div>
               <div>
                 <p className="font-semibold text-slate-900">Policy Evaluation</p>
-                <p className="text-xs mt-1">
+                <div className="text-xs mt-1">
                   <EducationalTooltip term="PEP">PEP</EducationalTooltip> sends your attributes to{' '}
                   <EducationalTooltip term="OPA">OPA</EducationalTooltip> for{' '}
                   <EducationalTooltip term="ABAC">ABAC</EducationalTooltip> decision.
-                </p>
+                </div>
               </div>
             </div>
             <div className="flex items-start gap-3 p-3 rounded-lg bg-white/60 backdrop-blur-sm">
               <div className="w-6 h-6 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">3</div>
               <div>
                 <p className="font-semibold text-slate-900">Secure Access</p>
-                <p className="text-xs mt-1">
+                <div className="text-xs mt-1">
                   If authorized, access resource. For encrypted content,{' '}
                   <EducationalTooltip term="KAS">KAS</EducationalTooltip> releases decryption key.
-                </p>
+                </div>
               </div>
             </div>
           </div>
@@ -227,19 +227,19 @@ export function DashboardOverview({ idps, stats, loading = false }: DashboardOve
               <Award className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-semibold text-slate-900">Your attributes are read-only</p>
-                <p className="text-xs text-slate-600 mt-1">
+                <div className="text-xs text-slate-600 mt-1">
                   <EducationalTooltip term="Clearance">Clearance</EducationalTooltip> and{' '}
                   <EducationalTooltip term="COI">COI</EducationalTooltip> are managed by your home IdP admin
-                </p>
+                </div>
               </div>
             </div>
             <div className="flex items-start gap-3 p-3 rounded-lg bg-white/60 backdrop-blur-sm">
               <Award className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
               <div>
                 <p className="text-sm font-semibold text-slate-900">All actions are audited</p>
-                <p className="text-xs text-slate-600 mt-1">
+                <div className="text-xs text-slate-600 mt-1">
                   Every authorization decision is logged for <EducationalTooltip term="ACP-240">ACP-240</EducationalTooltip> compliance
-                </p>
+                </div>
               </div>
             </div>
             <div className="flex items-start gap-3 p-3 rounded-lg bg-white/60 backdrop-blur-sm">
