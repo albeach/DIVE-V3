@@ -21,7 +21,14 @@
     "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
     "@typescript-eslint/explicit-module-boundary-types": "off",
     "@typescript-eslint/no-var-requires": "off",
-    "no-console": "off"
+    "no-console": "off",
+    "no-restricted-syntax": [
+      "error",
+      {
+        "selector": "CallExpression[callee.name='fetch'] Literal[value=/^https?:\\/\\/(127\\.0\\.0\\.1|localhost):/]",
+        "message": "Hardcoded localhost/127.0.0.1 URLs are not allowed. Use environment variables instead."
+      }
+    ]
   },
   "ignorePatterns": ["dist", "node_modules", "coverage"]
 }

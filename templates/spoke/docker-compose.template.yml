@@ -245,6 +245,11 @@ services:
       # Authentication - token and public key from Hub
       OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:-}
       OPAL_AUTH_PUBLIC_KEY: ${OPAL_AUTH_PUBLIC_KEY}
+      # Policy subscription directories - CRITICAL FIX for duplicate paths issue
+      # Request only specific directories from Hub (NOT "." which requests entire repo)
+      # This prevents OPAL from including files with "policies/" prefix duplicates
+      # Delimiter is colon (:) for OPAL client config
+      OPAL_POLICY_SUBSCRIPTION_DIRS: base:org:tenant:entrypoints:compat
       # Use inline OPA like Hub - CRITICAL for policy synchronization
       OPAL_INLINE_OPA_ENABLED: "true"
       OPAL_INLINE_OPA_CONFIG: |
@@ -345,6 +350,7 @@ services:
       - ./certs/ca:/app/certs/ca:ro  # Instance-specific CA for TLS trust
       - ./config.json:/app/config/config.json:ro
       - ../../config:/app/config/shared:ro
+      - ../../policies:/app/policies:ro  # Policy metadata for /api/policies endpoint
       - ./cache:/app/cache
       - backend_logs:/app/logs
     depends_on:

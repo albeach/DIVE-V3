@@ -35,6 +35,54 @@ export SPOKE_PHASE_DEPLOYMENT_LOADED=1
 #   0 - Success
 #   1 - Failure
 ##
+##
+# Ensure OPAL public key is configured (runs on EVERY deployment)
+# CRITICAL: This must run BEFORE starting containers so docker-compose sees the env var
+##
+spoke_ensure_opal_key_configured() {
+    local instance_code="$1"
+    local code_lower=$(lower "$instance_code")
+    local env_file="${DIVE_ROOT}/instances/${code_lower}/.env"
+
+    # Skip if .env doesn't exist (new deployment will create it)
+    if [ ! -f "$env_file" ]; then
+        return 0
+    fi
+
+    # Check if OPAL key is already valid
+    if grep -q "^OPAL_AUTH_PUBLIC_KEY=\"ssh-" "$env_file" 2>/dev/null; then
+        log_verbose "OPAL_AUTH_PUBLIC_KEY already configured"
+        return 0
+    fi
+
+    # Get OPAL public key (best-effort)
+    local opal_public_key=""
+    if [ -f "$HOME/.ssh/id_rsa.pub" ]; then
+        opal_public_key=$(cat "$HOME/.ssh/id_rsa.pub" 2>/dev/null | tr -d '\n\r')
+    fi
+
+    if [ -z "$opal_public_key" ]; then
+        log_verbose "No OPAL public key available (will use no-auth mode)"
+        return 0  # Non-blocking
+    fi
+
+    # Update or add OPAL key
+    if grep -q "^OPAL_AUTH_PUBLIC_KEY=" "$env_file"; then
+        # Update existing entry
+        sed -i.bak "s|^OPAL_AUTH_PUBLIC_KEY=.*|OPAL_AUTH_PUBLIC_KEY=\"$opal_public_key\"|" "$env_file"
+        rm -f "${env_file}.bak"
+        log_success "Updated OPAL_AUTH_PUBLIC_KEY (auto-fix for existing spoke)"
+    else
+        # Add new entry
+        echo "" >> "$env_file"
+        echo "# OPAL Authentication (auto-configured at deployment)" >> "$env_file"
+        echo "OPAL_AUTH_PUBLIC_KEY=\"$opal_public_key\"" >> "$env_file"
+        log_success "Added OPAL_AUTH_PUBLIC_KEY (auto-fix for existing spoke)"
+    fi
+
+    return 0
+}
+
 spoke_phase_deployment() {
     local instance_code="$1"
     local pipeline_mode="${2:-deploy}"
@@ -44,6 +92,10 @@ spoke_phase_deployment() {
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     log_info "Deployment phase for $code_upper"
+
+    # CRITICAL PRE-FLIGHT: Ensure OPAL key is configured
+    # This fixes OPAL client for both new and existing spokes
+    spoke_ensure_opal_key_configured "$instance_code" || true
 
     # Step 1: Start containers
     local force_rebuild="false"

@@ -268,9 +268,13 @@ spoke_compose_get_spoke_id() {
 spoke_compose_get_instance_name() {
     local code_upper="$1"
 
-    # Try NATO database
+    # Try NATO database (extract only country name, not full metadata)
     if [ -n "${NATO_COUNTRIES[$code_upper]}" ]; then
-        echo "${NATO_COUNTRIES[$code_upper]}"
+        # NATO_COUNTRIES format: "CountryName|flag|color1|color2|timezone|year|code"
+        # Extract only the country name (first field)
+        local full_entry="${NATO_COUNTRIES[$code_upper]}"
+        local country_name=$(echo "$full_entry" | cut -d'|' -f1)
+        echo "$country_name"
         return
     fi
 

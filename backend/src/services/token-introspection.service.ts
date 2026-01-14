@@ -17,6 +17,7 @@
  */
 
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import https from 'https';
 import NodeCache from 'node-cache';
 import { logger } from '../utils/logger';
 import CircuitBreaker from 'opossum';
@@ -104,12 +105,16 @@ export class TokenIntrospectionService {
 
   constructor() {
     // Initialize HTTP client with reasonable defaults
+    // CRITICAL: Accept self-signed certificates for internal Docker network communication
     this.httpClient = axios.create({
       timeout: this.REQUEST_TIMEOUT,
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'application/json',
       },
+      httpsAgent: new https.Agent({
+        rejectUnauthorized: false, // Accept self-signed certificates
+      }),
     });
 
     // Initialize caches
@@ -136,6 +141,68 @@ export class TokenIntrospectionService {
   }
 
   /**
+   * Normalize issuer URL for internal container access
+   * Translates localhost URLs to internal Docker DNS names
+   */
+  private normalizeIssuerUrl(issuer: string): string[] {
+    const urls: string[] = [];
+
+    try {
+      const parsedUrl = new URL(issuer);
+
+      // If it's localhost, try internal Docker DNS names FIRST
+      if (parsedUrl.hostname === 'localhost' || parsedUrl.hostname === '127.0.0.1') {
+        // Extract instance code from realm name (e.g., dive-v3-broker-nzl -> nzl)
+        const realmMatch = parsedUrl.pathname.match(/\/realms\/dive-v3-broker-(\w+)/);
+        if (realmMatch) {
+          const instanceCode = realmMatch[1];
+          const codeLower = instanceCode.toLowerCase();
+          const codeUpper = instanceCode.toUpperCase();
+
+          // CRITICAL: Try KEYCLOAK_URL first if it contains the instance code
+          // This ensures we use the correct internal DNS that Keycloak recognizes
+          if (process.env.KEYCLOAK_URL && process.env.KEYCLOAK_URL.includes(codeLower)) {
+            urls.push(`${process.env.KEYCLOAK_URL}${parsedUrl.pathname}`);
+          }
+
+          // Pattern 1: dive-spoke-{code}-keycloak (standard DIVE V3 spoke naming - lowercase)
+          urls.push(`https://dive-spoke-${codeLower}-keycloak:8443${parsedUrl.pathname}`);
+
+          // Pattern 2: dive-hub-keycloak (for USA hub specifically)
+          if (codeLower === 'usa') {
+            urls.push(`https://dive-hub-keycloak:8443${parsedUrl.pathname}`);
+          }
+
+          // Pattern 3: keycloak-{code} (alternative naming - lowercase)
+          urls.push(`https://keycloak-${codeLower}:8443${parsedUrl.pathname}`);
+
+          // Pattern 4: {code}-keycloak-{code}-1 (docker-compose generated names - lowercase)
+          urls.push(`https://${codeLower}-keycloak-${codeLower}-1:8443${parsedUrl.pathname}`);
+
+          // Fallback: Try generic KEYCLOAK_URL
+          if (process.env.KEYCLOAK_URL) {
+            urls.push(`${process.env.KEYCLOAK_URL}${parsedUrl.pathname}`);
+          }
+        }
+      }
+
+      // Always try original last (in case it's accessible)
+      urls.push(issuer);
+    } catch (error) {
+      logger.debug('Failed to parse issuer URL', { issuer, error: error instanceof Error ? error.message : 'Unknown error' });
+      // Fallback to original
+      urls.push(issuer);
+    }
+
+    // Log the URLs we're trying (helpful for debugging federation issues)
+    if (urls.length > 1) {
+      logger.debug('Normalized issuer to try multiple URLs', { issuer, count: urls.length, first: urls[0] });
+    }
+
+    return urls;
+  }
+
+  /**
    * Discover OAuth2 endpoints for an issuer
    */
   private async discoverEndpoints(issuer: string): Promise<IdPDiscoveryMetadata | null> {
@@ -148,36 +215,51 @@ export class TokenIntrospectionService {
       return cached;
     }
 
-    try {
-      // Try standard .well-known/openid-connect-configuration endpoint
-      const discoveryUrl = `${issuer}/.well-known/openid-connect-configuration`;
+    // Get all possible URLs to try (original + normalized)
+    const issuerUrls = this.normalizeIssuerUrl(issuer);
 
-      logger.debug('Discovering OAuth2 endpoints', { issuer, discoveryUrl });
+    // Try each URL until one succeeds
+    for (const tryUrl of issuerUrls) {
+      try {
+        // Try standard .well-known/openid-connect-configuration endpoint
+        const discoveryUrl = `${tryUrl}/.well-known/openid-connect-configuration`;
 
-      const response: AxiosResponse<IdPDiscoveryMetadata> = await this.httpClient.get(discoveryUrl);
+        logger.debug('Discovering OAuth2 endpoints', { issuer, tryUrl, discoveryUrl });
 
-      if (response.data && response.data.introspection_endpoint) {
-        // Cache the discovery metadata
-        this.discoveryCache.set(cacheKey, response.data);
+        const response: AxiosResponse<IdPDiscoveryMetadata> = await this.httpClient.get(discoveryUrl);
 
-        logger.info('Discovered OAuth2 endpoints', {
+        if (response.data && response.data.introspection_endpoint) {
+          // Cache the discovery metadata
+          this.discoveryCache.set(cacheKey, response.data);
+
+          logger.info('Discovered OAuth2 endpoints', {
+            issuer,
+            tryUrl,
+            introspectionEndpoint: response.data.introspection_endpoint,
+            jwksUri: response.data.jwks_uri,
+          });
+
+          return response.data;
+        } else {
+          logger.debug('Incomplete discovery metadata - missing introspection_endpoint', { issuer, tryUrl });
+          // Continue to next URL
+        }
+      } catch (error) {
+        logger.debug('Discovery attempt failed, trying next URL', {
           issuer,
-          introspectionEndpoint: response.data.introspection_endpoint,
-          jwksUri: response.data.jwks_uri,
+          tryUrl,
+          error: error instanceof Error ? error.message : 'Unknown error',
         });
-
-        return response.data;
-      } else {
-        logger.warn('Incomplete discovery metadata - missing introspection_endpoint', { issuer });
-        return null;
+        // Continue to next URL
       }
-    } catch (error) {
-      logger.error('Failed to discover OAuth2 endpoints', {
-        issuer,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-      return null;
     }
+
+    // All URLs failed
+    logger.error('Failed to discover OAuth2 endpoints from all URLs', {
+      issuer,
+      triedUrls: issuerUrls,
+    });
+    return null;
   }
 
   /**
@@ -221,22 +303,56 @@ export class TokenIntrospectionService {
 
       const kid = decoded.header.kid;
 
-      // Get discovery metadata
+      // Try to get discovery metadata
       const metadata = await this.discoverEndpoints(issuer);
-      if (!metadata?.jwks_uri) {
-        return { active: false, error: 'jwks_unavailable', error_description: 'JWKS URI not available' };
+
+      // If discovery succeeded, use the discovered JWKS URI
+      let jwksUri: string;
+      if (metadata?.jwks_uri) {
+        jwksUri = metadata.jwks_uri;
+        logger.debug('Using discovered JWKS URI', { issuer, jwksUri });
+      } else {
+        // FALLBACK: Discovery failed, construct JWKS URI manually
+        // Try normalized issuer URLs and append standard JWKS path
+        const issuerUrls = this.normalizeIssuerUrl(issuer);
+        const jwksPath = '/protocol/openid-connect/certs';
+
+        // Try each possible JWKS URI until one works
+        let jwksFound = false;
+        for (const tryIssuer of issuerUrls) {
+          const tryJwksUri = `${tryIssuer}${jwksPath}`;
+          try {
+            // Test if JWKS endpoint is accessible
+            const testResponse = await this.httpClient.get(tryJwksUri);
+            if (testResponse.data && testResponse.data.keys && testResponse.data.keys.length > 0) {
+              jwksUri = tryJwksUri;
+              jwksFound = true;
+              logger.info('Constructed JWKS URI (discovery unavailable)', { issuer, jwksUri });
+              break;
+            }
+          } catch (error) {
+            logger.debug('JWKS URI test failed, trying next', { tryJwksUri, error: error instanceof Error ? error.message : 'Unknown error' });
+          }
+        }
+
+        if (!jwksFound) {
+          logger.error('Could not find accessible JWKS URI', { issuer, triedUrls: issuerUrls });
+          return { active: false, error: 'jwks_unavailable', error_description: 'JWKS URI not available' };
+        }
       }
 
       // Get JWKS client
-      const cacheKey = `jwks:${metadata.jwks_uri}`;
+      const cacheKey = `jwks:${jwksUri}`;
       let jwksClient = this.jwksCache.get<JwksClient>(cacheKey);
 
       if (!jwksClient) {
         jwksClient = new JwksClient({
-          jwksUri: metadata.jwks_uri,
+          jwksUri: jwksUri,
           timeout: this.REQUEST_TIMEOUT,
           cache: true,
           cacheMaxAge: this.JWKS_CACHE_TTL * 1000,
+          requestHeaders: {},
+          requestAgent: new https.Agent({ rejectUnauthorized: false }), // Accept self-signed certs
         });
         this.jwksCache.set(cacheKey, jwksClient);
       }

@@ -112,6 +112,17 @@ spoke_pipeline_execute() {
         return 1
     fi
 
+    # GAP-001 FIX: Acquire deployment lock to prevent concurrent deployments
+    local lock_acquired=false
+    if type orch_acquire_deployment_lock &>/dev/null; then
+        if ! orch_acquire_deployment_lock "$code_upper"; then
+            log_error "Cannot start deployment for $code_upper - lock acquisition failed"
+            log_error "Another deployment is in progress"
+            return 1
+        fi
+        lock_acquired=true
+    fi
+
     # Initialize orchestration context
     orch_init_context "$code_upper" "$instance_name"
     if type orch_init_metrics &>/dev/null; then
@@ -119,59 +130,91 @@ spoke_pipeline_execute() {
     fi
 
     log_info "Starting spoke pipeline: $code_upper ($pipeline_mode mode)"
+    if [ "$lock_acquired" = true ]; then
+        log_info "Deployment lock acquired - concurrent-safe deployment"
+    fi
 
-    # Set initial state
-    orch_db_set_state "$code_upper" "INITIALIZING" "" \
-        "{\"mode\":\"$pipeline_mode\",\"instance_name\":\"$instance_name\"}"
+    # Check current state for logging
+    local current_state=$(get_deployment_state "$code_upper" 2>/dev/null || echo "UNKNOWN")
+    log_verbose "Current state before preflight: $current_state"
 
     # Execute phases based on mode
     local phase_result=0
 
-    # Phase 1: Preflight (always runs)
+    log_verbose "Starting phase execution (mode: $pipeline_mode)"
+
+    # Phase 1: Preflight (always runs) - MUST run BEFORE setting state
+    # This validates no other deployment is in progress
+    log_verbose "Executing phase 1: PREFLIGHT"
     if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_PREFLIGHT" "$pipeline_mode"; then
+        log_warn "Preflight phase failed, stopping pipeline"
         phase_result=1
+    fi
+
+    # Set initial state AFTER preflight passes (not before)
+    if [ $phase_result -eq 0 ]; then
+        log_verbose "Preflight passed, setting state to INITIALIZING..."
+        orch_db_set_state "$code_upper" "INITIALIZING" "" \
+            "{\"mode\":\"$pipeline_mode\",\"instance_name\":\"$instance_name\"}" || true
+        log_verbose "State set to INITIALIZING"
     fi
 
     # Phase 2: Initialization (skip for 'up' mode)
     if [ $phase_result -eq 0 ] && [ "$pipeline_mode" != "$PIPELINE_MODE_UP" ]; then
+        log_verbose "Executing phase 2: INITIALIZATION"
         if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_INITIALIZATION" "$pipeline_mode"; then
+            log_warn "Initialization phase failed, stopping pipeline"
             phase_result=1
         fi
+    else
+        [ "$pipeline_mode" = "$PIPELINE_MODE_UP" ] && log_verbose "Skipping INITIALIZATION (up mode)"
     fi
 
     # Phase 3: Deployment (always runs)
     if [ $phase_result -eq 0 ]; then
+        log_verbose "Executing phase 3: DEPLOYMENT"
         if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_DEPLOYMENT" "$pipeline_mode"; then
+            log_warn "Deployment phase failed, stopping pipeline"
             phase_result=1
         fi
     fi
 
     # Phase 4: Configuration (always runs)
     if [ $phase_result -eq 0 ]; then
+        log_verbose "Executing phase 4: CONFIGURATION"
         if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_CONFIGURATION" "$pipeline_mode"; then
+            log_warn "Configuration phase failed, stopping pipeline"
             phase_result=1
         fi
     fi
 
     # Phase 5: Seeding (deploy mode only)
     if [ $phase_result -eq 0 ] && [ "$pipeline_mode" = "$PIPELINE_MODE_DEPLOY" ]; then
+        log_verbose "Executing phase 5: SEEDING"
         if ! spoke_pipeline_run_phase "$code_upper" "SEEDING" "$pipeline_mode"; then
+            log_warn "Seeding phase failed, stopping pipeline"
             phase_result=1
         fi
+    else
+        [ "$pipeline_mode" != "$PIPELINE_MODE_DEPLOY" ] && log_verbose "Skipping SEEDING (not deploy mode)"
     fi
 
     # Phase 6: Verification (always runs)
     if [ $phase_result -eq 0 ]; then
+        log_verbose "Executing phase 6: VERIFICATION"
         if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_VERIFICATION" "$pipeline_mode"; then
+            log_warn "Verification phase failed, stopping pipeline"
             phase_result=1
         fi
     fi
+
+    log_verbose "Phase execution complete (result: $phase_result)"
 
     # Calculate duration
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
 
-    # Finalize
+    # Finalize (release lock will happen in cleanup below)
     if [ $phase_result -eq 0 ]; then
         orch_db_set_state "$code_upper" "COMPLETE" "" \
             "{\"duration_seconds\":$duration,\"mode\":\"$pipeline_mode\"}"
@@ -182,7 +225,7 @@ spoke_pipeline_execute() {
         fi
 
         spoke_pipeline_print_success "$code_upper" "$instance_name" "$duration" "$pipeline_mode"
-        return 0
+        local final_result=0
     else
         orch_db_set_state "$code_upper" "FAILED" "Pipeline failed" \
             "{\"duration_seconds\":$duration,\"mode\":\"$pipeline_mode\"}"
@@ -193,8 +236,15 @@ spoke_pipeline_execute() {
         fi
 
         spoke_pipeline_print_failure "$code_upper" "$instance_name" "$duration"
-        return 1
+        local final_result=1
     fi
+
+    # Always release deployment lock at the end
+    if [ "$lock_acquired" = true ] && type orch_release_deployment_lock &>/dev/null; then
+        orch_release_deployment_lock "$code_upper"
+    fi
+
+    return $final_result
 }
 
 ##
@@ -216,12 +266,43 @@ spoke_pipeline_run_phase() {
 
     log_step "Phase: $phase_name"
 
-    # Update state
-    orch_db_set_state "$instance_code" "$phase_name"
+    # Map pipeline phase names to orchestration states
+    local state_name="$phase_name"
+    case "$phase_name" in
+        "PREFLIGHT")
+            # Don't change state for preflight (validation only)
+            ;;
+        "INITIALIZATION")
+            # State already set to INITIALIZING in pipeline_execute
+            ;;
+        "DEPLOYMENT")
+            state_name="DEPLOYING"
+            orch_db_set_state "$instance_code" "$state_name" "" "{\"phase\":\"$phase_name\"}"
+            ;;
+        "CONFIGURATION")
+            state_name="CONFIGURING"
+            orch_db_set_state "$instance_code" "$state_name" "" "{\"phase\":\"$phase_name\"}"
+            ;;
+        "VERIFICATION")
+            state_name="VERIFYING"
+            orch_db_set_state "$instance_code" "$state_name" "" "{\"phase\":\"$phase_name\"}"
+            ;;
+        "SEEDING")
+            # Keep CONFIGURING state during seeding
+            ;;
+        *)
+            # Custom phase - update state if valid
+            if type orch_db_set_state &>/dev/null; then
+                orch_db_set_state "$instance_code" "$phase_name" "" "{\"phase\":\"$phase_name\"}"
+            fi
+            ;;
+    esac
 
-    # Create checkpoint before phase
-    if type orch_create_checkpoint &>/dev/null; then
-        orch_create_checkpoint "$instance_code" "$phase_name" "Starting $phase_name phase"
+    # Create checkpoint before critical phases
+    if [[ "$phase_name" =~ ^(DEPLOYMENT|CONFIGURATION)$ ]]; then
+        if type orch_create_checkpoint &>/dev/null; then
+            orch_create_checkpoint "$instance_code" "$phase_name" "Starting $phase_name phase" 2>/dev/null || true
+        fi
     fi
 
     # Execute phase function
@@ -230,15 +311,26 @@ spoke_pipeline_run_phase() {
     if type "$phase_function" &>/dev/null; then
         if "$phase_function" "$instance_code" "$pipeline_mode"; then
             log_success "Phase $phase_name completed"
+
+            # Record successful step
+            if type orch_db_record_step &>/dev/null; then
+                orch_db_record_step "$instance_code" "$phase_name" "COMPLETED" ""
+            fi
+
             return 0
         else
             log_error "Phase $phase_name failed"
 
-            # Record error if orchestration framework available
+            # Record error
             if type orch_record_error &>/dev/null; then
                 orch_record_error "PHASE_${phase_name}_FAIL" "$ORCH_SEVERITY_CRITICAL" \
                     "Phase $phase_name failed for $instance_code" "$phase_name" \
                     "Check logs and retry: ./dive spoke deploy $instance_code"
+            fi
+
+            # Record failed step
+            if type orch_db_record_step &>/dev/null; then
+                orch_db_record_step "$instance_code" "$phase_name" "FAILED" "Phase execution returned error"
             fi
 
             # Attempt rollback if enabled
@@ -250,6 +342,12 @@ spoke_pipeline_run_phase() {
         fi
     else
         log_warn "Phase function not found: $phase_function (skipping)"
+
+        # Record skipped step
+        if type orch_db_record_step &>/dev/null; then
+            orch_db_record_step "$instance_code" "$phase_name" "SKIPPED" "Function not found"
+        fi
+
         return 0
     fi
 }

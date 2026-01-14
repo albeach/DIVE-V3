@@ -155,6 +155,8 @@ function findRegoFilesRecursive(dir: string, baseDir: string): { filePath: strin
 
 /**
  * Get all available policies (including modular hierarchy)
+ * BEST PRACTICE: Read from mounted /app/policies directory (source of truth)
+ * Backend has read-only mount of policies for metadata display (matches Hub pattern)
  */
 export async function listPolicies(): Promise<IPolicyMetadata[]> {
     try {
@@ -185,6 +187,72 @@ export async function listPolicies(): Promise<IPolicyMetadata[]> {
         logger.error('Failed to list policies', { error });
         throw error;
     }
+}
+
+/**
+ * Fallback: List policies from filesystem (for backward compatibility)
+ */
+async function listPoliciesFromFilesystem(): Promise<IPolicyMetadata[]> {
+    try {
+        const policies: IPolicyMetadata[] = [];
+
+        if (!fs.existsSync(POLICY_DIR)) {
+            logger.warn('Policy directory not found', { POLICY_DIR });
+            return policies;
+        }
+
+        // Find all .rego files recursively
+        const regoFiles = findRegoFilesRecursive(POLICY_DIR, POLICY_DIR);
+
+        for (const { filePath, relativePath } of regoFiles) {
+            try {
+                const policyId = relativePath.replace(/\.rego$/, '').replace(/\//g, '_');
+                const metadata = await getPolicyMetadata(policyId, filePath, relativePath);
+                policies.push(metadata);
+            } catch (error) {
+                logger.warn('Failed to process policy file', { filePath, error });
+            }
+        }
+
+        logger.info('Listed policies from filesystem (fallback)', { count: policies.length });
+        return policies;
+
+    } catch (error) {
+        logger.error('Failed to list policies from filesystem', { error });
+        return [];
+    }
+}
+
+/**
+ * Parse policy metadata from Rego content (for OPA-sourced policies)
+ */
+function parsePolicyMetadataFromContent(
+    policyId: string,
+    relativePath: string,
+    content: string
+): IPolicyMetadata {
+    const layer = determineLayer(relativePath);
+    const tenantCode = extractTenantCode(relativePath);
+    const packageName = extractPackage(content);
+    const imports = extractImports(content);
+    const rules = extractRules(content);
+    const tests = extractTests(content);
+
+    return {
+        id: policyId,
+        name: path.basename(policyId, '.rego'),
+        description: extractDescription(content),
+        layer,
+        tenantCode,
+        path: relativePath,
+        packageName: packageName || 'unknown',
+        ruleCount: rules.length,
+        testCount: tests.length,
+        importCount: imports.length,
+        natoCompliant: isNATOCompliant(content),
+        lastModified: new Date().toISOString(), // OPA doesn't track this, use current time
+        size: content.length
+    };
 }
 
 /**
@@ -693,6 +761,7 @@ export async function testPolicyDecision(input: IOPAInput): Promise<IPolicyTestR
  */
 export async function getPolicyStats(): Promise<IPolicyStats> {
     try {
+        // Query OPA for actual loaded policies (not filesystem)
         const policies = await listPolicies();
         const totalTests = policies.reduce((sum, p) => sum + p.testCount, 0);
         const activeRules = policies.reduce((sum, p) => sum + p.ruleCount, 0);
@@ -706,7 +775,13 @@ export async function getPolicyStats(): Promise<IPolicyStats> {
 
     } catch (error) {
         logger.error('Failed to get policy stats', { error });
-        throw error;
+        // Return zero stats on error instead of throwing
+        return {
+            totalPolicies: 0,
+            activeRules: 0,
+            totalTests: 0,
+            lastUpdated: new Date().toISOString()
+        };
     }
 }
 

@@ -29,15 +29,6 @@ export function IdentityDrawer({ open, onClose, user }: { open: boolean; onClose
     }
   }, [session?.idToken]);
 
-  // #region agent log
-  // DEBUG: Log raw token claims for ACR/AMR analysis (Hypothesis A, B, C, D, E)
-  useMemo(() => {
-    if (decoded || user) {
-      fetch('http://127.0.0.1:7243/ingest/84b84b04-5661-4074-af82-a6f395f1c783',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'IdentityDrawer.tsx:35',message:'ACR_AMR_RAW_TOKEN_CLAIMS',data:{user_acr:user?.acr,user_amr:user?.amr,decoded_acr:decoded?.acr,decoded_amr:decoded?.amr,decoded_auth_time:decoded?.auth_time,user_clearance:user?.clearance,decoded_clearance:decoded?.clearance,decoded_iss:decoded?.iss,decoded_azp:decoded?.azp,has_id_token:!!session?.idToken,token_claims_preview:decoded ? Object.keys(decoded) : []},timestamp:Date.now(),sessionId:'acr-amr-debug',hypothesisId:'ALL'})}).catch(()=>{});
-    }
-  }, [decoded, user, session?.idToken]);
-  // #endregion
-
   if (!open) return null;
 
   const pseudonym = getPseudonymFromUser((user || {}) as any);
