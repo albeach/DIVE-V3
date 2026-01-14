@@ -928,6 +928,48 @@
         "healthEndpoint": "/health",
         "requestKeyEndpoint": "/request-key"
       }
+    },
+    {
+      "kasId": "tst-kas",
+      "organization": "Unknown",
+      "countryCode": "TST",
+      "kasUrl": "https://tst-api.dive25.com/api/kas",
+      "internalKasUrl": "http://kas-tst:8080",
+      "authMethod": "jwt",
+      "authConfig": {
+        "jwtIssuer": "https://tst-idp.dive25.com/realms/dive-v3-broker",
+        "jwtAudience": "dive-v3-broker"
+      },
+      "trustLevel": "high",
+      "supportedCountries": [
+        "TST"
+      ],
+      "supportedCOIs": [
+        "NATO",
+        "NATO-COSMIC"
+      ],
+      "policyTranslation": {
+        "clearanceMapping": {
+          "UNCLASSIFIED": "UNCLASSIFIED",
+          "RESTRICTED": "RESTRICTED",
+          "CONFIDENTIAL": "CONFIDENTIAL",
+          "SECRET": "SECRET",
+          "TOP_SECRET": "TOP_SECRET"
+        }
+      },
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": [
+          "key-release",
+          "policy-evaluation",
+          "audit-logging",
+          "ztdf-support"
+        ],
+        "contact": "kas-admin@tst.dive25.com",
+        "lastVerified": "2026-01-14T05:49:48Z",
+        "healthEndpoint": "/health",
+        "requestKeyEndpoint": "/request-key"
+      }
     }
   ],
   "federationTrust": {

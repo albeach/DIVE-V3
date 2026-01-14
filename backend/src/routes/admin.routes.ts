@@ -69,6 +69,7 @@ import {
     checkRevocationStatus,
     updateCRL
 } from '../controllers/admin-certificates.controller';
+import { validateSystem, quickHealth } from '../controllers/validation.controller';
 import { metricsService } from '../services/metrics.service';
 import {
     getPolicyHandler,
@@ -668,5 +669,22 @@ router.get('/opa/policy', getPolicyHandler);
  * Toggle a policy rule on/off (super_admin only)
  */
 router.post('/opa/policy/toggle-rule', requireSuperAdmin, toggleRuleHandler);
+
+// ============================================
+// System Validation Routes
+// ============================================
+
+/**
+ * GET /api/admin/validate
+ * Comprehensive system validation
+ * Checks: Secret sync, KAS registry, environment config
+ */
+router.get('/validate', validateSystem);
+
+/**
+ * GET /api/admin/health-check
+ * Quick health check endpoint
+ */
+router.get('/health-check', quickHealth);
 
 export default router;

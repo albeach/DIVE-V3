@@ -480,7 +480,9 @@ services:
       OPAL_POLICY_REPO_MAIN_BRANCH: master
       OPAL_POLICY_REPO_POLLING_INTERVAL: 30
       # Policy paths to include (relative to repo root)
-      OPAL_POLICY_SOURCE_DIRS: base,org,tenant,entrypoints,compat
+      # CRITICAL FIX (2026-01-15): Include root (.) for admin policies and other root-level files
+      # Without root, files like admin_authorization_policy.rego are excluded
+      OPAL_POLICY_SOURCE_DIRS: .,base,org,tenant,entrypoints,compat
       # Multiple data topics for real-time policy data distribution (Phase 2)
       OPAL_DATA_TOPICS_DEFAULT: policy_data,trusted_issuers,federation_matrix,tenant_configs
       OPAL_INLINE_OPA_CONFIG: "false"

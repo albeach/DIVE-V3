@@ -21,7 +21,7 @@ import { mongoKasRegistryStore, IKasInstance, IKasFederationAgreement } from '..
  */
 export interface IKasRouteResult {
   success: boolean;
-  kasInstance?: IKasInstance;
+  kasServer?: IKasInstance;
   routedToUrl?: string;
   reason: string;
   fallbackUsed?: boolean;
@@ -108,7 +108,7 @@ class KasRouterService {
 
       return {
         success: true,
-        kasInstance: kas,
+        kasServer: kas,
         routedToUrl: kas.kasUrl,
         reason: `Routed to supporting KAS: ${kas.kasId}`,
         fallbackUsed: true,
@@ -149,7 +149,7 @@ class KasRouterService {
 
     return {
       success: true,
-      kasInstance: originKas,
+      kasServer: originKas,
       routedToUrl: originKas.kasUrl,
       reason: `Routed to origin KAS: ${originKas.kasId}`,
     };
@@ -164,7 +164,7 @@ class KasRouterService {
     // Find appropriate KAS
     const routeResult = await this.findKasForRequest(originInstance, requesterInstance);
 
-    if (!routeResult.success || !routeResult.kasInstance) {
+    if (!routeResult.success || !routeResult.kasServer) {
       logger.error('Failed to route key request', {
         requestId,
         resourceId,
@@ -178,13 +178,13 @@ class KasRouterService {
       };
     }
 
-    const kasInstance = routeResult.kasInstance;
+    const kasServer = routeResult.kasServer;
     const kasUrl = routeResult.routedToUrl!;
 
     logger.info('Executing cross-KAS key request', {
       requestId,
       resourceId,
-      kasId: kasInstance.kasId,
+      kasId: kasServer.kasId,
       kasUrl,
       origin: originInstance,
       requester: requesterInstance,
@@ -222,13 +222,13 @@ class KasRouterService {
       logger.info('Cross-KAS request completed', {
         requestId,
         resourceId,
-        kasId: kasInstance.kasId,
+        kasId: kasServer.kasId,
         status: response.status,
         success: response.data?.success,
       });
 
       // Update heartbeat for this KAS
-      await mongoKasRegistryStore.heartbeat(kasInstance.kasId);
+      await mongoKasRegistryStore.heartbeat(kasServer.kasId);
 
       return {
         success: response.data?.success || false,
@@ -236,7 +236,7 @@ class KasRouterService {
         key: response.data?.key,
         error: response.data?.error,
         denialReason: response.data?.denialReason,
-        kasId: kasInstance.kasId,
+        kasId: kasServer.kasId,
       };
     } catch (error) {
       const axiosError = error as AxiosError;
@@ -246,7 +246,7 @@ class KasRouterService {
       logger.error('Cross-KAS request failed', {
         requestId,
         resourceId,
-        kasId: kasInstance.kasId,
+        kasId: kasServer.kasId,
         kasUrl,
         status,
         error: axiosError.message,
@@ -254,7 +254,7 @@ class KasRouterService {
 
       // If target KAS is unreachable, mark it as potentially offline
       if (!axiosError.response) {
-        logger.warn('KAS instance may be offline', { kasId: kasInstance.kasId });
+        logger.warn('KAS instance may be offline', { kasId: kasServer.kasId });
         // Don't suspend automatically - just log for monitoring
       }
 
@@ -262,7 +262,7 @@ class KasRouterService {
         success: false,
         error: errorData?.error as string || 'KAS request failed',
         denialReason: errorData?.denialReason as string || axiosError.message,
-        kasId: kasInstance.kasId,
+        kasId: kasServer.kasId,
       };
     }
   }
@@ -271,7 +271,7 @@ class KasRouterService {
    * Get current routing table (for debugging/monitoring)
    */
   async getRoutingTable(): Promise<{
-    kasInstances: Array<{
+    kasServers: Array<{
       kasId: string;
       organization: string;
       kasUrl: string;
@@ -286,7 +286,7 @@ class KasRouterService {
     const agreements = await mongoKasRegistryStore.getAllFederationAgreements();
 
     return {
-      kasInstances: instances.map((kas) => ({
+      kasServers: instances.map((kas) => ({
         kasId: kas.kasId,
         organization: kas.organization,
         kasUrl: kas.kasUrl,

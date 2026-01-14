@@ -1,13 +1,13 @@
 /**
  * Seed 1,000 Valid ZTDF-Encrypted Documents (COI COHERENCE FIX)
- * 
+ *
  * CRITICAL FIXES:
  * 1. Deterministic COI → Releasability derivation (no random combos)
  * 2. Enforces mutual exclusivity (US-ONLY ⊥ foreign-sharing COIs)
  * 3. Validates subset/superset with coiOperator (prevents widening)
  * 4. NOFORN → US-ONLY + REL USA only
  * 5. All documents pass strict COI validation
- * 
+ *
  * Date: October 21, 2025
  */
 
@@ -384,23 +384,23 @@ async function createValidZTDFDocument(index: number) {
     const keyAccessObjects = [];
     // For pilot: all KAOs point to the single running KAS instance
     // In production, these would be separate KAS endpoints
-    const kasInstances = [
+    const kasServers = [
         { kasId: 'dive-v3-kas-pilot', kasUrl: `${KAS_URL}/request-key`, description: 'Primary KAS' },
         { kasId: 'dive-v3-kas-pilot', kasUrl: `${KAS_URL}/request-key`, description: 'FVEY KAS (pilot: same endpoint)' },
         { kasId: 'dive-v3-kas-pilot', kasUrl: `${KAS_URL}/request-key`, description: 'NATO KAS (pilot: same endpoint)' }
     ];
 
     for (let i = 0; i < kaoCount; i++) {
-        const kasInstance = kasInstances[i % kasInstances.length];
+        const kasServer = kasServers[i % kasServers.length];
         // Generate unique kaoId by including index to prevent duplicates
         const kaoId = COI.length > 1 && i < COI.length
             ? `kao-${COI[i]}-${resourceId}`
-            : `kao-${kasInstance.kasId}-${i}-${resourceId}`;
+            : `kao-${kasServer.kasId}-${i}-${resourceId}`;
 
         keyAccessObjects.push({
             kaoId,
-            kasUrl: kasInstance.kasUrl,
-            kasId: kasInstance.kasId,
+            kasUrl: kasServer.kasUrl,
+            kasId: kasServer.kasId,
             wrappedKey,
             wrappingAlgorithm: 'RSA-OAEP-256',
             policyBinding: {

@@ -309,7 +309,7 @@ router.get('/registry', async (_req: Request, res: Response): Promise<void> => {
 
         res.json({
             success: true,
-            kasInstances: instances.map(kas => ({
+            kasServers: instances.map(kas => ({
                 kasId: kas.kasId,
                 organization: kas.organization,
                 kasUrl: kas.kasUrl,
@@ -486,7 +486,7 @@ router.get('/lookup/:country', async (req: Request, res: Response): Promise<void
         res.json({
             success: true,
             country: country.toUpperCase(),
-            kasInstances: instances.map(kas => ({
+            kasServers: instances.map(kas => ({
                 kasId: kas.kasId,
                 organization: kas.organization,
                 kasUrl: kas.kasUrl,
