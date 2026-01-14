@@ -218,10 +218,10 @@
         "projectName": "usa"
       },
       "services": {
-        "_comment": "USA is the primary instance - services use base names without suffix",
+        "_comment": "USA is the primary hub instance - all services use dive-hub-* naming pattern",
         "frontend": {
           "name": "frontend",
-          "containerName": "dive-v3-frontend",
+          "containerName": "dive-hub-frontend",
           "internalPort": 3000,
           "externalPort": 3000,
           "protocol": "https",
@@ -229,7 +229,7 @@
         },
         "backend": {
           "name": "backend",
-          "containerName": "dive-v3-backend",
+          "containerName": "dive-hub-backend",
           "internalPort": 4000,
           "externalPort": 4000,
           "protocol": "https",
@@ -237,7 +237,7 @@
         },
         "keycloak": {
           "name": "keycloak",
-          "containerName": "dive-v3-keycloak",
+          "containerName": "dive-hub-keycloak",
           "internalPort": 8443,
           "externalPort": 8443,
           "protocol": "https",
@@ -245,7 +245,7 @@
         },
         "kas": {
           "name": "kas",
-          "containerName": "dive-v3-kas",
+          "containerName": "dive-hub-kas",
           "internalPort": 8080,
           "externalPort": 8090,
           "protocol": "http",
@@ -253,25 +253,25 @@
         },
         "postgres": {
           "name": "postgres",
-          "containerName": "dive-v3-postgres",
+          "containerName": "dive-hub-postgres",
           "internalPort": 5432,
           "externalPort": 5433
         },
         "mongodb": {
           "name": "mongo",
-          "containerName": "dive-v3-mongo",
+          "containerName": "dive-hub-mongodb",
           "internalPort": 27017,
           "externalPort": 27017
         },
         "redis": {
           "name": "redis",
-          "containerName": "dive-v3-redis",
+          "containerName": "dive-hub-redis",
           "internalPort": 6379,
           "externalPort": 6379
         },
         "opa": {
           "name": "opa",
-          "containerName": "dive-v3-opa",
+          "containerName": "dive-hub-opa",
           "internalPort": 8181,
           "externalPort": 8181
         }

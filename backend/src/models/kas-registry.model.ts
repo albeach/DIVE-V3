@@ -130,9 +130,9 @@ export class MongoKasRegistryStore {
         if (fs.existsSync(registryPath)) {
           const data = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
 
-          // Seed KAS instances
-          if (data.kasInstances) {
-            const instances: IKasInstance[] = data.kasInstances.map((instance: Record<string, unknown>) => ({
+          // Seed KAS servers
+          if (data.kasServers) {
+            const instances: IKasInstance[] = data.kasServers.map((instance: Record<string, unknown>) => ({
               kasId: instance.kasId as string,
               organization: instance.organization as string,
               kasUrl: instance.kasUrl as string,
@@ -320,7 +320,7 @@ export class MongoKasRegistryStore {
   async getRegistryForOpal(): Promise<Record<string, unknown>> {
     const instances = await this.findActive();
 
-    const kasInstances = instances.map((kas) => ({
+    const kasServers = instances.map((kas) => ({
       kasId: kas.kasId,
       organization: kas.organization,
       kasUrl: kas.kasUrl,
@@ -332,8 +332,8 @@ export class MongoKasRegistryStore {
     }));
 
     return {
-      kasInstances,
-      count: kasInstances.length,
+      kasServers,
+      count: kasServers.length,
     };
   }
 

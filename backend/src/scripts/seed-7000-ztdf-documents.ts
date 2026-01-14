@@ -487,7 +487,7 @@ async function createValidZTDFDocument(index: number) {
     }
 
     const keyAccessObjects = [];
-    const kasInstances = [
+    const kasServers = [
         { kasId: 'dive-v3-kas-pilot', kasUrl: `${KAS_URL}/request-key`, description: 'Primary KAS' },
         { kasId: 'dive-v3-kas-pilot', kasUrl: `${KAS_URL}/request-key`, description: 'FVEY KAS (pilot: same endpoint)' },
         { kasId: 'dive-v3-kas-pilot', kasUrl: `${KAS_URL}/request-key`, description: 'NATO KAS (pilot: same endpoint)' }
@@ -497,12 +497,12 @@ async function createValidZTDFDocument(index: number) {
         const kasInstance = kasInstances[i % kasInstances.length];
         const kaoId = COI.length > 1 && i < COI.length
             ? `kao-${COI[i]}-${resourceId}`
-            : `kao-${kasInstance.kasId}-${i}-${resourceId}`;
+            : `kao-${kasServer.kasId}-${i}-${resourceId}`;
 
         keyAccessObjects.push({
             kaoId,
-            kasUrl: kasInstance.kasUrl,
-            kasId: kasInstance.kasId,
+            kasUrl: kasServer.kasUrl,
+            kasId: kasServer.kasId,
             wrappedKey,
             wrappingAlgorithm: 'RSA-OAEP-256',
             policyBinding: {

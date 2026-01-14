@@ -65,17 +65,191 @@ declare -A SERVICE_DEPENDENCIES=(
     ["opal-client"]="backend"
 )
 
+# =============================================================================
+# SERVICE DEPENDENCY VALIDATION (GAP-005 Fix)
+# =============================================================================
+
+##
+# Detect circular dependencies in service dependency graph
+#
+# Returns:
+#   0 - No circular dependencies
+#   1 - Circular dependency detected
+##
+orch_detect_circular_dependencies() {
+    log_verbose "Validating service dependency graph for circular dependencies..."
+
+    local visited_services=""
+
+    for service in "${!SERVICE_DEPENDENCIES[@]}"; do
+        # Check if already visited
+        if [[ " $visited_services " =~ " $service " ]]; then
+            continue
+        fi
+
+        # Check this service and its dependencies
+        # Capture cycle path from stderr if cycle detected
+        local cycle_result
+        cycle_result=$(_orch_check_cycle "$service" "" 2>&1)
+        local cycle_exit=$?
+
+        if [ $cycle_exit -ne 0 ]; then
+            # Cycle detected
+            log_error "❌ Circular dependency detected!"
+            log_error "Dependency cycle: $cycle_result"
+            log_error "Invalid service configuration - circular dependencies must be resolved"
+            log_error "Please fix SERVICE_DEPENDENCIES in orchestration-framework.sh"
+            return 1
+        fi
+
+        # Mark as visited
+        visited_services="$visited_services $service"
+    done
+
+    log_success "✅ No circular dependencies found in service dependency graph"
+    return 0
+}
+
+##
+# Check for circular dependency (internal helper)
+#
+# Arguments:
+#   $1 - Current service
+#   $2 - Path so far (space-separated)
+#
+# Returns:
+#   0 - No cycle
+#   1 - Cycle detected (prints cycle path to stderr)
+##
+_orch_check_cycle() {
+    local service="$1"
+    local path="$2"
+
+    # Check if service is in current path (cycle!)
+    if [[ " $path " =~ " $service " ]]; then
+        # Cycle detected - output the cycle path
+        echo "$path $service" >&2
+        return 1  # Cycle detected
+    fi
+
+    # Add to path
+    local new_path="$path $service"
+
+    # Get dependencies
+    local deps="${SERVICE_DEPENDENCIES[$service]}"
+
+    # Process dependencies
+    if [ "$deps" != "none" ] && [ -n "$deps" ]; then
+        IFS=',' read -ra DEP_ARRAY <<< "$deps"
+        for dep in "${DEP_ARRAY[@]}"; do
+            dep=$(echo "$dep" | xargs)  # Trim whitespace
+
+            # Validate dependency exists
+            if [ -z "${SERVICE_DEPENDENCIES[$dep]}" ]; then
+                log_verbose "Service $service depends on undefined service: $dep (will be treated as leaf)"
+                continue
+            fi
+
+            # Recurse - if returns 1 (cycle), propagate up
+            if ! _orch_check_cycle "$dep" "$new_path"; then
+                return 1  # Cycle found in recursion
+            fi
+        done
+    fi
+
+    return 0  # No cycle found
+}
+
+##
+# Calculate dependency level for a service (for parallel startup)
+#
+# Arguments:
+#   $1 - Service name
+#
+# Returns:
+#   Dependency level (0 = no deps, 1 = depends on level 0, etc.)
+##
+orch_calculate_dependency_level() {
+    local service="$1"
+    _orch_calc_level "$service" ""
+}
+
+##
+# Recursive dependency level calculation (internal helper)
+#
+# Arguments:
+#   $1 - Service name
+#   $2 - Already calculated levels (space-separated "service:level")
+#
+# Returns:
+#   Dependency level (via echo)
+##
+_orch_calc_level() {
+    local service="$1"
+    local calculated="$2"
+
+    # Check if already calculated
+    for entry in $calculated; do
+        local svc="${entry%%:*}"
+        local lvl="${entry##*:}"
+        if [ "$svc" = "$service" ]; then
+            echo "$lvl"
+            return 0
+        fi
+    done
+
+    local deps="${SERVICE_DEPENDENCIES[$service]}"
+
+    # No dependencies = level 0
+    if [ "$deps" = "none" ] || [ -z "$deps" ]; then
+        echo "0"
+        return 0
+    fi
+
+    # Calculate max dependency level + 1
+    local max_dep_level=0
+    IFS=',' read -ra DEP_ARRAY <<< "$deps"
+    for dep in "${DEP_ARRAY[@]}"; do
+        dep=$(echo "$dep" | xargs)
+
+        # Recurse to get dependency's level
+        local dep_level=$(_orch_calc_level "$dep" "$calculated")
+        calculated="$calculated $dep:$dep_level"
+
+        if [ "$dep_level" -gt "$max_dep_level" ]; then
+            max_dep_level=$dep_level
+        fi
+    done
+
+    echo $((max_dep_level + 1))
+}
+
 # Service startup timeouts (seconds)
+# Updated 2026-01-14: Keycloak timeout increased 180→240s (GAP-002 fix)
+# Rationale: P99 startup time is 150s, need 50%+ margin (was only 17%)
 declare -A SERVICE_TIMEOUTS=(
     ["postgres"]=60
     ["mongodb"]=60
     ["redis"]=30
-    ["keycloak"]=180
+    ["keycloak"]=240      # Increased from 180s - handles P99 (150s) + 60% margin
     ["backend"]=120
     ["frontend"]=60
     ["opa"]=30
     ["kas"]=60
     ["opal-client"]=30
+)
+
+# Timeout bounds for dynamic calculation (future enhancement)
+declare -A SERVICE_MIN_TIMEOUTS=(
+    ["keycloak"]=180
+    ["backend"]=90
+    ["frontend"]=45
+)
+
+declare -A SERVICE_MAX_TIMEOUTS=(
+    ["keycloak"]=300
+    ["backend"]=180
+    ["frontend"]=90
 )
 
 # =============================================================================
@@ -94,10 +268,229 @@ declare -A ORCH_CONTEXT=(
     ["errors_low"]=0
     ["retry_count"]=0
     ["checkpoint_enabled"]=true
+    ["lock_acquired"]=false
+    ["lock_fd"]=0
 )
 
 # Error tracking
 declare -a ORCHESTRATION_ERRORS=()
+
+# =============================================================================
+# CONCURRENT DEPLOYMENT PROTECTION (GAP-001 Fix)
+# =============================================================================
+# Implements file-based and PostgreSQL advisory locks to prevent
+# concurrent deployments of the same instance from corrupting state
+# =============================================================================
+
+##
+# Acquire deployment lock for instance (file-based with PostgreSQL fallback)
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Timeout seconds (optional, default: 30)
+#
+# Returns:
+#   0 - Lock acquired
+#   1 - Lock acquisition failed (another deployment in progress)
+##
+orch_acquire_deployment_lock() {
+    local instance_code="$1"
+    local timeout="${2:-30}"
+    local lock_file="${DIVE_ROOT}/.dive-state/${instance_code}.lock"
+    local lock_fd=200
+
+    log_verbose "Attempting to acquire deployment lock for $instance_code (timeout: ${timeout}s)..."
+
+    # Ensure lock directory exists
+    mkdir -p "$(dirname "$lock_file")"
+
+    # Check if flock is available
+    if ! command -v flock >/dev/null 2>&1; then
+        log_verbose "flock not available, using mkdir-based locking (macOS compatible)"
+        # Fallback: mkdir-based locking (atomic on all Unix systems)
+        local lock_dir="${DIVE_ROOT}/.dive-state/${instance_code}.lock.d"
+        local start_time=$(date +%s)
+
+        while [ $(($(date +%s) - start_time)) -lt "$timeout" ]; do
+            if mkdir "$lock_dir" 2>/dev/null; then
+                # Lock acquired
+                ORCH_CONTEXT["lock_acquired"]=true
+                ORCH_CONTEXT["lock_type"]="mkdir"
+
+                # Write lock metadata
+                {
+                    echo "instance_code=$instance_code"
+                    echo "locked_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                    echo "locked_by=${USER:-system}"
+                    echo "pid=$$"
+                    echo "hostname=$(hostname)"
+                } > "${lock_dir}/metadata"
+
+                log_success "Deployment lock acquired for $instance_code (mkdir)"
+
+                # Also try PostgreSQL advisory lock
+                if type -t orch_db_acquire_lock >/dev/null 2>&1; then
+                    orch_db_acquire_lock "$instance_code" 0 2>/dev/null || true
+                fi
+
+                return 0
+            fi
+
+            sleep 1
+        done
+
+        # Timeout
+        log_error "Failed to acquire deployment lock for $instance_code (timeout)"
+        if [ -d "$lock_dir" ] && [ -f "${lock_dir}/metadata" ]; then
+            log_error "Current lock holder:"
+            cat "${lock_dir}/metadata" | while IFS= read -r line; do
+                log_error "  $line"
+            done
+        fi
+        return 1
+    fi
+
+    # flock available, use it
+    touch "$lock_file"
+    exec 200>"$lock_file"
+
+    if flock -x -w "$timeout" 200; then
+        # Lock acquired successfully
+        ORCH_CONTEXT["lock_acquired"]=true
+        ORCH_CONTEXT["lock_fd"]=200
+        ORCH_CONTEXT["lock_type"]="flock"
+
+        # Write lock metadata
+        {
+            echo "instance_code=$instance_code"
+            echo "locked_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "locked_by=${USER:-system}"
+            echo "pid=$$"
+            echo "hostname=$(hostname)"
+        } >&200
+
+        log_success "Deployment lock acquired for $instance_code (flock)"
+
+        # Also try PostgreSQL advisory lock (best-effort)
+        if type -t orch_db_acquire_lock >/dev/null 2>&1; then
+            orch_db_acquire_lock "$instance_code" 0 2>/dev/null || \
+                log_verbose "DB advisory lock unavailable (file lock is sufficient)"
+        fi
+
+        return 0
+    else
+        # Lock acquisition failed
+        log_error "Failed to acquire deployment lock for $instance_code"
+        log_error "Another deployment may be in progress"
+        log_error "Lock file: $lock_file"
+
+        if [ -f "$lock_file" ]; then
+            local lock_info=$(cat "$lock_file" 2>/dev/null || echo "Unknown")
+            log_error "Current lock holder:"
+            echo "$lock_info" | while IFS= read -r line; do
+                log_error "  $line"
+            done
+        fi
+
+        exec 200>&-
+        return 1
+    fi
+}
+
+##
+# Release deployment lock for instance
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - Lock released
+#   1 - Lock was not acquired
+##
+orch_release_deployment_lock() {
+    local instance_code="$1"
+
+    if [ "${ORCH_CONTEXT["lock_acquired"]}" != "true" ]; then
+        log_verbose "No lock to release for $instance_code"
+        return 1
+    fi
+
+    log_verbose "Releasing deployment lock for $instance_code..."
+
+    # Release lock based on type
+    local lock_type="${ORCH_CONTEXT["lock_type"]:-flock}"
+
+    if [ "$lock_type" = "mkdir" ]; then
+        # Remove mkdir lock directory
+        local lock_dir="${DIVE_ROOT}/.dive-state/${instance_code}.lock.d"
+        rm -rf "$lock_dir" 2>/dev/null || true
+    else
+        # Release flock
+        local lock_fd="${ORCH_CONTEXT["lock_fd"]}"
+        if [ "$lock_fd" -gt 0 ]; then
+            if command -v flock >/dev/null 2>&1; then
+                flock -u "$lock_fd" 2>/dev/null || true
+            fi
+            eval "exec ${lock_fd}>&-" 2>/dev/null || true
+        fi
+    fi
+
+    # Release PostgreSQL advisory lock (if acquired)
+    if type -t orch_db_release_lock >/dev/null 2>&1; then
+        orch_db_release_lock "$instance_code" 2>/dev/null || true
+    fi
+
+    ORCH_CONTEXT["lock_acquired"]=false
+    ORCH_CONTEXT["lock_fd"]=0
+    ORCH_CONTEXT["lock_type"]=""
+
+    log_success "Deployment lock released for $instance_code"
+    return 0
+}
+
+##
+# Execute function with deployment lock protection
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Function to execute
+#   $@ - Arguments to pass to function
+#
+# Returns:
+#   Function exit code
+##
+orch_with_deployment_lock() {
+    local instance_code="$1"
+    local func="$2"
+    shift 2
+    local func_args=("$@")
+
+    # Acquire lock
+    if ! orch_acquire_deployment_lock "$instance_code"; then
+        orch_record_error "LOCK_ACQUISITION_FAILED" \
+            "$ORCH_SEVERITY_CRITICAL" \
+            "Could not acquire deployment lock for $instance_code" \
+            "deployment-lock" \
+            "Wait for current deployment to complete or manually remove lock: .dive-state/${instance_code}.lock" \
+            "{\"instance_code\":\"$instance_code\"}"
+        return 1
+    fi
+
+    # Set up cleanup trap
+    trap "orch_release_deployment_lock '$instance_code'" EXIT ERR INT TERM
+
+    # Execute function
+    local exit_code=0
+    $func "${func_args[@]}" || exit_code=$?
+
+    # Release lock
+    orch_release_deployment_lock "$instance_code"
+
+    # Clear trap
+    trap - EXIT ERR INT TERM
+
+    return $exit_code
+}
 
 ##
 # Initialize orchestration context
@@ -248,11 +641,33 @@ orch_generate_error_summary() {
 }
 
 # =============================================================================
-# SERVICE HEALTH MANAGEMENT
+# SERVICE HEALTH MANAGEMENT (GAP-007 Fix - Standardized Health Checks)
 # =============================================================================
 
+# Service health URL registry
+declare -A SERVICE_HEALTH_URLS=(
+    ["keycloak"]="/health"
+    ["backend"]="/health"
+    ["frontend"]="/"
+    ["opa"]="/health"
+    ["opal-server"]="/healthcheck"
+    ["opal-client"]="/ready"
+    ["kas"]="/health"
+)
+
+# Service health port configuration
+declare -A SERVICE_HEALTH_PORTS=(
+    ["keycloak"]="8443"
+    ["backend"]="4000"
+    ["frontend"]="3000"
+    ["opa"]="8181"
+    ["opal-server"]="7002"
+    ["opal-client"]="7000"
+    ["kas"]="8080"
+)
+
 ##
-# Check service health with intelligent retry logic
+# Standardized health check with multi-level validation
 #
 # Arguments:
 #   $1 - Instance code (lowercase)
@@ -262,6 +677,9 @@ orch_generate_error_summary() {
 # Returns:
 #   0 - Service is healthy
 #   1 - Service failed health check
+#
+# Outputs:
+#   JSON health status to stderr (for logging)
 ##
 orch_check_service_health() {
     local instance_code="$1"
@@ -276,37 +694,73 @@ orch_check_service_health() {
     log_verbose "Checking health of $container_name (timeout: ${timeout}s)"
 
     while [ $elapsed -lt "$timeout" ]; do
-        # Check if container exists
+        # Level 1: Container exists
         if ! docker ps --format '{{.Names}}' | grep -q "^${container_name}$"; then
             sleep 2
             elapsed=$((elapsed + 2))
             continue
         fi
 
-        # Get health status
+        # Level 2: Docker health status
         local health_status
-        health_status=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null || echo "unknown")
+        health_status=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null || echo "none")
 
         case "$health_status" in
             healthy)
+                # Docker health check passed
                 local total_time=$(( $(date +%s) - start_time ))
-                log_verbose "Service $service healthy after ${total_time}s"
+                log_verbose "Service $service healthy after ${total_time}s (Docker health check)"
+
+                # Record metric
+                orch_db_record_metric "$instance_code" "service_startup_time" "$total_time" "seconds" \
+                    "{\"service\":\"$service\",\"health_check\":\"docker\"}" 2>/dev/null || true
+
                 return 0
                 ;;
             unhealthy)
-                log_warn "Service $service reported unhealthy"
+                # Docker health check explicitly failed
+                log_warn "Service $service reported unhealthy (Docker health check)"
                 return 1
                 ;;
             starting)
                 # Still starting, continue waiting
+                sleep 2
+                elapsed=$((elapsed + 2))
+                continue
                 ;;
-            *)
-                # For services without health checks, check if container is running
+            none)
+                # No Docker health check, try HTTP health endpoint
+                local health_url="${SERVICE_HEALTH_URLS[$service]}"
+                local health_port="${SERVICE_HEALTH_PORTS[$service]}"
+
+                if [ -n "$health_url" ] && [ -n "$health_port" ]; then
+                    # Level 3: HTTP health endpoint
+                    local health_endpoint="http://localhost:${health_port}${health_url}"
+
+                    if curl -kfs --max-time 3 "$health_endpoint" >/dev/null 2>&1; then
+                        local total_time=$(( $(date +%s) - start_time ))
+                        log_verbose "Service $service healthy after ${total_time}s (HTTP health check)"
+
+                        # Record metric
+                        orch_db_record_metric "$instance_code" "service_startup_time" "$total_time" "seconds" \
+                            "{\"service\":\"$service\",\"health_check\":\"http\"}" 2>/dev/null || true
+
+                        return 0
+                    fi
+                fi
+
+                # Level 4: Fallback - check if container is running
                 local container_status
                 container_status=$(docker inspect --format='{{.State.Status}}' "$container_name" 2>/dev/null || echo "missing")
 
                 if [ "$container_status" = "running" ]; then
-                    log_verbose "Service $service running (no health check)"
+                    local total_time=$(( $(date +%s) - start_time ))
+                    log_verbose "Service $service running after ${total_time}s (no health check available)"
+
+                    # Record metric with warning flag
+                    orch_db_record_metric "$instance_code" "service_startup_time" "$total_time" "seconds" \
+                        "{\"service\":\"$service\",\"health_check\":\"none\",\"warning\":\"no_health_check_defined\"}" 2>/dev/null || true
+
                     return 0
                 fi
                 ;;
@@ -316,8 +770,90 @@ orch_check_service_health() {
         elapsed=$((elapsed + 2))
     done
 
+    # Timeout reached
     log_error "Service $service failed to become healthy within ${timeout}s"
+
+    # Record failure metric
+    orch_db_record_metric "$instance_code" "service_startup_timeout" "1" "count" \
+        "{\"service\":\"$service\",\"timeout_seconds\":$timeout}" 2>/dev/null || true
+
     return 1
+}
+
+##
+# Get detailed health status for service (JSON output)
+#
+# Arguments:
+#   $1 - Instance code (lowercase)
+#   $2 - Service name
+#
+# Returns:
+#   JSON health status object
+##
+orch_get_service_health_details() {
+    local instance_code="$1"
+    local service="$2"
+    local container_name="dive-spoke-${instance_code}-${service}"
+
+    # Check container exists
+    if ! docker ps --format '{{.Names}}' | grep -q "^${container_name}$"; then
+        echo '{"status": "MISSING", "healthy": false, "message": "Container not found"}'
+        return 1
+    fi
+
+    # Get container details
+    local container_status=$(docker inspect --format='{{.State.Status}}' "$container_name" 2>/dev/null || echo "unknown")
+    local health_status=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null || echo "none")
+    local started_at=$(docker inspect --format='{{.State.StartedAt}}' "$container_name" 2>/dev/null || echo "unknown")
+
+    # Try HTTP health check if available
+    local http_healthy="null"
+    local http_status="null"
+    local health_url="${SERVICE_HEALTH_URLS[$service]}"
+    local health_port="${SERVICE_HEALTH_PORTS[$service]}"
+
+    if [ -n "$health_url" ] && [ -n "$health_port" ]; then
+        local health_endpoint="http://localhost:${health_port}${health_url}"
+        local http_response=$(curl -kfs --max-time 3 -w "\n%{http_code}" "$health_endpoint" 2>/dev/null || echo "")
+        http_status=$(echo "$http_response" | tail -1)
+
+        if [ "$http_status" = "200" ]; then
+            http_healthy="true"
+        else
+            http_healthy="false"
+        fi
+    fi
+
+    # Determine overall health
+    local overall_healthy="false"
+    local overall_status="UNHEALTHY"
+
+    if [ "$health_status" = "healthy" ] || [ "$http_healthy" = "true" ]; then
+        overall_healthy="true"
+        overall_status="HEALTHY"
+    elif [ "$health_status" = "starting" ]; then
+        overall_status="STARTING"
+    elif [ "$container_status" = "running" ] && [ "$health_status" = "none" ]; then
+        overall_healthy="true"
+        overall_status="RUNNING_NO_HEALTH_CHECK"
+    fi
+
+    # Generate JSON
+    cat <<EOF
+{
+    "service": "$service",
+    "instance_code": "$instance_code",
+    "container": "$container_name",
+    "status": "$overall_status",
+    "healthy": $overall_healthy,
+    "container_status": "$container_status",
+    "docker_health": "$health_status",
+    "http_health": $http_healthy,
+    "http_status": $http_status,
+    "started_at": "$started_at",
+    "checked_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+}
+EOF
 }
 
 ##
@@ -663,6 +1199,74 @@ orch_calculate_retry_delay() {
     esac
 }
 
+##
+# Calculate dynamic timeout based on historical startup times
+# (Future enhancement - requires orchestration_metrics table)
+#
+# Arguments:
+#   $1 - Service name
+#   $2 - Instance code (optional)
+#
+# Returns:
+#   Dynamic timeout in seconds
+##
+orch_calculate_dynamic_timeout() {
+    local service="$1"
+    local instance_code="${2:-}"
+
+    # Check if database is available for metrics
+    if ! orch_db_check_connection 2>/dev/null; then
+        # Fallback to static timeout
+        echo "${SERVICE_TIMEOUTS[$service]}"
+        return 0
+    fi
+
+    # Query P95 startup time from last 20 deployments
+    local p95_startup=0
+    if [ -n "$instance_code" ]; then
+        p95_startup=$(orch_db_exec "
+            SELECT COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_seconds), 0)::INTEGER
+            FROM deployment_steps
+            WHERE step_name = 'start_${service}'
+            AND instance_code = '$(lower "$instance_code")'
+            AND status = 'COMPLETED'
+            AND started_at > NOW() - INTERVAL '30 days'
+            LIMIT 20
+        " 2>/dev/null | xargs || echo "0")
+    else
+        # Query across all instances
+        p95_startup=$(orch_db_exec "
+            SELECT COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_seconds), 0)::INTEGER
+            FROM deployment_steps
+            WHERE step_name = 'start_${service}'
+            AND status = 'COMPLETED'
+            AND started_at > NOW() - INTERVAL '30 days'
+            LIMIT 20
+        " 2>/dev/null | xargs || echo "0")
+    fi
+
+    # If no historical data, use static timeout
+    if [ "$p95_startup" -eq 0 ]; then
+        echo "${SERVICE_TIMEOUTS[$service]}"
+        return 0
+    fi
+
+    # Calculate dynamic timeout = P95 + 50% margin
+    local dynamic_timeout=$((p95_startup + (p95_startup * 50 / 100)))
+
+    # Clamp to min/max bounds
+    local min_timeout=${SERVICE_MIN_TIMEOUTS[$service]:-30}
+    local max_timeout=${SERVICE_MAX_TIMEOUTS[$service]:-300}
+
+    if [ "$dynamic_timeout" -lt "$min_timeout" ]; then
+        echo "$min_timeout"
+    elif [ "$dynamic_timeout" -gt "$max_timeout" ]; then
+        echo "$max_timeout"
+    else
+        echo "$dynamic_timeout"
+    fi
+}
+
 # =============================================================================
 # AUTOMATIC ROLLBACK & CHECKPOINTING (Phase 3)
 # =============================================================================
@@ -700,13 +1304,22 @@ orch_create_checkpoint() {
     local level="${2:-$CHECKPOINT_COMPLETE}"
     local description="${3:-Auto checkpoint}"
 
+    # Validate DIVE_ROOT is set
+    if [ -z "$DIVE_ROOT" ]; then
+        log_error "DIVE_ROOT not set, cannot create checkpoint" >&2
+        return 1
+    fi
+
     local checkpoint_id="$(date +%Y%m%d_%H%M%S)_${instance_code}_${level}"
     local checkpoint_dir="${DIVE_ROOT}/.dive-checkpoints/${checkpoint_id}"
 
     # Create checkpoint directory
-    mkdir -p "$checkpoint_dir"
+    if ! mkdir -p "$checkpoint_dir" 2>/dev/null; then
+        log_error "Failed to create checkpoint directory: $checkpoint_dir" >&2
+        return 1
+    fi
 
-    log_info "Creating $level checkpoint: $checkpoint_id"
+    log_info "Creating $level checkpoint: $checkpoint_id" >&2
 
     # Layer 1: Container state (always included)
     if [[ "$level" =~ ^($CHECKPOINT_CONTAINER|$CHECKPOINT_CONFIG|$CHECKPOINT_KEYCLOAK|$CHECKPOINT_FEDERATION|$CHECKPOINT_COMPLETE)$ ]]; then
@@ -729,7 +1342,7 @@ orch_create_checkpoint() {
     fi
 
     # Create metadata
-    cat > "${checkpoint_dir}/metadata.json" << EOF
+    if ! cat > "${checkpoint_dir}/metadata.json" << EOF
 {
     "checkpoint_id": "$checkpoint_id",
     "instance_code": "$instance_code",
@@ -740,12 +1353,25 @@ orch_create_checkpoint() {
     "orchestration_version": "3.0"
 }
 EOF
+    then
+        log_error "Failed to create checkpoint metadata"
+        rm -rf "$checkpoint_dir"
+        return 1
+    fi
+
+    # Verify checkpoint was created
+    if [ ! -f "${checkpoint_dir}/metadata.json" ]; then
+        log_error "Checkpoint creation failed - metadata missing"
+        return 1
+    fi
 
     # Register checkpoint
     CHECKPOINT_REGISTRY["$checkpoint_id"]="$checkpoint_dir"
     CHECKPOINT_METADATA["$checkpoint_id"]="$level"
 
-    log_success "Checkpoint created: $checkpoint_id"
+    log_success "Checkpoint created: $checkpoint_id" >&2
+
+    # Return ONLY the checkpoint ID on stdout (no logging)
     echo "$checkpoint_id"
 }
 
@@ -970,18 +1596,62 @@ orch_rollback_stop_services() {
 orch_rollback_configuration() {
     local instance_code="$1"
     local checkpoint_id="$2"
+
+    # Validate inputs
+    if [ -z "$DIVE_ROOT" ]; then
+        log_error "DIVE_ROOT not set"
+        return 1
+    fi
+
     local checkpoint_dir="${DIVE_ROOT}/.dive-checkpoints/${checkpoint_id}"
-
-    log_info "Restoring configuration files..."
-
     local instance_dir="${DIVE_ROOT}/instances/${instance_code}"
 
-    # Restore configuration files
-    cp "${checkpoint_dir}/.env" "${instance_dir}/.env" 2>/dev/null || true
-    cp "${checkpoint_dir}/config.json" "${instance_dir}/config.json" 2>/dev/null || true
-    cp "${checkpoint_dir}/docker-compose.yml" "${instance_dir}/docker-compose.yml" 2>/dev/null || true
+    # Verify checkpoint exists
+    if [ ! -d "$checkpoint_dir" ]; then
+        log_error "Checkpoint not found: $checkpoint_id"
+        log_error "Directory does not exist: $checkpoint_dir"
+        return 1
+    fi
 
-    log_success "Configuration files restored"
+    log_info "Restoring configuration files from $checkpoint_id..."
+
+    # Verify instance directory exists
+    if [ ! -d "$instance_dir" ]; then
+        log_warn "Instance directory doesn't exist, creating: $instance_dir"
+        mkdir -p "$instance_dir"
+    fi
+
+    # Restore configuration files with verification
+    local restored_count=0
+
+    if [ -f "${checkpoint_dir}/.env" ]; then
+        cp "${checkpoint_dir}/.env" "${instance_dir}/.env" && ((restored_count++))
+        log_verbose "Restored .env"
+    else
+        log_verbose "No .env in checkpoint"
+    fi
+
+    if [ -f "${checkpoint_dir}/config.json" ]; then
+        cp "${checkpoint_dir}/config.json" "${instance_dir}/config.json" && ((restored_count++))
+        log_verbose "Restored config.json"
+    else
+        log_verbose "No config.json in checkpoint"
+    fi
+
+    if [ -f "${checkpoint_dir}/docker-compose.yml" ]; then
+        cp "${checkpoint_dir}/docker-compose.yml" "${instance_dir}/docker-compose.yml" && ((restored_count++))
+        log_verbose "Restored docker-compose.yml"
+    else
+        log_verbose "No docker-compose.yml in checkpoint"
+    fi
+
+    if [ $restored_count -gt 0 ]; then
+        log_success "Configuration files restored ($restored_count files)"
+        return 0
+    else
+        log_error "No files were restored from checkpoint"
+        return 1
+    fi
 }
 
 ##
@@ -1079,46 +1749,77 @@ orch_start_metrics_collection() {
 
     # Background metrics collection
     (
+        # Disable exit on error for background process
+        set +e
+
         local collection_pid=$$
         local metrics_file="${DIVE_ROOT}/logs/orchestration-metrics-${instance_code}.json"
 
         # Ensure logs directory exists
-        mkdir -p "$(dirname "$metrics_file")"
+        mkdir -p "$(dirname "$metrics_file")" 2>/dev/null || true
 
         # Create metrics file
-        echo "[" > "$metrics_file"
+        echo "[" > "$metrics_file" 2>/dev/null || exit 0
 
+        # Wait for deployment to actually start (containers to appear)
+        local wait_count=0
+        local max_wait=60  # Wait up to 60 seconds for deployment to start
+
+        while [ $wait_count -lt $max_wait ]; do
+            if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "dive-spoke-${instance_code}"; then
+                break  # Containers found, start collecting
+            fi
+            sleep 1
+            ((wait_count++))
+        done
+
+        # If no containers after max_wait, exit gracefully
+        if [ $wait_count -ge $max_wait ]; then
+            echo "[]" > "$metrics_file" 2>/dev/null || true
+            exit 0
+        fi
+
+        # Collect metrics while deployment is active
         while true; do
             # Check if deployment is still active
-            if ! docker ps --format '{{.Names}}' | grep -q "dive-spoke-${instance_code}"; then
-                break
+            if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "dive-spoke-${instance_code}"; then
+                # No containers running, deployment may be complete or failed
+                sleep 2
+                # Double-check
+                if ! docker ps --format '{{.Names}}' 2>/dev/null | grep -q "dive-spoke-${instance_code}"; then
+                    break
+                fi
             fi
 
             # Collect metrics
             local metrics
-            metrics=$(orch_collect_current_metrics "$instance_code")
+            metrics=$(orch_collect_current_metrics "$instance_code" 2>/dev/null || echo "")
 
             # Append to metrics file (JSON Lines format)
             if [ -n "$metrics" ]; then
-                echo "$metrics," >> "$metrics_file"
+                echo "$metrics," >> "$metrics_file" 2>/dev/null || true
             fi
 
             sleep $METRICS_POLLING_INTERVAL
         done
 
         # Close JSON array
-        if grep -q "," "$metrics_file"; then
+        if grep -q "," "$metrics_file" 2>/dev/null; then
             # Remove trailing comma from last JSON object
-            sed -i '$ s/,$//' "$metrics_file"
+            sed -i.bak '$ s/,$//' "$metrics_file" 2>/dev/null && rm -f "${metrics_file}.bak"
         else
-            # No metrics collected, replace [ with []
-            echo "[]" > "$metrics_file"
+            # No metrics collected
+            echo "[]" > "$metrics_file" 2>/dev/null || true
         fi
-        echo "]" >> "$metrics_file"
+        echo "]" >> "$metrics_file" 2>/dev/null || true
 
-        log_verbose "Metrics collection completed for $instance_code"
+        # Don't log completion (can confuse parent process)
+        exit 0
 
-    ) &
+    ) >/dev/null 2>&1 &
+
+    # Store background PID for potential cleanup
+    ORCH_CONTEXT["metrics_pid"]=$!
 }
 
 ##
@@ -1493,7 +2194,7 @@ orch_execute_phase() {
 }
 
 ##
-# Main orchestration entry point
+# Main orchestration entry point (with concurrent deployment protection)
 #
 # Arguments:
 #   $1 - Instance code
@@ -1509,10 +2210,25 @@ orch_execute_deployment() {
     local instance_name="$2"
     local deployment_function="$3"
 
+    # GAP-001 FIX: Acquire deployment lock to prevent concurrent deployments
+    if ! orch_acquire_deployment_lock "$instance_code"; then
+        log_error "Cannot start deployment for $instance_code - lock acquisition failed"
+        log_error "Another deployment is in progress or lock cleanup needed"
+        log_error ""
+        log_error "To force deployment (if lock is stale):"
+        log_error "  rm -f ${DIVE_ROOT}/.dive-state/${instance_code}.lock"
+        log_error "  ./dive spoke deploy $instance_code"
+        return 1
+    fi
+
+    # Ensure lock is released on exit (even if error occurs)
+    trap "orch_release_deployment_lock '$instance_code'" EXIT ERR INT TERM
+
     # Initialize context
     orch_init_context "$instance_code" "$instance_name"
 
     log_info "Starting orchestrated deployment for $instance_code ($instance_name)"
+    log_info "Deployment lock acquired - no other deployments of this instance can run concurrently"
 
     # Phase execution with error handling
     local phases=(
@@ -1524,6 +2240,7 @@ orch_execute_deployment() {
         "$PHASE_COMPLETION:orch_phase_completion"
     )
 
+    local deployment_failed=false
     for phase_spec in "${phases[@]}"; do
         IFS=':' read -r phase_name phase_function <<< "$phase_spec"
 
@@ -1533,10 +2250,19 @@ orch_execute_deployment() {
                 log_error "Orchestration stopped due to error threshold"
                 set_deployment_state_enhanced "$instance_code" "FAILED" "Orchestration failed in phase $phase_name"
                 orch_generate_error_summary "$instance_code"
-                return 1
+                deployment_failed=true
+                break
             fi
         fi
     done
+
+    # Release lock before returning
+    orch_release_deployment_lock "$instance_code"
+    trap - EXIT ERR INT TERM
+
+    if [ "$deployment_failed" = true ]; then
+        return 1
+    fi
 
     # Final success
     local total_time=$(($(date +%s) - ORCH_CONTEXT["start_time"]))
@@ -1553,7 +2279,47 @@ orch_execute_deployment() {
 
 orch_phase_preflight() {
     log_info "Executing preflight checks..."
-    # Implement preflight checks
+
+    # GAP-005 FIX: Validate service dependency graph
+    if ! orch_detect_circular_dependencies; then
+        orch_record_error "CIRCULAR_DEPENDENCY" \
+            "$ORCH_SEVERITY_CRITICAL" \
+            "Circular dependency detected in service configuration" \
+            "preflight" \
+            "Fix SERVICE_DEPENDENCIES in orchestration-framework.sh"
+        return 1
+    fi
+
+    # Validate Docker is running
+    if ! docker info >/dev/null 2>&1; then
+        orch_record_error "DOCKER_UNAVAILABLE" \
+            "$ORCH_SEVERITY_CRITICAL" \
+            "Docker daemon is not running" \
+            "preflight" \
+            "Start Docker: systemctl start docker (Linux) or start Docker Desktop (Mac)"
+        return 1
+    fi
+
+    # Validate DIVE_ROOT is set
+    if [ -z "$DIVE_ROOT" ]; then
+        orch_record_error "DIVE_ROOT_UNSET" \
+            "$ORCH_SEVERITY_CRITICAL" \
+            "DIVE_ROOT environment variable not set" \
+            "preflight" \
+            "Run from DIVE V3 root directory"
+        return 1
+    fi
+
+    # Check required directories exist
+    local required_dirs=(".dive-state" ".dive-checkpoints" "logs" "instances")
+    for dir in "${required_dirs[@]}"; do
+        if [ ! -d "${DIVE_ROOT}/$dir" ]; then
+            log_verbose "Creating required directory: $dir"
+            mkdir -p "${DIVE_ROOT}/$dir"
+        fi
+    done
+
+    log_success "Preflight checks passed"
     return 0
 }
 

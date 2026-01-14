@@ -253,6 +253,45 @@ EOF
 ##
 # Generate .env file with GCP secret references
 ##
+##
+# Fetch OPAL public key from Hub OPAL server or local SSH key
+#
+# OPAL Authentication Strategy:
+#   1. Try to get public key from Hub OPAL server environment
+#   2. Fall back to user's SSH public key (~/.ssh/id_rsa.pub)
+#   3. If neither available, leave unset (OPAL client uses no-auth mode)
+#
+# Returns:
+#   Public key string on stdout, or empty if not available
+##
+spoke_get_hub_opal_public_key() {
+    # Try to fetch from running Hub OPAL server
+    if docker ps --format '{{.Names}}' | grep -q "dive-hub-opal-server"; then
+        # Check if public key is in Hub OPAL environment
+        local public_key=$(docker exec dive-hub-opal-server printenv OPAL_AUTH_PUBLIC_KEY 2>/dev/null | tr -d '\n\r' || echo "")
+
+        if [ -n "$public_key" ] && [ "$public_key" != "# NOT_CONFIGURED" ]; then
+            echo "$public_key"
+            return 0
+        fi
+    fi
+
+    # Fallback: Use user's SSH public key (same as NZL does)
+    # This is acceptable for local development (not production)
+    if [ -f "$HOME/.ssh/id_rsa.pub" ]; then
+        local ssh_key=$(cat "$HOME/.ssh/id_rsa.pub" 2>/dev/null | tr -d '\n\r')
+        if [ -n "$ssh_key" ]; then
+            log_verbose "Using user SSH public key for OPAL authentication (local dev)"
+            echo "$ssh_key"
+            return 0
+        fi
+    fi
+
+    # No public key available
+    log_verbose "OPAL public key not available (OPAL client will use no-auth mode)"
+    return 1
+}
+
 spoke_init_generate_env() {
     local instance_code="$1"
     local spoke_id="$2"
@@ -268,9 +307,49 @@ spoke_init_generate_env() {
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local env_file="$spoke_dir/.env"
 
-    # Don't overwrite existing .env (preserve secrets)
+    # Fetch OPAL public key from Hub (best-effort)
+    local opal_public_key=""
+    opal_public_key=$(spoke_get_hub_opal_public_key || echo "")
+
+    if [ -n "$opal_public_key" ]; then
+        log_success "Retrieved OPAL public key for authentication"
+    else
+        log_warn "OPAL public key not available (OPAL client will use no-auth mode)"
+        # Leave empty - docker-compose will use unset variable, OPAL client handles gracefully
+        opal_public_key=""
+    fi
+
+    # CRITICAL: Always ensure OPAL_AUTH_PUBLIC_KEY is set (even in existing .env)
+    # This fixes the OPAL client crash issue for all spokes
     if [ -f "$env_file" ]; then
-        log_verbose ".env file already exists, preserving"
+        log_verbose ".env file already exists, ensuring OPAL key is set"
+
+        # Check if OPAL_AUTH_PUBLIC_KEY exists
+        if grep -q "^OPAL_AUTH_PUBLIC_KEY=" "$env_file"; then
+            local existing_key=$(grep "^OPAL_AUTH_PUBLIC_KEY=" "$env_file" | cut -d'=' -f2- | tr -d '"')
+
+            # If existing key is empty, invalid placeholder, or missing, update it
+            if [ -z "$existing_key" ] || [ "$existing_key" = "# NOT_CONFIGURED" ] || [ "$existing_key" = '${OPAL_AUTH_PUBLIC_KEY}' ]; then
+                if [ -n "$opal_public_key" ]; then
+                    sed -i.bak "s|^OPAL_AUTH_PUBLIC_KEY=.*|OPAL_AUTH_PUBLIC_KEY=\"$opal_public_key\"|" "$env_file"
+                    rm -f "${env_file}.bak"
+                    log_success "Updated OPAL_AUTH_PUBLIC_KEY in existing .env (was invalid)"
+                fi
+            else
+                log_verbose "OPAL_AUTH_PUBLIC_KEY already set in .env (preserving)"
+            fi
+        else
+            # OPAL_AUTH_PUBLIC_KEY doesn't exist - add it
+            if [ -n "$opal_public_key" ]; then
+                echo "" >> "$env_file"
+                echo "# OPAL Authentication (auto-added by Phase 2 fix)" >> "$env_file"
+                echo "OPAL_AUTH_PUBLIC_KEY=\"$opal_public_key\"" >> "$env_file"
+                log_success "Added OPAL_AUTH_PUBLIC_KEY to existing .env"
+            else
+                log_warn "OPAL public key not available, OPAL client will use no-auth mode"
+            fi
+        fi
+
         return 0
     fi
 
@@ -295,9 +374,18 @@ KAS_URL=$kas_url
 HUB_URL=$hub_url
 
 # Federation configuration
-HUB_OPAL_URL=${hub_url//:4000/:7002}
+# CRITICAL FIX (2026-01-14): Use internal Docker network URL for Hub OPAL server
+# External domain (hub.dive25.com) not reachable from local containers
+# OPAL client needs WebSocket connection to Hub OPAL server on dive-shared network
+# CRITICAL FIX (2026-01-15): Hub OPAL server uses TLS - must use https:// not http://
+HUB_OPAL_URL=https://dive-hub-opal-server:7002
 SPOKE_OPAL_TOKEN=
 OPAL_LOG_LEVEL=INFO
+
+# OPAL Authentication (public key from Hub OPAL server)
+# CRITICAL FIX: OPAL client requires valid public key for authentication
+# Fetched from Hub OPAL server at deployment time
+OPAL_AUTH_PUBLIC_KEY="$opal_public_key"
 
 # Cloudflare tunnel (if configured)
 TUNNEL_TOKEN=
@@ -431,15 +519,25 @@ spoke_init_prepare_certificates() {
                "backend-${code_lower}" \
                "frontend-${code_lower}" 2>/dev/null
 
-        # Copy mkcert root CA for truststore
+        # CRITICAL: Always sync mkcert root CA from current mkcert installation
+        # This prevents CA mismatch when:
+        # - Switching development machines
+        # - Regenerating certificates after CA rotation
+        # - Adding spokes on different machines
+        # FIX (2026-01-14): Ensures CA matches service certificate issuer
         local mkcert_ca="$(mkcert -CAROOT)/rootCA.pem"
         if [ -f "$mkcert_ca" ]; then
+            # Sync to all CA locations
             cp "$mkcert_ca" "$spoke_dir/certs/rootCA.pem"
             mkdir -p "$spoke_dir/certs/ca"
             cp "$mkcert_ca" "$spoke_dir/certs/ca/rootCA.pem"
             cp "$mkcert_ca" "$spoke_dir/truststores/mkcert-rootCA.pem"
             chmod 644 "$spoke_dir/certs/rootCA.pem"
             chmod 644 "$spoke_dir/certs/ca/rootCA.pem"
+
+            log_success "Synced current mkcert CA (prevents certificate chain mismatch)"
+        else
+            log_warn "mkcert CA not found at: $(mkcert -CAROOT)"
         fi
     else
         # Fallback to OpenSSL self-signed

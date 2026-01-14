@@ -1,9 +1,9 @@
 {
   "identity": {
-    "spokeId": "spoke-deu-85a7aa1f",
+    "spokeId": "spoke-deu-ae7c58cd",
     "instanceCode": "DEU",
-    "name": "Bundeswehr Defence Force",
-    "description": "DIVE V3 Spoke Instance for Bundeswehr Defence Force",
+    "name": "DEU Instance",
+    "description": "DIVE V3 Spoke Instance for DEU",
     "country": "DEU",
     "organizationType": "government",
     "contactEmail": "admin@deu.dive25.com"
@@ -45,8 +45,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2026-01-12T15:36:50Z",
-    "lastModified": "2026-01-12T15:36:50Z",
+    "createdAt": "2026-01-14T06:05:45Z",
+    "lastModified": "2026-01-14T06:05:45Z",
     "configHash": ""
   }
 }

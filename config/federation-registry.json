@@ -1308,6 +1308,55 @@
           "protocol": "mongodb"
         }
       }
+    },
+    "tst": {
+      "code": "TST",
+      "name": "TST",
+      "locale": "en-US",
+      "type": "local",
+      "primary": false,
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "localhost",
+        "domain": "dive25.com",
+        "composeFile": "docker-compose.tst.yml",
+        "projectName": "tst"
+      },
+      "services": {
+        "_comment": "TST uses tst- prefix on all service names",
+        "frontend": {
+          "name": "frontend-tst",
+          "containerName": "dive-spoke-tst-frontend",
+          "internalPort": 3000,
+          "externalPort": 3457,
+          "protocol": "https",
+          "hostname": "tst-app.dive25.com"
+        },
+        "backend": {
+          "name": "backend-tst",
+          "containerName": "dive-spoke-tst-backend",
+          "internalPort": 4000,
+          "externalPort": 4457,
+          "protocol": "https",
+          "hostname": "tst-api.dive25.com"
+        },
+        "keycloak": {
+          "name": "keycloak-tst",
+          "containerName": "dive-spoke-tst-keycloak",
+          "internalPort": 8443,
+          "externalPort": 8506,
+          "protocol": "https",
+          "hostname": "tst-idp.dive25.com"
+        },
+        "mongodb": {
+          "name": "mongodb-tst",
+          "containerName": "dive-spoke-tst-mongodb",
+          "internalPort": 27017,
+          "externalPort": 27020,
+          "protocol": "mongodb"
+        }
+      }
     }
   },
   "federation": {
@@ -1333,7 +1382,8 @@
         "nor",
         "nzl",
         "pol",
-        "svk"
+        "svk",
+        "tst"
       ],
       "cze": [
         "deu",
@@ -1450,6 +1500,12 @@
         "usa"
       ],
       "alb": [
+        "deu",
+        "fra",
+        "gbr",
+        "usa"
+      ],
+      "tst": [
         "deu",
         "fra",
         "gbr",

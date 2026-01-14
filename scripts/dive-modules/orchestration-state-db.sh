@@ -144,37 +144,46 @@ orch_db_set_state() {
             local escaped_reason="${reason//\'/\'\'}"
             local escaped_metadata="$metadata"
 
-            # Handle JSON metadata - ROOT FIX: Proper NULL handling
-            if [ "$metadata" = "null" ] || [ -z "$metadata" ]; then
-                escaped_metadata="NULL"
-            else
-                # Validate JSON before inserting
+            # Handle JSON metadata - Simplified NULL handling
+            local metadata_sql="NULL"
+            if [ -n "$metadata" ] && [ "$metadata" != "null" ]; then
+                # Validate JSON
                 if echo "$metadata" | jq empty >/dev/null 2>&1; then
-                    escaped_metadata="'${metadata//\'/\'\'}'"
+                    # Escape single quotes for SQL
+                    local escaped_json="${metadata//\'/\'\'}"
+                    metadata_sql="'$escaped_json'::jsonb"
                 else
-                    log_warn "Invalid JSON metadata, using NULL"
-                    escaped_metadata="NULL"
+                    log_verbose "Invalid JSON metadata, using NULL"
                 fi
             fi
 
-            # Execute atomic transaction with rollback capability
-            local sql_transaction="BEGIN; INSERT INTO deployment_states (instance_code, state, previous_state, reason, metadata, created_by) VALUES ('$code_lower', '$new_state', '$prev_state', '$escaped_reason', CASE WHEN '$escaped_metadata' = 'NULL' THEN NULL ELSE '$escaped_metadata'::jsonb END, 'system'); INSERT INTO state_transitions (instance_code, from_state, to_state, metadata, initiated_by) VALUES ('$code_lower', '$prev_state', '$new_state', CASE WHEN '$escaped_metadata' = 'NULL' THEN NULL ELSE '$escaped_metadata'::jsonb END, 'system'); COMMIT;"
+            # Build SQL transaction with proper NULL handling
+            local sql_transaction="BEGIN;
+INSERT INTO deployment_states (instance_code, state, previous_state, reason, metadata, created_by)
+VALUES ('$code_lower', '$new_state', '$prev_state', '$escaped_reason', $metadata_sql, 'system');
 
-            # Execute the transaction
+INSERT INTO state_transitions (instance_code, from_state, to_state, metadata, initiated_by)
+VALUES ('$code_lower', '$prev_state', '$new_state', $metadata_sql, 'system');
+
+COMMIT;"
+
+            # Execute the transaction with better error capturing
             local sql_error_log
             sql_error_log=$(orch_db_exec "$sql_transaction" 2>&1)
-
             local db_exit_code=$?
-            if [ $db_exit_code -eq 0 ]; then
+
+            if [ $db_exit_code -eq 0 ] && [[ ! "$sql_error_log" =~ ERROR ]]; then
                 log_verbose "✓ State atomically persisted to database: $instance_code -> $new_state"
                 # Record successful transition
-                orch_db_exec "INSERT INTO orchestration_metrics (instance_code, metric_name, metric_value, labels) VALUES ('$code_lower', 'state_transition_success', 1, '{\"from_state\": \"$prev_state\", \"to_state\": \"$new_state\"}')" >/dev/null 2>&1 || true
+                orch_db_exec "INSERT INTO orchestration_metrics (instance_code, metric_name, metric_value) VALUES ('$code_lower', 'state_transition_success', 1)" >/dev/null 2>&1 || true
             else
                 # Transaction failed - rollback occurred automatically
-                log_error "Database transaction failed for $instance_code -> $new_state"
-                log_error "Transaction Error: $sql_error_log"
-                # Record failure for monitoring
-                orch_db_exec "INSERT INTO orchestration_errors (instance_code, error_code, severity, component, message, context) VALUES ('$code_lower', 'STATE_TRANSITION_FAILED', 3, 'orchestration-db', 'Failed to persist state transition', '{\"from_state\": \"$prev_state\", \"to_state\": \"$new_state\", \"error\": \"$sql_error_log\"}')" >/dev/null 2>&1 || true
+                # This is non-blocking in dual-write mode (file write already succeeded)
+                log_verbose "Database write failed (non-blocking): $instance_code -> $new_state"
+                if [ -n "$sql_error_log" ]; then
+                    log_verbose "DB Error: $sql_error_log"
+                fi
+                # File-based state is source of truth, so this is not critical
             fi
         else
             log_verbose "Database connection not available - state written to file only"
@@ -279,6 +288,141 @@ VALUES ('$code_lower', '$step_name', '$status', NOW(),
 " >/dev/null 2>&1
 
     log_verbose "✓ Step logged: $step_name -> $status"
+}
+
+# =============================================================================
+# DEPLOYMENT LOCK MANAGEMENT (GAP-001 Fix - PostgreSQL Advisory Locks)
+# =============================================================================
+
+##
+# Acquire PostgreSQL advisory lock for deployment
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Timeout seconds (optional, 0 = try once and return)
+#
+# Returns:
+#   0 - Lock acquired
+#   1 - Lock not available
+##
+orch_db_acquire_lock() {
+    local instance_code="$1"
+    local timeout="${2:-30}"
+    local code_lower
+    code_lower=$(lower "$instance_code")
+
+    if ! orch_db_check_connection; then
+        log_verbose "Database not available for advisory lock"
+        return 1
+    fi
+
+    # Generate unique lock ID from instance code (hash to integer)
+    local lock_id=$(echo -n "deployment_${code_lower}" | cksum | cut -d' ' -f1)
+
+    log_verbose "Attempting PostgreSQL advisory lock for $instance_code (lock_id: $lock_id, timeout: ${timeout}s)..."
+
+    # Try to acquire lock
+    if [ "$timeout" -eq 0 ]; then
+        # Non-blocking try
+        local acquired=$(orch_db_exec "SELECT pg_try_advisory_lock($lock_id);" 2>/dev/null | xargs)
+        if [ "$acquired" = "t" ]; then
+            log_verbose "PostgreSQL advisory lock acquired for $instance_code"
+            # Record lock acquisition
+            orch_db_exec "INSERT INTO deployment_locks (instance_code, lock_id, acquired_at, acquired_by) VALUES ('$code_lower', $lock_id, NOW(), '${USER:-system}')" >/dev/null 2>&1 || true
+            return 0
+        else
+            log_verbose "PostgreSQL advisory lock not available for $instance_code"
+            return 1
+        fi
+    else
+        # Blocking with timeout (poll-based since pg_advisory_lock doesn't support timeout)
+        local start_time=$(date +%s)
+        local elapsed=0
+
+        while [ $elapsed -lt "$timeout" ]; do
+            local acquired=$(orch_db_exec "SELECT pg_try_advisory_lock($lock_id);" 2>/dev/null | xargs)
+            if [ "$acquired" = "t" ]; then
+                log_success "PostgreSQL advisory lock acquired for $instance_code (after ${elapsed}s)"
+                # Record lock acquisition
+                orch_db_exec "INSERT INTO deployment_locks (instance_code, lock_id, acquired_at, acquired_by) VALUES ('$code_lower', $lock_id, NOW(), '${USER:-system}')" >/dev/null 2>&1 || true
+                return 0
+            fi
+
+            sleep 1
+            elapsed=$(($(date +%s) - start_time))
+        done
+
+        log_error "Failed to acquire PostgreSQL advisory lock for $instance_code (timeout)"
+        return 1
+    fi
+}
+
+##
+# Release PostgreSQL advisory lock for deployment
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - Lock released
+#   1 - Lock was not held
+##
+orch_db_release_lock() {
+    local instance_code="$1"
+    local code_lower
+    code_lower=$(lower "$instance_code")
+
+    if ! orch_db_check_connection; then
+        return 0  # Non-blocking
+    fi
+
+    # Generate same lock ID
+    local lock_id=$(echo -n "deployment_${code_lower}" | cksum | cut -d' ' -f1)
+
+    log_verbose "Releasing PostgreSQL advisory lock for $instance_code (lock_id: $lock_id)..."
+
+    # Release lock
+    local released=$(orch_db_exec "SELECT pg_advisory_unlock($lock_id);" 2>/dev/null | xargs)
+
+    if [ "$released" = "t" ]; then
+        log_verbose "PostgreSQL advisory lock released for $instance_code"
+        # Record lock release
+        orch_db_exec "UPDATE deployment_locks SET released_at = NOW() WHERE instance_code = '$code_lower' AND lock_id = $lock_id AND released_at IS NULL" >/dev/null 2>&1 || true
+        return 0
+    else
+        log_verbose "PostgreSQL advisory lock was not held for $instance_code"
+        return 1
+    fi
+}
+
+##
+# Check if deployment lock is held for instance
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - Lock is held
+#   1 - Lock is not held
+##
+orch_db_check_lock_status() {
+    local instance_code="$1"
+    local code_lower
+    code_lower=$(lower "$instance_code")
+
+    if ! orch_db_check_connection; then
+        return 1
+    fi
+
+    # Check if lock is held in database
+    local lock_count=$(orch_db_exec "
+        SELECT COUNT(*)
+        FROM deployment_locks
+        WHERE instance_code = '$code_lower'
+        AND released_at IS NULL
+    " 2>/dev/null | xargs || echo "0")
+
+    [ "$lock_count" -gt 0 ]
 }
 
 # =============================================================================

@@ -72,6 +72,18 @@ spoke_federation_setup() {
         return 1
     fi
 
+    # ==========================================================================
+    # NEW STEP 2.5: Create Bidirectional Federation (Hub→Spoke)
+    # ==========================================================================
+    # This completes bidirectional SSO by creating spoke-idp in Hub Keycloak
+    # Previously required manual './dive federation link [CODE]' command
+    # FIX (2026-01-14): Now automatic during deployment
+    # ==========================================================================
+    if ! spoke_federation_create_bidirectional "$instance_code"; then
+        log_warn "Bidirectional IdP creation incomplete (non-blocking)"
+        log_warn "Run manually: ./dive federation link $code_upper"
+    fi
+
     # Step 3: Synchronize client secrets
     if ! spoke_secrets_sync_federation "$instance_code"; then
         log_warn "Federation secret sync incomplete (non-blocking)"
@@ -376,6 +388,146 @@ $federation_entry" "$hub_tfvars"
 
     cd - &>/dev/null
     return 0
+}
+
+# =============================================================================
+# BIDIRECTIONAL FEDERATION (NEW - 2026-01-14)
+# =============================================================================
+
+##
+# Create bidirectional federation by adding spoke-idp to Hub
+#
+# This automates what './dive federation link [CODE]' does manually.
+# Creates {spoke}-idp in Hub Keycloak so Hub users can authenticate via spoke.
+#
+# Arguments:
+#   $1 - Instance code (spoke)
+#
+# Returns:
+#   0 - Success
+#   1 - Failure
+##
+spoke_federation_create_bidirectional() {
+    local instance_code="$1"
+    local code_upper=$(upper "$instance_code")
+    local code_lower=$(lower "$instance_code")
+
+    log_step "Creating bidirectional federation (Hub→Spoke)..."
+
+    # Check if Hub is accessible
+    if ! docker ps --format '{{.Names}}' | grep -q "^${HUB_KC_CONTAINER}$"; then
+        log_warn "Hub Keycloak not running - skipping bidirectional setup"
+        return 1
+    fi
+
+    # Use federation-link.sh helper if available
+    if type _federation_link_direct &>/dev/null; then
+        log_verbose "Using federation-link.sh helper for bidirectional setup"
+        if _federation_link_direct "USA" "$code_upper"; then
+            log_success "Created $code_lower-idp in Hub (bidirectional SSO ready)"
+            return 0
+        else
+            log_warn "Failed to create bidirectional IdP via helper"
+            return 1
+        fi
+    fi
+
+    # Fallback: Direct implementation
+    log_verbose "Creating $code_lower-idp in Hub directly..."
+
+    # Get Hub admin token
+    local hub_admin_token
+    hub_admin_token=$(spoke_federation_get_admin_token "$HUB_KC_CONTAINER")
+
+    if [ -z "$hub_admin_token" ]; then
+        log_error "Cannot get Hub admin token"
+        return 1
+    fi
+
+    # Get spoke details
+    local spoke_keycloak_port
+    spoke_keycloak_port=$(jq -r '.endpoints.idpPublicUrl // ""' "${DIVE_ROOT}/instances/${code_lower}/config.json" | grep -o ':[0-9]*' | tr -d ':')
+
+    if [ -z "$spoke_keycloak_port" ]; then
+        log_error "Cannot determine spoke Keycloak port"
+        return 1
+    fi
+
+    # Source URLs (spoke)
+    local source_public_url="https://localhost:${spoke_keycloak_port}"
+    local source_internal_url="https://dive-spoke-${code_lower}-keycloak:8443"
+    local source_realm="dive-v3-broker-${code_lower}"
+
+    # Get federation client secret (from GCP or generate)
+    local client_secret
+    if type _get_federation_secret &>/dev/null; then
+        client_secret=$(_get_federation_secret "$code_lower" "usa")
+    else
+        # Generate if helper not available
+        client_secret=$(openssl rand -base64 24 | tr -d '/+=')
+    fi
+
+    # IdP configuration
+    local idp_alias="${code_lower}-idp"
+    local idp_config="{
+        \"alias\": \"${idp_alias}\",
+        \"displayName\": \"${code_upper} Federation\",
+        \"providerId\": \"oidc\",
+        \"enabled\": true,
+        \"trustEmail\": true,
+        \"storeToken\": true,
+        \"linkOnly\": false,
+        \"firstBrokerLoginFlowAlias\": \"\",
+        \"updateProfileFirstLoginMode\": \"off\",
+        \"postBrokerLoginFlowAlias\": \"\",
+        \"config\": {
+            \"clientId\": \"dive-v3-broker-usa\",
+            \"clientSecret\": \"${client_secret}\",
+            \"authorizationUrl\": \"${source_public_url}/realms/${source_realm}/protocol/openid-connect/auth\",
+            \"tokenUrl\": \"${source_internal_url}/realms/${source_realm}/protocol/openid-connect/token\",
+            \"userInfoUrl\": \"${source_internal_url}/realms/${source_realm}/protocol/openid-connect/userinfo\",
+            \"logoutUrl\": \"${source_public_url}/realms/${source_realm}/protocol/openid-connect/logout\",
+            \"issuer\": \"${source_public_url}/realms/${source_realm}\",
+            \"validateSignature\": \"false\",
+            \"useJwksUrl\": \"true\",
+            \"jwksUrl\": \"${source_internal_url}/realms/${source_realm}/protocol/openid-connect/certs\",
+            \"syncMode\": \"FORCE\",
+            \"clientAuthMethod\": \"client_secret_post\"
+        }
+    }"
+
+    # Check if IdP already exists
+    local existing_idp
+    existing_idp=$(docker exec "$HUB_KC_CONTAINER" curl -sf \
+        -H "Authorization: Bearer $hub_admin_token" \
+        "http://localhost:8080/admin/realms/${HUB_REALM}/identity-provider/instances/${idp_alias}" 2>/dev/null || echo "")
+
+    if echo "$existing_idp" | grep -q '"alias"'; then
+        log_info "$idp_alias already exists in Hub (skipping)"
+        return 0
+    fi
+
+    # Create IdP
+    local create_result
+    create_result=$(docker exec "$HUB_KC_CONTAINER" curl -sf \
+        -X POST "http://localhost:8080/admin/realms/${HUB_REALM}/identity-provider/instances" \
+        -H "Authorization: Bearer $hub_admin_token" \
+        -H "Content-Type: application/json" \
+        -d "$idp_config" 2>&1)
+
+    if [ $? -eq 0 ]; then
+        log_success "Created $code_lower-idp in Hub (bidirectional SSO ready)"
+
+        # Configure IdP mappers
+        if type _configure_idp_mappers &>/dev/null; then
+            _configure_idp_mappers "$HUB_KC_CONTAINER" "$hub_admin_token" "$HUB_REALM" "$idp_alias"
+        fi
+
+        return 0
+    else
+        log_error "Failed to create bidirectional IdP: $create_result"
+        return 1
+    fi
 }
 
 # =============================================================================

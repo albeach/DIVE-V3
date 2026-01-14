@@ -526,7 +526,7 @@ interface IInstanceConfig {
 }
 
 interface IKASRegistry {
-    kasInstances: IKASServer[];  // Matches backend/config/kas-registry.json structure
+    kasServers: IKASServer[];  // Matches backend/config/kas-registry.json structure
     federationTrust?: {
         trustMatrix?: Record<string, string[]>;
     };
@@ -796,7 +796,7 @@ async function getMongoDBConnection(config: IInstanceConfig, instanceCode: strin
 
 function getKASServersForInstance(kasRegistry: IKASRegistry, instanceCode: string): IKASServer[] {
     const servers: IKASServer[] = [];
-    const localKas = kasRegistry.kasInstances?.find(k => k.countryCode === instanceCode);
+    const localKas = kasRegistry.kasServers?.find(k => k.countryCode === instanceCode);
 
     if (localKas) {
         servers.push(localKas);
@@ -808,7 +808,7 @@ function getKASServersForInstance(kasRegistry: IKASRegistry, instanceCode: strin
 
     if (localKasId && trustMatrix && trustMatrix[localKasId]) {
         for (const partnerKasId of trustMatrix[localKasId]) {
-            const partnerKas = kasRegistry.kasInstances?.find(k => k.kasId === partnerKasId);
+            const partnerKas = kasRegistry.kasServers?.find(k => k.kasId === partnerKasId);
             if (partnerKas) {
                 servers.push(partnerKas);
             }
@@ -1896,7 +1896,7 @@ async function main() {
     const federationRegistry = loadFederationRegistry();
     const kasRegistry = loadKASRegistry();
     console.log(`   Found ${Object.keys(federationRegistry.instances).length} instances`);
-    console.log(`   Found ${kasRegistry.kasInstances?.length || 0} KAS servers\n`);
+    console.log(`   Found ${kasRegistry.kasServers?.length || 0} KAS servers\n`);
 
     // Validate COI templates
     console.log('✅ Validating COI templates...');
