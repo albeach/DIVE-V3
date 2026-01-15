@@ -14,11 +14,35 @@
 # Date: 2026-01-13
 # =============================================================================
 
-# Prevent multiple sourcing
+# FIX (2026-01-15): Clear guard variable if set in parent shell
+# This prevents the guard from blocking module load during deployment
 if [ -n "$SPOKE_FEDERATION_LOADED" ]; then
-    return 0
+    # Already loaded in parent - functions should be available
+    # If not, something is wrong with exports
+    if ! type spoke_federation_setup &>/dev/null; then
+        # Functions not available - force reload
+        unset SPOKE_FEDERATION_LOADED
+    else
+        # Functions available - skip reload
+        return 0
+    fi
 fi
 export SPOKE_FEDERATION_LOADED=1
+
+# =============================================================================
+# LOAD FEDERATION-LINK MODULE FOR BIDIRECTIONAL SETUP
+# =============================================================================
+# Load federation-link.sh to make _federation_link_direct() available
+# This is required for automated bidirectional federation
+if [ -z "$DIVE_FEDERATION_LINK_LOADED" ]; then
+    _fed_link_path="${BASH_SOURCE[0]%/*}/../federation-link.sh"
+    if [ -f "$_fed_link_path" ]; then
+        source "$_fed_link_path"
+    elif [ -f "${DIVE_ROOT}/scripts/dive-modules/federation-link.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/federation-link.sh"
+    fi
+    unset _fed_link_path
+fi
 
 # =============================================================================
 # CONSTANTS
@@ -26,7 +50,9 @@ export SPOKE_FEDERATION_LOADED=1
 
 # Hub Keycloak defaults
 readonly HUB_KC_CONTAINER="${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}"
-readonly HUB_REALM="dive-v3-broker"
+# FIX (2026-01-15): Use HUB_REALM from common.sh (dive-v3-broker-usa)
+# LEGACY dive-v3-broker (without suffix) is DEPRECATED
+readonly HUB_REALM="${HUB_REALM:-dive-v3-broker-usa}"
 readonly HUB_IDP_ALIAS_PREFIX="spoke-idp-"
 
 # Federation status states
@@ -306,6 +332,12 @@ spoke_federation_register_in_hub() {
     local spoke_name=$(jq -r '.identity.name // "'"$code_upper"'"' "$spoke_config")
     local spoke_keycloak_port=$(jq -r '.endpoints.idpPublicUrl // "https://localhost:8443"' "$spoke_config" | grep -o ':[0-9]*' | tr -d ':')
     local spoke_frontend_port=$(jq -r '.endpoints.baseUrl // "https://localhost:3000"' "$spoke_config" | grep -o ':[0-9]*' | tr -d ':')
+    
+    # CRITICAL FIX (2026-01-15): Build URLs as complete strings to prevent line breaks
+    # Previous behavior: Variable expansion could cause multi-line strings in Terraform
+    # Root cause: If port extraction includes newlines, URLs split across lines (invalid TF syntax)
+    local idp_url="https://localhost:${spoke_keycloak_port}"
+    local frontend_url="https://localhost:${spoke_frontend_port}"
 
     # Check if already in tfvars
     if grep -q "\"${code_lower}\"" "$hub_tfvars" 2>/dev/null; then
@@ -313,13 +345,13 @@ spoke_federation_register_in_hub() {
     else
         log_step "Adding $code_upper to Hub federation_partners..."
 
-        # Create federation partner entry
+        # Create federation partner entry (using pre-built URL variables)
         local federation_entry="  ${code_lower} = {
     instance_code         = \"${code_upper}\"
     instance_name         = \"${spoke_name}\"
-    idp_url               = \"https://localhost:${spoke_keycloak_port}\"
+    idp_url               = \"${idp_url}\"
     idp_internal_url      = \"https://dive-spoke-${code_lower}-keycloak:8443\"
-    frontend_url          = \"https://localhost:${spoke_frontend_port}\"
+    frontend_url          = \"${frontend_url}\"
     enabled               = true
     client_secret         = \"\"  # Loaded from GCP: dive-v3-federation-${code_lower}-usa
     disable_trust_manager = true
@@ -328,24 +360,79 @@ spoke_federation_register_in_hub() {
         # Backup tfvars
         cp "$hub_tfvars" "${hub_tfvars}.backup-$(date +%Y%m%d-%H%M%S)"
 
-        # Update federation_partners
-        if grep -q 'federation_partners = {}' "$hub_tfvars"; then
-            # Replace empty map
-            sed -i.tmp "s|federation_partners = {}|federation_partners = {\\
-$federation_entry\\
-}|" "$hub_tfvars"
-            rm -f "${hub_tfvars}.tmp"
-        elif grep -q 'federation_partners = {' "$hub_tfvars"; then
-            # Add to existing map (find last closing brace of federation_partners block)
-            local close_line=$(grep -n '^}$' "$hub_tfvars" | grep -A1 'federation_partners' | tail -1 | cut -d: -f1)
-            if [ -n "$close_line" ]; then
-                sed -i.tmp "${close_line}i\\
-$federation_entry" "$hub_tfvars"
-                rm -f "${hub_tfvars}.tmp"
-            fi
-        fi
+        # Write entry to temp file for safe multi-line handling (no quotes = variable expansion)
+        cat > "${hub_tfvars}.entry" << ENTRY_EOF
+$federation_entry
+ENTRY_EOF
 
-        log_success "Added $code_upper to Hub Terraform configuration"
+        # Use Python for reliable multi-line insertion (safer than sed/awk)
+        python3 - "$hub_tfvars" "${hub_tfvars}.entry" "$code_upper" << 'PYTHON_EOF'
+import sys
+import re
+
+hub_tfvars = sys.argv[1]
+entry_file = sys.argv[2]
+code_upper = sys.argv[3]
+
+# Read the entry
+with open(entry_file, 'r') as f:
+    entry = f.read().strip()
+
+# Read tfvars
+with open(hub_tfvars, 'r') as f:
+    lines = f.readlines()
+
+# Find federation_partners = { line (not commented)
+fed_start = None
+for i, line in enumerate(lines):
+    if re.match(r'^federation_partners\s*=\s*\{', line.strip()) and not line.strip().startswith('#'):
+        fed_start = i
+        break
+
+if fed_start is None:
+    print(f"ERROR: federation_partners block not found", file=sys.stderr)
+    sys.exit(1)
+
+# Check if empty map
+if lines[fed_start].strip() == 'federation_partners = {}':
+    # Replace entire line
+    lines[fed_start] = f'federation_partners = {{\n{entry}\n}}\n'
+else:
+    # Find matching closing brace
+    brace_count = 1
+    close_idx = None
+    for i in range(fed_start + 1, len(lines)):
+        stripped = lines[i].strip()
+        if stripped.startswith('#'):
+            continue
+        brace_count += stripped.count('{') - stripped.count('}')
+        if brace_count == 0:
+            close_idx = i
+            break
+
+    if close_idx is None:
+        print(f"ERROR: Could not find closing brace for federation_partners", file=sys.stderr)
+        sys.exit(1)
+
+    # Insert entry before closing brace
+    lines.insert(close_idx, f'{entry}\n')
+
+# Write back
+with open(hub_tfvars, 'w') as f:
+    f.writelines(lines)
+
+print(f"✓ Added {code_upper} to federation_partners")
+PYTHON_EOF
+        local python_exit=$?
+
+        rm -f "${hub_tfvars}.entry"
+        
+        if [ $python_exit -eq 0 ]; then
+            log_success "Added $code_upper to Hub Terraform configuration"
+        else
+            log_error "Failed to update Hub Terraform configuration"
+            return 1
+        fi
     fi
 
     # Apply Hub Terraform
@@ -371,18 +458,30 @@ $federation_entry" "$hub_tfvars"
     # Initialize if needed
     if [ ! -d ".terraform" ]; then
         log_info "Initializing Hub Terraform..."
-        terraform init -upgrade &>/dev/null || {
-            log_error "Terraform init failed"
+        local init_output
+        local init_exit_code=0
+        init_output=$(terraform init -upgrade 2>&1) || init_exit_code=$?
+        
+        if [ $init_exit_code -ne 0 ]; then
+            log_error "Terraform init failed (exit code: $init_exit_code)"
+            echo "$init_output" | tail -30
             return 1
-        }
+        fi
     fi
 
     # Apply
     log_info "Running terraform apply for Hub..."
-    if terraform apply -var-file=hub.tfvars -auto-approve &>/dev/null; then
+    
+    # Capture output for proper error reporting (don't hide errors!)
+    local tf_output
+    local tf_exit_code=0
+    tf_output=$(terraform apply -var-file=hub.tfvars -auto-approve 2>&1) || tf_exit_code=$?
+    
+    if [ $tf_exit_code -eq 0 ]; then
         log_success "Hub Terraform applied - federation client created for $code_upper"
     else
-        log_error "Hub Terraform apply failed"
+        log_error "Hub Terraform apply failed (exit code: $tf_exit_code)"
+        echo "$tf_output" | tail -50  # Show last 50 lines of error
         return 1
     fi
 
