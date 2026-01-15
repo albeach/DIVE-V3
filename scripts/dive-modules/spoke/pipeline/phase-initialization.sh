@@ -245,8 +245,16 @@ EOF
     if [ -f "$spoke_dir/config.json" ]; then
         log_success "Configuration generated: $spoke_dir/config.json"
 
-        # Also create .env file with GCP secret references
+        # Create .env file with config variables
         spoke_init_generate_env "$instance_code" "$spoke_id" "$base_url" "$api_url" "$idp_url" "$idp_public_url" "$kas_url" "$hub_url"
+
+        # CRITICAL FIX (2026-01-15): Sync secrets to .env BEFORE containers start
+        # Root cause: Containers were starting with incomplete .env (missing secrets)
+        # Solution: Sync secrets during initialization, not configuration phase
+        if type spoke_secrets_sync_to_env &>/dev/null; then
+            log_verbose "Syncing secrets to .env before container startup"
+            spoke_secrets_sync_to_env "$instance_code" || log_warn "Secret sync had issues (continuing)"
+        fi
 
         return 0
     else
