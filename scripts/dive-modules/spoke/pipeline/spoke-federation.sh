@@ -330,12 +330,14 @@ spoke_federation_register_in_hub() {
 
     # Extract spoke details from config.json
     local spoke_name=$(jq -r '.identity.name // "'"$code_upper"'"' "$spoke_config")
-    local spoke_keycloak_port=$(jq -r '.endpoints.idpPublicUrl // "https://localhost:8443"' "$spoke_config" | grep -o ':[0-9]*' | tr -d ':')
-    local spoke_frontend_port=$(jq -r '.endpoints.baseUrl // "https://localhost:3000"' "$spoke_config" | grep -o ':[0-9]*' | tr -d ':')
     
-    # CRITICAL FIX (2026-01-15): Build URLs as complete strings to prevent line breaks
-    # Previous behavior: Variable expansion could cause multi-line strings in Terraform
-    # Root cause: If port extraction includes newlines, URLs split across lines (invalid TF syntax)
+    # CRITICAL FIX (2026-01-15): Port extraction was including leading newlines causing multi-line Terraform strings
+    # Root cause: grep -o can include newlines in output, tr -d only removes ':', not whitespace
+    # Solution: Use xargs to trim ALL whitespace (including newlines)
+    local spoke_keycloak_port=$(jq -r '.endpoints.idpPublicUrl // "https://localhost:8443"' "$spoke_config" | grep -o ':[0-9]*' | tr -d ':' | xargs)
+    local spoke_frontend_port=$(jq -r '.endpoints.baseUrl // "https://localhost:3000"' "$spoke_config" | grep -o ':[0-9]*' | tr -d ':' | xargs)
+    
+    # Build complete URLs as atomic strings (no variable expansion that could introduce newlines)
     local idp_url="https://localhost:${spoke_keycloak_port}"
     local frontend_url="https://localhost:${spoke_frontend_port}"
 
