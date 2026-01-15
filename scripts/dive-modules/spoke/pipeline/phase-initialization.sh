@@ -54,8 +54,15 @@ spoke_phase_initialization() {
         needs_full_init=false
         log_info "Instance already initialized at: $spoke_dir"
 
-        # Step 1b: Check for template drift
-        spoke_init_check_drift "$instance_code"
+        # BEST PRACTICE: Always regenerate docker-compose.yml from template (SSOT)
+        # This eliminates drift entirely - template is always authoritative
+        log_step "Regenerating docker-compose.yml from template (SSOT)"
+        
+        if ! spoke_init_generate_compose "$instance_code"; then
+            log_warn "Failed to regenerate docker-compose.yml (continuing with existing)"
+        else
+            log_success "✓ docker-compose.yml regenerated from template"
+        fi
     fi
 
     # Step 2: Full initialization if needed
@@ -319,40 +326,16 @@ spoke_init_generate_env() {
         opal_public_key=""
     fi
 
-    # CRITICAL: Always ensure OPAL_AUTH_PUBLIC_KEY is set (even in existing .env)
-    # This fixes the OPAL client crash issue for all spokes
+    # CRITICAL FIX (2026-01-15): Always regenerate complete .env template
+    # Previous behavior: Early return if file existed, causing incomplete .env files
+    # New behavior: Always create full template (SSOT principle)
+    # Backup existing file if present
     if [ -f "$env_file" ]; then
-        log_verbose ".env file already exists, ensuring OPAL key is set"
-
-        # Check if OPAL_AUTH_PUBLIC_KEY exists
-        if grep -q "^OPAL_AUTH_PUBLIC_KEY=" "$env_file"; then
-            local existing_key=$(grep "^OPAL_AUTH_PUBLIC_KEY=" "$env_file" | cut -d'=' -f2- | tr -d '"')
-
-            # If existing key is empty, invalid placeholder, or missing, update it
-            if [ -z "$existing_key" ] || [ "$existing_key" = "# NOT_CONFIGURED" ] || [ "$existing_key" = '${OPAL_AUTH_PUBLIC_KEY}' ]; then
-                if [ -n "$opal_public_key" ]; then
-                    sed -i.bak "s|^OPAL_AUTH_PUBLIC_KEY=.*|OPAL_AUTH_PUBLIC_KEY=\"$opal_public_key\"|" "$env_file"
-                    rm -f "${env_file}.bak"
-                    log_success "Updated OPAL_AUTH_PUBLIC_KEY in existing .env (was invalid)"
-                fi
-            else
-                log_verbose "OPAL_AUTH_PUBLIC_KEY already set in .env (preserving)"
-            fi
-        else
-            # OPAL_AUTH_PUBLIC_KEY doesn't exist - add it
-            if [ -n "$opal_public_key" ]; then
-                echo "" >> "$env_file"
-                echo "# OPAL Authentication (auto-added by Phase 2 fix)" >> "$env_file"
-                echo "OPAL_AUTH_PUBLIC_KEY=\"$opal_public_key\"" >> "$env_file"
-                log_success "Added OPAL_AUTH_PUBLIC_KEY to existing .env"
-            else
-                log_warn "OPAL public key not available, OPAL client will use no-auth mode"
-            fi
-        fi
-
-        return 0
+        cp "$env_file" "${env_file}.bak.$(date +%Y%m%d-%H%M%S)" 2>/dev/null || true
+        log_verbose "Backed up existing .env, regenerating complete template"
     fi
 
+    # ALWAYS create complete .env template
     cat > "$env_file" << EOF
 # ${code_upper} Spoke Configuration (GCP Secret Manager references)
 # Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
@@ -485,69 +468,82 @@ spoke_init_prepare_certificates() {
 
     # Check if certificates already exist
     if [ -f "$spoke_dir/certs/certificate.pem" ] && [ -f "$spoke_dir/certs/key.pem" ]; then
-        log_info "TLS certificates already exist - skipping generation"
-        return 0
+        # CRITICAL: Validate certificate has required SANs for federation
+        # Federation requires container name (dive-spoke-{code}-keycloak) in SANs
+        # Without this, Hub→Spoke token endpoint calls fail with SSLPeerUnverifiedException
+        local required_san="dive-spoke-${code_lower}-keycloak"
+        if openssl x509 -in "$spoke_dir/certs/certificate.pem" -text -noout 2>/dev/null | grep -q "$required_san"; then
+            log_info "TLS certificates exist and have required SANs - skipping generation"
+            return 0
+        else
+            log_warn "Existing certificate missing required SAN: $required_san"
+            log_warn "Regenerating certificate with federation-compatible SANs..."
+            # Backup old certificate
+            mv "$spoke_dir/certs/certificate.pem" "$spoke_dir/certs/certificate.pem.backup-$(date +%Y%m%d)" 2>/dev/null || true
+            mv "$spoke_dir/certs/key.pem" "$spoke_dir/certs/key.pem.backup-$(date +%Y%m%d)" 2>/dev/null || true
+        fi
     fi
 
-    # Load certificates module if available
+    # ==========================================================================
+    # SSOT: Use certificates.sh module for ALL certificate generation
+    # ==========================================================================
+    # This ensures consistent SANs across all deployment paths
+    # FIX (2026-01-15): Consolidated duplicate certificate generation code
+    # ==========================================================================
+    
+    # Load certificates module (SSOT for all certificate operations)
     if [ -f "${DIVE_ROOT}/scripts/dive-modules/certificates.sh" ]; then
         source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
 
-        if type prepare_federation_certificates &>/dev/null; then
-            if prepare_federation_certificates "$code_lower"; then
-                log_success "Federation certificates prepared"
+        # Use SSOT function with comprehensive SANs
+        if type generate_spoke_certificate &>/dev/null; then
+            if generate_spoke_certificate "$code_lower"; then
+                log_success "Federation certificates prepared via SSOT"
+                
+                # Sync mkcert root CA (required for TLS trust)
+                if type install_mkcert_ca_in_spoke &>/dev/null; then
+                    install_mkcert_ca_in_spoke "$code_lower" 2>/dev/null || {
+                        # Manual fallback if function unavailable
+                        if command -v mkcert &>/dev/null; then
+                            local mkcert_ca="$(mkcert -CAROOT)/rootCA.pem"
+                            if [ -f "$mkcert_ca" ]; then
+                                mkdir -p "$spoke_dir/certs/ca" "$spoke_dir/truststores"
+                                cp "$mkcert_ca" "$spoke_dir/certs/rootCA.pem"
+                                cp "$mkcert_ca" "$spoke_dir/certs/ca/rootCA.pem"
+                                cp "$mkcert_ca" "$spoke_dir/truststores/mkcert-rootCA.pem"
+                                chmod 644 "$spoke_dir/certs/rootCA.pem" "$spoke_dir/certs/ca/rootCA.pem"
+                                log_success "Synced mkcert CA"
+                            fi
+                        fi
+                    }
+                fi
+                
                 return 0
+            else
+                log_warn "SSOT certificate generation failed, trying fallback..."
             fi
         fi
     fi
 
-    # Fallback: Generate self-signed certificates
-    log_info "Generating self-signed TLS certificates"
-
-    # Generate using mkcert if available (better for local dev)
-    if command -v mkcert &>/dev/null; then
-        log_verbose "Using mkcert for locally-trusted certificates"
-        mkcert -key-file "$spoke_dir/certs/key.pem" \
-               -cert-file "$spoke_dir/certs/certificate.pem" \
-               localhost 127.0.0.1 ::1 host.docker.internal \
-               "dive-spoke-${code_lower}-keycloak" \
-               "dive-spoke-${code_lower}-backend" \
-               "dive-spoke-${code_lower}-frontend" \
-               "keycloak-${code_lower}" \
-               "${code_lower}-idp.dive25.com" \
-               "${code_lower}-api.dive25.com" \
-               "backend-${code_lower}" \
-               "frontend-${code_lower}" 2>/dev/null
-
-        # CRITICAL: Always sync mkcert root CA from current mkcert installation
-        # This prevents CA mismatch when:
-        # - Switching development machines
-        # - Regenerating certificates after CA rotation
-        # - Adding spokes on different machines
-        # FIX (2026-01-14): Ensures CA matches service certificate issuer
-        local mkcert_ca="$(mkcert -CAROOT)/rootCA.pem"
-        if [ -f "$mkcert_ca" ]; then
-            # Sync to all CA locations
-            cp "$mkcert_ca" "$spoke_dir/certs/rootCA.pem"
-            mkdir -p "$spoke_dir/certs/ca"
-            cp "$mkcert_ca" "$spoke_dir/certs/ca/rootCA.pem"
-            cp "$mkcert_ca" "$spoke_dir/truststores/mkcert-rootCA.pem"
-            chmod 644 "$spoke_dir/certs/rootCA.pem"
-            chmod 644 "$spoke_dir/certs/ca/rootCA.pem"
-
-            log_success "Synced current mkcert CA (prevents certificate chain mismatch)"
-        else
-            log_warn "mkcert CA not found at: $(mkcert -CAROOT)"
-        fi
-    else
-        # Fallback to OpenSSL self-signed
-        log_warn "mkcert not found, using self-signed certificate (browser warnings expected)"
-        openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-            -keyout "$spoke_dir/certs/key.pem" \
-            -out "$spoke_dir/certs/certificate.pem" \
-            -subj "/CN=localhost/O=DIVE-V3/C=US" \
-            -addext "subjectAltName=DNS:localhost,DNS:dive-spoke-${code_lower}-keycloak,DNS:keycloak-${code_lower},IP:127.0.0.1" 2>/dev/null
+    # ==========================================================================
+    # FALLBACK ONLY: If SSOT unavailable (should never happen in production)
+    # ==========================================================================
+    log_warn "certificates.sh module not found - using minimal fallback"
+    log_warn "This is NOT recommended - ensure certificates.sh is available"
+    
+    if ! command -v mkcert &>/dev/null; then
+        log_error "mkcert required but not installed"
+        log_error "Install: brew install mkcert && mkcert -install"
+        return 1
     fi
+    
+    # Minimal certificate generation (missing Hub SANs - federation may fail!)
+    log_warn "Generating certificate with INCOMPLETE SANs (Hub SANs missing)"
+    mkcert -key-file "$spoke_dir/certs/key.pem" \
+           -cert-file "$spoke_dir/certs/certificate.pem" \
+           localhost 127.0.0.1 ::1 host.docker.internal \
+           "dive-spoke-${code_lower}-keycloak" \
+           "keycloak-${code_lower}" 2>/dev/null || return 1
 
     chmod 600 "$spoke_dir/certs/key.pem"
     chmod 644 "$spoke_dir/certs/certificate.pem"
