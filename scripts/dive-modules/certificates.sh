@@ -438,8 +438,12 @@ generate_spoke_certificate() {
 
     log_verbose "Spoke certificate SANs (including Hub + all spoke services): $hostnames"
 
+    # CRITICAL FIX (2026-01-15): Skip browser trust store updates during cert generation
+    # Root cause: mkcert tries to verify NSS (Firefox) trust stores, causing hung certutil processes
+    # Solution: Set TRUST_STORES="" to skip all trust store operations (we only need cert files)
+    # Best practice: Certificate generation should NOT modify system trust stores
     # shellcheck disable=SC2086
-    if mkcert -key-file "$certs_dir/key.pem" \
+    if TRUST_STORES="" mkcert -key-file "$certs_dir/key.pem" \
               -cert-file "$certs_dir/certificate.pem" \
               $hostnames 2>/dev/null; then
         chmod 600 "$certs_dir/key.pem"
