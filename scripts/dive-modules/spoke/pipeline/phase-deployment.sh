@@ -281,8 +281,12 @@ spoke_deployment_run_init_scripts() {
         export SPOKE_INSTANCE="$code_lower"
         export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
 
-        log_verbose "Running init-all.sh..."
-        if bash "$init_script" 2>&1 | head -20; then
+        # CRITICAL FIX (2026-01-15): Pass instance code as required argument
+        # Root cause: init-all.sh expects <INSTANCE_CODE> argument but wasn't receiving it
+        # Previous: bash "$init_script" → Usage error
+        # Fixed: bash "$init_script" "$code_upper" → Proper execution
+        log_verbose "Running init-all.sh $code_upper..."
+        if bash "$init_script" "$code_upper" 2>&1 | head -20; then
             log_success "Post-startup initialization complete"
             touch "$init_marker"
         else
