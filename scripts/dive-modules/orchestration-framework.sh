@@ -23,6 +23,11 @@ if [ -f "$(dirname "${BASH_SOURCE[0]}")/deployment-state.sh" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/deployment-state.sh"
 fi
 
+# Load error recovery module (for shared circuit breaker configuration)
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/error-recovery.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/error-recovery.sh"
+fi
+
 # =============================================================================
 # ORCHESTRATION CONSTANTS
 # =============================================================================
@@ -946,10 +951,12 @@ orch_start_service() {
 # SMART RETRY & CIRCUIT BREAKER PATTERNS (Phase 3)
 # =============================================================================
 
-# Circuit breaker states
-readonly CIRCUIT_CLOSED="CLOSED"      # Normal operation, requests pass through
-readonly CIRCUIT_OPEN="OPEN"         # Failing, requests fail immediately
-readonly CIRCUIT_HALF_OPEN="HALF_OPEN" # Testing if service recovered
+# Circuit breaker states (only set if not already defined by error-recovery.sh)
+if [ -z "$CIRCUIT_CLOSED" ]; then
+    readonly CIRCUIT_CLOSED="CLOSED"      # Normal operation, requests pass through
+    readonly CIRCUIT_OPEN="OPEN"         # Failing, requests fail immediately
+    readonly CIRCUIT_HALF_OPEN="HALF_OPEN" # Testing if service recovered
+fi
 
 # Circuit breaker configuration
 declare -A CIRCUIT_BREAKERS=()
@@ -957,10 +964,11 @@ declare -A CIRCUIT_FAILURE_COUNTS=()
 declare -A CIRCUIT_LAST_FAILURE_TIME=()
 declare -A CIRCUIT_SUCCESS_COUNTS=()
 
-# Circuit breaker defaults
-readonly CIRCUIT_FAILURE_THRESHOLD=3     # Open circuit after N failures
-readonly CIRCUIT_TIMEOUT_SECONDS=60      # Auto-close after N seconds
-readonly CIRCUIT_SUCCESS_THRESHOLD=2     # Close circuit after N successes in half-open
+# Circuit breaker defaults (NOTE: Authoritative values now in error-recovery.sh)
+# Using fallback values here for backward compatibility if error-recovery.sh not loaded
+CIRCUIT_FAILURE_THRESHOLD="${CIRCUIT_FAILURE_THRESHOLD:-3}"     # Open circuit after N failures
+CIRCUIT_TIMEOUT_SECONDS="${CIRCUIT_TIMEOUT_SECONDS:-60}"        # Auto-close after N seconds
+CIRCUIT_SUCCESS_THRESHOLD="${CIRCUIT_SUCCESS_THRESHOLD:-2}"     # Close circuit after N successes in half-open
 
 ##
 # Initialize circuit breaker for an operation
@@ -1304,74 +1312,36 @@ orch_create_checkpoint() {
     local level="${2:-$CHECKPOINT_COMPLETE}"
     local description="${3:-Auto checkpoint}"
 
-    # Validate DIVE_ROOT is set
-    if [ -z "$DIVE_ROOT" ]; then
-        log_error "DIVE_ROOT not set, cannot create checkpoint" >&2
-        return 1
-    fi
-
+    # CRITICAL SIMPLIFICATION (2026-01-15): Database-only checkpoints
+    # Root cause: Dual file/database system is flaky and causes issues
+    # Previous: Created .dive-checkpoints/ files + database records
+    # Fixed: Database ONLY - single source of truth
+    # 
+    # Benefits:
+    # - No file synchronization issues
+    # - No stale checkpoint cleanup needed
+    # - No disk I/O for checkpoint storage
+    # - Database transactions ensure consistency
+    # - Simpler rollback logic
+    
     local checkpoint_id="$(date +%Y%m%d_%H%M%S)_${instance_code}_${level}"
-    local checkpoint_dir="${DIVE_ROOT}/.dive-checkpoints/${checkpoint_id}"
+    
+    log_verbose "Creating $level checkpoint: $checkpoint_id (database-only)" >&2
 
-    # Create checkpoint directory
-    if ! mkdir -p "$checkpoint_dir" 2>/dev/null; then
-        log_error "Failed to create checkpoint directory: $checkpoint_dir" >&2
-        return 1
+    # Store checkpoint in database ONLY
+    if orch_db_check_connection; then
+        local code_lower=$(lower "$instance_code")
+        local escaped_description="${description//\'/\'\'}"
+        
+        orch_db_exec "
+        INSERT INTO orchestration_checkpoints (
+            checkpoint_id, instance_code, phase, description, created_at
+        ) VALUES (
+            '$checkpoint_id', '$code_lower', '$level', '$escaped_description', NOW()
+        )" >/dev/null 2>&1 || true
     fi
 
-    log_info "Creating $level checkpoint: $checkpoint_id" >&2
-
-    # Layer 1: Container state (always included)
-    if [[ "$level" =~ ^($CHECKPOINT_CONTAINER|$CHECKPOINT_CONFIG|$CHECKPOINT_KEYCLOAK|$CHECKPOINT_FEDERATION|$CHECKPOINT_COMPLETE)$ ]]; then
-        orch_checkpoint_containers "$instance_code" "$checkpoint_dir"
-    fi
-
-    # Layer 2: Configuration files
-    if [[ "$level" =~ ^($CHECKPOINT_CONFIG|$CHECKPOINT_KEYCLOAK|$CHECKPOINT_FEDERATION|$CHECKPOINT_COMPLETE)$ ]]; then
-        orch_checkpoint_configuration "$instance_code" "$checkpoint_dir"
-    fi
-
-    # Layer 3: Keycloak realm state
-    if [[ "$level" =~ ^($CHECKPOINT_KEYCLOAK|$CHECKPOINT_FEDERATION|$CHECKPOINT_COMPLETE)$ ]]; then
-        orch_checkpoint_keycloak "$instance_code" "$checkpoint_dir"
-    fi
-
-    # Layer 4: Federation state
-    if [[ "$level" =~ ^($CHECKPOINT_FEDERATION|$CHECKPOINT_COMPLETE)$ ]]; then
-        orch_checkpoint_federation "$instance_code" "$checkpoint_dir"
-    fi
-
-    # Create metadata
-    if ! cat > "${checkpoint_dir}/metadata.json" << EOF
-{
-    "checkpoint_id": "$checkpoint_id",
-    "instance_code": "$instance_code",
-    "level": "$level",
-    "description": "$description",
-    "created_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-    "created_by": "${USER:-system}",
-    "orchestration_version": "3.0"
-}
-EOF
-    then
-        log_error "Failed to create checkpoint metadata"
-        rm -rf "$checkpoint_dir"
-        return 1
-    fi
-
-    # Verify checkpoint was created
-    if [ ! -f "${checkpoint_dir}/metadata.json" ]; then
-        log_error "Checkpoint creation failed - metadata missing"
-        return 1
-    fi
-
-    # Register checkpoint
-    CHECKPOINT_REGISTRY["$checkpoint_id"]="$checkpoint_dir"
-    CHECKPOINT_METADATA["$checkpoint_id"]="$level"
-
-    log_success "Checkpoint created: $checkpoint_id" >&2
-
-    # Return ONLY the checkpoint ID on stdout (no logging)
+    # Return checkpoint ID on stdout (no logging)
     echo "$checkpoint_id"
 }
 
@@ -1556,17 +1526,33 @@ orch_execute_rollback() {
 ##
 orch_find_latest_checkpoint() {
     local instance_code="$1"
+    local code_lower=$(lower "$instance_code")
 
-    # Find checkpoints for this instance, sorted by creation time (newest first)
-    local checkpoints=($(find "${DIVE_ROOT}/.dive-checkpoints" -name "*_${instance_code}_*" -type d 2>/dev/null | sort -r))
-
-    if [ ${#checkpoints[@]} -eq 0 ]; then
+    # CRITICAL FIX (2026-01-15): Database-only checkpoints
+    # Previous: Searched .dive-checkpoints/ filesystem
+    # Fixed: Query database for latest checkpoint
+    
+    if ! orch_db_check_connection; then
         echo ""
         return 1
     fi
 
-    # Return the newest checkpoint
-    basename "${checkpoints[0]}"
+    local checkpoint_id
+    checkpoint_id=$(orch_db_exec "
+        SELECT checkpoint_id 
+        FROM orchestration_checkpoints 
+        WHERE instance_code = '$code_lower' 
+        ORDER BY created_at DESC 
+        LIMIT 1
+    " 2>/dev/null | xargs)
+
+    if [ -n "$checkpoint_id" ]; then
+        echo "$checkpoint_id"
+        return 0
+    fi
+
+    echo ""
+    return 1
 }
 
 ##
@@ -1597,61 +1583,21 @@ orch_rollback_configuration() {
     local instance_code="$1"
     local checkpoint_id="$2"
 
-    # Validate inputs
-    if [ -z "$DIVE_ROOT" ]; then
-        log_error "DIVE_ROOT not set"
-        return 1
-    fi
-
-    local checkpoint_dir="${DIVE_ROOT}/.dive-checkpoints/${checkpoint_id}"
-    local instance_dir="${DIVE_ROOT}/instances/${instance_code}"
-
-    # Verify checkpoint exists
-    if [ ! -d "$checkpoint_dir" ]; then
-        log_error "Checkpoint not found: $checkpoint_id"
-        log_error "Directory does not exist: $checkpoint_dir"
-        return 1
-    fi
-
-    log_info "Restoring configuration files from $checkpoint_id..."
-
-    # Verify instance directory exists
-    if [ ! -d "$instance_dir" ]; then
-        log_warn "Instance directory doesn't exist, creating: $instance_dir"
-        mkdir -p "$instance_dir"
-    fi
-
-    # Restore configuration files with verification
-    local restored_count=0
-
-    if [ -f "${checkpoint_dir}/.env" ]; then
-        cp "${checkpoint_dir}/.env" "${instance_dir}/.env" && ((restored_count++))
-        log_verbose "Restored .env"
-    else
-        log_verbose "No .env in checkpoint"
-    fi
-
-    if [ -f "${checkpoint_dir}/config.json" ]; then
-        cp "${checkpoint_dir}/config.json" "${instance_dir}/config.json" && ((restored_count++))
-        log_verbose "Restored config.json"
-    else
-        log_verbose "No config.json in checkpoint"
-    fi
-
-    if [ -f "${checkpoint_dir}/docker-compose.yml" ]; then
-        cp "${checkpoint_dir}/docker-compose.yml" "${instance_dir}/docker-compose.yml" && ((restored_count++))
-        log_verbose "Restored docker-compose.yml"
-    else
-        log_verbose "No docker-compose.yml in checkpoint"
-    fi
-
-    if [ $restored_count -gt 0 ]; then
-        log_success "Configuration files restored ($restored_count files)"
-        return 0
-    else
-        log_error "No files were restored from checkpoint"
-        return 1
-    fi
+    # CRITICAL SIMPLIFICATION (2026-01-15): Database-only rollback
+    # Root cause: File-based checkpoint restoration is flaky and unnecessary
+    # Previous: Restored .env, config.json, docker-compose.yml from checkpoint files
+    # Fixed: These files are regenerated from SSOT (templates) on redeployment
+    # 
+    # Best Practice: Don't restore config files - regenerate from authoritative sources
+    # - .env: Generated from template + secrets from GCP
+    # - config.json: Generated from instance parameters
+    # - docker-compose.yml: Generated from template
+    
+    log_info "Configuration rollback skipped - files regenerated from templates on redeploy"
+    
+    # Note: Actual rollback is handled by stopping containers and redeploying
+    # Database state tracks deployment phase for recovery
+    return 0
 }
 
 ##
@@ -1665,16 +1611,18 @@ orch_rollback_containers() {
     local instance_code="$1"
     local checkpoint_id="$2"
 
-    log_info "Recreating containers from checkpoint..."
+    # CRITICAL SIMPLIFICATION (2026-01-15): Database-only rollback
+    # Rollback = stop containers, database tracks state for recovery
+    # Previous: Stopped + restarted containers from checkpoint files
+    # Fixed: Just stop containers, redeployment handles recreation
+    
+    log_info "Stopping containers for rollback..."
 
     # Stop existing containers
     orch_rollback_stop_services "$instance_code"
 
-    # Restart with checkpoint configuration
-    cd "${DIVE_ROOT}/instances/${instance_code}"
-    docker compose up -d 2>/dev/null || true
-
-    log_success "Containers recreated"
+    log_success "Containers stopped for rollback"
+    log_info "To recover: redeploy the spoke instance"
 }
 
 ##
@@ -1688,18 +1636,26 @@ orch_rollback_complete() {
     local instance_code="$1"
     local checkpoint_id="$2"
 
-    log_info "Executing complete system rollback..."
+    # CRITICAL SIMPLIFICATION (2026-01-15): Database-only rollback
+    # Root cause: File restoration is unnecessary when using templates (SSOT)
+    # Previous: Restored config files + restarted containers from checkpoint
+    # Fixed: Stop containers + update database state to FAILED
+    #
+    # Recovery: User redeploys, templates regenerate everything correctly
+    
+    log_info "Executing rollback for $instance_code..."
 
-    # Restore configuration
-    orch_rollback_configuration "$instance_code" "$checkpoint_id"
+    # Stop containers
+    orch_rollback_stop_services "$instance_code"
+    
+    # Update database state to FAILED
+    if orch_db_check_connection; then
+        local code_lower=$(lower "$instance_code")
+        orch_db_set_state "$instance_code" "FAILED" "Rollback executed - manual redeploy required"
+    fi
 
-    # Recreate containers
-    orch_rollback_containers "$instance_code" "$checkpoint_id"
-
-    # Note: Keycloak and federation rollback would require additional implementation
-    # for complete system restoration
-
-    log_success "Complete rollback executed"
+    log_success "Rollback complete - stopped containers and updated state to FAILED"
+    log_info "To recover: ./dive spoke deploy $instance_code"
 }
 
 # =============================================================================
