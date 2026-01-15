@@ -368,13 +368,24 @@ class HubSpokeRegistryService extends EventEmitter {
   /**
    * Register a new spoke instance
    * Initially in 'pending' status until manually approved
+   * 
+   * IDEMPOTENT: Returns existing registration if already registered (not revoked)
    */
   async registerSpoke(request: IRegistrationRequest): Promise<ISpokeRegistration> {
     // Check if instance code already registered
     const existing = await this.store.findByInstanceCode(request.instanceCode);
     if (existing) {
       if (existing.status !== 'revoked') {
-        throw new Error(`Instance ${request.instanceCode} is already registered`);
+        // CRITICAL FIX (2026-01-15): Return existing registration (idempotent behavior)
+        // Previous: throw Error → HTTP 500
+        // Fixed: Return existing → HTTP 201 with existing data
+        // Best practice: Registration endpoints should be idempotent
+        logger.info('Spoke already registered, returning existing registration', {
+          spokeId: existing.spokeId,
+          instanceCode: existing.instanceCode,
+          status: existing.status
+        });
+        return existing;
       }
       // Delete the revoked registration to allow re-registration
       logger.info('Deleting revoked spoke to allow re-registration', {
