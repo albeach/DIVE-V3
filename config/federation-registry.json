@@ -1342,7 +1342,7 @@
           "name": "keycloak-tst",
           "containerName": "dive-spoke-tst-keycloak",
           "internalPort": 8443,
-          "externalPort": 8506,
+          "externalPort": 8643,
           "protocol": "https",
           "hostname": "tst-idp.dive25.com"
         },

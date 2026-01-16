@@ -5,7 +5,37 @@ import { NotFoundError } from '../middleware/error.middleware';
 import { IZTDFResource } from '../types/ztdf.types';
 import { validateZTDFIntegrity, decryptContent } from '../utils/ztdf.utils';
 import { convertToOpenTDFFormat } from '../services/ztdf-export.service';
-import { kasRegistryService } from '../services/kas-registry.service';
+import { mongoKasRegistryStore } from '../models/kas-registry.model';
+import { kasRouterService } from '../services/kas-router.service';
+
+// Helper: Get INSTANCE_REALM constant for cross-instance checks
+const INSTANCE_REALM = process.env.INSTANCE_REALM || 'USA';
+
+/**
+ * Check if resource requires cross-instance KAS access
+ * MongoDB SSOT replacement for legacy kasRegistryService.isCrossInstanceResource
+ */
+function isCrossInstanceResource(resource: any): boolean {
+    const kasAuthority = getKASAuthority(resource);
+    const localKasId = `${INSTANCE_REALM.toLowerCase()}-kas`;
+    return kasAuthority !== localKasId;
+}
+
+/**
+ * Determine KAS authority for a resource based on originRealm
+ * MongoDB SSOT replacement for legacy kasRegistryService.getKASAuthority
+ */
+function getKASAuthority(resource: any): string {
+    // Priority: explicit kasAuthority > originRealm-derived > local instance
+    if (resource.kasAuthority) {
+        return resource.kasAuthority;
+    }
+    if (resource.originRealm) {
+        return `${resource.originRealm.toLowerCase()}-kas`;
+    }
+    // Default to local instance KAS
+    return `${INSTANCE_REALM.toLowerCase()}-kas`;
+}
 import axios from 'axios';
 
 /**
@@ -168,11 +198,11 @@ export const getResourceHandler = async (
         const obligations = (req as any).authzObligations || [];
         const kasObligation = obligations.find((o: any) => o.type === 'kas');
 
-        // Phase 4: Check if this is a cross-instance resource
-        const isCrossInstance = kasRegistryService.isCrossInstanceResource(resource);
-        const kasAuthority = kasRegistryService.getKASAuthority(resource);
+        // Phase 4: Check if this is a cross-instance resource (MongoDB SSOT)
+        const crossInstance = isCrossInstanceResource(resource);
+        const kasAuthority = getKASAuthority(resource);
 
-        if (isCrossInstance && kasRegistryService.isCrossKASEnabled()) {
+        if (crossInstance) {
             logger.info('Cross-instance encrypted resource detected', {
                 requestId,
                 resourceId: resource.resourceId,
@@ -202,10 +232,10 @@ export const getResourceHandler = async (
                 // Include policy evaluation details for frontend replay
                 policyEvaluation: (req as any).policyEvaluation,
 
-                // Phase 4: Cross-instance metadata
+                // Phase 4: Cross-instance metadata (MongoDB SSOT)
                 originRealm: (resource as any).originRealm || INSTANCE_REALM,
                 kasAuthority,
-                isCrossInstance,
+                isCrossInstance: crossInstance,
 
                 metadata: {
                     createdAt: resource.createdAt,
@@ -215,14 +245,15 @@ export const getResourceHandler = async (
 
             // If KAS obligation present, include KAS endpoint info
             if (kasObligation) {
-                // Phase 4: Determine correct KAS URL for cross-instance access
+                // Phase 4: Determine correct KAS URL for cross-instance access (MongoDB SSOT)
                 let kasUrl = resource.ztdf.payload.keyAccessObjects[0]?.kasUrl;
 
-                if (isCrossInstance && kasRegistryService.isCrossKASEnabled()) {
-                    const remoteKas = kasRegistryService.getKAS(kasAuthority);
-                    if (remoteKas) {
+                if (crossInstance) {
+                    // Look up KAS from MongoDB registry
+                    const remoteKas = await mongoKasRegistryStore.findById(kasAuthority);
+                    if (remoteKas && remoteKas.status === 'active' && remoteKas.enabled) {
                         kasUrl = remoteKas.kasUrl;
-                        logger.debug('Using cross-instance KAS URL', {
+                        logger.debug('Using cross-instance KAS URL from MongoDB', {
                             requestId,
                             kasAuthority,
                             kasUrl,
@@ -235,9 +266,9 @@ export const getResourceHandler = async (
                     required: true,
                     kasUrl,
                     kasAuthority,
-                    isCrossInstance,
+                    isCrossInstance: crossInstance,
                     wrappedKey: resource.ztdf.payload.keyAccessObjects[0]?.wrappedKey,
-                    message: isCrossInstance
+                    message: crossInstance
                         ? `Decryption key must be requested from ${kasAuthority}`
                         : 'Decryption key must be requested from KAS'
                 };
@@ -764,9 +795,9 @@ export const requestKeyHandler = async (
             return;
         }
 
-        // Phase 4: Check if this is a cross-instance resource
-        const isCrossInstance = kasRegistryService.isCrossInstanceResource(resource);
-        const kasAuthority = kasRegistryService.getKASAuthority(resource);
+        // Phase 4: Check if this is a cross-instance resource (MongoDB SSOT)
+        const crossInstanceRes = isCrossInstanceResource(resource);
+        const kasAuth = getKASAuthority(resource);
 
         // Get user info from request (set by JWT middleware)
         const user = (req as any).user || {};
@@ -783,8 +814,8 @@ export const requestKeyHandler = async (
         logger.info('Processing key request', {
             requestId,
             resourceId,
-            isCrossInstance,
-            kasAuthority,
+            isCrossInstance: crossInstanceRes,
+            kasAuthority: kasAuth,
             originRealm: (resource as any).originRealm,
             currentRealm: INSTANCE_REALM,
             hasWrappedKey: !!wrappedKey,
@@ -797,44 +828,42 @@ export const requestKeyHandler = async (
 
         let kasResponse: any;
 
-        // Phase 4: Use cross-KAS client for remote resources
-        if (isCrossInstance && kasRegistryService.isCrossKASEnabled()) {
-            logger.info('Initiating cross-instance KAS request', {
+        // Phase 4: Use cross-KAS client for remote resources (MongoDB SSOT via kasRouterService)
+        if (crossInstanceRes) {
+            logger.info('Initiating cross-instance KAS request via MongoDB registry', {
                 requestId,
                 resourceId,
-                kasAuthority,
+                kasAuthority: kasAuth,
                 subject: subject.uniqueID
             });
 
-            const crossKASResult = await kasRegistryService.requestCrossKASKey(
-                kasAuthority,
-                {
-                    resourceId,
-                    kaoId,
-                    wrappedKey,
-                    bearerToken,
-                    subject,
-                    requestId
-                }
-            );
+            // Use kasRouterService which is backed by MongoDB
+            const crossKASResult = await kasRouterService.routeKeyRequest({
+                resourceId,
+                kaoId,
+                originInstance: (resource as any).originRealm || kasAuth.replace('-kas', '').toUpperCase(),
+                requesterInstance: INSTANCE_REALM,
+                bearerToken,
+                wrappedKey,
+                requestId
+            });
 
             if (!crossKASResult.success) {
                 logger.warn('Cross-KAS key request denied', {
                     requestId,
                     resourceId,
-                    kasAuthority,
+                    kasAuthority: kasAuth,
                     denialReason: crossKASResult.denialReason,
-                    latencyMs: crossKASResult.latencyMs
+                    kasId: crossKASResult.kasId
                 });
 
                 res.status(403).json({
                     success: false,
                     error: 'Forbidden',
                     denialReason: crossKASResult.denialReason,
-                    kasAuthority,
-                    organization: crossKASResult.organization,
-                    isCrossInstance: true,
-                    executionTimeMs: crossKASResult.latencyMs
+                    kasAuthority: kasAuth,
+                    kasId: crossKASResult.kasId,
+                    isCrossInstance: true
                 });
                 return;
             }

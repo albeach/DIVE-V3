@@ -259,16 +259,27 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             type: "oidc",
             clientId: process.env.KEYCLOAK_CLIENT_ID!,
             clientSecret: process.env.KEYCLOAK_CLIENT_SECRET!,
-            issuer: `https://localhost:8443/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}`,
+            // CRITICAL: NextAuth needs two different URLs:
+            // 1. Internal URL (KEYCLOAK_URL): For server-side calls (token, userinfo, jwks) - uses Docker network
+            // 2. External URL (NEXT_PUBLIC_KEYCLOAK_URL): For browser redirects (authorization)
+            //
+            // FIX: Use KEYCLOAK_URL (internal) for issuer since NextAuth fetches well-known config server-side.
+            // The issuer in the token will still use the external URL, but we set wellKnown explicitly
+            // to fetch the config from the internal URL.
+            issuer: process.env.AUTH_KEYCLOAK_ISSUER || `${process.env.NEXT_PUBLIC_KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}`,
+            // Use wellKnown to fetch OIDC config from internal Docker URL
+            wellKnown: `${process.env.KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/.well-known/openid-configuration`,
             authorization: {
-                url: `https://localhost:8443/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/auth`,
+                // Authorization URL must be the external URL (browser redirect)
+                url: `${process.env.NEXT_PUBLIC_KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/auth`,
                 params: {
                     scope: "openid profile email",
                 }
             },
-            token: `https://localhost:8443/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/token`,
-            userinfo: `https://localhost:8443/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/userinfo`,
-            jwks_endpoint: `https://localhost:8443/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/certs`,
+            // Token and userinfo endpoints are called server-side, use internal KEYCLOAK_URL
+            token: `${process.env.KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/token`,
+            userinfo: `${process.env.KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/userinfo`,
+            jwks_endpoint: `${process.env.KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/certs`,
             profile(profile) {
                 // Log profile in development only
                 if (process.env.NODE_ENV === 'development') {

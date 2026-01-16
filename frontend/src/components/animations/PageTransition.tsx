@@ -2,24 +2,24 @@
 
 /**
  * Page Transition Component
- * 
+ *
  * Wraps page content with smooth framer-motion animations.
  * Provides consistent page entry/exit animations across the app.
- * 
+ *
  * Features:
  * - Fade in on mount
  * - Slide up animation
  * - Configurable animation variants
  * - Accessible (respects prefers-reduced-motion)
  * - Performance optimized
- * 
+ *
  * Usage:
  * ```tsx
  * <PageTransition>
  *   <YourPageContent />
  * </PageTransition>
  * ```
- * 
+ *
  * @version 1.0.0
  * @date 2026-01-16
  */
@@ -52,8 +52,8 @@ const variants = {
   },
 };
 
-export function PageTransition({ 
-  children, 
+export function PageTransition({
+  children,
   className = '',
   variant = 'fade'
 }: PageTransitionProps) {
@@ -120,12 +120,12 @@ export function StaggerItem({ children, className = '' }: { children: ReactNode;
  * Fade In Animation
  * Simple fade in on mount
  */
-export function FadeIn({ 
-  children, 
+export function FadeIn({
+  children,
   delay = 0,
-  className = '' 
-}: { 
-  children: ReactNode; 
+  className = ''
+}: {
+  children: ReactNode;
   delay?: number;
   className?: string;
 }) {

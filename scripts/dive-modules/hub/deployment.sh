@@ -122,39 +122,39 @@ _hub_generate_certs() {
     # FIX (2026-01-15): Consolidated Hub certificate generation to SSOT
     # Ensures consistent wildcard SANs for all spoke federation
     # ==========================================================================
-    
+
     mkdir -p "${HUB_CERTS_DIR}"
     mkdir -p "${HUB_DATA_DIR}/truststores"
 
     # Load certificates module (SSOT)
     if [ -f "${DIVE_ROOT}/scripts/dive-modules/certificates.sh" ]; then
         source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
-        
+
         # Use SSOT function for Hub certificate
         if type update_hub_certificate_sans &>/dev/null; then
             log_info "Generating Hub certificate via SSOT (wildcard SANs)..."
             if update_hub_certificate_sans; then
                 log_success "Hub certificate generated via SSOT"
-                
+
                 # Install mkcert CA in Hub truststore (SSOT function)
                 if type install_mkcert_ca_in_hub &>/dev/null; then
                     install_mkcert_ca_in_hub || {
                         log_warn "CA installation had issues (non-critical)"
                     }
                 fi
-                
+
                 return 0
             else
                 log_warn "SSOT Hub certificate generation failed, trying fallback..."
             fi
         fi
     fi
-    
+
     # ==========================================================================
     # FALLBACK: Use generate-dev-certs.sh if SSOT unavailable
     # ==========================================================================
     log_warn "Using fallback certificate generation (generate-dev-certs.sh)"
-    
+
     cd "${DIVE_ROOT}"
     COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-dive-hub}" \
     CERT_HOST_SCOPE="${CERT_HOST_SCOPE:-full}" \
@@ -164,7 +164,7 @@ _hub_generate_certs() {
         log_error "Install mkcert: brew install mkcert && mkcert -install"
         return 1
     }
-    
+
     log_success "TLS certificates generated via fallback"
 }
 _hub_create_config() {

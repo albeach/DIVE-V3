@@ -2,6 +2,7 @@
 
 import { getPseudonymFromUser } from '@/lib/pseudonym-generator';
 import { getCountryFlagComponent } from '@/components/ui/flags';
+import { getLocalizedClearance, usesLocalizedClearance } from '@/utils/clearance-localization';
 
 interface User {
   uniqueID?: string | null;
@@ -52,15 +53,20 @@ export function ProfileBadge({ user }: ProfileBadgeProps) {
               <span className="text-xs font-bold text-green-700 uppercase tracking-wide">Active</span>
             </span>
             
-            {/* Clearance Badge with Tooltip */}
+            {/* Clearance Badge with Tooltip - Localized for instance */}
             <span 
               className="group/clearance relative inline-flex items-center px-3 py-1 rounded-lg bg-blue-50 border border-blue-200 cursor-help"
-              title="Your security clearance level determines which classification levels you can access"
+              title={`Your security clearance level determines which classification levels you can access${usesLocalizedClearance() ? ` (${user.clearance})` : ''}`}
             >
-              <span className="text-sm font-bold text-blue-900">{user.clearance || 'Not Set'}</span>
-              {/* Tooltip */}
+              <span className="text-sm font-bold text-blue-900">
+                {getLocalizedClearance(user.clearance)}
+              </span>
+              {/* Tooltip - shows normalized value if localized */}
               <span className="invisible group-hover/clearance:visible absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg shadow-lg whitespace-nowrap z-10">
-                Security clearance level for classified access
+                {usesLocalizedClearance() 
+                  ? `${user.clearance || 'Not Set'} (NATO Standard)`
+                  : 'Security clearance level for classified access'
+                }
                 <span className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-1 border-4 border-transparent border-t-gray-900"></span>
               </span>
             </span>

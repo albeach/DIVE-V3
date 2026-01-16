@@ -13,7 +13,7 @@ export default async function DashboardPage() {
   }
 
   return (
-    <PageLayout 
+    <PageLayout
       user={session.user}
       breadcrumbs={[
         { label: 'dashboard.title', href: null, translate: true }

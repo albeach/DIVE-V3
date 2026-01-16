@@ -136,10 +136,8 @@ export function CoalitionPartnersFooter({ className = '' }: { className?: string
   useEffect(() => {
     const fetchIdPs = async () => {
       try {
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 
-                          process.env.NEXT_PUBLIC_API_URL || 
-                          'https://localhost:4000';
-        const response = await fetch(`${backendUrl}/api/idps/public`, {
+        // Use Next.js API route proxy instead of calling backend directly (avoids CORS issues)
+        const response = await fetch('/api/idps/public', {
           method: 'GET',
           headers: { 'Accept': 'application/json' },
         });

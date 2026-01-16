@@ -16,7 +16,7 @@ import axios from 'axios';
 import * as https from 'https';
 import { logger } from '../utils/logger';
 import { policyVersionMonitor } from '../services/policy-version-monitor.service';
-import { kasRegistryService } from '../services/kas-registry.service';
+import { mongoKasRegistryStore } from '../models/kas-registry.model';
 
 // ============================================
 // Configuration
@@ -144,7 +144,7 @@ export const getPolicyConsistencyHandler = async (
 
 /**
  * GET /api/health/kas-federation
- * Returns KAS federation status
+ * Returns KAS federation status (MongoDB SSOT)
  */
 export const getKASFederationStatusHandler = async (
   _req: Request,
@@ -152,20 +152,33 @@ export const getKASFederationStatusHandler = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const kasServers = kasRegistryService.getAllKAS();
-    const kasHealth = kasRegistryService.getKASHealth();
-    const crossKASEnabled = kasRegistryService.isCrossKASEnabled();
+    // Get KAS instances from MongoDB (SSOT)
+    const kasServers = await mongoKasRegistryStore.findAll();
+    const activeKas = kasServers.filter(k => k.status === 'active' && k.enabled);
 
     res.json({
       instance: INSTANCE_REALM,
-      crossKASEnabled,
+      crossKASEnabled: true, // Always enabled when using MongoDB registry
       kasServers: kasServers.map(kas => ({
         kasId: kas.kasId,
         organization: kas.organization,
         countryCode: kas.countryCode,
         trustLevel: kas.trustLevel,
-        health: kasHealth[kas.kasId] || { healthy: false, lastCheck: null }
+        status: kas.status,
+        enabled: kas.enabled,
+        lastHeartbeat: kas.metadata?.lastHeartbeat || null,
+        health: {
+          healthy: kas.status === 'active' && kas.enabled,
+          lastCheck: kas.metadata?.lastHeartbeat || null
+        }
       })),
+      summary: {
+        total: kasServers.length,
+        active: activeKas.length,
+        pending: kasServers.filter(k => k.status === 'pending').length,
+        suspended: kasServers.filter(k => k.status === 'suspended').length,
+        offline: kasServers.filter(k => k.status === 'offline').length
+      },
       timestamp: new Date().toISOString()
     });
   } catch (error) {
@@ -215,14 +228,16 @@ export const getDetailedHealthHandler = async (
     };
   }
 
-  // Check KAS registry loaded
+  // Check KAS registry loaded (MongoDB SSOT)
   try {
-    const kasServers = kasRegistryService.getAllKAS();
+    const kasServers = await mongoKasRegistryStore.findAll();
+    const activeKas = kasServers.filter(k => k.status === 'active' && k.enabled);
     checks.kasRegistry = {
       healthy: kasServers.length > 0,
       details: {
         kasCount: kasServers.length,
-        crossKASEnabled: kasRegistryService.isCrossKASEnabled()
+        activeCount: activeKas.length,
+        crossKASEnabled: true // Always enabled with MongoDB registry
       }
     };
   } catch (error) {

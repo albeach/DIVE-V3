@@ -1,8 +1,8 @@
 /**
  * Unit Tests: Backend i18n
- * 
+ *
  * Tests backend internationalization utilities.
- * 
+ *
  * Test Coverage:
  * - Translation function (t)
  * - Accept-Language parsing
@@ -10,7 +10,7 @@
  * - Translation interpolation
  * - Fallback behavior
  * - Caching
- * 
+ *
  * @version 1.0.0
  * @date 2026-01-16
  */

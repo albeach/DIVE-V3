@@ -441,30 +441,71 @@ _federation_link_direct() {
         }
     }"
 
-    # Create the IdP
-    local create_result
-    create_result=$(docker exec "$target_kc_container" curl -sf \
-        -X POST "http://localhost:8080/admin/realms/${target_realm}/identity-provider/instances" \
+    # ==========================================================================
+    # IDEMPOTENT IdP CREATION: Check if exists, update if needed, create if not
+    # ==========================================================================
+    
+    # Check if IdP already exists
+    local existing_idp
+    existing_idp=$(docker exec "$target_kc_container" curl -sf \
         -H "Authorization: Bearer $token" \
-        -H "Content-Type: application/json" \
-        -d "$idp_config" 2>&1)
-
-    local create_exit=$?
-
-    if [ $create_exit -eq 0 ]; then
-        log_info "Created ${idp_alias} in ${target_upper} (direct)"
-
-        # CRITICAL: Configure IdP mappers to import claims from federated tokens
-        # Without these mappers, user attributes like clearance, countryOfAffiliation, etc.
-        # will NOT be imported from the remote IdP's tokens, causing "Invalid JWT" errors
-        log_info "Configuring IdP claim mappers for ${idp_alias}..."
-        _configure_idp_mappers "$target_kc_container" "$token" "$target_realm" "$idp_alias"
-
-        return 0
+        "http://localhost:8080/admin/realms/${target_realm}/identity-provider/instances/${idp_alias}" 2>/dev/null)
+    
+    if [ -n "$existing_idp" ] && echo "$existing_idp" | grep -q '"alias"'; then
+        # IdP exists - update it instead of creating
+        log_info "IdP ${idp_alias} already exists in ${target_upper}, updating..."
+        
+        local update_result
+        update_result=$(docker exec "$target_kc_container" curl -sf -w "\nHTTP_CODE:%{http_code}" \
+            -X PUT "http://localhost:8080/admin/realms/${target_realm}/identity-provider/instances/${idp_alias}" \
+            -H "Authorization: Bearer $token" \
+            -H "Content-Type: application/json" \
+            -d "$idp_config" 2>&1)
+        
+        local http_code=$(echo "$update_result" | grep -o "HTTP_CODE:[0-9]*" | cut -d: -f2)
+        if [ "$http_code" = "204" ] || [ "$http_code" = "200" ] || [ -z "$http_code" ]; then
+            log_success "Updated ${idp_alias} in ${target_upper}"
+        else
+            log_warn "IdP update returned HTTP $http_code (may still be OK)"
+        fi
     else
-        log_warn "Failed to create IdP: $create_result"
-        return 1
+        # IdP doesn't exist - create it
+        log_info "Creating ${idp_alias} in ${target_upper}..."
+        
+        local create_result
+        create_result=$(docker exec "$target_kc_container" curl -s -w "\nHTTP_CODE:%{http_code}" \
+            -X POST "http://localhost:8080/admin/realms/${target_realm}/identity-provider/instances" \
+            -H "Authorization: Bearer $token" \
+            -H "Content-Type: application/json" \
+            -d "$idp_config" 2>&1)
+        
+        local http_code=$(echo "$create_result" | grep -o "HTTP_CODE:[0-9]*" | cut -d: -f2)
+        
+        if [ "$http_code" = "201" ] || [ "$http_code" = "204" ]; then
+            log_success "Created ${idp_alias} in ${target_upper}"
+        elif [ "$http_code" = "409" ]; then
+            # 409 Conflict - IdP already exists (race condition), try update
+            log_warn "IdP already exists (409), updating instead..."
+            docker exec "$target_kc_container" curl -sf \
+                -X PUT "http://localhost:8080/admin/realms/${target_realm}/identity-provider/instances/${idp_alias}" \
+                -H "Authorization: Bearer $token" \
+                -H "Content-Type: application/json" \
+                -d "$idp_config" 2>/dev/null || true
+            log_success "Updated ${idp_alias} in ${target_upper}"
+        else
+            log_error "Failed to create IdP: HTTP $http_code"
+            log_error "Response: $create_result"
+            return 1
+        fi
     fi
+
+    # CRITICAL: Configure IdP mappers to import claims from federated tokens
+    # Without these mappers, user attributes like clearance, countryOfAffiliation, etc.
+    # will NOT be imported from the remote IdP's tokens, causing "Invalid JWT" errors
+    log_info "Configuring IdP claim mappers for ${idp_alias}..."
+    _configure_idp_mappers "$target_kc_container" "$token" "$target_realm" "$idp_alias"
+
+    return 0
 }
 
 ##

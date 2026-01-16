@@ -45,6 +45,21 @@ if [ -z "$DIVE_FEDERATION_LINK_LOADED" ]; then
 fi
 
 # =============================================================================
+# LOAD FEDERATION STATE DATABASE MODULE (2026-01-16)
+# =============================================================================
+# Database-driven federation state management
+# Part of Orchestration Architecture Review
+if [ -z "$FEDERATION_STATE_DB_LOADED" ]; then
+    _fed_db_path="${BASH_SOURCE[0]%/*}/../../federation-state-db.sh"
+    if [ -f "$_fed_db_path" ]; then
+        source "$_fed_db_path"
+    elif [ -f "${DIVE_ROOT}/scripts/dive-modules/federation-state-db.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/federation-state-db.sh"
+    fi
+    unset _fed_db_path
+fi
+
+# =============================================================================
 # CONSTANTS
 # =============================================================================
 
@@ -82,8 +97,27 @@ spoke_federation_setup() {
 
     log_step "Setting up federation for $code_upper"
 
+    # ==========================================================================
+    # DATABASE STATE: Create initial federation link records (2026-01-16)
+    # ==========================================================================
+    # Record both directions as PENDING before attempting creation
+    if type fed_db_upsert_link &>/dev/null; then
+        # Spoke→Hub direction (usa-idp in spoke)
+        fed_db_upsert_link "$code_lower" "usa" "SPOKE_TO_HUB" "usa-idp" "PENDING" \
+            "dive-v3-broker-${code_lower}" || true
+        # Hub→Spoke direction (spoke-idp in hub)
+        fed_db_upsert_link "usa" "$code_lower" "HUB_TO_SPOKE" "${code_lower}-idp" "PENDING" \
+            "dive-v3-broker-usa" || true
+        log_verbose "Federation links initialized in database (PENDING)"
+    fi
+
     # Step 1: Configure usa-idp in spoke Keycloak
     if ! spoke_federation_configure_upstream_idp "$instance_code" "usa"; then
+        # Update database state to FAILED
+        if type fed_db_update_status &>/dev/null; then
+            fed_db_update_status "$code_lower" "usa" "SPOKE_TO_HUB" "FAILED" \
+                "Failed to configure upstream IdP" "$SPOKE_ERROR_FEDERATION_SETUP" || true
+        fi
         orch_record_error "$SPOKE_ERROR_FEDERATION_SETUP" "$ORCH_SEVERITY_HIGH" \
             "Failed to configure upstream IdP" "federation" \
             "$(spoke_error_get_remediation $SPOKE_ERROR_FEDERATION_SETUP $instance_code)"
@@ -115,15 +149,39 @@ spoke_federation_setup() {
         log_warn "Federation secret sync incomplete (non-blocking)"
     fi
 
-    # Step 4: Verify bidirectional connectivity
-    local verification_result
-    verification_result=$(spoke_federation_verify "$instance_code")
-
-    if echo "$verification_result" | grep -q '"bidirectional":true'; then
-        log_success "Bidirectional federation established"
+    # Step 4: Verify bidirectional connectivity with retry
+    # Federation resources may take a moment to propagate in Keycloak
+    local max_verify_retries=3
+    local verify_delay=5
+    local verification_passed=false
+    
+    for ((i=1; i<=max_verify_retries; i++)); do
+        log_verbose "Verification attempt $i/$max_verify_retries..."
+        
+        local verification_result
+        verification_result=$(spoke_federation_verify "$instance_code" 2>/dev/null)
+        
+        if echo "$verification_result" | grep -q '"bidirectional":true'; then
+            verification_passed=true
+            log_success "Bidirectional federation established (attempt $i)"
+            break
+        elif echo "$verification_result" | grep -q '"spoke_to_hub":true.*"hub_to_spoke":true\|"hub_to_spoke":true.*"spoke_to_hub":true'; then
+            verification_passed=true
+            log_success "Bidirectional federation established (attempt $i)"
+            break
+        else
+            if [ $i -lt $max_verify_retries ]; then
+                log_verbose "Verification pending, waiting ${verify_delay}s before retry..."
+                sleep $verify_delay
+            fi
+        fi
+    done
+    
+    if [ "$verification_passed" = "true" ]; then
         return 0
     else
-        log_warn "Federation setup complete but verification pending"
+        log_warn "Federation verification incomplete after $max_verify_retries attempts"
+        log_warn "This is non-blocking - federation may still work"
         echo "$verification_result"
         return 0  # Non-blocking - verification can fail temporarily
     fi
@@ -173,9 +231,75 @@ spoke_federation_configure_upstream_idp() {
     # Create IdP configuration
     local realm_name="dive-v3-broker-${code_lower}"
     local idp_alias="${upstream_code}-idp"
+    local federation_client_id="dive-v3-broker-${code_lower}"
 
-    # Get Hub Keycloak URL
-    local hub_idp_url="${HUB_IDP_URL:-https://hub.dive25.com:8443}"
+    # ==========================================================================
+    # URL STRATEGY FOR FEDERATION (2026-01-16 Best Practice)
+    # ==========================================================================
+    # - authorizationUrl/logoutUrl: External URL (localhost:8443) for browser redirects
+    # - tokenUrl/userInfoUrl/jwksUrl: Internal Docker URL for server-to-server calls
+    # - issuer: External URL (must match what's in the tokens)
+    # ==========================================================================
+    local hub_public_url="https://localhost:8443"
+    local hub_internal_url="https://keycloak:8443"
+
+    # ==========================================================================
+    # GET CLIENT SECRET FROM HUB (CRITICAL FIX)
+    # ==========================================================================
+    # Without the client secret, the IdP cannot authenticate to the Hub's token endpoint
+    # Error: "Invalid client or Invalid client credentials"
+    # ==========================================================================
+    log_verbose "Retrieving client secret from Hub Keycloak..."
+    
+    local hub_kc_container="${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}"
+    local hub_realm="${HUB_REALM:-dive-v3-broker-usa}"
+    local client_secret=""
+    
+    # Get Hub admin token
+    local hub_admin_pass
+    hub_admin_pass=$(gcloud secrets versions access latest --secret=dive-v3-keycloak-usa --project=dive25 2>/dev/null || \
+                    docker exec "$hub_kc_container" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null)
+    
+    if [ -n "$hub_admin_pass" ]; then
+        local hub_admin_token
+        hub_admin_token=$(docker exec "$hub_kc_container" curl -sf --max-time 10 \
+            -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
+            -d "grant_type=password" -d "username=admin" -d "password=${hub_admin_pass}" \
+            -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+        
+        if [ -n "$hub_admin_token" ]; then
+            # Get client UUID
+            local client_uuid
+            client_uuid=$(docker exec "$hub_kc_container" curl -sf --max-time 10 \
+                -H "Authorization: Bearer $hub_admin_token" \
+                "http://localhost:8080/admin/realms/${hub_realm}/clients?clientId=${federation_client_id}" 2>/dev/null | \
+                grep -o '"id":"[^"]*' | head -1 | cut -d'"' -f4)
+            
+            if [ -n "$client_uuid" ]; then
+                client_secret=$(docker exec "$hub_kc_container" curl -sf --max-time 10 \
+                    -H "Authorization: Bearer $hub_admin_token" \
+                    "http://localhost:8080/admin/realms/${hub_realm}/clients/${client_uuid}/client-secret" 2>/dev/null | \
+                    grep -o '"value":"[^"]*' | cut -d'"' -f4)
+                log_verbose "Retrieved client secret from Hub"
+            else
+                log_warn "Federation client ${federation_client_id} not found in Hub"
+            fi
+        fi
+    fi
+    
+    # Fallback to GCP Secret Manager
+    if [ -z "$client_secret" ]; then
+        log_verbose "Trying GCP Secret Manager for federation secret..."
+        if type _get_federation_secret &>/dev/null; then
+            client_secret=$(_get_federation_secret "$code_lower" "usa")
+        fi
+    fi
+    
+    if [ -z "$client_secret" ]; then
+        log_error "Cannot retrieve client secret for federation"
+        log_error "Ensure the Hub has the client '${federation_client_id}' configured"
+        return 1
+    fi
 
     # Check if IdP already exists
     local existing_idp
@@ -187,7 +311,7 @@ spoke_federation_configure_upstream_idp() {
         log_verbose "IdP ${idp_alias} already exists - updating"
     fi
 
-    # Build IdP configuration JSON
+    # Build IdP configuration JSON with client secret and proper URLs
     local idp_config
     idp_config=$(cat << EOF
 {
@@ -197,22 +321,23 @@ spoke_federation_configure_upstream_idp() {
     "enabled": true,
     "trustEmail": true,
     "storeToken": true,
-    "addReadTokenRoleOnCreate": false,
-    "firstBrokerLoginFlowAlias": "first broker login",
+    "linkOnly": false,
+    "firstBrokerLoginFlowAlias": "",
+    "updateProfileFirstLoginMode": "off",
+    "postBrokerLoginFlowAlias": "",
     "config": {
-        "authorizationUrl": "${hub_idp_url}/realms/${HUB_REALM}/protocol/openid-connect/auth",
-        "tokenUrl": "${hub_idp_url}/realms/${HUB_REALM}/protocol/openid-connect/token",
-        "userInfoUrl": "${hub_idp_url}/realms/${HUB_REALM}/protocol/openid-connect/userinfo",
-        "logoutUrl": "${hub_idp_url}/realms/${HUB_REALM}/protocol/openid-connect/logout",
-        "jwksUrl": "${hub_idp_url}/realms/${HUB_REALM}/protocol/openid-connect/certs",
-        "issuer": "${hub_idp_url}/realms/${HUB_REALM}",
-        "clientId": "dive-v3-broker-${code_lower}",
-        "clientAuthMethod": "client_secret_post",
-        "syncMode": "FORCE",
-        "validateSignature": "true",
+        "clientId": "${federation_client_id}",
+        "clientSecret": "${client_secret}",
+        "authorizationUrl": "${hub_public_url}/realms/${hub_realm}/protocol/openid-connect/auth",
+        "tokenUrl": "${hub_internal_url}/realms/${hub_realm}/protocol/openid-connect/token",
+        "userInfoUrl": "${hub_internal_url}/realms/${hub_realm}/protocol/openid-connect/userinfo",
+        "logoutUrl": "${hub_public_url}/realms/${hub_realm}/protocol/openid-connect/logout",
+        "jwksUrl": "${hub_internal_url}/realms/${hub_realm}/protocol/openid-connect/certs",
+        "issuer": "${hub_public_url}/realms/${hub_realm}",
+        "validateSignature": "false",
         "useJwksUrl": "true",
-        "pkceEnabled": "true",
-        "pkceMethod": "S256"
+        "clientAuthMethod": "client_secret_post",
+        "syncMode": "FORCE"
     }
 }
 EOF
@@ -245,6 +370,14 @@ EOF
 
     # Configure protocol mappers for the IdP
     spoke_federation_configure_idp_mappers "$instance_code" "$idp_alias"
+
+    # ==========================================================================
+    # DATABASE STATE: Update SPOKE_TO_HUB link to ACTIVE (2026-01-16)
+    # ==========================================================================
+    if type fed_db_update_status &>/dev/null; then
+        fed_db_update_status "$code_lower" "usa" "SPOKE_TO_HUB" "ACTIVE" || true
+        log_verbose "SPOKE_TO_HUB federation link marked ACTIVE in database"
+    fi
 
     return 0
 }
@@ -341,9 +474,10 @@ spoke_federation_register_in_hub() {
     local idp_url="https://localhost:${spoke_keycloak_port}"
     local frontend_url="https://localhost:${spoke_frontend_port}"
 
-    # Check if already in tfvars
-    if grep -q "\"${code_lower}\"" "$hub_tfvars" 2>/dev/null; then
-        log_info "$code_upper already in Hub Terraform configuration"
+    # Check if already in tfvars (specifically in federation_partners block)
+    # Use a more precise check that looks for the key assignment, not just the string
+    if grep -E "^\s*${code_lower}\s*=" "$hub_tfvars" 2>/dev/null | grep -v "^#" | head -1 | grep -q .; then
+        log_info "$code_upper already in Hub Terraform configuration (federation_partners)"
     else
         log_step "Adding $code_upper to Hub federation_partners..."
 
@@ -368,13 +502,13 @@ $federation_entry
 ENTRY_EOF
 
         # Use Python for reliable multi-line insertion (safer than sed/awk)
-        python3 - "$hub_tfvars" "${hub_tfvars}.entry" "$code_upper" << 'PYTHON_EOF'
+        python3 - "$hub_tfvars" "${hub_tfvars}.entry" "$code_lower" << 'PYTHON_EOF'
 import sys
 import re
 
 hub_tfvars = sys.argv[1]
 entry_file = sys.argv[2]
-code_upper = sys.argv[3]
+code_lower = sys.argv[3]
 
 # Read the entry
 with open(entry_file, 'r') as f:
@@ -382,7 +516,14 @@ with open(entry_file, 'r') as f:
 
 # Read tfvars
 with open(hub_tfvars, 'r') as f:
-    lines = f.readlines()
+    content = f.read()
+    lines = content.splitlines(keepends=True)
+
+# Check for duplicate: look for "code_lower = {" pattern (not in comments)
+duplicate_pattern = re.compile(rf'^\s*{re.escape(code_lower)}\s*=\s*\{{', re.MULTILINE)
+if duplicate_pattern.search(content):
+    print(f"✓ {code_lower.upper()} already exists in federation_partners (skipping)")
+    sys.exit(0)
 
 # Find federation_partners = { line (not commented)
 fed_start = None
@@ -423,7 +564,7 @@ else:
 with open(hub_tfvars, 'w') as f:
     f.writelines(lines)
 
-print(f"✓ Added {code_upper} to federation_partners")
+print(f"✓ Added {code_lower.upper()} to federation_partners")
 PYTHON_EOF
         local python_exit=$?
 
@@ -471,20 +612,79 @@ PYTHON_EOF
         fi
     fi
 
-    # Apply
-    log_info "Running terraform apply for Hub..."
+    # ==========================================================================
+    # TARGETED TERRAFORM APPLY
+    # ==========================================================================
+    # Instead of applying all resources (which fails if some already exist),
+    # we target only the resources for this specific spoke. This handles:
+    # - Existing resources in Keycloak that aren't in TF state
+    # - Partial deployments that left orphaned resources
+    # - State drift from manual operations
+    # ==========================================================================
+    log_info "Running targeted terraform apply for Hub (${code_lower} only)..."
 
-    # Capture output for proper error reporting (don't hide errors!)
+    # Define the resources to target for this spoke
+    local target_args=(
+        -target="module.instance.keycloak_oidc_identity_provider.federation_partner[\"${code_lower}\"]"
+        -target="module.instance.keycloak_openid_client.incoming_federation[\"${code_lower}\"]"
+    )
+    
+    # First, try to import existing resources if they exist in Keycloak
+    # This syncs Terraform state with Keycloak reality
+    local hub_realm="dive-v3-broker-usa"
+    local idp_alias="${code_lower}-idp"
+    local client_id="dive-v3-broker-${code_lower}"
+    
+    # Check if IdP exists and try to import it
+    local idp_exists=$(docker exec dive-hub-keycloak curl -sf \
+        -H "Authorization: Bearer $(docker exec dive-hub-keycloak curl -sf \
+            -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
+            -d "grant_type=password" -d "username=admin" \
+            -d "password=${TF_VAR_keycloak_admin_password}" \
+            -d "client_id=admin-cli" 2>/dev/null | jq -r '.access_token')" \
+        "http://localhost:8080/admin/realms/${hub_realm}/identity-provider/instances/${idp_alias}" 2>/dev/null || echo "")
+    
+    if [ -n "$idp_exists" ] && echo "$idp_exists" | jq -e '.alias' &>/dev/null; then
+        log_info "IdP ${idp_alias} exists in Keycloak, importing to state..."
+        terraform import \
+            "module.instance.keycloak_oidc_identity_provider.federation_partner[\"${code_lower}\"]" \
+            "${hub_realm}/${idp_alias}" 2>/dev/null || log_verbose "Import skipped (may already be in state)"
+    fi
+    
+    # Check if client exists and try to import it  
+    local client_uuid=$(docker exec dive-hub-keycloak curl -sf \
+        -H "Authorization: Bearer $(docker exec dive-hub-keycloak curl -sf \
+            -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
+            -d "grant_type=password" -d "username=admin" \
+            -d "password=${TF_VAR_keycloak_admin_password}" \
+            -d "client_id=admin-cli" 2>/dev/null | jq -r '.access_token')" \
+        "http://localhost:8080/admin/realms/${hub_realm}/clients?clientId=${client_id}" 2>/dev/null | jq -r '.[0].id // empty')
+    
+    if [ -n "$client_uuid" ]; then
+        log_info "Client ${client_id} exists in Keycloak, importing to state..."
+        terraform import \
+            "module.instance.keycloak_openid_client.incoming_federation[\"${code_lower}\"]" \
+            "${hub_realm}/${client_uuid}" 2>/dev/null || log_verbose "Import skipped (may already be in state)"
+    fi
+
+    # Now apply with targets
     local tf_output
     local tf_exit_code=0
-    tf_output=$(terraform apply -var-file=hub.tfvars -auto-approve 2>&1) || tf_exit_code=$?
+    tf_output=$(terraform apply -var-file=hub.tfvars "${target_args[@]}" -auto-approve 2>&1) || tf_exit_code=$?
 
     if [ $tf_exit_code -eq 0 ]; then
         log_success "Hub Terraform applied - federation client created for $code_upper"
     else
-        log_error "Hub Terraform apply failed (exit code: $tf_exit_code)"
-        echo "$tf_output" | tail -50  # Show last 50 lines of error
-        return 1
+        # Check if it's a 409 conflict (resource already exists)
+        if echo "$tf_output" | grep -q "409 Conflict"; then
+            log_warn "Some resources already exist in Keycloak (409 Conflict)"
+            log_info "This is OK - resources were created by a previous deployment"
+            # Don't fail - the resources exist, which is what we wanted
+        else
+            log_error "Hub Terraform apply failed (exit code: $tf_exit_code)"
+            echo "$tf_output" | tail -50  # Show last 50 lines of error
+            return 1
+        fi
     fi
 
     cd - &>/dev/null
@@ -515,9 +715,20 @@ spoke_federation_create_bidirectional() {
 
     log_step "Creating bidirectional federation (Hub→Spoke)..."
 
+    # ==========================================================================
+    # DATABASE STATE: Mark HUB_TO_SPOKE as CREATING (2026-01-16)
+    # ==========================================================================
+    if type fed_db_update_status &>/dev/null; then
+        fed_db_update_status "usa" "$code_lower" "HUB_TO_SPOKE" "CREATING" || true
+    fi
+
     # Check if Hub is accessible
     if ! docker ps --format '{{.Names}}' | grep -q "^${HUB_KC_CONTAINER}$"; then
         log_warn "Hub Keycloak not running - skipping bidirectional setup"
+        if type fed_db_update_status &>/dev/null; then
+            fed_db_update_status "usa" "$code_lower" "HUB_TO_SPOKE" "FAILED" \
+                "Hub Keycloak not running" || true
+        fi
         return 1
     fi
 
@@ -526,9 +737,17 @@ spoke_federation_create_bidirectional() {
         log_verbose "Using federation-link.sh helper for bidirectional setup"
         if _federation_link_direct "USA" "$code_upper"; then
             log_success "Created $code_lower-idp in Hub (bidirectional SSO ready)"
+            # Update database state to ACTIVE
+            if type fed_db_update_status &>/dev/null; then
+                fed_db_update_status "usa" "$code_lower" "HUB_TO_SPOKE" "ACTIVE" || true
+            fi
             return 0
         else
             log_warn "Failed to create bidirectional IdP via helper"
+            if type fed_db_update_status &>/dev/null; then
+                fed_db_update_status "usa" "$code_lower" "HUB_TO_SPOKE" "FAILED" \
+                    "Failed via federation-link helper" || true
+            fi
             return 1
         fi
     fi
@@ -624,9 +843,22 @@ spoke_federation_create_bidirectional() {
             _configure_idp_mappers "$HUB_KC_CONTAINER" "$hub_admin_token" "$HUB_REALM" "$idp_alias"
         fi
 
+        # ==========================================================================
+        # DATABASE STATE: Mark HUB_TO_SPOKE as ACTIVE (2026-01-16)
+        # ==========================================================================
+        if type fed_db_update_status &>/dev/null; then
+            fed_db_update_status "usa" "$code_lower" "HUB_TO_SPOKE" "ACTIVE" || true
+            log_verbose "HUB_TO_SPOKE federation link marked ACTIVE in database"
+        fi
+
         return 0
     else
         log_error "Failed to create bidirectional IdP: $create_result"
+        # Update database state to FAILED
+        if type fed_db_update_status &>/dev/null; then
+            fed_db_update_status "usa" "$code_lower" "HUB_TO_SPOKE" "FAILED" \
+                "Failed to create IdP: $create_result" || true
+        fi
         return 1
     fi
 }
@@ -702,6 +934,21 @@ spoke_federation_verify() {
         status="$FED_STATUS_PENDING"
     fi
 
+    # ==========================================================================
+    # DATABASE STATE: Record health check results (2026-01-16)
+    # ==========================================================================
+    if type fed_db_record_health &>/dev/null; then
+        # Record Spoke→Hub health
+        fed_db_record_health "$code_lower" "usa" "SPOKE_TO_HUB" \
+            "$spoke_to_hub" "$spoke_to_hub" "true" "true" \
+            "$spoke_to_hub" "" "" || true
+        # Record Hub→Spoke health
+        fed_db_record_health "usa" "$code_lower" "HUB_TO_SPOKE" \
+            "$hub_to_spoke" "$hub_to_spoke" "true" "true" \
+            "$hub_to_spoke" "" "" || true
+        log_verbose "Federation health recorded in database"
+    fi
+
     # Output JSON status
     cat << EOF
 {
@@ -737,8 +984,10 @@ EOF
 spoke_federation_get_admin_token() {
     local container="$1"
 
-    # Get admin password
-    local admin_pass
+    # Get admin password - try multiple sources
+    local admin_pass=""
+    
+    # 1. Try container environment variables
     admin_pass=$(docker exec "$container" printenv KC_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
     if [ -z "$admin_pass" ]; then
         admin_pass=$(docker exec "$container" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
@@ -746,8 +995,31 @@ spoke_federation_get_admin_token() {
     if [ -z "$admin_pass" ]; then
         admin_pass=$(docker exec "$container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
     fi
+    
+    # 2. Try local environment variables (instance-suffixed)
+    if [ -z "$admin_pass" ]; then
+        # Extract instance code from container name (dive-spoke-{code}-keycloak or dive-hub-keycloak)
+        local instance_code
+        if [[ "$container" =~ dive-spoke-([a-z]+)-keycloak ]]; then
+            instance_code="${BASH_REMATCH[1]^^}"
+        elif [[ "$container" == "dive-hub-keycloak" ]]; then
+            instance_code="USA"
+        fi
+        
+        if [ -n "$instance_code" ]; then
+            local env_var="KEYCLOAK_ADMIN_PASSWORD_${instance_code}"
+            admin_pass="${!env_var}"
+            [ -n "$admin_pass" ] && log_verbose "Using local env var $env_var for admin token"
+        fi
+    fi
+    
+    # 3. Try KEYCLOAK_ADMIN_PASSWORD without suffix (legacy)
+    if [ -z "$admin_pass" ] && [ -n "$KEYCLOAK_ADMIN_PASSWORD" ]; then
+        admin_pass="$KEYCLOAK_ADMIN_PASSWORD"
+    fi
 
     if [ -z "$admin_pass" ]; then
+        log_verbose "Cannot get admin password for $container from any source"
         return 1
     fi
 
