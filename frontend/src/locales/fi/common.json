@@ -1,0 +1,41 @@
+{
+    "app": {
+        "name": "DIVE V3",
+        "tagline": "Coalition-Friendly ICAM Pilot"
+    },
+    "nav": {
+        "home": "Home",
+        "resources": "Resources",
+        "admin": "Admin",
+        "dashboard": "Dashboard",
+        "signOut": "Sign Out"
+    },
+    "common": {
+        "loading": "Loading...",
+        "error": "Error",
+        "success": "Success",
+        "cancel": "Cancel",
+        "save": "Save",
+        "delete": "Delete",
+        "edit": "Edit",
+        "view": "View",
+        "test": "Test",
+        "refresh": "Refresh",
+        "export": "Export",
+        "import": "Import",
+        "search": "Search",
+        "filter": "Filter",
+        "clearFilters": "Clear Filters",
+        "noResults": "No results found",
+        "confirm": "Confirm"
+    },
+    "time": {
+        "justNow": "Just now",
+        "minuteAgo": "1 minute ago",
+        "minutesAgo": "{{count}} minutes ago",
+        "hourAgo": "1 hour ago",
+        "hoursAgo": "{{count}} hours ago",
+        "dayAgo": "1 day ago",
+        "daysAgo": "{{count}} days ago"
+    }
+}

@@ -8,6 +8,7 @@ import { StandardsLensProvider } from "@/contexts/StandardsLensContext";
 import { IdentityDrawerProvider } from "@/contexts/IdentityDrawerContext";
 import { PolicyProvider } from "@/contexts/PolicyContext";
 import { InstanceThemeProvider } from "@/components/ui/theme-provider";
+import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { Toaster } from "sonner";
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -24,25 +25,27 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }));
 
   return (
-    <InstanceThemeProvider>
-      <StandardsLensProvider>
-        <LocaleProvider>
-          <QueryClientProvider client={queryClient}>
-            <SessionProvider 
-              refetchInterval={5 * 60}
-              refetchOnWindowFocus={false}
-              refetchWhenOffline={false}
-            >
-              <PolicyProvider>
-                <IdentityDrawerProvider>
-                  {children}
-                  <Toaster position="top-right" richColors />
-                </IdentityDrawerProvider>
-              </PolicyProvider>
-            </SessionProvider>
-          </QueryClientProvider>
-        </LocaleProvider>
-      </StandardsLensProvider>
-    </InstanceThemeProvider>
+    <ThemeProvider>
+      <InstanceThemeProvider>
+        <StandardsLensProvider>
+          <LocaleProvider>
+            <QueryClientProvider client={queryClient}>
+              <SessionProvider 
+                refetchInterval={5 * 60}
+                refetchOnWindowFocus={false}
+                refetchWhenOffline={false}
+              >
+                <PolicyProvider>
+                  <IdentityDrawerProvider>
+                    {children}
+                    <Toaster position="top-right" richColors />
+                  </IdentityDrawerProvider>
+                </PolicyProvider>
+              </SessionProvider>
+            </QueryClientProvider>
+          </LocaleProvider>
+        </StandardsLensProvider>
+      </InstanceThemeProvider>
+    </ThemeProvider>
   );
 }

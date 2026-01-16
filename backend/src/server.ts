@@ -40,7 +40,7 @@ import swaggerRoutes from './routes/swagger.routes';  // API Documentation (Open
 import clearanceManagementRoutes from './routes/clearance-management.routes';  // Phase 3: Clearance management
 import { initializeThemesCollection } from './services/idp-theme.service';
 import { KeycloakConfigSyncService } from './services/keycloak-config-sync.service';
-import { kasRegistryService } from './services/kas-registry.service';  // Phase 4: Cross-instance KAS
+import { mongoKasRegistryStore } from './models/kas-registry.model';  // Phase 4: Cross-instance KAS (MongoDB SSOT)
 import { policyVersionMonitor } from './services/policy-version-monitor.service';  // Phase 4: Policy drift
 import { spokeFailover } from './services/spoke-failover.service';  // Phase 5: Circuit breaker
 import { spokeAuditQueue } from './services/spoke-audit-queue.service';  // Phase 5: Audit queue
@@ -98,6 +98,11 @@ app.use(cors({
 // Body parsing
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
+// i18n middleware - Attach user's locale to request
+// Parses Accept-Language header or ?locale query parameter
+import { localeMiddleware } from './utils/i18n';
+app.use(localeMiddleware);
 
 // Policy selector (determines which OPA policy to use)
 app.use(policySelectorMiddleware);
@@ -280,16 +285,17 @@ function startServer() {
       // Non-fatal: fall back to local cache invalidation
     }
 
-    // Phase 4: Initialize KAS Registry for cross-instance encrypted access
+    // Phase 4: Initialize KAS Registry for cross-instance encrypted access (MongoDB SSOT)
     try {
-      logger.info('Loading KAS registry for cross-instance federation');
-      await kasRegistryService.loadRegistry();
-      const kasCount = kasRegistryService.getAllKAS().length;
-      logger.info(`KAS registry loaded: ${kasCount} KAS servers configured`, {
-        crossKASEnabled: kasRegistryService.isCrossKASEnabled()
+      logger.info('Initializing MongoDB KAS registry for cross-instance federation');
+      await mongoKasRegistryStore.initialize();
+      const activeKAS = await mongoKasRegistryStore.findActive();
+      logger.info(`MongoDB KAS registry initialized: ${activeKAS.length} active KAS servers`, {
+        kasIds: activeKAS.map(k => k.kasId),
+        crossKASEnabled: true
       });
     } catch (error) {
-      logger.warn('Failed to load KAS registry (cross-instance KAS disabled)', {
+      logger.warn('Failed to initialize MongoDB KAS registry (cross-instance KAS disabled)', {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       // Non-fatal: cross-instance access will fail gracefully
