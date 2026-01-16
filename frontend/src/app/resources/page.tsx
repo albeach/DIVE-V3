@@ -14,6 +14,8 @@ import { useEffect, useState, useCallback, useMemo } from 'react';
 import { useSession, signIn } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import PageLayout from '@/components/layout/page-layout';
+import { useTranslation } from '@/hooks/useTranslation';
+import { useLocale } from '@/contexts/LocaleContext';
 
 import {
   VirtualResourceList,
@@ -97,6 +99,8 @@ interface IFederationIdP {
 export default function ResourcesPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const { t } = useTranslation('resources');
+  const { locale } = useLocale();
 
   // Federated instances - loaded from API
   const [federationInstances, setFederationInstances] = useState<string[]>([CURRENT_INSTANCE]);
