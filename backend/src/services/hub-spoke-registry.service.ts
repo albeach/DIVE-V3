@@ -368,7 +368,7 @@ class HubSpokeRegistryService extends EventEmitter {
   /**
    * Register a new spoke instance
    * Initially in 'pending' status until manually approved
-   * 
+   *
    * IDEMPOTENT: Returns existing registration if already registered (not revoked)
    */
   async registerSpoke(request: IRegistrationRequest): Promise<ISpokeRegistration> {

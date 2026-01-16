@@ -31,6 +31,7 @@ interface BentoDashboardProps {
   encryptedCount: number;
   classificationBreakdown: {
     UNCLASSIFIED: number;
+    RESTRICTED: number;
     CONFIDENTIAL: number;
     SECRET: number;
     TOP_SECRET: number;
@@ -48,6 +49,16 @@ interface BentoDashboardProps {
   };
   bookmarkCount: number;
   isLoading: boolean;
+  // New enhanced metrics
+  averageDocAge?: number; // in days
+  accessRate?: number; // percentage of documents user can access
+  topCOIs?: Array<{ tag: string; count: number }>;
+  releasabilityStats?: {
+    natoCount: number;
+    fveyCount: number;
+    restrictedCount: number;
+  };
+  dataFreshness?: Date;
 }
 
 // ============================================
@@ -115,6 +126,7 @@ function AnimatedCounter({ value, duration = 1000 }: { value: number; duration?:
 
 const classificationColors = {
   UNCLASSIFIED: 'text-emerald-600 dark:text-emerald-400',
+  RESTRICTED: 'text-blue-600 dark:text-blue-400',
   CONFIDENTIAL: 'text-amber-600 dark:text-amber-400',
   SECRET: 'text-orange-600 dark:text-orange-400',
   TOP_SECRET: 'text-red-600 dark:text-red-400',
@@ -142,6 +154,12 @@ export default function BentoDashboard({
   userAttributes,
   bookmarkCount,
   isLoading,
+  // New enhanced metrics
+  averageDocAge,
+  accessRate,
+  topCOIs,
+  releasabilityStats,
+  dataFreshness,
 }: BentoDashboardProps) {
   return (
     <motion.div
@@ -253,14 +271,15 @@ export default function BentoDashboard({
             <Shield className="w-4 h-4 text-gray-500 dark:text-gray-400" />
             <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Classification</span>
           </div>
-          <div className="grid grid-cols-4 gap-1 text-center">
+          <div className="grid grid-cols-5 gap-1 text-center">
             {(Object.entries(classificationBreakdown) as [keyof typeof classificationColors, number][]).map(([level, count]) => (
               <div key={level} className="min-w-0">
-                <div className={`text-lg font-bold ${classificationColors[level]}`}>
+                <div className={`text-sm font-bold ${classificationColors[level]}`}>
                   {count}
                 </div>
-                <div className="text-[9px] text-gray-500 dark:text-gray-400 truncate">
-                  {level === 'UNCLASSIFIED' ? 'UNCLAS' : 
+                <div className="text-[8px] text-gray-500 dark:text-gray-400 truncate">
+                  {level === 'UNCLASSIFIED' ? 'UNCL' :
+                   level === 'RESTRICTED' ? 'RESTR' :
                    level === 'CONFIDENTIAL' ? 'CONF' :
                    level === 'TOP_SECRET' ? 'TS' : level}
                 </div>
@@ -269,62 +288,78 @@ export default function BentoDashboard({
           </div>
         </motion.div>
 
-        {/* User Access */}
+        {/* Access Rate & Data Freshness */}
         <motion.div
           variants={itemVariants}
-          className="col-span-2 sm:col-span-2 rounded-xl bg-gradient-to-br from-slate-700 to-slate-800 dark:from-slate-600 dark:to-slate-700 p-3 text-white shadow-lg"
+          className="rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 p-3 text-white shadow-lg"
         >
-          <div className="flex items-center gap-1.5 mb-2">
-            <Eye className="w-4 h-4 text-slate-400" />
-            <span className="text-xs font-semibold text-slate-300">Your Access</span>
+          <div className="flex items-center gap-1 mb-1">
+            <Eye className="w-4 h-4 text-white/70" />
+            <span className="text-[10px] text-white/70">Access Rate</span>
           </div>
-          <div className="grid grid-cols-3 gap-2 text-center">
-            <div>
-              <div className={`text-sm font-bold ${
-                userAttributes.clearance === 'TOP_SECRET' ? 'text-red-400' :
-                userAttributes.clearance === 'SECRET' ? 'text-orange-400' :
-                userAttributes.clearance === 'CONFIDENTIAL' ? 'text-amber-400' :
-                'text-emerald-400'
-              }`}>
-                {userAttributes.clearance?.replace('_', ' ').substring(0, 6) || '—'}
-              </div>
-              <div className="text-[9px] text-slate-400">Clearance</div>
-            </div>
-            <div>
-              <div className="text-sm font-bold text-white">
-                {userAttributes.country ? `${instanceFlags[userAttributes.country] || ''} ${userAttributes.country}` : '—'}
-              </div>
-              <div className="text-[9px] text-slate-400">Country</div>
-            </div>
-            <div>
-              <div className="text-sm font-bold text-white">
-                {userAttributes.coi?.length || 0}
-              </div>
-              <div className="text-[9px] text-slate-400">COIs</div>
-            </div>
+          <div className="text-xl font-bold">
+            {accessRate !== undefined ? `${Math.round(accessRate)}%` : '—'}
+          </div>
+          <div className="text-[9px] text-white/60">
+            {dataFreshness ? `${Math.round((Date.now() - dataFreshness.getTime()) / 1000)}s ago` : 'Fresh'}
           </div>
         </motion.div>
 
-        {/* Bookmarks */}
+        {/* Document Age */}
         <motion.div
           variants={itemVariants}
-          className="rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 p-3 text-white shadow-lg"
+          className="rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 p-3 text-white shadow-lg"
         >
-          <Bookmark className="w-4 h-4 mb-1 text-white/70" />
-          <div className="text-2xl font-bold">{bookmarkCount}</div>
-          <div className="text-[10px] text-white/70">Bookmarks</div>
+          <div className="flex items-center gap-1 mb-1">
+            <FileText className="w-4 h-4 text-white/70" />
+            <span className="text-[10px] text-white/70">Avg Age</span>
+          </div>
+          <div className="text-xl font-bold">
+            {averageDocAge !== undefined ? `${Math.round(averageDocAge)}d` : '—'}
+          </div>
+          <div className="text-[9px] text-white/60">Documents</div>
         </motion.div>
 
-        {/* Status */}
+        {/* Top COIs */}
         <motion.div
           variants={itemVariants}
           className="rounded-xl bg-white dark:bg-gray-800 p-3 shadow-lg border border-gray-200 dark:border-gray-700"
         >
-          <div className={`w-4 h-4 mb-1 rounded-full ${isLoading ? 'bg-blue-500 animate-pulse' : 'bg-green-500'}`} />
-          <div className="text-sm font-bold text-gray-900 dark:text-white">
-            {isLoading ? 'Loading' : 'Ready'}
+          <div className="flex items-center gap-1.5 mb-2">
+            <Globe2 className="w-4 h-4 text-gray-500 dark:text-gray-400" />
+            <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Top COIs</span>
           </div>
-          <div className="text-[10px] text-gray-500 dark:text-gray-400">Status</div>
+          <div className="space-y-1">
+            {topCOIs?.slice(0, 2).map((coi, index) => (
+              <div key={coi.tag} className="flex items-center justify-between text-xs">
+                <span className="text-gray-600 dark:text-gray-400 truncate">{coi.tag}</span>
+                <span className="text-gray-900 dark:text-white font-medium">{coi.count}</span>
+              </div>
+            )) || (
+              <div className="text-xs text-gray-500 dark:text-gray-400">No data</div>
+            )}
+          </div>
+        </motion.div>
+
+        {/* Releasability Stats */}
+        <motion.div
+          variants={itemVariants}
+          className="rounded-xl bg-gradient-to-br from-slate-600 to-slate-700 p-3 text-white shadow-lg"
+        >
+          <div className="flex items-center gap-1.5 mb-2">
+            <Server className="w-4 h-4 text-slate-400" />
+            <span className="text-xs font-semibold text-slate-300">Coalition</span>
+          </div>
+          <div className="space-y-1 text-center">
+            <div className="text-xs">
+              <span className="text-slate-400">NATO:</span>
+              <span className="ml-1 font-bold text-blue-300">{releasabilityStats?.natoCount || 0}</span>
+            </div>
+            <div className="text-xs">
+              <span className="text-slate-400">FVEY:</span>
+              <span className="ml-1 font-bold text-green-300">{releasabilityStats?.fveyCount || 0}</span>
+            </div>
+          </div>
         </motion.div>
       </div>
     </motion.div>

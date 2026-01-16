@@ -127,17 +127,17 @@ spoke_pipeline_execute() {
         fi
         lock_acquired=true
     fi
-    
+
     # CRITICAL: Execute pipeline with guaranteed lock cleanup
     # Use subshell pattern to ensure cleanup happens even on early returns
     local pipeline_result=0
     _spoke_pipeline_execute_internal "$code_upper" "$instance_name" "$pipeline_mode" "$start_time" || pipeline_result=$?
-    
+
     # ALWAYS release lock (runs whether pipeline succeeded or failed)
     if [ "$lock_acquired" = true ] && type orch_release_deployment_lock &>/dev/null; then
         orch_release_deployment_lock "$code_upper"
     fi
-    
+
     return $pipeline_result
 }
 
@@ -193,7 +193,7 @@ _spoke_pipeline_execute_internal() {
             log_warn "Initialization phase failed, stopping pipeline"
             phase_result=1
         fi
-        
+
         # Check failure threshold after INITIALIZATION
         if [ $phase_result -eq 0 ] && type orch_check_failure_threshold &>/dev/null; then
             if ! orch_check_failure_threshold "$code_upper"; then
@@ -212,7 +212,7 @@ _spoke_pipeline_execute_internal() {
             log_warn "Deployment phase failed, stopping pipeline"
             phase_result=1
         fi
-        
+
         # Check failure threshold after DEPLOYMENT
         if [ $phase_result -eq 0 ] && type orch_check_failure_threshold &>/dev/null; then
             if ! orch_check_failure_threshold "$code_upper"; then
@@ -229,7 +229,7 @@ _spoke_pipeline_execute_internal() {
             log_warn "Configuration phase failed, stopping pipeline"
             phase_result=1
         fi
-        
+
         # Check failure threshold after CONFIGURATION
         if [ $phase_result -eq 0 ] && type orch_check_failure_threshold &>/dev/null; then
             if ! orch_check_failure_threshold "$code_upper"; then
@@ -246,7 +246,7 @@ _spoke_pipeline_execute_internal() {
             log_warn "Seeding phase failed, stopping pipeline"
             phase_result=1
         fi
-        
+
         # Check failure threshold after SEEDING
         if [ $phase_result -eq 0 ] && type orch_check_failure_threshold &>/dev/null; then
             if ! orch_check_failure_threshold "$code_upper"; then
@@ -265,7 +265,7 @@ _spoke_pipeline_execute_internal() {
             log_warn "Verification phase failed, stopping pipeline"
             phase_result=1
         fi
-        
+
         # Check failure threshold after VERIFICATION
         if [ $phase_result -eq 0 ] && type orch_check_failure_threshold &>/dev/null; then
             if ! orch_check_failure_threshold "$code_upper"; then

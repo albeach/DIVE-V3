@@ -134,18 +134,18 @@ spoke_config_register_in_hub_mongodb() {
     local instance_code="$1"
     local code_upper=$(upper "$instance_code")
     local code_lower=$(lower "$instance_code")
-    
+
     log_verbose "Registering spoke in Hub MongoDB spoke registry..."
-    
+
     # Get spoke configuration
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local config_file="$spoke_dir/config.json"
-    
+
     if [ ! -f "$config_file" ]; then
         log_error "Spoke config not found: $config_file"
         return 1
     fi
-    
+
     local spoke_id=$(jq -r '.identity.spokeId // empty' "$config_file" 2>/dev/null)
     local instance_name=$(jq -r '.identity.name // empty' "$config_file" 2>/dev/null)
     local base_url=$(jq -r '.endpoints.baseUrl // empty' "$config_file" 2>/dev/null)
@@ -153,7 +153,7 @@ spoke_config_register_in_hub_mongodb() {
     local idp_url=$(jq -r '.endpoints.idpUrl // empty' "$config_file" 2>/dev/null)
     local idp_public_url=$(jq -r '.endpoints.idpPublicUrl // empty' "$config_file" 2>/dev/null)
     local contact_email=$(jq -r '.identity.contactEmail // empty' "$config_file" 2>/dev/null)
-    
+
     # Fallback to NATO database for name if config doesn't have it
     if [ -z "$instance_name" ] || [ "$instance_name" = "null" ]; then
         if [ -n "${NATO_COUNTRIES[$code_upper]}" ]; then
@@ -162,16 +162,16 @@ spoke_config_register_in_hub_mongodb() {
             instance_name="$code_upper Instance"
         fi
     fi
-    
+
     # Fallback for contact email
     if [ -z "$contact_email" ] || [ "$contact_email" = "null" ]; then
         contact_email="admin@${code_lower}.dive25.com"
     fi
-    
+
     # Get Keycloak admin password (CRITICAL for bidirectional federation)
     local keycloak_password_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
     local keycloak_password="${!keycloak_password_var}"
-    
+
     # Validate password exists
     if [ -z "$keycloak_password" ]; then
         log_error "Keycloak admin password not found: $keycloak_password_var"
@@ -179,9 +179,9 @@ spoke_config_register_in_hub_mongodb() {
         log_error "Set $keycloak_password_var in environment or spoke .env file"
         return 1
     fi
-    
+
     log_verbose "Using Keycloak password for bidirectional federation (${#keycloak_password} chars)"
-    
+
     # Build registration payload matching API schema exactly
     # Reference: backend/src/routes/federation.routes.ts line 180-198
     # CRITICAL: Include keycloakAdminPassword for bidirectional federation
@@ -200,40 +200,40 @@ spoke_config_register_in_hub_mongodb() {
 }
 EOF
 )
-    
+
     # Call Hub registration endpoint
     local hub_api="https://localhost:4000/api/federation/register"
     local response
     local http_code
-    
+
     response=$(curl -sk -X POST "$hub_api" \
         -H "Content-Type: application/json" \
         -d "$payload" \
         -w "\nHTTP_CODE:%{http_code}" 2>&1)
-    
+
     http_code=$(echo "$response" | grep "HTTP_CODE:" | cut -d: -f2)
     response=$(echo "$response" | sed '/HTTP_CODE:/d')
-    
+
     if [ "$http_code" = "200" ] || [ "$http_code" = "201" ]; then
         log_success "✓ Spoke registered in Hub MongoDB"
-        
+
         # Extract spokeId and status from response
         local registered_spoke_id=$(echo "$response" | jq -r '.spoke.spokeId // empty' 2>/dev/null)
         local spoke_status=$(echo "$response" | jq -r '.spoke.status // empty' 2>/dev/null)
-        
+
         log_verbose "Spoke ID: $registered_spoke_id"
         log_verbose "Status: $spoke_status"
-        
+
         # Check if auto-approval succeeded (development mode)
         if [ "$spoke_status" = "approved" ]; then
             log_success "✓ Spoke auto-approved (development mode)"
-            
+
             # Extract token from auto-approval response
             local spoke_token=$(echo "$response" | jq -r '.token.token // empty' 2>/dev/null)
-            
+
             if [ -n "$spoke_token" ]; then
                 log_success "✓ Token received from auto-approval"
-                
+
                 # Update .env with SPOKE_TOKEN
                 if grep -q "^SPOKE_TOKEN=" "$spoke_dir/.env" 2>/dev/null; then
                     sed -i.bak "s|^SPOKE_TOKEN=.*|SPOKE_TOKEN=$spoke_token|" "$spoke_dir/.env"
@@ -241,7 +241,7 @@ EOF
                     echo "SPOKE_TOKEN=$spoke_token" >> "$spoke_dir/.env"
                 fi
                 rm -f "$spoke_dir/.env.bak"
-                
+
                 log_success "✓ SPOKE_TOKEN configured in .env"
                 return 0
             else
@@ -256,7 +256,7 @@ EOF
             log_error "Reason: $error_msg"
             return 1
         fi
-        
+
         # Fallback: Try manual approval (legacy path - may fail due to auth)
         if [ -n "$registered_spoke_id" ]; then
             if spoke_config_approve_and_get_token "$registered_spoke_id" "$code_lower"; then
@@ -266,7 +266,7 @@ EOF
                 log_warn "Manual approval failed - authentication required"
             fi
         fi
-        
+
         return 0
     else
         log_error "Spoke registration failed (HTTP $http_code)"
@@ -283,23 +283,23 @@ spoke_config_approve_and_get_token() {
     local spoke_id="$1"
     local code_lower="$2"
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
-    
+
     log_verbose "Auto-approving spoke and generating token..."
-    
+
     # Approve spoke
     local approve_payload='{"allowedScopes":["policy:base","policy:org"],"allowedFeatures":["federation","ztdf","audit"]}'
     local hub_approve_api="https://localhost:4000/api/federation/spokes/$spoke_id/approve"
-    
+
     local approve_response
     approve_response=$(curl -sk -X POST "$hub_approve_api" \
         -H "Content-Type: application/json" \
         -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY:-admin-dev-key}" \
         -d "$approve_payload" 2>&1)
-    
+
     if echo "$approve_response" | jq -e '.success' >/dev/null 2>&1; then
         # Extract token
         local spoke_token=$(echo "$approve_response" | jq -r '.hubApiToken.token // empty')
-        
+
         if [ -n "$spoke_token" ]; then
             # Update .env with SPOKE_TOKEN
             if grep -q "^SPOKE_TOKEN=" "$spoke_dir/.env" 2>/dev/null; then
@@ -307,12 +307,12 @@ spoke_config_approve_and_get_token() {
             else
                 echo "SPOKE_TOKEN=$spoke_token" >> "$spoke_dir/.env"
             fi
-            
+
             log_success "✓ Spoke token configured in .env"
             return 0
         fi
     fi
-    
+
     log_warn "Auto-approval failed - manual approval required"
     return 1
 }
@@ -365,12 +365,12 @@ spoke_config_register_in_registries() {
 
     if type spoke_kas_register_mongodb &>/dev/null; then
         log_verbose "Registering KAS in MongoDB"
-        
+
         # CRITICAL: Don't hide errors - capture output for proper debugging
         local kas_output
         local kas_exit_code=0
         kas_output=$(spoke_kas_register_mongodb "$code_upper" 2>&1) || kas_exit_code=$?
-        
+
         if [ $kas_exit_code -eq 0 ]; then
             log_verbose "✓ KAS registered in MongoDB"
 
@@ -523,7 +523,7 @@ spoke_config_apply_terraform() {
             fi
 
             log_verbose "Applying Terraform configuration"
-            
+
             # Wrap Terraform apply with retry + circuit breaker for resilience
             local terraform_success=false
             if type orch_retry_with_backoff &>/dev/null && type orch_circuit_breaker_execute &>/dev/null; then
@@ -539,7 +539,7 @@ spoke_config_apply_terraform() {
                     terraform_success=true
                 fi
             fi
-            
+
             if [ "$terraform_success" = false ]; then
                 log_warn "Terraform apply failed after retries"
                 return 1

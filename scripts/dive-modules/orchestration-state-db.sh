@@ -175,7 +175,7 @@ COMMIT;"
 
             if [ $db_exit_code -eq 0 ] && [[ ! "$sql_error_log" =~ ERROR ]]; then
                 log_verbose "✓ State atomically persisted to database: $instance_code -> $new_state"
-                
+
                 # Database write succeeded - now write to file as cache
                 if type -t set_deployment_state_enhanced >/dev/null 2>&1; then
                     if set_deployment_state_enhanced "$instance_code" "$new_state" "$reason" "$metadata" 2>/dev/null; then
@@ -203,7 +203,7 @@ checksum=$(echo -n "$new_state$(date +%s)" | shasum -a 256 2>/dev/null | cut -d'
 STATE_EOF
                     log_verbose "✓ File cache written directly: $instance_code -> $new_state"
                 fi
-                
+
                 # Record successful transition
                 orch_db_exec "INSERT INTO orchestration_metrics (instance_code, metric_name, metric_value) VALUES ('$code_lower', 'state_transition_success', 1)" >/dev/null 2>&1 || true
             else
@@ -251,7 +251,7 @@ STATE_EOF
         # File-only mode (legacy)
         set_deployment_state_enhanced "$instance_code" "$new_state" "$reason" "$metadata"
     fi
-    
+
     # Validate consistency after state change (non-blocking)
     if type orch_state_validate_consistency &>/dev/null; then
         orch_state_validate_consistency "$instance_code" "true" || true
@@ -302,7 +302,7 @@ orch_db_get_state() {
             fi
         fi
     fi
-    
+
     # Validate consistency on read (non-blocking)
     if type orch_state_validate_consistency &>/dev/null; then
         orch_state_validate_consistency "$instance_code" "true" >/dev/null 2>&1 || true

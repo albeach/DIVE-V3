@@ -131,10 +131,10 @@ spoke_containers_start() {
     # Check if parallel tier-based startup is available
     if type orch_start_services_tiered &>/dev/null && [ "$force_rebuild" != "true" ]; then
         log_info "Using optimized parallel tier-based startup (30% faster)"
-        
+
         # Change back to DIVE_ROOT for module execution
         cd "${DIVE_ROOT}"
-        
+
         # Use tiered parallel startup
         if orch_start_services_tiered "$instance_code" "docker-compose.yml"; then
             log_success "All services started with parallel tier approach"
@@ -144,7 +144,7 @@ spoke_containers_start() {
             cd "$spoke_dir"
         fi
     fi
-    
+
     # Traditional approach (fallback or force rebuild)
     local compose_cmd="docker compose"
     local compose_args="up -d"

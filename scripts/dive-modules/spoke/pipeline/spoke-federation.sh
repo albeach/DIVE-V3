@@ -330,13 +330,13 @@ spoke_federation_register_in_hub() {
 
     # Extract spoke details from config.json
     local spoke_name=$(jq -r '.identity.name // "'"$code_upper"'"' "$spoke_config")
-    
+
     # CRITICAL FIX (2026-01-15): Port extraction was including leading newlines causing multi-line Terraform strings
     # Root cause: grep -o can include newlines in output, tr -d only removes ':', not whitespace
     # Solution: Use xargs to trim ALL whitespace (including newlines)
     local spoke_keycloak_port=$(jq -r '.endpoints.idpPublicUrl // "https://localhost:8443"' "$spoke_config" | grep -o ':[0-9]*' | tr -d ':' | xargs)
     local spoke_frontend_port=$(jq -r '.endpoints.baseUrl // "https://localhost:3000"' "$spoke_config" | grep -o ':[0-9]*' | tr -d ':' | xargs)
-    
+
     # Build complete URLs as atomic strings (no variable expansion that could introduce newlines)
     local idp_url="https://localhost:${spoke_keycloak_port}"
     local frontend_url="https://localhost:${spoke_frontend_port}"
@@ -428,7 +428,7 @@ PYTHON_EOF
         local python_exit=$?
 
         rm -f "${hub_tfvars}.entry"
-        
+
         if [ $python_exit -eq 0 ]; then
             log_success "Added $code_upper to Hub Terraform configuration"
         else
@@ -463,7 +463,7 @@ PYTHON_EOF
         local init_output
         local init_exit_code=0
         init_output=$(terraform init -upgrade 2>&1) || init_exit_code=$?
-        
+
         if [ $init_exit_code -ne 0 ]; then
             log_error "Terraform init failed (exit code: $init_exit_code)"
             echo "$init_output" | tail -30
@@ -473,12 +473,12 @@ PYTHON_EOF
 
     # Apply
     log_info "Running terraform apply for Hub..."
-    
+
     # Capture output for proper error reporting (don't hide errors!)
     local tf_output
     local tf_exit_code=0
     tf_output=$(terraform apply -var-file=hub.tfvars -auto-approve 2>&1) || tf_exit_code=$?
-    
+
     if [ $tf_exit_code -eq 0 ]; then
         log_success "Hub Terraform applied - federation client created for $code_upper"
     else

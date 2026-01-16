@@ -1316,23 +1316,23 @@ orch_create_checkpoint() {
     # Root cause: Dual file/database system is flaky and causes issues
     # Previous: Created .dive-checkpoints/ files + database records
     # Fixed: Database ONLY - single source of truth
-    # 
+    #
     # Benefits:
     # - No file synchronization issues
     # - No stale checkpoint cleanup needed
     # - No disk I/O for checkpoint storage
     # - Database transactions ensure consistency
     # - Simpler rollback logic
-    
+
     local checkpoint_id="$(date +%Y%m%d_%H%M%S)_${instance_code}_${level}"
-    
+
     log_verbose "Creating $level checkpoint: $checkpoint_id (database-only)" >&2
 
     # Store checkpoint in database ONLY
     if orch_db_check_connection; then
         local code_lower=$(lower "$instance_code")
         local escaped_description="${description//\'/\'\'}"
-        
+
         orch_db_exec "
         INSERT INTO orchestration_checkpoints (
             checkpoint_id, instance_code, phase, description, created_at
@@ -1531,7 +1531,7 @@ orch_find_latest_checkpoint() {
     # CRITICAL FIX (2026-01-15): Database-only checkpoints
     # Previous: Searched .dive-checkpoints/ filesystem
     # Fixed: Query database for latest checkpoint
-    
+
     if ! orch_db_check_connection; then
         echo ""
         return 1
@@ -1539,10 +1539,10 @@ orch_find_latest_checkpoint() {
 
     local checkpoint_id
     checkpoint_id=$(orch_db_exec "
-        SELECT checkpoint_id 
-        FROM orchestration_checkpoints 
-        WHERE instance_code = '$code_lower' 
-        ORDER BY created_at DESC 
+        SELECT checkpoint_id
+        FROM orchestration_checkpoints
+        WHERE instance_code = '$code_lower'
+        ORDER BY created_at DESC
         LIMIT 1
     " 2>/dev/null | xargs)
 
@@ -1587,14 +1587,14 @@ orch_rollback_configuration() {
     # Root cause: File-based checkpoint restoration is flaky and unnecessary
     # Previous: Restored .env, config.json, docker-compose.yml from checkpoint files
     # Fixed: These files are regenerated from SSOT (templates) on redeployment
-    # 
+    #
     # Best Practice: Don't restore config files - regenerate from authoritative sources
     # - .env: Generated from template + secrets from GCP
     # - config.json: Generated from instance parameters
     # - docker-compose.yml: Generated from template
-    
+
     log_info "Configuration rollback skipped - files regenerated from templates on redeploy"
-    
+
     # Note: Actual rollback is handled by stopping containers and redeploying
     # Database state tracks deployment phase for recovery
     return 0
@@ -1615,7 +1615,7 @@ orch_rollback_containers() {
     # Rollback = stop containers, database tracks state for recovery
     # Previous: Stopped + restarted containers from checkpoint files
     # Fixed: Just stop containers, redeployment handles recreation
-    
+
     log_info "Stopping containers for rollback..."
 
     # Stop existing containers
@@ -1642,12 +1642,12 @@ orch_rollback_complete() {
     # Fixed: Stop containers + update database state to FAILED
     #
     # Recovery: User redeploys, templates regenerate everything correctly
-    
+
     log_info "Executing rollback for $instance_code..."
 
     # Stop containers
     orch_rollback_stop_services "$instance_code"
-    
+
     # Update database state to FAILED
     if orch_db_check_connection; then
         local code_lower=$(lower "$instance_code")

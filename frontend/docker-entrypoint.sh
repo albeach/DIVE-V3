@@ -27,13 +27,13 @@ echo "[Entrypoint] DIVE V3 Frontend starting..."
 
 if [ -f "/app/certs/ca/rootCA.pem" ]; then
     echo "[Entrypoint] Installing mkcert CA into system trust store..."
-    
+
     # Copy CA to system directory (must be .crt extension for Alpine)
     cp /app/certs/ca/rootCA.pem /usr/local/share/ca-certificates/mkcert-dev-ca.crt
-    
+
     # Update system CA bundle
     update-ca-certificates
-    
+
     echo "[Entrypoint] ✓ mkcert CA installed successfully"
     echo "[Entrypoint] Node.js fetch() will now trust self-signed certificates"
 else
