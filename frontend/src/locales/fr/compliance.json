@@ -1,59 +1,59 @@
 {
   "multiKas": {
-    "title": "Multi-KAS Coalition Architecture",
-    "description": "Distributed key management for coalition environments",
-    "loading": "Loading Multi-KAS Registry...",
-    "loadingSubtitle": "Fetching live data from MongoDB",
-    "refreshing": "Refreshing...",
-    "refresh": "Refresh",
-    "liveFromMongoDB": "Live from MongoDB",
-    "updated": "Updated: {{time}}",
-    "lastUpdated": "Last updated: {{time}}",
-    "autoRefreshInterval": "Auto-refresh interval: {{seconds}} seconds",
-    "errorTitle": "Error Loading KAS Data",
-    "retry": "Retry",
-    "hideDetails": "Hide Details",
-    "showDetails": "Show Details",
-    "technicalDetails": "Technical Details",
+    "title": "Architecture Multi-KAS Coalition",
+    "description": "Gestion distribuée des clés pour les environnements de coalition",
+    "loading": "Chargement du registre Multi-KAS...",
+    "loadingSubtitle": "Récupération des données en direct depuis MongoDB",
+    "refreshing": "Actualisation...",
+    "refresh": "Actualiser",
+    "liveFromMongoDB": "En direct depuis MongoDB",
+    "updated": "Mis à jour : {{time}}",
+    "lastUpdated": "Dernière mise à jour : {{time}}",
+    "autoRefreshInterval": "Intervalle d'actualisation automatique : {{seconds}} secondes",
+    "errorTitle": "Erreur de chargement des données KAS",
+    "retry": "Réessayer",
+    "hideDetails": "Masquer les détails",
+    "showDetails": "Afficher les détails",
+    "technicalDetails": "Détails techniques",
     "howItWorks": {
-      "title": "How Multi-KAS Works in DIVE V3",
+      "title": "Comment fonctionne Multi-KAS dans DIVE V3",
       "uploadPhase": {
-        "title": "Upload Phase (Resource Creation)",
-        "description": "When you upload an encrypted resource, upload.service.ts automatically creates 1-4 Key Access Objects (KAOs) based on the resource's releasabilityTo and COI tags. Each KAO wraps the data encryption key (DEK) with a different KAS's public key."
+        "title": "Phase de téléchargement (Création de ressource)",
+        "description": "Lorsque vous téléchargez une ressource chiffrée, upload.service.ts crée automatiquement 1 à 4 objets d'accès aux clés (KAO) en fonction des balises releasabilityTo et COI de la ressource. Chaque KAO enveloppe la clé de chiffrement des données (DEK) avec la clé publique d'un KAS différent."
       },
       "accessPhase": {
-        "title": "Access Phase (Key Request)",
-        "description": "When you try to view a resource, resource.service.ts selects the optimal KAS based on your attributes (country, COI membership). It sends a rewrap request to that KAS, which re-evaluates the OPA policy before releasing the key."
+        "title": "Phase d'accès (Demande de clé)",
+        "description": "Lorsque vous essayez de consulter une ressource, resource.service.ts sélectionne le KAS optimal en fonction de vos attributs (pays, appartenance COI). Il envoie une demande de réenveloppement à ce KAS, qui réévalue la politique OPA avant de libérer la clé."
       },
       "mongoDBSSOT": {
-        "title": "MongoDB as SSOT",
-        "description": "All KAS registrations are stored in kas_registry collection. Health metrics, heartbeats, and federation agreements are tracked in real-time. The dashboard you're viewing now fetches live data from MongoDB every 30 seconds."
+        "title": "MongoDB comme SSOT",
+        "description": "Toutes les inscriptions KAS sont stockées dans la collection kas_registry. Les métriques de santé, les pulsations et les accords de fédération sont suivis en temps réel. Le tableau de bord que vous consultez récupère des données en direct depuis MongoDB toutes les 30 secondes."
       },
       "dataSource": {
-        "title": "Data Source:",
-        "description": "This dashboard displays real KAS instances from the MongoDB kas_registry collection. Metrics are aggregated from audit_log for request counts and response times."
+        "title": "Source de données :",
+        "description": "Ce tableau de bord affiche les instances KAS réelles de la collection MongoDB kas_registry. Les métriques sont agrégées depuis audit_log pour les comptages de requêtes et les temps de réponse."
       }
     },
     "grid": {
-      "title": "KAS Federation Registry",
-      "subtitle": "Live data from MongoDB (kas_registry collection)"
+      "title": "Registre de fédération KAS",
+      "subtitle": "Données en direct depuis MongoDB (collection kas_registry)"
     },
     "flow": {
-      "title": "Multi-KAS Flow"
+      "title": "Flux Multi-KAS"
     },
     "example": {
-      "title": "Example: Multi-KAO Resource",
+      "title": "Exemple : Ressource Multi-KAO",
       "classification": "Classification",
-      "kaoCount": "{{count}} KAOs",
-      "releasableTo": "Releasable To:",
-      "communitiesOfInterest": "Communities of Interest:",
-      "keyAccessObjects": "Key Access Objects (KAOs):",
+      "kaoCount": "{{count}} KAO",
+      "releasableTo": "Diffusable à :",
+      "communitiesOfInterest": "Communautés d'intérêt :",
+      "keyAccessObjects": "Objets d'accès aux clés (KAO) :",
       "kaoNumber": "KAO #{{number}}",
-      "kasEndpoint": "KAS Endpoint:",
-      "wrappedKey": "Wrapped Key:"
+      "kasEndpoint": "Point de terminaison KAS :",
+      "wrappedKey": "Clé enveloppée :"
     },
     "benefits": {
-      "title": "Coalition Benefits",
+      "title": "Avantages pour la coalition",
       "instantGrowth": {
         "title": "Instant Coalition Growth",
         "description": "Add new coalition partners in minutes by deploying a spoke KAS. No re-encryption needed for existing resources."

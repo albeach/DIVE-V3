@@ -504,7 +504,8 @@ export default function Navigation({ user }: INavigationProps) {
                             </div> */}
 
                             {/* Language Selector - Phase 3 i18n */}
-                            <div className="hidden lg:block">
+                            {/* TESTING: Made always visible (remove hidden lg:block) */}
+                            <div>
                                 <LocaleSelector />
                             </div>
 
