@@ -8,7 +8,8 @@ import { StandardsLensProvider } from "@/contexts/StandardsLensContext";
 import { IdentityDrawerProvider } from "@/contexts/IdentityDrawerContext";
 import { PolicyProvider } from "@/contexts/PolicyContext";
 import { InstanceThemeProvider } from "@/components/ui/theme-provider";
-import { ThemeProvider } from "@/components/providers/ThemeProvider";
+// TEMPORARY: ThemeProvider disabled until container rebuild picks up next-themes
+// import { ThemeProvider } from "@/components/providers/ThemeProvider";
 import { Toaster } from "sonner";
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -25,12 +26,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
   }));
 
   return (
-    <ThemeProvider>
+    // <ThemeProvider> {/* TEMPORARY: Disabled - enable after container rebuild */}
       <InstanceThemeProvider>
         <StandardsLensProvider>
           <LocaleProvider>
             <QueryClientProvider client={queryClient}>
-              <SessionProvider 
+              <SessionProvider
                 refetchInterval={5 * 60}
                 refetchOnWindowFocus={false}
                 refetchWhenOffline={false}
@@ -38,14 +39,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
                 <PolicyProvider>
                   <IdentityDrawerProvider>
                     {children}
-                    <Toaster position="top-right" richColors />
-                  </IdentityDrawerProvider>
-                </PolicyProvider>
-              </SessionProvider>
-            </QueryClientProvider>
-          </LocaleProvider>
-        </StandardsLensProvider>
-      </InstanceThemeProvider>
-    </ThemeProvider>
+                  <Toaster position="top-right" richColors />
+                </IdentityDrawerProvider>
+              </PolicyProvider>
+            </SessionProvider>
+          </QueryClientProvider>
+        </LocaleProvider>
+      </StandardsLensProvider>
+    </InstanceThemeProvider>
+    // </ThemeProvider> {/* TEMPORARY: Disabled - enable after container rebuild */}
   );
 }
