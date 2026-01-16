@@ -1,0 +1,52 @@
+{
+  "title": "Notifications",
+  "subtitle": "System alerts and messages",
+  "markAsRead": "Mark as Read",
+  "markAllRead": "Mark All as Read",
+  "clearAll": "Clear All",
+  "noNotifications": "No notifications",
+  "types": {
+    "info": "Information",
+    "success": "Success",
+    "warning": "Warning",
+    "error": "Error",
+    "security": "Security Alert"
+  },
+  "categories": {
+    "system": "System",
+    "access": "Access Control",
+    "federation": "Federation",
+    "resource": "Resources",
+    "policy": "Policies",
+    "user": "User Account"
+  },
+  "messages": {
+    "resourceAccessed": "Resource {{resource}} accessed",
+    "resourceUploaded": "Resource {{resource}} uploaded successfully",
+    "accessGranted": "Access granted to {{resource}}",
+    "accessDenied": "Access denied to {{resource}}",
+    "policyUpdated": "Policy {{policy}} updated",
+    "spokeDeployed": "Spoke {{spoke}} deployed successfully",
+    "spokeOffline": "Spoke {{spoke}} is offline",
+    "federationEstablished": "Federation link established with {{spoke}}",
+    "certificateExpiring": "Certificate expires in {{days}} days",
+    "systemMaintenance": "System maintenance scheduled for {{date}}",
+    "securityAlert": "Security alert: {{message}}",
+    "loginSuccess": "Successful login from {{location}}",
+    "loginFailure": "Failed login attempt from {{location}}",
+    "passwordChanged": "Password changed successfully",
+    "accountLocked": "Account locked due to multiple failed login attempts"
+  },
+  "filters": {
+    "all": "All",
+    "unread": "Unread",
+    "read": "Read",
+    "type": "Type",
+    "category": "Category",
+    "dateRange": "Date Range"
+  },
+  "empty": {
+    "title": "No Notifications",
+    "description": "You're all caught up! No new notifications at this time."
+  }
+}
