@@ -20,6 +20,11 @@ if [ -n "$SPOKE_PHASE_PREFLIGHT_LOADED" ]; then
 fi
 export SPOKE_PHASE_PREFLIGHT_LOADED=1
 
+# Load orchestration dependencies module
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../orchestration-dependencies.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../../orchestration-dependencies.sh"
+fi
+
 # =============================================================================
 # MAIN PREFLIGHT PHASE FUNCTION
 # =============================================================================
@@ -44,6 +49,15 @@ spoke_phase_preflight() {
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     log_info "Preflight checks for $code_upper (mode: $pipeline_mode)"
+
+    # Step 0: Validate deployment dependencies (comprehensive pre-flight checks)
+    if type orch_validate_dependencies &>/dev/null; then
+        log_step "Validating deployment dependencies..."
+        if ! orch_validate_dependencies "$instance_code"; then
+            log_error "Dependency validation failed - cannot proceed"
+            return 1
+        fi
+    fi
 
     # Step 1: Check for deployment conflicts
     if ! spoke_preflight_check_conflicts "$instance_code"; then

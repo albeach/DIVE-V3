@@ -3,10 +3,10 @@
 /**
  * Federated Resource Search Component
  * Phase 3: Distributed Query Federation UI
- * 
+ *
  * Enables users to search for resources across all federated instances
  * (USA, FRA, GBR, DEU) with real-time ABAC filtering.
- * 
+ *
  * Features:
  * - Instance selection (toggle which countries to search)
  * - Classification filter
@@ -14,7 +14,7 @@
  * - Real-time search with debouncing
  * - Instance status indicators
  * - Performance metrics display
- * 
+ *
  * NATO Compliance: ACP-240 §5.4 (Federated Resource Access)
  */
 
@@ -90,19 +90,19 @@ const COIS = ['NATO', 'NATO-COSMIC', 'FVEY', 'CAN-US', 'US-ONLY', 'EU-RESTRICTED
 
 export function FederatedResourceSearch() {
     const { data: session, status } = useSession();
-    
+
     // Search state
     const [query, setQuery] = useState('');
     const [selectedInstances, setSelectedInstances] = useState<string[]>(['USA', 'FRA', 'GBR', 'DEU']);
     const [selectedClassifications, setSelectedClassifications] = useState<string[]>([]);
     const [selectedCOIs, setSelectedCOIs] = useState<string[]>([]);
     const [showFilters, setShowFilters] = useState(false);
-    
+
     // Results state
     const [results, setResults] = useState<IFederatedSearchResponse | null>(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    
+
     // Instance status
     const [instanceStatus, setInstanceStatus] = useState<Record<string, any>>({});
 
@@ -112,7 +112,7 @@ export function FederatedResourceSearch() {
     // Debounced search
     const executeSearch = useCallback(async () => {
         if (!session?.accessToken) return;
-        
+
         setLoading(true);
         setError(null);
 
@@ -141,7 +141,7 @@ export function FederatedResourceSearch() {
 
             const data: IFederatedSearchResponse = await response.json();
             setResults(data);
-            
+
             // Update instance status from response
             const status: Record<string, any> = {};
             for (const [code, result] of Object.entries(data.instanceResults)) {
@@ -165,7 +165,7 @@ export function FederatedResourceSearch() {
     // Auto-search on filter change (debounced)
     useEffect(() => {
         if (status !== 'authenticated') return;
-        
+
         const timer = setTimeout(() => {
             executeSearch();
         }, 300);
@@ -182,8 +182,8 @@ export function FederatedResourceSearch() {
 
     // Toggle instance selection
     const toggleInstance = (code: string) => {
-        setSelectedInstances(prev => 
-            prev.includes(code) 
+        setSelectedInstances(prev =>
+            prev.includes(code)
                 ? prev.filter(c => c !== code)
                 : [...prev, code]
         );
@@ -295,8 +295,8 @@ export function FederatedResourceSearch() {
                                 onClick={() => toggleInstance(instance.code)}
                                 className={`
                                     relative p-4 rounded-xl border-2 transition-all text-left
-                                    ${isSelected 
-                                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20' 
+                                    ${isSelected
+                                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20'
                                         : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
                                     }
                                     ${(hasError || circuitOpen) ? 'opacity-60' : ''}
@@ -311,7 +311,7 @@ export function FederatedResourceSearch() {
                                 <div className="text-xs text-gray-500 dark:text-gray-400">
                                     {instance.name}
                                 </div>
-                                
+
                                 {/* Status indicator */}
                                 <div className="absolute top-2 right-2">
                                     {hasError || circuitOpen ? (
@@ -430,11 +430,11 @@ export function FederatedResourceSearch() {
                     </div>
                     <div className="flex items-center gap-2 text-xs text-gray-500">
                         {Object.entries(results.instanceResults).map(([code, result]) => (
-                            <span 
+                            <span
                                 key={code}
                                 className={`px-2 py-1 rounded ${
-                                    result.error 
-                                        ? 'bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400' 
+                                    result.error
+                                        ? 'bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400'
                                         : 'bg-gray-100 dark:bg-gray-800'
                                 }`}
                             >
@@ -492,7 +492,7 @@ function ResourceCard({ resource }: { resource: IFederatedResource }) {
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-lg transition-all group">
             {/* Classification Banner */}
             <div className={`${getClassificationColor(resource.classification)} h-1.5`} />
-            
+
             <div className="p-4">
                 {/* Header */}
                 <div className="flex items-start justify-between gap-2 mb-3">
@@ -525,8 +525,8 @@ function ResourceCard({ resource }: { resource: IFederatedResource }) {
                     {/* Releasability */}
                     <div className="flex items-center gap-2 flex-wrap">
                         <Globe2 className="w-4 h-4 text-gray-400" />
-                        {resource.releasabilityTo.slice(0, 4).map((country) => (
-                            <span 
+                        {Array.from(new Set(resource.releasabilityTo.slice(0, 4))).map((country) => (
+                            <span
                                 key={country}
                                 className="px-2 py-0.5 bg-gray-100 dark:bg-gray-700 rounded text-xs text-gray-600 dark:text-gray-300"
                             >
@@ -544,8 +544,8 @@ function ResourceCard({ resource }: { resource: IFederatedResource }) {
                     {resource.COI && resource.COI.length > 0 && (
                         <div className="flex items-center gap-2 flex-wrap">
                             <Shield className="w-4 h-4 text-purple-400" />
-                            {resource.COI.map((coi) => (
-                                <span 
+                            {Array.from(new Set(resource.COI)).map((coi) => (
+                                <span
                                     key={coi}
                                     className="px-2 py-0.5 bg-purple-100 dark:bg-purple-900/50 rounded text-xs text-purple-700 dark:text-purple-300"
                                 >

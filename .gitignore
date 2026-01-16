@@ -300,3 +300,4 @@ gcp/
 # Terraform Service Account Keys (CRITICAL - DO NOT COMMIT)
 # ============================================
 .terraform-keys/
+# Checkpoints (generated)

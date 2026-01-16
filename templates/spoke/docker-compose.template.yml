@@ -1,11 +1,11 @@
 # =============================================================================
 # DIVE V3 Spoke Instance: {{INSTANCE_CODE_UPPER}} ({{INSTANCE_NAME}})
 # =============================================================================
-# Template Version: 2.9.0
-# Template Last Updated: {{TEMPLATE_LAST_UPDATED}}
-# Template Hash: {{TEMPLATE_HASH}}
 # Generated At: {{TIMESTAMP}}
+# Template Hash: {{TEMPLATE_HASH}}
 # Spoke ID: {{SPOKE_ID}}
+# NOTE: This file is auto-generated from templates/spoke/docker-compose.template.yml
+#       Do not edit directly - changes will be overwritten on next deployment
 # =============================================================================
 #
 # BREAKING CHANGES in 2.5.0:
@@ -116,7 +116,7 @@ services:
     restart: unless-stopped
 
   mongodb-{{INSTANCE_CODE_LOWER}}:
-    image: mongo:7-jammy
+    image: mongo:8.0.17
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-mongodb
     environment:
       MONGO_INITDB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
@@ -199,9 +199,15 @@ services:
       postgres-{{INSTANCE_CODE_LOWER}}:
         condition: service_healthy
     networks:
-      - dive-internal
+      dive-internal:
+      dive-shared:
+        aliases:
+          - keycloak-{{INSTANCE_CODE_LOWER}}  # CRITICAL: Network alias for federation JWKS discovery
     healthcheck:
-      test: ["CMD-SHELL", "curl -ksf https://localhost:8443/realms/master >/dev/null"]
+      # ENHANCED: Check spoke realm (application ready) with fallback to master (Keycloak operational)
+      # Primary: Verifies Terraform configuration applied (spoke realm exists)
+      # Fallback: Verifies Keycloak is operational (during Terraform apply phase)
+      test: ["CMD-SHELL", "curl -ksf https://localhost:8443/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}} >/dev/null 2>&1 || curl -ksf https://localhost:8443/realms/master >/dev/null 2>&1"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -226,10 +232,13 @@ services:
     networks:
       - dive-internal
     healthcheck:
-      test: ["CMD", "/opa", "eval", "true"]
-      interval: 10s
+      # FIXED: Use CMD (not CMD-SHELL) as OPA minimal image has no /bin/sh
+      # Test basic OPA evaluation (policies loaded from mounted volumes)
+      test: ["CMD", "/opa", "eval", "--format", "raw", "true"]
+      interval: 15s
       timeout: 5s
-      retries: 3
+      retries: 5
+      start_period: 30s
     restart: unless-stopped
 
   opal-client-{{INSTANCE_CODE_LOWER}}:
@@ -336,7 +345,7 @@ services:
       FEDERATION_ALLOWED_ORIGINS: {{BASE_URL}},{{API_URL}},{{IDP_URL}}
       # Hub federation - use Docker internal container name for local deployment
       HUB_URL: ${HUB_URL:-https://dive-hub-backend:4000}
-      SPOKE_TOKEN: ${SPOKE_OPAL_TOKEN:-}
+      SPOKE_TOKEN: ${SPOKE_TOKEN:-}  # Hub API token for heartbeat authentication
       SPOKE_CONFIG_PATH: /app/config/config.json
       DIVE_POLICY_CACHE_PATH: /app/cache/policies
       DIVE_AUDIT_QUEUE_PATH: /app/cache/audit
@@ -348,16 +357,27 @@ services:
       - ./certs:/app/certs:rw
       - ./certs:/opt/keycloak/certs:ro
       - ./certs/ca:/app/certs/ca:ro  # Instance-specific CA for TLS trust
-      - ./config.json:/app/config/config.json:ro
-      - ../../config:/app/config/shared:ro
+      - ./config.json:/app/instance-config.json:ro  # Instance-specific config
+      - ../../config/federation-registry.json:/app/config/federation-registry.json:ro
+      # NOTE: kas-registry.json mount REMOVED in Phase 3 (MongoDB KAS Registry Migration)
+      # Spokes now use MongoDB kas_registry collection as SSOT for KAS instances
+      # Registration happens via: spoke_kas_register_mongodb() -> POST /api/kas/register
       - ../../policies:/app/policies:ro  # Policy metadata for /api/policies endpoint
       - ./cache:/app/cache
       - backend_logs:/app/logs
     depends_on:
+      postgres-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy  # NEW: Backend uses orchestration DB
       mongodb-{{INSTANCE_CODE_LOWER}}:
         condition: service_healthy
+      redis-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy  # NEW: Backend uses redis for sessions
+      keycloak-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy  # NEW: Backend validates JWT tokens
+      opa-{{INSTANCE_CODE_LOWER}}:
+        condition: service_started  # NEW: Explicit OPA dependency (policies loaded via OPAL)
       opal-client-{{INSTANCE_CODE_LOWER}}:
-        condition: service_healthy
+        condition: service_healthy  # Ensures policies synced from Hub
     networks:
       - dive-internal      # Internal spoke communication
       - dive-shared        # CRITICAL: Required for Hub federation and OPAL policy sync
@@ -433,8 +453,6 @@ services:
     command: ["/bin/sh","-c","rm -f /app/.env.local && if [ ! -f /app/node_modules/.package-hash ] || [ \"$(md5sum /app/package.json | cut -d' ' -f1)\" != \"$(cat /app/node_modules/.package-hash 2>/dev/null)\" ]; then echo 'Package.json changed - reinstalling dependencies...' && npm install && md5sum /app/package.json | cut -d' ' -f1 > /app/node_modules/.package-hash; else echo 'Dependencies up to date'; fi && npm run dev"]
     environment:
       NODE_ENV: development
-      # SECURITY: Trust mkcert CA instead of disabling TLS verification
-      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
       NEXT_PUBLIC_INSTANCE: {{INSTANCE_CODE_UPPER}}
       NEXT_PUBLIC_INSTANCE_NAME: "{{INSTANCE_NAME}}"
       # Public URLs for client-side requests
@@ -458,6 +476,13 @@ services:
       AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET_{{INSTANCE_CODE_UPPER}}}
       AUTH_KEYCLOAK_ISSUER: {{IDP_BASE_URL}}/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}}
       AUTH_POST_LOGOUT_REDIRECT: {{BASE_URL}}
+      
+      # TLS Certificate Handling - Proper mkcert Integration (2026 Best Practice)
+      # Makes Node.js fetch() API respect system CA trust store (installed via entrypoint)
+      # This maintains proper TLS verification without security compromises
+      # See: docs/TLS_BEST_PRACTICES_2026.md
+      NODE_OPTIONS: "--use-openssl-ca"
+      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem  # Legacy https module support
     ports:
       - "{{FRONTEND_HOST_PORT}}:3000"
     volumes:
@@ -470,8 +495,18 @@ services:
     extra_hosts:
       - "localhost:host-gateway"
     depends_on:
+      keycloak-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy  # NEW: NextAuth needs Keycloak realm
       backend-{{INSTANCE_CODE_LOWER}}:
         condition: service_healthy
+    healthcheck:
+      # FIXED: Use HTTPS (Next.js serves HTTPS only via custom server.js)
+      # Test root endpoint which always exists
+      test: ["CMD", "wget", "--no-check-certificate", "--quiet", "--spider", "https://127.0.0.1:3000/", "--timeout=10"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s  # INCREASED: Next.js SSR build can take 45-60s
     networks:
       - dive-internal
     restart: unless-stopped

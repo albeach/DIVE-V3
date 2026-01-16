@@ -27,10 +27,7 @@
 # Date: 2026-01-13
 # =============================================================================
 
-# Prevent multiple sourcing
-if [ -n "$SPOKE_COMPOSE_GENERATOR_LOADED" ]; then
-    return 0
-fi
+# Mark as loaded (but continue to allow re-exports)
 export SPOKE_COMPOSE_GENERATOR_LOADED=1
 
 # =============================================================================
@@ -461,3 +458,20 @@ spoke_compose_update() {
     # Regenerate
     spoke_compose_generate "$instance_code" "$spoke_dir"
 }
+
+# =============================================================================
+# MODULE EXPORTS
+# =============================================================================
+
+# Export functions for use by other modules
+export -f spoke_compose_generate
+export -f spoke_compose_get_placeholders
+export -f spoke_compose_get_ports
+export -f spoke_compose_get_spoke_id
+export -f spoke_compose_get_instance_name
+export -f spoke_compose_render_template
+export -f spoke_compose_validate
+export -f spoke_compose_check_drift
+export -f spoke_compose_update
+
+log_verbose "Compose generator module loaded (9 functions)"

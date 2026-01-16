@@ -242,11 +242,17 @@ spoke_seed_resources() {
         fi
     fi
 
-    # If ZTDF seeding failed, fall back to legacy
-    log_warn "ZTDF seeding failed, falling back to legacy plaintext seeding"
-    log_verbose "Seed error: $(echo "$seed_output" | tail -5)"
+    # If ZTDF seeding failed, show full error (don't hide in verbose)
+    log_error "ZTDF seeding failed - full error output:"
+    echo "$seed_output" | tail -30
+    log_error ""
+    log_error "This is a CRITICAL failure - ZTDF encryption is required for ACP-240 compliance"
+    log_error "Falling back to plaintext is NOT acceptable for production"
+    log_error ""
+    
+    # Still seed plaintext for testing, but mark as failure
     spoke_seed_resources_legacy "$instance_code" "$resource_count"
-    return $?
+    return 1  # Return failure - plaintext fallback is not success
 }
 
 ##

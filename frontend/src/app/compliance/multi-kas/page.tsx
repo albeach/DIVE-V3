@@ -2,7 +2,7 @@
 
 /**
  * Multi-KAS Architecture Visualizer
- * 
+ *
  * Interactive visualization of coalition-scalable Multi-KAS architecture
  * Shows how 1-4 KAOs per resource enable instant coalition growth
  */
@@ -11,12 +11,12 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import PageLayout from '@/components/layout/page-layout';
-import { 
-  Server, 
-  Key, 
-  Shield, 
-  Zap, 
-  CheckCircle2, 
+import {
+  Server,
+  Key,
+  Shield,
+  Zap,
+  CheckCircle2,
   Activity,
   Globe,
   Lock,
@@ -69,7 +69,7 @@ interface MultiKasData {
 export default function MultiKasPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  
+
   const [multiKasData, setMultiKasData] = useState<MultiKasData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,14 +85,14 @@ export default function MultiKasPage() {
 
   useEffect(() => {
     if (status === 'loading') return;
-    
+
     if (!session) {
       return;
     }
 
     async function fetchMultiKasData() {
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
-      
+
       try {
         const response = await fetch(`${backendUrl}/api/compliance/multi-kas`, {
           cache: 'no-store',
@@ -226,8 +226,8 @@ export default function MultiKasPage() {
                 1. Upload Phase (Resource Creation)
               </h3>
               <p className="text-sm text-gray-700">
-                When you upload an encrypted resource, <code className="px-2 py-1 bg-gray-100 rounded text-xs">upload.service.ts</code> automatically 
-                creates <strong>1-4 Key Access Objects (KAOs)</strong> based on the resource's <code className="text-blue-600">releasabilityTo</code> and 
+                When you upload an encrypted resource, <code className="px-2 py-1 bg-gray-100 rounded text-xs">upload.service.ts</code> automatically
+                creates <strong>1-4 Key Access Objects (KAOs)</strong> based on the resource's <code className="text-blue-600">releasabilityTo</code> and
                 <code className="text-purple-600">COI</code> tags. Each KAO wraps the data encryption key (DEK) with a different KAS's public key.
               </p>
             </div>
@@ -238,8 +238,8 @@ export default function MultiKasPage() {
                 2. Access Phase (Key Request)
               </h3>
               <p className="text-sm text-gray-700">
-                When you try to view a resource, <code className="px-2 py-1 bg-gray-100 rounded text-xs">resource.service.ts</code> selects the 
-                <strong>optimal KAS</strong> based on your attributes (country, COI membership). It sends a rewrap request to that KAS, which 
+                When you try to view a resource, <code className="px-2 py-1 bg-gray-100 rounded text-xs">resource.service.ts</code> selects the
+                <strong>optimal KAS</strong> based on your attributes (country, COI membership). It sends a rewrap request to that KAS, which
                 re-evaluates the OPA policy before releasing the key.
               </p>
             </div>
@@ -273,8 +273,8 @@ export default function MultiKasPage() {
 
             <div className="bg-gradient-to-r from-yellow-50 to-amber-50 rounded-lg p-4 border-2 border-yellow-300">
               <p className="text-sm text-gray-800">
-                <strong className="text-yellow-800">💡 Production Deployment:</strong> In production, each nation/COI would host 
-                their own KAS endpoint. The endpoints shown below represent the <strong>target architecture</strong> for coalition 
+                <strong className="text-yellow-800">💡 Production Deployment:</strong> In production, each nation/COI would host
+                their own KAS endpoint. The endpoints shown below represent the <strong>target architecture</strong> for coalition
                 deployment, demonstrating how DIVE V3 enables instant coalition growth without re-encrypting historical data.
               </p>
             </div>
@@ -336,7 +336,7 @@ export default function MultiKasPage() {
                     <p className="text-xs text-gray-500 mb-1">Uptime:</p>
                     <div className="flex items-center gap-2">
                       <div className="flex-1 bg-gray-200 rounded-full h-2">
-                        <div 
+                        <div
                           className="h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full"
                           style={{ width: `${kas.uptime}%` }}
                         />
@@ -418,7 +418,7 @@ export default function MultiKasPage() {
                             <span className="text-2xl font-bold text-green-600">{kas.uptime}%</span>
                           </div>
                           <div className="bg-gray-200 rounded-full h-2">
-                            <div 
+                            <div
                               className="h-full bg-gradient-to-r from-green-400 to-emerald-500 rounded-full"
                               style={{ width: `${kas.uptime}%` }}
                             />
@@ -573,7 +573,7 @@ export default function MultiKasPage() {
               <div>
                 <p className="text-sm font-semibold text-gray-700 mb-2">Releasable To:</p>
                 <div className="flex flex-wrap gap-2">
-                  {multiKasData.exampleScenario.releasabilityTo.map((country) => (
+                  {Array.from(new Set(multiKasData.exampleScenario.releasabilityTo)).map((country) => (
                     <span key={country} className="px-3 py-1 rounded-full text-xs font-bold bg-green-100 text-green-800">
                       {country}
                     </span>
@@ -583,7 +583,7 @@ export default function MultiKasPage() {
               <div>
                 <p className="text-sm font-semibold text-gray-700 mb-2">Communities of Interest:</p>
                 <div className="flex flex-wrap gap-2">
-                  {multiKasData.exampleScenario.COI.map((coi) => (
+                  {Array.from(new Set(multiKasData.exampleScenario.COI)).map((coi) => (
                     <span key={coi} className="px-3 py-1 rounded-full text-xs font-bold bg-purple-100 text-purple-800">
                       {coi}
                     </span>

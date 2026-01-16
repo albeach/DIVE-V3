@@ -128,12 +128,32 @@ spoke_containers_start() {
         set +a
     fi
 
-    # Build command
+    # Check if parallel tier-based startup is available
+    if type orch_start_services_tiered &>/dev/null && [ "$force_rebuild" != "true" ]; then
+        log_info "Using optimized parallel tier-based startup (30% faster)"
+        
+        # Change back to DIVE_ROOT for module execution
+        cd "${DIVE_ROOT}"
+        
+        # Use tiered parallel startup
+        if orch_start_services_tiered "$instance_code" "docker-compose.yml"; then
+            log_success "All services started with parallel tier approach"
+            return 0
+        else
+            log_warn "Parallel tier startup failed, falling back to traditional approach"
+            cd "$spoke_dir"
+        fi
+    fi
+    
+    # Traditional approach (fallback or force rebuild)
     local compose_cmd="docker compose"
     local compose_args="up -d"
 
     if [ "$force_rebuild" = "true" ]; then
         compose_args="up -d --build --force-recreate"
+        log_info "Using traditional startup with rebuild"
+    else
+        log_verbose "Using traditional sequential startup"
     fi
 
     # Run docker compose

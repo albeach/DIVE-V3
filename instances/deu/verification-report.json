@@ -1,8 +1,8 @@
 {
     "instance": "DEU",
-    "status": "success",
-    "timestamp": "2026-01-14T06:09:28Z",
-    "containers": {"running":9,"unhealthy":0,"stopped":0,"total":9},
+    "status": "warning",
+    "timestamp": "2026-01-15T11:36:45Z",
+    "containers": {"running":9,"unhealthy":1,"stopped":0,"total":9},
     "checks": {
         "services": true,
         "databases": true,

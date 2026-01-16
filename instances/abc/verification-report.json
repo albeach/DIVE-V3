@@ -1,0 +1,18 @@
+{
+    "instance": "ABC",
+    "status": "success",
+    "timestamp": "2026-01-15T12:21:17Z",
+    "containers": {"running":9,"unhealthy":0,"stopped":0,"total":9},
+    "checks": {
+        "services": true,
+        "databases": true,
+        "keycloak": true,
+        "federation": true,
+        "api": true
+    },
+    "endpoints": {
+        "frontend": "https://localhost:3048",
+        "backend": "https://localhost:4048",
+        "keycloak": "https://localhost:8491"
+    }
+}

@@ -493,7 +493,7 @@
           "name": "backend-est",
           "containerName": "dive-spoke-est-backend",
           "internalPort": 4000,
-          "externalPort": 4008,
+          "externalPort": 4457,
           "protocol": "https",
           "hostname": "est-api.dive25.com"
         },
@@ -509,7 +509,7 @@
           "name": "mongodb-est",
           "containerName": "dive-spoke-est-mongodb",
           "internalPort": 27017,
-          "externalPort": 27025,
+          "externalPort": 27020,
           "protocol": "mongodb"
         }
       }
@@ -880,11 +880,12 @@
         "projectName": "hun"
       },
       "services": {
+        "_comment": "HUN uses hun- prefix on all service names",
         "frontend": {
           "name": "frontend-hun",
           "containerName": "dive-spoke-hun-frontend",
           "internalPort": 3000,
-          "externalPort": 3013,
+          "externalPort": 3457,
           "protocol": "https",
           "hostname": "hun-app.dive25.com"
         },
@@ -892,7 +893,7 @@
           "name": "backend-hun",
           "containerName": "dive-spoke-hun-backend",
           "internalPort": 4000,
-          "externalPort": 4013,
+          "externalPort": 4457,
           "protocol": "https",
           "hostname": "hun-api.dive25.com"
         },
@@ -908,13 +909,9 @@
           "name": "mongodb-hun",
           "containerName": "dive-spoke-hun-mongodb",
           "internalPort": 27017,
-          "externalPort": 27030,
+          "externalPort": 27020,
           "protocol": "mongodb"
         }
-      },
-      "mongodb": {
-        "database": "dive-v3-hun",
-        "user": "admin"
       }
     },
     "bgr": {
@@ -1043,7 +1040,7 @@
           "name": "backend-svk",
           "containerName": "dive-spoke-svk-backend",
           "internalPort": 4000,
-          "externalPort": 4026,
+          "externalPort": 4457,
           "protocol": "https",
           "hostname": "svk-api.dive25.com"
         },
@@ -1059,7 +1056,7 @@
           "name": "mongodb-svk",
           "containerName": "dive-spoke-svk-mongodb",
           "internalPort": 27017,
-          "externalPort": 27043,
+          "externalPort": 27020,
           "protocol": "mongodb"
         }
       }
@@ -1357,6 +1354,104 @@
           "protocol": "mongodb"
         }
       }
+    },
+    "dnk": {
+      "code": "DNK",
+      "name": "Denmark",
+      "locale": "da-DK",
+      "type": "local",
+      "primary": false,
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "localhost",
+        "domain": "dive25.com",
+        "composeFile": "docker-compose.dnk.yml",
+        "projectName": "dnk"
+      },
+      "services": {
+        "_comment": "DNK uses dnk- prefix on all service names",
+        "frontend": {
+          "name": "frontend-dnk",
+          "containerName": "dive-spoke-dnk-frontend",
+          "internalPort": 3000,
+          "externalPort": 3457,
+          "protocol": "https",
+          "hostname": "dnk-app.dive25.com"
+        },
+        "backend": {
+          "name": "backend-dnk",
+          "containerName": "dive-spoke-dnk-backend",
+          "internalPort": 4000,
+          "externalPort": 4457,
+          "protocol": "https",
+          "hostname": "dnk-api.dive25.com"
+        },
+        "keycloak": {
+          "name": "keycloak-dnk",
+          "containerName": "dive-spoke-dnk-keycloak",
+          "internalPort": 8443,
+          "externalPort": 8450,
+          "protocol": "https",
+          "hostname": "dnk-idp.dive25.com"
+        },
+        "mongodb": {
+          "name": "mongodb-dnk",
+          "containerName": "dive-spoke-dnk-mongodb",
+          "internalPort": 27017,
+          "externalPort": 27020,
+          "protocol": "mongodb"
+        }
+      }
+    },
+    "can": {
+      "code": "CAN",
+      "name": "Canada",
+      "locale": "en-CA",
+      "type": "local",
+      "primary": false,
+      "enabled": true,
+      "deployment": {
+        "provider": "docker",
+        "host": "localhost",
+        "domain": "dive25.com",
+        "composeFile": "docker-compose.can.yml",
+        "projectName": "can"
+      },
+      "services": {
+        "_comment": "CAN uses can- prefix on all service names",
+        "frontend": {
+          "name": "frontend-can",
+          "containerName": "dive-spoke-can-frontend",
+          "internalPort": 3000,
+          "externalPort": 3457,
+          "protocol": "https",
+          "hostname": "can-app.dive25.com"
+        },
+        "backend": {
+          "name": "backend-can",
+          "containerName": "dive-spoke-can-backend",
+          "internalPort": 4000,
+          "externalPort": 4457,
+          "protocol": "https",
+          "hostname": "can-api.dive25.com"
+        },
+        "keycloak": {
+          "name": "keycloak-can",
+          "containerName": "dive-spoke-can-keycloak",
+          "internalPort": 8443,
+          "externalPort": 8447,
+          "protocol": "https",
+          "hostname": "can-idp.dive25.com"
+        },
+        "mongodb": {
+          "name": "mongodb-can",
+          "containerName": "dive-spoke-can-mongodb",
+          "internalPort": 27017,
+          "externalPort": 27020,
+          "protocol": "mongodb"
+        }
+      }
     }
   },
   "federation": {
@@ -1366,8 +1461,10 @@
         "alb",
         "bel",
         "bgr",
+        "can",
         "cze",
         "deu",
+        "dnk",
         "esp",
         "est",
         "fra",
@@ -1506,6 +1603,18 @@
         "usa"
       ],
       "tst": [
+        "deu",
+        "fra",
+        "gbr",
+        "usa"
+      ],
+      "dnk": [
+        "deu",
+        "fra",
+        "gbr",
+        "usa"
+      ],
+      "can": [
         "deu",
         "fra",
         "gbr",

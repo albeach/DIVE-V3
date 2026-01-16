@@ -216,7 +216,9 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
         const {
             kasId,
             organization,
+            countryCode, // ISO 3166-1 alpha-3 (SSOT)
             kasUrl,
+            internalKasUrl, // Docker service URL for container-to-container
             jwtIssuer,
             supportedCountries,
             supportedCOIs,
@@ -224,11 +226,20 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
             contact
         } = req.body;
 
-        // Validate required fields
-        if (!kasId || !organization || !kasUrl) {
+        // Validate required fields - countryCode is now required (ISO 3166-1 alpha-3)
+        if (!kasId || !organization || !kasUrl || !countryCode) {
             res.status(400).json({
                 success: false,
-                error: 'kasId, organization, and kasUrl are required'
+                error: 'kasId, organization, countryCode (ISO 3166-1 alpha-3), and kasUrl are required'
+            });
+            return;
+        }
+
+        // Validate countryCode format (ISO 3166-1 alpha-3: exactly 3 uppercase letters)
+        if (!/^[A-Z]{3}$/.test(countryCode)) {
+            res.status(400).json({
+                success: false,
+                error: 'countryCode must be ISO 3166-1 alpha-3 format (3 uppercase letters, e.g., USA, FRA, EST)'
             });
             return;
         }
@@ -245,17 +256,20 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
-        // Create registration
+        // Create registration with ISO 3166-1 alpha-3 countryCode as SSOT
         const kasInstance: Omit<IKasInstance, 'status'> = {
             kasId,
             organization,
+            countryCode, // ISO 3166-1 alpha-3 - SSOT
             kasUrl,
+            internalKasUrl: internalKasUrl || undefined, // Docker service URL for container-to-container
             authMethod: 'jwt',
             authConfig: {
                 jwtIssuer: jwtIssuer || undefined
             },
             trustLevel: 'medium',
-            supportedCountries: supportedCountries || [],
+            // Default supportedCountries to [countryCode] if not provided
+            supportedCountries: supportedCountries || [countryCode],
             supportedCOIs: supportedCOIs || ['NATO'],
             enabled: false, // Disabled until approved
             metadata: {

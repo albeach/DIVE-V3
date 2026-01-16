@@ -316,6 +316,12 @@ class SpokeHeartbeatService extends EventEmitter {
         timeout: this.config!.timeoutMs,
       };
 
+      // DEVELOPMENT: Accept self-signed certificates (mkcert)
+      // SECURITY: Only for local development - NEVER in production
+      if (isHttps && process.env.NODE_ENV !== 'production') {
+        requestOptions.rejectUnauthorized = false;
+      }
+
       // Add mTLS configuration if certificates are provided
       if (isHttps && this.config!.certificatePath && this.config!.privateKeyPath) {
         try {
@@ -323,10 +329,6 @@ class SpokeHeartbeatService extends EventEmitter {
           requestOptions.key = fs.readFileSync(this.config!.privateKeyPath);
           if (this.config!.caBundlePath) {
             requestOptions.ca = fs.readFileSync(this.config!.caBundlePath);
-          }
-          // In development, allow self-signed certs
-          if (process.env.NODE_ENV !== 'production') {
-            requestOptions.rejectUnauthorized = false;
           }
         } catch (certError) {
           logger.warn('Failed to load certificates for mTLS', {
