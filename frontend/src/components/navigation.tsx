@@ -45,7 +45,8 @@ import { SearchBox } from '@/components/navigation/SearchBox';
 import { SkipNavigation } from '@/components/navigation/SkipNavigation';
 import { ScreenReaderAnnouncer } from '@/components/navigation/ScreenReaderAnnouncer';
 import { LocaleSelector } from '@/components/navigation/LocaleSelector';
-import { ThemeToggle } from '@/components/navigation/ThemeToggle';
+// TEMPORARY: ThemeToggle disabled until container rebuild picks up next-themes
+// import { ThemeToggle } from '@/components/navigation/ThemeToggle';
 import { navItems, adminItems, getNationalClearance, getCountryName } from '@/components/navigation/nav-config';
 import { useInstanceTheme } from '@/components/ui/theme-provider';
 import { InstanceFlag } from '@/components/ui/instance-hero-badge';
@@ -497,9 +498,10 @@ export default function Navigation({ user }: INavigationProps) {
                     {/* Right: User Menu Only - 2025 Pattern */}
                     <div className="flex items-center gap-3">
                             {/* Theme Toggle - Phase 5 Dark Mode */}
-                            <div className="hidden lg:block">
+                            {/* TEMPORARY: Disabled until container rebuild picks up next-themes */}
+                            {/* <div className="hidden lg:block">
                                 <ThemeToggle />
-                            </div>
+                            </div> */}
 
                             {/* Language Selector - Phase 3 i18n */}
                             <div className="hidden lg:block">
