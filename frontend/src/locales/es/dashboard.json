@@ -2,6 +2,7 @@
   "title": "Panel de control",
   "subtitle": "Resumen de inteligencia de la coalición",
   "welcome": "Bienvenido de nuevo, {{name}}",
+  "welcomeBack": "Bienvenido de nuevo,",
   "loading": "Cargando panel de control...",
   "refreshing": "Actualizando...",
   "refresh": "Actualizar",

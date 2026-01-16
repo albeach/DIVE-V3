@@ -2,6 +2,7 @@
   "title": "Panel sterowania",
   "subtitle": "Przegląd wywiadu koalicyjnego",
   "welcome": "Witaj ponownie, {{name}}",
+  "welcomeBack": "Witaj ponownie,",
   "loading": "Ładowanie panelu sterowania...",
   "refreshing": "Odświeżanie...",
   "refresh": "Odśwież",

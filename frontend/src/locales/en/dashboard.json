@@ -1,7 +1,8 @@
 {
   "title": "Dashboard",
   "subtitle": "Coalition intelligence overview",
-  "welcome": "Welcome back, {{name}}",
+  "welcome": "Welcome back,",
+  "welcomeBack": "Welcome back,",
   "overview": {
     "title": "System Overview",
     "totalResources": "Total Resources",
