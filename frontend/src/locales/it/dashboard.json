@@ -2,6 +2,7 @@
   "title": "Cruscotto",
   "subtitle": "Panoramica dell'intelligence di coalizione",
   "welcome": "Bentornato, {{name}}",
+  "welcomeBack": "Bentornato,",
   "loading": "Caricamento cruscotto...",
   "refreshing": "Aggiornamento...",
   "refresh": "Aggiorna",

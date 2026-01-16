@@ -2,6 +2,7 @@
   "title": "Dashboard",
   "subtitle": "Coalitie-intelligentie overzicht",
   "welcome": "Welkom terug, {{name}}",
+  "welcomeBack": "Welkom terug,",
   "loading": "Dashboard laden...",
   "refreshing": "Vernieuwen...",
   "refresh": "Vernieuwen",

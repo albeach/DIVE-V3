@@ -2,6 +2,7 @@
   "title": "Tableau de bord",
   "subtitle": "Aperçu de l'intelligence de la coalition",
   "welcome": "Bon retour, {{name}}",
+  "welcomeBack": "Bon retour,",
   "loading": "Chargement du tableau de bord...",
   "refreshing": "Actualisation...",
   "refresh": "Actualiser",
