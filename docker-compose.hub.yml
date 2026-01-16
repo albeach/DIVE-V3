@@ -41,6 +41,8 @@ services:
     image: postgres:15-alpine
     container_name: ${COMPOSE_PROJECT_NAME}-postgres
     restart: unless-stopped
+    env_file:
+      - .env.hub
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -63,6 +65,8 @@ services:
     image: mongo:8.0.17
     container_name: ${COMPOSE_PROJECT_NAME}-mongodb
     restart: unless-stopped
+    env_file:
+      - .env.hub
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
@@ -84,6 +88,8 @@ services:
     image: redis:7-alpine
     container_name: ${COMPOSE_PROJECT_NAME}-redis
     restart: unless-stopped
+    env_file:
+      - .env.hub
     command: >
       redis-server
       --requirepass ${REDIS_PASSWORD_USA}
@@ -118,6 +124,8 @@ services:
     image: redis:7-alpine
     container_name: ${COMPOSE_PROJECT_NAME}-redis-blacklist
     restart: unless-stopped
+    env_file:
+      - .env.hub
     command: >
       redis-server
       --requirepass ${REDIS_PASSWORD_BLACKLIST}
@@ -157,6 +165,8 @@ services:
       dockerfile: Dockerfile
     container_name: ${COMPOSE_PROJECT_NAME}-keycloak
     restart: unless-stopped
+    env_file:
+      - .env.hub
     entrypoint: ["/bin/bash", "/opt/keycloak/scripts/import-realm.sh"]
     command: ["start-dev", "--spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true", "--features=scripts"]
     environment:
@@ -255,6 +265,8 @@ services:
       dockerfile: Dockerfile.dev
     container_name: ${COMPOSE_PROJECT_NAME}-backend
     restart: unless-stopped
+    env_file:
+      - .env.hub
     environment:
       NODE_ENV: development
       PORT: "4000"
@@ -368,6 +380,8 @@ services:
       dockerfile: Dockerfile
     container_name: ${COMPOSE_PROJECT_NAME}-kas
     restart: unless-stopped
+    env_file:
+      - .env.hub
     healthcheck:
       test: ["CMD-SHELL", "wget --no-check-certificate -q -O- https://localhost:8080/health || exit 1"]
       interval: 15s
@@ -415,6 +429,8 @@ services:
       dockerfile: Dockerfile.dev
     container_name: ${COMPOSE_PROJECT_NAME}-frontend
     restart: unless-stopped
+    env_file:
+      - .env.hub
     healthcheck:
       test: ["CMD-SHELL", "curl -ksf https://localhost:3000/ >/dev/null || exit 1"]
       interval: 30s
@@ -478,6 +494,8 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-opal-server
     restart: unless-stopped
     stop_grace_period: 30s
+    env_file:
+      - .env.hub
     environment:
       # Use Redis as broadcast backend for pub/sub
       OPAL_BROADCAST_URI: redis://:${REDIS_PASSWORD_USA}@redis:6379
