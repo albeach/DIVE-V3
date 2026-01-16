@@ -65,16 +65,16 @@ section() {
 # =============================================================================
 test_spoke_token_mapping_fix() {
     section "Test 1: CRITICAL BUG FIX - SPOKE_TOKEN Environment Mapping"
-    
+
     local template="${DIVE_ROOT}/templates/spoke/docker-compose.template.yml"
-    
+
     critical "Testing the SPOKE_TOKEN environment variable mapping fix"
     echo ""
     info "Background: This was a critical bug that prevented ALL spoke heartbeat"
     info "authentication from working. The template was using SPOKE_OPAL_TOKEN"
     info "(OPAL client JWT) instead of SPOKE_TOKEN (Hub API token)."
     echo ""
-    
+
     # Test: Template exists
     if [ -f "$template" ]; then
         pass "Docker-compose template file exists"
@@ -82,7 +82,7 @@ test_spoke_token_mapping_fix() {
         fail "Template not found" "Path: $template"
         return
     fi
-    
+
     # Test: CRITICAL - Correct SPOKE_TOKEN mapping
     if grep -q 'SPOKE_TOKEN: ${SPOKE_TOKEN:-}' "$template"; then
         pass "✨ Template uses CORRECT mapping: \${SPOKE_TOKEN:-}"
@@ -90,7 +90,7 @@ test_spoke_token_mapping_fix() {
     else
         fail "🔴 Template missing correct SPOKE_TOKEN mapping" "Expected: SPOKE_TOKEN: \${SPOKE_TOKEN:-}"
     fi
-    
+
     # Test: CRITICAL - No SPOKE_OPAL_TOKEN mapping (the bug)
     if grep -q 'SPOKE_TOKEN: ${SPOKE_OPAL_TOKEN' "$template"; then
         fail "🔴 CRITICAL BUG STILL PRESENT!" "Template uses \${SPOKE_OPAL_TOKEN:-} for SPOKE_TOKEN"
@@ -99,7 +99,7 @@ test_spoke_token_mapping_fix() {
     else
         pass "✅ Bug is FIXED: Template does NOT use SPOKE_OPAL_TOKEN"
     fi
-    
+
     # Test: Comment explaining the fix
     if grep -A1 'SPOKE_TOKEN:' "$template" | grep -q 'Hub API token'; then
         pass "Comment added explaining SPOKE_TOKEN purpose"
@@ -113,9 +113,9 @@ test_spoke_token_mapping_fix() {
 # =============================================================================
 test_template_substitution() {
     section "Test 2: Template Substitution Variables"
-    
+
     local template="${DIVE_ROOT}/templates/spoke/docker-compose.template.yml"
-    
+
     # Test: Critical substitution variables present
     local required_vars=(
         "{{INSTANCE_CODE_LOWER}}"
@@ -124,7 +124,7 @@ test_template_substitution() {
         "{{BACKEND_HOST_PORT}}"
         "{{KEYCLOAK_HTTPS_HOST_PORT}}"
     )
-    
+
     for var in "${required_vars[@]}"; do
         if grep -q "$var" "$template" 2>/dev/null; then
             pass "Template variable present: $var"
@@ -132,7 +132,7 @@ test_template_substitution() {
             fail "Template variable missing: $var" "Required for spoke-init.sh"
         fi
     done
-    
+
     # Test: Environment variable references
     local env_vars=(
         '${SPOKE_TOKEN:-}'
@@ -140,7 +140,7 @@ test_template_substitution() {
         '${KEYCLOAK_ADMIN_PASSWORD'
         '${MONGO_PASSWORD'
     )
-    
+
     for var in "${env_vars[@]}"; do
         if grep -q "$var" "$template" 2>/dev/null; then
             pass "Environment variable reference found: $var"
@@ -153,9 +153,9 @@ test_template_substitution() {
 # =============================================================================
 test_healthcheck_configurations() {
     section "Test 3: Healthcheck Configurations"
-    
+
     local template="${DIVE_ROOT}/templates/spoke/docker-compose.template.yml"
-    
+
     # Test: All services have healthchecks
     local services_with_healthchecks=(
         "postgres"
@@ -167,7 +167,7 @@ test_healthcheck_configurations() {
         "frontend"
         "kas"
     )
-    
+
     for service in "${services_with_healthchecks[@]}"; do
         if grep -A10 "  ${service}-{{INSTANCE_CODE_LOWER}}:" "$template" 2>/dev/null | grep -q "healthcheck:"; then
             pass "Service has healthcheck: $service"
@@ -175,7 +175,7 @@ test_healthcheck_configurations() {
             warn "Service missing healthcheck: $service"
         fi
     done
-    
+
     # Test: Keycloak healthcheck uses management port 9000
     if grep -A20 "keycloak-{{INSTANCE_CODE_LOWER}}:" "$template" | grep -q "https://localhost:9000/health/ready"; then
         pass "Keycloak healthcheck uses correct management port 9000"
@@ -189,21 +189,21 @@ test_healthcheck_configurations() {
 # =============================================================================
 test_network_configuration() {
     section "Test 4: Network Configuration"
-    
+
     local template="${DIVE_ROOT}/templates/spoke/docker-compose.template.yml"
-    
+
     # Test: Network definitions
     if grep -q "networks:" "$template"; then
         pass "Network configuration present in template"
     else
         fail "Network configuration missing" "Docker Compose requires networks section"
     fi
-    
+
     # Test: Service network assignments
     if grep -q "- dive-v3-{{INSTANCE_CODE_LOWER}}" "$template"; then
         pass "Services assigned to instance-specific network"
     fi
-    
+
     # Test: External network references
     if grep -q "dive-v3-shared-network" "$template"; then
         pass "Shared network reference present (for blacklist Redis)"
@@ -215,28 +215,28 @@ test_network_configuration() {
 # =============================================================================
 test_generated_files() {
     section "Test 5: Generated File Validation"
-    
+
     # Check if any instance directories exist
     local instance_dirs=("${DIVE_ROOT}"/instances/*/)
     local instances_tested=0
-    
+
     for instance_dir in "${instance_dirs[@]}"; do
         if [ ! -d "$instance_dir" ]; then
             continue
         fi
-        
+
         local instance_name=$(basename "$instance_dir")
-        
+
         # Skip special directories
         if [ "$instance_name" = "hub" ] || [ "$instance_name" = "shared" ]; then
             continue
         fi
-        
+
         local compose_file="${instance_dir}docker-compose.yml"
-        
+
         if [ -f "$compose_file" ]; then
             ((instances_tested++))
-            
+
             # Test: Correct SPOKE_TOKEN mapping in generated file
             if grep -q 'SPOKE_TOKEN: ${SPOKE_TOKEN:-}' "$compose_file" 2>/dev/null; then
                 pass "$instance_name: Correct SPOKE_TOKEN mapping"
@@ -247,7 +247,7 @@ test_generated_files() {
             fi
         fi
     done
-    
+
     if [ $instances_tested -gt 0 ]; then
         info "Tested $instances_tested deployed instance(s)"
     else
@@ -272,14 +272,14 @@ main() {
     echo "✅ The Fix: SPOKE_TOKEN now maps to \${SPOKE_TOKEN:-}"
     echo "   Result: Backend receives Hub API token for heartbeat"
     echo ""
-    
+
     # Run test suites
     test_spoke_token_mapping_fix
     test_template_substitution
     test_healthcheck_configurations
     test_network_configuration
     test_generated_files
-    
+
     # Summary
     echo ""
     echo "================================================="
@@ -288,7 +288,7 @@ main() {
     echo -e "Total Tests:  $TESTS_RUN"
     echo -e "${GREEN}Passed:${NC}       $TESTS_PASSED"
     echo -e "${RED}Failed:${NC}       $TESTS_FAILED"
-    
+
     if [ $TESTS_FAILED -eq 0 ]; then
         echo ""
         echo -e "${GREEN}✓✓✓ All template validation tests passed! ✓✓✓${NC}"
@@ -300,13 +300,13 @@ main() {
     else
         echo ""
         echo -e "${RED}✗ Some tests failed${NC}"
-        
+
         # Check if the critical bug is still present
         if grep -q 'SPOKE_TOKEN: ${SPOKE_OPAL_TOKEN' "${DIVE_ROOT}/templates/spoke/docker-compose.template.yml" 2>/dev/null; then
             critical "THE CRITICAL BUG IS STILL PRESENT IN TEMPLATE!"
             critical "Fix required: Change SPOKE_OPAL_TOKEN to SPOKE_TOKEN in template"
         fi
-        
+
         exit 1
     fi
 }

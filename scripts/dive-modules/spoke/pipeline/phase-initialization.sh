@@ -57,7 +57,7 @@ spoke_phase_initialization() {
         # BEST PRACTICE: Always regenerate docker-compose.yml from template (SSOT)
         # This eliminates drift entirely - template is always authoritative
         log_step "Regenerating docker-compose.yml from template (SSOT)"
-        
+
         if ! spoke_init_generate_compose "$instance_code"; then
             log_warn "Failed to regenerate docker-compose.yml (continuing with existing)"
         else
@@ -498,7 +498,7 @@ spoke_init_prepare_certificates() {
     # This ensures consistent SANs across all deployment paths
     # FIX (2026-01-15): Consolidated duplicate certificate generation code
     # ==========================================================================
-    
+
     # Load certificates module (SSOT for all certificate operations)
     if [ -f "${DIVE_ROOT}/scripts/dive-modules/certificates.sh" ]; then
         source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
@@ -507,7 +507,7 @@ spoke_init_prepare_certificates() {
         if type generate_spoke_certificate &>/dev/null; then
             if generate_spoke_certificate "$code_lower"; then
                 log_success "Federation certificates prepared via SSOT"
-                
+
                 # Sync mkcert root CA (required for TLS trust)
                 if type install_mkcert_ca_in_spoke &>/dev/null; then
                     install_mkcert_ca_in_spoke "$code_lower" 2>/dev/null || {
@@ -525,7 +525,7 @@ spoke_init_prepare_certificates() {
                         fi
                     }
                 fi
-                
+
                 return 0
             else
                 log_warn "SSOT certificate generation failed, trying fallback..."
@@ -538,13 +538,13 @@ spoke_init_prepare_certificates() {
     # ==========================================================================
     log_warn "certificates.sh module not found - using minimal fallback"
     log_warn "This is NOT recommended - ensure certificates.sh is available"
-    
+
     if ! command -v mkcert &>/dev/null; then
         log_error "mkcert required but not installed"
         log_error "Install: brew install mkcert && mkcert -install"
         return 1
     fi
-    
+
     # Minimal certificate generation (missing Hub SANs - federation may fail!)
     log_warn "Generating certificate with INCOMPLETE SANs (Hub SANs missing)"
     mkcert -key-file "$spoke_dir/certs/key.pem" \

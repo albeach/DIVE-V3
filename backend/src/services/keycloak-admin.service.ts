@@ -76,8 +76,8 @@ class KeycloakAdminService {
         }
 
         const username = process.env.KEYCLOAK_ADMIN_USER || process.env.KEYCLOAK_ADMIN_USERNAME || 'admin';
-        // Load Keycloak admin password from GCP Secret Manager
-        const password = process.env.KEYCLOAK_ADMIN_PASSWORD;
+        // Load Keycloak admin password from GCP Secret Manager (KC_ADMIN_PASSWORD for Keycloak v26 consistency)
+        const password = process.env.KC_ADMIN_PASSWORD || process.env.KEYCLOAK_ADMIN_PASSWORD;
 
         // Always authenticate against master realm for admin operations
         const masterAuthUrl = `${this.axios.defaults.baseURL.replace(/\/$/, '')}/realms/master/protocol/openid-connect/token`;
