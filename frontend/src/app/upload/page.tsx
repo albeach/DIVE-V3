@@ -7,6 +7,8 @@ import Link from 'next/link';
 import PageLayout from '@/components/layout/page-layout';
 import FileUploader from '@/components/upload/file-uploader';
 import SecurityLabelForm from '@/components/upload/security-label-form';
+import { useTranslation } from '@/hooks/useTranslation';
+import { useLocale } from '@/contexts/LocaleContext';
 
 const classificationColors: Record<string, string> = {
   'UNCLASSIFIED': 'bg-green-100 text-green-800 border-green-300',
@@ -22,6 +24,8 @@ const CURRENT_INSTANCE = process.env.NEXT_PUBLIC_INSTANCE || 'USA';
 export default function UploadPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
+  const { t } = useTranslation('resources');
+  const { locale } = useLocale();
 
   const [file, setFile] = useState<File | null>(null);
   const [classification, setClassification] = useState('UNCLASSIFIED');
@@ -84,17 +88,17 @@ export default function UploadPage() {
 
   const handleUpload = async () => {
     if (!file) {
-      setError('Please select a file to upload');
+      setError(t('upload.metadata.titlePlaceholder'));
       return;
     }
 
     if (!title.trim()) {
-      setError('Please enter a document title');
+      setError(t('upload.metadata.titlePlaceholder'));
       return;
     }
 
     if (releasabilityTo.length === 0) {
-      setError('Please select at least one country for releasability');
+      setError(t('errors.insufficientClearance'));
       return;
     }
 
