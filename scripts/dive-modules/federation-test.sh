@@ -136,7 +136,7 @@ run_federation_basic_tests() {
     ((tests_total++))
     local kc_url="${hub_url//4000/8443}"
     echo -n "   Hub Keycloak discovery: "
-    if curl -sk --max-time 5 "${kc_url}/realms/dive-v3-broker/.well-known/openid-connect-configuration" >/dev/null 2>&1; then
+    if curl -sk --max-time 5 "${kc_url}/realms/${HUB_REALM:-dive-v3-broker-usa}/.well-known/openid-connect-configuration" >/dev/null 2>&1; then
         echo -e "${GREEN}✓ PASS${NC}"
         ((tests_passed++))
     else
@@ -385,11 +385,11 @@ test_bidirectional_sso() {
     if [ -n "$hub_token" ]; then
         local source_idp=$(curl -sk --max-time 5 \
             -H "Authorization: Bearer $hub_token" \
-            "https://localhost:8443/admin/realms/dive-v3-broker/identity-provider/instances/${source_lower}-idp" 2>/dev/null | jq -r '.alias // empty')
+            "https://localhost:8443/admin/realms/${HUB_REALM:-dive-v3-broker-usa}/identity-provider/instances/${source_lower}-idp" 2>/dev/null | jq -r '.alias // empty')
 
         local target_idp=$(curl -sk --max-time 5 \
             -H "Authorization: Bearer $hub_token" \
-            "https://localhost:8443/admin/realms/dive-v3-broker/identity-provider/instances/${target_lower}-idp" 2>/dev/null | jq -r '.alias // empty')
+            "https://localhost:8443/admin/realms/${HUB_REALM:-dive-v3-broker-usa}/identity-provider/instances/${target_lower}-idp" 2>/dev/null | jq -r '.alias // empty')
 
         if [ "$source_idp" = "${source_lower}-idp" ] && [ "$target_idp" = "${target_lower}-idp" ]; then
             echo -e "${GREEN}✓ PASS${NC} (Both IdPs configured)"
@@ -470,7 +470,7 @@ federation_health_check() {
     ((total_checks++))
     local keycloak_url="${hub_url//4000/8443}"
     echo -n "3. Hub Keycloak: "
-    if curl -sk --max-time 5 "${keycloak_url}/realms/dive-v3-broker/.well-known/openid-connect-configuration" >/dev/null 2>&1; then
+    if curl -sk --max-time 5 "${keycloak_url}/realms/${HUB_REALM:-dive-v3-broker-usa}/.well-known/openid-connect-configuration" >/dev/null 2>&1; then
         echo -e "${GREEN}✓ PASS${NC}"
         ((passed_checks++))
     else

@@ -237,7 +237,8 @@ spoke_kas_register() {
     fi
 
     kas_url="${kas_url:-https://${code_lower}-api.dive25.com/api/kas}"
-    idp_url="${idp_url:-https://${code_lower}-idp.dive25.com/realms/dive-v3-broker}"
+    # FIX (2026-01-15): Realm name includes instance code suffix
+    idp_url="${idp_url:-https://${code_lower}-idp.dive25.com/realms/dive-v3-broker-${code_lower}}"
     internal_kas_url="http://kas-${code_lower}:8080"
 
     if [ "$DRY_RUN" = true ]; then
@@ -267,7 +268,7 @@ spoke_kas_register() {
   "authMethod": "jwt",
   "authConfig": {
     "jwtIssuer": "${idp_url}",
-    "jwtAudience": "dive-v3-broker"
+    "jwtAudience": "dive-v3-broker-${code_lower}"
   },
   "trustLevel": "high",
   "supportedCountries": ["${code_upper}"],
@@ -408,27 +409,255 @@ spoke_kas_logs() {
     fi
 }
 
+# =============================================================================
+# MONGODB KAS REGISTRATION (Phase 3: MongoDB-Only Architecture)
+# =============================================================================
+
+##
+# Register spoke KAS instance in MongoDB via Backend API
+# This replaces file-based kas-registry.json for spoke deployments
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - Success (registered or already exists)
+#   1 - Failed to register
+##
+spoke_kas_register_mongodb() {
+    local instance_code="${1:-${INSTANCE:-}}"
+
+    if [ -z "$instance_code" ]; then
+        log_error "Instance code required"
+        echo "Usage: ./dive spoke kas register-mongodb <CODE>"
+        return 1
+    fi
+
+    local code_lower=$(lower "$instance_code")
+    local code_upper=$(upper "$instance_code")
+    local kas_id="${code_lower}-kas"
+
+    echo -e "${BOLD}Register Spoke KAS in MongoDB - ${code_upper}${NC}"
+    echo ""
+
+    # Get country info
+    local country_name
+    local spoke_config="${DIVE_ROOT}/instances/${code_lower}/config.json"
+
+    if [ -f "$spoke_config" ]; then
+        country_name=$(jq -r '.name // .instanceName // "Unknown"' "$spoke_config" 2>/dev/null)
+    else
+        country_name=$(get_country_name "$code_upper" 2>/dev/null || echo "$code_upper")
+    fi
+
+    # Calculate ports
+    eval "$(_spoke_kas_get_ports "$code_upper")"
+
+    # Get URLs from config or generate defaults for LOCAL Docker development
+    local kas_url internal_kas_url idp_url
+    local backend_port="${SPOKE_BACKEND_PORT:-14000}"
+    local kas_port="${SPOKE_KAS_PORT:-10008}"
+    local keycloak_https_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8451}"
+
+    if [ -f "$spoke_config" ]; then
+        kas_url=$(jq -r '.endpoints.kas // empty' "$spoke_config" 2>/dev/null)
+        idp_url=$(jq -r '.endpoints.idp // empty' "$spoke_config" 2>/dev/null)
+    fi
+
+    # Use localhost URLs for local Docker development (operational!)
+    # External URLs would be: https://${code_lower}-kas.dive25.com for production
+    kas_url="${kas_url:-https://localhost:${kas_port}}"
+    internal_kas_url="https://kas:8080"  # Docker service name for container-to-container
+    idp_url="${idp_url:-https://localhost:${keycloak_https_port}/realms/dive-v3-broker-${code_lower}}"
+
+    # Backend API endpoint (local Docker network)
+    local backend_container="dive-spoke-${code_lower}-backend"
+    local api_endpoint="https://localhost:${backend_port}/api/kas/register"
+
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would register $kas_id in MongoDB via $api_endpoint"
+        log_dry "  Organization: $country_name"
+        log_dry "  Country Code: $code_upper"
+        log_dry "  KAS URL: $kas_url"
+        return 0
+    fi
+
+    log_info "Registering $kas_id in MongoDB..."
+    echo "  Organization: $country_name"
+    echo "  Country Code: $code_upper"
+    echo "  KAS URL: $kas_url"
+    echo ""
+
+    # Check if backend is running
+    if ! docker ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
+        log_error "Backend container not running: $backend_container"
+        log_info "Start the spoke first: ./dive --instance $code_lower spoke up"
+        return 1
+    fi
+    
+    # CRITICAL: Wait for backend to be healthy before attempting registration
+    log_verbose "Waiting for backend to be healthy..."
+    local max_wait=60
+    local elapsed=0
+    while [ $elapsed -lt $max_wait ]; do
+        local health_status=$(docker inspect "$backend_container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+        
+        if [ "$health_status" = "healthy" ]; then
+            log_verbose "✓ Backend is healthy, proceeding with registration"
+            break
+        fi
+        
+        sleep 2
+        ((elapsed += 2))
+    done
+    
+    if [ $elapsed -ge $max_wait ]; then
+        log_error "Backend not healthy after ${max_wait}s - cannot register KAS"
+        return 1
+    fi
+
+    # Create registration payload
+    # IMPORTANT: countryCode must be ISO 3166-1 alpha-3 (e.g., USA, FRA, EST)
+    # kasUrl = External/localhost URL for clients
+    # internalKasUrl = Docker service name for container-to-container
+    local payload
+    payload=$(cat << EOF
+{
+  "kasId": "${kas_id}",
+  "organization": "${country_name}",
+  "countryCode": "${code_upper}",
+  "kasUrl": "${kas_url}",
+  "internalKasUrl": "${internal_kas_url}",
+  "jwtIssuer": "${idp_url}",
+  "supportedCountries": ["${code_upper}"],
+  "supportedCOIs": ["NATO", "NATO-COSMIC"],
+  "capabilities": ["key-release", "policy-evaluation", "audit-logging", "ztdf-support"],
+  "contact": "kas-admin@${code_lower}.dive25.com"
+}
+EOF
+)
+
+    # Call backend API to register KAS in MongoDB
+    local response
+    response=$(curl -sk -X POST \
+        -H "Content-Type: application/json" \
+        -d "$payload" \
+        "$api_endpoint" 2>&1)
+
+    local curl_exit=$?
+
+    if [ $curl_exit -ne 0 ]; then
+        log_error "Failed to connect to backend API: $api_endpoint"
+        log_error "curl exit code: $curl_exit"
+        log_error "Ensure backend is healthy: docker ps --filter name=$backend_container"
+        return 1
+    fi
+
+    # Check response
+    local success
+    success=$(echo "$response" | jq -r '.success // false' 2>/dev/null)
+
+    if [ "$success" = "true" ]; then
+        log_success "KAS $kas_id registered in MongoDB"
+        echo ""
+        echo -e "${BOLD}Registration Details:${NC}"
+        echo "  Status: pending (awaiting admin approval)"
+        echo "  Approve with: ./dive kas approve $kas_id"
+        return 0
+    fi
+
+    # Check if already registered (409 Conflict)
+    local error_msg
+    error_msg=$(echo "$response" | jq -r '.error // "Unknown error"' 2>/dev/null)
+
+    if echo "$error_msg" | grep -qi "already registered"; then
+        log_info "KAS $kas_id is already registered in MongoDB"
+        return 0
+    fi
+
+    log_error "Failed to register KAS: $error_msg"
+    log_error "Full backend response:"
+    echo "$response" | jq . 2>/dev/null || echo "$response"
+    log_error ""
+    log_error "Registration payload sent:"
+    echo "$payload" | jq . 2>/dev/null
+    log_error ""
+    log_error "Backend endpoint: $api_endpoint"
+    log_error "Backend container: $backend_container"
+    return 1
+}
+
+##
+# Auto-approve a KAS registration (for automated deployment)
+#
+# Arguments:
+#   $1 - KAS ID (e.g., hun-kas)
+#
+# Returns:
+#   0 - Success
+#   1 - Failure
+##
+spoke_kas_approve() {
+    local kas_id="$1"
+
+    if [ -z "$kas_id" ]; then
+        log_error "KAS ID required"
+        echo "Usage: ./dive spoke kas approve <kas-id>"
+        return 1
+    fi
+
+    # Extract instance code from kas_id (e.g., hun-kas -> hun)
+    local code_lower="${kas_id%-kas}"
+    local backend_port
+    eval "$(get_instance_ports "$(upper "$code_lower")")"
+    backend_port="${SPOKE_BACKEND_PORT:-14000}"
+
+    local api_endpoint="https://localhost:${backend_port}/api/kas/registry/${kas_id}/approve"
+
+    log_info "Approving KAS registration: $kas_id"
+
+    local response
+    response=$(curl -sk -X POST "$api_endpoint" 2>&1)
+
+    local success
+    success=$(echo "$response" | jq -r '.success // false' 2>/dev/null)
+
+    if [ "$success" = "true" ]; then
+        log_success "KAS $kas_id approved and activated"
+        return 0
+    fi
+
+    local error_msg
+    error_msg=$(echo "$response" | jq -r '.error // "Unknown error"' 2>/dev/null)
+    log_error "Failed to approve KAS: $error_msg"
+    return 1
+}
+
 # Spoke KAS command dispatcher
 spoke_kas() {
     local subcommand="${1:-status}"
     shift || true
 
     case "$subcommand" in
-        init)       spoke_kas_init "$@" ;;
-        status)     spoke_kas_status "$@" ;;
-        health)     spoke_kas_health "$@" ;;
-        register)   spoke_kas_register "$@" ;;
-        unregister) spoke_kas_unregister "$@" ;;
-        logs)       spoke_kas_logs "$@" ;;
+        init)             spoke_kas_init "$@" ;;
+        status)           spoke_kas_status "$@" ;;
+        health)           spoke_kas_health "$@" ;;
+        register)         spoke_kas_register "$@" ;;
+        register-mongodb) spoke_kas_register_mongodb "$@" ;;
+        approve)          spoke_kas_approve "$@" ;;
+        unregister)       spoke_kas_unregister "$@" ;;
+        logs)             spoke_kas_logs "$@" ;;
         *)
             echo -e "${BOLD}Spoke KAS Commands:${NC}"
             echo ""
-            echo "  init <code>        Initialize KAS for a spoke"
-            echo "  status <code>      Show KAS status"
-            echo "  health <code>      Detailed health check"
-            echo "  register <code>    Register in federation registry"
-            echo "  unregister <code>  Remove from registry"
-            echo "  logs <code> [-f]   View KAS logs"
+            echo "  init <code>             Initialize KAS for a spoke"
+            echo "  status <code>           Show KAS status"
+            echo "  health <code>           Detailed health check"
+            echo "  register <code>         Register in file-based registry (legacy)"
+            echo "  register-mongodb <code> Register in MongoDB (recommended)"
+            echo "  approve <kas-id>        Approve a pending KAS registration"
+            echo "  unregister <code>       Remove from registry"
+            echo "  logs <code> [-f]        View KAS logs"
             echo ""
             ;;
     esac

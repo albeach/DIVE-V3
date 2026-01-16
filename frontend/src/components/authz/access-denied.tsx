@@ -68,8 +68,8 @@ export default function AccessDenied({ resource, denial, userCountry, suggestedR
         resourceId: denial.details?.resource?.resourceId || resource.resourceId,
         title: denial.details?.resource?.title || resource.title,
         classification: denial.details?.resource?.classification || resource.classification,
-        releasabilityTo: denial.details?.resource?.releasabilityTo || resource.releasabilityTo,
-        coi: denial.details?.resource?.coi || resource.COI
+        releasabilityTo: Array.from(new Set(denial.details?.resource?.releasabilityTo || resource.releasabilityTo || [])),
+        coi: Array.from(new Set(denial.details?.resource?.coi || resource.COI || []))
     };
 
     // Determine which checks failed

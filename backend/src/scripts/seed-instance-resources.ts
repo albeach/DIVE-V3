@@ -536,9 +536,10 @@ interface IKASRegistry {
 interface IKASServer {
     kasId: string;
     organization: string;
-    countryCode: string;
+    countryCode: string;  // ISO 3166-1 alpha-3 - SSOT for KAS home country
+    supportedCountries?: string[];  // ISO codes this KAS can serve (defaults to [countryCode])
     kasUrl: string;
-    internalKasUrl: string;
+    internalKasUrl?: string;  // Optional for MongoDB registrations
     supportedCOIs: string[];
 }
 
@@ -597,8 +598,13 @@ interface ISeedOptions {
 
 function parseArgs(): ISeedOptions {
     const args = process.argv.slice(2);
+
+    // INSTANCE_CODE from environment takes precedence (ISO 3166-1 alpha-3)
+    // This enables Docker exec with: INSTANCE_CODE=EST npm run seed:instance
+    const envInstance = process.env.INSTANCE_CODE?.toUpperCase();
+
     const options: ISeedOptions = {
-        instance: 'USA',
+        instance: envInstance || 'USA',  // Use env var or default to USA
         count: 5000,  // Default: 5000 ZTDF encrypted documents per instance
         dryRun: false,
         replace: false,
@@ -608,7 +614,7 @@ function parseArgs(): ISeedOptions {
 
     for (const arg of args) {
         if (arg.startsWith('--instance=')) {
-            options.instance = arg.split('=')[1].toUpperCase();
+            options.instance = arg.split('=')[1].toUpperCase();  // CLI overrides env
         } else if (arg.startsWith('--count=')) {
             options.count = parseInt(arg.split('=')[1], 10);
         } else if (arg === '--dry-run') {
@@ -723,7 +729,55 @@ function loadFederationRegistry(): IFederationRegistry {
     return JSON.parse(content);
 }
 
-function loadKASRegistry(): IKASRegistry {
+async function loadKASRegistry(): Promise<IKASRegistry> {
+    // Try to load from MongoDB (SSOT) first
+    try {
+        const { MongoKasRegistryStore } = await import('../models/kas-registry.model');
+        const kasStore = new MongoKasRegistryStore();
+        await kasStore.initialize();
+
+        // Get all active KAS servers from database
+        const kasServers = await kasStore.findAll();
+        const activeServers = kasServers.filter(k => k.enabled && k.status === 'active');
+
+        if (activeServers.length > 0) {
+            console.log(`   ✅ Loaded ${activeServers.length} KAS servers from MongoDB (SSOT)`);
+
+            // Convert to legacy format for compatibility
+            return {
+                kasServers: activeServers.map(k => ({
+                    kasId: k.kasId,
+                    organization: k.organization,
+                    countryCode: k.kasId.split('-')[0].toUpperCase(), // Extract from kasId (e.g., hun-kas -> HUN)
+                    kasUrl: k.kasUrl,
+                    internalKasUrl: k.kasUrl, // Use same URL for now
+                    authMethod: k.authMethod,
+                    authConfig: {
+                        jwtIssuer: k.authConfig.jwtIssuer,
+                        jwtAudience: k.authConfig.jwtAudience || 'dive-v3-broker'
+                    },
+                    trustLevel: k.trustLevel,
+                    supportedCountries: k.supportedCountries,
+                    supportedCOIs: k.supportedCOIs,
+                    policyTranslation: k.policyTranslation,
+                    metadata: {
+                        version: k.metadata.version,
+                        capabilities: k.metadata.capabilities,
+                        contact: k.metadata.contact || '',
+                        lastVerified: k.metadata.lastVerified?.toISOString() || new Date().toISOString()
+                    }
+                })),
+                version: '2.0',
+                federationTrust: {
+                    trustMatrix: {} // TODO: Build from agreements if needed
+                }
+            };
+        }
+    } catch (error) {
+        console.warn('   ⚠️ Could not load from MongoDB, falling back to file');
+    }
+
+    // Fallback to file
     const content = fs.readFileSync(KAS_REGISTRY_PATH, 'utf-8');
     return JSON.parse(content);
 }
@@ -796,6 +850,7 @@ async function getMongoDBConnection(config: IInstanceConfig, instanceCode: strin
 
 function getKASServersForInstance(kasRegistry: IKASRegistry, instanceCode: string): IKASServer[] {
     const servers: IKASServer[] = [];
+    // Find KAS where countryCode matches (SSOT: ISO 3166-1 alpha-3)
     const localKas = kasRegistry.kasServers?.find(k => k.countryCode === instanceCode);
 
     if (localKas) {
@@ -1894,7 +1949,7 @@ async function main() {
     // Load configurations
     console.log('📋 Loading configuration...');
     const federationRegistry = loadFederationRegistry();
-    const kasRegistry = loadKASRegistry();
+    const kasRegistry = await loadKASRegistry();
     console.log(`   Found ${Object.keys(federationRegistry.instances).length} instances`);
     console.log(`   Found ${kasRegistry.kasServers?.length || 0} KAS servers\n`);
 

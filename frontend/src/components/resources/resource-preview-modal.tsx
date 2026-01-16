@@ -1,12 +1,12 @@
 /**
  * Resource Preview Modal Component (2025)
- * 
+ *
  * Quick preview modal for resources with:
  * - Keyboard navigation (Space to open, arrows to navigate)
  * - Swipe gestures on mobile
  * - Quick actions (open, bookmark, export)
  * - WCAG 2.1 AA compliant accessibility
- * 
+ *
  * Accessibility features:
  * - role="dialog" with aria-modal="true"
  * - aria-labelledby and aria-describedby
@@ -21,17 +21,17 @@ import React, { useEffect, useCallback, useRef, useId } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
-import { 
-  X, 
-  ChevronLeft, 
-  ChevronRight, 
-  ExternalLink, 
-  Bookmark, 
-  Download, 
-  Shield, 
-  Globe2, 
-  Users, 
-  Lock, 
+import {
+  X,
+  ChevronLeft,
+  ChevronRight,
+  ExternalLink,
+  Bookmark,
+  Download,
+  Shield,
+  Globe2,
+  Users,
+  Lock,
   FileText,
   Calendar,
   Eye,
@@ -107,7 +107,7 @@ export default function ResourcePreviewModal({
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
   const [mounted, setMounted] = React.useState(false);
-  
+
   // Generate unique IDs for ARIA attributes
   const titleId = useId();
   const descId = useId();
@@ -206,17 +206,17 @@ export default function ResourcePreviewModal({
 
   // Touch/swipe handling
   const touchStartX = useRef<number | null>(null);
-  
+
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
   };
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (touchStartX.current === null) return;
-    
+
     const touchEndX = e.changedTouches[0].clientX;
     const diff = touchStartX.current - touchEndX;
-    
+
     if (Math.abs(diff) > 50) {
       if (diff > 0 && hasNext) {
         onNavigate('next');
@@ -224,7 +224,7 @@ export default function ResourcePreviewModal({
         onNavigate('prev');
       }
     }
-    
+
     touchStartX.current = null;
   };
 
@@ -265,7 +265,7 @@ export default function ResourcePreviewModal({
 
   if (!mounted) return null;
 
-  const classColors = resource 
+  const classColors = resource
     ? (classificationColors[resource.classification] || { bg: 'bg-gray-100', text: 'text-gray-800', border: 'border-gray-300' })
     : { bg: '', text: '', border: '' };
 
@@ -296,7 +296,7 @@ export default function ResourcePreviewModal({
             onTouchStart={handleTouchStart}
             onTouchEnd={handleTouchEnd}
           >
-            <div 
+            <div
               role="dialog"
               aria-modal="true"
               aria-labelledby={titleId}
@@ -340,7 +340,7 @@ export default function ResourcePreviewModal({
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-2 flex-wrap">
-                        <span 
+                        <span
                           className={`px-3 py-1 rounded-lg text-sm font-bold ${classColors.bg} ${classColors.text} border ${classColors.border}`}
                           role="status"
                           aria-label={`Classification: ${resource.classification.replace('_', ' ')}`}
@@ -353,7 +353,7 @@ export default function ResourcePreviewModal({
                           </span>
                         )}
                         {resource.encrypted && (
-                          <span 
+                          <span
                             className="px-2 py-1 rounded-lg text-xs font-bold bg-purple-600 text-white"
                             aria-label="Resource is encrypted with ZTDF"
                           >
@@ -362,13 +362,13 @@ export default function ResourcePreviewModal({
                           </span>
                         )}
                       </div>
-                      <h2 
+                      <h2
                         id={titleId}
                         className="text-xl font-bold text-gray-900 dark:text-white mb-1"
                       >
                         {resource.title}
                       </h2>
-                      <p 
+                      <p
                         id={descId}
                         className="text-sm text-gray-600 dark:text-gray-400 font-mono"
                       >
@@ -404,7 +404,7 @@ export default function ResourcePreviewModal({
                         {accessIndicator.message}
                       </p>
                       <p className="text-xs text-gray-600 dark:text-gray-400">
-                        Based on your clearance: {userAttributes?.clearance || 'Unknown'}, 
+                        Based on your clearance: {userAttributes?.clearance || 'Unknown'},
                         Country: {userAttributes?.country || 'Unknown'}
                       </p>
                     </div>
@@ -421,7 +421,7 @@ export default function ResourcePreviewModal({
                         </h4>
                       </div>
                       <div className="flex flex-wrap gap-1.5">
-                        {resource.releasabilityTo.map((country) => (
+                        {Array.from(new Set(resource.releasabilityTo)).map((country) => (
                           <span
                             key={country}
                             className={`px-2 py-1 rounded-md text-xs font-semibold ${
@@ -446,7 +446,7 @@ export default function ResourcePreviewModal({
                       </div>
                       {resource.COI && resource.COI.length > 0 ? (
                         <div className="flex flex-wrap gap-1.5">
-                          {resource.COI.map((coi) => (
+                          {Array.from(new Set(resource.COI)).map((coi) => (
                             <span
                               key={coi}
                               className={`px-2 py-1 rounded-md text-xs font-semibold ${
@@ -557,7 +557,7 @@ export function useResourcePreview(resources: IResource[]) {
 
   const navigatePreview = useCallback((direction: 'prev' | 'next') => {
     if (selectedIndex === null) return;
-    
+
     if (direction === 'prev' && selectedIndex > 0) {
       setSelectedIndex(selectedIndex - 1);
     } else if (direction === 'next' && selectedIndex < resources.length - 1) {

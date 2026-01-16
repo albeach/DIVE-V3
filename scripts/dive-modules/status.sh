@@ -1141,7 +1141,7 @@ cmd_diagnostics() {
         realms=$(echo "$realms" | tr -d -c '0-9' || echo "0")
         if [ "$realms" -eq 0 ]; then
             warnings_found=$((warnings_found + 1))
-            echo -e "  ${YELLOW}⚠${NC} Keycloak dive-v3-broker realm may not exist"
+            echo -e "  ${YELLOW}⚠${NC} Keycloak ${HUB_REALM:-dive-v3-broker-usa} realm may not exist"
             echo -e "    ${GRAY}Fix:${NC} ./dive hub reset keycloak"
         else
             echo -e "  ${GREEN}✓${NC} Keycloak realm(s) configured"
@@ -1251,7 +1251,7 @@ cmd_diagnostics() {
     spokes_running=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E "^(est|gbr|fra|deu|pol|dnk)-" | sed 's/-.*//' | sort -u)
     if [ -n "$spokes_running" ]; then
         local hub_idps
-        hub_idps=$(curl -ks https://localhost:8443/admin/realms/dive-v3-broker/identity-providers 2>/dev/null | jq -r '.[].alias' 2>/dev/null || echo "")
+        hub_idps=$(curl -ks "https://localhost:8443/admin/realms/${HUB_REALM:-dive-v3-broker-usa}/identity-providers" 2>/dev/null | jq -r '.[].alias' 2>/dev/null || echo "")
         while IFS= read -r spoke; do
             [ -z "$spoke" ] && continue
             if ! echo "$hub_idps" | grep -q "${spoke}-idp"; then

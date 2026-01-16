@@ -1497,7 +1497,7 @@ _spoke_deploy_legacy() {
                 local spoke_idp_check
                 spoke_idp_check=$(docker exec "$hub_kc_container" curl -sf \
                     -H "Authorization: Bearer $hub_token" \
-                    "http://localhost:8080/admin/realms/dive-v3-broker/identity-provider/instances/${code_lower}-idp" 2>/dev/null)
+                    "http://localhost:8080/admin/realms/${HUB_REALM:-dive-v3-broker-usa}/identity-provider/instances/${code_lower}-idp" 2>/dev/null)
                 if echo "$spoke_idp_check" | grep -q '"alias"'; then
                     hub_has_spoke_idp=true
                 fi

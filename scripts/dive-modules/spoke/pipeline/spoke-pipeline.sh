@@ -32,6 +32,11 @@ if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../orchestration-state-db.sh" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/../../orchestration-state-db.sh"
 fi
 
+# Load error recovery module
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../error-recovery.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../../error-recovery.sh"
+fi
+
 # =============================================================================
 # PIPELINE CONSTANTS
 # =============================================================================
@@ -122,6 +127,28 @@ spoke_pipeline_execute() {
         fi
         lock_acquired=true
     fi
+    
+    # CRITICAL: Execute pipeline with guaranteed lock cleanup
+    # Use subshell pattern to ensure cleanup happens even on early returns
+    local pipeline_result=0
+    _spoke_pipeline_execute_internal "$code_upper" "$instance_name" "$pipeline_mode" "$start_time" || pipeline_result=$?
+    
+    # ALWAYS release lock (runs whether pipeline succeeded or failed)
+    if [ "$lock_acquired" = true ] && type orch_release_deployment_lock &>/dev/null; then
+        orch_release_deployment_lock "$code_upper"
+    fi
+    
+    return $pipeline_result
+}
+
+##
+# Internal pipeline execution (separated for proper cleanup handling)
+##
+_spoke_pipeline_execute_internal() {
+    local code_upper="$1"
+    local instance_name="$2"
+    local pipeline_mode="$3"
+    local start_time="$4"
 
     # Initialize orchestration context
     orch_init_context "$code_upper" "$instance_name"
@@ -166,6 +193,14 @@ spoke_pipeline_execute() {
             log_warn "Initialization phase failed, stopping pipeline"
             phase_result=1
         fi
+        
+        # Check failure threshold after INITIALIZATION
+        if [ $phase_result -eq 0 ] && type orch_check_failure_threshold &>/dev/null; then
+            if ! orch_check_failure_threshold "$code_upper"; then
+                log_error "Failure threshold exceeded after INITIALIZATION - aborting deployment"
+                phase_result=1
+            fi
+        fi
     else
         [ "$pipeline_mode" = "$PIPELINE_MODE_UP" ] && log_verbose "Skipping INITIALIZATION (up mode)"
     fi
@@ -177,6 +212,14 @@ spoke_pipeline_execute() {
             log_warn "Deployment phase failed, stopping pipeline"
             phase_result=1
         fi
+        
+        # Check failure threshold after DEPLOYMENT
+        if [ $phase_result -eq 0 ] && type orch_check_failure_threshold &>/dev/null; then
+            if ! orch_check_failure_threshold "$code_upper"; then
+                log_error "Failure threshold exceeded after DEPLOYMENT - aborting deployment"
+                phase_result=1
+            fi
+        fi
     fi
 
     # Phase 4: Configuration (always runs)
@@ -186,6 +229,14 @@ spoke_pipeline_execute() {
             log_warn "Configuration phase failed, stopping pipeline"
             phase_result=1
         fi
+        
+        # Check failure threshold after CONFIGURATION
+        if [ $phase_result -eq 0 ] && type orch_check_failure_threshold &>/dev/null; then
+            if ! orch_check_failure_threshold "$code_upper"; then
+                log_error "Failure threshold exceeded after CONFIGURATION - aborting deployment"
+                phase_result=1
+            fi
+        fi
     fi
 
     # Phase 5: Seeding (deploy mode only)
@@ -194,6 +245,14 @@ spoke_pipeline_execute() {
         if ! spoke_pipeline_run_phase "$code_upper" "SEEDING" "$pipeline_mode"; then
             log_warn "Seeding phase failed, stopping pipeline"
             phase_result=1
+        fi
+        
+        # Check failure threshold after SEEDING
+        if [ $phase_result -eq 0 ] && type orch_check_failure_threshold &>/dev/null; then
+            if ! orch_check_failure_threshold "$code_upper"; then
+                log_error "Failure threshold exceeded after SEEDING - aborting deployment"
+                phase_result=1
+            fi
         fi
     else
         [ "$pipeline_mode" != "$PIPELINE_MODE_DEPLOY" ] && log_verbose "Skipping SEEDING (not deploy mode)"
@@ -206,6 +265,15 @@ spoke_pipeline_execute() {
             log_warn "Verification phase failed, stopping pipeline"
             phase_result=1
         fi
+        
+        # Check failure threshold after VERIFICATION
+        if [ $phase_result -eq 0 ] && type orch_check_failure_threshold &>/dev/null; then
+            if ! orch_check_failure_threshold "$code_upper"; then
+                log_error "Failure threshold exceeded after VERIFICATION - marking deployment degraded"
+                # Don't fail here - verification complete, just warn
+                log_warn "Deployment may have accumulated errors - review logs"
+            fi
+        fi
     fi
 
     log_verbose "Phase execution complete (result: $phase_result)"
@@ -214,7 +282,7 @@ spoke_pipeline_execute() {
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
 
-    # Finalize (release lock will happen in cleanup below)
+    # Finalize
     if [ $phase_result -eq 0 ]; then
         orch_db_set_state "$code_upper" "COMPLETE" "" \
             "{\"duration_seconds\":$duration,\"mode\":\"$pipeline_mode\"}"
@@ -225,7 +293,7 @@ spoke_pipeline_execute() {
         fi
 
         spoke_pipeline_print_success "$code_upper" "$instance_name" "$duration" "$pipeline_mode"
-        local final_result=0
+        return 0
     else
         orch_db_set_state "$code_upper" "FAILED" "Pipeline failed" \
             "{\"duration_seconds\":$duration,\"mode\":\"$pipeline_mode\"}"
@@ -236,15 +304,8 @@ spoke_pipeline_execute() {
         fi
 
         spoke_pipeline_print_failure "$code_upper" "$instance_name" "$duration"
-        local final_result=1
+        return 1
     fi
-
-    # Always release deployment lock at the end
-    if [ "$lock_acquired" = true ] && type orch_release_deployment_lock &>/dev/null; then
-        orch_release_deployment_lock "$code_upper"
-    fi
-
-    return $final_result
 }
 
 ##

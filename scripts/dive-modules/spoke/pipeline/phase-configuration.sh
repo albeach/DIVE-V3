@@ -23,6 +23,20 @@ fi
 export SPOKE_PHASE_CONFIGURATION_LOADED=1
 
 # =============================================================================
+# LOAD SPOKE FEDERATION MODULE
+# =============================================================================
+# Load spoke-federation.sh for spoke_federation_setup() function
+if [ -z "$SPOKE_FEDERATION_LOADED" ]; then
+    _spoke_fed_path="${BASH_SOURCE[0]%/*}/spoke-federation.sh"
+    if [ -f "$_spoke_fed_path" ]; then
+        source "$_spoke_fed_path"
+    elif [ -f "${DIVE_ROOT}/scripts/dive-modules/spoke/pipeline/spoke-federation.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/spoke/pipeline/spoke-federation.sh"
+    fi
+    unset _spoke_fed_path
+fi
+
+# =============================================================================
 # MAIN CONFIGURATION PHASE FUNCTION
 # =============================================================================
 
@@ -106,8 +120,210 @@ spoke_phase_configuration() {
 # =============================================================================
 
 ##
-# Register spoke in federation-registry.json and kas-registry.json
+# Register spoke in Hub MongoDB spoke registry
+# CRITICAL: Required for spoke heartbeat authentication
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - Success
+#   1 - Failure
+##
+spoke_config_register_in_hub_mongodb() {
+    local instance_code="$1"
+    local code_upper=$(upper "$instance_code")
+    local code_lower=$(lower "$instance_code")
+    
+    log_verbose "Registering spoke in Hub MongoDB spoke registry..."
+    
+    # Get spoke configuration
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    local config_file="$spoke_dir/config.json"
+    
+    if [ ! -f "$config_file" ]; then
+        log_error "Spoke config not found: $config_file"
+        return 1
+    fi
+    
+    local spoke_id=$(jq -r '.identity.spokeId // empty' "$config_file" 2>/dev/null)
+    local instance_name=$(jq -r '.identity.name // empty' "$config_file" 2>/dev/null)
+    local base_url=$(jq -r '.endpoints.baseUrl // empty' "$config_file" 2>/dev/null)
+    local api_url=$(jq -r '.endpoints.apiUrl // empty' "$config_file" 2>/dev/null)
+    local idp_url=$(jq -r '.endpoints.idpUrl // empty' "$config_file" 2>/dev/null)
+    local idp_public_url=$(jq -r '.endpoints.idpPublicUrl // empty' "$config_file" 2>/dev/null)
+    local contact_email=$(jq -r '.identity.contactEmail // empty' "$config_file" 2>/dev/null)
+    
+    # Fallback to NATO database for name if config doesn't have it
+    if [ -z "$instance_name" ] || [ "$instance_name" = "null" ]; then
+        if [ -n "${NATO_COUNTRIES[$code_upper]}" ]; then
+            instance_name=$(echo "${NATO_COUNTRIES[$code_upper]}" | cut -d'|' -f1)
+        else
+            instance_name="$code_upper Instance"
+        fi
+    fi
+    
+    # Fallback for contact email
+    if [ -z "$contact_email" ] || [ "$contact_email" = "null" ]; then
+        contact_email="admin@${code_lower}.dive25.com"
+    fi
+    
+    # Get Keycloak admin password (CRITICAL for bidirectional federation)
+    local keycloak_password_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
+    local keycloak_password="${!keycloak_password_var}"
+    
+    # Validate password exists
+    if [ -z "$keycloak_password" ]; then
+        log_error "Keycloak admin password not found: $keycloak_password_var"
+        log_error "CRITICAL: Bidirectional federation requires spoke Keycloak password"
+        log_error "Set $keycloak_password_var in environment or spoke .env file"
+        return 1
+    fi
+    
+    log_verbose "Using Keycloak password for bidirectional federation (${#keycloak_password} chars)"
+    
+    # Build registration payload matching API schema exactly
+    # Reference: backend/src/routes/federation.routes.ts line 180-198
+    # CRITICAL: Include keycloakAdminPassword for bidirectional federation
+    local payload=$(cat <<EOF
+{
+  "instanceCode": "$code_upper",
+  "name": "$instance_name",
+  "baseUrl": "$base_url",
+  "apiUrl": "$api_url",
+  "idpUrl": "$idp_url",
+  "idpPublicUrl": "$idp_public_url",
+  "requestedScopes": ["policy:base", "policy:org", "policy:tenant"],
+  "contactEmail": "$contact_email",
+  "keycloakAdminPassword": "$keycloak_password",
+  "skipValidation": true
+}
+EOF
+)
+    
+    # Call Hub registration endpoint
+    local hub_api="https://localhost:4000/api/federation/register"
+    local response
+    local http_code
+    
+    response=$(curl -sk -X POST "$hub_api" \
+        -H "Content-Type: application/json" \
+        -d "$payload" \
+        -w "\nHTTP_CODE:%{http_code}" 2>&1)
+    
+    http_code=$(echo "$response" | grep "HTTP_CODE:" | cut -d: -f2)
+    response=$(echo "$response" | sed '/HTTP_CODE:/d')
+    
+    if [ "$http_code" = "200" ] || [ "$http_code" = "201" ]; then
+        log_success "✓ Spoke registered in Hub MongoDB"
+        
+        # Extract spokeId and status from response
+        local registered_spoke_id=$(echo "$response" | jq -r '.spoke.spokeId // empty' 2>/dev/null)
+        local spoke_status=$(echo "$response" | jq -r '.spoke.status // empty' 2>/dev/null)
+        
+        log_verbose "Spoke ID: $registered_spoke_id"
+        log_verbose "Status: $spoke_status"
+        
+        # Check if auto-approval succeeded (development mode)
+        if [ "$spoke_status" = "approved" ]; then
+            log_success "✓ Spoke auto-approved (development mode)"
+            
+            # Extract token from auto-approval response
+            local spoke_token=$(echo "$response" | jq -r '.token.token // empty' 2>/dev/null)
+            
+            if [ -n "$spoke_token" ]; then
+                log_success "✓ Token received from auto-approval"
+                
+                # Update .env with SPOKE_TOKEN
+                if grep -q "^SPOKE_TOKEN=" "$spoke_dir/.env" 2>/dev/null; then
+                    sed -i.bak "s|^SPOKE_TOKEN=.*|SPOKE_TOKEN=$spoke_token|" "$spoke_dir/.env"
+                else
+                    echo "SPOKE_TOKEN=$spoke_token" >> "$spoke_dir/.env"
+                fi
+                rm -f "$spoke_dir/.env.bak"
+                
+                log_success "✓ SPOKE_TOKEN configured in .env"
+                return 0
+            else
+                log_warn "Token not found in auto-approval response - may need manual approval"
+            fi
+        elif [ "$spoke_status" = "pending" ]; then
+            log_warn "Spoke status: pending (manual approval required)"
+            log_warn "Auto-approval disabled or bidirectional federation failed"
+        elif [ "$spoke_status" = "suspended" ]; then
+            log_error "Spoke suspended during registration!"
+            local error_msg=$(echo "$response" | jq -r '.spoke.message // empty' 2>/dev/null)
+            log_error "Reason: $error_msg"
+            return 1
+        fi
+        
+        # Fallback: Try manual approval (legacy path - may fail due to auth)
+        if [ -n "$registered_spoke_id" ]; then
+            if spoke_config_approve_and_get_token "$registered_spoke_id" "$code_lower"; then
+                log_success "✓ Manual approval succeeded"
+                return 0
+            else
+                log_warn "Manual approval failed - authentication required"
+            fi
+        fi
+        
+        return 0
+    else
+        log_error "Spoke registration failed (HTTP $http_code)"
+        log_error "Response:"
+        echo "$response" | jq . 2>/dev/null || echo "$response"
+        return 1
+    fi
+}
+
+##
+# Approve spoke and configure its heartbeat token
+##
+spoke_config_approve_and_get_token() {
+    local spoke_id="$1"
+    local code_lower="$2"
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    
+    log_verbose "Auto-approving spoke and generating token..."
+    
+    # Approve spoke
+    local approve_payload='{"allowedScopes":["policy:base","policy:org"],"allowedFeatures":["federation","ztdf","audit"]}'
+    local hub_approve_api="https://localhost:4000/api/federation/spokes/$spoke_id/approve"
+    
+    local approve_response
+    approve_response=$(curl -sk -X POST "$hub_approve_api" \
+        -H "Content-Type: application/json" \
+        -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY:-admin-dev-key}" \
+        -d "$approve_payload" 2>&1)
+    
+    if echo "$approve_response" | jq -e '.success' >/dev/null 2>&1; then
+        # Extract token
+        local spoke_token=$(echo "$approve_response" | jq -r '.hubApiToken.token // empty')
+        
+        if [ -n "$spoke_token" ]; then
+            # Update .env with SPOKE_TOKEN
+            if grep -q "^SPOKE_TOKEN=" "$spoke_dir/.env" 2>/dev/null; then
+                sed -i.bak "s|^SPOKE_TOKEN=.*|SPOKE_TOKEN=$spoke_token|" "$spoke_dir/.env"
+            else
+                echo "SPOKE_TOKEN=$spoke_token" >> "$spoke_dir/.env"
+            fi
+            
+            log_success "✓ Spoke token configured in .env"
+            return 0
+        fi
+    fi
+    
+    log_warn "Auto-approval failed - manual approval required"
+    return 1
+}
+
+##
+# Register spoke in federation-registry.json and MongoDB kas_registry collection
 # CRITICAL: Required for ZTDF resource seeding and federated search
+#
+# Architecture (as of Phase 3):
+#   - Federation registry: file-based (federation-registry.json) - unchanged
+#   - KAS registry: MongoDB-backed (kas_registry collection) - NEW
 #
 # Arguments:
 #   $1 - Instance code
@@ -119,7 +335,14 @@ spoke_config_register_in_registries() {
 
     log_step "Registering $code_upper in federation and KAS registries..."
 
-    # Step 1: Register in federation-registry.json
+    # Step 0: CRITICAL - Register spoke in Hub MongoDB spoke registry (REQUIRED for heartbeat)
+    if ! spoke_config_register_in_hub_mongodb "$instance_code"; then
+        log_error "Failed to register spoke in Hub MongoDB"
+        log_error "This is CRITICAL - spoke heartbeat will not work without registration"
+        return 1
+    fi
+
+    # Step 1: Register in federation-registry.json (file-based legacy)
     local fed_reg_script="${DIVE_ROOT}/scripts/spoke-init/register-spoke-federation.sh"
     if [ -f "$fed_reg_script" ]; then
         log_verbose "Updating federation-registry.json"
@@ -132,25 +355,50 @@ spoke_config_register_in_registries() {
         log_warn "Federation registry script not found: $fed_reg_script"
     fi
 
-    # Step 2: Register KAS in kas-registry.json
-    if type spoke_kas_register &>/dev/null; then
-        log_verbose "Updating kas-registry.json"
-        if spoke_kas_register "$code_upper" 2>/dev/null; then
-            log_verbose "✓ KAS registry updated"
+    # Step 2: Register KAS in MongoDB (replaces file-based kas-registry.json)
+    # Load spoke-kas.sh if not already loaded
+    if [ -z "$DIVE_SPOKE_KAS_LOADED" ]; then
+        if [ -f "${DIVE_ROOT}/scripts/dive-modules/spoke/spoke-kas.sh" ]; then
+            source "${DIVE_ROOT}/scripts/dive-modules/spoke/spoke-kas.sh"
+        fi
+    fi
+
+    if type spoke_kas_register_mongodb &>/dev/null; then
+        log_verbose "Registering KAS in MongoDB"
+        
+        # CRITICAL: Don't hide errors - capture output for proper debugging
+        local kas_output
+        local kas_exit_code=0
+        kas_output=$(spoke_kas_register_mongodb "$code_upper" 2>&1) || kas_exit_code=$?
+        
+        if [ $kas_exit_code -eq 0 ]; then
+            log_verbose "✓ KAS registered in MongoDB"
+
+            # Auto-approve the KAS registration for automated deployments
+            local kas_id="${code_lower}-kas"
+            if type spoke_kas_approve &>/dev/null; then
+                local approve_output
+                approve_output=$(spoke_kas_approve "$kas_id" 2>&1) || true
+                if echo "$approve_output" | grep -q "approved\|success"; then
+                    log_verbose "✓ KAS auto-approved"
+                else
+                    log_verbose "KAS approval pending (manual approval required)"
+                fi
+            fi
         else
-            log_verbose "KAS registration skipped (may not be configured yet)"
+            log_error "MongoDB KAS registration failed"
+            log_error "Error output:"
+            echo "$kas_output" | head -20
+            return 1  # This is a critical failure, not acceptable
         fi
-    elif [ -f "${DIVE_ROOT}/scripts/dive-modules/spoke/spoke-kas.sh" ]; then
-        source "${DIVE_ROOT}/scripts/dive-modules/spoke/spoke-kas.sh"
-        if type spoke_kas_register &>/dev/null; then
-            log_verbose "Updating kas-registry.json"
-            spoke_kas_register "$code_upper" 2>/dev/null || log_verbose "KAS registration skipped"
-        fi
+    else
+        log_error "MongoDB KAS registration function not available"
+        return 1  # Not acceptable - this is required functionality
     fi
 
     log_success "Registry updates complete"
     echo "  ✓ federation-registry.json updated (enables federated search)"
-    echo "  ✓ kas-registry.json updated (enables ZTDF encryption)"
+    echo "  ✓ MongoDB kas_registry updated (enables ZTDF encryption)"
 }
 
 # =============================================================================
@@ -275,8 +523,25 @@ spoke_config_apply_terraform() {
             fi
 
             log_verbose "Applying Terraform configuration"
-            if ! terraform_spoke apply "$code_upper"; then
-                log_warn "Terraform apply failed"
+            
+            # Wrap Terraform apply with retry + circuit breaker for resilience
+            local terraform_success=false
+            if type orch_retry_with_backoff &>/dev/null && type orch_circuit_breaker_execute &>/dev/null; then
+                log_verbose "Using resilient Terraform apply (retry + circuit breaker)"
+                if orch_retry_with_backoff "Terraform apply $code_upper" \
+                    orch_circuit_breaker_execute "Terraform Keycloak API" \
+                        terraform_spoke apply "$code_upper"; then
+                    terraform_success=true
+                fi
+            else
+                # Fallback to direct execution
+                if terraform_spoke apply "$code_upper"; then
+                    terraform_success=true
+                fi
+            fi
+            
+            if [ "$terraform_success" = false ]; then
+                log_warn "Terraform apply failed after retries"
                 return 1
             fi
 

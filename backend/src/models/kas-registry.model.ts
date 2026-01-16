@@ -20,11 +20,16 @@ const COLLECTION_KAS_AGREEMENTS = 'kas_federation_agreements';
 
 /**
  * KAS Instance record
+ *
+ * IMPORTANT: All country codes MUST be ISO 3166-1 alpha-3 (USA, FRA, EST, etc.)
+ * Reference: .cursorrules specification for DIVE V3
  */
 export interface IKasInstance {
-  kasId: string; // e.g., kas-usa, kas-fra
+  kasId: string; // e.g., usa-kas, fra-kas (format: {iso-code-lower}-kas)
   organization: string; // e.g., United States, France
-  kasUrl: string; // e.g., https://usa-kas.dive25.com/request-key
+  countryCode: string; // ISO 3166-1 alpha-3 - SSOT for KAS home country (USA, FRA, EST)
+  kasUrl: string; // External URL: https://localhost:10008 (dev) or https://usa-kas.dive25.com (prod)
+  internalKasUrl?: string; // Docker service URL: https://kas:8080 (container-to-container)
   authMethod: 'jwt' | 'mtls' | 'api_key';
   authConfig: {
     jwtIssuer?: string;
@@ -32,7 +37,7 @@ export interface IKasInstance {
     apiKeyHash?: string;
   };
   trustLevel: 'high' | 'medium' | 'low';
-  supportedCountries: string[];
+  supportedCountries: string[]; // ISO 3166-1 alpha-3 codes this KAS can serve
   supportedCOIs: string[];
   policyTranslation?: {
     clearanceMapping?: Record<string, string>;
@@ -88,6 +93,7 @@ export class MongoKasRegistryStore {
       // Create indexes
       await this.kasCollection.createIndex({ kasId: 1 }, { unique: true });
       await this.kasCollection.createIndex({ kasUrl: 1 }, { unique: true });
+      await this.kasCollection.createIndex({ countryCode: 1 }); // ISO 3166-1 alpha-3 - SSOT
       await this.kasCollection.createIndex({ organization: 1 });
       await this.kasCollection.createIndex({ status: 1 });
       await this.kasCollection.createIndex({ 'authConfig.jwtIssuer': 1 }, { sparse: true });
@@ -135,6 +141,8 @@ export class MongoKasRegistryStore {
             const instances: IKasInstance[] = data.kasServers.map((instance: Record<string, unknown>) => ({
               kasId: instance.kasId as string,
               organization: instance.organization as string,
+              // countryCode: ISO 3166-1 alpha-3 - SSOT for KAS home country
+              countryCode: (instance.countryCode as string) || (instance.supportedCountries as string[])?.[0] || 'USA',
               kasUrl: instance.kasUrl as string,
               authMethod: (instance.authMethod as string) || 'jwt',
               authConfig: instance.authConfig as IKasInstance['authConfig'],
@@ -291,6 +299,19 @@ export class MongoKasRegistryStore {
   async findAll(): Promise<IKasInstance[]> {
     await this.ensureInitialized();
     return this.kasCollection!.find().toArray();
+  }
+
+  /**
+   * Find KAS instance by countryCode (ISO 3166-1 alpha-3)
+   * This is the primary lookup method as countryCode is the SSOT
+   */
+  async findByCountryCode(countryCode: string): Promise<IKasInstance | null> {
+    await this.ensureInitialized();
+    return this.kasCollection!.findOne({
+      countryCode: countryCode.toUpperCase(),
+      status: 'active',
+      enabled: true,
+    });
   }
 
   /**

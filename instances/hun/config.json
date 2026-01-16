@@ -1,9 +1,9 @@
 {
   "identity": {
-    "spokeId": "spoke-hun-37861991",
+    "spokeId": "spoke-hun-eb38c2e8",
     "instanceCode": "HUN",
-    "name": "Hungarian Defence Forces",
-    "description": "DIVE V3 Spoke Instance for Hungarian Defence Forces",
+    "name": "Hungary",
+    "description": "DIVE V3 Spoke Instance for Hungary",
     "country": "HUN",
     "organizationType": "government",
     "contactEmail": "admin@hun.dive25.com"
@@ -45,8 +45,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2025-12-28T03:49:10Z",
-    "lastModified": "2025-12-28T03:49:10Z",
+    "createdAt": "2026-01-15T14:32:03Z",
+    "lastModified": "2026-01-15T14:32:03Z",
     "configHash": ""
   }
 }

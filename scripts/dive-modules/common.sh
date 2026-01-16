@@ -233,7 +233,9 @@ export HUB_PROJECT_NAME="${HUB_PROJECT_NAME:-dive-hub}"
 export HUB_KEYCLOAK_CONTAINER="${HUB_PROJECT_NAME}-keycloak"
 export HUB_BACKEND_CONTAINER="${HUB_PROJECT_NAME}-backend"
 export HUB_FRONTEND_CONTAINER="${HUB_PROJECT_NAME}-frontend"
-export HUB_REALM="${HUB_REALM:-dive-v3-broker}"
+# FIX (2026-01-15): Hub realm is dive-v3-broker-usa (USA is the hub)
+# LEGACY dive-v3-broker (without suffix) is DEPRECATED and should not exist
+export HUB_REALM="${HUB_REALM:-dive-v3-broker-usa}"
 
 # Hub API URL - Environment aware
 # - LOCAL/DEV: Use localhost hub
@@ -834,7 +836,8 @@ apply_env_profile() {
         local|dev)
             # Dev defaults to tunnel hosts; local still works via overrides/env.
             export NEXTAUTH_URL="${NEXTAUTH_URL:-https://${inst_lc}-app.dive25.com}"
-            export KEYCLOAK_ISSUER="${KEYCLOAK_ISSUER:-https://${inst_lc}-idp.dive25.com/realms/dive-v3-broker}"
+            # FIX (2026-01-15): Realm name includes instance code suffix (dive-v3-broker-{code})
+            export KEYCLOAK_ISSUER="${KEYCLOAK_ISSUER:-https://${inst_lc}-idp.dive25.com/realms/dive-v3-broker-${inst_lc}}"
             export KEYCLOAK_URL_PUBLIC="${KEYCLOAK_URL_PUBLIC:-https://${inst_lc}-idp.dive25.com}"
             export KEYCLOAK_URL_INTERNAL="${KEYCLOAK_URL_INTERNAL:-https://keycloak:8443}"
             export KEYCLOAK_URL="${KEYCLOAK_URL_INTERNAL}"
@@ -849,7 +852,8 @@ apply_env_profile() {
         gcp|pilot|prod|staging)
             export KEYCLOAK_HOSTNAME="${KEYCLOAK_HOSTNAME:-${inst_lc}-idp.dive25.com}"
             export NEXTAUTH_URL="${NEXTAUTH_URL:-https://${inst_lc}-app.dive25.com}"
-            export KEYCLOAK_ISSUER="${KEYCLOAK_ISSUER:-https://${inst_lc}-idp.dive25.com/realms/dive-v3-broker}"
+            # FIX (2026-01-15): Realm name includes instance code suffix (dive-v3-broker-{code})
+            export KEYCLOAK_ISSUER="${KEYCLOAK_ISSUER:-https://${inst_lc}-idp.dive25.com/realms/dive-v3-broker-${inst_lc}}"
             export NEXT_PUBLIC_BACKEND_URL="${NEXT_PUBLIC_BACKEND_URL:-https://${inst_lc}-api.dive25.com}"
             export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-https://${inst_lc}-api.dive25.com}"
             export NEXT_PUBLIC_BASE_URL="${NEXT_PUBLIC_BASE_URL:-https://${inst_lc}-app.dive25.com}"

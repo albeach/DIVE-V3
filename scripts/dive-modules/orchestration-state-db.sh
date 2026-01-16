@@ -22,6 +22,11 @@ if [ -f "$(dirname "${BASH_SOURCE[0]}")/deployment-state.sh" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/deployment-state.sh"
 fi
 
+# Load state recovery module for consistency validation
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/orchestration-state-recovery.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/orchestration-state-recovery.sh"
+fi
+
 # =============================================================================
 # DATABASE CONNECTION CONFIGURATION
 # =============================================================================
@@ -39,7 +44,7 @@ ORCH_DB_CONN="postgresql://${ORCH_DB_USER}:${ORCH_DB_PASSWORD}@${ORCH_DB_HOST}:$
 # Feature flags
 ORCH_DB_ENABLED="${ORCH_DB_ENABLED:-true}"
 ORCH_DB_DUAL_WRITE="${ORCH_DB_DUAL_WRITE:-true}"  # Write to both file and DB
-ORCH_DB_SOURCE_OF_TRUTH="${ORCH_DB_SOURCE_OF_TRUTH:-file}" # file or db
+ORCH_DB_SOURCE_OF_TRUTH="${ORCH_DB_SOURCE_OF_TRUTH:-db}" # db or file (CHANGED: db is now SSOT)
 
 # =============================================================================
 # DATABASE CONNECTION HELPERS
@@ -132,13 +137,9 @@ orch_db_set_state() {
     fi
 
     # Dual-write phase: Write to both file and database
+    # CRITICAL: Database is SSOT - write to DB first, then file
     if [ "$ORCH_DB_DUAL_WRITE" = "true" ]; then
-        # Write to file (existing function - non-blocking)
-        if type -t set_deployment_state_enhanced >/dev/null 2>&1; then
-            set_deployment_state_enhanced "$instance_code" "$new_state" "$reason" "$metadata" 2>/dev/null || true
-        fi
-
-        # Write to database with proper error handling
+        # Write to database FIRST (SSOT) with proper error handling
         if orch_db_check_connection; then
             # Escape SQL strings properly
             local escaped_reason="${reason//\'/\'\'}"
@@ -174,16 +175,45 @@ COMMIT;"
 
             if [ $db_exit_code -eq 0 ] && [[ ! "$sql_error_log" =~ ERROR ]]; then
                 log_verbose "✓ State atomically persisted to database: $instance_code -> $new_state"
+                
+                # Database write succeeded - now write to file as cache
+                if type -t set_deployment_state_enhanced >/dev/null 2>&1; then
+                    if set_deployment_state_enhanced "$instance_code" "$new_state" "$reason" "$metadata" 2>/dev/null; then
+                        log_verbose "✓ File cache updated: $instance_code -> $new_state"
+                    else
+                        log_verbose "File write failed (non-critical, DB is SSOT), falling back to simple write"
+                        # Fallback: Simple file write
+                        cat > "${DIVE_ROOT}/.dive-state/${code_lower}.state" << STATE_EOF
+state=$new_state
+timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+version=2.0
+metadata=$metadata
+checksum=$(echo -n "$new_state$(date +%s)" | shasum -a 256 2>/dev/null | cut -d' ' -f1 || echo "none")
+STATE_EOF
+                    fi
+                else
+                    # Function not available, write directly
+                    mkdir -p "${DIVE_ROOT}/.dive-state"
+                    cat > "${DIVE_ROOT}/.dive-state/${code_lower}.state" << STATE_EOF
+state=$new_state
+timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+version=2.0
+metadata=$metadata
+checksum=$(echo -n "$new_state$(date +%s)" | shasum -a 256 2>/dev/null | cut -d' ' -f1 || echo "none")
+STATE_EOF
+                    log_verbose "✓ File cache written directly: $instance_code -> $new_state"
+                fi
+                
                 # Record successful transition
                 orch_db_exec "INSERT INTO orchestration_metrics (instance_code, metric_name, metric_value) VALUES ('$code_lower', 'state_transition_success', 1)" >/dev/null 2>&1 || true
             else
                 # Transaction failed - rollback occurred automatically
-                # This is non-blocking in dual-write mode (file write already succeeded)
-                log_verbose "Database write failed (non-blocking): $instance_code -> $new_state"
+                # This IS blocking in DB-SSOT mode (database write must succeed)
+                log_error "Database write failed (blocking in DB-SSOT mode): $instance_code -> $new_state"
                 if [ -n "$sql_error_log" ]; then
-                    log_verbose "DB Error: $sql_error_log"
+                    log_error "DB Error: $sql_error_log"
                 fi
-                # File-based state is source of truth, so this is not critical
+                return 1  # Fail if DB write fails (DB is SSOT)
             fi
         else
             log_verbose "Database connection not available - state written to file only"
@@ -221,6 +251,11 @@ COMMIT;"
         # File-only mode (legacy)
         set_deployment_state_enhanced "$instance_code" "$new_state" "$reason" "$metadata"
     fi
+    
+    # Validate consistency after state change (non-blocking)
+    if type orch_state_validate_consistency &>/dev/null; then
+        orch_state_validate_consistency "$instance_code" "true" || true
+    fi
 }
 
 ##
@@ -239,20 +274,38 @@ orch_db_get_state() {
 
     # Choose source based on configuration
     if [ "$ORCH_DB_SOURCE_OF_TRUTH" = "db" ] && orch_db_check_connection; then
-        # Database is source of truth
+        # Database is source of truth - query directly
         local state
-        state=$(orch_db_exec "SELECT get_current_state('$code_lower');" | xargs)
+        state=$(orch_db_exec "SELECT state FROM deployment_states WHERE instance_code='$code_lower' ORDER BY timestamp DESC LIMIT 1" 2>/dev/null | xargs)
 
         if [ -n "$state" ] && [ "$state" != "UNKNOWN" ]; then
             echo "$state"
             return 0
         fi
 
-        # Fallback to file if DB returns UNKNOWN
-        get_deployment_state "$instance_code"
+        # Fallback to file if DB returns no records
+        if type -t get_deployment_state >/dev/null 2>&1; then
+            get_deployment_state "$instance_code"
+        else
+            echo "UNKNOWN"
+        fi
     else
-        # File is source of truth (default for dual-write phase)
-        get_deployment_state "$instance_code"
+        # File is source of truth (legacy mode)
+        if type -t get_deployment_state >/dev/null 2>&1; then
+            get_deployment_state "$instance_code"
+        else
+            # Fallback: Read file directly
+            if [ -f "${DIVE_ROOT}/.dive-state/${code_lower}.state" ]; then
+                grep "^state=" "${DIVE_ROOT}/.dive-state/${code_lower}.state" 2>/dev/null | cut -d= -f2 || echo "UNKNOWN"
+            else
+                echo "UNKNOWN"
+            fi
+        fi
+    fi
+    
+    # Validate consistency on read (non-blocking)
+    if type orch_state_validate_consistency &>/dev/null; then
+        orch_state_validate_consistency "$instance_code" "true" >/dev/null 2>&1 || true
     fi
 }
 
