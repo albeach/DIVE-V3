@@ -12,8 +12,89 @@ if [ -z "$DIVE_COMMON_LOADED" ]; then
     export DIVE_COMMON_LOADED=1
 fi
 
+# Load NATO/ISO countries database for unified port calculation
+_fed_health_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "${_fed_health_script_dir}/../../nato-countries.sh" ]; then
+    source "${_fed_health_script_dir}/../../nato-countries.sh"
+fi
+unset _fed_health_script_dir
+
 # Mark this module as loaded
 export DIVE_SPOKE_FEDERATION_HEALTH_LOADED=1
+
+# =============================================================================
+# PORT CALCULATION HELPER
+# =============================================================================
+
+##
+# Get backend port for an instance using unified country database
+# Falls back to hardcoded values if database unavailable
+#
+# Arguments:
+#   $1 - Instance code (any case)
+#
+# Prints:
+#   Backend port number
+##
+_get_instance_backend_port() {
+    local code="${1^^}"
+    
+    # Try unified country database first
+    if type get_any_country_offset &>/dev/null; then
+        local offset=$(get_any_country_offset "$code")
+        if [ -n "$offset" ] && [ "$offset" -ge 0 ]; then
+            echo "$((4000 + offset))"
+            return
+        fi
+    fi
+    
+    # Fallback to hardcoded values for known countries
+    case "${code,,}" in
+        usa) echo "4000" ;;
+        alb) echo "4001" ;;
+        fra) echo "4010" ;;
+        gbr) echo "4031" ;;
+        deu) echo "4011" ;;
+        nld) echo "4020" ;;
+        est) echo "4008" ;;
+        lva) echo "4016" ;;
+        pol) echo "4023" ;;
+        *) echo "4000" ;;  # Default fallback
+    esac
+}
+
+##
+# Get Keycloak HTTPS port for an instance using unified country database
+#
+# Arguments:
+#   $1 - Instance code (any case)
+#
+# Prints:
+#   Keycloak HTTPS port number
+##
+_get_instance_keycloak_port() {
+    local code="${1^^}"
+    
+    # Try unified country database first
+    if type get_any_country_offset &>/dev/null; then
+        local offset=$(get_any_country_offset "$code")
+        if [ -n "$offset" ] && [ "$offset" -ge 0 ]; then
+            echo "$((8443 + offset))"
+            return
+        fi
+    fi
+    
+    # Fallback to hardcoded values
+    case "${code,,}" in
+        usa) echo "8443" ;;
+        alb) echo "8444" ;;
+        fra) echo "8453" ;;
+        gbr) echo "8474" ;;
+        deu) echo "8454" ;;
+        nld) echo "8463" ;;
+        *) echo "8443" ;;  # Default fallback
+    esac
+}
 
 # =============================================================================
 # FEDERATION HEALTH CHECK FUNCTIONS
@@ -31,21 +112,9 @@ export DIVE_SPOKE_FEDERATION_HEALTH_LOADED=1
 ##
 spoke_test_idp_enumeration() {
     local code_lower="$1"
-    local backend_port
-
-    # Map instance to backend port
-    case "$code_lower" in
-        alb) backend_port=4001 ;;
-        fra) backend_port=4010 ;;
-        gbr) backend_port=4031 ;;
-        deu) backend_port=4040 ;;
-        nld) backend_port=4052 ;;
-        est) backend_port=4063 ;;
-        lva) backend_port=4074 ;;
-        pol) backend_port=4085 ;;
-        *) backend_port=4001 ;;    # Default fallback
-    esac
-
+    
+    # Use unified port calculation
+    local backend_port=$(_get_instance_backend_port "$code_lower")
     local backend_url="https://localhost:${backend_port}"
 
     log_verbose "Testing IdP enumeration for $code_lower..."
@@ -94,21 +163,9 @@ spoke_test_idp_enumeration() {
 ##
 spoke_test_idp_health() {
     local code_lower="$1"
-    local backend_port
-
-    # Map instance to backend port
-    case "$code_lower" in
-        alb) backend_port=4001 ;;
-        fra) backend_port=4010 ;;
-        gbr) backend_port=4031 ;;
-        deu) backend_port=4040 ;;
-        nld) backend_port=4052 ;;
-        est) backend_port=4063 ;;
-        lva) backend_port=4074 ;;
-        pol) backend_port=4085 ;;
-        *) backend_port=4001 ;;    # Default fallback
-    esac
-
+    
+    # Use unified port calculation
+    local backend_port=$(_get_instance_backend_port "$code_lower")
     local backend_url="https://localhost:${backend_port}"
 
     log_verbose "Testing IdP health for $code_lower..."
@@ -177,20 +234,9 @@ spoke_test_token_exchange() {
     local code_lower="$1"
     local code_upper=$(upper "$code_lower")
 
-    local port_offset
-    case "$code_lower" in
-        alb) port_offset=1 ;;
-        fra) port_offset=10 ;;
-        gbr) port_offset=31 ;;
-        deu) port_offset=40 ;;
-        nld) port_offset=52 ;;
-        est) port_offset=63 ;;
-        lva) port_offset=74 ;;
-        pol) port_offset=85 ;;
-        *) port_offset=1 ;;  # Default fallback
-    esac
-
-    local backend_url="https://localhost:40${port_offset}"
+    # Use unified port calculation
+    local backend_port=$(_get_instance_backend_port "$code_lower")
+    local backend_url="https://localhost:${backend_port}"
 
     log_verbose "Testing token exchange for $code_lower..."
 
@@ -211,17 +257,8 @@ spoke_test_token_exchange() {
     fi
 
     # If direct login doesn't work, test Keycloak connectivity
-    local keycloak_port_offset
-    case "$code_lower" in
-        alb) keycloak_port_offset=4 ;;      # 8444
-        fra) keycloak_port_offset=53 ;;     # 8453
-        gbr) keycloak_port_offset=74 ;;     # 8474
-        deu) keycloak_port_offset=83 ;;     # 8483
-        nld) keycloak_port_offset=92 ;;     # 8492
-        *) keycloak_port_offset=4 ;;        # Default fallback
-    esac
-
-    local keycloak_url="https://localhost:84${keycloak_port_offset}"
+    local keycloak_port=$(_get_instance_keycloak_port "$code_lower")
+    local keycloak_url="https://localhost:${keycloak_port}"
     local realm="dive-v3-broker-${code_lower}"
 
     # Test Keycloak realm discovery
@@ -251,20 +288,9 @@ spoke_test_cross_instance_federation() {
     local code_lower="$1"
     local code_upper=$(upper "$code_lower")
 
-    local port_offset
-    case "$code_lower" in
-        alb) port_offset=1 ;;
-        fra) port_offset=10 ;;
-        gbr) port_offset=31 ;;
-        deu) port_offset=40 ;;
-        nld) port_offset=52 ;;
-        est) port_offset=63 ;;
-        lva) port_offset=74 ;;
-        pol) port_offset=85 ;;
-        *) port_offset=1 ;;  # Default fallback
-    esac
-
-    local backend_url="https://localhost:40${port_offset}"
+    # Use unified port calculation
+    local backend_port=$(_get_instance_backend_port "$code_lower")
+    local backend_url="https://localhost:${backend_port}"
 
     log_verbose "Testing cross-instance federation for $code_lower..."
 
@@ -371,20 +397,9 @@ spoke_generate_federation_health_report() {
     echo "" >> "$report_file"
 
     echo "1. IdP Enumeration:" >> "$report_file"
-    local port_offset
-    case "$code_lower" in
-        alb) port_offset=1 ;;
-        fra) port_offset=10 ;;
-        gbr) port_offset=31 ;;
-        deu) port_offset=40 ;;
-        nld) port_offset=52 ;;
-        est) port_offset=63 ;;
-        lva) port_offset=74 ;;
-        pol) port_offset=85 ;;
-        *) port_offset=1 ;;  # Default fallback
-    esac
-
-    local backend_url="https://localhost:40${port_offset}"
+    # Use unified port calculation
+    local backend_port=$(_get_instance_backend_port "$code_lower")
+    local backend_url="https://localhost:${backend_port}"
     local idps_response
     idps_response=$(curl -sk "$backend_url/api/idps/public" 2>/dev/null)
     echo "$idps_response" >> "$report_file"
@@ -410,16 +425,8 @@ spoke_generate_federation_health_report() {
     echo "" >> "$report_file"
 
     echo "4. Keycloak Realm Status:" >> "$report_file"
-    local keycloak_port_offset
-    case "$code_lower" in
-        alb) keycloak_port_offset=4 ;;      # 8444
-        fra) keycloak_port_offset=53 ;;     # 8453
-        gbr) keycloak_port_offset=74 ;;     # 8474
-        deu) keycloak_port_offset=83 ;;     # 8483
-        nld) keycloak_port_offset=92 ;;     # 8492
-        *) keycloak_port_offset=4 ;;        # Default fallback
-    esac
-    local keycloak_url="https://localhost:84${keycloak_port_offset}"
+    local keycloak_port=$(_get_instance_keycloak_port "$code_lower")
+    local keycloak_url="https://localhost:${keycloak_port}"
     local realm="dive-v3-broker-${code_lower}"
     local realm_status
     realm_status=$(curl -sk "$keycloak_url/realms/$realm/.well-known/openid-configuration" 2>/dev/null | jq -r '.issuer' 2>/dev/null || echo "Realm not accessible")

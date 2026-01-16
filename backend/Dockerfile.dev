@@ -22,6 +22,9 @@ EXPOSE 4000
 
 ENV PORT=4000
 ENV NODE_ENV=development
+# Enable polling for file watching in Docker (fixes hot-reload on macOS/Windows)
+ENV CHOKIDAR_USEPOLLING=true
+ENV CHOKIDAR_INTERVAL=1000
 
 # Development mode with hot reload (tsx watch)
 CMD ["npm", "run", "dev"]

@@ -547,66 +547,98 @@ list_partner_nations() {
 }
 
 # =============================================================================
-# UNIFIED COUNTRY FUNCTIONS (Works with both NATO and Partner Nations)
+# LOAD ISO COUNTRIES DATABASE (for extended country support)
+# =============================================================================
+# Source iso-countries.sh for ISO 3166-1 Alpha-3 and custom test codes
+_iso_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+if [ -f "${_iso_script_dir}/iso-countries.sh" ]; then
+    source "${_iso_script_dir}/iso-countries.sh"
+fi
+unset _iso_script_dir
+
+# =============================================================================
+# UNIFIED COUNTRY FUNCTIONS (Works with NATO, Partner, ISO, and Custom codes)
 # =============================================================================
 
-# Check if code is any valid country (NATO or Partner)
+# Check if code is any valid country (NATO, Partner, ISO, or Custom Test)
 is_valid_country() {
     local code="${1^^}"
-    is_nato_country "$code" || is_partner_nation "$code"
+    is_nato_country "$code" || is_partner_nation "$code" || \
+    { type is_iso_country &>/dev/null && is_iso_country "$code"; } || \
+    { type is_custom_test_code &>/dev/null && is_custom_test_code "$code"; }
 }
 
-# Get country name (unified)
+# Get country name (unified - supports NATO, Partner, ISO, and Custom)
 get_any_country_name() {
     local code="${1^^}"
     if is_nato_country "$code"; then
         get_country_name "$code"
     elif is_partner_nation "$code"; then
         get_partner_name "$code"
+    elif type is_iso_country &>/dev/null && is_iso_country "$code"; then
+        get_iso_country_name "$code"
+    elif type is_custom_test_code &>/dev/null && is_custom_test_code "$code"; then
+        get_custom_test_name "$code"
     fi
 }
 
-# Get country flag (unified)
+# Get country flag (unified - supports NATO, Partner, ISO, and Custom)
 get_any_country_flag() {
     local code="${1^^}"
     if is_nato_country "$code"; then
         get_country_flag "$code"
     elif is_partner_nation "$code"; then
         get_partner_flag "$code"
+    elif type is_iso_country &>/dev/null && is_iso_country "$code"; then
+        get_iso_country_flag "$code"
+    elif type is_custom_test_code &>/dev/null && is_custom_test_code "$code"; then
+        get_custom_test_flag "$code"
     fi
 }
 
-# Get country timezone (unified)
+# Get country timezone (unified - supports NATO, Partner, ISO, and Custom)
 get_any_country_timezone() {
     local code="${1^^}"
     if is_nato_country "$code"; then
         get_country_timezone "$code"
     elif is_partner_nation "$code"; then
         get_partner_timezone "$code"
+    elif type is_iso_country &>/dev/null && is_iso_country "$code"; then
+        get_iso_country_timezone "$code"
+    elif type is_custom_test_code &>/dev/null && is_custom_test_code "$code"; then
+        echo "UTC"  # Custom test codes use UTC
     fi
 }
 
-# Get country ports (unified)
+# Get country ports (unified - supports NATO, Partner, ISO, and Custom)
 get_any_country_ports() {
     local code="${1^^}"
     if is_nato_country "$code"; then
         get_country_ports "$code"
     elif is_partner_nation "$code"; then
         get_partner_ports "$code"
+    elif type is_iso_country &>/dev/null && is_iso_country "$code"; then
+        get_iso_country_ports "$code"
+    elif type is_custom_test_code &>/dev/null && is_custom_test_code "$code"; then
+        get_custom_test_ports "$code"
     fi
 }
 
-# Get country offset (unified)
+# Get country offset (unified - supports NATO, Partner, ISO, and Custom)
 get_any_country_offset() {
     local code="${1^^}"
     if is_nato_country "$code"; then
         get_country_offset "$code"
     elif is_partner_nation "$code"; then
         get_partner_offset "$code"
+    elif type is_iso_country &>/dev/null && is_iso_country "$code"; then
+        get_iso_country_offset "$code"
+    elif type is_custom_test_code &>/dev/null && is_custom_test_code "$code"; then
+        get_custom_test_offset "$code"
     fi
 }
 
-# Get country locale code (unified)
+# Get country locale code (unified - supports NATO, Partner, ISO, and Custom)
 # Usage: get_any_country_locale "HRV" → "hr"
 get_any_country_locale() {
     local code="${1^^}"
@@ -614,8 +646,26 @@ get_any_country_locale() {
         get_country_locale "$code"
     elif is_partner_nation "$code"; then
         get_partner_locale "$code"
+    elif type is_iso_country &>/dev/null && is_iso_country "$code"; then
+        get_iso_country_locale "$code"
     else
-        echo "en"  # Default to English
+        echo "en"  # Default to English (custom test codes)
+    fi
+}
+
+# Get country type (returns: NATO, PARTNER, ISO, CUSTOM, or UNKNOWN)
+get_country_type() {
+    local code="${1^^}"
+    if is_nato_country "$code"; then
+        echo "NATO"
+    elif is_partner_nation "$code"; then
+        echo "PARTNER"
+    elif type is_iso_country &>/dev/null && is_iso_country "$code"; then
+        echo "ISO"
+    elif type is_custom_test_code &>/dev/null && is_custom_test_code "$code"; then
+        echo "CUSTOM"
+    else
+        echo "UNKNOWN"
     fi
 }
 

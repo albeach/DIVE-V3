@@ -38,8 +38,8 @@ export function FederationPartnersRevamped({ user }: FederationPartnersRevampedP
   useEffect(() => {
     async function fetchIdPs() {
       try {
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
-        const response = await fetch(`${backendUrl}/api/idps/public`);
+        // Use Next.js API route proxy instead of calling backend directly (avoids CORS issues)
+        const response = await fetch('/api/idps/public');
         
         if (!response.ok) {
           throw new Error('Failed to fetch identity providers');

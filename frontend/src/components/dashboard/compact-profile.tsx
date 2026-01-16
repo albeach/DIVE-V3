@@ -1,6 +1,7 @@
 'use client';
 
 import { getPseudonymFromUser } from '@/lib/pseudonym-generator';
+import { getLocalizedClearance, usesLocalizedClearance } from '@/utils/clearance-localization';
 
 interface User {
   uniqueID?: string | null;
@@ -67,10 +68,17 @@ export function CompactProfile({ user }: CompactProfileProps) {
               </dd>
             </div>
             <div>
-              <dt className="text-sm font-semibold text-gray-500 mb-2 uppercase tracking-wide">Clearance Level</dt>
+              <dt className="text-sm font-semibold text-gray-500 mb-2 uppercase tracking-wide">
+                Clearance Level
+                {usesLocalizedClearance() && (
+                  <span className="ml-2 text-xs text-gray-400 normal-case">
+                    ({user.clearance})
+                  </span>
+                )}
+              </dt>
               <dd className="text-base font-bold text-gray-900">
                 <span className="inline-flex items-center px-4 py-2 rounded-lg bg-blue-50 border border-blue-200 text-blue-900">
-                  {user.clearance || 'Not Set'}
+                  {getLocalizedClearance(user.clearance)}
                 </span>
               </dd>
             </div>

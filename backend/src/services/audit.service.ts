@@ -166,7 +166,7 @@ export interface IAuditServiceConfig {
 const DEFAULT_CONFIG: IAuditServiceConfig = {
   logPath: process.env.AUDIT_LOG_PATH || path.join(process.cwd(), 'logs', 'audit.log'),
   maxSize: parseInt(process.env.AUDIT_LOG_MAX_SIZE || '104857600', 10), // 100MB
-  maxFiles: parseInt(process.env.AUDIT_LOG_MAX_FILES || '90', 10), // 90 files
+  maxFiles: parseInt(process.env.AUDIT_LOG_MAX_FILES || '10', 10), // 10 files (1GB max) - reduced from 90 to prevent 9GB growth
   retentionDays: parseInt(process.env.AUDIT_RETENTION_DAYS || '90', 10), // ACP-240: 90 days min
   serviceName: process.env.SERVICE_NAME || 'dive-v3-backend',
   consoleOutput: process.env.AUDIT_CONSOLE_OUTPUT === 'true'

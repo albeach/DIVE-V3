@@ -526,6 +526,36 @@ spoke_init_prepare_certificates() {
                     }
                 fi
 
+                # ==========================================================================
+                # CRITICAL: Generate Java truststore for Keycloak federation
+                # ==========================================================================
+                # Without this truststore, Keycloak cannot verify TLS certificates for
+                # server-to-server calls (tokenUrl, userInfoUrl, jwksUrl) during federation.
+                # Error: "PKIX path building failed: unable to find valid certification path"
+                # ==========================================================================
+                if type generate_spoke_truststore &>/dev/null; then
+                    generate_spoke_truststore "$code_lower" || {
+                        log_warn "Java truststore generation failed - federation may not work"
+                    }
+                else
+                    # Inline fallback for truststore generation
+                    log_verbose "Generating Java truststore (inline fallback)"
+                    if command -v keytool &>/dev/null && [ -f "$spoke_dir/certs/ca/rootCA.pem" ]; then
+                        rm -f "$spoke_dir/certs/truststore.p12"
+                        keytool -importcert -noprompt -trustcacerts \
+                            -alias mkcert-ca \
+                            -file "$spoke_dir/certs/ca/rootCA.pem" \
+                            -keystore "$spoke_dir/certs/truststore.p12" \
+                            -storepass changeit \
+                            -storetype PKCS12 2>/dev/null && {
+                            chmod 644 "$spoke_dir/certs/truststore.p12"
+                            log_success "Generated Java truststore for Keycloak federation"
+                        } || log_warn "Failed to generate Java truststore"
+                    else
+                        log_warn "Cannot generate Java truststore (keytool or rootCA.pem missing)"
+                    fi
+                fi
+
                 return 0
             else
                 log_warn "SSOT certificate generation failed, trying fallback..."

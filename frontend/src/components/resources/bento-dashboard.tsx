@@ -1,9 +1,9 @@
 /**
  * Bento Dashboard Component - Phase 4 Visual Polish
- * 
+ *
  * A compact, visually striking stats header for the resources page.
  * Redesigned for better layout consistency and visual balance.
- * 
+ *
  * @version 2.0.0 - Simplified layout
  */
 
@@ -100,20 +100,20 @@ function AnimatedCounter({ value, duration = 1000 }: { value: number; duration?:
   useEffect(() => {
     const startTime = Date.now();
     const startValue = displayValue;
-    
+
     const animate = () => {
       const elapsed = Date.now() - startTime;
       const progress = Math.min(elapsed / duration, 1);
       const easeOut = 1 - Math.pow(1 - progress, 3);
       const current = Math.floor(startValue + (value - startValue) * easeOut);
-      
+
       setDisplayValue(current);
-      
+
       if (progress < 1) {
         requestAnimationFrame(animate);
       }
     };
-    
+
     requestAnimationFrame(animate);
   }, [value, duration]);
 
@@ -176,7 +176,7 @@ export default function BentoDashboard({
           className="col-span-2 relative overflow-hidden rounded-xl bg-gradient-to-br from-blue-600 via-indigo-600 to-violet-700 p-4 text-white shadow-lg"
         >
           <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2 blur-xl" />
-          
+
           <div className="relative z-10 flex items-center justify-between">
             <div>
               <div className="flex items-center gap-2 mb-1">

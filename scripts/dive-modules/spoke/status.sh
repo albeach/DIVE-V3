@@ -140,8 +140,16 @@ spoke_health() {
     frontend_port=$(docker port "dive-spoke-${code_lower}-frontend" 3000/tcp 2>/dev/null | cut -d: -f2 || echo "3001")
 
 
-    # Define services to check (HTTPS for all secured services)
-    local services=("OPA:https:${opa_port}/health" "Backend:https:${backend_port}/health" "Keycloak:https:${keycloak_port}/realms/dive-v3-broker-${code_lower}" "KAS:https:${kas_port}/health" "Frontend:https:${frontend_port}/api/health")
+    # Define services to check
+    # Format: name:protocol:port/path
+    # OPA uses HTTP internally (no TLS), all others use HTTPS
+    local services=(
+        "OPA:http:${opa_port}/health"
+        "Backend:https:${backend_port}/health"
+        "Keycloak:https:${keycloak_port}/realms/dive-v3-broker-${code_lower}"
+        "KAS:https:${kas_port}/health"
+        "Frontend:https:${frontend_port}/api/health"
+    )
     local all_healthy=true
 
     echo -e "${CYAN}Services:${NC}"
@@ -151,8 +159,18 @@ spoke_health() {
         local protocol="${svc#*:}"
         local protocol="${protocol%%:*}"
         local endpoint="${svc#*:*:}"
-        # Use appropriate protocol (HTTP for OPA, HTTPS for others)
         local url="${protocol}://localhost:${endpoint}"
+        
+        # First check Docker health status (most reliable)
+        local container_name="dive-spoke-${code_lower}-$(echo "$name" | tr '[:upper:]' '[:lower:]')"
+        local docker_health=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null || echo "")
+        
+        if [ "$docker_health" = "healthy" ]; then
+            printf "  %-14s ${GREEN}✓ Healthy${NC}\n" "$name:"
+            continue
+        fi
+        
+        # Fallback to HTTP health check
         local status_code=$(curl -k -s -o /dev/null -w '%{http_code}' "$url" --max-time 5 2>/dev/null || echo "000")
 
         if [ "$status_code" = "200" ] || [ "$status_code" = "204" ]; then

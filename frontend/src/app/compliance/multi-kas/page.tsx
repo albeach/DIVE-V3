@@ -152,7 +152,7 @@ export default function MultiKasPage() {
       ]}
     >
       {/* Hero Section */}
-      <motion.div 
+      <motion.div
         className="relative overflow-hidden bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 rounded-2xl p-8 md:p-12 mb-8 shadow-2xl"
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -216,7 +216,7 @@ export default function MultiKasPage() {
 
       {/* Error State */}
       {error && (
-        <motion.div 
+        <motion.div
           className="bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-xl p-6 mb-6 flex items-start gap-4"
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
@@ -454,7 +454,7 @@ export default function MultiKasPage() {
 
       {/* Benefits Section */}
       {multiKasData?.benefits && multiKasData.benefits.length > 0 && (
-        <motion.div 
+        <motion.div
           className="mb-8"
           initial="hidden"
           animate="visible"
@@ -466,8 +466,8 @@ export default function MultiKasPage() {
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {multiKasData.benefits.map((benefit) => (
-              <motion.div 
-                key={benefit.title} 
+              <motion.div
+                key={benefit.title}
                 className="bg-white dark:bg-gray-800 rounded-xl p-6 border-2 border-gray-200 dark:border-gray-700 shadow-md hover:shadow-xl transition-all"
                 variants={staggerItemVariants}
                 whileHover={{ scale: 1.05, transition: { duration: 0.2 } }}

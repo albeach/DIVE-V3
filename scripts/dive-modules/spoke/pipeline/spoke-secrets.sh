@@ -200,6 +200,7 @@ spoke_secrets_load_from_gcp() {
     local project="${GCP_PROJECT:-dive25}"
     local secrets_loaded=0
     local secrets_failed=0
+    local failed_secrets=()  # Track which secrets failed
 
     log_verbose "Loading secrets from GCP project: $project"
 
@@ -228,6 +229,7 @@ spoke_secrets_load_from_gcp() {
                 log_verbose "Loaded $env_var_name from shared GCP secret"
             else
                 secrets_failed=$((secrets_failed + 1))
+                failed_secrets+=("$base_secret")
                 log_verbose "GCP secret not found: $gcp_secret_name (also tried $shared_secret_name)"
             fi
         fi
@@ -262,6 +264,18 @@ spoke_secrets_load_from_gcp() {
         return 0
     else
         log_warn "Only loaded $secrets_loaded/${#SPOKE_REQUIRED_SECRETS[@]} required secrets from GCP"
+        
+        # Report which secrets failed to load
+        if [ ${#failed_secrets[@]} -gt 0 ]; then
+            log_warn "Missing GCP secrets: ${failed_secrets[*]}"
+            log_verbose "To create missing secrets in GCP, run:"
+            for secret in "${failed_secrets[@]}"; do
+                local gcp_name=$(_map_env_to_gcp_secret "$secret" "$code_lower")
+                log_verbose "  gcloud secrets create $gcp_name --project=$project"
+                log_verbose "  echo -n 'YOUR_SECRET' | gcloud secrets versions add $gcp_name --data-file=- --project=$project"
+            done
+        fi
+        
         return 1
     fi
 }

@@ -80,16 +80,17 @@ spoke_verify_federation() {
     echo -e "${BOLD}Spoke Federation Verification:${NC} ${code_upper}"
     echo ""
 
-    # TODO: Implement federation verification checks
-    # This should verify:
-    # - Federation links are working
-    # - IdP brokers are configured correctly
-    # - SSO flows work between spoke and hub
-    # - Attribute mapping is correct
-
-    echo -e "${YELLOW}⚠ Federation verification not yet implemented${NC}"
-    echo ""
-    echo "This feature will be available in Phase 6."
-    echo "It will verify federation connectivity and attribute mapping."
-    echo ""
+    # Use the comprehensive federation verification from spoke-federation.sh
+    if type spoke_federation_verify &>/dev/null; then
+        spoke_federation_verify "$instance_code"
+    elif type federation_verify &>/dev/null; then
+        federation_verify "$instance_code"
+    else
+        # Fallback: Run the ./dive federation verify command
+        "${DIVE_ROOT}/dive" federation verify "$instance_code" 2>/dev/null || {
+            echo -e "${YELLOW}⚠ Federation verification requires spoke-federation module${NC}"
+            echo ""
+            echo "Run: ./dive federation verify $code_upper"
+        }
+    fi
 }

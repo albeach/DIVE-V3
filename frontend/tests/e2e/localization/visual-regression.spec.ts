@@ -1,16 +1,16 @@
 /**
  * E2E Tests: Visual Regression for Localization
- * 
+ *
  * Takes screenshots of key pages in all 7 primary languages.
  * Detects layout breaks caused by text overflow or formatting issues.
- * 
+ *
  * Test Coverage:
  * - Multi-KAS page in all 7 languages
  * - Dashboard in all 7 languages
  * - Resource browser in all 7 languages
  * - Light and dark mode variants
  * - Responsive breakpoints (mobile, tablet, desktop)
- * 
+ *
  * @requires Percy or Chromatic for visual diff
  * @version 1.0.0
  * @date 2026-01-16
@@ -69,7 +69,7 @@ test.describe('Visual Regression - Dark Mode', () => {
   for (const locale of PRIMARY_LOCALES) {
     test(`Multi-KAS page in dark mode - ${LOCALE_NAMES[locale]}`, async ({ page }) => {
       await page.setViewportSize({ width: 1920, height: 1080 });
-      
+
       // Enable dark mode by adding class to html element
       await page.goto('${BASE_URL}/compliance/multi-kas');
       await page.evaluate(() => {
@@ -165,7 +165,7 @@ test.describe('Locale Persistence', () => {
     await page.waitForTimeout(300);
 
     // Get localStorage value
-    const localeStored = await page.evaluate(() => 
+    const localeStored = await page.evaluate(() =>
       localStorage.getItem('dive-v3-locale')
     );
     expect(localeStored).toBe('fr');
@@ -231,7 +231,7 @@ test.describe('Accessibility - Locale Selector', () => {
 
     // Check ARIA attributes
     await expect(localeButton).toHaveAttribute('aria-haspopup', 'listbox');
-    
+
     // Open dropdown
     await localeButton.click();
 

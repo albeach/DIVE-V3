@@ -122,10 +122,39 @@ const ISO_3166_1_ALPHA_3: Record<string, string> = {
 };
 
 /**
- * Validate that a country code is a valid ISO 3166-1 alpha-3 code
+ * Custom test/development codes that are allowed for non-production instances
+ * These enable testing and development without requiring real country codes
+ */
+const CUSTOM_TEST_CODES: Record<string, string> = {
+    'TST': 'Test Instance',
+    'DEV': 'Development Instance',
+    'QAA': 'QA Instance A',
+    'QAB': 'QA Instance B',
+    'STG': 'Staging Instance',
+    'DMO': 'Demo Instance',
+    'TRN': 'Training Instance',
+    'SND': 'Sandbox Instance',
+    'ORF': 'Orphan Test',
+    'TMP': 'Temporary Instance',
+    'LOC': 'Local Development',
+    'INT': 'Integration Test',
+    'UAT': 'User Acceptance Test',
+    'PRF': 'Performance Test',
+    'SEC': 'Security Test'
+};
+
+/**
+ * Check if a code is a valid custom test code
+ */
+function isCustomTestCode(code: string): boolean {
+    return code in CUSTOM_TEST_CODES;
+}
+
+/**
+ * Validate that a country code is a valid ISO 3166-1 alpha-3 code or custom test code
  */
 function validateCountryCode(code: string): boolean {
-    return code in ISO_3166_1_ALPHA_3;
+    return code in ISO_3166_1_ALPHA_3 || isCustomTestCode(code);
 }
 
 /**
@@ -692,6 +721,45 @@ function deleteCheckpoint(instanceCode: string, seedBatchId: string): void {
     const checkpointPath = getCheckpointPath(instanceCode, seedBatchId);
     if (fs.existsSync(checkpointPath)) {
         fs.unlinkSync(checkpointPath);
+    }
+}
+
+/**
+ * Clean up old seed manifest files (older than 7 days)
+ * Prevents accumulation of manifest files in logs/seed directory
+ */
+function cleanupOldManifests(): void {
+    if (!fs.existsSync(SEED_LOG_DIR)) return;
+
+    const now = Date.now();
+    const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+    let deletedCount = 0;
+
+    try {
+        const files = fs.readdirSync(SEED_LOG_DIR)
+            .filter(f => f.startsWith('seed-manifest-') && f.endsWith('.json'));
+
+        for (const file of files) {
+            const filePath = path.join(SEED_LOG_DIR, file);
+            try {
+                const stats = fs.statSync(filePath);
+                const age = now - stats.mtimeMs;
+
+                if (age > maxAge) {
+                    fs.unlinkSync(filePath);
+                    deletedCount++;
+                }
+            } catch (err) {
+                // Ignore errors for individual files
+                console.warn(`Warning: Could not delete ${file}: ${err}`);
+            }
+        }
+
+        if (deletedCount > 0) {
+            console.log(`🧹 Cleaned up ${deletedCount} old seed manifest files (older than 7 days)\n`);
+        }
+    } catch (err) {
+        console.warn(`Warning: Could not cleanup old manifests: ${err}`);
     }
 }
 
@@ -1389,9 +1457,9 @@ async function createZTDFDocument(
         throw new Error(`No KAS servers configured for instance ${instanceCode}. Cannot create ZTDF documents without KAS.`);
     }
 
-    // Validate instance code is valid ISO 3166-1 alpha-3
+    // Validate instance code is valid ISO 3166-1 alpha-3 or custom test code
     if (!validateCountryCode(instanceCode)) {
-        throw new Error(`Invalid ISO 3166-1 alpha-3 instance code: ${instanceCode}. Must be 3 uppercase letters (e.g., USA, FRA, GBR, DEU).`);
+        throw new Error(`Invalid instance code: ${instanceCode}. Must be ISO 3166-1 alpha-3 (e.g., USA, FRA, GBR) or custom test code (e.g., TST, DEV, QAA).`);
     }
 
     // Resource ID format: doc-<ISO3166-3>-<batchId>-<sequence>
@@ -1652,12 +1720,16 @@ async function seedInstance(
         byIndustryAccess: { 'true': 0, 'false': 0 }
     };
 
-    // Validate instance code is ISO 3166-1 alpha-3
+    // Validate instance code is ISO 3166-1 alpha-3 or custom test code
     if (!validateCountryCode(instanceCode)) {
-        throw new Error(`Invalid ISO 3166-1 alpha-3 instance code: ${instanceCode}. Valid codes: ${Object.keys(ISO_3166_1_ALPHA_3).join(', ')}`);
+        const allCodes = [...Object.keys(ISO_3166_1_ALPHA_3), ...Object.keys(CUSTOM_TEST_CODES)];
+        throw new Error(`Invalid instance code: ${instanceCode}. Valid codes: ${allCodes.join(', ')}`);
     }
 
-    console.log(`   ✅ Instance Code ${instanceCode} validated (ISO 3166-1 alpha-3: ${ISO_3166_1_ALPHA_3[instanceCode]})\n`);
+    // Display validation message with appropriate label
+    const codeName = ISO_3166_1_ALPHA_3[instanceCode] || CUSTOM_TEST_CODES[instanceCode] || instanceCode;
+    const codeType = isCustomTestCode(instanceCode) ? 'Custom Test Code' : 'ISO 3166-1 alpha-3';
+    console.log(`   ✅ Instance Code ${instanceCode} validated (${codeType}: ${codeName})\n`);
 
     if (options.dryRun) {
         console.log('🧪 DRY RUN: Validating templates and showing expected distribution...\n');
@@ -1943,6 +2015,9 @@ async function main() {
     console.log('║       DIVE V3 - Instance-Aware Resource Seeding Script           ║');
     console.log('║       Version 1.0.0 - November 29, 2025                           ║');
     console.log('╚══════════════════════════════════════════════════════════════════╝\n');
+
+    // Clean up old seed manifest files before starting
+    cleanupOldManifests();
 
     const options = parseArgs();
 

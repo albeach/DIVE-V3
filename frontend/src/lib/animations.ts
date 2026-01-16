@@ -1,15 +1,15 @@
 /**
  * Animation Utilities for DIVE V3
- * 
+ *
  * Centralized framer-motion animation variants and configurations.
  * Provides consistent animations across the application.
- * 
+ *
  * Features:
  * - Reusable animation variants
  * - Accessible (respects prefers-reduced-motion)
  * - Performance optimized
  * - TypeScript typed
- * 
+ *
  * @version 1.0.0
  * @date 2026-01-16
  */
@@ -86,8 +86,8 @@ export const staggerContainerVariants: Variants = {
  */
 export const staggerItemVariants: Variants = {
   hidden: { opacity: 0, y: 20 },
-  visible: { 
-    opacity: 1, 
+  visible: {
+    opacity: 1,
     y: 0,
     transition: {
       duration: 0.4,
@@ -101,7 +101,7 @@ export const staggerItemVariants: Variants = {
  */
 export const cardHoverVariants: Variants = {
   initial: { scale: 1 },
-  hover: { 
+  hover: {
     scale: 1.02,
     transition: { duration: 0.2 },
   },
@@ -113,18 +113,18 @@ export const cardHoverVariants: Variants = {
  */
 export const modalVariants: Variants = {
   initial: { opacity: 0, scale: 0.9, y: 20 },
-  animate: { 
-    opacity: 1, 
-    scale: 1, 
+  animate: {
+    opacity: 1,
+    scale: 1,
     y: 0,
     transition: {
       duration: 0.2,
       ease: 'easeOut',
     },
   },
-  exit: { 
-    opacity: 0, 
-    scale: 0.9, 
+  exit: {
+    opacity: 0,
+    scale: 0.9,
     y: 20,
     transition: {
       duration: 0.15,
@@ -146,8 +146,8 @@ export const backdropVariants: Variants = {
  */
 export const listItemVariants: Variants = {
   hidden: { opacity: 0, x: -20 },
-  visible: { 
-    opacity: 1, 
+  visible: {
+    opacity: 1,
     x: 0,
     transition: {
       duration: 0.3,
@@ -160,9 +160,9 @@ export const listItemVariants: Variants = {
  */
 export const notificationVariants: Variants = {
   initial: { opacity: 0, y: -50, scale: 0.8 },
-  animate: { 
-    opacity: 1, 
-    y: 0, 
+  animate: {
+    opacity: 1,
+    y: 0,
     scale: 1,
     transition: {
       type: 'spring',
@@ -170,8 +170,8 @@ export const notificationVariants: Variants = {
       damping: 40,
     },
   },
-  exit: { 
-    opacity: 0, 
+  exit: {
+    opacity: 0,
     x: 100,
     transition: {
       duration: 0.2,
@@ -183,16 +183,16 @@ export const notificationVariants: Variants = {
  * Accordion/Collapse animation variants
  */
 export const collapseVariants: Variants = {
-  collapsed: { 
-    height: 0, 
+  collapsed: {
+    height: 0,
     opacity: 0,
     transition: {
       duration: 0.3,
       ease: 'easeInOut',
     },
   },
-  expanded: { 
-    height: 'auto', 
+  expanded: {
+    height: 'auto',
     opacity: 1,
     transition: {
       duration: 0.3,

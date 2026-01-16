@@ -177,6 +177,18 @@ services:
       KC_FEATURES: scripts
       KC_HEALTH_ENABLED: "true"
       KC_METRICS_ENABLED: "true"
+      # ==========================================================================
+      # TRUST STORE FOR FEDERATION (Keycloak 26+ native approach)
+      # ==========================================================================
+      # Keycloak needs to trust self-signed certificates from other Keycloak
+      # instances during federation. This is required for server-to-server calls
+      # (tokenUrl, userInfoUrl, jwksUrl). Without this:
+      #   "PKIX path building failed: unable to find valid certification path"
+      #
+      # The rootCA.pem is synced during deployment via:
+      #   spoke_init_prepare_certificates() in phase-initialization.sh
+      # ==========================================================================
+      KC_TRUSTSTORE_PATHS: /opt/keycloak/certs/ca/rootCA.pem
       # Terraform SSOT: Skip JSON import, Keycloak starts empty
       SKIP_REALM_IMPORT: "true"
       # Legacy realm import variables (kept for compatibility, but not used)

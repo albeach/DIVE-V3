@@ -52,6 +52,7 @@ async function proxyRequest(urlStr: string): Promise<{ status: number; body: any
         path: `${urlObj.pathname}${urlObj.search}`,
         method: 'GET',
         rejectUnauthorized: false,
+        timeout: 5000, // 5 second timeout
       },
       (res) => {
         let data = '';
@@ -64,15 +65,21 @@ async function proxyRequest(urlStr: string): Promise<{ status: number; body: any
             const parsed = data ? JSON.parse(data) : {};
             resolve({ status, body: parsed });
           } catch (parseErr) {
-            reject(parseErr);
+            reject(new Error(`Failed to parse response: ${parseErr}`));
           }
         });
       }
     );
 
     req.on('error', (err) => {
-      reject(err);
+      reject(new Error(`Backend connection failed: ${err.message}. Is the backend running at ${urlStr}?`));
     });
+
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error(`Backend request timeout. Is the backend running at ${urlStr}?`));
+    });
+
     req.end();
   });
 }

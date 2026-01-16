@@ -290,7 +290,14 @@ terraform_spoke() {
             export TF_VAR_admin_user_password="${!keycloak_password_var:-default}"
             export KEYCLOAK_USER="admin"
 
-            terraform plan -var-file="../countries/${code_lower}.tfvars"
+            # Pass sensitive variables directly via -var flags for reliability
+            local tf_vars=()
+            [ -n "${!keycloak_password_var}" ] && tf_vars+=(-var="keycloak_admin_password=${!keycloak_password_var}")
+            [ -n "${!client_secret_var}" ] && tf_vars+=(-var="client_secret=${!client_secret_var}")
+            [ -n "${!keycloak_password_var}" ] && tf_vars+=(-var="test_user_password=${!keycloak_password_var}")
+            [ -n "${!keycloak_password_var}" ] && tf_vars+=(-var="admin_user_password=${!keycloak_password_var}")
+
+            terraform plan -var-file="../countries/${code_lower}.tfvars" "${tf_vars[@]}"
             ;;
         apply)
             terraform workspace select "$code_lower" 2>/dev/null || terraform workspace new "$code_lower"
@@ -332,7 +339,18 @@ terraform_spoke() {
             export KEYCLOAK_USER="admin"
 
             log_verbose "Terraform environment configured for $code_upper"
-            terraform apply -var-file="../countries/${code_lower}.tfvars" -auto-approve
+            
+            # CRITICAL: Pass sensitive variables directly via -var flags
+            # This ensures variables reach Terraform regardless of shell export inheritance
+            # See: https://developer.hashicorp.com/terraform/language/values/variables#variable-definition-precedence
+            local tf_vars=(
+                -var="keycloak_admin_password=${!keycloak_password_var}"
+                -var="client_secret=${!client_secret_var}"
+                -var="test_user_password=${!keycloak_password_var}"
+                -var="admin_user_password=${!keycloak_password_var}"
+            )
+            
+            terraform apply -var-file="../countries/${code_lower}.tfvars" "${tf_vars[@]}" -auto-approve
             ;;
         destroy)
             terraform workspace select "$code_lower" 2>/dev/null || {
@@ -365,7 +383,14 @@ terraform_spoke() {
             export TF_VAR_admin_user_password="${!keycloak_password_var:-default}"
             export KEYCLOAK_USER="admin"
 
-            terraform destroy -var-file="../countries/${code_lower}.tfvars" -auto-approve
+            # Pass sensitive variables directly via -var flags for reliability
+            local tf_vars=()
+            [ -n "${!keycloak_password_var}" ] && tf_vars+=(-var="keycloak_admin_password=${!keycloak_password_var}")
+            [ -n "${!client_secret_var}" ] && tf_vars+=(-var="client_secret=${!client_secret_var}")
+            [ -n "${!keycloak_password_var}" ] && tf_vars+=(-var="test_user_password=${!keycloak_password_var}")
+            [ -n "${!keycloak_password_var}" ] && tf_vars+=(-var="admin_user_password=${!keycloak_password_var}")
+
+            terraform destroy -var-file="../countries/${code_lower}.tfvars" "${tf_vars[@]}" -auto-approve
             ;;
         *)
             log_error "Unknown action: $action"

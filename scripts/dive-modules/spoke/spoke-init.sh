@@ -773,7 +773,7 @@ _create_spoke_docker_compose() {
     if [ -z "$theme_primary" ]; then
         theme_primary="#1a365d"
         theme_secondary="#2b6cb0"
-        log_warn "Country $code_upper not in NATO database, using default colors"
+        log_verbose "Using default theme colors for $code_upper (no custom colors defined)"
     fi
 
     log_info "Using theme colors for $code_upper: primary=$theme_primary, secondary=$theme_secondary"

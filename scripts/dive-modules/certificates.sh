@@ -125,6 +125,148 @@ install_mkcert_ca_to_truststore() {
 }
 
 ##
+# Generate Java PKCS12 truststore from mkcert root CA
+#
+# This truststore is required for Keycloak to trust other Keycloak instances
+# during federation (server-to-server token endpoint calls).
+#
+# Arguments:
+#   $1 - Target directory for truststore (e.g., instances/svk/certs)
+#   $2 - Truststore password (optional, defaults to 'changeit')
+#
+# Returns:
+#   0 - Success
+#   1 - keytool not found
+#   2 - mkcert CA not found
+#   3 - Truststore generation failed
+##
+generate_java_truststore() {
+    local target_dir="${1:?Target directory required}"
+    local truststore_password="${2:-changeit}"
+    local truststore_file="$target_dir/truststore.p12"
+
+    # Check for keytool
+    if ! command -v keytool &>/dev/null; then
+        log_error "keytool not found - Java JDK required"
+        return 1
+    fi
+
+    # Check mkcert CA
+    if ! check_mkcert_ready; then
+        return 2
+    fi
+
+    local ca_path
+    ca_path=$(get_mkcert_ca_path)
+
+    if [ ! -f "$ca_path" ]; then
+        log_error "mkcert root CA not found at: $ca_path"
+        return 2
+    fi
+
+    # Create directory if needed
+    mkdir -p "$target_dir"
+
+    # Remove existing truststore to avoid "alias already exists" error
+    rm -f "$truststore_file"
+
+    # Generate PKCS12 truststore
+    if keytool -importcert -noprompt -trustcacerts \
+        -alias mkcert-ca \
+        -file "$ca_path" \
+        -keystore "$truststore_file" \
+        -storepass "$truststore_password" \
+        -storetype PKCS12 2>/dev/null; then
+        
+        chmod 644 "$truststore_file"
+        log_verbose "Generated Java truststore: $truststore_file"
+        return 0
+    else
+        log_error "Failed to generate Java truststore"
+        return 3
+    fi
+}
+
+##
+# Generate Java truststore for a spoke instance
+#
+# This is the main entry point for deployment pipeline integration.
+# It creates the truststore that allows Keycloak to trust federation IdPs.
+#
+# Arguments:
+#   $1 - Instance code (e.g., SVK, TST)
+#
+# Returns:
+#   0 - Success
+#   1 - Failure
+##
+generate_spoke_truststore() {
+    local instance_code="${1:?Instance code required}"
+    local code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    local certs_dir="$spoke_dir/certs"
+
+    log_step "Generating Java truststore for $instance_code"
+
+    # Ensure CA directory exists and has root CA
+    mkdir -p "$certs_dir/ca"
+    
+    local ca_path
+    ca_path=$(get_mkcert_ca_path)
+    
+    if [ -f "$ca_path" ]; then
+        cp "$ca_path" "$certs_dir/ca/rootCA.pem"
+        chmod 644 "$certs_dir/ca/rootCA.pem"
+    else
+        log_warn "mkcert CA not found, truststore will be incomplete"
+    fi
+
+    # Generate the truststore
+    if generate_java_truststore "$certs_dir" "changeit"; then
+        log_success "Java truststore generated for $instance_code"
+        return 0
+    else
+        log_error "Failed to generate Java truststore for $instance_code"
+        return 1
+    fi
+}
+
+##
+# Generate Java truststore for the Hub instance
+#
+# Arguments: none
+#
+# Returns:
+#   0 - Success
+#   1 - Failure
+##
+generate_hub_truststore() {
+    local hub_dir="${DIVE_ROOT}/instances/hub"
+    local certs_dir="$hub_dir/certs"
+
+    log_step "Generating Java truststore for Hub"
+
+    # Ensure CA directory exists
+    mkdir -p "$certs_dir/ca"
+    
+    local ca_path
+    ca_path=$(get_mkcert_ca_path)
+    
+    if [ -f "$ca_path" ]; then
+        cp "$ca_path" "$certs_dir/ca/rootCA.pem"
+        chmod 644 "$certs_dir/ca/rootCA.pem"
+    fi
+
+    if generate_java_truststore "$certs_dir" "changeit"; then
+        log_success "Java truststore generated for Hub"
+        return 0
+    else
+        log_error "Failed to generate Java truststore for Hub"
+        return 1
+    fi
+}
+
+##
 # Install mkcert root CA in a running Keycloak container
 #
 # Arguments:
