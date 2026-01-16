@@ -1,0 +1,99 @@
+{
+  "title": "Resources",
+  "subtitle": "Manage and access coalition information resources",
+  "list": {
+    "title": "Resource Browser",
+    "searchPlaceholder": "Search resources by title, classification, or tags...",
+    "noResults": "No resources found",
+    "totalResources": "{{count}} resources",
+    "showing": "Showing {{start}}-{{end}} of {{total}}",
+    "loadMore": "Load More",
+    "refresh": "Refresh"
+  },
+  "filters": {
+    "title": "Filters",
+    "clearAll": "Clear All",
+    "classification": "Classification",
+    "releasability": "Releasability",
+    "coi": "Community of Interest",
+    "dateRange": "Date Range",
+    "encrypted": "Encrypted Resources Only",
+    "apply": "Apply Filters",
+    "reset": "Reset"
+  },
+  "table": {
+    "title": "Title",
+    "classification": "Classification",
+    "releasability": "Releasability",
+    "created": "Created",
+    "modified": "Modified",
+    "actions": "Actions",
+    "view": "View",
+    "edit": "Edit",
+    "delete": "Delete",
+    "download": "Download",
+    "requestAccess": "Request Access"
+  },
+  "detail": {
+    "title": "Resource Details",
+    "metadata": "Metadata",
+    "resourceId": "Resource ID",
+    "createdBy": "Created By",
+    "createdDate": "Created Date",
+    "lastModified": "Last Modified",
+    "fileSize": "File Size",
+    "contentType": "Content Type",
+    "accessLog": "Access Log",
+    "noAccessHistory": "No access history available"
+  },
+  "upload": {
+    "title": "Upload Resource",
+    "dragDrop": "Drag and drop files here, or click to browse",
+    "selectFile": "Select File",
+    "maxSize": "Maximum file size: {{size}}MB",
+    "allowedTypes": "Allowed types: {{types}}",
+    "metadata": {
+      "title": "Resource Metadata",
+      "titleLabel": "Title",
+      "titlePlaceholder": "Enter resource title",
+      "description": "Description",
+      "descriptionPlaceholder": "Enter resource description",
+      "classification": "Classification Level",
+      "releasability": "Releasable To",
+      "coi": "Communities of Interest",
+      "tags": "Tags",
+      "encryption": "Encryption"
+    },
+    "uploading": "Uploading...",
+    "uploadProgress": "{{percent}}% uploaded",
+    "uploadSuccess": "Resource uploaded successfully",
+    "uploadError": "Failed to upload resource",
+    "cancel": "Cancel Upload"
+  },
+  "access": {
+    "requesting": "Requesting Access...",
+    "granted": "Access Granted",
+    "denied": "Access Denied",
+    "pending": "Access Pending",
+    "reasonDenied": "Reason: {{reason}}",
+    "requestKey": "Request Decryption Key",
+    "keyReceived": "Decryption key received",
+    "decrypting": "Decrypting...",
+    "decrypted": "Decrypted successfully"
+  },
+  "errors": {
+    "notFound": "Resource not found",
+    "accessDenied": "You do not have permission to access this resource",
+    "loadFailed": "Failed to load resource",
+    "uploadFailed": "Failed to upload resource",
+    "deleteFailed": "Failed to delete resource",
+    "insufficientClearance": "Insufficient clearance level",
+    "countryNotReleased": "Resource not released to your country",
+    "coiNotMember": "You are not a member of the required COI"
+  },
+  "breadcrumbs": {
+    "resources": "Resources",
+    "upload": "Upload",
+    "detail": "Details"
+  }
+}

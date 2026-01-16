@@ -1,0 +1,88 @@
+{
+  "title": "Policy Management",
+  "subtitle": "Attribute-based access control policies",
+  "list": {
+    "title": "Policies",
+    "searchPlaceholder": "Search policies...",
+    "noResults": "No policies found",
+    "totalPolicies": "{{count}} policies",
+    "active": "Active",
+    "inactive": "Inactive",
+    "draft": "Draft"
+  },
+  "editor": {
+    "title": "Policy Editor",
+    "newPolicy": "New Policy",
+    "editPolicy": "Edit Policy",
+    "policyName": "Policy Name",
+    "policyNamePlaceholder": "Enter policy name",
+    "description": "Description",
+    "descriptionPlaceholder": "Describe the policy purpose",
+    "regoCode": "Rego Code",
+    "validate": "Validate",
+    "save": "Save Policy",
+    "cancel": "Cancel",
+    "delete": "Delete Policy",
+    "validating": "Validating...",
+    "valid": "Policy is valid",
+    "invalid": "Policy has errors",
+    "syntaxError": "Syntax Error",
+    "lineNumber": "Line {{line}}"
+  },
+  "sandbox": {
+    "title": "Policy Sandbox",
+    "subtitle": "Test policies before deployment",
+    "selectPolicy": "Select Policy",
+    "inputData": "Input Data",
+    "inputDataPlaceholder": "Enter JSON input for policy evaluation",
+    "evaluate": "Evaluate",
+    "evaluating": "Evaluating...",
+    "result": "Result",
+    "allow": "ALLOW",
+    "deny": "DENY",
+    "reason": "Reason",
+    "evaluationDetails": "Evaluation Details",
+    "clearInput": "Clear Input",
+    "loadExample": "Load Example"
+  },
+  "lab": {
+    "title": "Policy Lab",
+    "subtitle": "Test and debug OPA policies",
+    "testCases": "Test Cases",
+    "addTestCase": "Add Test Case",
+    "runTests": "Run Tests",
+    "runningTests": "Running Tests...",
+    "allPassed": "All Tests Passed",
+    "someFailed": "{{failed}} of {{total}} tests failed",
+    "testName": "Test Name",
+    "expected": "Expected",
+    "actual": "Actual",
+    "passed": "Passed",
+    "failed": "Failed"
+  },
+  "detail": {
+    "title": "Policy Details",
+    "policyId": "Policy ID",
+    "createdBy": "Created By",
+    "createdDate": "Created Date",
+    "lastModified": "Last Modified",
+    "status": "Status",
+    "version": "Version",
+    "evaluations": "Evaluations (24h)",
+    "allowRate": "Allow Rate",
+    "denyRate": "Deny Rate"
+  },
+  "errors": {
+    "loadFailed": "Failed to load policy",
+    "saveFailed": "Failed to save policy",
+    "deleteFailed": "Failed to delete policy",
+    "validationFailed": "Policy validation failed",
+    "evaluationFailed": "Policy evaluation failed"
+  },
+  "breadcrumbs": {
+    "policies": "Policies",
+    "editor": "Editor",
+    "sandbox": "Sandbox",
+    "lab": "Lab"
+  }
+}

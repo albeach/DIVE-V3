@@ -1,0 +1,87 @@
+{
+  "title": "Dashboard",
+  "subtitle": "Coalition intelligence overview",
+  "welcome": "Welcome back, {{name}}",
+  "overview": {
+    "title": "System Overview",
+    "totalResources": "Total Resources",
+    "activeUsers": "Active Users",
+    "requestsToday": "Requests Today",
+    "avgResponseTime": "Avg Response Time",
+    "uptime": "System Uptime",
+    "healthStatus": "Health Status",
+    "healthy": "Healthy",
+    "degraded": "Degraded",
+    "down": "Down"
+  },
+  "widgets": {
+    "recentActivity": {
+      "title": "Recent Activity",
+      "noActivity": "No recent activity",
+      "viewAll": "View All"
+    },
+    "recentResources": {
+      "title": "Recently Accessed Resources",
+      "noResources": "No resources accessed recently"
+    },
+    "notifications": {
+      "title": "Notifications",
+      "noNotifications": "No new notifications",
+      "markAllRead": "Mark All Read"
+    },
+    "quickActions": {
+      "title": "Quick Actions",
+      "uploadResource": "Upload Resource",
+      "browseResources": "Browse Resources",
+      "viewPolicies": "View Policies",
+      "manageUsers": "Manage Users"
+    },
+    "federationStatus": {
+      "title": "Federation Status",
+      "connectedSpokes": "Connected Spokes",
+      "activeFederations": "Active Federations",
+      "viewFederation": "View Federation"
+    },
+    "kasStatus": {
+      "title": "KAS Status",
+      "totalKAS": "Total KAS Endpoints",
+      "healthyKAS": "Healthy",
+      "unhealthyKAS": "Unhealthy",
+      "viewKAS": "View Multi-KAS"
+    },
+    "accessRequests": {
+      "title": "Access Requests",
+      "pending": "Pending",
+      "granted": "Granted Today",
+      "denied": "Denied Today",
+      "viewRequests": "View All Requests"
+    },
+    "securityMetrics": {
+      "title": "Security Metrics",
+      "authFailures": "Auth Failures (24h)",
+      "policyDenials": "Policy Denials (24h)",
+      "suspiciousActivity": "Suspicious Activity",
+      "viewAuditLog": "View Audit Log"
+    }
+  },
+  "charts": {
+    "requestsOverTime": "Requests Over Time",
+    "accessByCountry": "Access by Country",
+    "classificationDistribution": "Classification Distribution",
+    "responseTimeTrends": "Response Time Trends",
+    "today": "Today",
+    "week": "This Week",
+    "month": "This Month",
+    "custom": "Custom Range"
+  },
+  "filters": {
+    "timeRange": "Time Range",
+    "last24Hours": "Last 24 Hours",
+    "last7Days": "Last 7 Days",
+    "last30Days": "Last 30 Days",
+    "customRange": "Custom Range"
+  },
+  "breadcrumbs": {
+    "dashboard": "Dashboard"
+  }
+}

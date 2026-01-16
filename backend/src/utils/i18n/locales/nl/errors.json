@@ -1,0 +1,36 @@
+{
+  "authentication": {
+    "unauthorized": "Unauthorized. Please sign in.",
+    "sessionExpired": "Your session has expired. Please sign in again.",
+    "invalidToken": "Authentication token is invalid.",
+    "tokenExpired": "Authentication token has expired.",
+    "invalidCredentials": "Invalid username or password."
+  },
+  "authorization": {
+    "forbidden": "You do not have permission to perform this action.",
+    "insufficientClearance": "Insufficient clearance level to access this resource.",
+    "countryRestriction": "Access restricted: Resource not released to {{country}}.",
+    "coiRestriction": "Access restricted: You are not a member of the required COI.",
+    "policyDenied": "Access denied by policy: {{reason}}"
+  },
+  "resources": {
+    "notFound": "Resource not found.",
+    "uploadFailed": "Failed to upload resource.",
+    "deleteFailed": "Failed to delete resource.",
+    "updateFailed": "Failed to update resource.",
+    "encryptionFailed": "Failed to encrypt resource.",
+    "decryptionFailed": "Failed to decrypt resource.",
+    "invalidMetadata": "Invalid resource metadata."
+  },
+  "validation": {
+    "required": "{{field}} is required.",
+    "invalidFormat": "Invalid format for {{field}}.",
+    "tooShort": "{{field}} must be at least {{min}} characters.",
+    "tooLong": "{{field}} must be no more than {{max}} characters."
+  },
+  "server": {
+    "internalError": "Internal server error. Please try again later.",
+    "serviceUnavailable": "Service temporarily unavailable.",
+    "databaseError": "Database error occurred."
+  }
+}
