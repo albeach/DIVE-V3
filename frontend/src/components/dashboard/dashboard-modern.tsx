@@ -16,6 +16,8 @@
 import { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getPseudonymFromUser } from '@/lib/pseudonym-generator';
+import { useTranslation } from '@/hooks/useTranslation';
+import { useLocale } from '@/contexts/LocaleContext';
 import {
   ShieldCheck,
   Globe,
@@ -112,6 +114,9 @@ interface DashboardData {
 }
 
 export function DashboardModern({ user, session }: DashboardModernProps) {
+  const { t } = useTranslation('dashboard');
+  const { locale } = useLocale();
+  
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
   const [data, setData] = useState<DashboardData>({
     idps: [],

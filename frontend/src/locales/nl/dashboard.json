@@ -1,85 +1,106 @@
 {
   "title": "Dashboard",
-  "subtitle": "Coalition intelligence overview",
-  "welcome": "Welcome back, {{name}}",
+  "subtitle": "Coalitie-intelligentie overzicht",
+  "welcome": "Welkom terug, {{name}}",
+  "loading": "Dashboard laden...",
+  "refreshing": "Vernieuwen...",
+  "refresh": "Vernieuwen",
+  "lastUpdated": "Laatst bijgewerkt: {{time}}",
+  "tabs": {
+    "overview": "Overzicht",
+    "federation": "Federatie",
+    "authorization": "Autorisatie",
+    "resources": "Bronnen",
+    "activity": "Activiteit"
+  },
   "overview": {
-    "title": "System Overview",
-    "totalResources": "Total Resources",
-    "activeUsers": "Active Users",
-    "requestsToday": "Requests Today",
-    "avgResponseTime": "Avg Response Time",
-    "uptime": "System Uptime",
-    "healthStatus": "Health Status",
-    "healthy": "Healthy",
-    "degraded": "Degraded",
-    "down": "Down"
+    "title": "Systeemoverzicht",
+    "totalResources": "Totaal bronnen",
+    "activeUsers": "Actieve gebruikers",
+    "requestsToday": "Verzoeken vandaag",
+    "avgResponseTime": "Gem. reactietijd",
+    "uptime": "Systeembeschikbaarheid",
+    "healthStatus": "Gezondheidsstatus",
+    "healthy": "Gezond",
+    "degraded": "Verminderd",
+    "down": "Offline",
+    "authorizationRate": "Autorisatieverhouding",
+    "systemHealth": "Systeemgezondheid"
   },
   "widgets": {
     "recentActivity": {
-      "title": "Recent Activity",
-      "noActivity": "No recent activity",
-      "viewAll": "View All"
+      "title": "Recente activiteit",
+      "noActivity": "Geen recente activiteit",
+      "viewAll": "Alles bekijken"
     },
     "recentResources": {
-      "title": "Recently Accessed Resources",
-      "noResources": "No resources accessed recently"
+      "title": "Recent geopende bronnen",
+      "noResources": "Geen bronnen recent geopend"
     },
     "notifications": {
-      "title": "Notifications",
-      "noNotifications": "No new notifications",
-      "markAllRead": "Mark All Read"
+      "title": "Meldingen",
+      "noNotifications": "Geen nieuwe meldingen",
+      "markAllRead": "Alles als gelezen markeren"
     },
     "quickActions": {
-      "title": "Quick Actions",
-      "uploadResource": "Upload Resource",
-      "browseResources": "Browse Resources",
-      "viewPolicies": "View Policies",
-      "manageUsers": "Manage Users"
+      "title": "Snelle acties",
+      "uploadResource": "Bron uploaden",
+      "browseResources": "Bronnen verkennen",
+      "viewPolicies": "Beleid bekijken",
+      "manageUsers": "Gebruikers beheren"
     },
     "federationStatus": {
-      "title": "Federation Status",
-      "connectedSpokes": "Connected Spokes",
-      "activeFederations": "Active Federations",
-      "viewFederation": "View Federation"
+      "title": "Federatiestatus",
+      "connectedSpokes": "Verbonden spaken",
+      "activeFederations": "Actieve federaties",
+      "viewFederation": "Federatie bekijken"
     },
     "kasStatus": {
-      "title": "KAS Status",
-      "totalKAS": "Total KAS Endpoints",
-      "healthyKAS": "Healthy",
-      "unhealthyKAS": "Unhealthy",
-      "viewKAS": "View Multi-KAS"
+      "title": "KAS-status",
+      "totalKAS": "Totaal KAS-eindpunten",
+      "healthyKAS": "Gezond",
+      "unhealthyKAS": "Ongezond",
+      "viewKAS": "Multi-KAS bekijken"
     },
     "accessRequests": {
-      "title": "Access Requests",
-      "pending": "Pending",
-      "granted": "Granted Today",
-      "denied": "Denied Today",
-      "viewRequests": "View All Requests"
+      "title": "Toegangsverzoeken",
+      "pending": "In behandeling",
+      "granted": "Vandaag verleend",
+      "denied": "Vandaag geweigerd",
+      "viewRequests": "Alle verzoeken bekijken"
     },
     "securityMetrics": {
-      "title": "Security Metrics",
-      "authFailures": "Auth Failures (24h)",
-      "policyDenials": "Policy Denials (24h)",
-      "suspiciousActivity": "Suspicious Activity",
-      "viewAuditLog": "View Audit Log"
+      "title": "Beveiligingsstatistieken",
+      "authFailures": "Auth-fouten (24u)",
+      "policyDenials": "Beleidsweigeringen (24u)",
+      "suspiciousActivity": "Verdachte activiteit",
+      "viewAuditLog": "Auditlogboek bekijken"
     }
   },
   "charts": {
-    "requestsOverTime": "Requests Over Time",
-    "accessByCountry": "Access by Country",
-    "classificationDistribution": "Classification Distribution",
-    "responseTimeTrends": "Response Time Trends",
-    "today": "Today",
-    "week": "This Week",
-    "month": "This Month",
-    "custom": "Custom Range"
+    "requestsOverTime": "Verzoeken in de tijd",
+    "accessByCountry": "Toegang per land",
+    "classificationDistribution": "Classificatieverdeling",
+    "responseTimeTrends": "Reactietijdtrends",
+    "today": "Vandaag",
+    "week": "Deze week",
+    "month": "Deze maand",
+    "custom": "Aangepast bereik"
   },
   "filters": {
-    "timeRange": "Time Range",
-    "last24Hours": "Last 24 Hours",
-    "last7Days": "Last 7 Days",
-    "last30Days": "Last 30 Days",
-    "customRange": "Custom Range"
+    "timeRange": "Tijdsbereik",
+    "last24Hours": "Laatste 24 uur",
+    "last7Days": "Laatste 7 dagen",
+    "last30Days": "Laatste 30 dagen",
+    "customRange": "Aangepast bereik"
+  },
+  "userInfo": {
+    "clearance": "Machtiging",
+    "country": "Land",
+    "coi": "COI",
+    "role": "Rol",
+    "lastLogin": "Laatste login",
+    "sessions": "Actieve sessies"
   },
   "breadcrumbs": {
     "dashboard": "Dashboard"
