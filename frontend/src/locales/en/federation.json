@@ -1,0 +1,101 @@
+{
+  "title": "Federation Management",
+  "subtitle": "Coalition partner integration and trust management",
+  "spokes": {
+    "title": "Federation Spokes",
+    "totalSpokes": "{{count}} spokes",
+    "healthy": "Healthy",
+    "unhealthy": "Unhealthy",
+    "deploying": "Deploying",
+    "offline": "Offline",
+    "viewAll": "View All Spokes"
+  },
+  "registry": {
+    "title": "Spoke Registry",
+    "instanceCode": "Instance Code",
+    "displayName": "Display Name",
+    "status": "Status",
+    "lastHeartbeat": "Last Heartbeat",
+    "services": "Services",
+    "actions": "Actions",
+    "deploy": "Deploy",
+    "undeploy": "Undeploy",
+    "viewDetails": "View Details",
+    "noSpokes": "No spokes registered"
+  },
+  "detail": {
+    "title": "Spoke Details",
+    "overview": "Overview",
+    "services": "Services",
+    "federation": "Federation Links",
+    "configuration": "Configuration",
+    "logs": "Logs",
+    "instanceCode": "Instance Code",
+    "displayName": "Display Name",
+    "country": "Country",
+    "deployedDate": "Deployed Date",
+    "lastSeen": "Last Seen",
+    "uptime": "Uptime"
+  },
+  "services": {
+    "title": "Services",
+    "serviceName": "Service Name",
+    "status": "Status",
+    "healthCheck": "Health Check",
+    "running": "Running",
+    "stopped": "Stopped",
+    "starting": "Starting",
+    "restart": "Restart",
+    "viewLogs": "View Logs"
+  },
+  "links": {
+    "title": "Federation Links",
+    "bidirectional": "Bidirectional Links",
+    "outbound": "Outbound Only",
+    "inbound": "Inbound Only",
+    "fromHub": "From Hub",
+    "toHub": "To Hub",
+    "fromSpoke": "From Spoke",
+    "toSpoke": "To Spoke",
+    "verified": "Verified",
+    "unverified": "Unverified",
+    "verifyLink": "Verify Link"
+  },
+  "deployment": {
+    "title": "Deploy New Spoke",
+    "instanceCode": "Instance Code",
+    "instanceCodePlaceholder": "e.g., USA, FRA, DEU",
+    "displayName": "Display Name",
+    "displayNamePlaceholder": "e.g., United States, France, Germany",
+    "country": "Country",
+    "selectCountry": "Select Country",
+    "deploy": "Deploy Spoke",
+    "deploying": "Deploying...",
+    "deploySuccess": "Spoke deployed successfully",
+    "deployError": "Failed to deploy spoke",
+    "estimatedTime": "Estimated time: {{minutes}} minutes"
+  },
+  "idp": {
+    "title": "Identity Provider",
+    "protocol": "Protocol",
+    "entityId": "Entity ID",
+    "ssoUrl": "SSO URL",
+    "logoutUrl": "Logout URL",
+    "certificate": "Certificate",
+    "oidc": "OIDC",
+    "saml": "SAML"
+  },
+  "errors": {
+    "loadFailed": "Failed to load federation data",
+    "deployFailed": "Failed to deploy spoke",
+    "undeployFailed": "Failed to undeploy spoke",
+    "heartbeatFailed": "Heartbeat check failed",
+    "federationLinkFailed": "Federation link verification failed"
+  },
+  "breadcrumbs": {
+    "federation": "Federation",
+    "spokes": "Spokes",
+    "deploy": "Deploy",
+    "detail": "Details"
+  }
+}

@@ -1,0 +1,174 @@
+{
+    "idp": {
+        "title": "Identity Provider Management",
+        "subtitle": "Manage and monitor your federated identity providers",
+        "addNew": "Add New IdP",
+        "noIdPs": "No Identity Providers yet",
+        "noIdPsDescription": "Get started by adding your first Identity Provider",
+        "noResults": "No matching IdPs found",
+        "noResultsDescription": "Try adjusting your search or filters",
+        "searchPlaceholder": "Search IdPs...",
+        "status": {
+            "enabled": "Enabled",
+            "disabled": "Disabled",
+            "online": "Online",
+            "offline": "Offline",
+            "degraded": "Degraded"
+        },
+        "protocol": {
+            "oidc": "OIDC",
+            "saml": "SAML"
+        },
+        "actions": {
+            "test": "Test Connection",
+            "view": "View Details",
+            "edit": "Edit",
+            "delete": "Delete IdP",
+            "enable": "Enable",
+            "disable": "Disable",
+            "analytics": "View Analytics",
+            "sessions": "Manage Sessions",
+            "mfa": "Configure MFA",
+            "theme": "Customize Theme"
+        },
+        "confirm": {
+            "delete": "Are you sure you want to delete this Identity Provider? This action cannot be undone.",
+            "enable": "Are you sure you want to enable {{count}} IdP(s)?",
+            "disable": "Are you sure you want to disable {{count}} IdP(s)?",
+            "deleteMultiple": "Are you sure you want to delete {{count}} IdP(s)? This action cannot be undone."
+        },
+        "batch": {
+            "selected": "{{count}} selected",
+            "enableAll": "Enable All",
+            "disableAll": "Disable All",
+            "testAll": "Test All",
+            "exportConfig": "Export Config",
+            "deleteSelected": "Delete Selected"
+        }
+    },
+    "mfa": {
+        "title": "Multi-Factor Authentication",
+        "subtitle": "Configure MFA requirements for this Identity Provider",
+        "requireAll": "Require MFA for all users",
+        "requireAllDescription": "All users must configure and use multi-factor authentication",
+        "conditionalMFA": "Conditional MFA (Clearance-Based)",
+        "conditionalMFADescription": "Require MFA only for users with specific clearance levels",
+        "selectClearanceLevels": "Select Clearance Levels",
+        "otpSettings": "OTP Settings",
+        "algorithm": "Algorithm",
+        "codeLength": "Code Length",
+        "timePeriod": "Time Period (seconds)",
+        "preview": "MFA Rule Preview",
+        "testFlow": "Test MFA Flow",
+        "saveChanges": "Save Changes",
+        "unsavedChanges": "Unsaved changes"
+    },
+    "sessions": {
+        "title": "Active Sessions",
+        "subtitle": "View and manage active user sessions",
+        "noSessions": "No active sessions",
+        "noSessionsDescription": "There are currently no active sessions for this IdP",
+        "searchPlaceholder": "Search by username or IP...",
+        "columns": {
+            "username": "Username",
+            "ipAddress": "IP Address",
+            "loginTime": "Login Time",
+            "lastActivity": "Last Activity",
+            "client": "Client",
+            "actions": "Actions"
+        },
+        "stats": {
+            "totalActive": "Total Active",
+            "peakConcurrent": "Peak Concurrent (24h)",
+            "avgDuration": "Avg Duration",
+            "errorRate": "Error Rate",
+            "avgResponse": "Avg Response"
+        },
+        "actions": {
+            "revoke": "Revoke Session",
+            "revokeAll": "Revoke All Sessions",
+            "revokeSelected": "Revoke Selected",
+            "viewDetails": "View Details"
+        },
+        "confirm": {
+            "revoke": "Are you sure you want to revoke this session?",
+            "revokeAll": "Are you sure you want to revoke all sessions for this user?",
+            "revokeMultiple": "Are you sure you want to revoke {{count}} session(s)?"
+        }
+    },
+    "theme": {
+        "title": "Custom Login Theme",
+        "subtitle": "Customize the login page appearance",
+        "enabled": "Use Custom Login Page",
+        "enabledDescription": "Users will be redirected to your custom login page",
+        "tabs": {
+            "colors": "Colors",
+            "background": "Background",
+            "logo": "Logo",
+            "layout": "Layout"
+        },
+        "colors": {
+            "title": "Color Palette",
+            "countryPresets": "Country Flag Presets",
+            "primary": "Primary Color",
+            "secondary": "Secondary Color",
+            "accent": "Accent Color",
+            "background": "Background Color",
+            "text": "Text Color"
+        },
+        "background": {
+            "title": "Background Image",
+            "upload": "Upload Background",
+            "dragDrop": "Drag and drop an image, or browse",
+            "fileTypes": "JPG, PNG, WebP up to 5MB",
+            "blur": "Blur Intensity",
+            "overlay": "Overlay Opacity"
+        },
+        "logo": {
+            "title": "Logo",
+            "upload": "Upload Logo",
+            "remove": "Remove Logo",
+            "position": "Logo Position",
+            "recommended": "PNG or SVG, 200x200px recommended"
+        },
+        "layout": {
+            "formPosition": "Form Position",
+            "cardStyle": "Card Style",
+            "buttonStyle": "Button Style",
+            "positions": {
+                "left": "Left",
+                "center": "Center",
+                "right": "Right"
+            },
+            "styles": {
+                "glassmorphism": "Glassmorphism",
+                "solid": "Solid",
+                "bordered": "Bordered",
+                "floating": "Floating",
+                "rounded": "Rounded",
+                "square": "Square",
+                "pill": "Pill"
+            }
+        },
+        "preview": {
+            "title": "Theme Preview",
+            "devices": {
+                "desktop": "Desktop",
+                "tablet": "Tablet",
+                "mobile": "Mobile"
+            }
+        },
+        "actions": {
+            "saveTheme": "Save Theme",
+            "revertDefault": "Revert to Default",
+            "previewTheme": "Preview Theme"
+        }
+    },
+    "analytics": {
+        "title": "IdP Governance Dashboard",
+        "subtitle": "Monitor federation partner ecosystem health and onboarding quality",
+        "manageIdPs": "Manage IdPs",
+        "riskDistribution": "IdP Risk Tier Distribution",
+        "clickToView": "Click to view"
+    }
+}
