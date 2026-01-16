@@ -1,7 +1,7 @@
 {
-    "instance": "POL",
+    "instance": "SVK",
     "status": "success",
-    "timestamp": "2026-01-14T11:40:43Z",
+    "timestamp": "2026-01-15T12:15:12Z",
     "containers": {"running":9,"unhealthy":0,"stopped":0,"total":9},
     "checks": {
         "services": true,
@@ -11,8 +11,8 @@
         "api": true
     },
     "endpoints": {
-        "frontend": "https://localhost:13000",
-        "backend": "https://localhost:14000",
-        "keycloak": "https://localhost:18443"
+        "frontend": "https://localhost:3026",
+        "backend": "https://localhost:4026",
+        "keycloak": "https://localhost:8469"
     }
 }

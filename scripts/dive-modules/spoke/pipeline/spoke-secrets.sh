@@ -146,6 +146,46 @@ spoke_secrets_load() {
 #   0 - Success
 #   1 - Failure
 ##
+##
+# Map environment variable name to GCP secret name (SSOT naming convention)
+# Per .cursorrules: dive-v3-<type>-<instance>
+##
+_map_env_to_gcp_secret() {
+    local env_var="$1"
+    local instance_code="$2"
+
+    case "$env_var" in
+        POSTGRES_PASSWORD)
+            echo "dive-v3-postgres-${instance_code}"
+            ;;
+        MONGO_PASSWORD)
+            echo "dive-v3-mongodb-${instance_code}"
+            ;;
+        REDIS_PASSWORD)
+            echo "dive-v3-redis-${instance_code}"
+            ;;
+        KEYCLOAK_ADMIN_PASSWORD)
+            echo "dive-v3-keycloak-${instance_code}"
+            ;;
+        KEYCLOAK_CLIENT_SECRET)
+            echo "dive-v3-client-secret-${instance_code}"
+            ;;
+        AUTH_SECRET)
+            echo "dive-v3-auth-secret-${instance_code}"
+            ;;
+        JWT_SECRET)
+            echo "dive-v3-jwt-secret-${instance_code}"
+            ;;
+        NEXTAUTH_SECRET)
+            echo "dive-v3-nextauth-secret-${instance_code}"
+            ;;
+        *)
+            # Fallback to transformation (for unknown secrets)
+            echo "dive-v3-$(echo "$env_var" | tr '[:upper:]' '[:lower:]' | tr '_' '-')-${instance_code}"
+            ;;
+    esac
+}
+
 spoke_secrets_load_from_gcp() {
     local instance_code="$1"
     local code_upper=$(upper "$instance_code")
@@ -163,9 +203,10 @@ spoke_secrets_load_from_gcp() {
 
     log_verbose "Loading secrets from GCP project: $project"
 
-    # Load each required secret
+    # Load each required secret using SSOT naming convention
     for base_secret in "${SPOKE_REQUIRED_SECRETS[@]}"; do
-        local gcp_secret_name="dive-v3-$(echo "$base_secret" | tr '[:upper:]' '[:lower:]' | tr '_' '-')-${code_lower}"
+        # Use SSOT mapping function instead of naive transformation
+        local gcp_secret_name=$(_map_env_to_gcp_secret "$base_secret" "$code_lower")
         local env_var_name="${base_secret}_${code_upper}"
 
         # Try to fetch from GCP
@@ -175,9 +216,9 @@ spoke_secrets_load_from_gcp() {
         if [ -n "$secret_value" ]; then
             export "${env_var_name}=${secret_value}"
             secrets_loaded=$((secrets_loaded + 1))
-            log_verbose "Loaded $env_var_name from GCP"
+            log_verbose "Loaded $env_var_name from GCP ($gcp_secret_name)"
         else
-            # Try shared secret (some secrets are not instance-specific)
+            # Try shared secret (for instance-agnostic secrets like redis-blacklist)
             local shared_secret_name="dive-v3-$(echo "$base_secret" | tr '[:upper:]' '[:lower:]' | tr '_' '-')"
             secret_value=$(gcloud secrets versions access latest --secret="$shared_secret_name" --project="$project" 2>/dev/null)
 
@@ -187,14 +228,15 @@ spoke_secrets_load_from_gcp() {
                 log_verbose "Loaded $env_var_name from shared GCP secret"
             else
                 secrets_failed=$((secrets_failed + 1))
-                log_verbose "GCP secret not found: $gcp_secret_name"
+                log_verbose "GCP secret not found: $gcp_secret_name (also tried $shared_secret_name)"
             fi
         fi
     done
 
     # Also load optional secrets (don't fail if missing)
     for base_secret in "${SPOKE_OPTIONAL_SECRETS[@]}"; do
-        local gcp_secret_name="dive-v3-$(echo "$base_secret" | tr '[:upper:]' '[:lower:]' | tr '_' '-')-${code_lower}"
+        # Use SSOT mapping function
+        local gcp_secret_name=$(_map_env_to_gcp_secret "$base_secret" "$code_lower")
         local env_var_name="${base_secret}_${code_upper}"
 
         local secret_value
@@ -202,7 +244,7 @@ spoke_secrets_load_from_gcp() {
 
         if [ -n "$secret_value" ]; then
             export "${env_var_name}=${secret_value}"
-            log_verbose "Loaded optional $env_var_name from GCP"
+            log_verbose "Loaded optional $env_var_name from GCP ($gcp_secret_name)"
         fi
     done
 

@@ -1,13 +1,13 @@
 /**
  * Animated Resource Card - Phase 4 Micro-interactions
- * 
+ *
  * Enhanced resource card with beautiful micro-interactions:
  * - Hover lift and scale animations
  * - Staggered reveal on load
  * - Press feedback
  * - Classification pulse animation
  * - Bookmark toggle animation
- * 
+ *
  * Uses Framer Motion for smooth, physics-based animations
  */
 
@@ -56,9 +56,9 @@ interface AnimatedResourceCardProps {
 // Constants
 // ============================================
 
-const classificationStyles: Record<string, { 
-  bg: string; 
-  text: string; 
+const classificationStyles: Record<string, {
+  bg: string;
+  text: string;
   border: string;
   glow: string;
   darkBg: string;
@@ -111,8 +111,8 @@ const instanceFlags: Record<string, string> = {
 // ============================================
 
 const cardVariants = {
-  hidden: { 
-    opacity: 0, 
+  hidden: {
+    opacity: 0,
     y: 20,
     scale: 0.95,
   },
@@ -171,7 +171,7 @@ const AnimatedResourceCard = forwardRef<HTMLDivElement, AnimatedResourceCardProp
   // 3D tilt effect
   const x = useMotionValue(0);
   const y = useMotionValue(0);
-  
+
   const springConfig = { damping: 30, stiffness: 300 };
   const rotateX = useSpring(useTransform(y, [-100, 100], [5, -5]), springConfig);
   const rotateY = useSpring(useTransform(x, [-100, 100], [-5, 5]), springConfig);
@@ -198,7 +198,7 @@ const AnimatedResourceCard = forwardRef<HTMLDivElement, AnimatedResourceCardProp
       variants={cardVariants}
       initial="hidden"
       animate="visible"
-      whileHover={{ 
+      whileHover={{
         y: -4,
         transition: { type: 'spring', stiffness: 400, damping: 25 }
       }}
@@ -216,10 +216,10 @@ const AnimatedResourceCard = forwardRef<HTMLDivElement, AnimatedResourceCardProp
         backdrop-blur-sm
         rounded-2xl
         border-2 transition-colors duration-200
-        ${isSelected 
-          ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-200 dark:ring-blue-800' 
-          : isFocused 
-            ? 'border-blue-300 dark:border-blue-600' 
+        ${isSelected
+          ? 'border-blue-500 dark:border-blue-400 ring-2 ring-blue-200 dark:ring-blue-800'
+          : isFocused
+            ? 'border-blue-300 dark:border-blue-600'
             : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
         }
         shadow-lg hover:shadow-xl
@@ -242,7 +242,7 @@ const AnimatedResourceCard = forwardRef<HTMLDivElement, AnimatedResourceCardProp
         <span className={`text-xs font-black tracking-wide ${classStyles.text} ${classStyles.darkText}`}>
           {resource.classification.replace('_', ' ')}
         </span>
-        
+
         <div className="flex items-center gap-2">
           {resource.originRealm && (
             <span className="text-xs font-medium text-gray-600 dark:text-gray-400">
@@ -266,14 +266,14 @@ const AnimatedResourceCard = forwardRef<HTMLDivElement, AnimatedResourceCardProp
       <div className="p-4">
         {/* Title */}
         <Link href={`/resources/${resource.resourceId}`}>
-          <motion.h3 
+          <motion.h3
             className="text-base font-bold text-gray-900 dark:text-gray-100 mb-2 line-clamp-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors"
             whileHover={{ x: 2 }}
           >
             {resource.title}
           </motion.h3>
         </Link>
-        
+
         {/* Resource ID */}
         <p className="text-xs text-gray-500 dark:text-gray-400 font-mono mb-3 truncate">
           {resource.resourceId}
@@ -281,7 +281,7 @@ const AnimatedResourceCard = forwardRef<HTMLDivElement, AnimatedResourceCardProp
 
         {/* Releasability Tags */}
         <div className="flex flex-wrap gap-1.5 mb-3">
-          {resource.releasabilityTo.slice(0, 4).map((country) => (
+          {Array.from(new Set(resource.releasabilityTo.slice(0, 4))).map((country) => (
             <motion.span
               key={country}
               initial={{ opacity: 0, scale: 0.8 }}
@@ -302,7 +302,7 @@ const AnimatedResourceCard = forwardRef<HTMLDivElement, AnimatedResourceCardProp
         {/* COI Tags */}
         {resource.COI.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-3">
-            {resource.COI.map((coi) => (
+            {Array.from(new Set(resource.COI)).map((coi) => (
               <span
                 key={coi}
                 className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
@@ -317,8 +317,8 @@ const AnimatedResourceCard = forwardRef<HTMLDivElement, AnimatedResourceCardProp
         {/* Access Status */}
         <div className={`
           flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium
-          ${accessStatus === 'allowed' 
-            ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300' 
+          ${accessStatus === 'allowed'
+            ? 'bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300'
             : accessStatus === 'denied'
               ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300'
               : 'bg-gray-50 dark:bg-gray-700/50 text-gray-600 dark:text-gray-400'
@@ -360,7 +360,7 @@ const AnimatedResourceCard = forwardRef<HTMLDivElement, AnimatedResourceCardProp
             <ExternalLink className="w-4 h-4" />
           </motion.button>
         )}
-        
+
         {onBookmarkToggle && (
           <motion.button
             variants={bookmarkVariants}
@@ -375,8 +375,8 @@ const AnimatedResourceCard = forwardRef<HTMLDivElement, AnimatedResourceCardProp
             }}
             className={`
               p-2 rounded-lg shadow-lg backdrop-blur-sm transition-colors
-              ${isBookmarked 
-                ? 'bg-amber-500 text-white' 
+              ${isBookmarked
+                ? 'bg-amber-500 text-white'
                 : 'bg-white/90 dark:bg-gray-800/90 text-gray-600 dark:text-gray-300 hover:text-amber-500'
               }
             `}
@@ -412,10 +412,10 @@ export default AnimatedResourceCard;
 // Grid Container
 // ============================================
 
-export function AnimatedResourceGrid({ 
+export function AnimatedResourceGrid({
   children,
   viewMode = 'grid',
-}: { 
+}: {
   children: React.ReactNode;
   viewMode?: 'grid' | 'list' | 'compact';
 }) {

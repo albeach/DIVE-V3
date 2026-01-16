@@ -140,14 +140,14 @@ function ValidationIcon({ valid }: { valid: boolean }) {
 // NEW: Animated section reveal component
 function AnimatedSection({ children, delay = 0 }: { children: React.ReactNode; delay?: number }) {
   const [isVisible, setIsVisible] = useState(false);
-  
+
   useEffect(() => {
     const timer = setTimeout(() => setIsVisible(true), delay);
     return () => clearTimeout(timer);
   }, [delay]);
 
   return (
-    <div 
+    <div
       className={`transition-all duration-700 ease-out transform ${
         isVisible ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-4'
       }`}
@@ -160,7 +160,7 @@ function AnimatedSection({ children, delay = 0 }: { children: React.ReactNode; d
 // NEW: Info tooltip for educational context
 function InfoTooltip({ content }: { content: string }) {
   const [showTooltip, setShowTooltip] = useState(false);
-  
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
@@ -170,7 +170,7 @@ function InfoTooltip({ content }: { content: string }) {
       setShowTooltip(false);
     }
   };
-  
+
   return (
     <span className="relative inline-block ml-2">
       <span
@@ -215,8 +215,8 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
     <button
       onClick={handleCopy}
       className={`inline-flex items-center px-2 py-1 text-xs font-medium border rounded transition-all duration-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
-        copied 
-          ? 'bg-green-50 text-green-700 border-green-300 scale-105' 
+        copied
+          ? 'bg-green-50 text-green-700 border-green-300 scale-105'
           : 'text-gray-700 bg-white border-gray-300 hover:bg-gray-50 hover:scale-105'
       }`}
       title={label || 'Copy to clipboard'}
@@ -243,7 +243,7 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
 // NEW: Offline Decryption Guide Component
 function OfflineDecryptionGuide({ manifest, payload }: { manifest: IZTDFManifest; payload: IZTDFPayload }) {
   const [isExpanded, setIsExpanded] = useState(false);
-  
+
   return (
     <AnimatedSection delay={200}>
       <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border-2 border-purple-200 rounded-lg overflow-hidden">
@@ -314,7 +314,7 @@ function OfflineDecryptionGuide({ manifest, payload }: { manifest: IZTDFManifest
               <div className="bg-gray-900 text-gray-100 rounded-lg p-4 font-mono text-sm">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-green-400">$ </span>
-                  <CopyButton 
+                  <CopyButton
                     text={`curl -H "Authorization: Bearer YOUR_TOKEN" \\\n  "${process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000'}/api/resources/${manifest.objectId}/download" \\\n  -o ${manifest.objectId}.tdf`}
                     label="Copy download command"
                   />
@@ -341,7 +341,7 @@ function OfflineDecryptionGuide({ manifest, payload }: { manifest: IZTDFManifest
               <p className="text-sm text-gray-700 mb-3">
                 Install the OpenTDF command-line tool (requires Node.js 18+ or Python 3.9+):
               </p>
-              
+
               <div className="space-y-3">
                 <div>
                   <p className="text-xs font-semibold text-gray-600 mb-2">Option A: NPM (Node.js)</p>
@@ -353,7 +353,7 @@ function OfflineDecryptionGuide({ manifest, payload }: { manifest: IZTDFManifest
                     <code>npm install -g @opentdf/cli</code>
                   </div>
                 </div>
-                
+
                 <div>
                   <p className="text-xs font-semibold text-gray-600 mb-2">Option B: Python (pip)</p>
                   <div className="bg-gray-900 text-gray-100 rounded-lg p-4 font-mono text-sm">
@@ -381,7 +381,7 @@ function OfflineDecryptionGuide({ manifest, payload }: { manifest: IZTDFManifest
               <div className="bg-gray-900 text-gray-100 rounded-lg p-4 font-mono text-sm">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-green-400">$ </span>
-                  <CopyButton 
+                  <CopyButton
                     text={`opentdf decrypt \\\n  --input ${manifest.objectId}.tdf \\\n  --output ${manifest.objectId}_decrypted.${manifest.contentType.split('/')[1] || 'txt'} \\\n  --auth-token YOUR_TOKEN`}
                   />
                 </div>
@@ -476,9 +476,9 @@ function OfflineDecryptionGuide({ manifest, payload }: { manifest: IZTDFManifest
                 <div className="bg-gray-50 rounded p-3 border border-gray-200">
                   <p className="font-semibold text-gray-900 mb-1">JavaScript / TypeScript</p>
                   <code className="text-xs text-gray-600">@opentdf/client</code>
-                  <a 
-                    href="https://github.com/opentdf/client-web" 
-                    target="_blank" 
+                  <a
+                    href="https://github.com/opentdf/client-web"
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="block text-xs text-blue-600 hover:underline mt-1"
                   >
@@ -488,9 +488,9 @@ function OfflineDecryptionGuide({ manifest, payload }: { manifest: IZTDFManifest
                 <div className="bg-gray-50 rounded p-3 border border-gray-200">
                   <p className="font-semibold text-gray-900 mb-1">Python</p>
                   <code className="text-xs text-gray-600">opentdf</code>
-                  <a 
-                    href="https://github.com/opentdf/client-python" 
-                    target="_blank" 
+                  <a
+                    href="https://github.com/opentdf/client-python"
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="block text-xs text-blue-600 hover:underline mt-1"
                   >
@@ -500,9 +500,9 @@ function OfflineDecryptionGuide({ manifest, payload }: { manifest: IZTDFManifest
                 <div className="bg-gray-50 rounded p-3 border border-gray-200">
                   <p className="font-semibold text-gray-900 mb-1">Go</p>
                   <code className="text-xs text-gray-600">github.com/opentdf/client-go</code>
-                  <a 
-                    href="https://github.com/opentdf/platform" 
-                    target="_blank" 
+                  <a
+                    href="https://github.com/opentdf/platform"
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="block text-xs text-blue-600 hover:underline mt-1"
                   >
@@ -522,9 +522,9 @@ function OfflineDecryptionGuide({ manifest, payload }: { manifest: IZTDFManifest
                 OpenTDF is an open-source framework for protecting data with cryptographically-bound access policies.
               </p>
               <div className="flex flex-wrap gap-2">
-                <a 
-                  href="https://opentdf.io" 
-                  target="_blank" 
+                <a
+                  href="https://opentdf.io"
+                  target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center px-3 py-1.5 bg-white text-purple-700 rounded-lg text-sm font-medium hover:bg-purple-50 transition-colors"
                 >
@@ -533,9 +533,9 @@ function OfflineDecryptionGuide({ manifest, payload }: { manifest: IZTDFManifest
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                   </svg>
                 </a>
-                <a 
-                  href="https://github.com/opentdf" 
-                  target="_blank" 
+                <a
+                  href="https://github.com/opentdf"
+                  target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center px-3 py-1.5 bg-white text-purple-700 rounded-lg text-sm font-medium hover:bg-purple-50 transition-colors"
                 >
@@ -602,7 +602,7 @@ function OverviewPanel({ ztdfDetails, details }: { ztdfDetails: IZTDFDetails; de
               </div>
               <h2 className="text-3xl font-bold mb-3">{ztdfDetails.title}</h2>
               <p className="text-blue-100 text-lg mb-4 max-w-2xl">
-                This document is protected using policy-bound encryption. The security policy travels with the encrypted content, 
+                This document is protected using policy-bound encryption. The security policy travels with the encrypted content,
                 ensuring continuous enforcement of access controls.
               </p>
               <div className="flex flex-wrap gap-3">
@@ -645,13 +645,13 @@ function OverviewPanel({ ztdfDetails, details }: { ztdfDetails: IZTDFDetails; de
               {details.policy.securityLabel.classification}
             </div>
             <p className="mt-3 text-xs text-gray-600">
-              {details.policy.securityLabel.classification === 'TOP_SECRET' && 
+              {details.policy.securityLabel.classification === 'TOP_SECRET' &&
                 'Exceptionally grave damage if disclosed'}
-              {details.policy.securityLabel.classification === 'SECRET' && 
+              {details.policy.securityLabel.classification === 'SECRET' &&
                 'Serious damage if disclosed'}
-              {details.policy.securityLabel.classification === 'CONFIDENTIAL' && 
+              {details.policy.securityLabel.classification === 'CONFIDENTIAL' &&
                 'Damage if disclosed'}
-              {details.policy.securityLabel.classification === 'UNCLASSIFIED' && 
+              {details.policy.securityLabel.classification === 'UNCLASSIFIED' &&
                 'Publicly releasable'}
             </p>
           </div>
@@ -663,7 +663,7 @@ function OverviewPanel({ ztdfDetails, details }: { ztdfDetails: IZTDFDetails; de
               <InfoTooltip content="Only users from these countries can access this document, even if they have the right clearance." />
             </div>
             <div className="flex flex-wrap gap-2">
-              {details.policy.securityLabel.releasabilityTo.map((country: string) => (
+              {Array.from(new Set(details.policy.securityLabel.releasabilityTo)).map((country: string) => (
                 <span
                   key={country}
                   className="inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold bg-blue-100 text-blue-800 border border-blue-300"
@@ -821,7 +821,7 @@ function OverviewPanel({ ztdfDetails, details }: { ztdfDetails: IZTDFDetails; de
         <div className="bg-white rounded-lg border border-gray-200 p-6">
           <h3 className="text-lg font-semibold text-gray-900 mb-4">Explore This ZTDF</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <button 
+            <button
               onClick={() => document.querySelector<HTMLButtonElement>('button[role="tab"]:nth-child(3)')?.click()}
               className="flex items-center justify-between p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-lg hover:shadow-md transition-all duration-300 group"
             >
@@ -833,8 +833,8 @@ function OverviewPanel({ ztdfDetails, details }: { ztdfDetails: IZTDFDetails; de
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
-            
-            <button 
+
+            <button
               onClick={() => document.querySelector<HTMLButtonElement>('button[role="tab"]:nth-child(4)')?.click()}
               className="flex items-center justify-between p-4 bg-gradient-to-r from-green-50 to-emerald-50 border border-green-200 rounded-lg hover:shadow-md transition-all duration-300 group"
             >
@@ -846,8 +846,8 @@ function OverviewPanel({ ztdfDetails, details }: { ztdfDetails: IZTDFDetails; de
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
               </svg>
             </button>
-            
-            <button 
+
+            <button
               onClick={() => document.querySelector<HTMLButtonElement>('button[role="tab"]:nth-child(7)')?.click()}
               className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-pink-50 border border-purple-200 rounded-lg hover:shadow-md transition-all duration-300 group"
             >
@@ -942,10 +942,10 @@ function PolicyPanel({ policy }: { policy: IZTDFPolicy }) {
           </svg>
           Policy Integrity (STANAG 4778)
         </h3>
-        <HashDisplay 
-          hash={policy.policyHash} 
-          valid={policy.policyHashValid} 
-          label="Policy Hash (SHA-384)" 
+        <HashDisplay
+          hash={policy.policyHash}
+          valid={policy.policyHashValid}
+          label="Policy Hash (SHA-384)"
         />
         <p className="mt-3 text-xs text-gray-500">
           The policy hash ensures that security labels and assertions haven't been tampered with after creation.
@@ -957,7 +957,7 @@ function PolicyPanel({ policy }: { policy: IZTDFPolicy }) {
         <h3 className="text-lg font-semibold text-gray-900 mb-4">
           Security Label (STANAG 4774)
         </h3>
-        
+
         {/* Display Marking */}
         <div className="mb-6 p-4 bg-gray-50 border-2 border-gray-300 rounded">
           <p className="text-xs font-medium text-gray-500 mb-2">DISPLAY MARKING</p>
@@ -975,13 +975,13 @@ function PolicyPanel({ policy }: { policy: IZTDFPolicy }) {
             {policy.securityLabel.classification}
           </span>
           <p className="mt-2 text-xs text-gray-500">
-            {policy.securityLabel.classification === 'TOP_SECRET' && 
+            {policy.securityLabel.classification === 'TOP_SECRET' &&
               'Unauthorized disclosure could cause exceptionally grave damage to national security'}
-            {policy.securityLabel.classification === 'SECRET' && 
+            {policy.securityLabel.classification === 'SECRET' &&
               'Unauthorized disclosure could cause serious damage to national security'}
-            {policy.securityLabel.classification === 'CONFIDENTIAL' && 
+            {policy.securityLabel.classification === 'CONFIDENTIAL' &&
               'Unauthorized disclosure could cause damage to national security'}
-            {policy.securityLabel.classification === 'UNCLASSIFIED' && 
+            {policy.securityLabel.classification === 'UNCLASSIFIED' &&
               'Not classified - publicly releasable information'}
           </p>
         </div>
@@ -992,7 +992,7 @@ function PolicyPanel({ policy }: { policy: IZTDFPolicy }) {
             Releasable To (Countries)
           </label>
           <div className="flex flex-wrap gap-2">
-            {policy.securityLabel.releasabilityTo.map((country) => (
+            {Array.from(new Set(policy.securityLabel.releasabilityTo)).map((country) => (
               <span
                 key={country}
                 className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 border border-blue-300"
@@ -1010,7 +1010,7 @@ function PolicyPanel({ policy }: { policy: IZTDFPolicy }) {
               Communities of Interest (COI)
             </label>
             <div className="flex flex-wrap gap-2">
-              {policy.securityLabel.COI.map((coi) => (
+              {Array.from(new Set(policy.securityLabel.COI)).map((coi) => (
                 <span
                   key={coi}
                   className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800 border border-purple-300"
@@ -1051,7 +1051,7 @@ function PolicyPanel({ policy }: { policy: IZTDFPolicy }) {
             <p className="text-xs text-blue-800 mb-3">
               NATO standard for coalition interoperability - original classification preserved with NATO equivalent
             </p>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {policy.securityLabel.originalClassification && (
                 <div className="bg-white rounded-md p-3 border border-blue-300">
@@ -1062,7 +1062,7 @@ function PolicyPanel({ policy }: { policy: IZTDFPolicy }) {
                   )}
                 </div>
               )}
-              
+
               {policy.securityLabel.natoEquivalent && (
                 <div className="bg-white rounded-md p-3 border border-blue-300">
                   <label className="text-xs font-semibold text-gray-500 uppercase block mb-1">NATO Equivalent</label>
@@ -1070,14 +1070,14 @@ function PolicyPanel({ policy }: { policy: IZTDFPolicy }) {
                   <p className="text-xs text-gray-600 mt-1">standardized level</p>
                 </div>
               )}
-              
+
               <div className="bg-white rounded-md p-3 border border-blue-300">
                 <label className="text-xs font-semibold text-gray-500 uppercase block mb-1">Current (DIVE V3)</label>
                 <p className="text-sm font-bold text-gray-900">{policy.securityLabel.classification}</p>
                 <p className="text-xs text-gray-600 mt-1">normalized level</p>
               </div>
             </div>
-            
+
             <div className="mt-3 flex items-center gap-2 text-xs text-blue-700">
               <svg className="h-4 w-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
@@ -1165,10 +1165,10 @@ function PayloadPanel({ payload }: { payload: IZTDFPayload }) {
       {/* Payload Hash */}
       <div className="bg-white rounded-lg border border-gray-200 p-6">
         <h3 className="text-lg font-semibold text-gray-900 mb-4">Payload Integrity</h3>
-        <HashDisplay 
-          hash={payload.payloadHash} 
-          valid={payload.payloadHashValid} 
-          label="Payload Hash (SHA-384)" 
+        <HashDisplay
+          hash={payload.payloadHash}
+          valid={payload.payloadHashValid}
+          label="Payload Hash (SHA-384)"
         />
       </div>
 
@@ -1214,8 +1214,8 @@ function PayloadPanel({ payload }: { payload: IZTDFPayload }) {
                     <div>
                       <label className="text-xs text-gray-500">COI Required</label>
                       <p className="text-sm text-gray-900">
-                        {kao.policyBinding.coiRequired.length > 0 
-                          ? kao.policyBinding.coiRequired.join(', ') 
+                        {kao.policyBinding.coiRequired.length > 0
+                          ? kao.policyBinding.coiRequired.join(', ')
                           : 'None'}
                       </p>
                     </div>
@@ -1271,8 +1271,8 @@ function IntegrityPanel({ integrityStatus }: { integrityStatus: IIntegrityStatus
     <div className="space-y-6">
       {/* Overall Status */}
       <div className={`rounded-lg border-2 p-6 ${
-        integrityStatus.overallValid 
-          ? 'bg-green-50 border-green-300' 
+        integrityStatus.overallValid
+          ? 'bg-green-50 border-green-300'
           : 'bg-red-50 border-red-300'
       }`}>
         <div className="flex items-center justify-between mb-4">
@@ -1413,7 +1413,7 @@ function IntegrityPanel({ integrityStatus }: { integrityStatus: IIntegrityStatus
                 Integrity Verified
               </h3>
               <p className="text-sm text-green-800">
-                All cryptographic hashes match their expected values. This ZTDF resource has not been 
+                All cryptographic hashes match their expected values. This ZTDF resource has not been
                 tampered with and complies with STANAG 4778 cryptographic binding requirements.
               </p>
             </div>
@@ -1447,7 +1447,7 @@ export default function ZTDFInspectorPage() {
 
   useEffect(() => {
     if (status === 'loading') return;
-    
+
     if (!session) {
       return;
     }
@@ -1585,8 +1585,8 @@ export default function ZTDFInspectorPage() {
           <Tab.Panels>
             {/* NEW: Overview Tab */}
             <Tab.Panel>
-              <OverviewPanel 
-                ztdfDetails={ztdfDetails} 
+              <OverviewPanel
+                ztdfDetails={ztdfDetails}
                 details={details}
               />
             </Tab.Panel>

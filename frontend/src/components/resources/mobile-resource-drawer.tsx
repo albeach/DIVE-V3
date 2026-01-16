@@ -1,13 +1,13 @@
 /**
  * Mobile Resource Drawer - Phase 4 Mobile-First Responsive Redesign
- * 
+ *
  * A bottom sheet drawer for mobile devices with:
  * - Swipe to close gesture
  * - Smooth spring animations
  * - Dark mode optimized colors
  * - Touch-friendly hit targets (48px minimum)
  * - Optimized for thumb reach
- * 
+ *
  * Inspired by iOS/Android bottom sheets
  */
 
@@ -65,7 +65,7 @@ interface MobileResourceDrawerProps {
 const DRAWER_HEIGHT = '85vh';
 const CLOSE_THRESHOLD = 150; // Drag distance to trigger close
 
-const classificationColors: Record<string, { 
+const classificationColors: Record<string, {
   bg: string;
   text: string;
   darkBg: string;
@@ -146,7 +146,7 @@ export default function MobileResourceDrawer({
 
   if (!mounted) return null;
 
-  const classColors = resource 
+  const classColors = resource
     ? classificationColors[resource.classification] || classificationColors.UNCLASSIFIED
     : classificationColors.UNCLASSIFIED;
 
@@ -185,7 +185,7 @@ export default function MobileResourceDrawer({
           >
             <div className="h-full bg-white dark:bg-gray-900 rounded-t-3xl shadow-2xl flex flex-col overflow-hidden">
               {/* Drag Handle */}
-              <div 
+              <div
                 className="flex justify-center py-3 cursor-grab active:cursor-grabbing touch-none"
                 onPointerDown={(e) => dragControls.start(e)}
               >
@@ -239,7 +239,7 @@ export default function MobileResourceDrawer({
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-1">
-                        {resource.releasabilityTo.slice(0, 3).map((country) => (
+                        {Array.from(new Set(resource.releasabilityTo.slice(0, 3))).map((country) => (
                           <span
                             key={country}
                             className={`
@@ -271,7 +271,7 @@ export default function MobileResourceDrawer({
                       </div>
                       <div className="flex flex-wrap gap-1">
                         {resource.COI.length > 0 ? (
-                          resource.COI.map((coi) => (
+                          Array.from(new Set(resource.COI)).map((coi) => (
                             <span
                               key={coi}
                               className="px-2 py-0.5 rounded text-xs font-bold bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
@@ -405,15 +405,15 @@ export function useSwipeToOpen(onOpen: () => void, threshold = 100) {
 
   const handleTouchEnd = (e: React.TouchEvent) => {
     if (touchStartY.current === null) return;
-    
+
     const touchEndY = e.changedTouches[0].clientY;
     const diff = touchStartY.current - touchEndY;
-    
+
     // Swipe up from bottom of screen
     if (diff > threshold && touchStartY.current > window.innerHeight - 100) {
       onOpen();
     }
-    
+
     touchStartY.current = null;
   };
 

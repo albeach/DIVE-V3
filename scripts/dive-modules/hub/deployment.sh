@@ -116,67 +116,56 @@ EOF
     log_info "Secrets saved to .env.hub (gitignored)"
 }
 _hub_generate_certs() {
+    # ==========================================================================
+    # SSOT: Use certificates.sh module for Hub certificate generation
+    # ==========================================================================
+    # FIX (2026-01-15): Consolidated Hub certificate generation to SSOT
+    # Ensures consistent wildcard SANs for all spoke federation
+    # ==========================================================================
+    
     mkdir -p "${HUB_CERTS_DIR}"
     mkdir -p "${HUB_DATA_DIR}/truststores"
 
-    # Check for mkcert
-    if command -v mkcert >/dev/null 2>&1; then
-        log_info "Using mkcert for certificate generation..."
-
-        # Install mkcert CA if not already done
-        mkcert -install 2>/dev/null || true
-
-        # Generate Hub certificate with WILDCARD SANs for dynamic spoke support
-        # This allows ANY future spoke to be added without certificate regeneration
-        # No hardcoded NATO country list - supports any partner nation
-        (
-            cd "${HUB_CERTS_DIR}"
-            mkcert -key-file key.pem -cert-file certificate.pem \
-                localhost 127.0.0.1 ::1 host.docker.internal \
-                "*.localhost" \
-                "hub.dive25.com" "usa-idp.dive25.com" "usa-api.dive25.com" \
-                "*.dive25.com" "*.dive25.local" \
-                "dive-hub-keycloak" "dive-hub-backend" "dive-hub-frontend" \
-                "dive-hub-opa" "dive-hub-opal-server" "dive-hub-kas" \
-                "keycloak" "hub-keycloak" "backend" "frontend" "opa" "opal-server" \
-                2>/dev/null
-        )
-        log_success "Hub certificate generated with wildcard SANs (supports all current and future spokes)"
-
-        # Copy mkcert root CA to truststores directory
-        local ca_root
-        ca_root=$(mkcert -CAROOT 2>/dev/null)
-        if [ -f "$ca_root/rootCA.pem" ]; then
-            cp "$ca_root/rootCA.pem" "${HUB_CERTS_DIR}/mkcert-rootCA.pem"
-            cp "$ca_root/rootCA.pem" "${HUB_DATA_DIR}/truststores/mkcert-rootCA.pem"
-            log_success "mkcert root CA installed in Hub truststore"
-        else
-            log_warn "mkcert root CA not found at: $ca_root"
+    # Load certificates module (SSOT)
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/certificates.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+        
+        # Use SSOT function for Hub certificate
+        if type update_hub_certificate_sans &>/dev/null; then
+            log_info "Generating Hub certificate via SSOT (wildcard SANs)..."
+            if update_hub_certificate_sans; then
+                log_success "Hub certificate generated via SSOT"
+                
+                # Install mkcert CA in Hub truststore (SSOT function)
+                if type install_mkcert_ca_in_hub &>/dev/null; then
+                    install_mkcert_ca_in_hub || {
+                        log_warn "CA installation had issues (non-critical)"
+                    }
+                fi
+                
+                return 0
+            else
+                log_warn "SSOT Hub certificate generation failed, trying fallback..."
+            fi
         fi
-    else
-        # Fallback to openssl self-signed with WILDCARD SANs (same as mkcert approach)
-        log_warn "mkcert not found, using self-signed certificate (federation may have SSL issues)"
-
-        # Build comprehensive SAN list (matching mkcert approach)
-        local san_list="DNS:localhost,DNS:*.localhost"
-        san_list="${san_list},DNS:host.docker.internal"
-        san_list="${san_list},DNS:dive-hub-keycloak,DNS:dive-hub-backend,DNS:dive-hub-frontend"
-        san_list="${san_list},DNS:dive-hub-opa,DNS:dive-hub-opal-server,DNS:dive-hub-kas"
-        san_list="${san_list},DNS:keycloak,DNS:hub-keycloak,DNS:backend,DNS:frontend,DNS:opa,DNS:opal-server"
-        san_list="${san_list},DNS:hub.dive25.com,DNS:usa-idp.dive25.com,DNS:usa-api.dive25.com,DNS:usa-app.dive25.com"
-        san_list="${san_list},DNS:*.dive25.com,DNS:*.dive25.local"
-        san_list="${san_list},IP:127.0.0.1,IP:::1"
-
-        openssl req -x509 -newkey rsa:4096 -sha256 -days 365 \
-            -nodes -keyout "${HUB_CERTS_DIR}/key.pem" \
-            -out "${HUB_CERTS_DIR}/certificate.pem" \
-            -subj "/CN=dive-hub-keycloak" \
-            -addext "subjectAltName=${san_list}" \
-            2>/dev/null
-
-        log_success "Self-signed certificate generated with wildcard SANs (supports all spokes)"
-        log_warn "For trusted certificates, install mkcert and regenerate: ./dive certificates update-hub-sans"
     fi
+    
+    # ==========================================================================
+    # FALLBACK: Use generate-dev-certs.sh if SSOT unavailable
+    # ==========================================================================
+    log_warn "Using fallback certificate generation (generate-dev-certs.sh)"
+    
+    cd "${DIVE_ROOT}"
+    COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-dive-hub}" \
+    CERT_HOST_SCOPE="${CERT_HOST_SCOPE:-full}" \
+    SKIP_CERT_REGEN_IF_PRESENT=false \
+    bash "${DIVE_ROOT}/scripts/generate-dev-certs.sh" 2>/dev/null || {
+        log_error "Certificate generation failed"
+        log_error "Install mkcert: brew install mkcert && mkcert -install"
+        return 1
+    }
+    
+    log_success "TLS certificates generated via fallback"
 }
 _hub_create_config() {
     local config_file="${HUB_DATA_DIR}/config/hub.json"

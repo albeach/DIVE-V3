@@ -19,10 +19,20 @@ fi
 export DIVE_SPOKE_INIT_LOADED=1
 
 # =============================================================================
-# KAS AUTO-REGISTRATION HELPER
+# KAS AUTO-REGISTRATION HELPER (MongoDB-backed since Phase 3)
 # =============================================================================
-# Automatically registers a spoke's KAS server in config/kas-registry.json
-# This ensures ZTDF encryption works without manual configuration edits
+# ARCHITECTURE NOTE:
+# As of Phase 3 (MongoDB KAS Registry Migration), KAS registration uses MongoDB
+# instead of file-based kas-registry.json. This function is kept as a no-op
+# for backward compatibility during the initialization phase.
+#
+# Actual MongoDB KAS registration occurs in:
+#   scripts/dive-modules/spoke/pipeline/phase-configuration.sh
+#   -> spoke_config_register_in_registries()
+#   -> spoke_kas_register_mongodb()
+#
+# The MongoDB kas_registry collection is the SSOT for spoke KAS instances.
+# Hub continues to use file-based registry (no changes to Hub deployment).
 # =============================================================================
 
 _auto_register_kas() {
@@ -30,98 +40,10 @@ _auto_register_kas() {
     local code_lower="$2"
     local kas_port="$3"
 
-    local kas_registry="${DIVE_ROOT}/config/kas-registry.json"
-
-    if [ ! -f "$kas_registry" ]; then
-        log_warn "KAS registry not found: $kas_registry"
-        return 0  # Non-fatal
-    fi
-
-    # Check if KAS entry already exists
-    if jq -e ".kasServers[] | select(.countryCode == \"$code_upper\")" "$kas_registry" >/dev/null 2>&1; then
-        log_info "KAS entry for $code_upper already exists (skipping registration)"
-        return 0
-    fi
-
-    log_info "Auto-registering $code_upper in KAS registry..."
-
-    # Get country name from NATO database
-    local country_name="$code_upper"
-    if declare -F get_country_name >/dev/null 2>&1; then
-        country_name=$(get_country_name "$code_upper" 2>/dev/null || echo "$code_upper")
-    fi
-
-    # Create KAS entry JSON
-    local kas_entry=$(cat <<EOF
-{
-  "kasId": "${code_lower}-kas",
-  "organization": "$country_name",
-  "countryCode": "$code_upper",
-  "kasUrl": "https://localhost:${kas_port}/api/kas",
-  "internalKasUrl": "http://kas-${code_lower}:8080",
-  "authMethod": "jwt",
-  "authConfig": {
-    "jwtIssuer": "https://${code_lower}-idp.dive25.com/realms/dive-v3-broker-${code_lower}",
-    "jwtAudience": "dive-v3-broker"
-  },
-  "trustLevel": "high",
-  "supportedCountries": ["$code_upper"],
-  "supportedCOIs": ["NATO", "NATO-COSMIC", "EU-RESTRICTED"],
-  "policyTranslation": {
-    "clearanceMapping": {
-      "UNCLASSIFIED": "UNCLASSIFIED",
-      "RESTRICTED": "RESTRICTED",
-      "CONFIDENTIAL": "CONFIDENTIAL",
-      "SECRET": "SECRET",
-      "TOP_SECRET": "TOP_SECRET"
-    }
-  },
-  "metadata": {
-    "version": "1.0.0",
-    "capabilities": ["key-release", "policy-evaluation", "audit-logging", "ztdf-support"],
-    "contact": "kas-admin@${code_lower}.dive25.com",
-    "lastVerified": "$(date -u +%Y-%m-%dT%H:%M:%SZ 2>/dev/null || date +%Y-%m-%dT%H:%M:%SZ)",
-    "healthEndpoint": "/health",
-    "requestKeyEndpoint": "/request-key"
-  }
-}
-EOF
-)
-
-    # Add KAS server to registry
-    local temp_file=$(mktemp)
-    if jq ".kasServers += [$kas_entry]" "$kas_registry" > "$temp_file" 2>/dev/null; then
-        mv "$temp_file" "$kas_registry"
-    else
-        log_error "Failed to add KAS entry (jq error)"
-        rm -f "$temp_file"
-        return 1
-    fi
-
-    # Update trust matrix - add bidirectional trust with USA and other major partners
-    local default_partners=("usa" "fra" "gbr" "deu")
-
-    # Add this spoke to all partners' trust lists
-    for partner in "${default_partners[@]}"; do
-        local temp_file2=$(mktemp)
-        if jq ".federationTrust.trustMatrix[\"${partner}-kas\"] += [\"${code_lower}-kas\"] | .federationTrust.trustMatrix[\"${partner}-kas\"] |= unique" "$kas_registry" > "$temp_file2" 2>/dev/null; then
-            mv "$temp_file2" "$kas_registry"
-        else
-            rm -f "$temp_file2"
-        fi
-    done
-
-    # Add partners to this spoke's trust list
-    local partners_json='["usa-kas","fra-kas","gbr-kas","deu-kas"]'
-
-    local temp_file3=$(mktemp)
-    if jq ".federationTrust.trustMatrix[\"${code_lower}-kas\"] = $partners_json" "$kas_registry" > "$temp_file3" 2>/dev/null; then
-        mv "$temp_file3" "$kas_registry"
-        log_success "KAS entry registered for $code_upper (trusted by: USA, FRA, GBR, DEU)"
-    else
-        log_warn "Failed to update trust matrix"
-        rm -f "$temp_file3"
-    fi
+    # DEPRECATION NOTICE: File-based KAS registration removed in Phase 3
+    # KAS registration now happens via MongoDB during deployment configuration phase
+    log_verbose "KAS registration deferred to deployment phase (MongoDB-backed)"
+    log_verbose "  -> Will register ${code_lower}-kas in MongoDB kas_registry collection"
 
     return 0
 }
@@ -698,54 +620,42 @@ EOF
     _create_spoke_docker_compose "$spoke_dir" "$code_upper" "$code_lower" "$instance_name" \
         "$spoke_id" "$idp_hostname" "$api_url" "$base_url" "$idp_url" "$tunnel_token"
 
-    # Generate TLS certificates (prefer mkcert for local dev, fallback to openssl)
-    log_step "Generating TLS certificates"
-    if command -v mkcert &>/dev/null; then
-        log_info "Using mkcert for locally-trusted certificates"
-        mkcert -key-file "$spoke_dir/certs/key.pem" \
-               -cert-file "$spoke_dir/certs/certificate.pem" \
-               localhost \
-               127.0.0.1 \
-               ::1 \
-               host.docker.internal \
-               "dive-spoke-${code_lower}-keycloak" \
-               "dive-spoke-${code_lower}-backend" \
-               "dive-spoke-${code_lower}-frontend" \
-               "dive-spoke-${code_lower}-opa" \
-               "keycloak-${code_lower}" \
-               "opa-${code_lower}" \
-               "${code_lower}-keycloak-${code_lower}-1" \
-               "${code_lower}-idp.dive25.com" \
-               "${code_lower}-api.dive25.com" \
-               "${code_lower}-app.dive25.com" \
-               "backend-${code_lower}" \
-               "frontend-${code_lower}" 2>/dev/null
-    else
-        log_warn "mkcert not found, using self-signed certificate (will show browser warnings)"
-        # Generate with SANs for localhost including new container naming convention
-        openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-            -keyout "$spoke_dir/certs/key.pem" \
-            -out "$spoke_dir/certs/certificate.pem" \
-            -subj "/CN=localhost/O=DIVE-V3/C=US" \
-            -addext "subjectAltName=DNS:localhost,DNS:${idp_hostname},DNS:dive-spoke-${code_lower}-keycloak,DNS:dive-spoke-${code_lower}-backend,DNS:keycloak-${code_lower},DNS:${code_lower}-keycloak-${code_lower}-1,IP:127.0.0.1" 2>/dev/null
-    fi
-    chmod 600 "$spoke_dir/certs/key.pem"
-    chmod 644 "$spoke_dir/certs/certificate.pem"
+    # ==========================================================================
+    # SSOT: Use certificates.sh module for ALL certificate generation
+    # ==========================================================================
+    # FIX (2026-01-15): Replaced inline certificate generation with SSOT function
+    # This ensures comprehensive SANs including Hub containers for federation
+    # ==========================================================================
 
-    # Copy mkcert root CA for Keycloak truststore (required for federation)
-    if command -v mkcert &>/dev/null; then
-        local mkcert_ca="$(mkcert -CAROOT)/rootCA.pem"
-        if [ -f "$mkcert_ca" ]; then
-            cp "$mkcert_ca" "$spoke_dir/certs/rootCA.pem"
-            cp "$mkcert_ca" "$spoke_dir/truststores/mkcert-rootCA.pem"
-            chmod 644 "$spoke_dir/certs/rootCA.pem"
-            chmod 644 "$spoke_dir/truststores/mkcert-rootCA.pem"
-            # Create symlink for OPAL client SSL verification
-            ln -sf rootCA.pem "$spoke_dir/certs/mkcert-rootCA.pem"
-            log_info "Copied mkcert root CA for federation truststore"
+    log_step "Generating TLS certificates"
+
+    # Load certificates module (SSOT)
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/certificates.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+
+        # Use SSOT function with comprehensive SANs (includes Hub + Spoke containers)
+        if type generate_spoke_certificate &>/dev/null; then
+            if generate_spoke_certificate "$code_lower"; then
+                log_success "TLS certificates generated via SSOT"
+            else
+                log_error "Failed to generate certificates via SSOT"
+                return 1
+            fi
         else
-            log_warn "mkcert root CA not found at $mkcert_ca"
+            log_error "generate_spoke_certificate function not available"
+            return 1
         fi
+
+        # Install mkcert CA in spoke truststore (SSOT function)
+        if type install_mkcert_ca_in_spoke &>/dev/null; then
+            install_mkcert_ca_in_spoke "$code_lower" || {
+                log_warn "CA installation had issues (non-critical)"
+            }
+        fi
+    else
+        log_error "certificates.sh module not found"
+        log_error "Cannot generate federation-compatible certificates"
+        return 1
     fi
 
     # Generate spoke mTLS certificates
@@ -910,9 +820,14 @@ _create_spoke_docker_compose() {
     sed -i '' "s|{{BACKEND_HOST_PORT}}|${backend_host_port}|g" "$spoke_dir/docker-compose.yml"
     sed -i '' "s|{{FRONTEND_HOST_PORT}}|${frontend_host_port}|g" "$spoke_dir/docker-compose.yml"
     sed -i '' "s|{{OPA_HOST_PORT}}|${opa_host_port}|g" "$spoke_dir/docker-compose.yml"
+    # Calculate OPAL OPA port (9181 + offset based on instance code)
+    # Simplified to avoid syntax errors with od command output
+    local opal_opa_offset=$(echo -n "${code_lower}" | cksum | cut -d' ' -f1)
+    local opal_opa_port=$((9181 + (opal_opa_offset % 100)))
+    sed -i '' "s|{{OPAL_OPA_PORT}}|${opal_opa_port}|g" "$spoke_dir/docker-compose.yml"
     sed -i '' "s|{{KAS_HOST_PORT}}|${kas_host_port}|g" "$spoke_dir/docker-compose.yml"
 
-    log_success "Generated docker-compose.yml from template v2.8.0 (Network fix for Hub federation)"
+    log_success "Generated docker-compose.yml from template (always regenerated from SSOT)"
 }
 # Original spoke_init (backward compatible, calls wizard or direct)
 spoke_init() {

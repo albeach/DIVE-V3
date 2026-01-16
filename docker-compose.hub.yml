@@ -60,7 +60,7 @@ services:
   # MongoDB - policy/resource data backing store for backend
   # ---------------------------------------------------------------------------
   mongodb:
-    image: mongo:7-jammy
+    image: mongo:8.0.17
     container_name: ${COMPOSE_PROJECT_NAME}-mongodb
     restart: unless-stopped
     environment:
@@ -439,8 +439,11 @@ services:
       AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       AUTH_KEYCLOAK_ISSUER: ${AUTH_KEYCLOAK_ISSUER:-https://localhost:8443/realms/dive-v3-broker-usa}
       AUTH_TRUST_HOST: "true"
-      # SECURITY: Trust mkcert CA instead of disabling TLS verification
-      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
+      # TLS Certificate Handling - Proper mkcert Integration (2026 Best Practice)
+      # Makes Node.js fetch() API use system CA trust store (mkcert CA installed via entrypoint)
+      # See: docs/TLS_BEST_PRACTICES_2026.md
+      NODE_OPTIONS: "--use-openssl-ca"
+      NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem  # Legacy https module support
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/dive_v3_app
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"

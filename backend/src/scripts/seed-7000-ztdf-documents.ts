@@ -1,6 +1,6 @@
 /**
  * Seed ZTDF-Encrypted Documents (COI COHERENCE FIX + NEW COIs)
- * 
+ *
  * Enhanced version with:
  * - Configurable quantity (1 - 20,000 documents)
  * - Dry-run validation mode
@@ -8,12 +8,12 @@
  * - 28 validated COI templates (includes Alpha, Beta, Gamma)
  * - RESTRICTED clearance level
  * - Templates with no COIs
- * 
+ *
  * Usage:
  *   npm run seed-database              # Seeds 11,000 docs (default)
  *   npm run seed-database 10000        # Seeds 10,000 docs
  *   npm run seed-database -- --dry-run # Tests with 10 docs
- * 
+ *
  * Date: November 6, 2025
  */
 
@@ -611,7 +611,7 @@ async function main() {
 
     if (DRY_RUN) {
         console.log('🧪 DRY-RUN MODE: Testing document generation...\n');
-        
+
         // Generate 10 test documents
         for (let i = 1; i <= 10; i++) {
             const doc = await createValidZTDFDocument(i);
@@ -660,12 +660,12 @@ async function main() {
             for (let i = 0; i < BATCH_SIZE; i++) {
                 batchPromises.push(createValidZTDFDocument(startIdx + i + 1));
             }
-            
+
             const batchDocs = await Promise.all(batchPromises);
             documents.push(...batchDocs);
 
             await collection.insertMany(documents);
-            
+
             const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
             const docsPerSec = ((startIdx + BATCH_SIZE) / (Date.now() - startTime) * 1000).toFixed(1);
             console.log(`✅ Batch ${batch + 1}/${TOTAL_DOCS / BATCH_SIZE}: ${BATCH_SIZE} docs (${startIdx + 1}-${startIdx + BATCH_SIZE}) | ${elapsed}s elapsed | ${docsPerSec} docs/sec`);

@@ -21,13 +21,13 @@ interface RearGlassProps {
 
 /**
  * Rear Glass Layer Component
- * 
+ *
  * Displays object and policy information (ACP-240):
  * - ZTDF structure (resource ID, classification)
  * - Security policy (releasabilityTo, COI)
  * - Encryption status (encrypted, KAO count)
  * - Integrity verification (signature valid)
- * 
+ *
  * Design:
  * - Glassmorphism (backdrop-blur-lg, semi-transparent amber background)
  * - Amber color scheme (object model)
@@ -103,7 +103,7 @@ export function RearGlass({ resource }: RearGlassProps) {
                 Releasability To
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {resource.releasabilityTo.map((country) => (
+                {Array.from(new Set(resource.releasabilityTo)).map((country) => (
                   <span
                     key={country}
                     className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200"
@@ -125,7 +125,7 @@ export function RearGlass({ resource }: RearGlassProps) {
                 Communities of Interest
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {resource.COI.map((coi) => (
+                {Array.from(new Set(resource.COI)).map((coi) => (
                   <span
                     key={coi}
                     className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-amber-100 dark:bg-amber-900 text-amber-800 dark:text-amber-200"

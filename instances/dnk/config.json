@@ -1,12 +1,12 @@
 {
   "identity": {
-    "spokeId": "spoke-dnk-63925d8b",
+    "spokeId": "spoke-dnk-4af5464a",
     "instanceCode": "DNK",
-    "name": "Denmark",
-    "description": "DIVE V3 Spoke Instance for Denmark",
+    "name": "DNK Instance",
+    "description": "DIVE V3 Spoke Instance for DNK",
     "country": "DNK",
     "organizationType": "government",
-    "contactEmail": ""
+    "contactEmail": "admin@dnk.dive25.com"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -14,8 +14,9 @@
     "hubOpalUrl": "https://localhost:7002",
     "baseUrl": "https://localhost:3007",
     "apiUrl": "https://localhost:4007",
-    "idpUrl": "https://localhost:8450",
-    "kasUrl": "https://localhost:9007"
+    "idpUrl": "https://dive-spoke-dnk-keycloak:8443",
+    "idpPublicUrl": "https://localhost:8450",
+    "kasUrl": "https://localhost:10007"
   },
   "certificates": {
     "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/dnk/certs/spoke.crt",
@@ -44,8 +45,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2025-12-14T00:49:22Z",
-    "lastModified": "2025-12-14T00:49:22Z",
+    "createdAt": "2026-01-15T12:22:45Z",
+    "lastModified": "2026-01-15T12:22:45Z",
     "configHash": ""
   }
 }
