@@ -1,22 +1,22 @@
 {
   "multiKas": {
-    "title": "Multi-KAS Coalition Architecture",
-    "description": "Distributed key management for coalition environments",
-    "loading": "Loading Multi-KAS Registry...",
-    "loadingSubtitle": "Fetching live data from MongoDB",
-    "refreshing": "Refreshing...",
-    "refresh": "Refresh",
-    "liveFromMongoDB": "Live from MongoDB",
-    "updated": "Updated: {{time}}",
-    "lastUpdated": "Last updated: {{time}}",
-    "autoRefreshInterval": "Auto-refresh interval: {{seconds}} seconds",
-    "errorTitle": "Error Loading KAS Data",
-    "retry": "Retry",
-    "hideDetails": "Hide Details",
-    "showDetails": "Show Details",
-    "technicalDetails": "Technical Details",
+    "title": "Multi-KAS-Koalitionsarchitektur",
+    "description": "Verteiltes Schlüsselmanagement für Koalitionsumgebungen",
+    "loading": "Lade Multi-KAS-Register...",
+    "loadingSubtitle": "Abrufen von Live-Daten aus MongoDB",
+    "refreshing": "Aktualisieren...",
+    "refresh": "Aktualisieren",
+    "liveFromMongoDB": "Live von MongoDB",
+    "updated": "Aktualisiert: {{time}}",
+    "lastUpdated": "Zuletzt aktualisiert: {{time}}",
+    "autoRefreshInterval": "Automatisches Aktualisierungsintervall: {{seconds}} Sekunden",
+    "errorTitle": "Fehler beim Laden der KAS-Daten",
+    "retry": "Wiederholen",
+    "hideDetails": "Details ausblenden",
+    "showDetails": "Details anzeigen",
+    "technicalDetails": "Technische Details",
     "howItWorks": {
-      "title": "How Multi-KAS Works in DIVE V3",
+      "title": "Wie Multi-KAS in DIVE V3 funktioniert",
       "uploadPhase": {
         "title": "Upload Phase (Resource Creation)",
         "description": "When you upload an encrypted resource, upload.service.ts automatically creates 1-4 Key Access Objects (KAOs) based on the resource's releasabilityTo and COI tags. Each KAO wraps the data encryption key (DEK) with a different KAS's public key."
@@ -35,11 +35,11 @@
       }
     },
     "grid": {
-      "title": "KAS Federation Registry",
-      "subtitle": "Live data from MongoDB (kas_registry collection)"
+      "title": "KAS-Föderationsregister",
+      "subtitle": "Live-Daten aus MongoDB (kas_registry-Sammlung)"
     },
     "flow": {
-      "title": "Multi-KAS Flow"
+      "title": "Multi-KAS-Ablauf"
     },
     "example": {
       "title": "Example: Multi-KAO Resource",
@@ -125,7 +125,7 @@
     "description": "COI tags determine which KAS endpoints can decrypt resources"
   },
   "breadcrumbs": {
-    "compliance": "Compliance",
+    "compliance": "Konformität",
     "multiKas": "Multi-KAS",
     "certificates": "Certificates",
     "classifications": "Classifications",
