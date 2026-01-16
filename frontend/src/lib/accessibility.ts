@@ -1,15 +1,15 @@
 /**
  * Accessibility Utilities for DIVE V3
- * 
+ *
  * Helper functions and constants for WCAG 2.1 AAA compliance.
- * 
+ *
  * Features:
  * - ARIA label generators
  * - Keyboard event handlers
  * - Focus management utilities
  * - Screen reader announcements
  * - Color contrast validators
- * 
+ *
  * @version 1.0.0
  * @date 2026-01-16
  */

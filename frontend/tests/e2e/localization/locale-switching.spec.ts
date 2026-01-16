@@ -1,16 +1,16 @@
 /**
  * E2E Tests: Locale Switching
- * 
+ *
  * Tests language switching functionality across the application.
  * Validates that UI updates correctly when locale changes.
- * 
+ *
  * Test Coverage:
  * - LocaleSelector component visibility and interaction
  * - Language switching triggers UI updates
  * - Locale persistence across page navigation
  * - Auto-detection from IdP
  * - All 7 primary languages render correctly
- * 
+ *
  * @version 1.0.0
  * @date 2026-01-16
  */
@@ -72,7 +72,7 @@ test.describe('Locale Switching', () => {
     // Verify French translations loaded
     // Check for French title (should NOT contain English text)
     const pageContent = await page.textContent('body');
-    
+
     // These checks assume French translations are actually translated
     // For now, they'll be in English (machine translation needed)
     expect(pageContent).toBeTruthy();

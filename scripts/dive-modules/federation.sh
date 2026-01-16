@@ -51,6 +51,12 @@ if [ -z "$DIVE_FEDERATION_STATE_LOADED" ]; then
     export DIVE_FEDERATION_STATE_LOADED=1
 fi
 
+# Load federation state database module (2026-01-16)
+if [ -z "$FEDERATION_STATE_DB_LOADED" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/federation-state-db.sh"
+    export FEDERATION_STATE_DB_LOADED=1
+fi
+
 # All federation sub-modules loaded at initialization
 
 # =============================================================================
@@ -310,9 +316,222 @@ module_federation() {
         # Federation diagnostics
         diagnose)       federation_diagnose "$@" ;;
 
+        # Federation database operations (2026-01-16)
+        db|db-status|db-init)
+            federation_db_dispatch "$@"
+            ;;
+
         # Help
         *)              module_federation_help ;;
     esac
+}
+
+# =============================================================================
+# FEDERATION DATABASE COMMANDS (2026-01-16)
+# =============================================================================
+
+##
+# Dispatch federation database commands
+##
+federation_db_dispatch() {
+    local subcmd="${1:-status}"
+    shift || true
+
+    case "$subcmd" in
+        status)
+            federation_db_status "$@"
+            ;;
+        init|init-schema)
+            federation_db_init_schema
+            ;;
+        list|list-links)
+            federation_db_list "$@"
+            ;;
+        health|health-history)
+            federation_db_health "$@"
+            ;;
+        recover|retry)
+            federation_db_recover "$@"
+            ;;
+        cleanup)
+            federation_db_cleanup "$@"
+            ;;
+        *)
+            echo "DIVE V3 Federation Database Commands"
+            echo "====================================="
+            echo ""
+            echo "Commands:"
+            echo "  ./dive federation db status              Show federation database status"
+            echo "  ./dive federation db init                Initialize federation schema"
+            echo "  ./dive federation db list [CODE]         List federation links"
+            echo "  ./dive federation db health [CODE]       Show health check history"
+            echo "  ./dive federation db recover <CODE>      Retry failed federation links"
+            echo "  ./dive federation db cleanup [days]      Clean up old health records (default: 30)"
+            echo ""
+            echo "Examples:"
+            echo "  ./dive federation db status              # Show connection and link counts"
+            echo "  ./dive federation db list SVK            # Show links for SVK"
+            echo "  ./dive federation db recover HUN         # Retry failed HUN links"
+            ;;
+    esac
+}
+
+##
+# Show federation database status
+##
+federation_db_status() {
+    local instance_code="${1:-}"
+
+    echo -e "${BOLD}Federation Database Status:${NC}"
+    echo ""
+
+    if ! type orch_db_check_connection &>/dev/null || ! orch_db_check_connection; then
+        echo -e "  ${RED}Database not available${NC}"
+        return 1
+    fi
+
+    echo -e "  ${GREEN}Database connected${NC}"
+    echo ""
+
+    # Check if federation tables exist
+    local table_count
+    table_count=$(orch_db_exec "SELECT COUNT(*) FROM information_schema.tables WHERE table_name IN ('federation_links', 'federation_health')" 2>/dev/null | xargs)
+
+    if [ "$table_count" -lt 2 ]; then
+        echo -e "  ${YELLOW}Federation schema not initialized${NC}"
+        echo "  Run: ./dive federation db init"
+        return 1
+    fi
+
+    # Get counts
+    local link_count active_count failed_count health_count
+    link_count=$(orch_db_exec "SELECT COUNT(*) FROM federation_links" 2>/dev/null | xargs)
+    active_count=$(orch_db_exec "SELECT COUNT(*) FROM federation_links WHERE status = 'ACTIVE'" 2>/dev/null | xargs)
+    failed_count=$(orch_db_exec "SELECT COUNT(*) FROM federation_links WHERE status = 'FAILED'" 2>/dev/null | xargs)
+    health_count=$(orch_db_exec "SELECT COUNT(*) FROM federation_health" 2>/dev/null | xargs)
+
+    echo "  Federation Links:"
+    echo "    Total:  $link_count"
+    echo -e "    Active: ${GREEN}$active_count${NC}"
+    [ "$failed_count" -gt 0 ] && echo -e "    Failed: ${RED}$failed_count${NC}" || echo "    Failed: $failed_count"
+    echo ""
+    echo "  Health Records: $health_count"
+    echo ""
+
+    # Show specific instance status if provided
+    if [ -n "$instance_code" ]; then
+        echo "  Status for $(upper "$instance_code"):"
+        if type fed_db_get_instance_status &>/dev/null; then
+            fed_db_get_instance_status "$instance_code"
+        fi
+    fi
+}
+
+##
+# Initialize federation schema
+##
+federation_db_init_schema() {
+    if type fed_db_init_schema &>/dev/null; then
+        fed_db_init_schema
+    else
+        log_error "Federation database module not loaded"
+        return 1
+    fi
+}
+
+##
+# List federation links
+##
+federation_db_list() {
+    local instance_code="${1:-}"
+
+    if ! type orch_db_check_connection &>/dev/null || ! orch_db_check_connection; then
+        echo -e "${RED}Database not available${NC}"
+        return 1
+    fi
+
+    echo -e "${BOLD}Federation Links:${NC}"
+    echo ""
+
+    if [ -n "$instance_code" ]; then
+        # List links for specific instance
+        if type fed_db_list_links &>/dev/null; then
+            fed_db_list_links "$instance_code"
+        fi
+    else
+        # List all links
+        if type fed_db_list_all_links &>/dev/null; then
+            fed_db_list_all_links
+        fi
+    fi
+}
+
+##
+# Show health check history
+##
+federation_db_health() {
+    local instance_code="${1:-}"
+
+    if ! type orch_db_check_connection &>/dev/null || ! orch_db_check_connection; then
+        echo -e "${RED}Database not available${NC}"
+        return 1
+    fi
+
+    echo -e "${BOLD}Federation Health History:${NC}"
+    echo ""
+
+    local where_clause=""
+    if [ -n "$instance_code" ]; then
+        local code_lower=$(lower "$instance_code")
+        where_clause="WHERE source_code = '$code_lower' OR target_code = '$code_lower'"
+    fi
+
+    orch_db_exec "
+SELECT check_timestamp, source_code, target_code, direction,
+       CASE WHEN sso_test_passed THEN 'PASS' ELSE 'FAIL' END as result,
+       sso_latency_ms, error_message
+FROM federation_health
+$where_clause
+ORDER BY check_timestamp DESC
+LIMIT 20;
+" 2>/dev/null
+}
+
+##
+# Recover failed federation links
+##
+federation_db_recover() {
+    local instance_code="${1:-}"
+
+    if [ -z "$instance_code" ]; then
+        echo "Usage: ./dive federation db recover <CODE>"
+        return 1
+    fi
+
+    if type fed_db_reset_failed &>/dev/null; then
+        fed_db_reset_failed "$instance_code"
+        echo ""
+        echo "To retry federation setup, run:"
+        echo "  ./dive federation link $instance_code"
+    else
+        log_error "Federation database module not loaded"
+        return 1
+    fi
+}
+
+##
+# Clean up old health records
+##
+federation_db_cleanup() {
+    local days="${1:-30}"
+
+    if type fed_db_cleanup_health_history &>/dev/null; then
+        fed_db_cleanup_health_history "$days"
+    fi
+
+    if type fed_db_cleanup_operations &>/dev/null; then
+        fed_db_cleanup_operations "90"
+    fi
 }
 
 module_federation_help() {
@@ -348,6 +567,14 @@ module_federation_help() {
     echo "    ${GRAY}show${NC} <nation>      Show nation mapper details"
     echo "    ${GRAY}apply${NC}              Apply PII-minimized mappers"
     echo "    ${GRAY}verify${NC}             Verify mapper configuration"
+    echo ""
+    echo -e "${CYAN}Database Commands (2026-01-16):${NC}"
+    echo "  ${GREEN}${BOLD}db${NC} status           Show federation database status"
+    echo "  ${GREEN}${BOLD}db${NC} init             Initialize federation schema"
+    echo "  ${GREEN}${BOLD}db${NC} list [CODE]      List federation links"
+    echo "  ${GREEN}${BOLD}db${NC} health [CODE]    Show health check history"
+    echo "  ${GREEN}${BOLD}db${NC} recover <CODE>   Retry failed federation links"
+    echo "  ${GREEN}${BOLD}db${NC} cleanup [days]   Clean up old health records"
     echo ""
     echo "Examples:"
     echo "  ./dive federation status                        # Show federation status"

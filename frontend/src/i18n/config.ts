@@ -1,8 +1,8 @@
 /**
  * i18n Configuration
- * 
+ *
  * Multi-language support for 25 languages across 32 NATO members.
- * 
+ *
  * Primary Languages (Complete):
  * - English (en) - USA, GBR, CAN, NZL
  * - French (fr) - France, Canada
@@ -11,12 +11,12 @@
  * - Spanish (es) - Spain
  * - Polish (pl) - Poland
  * - Dutch (nl) - Netherlands
- * 
+ *
  * NATO Expansion Languages (Skeleton):
  * - Romanian, Portuguese, Czech, Greek, Hungarian, Slovak, Bulgarian,
  *   Croatian, Lithuanian, Latvian, Estonian, Slovenian, Albanian,
  *   Macedonian, Serbian, Turkish, Norwegian, Icelandic, Danish, Finnish, Swedish
- * 
+ *
  * Phase 7: NATO Expansion Multi-Language
  */
 
@@ -129,7 +129,7 @@ export function setStoredLocale(locale: Locale): void {
 
 /**
  * IdP-to-Locale Mapping
- * 
+ *
  * Maps IdP aliases to their primary language/locale.
  * This enables automatic language detection based on the IdP being used.
  * Supports all 32 NATO members + partners.
@@ -297,10 +297,10 @@ export const idpLocaleMap: Record<string, Locale> = {
 
 /**
  * Get locale from IdP alias
- * 
+ *
  * Automatically determines the appropriate language based on the IdP.
  * Falls back to stored preference or default locale.
- * 
+ *
  * @param idpAlias - The IdP alias from the route (e.g., 'ita-realm-broker')
  * @returns The appropriate locale for the IdP
  */

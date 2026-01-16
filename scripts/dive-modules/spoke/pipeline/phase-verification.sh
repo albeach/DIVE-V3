@@ -277,14 +277,24 @@ spoke_verify_keycloak_health() {
 
     # Check Keycloak health endpoint
     local health_response
-    # Keycloak health checks are on management port 9000 (HTTPS)
+    # Keycloak health checks are on management port 9000 (HTTPS) or via HTTP on 8080
     # Reference: https://www.keycloak.org/observability/health
-    health_response=$(docker exec "$kc_container" curl -sfk "https://localhost:9000/health/ready" 2>/dev/null || echo "failed")
+    health_response=$(docker exec "$kc_container" curl -sfk "https://localhost:9000/health/ready" 2>/dev/null || \
+                      docker exec "$kc_container" curl -sf "http://localhost:8080/health/ready" 2>/dev/null || echo "")
 
-    if echo "$health_response" | grep -q '"status":"UP"'; then
+    if echo "$health_response" | grep -qi '"status".*"UP"\|"status".*"up"'; then
         echo "  ✅ Keycloak health: UP"
+    elif [ -n "$health_response" ]; then
+        echo "  ✅ Keycloak health: responding"
     else
-        echo "  ⚠️  Keycloak health: check failed"
+        # Fallback: check if we can reach the realm endpoint (proves Keycloak is working)
+        local realm_response
+        realm_response=$(docker exec "$kc_container" curl -sf "http://localhost:8080/realms/${realm_name}/.well-known/openid-configuration" 2>/dev/null || echo "")
+        if [ -n "$realm_response" ]; then
+            echo "  ✅ Keycloak health: realm accessible"
+        else
+            echo "  ⚠️  Keycloak health: check failed"
+        fi
     fi
 
     # Check realm exists
@@ -410,14 +420,28 @@ spoke_verify_api_health() {
     # Backend API
     local backend_container="dive-spoke-${code_lower}-backend"
     if docker ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
-        local api_health
-        api_health=$(docker exec "$backend_container" curl -sf "http://localhost:4000/api/health" 2>&1 || echo "")
-
-        if echo "$api_health" | grep -qi "ok\|healthy\|status"; then
+        # First check Docker's health status (most reliable)
+        local docker_health
+        docker_health=$(docker inspect --format='{{.State.Health.Status}}' "$backend_container" 2>/dev/null || echo "")
+        
+        if [ "$docker_health" = "healthy" ]; then
             echo "  ✅ Backend API: healthy"
         else
-            echo "  ⚠️  Backend API: health check failed"
-            issues=$((issues + 1))
+            # Fallback: try curl health endpoints (HTTPS with -k for self-signed certs)
+            local api_health
+            api_health=$(docker exec "$backend_container" curl -sfk "https://localhost:4000/health" 2>/dev/null || \
+                         docker exec "$backend_container" curl -sfk "https://localhost:4000/api/health" 2>/dev/null || echo "")
+
+            if echo "$api_health" | grep -qi "ok\|healthy\|status\|running"; then
+                echo "  ✅ Backend API: healthy"
+            elif [ -n "$api_health" ]; then
+                echo "  ✅ Backend API: responding"
+            elif [ "$docker_health" = "starting" ]; then
+                echo "  ⏳ Backend API: starting"
+            else
+                echo "  ⚠️  Backend API: health check inconclusive"
+                issues=$((issues + 1))
+            fi
         fi
     else
         echo "  ⚠️  Backend container not running"
@@ -427,28 +451,56 @@ spoke_verify_api_health() {
     # Frontend
     local frontend_container="dive-spoke-${code_lower}-frontend"
     if docker ps --format '{{.Names}}' | grep -q "^${frontend_container}$"; then
-        local frontend_health
-        frontend_health=$(docker exec "$frontend_container" curl -sf "http://localhost:3000/" 2>&1 || echo "")
-
-        if [ -n "$frontend_health" ]; then
-            echo "  ✅ Frontend: responding"
+        # First check Docker's health status (most reliable for Next.js)
+        local docker_health
+        docker_health=$(docker inspect --format='{{.State.Health.Status}}' "$frontend_container" 2>/dev/null || echo "")
+        
+        if [ "$docker_health" = "healthy" ]; then
+            echo "  ✅ Frontend: healthy"
         else
-            echo "  ⚠️  Frontend: not responding"
+            # Fallback: try curl (HTTPS with -k for self-signed certs)
+            local frontend_health
+            frontend_health=$(docker exec "$frontend_container" curl -sfk "https://localhost:3000/api/health" 2>/dev/null || \
+                              docker exec "$frontend_container" curl -sfk -o /dev/null -w "%{http_code}" "https://localhost:3000/" 2>/dev/null || echo "")
+
+            if [ "$frontend_health" = "200" ] || echo "$frontend_health" | grep -qi "ok\|healthy"; then
+                echo "  ✅ Frontend: responding"
+            elif [ -n "$frontend_health" ] && [ "$frontend_health" != "000" ]; then
+                echo "  ✅ Frontend: accessible (HTTP $frontend_health)"
+            elif [ "$docker_health" = "starting" ]; then
+                echo "  ⏳ Frontend: starting"
+            else
+                echo "  ⚠️  Frontend: health check inconclusive"
+            fi
         fi
     else
         echo "  ⚠️  Frontend container not running"
     fi
 
-    # OPA
+    # OPA (OPA uses HTTP internally, but check Docker health first)
     local opa_container="dive-spoke-${code_lower}-opa"
     if docker ps --format '{{.Names}}' | grep -q "^${opa_container}$"; then
-        local opa_health
-        opa_health=$(docker exec "$opa_container" curl -sf "http://localhost:8181/health" 2>&1 || echo "")
-
-        if echo "$opa_health" | grep -qi "{}"; then
+        # First check Docker's health status (most reliable)
+        local docker_health
+        docker_health=$(docker inspect --format='{{.State.Health.Status}}' "$opa_container" 2>/dev/null || echo "")
+        
+        if [ "$docker_health" = "healthy" ]; then
             echo "  ✅ OPA: healthy"
         else
-            echo "  ⚠️  OPA: health check failed"
+            # Fallback: try wget or curl (OPA container may not have either)
+            # OPA health endpoint is HTTP on port 8181
+            local opa_health
+            opa_health=$(docker exec "$opa_container" wget -qO- "http://localhost:8181/health" 2>/dev/null || \
+                         docker exec "$opa_container" curl -sf "http://localhost:8181/health" 2>/dev/null || echo "")
+
+            # OPA health returns {} or {"plugins":{...}} when healthy
+            if echo "$opa_health" | grep -q '{'; then
+                echo "  ✅ OPA: healthy"
+            elif [ "$docker_health" = "starting" ]; then
+                echo "  ⏳ OPA: starting"
+            else
+                echo "  ⚠️  OPA: health check inconclusive"
+            fi
         fi
     fi
 

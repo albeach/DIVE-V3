@@ -1,1189 +1,145 @@
 {
-  "$schema": "./kas-registry.schema.json",
-  "version": "1.0.0",
-  "metadata": {
-    "lastUpdated": "2025-11-28T00:00:00Z",
-    "maintainer": "DIVE V3 Ops Team",
-    "description": "KAS Federation Registry - Cross-instance key access service configuration",
-    "compliance": [
-      "ACP-240",
-      "ADatP-5663",
-      "STANAG 4774",
-      "STANAG 4778"
-    ]
-  },
   "kasServers": [
     {
       "kasId": "usa-kas",
-      "organization": "United States",
+      "organization": "US DoD",
       "countryCode": "USA",
-      "kasUrl": "https://localhost:8085/api/kas",
-      "internalKasUrl": "http://kas:8080",
+      "kasUrl": "https://kas.usa.dive25.local:8080",
       "authMethod": "jwt",
       "authConfig": {
-        "jwtIssuer": "https://usa-idp.dive25.com/realms/dive-v3-broker",
-        "jwtAudience": "dive-v3-broker"
+        "issuer": "https://keycloak.usa.dive25.local/realms/dive-v3-broker",
+        "audience": "dive-v3-kas"
       },
-      "trustLevel": "high",
-      "supportedCountries": [
-        "USA"
-      ],
-      "supportedCOIs": [
-        "US-ONLY",
-        "CAN-US",
-        "FVEY",
-        "NATO",
-        "NATO-COSMIC"
-      ],
-      "policyTranslation": {
-        "clearanceMapping": {
-          "UNCLASSIFIED": "UNCLASSIFIED",
-          "RESTRICTED": "RESTRICTED",
-          "CONFIDENTIAL": "CONFIDENTIAL",
-          "SECRET": "SECRET",
-          "TOP_SECRET": "TOP_SECRET"
-        }
-      },
+      "trustLevel": "TOP_SECRET",
+      "supportedCountries": ["USA"],
+      "supportedCOIs": ["FVEY", "NATO-COSMIC", "US-ONLY"],
       "metadata": {
         "version": "1.0.0",
-        "capabilities": [
-          "key-release",
-          "policy-evaluation",
-          "audit-logging",
-          "ztdf-support"
-        ],
-        "contact": "kas-admin@dive25.com",
-        "lastVerified": "2025-11-28T00:00:00Z",
-        "healthEndpoint": "/health",
-        "requestKeyEndpoint": "/request-key"
-      }
-    },
-    {
-      "kasId": "fra-kas",
-      "organization": "France",
-      "countryCode": "FRA",
-      "kasUrl": "https://localhost:8084/api/kas",
-      "internalKasUrl": "http://kas-fra:8080",
-      "authMethod": "jwt",
-      "authConfig": {
-        "jwtIssuer": "https://fra-idp.dive25.com/realms/dive-v3-broker",
-        "jwtAudience": "dive-v3-broker"
-      },
-      "trustLevel": "high",
-      "supportedCountries": [
-        "FRA"
-      ],
-      "supportedCOIs": [
-        "FRA-US",
-        "NATO",
-        "NATO-COSMIC",
-        "EU-RESTRICTED"
-      ],
-      "policyTranslation": {
-        "clearanceMapping": {
-          "TRES_SECRET": "TOP_SECRET",
-          "SECRET": "SECRET",
-          "CONFIDENTIEL_DEFENSE": "CONFIDENTIAL",
-          "DIFFUSION_RESTREINTE": "RESTRICTED",
-          "NON_PROTEGE": "UNCLASSIFIED",
-          "UNCLASSIFIED": "UNCLASSIFIED",
-          "CONFIDENTIAL": "CONFIDENTIAL",
-          "TOP_SECRET": "TOP_SECRET"
-        }
-      },
-      "metadata": {
-        "version": "1.0.0",
-        "capabilities": [
-          "key-release",
-          "policy-evaluation",
-          "audit-logging",
-          "ztdf-support"
-        ],
-        "contact": "kas-admin@fra.dive25.com",
-        "lastVerified": "2025-11-28T00:00:00Z",
-        "healthEndpoint": "/health",
-        "requestKeyEndpoint": "/request-key"
+        "capabilities": ["rewrap", "store", "upsert"],
+        "registeredAt": "2026-01-16T00:00:00Z"
       }
     },
     {
       "kasId": "gbr-kas",
-      "organization": "United Kingdom",
+      "organization": "UK MOD",
       "countryCode": "GBR",
-      "kasUrl": "https://gbr-api.dive25.com/api/kas",
-      "internalKasUrl": "http://kas-gbr:8080",
+      "kasUrl": "https://kas.gbr.dive25.local:8080",
       "authMethod": "jwt",
       "authConfig": {
-        "jwtIssuer": "https://gbr-idp.dive25.com/realms/dive-v3-broker",
-        "jwtAudience": "dive-v3-broker"
+        "issuer": "https://keycloak.gbr.dive25.local/realms/dive-v3-broker",
+        "audience": "dive-v3-kas"
       },
-      "trustLevel": "high",
-      "supportedCountries": [
-        "GBR"
-      ],
-      "supportedCOIs": [
-        "GBR-US",
-        "FVEY",
-        "NATO",
-        "NATO-COSMIC"
-      ],
-      "policyTranslation": {
-        "clearanceMapping": {
-          "OFFICIAL": "UNCLASSIFIED",
-          "OFFICIAL_SENSITIVE": "RESTRICTED",
-          "SECRET": "SECRET",
-          "TOP_SECRET": "TOP_SECRET",
-          "UNCLASSIFIED": "UNCLASSIFIED",
-          "RESTRICTED": "RESTRICTED",
-          "CONFIDENTIAL": "CONFIDENTIAL"
-        }
-      },
+      "trustLevel": "TOP_SECRET",
+      "supportedCountries": ["GBR"],
+      "supportedCOIs": ["FVEY", "NATO-COSMIC", "GBR-ONLY"],
       "metadata": {
         "version": "1.0.0",
-        "capabilities": [
-          "key-release",
-          "policy-evaluation",
-          "audit-logging",
-          "ztdf-support"
-        ],
-        "contact": "kas-admin@gbr.dive25.com",
-        "lastVerified": "2025-11-28T00:00:00Z",
-        "healthEndpoint": "/health",
-        "requestKeyEndpoint": "/request-key"
+        "capabilities": ["rewrap", "store"],
+        "registeredAt": "2026-01-16T00:00:00Z"
+      }
+    },
+    {
+      "kasId": "fra-kas",
+      "organization": "France DGA",
+      "countryCode": "FRA",
+      "kasUrl": "https://kas.fra.dive25.local:8080",
+      "authMethod": "jwt",
+      "authConfig": {
+        "issuer": "https://keycloak.fra.dive25.local/realms/dive-v3-broker",
+        "audience": "dive-v3-kas"
+      },
+      "trustLevel": "SECRET",
+      "supportedCountries": ["FRA"],
+      "supportedCOIs": ["NATO-COSMIC", "FRA-ONLY"],
+      "metadata": {
+        "version": "1.0.0",
+        "capabilities": ["rewrap"],
+        "registeredAt": "2026-01-16T00:00:00Z"
       }
     },
     {
       "kasId": "deu-kas",
-      "organization": "Germany",
+      "organization": "Germany BMVg",
       "countryCode": "DEU",
-      "kasUrl": "https://deu-api.prosecurity.biz/api/kas",
-      "internalKasUrl": "http://kas-deu:8080",
+      "kasUrl": "https://kas.deu.dive25.local:8080",
       "authMethod": "jwt",
       "authConfig": {
-        "jwtIssuer": "https://deu-idp.prosecurity.biz/realms/dive-v3-broker",
-        "jwtAudience": "dive-v3-broker"
+        "issuer": "https://keycloak.deu.dive25.local/realms/dive-v3-broker",
+        "audience": "dive-v3-kas"
       },
-      "trustLevel": "high",
-      "supportedCountries": [
-        "DEU"
-      ],
-      "supportedCOIs": [
-        "DEU-US",
-        "NATO",
-        "NATO-COSMIC",
-        "EU-RESTRICTED"
-      ],
-      "policyTranslation": {
-        "clearanceMapping": {
-          "STRENG_GEHEIM": "TOP_SECRET",
-          "GEHEIM": "SECRET",
-          "VS_VERTRAULICH": "CONFIDENTIAL",
-          "VS_NUR_DIENSTGEBRAUCH": "RESTRICTED",
-          "OFFEN": "UNCLASSIFIED",
-          "UNCLASSIFIED": "UNCLASSIFIED",
-          "CONFIDENTIAL": "CONFIDENTIAL",
-          "SECRET": "SECRET",
-          "TOP_SECRET": "TOP_SECRET"
-        }
-      },
+      "trustLevel": "SECRET",
+      "supportedCountries": ["DEU"],
+      "supportedCOIs": ["NATO-COSMIC", "DEU-ONLY"],
       "metadata": {
         "version": "1.0.0",
-        "capabilities": [
-          "key-release",
-          "policy-evaluation",
-          "audit-logging",
-          "ztdf-support"
-        ],
-        "contact": "kas-admin@deu.prosecurity.biz",
-        "lastVerified": "2025-11-28T00:00:00Z",
-        "healthEndpoint": "/health",
-        "requestKeyEndpoint": "/request-key"
-      }
-    },
-    {
-      "kasId": "esp-kas",
-      "organization": "Spain",
-      "countryCode": "ESP",
-      "kasUrl": "https://localhost:10028/api/kas",
-      "internalKasUrl": "http://kas-esp:8080",
-      "authMethod": "jwt",
-      "authConfig": {
-        "jwtIssuer": "https://esp-idp.dive25.com/realms/dive-v3-broker",
-        "jwtAudience": "dive-v3-broker"
-      },
-      "trustLevel": "high",
-      "supportedCountries": [
-        "ESP"
-      ],
-      "supportedCOIs": [
-        "NATO",
-        "NATO-COSMIC",
-        "EU-RESTRICTED"
-      ],
-      "policyTranslation": {
-        "clearanceMapping": {
-          "UNCLASSIFIED": "UNCLASSIFIED",
-          "RESTRICTED": "RESTRICTED",
-          "CONFIDENTIAL": "CONFIDENTIAL",
-          "SECRET": "SECRET",
-          "TOP_SECRET": "TOP_SECRET"
-        }
-      },
-      "metadata": {
-        "version": "1.0.0",
-        "capabilities": [
-          "key-release",
-          "policy-evaluation",
-          "audit-logging",
-          "ztdf-support"
-        ],
-        "contact": "kas-admin@esp.dive25.com",
-        "lastVerified": "2025-12-27T00:00:00Z",
-        "healthEndpoint": "/health",
-        "requestKeyEndpoint": "/request-key"
-      }
-    },
-    {
-      "kasId": "lux-kas",
-      "organization": "Luxembourg",
-      "countryCode": "LUX",
-      "kasUrl": "https://localhost:9018/api/kas",
-      "internalKasUrl": "http://kas-lux:8080",
-      "authMethod": "jwt",
-      "authConfig": {
-        "jwtIssuer": "https://lux-idp.dive25.com/realms/dive-v3-broker",
-        "jwtAudience": "dive-v3-broker"
-      },
-      "trustLevel": "high",
-      "supportedCountries": [
-        "LUX"
-      ],
-      "supportedCOIs": [
-        "NATO",
-        "NATO-COSMIC",
-        "EU-RESTRICTED"
-      ],
-      "policyTranslation": {
-        "clearanceMapping": {
-          "UNCLASSIFIED": "UNCLASSIFIED",
-          "RESTRICTED": "RESTRICTED",
-          "CONFIDENTIAL": "CONFIDENTIAL",
-          "SECRET": "SECRET",
-          "TOP_SECRET": "TOP_SECRET"
-        }
-      },
-      "metadata": {
-        "version": "1.0.0",
-        "capabilities": [
-          "key-release",
-          "policy-evaluation",
-          "audit-logging",
-          "ztdf-support"
-        ],
-        "contact": "kas-admin@lux.dive25.com",
-        "lastVerified": "2025-12-21T00:00:00Z",
-        "healthEndpoint": "/health",
-        "requestKeyEndpoint": "/request-key"
-      }
-    },
-    {
-      "kasId": "mne-kas",
-      "organization": "Montenegro",
-      "countryCode": "MNE",
-      "kasUrl": "https://localhost:9019/api/kas",
-      "internalKasUrl": "http://kas-mne:8080",
-      "authMethod": "jwt",
-      "authConfig": {
-        "jwtIssuer": "https://mne-idp.dive25.com/realms/dive-v3-broker",
-        "jwtAudience": "dive-v3-broker"
-      },
-      "trustLevel": "high",
-      "supportedCountries": [
-        "MNE"
-      ],
-      "supportedCOIs": [
-        "NATO",
-        "NATO-COSMIC"
-      ],
-      "policyTranslation": {
-        "clearanceMapping": {
-          "UNCLASSIFIED": "UNCLASSIFIED",
-          "RESTRICTED": "RESTRICTED",
-          "CONFIDENTIAL": "CONFIDENTIAL",
-          "SECRET": "SECRET",
-          "TOP_SECRET": "TOP_SECRET"
-        }
-      },
-      "metadata": {
-        "version": "1.0.0",
-        "capabilities": [
-          "key-release",
-          "policy-evaluation",
-          "audit-logging",
-          "ztdf-support"
-        ],
-        "contact": "kas-admin@mne.dive25.com",
-        "lastVerified": "2025-12-21T00:00:00Z",
-        "healthEndpoint": "/health",
-        "requestKeyEndpoint": "/request-key"
-      }
-    },
-    {
-      "kasId": "nld-kas",
-      "organization": "Netherlands",
-      "countryCode": "NLD",
-      "kasUrl": "https://localhost:9020/api/kas",
-      "internalKasUrl": "http://kas-nld:8080",
-      "authMethod": "jwt",
-      "authConfig": {
-        "jwtIssuer": "https://nld-idp.dive25.com/realms/dive-v3-broker",
-        "jwtAudience": "dive-v3-broker"
-      },
-      "trustLevel": "high",
-      "supportedCountries": [
-        "NLD"
-      ],
-      "supportedCOIs": [
-        "NATO",
-        "NATO-COSMIC",
-        "EU-RESTRICTED"
-      ],
-      "policyTranslation": {
-        "clearanceMapping": {
-          "UNCLASSIFIED": "UNCLASSIFIED",
-          "RESTRICTED": "RESTRICTED",
-          "CONFIDENTIAL": "CONFIDENTIAL",
-          "SECRET": "SECRET",
-          "TOP_SECRET": "TOP_SECRET"
-        }
-      },
-      "metadata": {
-        "version": "1.0.0",
-        "capabilities": [
-          "key-release",
-          "policy-evaluation",
-          "audit-logging",
-          "ztdf-support"
-        ],
-        "contact": "kas-admin@nld.dive25.com",
-        "lastVerified": "2025-12-21T00:00:00Z",
-        "healthEndpoint": "/health",
-        "requestKeyEndpoint": "/request-key"
-      }
-    },
-    {
-      "kasId": "cze-kas",
-      "organization": "Czechia",
-      "countryCode": "CZE",
-      "kasUrl": "https://localhost:10006/api/kas",
-      "internalKasUrl": "http://kas-cze:8080",
-      "authMethod": "jwt",
-      "authConfig": {
-        "jwtIssuer": "https://cze-idp.dive25.com/realms/dive-v3-broker-cze",
-        "jwtAudience": "dive-v3-broker"
-      },
-      "trustLevel": "high",
-      "supportedCountries": [
-        "CZE"
-      ],
-      "supportedCOIs": [
-        "NATO",
-        "NATO-COSMIC",
-        "EU-RESTRICTED"
-      ],
-      "policyTranslation": {
-        "clearanceMapping": {
-          "UNCLASSIFIED": "UNCLASSIFIED",
-          "RESTRICTED": "RESTRICTED",
-          "CONFIDENTIAL": "CONFIDENTIAL",
-          "SECRET": "SECRET",
-          "TOP_SECRET": "TOP_SECRET"
-        }
-      },
-      "metadata": {
-        "version": "1.0.0",
-        "capabilities": [
-          "key-release",
-          "policy-evaluation",
-          "audit-logging",
-          "ztdf-support"
-        ],
-        "contact": "kas-admin@cze.dive25.com",
-        "lastVerified": "2025-12-28T00:30:27Z",
-        "healthEndpoint": "/health",
-        "requestKeyEndpoint": "/request-key"
-      }
-    },
-    {
-      "kasId": "pol-kas",
-      "organization": "Poland",
-      "countryCode": "POL",
-      "kasUrl": "https://localhost:10023/api/kas",
-      "internalKasUrl": "http://kas-pol:8080",
-      "authMethod": "jwt",
-      "authConfig": {
-        "jwtIssuer": "https://pol-idp.dive25.com/realms/dive-v3-broker-pol",
-        "jwtAudience": "dive-v3-broker"
-      },
-      "trustLevel": "high",
-      "supportedCountries": [
-        "POL"
-      ],
-      "supportedCOIs": [
-        "NATO",
-        "NATO-COSMIC",
-        "EU-RESTRICTED"
-      ],
-      "policyTranslation": {
-        "clearanceMapping": {
-          "UNCLASSIFIED": "UNCLASSIFIED",
-          "RESTRICTED": "RESTRICTED",
-          "CONFIDENTIAL": "CONFIDENTIAL",
-          "SECRET": "SECRET",
-          "TOP_SECRET": "TOP_SECRET"
-        }
-      },
-      "metadata": {
-        "version": "1.0.0",
-        "capabilities": [
-          "key-release",
-          "policy-evaluation",
-          "audit-logging",
-          "ztdf-support"
-        ],
-        "contact": "kas-admin@pol.dive25.com",
-        "lastVerified": "2025-12-28T03:38:14Z",
-        "healthEndpoint": "/health",
-        "requestKeyEndpoint": "/request-key"
-      }
-    },
-    {
-      "kasId": "hun-kas",
-      "organization": "Hungary",
-      "countryCode": "HUN",
-      "kasUrl": "https://localhost:10013/api/kas",
-      "internalKasUrl": "http://kas-hun:8080",
-      "authMethod": "jwt",
-      "authConfig": {
-        "jwtIssuer": "https://hun-idp.dive25.com/realms/dive-v3-broker-hun",
-        "jwtAudience": "dive-v3-broker"
-      },
-      "trustLevel": "high",
-      "supportedCountries": [
-        "HUN"
-      ],
-      "supportedCOIs": [
-        "NATO",
-        "NATO-COSMIC",
-        "EU-RESTRICTED"
-      ],
-      "policyTranslation": {
-        "clearanceMapping": {
-          "UNCLASSIFIED": "UNCLASSIFIED",
-          "RESTRICTED": "RESTRICTED",
-          "CONFIDENTIAL": "CONFIDENTIAL",
-          "SECRET": "SECRET",
-          "TOP_SECRET": "TOP_SECRET"
-        }
-      },
-      "metadata": {
-        "version": "1.0.0",
-        "capabilities": [
-          "key-release",
-          "policy-evaluation",
-          "audit-logging",
-          "ztdf-support"
-        ],
-        "contact": "kas-admin@hun.dive25.com",
-        "lastVerified": "2025-12-28T03:49:11Z",
-        "healthEndpoint": "/health",
-        "requestKeyEndpoint": "/request-key"
-      }
-    },
-    {
-      "kasId": "ita-kas",
-      "organization": "Italy",
-      "countryCode": "ITA",
-      "kasUrl": "https://localhost:10015/api/kas",
-      "internalKasUrl": "http://kas-ita:8080",
-      "authMethod": "jwt",
-      "authConfig": {
-        "jwtIssuer": "https://ita-idp.dive25.com/realms/dive-v3-broker-ita",
-        "jwtAudience": "dive-v3-broker"
-      },
-      "trustLevel": "high",
-      "supportedCountries": [
-        "ITA"
-      ],
-      "supportedCOIs": [
-        "NATO",
-        "NATO-COSMIC",
-        "EU-RESTRICTED"
-      ],
-      "policyTranslation": {
-        "clearanceMapping": {
-          "UNCLASSIFIED": "UNCLASSIFIED",
-          "RESTRICTED": "RESTRICTED",
-          "CONFIDENTIAL": "CONFIDENTIAL",
-          "SECRET": "SECRET",
-          "TOP_SECRET": "TOP_SECRET"
-        }
-      },
-      "metadata": {
-        "version": "1.0.0",
-        "capabilities": [
-          "key-release",
-          "policy-evaluation",
-          "audit-logging",
-          "ztdf-support"
-        ],
-        "contact": "kas-admin@ita.dive25.com",
-        "lastVerified": "2025-12-28T04:03:43Z",
-        "healthEndpoint": "/health",
-        "requestKeyEndpoint": "/request-key"
-      }
-    },
-    {
-      "kasId": "bgr-kas",
-      "organization": "Bulgaria",
-      "countryCode": "BGR",
-      "kasUrl": "https://localhost:10003/api/kas",
-      "internalKasUrl": "http://kas-bgr:8080",
-      "authMethod": "jwt",
-      "authConfig": {
-        "jwtIssuer": "https://bgr-idp.dive25.com/realms/dive-v3-broker-bgr",
-        "jwtAudience": "dive-v3-broker"
-      },
-      "trustLevel": "high",
-      "supportedCountries": [
-        "BGR"
-      ],
-      "supportedCOIs": [
-        "NATO",
-        "NATO-COSMIC",
-        "EU-RESTRICTED"
-      ],
-      "policyTranslation": {
-        "clearanceMapping": {
-          "UNCLASSIFIED": "UNCLASSIFIED",
-          "RESTRICTED": "RESTRICTED",
-          "CONFIDENTIAL": "CONFIDENTIAL",
-          "SECRET": "SECRET",
-          "TOP_SECRET": "TOP_SECRET"
-        }
-      },
-      "metadata": {
-        "version": "1.0.0",
-        "capabilities": [
-          "key-release",
-          "policy-evaluation",
-          "audit-logging",
-          "ztdf-support"
-        ],
-        "contact": "kas-admin@bgr.dive25.com",
-        "lastVerified": "2025-12-30T03:02:06Z",
-        "healthEndpoint": "/health",
-        "requestKeyEndpoint": "/request-key"
-      }
-    },
-    {
-      "kasId": "est-kas",
-      "organization": "Estonia",
-      "countryCode": "EST",
-      "kasUrl": "https://localhost:10008/api/kas",
-      "internalKasUrl": "http://kas-est:8080",
-      "authMethod": "jwt",
-      "authConfig": {
-        "jwtIssuer": "https://est-idp.dive25.com/realms/dive-v3-broker-est",
-        "jwtAudience": "dive-v3-broker"
-      },
-      "trustLevel": "high",
-      "supportedCountries": [
-        "EST"
-      ],
-      "supportedCOIs": [
-        "NATO",
-        "NATO-COSMIC",
-        "EU-RESTRICTED"
-      ],
-      "policyTranslation": {
-        "clearanceMapping": {
-          "UNCLASSIFIED": "UNCLASSIFIED",
-          "RESTRICTED": "RESTRICTED",
-          "CONFIDENTIAL": "CONFIDENTIAL",
-          "SECRET": "SECRET",
-          "TOP_SECRET": "TOP_SECRET"
-        }
-      },
-      "metadata": {
-        "version": "1.0.0",
-        "capabilities": [
-          "key-release",
-          "policy-evaluation",
-          "audit-logging",
-          "ztdf-support"
-        ],
-        "contact": "kas-admin@est.dive25.com",
-        "lastVerified": "2025-12-30T07:14:10Z",
-        "healthEndpoint": "/health",
-        "requestKeyEndpoint": "/request-key"
-      }
-    },
-    {
-      "kasId": "svk-kas",
-      "organization": "Slovakia",
-      "countryCode": "SVK",
-      "kasUrl": "https://localhost:10026/api/kas",
-      "internalKasUrl": "http://kas-svk:8080",
-      "authMethod": "jwt",
-      "authConfig": {
-        "jwtIssuer": "https://svk-idp.dive25.com/realms/dive-v3-broker-svk",
-        "jwtAudience": "dive-v3-broker"
-      },
-      "trustLevel": "high",
-      "supportedCountries": [
-        "SVK"
-      ],
-      "supportedCOIs": [
-        "NATO",
-        "NATO-COSMIC",
-        "EU-RESTRICTED"
-      ],
-      "policyTranslation": {
-        "clearanceMapping": {
-          "UNCLASSIFIED": "UNCLASSIFIED",
-          "RESTRICTED": "RESTRICTED",
-          "CONFIDENTIAL": "CONFIDENTIAL",
-          "SECRET": "SECRET",
-          "TOP_SECRET": "TOP_SECRET"
-        }
-      },
-      "metadata": {
-        "version": "1.0.0",
-        "capabilities": [
-          "key-release",
-          "policy-evaluation",
-          "audit-logging",
-          "ztdf-support"
-        ],
-        "contact": "kas-admin@svk.dive25.com",
-        "lastVerified": "2025-12-30T07:53:32Z",
-        "healthEndpoint": "/health",
-        "requestKeyEndpoint": "/request-key"
-      }
-    },
-    {
-      "kasId": "nor-kas",
-      "organization": "Norway",
-      "countryCode": "NOR",
-      "kasUrl": "https://localhost:10022/api/kas",
-      "internalKasUrl": "http://kas-nor:8080",
-      "authMethod": "jwt",
-      "authConfig": {
-        "jwtIssuer": "https://nor-idp.dive25.com/realms/dive-v3-broker-nor",
-        "jwtAudience": "dive-v3-broker"
-      },
-      "trustLevel": "high",
-      "supportedCountries": [
-        "NOR"
-      ],
-      "supportedCOIs": [
-        "NATO",
-        "NATO-COSMIC",
-        "EU-RESTRICTED"
-      ],
-      "policyTranslation": {
-        "clearanceMapping": {
-          "UNCLASSIFIED": "UNCLASSIFIED",
-          "RESTRICTED": "RESTRICTED",
-          "CONFIDENTIAL": "CONFIDENTIAL",
-          "SECRET": "SECRET",
-          "TOP_SECRET": "TOP_SECRET"
-        }
-      },
-      "metadata": {
-        "version": "1.0.0",
-        "capabilities": [
-          "key-release",
-          "policy-evaluation",
-          "audit-logging",
-          "ztdf-support"
-        ],
-        "contact": "kas-admin@nor.dive25.com",
-        "lastVerified": "2025-12-31T00:23:02Z",
-        "healthEndpoint": "/health",
-        "requestKeyEndpoint": "/request-key"
-      }
-    },
-    {
-      "kasId": "bel-kas",
-      "organization": "Belgium",
-      "countryCode": "BEL",
-      "kasUrl": "https://localhost:10002/api/kas",
-      "internalKasUrl": "http://kas-bel:8080",
-      "authMethod": "jwt",
-      "authConfig": {
-        "jwtIssuer": "https://bel-idp.dive25.com/realms/dive-v3-broker-bel",
-        "jwtAudience": "dive-v3-broker"
-      },
-      "trustLevel": "high",
-      "supportedCountries": [
-        "BEL"
-      ],
-      "supportedCOIs": [
-        "NATO",
-        "NATO-COSMIC",
-        "EU-RESTRICTED"
-      ],
-      "policyTranslation": {
-        "clearanceMapping": {
-          "UNCLASSIFIED": "UNCLASSIFIED",
-          "RESTRICTED": "RESTRICTED",
-          "CONFIDENTIAL": "CONFIDENTIAL",
-          "SECRET": "SECRET",
-          "TOP_SECRET": "TOP_SECRET"
-        }
-      },
-      "metadata": {
-        "version": "1.0.0",
-        "capabilities": [
-          "key-release",
-          "policy-evaluation",
-          "audit-logging",
-          "ztdf-support"
-        ],
-        "contact": "kas-admin@bel.dive25.com",
-        "lastVerified": "2026-01-02T05:30:33Z",
-        "healthEndpoint": "/health",
-        "requestKeyEndpoint": "/request-key"
-      }
-    },
-    {
-      "kasId": "nzl-kas",
-      "organization": "",
-      "countryCode": "NZL",
-      "kasUrl": "https://localhost:10033/api/kas",
-      "internalKasUrl": "http://kas-nzl:8080",
-      "authMethod": "jwt",
-      "authConfig": {
-        "jwtIssuer": "https://nzl-idp.dive25.com/realms/dive-v3-broker-nzl",
-        "jwtAudience": "dive-v3-broker"
-      },
-      "trustLevel": "high",
-      "supportedCountries": [
-        "NZL"
-      ],
-      "supportedCOIs": [
-        "NATO",
-        "NATO-COSMIC",
-        "EU-RESTRICTED"
-      ],
-      "policyTranslation": {
-        "clearanceMapping": {
-          "UNCLASSIFIED": "UNCLASSIFIED",
-          "RESTRICTED": "RESTRICTED",
-          "CONFIDENTIAL": "CONFIDENTIAL",
-          "SECRET": "SECRET",
-          "TOP_SECRET": "TOP_SECRET"
-        }
-      },
-      "metadata": {
-        "version": "1.0.0",
-        "capabilities": [
-          "key-release",
-          "policy-evaluation",
-          "audit-logging",
-          "ztdf-support"
-        ],
-        "contact": "kas-admin@nzl.dive25.com",
-        "lastVerified": "2026-01-02T17:54:49Z",
-        "healthEndpoint": "/health",
-        "requestKeyEndpoint": "/request-key"
-      }
-    },
-    {
-      "kasId": "hrv-kas",
-      "organization": "Croatia",
-      "countryCode": "HRV",
-      "kasUrl": "https://localhost:10005/api/kas",
-      "internalKasUrl": "http://kas-hrv:8080",
-      "authMethod": "jwt",
-      "authConfig": {
-        "jwtIssuer": "https://hrv-idp.dive25.com/realms/dive-v3-broker-hrv",
-        "jwtAudience": "dive-v3-broker"
-      },
-      "trustLevel": "high",
-      "supportedCountries": [
-        "HRV"
-      ],
-      "supportedCOIs": [
-        "NATO",
-        "NATO-COSMIC",
-        "EU-RESTRICTED"
-      ],
-      "policyTranslation": {
-        "clearanceMapping": {
-          "UNCLASSIFIED": "UNCLASSIFIED",
-          "RESTRICTED": "RESTRICTED",
-          "CONFIDENTIAL": "CONFIDENTIAL",
-          "SECRET": "SECRET",
-          "TOP_SECRET": "TOP_SECRET"
-        }
-      },
-      "metadata": {
-        "version": "1.0.0",
-        "capabilities": [
-          "key-release",
-          "policy-evaluation",
-          "audit-logging",
-          "ztdf-support"
-        ],
-        "contact": "kas-admin@hrv.dive25.com",
-        "lastVerified": "2026-01-03T10:55:34Z",
-        "healthEndpoint": "/health",
-        "requestKeyEndpoint": "/request-key"
-      }
-    },
-    {
-      "kasId": "alb-kas",
-      "organization": "Albania",
-      "countryCode": "ALB",
-      "kasUrl": "https://localhost:10001/api/kas",
-      "internalKasUrl": "http://kas-alb:8080",
-      "authMethod": "jwt",
-      "authConfig": {
-        "jwtIssuer": "https://alb-idp.dive25.com/realms/dive-v3-broker-alb",
-        "jwtAudience": "dive-v3-broker"
-      },
-      "trustLevel": "high",
-      "supportedCountries": [
-        "ALB"
-      ],
-      "supportedCOIs": [
-        "NATO",
-        "NATO-COSMIC",
-        "EU-RESTRICTED"
-      ],
-      "policyTranslation": {
-        "clearanceMapping": {
-          "UNCLASSIFIED": "UNCLASSIFIED",
-          "RESTRICTED": "RESTRICTED",
-          "CONFIDENTIAL": "CONFIDENTIAL",
-          "SECRET": "SECRET",
-          "TOP_SECRET": "TOP_SECRET"
-        }
-      },
-      "metadata": {
-        "version": "1.0.0",
-        "capabilities": [
-          "key-release",
-          "policy-evaluation",
-          "audit-logging",
-          "ztdf-support"
-        ],
-        "contact": "kas-admin@alb.dive25.com",
-        "lastVerified": "2026-01-08T03:21:04Z",
-        "healthEndpoint": "/health",
-        "requestKeyEndpoint": "/request-key"
+        "capabilities": ["rewrap"],
+        "registeredAt": "2026-01-16T00:00:00Z"
       }
     },
     {
       "kasId": "can-kas",
-      "organization": "Canada",
+      "organization": "Canada DND",
       "countryCode": "CAN",
-      "kasUrl": "https://localhost:10004/api/kas",
-      "internalKasUrl": "http://kas-can:8080",
+      "kasUrl": "https://kas.can.dive25.local:8080",
       "authMethod": "jwt",
       "authConfig": {
-        "jwtIssuer": "https://can-idp.dive25.com/realms/dive-v3-broker-can",
-        "jwtAudience": "dive-v3-broker"
+        "issuer": "https://keycloak.can.dive25.local/realms/dive-v3-broker",
+        "audience": "dive-v3-kas"
       },
-      "trustLevel": "high",
-      "supportedCountries": [
-        "CAN"
-      ],
-      "supportedCOIs": [
-        "NATO",
-        "NATO-COSMIC",
-        "EU-RESTRICTED"
-      ],
-      "policyTranslation": {
-        "clearanceMapping": {
-          "UNCLASSIFIED": "UNCLASSIFIED",
-          "RESTRICTED": "RESTRICTED",
-          "CONFIDENTIAL": "CONFIDENTIAL",
-          "SECRET": "SECRET",
-          "TOP_SECRET": "TOP_SECRET"
-        }
-      },
+      "trustLevel": "TOP_SECRET",
+      "supportedCountries": ["CAN"],
+      "supportedCOIs": ["FVEY", "NATO-COSMIC", "CAN-US"],
       "metadata": {
         "version": "1.0.0",
-        "capabilities": [
-          "key-release",
-          "policy-evaluation",
-          "audit-logging",
-          "ztdf-support"
-        ],
-        "contact": "kas-admin@can.dive25.com",
-        "lastVerified": "2026-01-13T00:56:33Z",
-        "healthEndpoint": "/health",
-        "requestKeyEndpoint": "/request-key"
+        "capabilities": ["rewrap", "store"],
+        "registeredAt": "2026-01-16T00:00:00Z"
       }
     },
     {
-      "kasId": "tst-kas",
-      "organization": "Unknown",
-      "countryCode": "TST",
-      "kasUrl": "https://tst-api.dive25.com/api/kas",
-      "internalKasUrl": "http://kas-tst:8080",
+      "kasId": "nato-kas",
+      "organization": "NATO CIS",
+      "countryCode": "NATO",
+      "kasUrl": "https://kas.nato.dive25.local:8080",
       "authMethod": "jwt",
       "authConfig": {
-        "jwtIssuer": "https://tst-idp.dive25.com/realms/dive-v3-broker",
-        "jwtAudience": "dive-v3-broker"
+        "issuer": "https://keycloak.nato.dive25.local/realms/dive-v3-broker",
+        "audience": "dive-v3-kas"
       },
-      "trustLevel": "high",
-      "supportedCountries": [
-        "TST"
-      ],
-      "supportedCOIs": [
-        "NATO",
-        "NATO-COSMIC"
-      ],
-      "policyTranslation": {
-        "clearanceMapping": {
-          "UNCLASSIFIED": "UNCLASSIFIED",
-          "RESTRICTED": "RESTRICTED",
-          "CONFIDENTIAL": "CONFIDENTIAL",
-          "SECRET": "SECRET",
-          "TOP_SECRET": "TOP_SECRET"
-        }
-      },
+      "trustLevel": "SECRET",
+      "supportedCountries": ["USA", "GBR", "FRA", "DEU", "CAN", "ITA", "ESP", "NLD", "BEL", "POL"],
+      "supportedCOIs": ["NATO-COSMIC", "NATO-SECRET"],
       "metadata": {
         "version": "1.0.0",
-        "capabilities": [
-          "key-release",
-          "policy-evaluation",
-          "audit-logging",
-          "ztdf-support"
-        ],
-        "contact": "kas-admin@tst.dive25.com",
-        "lastVerified": "2026-01-14T05:49:48Z",
-        "healthEndpoint": "/health",
-        "requestKeyEndpoint": "/request-key"
+        "capabilities": ["rewrap", "store", "federated"],
+        "registeredAt": "2026-01-16T00:00:00Z"
       }
     }
   ],
-  "federationTrust": {
-    "model": "bilateral",
-    "defaultTrustLevel": "high",
-    "trustMatrix": {
-      "usa-kas": [
-        "alb-kas",
-        "bel-kas",
-        "bgr-kas",
-        "can-kas",
-        "cze-kas",
-        "deu-kas",
-        "esp-kas",
-        "est-kas",
-        "fra-kas",
-        "gbr-kas",
-        "hrv-kas",
-        "hun-kas",
-        "ita-kas",
-        "lux-kas",
-        "mne-kas",
-        "nld-kas",
-        "nor-kas",
-        "nzl-kas",
-        "pol-kas",
-        "svk-kas"
-      ],
-      "fra-kas": [
-        "alb-kas",
-        "bel-kas",
-        "bgr-kas",
-        "can-kas",
-        "cze-kas",
-        "deu-kas",
-        "esp-kas",
-        "est-kas",
-        "gbr-kas",
-        "hrv-kas",
-        "hun-kas",
-        "ita-kas",
-        "lux-kas",
-        "mne-kas",
-        "nld-kas",
-        "nor-kas",
-        "nzl-kas",
-        "pol-kas",
-        "svk-kas",
-        "usa-kas"
-      ],
-      "gbr-kas": [
-        "alb-kas",
-        "bel-kas",
-        "bgr-kas",
-        "can-kas",
-        "cze-kas",
-        "deu-kas",
-        "esp-kas",
-        "est-kas",
-        "fra-kas",
-        "hrv-kas",
-        "hun-kas",
-        "ita-kas",
-        "lux-kas",
-        "mne-kas",
-        "nld-kas",
-        "nor-kas",
-        "nzl-kas",
-        "pol-kas",
-        "svk-kas",
-        "usa-kas"
-      ],
-      "deu-kas": [
-        "alb-kas",
-        "bel-kas",
-        "bgr-kas",
-        "can-kas",
-        "cze-kas",
-        "esp-kas",
-        "est-kas",
-        "fra-kas",
-        "gbr-kas",
-        "hrv-kas",
-        "hun-kas",
-        "ita-kas",
-        "lux-kas",
-        "mne-kas",
-        "nld-kas",
-        "nor-kas",
-        "nzl-kas",
-        "pol-kas",
-        "svk-kas",
-        "usa-kas"
-      ],
-      "esp-kas": [
-        "usa-kas",
-        "fra-kas",
-        "gbr-kas",
-        "deu-kas",
-        "lux-kas"
-      ],
-      "lux-kas": [
-        "usa-kas",
-        "fra-kas",
-        "gbr-kas",
-        "deu-kas",
-        "esp-kas"
-      ],
-      "mne-kas": [
-        "usa-kas",
-        "fra-kas",
-        "gbr-kas",
-        "deu-kas",
-        "esp-kas"
-      ],
-      "nld-kas": [
-        "usa-kas",
-        "fra-kas",
-        "gbr-kas",
-        "deu-kas",
-        "esp-kas"
-      ],
-      "cze-kas": [
-        "usa-kas",
-        "fra-kas",
-        "gbr-kas",
-        "deu-kas"
-      ],
-      "pol-kas": [
-        "usa-kas",
-        "fra-kas",
-        "gbr-kas",
-        "deu-kas"
-      ],
-      "hun-kas": [
-        "usa-kas",
-        "fra-kas",
-        "gbr-kas",
-        "deu-kas"
-      ],
-      "ita-kas": [
-        "usa-kas",
-        "fra-kas",
-        "gbr-kas",
-        "deu-kas"
-      ],
-      "bgr-kas": [
-        "usa-kas",
-        "fra-kas",
-        "gbr-kas",
-        "deu-kas"
-      ],
-      "est-kas": [
-        "usa-kas",
-        "fra-kas",
-        "gbr-kas",
-        "deu-kas"
-      ],
-      "svk-kas": [
-        "usa-kas",
-        "fra-kas",
-        "gbr-kas",
-        "deu-kas"
-      ],
-      "nor-kas": [
-        "usa-kas",
-        "fra-kas",
-        "gbr-kas",
-        "deu-kas"
-      ],
-      "bel-kas": [
-        "usa-kas",
-        "fra-kas",
-        "gbr-kas",
-        "deu-kas"
-      ],
-      "nzl-kas": [
-        "usa-kas",
-        "fra-kas",
-        "gbr-kas",
-        "deu-kas"
-      ],
-      "hrv-kas": [
-        "usa-kas",
-        "fra-kas",
-        "gbr-kas",
-        "deu-kas"
-      ],
-      "alb-kas": [
-        "usa-kas",
-        "fra-kas",
-        "gbr-kas",
-        "deu-kas"
-      ],
-      "can-kas": [
-        "usa-kas",
-        "fra-kas",
-        "gbr-kas",
-        "deu-kas"
-      ]
+  "federationAgreements": {
+    "USA": {
+      "trustedKAS": ["usa-kas", "gbr-kas", "can-kas", "nato-kas"],
+      "maxClassification": "TOP_SECRET",
+      "allowedCOIs": ["FVEY", "NATO-COSMIC", "US-ONLY", "CAN-US"]
     },
-    "crossKASEnabled": true,
-    "failClosedOnKASUnavailable": true,
-    "maxCrossKASLatencyMs": 5000,
-    "retryPolicy": {
-      "maxRetries": 2,
-      "backoffMs": 500,
-      "exponentialBackoff": true
+    "GBR": {
+      "trustedKAS": ["gbr-kas", "usa-kas", "can-kas", "nato-kas"],
+      "maxClassification": "TOP_SECRET",
+      "allowedCOIs": ["FVEY", "NATO-COSMIC", "GBR-ONLY"]
+    },
+    "FRA": {
+      "trustedKAS": ["fra-kas", "nato-kas"],
+      "maxClassification": "SECRET",
+      "allowedCOIs": ["NATO-COSMIC", "FRA-ONLY"]
+    },
+    "DEU": {
+      "trustedKAS": ["deu-kas", "nato-kas"],
+      "maxClassification": "SECRET",
+      "allowedCOIs": ["NATO-COSMIC", "DEU-ONLY"]
+    },
+    "CAN": {
+      "trustedKAS": ["can-kas", "usa-kas", "gbr-kas", "nato-kas"],
+      "maxClassification": "TOP_SECRET",
+      "allowedCOIs": ["FVEY", "NATO-COSMIC", "CAN-US"]
     }
-  },
-  "monitoring": {
-    "healthCheckIntervalSeconds": 30,
-    "alertOnKASDown": true,
-    "logCrossKASRequests": true,
-    "auditRetentionDays": 90
   }
 }

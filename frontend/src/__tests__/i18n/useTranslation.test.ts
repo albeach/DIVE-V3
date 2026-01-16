@@ -1,15 +1,15 @@
 /**
  * Unit Tests: useTranslation Hook
- * 
+ *
  * Tests the translation hook functionality across all namespaces and locales.
- * 
+ *
  * Test Coverage:
  * - Translation key resolution
  * - Namespace loading
  * - Fallback behavior
  * - Interpolation
  * - Missing key handling
- * 
+ *
  * @version 1.0.0
  * @date 2026-01-16
  */

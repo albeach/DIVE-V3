@@ -66,7 +66,8 @@
         "opal-publisher": "tsx src/scripts/opal-publisher.ts",
         "opal:sync": "tsx src/scripts/opal-publisher.ts -- --sync",
         "opal:watch": "tsx src/scripts/opal-publisher.ts -- --watch",
-        "opal:health": "tsx src/scripts/opal-publisher.ts -- --health"
+        "opal:health": "tsx src/scripts/opal-publisher.ts -- --health",
+        "cleanup-logs": "tsx src/scripts/cleanup-logs.ts"
     },
     "keywords": [
         "dive",

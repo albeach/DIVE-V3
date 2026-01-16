@@ -168,166 +168,78 @@ export async function getComplianceStatus(
 /**
  * GET /api/compliance/multi-kas
  *
- * Returns Multi-KAS architecture visualization data
+ * Returns Multi-KAS architecture visualization data from MongoDB (SSOT)
+ * All data is LIVE from the kas_registry collection - no placeholders!
  */
 export async function getMultiKasInfo(
     _req: Request,
     res: Response,
 ): Promise<void> {
     try {
-        const multiKasInfo = {
-            title: "Multi-KAS Coalition Architecture",
-            description:
-                "Each resource gets 1-4 Key Access Objects (KAOs) based on COI and releasability, enabling coalition scalability without data re-encryption.",
-            kasEndpoints: [
-                {
-                    id: "usa-kas",
-                    name: "United States KAS",
-                    url: "https://kas.usa.mil:8080",
-                    country: "USA",
-                    status: "active",
-                    uptime: 99.9,
-                    requestsToday: 1245,
-                },
-                {
-                    id: "gbr-kas",
-                    name: "United Kingdom KAS",
-                    url: "https://kas.mod.uk:8080",
-                    country: "GBR",
-                    status: "active",
-                    uptime: 99.8,
-                    requestsToday: 856,
-                },
-                {
-                    id: "fra-kas",
-                    name: "France KAS",
-                    url: "https://kas.defense.gouv.fr:8080",
-                    country: "FRA",
-                    status: "active",
-                    uptime: 99.7,
-                    requestsToday: 645,
-                },
-                {
-                    id: "can-kas",
-                    name: "Canada KAS",
-                    url: "https://kas.forces.gc.ca:8080",
-                    country: "CAN",
-                    status: "active",
-                    uptime: 99.9,
-                    requestsToday: 423,
-                },
-                {
-                    id: "fvey-kas",
-                    name: "FVEY Community KAS",
-                    url: "https://kas.fvey.int:8080",
-                    country: "FVEY",
-                    status: "active",
-                    uptime: 99.95,
-                    requestsToday: 2134,
-                },
-                {
-                    id: "nato-kas",
-                    name: "NATO COSMIC KAS",
-                    url: "https://kas.nato.int:8080",
-                    country: "NATO",
-                    status: "active",
-                    uptime: 99.8,
-                    requestsToday: 1876,
-                },
-            ],
-            benefits: [
-                {
-                    title: "Instant Coalition Growth",
-                    description:
-                        "New members get immediate access to historical data without re-encryption",
-                    icon: "⚡",
-                },
-                {
-                    title: "National Sovereignty",
-                    description:
-                        "Each nation controls its own KAS endpoint and key custody",
-                    icon: "🏛️",
-                },
-                {
-                    title: "High Availability",
-                    description:
-                        "If one KAS is down, alternate KAOs provide redundant access",
-                    icon: "🔄",
-                },
-                {
-                    title: "Zero Re-encryption",
-                    description: "Coalition changes never require mass data reprocessing",
-                    icon: "🚀",
-                },
-            ],
-            exampleScenario: {
+        // Import the KAS metrics service (uses MongoDB as SSOT)
+        const { kasMetricsService } = await import('../services/kas-metrics.service');
+        
+        // Get live Multi-KAS info from MongoDB
+        const multiKasInfo = await kasMetricsService.getMultiKASInfo();
+
+        // Transform the response to match frontend expectations
+        const response = {
+            title: multiKasInfo.title,
+            description: multiKasInfo.description,
+            kasEndpoints: multiKasInfo.kasEndpoints.map(kas => ({
+                id: kas.kasId,
+                name: `${kas.organization || kas.countryCode} KAS`,
+                url: kas.kasUrl,
+                country: kas.countryCode,
+                status: kas.status,
+                uptime: kas.uptime,
+                requestsToday: kas.requestsToday,
+                // Extended metrics (2025 design patterns)
+                enabled: kas.enabled,
+                lastHeartbeat: kas.lastHeartbeat,
+                successRate: kas.successRate,
+                p95ResponseTime: kas.p95ResponseTime,
+                circuitBreakerState: kas.circuitBreakerState,
+                federationTrust: kas.federationTrust,
+                metadata: kas.metadata
+            })),
+            benefits: multiKasInfo.benefits,
+            flowSteps: multiKasInfo.flowSteps,
+            // Include live summary statistics
+            summary: multiKasInfo.summary,
+            // Timestamp to show this is live data
+            timestamp: multiKasInfo.timestamp,
+            // Example scenario using real KAS endpoints
+            exampleScenario: multiKasInfo.kasEndpoints.length > 0 ? {
                 resourceId: "doc-nato-fuel-2024",
                 title: "NATO Fuel Inventory Report 2024",
                 classification: "SECRET",
-                releasabilityTo: ["USA", "GBR", "FRA", "CAN"],
-                COI: ["NATO", "FVEY"],
-                kaoCount: 4,
-                kaos: [
-                    {
-                        id: "kao-1",
-                        kasEndpoint: "usa-kas",
-                        wrappedKey: "encrypted_by_usa_kas",
-                        coi: "USA-ONLY",
-                    },
-                    {
-                        id: "kao-2",
-                        kasEndpoint: "fvey-kas",
-                        wrappedKey: "encrypted_by_fvey_kas",
-                        coi: "FVEY",
-                    },
-                    {
-                        id: "kao-3",
-                        kasEndpoint: "nato-kas",
-                        wrappedKey: "encrypted_by_nato_kas",
-                        coi: "NATO",
-                    },
-                    {
-                        id: "kao-4",
-                        kasEndpoint: "gbr-kas",
-                        wrappedKey: "encrypted_by_gbr_kas",
-                        coi: "GBR-ONLY",
-                    },
-                ],
-            },
-            flowSteps: [
-                {
-                    step: 1,
-                    title: "User requests resource",
-                    description: "User clicks on encrypted document",
-                },
-                {
-                    step: 2,
-                    title: "PEP validates authorization",
-                    description: "Backend checks clearance, country, COI with OPA",
-                },
-                {
-                    step: 3,
-                    title: "Select optimal KAS",
-                    description:
-                        "Choose KAS based on user attributes and KAO availability",
-                },
-                {
-                    step: 4,
-                    title: "Request key from KAS",
-                    description: "KAS re-evaluates policy before releasing key",
-                },
-                {
-                    step: 5,
-                    title: "Decrypt and display",
-                    description: "Content decrypted client-side and rendered securely",
-                },
-            ],
+                releasabilityTo: multiKasInfo.kasEndpoints
+                    .filter(k => k.status === 'active')
+                    .slice(0, 4)
+                    .map(k => k.countryCode),
+                COI: ["NATO"],
+                kaoCount: Math.min(4, multiKasInfo.kasEndpoints.filter(k => k.status === 'active').length),
+                kaos: multiKasInfo.kasEndpoints
+                    .filter(k => k.status === 'active')
+                    .slice(0, 4)
+                    .map((kas, idx) => ({
+                        id: `kao-${idx + 1}`,
+                        kasEndpoint: kas.kasId,
+                        wrappedKey: `encrypted_by_${kas.kasId}`,
+                        coi: kas.federationTrust.allowedCOIs[0] || 'NATO'
+                    }))
+            } : undefined
         };
 
-        res.json(multiKasInfo);
+        res.json(response);
     } catch (error) {
-        logger.error("Error fetching Multi-KAS info", { error });
-        res.status(500).json({ error: "Failed to fetch Multi-KAS info" });
+        logger.error("Error fetching Multi-KAS info from MongoDB", { error });
+        res.status(500).json({ 
+            error: "Failed to fetch Multi-KAS info",
+            message: "MongoDB KAS registry unavailable",
+            timestamp: new Date().toISOString()
+        });
     }
 }
 

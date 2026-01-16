@@ -2,17 +2,17 @@
 
 /**
  * Theme Toggle Component
- * 
+ *
  * Allows users to switch between light, dark, and system themes.
  * Integrates with next-themes for persistent preference.
- * 
+ *
  * Features:
  * - Toggle button with icon (sun/moon)
  * - Dropdown for light/dark/system selection
  * - Smooth transitions
  * - Accessible keyboard navigation
  * - ARIA labels for screen readers
- * 
+ *
  * @version 1.0.0
  * @date 2026-01-16
  */
@@ -105,8 +105,8 @@ export function ThemeSelector() {
 
       {isOpen && (
         <>
-          <div 
-            className="fixed inset-0 z-10" 
+          <div
+            className="fixed inset-0 z-10"
             onClick={() => setIsOpen(false)}
             aria-hidden="true"
           />

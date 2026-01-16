@@ -4,7 +4,7 @@ import * as https from 'https';
 import { healthService } from '../services/health.service';
 import { KeycloakConfigSyncService } from '../services/keycloak-config-sync.service';
 import { policyVersionMonitor } from '../services/policy-version-monitor.service';
-import { kasRegistryService } from '../services/kas-registry.service';
+import { mongoKasRegistryStore } from '../models/kas-registry.model';
 import { authenticateJWT } from '../middleware/authz.middleware';
 
 const router = Router();
@@ -244,24 +244,36 @@ router.get('/policy-consistency', authenticateJWT, async (req: Request, res: Res
 
 /**
  * GET /health/kas-federation
- * Phase 4, Task 1.4: Returns KAS federation status
+ * Phase 4, Task 1.4: Returns KAS federation status (MongoDB SSOT)
  */
 router.get('/kas-federation', async (_req: Request, res: Response) => {
     try {
-        const kasServers = kasRegistryService.getAllKAS();
-        const kasHealth = kasRegistryService.getKASHealth();
-        const crossKASEnabled = kasRegistryService.isCrossKASEnabled();
+        // Get KAS instances from MongoDB (SSOT)
+        const kasServers = await mongoKasRegistryStore.findAll();
+        const activeKas = kasServers.filter(k => k.status === 'active' && k.enabled);
 
         res.json({
             instance: INSTANCE_REALM,
-            crossKASEnabled,
+            crossKASEnabled: true, // Always enabled with MongoDB registry
             kasServers: kasServers.map(kas => ({
                 kasId: kas.kasId,
                 organization: kas.organization,
                 countryCode: kas.countryCode,
                 trustLevel: kas.trustLevel,
-                health: kasHealth[kas.kasId] || { healthy: false, lastCheck: null }
+                status: kas.status,
+                enabled: kas.enabled,
+                lastHeartbeat: kas.metadata?.lastHeartbeat || null,
+                health: {
+                    healthy: kas.status === 'active' && kas.enabled,
+                    lastCheck: kas.metadata?.lastHeartbeat || null
+                }
             })),
+            summary: {
+                total: kasServers.length,
+                active: activeKas.length,
+                pending: kasServers.filter(k => k.status === 'pending').length,
+                suspended: kasServers.filter(k => k.status === 'suspended').length
+            },
             timestamp: new Date().toISOString()
         });
     } catch (error) {

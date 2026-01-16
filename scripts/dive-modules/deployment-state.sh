@@ -198,6 +198,7 @@ readonly STATE_CLEANUP="CLEANUP"
 
 # State transition validation
 declare -A VALID_TRANSITIONS=(
+    # Normal deployment flow
     ["$STATE_UNKNOWN|$STATE_INITIALIZING"]=1
     ["$STATE_INITIALIZING|$STATE_DEPLOYING"]=1
     ["$STATE_DEPLOYING|$STATE_CONFIGURING"]=1
@@ -206,10 +207,18 @@ declare -A VALID_TRANSITIONS=(
     ["$STATE_CONFIGURING|$STATE_FAILED"]=1
     ["$STATE_VERIFYING|$STATE_COMPLETE"]=1
     ["$STATE_VERIFYING|$STATE_FAILED"]=1
+    
+    # Failure handling
     ["$STATE_FAILED|$STATE_ROLLING_BACK"]=1
     ["$STATE_ROLLING_BACK|$STATE_CLEANUP"]=1
     ["$STATE_CLEANUP|$STATE_UNKNOWN"]=1
+    
+    # Cleanup transitions
     ["$STATE_COMPLETE|$STATE_CLEANUP"]=1
+    
+    # Redeploy transitions (allow redeployment from COMPLETE or FAILED)
+    ["$STATE_COMPLETE|$STATE_INITIALIZING"]=1
+    ["$STATE_FAILED|$STATE_INITIALIZING"]=1
 )
 
 ##

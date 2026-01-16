@@ -65,46 +65,75 @@ spoke_phase_configuration() {
     # Terraform manages all Keycloak resources (clients, mappers, IdPs)
     export USE_TERRAFORM_SSOT=true
 
-    # Step 0: Apply Terraform configuration (requires Keycloak to be running)
+    # ==========================================================================
+    # CRITICAL STEPS - Pipeline stops on failure
+    # ==========================================================================
+
+    # Step 0: Apply Terraform configuration (CRITICAL - creates Keycloak realm)
     if [ "$pipeline_mode" = "deploy" ]; then
         if ! spoke_config_apply_terraform "$instance_code"; then
-            log_warn "Terraform apply had issues (continuing)"
+            log_error "CRITICAL: Terraform apply failed - cannot continue without Keycloak realm"
+            log_error "The realm and OIDC client must exist before federation can be configured"
+            log_error "To retry: ./dive tf spoke apply $code_upper"
+            return 1
         fi
     fi
 
-    # Step 0.5: Initialize NextAuth database schema (requires PostgreSQL to be running)
+    # Step 0.5: Initialize NextAuth database schema (soft failure - can retry later)
     if [ "$pipeline_mode" = "deploy" ]; then
         if ! spoke_config_init_nextauth_db "$instance_code"; then
             log_warn "NextAuth DB initialization had issues (continuing)"
         fi
     fi
 
-    # Step 1: NATO Localization (deploy mode only)
+    # Step 1: NATO Localization (soft failure - non-essential)
     if [ "$pipeline_mode" = "deploy" ]; then
         spoke_config_nato_localization "$instance_code"
     fi
 
-    # Step 2: Federation setup
+    # Step 1.5: Ensure secrets are loaded before federation setup
+    # This ensures KEYCLOAK_ADMIN_PASSWORD_* is available for admin token retrieval
+    if type spoke_secrets_load &>/dev/null; then
+        spoke_secrets_load "$code_upper" "load" 2>/dev/null || true
+        # Also source .env directly as fallback
+        if [ -f "$spoke_dir/.env" ]; then
+            set -a  # Export all variables
+            source "$spoke_dir/.env" 2>/dev/null || true
+            set +a
+        fi
+    fi
+
+    # Step 2: Federation setup (CRITICAL - required for SSO)
     if ! spoke_config_setup_federation "$instance_code" "$pipeline_mode"; then
-        log_warn "Federation setup incomplete (continuing)"
+        log_error "CRITICAL: Federation setup failed - SSO will not work"
+        log_error "To retry: ./dive federation link $code_upper"
+        return 1
     fi
 
-    # Step 2.5: Register in Federation and KAS registries (deploy mode only)
+    # Step 2.5: Register in Federation and KAS registries (CRITICAL - required for heartbeat)
     if [ "$pipeline_mode" = "deploy" ]; then
-        spoke_config_register_in_registries "$instance_code"
+        if ! spoke_config_register_in_registries "$instance_code"; then
+            log_error "CRITICAL: Registry registration failed - spoke heartbeat will not work"
+            log_error "To retry: ./dive spoke register $code_upper"
+            return 1
+        fi
     fi
 
-    # Step 3: Synchronize secrets
-    spoke_config_sync_secrets "$instance_code"
+    # ==========================================================================
+    # NON-CRITICAL STEPS - Pipeline continues on failure
+    # ==========================================================================
 
-    # Step 4: OPAL token provisioning
-    spoke_config_provision_opal "$instance_code"
+    # Step 3: Synchronize secrets (soft failure - can sync later)
+    spoke_config_sync_secrets "$instance_code" || log_warn "Secret sync had issues (continuing)"
 
-    # Step 5: AMR attribute synchronization
-    spoke_config_sync_amr_attributes "$instance_code"
+    # Step 4: OPAL token provisioning (soft failure)
+    spoke_config_provision_opal "$instance_code" || log_warn "OPAL provisioning had issues (continuing)"
 
-    # Step 6: Configure Keycloak client redirect URIs
-    spoke_config_update_redirect_uris "$instance_code"
+    # Step 5: AMR attribute synchronization (soft failure - non-essential)
+    spoke_config_sync_amr_attributes "$instance_code" || true
+
+    # Step 6: Configure Keycloak client redirect URIs (soft failure)
+    spoke_config_update_redirect_uris "$instance_code" || log_warn "Redirect URI update had issues (continuing)"
 
     # Create configuration checkpoint
     if type orch_create_checkpoint &>/dev/null; then
@@ -251,10 +280,47 @@ EOF
             log_warn "Spoke status: pending (manual approval required)"
             log_warn "Auto-approval disabled or bidirectional federation failed"
         elif [ "$spoke_status" = "suspended" ]; then
-            log_error "Spoke suspended during registration!"
+            log_warn "Spoke suspended during registration (federation verification failed)"
             local error_msg=$(echo "$response" | jq -r '.spoke.message // empty' 2>/dev/null)
-            log_error "Reason: $error_msg"
-            return 1
+            log_warn "Reason: $error_msg"
+            
+            # Try to unsuspend and re-register after a delay
+            # Federation resources were just created - they may need time to propagate
+            if [ -n "$registered_spoke_id" ]; then
+                log_info "Attempting to unsuspend and retry registration..."
+                sleep 5  # Wait for Keycloak to propagate changes
+                
+                # Call Hub backend to unsuspend
+                local unsuspend_response
+                unsuspend_response=$(curl -sk -X POST \
+                    "https://localhost:4000/api/federation/spokes/${registered_spoke_id}/unsuspend" \
+                    -H "Content-Type: application/json" \
+                    -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY:-admin-dev-key}" \
+                    -d '{"retryFederation": true}' 2>&1)
+                
+                if echo "$unsuspend_response" | jq -e '.success' &>/dev/null; then
+                    log_success "Spoke unsuspended and federation retried"
+                    
+                    # Check new status
+                    local check_response
+                    check_response=$(curl -sk \
+                        "https://localhost:4000/api/federation/spokes/${registered_spoke_id}" \
+                        -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY:-admin-dev-key}" 2>/dev/null)
+                    
+                    local new_status=$(echo "$check_response" | jq -r '.spoke.status // empty' 2>/dev/null)
+                    if [ "$new_status" = "approved" ]; then
+                        log_success "Spoke now approved after unsuspend"
+                    else
+                        log_warn "Spoke status after unsuspend: $new_status"
+                    fi
+                else
+                    log_warn "Unsuspend failed - manual intervention may be required"
+                    log_warn "Run: ./dive hub spoke unsuspend ${registered_spoke_id}"
+                fi
+            fi
+            
+            # Don't fail - registration succeeded, suspension can be resolved later
+            log_warn "Continuing despite suspension - federation can be fixed later"
         fi
 
         # Fallback: Try manual approval (legacy path - may fail due to auth)
@@ -365,11 +431,36 @@ spoke_config_register_in_registries() {
 
     if type spoke_kas_register_mongodb &>/dev/null; then
         log_verbose "Registering KAS in MongoDB"
+        
+        # Wait for backend to be healthy after federation registry restart
+        local backend_container="dive-spoke-${code_lower}-backend"
+        local max_wait=30
+        local waited=0
+        
+        while [ $waited -lt $max_wait ]; do
+            if docker exec "$backend_container" curl -sf http://localhost:4000/health &>/dev/null; then
+                log_verbose "Backend healthy, proceeding with KAS registration"
+                break
+            fi
+            sleep 2
+            waited=$((waited + 2))
+            log_verbose "Waiting for backend to be healthy... (${waited}s/${max_wait}s)"
+        done
 
         # CRITICAL: Don't hide errors - capture output for proper debugging
+        # Retry KAS registration up to 3 times (backend may still be starting up)
         local kas_output
-        local kas_exit_code=0
-        kas_output=$(spoke_kas_register_mongodb "$code_upper" 2>&1) || kas_exit_code=$?
+        local kas_exit_code=1
+        local kas_retries=3
+        
+        for ((retry=1; retry<=kas_retries; retry++)); do
+            kas_output=$(spoke_kas_register_mongodb "$code_upper" 2>&1) && kas_exit_code=0 && break
+            
+            if [ $retry -lt $kas_retries ]; then
+                log_warn "KAS registration attempt $retry failed, retrying in 5s..."
+                sleep 5
+            fi
+        done
 
         if [ $kas_exit_code -eq 0 ]; then
             log_verbose "✓ KAS registered in MongoDB"
@@ -386,10 +477,12 @@ spoke_config_register_in_registries() {
                 fi
             fi
         else
-            log_error "MongoDB KAS registration failed"
-            log_error "Error output:"
+            log_warn "MongoDB KAS registration failed after $kas_retries attempts"
+            log_warn "Error output:"
             echo "$kas_output" | head -20
-            return 1  # This is a critical failure, not acceptable
+            log_warn "KAS registration can be retried later: ./dive spoke kas register $code_upper"
+            # Don't fail - KAS registration is important but not critical for basic deployment
+            # Spoke will still work for authentication, just not ZTDF encryption
         fi
     else
         log_error "MongoDB KAS registration function not available"

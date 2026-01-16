@@ -290,6 +290,9 @@ services:
       OPA_POLICIES_PATH: /policies
       # KAS URL for key requests (use container name since KAS is manually started)
       KAS_URL: https://kas:8080
+      # Enable polling for file watching in Docker (fixes hot-reload)
+      CHOKIDAR_USEPOLLING: "true"
+      CHOKIDAR_INTERVAL: "1000"
     ports:
       - "127.0.0.1:${BACKEND_PORT:-4000}:4000"
     volumes:

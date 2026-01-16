@@ -31,6 +31,18 @@
 export SPOKE_COMPOSE_GENERATOR_LOADED=1
 
 # =============================================================================
+# LOAD COUNTRY DATABASE
+# =============================================================================
+# Source nato-countries.sh (which also loads iso-countries.sh)
+# This provides unified port assignments for all country types
+_compose_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_nato_db="${_compose_script_dir}/../../../nato-countries.sh"
+if [ -f "$_nato_db" ]; then
+    source "$_nato_db"
+fi
+unset _compose_script_dir _nato_db
+
+# =============================================================================
 # TEMPLATE CONFIGURATION
 # =============================================================================
 
@@ -200,14 +212,25 @@ EOF
 spoke_compose_get_ports() {
     local code_upper="$1"
 
-    # Use existing port function if available
+    # Priority 1: Use unified country database (NATO, Partner, ISO, Custom)
+    # This ensures consistency between docker-compose and terraform tfvars
+    if type get_any_country_ports &>/dev/null && type is_valid_country &>/dev/null; then
+        if is_valid_country "$code_upper"; then
+            get_any_country_ports "$code_upper"
+            return
+        fi
+    fi
+
+    # Priority 2: Use legacy port function if available
     if type _get_spoke_ports &>/dev/null; then
         _get_spoke_ports "$code_upper"
         return
     fi
 
-    # Fallback: Calculate ports based on country code hash
-    # This ensures consistent port assignment for each country
+    # Priority 3: Fallback for truly unknown codes
+    # Calculate ports based on country code hash (consistent assignment)
+    log_warn "Unknown country code '$code_upper' - using hash-based port assignment"
+    
     local hash_value
     hash_value=$(echo -n "$code_upper" | od -A n -t d1 | awk '{sum=0; for(i=1;i<=NF;i++) sum+=$i; print sum % 100}')
 

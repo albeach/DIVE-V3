@@ -56,10 +56,6 @@ export function IdpSelector() {
 
   // Check health of all IdPs
   const checkIdpHealth = async (idpList: IdPOption[]) => {
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ||
-                      process.env.NEXT_PUBLIC_API_URL ||
-                      'https://localhost:4000';
-
     // Initialize all to checking
     const initialStatuses: Record<string, IdPStatus> = {};
     idpList.forEach(idp => {
@@ -67,13 +63,13 @@ export function IdpSelector() {
     });
     setIdpStatuses(initialStatuses);
 
-    // Check each IdP in parallel
+    // Check each IdP in parallel using Next.js proxy route (avoids CORS issues)
     const healthChecks = idpList.map(async (idp) => {
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 3000);
 
-        const response = await fetch(`${backendUrl}/api/idps/${idp.alias}/health`, {
+        const response = await fetch(`/api/idps/${idp.alias}/health`, {
           method: 'GET',
           signal: controller.signal,
         });
@@ -117,14 +113,11 @@ export function IdpSelector() {
 
   const fetchEnabledIdPs = async () => {
     try {
-      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL ||
-                        process.env.NEXT_PUBLIC_API_URL ||
-                        'https://localhost:4000';
-
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), 5000);
 
-      const response = await fetch(`${backendUrl}/api/idps/public`, {
+      // Use Next.js API route proxy instead of calling backend directly (avoids CORS issues)
+      const response = await fetch('/api/idps/public', {
         method: 'GET',
         headers: { 'Accept': 'application/json' },
         signal: controller.signal,

@@ -37,6 +37,16 @@ if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../error-recovery.sh" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/../../error-recovery.sh"
 fi
 
+# Load orchestration dependencies module (2026-01-16)
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../orchestration-dependencies.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../../orchestration-dependencies.sh"
+fi
+
+# Load federation state database module (2026-01-16)
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../federation-state-db.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../../federation-state-db.sh"
+fi
+
 # =============================================================================
 # PIPELINE CONSTANTS
 # =============================================================================
