@@ -2,6 +2,7 @@
   "title": "Dashboard",
   "subtitle": "Koalitionsintelligenz-Übersicht",
   "welcome": "Willkommen zurück, {{name}}",
+  "welcomeBack": "Willkommen zurück,",
   "loading": "Dashboard wird geladen...",
   "refreshing": "Aktualisieren...",
   "refresh": "Aktualisieren",

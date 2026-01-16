@@ -15,6 +15,7 @@ import {
   FileText,
   Activity,
 } from 'lucide-react';
+import { useTranslation } from '@/hooks/useTranslation';
 
 export type DashboardTab = 'overview' | 'federation' | 'authorization' | 'resources' | 'activity';
 
@@ -26,39 +27,6 @@ interface TabConfig {
   description: string;
 }
 
-const TABS: TabConfig[] = [
-  {
-    id: 'overview',
-    label: 'Overview',
-    icon: <LayoutDashboard className="w-4 h-4" />,
-    description: 'Dashboard home with quick stats and feature cards',
-  },
-  {
-    id: 'federation',
-    label: 'Federation',
-    icon: <Globe className="w-4 h-4" />,
-    description: 'Active IdPs and cross-partner access',
-  },
-  {
-    id: 'authorization',
-    label: 'Authorization',
-    icon: <ShieldCheck className="w-4 h-4" />,
-    description: 'Policy decisions and insights',
-  },
-  {
-    id: 'resources',
-    label: 'Resources',
-    icon: <FileText className="w-4 h-4" />,
-    description: 'Accessible documents and activity',
-  },
-  {
-    id: 'activity',
-    label: 'Activity',
-    icon: <Activity className="w-4 h-4" />,
-    description: 'Personal audit trail and compliance',
-  },
-];
-
 interface DashboardTabsProps {
   activeTab: DashboardTab;
   onTabChange: (tab: DashboardTab) => void;
@@ -66,6 +34,42 @@ interface DashboardTabsProps {
 }
 
 export function DashboardTabs({ activeTab, onTabChange, badges = {} }: DashboardTabsProps) {
+  const { t } = useTranslation('dashboard');
+
+  // Generate tabs with localized labels
+  const TABS: TabConfig[] = [
+    {
+      id: 'overview',
+      label: t('tabs.overview'),
+      icon: <LayoutDashboard className="w-4 h-4" />,
+      description: t('tabs.overview'),
+    },
+    {
+      id: 'federation',
+      label: t('tabs.federation'),
+      icon: <Globe className="w-4 h-4" />,
+      description: t('tabs.federation'),
+    },
+    {
+      id: 'authorization',
+      label: t('tabs.authorization'),
+      icon: <ShieldCheck className="w-4 h-4" />,
+      description: t('tabs.authorization'),
+    },
+    {
+      id: 'resources',
+      label: t('tabs.resources'),
+      icon: <FileText className="w-4 h-4" />,
+      description: t('tabs.resources'),
+    },
+    {
+      id: 'activity',
+      label: t('tabs.activity'),
+      icon: <Activity className="w-4 h-4" />,
+      description: t('tabs.activity'),
+    },
+  ];
+
   // Handle keyboard navigation
   const handleKeyDown = (e: React.KeyboardEvent, tabId: DashboardTab) => {
     const tabIds = TABS.map(t => t.id);
@@ -175,5 +179,3 @@ function TabButton({ tab, isActive, badge, onClick, onKeyDown }: TabButtonProps)
     </button>
   );
 }
-
-export { TABS };

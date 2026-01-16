@@ -116,7 +116,7 @@ interface DashboardData {
 export function DashboardModern({ user, session }: DashboardModernProps) {
   const { t } = useTranslation('dashboard');
   const { locale } = useLocale();
-  
+
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
   const [data, setData] = useState<DashboardData>({
     idps: [],
@@ -368,7 +368,7 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
 
                 <div className="mt-2 flex items-center gap-3">
                   <h1 className="text-xl lg:text-2xl font-bold text-slate-900 truncate">
-                    Welcome back, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">{pseudonym}</span>
+                    {t('welcomeBack')} <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">{pseudonym}</span>
                   </h1>
                 </div>
 
