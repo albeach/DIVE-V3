@@ -23,6 +23,8 @@ import { useRouter } from 'next/navigation';
 import PageLayout from '@/components/layout/page-layout';
 import { useTranslation } from '@/hooks/useTranslation';
 import { useLocale } from '@/contexts/LocaleContext';
+import { motion } from 'framer-motion';
+import { fadeVariants, staggerContainerVariants, staggerItemVariants, defaultTransition } from '@/lib/animations';
 import {
   Key,
   Shield,
@@ -150,7 +152,12 @@ export default function MultiKasPage() {
       ]}
     >
       {/* Hero Section */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 rounded-2xl p-8 md:p-12 mb-8 shadow-2xl">
+      <motion.div 
+        className="relative overflow-hidden bg-gradient-to-br from-blue-600 via-indigo-600 to-purple-700 rounded-2xl p-8 md:p-12 mb-8 shadow-2xl"
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={defaultTransition}
+      >
         <div className="absolute inset-0 opacity-10">
           <div className="absolute inset-0" style={{
             backgroundImage: `radial-gradient(circle at 30% 50%, white 2px, transparent 2px)`,
@@ -205,23 +212,28 @@ export default function MultiKasPage() {
             )}
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* Error State */}
       {error && (
-        <div className="bg-red-50 border-2 border-red-200 rounded-xl p-6 mb-6 flex items-start gap-4">
-          <AlertCircle className="w-6 h-6 text-red-500 flex-shrink-0" />
+        <motion.div 
+          className="bg-red-50 dark:bg-red-900/20 border-2 border-red-200 dark:border-red-800 rounded-xl p-6 mb-6 flex items-start gap-4"
+          initial={{ opacity: 0, y: -10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={defaultTransition}
+        >
+          <AlertCircle className="w-6 h-6 text-red-500 dark:text-red-400 flex-shrink-0" />
           <div>
-            <h3 className="font-bold text-red-800">{t('multiKas.errorTitle')}</h3>
-            <p className="text-red-700">{error}</p>
+            <h3 className="font-bold text-red-800 dark:text-red-200">{t('multiKas.errorTitle')}</h3>
+            <p className="text-red-700 dark:text-red-300">{error}</p>
             <button
               onClick={handleRefresh}
-              className="mt-3 px-4 py-2 bg-red-100 text-red-800 rounded-lg hover:bg-red-200 transition-colors text-sm font-semibold"
+              className="mt-3 px-4 py-2 bg-red-100 dark:bg-red-800/50 text-red-800 dark:text-red-200 rounded-lg hover:bg-red-200 dark:hover:bg-red-700/50 transition-colors text-sm font-semibold"
             >
               {t('multiKas.retry')}
             </button>
           </div>
-        </div>
+        </motion.div>
       )}
 
       {/* Summary Bar */}
@@ -442,26 +454,36 @@ export default function MultiKasPage() {
 
       {/* Benefits Section */}
       {multiKasData?.benefits && multiKasData.benefits.length > 0 && (
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-3">
+        <motion.div 
+          className="mb-8"
+          initial="hidden"
+          animate="visible"
+          variants={staggerContainerVariants}
+        >
+          <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4 flex items-center gap-3">
             <Zap className="w-7 h-7 text-yellow-500" />
             {t('multiKas.benefits.title')}
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {multiKasData.benefits.map((benefit) => (
-              <div key={benefit.title} className="bg-white rounded-xl p-6 border-2 border-gray-200 shadow-md hover:shadow-xl hover:scale-105 transition-all">
+              <motion.div 
+                key={benefit.title} 
+                className="bg-white dark:bg-gray-800 rounded-xl p-6 border-2 border-gray-200 dark:border-gray-700 shadow-md hover:shadow-xl transition-all"
+                variants={staggerItemVariants}
+                whileHover={{ scale: 1.05, transition: { duration: 0.2 } }}
+              >
                 <div className="flex items-center gap-3 mb-3">
                   <div className="p-3 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl">
                     {benefitIcons[benefit.title] || <Zap className="w-6 h-6 text-white" />}
                   </div>
                   <span className="text-3xl" role="img" aria-label={benefit.title}>{benefit.icon}</span>
                 </div>
-                <h3 className="font-bold text-gray-900 mb-2">{benefit.title}</h3>
-                <p className="text-sm text-gray-600">{benefit.description}</p>
-              </div>
+                <h3 className="font-bold text-gray-900 dark:text-gray-100 mb-2">{benefit.title}</h3>
+                <p className="text-sm text-gray-600 dark:text-gray-300">{benefit.description}</p>
+              </motion.div>
             ))}
           </div>
-        </div>
+        </motion.div>
       )}
 
       {/* Footer with data source info */}

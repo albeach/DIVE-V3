@@ -1,17 +1,17 @@
 /**
  * Backend Internationalization (i18n) Utility
- * 
+ *
  * Provides locale-aware error messages and validation responses.
  * Supports 7 languages: en, fr, de, es, it, nl, pl
- * 
+ *
  * Usage:
  * ```typescript
  * import { t, getLocaleFromRequest } from '@/utils/i18n';
- * 
+ *
  * const locale = getLocaleFromRequest(req);
  * const message = t('errors.authentication.unauthorized', {}, locale);
  * ```
- * 
+ *
  * @version 1.0.0
  * @date 2026-01-16
  */
@@ -33,7 +33,7 @@ const translationsCache: Map<string, any> = new Map();
  */
 function loadTranslations(locale: Locale, namespace: string = 'errors'): any {
   const cacheKey = `${locale}:${namespace}`;
-  
+
   if (translationsCache.has(cacheKey)) {
     return translationsCache.get(cacheKey);
   }
@@ -46,12 +46,12 @@ function loadTranslations(locale: Locale, namespace: string = 'errors'): any {
     return translations;
   } catch (error) {
     console.error(`[i18n] Failed to load translations: ${locale}/${namespace}`, error);
-    
+
     // Fallback to English if available
     if (locale !== defaultLocale) {
       return loadTranslations(defaultLocale, namespace);
     }
-    
+
     return {};
   }
 }
@@ -76,7 +76,7 @@ function interpolate(str: string, params: Record<string, any> = {}): string {
 
 /**
  * Translate a key to the target locale
- * 
+ *
  * @param key - Translation key (e.g., "errors.authentication.unauthorized")
  * @param params - Interpolation parameters (e.g., {field: "email"})
  * @param locale - Target locale (defaults to 'en')
@@ -91,20 +91,20 @@ export function t(
 ): string {
   const translations = loadTranslations(locale, namespace);
   const value = getNestedValue(translations, key);
-  
+
   if (!value) {
     console.warn(`[i18n] Translation missing: ${locale}:${namespace}:${key}`);
     return key; // Return key as fallback
   }
-  
+
   return interpolate(value, params);
 }
 
 /**
  * Parse Accept-Language header to determine user's preferred locale
- * 
+ *
  * Example: "fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7" -> 'fr'
- * 
+ *
  * @param acceptLanguage - Accept-Language header value
  * @returns Preferred locale
  */
@@ -136,12 +136,12 @@ export function parseAcceptLanguage(acceptLanguage: string | undefined): Locale 
 
 /**
  * Get locale from Express request
- * 
+ *
  * Checks (in order):
  * 1. Query parameter: ?locale=fr
  * 2. Accept-Language header
  * 3. Default locale
- * 
+ *
  * @param req - Express request object
  * @returns Determined locale
  */
@@ -159,11 +159,11 @@ export function getLocaleFromRequest(req: Request): Locale {
 
 /**
  * Express middleware to attach locale to request
- * 
+ *
  * Usage:
  * ```typescript
  * app.use(localeMiddleware);
- * 
+ *
  * // In route handler:
  * const message = t('errors.notFound', {}, req.locale);
  * ```
@@ -172,6 +172,3 @@ export function localeMiddleware(req: Request, res: any, next: any) {
   (req as any).locale = getLocaleFromRequest(req);
   next();
 }
-
-// Export for convenience
-export { Locale } from './index';
