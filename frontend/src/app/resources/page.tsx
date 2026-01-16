@@ -73,6 +73,7 @@ const CURRENT_INSTANCE = process.env.NEXT_PUBLIC_INSTANCE || 'USA';
 
 const CLASSIFICATION_OPTIONS = [
   { value: 'UNCLASSIFIED', label: 'Unclassified', color: 'bg-green-100 text-green-800 border-green-300' },
+  { value: 'RESTRICTED', label: 'Restricted', color: 'bg-blue-100 text-blue-800 border-blue-300' },
   { value: 'CONFIDENTIAL', label: 'Confidential', color: 'bg-amber-100 text-amber-800 border-amber-300' },
   { value: 'SECRET', label: 'Secret', color: 'bg-orange-100 text-orange-800 border-orange-300' },
   { value: 'TOP_SECRET', label: 'Top Secret', color: 'bg-red-100 text-red-800 border-red-300' },
@@ -150,16 +151,22 @@ export default function ResourcesPage() {
     },
     initialSort: { field: 'title', order: 'asc' },
     pageSize: 50,
-    includeFacets: true,
+    // Only request facets from API for local search (federated search endpoint doesn't support facets)
+    includeFacets: !federatedMode,
     federated: federatedMode,
     autoLoad: true,
     // KEY FIX: Only enable fetching when session is authenticated
     enabled: isSessionReady,
   });
 
-  // CRITICAL FIX: Always calculate facets from currently loaded resources
-  // This ensures facets reflect the actual displayed data
+  // Use API-provided facets when available (local search), otherwise calculate from loaded resources (federated search)
   const facets = useMemo(() => {
+    // For local search, use API-provided facets which are accurate for all matching documents
+    if (!federatedMode && apiFacets) {
+      return apiFacets;
+    }
+
+    // For federated search or when API facets aren't available, calculate from currently loaded resources
     const facetCounts = {
       classifications: {} as Record<string, number>,
       countries: {} as Record<string, number>,
@@ -202,15 +209,17 @@ export default function ResourcesPage() {
       }
     });
 
-    // Convert to the expected facet format (approximate: false since counts are exact from loaded data)
+    // Convert to the expected facet format
+    // For federated search, mark as approximate since we only have counts from loaded results
+    const approximate = federatedMode;
     return {
-      classifications: Object.entries(facetCounts.classifications).map(([value, count]) => ({ value, count, approximate: false })),
-      countries: Object.entries(facetCounts.countries).map(([value, count]) => ({ value, count, approximate: false })),
-      cois: Object.entries(facetCounts.cois).map(([value, count]) => ({ value, count, approximate: false })),
-      encryptionStatus: Object.entries(facetCounts.encryptionStatus).map(([value, count]) => ({ value, count, approximate: false })),
-      instances: Object.entries(facetCounts.instances).map(([value, count]) => ({ value, count, approximate: false })),
+      classifications: Object.entries(facetCounts.classifications).map(([value, count]) => ({ value, count, approximate })),
+      countries: Object.entries(facetCounts.countries).map(([value, count]) => ({ value, count, approximate })),
+      cois: Object.entries(facetCounts.cois).map(([value, count]) => ({ value, count, approximate })),
+      encryptionStatus: Object.entries(facetCounts.encryptionStatus).map(([value, count]) => ({ value, count, approximate })),
+      instances: Object.entries(facetCounts.instances).map(([value, count]) => ({ value, count, approximate })),
     };
-  }, [resources]);
+  }, [federatedMode, apiFacets, resources]);
 
   // Keyboard Navigation
   const [navState, navActions] = useKeyboardNavigation({
@@ -419,12 +428,78 @@ export default function ResourcesPage() {
   const classificationBreakdown = useMemo(() => {
     const breakdown = {
       UNCLASSIFIED: facets?.classifications?.find(c => c.value === 'UNCLASSIFIED')?.count || 0,
+      RESTRICTED: facets?.classifications?.find(c => c.value === 'RESTRICTED')?.count || 0,
       CONFIDENTIAL: facets?.classifications?.find(c => c.value === 'CONFIDENTIAL')?.count || 0,
       SECRET: facets?.classifications?.find(c => c.value === 'SECRET')?.count || 0,
       TOP_SECRET: facets?.classifications?.find(c => c.value === 'TOP_SECRET')?.count || 0,
     };
     return breakdown;
   }, [facets]);
+
+  // Calculate average document age from loaded resources
+  const averageDocAge = useMemo(() => {
+    if (resources.length === 0) return undefined;
+
+    const now = new Date();
+    const ages = resources
+      .filter(r => r.creationDate)
+      .map(r => (now.getTime() - new Date(r.creationDate!).getTime()) / (1000 * 60 * 60 * 24));
+
+    if (ages.length === 0) return undefined;
+    return ages.reduce((sum, age) => sum + age, 0) / ages.length;
+  }, [resources]);
+
+  // Calculate access rate (percentage of documents user can access)
+  // For federated search, this is approximate based on loaded documents
+  // For local search, this could be more accurate if we had total counts
+  const accessRate = useMemo(() => {
+    if (totalCount === 0) return undefined;
+
+    // In federated mode, we show what percentage of loaded docs user can access
+    // In local mode, resources array represents accessible documents
+    if (federatedMode) {
+      // This is approximate since we don't know total inaccessible docs
+      const accessibleLoaded = resources.length;
+      const estimatedTotal = totalCount;
+      return estimatedTotal > 0 ? (accessibleLoaded / estimatedTotal) * 100 : undefined;
+    } else {
+      // For local search, assume all returned documents are accessible
+      return totalCount > 0 ? 100 : undefined;
+    }
+  }, [resources.length, totalCount, federatedMode]);
+
+  // Calculate top COIs from facets
+  const topCOIs = useMemo(() => {
+    return facets?.cois
+      ?.sort((a, b) => b.count - a.count)
+      .slice(0, 3)
+      .map(coi => ({ tag: coi.value, count: coi.count })) || [];
+  }, [facets]);
+
+  // Calculate releasability statistics (NATO, FVEY, restricted access)
+  const releasabilityStats = useMemo(() => {
+    const natoCount = facets?.countries?.find(c => c.value === 'NATO')?.count || 0;
+    const fveyCount = facets?.countries?.find(c => c.value === 'FVEY')?.count || 0;
+    // Restricted could be documents that are only releasable to specific countries
+    // This is approximate - could be enhanced with more detailed analysis
+    const restrictedCount = totalCount - natoCount - fveyCount;
+
+    return {
+      natoCount,
+      fveyCount,
+      restrictedCount: Math.max(0, restrictedCount)
+    };
+  }, [facets, totalCount]);
+
+  // Track data freshness (when data was last loaded)
+  const [dataFreshness, setDataFreshness] = useState<Date | undefined>();
+
+  // Update data freshness when resources are loaded
+  useEffect(() => {
+    if (resources.length > 0 && !isLoading) {
+      setDataFreshness(new Date());
+    }
+  }, [resources.length, isLoading]);
 
   if (status === 'loading') {
     return <div className="min-h-screen bg-gray-50 dark:bg-gray-900"><ResourcesPageSkeleton /></div>;
@@ -570,6 +645,12 @@ export default function ResourcesPage() {
           }}
           bookmarkCount={bookmarks.length}
           isLoading={isLoading}
+          // Enhanced metrics
+          averageDocAge={averageDocAge}
+          accessRate={accessRate}
+          topCOIs={topCOIs}
+          releasabilityStats={releasabilityStats}
+          dataFreshness={dataFreshness}
         />
       )}
 

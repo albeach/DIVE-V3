@@ -1,5 +1,4 @@
 import NextAuth from "next-auth";
-import Keycloak from "next-auth/providers/keycloak";
 import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { db } from "@/lib/db";
 import { accounts, sessions, users, verificationTokens } from "@/lib/db/schema";
@@ -254,24 +253,22 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         },
     },
     providers: [
-        Keycloak({
-            // Auth.js standard configuration (per https://authjs.dev/getting-started/providers/keycloak)
-            // Uses AUTH_KEYCLOAK_ID, AUTH_KEYCLOAK_SECRET, AUTH_KEYCLOAK_ISSUER from environment
-            // Auth.js automatically discovers endpoints via OIDC discovery from issuer
-            issuer: process.env.AUTH_KEYCLOAK_ISSUER ?? process.env.KEYCLOAK_ISSUER ?? 'https://localhost:8443/realms/dive-v3-broker',
+        {
+            id: "keycloak",
+            name: "Keycloak",
+            type: "oidc",
+            clientId: process.env.KEYCLOAK_CLIENT_ID!,
+            clientSecret: process.env.KEYCLOAK_CLIENT_SECRET!,
+            issuer: `https://localhost:8443/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}`,
             authorization: {
+                url: `https://localhost:8443/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/auth`,
                 params: {
-                    // Request only online tokens locally; offline_access caused KC to reject with "Offline tokens not allowed"
                     scope: "openid profile email",
                 }
             },
-            // FIX (2026-01-05): Disable 'iss' check to avoid issuer mismatch errors
-            // Keycloak returns iss=localhost:8443 but backend communicates via dive-hub-keycloak:8443
-            // Still using PKCE and state for security
-            checks: ["pkce", "state"],  // Removed "nonce" which was causing InvalidCheck errors
-            allowDangerousEmailAccountLinking: true,
-            // FIX (Nov 7): Profile callback to handle remote IdPs without email
-            // and capture DIVE attributes from Keycloak tokens
+            token: `https://localhost:8443/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/token`,
+            userinfo: `https://localhost:8443/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/userinfo`,
+            jwks_endpoint: `https://localhost:8443/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/certs`,
             profile(profile) {
                 // Log profile in development only
                 if (process.env.NODE_ENV === 'development') {
@@ -314,7 +311,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     roles: profile.realm_access?.roles || profile.roles || [],
                 };
             },
-        }),
+        }
     ],
 
     callbacks: {

@@ -60,7 +60,7 @@ test_skip() {
 mock_docker_inspect() {
     local container="$1"
     local status_file="/tmp/mock-health-$$-${container}"
-    
+
     if [ -f "$status_file" ]; then
         cat "$status_file"
     else
@@ -77,18 +77,18 @@ mock_docker_inspect() {
 ##
 test_1_detects_healthy() {
     print_test "Detects healthy service correctly"
-    
+
     # Use real container if Hub is running
     if docker ps --filter "name=dive-hub-redis" --format '{{.Names}}' | grep -q "dive-hub-redis"; then
         # Real test with Hub redis (should be healthy)
         export HEALTH_CHECK_REQUIRED_SUCCESSES=1
-        
+
         if orch_wait_healthy_with_retry "dive-hub-redis" 30 >/dev/null 2>&1; then
             test_pass
         else
             test_fail "Should have detected Hub redis as healthy"
         fi
-        
+
         export HEALTH_CHECK_REQUIRED_SUCCESSES=2
     else
         test_skip "No healthy container available for test"
@@ -100,12 +100,12 @@ test_1_detects_healthy() {
 ##
 test_2_requires_consecutive_successes() {
     print_test "Requires 2 consecutive healthy checks"
-    
+
     if ! docker ps --filter "name=dive-hub" --format '{{.Names}}' | grep -q "dive-hub"; then
         test_skip "Hub not running"
         return 0
     fi
-    
+
     # This is validated by the implementation (HEALTH_CHECK_REQUIRED_SUCCESSES=2)
     # Difficult to unit test without mocking, so we verify configuration
     if [ "${HEALTH_CHECK_REQUIRED_SUCCESSES}" -eq 2 ]; then
@@ -120,7 +120,7 @@ test_2_requires_consecutive_successes() {
 ##
 test_3_tracks_consecutive_failures() {
     print_test "Tracks consecutive failures correctly"
-    
+
     # This tests the implementation logic
     # Verify max consecutive failures is set
     if [ "${HEALTH_CHECK_MAX_CONSECUTIVE_FAILURES}" -eq 3 ]; then
@@ -135,7 +135,7 @@ test_3_tracks_consecutive_failures() {
 ##
 test_4_timeout_returns_error() {
     print_test "Timeout returns error code 1"
-    
+
     # Test with non-existent container (should timeout immediately)
     if orch_wait_healthy_with_retry "nonexistent-container-12345" 5 >/dev/null 2>&1; then
         test_fail "Should have failed for nonexistent container"
@@ -158,7 +158,7 @@ test_4_timeout_returns_error() {
 ##
 test_5_function_exported() {
     print_test "orch_wait_healthy_with_retry function is exported"
-    
+
     if type orch_wait_healthy_with_retry &>/dev/null; then
         test_pass
     else

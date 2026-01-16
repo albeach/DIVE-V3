@@ -178,10 +178,10 @@ services:
       KC_HEALTH_ENABLED: "true"
       KC_FEATURES: scripts
       KC_ADMIN: admin
-      KC_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
       # Initial admin user creation (Keycloak 26.5.0)
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
       # Bootstrap realm for Terraform provider authentication
       SKIP_REALM_IMPORT: "true"  # Terraform SSOT: Start empty, configure via Terraform
       # Legacy realm import variables (kept for compatibility, but not used)
@@ -267,7 +267,7 @@ services:
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       KEYCLOAK_JWKS_URI: https://keycloak:8443/realms/dive-v3-broker-usa/protocol/openid-connect/certs
       KEYCLOAK_ADMIN_USERNAME: admin
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
+      KC_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
       # Redis configuration
       REDIS_PASSWORD: ${REDIS_PASSWORD_USA}
       REDIS_URL: redis://:${REDIS_PASSWORD_USA}@redis:6379
@@ -433,6 +433,7 @@ services:
       NEXTAUTH_URL: ${NEXTAUTH_URL:-https://localhost:3000}
       NEXT_PUBLIC_EXTERNAL_DOMAINS: "${NEXT_PUBLIC_EXTERNAL_DOMAINS:-https://localhost:3000,https://localhost:4000,https://localhost:8443}"
       AUTH_SECRET: ${AUTH_SECRET:-default-auth-secret-change-me}
+      NEXTAUTH_SECRET: ${AUTH_SECRET:-default-auth-secret-change-me}
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-broker-usa}
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       AUTH_KEYCLOAK_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-broker-usa}

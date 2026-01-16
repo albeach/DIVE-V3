@@ -476,7 +476,7 @@ services:
       AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET_{{INSTANCE_CODE_UPPER}}}
       AUTH_KEYCLOAK_ISSUER: {{IDP_BASE_URL}}/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}}
       AUTH_POST_LOGOUT_REDIRECT: {{BASE_URL}}
-      
+
       # TLS Certificate Handling - Proper mkcert Integration (2026 Best Practice)
       # Makes Node.js fetch() API respect system CA trust store (installed via entrypoint)
       # This maintains proper TLS verification without security compromises

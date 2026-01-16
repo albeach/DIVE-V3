@@ -494,23 +494,23 @@ spoke_kas_register_mongodb() {
         log_info "Start the spoke first: ./dive --instance $code_lower spoke up"
         return 1
     fi
-    
+
     # CRITICAL: Wait for backend to be healthy before attempting registration
     log_verbose "Waiting for backend to be healthy..."
     local max_wait=60
     local elapsed=0
     while [ $elapsed -lt $max_wait ]; do
         local health_status=$(docker inspect "$backend_container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
-        
+
         if [ "$health_status" = "healthy" ]; then
             log_verbose "✓ Backend is healthy, proceeding with registration"
             break
         fi
-        
+
         sleep 2
         ((elapsed += 2))
     done
-    
+
     if [ $elapsed -ge $max_wait ]; then
         log_error "Backend not healthy after ${max_wait}s - cannot register KAS"
         return 1

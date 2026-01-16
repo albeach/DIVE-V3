@@ -66,12 +66,12 @@ test_fail() {
 
 cleanup_test_instance() {
     log_verbose "Cleaning up test instance: $TEST_INSTANCE"
-    
+
     # Remove state files
     rm -f "${DIVE_ROOT}/.dive-state/${TEST_INSTANCE}.state" 2>/dev/null || true
     rm -f "${DIVE_ROOT}/.dive-state/${TEST_INSTANCE}.lock" 2>/dev/null || true
     rm -f "${DIVE_ROOT}/.dive-state/${TEST_INSTANCE}.cleanup_scheduled" 2>/dev/null || true
-    
+
     # Clean database records
     if orch_db_check_connection; then
         orch_db_exec "DELETE FROM deployment_states WHERE instance_code='$TEST_INSTANCE'" >/dev/null 2>&1 || true
@@ -90,14 +90,14 @@ cleanup_test_instance() {
 test_1_file_and_db_match() {
     print_test_header "File and DB state match after deployment"
     cleanup_test_instance
-    
+
     # Set state using dual-write
     orch_db_set_state "$TEST_INSTANCE" "COMPLETE" "Test deployment" '{"test":true}'
-    
+
     # Get state from both sources
     local file_state=$(grep "^state=" "${DIVE_ROOT}/.dive-state/${TEST_INSTANCE}.state" 2>/dev/null | cut -d= -f2)
     local db_state=$(orch_db_exec "SELECT state FROM deployment_states WHERE instance_code='$TEST_INSTANCE' ORDER BY timestamp DESC LIMIT 1" 2>/dev/null | xargs)
-    
+
     if [ "$file_state" = "COMPLETE" ] && [ "$db_state" = "COMPLETE" ]; then
         # Validate consistency
         if orch_state_validate_consistency "$TEST_INSTANCE" "false"; then
@@ -119,19 +119,19 @@ test_1_file_and_db_match() {
 test_2_reconcile_when_file_missing() {
     print_test_header "State reconciliation when file missing"
     cleanup_test_instance
-    
+
     # Create DB state only
     orch_db_exec "INSERT INTO deployment_states (instance_code, state, reason) VALUES ('$TEST_INSTANCE', 'DEPLOYING', 'Test')" >/dev/null 2>&1
-    
+
     # Validate consistency (should auto-create file)
     if orch_state_validate_consistency "$TEST_INSTANCE" "true"; then
         test_fail "Expected validation to return 1 (was inconsistent, now fixed)"
         return 1
     fi
-    
+
     # Check if file was created
     local file_state=$(grep "^state=" "${DIVE_ROOT}/.dive-state/${TEST_INSTANCE}.state" 2>/dev/null | cut -d= -f2)
-    
+
     if [ "$file_state" = "DEPLOYING" ]; then
         test_pass
         return 0
@@ -147,7 +147,7 @@ test_2_reconcile_when_file_missing() {
 test_3_reconcile_when_db_missing() {
     print_test_header "State reconciliation when DB missing"
     cleanup_test_instance
-    
+
     # Create file state only
     cat > "${DIVE_ROOT}/.dive-state/${TEST_INSTANCE}.state" << EOF
 state=VERIFYING
@@ -156,16 +156,16 @@ version=2.0
 metadata={"test":true}
 checksum=abc123
 EOF
-    
+
     # Validate consistency (should auto-create DB record)
     if orch_state_validate_consistency "$TEST_INSTANCE" "true"; then
         test_fail "Expected validation to return 1 (was inconsistent)"
         return 1
     fi
-    
+
     # Check if DB was created
     local db_state=$(orch_db_exec "SELECT state FROM deployment_states WHERE instance_code='$TEST_INSTANCE' ORDER BY timestamp DESC LIMIT 1" 2>/dev/null | xargs)
-    
+
     if [ "$db_state" = "VERIFYING" ]; then
         test_pass
         return 0
@@ -181,7 +181,7 @@ EOF
 test_4_corruption_detection() {
     print_test_header "State corruption detection (checksum mismatch)"
     cleanup_test_instance
-    
+
     # Create state file with invalid checksum
     cat > "${DIVE_ROOT}/.dive-state/${TEST_INSTANCE}.state" << EOF
 state=COMPLETE
@@ -190,7 +190,7 @@ version=2.0
 metadata={"test":true}
 checksum=INVALID_CHECKSUM_123
 EOF
-    
+
     # Validate checksum (should detect corruption)
     if orch_state_validate_checksum "$TEST_INSTANCE"; then
         test_fail "Failed to detect corrupted checksum"
@@ -207,25 +207,25 @@ EOF
 test_5_concurrent_state_isolation() {
     print_test_header "Concurrent deployment state isolation"
     cleanup_test_instance
-    
+
     local test_instance_2="ts2"
-    
+
     # Clean second instance
     rm -f "${DIVE_ROOT}/.dive-state/${test_instance_2}.state" 2>/dev/null || true
     orch_db_exec "DELETE FROM deployment_states WHERE instance_code='$test_instance_2'" >/dev/null 2>&1 || true
-    
+
     # Set different states for different instances
     orch_db_set_state "$TEST_INSTANCE" "DEPLOYING" "Test 1"
     orch_db_set_state "$test_instance_2" "COMPLETE" "Test 2"
-    
+
     # Verify isolation
     local state1=$(orch_db_get_state "$TEST_INSTANCE")
     local state2=$(orch_db_get_state "$test_instance_2")
-    
+
     # Cleanup second instance
     rm -f "${DIVE_ROOT}/.dive-state/${test_instance_2}.state" 2>/dev/null || true
     orch_db_exec "DELETE FROM deployment_states WHERE instance_code='$test_instance_2'" >/dev/null 2>&1 || true
-    
+
     if [ "$state1" = "DEPLOYING" ] && [ "$state2" = "COMPLETE" ]; then
         test_pass
         return 0
@@ -241,16 +241,16 @@ test_5_concurrent_state_isolation() {
 test_6_infer_state_no_containers() {
     print_test_header "State inference from containers (no containers)"
     cleanup_test_instance
-    
+
     # Ensure no containers exist
     docker ps -a -q --filter "name=dive-spoke-${TEST_INSTANCE}" | xargs -r docker rm -f >/dev/null 2>&1 || true
-    
+
     # Infer state
     orch_state_infer_from_containers "$TEST_INSTANCE"
-    
+
     # Should infer UNKNOWN (no containers)
     local inferred=$(orch_db_get_state "$TEST_INSTANCE")
-    
+
     if [ "$inferred" = "UNKNOWN" ]; then
         test_pass
         return 0
@@ -266,7 +266,7 @@ test_6_infer_state_no_containers() {
 test_7_reconcile_uses_ssot() {
     print_test_header "Auto-reconciliation uses correct SSOT (DB is SSOT)"
     cleanup_test_instance
-    
+
     # Set different states in file and DB
     cat > "${DIVE_ROOT}/.dive-state/${TEST_INSTANCE}.state" << EOF
 state=DEPLOYING
@@ -275,16 +275,16 @@ version=2.0
 metadata={}
 checksum=test123
 EOF
-    
+
     orch_db_exec "INSERT INTO deployment_states (instance_code, state, reason) VALUES ('$TEST_INSTANCE', 'COMPLETE', 'Test')" >/dev/null 2>&1
-    
+
     # Reconcile (should use DB as SSOT since ORCH_DB_SOURCE_OF_TRUTH=db)
     orch_state_reconcile "$TEST_INSTANCE"
-    
+
     # File should now match DB
     local file_state=$(grep "^state=" "${DIVE_ROOT}/.dive-state/${TEST_INSTANCE}.state" 2>/dev/null | cut -d= -f2)
     local db_state=$(orch_db_exec "SELECT state FROM deployment_states WHERE instance_code='$TEST_INSTANCE' ORDER BY timestamp DESC LIMIT 1" 2>/dev/null | xargs)
-    
+
     if [ "$file_state" = "COMPLETE" ] && [ "$db_state" = "COMPLETE" ]; then
         test_pass
         return 0
@@ -300,10 +300,10 @@ EOF
 test_8_garbage_collection() {
     print_test_header "State garbage collection removes old states"
     cleanup_test_instance
-    
+
     # Create old orphaned cleanup marker (simulate 30 days old)
     touch "${DIVE_ROOT}/.dive-state/${TEST_INSTANCE}.cleanup_scheduled"
-    
+
     # On macOS, use -A flag; on Linux, use -d flag
     if touch -A -1200000 "${DIVE_ROOT}/.dive-state/${TEST_INSTANCE}.cleanup_scheduled" 2>/dev/null; then
         : # macOS success
@@ -314,10 +314,10 @@ test_8_garbage_collection() {
         test_pass  # Skip test on unsupported platform
         return 0
     fi
-    
+
     # Run garbage collection (7 day retention for cleanup markers)
     orch_state_cleanup_old 90 >/dev/null 2>&1
-    
+
     # Check if marker was removed
     if [ ! -f "${DIVE_ROOT}/.dive-state/${TEST_INSTANCE}.cleanup_scheduled" ]; then
         test_pass
