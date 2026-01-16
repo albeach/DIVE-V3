@@ -1,87 +1,108 @@
 {
-  "title": "Dashboard",
-  "subtitle": "Coalition intelligence overview",
-  "welcome": "Welcome back, {{name}}",
+  "title": "Tableau de bord",
+  "subtitle": "Aperçu de l'intelligence de la coalition",
+  "welcome": "Bon retour, {{name}}",
+  "loading": "Chargement du tableau de bord...",
+  "refreshing": "Actualisation...",
+  "refresh": "Actualiser",
+  "lastUpdated": "Dernière mise à jour : {{time}}",
+  "tabs": {
+    "overview": "Aperçu",
+    "federation": "Fédération",
+    "authorization": "Autorisation",
+    "resources": "Ressources",
+    "activity": "Activité"
+  },
   "overview": {
-    "title": "System Overview",
-    "totalResources": "Total Resources",
-    "activeUsers": "Active Users",
-    "requestsToday": "Requests Today",
-    "avgResponseTime": "Avg Response Time",
-    "uptime": "System Uptime",
-    "healthStatus": "Health Status",
-    "healthy": "Healthy",
-    "degraded": "Degraded",
-    "down": "Down"
+    "title": "Aperçu du système",
+    "totalResources": "Ressources totales",
+    "activeUsers": "Utilisateurs actifs",
+    "requestsToday": "Requêtes aujourd'hui",
+    "avgResponseTime": "Temps de réponse moyen",
+    "uptime": "Disponibilité du système",
+    "healthStatus": "État de santé",
+    "healthy": "Sain",
+    "degraded": "Dégradé",
+    "down": "Hors ligne",
+    "authorizationRate": "Taux d'autorisation",
+    "systemHealth": "Santé du système"
   },
   "widgets": {
     "recentActivity": {
-      "title": "Recent Activity",
-      "noActivity": "No recent activity",
-      "viewAll": "View All"
+      "title": "Activité récente",
+      "noActivity": "Aucune activité récente",
+      "viewAll": "Voir tout"
     },
     "recentResources": {
-      "title": "Recently Accessed Resources",
-      "noResources": "No resources accessed recently"
+      "title": "Ressources récemment consultées",
+      "noResources": "Aucune ressource consultée récemment"
     },
     "notifications": {
       "title": "Notifications",
-      "noNotifications": "No new notifications",
-      "markAllRead": "Mark All Read"
+      "noNotifications": "Aucune nouvelle notification",
+      "markAllRead": "Tout marquer comme lu"
     },
     "quickActions": {
-      "title": "Quick Actions",
-      "uploadResource": "Upload Resource",
-      "browseResources": "Browse Resources",
-      "viewPolicies": "View Policies",
-      "manageUsers": "Manage Users"
+      "title": "Actions rapides",
+      "uploadResource": "Télécharger une ressource",
+      "browseResources": "Parcourir les ressources",
+      "viewPolicies": "Voir les politiques",
+      "manageUsers": "Gérer les utilisateurs"
     },
     "federationStatus": {
-      "title": "Federation Status",
-      "connectedSpokes": "Connected Spokes",
-      "activeFederations": "Active Federations",
-      "viewFederation": "View Federation"
+      "title": "État de la fédération",
+      "connectedSpokes": "Rayons connectés",
+      "activeFederations": "Fédérations actives",
+      "viewFederation": "Voir la fédération"
     },
     "kasStatus": {
-      "title": "KAS Status",
-      "totalKAS": "Total KAS Endpoints",
-      "healthyKAS": "Healthy",
-      "unhealthyKAS": "Unhealthy",
-      "viewKAS": "View Multi-KAS"
+      "title": "État KAS",
+      "totalKAS": "Points de terminaison KAS totaux",
+      "healthyKAS": "Sains",
+      "unhealthyKAS": "Non sains",
+      "viewKAS": "Voir Multi-KAS"
     },
     "accessRequests": {
-      "title": "Access Requests",
-      "pending": "Pending",
-      "granted": "Granted Today",
-      "denied": "Denied Today",
-      "viewRequests": "View All Requests"
+      "title": "Demandes d'accès",
+      "pending": "En attente",
+      "granted": "Accordées aujourd'hui",
+      "denied": "Refusées aujourd'hui",
+      "viewRequests": "Voir toutes les demandes"
     },
     "securityMetrics": {
-      "title": "Security Metrics",
-      "authFailures": "Auth Failures (24h)",
-      "policyDenials": "Policy Denials (24h)",
-      "suspiciousActivity": "Suspicious Activity",
-      "viewAuditLog": "View Audit Log"
+      "title": "Métriques de sécurité",
+      "authFailures": "Échecs d'authentification (24h)",
+      "policyDenials": "Refus de politique (24h)",
+      "suspiciousActivity": "Activité suspecte",
+      "viewAuditLog": "Voir le journal d'audit"
     }
   },
   "charts": {
-    "requestsOverTime": "Requests Over Time",
-    "accessByCountry": "Access by Country",
-    "classificationDistribution": "Classification Distribution",
-    "responseTimeTrends": "Response Time Trends",
-    "today": "Today",
-    "week": "This Week",
-    "month": "This Month",
-    "custom": "Custom Range"
+    "requestsOverTime": "Requêtes au fil du temps",
+    "accessByCountry": "Accès par pays",
+    "classificationDistribution": "Distribution par classification",
+    "responseTimeTrends": "Tendances du temps de réponse",
+    "today": "Aujourd'hui",
+    "week": "Cette semaine",
+    "month": "Ce mois",
+    "custom": "Plage personnalisée"
   },
   "filters": {
-    "timeRange": "Time Range",
-    "last24Hours": "Last 24 Hours",
-    "last7Days": "Last 7 Days",
-    "last30Days": "Last 30 Days",
-    "customRange": "Custom Range"
+    "timeRange": "Plage temporelle",
+    "last24Hours": "Dernières 24 heures",
+    "last7Days": "7 derniers jours",
+    "last30Days": "30 derniers jours",
+    "customRange": "Plage personnalisée"
+  },
+  "userInfo": {
+    "clearance": "Habilitation",
+    "country": "Pays",
+    "coi": "COI",
+    "role": "Rôle",
+    "lastLogin": "Dernière connexion",
+    "sessions": "Sessions actives"
   },
   "breadcrumbs": {
-    "dashboard": "Dashboard"
+    "dashboard": "Tableau de bord"
   }
 }
