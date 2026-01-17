@@ -27,6 +27,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { EducationalTooltip } from './educational-tooltip';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface AuthorizationDecision {
   id: string;
@@ -61,6 +62,7 @@ export function DashboardAuthorization({
   userCountry,
   userCOI,
 }: DashboardAuthorizationProps) {
+  const { t } = useTranslation('dashboard');
   const [showAllDecisions, setShowAllDecisions] = useState(false);
 
   const displayedDecisions = showAllDecisions ? decisions : decisions.slice(0, 5);
@@ -85,7 +87,7 @@ export function DashboardAuthorization({
             <ShieldCheck className="w-8 h-8 text-white/80" />
             <span className="text-3xl font-bold">{stats?.allowedCount || 0}</span>
           </div>
-          <p className="text-sm text-white/80">Allowed Requests</p>
+          <p className="text-sm text-white/80">{t('authorization.stats.allowedRequests')}</p>
         </div>
 
         <div className="rounded-2xl bg-gradient-to-br from-red-500 to-rose-600 p-6 shadow-xl text-white">
@@ -93,7 +95,7 @@ export function DashboardAuthorization({
             <ShieldX className="w-8 h-8 text-white/80" />
             <span className="text-3xl font-bold">{stats?.deniedCount || 0}</span>
           </div>
-          <p className="text-sm text-white/80">Denied Requests</p>
+          <p className="text-sm text-white/80">{t('authorization.stats.deniedRequests')}</p>
         </div>
 
         <div className="rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 p-6 shadow-xl text-white">
@@ -101,7 +103,7 @@ export function DashboardAuthorization({
             <BarChart3 className="w-8 h-8 text-white/80" />
             <span className="text-3xl font-bold">{allowRate}%</span>
           </div>
-          <p className="text-sm text-white/80">Authorization Rate</p>
+          <p className="text-sm text-white/80">{t('authorization.stats.authorizationRate')}</p>
         </div>
 
         <div className="rounded-2xl bg-gradient-to-br from-purple-500 to-pink-600 p-6 shadow-xl text-white">
@@ -109,11 +111,11 @@ export function DashboardAuthorization({
             <Clock className="w-8 h-8 text-white/80" />
             <span className="text-3xl font-bold">{stats?.avgLatencyMs || '<50'}ms</span>
           </div>
-          <p className="text-sm text-white/80">Avg Decision Time</p>
+          <p className="text-sm text-white/80">{t('authorization.stats.avgDecisionTime')}</p>
         </div>
       </motion.div>
 
-      {/* Your Authorization Profile */}
+      {/* {t('authorization.profile.title')} */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -125,9 +127,9 @@ export function DashboardAuthorization({
             <Users className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-slate-900">Your Authorization Profile</h3>
+            <h3 className="text-lg font-bold text-slate-900">{t('authorization.profile.title')}</h3>
             <p className="text-xs text-slate-600">
-              Attributes used for <EducationalTooltip term="ABAC">ABAC</EducationalTooltip> decisions
+              {t('authorization.profile.subtitle')} <EducationalTooltip term="ABAC">ABAC</EducationalTooltip> {t('authorization.profile.decisions')}
             </p>
           </div>
         </div>
@@ -163,7 +165,7 @@ export function DashboardAuthorization({
                   </span>
                   {level === userClearance && (
                     <span className="ml-auto text-xs bg-blue-500 text-white px-2 py-0.5 rounded-full">
-                      Current
+                      {t('authorization.profile.current')}
                     </span>
                   )}
                 </div>
@@ -175,7 +177,7 @@ export function DashboardAuthorization({
           <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
             <div className="flex items-center gap-2 mb-3">
               <Globe className="w-5 h-5 text-emerald-600" />
-              <p className="text-sm font-semibold text-slate-900">Country of Affiliation</p>
+              <p className="text-sm font-semibold text-slate-900">{t('authorization.profile.countryOfAffiliation')}</p>
             </div>
             <div className="flex items-center gap-3 p-3 rounded-lg bg-emerald-50 border border-emerald-200">
               <span className="text-3xl">{
@@ -184,7 +186,7 @@ export function DashboardAuthorization({
               <div>
                 <p className="text-sm font-bold text-slate-900">{userCountry}</p>
                 <p className="text-xs text-slate-600">
-                  <EducationalTooltip term="Releasability">Releasability</EducationalTooltip> checked against this
+                  <EducationalTooltip term="Releasability">{t('authorization.profile.releasabilityTerm')}</EducationalTooltip> {t('authorization.profile.releasabilityChecked')}
                 </p>
               </div>
             </div>
@@ -195,7 +197,7 @@ export function DashboardAuthorization({
             <div className="flex items-center gap-2 mb-3">
               <Users className="w-5 h-5 text-purple-600" />
               <p className="text-sm font-semibold text-slate-900">
-                <EducationalTooltip term="COI">COI Memberships</EducationalTooltip>
+                <EducationalTooltip term="COI">{t('authorization.profile.coiMemberships')}</EducationalTooltip>
               </p>
             </div>
             {userCOI.length > 0 ? (

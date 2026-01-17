@@ -4,27 +4,51 @@ import { useState } from 'react';
 import { AttributeTag, AttributeTagGroup } from '@/components/standards/AttributeTag';
 import { StandardsBadge } from '@/components/standards/StandardsBadge';
 import { FileText, Shield, Lock, Eye } from 'lucide-react';
+import { MarkingPreview } from './MarkingPreview';
 
 /**
  * Upload Form with Standards Tabs
- * 
+ *
  * Tabbed upload form showing which fields belong to which standard:
  * - [Basic Info]: File selection, title
  * - [🔵 Federation (5663)]: Issuer, AAL context (auto-populated)
  * - [🟠 Object (240)]: Classification, releasability, encryption, KAS
  * - [Preview]: Final ZTDF structure with color-coded JSON
- * 
+ *
  * Educational: Users learn which standard governs each field
  */
 export function UploadFormWithStandardsTabs() {
   const [activeTab, setActiveTab] = useState<'basic' | 'federation' | 'object' | 'preview'>('basic');
-  
+
+  // Form state for classification and releasability
+  const [classification, setClassification] = useState('SECRET');
+  const [releasabilityTo, setReleasabilityTo] = useState<string[]>(['USA']);
+  const [selectedCOI, setSelectedCOI] = useState<string[]>(['FVEY']);
+  const [documentTitle, setDocumentTitle] = useState('');
+
   // Mock user context (would come from session)
   const userContext = {
     issuer: 'dive-v3-usa',
     aal: 'AAL2',
     authTime: '5m ago',
     amr: ['pwd', 'otp'],
+  };
+
+  // Toggle helpers for checkboxes
+  const toggleReleasability = (country: string) => {
+    setReleasabilityTo(prev =>
+      prev.includes(country)
+        ? prev.filter(c => c !== country)
+        : [...prev, country]
+    );
+  };
+
+  const toggleCOI = (coi: string) => {
+    setSelectedCOI(prev =>
+      prev.includes(coi)
+        ? prev.filter(c => c !== coi)
+        : [...prev, coi]
+    );
   };
 
   const tabs = [
@@ -42,7 +66,7 @@ export function UploadFormWithStandardsTabs() {
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
-            
+
             return (
               <button
                 key={tab.id}
@@ -84,6 +108,8 @@ export function UploadFormWithStandardsTabs() {
               <input
                 type="text"
                 placeholder="Enter document title"
+                value={documentTitle}
+                onChange={(e) => setDocumentTitle(e.target.value)}
                 className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
               />
             </div>
@@ -189,11 +215,15 @@ export function UploadFormWithStandardsTabs() {
                   </label>
                   <AttributeTag standard="both" attribute="§4" size="xs" />
                 </div>
-                <select className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700">
-                  <option>UNCLASSIFIED</option>
-                  <option>CONFIDENTIAL</option>
-                  <option>SECRET</option>
-                  <option>TOP_SECRET</option>
+                <select
+                  value={classification}
+                  onChange={(e) => setClassification(e.target.value)}
+                  className="block w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700"
+                >
+                  <option value="UNCLASSIFIED">UNCLASSIFIED</option>
+                  <option value="CONFIDENTIAL">CONFIDENTIAL</option>
+                  <option value="SECRET">SECRET</option>
+                  <option value="TOP_SECRET">TOP_SECRET</option>
                 </select>
                 <p className="text-xs text-gray-500 mt-1">Determines minimum clearance required (used by both standards)</p>
               </div>
@@ -208,7 +238,12 @@ export function UploadFormWithStandardsTabs() {
                 <div className="flex flex-wrap gap-2">
                   {['USA', 'GBR', 'CAN', 'FRA', 'DEU'].map(country => (
                     <label key={country} className="inline-flex items-center gap-1 px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
-                      <input type="checkbox" className="rounded" />
+                      <input
+                        type="checkbox"
+                        className="rounded"
+                        checked={releasabilityTo.includes(country)}
+                        onChange={() => toggleReleasability(country)}
+                      />
                       <span className="text-sm">{country}</span>
                     </label>
                   ))}
@@ -226,7 +261,12 @@ export function UploadFormWithStandardsTabs() {
                 <div className="flex flex-wrap gap-2">
                   {['FVEY', 'NATO', 'US-ONLY', 'CAN-US'].map(coi => (
                     <label key={coi} className="inline-flex items-center gap-1 px-3 py-1 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
-                      <input type="checkbox" className="rounded" />
+                      <input
+                        type="checkbox"
+                        className="rounded"
+                        checked={selectedCOI.includes(coi)}
+                        onChange={() => toggleCOI(coi)}
+                      />
                       <span className="text-sm">{coi}</span>
                     </label>
                   ))}
@@ -278,7 +318,16 @@ export function UploadFormWithStandardsTabs() {
         )}
 
         {activeTab === 'preview' && (
-          <div className="space-y-4">
+          <div className="space-y-6">
+            {/* STANAG 4774 Marking Preview */}
+            <MarkingPreview
+              classification={classification}
+              releasabilityTo={releasabilityTo}
+              COI={selectedCOI}
+              documentTitle={documentTitle || 'Untitled Document'}
+            />
+
+            {/* ZTDF Structure Preview */}
             <div className="bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg p-4">
               <h4 className="font-bold text-gray-900 dark:text-gray-100 mb-3">
                 Final ZTDF Structure
@@ -286,19 +335,19 @@ export function UploadFormWithStandardsTabs() {
               <pre className="text-xs font-mono overflow-x-auto">
                 <code>
 {`{
-  `}<span className="text-amber-600">"policySection"</span>{`: {          `}<AttributeTag standard="240" size="xs" />{`
-    `}<span className="text-teal-600">"classification"</span>{`: "SECRET",  `}<AttributeTag standard="both" size="xs" />{`
-    `}<span className="text-amber-600">"releasabilityTo"</span>{`: ["USA"], `}<AttributeTag standard="240" size="xs" />{`
-    `}<span className="text-amber-600">"COI"</span>{`: ["FVEY"]              `}<AttributeTag standard="240" size="xs" />{`
+  `}<span className="text-amber-600">&quot;policySection&quot;</span>{`: {          `}<AttributeTag standard="240" size="xs" />{`
+    `}<span className="text-teal-600">&quot;classification&quot;</span>{`: "${classification}",  `}<AttributeTag standard="both" size="xs" />{`
+    `}<span className="text-amber-600">&quot;releasabilityTo&quot;</span>{`: ${JSON.stringify(releasabilityTo)}, `}<AttributeTag standard="240" size="xs" />{`
+    `}<span className="text-amber-600">&quot;COI&quot;</span>{`: ${JSON.stringify(selectedCOI)}              `}<AttributeTag standard="240" size="xs" />{`
   },
-  `}<span className="text-amber-600">"payloadSection"</span>{`: {        `}<AttributeTag standard="240" size="xs" />{`
-    `}<span className="text-amber-600">"encrypted"</span>{`: true,
-    `}<span className="text-amber-600">"algorithm"</span>{`: "AES-256-GCM"
+  `}<span className="text-amber-600">&quot;payloadSection&quot;</span>{`: {        `}<AttributeTag standard="240" size="xs" />{`
+    `}<span className="text-amber-600">&quot;encrypted&quot;</span>{`: true,
+    `}<span className="text-amber-600">&quot;algorithm&quot;</span>{`: "AES-256-GCM"
   },
-  `}<span className="text-indigo-600">"metadata"</span>{`: {              `}<AttributeTag standard="5663" size="xs" />{`
-    `}<span className="text-indigo-600">"issuer"</span>{`: "dive-v3-usa",
-    `}<span className="text-indigo-600">"aal"</span>{`: "AAL2",
-    `}<span className="text-indigo-600">"authTime"</span>{`: 1698345600
+  `}<span className="text-indigo-600">&quot;metadata&quot;</span>{`: {              `}<AttributeTag standard="5663" size="xs" />{`
+    `}<span className="text-indigo-600">&quot;issuer&quot;</span>{`: "${userContext.issuer}",
+    `}<span className="text-indigo-600">&quot;aal&quot;</span>{`: "${userContext.aal}",
+    `}<span className="text-indigo-600">&quot;authTime&quot;</span>{`: 1698345600
   }
 }`}
                 </code>

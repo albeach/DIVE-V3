@@ -68,6 +68,65 @@ export const clearAuthzCaches = (): void => {
     testDecisionCache.clear();
 };
 
+/**
+ * Normalize ACR (Authentication Context Class Reference) to numeric AAL (Authenticator Assurance Level)
+ * @param acr ACR value from JWT token
+ * @returns Numeric AAL level (0=AAL1, 1=AAL2, 2=AAL3)
+ */
+export function normalizeACR(acr: string | number | undefined): number {
+    if (acr === undefined || acr === null) {
+        return 0; // Default: AAL1
+    }
+
+    if (typeof acr === 'number') {
+        return acr;
+    }
+
+    const numericACR = parseInt(acr as string, 10);
+    if (!isNaN(numericACR)) {
+        return numericACR;
+    }
+
+    const acrLower = (acr as string).toLowerCase();
+    if (acrLower.includes('bronze') || acrLower.includes('aal1')) {
+        return 0; // AAL1
+    }
+    if (acrLower.includes('silver') || acrLower.includes('aal2')) {
+        return 1; // AAL2
+    }
+    if (acrLower.includes('gold') || acrLower.includes('aal3')) {
+        return 2; // AAL3
+    }
+
+    return 0; // Default: AAL1 (fail-secure)
+}
+
+/**
+ * Normalize AMR (Authentication Methods References) to array format
+ * @param amr AMR value from JWT token
+ * @returns Array of authentication methods
+ */
+export function normalizeAMR(amr: string | string[] | undefined): string[] {
+    if (amr === undefined || amr === null) {
+        return ['pwd']; // Default: password only
+    }
+
+    if (Array.isArray(amr)) {
+        return amr;
+    }
+
+    try {
+        const parsed = JSON.parse(amr as string);
+        if (Array.isArray(parsed)) {
+            return parsed;
+        }
+    } catch (e) {
+        // Not JSON
+    }
+
+    return [amr as string];
+}
+
 // OPA endpoint - Phase 5: Use unified dive.authz entrypoint
 // Supports backward compatibility via v1_shim.rego if using dive.authorization
 const OPA_URL = process.env.OPA_URL || 'https://localhost:8181';

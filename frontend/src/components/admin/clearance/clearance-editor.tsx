@@ -16,6 +16,11 @@ interface ClearanceMapping {
     nationalEquivalents: Record<string, string[]>;
     mfaRequired: boolean;
     aalLevel: number;
+    acrLevel?: number;
+    description?: string;
+    version?: number;
+    updatedAt?: Date;
+    updatedBy?: string;
 }
 
 interface Props {

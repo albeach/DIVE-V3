@@ -14,6 +14,7 @@
 'use client';
 
 import React, { forwardRef } from 'react';
+import { useTranslation } from '@/hooks/useTranslation';
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import Link from 'next/link';
 import {
@@ -176,6 +177,8 @@ const AnimatedResourceCard = forwardRef<HTMLDivElement, AnimatedResourceCardProp
   const rotateX = useSpring(useTransform(y, [-100, 100], [5, -5]), springConfig);
   const rotateY = useSpring(useTransform(x, [-100, 100], [-5, 5]), springConfig);
 
+  const { t } = useTranslation('resources');
+
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     const rect = e.currentTarget.getBoundingClientRect();
     const centerX = rect.left + rect.width / 2;
@@ -240,7 +243,7 @@ const AnimatedResourceCard = forwardRef<HTMLDivElement, AnimatedResourceCardProp
         `}
       >
         <span className={`text-xs font-black tracking-wide ${classStyles.text} ${classStyles.darkText}`}>
-          {resource.classification.replace('_', ' ')}
+          {t(`classifications.${resource.classification.toLowerCase()}`)}
         </span>
 
         <div className="flex items-center gap-2">

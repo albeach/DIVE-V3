@@ -79,7 +79,7 @@ test_skip() {
 ##
 test_db_connection() {
     test_start "Database connection"
-    
+
     if type orch_db_check_connection &>/dev/null && orch_db_check_connection; then
         test_pass
         return 0
@@ -94,7 +94,7 @@ test_db_connection() {
 ##
 test_schema_exists() {
     test_start "Federation schema exists"
-    
+
     if type fed_db_schema_exists &>/dev/null && fed_db_schema_exists; then
         test_pass
         return 0
@@ -109,7 +109,7 @@ test_schema_exists() {
 ##
 test_create_spoke_to_hub_link() {
     test_start "Create SPOKE_TO_HUB link"
-    
+
     if type fed_db_upsert_link &>/dev/null; then
         if fed_db_upsert_link "$TEST_INSTANCE" "usa" "SPOKE_TO_HUB" "usa-idp" "PENDING" \
             "dive-v3-broker-${TEST_INSTANCE}" '{"test": true}'; then
@@ -130,7 +130,7 @@ test_create_spoke_to_hub_link() {
 ##
 test_create_hub_to_spoke_link() {
     test_start "Create HUB_TO_SPOKE link"
-    
+
     if type fed_db_upsert_link &>/dev/null; then
         if fed_db_upsert_link "usa" "$TEST_INSTANCE" "HUB_TO_SPOKE" "${TEST_INSTANCE}-idp" "PENDING" \
             "dive-v3-broker-usa" '{"test": true}'; then
@@ -151,7 +151,7 @@ test_create_hub_to_spoke_link() {
 ##
 test_update_link_status_active() {
     test_start "Update link status to ACTIVE"
-    
+
     if type fed_db_update_status &>/dev/null; then
         if fed_db_update_status "$TEST_INSTANCE" "usa" "SPOKE_TO_HUB" "ACTIVE"; then
             test_pass
@@ -171,7 +171,7 @@ test_update_link_status_active() {
 ##
 test_update_link_status_failed() {
     test_start "Update link status to FAILED"
-    
+
     if type fed_db_update_status &>/dev/null; then
         if fed_db_update_status "usa" "$TEST_INSTANCE" "HUB_TO_SPOKE" "FAILED" \
             "Test failure message" "E001"; then
@@ -192,11 +192,11 @@ test_update_link_status_failed() {
 ##
 test_get_link_status() {
     test_start "Get link status"
-    
+
     if type fed_db_get_link_status &>/dev/null; then
         local status
         status=$(fed_db_get_link_status "$TEST_INSTANCE" "usa" "SPOKE_TO_HUB")
-        
+
         if [ "$status" = "ACTIVE" ]; then
             test_pass
             return 0
@@ -215,11 +215,11 @@ test_get_link_status() {
 ##
 test_list_links() {
     test_start "List links for instance"
-    
+
     if type fed_db_list_links &>/dev/null; then
         local output
         output=$(fed_db_list_links "$TEST_INSTANCE")
-        
+
         if [ -n "$output" ]; then
             test_pass
             return 0
@@ -238,7 +238,7 @@ test_list_links() {
 ##
 test_record_health_check() {
     test_start "Record health check"
-    
+
     if type fed_db_record_health &>/dev/null; then
         if fed_db_record_health "$TEST_INSTANCE" "usa" "SPOKE_TO_HUB" \
             "true" "true" "true" "true" "true" "150" ""; then
@@ -259,11 +259,11 @@ test_record_health_check() {
 ##
 test_get_latest_health() {
     test_start "Get latest health check"
-    
+
     if type fed_db_get_latest_health &>/dev/null; then
         local output
         output=$(fed_db_get_latest_health "$TEST_INSTANCE" "usa" "SPOKE_TO_HUB")
-        
+
         if [ -n "$output" ]; then
             test_pass
             return 0
@@ -282,11 +282,11 @@ test_get_latest_health() {
 ##
 test_get_instance_status() {
     test_start "Get instance status JSON"
-    
+
     if type fed_db_get_instance_status &>/dev/null; then
         local output
         output=$(fed_db_get_instance_status "$TEST_INSTANCE")
-        
+
         if echo "$output" | jq empty >/dev/null 2>&1; then
             # Check for expected fields
             if echo "$output" | jq -e '.instance' >/dev/null 2>&1; then
@@ -311,11 +311,11 @@ test_get_instance_status() {
 ##
 test_get_failed_links() {
     test_start "Get failed links for retry"
-    
+
     if type fed_db_get_failed_links &>/dev/null; then
         local output
         output=$(fed_db_get_failed_links 5)
-        
+
         # Should find at least the HUB_TO_SPOKE link we marked as FAILED
         if echo "$output" | grep -q "$TEST_INSTANCE"; then
             test_pass
@@ -335,13 +335,13 @@ test_get_failed_links() {
 ##
 test_reset_failed_links() {
     test_start "Reset failed links"
-    
+
     if type fed_db_reset_failed &>/dev/null; then
         if fed_db_reset_failed "$TEST_INSTANCE" >/dev/null; then
             # Verify status is now PENDING
             local status
             status=$(fed_db_get_link_status "usa" "$TEST_INSTANCE" "HUB_TO_SPOKE")
-            
+
             if [ "$status" = "PENDING" ]; then
                 test_pass
                 return 0
@@ -364,10 +364,10 @@ test_reset_failed_links() {
 ##
 test_federation_status_view() {
     test_start "Query federation_status view"
-    
+
     local output
     output=$(orch_db_exec "SELECT * FROM federation_status WHERE source_code = '$TEST_INSTANCE' OR target_code = '$TEST_INSTANCE' LIMIT 5" 2>/dev/null)
-    
+
     if [ -n "$output" ]; then
         test_pass
         return 0
@@ -382,10 +382,10 @@ test_federation_status_view() {
 ##
 test_federation_pairs_view() {
     test_start "Query federation_pairs view"
-    
+
     local output
     output=$(orch_db_exec "SELECT * FROM federation_pairs LIMIT 5" 2>/dev/null)
-    
+
     # View might be empty if no complete pairs, but query should succeed
     test_pass
     return 0
@@ -396,16 +396,16 @@ test_federation_pairs_view() {
 ##
 cleanup_test_data() {
     test_start "Cleanup test data"
-    
+
     # Delete test links
     if type fed_db_delete_link &>/dev/null; then
         fed_db_delete_link "$TEST_INSTANCE" "usa" "SPOKE_TO_HUB" >/dev/null 2>&1 || true
         fed_db_delete_link "usa" "$TEST_INSTANCE" "HUB_TO_SPOKE" >/dev/null 2>&1 || true
     fi
-    
+
     # Delete test health records
     orch_db_exec "DELETE FROM federation_health WHERE source_code = '$TEST_INSTANCE' OR target_code = '$TEST_INSTANCE'" >/dev/null 2>&1 || true
-    
+
     test_pass
 }
 
@@ -421,7 +421,7 @@ main() {
     echo ""
     echo "Test Instance: $TEST_INSTANCE"
     echo ""
-    
+
     # Pre-flight check
     echo "Pre-flight Checks:"
     if ! test_db_connection; then
@@ -430,7 +430,7 @@ main() {
         echo "Make sure the hub is running: ./dive hub up"
         exit 1
     fi
-    
+
     if ! test_schema_exists; then
         echo ""
         echo -e "${YELLOW}Federation schema not found - initializing...${NC}"
@@ -442,7 +442,7 @@ main() {
         fi
     fi
     echo ""
-    
+
     # Run tests
     echo "Federation Link Tests:"
     test_create_spoke_to_hub_link
@@ -452,27 +452,27 @@ main() {
     test_get_link_status
     test_list_links
     echo ""
-    
+
     echo "Health Check Tests:"
     test_record_health_check
     test_get_latest_health
     test_get_instance_status
     echo ""
-    
+
     echo "Recovery Tests:"
     test_get_failed_links
     test_reset_failed_links
     echo ""
-    
+
     echo "View Tests:"
     test_federation_status_view
     test_federation_pairs_view
     echo ""
-    
+
     echo "Cleanup:"
     cleanup_test_data
     echo ""
-    
+
     # Summary
     echo "=============================================="
     echo "Test Summary"
@@ -481,7 +481,7 @@ main() {
     echo -e "  Passed: ${GREEN}$TESTS_PASSED${NC}"
     echo -e "  Failed: ${RED}$TESTS_FAILED${NC}"
     echo ""
-    
+
     if [ $TESTS_FAILED -gt 0 ]; then
         echo -e "${RED}Some tests failed!${NC}"
         exit 1

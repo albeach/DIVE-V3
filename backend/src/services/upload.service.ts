@@ -1,9 +1,14 @@
 /**
  * Upload Service
  * Week 3.2: Secure File Upload with ACP-240 Compliance
- * 
+ *
  * Handles file upload and automatic ZTDF conversion
  * Implements: AES-256-GCM encryption, STANAG 4774 labels, STANAG 4778 binding
+ *
+ * STANAG 4774/4778 Enhancement:
+ * - Extracts BDO (Binding Data Object) from uploaded files
+ * - Generates SPIF-compliant marking text
+ * - Stores STANAG metadata for frontend rendering
  */
 
 import crypto from 'crypto';
@@ -20,6 +25,10 @@ import {
     ClassificationLevel
 } from '../types/ztdf.types';
 import {
+    ISTANAGResourceMetadata,
+    IBindingDataObject,
+} from '../types/stanag.types';
+import {
     encryptContent,
     computeSHA384,
     computeObjectHash,
@@ -27,9 +36,16 @@ import {
 } from '../utils/ztdf.utils';
 import { createZTDFResource } from './resource.service';
 import { validateCOICoherenceOrThrow } from './coi-validation.service';
+import { extractBDO, createBDOFromMetadata } from './bdo-parser.service';
+import { generateMarking } from './spif-parser.service';
 
 /**
  * Upload file and convert to ZTDF
+ *
+ * STANAG 4774/4778 Enhancement:
+ * - Attempts to extract existing BDO from uploaded file
+ * - Falls back to user-provided metadata
+ * - Generates SPIF-compliant markings for display
  */
 export async function uploadFile(
     fileBuffer: Buffer,
@@ -51,10 +67,38 @@ export async function uploadFile(
     });
 
     try {
-        // 1. Validate COI coherence (CRITICAL: Fail-closed)
+        // 1. Extract existing BDO from file (STANAG 4778)
+        let existingBDO: IBindingDataObject | null = null;
+        try {
+            existingBDO = await extractBDO(fileBuffer, mimeType, originalFilename);
+            if (existingBDO) {
+                logger.info('Extracted BDO from uploaded file', {
+                    uploadId,
+                    filename: originalFilename,
+                    classification: existingBDO.originatorConfidentialityLabel.classification,
+                    policyId: existingBDO.originatorConfidentialityLabel.policyIdentifier,
+                });
+            }
+        } catch (bdoError) {
+            logger.warn('BDO extraction failed, using user metadata', {
+                uploadId,
+                error: bdoError instanceof Error ? bdoError.message : 'Unknown error',
+            });
+        }
+
+        // 2. Merge existing BDO with user metadata (user input takes precedence)
+        const effectiveClassification = metadata.classification ||
+            existingBDO?.originatorConfidentialityLabel.classification ||
+            'UNCLASSIFIED';
+
+        const effectiveReleasability = metadata.releasabilityTo.length > 0
+            ? metadata.releasabilityTo
+            : extractReleasabilityFromBDO(existingBDO);
+
+        // 3. Validate COI coherence (CRITICAL: Fail-closed)
         validateCOICoherenceOrThrow({
-            classification: metadata.classification,
-            releasabilityTo: metadata.releasabilityTo,
+            classification: effectiveClassification,
+            releasabilityTo: effectiveReleasability,
             COI: metadata.COI || [],
             coiOperator: metadata.coiOperator || 'ALL',
             caveats: metadata.caveats
@@ -64,58 +108,100 @@ export async function uploadFile(
             uploadId,
             COI: metadata.COI,
             coiOperator: metadata.coiOperator || 'ALL',
-            releasabilityTo: metadata.releasabilityTo,
+            releasabilityTo: effectiveReleasability,
             caveats: metadata.caveats
         });
 
-        // 2. Validate file
+        // 4. Validate file
         const validation = validateFile(fileBuffer, mimeType);
         if (!validation.valid) {
             throw new Error(`File validation failed: ${validation.errors.join(', ')}`);
         }
 
-        // 3. Convert file to base64 for encryption
+        // 5. Generate STANAG-compliant marking using SPIF (STANAG 4774)
+        const stanagMarking = await generateMarking(
+            effectiveClassification,
+            effectiveReleasability,
+            {
+                COI: metadata.COI,
+                caveats: metadata.caveats,
+            }
+        );
+
+        logger.info('Generated STANAG marking', {
+            uploadId,
+            displayMarking: stanagMarking.displayMarking,
+            portionMarking: stanagMarking.portionMarking,
+            watermarkText: stanagMarking.watermarkText,
+        });
+
+        // 6. Create or preserve BDO for storage
+        const bdo = existingBDO || createBDOFromMetadata(
+            effectiveClassification,
+            effectiveReleasability,
+            {
+                COI: metadata.COI,
+                caveats: metadata.caveats,
+                title: metadata.title,
+                creator: uploader.uniqueID,
+            }
+        );
+
+        // 7. Create STANAG resource metadata
+        const stanagMetadata: ISTANAGResourceMetadata = {
+            bdo,
+            watermarkText: stanagMarking.watermarkText,
+            displayMarking: stanagMarking.displayMarking,
+            originalClassification: metadata.originalClassification,
+            originalCountry: metadata.originalCountry,
+            natoEquivalent: effectiveClassification,
+        };
+
+        // 8. Convert file to base64 for encryption
         const base64Content = fileBuffer.toString('base64');
 
-        // 4. Create ZTDF object
+        // 9. Create ZTDF object
         const ztdfObject = await convertToZTDF(
             base64Content,
             uploadId,
-            metadata,
+            { ...metadata, classification: effectiveClassification as ClassificationLevel },
             uploader,
             mimeType
         );
 
-        // 5. Create ZTDF resource and store in MongoDB
+        // 10. Create ZTDF resource and store in MongoDB
         const ztdfResource: IZTDFResource = {
             resourceId: uploadId,
             title: metadata.title,
             ztdf: ztdfObject,
             legacy: {
-                classification: metadata.classification,
-                releasabilityTo: metadata.releasabilityTo,
+                classification: effectiveClassification,
+                releasabilityTo: effectiveReleasability,
                 COI: metadata.COI || [],
                 coiOperator: metadata.coiOperator || 'ALL',
                 encrypted: true,
                 encryptedContent: ztdfObject.payload.encryptedChunks[0]?.encryptedData
-            }
+            },
+            // Add STANAG metadata to resource
+            stanag: stanagMetadata,
         };
 
         await createZTDFResource(ztdfResource);
 
-        logger.info('File upload successful', {
+        logger.info('File upload successful with STANAG metadata', {
             uploadId,
             resourceId: ztdfResource.resourceId,
-            displayMarking: ztdfObject.policy.securityLabel.displayMarking,
-            coiOperator: metadata.coiOperator || 'ALL'
+            displayMarking: stanagMarking.displayMarking,
+            coiOperator: metadata.coiOperator || 'ALL',
+            hasBDO: !!existingBDO,
         });
 
-        // 6. Return result (include full ZTDF for classification equivalency tests)
+        // 11. Return result (include full ZTDF for classification equivalency tests)
         return {
             success: true,
             resourceId: uploadId,
             ztdfObjectId: ztdfObject.manifest.objectId,
-            displayMarking: ztdfObject.policy.securityLabel.displayMarking || '',
+            displayMarking: stanagMarking.displayMarking,
             ztdf: ztdfObject,  // Include full ZTDF object for test validation
             metadata: {
                 fileSize: fileBuffer.length,
@@ -123,13 +209,19 @@ export async function uploadFile(
                 originalFilename,
                 uploadedAt: new Date().toISOString(),
                 uploadedBy: uploader.uniqueID,
-                classification: metadata.classification,
+                classification: effectiveClassification,
                 encrypted: true,
                 ztdf: {
                     version: ztdfObject.manifest.version,
                     policyHash: ztdfObject.policy.policyHash || '',
                     payloadHash: ztdfObject.payload.payloadHash || '',
                     kaoCount: ztdfObject.payload.keyAccessObjects.length
+                },
+                stanag: {
+                    displayMarking: stanagMarking.displayMarking,
+                    portionMarking: stanagMarking.portionMarking,
+                    watermarkText: stanagMarking.watermarkText,
+                    hasBDO: !!existingBDO,
                 }
             }
         };
@@ -141,6 +233,24 @@ export async function uploadFile(
         });
         throw error;
     }
+}
+
+/**
+ * Extract releasability countries from BDO categories
+ */
+function extractReleasabilityFromBDO(bdo: IBindingDataObject | null): string[] {
+    if (!bdo) return [];
+
+    const categories = bdo.originatorConfidentialityLabel.categories;
+    if (!categories) return [];
+
+    // Look for releasability category
+    const releasabilityCategory = categories.find(
+        c => c.tagName.toLowerCase().includes('releasab') ||
+             c.tagSetId === '1.3.26.1.4.2'
+    );
+
+    return releasabilityCategory?.values || [];
 }
 
 /**

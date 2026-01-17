@@ -1,6 +1,7 @@
 "use client";
 
 import { useStandardsLens } from '@/contexts/StandardsLensContext';
+import { useTranslation } from '@/hooks/useTranslation';
 import { AttributeTag } from '@/components/standards/AttributeTag';
 import { Shield, Clock, Key, Globe, Lock, FileCheck } from 'lucide-react';
 
@@ -42,22 +43,23 @@ interface IResourceCard5663vs240Props {
  */
 export function ResourceCard5663vs240({ resource, user, onClick }: IResourceCard5663vs240Props) {
   const { activeLens, isUnifiedActive } = useStandardsLens();
+  const { t } = useTranslation('resources');
 
   if (isUnifiedActive) {
-    return <UnifiedView resource={resource} user={user} onClick={onClick} />;
+    return <UnifiedView resource={resource} user={user} onClick={onClick} t={t} />;
   }
 
   if (activeLens === '5663') {
-    return <FederationView resource={resource} user={user} onClick={onClick} />;
+    return <FederationView resource={resource} user={user} onClick={onClick} t={t} />;
   }
 
-  return <ObjectView resource={resource} onClick={onClick} />;
+  return <ObjectView resource={resource} onClick={onClick} t={t} />;
 }
 
 /**
  * Unified View: Side-by-side 5663 + 240
  */
-function UnifiedView({ resource, user, onClick }: IResourceCard5663vs240Props) {
+function UnifiedView({ resource, user, onClick, t }: IResourceCard5663vs240Props & { t: (key: string) => string }) {
   return (
     <div 
       className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-lg hover:shadow-xl transition-all cursor-pointer"
@@ -115,7 +117,7 @@ function UnifiedView({ resource, user, onClick }: IResourceCard5663vs240Props) {
             <div className="flex items-start gap-2">
               <AttributeTag standard="both" attribute="Class" size="xs" showLabel={false} />
               <span className="text-gray-700 dark:text-gray-300 text-xs">
-                {resource.classification}
+                {t(`classifications.${resource.classification.toLowerCase()}`)}
               </span>
             </div>
             <div className="flex items-start gap-2">
@@ -141,7 +143,7 @@ function UnifiedView({ resource, user, onClick }: IResourceCard5663vs240Props) {
 /**
  * Federation View: Emphasize 5663 attributes
  */
-function FederationView({ resource, user, onClick }: IResourceCard5663vs240Props) {
+function FederationView({ resource, user, onClick, t }: IResourceCard5663vs240Props & { t: (key: string) => string }) {
   return (
     <div 
       className="bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-900/20 dark:to-blue-900/20 rounded-xl border-2 border-indigo-200 dark:border-indigo-700 shadow-lg hover:shadow-xl transition-all cursor-pointer"
@@ -189,7 +191,7 @@ function FederationView({ resource, user, onClick }: IResourceCard5663vs240Props
 /**
  * Object View: Emphasize 240 attributes
  */
-function ObjectView({ resource, onClick }: IResourceCard5663vs240Props) {
+function ObjectView({ resource, onClick, t }: IResourceCard5663vs240Props & { t: (key: string) => string }) {
   return (
     <div 
       className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-xl border-2 border-amber-200 dark:border-amber-700 shadow-lg hover:shadow-xl transition-all cursor-pointer"
@@ -205,7 +207,7 @@ function ObjectView({ resource, onClick }: IResourceCard5663vs240Props) {
           <div className="flex items-center gap-2 text-sm">
             <FileCheck className="w-4 h-4 text-amber-600" />
             <span className="text-gray-700 dark:text-gray-300">
-              Classification: {resource.classification}
+              Classification: {t(`classifications.${resource.classification.toLowerCase()}`)}
               {resource.originalClassification && ` (${resource.originalClassification})`}
             </span>
           </div>

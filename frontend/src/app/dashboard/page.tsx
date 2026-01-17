@@ -2,6 +2,7 @@ import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 import PageLayout from "@/components/layout/page-layout";
 import { DashboardModern } from "@/components/dashboard/dashboard-modern";
+import { DashboardLocaleInitializer } from "@/components/dashboard/dashboard-locale-initializer";
 
 // Note: Server components can't use hooks directly
 // Breadcrumb localization will be handled in PageLayout/Breadcrumbs component
@@ -19,6 +20,7 @@ export default async function DashboardPage() {
         { label: 'dashboard.title', href: null, translate: true }
       ]}
     >
+      <DashboardLocaleInitializer user={session.user as any} />
       <DashboardModern user={session.user as any} session={session as any} />
     </PageLayout>
   );

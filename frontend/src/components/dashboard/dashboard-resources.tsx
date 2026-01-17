@@ -25,6 +25,7 @@ import {
   AlertCircle,
 } from 'lucide-react';
 import { EducationalTooltip } from './educational-tooltip';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface Resource {
   id: string;
@@ -61,6 +62,8 @@ export function DashboardResources({
   userClearance,
   userCountry,
 }: DashboardResourcesProps) {
+  const { t } = useTranslation('dashboard');
+
   // Default stats
   const resourceStats: ResourceStats = stats || {
     totalAccessible: 0,
@@ -87,7 +90,7 @@ export function DashboardResources({
             <FolderOpen className="w-8 h-8 text-white/80" />
             <span className="text-3xl font-bold">{resourceStats.totalAccessible}</span>
           </div>
-          <p className="text-sm text-white/80">Accessible Documents</p>
+          <p className="text-sm text-white/80">{t('resources.accessibleDocuments')}</p>
         </div>
 
         <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 p-6 shadow-xl text-white">
@@ -95,7 +98,7 @@ export function DashboardResources({
             <Upload className="w-8 h-8 text-white/80" />
             <span className="text-3xl font-bold">{resourceStats.uploadedByUser}</span>
           </div>
-          <p className="text-sm text-white/80">Your Uploads</p>
+          <p className="text-sm text-white/80">{t('resources.yourUploads')}</p>
         </div>
 
         <div className="rounded-2xl bg-gradient-to-br from-purple-500 to-pink-600 p-6 shadow-xl text-white">
@@ -103,7 +106,7 @@ export function DashboardResources({
             <Eye className="w-8 h-8 text-white/80" />
             <span className="text-3xl font-bold">{resourceStats.recentlyAccessed.length}</span>
           </div>
-          <p className="text-sm text-white/80">Recently Viewed</p>
+          <p className="text-sm text-white/80">{t('resources.recentlyViewed')}</p>
         </div>
 
         <div className="rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 p-6 shadow-xl text-white">
@@ -130,9 +133,9 @@ export function DashboardResources({
               <BarChart3 className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-slate-900">Classification Distribution</h3>
+              <h3 className="text-lg font-bold text-slate-900">{t('resources.resourcesByClassification')}</h3>
               <p className="text-xs text-slate-600">
-                Resources by <EducationalTooltip term="Clearance">classification level</EducationalTooltip>
+                {t('resources.resourceStats')} <EducationalTooltip term="Clearance">classification level</EducationalTooltip>
               </p>
             </div>
           </div>
@@ -140,7 +143,7 @@ export function DashboardResources({
             href="/resources"
             className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
           >
-            Browse all
+{t('resources.browseAll')}
             <ArrowRight className="w-4 h-4" />
           </Link>
         </div>
@@ -192,26 +195,26 @@ export function DashboardResources({
             <Shield className="w-6 h-6 text-white" />
           </div>
           <div className="flex-1">
-            <h3 className="text-lg font-bold text-slate-900 mb-2">Your Access Context</h3>
+            <h3 className="text-lg font-bold text-slate-900 mb-2">{t('resources.yourAccessContext')}</h3>
             <p className="text-sm text-slate-600 leading-relaxed mb-4">
-              Based on your <EducationalTooltip term="Clearance">{userClearance}</EducationalTooltip> clearance
-              and <EducationalTooltip term="Releasability">{userCountry}</EducationalTooltip> affiliation,
-              you can access documents up to {userClearance} classification that are releasable to {userCountry}.
+              {t('resources.basedOnYourClearance')} <EducationalTooltip term="Clearance">{userClearance}</EducationalTooltip> clearance
+              {t('resources.andCountryAffiliation')} <EducationalTooltip term="Releasability">{userCountry}</EducationalTooltip>,
+              {t('resources.youCanAccess')} {t('resources.documentsAcross')} {userClearance} classification {t('resources.thatAreReleasableTo')} {userCountry}.
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="flex items-center gap-2 p-3 rounded-lg bg-white border border-blue-200">
                 <CheckCircle2 className="w-5 h-5 text-blue-600" />
                 <div>
-                  <p className="text-xs font-medium text-slate-900">Max Classification</p>
+                  <p className="text-xs font-medium text-slate-900">{t('resources.maxClassification')}</p>
                   <p className="text-xs text-slate-600">{userClearance}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 p-3 rounded-lg bg-white border border-blue-200">
                 <Globe className="w-5 h-5 text-blue-600" />
                 <div>
-                  <p className="text-xs font-medium text-slate-900">Releasability</p>
-                  <p className="text-xs text-slate-600">Must include {userCountry}</p>
+                  <p className="text-xs font-medium text-slate-900">{t('resources.releasability')}</p>
+                  <p className="text-xs text-slate-600">{t('resources.mustInclude')} {userCountry}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2 p-3 rounded-lg bg-white border border-blue-200">

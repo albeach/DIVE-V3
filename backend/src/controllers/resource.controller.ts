@@ -7,6 +7,7 @@ import { validateZTDFIntegrity, decryptContent } from '../utils/ztdf.utils';
 import { convertToOpenTDFFormat } from '../services/ztdf-export.service';
 import { mongoKasRegistryStore } from '../models/kas-registry.model';
 import { kasRouterService } from '../services/kas-router.service';
+import { generateMarking } from '../services/spif-parser.service';
 
 // Helper: Get INSTANCE_REALM constant for cross-instance checks
 const INSTANCE_REALM = process.env.INSTANCE_REALM || 'USA';
@@ -103,16 +104,24 @@ export const listResourcesHandler = async (
             .map(r => {
                 if (isZTDFResource(r)) {
                     // ZTDF-enhanced resource
+                    const classification = r.ztdf.policy.securityLabel.classification;
+                    const displayMarking = r.stanag?.displayMarking || r.ztdf.policy.securityLabel.displayMarking;
+
                     return {
                         resourceId: r.resourceId,
                         title: r.title,
-                        classification: r.ztdf.policy.securityLabel.classification,
+                        classification,
                         releasabilityTo: r.ztdf.policy.securityLabel.releasabilityTo,
                         COI: r.ztdf.policy.securityLabel.COI || [],
                         encrypted: true, // ZTDF is always encrypted
                         creationDate: r.ztdf.policy.securityLabel.creationDate,
-                        displayMarking: r.ztdf.policy.securityLabel.displayMarking, // ACP-240 STANAG 4774
+                        displayMarking, // ACP-240 STANAG 4774
                         ztdfVersion: r.ztdf.manifest.version,
+                        // STANAG metadata for list display
+                        stanag: r.stanag ? {
+                            displayMarking: r.stanag.displayMarking,
+                            watermarkText: r.stanag.watermarkText,
+                        } : undefined,
                         // Multi-KAS support: Include KAO count and basic KAO info
                         kaoCount: r.ztdf.payload.keyAccessObjects.length,
                         kaos: r.ztdf.payload.keyAccessObjects.map(kao => ({
@@ -214,17 +223,59 @@ export const getResourceHandler = async (
 
         if (isZTDFResource(resource)) {
             // ZTDF-enhanced resource
+            const classification = resource.ztdf.policy.securityLabel.classification;
+            const releasabilityTo = resource.ztdf.policy.securityLabel.releasabilityTo || [];
+            const COI = resource.ztdf.policy.securityLabel.COI || [];
+
+            // Generate STANAG-compliant marking if not already stored
+            let stanagMarkings = resource.stanag;
+            if (!stanagMarkings) {
+                try {
+                    const marking = await generateMarking(
+                        classification,
+                        releasabilityTo,
+                        { COI, caveats: resource.ztdf.policy.securityLabel.caveats }
+                    );
+                    stanagMarkings = {
+                        displayMarking: marking.displayMarking,
+                        watermarkText: marking.watermarkText,
+                        portionMarkings: undefined,
+                    };
+                } catch (markingError) {
+                    logger.warn('Failed to generate STANAG marking', {
+                        requestId,
+                        resourceId: id,
+                        error: markingError instanceof Error ? markingError.message : 'Unknown error',
+                    });
+                    stanagMarkings = {
+                        displayMarking: resource.ztdf.policy.securityLabel.displayMarking || `${classification} // REL TO ${releasabilityTo.join(', ')}`,
+                        watermarkText: classification,
+                    };
+                }
+            }
+
             const response: any = {
                 resourceId: resource.resourceId,
                 title: resource.title,
-                classification: resource.ztdf.policy.securityLabel.classification,
-                releasabilityTo: resource.ztdf.policy.securityLabel.releasabilityTo,
-                COI: resource.ztdf.policy.securityLabel.COI || [],
+                classification,
+                releasabilityTo,
+                COI,
                 encrypted: true,
                 creationDate: resource.ztdf.policy.securityLabel.creationDate,
 
                 // ACP-240: STANAG 4774 Display Marking (prominent)
-                displayMarking: resource.ztdf.policy.securityLabel.displayMarking,
+                displayMarking: stanagMarkings.displayMarking || resource.ztdf.policy.securityLabel.displayMarking,
+
+                // STANAG 4774/4778 marking metadata for frontend rendering
+                stanag: {
+                    displayMarking: stanagMarkings.displayMarking,
+                    watermarkText: stanagMarkings.watermarkText,
+                    portionMarkings: stanagMarkings.portionMarkings,
+                    bdo: resource.stanag?.bdo,
+                    originalClassification: resource.stanag?.originalClassification,
+                    originalCountry: resource.stanag?.originalCountry,
+                    natoEquivalent: resource.stanag?.natoEquivalent,
+                },
 
                 // ZTDF object (full for classification equivalency tests)
                 ztdf: resource.ztdf,
@@ -922,6 +973,21 @@ export const requestKeyHandler = async (
             });
 
             try {
+                const resourceMetadata = {
+                    classification: (resource as any).classification || 'UNCLASSIFIED',
+                    releasabilityTo: (resource as any).releasabilityTo || ['USA'],
+                    COI: (resource as any).COI || [],
+                    creationDate: (resource as any).creationDate
+                };
+
+                logger.info('Sending resourceMetadata to KAS', {
+                    requestId,
+                    resourceId,
+                    hasClassification: !!resourceMetadata.classification,
+                    hasReleasabilityTo: !!resourceMetadata.releasabilityTo,
+                    coiCount: resourceMetadata.COI?.length || 0
+                });
+
                 kasResponse = await axios.post(
                     kasUrl,
                     {
@@ -931,7 +997,8 @@ export const requestKeyHandler = async (
                         bearerToken: kasServiceToken, // Use service account token
                         userIdentity: subject, // Include original user identity for audit
                         requestTimestamp: new Date().toISOString(),
-                        requestId
+                        requestId,
+                        resourceMetadata
                     },
                     {
                         headers: { 'Content-Type': 'application/json' },
@@ -1053,7 +1120,7 @@ export const requestKeyHandler = async (
                 logger.info('Content decrypted successfully', {
                     requestId,
                     resourceId,
-                    isCrossInstance,
+                    isCrossInstance: crossInstanceRes,
                     kasAuthority: kasResponse.data.kasDecision?.kasAuthority
                 });
 
@@ -1061,8 +1128,8 @@ export const requestKeyHandler = async (
                     success: true,
                     content: decryptedContent,
                     kasDecision: kasResponse.data.kasDecision,
-                    isCrossInstance,
-                    kasAuthority: isCrossInstance ? kasAuthority : undefined,
+                    isCrossInstance: crossInstanceRes,
+                    kasAuthority: crossInstanceRes ? kasAuth : undefined,
                     executionTimeMs: Date.now() - startTime
                 });
 

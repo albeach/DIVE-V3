@@ -6,9 +6,17 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
+import {
+    findUserById,
+    insertUser,
+    findAccountsByUserId,
+    updateAccountTokens,
+    insertAccount,
+    insertSession
+} from '@/lib/db/operations';
 import { db } from '@/lib/db';
-import { users, accounts, sessions } from '@/lib/db/schema';
-import { eq, and } from 'drizzle-orm';
+import { users } from '@/lib/db/schema';
+import { eq } from 'drizzle-orm';
 import { randomUUID } from 'crypto';
 
 export const dynamic = 'force-dynamic';
@@ -73,41 +81,30 @@ export async function POST(request: NextRequest) {
         if (existingUsers.length > 0) {
             user = existingUsers[0];
         } else {
-            const newUsers = await db.insert(users).values({
+            await insertUser({
                 id: randomUUID(),
                 name,
                 email,
-                emailVerified: null,
-                image: null,
-            } as any).returning();
+            });
+            const newUsers = await db.select().from(users).where(eq(users.email, email)).limit(1);
             user = newUsers[0];
         }
 
         // Create or update account
-        const existingAccounts = await db.select().from(accounts)
-            .where(eq(accounts.userId, user.id))
-            .limit(1);
-
+        const existingAccounts = await findAccountsByUserId(user.id);
         const expiresAt = Math.floor(Date.now() / 1000) + (expiresIn || 900);
 
         if (existingAccounts.length > 0) {
-            // Update existing account (use compound primary key: provider + providerAccountId)
-            await db.update(accounts)
-                .set({
-                    access_token: accessToken,
-                    refresh_token: refreshToken,
-                    id_token: idToken,
-                    expires_at: expiresAt,
-                })
-                .where(
-                    and(
-                        eq(accounts.provider, 'keycloak'),
-                        eq(accounts.providerAccountId, payload.sub)
-                    )
-                );
+            // Update existing account tokens
+            await updateAccountTokens('keycloak', payload.sub, {
+                access_token: accessToken,
+                refresh_token: refreshToken,
+                id_token: idToken,
+                expires_at: expiresAt,
+            });
         } else {
-            // Create new account (no 'id' field - uses compound PK)
-            await db.insert(accounts).values({
+            // Create new account
+            await insertAccount({
                 userId: user.id,
                 type: 'oauth',
                 provider: 'keycloak',
@@ -125,7 +122,7 @@ export async function POST(request: NextRequest) {
         const sessionToken = randomUUID();
         const sessionExpiry = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // 30 days
 
-        await db.insert(sessions).values({
+        await insertSession({
             sessionToken,
             userId: user.id,
             expires: sessionExpiry,

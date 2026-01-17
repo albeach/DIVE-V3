@@ -1,5 +1,6 @@
 {
   "title": "Dashboard",
+  "dashboard.title": "Dashboard",
   "subtitle": "Coalitie-intelligentie overzicht",
   "welcome": "Welkom terug, {{name}}",
   "welcomeBack": "Welkom terug,",
@@ -7,6 +8,118 @@
   "refreshing": "Vernieuwen...",
   "refresh": "Vernieuwen",
   "lastUpdated": "Laatst bijgewerkt: {{time}}",
+  "platformBadge": "Coalitie-ICAM-platform",
+  "glossary": "Woordenlijst",
+  "description": "Uw beveiligde toegang tot geclassificeerde bronnen in de gehele coalitie. Alle acties worden beschermd door ABAC-beleid en geregistreerd voor compliance.",
+  "loading": "Dashboard laden...",
+  "refreshing": "Vernieuwen...",
+  "refresh": "Vernieuwen",
+  "lastUpdated": "Laatst bijgewerkt: {{time}}",
+  "stats": {
+    "documentsAccessible": "Toegankelijke documenten",
+    "authorizationRate": "Autorisatieverhouding",
+    "avgResponseTime": "Gem. reactietijd"
+  },
+  "federation": {
+    "directAccess": "Directe toegang",
+    "homeInstance": "Thuissituatie",
+    "federated": "Gefedereerd",
+    "status": {
+      "title": "Federatiestatus",
+      "subtitle": "Uw huidige identiteit en toegangskader",
+      "federatedAccess": "Gefedereerde toegang",
+      "homeInstance": "Thuissituatie",
+      "portal": "Portaal"
+    },
+    "stats": {
+      "partners": {
+        "title": "Federatiepartners",
+        "description": "Actieve identiteitsproviders in het netwerk"
+      },
+      "crossPartnerAccesses": {
+        "title": "Cross-partner toegang",
+        "description": "Bronnen geopend vanaf andere partners"
+      },
+      "authentications": {
+        "title": "Authenticaties van vandaag",
+        "description": "Federatieverbindingen vandaag"
+      }
+    },
+    "explanation": {
+      "title": "Wat is identiteitsfederatie?",
+      "federationTerm": "Identiteitsfederatie",
+      "description": "laat u zich authenticeren met de identiteitsprovider van uw thuisorganisatie en toegang krijgen tot coalitiepartnerbronnen zonder aparte accounts aan te maken. Dit volgt de",
+      "stanagTerm": "ADatP-5663",
+      "standardsText": "standaarden voor NATO-identiteitsbeheer."
+    }
+  },
+  "resources": {
+    "accessibleDocuments": "Toegankelijke documenten",
+    "yourUploads": "Uw uploads",
+    "recentlyViewed": "Recent bekeken",
+    "resourceStats": "Bronstatistieken",
+    "resourcesByClassification": "Bronnen per classificatie",
+    "recentActivity": "Recente activiteit",
+    "basedOnYourClearance": "Gebaseerd op uw vrijgave",
+    "andCountryAffiliation": "en uw landsaansluiting",
+    "youCanAccess": "u kunt toegang krijgen tot",
+    "documentsAcross": "documenten in",
+    "differentClassifications": "verschillende classificaties",
+    "browseAll": "Alles doorbladeren",
+    "yourAccessContext": "Uw toegangskader",
+    "youCanAccessDocuments": "u kunt toegang krijgen tot documenten tot de classificatie",
+    "thatAreReleasableTo": "die vrijgegeven kunnen worden aan",
+    "maxClassification": "Maximale classificatie",
+    "releasability": "Vrijgeefbaarheid",
+    "mustInclude": "Moet bevatten"
+  },
+  "authorization": {
+    "stats": {
+      "allowedRequests": "Toegestane verzoeken",
+      "deniedRequests": "Geweigerde verzoeken",
+      "authorizationRate": "Autorisatieverhouding",
+      "avgDecisionTime": "Gem. beslissingstijd"
+    },
+    "profile": {
+      "title": "Uw autorisatieprofiel",
+      "subtitle": "Attributen gebruikt voor beslissingen",
+      "decisions": "ABAC",
+      "current": "Huidig",
+      "countryOfAffiliation": "Landsaansluiting",
+      "releasabilityTerm": "Vrijgeefbaarheid",
+      "releasabilityChecked": "gecontroleerd tegen dit",
+      "coiMemberships": "COI-lidmaatschappen"
+    }
+  },
+  "activity": {
+    "stats": {
+      "totalEvents": "Totaal gebeurtenissen",
+      "successfulActions": "Succesvolle acties",
+      "lastLogin": "Laatste login",
+      "activeSessions": "Actieve sessies"
+    },
+    "compliance": {
+      "title": "Compliance-status",
+      "subtitle": "Uw naleving van vereisten",
+      "requirements": "ACP-240",
+      "authenticationCompliance": {
+        "name": "Authenticatie-compliance",
+        "description": "Alle authenticaties via goedgekeurde IdP's"
+      },
+      "accessControlAdherence": {
+        "name": "Toegangscontrole-naleving",
+        "description": "Geen ongeautoriseerde toegangspogingen"
+      },
+      "auditTrailCompleteness": {
+        "name": "Audittrail-volledigheid",
+        "description": "Alle acties geregistreerd volgens ACP-240"
+      },
+      "sessionSecurity": {
+        "name": "Sessieveiligheid",
+        "description": "Tokenlevensduur binnen beleidsgrenzen"
+      }
+    }
+  },
   "tabs": {
     "overview": "Overzicht",
     "federation": "Federatie",
@@ -26,7 +139,123 @@
     "degraded": "Verminderd",
     "down": "Offline",
     "authorizationRate": "Autorisatieverhouding",
-    "systemHealth": "Systeemgezondheid"
+    "systemHealth": "Systeemgezondheid",
+    "features": {
+      "browseDocuments": {
+        "title": "Documenten doorbladeren",
+        "description": "Beveiligde toegang tot geclassificeerde bronnen",
+        "educational": "Elke documenttoegang wordt geëvalueerd tegen OPA-beleid. Uw vrijgave, land en COI-lidmaatschappen bepalen wat u kunt zien.",
+        "stats": {
+          "accessible": "toegankelijk",
+          "authRate": "auth-verhouding"
+        },
+        "badges": {
+          "policyEnforced": "Beleid afgedwongen",
+          "endToEndEncrypted": "End-to-end versleuteld",
+          "auditLogged": "Audit geregistreerd"
+        }
+      },
+      "federationNetwork": {
+        "title": "Federatienetwerk",
+        "description": "Cross-partner identiteitsfederatie",
+        "educational": "Authenticeer met uw thuis-IdP en krijg toegang tot coalitiepartnerbronnen. Federatie maakt naadloze samenwerking mogelijk terwijl veiligheid wordt gehandhaafd.",
+        "stats": {
+          "partners": "partners"
+        }
+      },
+      "uploadDocument": {
+        "title": "Document uploaden",
+        "description": "Beveiligde documentupload",
+        "educational": "Upload documenten met automatische ZTDF-versleuteling en ACP-240-conforme labeling. Stel classificatie en vrijgeefbaarheid in tijdens upload.",
+        "badges": {
+          "ztdfEncryption": "ZTDF-versleuteling"
+        }
+      },
+      "authorizationPolicies": {
+        "title": "Autorisatiebeleid",
+        "description": "OPA Rego-beleid",
+        "educational": "Verken de modulaire beleidssuite die de ABAC-engine van DIVE aandrijft. Bekijk beleidshiërarchie, test beslissingen en begrijp regel-logica.",
+        "stats": {
+          "policies": "beleidsregels"
+        }
+      },
+      "integrationGuide": {
+        "title": "Integratiegids",
+        "description": "ADatP-5663 × ACP-240",
+        "educational": "Interactieve tutorial die uitlegt hoe identiteitsfederatie (ADatP-5663) en toegangscontrole (ACP-240) samenwerken."
+      },
+      "apiDocumentation": {
+        "title": "API-documentatie",
+        "description": "Interactieve API-referentie",
+        "educational": "Verken alle DIVE V3-eindpunten, test live verzoeken en bekijk verzoek/antwoordvoorbeelden. Perfect voor ontwikkelaars die het coalitie-ICAM-platform integreren."
+      },
+      "kasEncryption": {
+        "title": "KAS-versleuteling",
+        "description": "Sleuteltoegangsservice",
+        "educational": "Beleid-gebonden sleutelrelease voor versleutelde inhoud. KAS her-evalueert autorisatie voordat decryptiesleutels worden vrijgegeven.",
+        "stats": {
+          "encrypted": "versleuteld"
+        }
+      },
+      "compliance": {
+        "title": "Compliance",
+        "description": "Naleving NATO-standaarden",
+        "educational": "Monitor naleving met ACP-240, STANAG 4774/5636 en andere coalitie-beveiligingseisen."
+      }
+    },
+    "sections": {
+      "howDiveWorks": {
+        "title": "Hoe DIVE V3 werkt",
+        "subtitle": "Coalitie-ICAM in actie",
+        "steps": {
+          "federatedAuth": {
+            "title": "Gefedereerde authenticatie",
+            "description": "Log in via uw thuis-IdP. Keycloak beheert identiteiten via coalitiepartners."
+          },
+          "policyEval": {
+            "title": "Beleidsevaluatie",
+            "description": "PEP stuurt uw attributen naar OPA voor ABAC-besluit."
+          },
+          "secureAccess": {
+            "title": "Beveiligde toegang",
+            "description": "Als geautoriseerd, krijg toegang tot de bron. Voor versleutelde inhoud geeft KAS de decryptiesleutel vrij."
+          }
+        }
+      },
+      "quickTips": {
+        "title": "Snelle tips",
+        "tips": {
+          "readOnlyAttributes": {
+            "title": "Uw attributen zijn alleen-lezen",
+            "description": "Vrijgave en COI's worden beheerd door uw thuis-IdP-beheerder"
+          },
+          "auditLogging": {
+            "title": "Alle acties worden gecontroleerd",
+            "description": "Elke autorisatiebeslissing wordt geregistreerd voor ACP-240-compliance"
+          },
+          "crossPartner": {
+            "title": "Cross-partner samenwerking",
+            "description": "Gebruikers van partner-IdP's kunnen toegang krijgen tot uw documenten als vrijgeefbaarheid dit toelaat"
+          }
+        }
+      },
+      "federationPartners": {
+        "title": "Actieve federatiepartners",
+        "providersAvailable": "identiteitsproviders beschikbaar",
+        "viewAll": "Alles bekijken"
+      },
+      "systemStatus": {
+        "title": "Systeemstatus",
+        "services": {
+          "opaEngine": "OPA-beleidsengine",
+          "keycloakAuth": "Keycloak-authenticatie",
+          "resourceApi": "Bron-API"
+        },
+        "status": {
+          "operational": "Operationeel"
+        }
+      }
+    }
   },
   "widgets": {
     "recentActivity": {
@@ -105,5 +334,8 @@
   },
   "breadcrumbs": {
     "dashboard": "Dashboard"
-  }
+  },
+  "instance": "Instantie",
+  "clearance": "Machtiging",
+  "country": "Land"
 }

@@ -73,12 +73,13 @@ const FEDERATED_MODE_KEY = 'dive_resources_federated_mode';
 // This determines the default instance for local searches
 const CURRENT_INSTANCE = process.env.NEXT_PUBLIC_INSTANCE || 'USA';
 
-const CLASSIFICATION_OPTIONS = [
-  { value: 'UNCLASSIFIED', label: 'Unclassified', color: 'bg-green-100 text-green-800 border-green-300' },
-  { value: 'RESTRICTED', label: 'Restricted', color: 'bg-blue-100 text-blue-800 border-blue-300' },
-  { value: 'CONFIDENTIAL', label: 'Confidential', color: 'bg-amber-100 text-amber-800 border-amber-300' },
-  { value: 'SECRET', label: 'Secret', color: 'bg-orange-100 text-orange-800 border-orange-300' },
-  { value: 'TOP_SECRET', label: 'Top Secret', color: 'bg-red-100 text-red-800 border-red-300' },
+// Classification options with translations
+const getClassificationOptions = (t: (key: string) => string) => [
+  { value: 'UNCLASSIFIED', label: t('classifications.unclassified'), color: 'bg-green-100 text-green-800 border-green-300' },
+  { value: 'RESTRICTED', label: t('classifications.restricted'), color: 'bg-blue-100 text-blue-800 border-blue-300' },
+  { value: 'CONFIDENTIAL', label: t('classifications.confidential'), color: 'bg-amber-100 text-amber-800 border-amber-300' },
+  { value: 'SECRET', label: t('classifications.secret'), color: 'bg-orange-100 text-orange-800 border-orange-300' },
+  { value: 'TOP_SECRET', label: t('classifications.topSecret'), color: 'bg-red-100 text-red-800 border-red-300' },
 ];
 
 // ============================================
@@ -513,9 +514,9 @@ export default function ResourcesPage() {
     return (
       <PageLayout>
         <div className="flex flex-col items-center justify-center py-16 gap-4">
-          <h2 className="text-xl font-semibold">Sign in to view resources</h2>
+          <h2 className="text-xl font-semibold">{t('auth.signInToView')}</h2>
           <p className="text-sm text-muted-foreground text-center max-w-md">
-            You need to be authenticated to access coalition resources.
+            {t('auth.needAuthentication')}
           </p>
           <button
             data-testid="sign-in-button"
@@ -532,7 +533,7 @@ export default function ResourcesPage() {
   return (
     <PageLayout
       user={session.user}
-      breadcrumbs={[{ label: 'Documents', href: null }]}
+      breadcrumbs={[{ label: t('breadcrumbs.resources'), href: null }]}
     >
       {/* Command Palette Search - Opens with "/" */}
       <div className="mb-5">
@@ -569,7 +570,7 @@ export default function ResourcesPage() {
               }`}
             >
               <Server className="w-4 h-4" />
-              <span>Local</span>
+              <span>{t('federation.local')}</span>
               {!federatedMode && (
                 <span className="absolute -top-1 -right-1 w-2 h-2 bg-green-500 rounded-full animate-pulse" />
               )}
@@ -583,7 +584,7 @@ export default function ResourcesPage() {
               }`}
             >
               <Globe2 className="w-4 h-4" />
-              <span>Federated</span>
+              <span>{t('federation.federated')}</span>
               {federatedMode && (
                 <span className="absolute -top-1 -right-1 w-2 h-2 bg-blue-500 rounded-full animate-pulse" />
               )}
@@ -668,7 +669,7 @@ export default function ResourcesPage() {
           <div className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-hidden">
             <FacetedFilters
               facets={{
-                classifications: CLASSIFICATION_OPTIONS.map(o => ({
+                classifications: getClassificationOptions(t).map(o => ({
                   value: o.value,
                   label: o.label,
                   count: facets?.classifications?.find(c => c.value === o.value)?.count || 0
@@ -712,7 +713,7 @@ export default function ResourcesPage() {
             className="inline-flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
           >
             <Filter className="w-4 h-4" />
-            Filters
+            {t('filters.filters')}
             {activeFilterCount > 0 && (
               <span className="px-1.5 py-0.5 bg-blue-600 text-white text-xs rounded-full">{activeFilterCount}</span>
             )}
@@ -723,7 +724,7 @@ export default function ResourcesPage() {
         <div className="lg:col-span-9 space-y-4">
           {/* Quick Classification Pills */}
           <div className="flex flex-wrap items-center gap-2">
-            {CLASSIFICATION_OPTIONS.map((opt) => {
+            {getClassificationOptions(t).map((opt) => {
               const isSelected = selectedFilters.classifications.includes(opt.value);
               const count = facets?.classifications?.find(c => c.value === opt.value)?.count || 0;
               return (
@@ -749,7 +750,7 @@ export default function ResourcesPage() {
                 className="inline-flex items-center gap-1 px-2 py-1.5 text-xs text-gray-500 hover:text-gray-700"
               >
                 <X className="w-3 h-3" />
-                Clear all
+                {t('filters.clearAll')}
               </button>
             )}
           </div>
@@ -766,10 +767,10 @@ export default function ResourcesPage() {
                 onChange={(e) => handleSortChange(e.target.value)}
                 className="px-2 py-1 text-xs bg-transparent border border-gray-200 dark:border-gray-700 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
               >
-                <option value="title-asc">Title A-Z</option>
-                <option value="title-desc">Title Z-A</option>
-                <option value="creationDate-desc">Newest</option>
-                <option value="creationDate-asc">Oldest</option>
+                <option value="title-asc">{t('sorting.titleAZ')}</option>
+                <option value="title-desc">{t('sorting.titleZA')}</option>
+                <option value="creationDate-desc">{t('sorting.newest')}</option>
+                <option value="creationDate-asc">{t('sorting.oldest')}</option>
               </select>
             </div>
             <ViewModeSwitcher viewMode={viewMode} onChange={handleViewModeChange} />
@@ -820,7 +821,7 @@ export default function ResourcesPage() {
         isOpen={showMobileFilters}
         onClose={() => setShowMobileFilters(false)}
         facets={{
-          classifications: CLASSIFICATION_OPTIONS.map(o => ({
+          classifications: getClassificationOptions(t).map(o => ({
             value: o.value, label: o.label, count: facets?.classifications?.find(c => c.value === o.value)?.count || 0
           })),
           countries: facets?.countries?.map(c => ({ value: c.value, label: c.value, count: c.count })) || [],

@@ -1,6 +1,6 @@
 /**
  * DIVE V3 - Hub-Spoke Registry Service Tests
- * 
+ *
  * Comprehensive test suite for the federation hub-spoke registry.
  * Tests cover:
  * - Spoke registration
@@ -11,7 +11,7 @@
  * - OPAL integration
  * - Rate limiting
  * - Audit logging
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-04
  */

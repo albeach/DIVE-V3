@@ -337,14 +337,32 @@ get_keycloak_password() {
 }
 
 # Resolve container name based on environment/prefix, with override support.
+# Hub deployments use "dive-hub-*", spoke uses "dive-spoke-{code}-*"
 container_name() {
     local service="$1"
+    local instance_code="${2:-${INSTANCE:-}}"
     local prefix="${CONTAINER_PREFIX:-}"
+
     if [ -z "$prefix" ]; then
         if [ "$ENVIRONMENT" = "pilot" ]; then
             prefix="dive-pilot"
+        elif [ -n "$instance_code" ]; then
+            local code_upper
+            code_upper=$(echo "$instance_code" | tr '[:lower:]' '[:upper:]')
+            if [ "$code_upper" = "USA" ] || [ "$code_upper" = "HUB" ]; then
+                prefix="dive-hub"
+            else
+                local code_lower
+                code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
+                prefix="dive-spoke-${code_lower}"
+            fi
         else
-            prefix="dive-v3"
+            # Fallback - check if we're in hub context
+            if [ "${COMPOSE_PROJECT_NAME:-}" = "dive-hub" ]; then
+                prefix="dive-hub"
+            else
+                prefix="dive-v3"
+            fi
         fi
     fi
     echo "${prefix}-${service}"
@@ -452,7 +470,10 @@ check_terraform() {
 }
 
 check_certs() {
-    # Ensure mkcert is installed and CA present before regen
+    # SSOT: Use certificates.sh module for all certificate operations
+    # This matches the spoke pipeline approach for consistency
+
+    # Ensure mkcert is installed and CA present
     if ! command -v mkcert >/dev/null 2>&1; then
         log_error "mkcert not installed. Install mkcert and trust the local CA."
         return 1
@@ -461,7 +482,6 @@ check_certs() {
     local caroot
     caroot=$(mkcert -CAROOT 2>/dev/null || true)
     if [ -z "$caroot" ]; then
-        # Fallback to default macOS path
         caroot="${HOME}/Library/Application Support/mkcert"
     fi
 
@@ -477,27 +497,87 @@ check_certs() {
         fi
     fi
 
-    # Re-evaluate after install attempt
     if [ ! -f "$ca_key" ] || [ ! -f "$ca_cert" ]; then
         log_error "mkcert CA still missing at ${caroot}; please run mkcert -install manually"
         return 1
     fi
 
-    log_step "Regenerating mkcert certificates for all services..."
+    # Determine certificate target directory based on context
+    local cert_dir="${DIVE_ROOT}/instances/hub/certs"
+
+    # Check if valid certificates already exist
+    if [ -f "$cert_dir/certificate.pem" ] && [ -f "$cert_dir/key.pem" ]; then
+        # Verify certificate hasn't expired
+        local expiry_check
+        expiry_check=$(openssl x509 -in "$cert_dir/certificate.pem" -checkend 86400 2>/dev/null && echo "valid" || echo "expiring")
+        if [ "$expiry_check" = "valid" ]; then
+            log_info "Hub certificates exist and are valid - skipping regeneration"
+            log_info "To force regeneration: rm -f $cert_dir/certificate.pem"
+            # Still sync mkcert CA to truststores
+            _sync_mkcert_ca_to_hub
+            return 0
+        fi
+        log_warn "Certificate expiring within 24h - regenerating"
+    fi
+
+    log_step "Generating hub certificates via SSOT (instances/hub/certs)..."
     if [ "$DRY_RUN" = true ]; then
-        log_dry "Would regenerate certificates via ./scripts/generate-dev-certs.sh"
+        log_dry "Would generate certificates to $cert_dir"
         return 0
     fi
 
-    if [ -x "./scripts/generate-dev-certs.sh" ]; then
-        ./scripts/generate-dev-certs.sh
+    mkdir -p "$cert_dir"
+
+    # Hub certificate SANs - same approach as spoke pipeline
+    local hostnames="localhost 127.0.0.1 ::1 host.docker.internal"
+
+    # Hub container names (SSOT naming convention)
+    hostnames="$hostnames dive-hub-keycloak dive-hub-backend dive-hub-frontend"
+    hostnames="$hostnames dive-hub-opa dive-hub-opal-server dive-hub-kas"
+    hostnames="$hostnames dive-hub-mongodb dive-hub-postgres dive-hub-redis"
+    hostnames="$hostnames dive-hub-redis-blacklist dive-hub-authzforce"
+
+    # Service aliases (used in compose networks)
+    hostnames="$hostnames keycloak backend frontend opa opal-server kas"
+    hostnames="$hostnames mongodb postgres redis redis-blacklist authzforce"
+
+    # External access
+    hostnames="$hostnames *.dive25.com usa-idp.dive25.com usa-api.dive25.com usa-app.dive25.com"
+
+    # Generate certificate
+    # shellcheck disable=SC2086
+    if mkcert -key-file "$cert_dir/key.pem" \
+              -cert-file "$cert_dir/certificate.pem" \
+              $hostnames 2>/dev/null; then
+        chmod 600 "$cert_dir/key.pem"
+        chmod 644 "$cert_dir/certificate.pem"
+        log_success "Hub certificates generated to $cert_dir"
+
+        # Sync mkcert CA to truststores
+        _sync_mkcert_ca_to_hub
+
+        return 0
     else
-        log_error "scripts/generate-dev-certs.sh not found"
+        log_error "Failed to generate hub certificates"
         return 1
     fi
+}
 
-    log_success "mkcert certificates regenerated"
-    return 0
+# Helper: Sync mkcert root CA to hub truststores
+_sync_mkcert_ca_to_hub() {
+    local caroot
+    caroot=$(mkcert -CAROOT 2>/dev/null || true)
+    local hub_cert_dir="${DIVE_ROOT}/instances/hub/certs"
+    local hub_truststore="${DIVE_ROOT}/instances/hub/truststores"
+
+    if [ -f "$caroot/rootCA.pem" ]; then
+        mkdir -p "$hub_cert_dir" "$hub_truststore"
+        cp "$caroot/rootCA.pem" "$hub_cert_dir/mkcert-rootCA.pem" 2>/dev/null || true
+        cp "$caroot/rootCA.pem" "$hub_cert_dir/rootCA.pem" 2>/dev/null || true
+        cp "$caroot/rootCA.pem" "$hub_truststore/mkcert-rootCA.pem" 2>/dev/null || true
+        chmod 644 "$hub_cert_dir/mkcert-rootCA.pem" "$hub_cert_dir/rootCA.pem" 2>/dev/null || true
+        log_verbose "Synced mkcert CA to hub truststores"
+    fi
 }
 
 # =============================================================================
@@ -605,12 +685,13 @@ load_gcp_secrets() {
         return 1
     }
 
-    fetch_first_secret POSTGRES_PASSWORD "dive-v3-postgres-${inst_lc}"
-    fetch_first_secret KEYCLOAK_ADMIN_PASSWORD "dive-v3-keycloak-${inst_lc}"
-    fetch_first_secret MONGO_PASSWORD "dive-v3-mongodb-${inst_lc}"
-    fetch_first_secret AUTH_SECRET "dive-v3-auth-secret-${inst_lc}"
-    fetch_first_secret KEYCLOAK_CLIENT_SECRET "dive-v3-keycloak-client-secret" "dive-v3-keycloak-client-secret-${inst_lc}"
-    fetch_first_secret REDIS_PASSWORD "dive-v3-redis-blacklist" "dive-v3-redis-${inst_lc}"
+    # CRITICAL: Only load from GCP if not already set (preserve .env values)
+    [ -z "${POSTGRES_PASSWORD:-}" ] && fetch_first_secret POSTGRES_PASSWORD "dive-v3-postgres-${inst_lc}"
+    [ -z "${KEYCLOAK_ADMIN_PASSWORD:-}" ] && fetch_first_secret KEYCLOAK_ADMIN_PASSWORD "dive-v3-keycloak-${inst_lc}"
+    [ -z "${MONGO_PASSWORD:-}" ] && fetch_first_secret MONGO_PASSWORD "dive-v3-mongodb-${inst_lc}"
+    [ -z "${AUTH_SECRET:-}" ] && fetch_first_secret AUTH_SECRET "dive-v3-auth-secret-${inst_lc}"
+    [ -z "${KEYCLOAK_CLIENT_SECRET:-}" ] && fetch_first_secret KEYCLOAK_CLIENT_SECRET "dive-v3-keycloak-client-secret" "dive-v3-keycloak-client-secret-${inst_lc}"
+    [ -z "${REDIS_PASSWORD:-}" ] && fetch_first_secret REDIS_PASSWORD "dive-v3-redis-blacklist" "dive-v3-redis-${inst_lc}"
 
     # Export instance-suffixed variables for spoke docker-compose files
     # CRITICAL: Only overwrite if we have a non-empty value (preserve .env values)
@@ -644,6 +725,15 @@ load_gcp_secrets() {
     # Align NextAuth/JWT to AUTH secret unless explicitly provided
     [ -n "$AUTH_SECRET" ] && export NEXTAUTH_SECRET="${NEXTAUTH_SECRET:-$AUTH_SECRET}"
     [ -n "$AUTH_SECRET" ] && export JWT_SECRET="${JWT_SECRET:-$AUTH_SECRET}"
+
+    # KC_ADMIN_PASSWORD is the SSOT naming convention for docker-compose
+    export KC_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD"
+
+    # OPAL authentication token - generate from AUTH_SECRET if not explicitly set
+    if [ -z "${OPAL_AUTH_MASTER_TOKEN:-}" ] && [ -n "$AUTH_SECRET" ]; then
+        # Generate a deterministic token from AUTH_SECRET for OPAL
+        export OPAL_AUTH_MASTER_TOKEN=$(echo -n "opal-${AUTH_SECRET}" | openssl dgst -sha256 | awk '{print $2}' | cut -c1-64)
+    fi
 
     # Terraform variables
     export TF_VAR_keycloak_admin_password="$KEYCLOAK_ADMIN_PASSWORD"
@@ -692,6 +782,7 @@ load_gcp_secrets() {
 load_local_defaults() {
     log_warn "Local/dev mode: using fixed defaults for reproducibility (override via env)."
     export KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-KeycloakAdminSecure123!}"
+    export KC_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD"  # SSOT naming for docker-compose
     export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-LocalPgSecure123!}"
     export MONGO_PASSWORD="${MONGO_PASSWORD:-LocalMongoSecure123!}"
     export REDIS_PASSWORD="${REDIS_PASSWORD:-LocalRedisSecure123!}"
@@ -699,6 +790,10 @@ load_local_defaults() {
     export KEYCLOAK_CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET:-LocalClientSecret123!}"
     export JWT_SECRET="${JWT_SECRET:-$AUTH_SECRET}"
     export NEXTAUTH_SECRET="${NEXTAUTH_SECRET:-$AUTH_SECRET}"
+    # SSOT naming conventions for docker-compose
+    export KC_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD"
+    export OPAL_AUTH_MASTER_TOKEN=$(echo -n "opal-${AUTH_SECRET}" | openssl dgst -sha256 | awk '{print $2}' | cut -c1-64)
+    # Terraform variables
     export TF_VAR_keycloak_admin_password="$KEYCLOAK_ADMIN_PASSWORD"
     export TF_VAR_client_secret="$KEYCLOAK_CLIENT_SECRET"
     export TF_VAR_test_user_password="${TF_VAR_test_user_password:-KeycloakAdminSecure123!}"

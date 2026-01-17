@@ -16,6 +16,7 @@
 'use client';
 
 import React, { useState, useCallback, useMemo } from 'react';
+import { useTranslation } from '@/hooks/useTranslation';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   X,
@@ -157,6 +158,8 @@ export default function BulkActionsToolbar({
   const [isExporting, setIsExporting] = useState(false);
   const [exportSuccess, setExportSuccess] = useState<string | null>(null);
 
+  const { t } = useTranslation('resources');
+
   const selectedCount = selectedResources.length;
   const isVisible = selectedCount > 0;
   const canCompare = selectedCount >= 2 && selectedCount <= 4;
@@ -208,7 +211,7 @@ export default function BulkActionsToolbar({
               </div>
               <div className="text-sm">
                 <span className="font-bold">{selectedCount}</span>
-                <span className="text-gray-400 ml-1">selected</span>
+                <span className="text-gray-400 ml-1">{t('bulkActions.selected')}</span>
               </div>
             </div>
 
@@ -221,12 +224,12 @@ export default function BulkActionsToolbar({
                 {allSelected ? (
                   <>
                     <Square className="w-4 h-4" />
-                    <span className="hidden sm:inline">Deselect All</span>
+                    <span className="hidden sm:inline">{t('bulkActions.deselectAll')}</span>
                   </>
                 ) : (
                   <>
                     <CheckSquare className="w-4 h-4" />
-                    <span className="hidden sm:inline">Select All ({totalResources})</span>
+                    <span className="hidden sm:inline">{t('bulkActions.selectAll')} ({totalResources})</span>
                   </>
                 )}
               </button>
@@ -244,7 +247,7 @@ export default function BulkActionsToolbar({
                 ) : (
                   <Download className="w-4 h-4" />
                 )}
-                <span>Export</span>
+                <span>{t('bulkActions.export')}</span>
                 <ChevronDown className="w-4 h-4" />
               </button>
               
@@ -268,15 +271,15 @@ export default function BulkActionsToolbar({
                     : 'bg-gray-700 text-gray-400 cursor-not-allowed'
                 }`}
                 title={
-                  selectedCount < 2 
-                    ? 'Select at least 2 items to compare' 
-                    : selectedCount > 4 
-                      ? 'Can only compare up to 4 items'
-                      : 'Compare selected items'
+                  selectedCount < 2
+                    ? t('bulkActions.compareTooltip.selectMin')
+                    : selectedCount > 4
+                      ? t('bulkActions.compareTooltip.maxItems')
+                      : t('bulkActions.compareTooltip.compareSelected')
                 }
               >
                 <GitCompare className="w-4 h-4" />
-                <span className="hidden sm:inline">Compare</span>
+                <span className="hidden sm:inline">{t('bulkActions.compare')}</span>
                 {!canCompare && selectedCount < 2 && (
                   <span className="text-xs text-gray-500">(2+ needed)</span>
                 )}

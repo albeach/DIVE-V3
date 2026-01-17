@@ -395,10 +395,28 @@
       "enabled": true,
       "protocol": "oidc",
       "federation_class": "LOCAL"
+    },
+    "https://new-issuer.example.com": {
+      "tenant": "USA",
+      "name": "Test Issuer",
+      "country": "USA",
+      "trust_level": "HIGH",
+      "enabled": true,
+      "protocol": "oidc",
+      "federation_class": "NATIONAL"
+    },
+    "https://jpn-idp.example.com": {
+      "tenant": "JPN",
+      "name": "Japan Defense IdP",
+      "country": "JPN",
+      "trust_level": "HIGH",
+      "enabled": true,
+      "protocol": "saml",
+      "federation_class": "NATIONAL"
     }
   },
   "_metadata": {
-    "lastUpdated": "2025-12-28T00:00:00.000Z",
+    "lastUpdated": "2026-01-17T04:01:45.421Z",
     "description": "Trusted Keycloak issuers for DIVE V3 federation. Each issuer maps to a tenant/country for authorization."
   },
   "https://localhost:8469/realms/dive-v3-broker-svk": {

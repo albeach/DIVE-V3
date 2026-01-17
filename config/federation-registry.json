@@ -395,7 +395,7 @@
           "name": "backend-gbr",
           "containerName": "dive-spoke-gbr-backend",
           "internalPort": 4000,
-          "externalPort": 4031,
+          "externalPort": 4457,
           "protocol": "https",
           "hostname": "gbr-api.dive25.com"
         },
@@ -411,7 +411,7 @@
           "name": "mongodb-gbr",
           "containerName": "dive-spoke-gbr-mongodb",
           "internalPort": 27017,
-          "externalPort": 27048,
+          "externalPort": 27020,
           "protocol": "mongodb"
         }
       }

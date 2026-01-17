@@ -1,12 +1,34 @@
 #!/usr/bin/env bash
 # =============================================================================
-# DIVE V3 Hub Resource Seeding Script
+# ⚠️  DEPRECATED - DO NOT USE ⚠️
+# =============================================================================
+# This script creates NON-ZTDF resources which violates ACP-240 compliance.
+#
+# SSOT (Single Source of Truth) for hub seeding:
+#   ./dive hub seed [count]
+#
+# Which uses:
+#   - scripts/dive-modules/hub/seed.sh (hub_seed function)
+#   - backend/src/scripts/seed-instance-resources.ts (ZTDF-compliant)
+#
+# This legacy script will be removed in a future version.
+# =============================================================================
+# DIVE V3 Hub Resource Seeding Script (LEGACY)
 #
 # Purpose: Seed sample resources into the Hub MongoDB with proper distribution
 #          across classification levels for ABAC testing
 #
 # Usage: ./seed-hub-resources.sh [resource_count]
 # =============================================================================
+
+echo ""
+echo "⚠️  WARNING: This script is DEPRECATED and creates NON-ZTDF resources!"
+echo ""
+echo "   Use the SSOT instead:"
+echo "   ./dive hub seed [count]"
+echo ""
+echo "   Continuing in 5 seconds... (Ctrl+C to abort)"
+sleep 5
 
 set -e
 

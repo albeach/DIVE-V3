@@ -14,11 +14,11 @@
 
 import React from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Search, 
-  Filter, 
-  RefreshCw, 
-  FileQuestion, 
+import {
+  Search,
+  Filter,
+  RefreshCw,
+  FileQuestion,
   ShieldAlert,
   Globe2,
   WifiOff,
@@ -26,6 +26,7 @@ import {
   Bookmark,
   Inbox,
 } from 'lucide-react';
+import { useTranslation } from '@/hooks/useTranslation';
 
 // ============================================
 // Animation Variants
@@ -439,19 +440,21 @@ function EmptyStateWrapper({
 // Exported Components
 // ============================================
 
-export function EmptySearchResults({ 
-  query, 
-  onClearSearch 
-}: { 
-  query: string; 
-  onClearSearch: () => void; 
+export function EmptySearchResults({
+  query,
+  onClearSearch
+}: {
+  query: string;
+  onClearSearch: () => void;
 }) {
+  const { t } = useTranslation('resources');
+
   return (
     <EmptyStateWrapper
-      title="No results found"
-      description={`We couldn't find any documents matching "${query}". Try adjusting your search terms or filters.`}
+      title={t('emptyStates.noResults.title')}
+      description={t('emptyStates.noResults.description', { query })}
       action={{
-        label: 'Clear search',
+        label: t('emptyStates.noResults.clearSearch'),
         onClick: onClearSearch,
         icon: <Search className="w-4 h-4" />,
       }}
@@ -461,17 +464,19 @@ export function EmptySearchResults({
   );
 }
 
-export function EmptyFilterResults({ 
-  onClearFilters 
-}: { 
-  onClearFilters: () => void; 
+export function EmptyFilterResults({
+  onClearFilters
+}: {
+  onClearFilters: () => void;
 }) {
+  const { t } = useTranslation('resources');
+
   return (
     <EmptyStateWrapper
-      title="No matching documents"
-      description="Your current filters don't match any documents. Try relaxing your filter criteria."
+      title={t('emptyStates.noMatchingDocuments.title')}
+      description={t('emptyStates.noMatchingDocuments.description')}
       action={{
-        label: 'Clear filters',
+        label: t('emptyStates.noMatchingDocuments.clearFilters'),
         onClick: onClearFilters,
         icon: <Filter className="w-4 h-4" />,
       }}
@@ -481,19 +486,21 @@ export function EmptyFilterResults({
   );
 }
 
-export function ErrorState({ 
-  message, 
-  onRetry 
-}: { 
-  message: string; 
-  onRetry: () => void; 
+export function ErrorState({
+  message,
+  onRetry
+}: {
+  message: string;
+  onRetry: () => void;
 }) {
+  const { t } = useTranslation('resources');
+
   return (
     <EmptyStateWrapper
-      title="Something went wrong"
-      description={message || "We encountered an error while loading documents. Please try again."}
+      title={t('emptyStates.error.title')}
+      description={message || t('emptyStates.error.description')}
       action={{
-        label: 'Try again',
+        label: t('emptyStates.error.tryAgain'),
         onClick: onRetry,
         icon: <RefreshCw className="w-4 h-4" />,
       }}

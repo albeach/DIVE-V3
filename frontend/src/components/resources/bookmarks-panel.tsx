@@ -22,6 +22,7 @@
 import React, { Fragment, useRef, useEffect, useId } from 'react';
 import Link from 'next/link';
 import { useBookmarks } from '@/hooks/useBookmarks';
+import { useTranslation } from '@/hooks/useTranslation';
 import type { Bookmark } from '@/lib/bookmarks';
 import { 
   Bookmark as BookmarkIcon, 
@@ -181,17 +182,17 @@ function BookmarkItem({ bookmark, onRemove, onNavigate }: BookmarkItemProps) {
 // Empty State Component
 // ============================================
 
-function EmptyState() {
+function EmptyState({ t }: { t: (key: string) => string }) {
   return (
     <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
       <div className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-100 to-orange-100 dark:from-amber-900/30 dark:to-orange-900/30 flex items-center justify-center mb-4">
         <Star className="w-8 h-8 text-amber-500" />
       </div>
       <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
-        No Bookmarks Yet
+        {t('bookmarks.emptyState.title')}
       </h3>
       <p className="text-sm text-gray-600 dark:text-gray-400 max-w-xs">
-        Bookmark documents and policies for quick access. Click the bookmark icon on any resource to save it here.
+        {t('bookmarks.emptyState.description')}
       </p>
     </div>
   );
@@ -202,15 +203,17 @@ function EmptyState() {
 // ============================================
 
 export default function BookmarksPanel({ isOpen, onClose }: BookmarksPanelProps) {
-  const { 
-    bookmarks, 
-    documentBookmarks, 
-    policyBookmarks, 
-    count, 
+  const {
+    bookmarks,
+    documentBookmarks,
+    policyBookmarks,
+    count,
     maxBookmarks,
-    remove, 
-    clearAll 
+    remove,
+    clearAll
   } = useBookmarks();
+
+  const { t } = useTranslation('resources');
   
   const panelRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -337,7 +340,7 @@ export default function BookmarksPanel({ isOpen, onClose }: BookmarksPanelProps)
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-4">
           {count === 0 ? (
-            <EmptyState />
+            <EmptyState t={t} />
           ) : (
             <div className="space-y-6">
               {/* Documents Section */}

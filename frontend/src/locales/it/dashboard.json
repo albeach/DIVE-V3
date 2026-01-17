@@ -1,5 +1,6 @@
 {
   "title": "Cruscotto",
+  "dashboard.title": "Cruscotto",
   "subtitle": "Panoramica dell'intelligence di coalizione",
   "welcome": "Bentornato, {{name}}",
   "welcomeBack": "Bentornato,",
@@ -7,6 +8,118 @@
   "refreshing": "Aggiornamento...",
   "refresh": "Aggiorna",
   "lastUpdated": "Ultimo aggiornamento: {{time}}",
+  "platformBadge": "Piattaforma ICAM di coalizione",
+  "glossary": "Glossario",
+  "description": "Il tuo accesso sicuro alle risorse classificate in tutta la coalizione. Tutte le azioni sono protette da politiche ABAC e registrate per conformità.",
+  "loading": "Caricamento cruscotto...",
+  "refreshing": "Aggiornamento...",
+  "refresh": "Aggiorna",
+  "lastUpdated": "Ultimo aggiornamento: {{time}}",
+  "stats": {
+    "documentsAccessible": "Documenti accessibili",
+    "authorizationRate": "Tasso di autorizzazione",
+    "avgResponseTime": "Tempo di risposta medio"
+  },
+  "federation": {
+    "directAccess": "Accesso diretto",
+    "homeInstance": "Istanza di origine",
+    "federated": "Federato",
+    "status": {
+      "title": "Stato federazione",
+      "subtitle": "La tua identità e contesto di accesso attuali",
+      "federatedAccess": "Accesso federato",
+      "homeInstance": "Istanza di origine",
+      "portal": "Portale"
+    },
+    "stats": {
+      "partners": {
+        "title": "Partner di federazione",
+        "description": "Fornitori di identità attivi nella rete"
+      },
+      "crossPartnerAccesses": {
+        "title": "Accessi tra partner",
+        "description": "Risorse accessite da altri partner"
+      },
+      "authentications": {
+        "title": "Autenticazioni di oggi",
+        "description": "Connessioni di federazione oggi"
+      }
+    },
+    "explanation": {
+      "title": "Cos'è la federazione di identità?",
+      "federationTerm": "Federazione di identità",
+      "description": "ti permette di autenticarti con il fornitore di identità della tua organizzazione di origine e accedere alle risorse dei partner di coalizione senza creare account separati. Questo segue gli",
+      "stanagTerm": "ADatP-5663",
+      "standardsText": "standard per la gestione dell'identità NATO."
+    }
+  },
+  "resources": {
+    "accessibleDocuments": "Documenti accessibili",
+    "yourUploads": "I tuoi caricamenti",
+    "recentlyViewed": "Visualizzati di recente",
+    "resourceStats": "Statistiche risorse",
+    "resourcesByClassification": "Risorse per classificazione",
+    "recentActivity": "Attività recente",
+    "basedOnYourClearance": "Basato sulla tua autorizzazione",
+    "andCountryAffiliation": "e la tua affiliazione paese",
+    "youCanAccess": "puoi accedere a",
+    "documentsAcross": "documenti in",
+    "differentClassifications": "diverse classificazioni",
+    "browseAll": "Sfoglia tutto",
+    "yourAccessContext": "Il tuo contesto di accesso",
+    "youCanAccessDocuments": "puoi accedere ai documenti fino alla classificazione",
+    "thatAreReleasableTo": "che possono essere rilasciati a",
+    "maxClassification": "Classificazione massima",
+    "releasability": "Rilasciabilità",
+    "mustInclude": "Deve includere"
+  },
+  "authorization": {
+    "stats": {
+      "allowedRequests": "Richieste consentite",
+      "deniedRequests": "Richieste negate",
+      "authorizationRate": "Tasso di autorizzazione",
+      "avgDecisionTime": "Tempo di decisione medio"
+    },
+    "profile": {
+      "title": "Il tuo profilo di autorizzazione",
+      "subtitle": "Attributi utilizzati per le decisioni",
+      "decisions": "ABAC",
+      "current": "Attuale",
+      "countryOfAffiliation": "Paese di affiliazione",
+      "releasabilityTerm": "Rilasciabilità",
+      "releasabilityChecked": "verificato contro questo",
+      "coiMemberships": "Membri COI"
+    }
+  },
+  "activity": {
+    "stats": {
+      "totalEvents": "Eventi totali",
+      "successfulActions": "Azioni riuscite",
+      "lastLogin": "Ultimo accesso",
+      "activeSessions": "Sessioni attive"
+    },
+    "compliance": {
+      "title": "Stato di conformità",
+      "subtitle": "La tua adesione ai requisiti",
+      "requirements": "ACP-240",
+      "authenticationCompliance": {
+        "name": "Conformità autenticazione",
+        "description": "Tutte le autenticazioni tramite IdP approvati"
+      },
+      "accessControlAdherence": {
+        "name": "Aderenza controllo accessi",
+        "description": "Nessun tentativo di accesso non autorizzato"
+      },
+      "auditTrailCompleteness": {
+        "name": "Completezza traccia audit",
+        "description": "Tutte le azioni registrate secondo ACP-240"
+      },
+      "sessionSecurity": {
+        "name": "Sicurezza sessione",
+        "description": "Durate token entro limiti di policy"
+      }
+    }
+  },
   "tabs": {
     "overview": "Panoramica",
     "federation": "Federazione",
@@ -26,7 +139,123 @@
     "degraded": "Degradato",
     "down": "Offline",
     "authorizationRate": "Tasso di autorizzazione",
-    "systemHealth": "Salute del sistema"
+    "systemHealth": "Salute del sistema",
+    "features": {
+      "browseDocuments": {
+        "title": "Sfoglia documenti",
+        "description": "Accesso sicuro a risorse classificate",
+        "educational": "Ogni accesso ai documenti viene valutato contro le politiche OPA. La tua autorizzazione, paese e membri COI determinano cosa puoi vedere.",
+        "stats": {
+          "accessible": "accessibili",
+          "authRate": "tasso auth"
+        },
+        "badges": {
+          "policyEnforced": "Policy applicata",
+          "endToEndEncrypted": "Crittografato end-to-end",
+          "auditLogged": "Audit registrato"
+        }
+      },
+      "federationNetwork": {
+        "title": "Rete federazione",
+        "description": "Federazione identità cross-partner",
+        "educational": "Autenticati con il tuo IdP di origine e accedi alle risorse dei partner di coalizione. La federazione permette collaborazione senza soluzione di continuità mantenendo la sicurezza.",
+        "stats": {
+          "partners": "partner"
+        }
+      },
+      "uploadDocument": {
+        "title": "Carica documento",
+        "description": "Caricamento sicuro documenti",
+        "educational": "Carica documenti con crittografia ZTDF automatica ed etichettatura conforme ACP-240. Imposta classificazione e rilasciabilità durante il caricamento.",
+        "badges": {
+          "ztdfEncryption": "Crittografia ZTDF"
+        }
+      },
+      "authorizationPolicies": {
+        "title": "Politiche autorizzazione",
+        "description": "Politiche OPA Rego",
+        "educational": "Esplora la suite modulare di politiche che alimenta il motore ABAC di DIVE. Visualizza gerarchia politiche, testa decisioni e comprendi logica regole.",
+        "stats": {
+          "policies": "politiche"
+        }
+      },
+      "integrationGuide": {
+        "title": "Guida integrazione",
+        "description": "ADatP-5663 × ACP-240",
+        "educational": "Tutorial interattivo che spiega come federazione identità (ADatP-5663) e controllo accessi (ACP-240) funzionano insieme."
+      },
+      "apiDocumentation": {
+        "title": "Documentazione API",
+        "description": "Riferimento API interattivo",
+        "educational": "Esplora tutti gli endpoint DIVE V3, testa richieste live e visualizza esempi richiesta/risposta. Perfetto per sviluppatori che integrano la piattaforma ICAM di coalizione."
+      },
+      "kasEncryption": {
+        "title": "Crittografia KAS",
+        "description": "Servizio accesso chiavi",
+        "educational": "Rilascio chiavi legato a politiche per contenuti crittografati. KAS rivaluta l'autorizzazione prima di rilasciare chiavi di decrittazione.",
+        "stats": {
+          "encrypted": "crittografati"
+        }
+      },
+      "compliance": {
+        "title": "Conformità",
+        "description": "Aderenza standard NATO",
+        "educational": "Monitora conformità con ACP-240, STANAG 4774/5636 e altri requisiti sicurezza coalizione."
+      }
+    },
+    "sections": {
+      "howDiveWorks": {
+        "title": "Come funziona DIVE V3",
+        "subtitle": "ICAM di coalizione in azione",
+        "steps": {
+          "federatedAuth": {
+            "title": "Autenticazione federata",
+            "description": "Accedi tramite il tuo IdP di origine. Keycloak gestisce identità attraverso partner di coalizione."
+          },
+          "policyEval": {
+            "title": "Valutazione politiche",
+            "description": "PEP invia i tuoi attributi a OPA per decisione ABAC."
+          },
+          "secureAccess": {
+            "title": "Accesso sicuro",
+            "description": "Se autorizzato, accedi alla risorsa. Per contenuti crittografati, KAS rilascia la chiave di decrittazione."
+          }
+        }
+      },
+      "quickTips": {
+        "title": "Suggerimenti rapidi",
+        "tips": {
+          "readOnlyAttributes": {
+            "title": "I tuoi attributi sono di sola lettura",
+            "description": "Autorizzazione e COI sono gestiti dall'amministratore del tuo IdP di origine"
+          },
+          "auditLogging": {
+            "title": "Tutte le azioni sono auditate",
+            "description": "Ogni decisione di autorizzazione è registrata per conformità ACP-240"
+          },
+          "crossPartner": {
+            "title": "Collaborazione cross-partner",
+            "description": "Gli utenti degli IdP partner possono accedere ai tuoi documenti se la rilasciabilità lo permette"
+          }
+        }
+      },
+      "federationPartners": {
+        "title": "Partner federazione attivi",
+        "providersAvailable": "fornitori identità disponibili",
+        "viewAll": "Visualizza tutto"
+      },
+      "systemStatus": {
+        "title": "Stato sistema",
+        "services": {
+          "opaEngine": "Motore politiche OPA",
+          "keycloakAuth": "Autenticazione Keycloak",
+          "resourceApi": "API risorse"
+        },
+        "status": {
+          "operational": "Operativo"
+        }
+      }
+    }
   },
   "widgets": {
     "recentActivity": {
@@ -105,5 +334,8 @@
   },
   "breadcrumbs": {
     "dashboard": "Cruscotto"
-  }
+  },
+  "instance": "Istanza",
+  "clearance": "Autorizzazione",
+  "country": "Paese"
 }

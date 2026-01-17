@@ -149,8 +149,14 @@ spoke_containers_start() {
     local compose_cmd="docker compose"
     local compose_args="up -d"
 
+    # Add --env-file flag if .env file exists (required for variable substitution)
+    if [ -f "$spoke_dir/.env" ]; then
+        compose_cmd="$compose_cmd --env-file .env"
+        log_verbose "Using environment file: .env"
+    fi
+
     if [ "$force_rebuild" = "true" ]; then
-        compose_args="up -d --build --force-recreate"
+        compose_args="$compose_args --build --force-recreate"
         log_info "Using traditional startup with rebuild"
     else
         log_verbose "Using traditional sequential startup"

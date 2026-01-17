@@ -1,9 +1,9 @@
 /**
  * Breadcrumbs Component
- * 
+ *
  * Shows navigation hierarchy for nested pages
  * Example: Home / Resources / doc-ztdf-0001 / ZTDF Inspector
- * 
+ *
  * 🎨 INSTANCE-THEMED: Uses CSS variables from InstanceThemeProvider
  * for country-specific styling (USA, FRA, DEU, GBR, etc.)
  */
@@ -12,14 +12,69 @@
 
 import Link from 'next/link';
 import React from 'react';
+import { useTranslation } from '@/hooks/useTranslation';
 
 export interface BreadcrumbItem {
     label: string;
     href: string | null; // null for current page (not clickable)
+    translate?: boolean; // Whether label is a translation key
+    namespace?: string; // Translation namespace (defaults to 'common')
 }
 
 interface BreadcrumbsProps {
     items: BreadcrumbItem[];
+}
+
+// Component to render a single breadcrumb item with translation support
+function BreadcrumbItemComponent({ item, index }: { item: BreadcrumbItem; index: number }) {
+    // Handle translation if needed
+    let displayLabel = item.label;
+
+    if (item.translate) {
+        // Determine namespace and key
+        let namespace = item.namespace || 'common';
+        let key = item.label;
+
+        // If label contains a dot, split into namespace.key
+        if (item.label.includes('.')) {
+            const parts = item.label.split('.');
+            namespace = parts[0];
+            key = parts.slice(1).join('.');
+        }
+
+        // Use translation hook for this specific namespace
+        const { t } = useTranslation(namespace);
+        displayLabel = t(key);
+    }
+
+    return (
+        <li key={index} className="flex items-center whitespace-nowrap">
+            <svg
+                className="flex-shrink-0 h-5 w-5 text-gray-400"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+            >
+                <path
+                    fillRule="evenodd"
+                    d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z"
+                    clipRule="evenodd"
+                />
+            </svg>
+            {item.href ? (
+                <Link
+                    href={item.href}
+                    className="transition-colors hover:opacity-80"
+                    style={{ color: 'var(--instance-primary)' }}
+                >
+                    {displayLabel}
+                </Link>
+            ) : (
+                <span className="text-gray-700 font-medium">
+                    {displayLabel}
+                </span>
+            )}
+        </li>
+    );
 }
 
 export default function Breadcrumbs({ items }: BreadcrumbsProps) {
@@ -29,9 +84,9 @@ export default function Breadcrumbs({ items }: BreadcrumbsProps) {
     }
 
     return (
-        <nav 
-            className="border-b py-2" 
-            style={{ 
+        <nav
+            className="border-b py-2"
+            style={{
                 backgroundColor: 'rgba(var(--instance-primary-rgb, 59, 130, 246), 0.03)',
                 borderColor: 'rgba(var(--instance-primary-rgb, 59, 130, 246), 0.1)'
             }}
@@ -41,8 +96,8 @@ export default function Breadcrumbs({ items }: BreadcrumbsProps) {
                 <ol className="flex items-center space-x-2 text-sm overflow-x-auto">
                     {/* Home Link - Instance Themed */}
                     <li className="flex items-center">
-                        <Link 
-                            href="/dashboard" 
+                        <Link
+                            href="/dashboard"
                             className="flex items-center transition-colors hover:opacity-80"
                             style={{ color: 'var(--instance-primary)' }}
                         >
@@ -55,32 +110,7 @@ export default function Breadcrumbs({ items }: BreadcrumbsProps) {
 
                     {/* Breadcrumb Items - Instance Themed */}
                     {items.map((item, index) => (
-                        <li key={index} className="flex items-center whitespace-nowrap">
-                            <svg 
-                                className="flex-shrink-0 h-5 w-5 text-gray-400" 
-                                fill="currentColor" 
-                                viewBox="0 0 20 20"
-                            >
-                                <path 
-                                    fillRule="evenodd" 
-                                    d="M7.293 14.707a1 1 0 010-1.414L10.586 10 7.293 6.707a1 1 0 011.414-1.414l4 4a1 1 0 010 1.414l-4 4a1 1 0 01-1.414 0z" 
-                                    clipRule="evenodd" 
-                                />
-                            </svg>
-                            {item.href ? (
-                                <Link 
-                                    href={item.href} 
-                                    className="transition-colors hover:opacity-80"
-                                    style={{ color: 'var(--instance-primary)' }}
-                                >
-                                    {item.label}
-                                </Link>
-                            ) : (
-                                <span className="text-gray-700 font-medium">
-                                    {item.label}
-                                </span>
-                            )}
-                        </li>
+                        <BreadcrumbItemComponent key={index} item={item} index={index} />
                     ))}
                 </ol>
             </div>

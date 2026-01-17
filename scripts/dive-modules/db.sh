@@ -23,7 +23,8 @@ cmd_seed() {
     instance=$(upper "$instance_arg")
 
     log_step "Seeding ${count} ZTDF-encrypted resources for ${instance}..."
-    local backend_container="${BACKEND_CONTAINER:-$(container_name backend)}"
+    # Pass instance to container_name for correct hub/spoke prefix resolution
+    local backend_container="${BACKEND_CONTAINER:-$(container_name backend "$instance")}"
 
     if [ "$DRY_RUN" = true ]; then
         log_dry "docker exec ${backend_container} npm run seed:instance -- --instance=${instance} --count=${count} --replace"
@@ -61,8 +62,9 @@ cmd_seed_verify() {
 
     log_step "Verifying ZTDF encryption for ${instance}..."
 
+    # Use container_name for correct hub/spoke prefix resolution
     local mongo_container
-    mongo_container="dive-spoke-${instance_lower}-mongodb"
+    mongo_container=$(container_name mongodb "$instance")
 
     if [ "$DRY_RUN" = true ]; then
         log_dry "docker exec ${mongo_container} mongosh --eval 'db.resources.countDocuments()'"
@@ -115,6 +117,13 @@ cmd_seed_verify() {
     # Validation checks
     local errors=0
 
+    # Handle empty database case (no documents seeded yet)
+    if [ "${total_count:-0}" -eq 0 ]; then
+        echo -e "${YELLOW}⚠ INFO:${NC} No documents in database - initial deployment or seeding not run yet"
+        echo ""
+        return 0
+    fi
+
     if [ "${ztdf_count}" -lt "$((total_count * 98 / 100))" ]; then
         echo -e "${RED}✗ FAIL:${NC} Less than 98% of resources are ZTDF-encrypted"
         echo -e "  Expected: ${total_count}, Found: ${ztdf_count}"
@@ -123,7 +132,9 @@ cmd_seed_verify() {
         echo -e "${GREEN}✓ PASS:${NC} ZTDF encryption coverage: $((ztdf_count * 100 / total_count))%"
     fi
 
-    if [ "${locale_count}" -lt "$((ztdf_count * 95 / 100))" ]; then
+    if [ "${ztdf_count:-0}" -eq 0 ]; then
+        echo -e "${YELLOW}⚠ WARNING:${NC} No ZTDF resources to check locale classifications"
+    elif [ "${locale_count}" -lt "$((ztdf_count * 95 / 100))" ]; then
         echo -e "${YELLOW}⚠ WARNING:${NC} Less than 95% of ZTDF resources have locale classifications"
         echo -e "  Expected: ${ztdf_count}, Found: ${locale_count}"
     else

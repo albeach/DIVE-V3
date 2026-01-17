@@ -15,7 +15,8 @@ export DIVE_HUB_INIT_LOADED=1
 
 HUB_COMPOSE_FILE="${DIVE_ROOT}/docker-compose.hub.yml"
 HUB_DATA_DIR="${DIVE_ROOT}/data/hub"
-HUB_CERTS_DIR="${DIVE_ROOT}/keycloak/certs"
+# SSOT: Hub certificates are in instances/hub/certs
+HUB_CERTS_DIR="${DIVE_ROOT}/instances/hub/certs"
 HUB_LOGS_DIR="${DIVE_ROOT}/logs/hub"
 
 # =============================================================================

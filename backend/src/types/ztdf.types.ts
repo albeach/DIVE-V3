@@ -1,9 +1,9 @@
 /**
  * Zero Trust Data Format (ZTDF) Type Definitions
- * 
+ *
  * Implements NATO ACP-240 Data-Centric Security requirements
  * Reference: ACP240-llms.txt sections 5 (ZTDF & Cryptography) and 4 (Data Markings)
- * 
+ *
  * ZTDF Structure:
  * 1. Manifest: Object metadata and versioning
  * 2. Policy: Security labels and assertions (STANAG 4774/5636)
@@ -35,7 +35,7 @@ export type COIOperator = 'ALL' | 'ANY';
 /**
  * STANAG 4774 Security Label
  * Mandatory labeling for all objects per ACP-240 section 4.1
- * 
+ *
  * ACP-240 Section 4.3 Compliance:
  * "Carry original + standardized tags for recipients to enforce equivalents"
  */
@@ -284,7 +284,7 @@ export interface IZTDFPayload {
 /**
  * Zero Trust Data Format (ZTDF) Object
  * Self-contained encrypted object with embedded policy
- * 
+ *
  * CRITICAL: Integrity validation required before decryption
  * - Verify policyHash against policy section
  * - Verify payloadHash against payload chunks
@@ -341,6 +341,40 @@ export interface IZTDFResource {
         encryptedContent?: string;
         /** Industry Access Control (ACP-240 Section 4.2) */
         releasableToIndustry?: boolean;
+    };
+
+    /** STANAG 4774/4778 metadata for marking rendering */
+    stanag?: {
+        /** Binding Data Object (STANAG 4778) */
+        bdo?: {
+            originatorConfidentialityLabel: {
+                policyIdentifier: string;
+                classification: string;
+                categories?: Array<{
+                    tagSetId: string;
+                    tagName: string;
+                    values: string[];
+                }>;
+                creationDateTime?: string;
+                originatorId?: string;
+            };
+            dataReferences?: Array<{
+                uri: string;
+                portion?: string;
+            }>;
+        };
+        /** Portion markings for text sections */
+        portionMarkings?: Record<string, string>;
+        /** Watermark text */
+        watermarkText: string;
+        /** Full display marking string */
+        displayMarking: string;
+        /** Original classification (before NATO mapping) */
+        originalClassification?: string;
+        /** Original country of classification */
+        originalCountry?: string;
+        /** NATO equivalent classification */
+        natoEquivalent?: string;
     };
 
     /** MongoDB timestamps */
