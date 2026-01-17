@@ -1,9 +1,9 @@
 /**
  * Session Refresh API Route
- * 
+ *
  * Allows clients to manually trigger a session refresh
  * This extends the session by refreshing tokens with Keycloak
- * 
+ *
  * Week 3.4: Enhanced Session Management
  */
 
@@ -12,6 +12,7 @@ import { auth } from '@/auth';
 import { db } from '@/lib/db';
 import { accounts, sessions } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { updateAccountTokensByUserId } from '@/lib/db/operations';
 
 export const dynamic = 'force-dynamic';
 
@@ -104,14 +105,12 @@ export async function POST(request: NextRequest) {
             }
 
             // Update account with new tokens
-            await db.update(accounts)
-                .set({
-                    access_token: tokens.access_token,
-                    id_token: tokens.id_token,
-                    expires_at: Math.floor(Date.now() / 1000) + tokens.expires_in,
-                    refresh_token: tokens.refresh_token || account.refresh_token,
-                })
-                .where(eq(accounts.userId, session.user.id));
+            await updateAccountTokensByUserId(session.user.id, {
+                access_token: tokens.access_token,
+                id_token: tokens.id_token,
+                expires_at: Math.floor(Date.now() / 1000) + tokens.expires_in,
+                refresh_token: tokens.refresh_token || account.refresh_token,
+            });
 
             // FIX #2: Update database session expiry to match token refresh
             // Extend session by 60 minutes from now

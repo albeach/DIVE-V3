@@ -771,18 +771,25 @@ cmd_validate() {
     # =========================================================================
     echo -e "${CYAN}TLS Certificates:${NC}"
 
-    if [ -f "keycloak/certs/certificate.pem" ]; then
+    # Hub certificates SSOT: instances/hub/certs
+    local hub_cert_path="instances/hub/certs/certificate.pem"
+    if [ -f "$hub_cert_path" ]; then
         # Check certificate validity
-        if openssl x509 -checkend 0 -noout -in keycloak/certs/certificate.pem 2>/dev/null; then
+        if openssl x509 -checkend 0 -noout -in "$hub_cert_path" 2>/dev/null; then
             local cert_subject
-            cert_subject=$(openssl x509 -subject -noout -in keycloak/certs/certificate.pem 2>/dev/null | sed 's/subject=//')
-            format_status "keycloak/certs" "pass" "Valid"
+            cert_subject=$(openssl x509 -subject -noout -in "$hub_cert_path" 2>/dev/null | sed 's/subject=//')
+            format_status "instances/hub/certs" "pass" "Valid"
         else
-            format_status "keycloak/certs" "fail" "Expired"
+            format_status "instances/hub/certs" "fail" "Expired"
             issues=$((issues + 1))
         fi
     else
-        format_status "keycloak/certs" "warn" "Not found (run: mkcert -install && ./scripts/generate-certs.sh)"
+        # Fallback check for legacy keycloak/certs location
+        if [ -f "keycloak/certs/certificate.pem" ]; then
+            format_status "keycloak/certs" "warn" "Legacy location (migrate to instances/hub/certs)"
+        else
+            format_status "instances/hub/certs" "warn" "Not found (run: ./dive deploy hub to generate)"
+        fi
     fi
 
     if [ -f "backend/certs/certificate.pem" ]; then
@@ -1211,11 +1218,13 @@ cmd_diagnostics() {
         echo -e "  ${GREEN}✓${NC} No port conflicts"
     fi
 
-    # Pattern 6: Certificate expiry
+    # Pattern 6: Certificate expiry (SSOT: instances/hub/certs)
     patterns_checked=$((patterns_checked + 1))
-    if [ -f "keycloak/certs/certificate.pem" ]; then
+    local cert_check_path="instances/hub/certs/certificate.pem"
+    [ ! -f "$cert_check_path" ] && cert_check_path="keycloak/certs/certificate.pem"  # Fallback
+    if [ -f "$cert_check_path" ]; then
         local cert_expiry
-        cert_expiry=$(openssl x509 -enddate -noout -in keycloak/certs/certificate.pem 2>/dev/null | cut -d= -f2)
+        cert_expiry=$(openssl x509 -enddate -noout -in "$cert_check_path" 2>/dev/null | cut -d= -f2)
         local cert_epoch
         cert_epoch=$(date -j -f "%b %d %H:%M:%S %Y %Z" "$cert_expiry" "+%s" 2>/dev/null || date -d "$cert_expiry" "+%s" 2>/dev/null || echo "0")
         local now_epoch

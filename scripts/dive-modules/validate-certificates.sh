@@ -37,15 +37,15 @@ validate_spoke_certificate() {
     code_lower=$(lower "$spoke_code")
     local code_upper
     code_upper=$(upper "$spoke_code")
-    
+
     local cert_path="${DIVE_ROOT}/instances/${code_lower}/certs/certificate.pem"
-    
+
     # Check if certificate exists
     if [ ! -f "$cert_path" ]; then
         echo -e "  ${RED}✗ Certificate not found: $cert_path${NC}"
         return 1
     fi
-    
+
     # Check certificate expiration
     local expiry
     expiry=$(openssl x509 -in "$cert_path" -enddate -noout 2>/dev/null | cut -d= -f2)
@@ -53,44 +53,44 @@ validate_spoke_certificate() {
     expiry_epoch=$(date -j -f "%b %d %T %Y %Z" "$expiry" +%s 2>/dev/null || echo "0")
     local now_epoch
     now_epoch=$(date +%s)
-    
+
     if [ "$expiry_epoch" -le "$now_epoch" ]; then
         echo -e "  ${RED}✗ Certificate expired: $expiry${NC}"
         return 1
     fi
-    
+
     # Required SANs for federation
     local required_sans=(
         "dive-spoke-${code_lower}-keycloak"
         "dive-spoke-${code_lower}-backend"
         "localhost"
     )
-    
+
     # Optional but recommended SANs
     local optional_sans=(
         "dive-hub-keycloak"
         "${code_lower}-idp.dive25.com"
     )
-    
+
     local missing_required=()
     local missing_optional=()
     local cert_text
     cert_text=$(openssl x509 -in "$cert_path" -text -noout 2>/dev/null)
-    
+
     # Check required SANs
     for san in "${required_sans[@]}"; do
         if ! echo "$cert_text" | grep -q "$san"; then
             missing_required+=("$san")
         fi
     done
-    
+
     # Check optional SANs
     for san in "${optional_sans[@]}"; do
         if ! echo "$cert_text" | grep -q "$san"; then
             missing_optional+=("$san")
         fi
     done
-    
+
     # Report results
     if [ ${#missing_required[@]} -eq 0 ]; then
         if [ ${#missing_optional[@]} -eq 0 ]; then
@@ -123,33 +123,33 @@ validate_spoke_certificate() {
 }
 
 ##
-# Validate Hub certificate
+# Validate Hub certificate (SSOT: instances/hub/certs)
 ##
 validate_hub_certificate() {
-    local cert_path="${DIVE_ROOT}/keycloak/certs/certificate.pem"
-    
+    local cert_path="${DIVE_ROOT}/instances/hub/certs/certificate.pem"
+
     if [ ! -f "$cert_path" ]; then
         echo -e "  ${RED}✗ Hub certificate not found: $cert_path${NC}"
         return 1
     fi
-    
+
     # Required SANs for Hub
     local required_sans=(
         "dive-hub-keycloak"
         "dive-hub-backend"
         "localhost"
     )
-    
+
     local cert_text
     cert_text=$(openssl x509 -in "$cert_path" -text -noout 2>/dev/null)
-    
+
     local missing=()
     for san in "${required_sans[@]}"; do
         if ! echo "$cert_text" | grep -q "$san"; then
             missing+=("$san")
         fi
     done
-    
+
     if [ ${#missing[@]} -eq 0 ]; then
         # Check for wildcard SANs (best practice)
         if echo "$cert_text" | grep -q "*.dive25.com"; then
@@ -177,28 +177,28 @@ validate_all_certificates() {
     echo -e "${BOLD}  DIVE V3 Certificate Validation${NC}"
     echo -e "${BOLD}═══════════════════════════════════════════════════════════════${NC}"
     echo ""
-    
+
     # Validate Hub
     echo -e "${CYAN}Hub (USA):${NC}"
     validate_hub_certificate
     echo ""
-    
+
     # Find all deployed spokes (have running containers)
     local deployed_spokes
     deployed_spokes=$(docker ps --format '{{.Names}}' 2>/dev/null | \
         grep -E "^dive-spoke-.*-keycloak$" | \
         sed 's/dive-spoke-\(.*\)-keycloak/\1/' | \
         tr '[:lower:]' '[:upper:]' || true)
-    
+
     if [ -z "$deployed_spokes" ]; then
         log_warn "No deployed spokes found"
         return 0
     fi
-    
+
     local total=0
     local valid=0
     local invalid=0
-    
+
     for spoke in $deployed_spokes; do
         ((total++))
         echo -e "${CYAN}Spoke ${spoke}:${NC}"
@@ -209,7 +209,7 @@ validate_all_certificates() {
         fi
         echo ""
     done
-    
+
     # Summary
     echo -e "${BOLD}═══════════════════════════════════════════════════════════════${NC}"
     echo -e "${BOLD}  Summary: $total spokes validated${NC}"
@@ -218,7 +218,7 @@ validate_all_certificates() {
     echo -e "  ${GREEN}✓ Valid:   $valid${NC}"
     echo -e "  ${RED}✗ Invalid: $invalid${NC}"
     echo ""
-    
+
     if [ "$invalid" -eq 0 ]; then
         echo -e "${GREEN}🎉 All certificates are federation-compatible!${NC}"
         return 0

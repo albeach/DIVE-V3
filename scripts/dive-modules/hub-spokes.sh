@@ -29,7 +29,7 @@ FEDERATION_ADMIN_KEY="${FEDERATION_ADMIN_KEY:-dive-hub-admin-key}"
 # SPOKE MANAGEMENT
 # =============================================================================
 
-hub_spokes() {
+hub_spokes_main() {
     local action="${1:-list}"
     shift || true
 
@@ -51,53 +51,124 @@ hub_spokes_list() {
     echo -e "${BOLD}Registered Spokes${NC}"
     echo ""
 
-    local response=$(curl -kfs --max-time 10 \
-        -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY}" \
-        "${HUB_BACKEND_URL}/api/federation/spokes" 2>/dev/null)
-
-    if [ -z "$response" ]; then
-        log_error "Failed to fetch spokes (is the hub running?)"
+    # Check if hub MongoDB is running
+    if ! docker ps --filter "name=dive-hub-mongodb" --format "{{.Names}}" | grep -q "dive-hub-mongodb"; then
+        echo "  ${RED}❌ Hub MongoDB not running - cannot query federation registry${NC}"
+        echo ""
+        echo "  Check that the hub is running:"
+        echo "    ./dive hub status"
         return 1
     fi
 
-    echo "$response" | jq -r '
-        .spokes[] |
-        "  \(.instanceCode)\t\(.status)\t\(.trustLevel // "N/A")\t\(.name)"
-    ' 2>/dev/null | column -t -s $'\t' || echo "  (no spokes registered)"
+    # Get MongoDB credentials from hub .env
+    local mongo_password
+    mongo_password=$(grep "^MONGO_PASSWORD=" "${DIVE_ROOT}/instances/hub/.env" | cut -d'=' -f2 | tr -d '"')
 
+    if [ -z "$mongo_password" ]; then
+        echo "  ${RED}❌ Cannot find MongoDB password in hub .env file${NC}"
+        return 1
+    fi
+
+    # Query federation_spokes collection directly from MongoDB SSOT
+    local spokes_data
+    spokes_data=$(docker exec dive-hub-mongodb mongosh --username admin --password "$mongo_password" --authenticationDatabase admin dive-v3-hub --eval "
+        db.federation_spokes.find({}, {
+            spokeId: 1,
+            instanceCode: 1,
+            name: 1,
+            status: 1,
+            trustLevel: 1,
+            baseUrl: 1,
+            createdAt: 1,
+            _id: 0
+        }).toArray()
+    " 2>/dev/null | sed '1d;$d' | tr -d '\r')  # Remove MongoDB shell output lines
+
+    if [ -z "$spokes_data" ] || [ "$spokes_data" = "[]" ]; then
+        echo "  ${YELLOW}⚠️  No spokes registered in MongoDB SSOT${NC}"
+        echo ""
+        echo "  ${CYAN}Note:${NC} Spoke deployment updates federation-registry.json but"
+        echo "  ${CYAN}      MongoDB federation_spokes collection is not populated${NC}"
+        echo "  ${CYAN}      This indicates a gap between intended SSOT and implementation${NC}"
+        echo ""
+        echo "  ${CYAN}MongoDB SSOT:${NC} federation_spokes collection"
+        return 0
+    fi
+
+    # Parse and display spokes data
+    echo "$spokes_data" | jq -r '
+        .[] |
+        "  \(.instanceCode // "N/A")\t\(.status // "unknown")\t\(.trustLevel // "N/A")\t\(.name // "Unknown")"
+    ' 2>/dev/null | column -t -s $'\t'
+
+    # Show statistics
     echo ""
-    echo "$response" | jq -r '
-        .statistics |
-        "Total: \(.totalSpokes) | Active: \(.activeSpokes) | Pending: \(.pendingApprovals)"
-    ' 2>/dev/null
+    local total_spokes active_spokes pending_spokes suspended_spokes
+    total_spokes=$(echo "$spokes_data" | jq '. | length' 2>/dev/null || echo "0")
+    active_spokes=$(echo "$spokes_data" | jq '[.[] | select(.status == "approved")] | length' 2>/dev/null || echo "0")
+    pending_spokes=$(echo "$spokes_data" | jq '[.[] | select(.status == "pending")] | length' 2>/dev/null || echo "0")
+    suspended_spokes=$(echo "$spokes_data" | jq '[.[] | select(.status == "suspended")] | length' 2>/dev/null || echo "0")
+
+    echo "Total: $total_spokes | Active: $active_spokes | Pending: $pending_spokes | Suspended: $suspended_spokes"
+    echo ""
+    echo "  ${CYAN}MongoDB SSOT:${NC} federation_spokes collection"
 }
 
 hub_spokes_pending() {
     echo -e "${BOLD}Pending Spoke Registrations${NC}"
     echo ""
 
-    local response=$(curl -kfs --max-time 10 \
-        -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY}" \
-        "${HUB_BACKEND_URL}/api/federation/spokes/pending" 2>/dev/null)
-
-    if [ -z "$response" ]; then
-        log_error "Failed to fetch pending spokes (is the hub running?)"
+    # Check if hub MongoDB is running
+    if ! docker ps --filter "name=dive-hub-mongodb" --format "{{.Names}}" | grep -q "dive-hub-mongodb"; then
+        log_error "Hub MongoDB not running - cannot query federation registry"
         return 1
     fi
 
-    local count=$(echo "$response" | jq '.pending | length' 2>/dev/null || echo "0")
+    # Get MongoDB credentials from hub .env
+    local mongo_password
+    mongo_password=$(grep "^MONGO_PASSWORD=" "${DIVE_ROOT}/instances/hub/.env" | cut -d'=' -f2 | tr -d '"')
 
-    if [ "$count" = "0" ]; then
+    if [ -z "$mongo_password" ]; then
+        log_error "Cannot find MongoDB password in hub .env file"
+        return 1
+    fi
+
+    # Query pending spokes from MongoDB SSOT
+    local pending_data
+    pending_data=$(docker exec dive-hub-mongodb mongosh --username admin --password "$mongo_password" --authenticationDatabase admin dive-v3-hub --eval "
+        db.federation_spokes.find({status: 'pending'}, {
+            spokeId: 1,
+            instanceCode: 1,
+            name: 1,
+            contactEmail: 1,
+            baseUrl: 1,
+            idpUrl: 1,
+            registeredAt: 1,
+            requestedScopes: 1,
+            certificatePEM: 1,
+            csrPEM: 1,
+            _id: 0
+        }).toArray()
+    " 2>/dev/null | sed '1d;$d' | tr -d '\r')  # Remove MongoDB shell output lines
+
+    if [ -z "$pending_data" ] || [ "$pending_data" = "[]" ]; then
         echo -e "  ${GREEN}✓${NC} No pending approvals"
+        echo ""
+        echo "  ${CYAN}Note:${NC} MongoDB federation_spokes collection is currently empty"
+        echo "  ${CYAN}      Spoke deployment updates federation-registry.json but${NC}"
+        echo "  ${CYAN}      does not populate the MongoDB SSOT collection${NC}"
+        echo ""
+        echo "  ${CYAN}MongoDB SSOT:${NC} federation_spokes collection"
         return 0
     fi
 
+    local count=$(echo "$pending_data" | jq '. | length' 2>/dev/null || echo "0")
     echo -e "  ${YELLOW}$count pending approval(s)${NC}"
     echo ""
 
     # Rich display for each pending spoke
-    echo "$response" | jq -r '
-        .pending[] |
+    echo "$pending_data" | jq -r '
+        .[] |
         "┌─────────────────────────────────────────────────────────────┐",
         "│ Spoke: \(.spokeId | .[0:50])",
         "├─────────────────────────────────────────────────────────────┤",
@@ -121,7 +192,7 @@ hub_spokes_pending() {
     echo "  Reject:   ./dive hub spokes reject <spoke-id>"
     echo ""
     echo -e "${CYAN}Example:${NC}"
-    local first_spoke=$(echo "$response" | jq -r '.pending[0].spokeId // empty' 2>/dev/null)
+    local first_spoke=$(echo "$pending_data" | jq -r '.[0].spokeId // empty' 2>/dev/null)
     if [ -n "$first_spoke" ]; then
         echo "  ./dive hub spokes approve $first_spoke"
     fi

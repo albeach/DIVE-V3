@@ -230,7 +230,7 @@ spoke_compose_get_ports() {
     # Priority 3: Fallback for truly unknown codes
     # Calculate ports based on country code hash (consistent assignment)
     log_warn "Unknown country code '$code_upper' - using hash-based port assignment"
-    
+
     local hash_value
     hash_value=$(echo -n "$code_upper" | od -A n -t d1 | awk '{sum=0; for(i=1;i<=NF;i++) sum+=$i; print sum % 100}')
 
@@ -359,6 +359,34 @@ spoke_compose_render_template() {
     template_content="${template_content//\{\{TIMESTAMP\}\}/${TIMESTAMP}}"
     template_content="${template_content//\{\{TEMPLATE_HASH\}\}/${TEMPLATE_HASH}}"
     template_content="${template_content//\{\{TEMPLATE_LAST_UPDATED\}\}/${TEMPLATE_LAST_UPDATED}}"
+
+    # Substitute environment variables from .env file
+    if [ -f "${target_dir}/.env" ]; then
+        log_verbose "Substituting environment variables from .env file"
+        while IFS='=' read -r key value; do
+            # Skip comments and empty lines
+            [[ $key =~ ^[[:space:]]*# ]] && continue
+            [[ -z "$key" ]] && continue
+
+            # Strip surrounding quotes from .env value if present
+            clean_value="${value#\"}"  # Remove leading quote
+            clean_value="${clean_value%\"}"  # Remove trailing quote
+
+            # Escape special characters in clean value for sed
+            escaped_value=$(printf '%s\n' "$clean_value" | sed 's/[[\.*^$()+?{|]/\\&/g')
+
+            # Substitute ${KEY} with actual value (only quote if truly necessary for YAML)
+            if [[ "$clean_value" == *"'"* ]] || [[ "$clean_value" == *'"'* ]]; then
+                # Only quote if contains quotes (which would break YAML unquoted)
+                template_content="${template_content//\$\{$key\}/\"$escaped_value\"}"
+            else
+                # Use unquoted value - YAML can handle most special chars unquoted
+                template_content="${template_content//\$\{$key\}/$escaped_value}"
+            fi
+        done < "${target_dir}/.env"
+    else
+        log_warn "No .env file found at ${target_dir}/.env - environment variables will not be substituted"
+    fi
 
     # Write output
     echo "$template_content" > "$output_file"

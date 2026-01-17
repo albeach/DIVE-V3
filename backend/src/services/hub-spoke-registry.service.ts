@@ -1588,6 +1588,176 @@ class HubSpokeRegistryService extends EventEmitter {
   }
 
   // ============================================
+  // FEDERATION VALIDATION (MongoDB as Source of Truth)
+  // ============================================
+
+  /**
+   * Get list of active spoke instance codes from MongoDB
+   * This is the SOURCE OF TRUTH for which federation partners are active
+   * 
+   * Used by:
+   * - /api/idps/public endpoint to filter IdPs
+   * - Dashboard for "Active Federation Partners" count
+   * - Federated search for available spokes
+   * 
+   * @returns Array of uppercase instance codes (e.g., ['DEU', 'FRA', 'GBR'])
+   */
+  async getActiveSpokeCodes(): Promise<string[]> {
+    try {
+      const activeSpokes = await this.store.findByStatus('approved');
+      const codes = activeSpokes.map(spoke => spoke.instanceCode.toUpperCase());
+      
+      logger.debug('Retrieved active spoke codes from MongoDB', {
+        count: codes.length,
+        codes
+      });
+      
+      return codes;
+    } catch (error) {
+      logger.error('Failed to get active spoke codes from MongoDB', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      return [];
+    }
+  }
+
+  /**
+   * Validate if a Keycloak IdP alias has a corresponding active spoke in MongoDB
+   * 
+   * @param idpAlias - The IdP alias (e.g., 'deu-idp', 'fra-idp')
+   * @returns true if the spoke is registered and active in MongoDB
+   */
+  async validateIdPAgainstSpokes(idpAlias: string): Promise<boolean> {
+    const instanceCode = this.extractInstanceCodeFromAlias(idpAlias);
+    if (!instanceCode) {
+      logger.warn('Could not extract instance code from IdP alias', { idpAlias });
+      return false;
+    }
+    
+    const spoke = await this.store.findByInstanceCode(instanceCode);
+    const isValid = spoke !== null && spoke.status === 'approved';
+    
+    logger.debug('IdP validation against MongoDB spokes', {
+      idpAlias,
+      instanceCode,
+      spokeFound: spoke !== null,
+      spokeStatus: spoke?.status,
+      isValid
+    });
+    
+    return isValid;
+  }
+
+  /**
+   * Filter a list of IdPs to only include those with active spokes in MongoDB
+   * 
+   * @param idps - Array of IdP objects with 'alias' property
+   * @returns Filtered array with only IdPs that have active spokes
+   */
+  async filterIdPsByActiveSpokes<T extends { alias: string }>(idps: T[]): Promise<T[]> {
+    const activeCodes = await this.getActiveSpokeCodes();
+    
+    return idps.filter(idp => {
+      const instanceCode = this.extractInstanceCodeFromAlias(idp.alias);
+      return instanceCode && activeCodes.includes(instanceCode);
+    });
+  }
+
+  /**
+   * Extract instance code from IdP alias
+   * @example 'deu-idp' -> 'DEU'
+   * @example 'fra-idp' -> 'FRA'
+   */
+  extractInstanceCodeFromAlias(alias: string): string | null {
+    const match = alias.match(/^([a-z]+)-idp$/i);
+    return match ? match[1].toUpperCase() : null;
+  }
+
+  // ============================================
+  // RUNTIME HEALTH STATUS
+  // ============================================
+
+  /**
+   * Runtime health status for a spoke based on heartbeat freshness
+   */
+  getSpokeRuntimeHealth(spoke: ISpokeRegistration): 'online' | 'degraded' | 'offline' {
+    // If not approved, it's offline
+    if (spoke.status !== 'approved') {
+      return 'offline';
+    }
+
+    // Check heartbeat freshness
+    if (!spoke.lastHeartbeat) {
+      // Never received heartbeat - consider offline unless just registered
+      const registrationAge = Date.now() - spoke.registeredAt.getTime();
+      if (registrationAge < 5 * 60 * 1000) { // 5 minutes grace period for new registrations
+        return 'degraded';
+      }
+      return 'offline';
+    }
+
+    const heartbeatAge = Date.now() - spoke.lastHeartbeat.getTime();
+    const intervalMs = spoke.heartbeatIntervalMs || 30000; // Default 30s
+
+    // Online: heartbeat within 2x interval
+    if (heartbeatAge < intervalMs * 2) {
+      return 'online';
+    }
+    
+    // Degraded: heartbeat within 5x interval (missed a few)
+    if (heartbeatAge < intervalMs * 5) {
+      return 'degraded';
+    }
+    
+    // Offline: heartbeat too old
+    return 'offline';
+  }
+
+  /**
+   * Get active spokes with their runtime health status
+   * Returns both registration status AND runtime health
+   */
+  async getActiveSpokesWithHealth(): Promise<Array<{
+    instanceCode: string;
+    name: string;
+    status: string;
+    runtimeHealth: 'online' | 'degraded' | 'offline';
+    lastHeartbeat: Date | null;
+    heartbeatAgeSeconds: number | null;
+  }>> {
+    try {
+      const activeSpokes = await this.store.findByStatus('approved');
+      
+      return activeSpokes.map(spoke => ({
+        instanceCode: spoke.instanceCode,
+        name: spoke.name,
+        status: spoke.status,
+        runtimeHealth: this.getSpokeRuntimeHealth(spoke),
+        lastHeartbeat: spoke.lastHeartbeat || null,
+        heartbeatAgeSeconds: spoke.lastHeartbeat 
+          ? Math.floor((Date.now() - spoke.lastHeartbeat.getTime()) / 1000)
+          : null,
+      }));
+    } catch (error) {
+      logger.error('Failed to get active spokes with health', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      return [];
+    }
+  }
+
+  /**
+   * Get spoke health status by instance code
+   */
+  async getSpokeHealthByCode(instanceCode: string): Promise<'online' | 'degraded' | 'offline' | 'not_found'> {
+    const spoke = await this.store.findByInstanceCode(instanceCode.toUpperCase());
+    if (!spoke) {
+      return 'not_found';
+    }
+    return this.getSpokeRuntimeHealth(spoke);
+  }
+
+  // ============================================
   // HELPERS
   // ============================================
 

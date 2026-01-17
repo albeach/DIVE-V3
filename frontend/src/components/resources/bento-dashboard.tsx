@@ -10,6 +10,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from '@/hooks/useTranslation';
 import { motion } from 'framer-motion';
 import {
   FileText,
@@ -161,6 +162,8 @@ export default function BentoDashboard({
   releasabilityStats,
   dataFreshness,
 }: BentoDashboardProps) {
+  const { t } = useTranslation('resources');
+
   return (
     <motion.div
       variants={containerVariants}
@@ -181,7 +184,7 @@ export default function BentoDashboard({
             <div>
               <div className="flex items-center gap-2 mb-1">
                 <FileText className="w-4 h-4 text-white/70" />
-                <span className="text-xs font-medium text-white/70">Total Documents</span>
+                <span className="text-xs font-medium text-white/70">{t('bentoDashboard.totalDocuments')}</span>
               </div>
               <div className="text-3xl sm:text-4xl font-black tracking-tight">
                 {isLoading ? (
@@ -193,7 +196,7 @@ export default function BentoDashboard({
             </div>
             <div className="text-right">
               <div className="text-xs text-white/60">
-                {federatedMode ? `${activeInstances.length} instances` : 'Local'}
+                {federatedMode ? `${activeInstances.length} ${t('bentoDashboard.instances')}` : t('bentoDashboard.local')}
               </div>
             </div>
           </div>
@@ -208,7 +211,7 @@ export default function BentoDashboard({
           <div className="text-2xl font-bold">
             {isLoading ? '—' : encryptedCount}
           </div>
-          <div className="text-[10px] text-white/70">ZTDF Encrypted</div>
+          <div className="text-[10px] text-white/70">{t('bentoDashboard.ztdfEncrypted')}</div>
         </motion.div>
 
         <motion.div
@@ -236,7 +239,7 @@ export default function BentoDashboard({
                 <Server className="w-4 h-4 text-gray-500 dark:text-gray-400" />
               )}
               <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                {federatedMode ? 'Federated' : 'Local'}
+                {federatedMode ? t('bentoDashboard.federated') : t('bentoDashboard.local')}
               </span>
             </div>
             <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 font-medium">
@@ -269,7 +272,7 @@ export default function BentoDashboard({
         >
           <div className="flex items-center gap-1.5 mb-2">
             <Shield className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-            <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Classification</span>
+            <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{t('bentoDashboard.classification')}</span>
           </div>
           <div className="grid grid-cols-5 gap-1 text-center">
             {(Object.entries(classificationBreakdown) as [keyof typeof classificationColors, number][]).map(([level, count]) => (

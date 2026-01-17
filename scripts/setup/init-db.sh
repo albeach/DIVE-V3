@@ -13,3 +13,6 @@ psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" <<-E
     GRANT ALL PRIVILEGES ON DATABASE dive_v3_app TO $POSTGRES_USER;
 EOSQL
 
+# Initialize NextAuth schema in dive_v3_app database
+echo "Initializing NextAuth schema..."
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "dive_v3_app" < /scripts/postgres-init/01-init-nextauth.sql

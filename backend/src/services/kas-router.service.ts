@@ -50,6 +50,10 @@ export interface IKasResponse {
   error?: string;
   denialReason?: string;
   kasId?: string;
+  dek?: string;
+  auditEventId?: string;
+  organization?: string;
+  latencyMs?: number;
 }
 
 /**

@@ -102,5 +102,76 @@
     "resources": "Bronnen",
     "upload": "Uploaden",
     "detail": "Details"
+  },
+  "federation": {
+    "local": "Lokaal",
+    "federated": "Gefedereerd"
+  },
+  "classifications": {
+    "unclassified": "ONGECLASSIFICEERD",
+    "restricted": "BEPERKT",
+    "confidential": "VERTROUWELIJK",
+    "secret": "GEHEIM",
+    "topSecret": "ZEER GEHEIM"
+  },
+  "auth": {
+    "signInToView": "Meld u aan om bronnen te bekijken",
+    "needAuthentication": "U moet geauthenticeerd zijn om toegang te krijgen tot coalitiebronnen."
+  },
+  "sorting": {
+    "titleAZ": "Titel A-Z",
+    "titleZA": "Titel Z-A",
+    "newest": "Nieuwste",
+    "oldest": "Oudste"
+  },
+  "bentoDashboard": {
+    "totalDocuments": "Totaal documenten",
+    "ztdfEncrypted": "ZTDF-gecodeerd",
+    "local": "Lokaal",
+    "federated": "Gefedereerd",
+    "classification": "Classificatie",
+    "instances": "instanties"
+  },
+  "viewModes": {
+    "grid": "Raster",
+    "list": "Lijst",
+    "compact": "Compact"
+  },
+  "bulkActions": {
+    "selected": "geselecteerd",
+    "deselectAll": "Alles deselecteren",
+    "selectAll": "Alles selecteren",
+    "export": "Exporteren",
+    "compare": "Vergelijken",
+    "compareTooltip": {
+      "selectMin": "Selecteer minimaal 2 items om te vergelijken",
+      "maxItems": "Kan slechts tot 4 items vergelijken",
+      "compareSelected": "Geselecteerde items vergelijken"
+    }
+  },
+  "comparison": {
+    "title": "Bronnen vergelijken",
+    "closeTooltip": "Sluiten (Escape)",
+    "metadata": "Metagegevens"
+  },
+  "bookmarks": {
+    "emptyState": {
+      "title": "Nog geen bladwijzers",
+      "description": "Bladwijzer documenten en beleid voor snelle toegang. Klik op het bladwijzerpictogram bij elke bron om deze hier op te slaan."
+    }
+  },
+  "dateRange": {
+    "creationDate": "Aanmaakdatum",
+    "quickSelect": "Snelle selectie",
+    "today": "Vandaag",
+    "last7Days": "Laatste 7 dagen",
+    "last30Days": "Laatste 30 dagen",
+    "last90Days": "Laatste 90 dagen",
+    "thisMonth": "Deze maand",
+    "lastMonth": "Vorige maand",
+    "customRange": "Aangepast bereik",
+    "placeholder": "Filteren op datumbereik",
+    "clickToStart": "Klik op een datum om de selectie te starten",
+    "clickToComplete": "Klik op een andere datum om het bereik te voltooien"
   }
 }

@@ -1,8 +1,128 @@
 {
   "title": "Dashboard",
+  "dashboard.title": "Dashboard",
   "subtitle": "Coalition intelligence overview",
-  "welcome": "Welcome back,",
+  "welcome": "Welcome back, {{name}}",
   "welcomeBack": "Welcome back,",
+  "loading": "Loading dashboard...",
+  "refreshing": "Refreshing...",
+  "refresh": "Refresh",
+  "lastUpdated": "Last updated: {{time}}",
+  "platformBadge": "Coalition ICAM Platform",
+  "glossary": "Glossary",
+  "description": "Your secure access to classified resources across the coalition. All actions are protected by ABAC policies and logged for compliance.",
+  "stats": {
+    "documentsAccessible": "Documents Accessible",
+    "authorizationRate": "Authorization Rate",
+    "avgResponseTime": "Avg Response Time"
+  },
+  "federation": {
+    "directAccess": "Direct Access",
+    "homeInstance": "Home Instance",
+    "federated": "Federated",
+    "status": {
+      "title": "Federation Status",
+      "subtitle": "Your current identity and access context",
+      "federatedAccess": "Federated Access",
+      "homeInstance": "Home Instance",
+      "portal": "Portal"
+    },
+    "stats": {
+      "partners": {
+        "title": "Federation Partners",
+        "description": "Active identity providers in the network"
+      },
+      "crossPartnerAccesses": {
+        "title": "Cross-Partner Accesses",
+        "description": "Resources accessed from other partners"
+      },
+      "authentications": {
+        "title": "Today's Authentications",
+        "description": "Federation connections today"
+      }
+    },
+    "explanation": {
+      "title": "What is Identity Federation?",
+      "federationTerm": "Identity federation",
+      "description": "allows you to authenticate with your organization's home identity provider and access coalition partner resources without creating separate accounts. This follows the",
+      "stanagTerm": "ADatP-5663",
+      "standardsText": "standards for NATO identity management."
+    }
+  },
+  "resources": {
+    "accessibleDocuments": "Accessible Documents",
+    "yourUploads": "Your Uploads",
+    "recentlyViewed": "Recently Viewed",
+    "resourceStats": "Resource Statistics",
+    "resourcesByClassification": "Resources by Classification",
+    "recentActivity": "Recent Activity",
+    "basedOnYourClearance": "Based on your clearance",
+    "andCountryAffiliation": "and your country affiliation",
+    "youCanAccess": "you can access",
+    "documentsAcross": "documents across",
+    "differentClassifications": "different classifications",
+    "browseAll": "Browse All",
+    "yourAccessContext": "Your Access Context",
+    "youCanAccessDocuments": "you can access documents up to the classification",
+    "thatAreReleasableTo": "that are releasable to",
+    "maxClassification": "Max Classification",
+    "releasability": "Releasability",
+    "mustInclude": "Must Include"
+  },
+  "authorization": {
+    "stats": {
+      "allowedRequests": "Allowed Requests",
+      "deniedRequests": "Denied Requests",
+      "authorizationRate": "Authorization Rate",
+      "avgDecisionTime": "Avg Decision Time"
+    },
+    "profile": {
+      "title": "Your Authorization Profile",
+      "subtitle": "Attributes used for decisions",
+      "decisions": "ABAC",
+      "current": "Current",
+      "countryOfAffiliation": "Country of Affiliation",
+      "releasabilityTerm": "Releasability",
+      "releasabilityChecked": "checked against this",
+      "coiMemberships": "COI Memberships"
+    }
+  },
+  "activity": {
+    "stats": {
+      "totalEvents": "Total Events",
+      "successfulActions": "Successful Actions",
+      "lastLogin": "Last Login",
+      "activeSessions": "Active Sessions"
+    },
+    "compliance": {
+      "title": "Compliance Status",
+      "subtitle": "Your adherence to requirements",
+      "requirements": "ACP-240",
+      "authenticationCompliance": {
+        "name": "Authentication Compliance",
+        "description": "All authentications via approved IdPs"
+      },
+      "accessControlAdherence": {
+        "name": "Access Control Adherence",
+        "description": "No unauthorized access attempts"
+      },
+      "auditTrailCompleteness": {
+        "name": "Audit Trail Completeness",
+        "description": "All actions logged per ACP-240"
+      },
+      "sessionSecurity": {
+        "name": "Session Security",
+        "description": "Token lifetimes within policy limits"
+      }
+    }
+  },
+  "tabs": {
+    "overview": "Overview",
+    "federation": "Federation",
+    "authorization": "Authorization",
+    "resources": "Resources",
+    "activity": "Activity"
+  },
   "overview": {
     "title": "System Overview",
     "totalResources": "Total Resources",
@@ -13,7 +133,125 @@
     "healthStatus": "Health Status",
     "healthy": "Healthy",
     "degraded": "Degraded",
-    "down": "Down"
+    "down": "Down",
+    "authorizationRate": "Authorization Rate",
+    "systemHealth": "System Health",
+    "features": {
+      "browseDocuments": {
+        "title": "Browse Documents",
+        "description": "Secure access to classified resources",
+        "educational": "Each document access is evaluated against OPA policies. Your clearance, country, and COI memberships determine what you can view.",
+        "stats": {
+          "accessible": "accessible",
+          "authRate": "auth rate"
+        },
+        "badges": {
+          "policyEnforced": "Policy Enforced",
+          "endToEndEncrypted": "End-to-End Encrypted",
+          "auditLogged": "Audit Logged"
+        }
+      },
+      "federationNetwork": {
+        "title": "Federation Network",
+        "description": "Cross-partner identity federation",
+        "educational": "Authenticate with your home IdP and access coalition partner resources. Federation enables seamless collaboration while maintaining security.",
+        "stats": {
+          "partners": "partners"
+        }
+      },
+      "uploadDocument": {
+        "title": "Upload Document",
+        "description": "Secure document upload",
+        "educational": "Upload documents with automatic ZTDF encryption and ACP-240 compliant labeling. Set classification and releasability during upload.",
+        "badges": {
+          "ztdfEncryption": "ZTDF Encryption"
+        }
+      },
+      "authorizationPolicies": {
+        "title": "Authorization Policies",
+        "description": "OPA Rego policies",
+        "educational": "Explore the modular policy suite powering DIVE's ABAC engine. View policy hierarchy, test decisions, and understand rule logic.",
+        "stats": {
+          "policies": "policies"
+        }
+      },
+      "integrationGuide": {
+        "title": "Integration Guide",
+        "description": "ADatP-5663 × ACP-240",
+        "educational": "Interactive tutorial explaining how identity federation (ADatP-5663) and access control (ACP-240) work together."
+      },
+      "apiDocumentation": {
+        "title": "API Documentation",
+        "description": "Interactive API reference",
+        "educational": "Explore all DIVE V3 endpoints, test live requests, and view request/response examples. Perfect for developers integrating the coalition ICAM platform."
+      },
+      "kasEncryption": {
+        "title": "KAS Encryption",
+        "description": "Key Access Service",
+        "educational": "Policy-bound key release for encrypted content. KAS re-evaluates authorization before releasing decryption keys.",
+        "stats": {
+          "encrypted": "encrypted"
+        }
+      },
+      "compliance": {
+        "title": "Compliance",
+        "description": "Adherence to NATO standards",
+        "educational": "Monitor compliance with ACP-240, STANAG 4774/5636, and other coalition security requirements."
+      }
+    },
+    "sections": {
+      "howDiveWorks": {
+        "title": "How DIVE V3 Works",
+        "subtitle": "Coalition ICAM in action",
+        "steps": {
+          "federatedAuth": {
+            "title": "Federated Authentication",
+            "description": "Login via your home IdP. Keycloak manages identity across coalition partners."
+          },
+          "policyEval": {
+            "title": "Policy Evaluation",
+            "description": "PEP sends your attributes to OPA for ABAC decision."
+          },
+          "secureAccess": {
+            "title": "Secure Access",
+            "description": "If authorized, access the resource. For encrypted content, KAS releases the decryption key."
+          }
+        }
+      },
+      "quickTips": {
+        "title": "Quick Tips",
+        "tips": {
+          "readOnlyAttributes": {
+            "title": "Your attributes are read-only",
+            "description": "Clearance and COIs are managed by your home IdP administrator"
+          },
+          "auditLogging": {
+            "title": "All actions are audited",
+            "description": "Every authorization decision is logged for ACP-240 compliance"
+          },
+          "crossPartner": {
+            "title": "Cross-partner collaboration",
+            "description": "Users from partner IdPs can access your documents if releasability allows"
+          }
+        }
+      },
+      "federationPartners": {
+        "title": "Active Federation Partners",
+        "providersAvailable": "identity providers available",
+        "viewAll": "View All"
+      },
+      "systemStatus": {
+        "title": "System Status",
+        "services": {
+          "opaEngine": "OPA Policy Engine",
+          "keycloakAuth": "Keycloak Authentication",
+          "resourceApi": "Resource API"
+        },
+        "status": {
+          "operational": "Operational"
+        }
+      }
+    }
   },
   "widgets": {
     "recentActivity": {
@@ -84,5 +322,8 @@
   },
   "breadcrumbs": {
     "dashboard": "Dashboard"
-  }
+  },
+  "instance": "Instance",
+  "clearance": "Clearance",
+  "country": "Country"
 }

@@ -14,6 +14,7 @@
 'use client';
 
 import React, { useRef, useEffect, useState } from 'react';
+import { useTranslation } from '@/hooks/useTranslation';
 import { motion, AnimatePresence, useDragControls, PanInfo } from 'framer-motion';
 import { createPortal } from 'react-dom';
 import {
@@ -118,6 +119,7 @@ export default function MobileResourceDrawer({
   isBookmarked = false,
   userAttributes,
 }: MobileResourceDrawerProps) {
+  const { t } = useTranslation('resources');
   const [mounted, setMounted] = useState(false);
   const drawerRef = useRef<HTMLDivElement>(null);
   const dragControls = useDragControls();
@@ -198,7 +200,7 @@ export default function MobileResourceDrawer({
                 ${classColors.bg} ${classColors.darkBg}
               `}>
                 <span className={`text-sm font-black tracking-wide ${classColors.text} ${classColors.darkText}`}>
-                  {resource.classification.replace('_', ' ')}
+                  {t(`classifications.${resource.classification.toLowerCase()}`)}
                 </span>
                 <div className="flex items-center gap-2">
                   {resource.originRealm && (

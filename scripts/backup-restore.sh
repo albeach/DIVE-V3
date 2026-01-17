@@ -23,6 +23,14 @@ REDIS_PASSWORD="${REDIS_PASSWORD}"
 RETENTION_DAYS="${RETENTION_DAYS:-30}"
 MAX_BACKUPS="${MAX_BACKUPS:-10}"
 
+# Encryption settings (for production)
+ENCRYPT_BACKUPS="${ENCRYPT_BACKUPS:-true}"
+BACKUP_ENCRYPTION_KEY="${BACKUP_ENCRYPTION_KEY:-}"
+
+# Automated backup settings
+AUTO_BACKUP_ENABLED="${AUTO_BACKUP_ENABLED:-false}"
+AUTO_BACKUP_SCHEDULE="${AUTO_BACKUP_SCHEDULE:-daily}"  # daily, weekly, monthly
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -45,6 +53,50 @@ log_warning() {
 
 log_error() {
     echo -e "${RED}[ERROR]${NC} $(date +%Y-%m-%d\ %H:%M:%S) - $1"
+}
+
+# Automated backup scheduling
+schedule_backup() {
+    local schedule_type="$1"
+
+    case "$schedule_type" in
+        daily)
+            # Create cron job for daily backups at 2 AM
+            local cron_job="0 2 * * * $SCRIPT_DIR/backup-restore.sh backup --name daily-$(date +\\%Y\\%m\\%d)"
+            ;;
+        weekly)
+            # Create cron job for weekly backups (Sunday at 2 AM)
+            local cron_job="0 2 * * 0 $SCRIPT_DIR/backup-restore.sh backup --name weekly-$(date +\\%Y\\%m\\%d)"
+            ;;
+        monthly)
+            # Create cron job for monthly backups (1st of month at 2 AM)
+            local cron_job="0 2 1 * * $SCRIPT_DIR/backup-restore.sh backup --name monthly-$(date +\\%Y\\%m\\%d)"
+            ;;
+        *)
+            log_error "Unknown schedule type: $schedule_type"
+            echo "Supported types: daily, weekly, monthly"
+            exit 1
+            ;;
+    esac
+
+    # Add to crontab if not already present
+    if ! crontab -l 2>/dev/null | grep -q "backup-restore.sh backup"; then
+        (crontab -l 2>/dev/null; echo "$cron_job") | crontab -
+        log_success "Automated backup scheduled: $schedule_type"
+        log_info "Cron job added: $cron_job"
+    else
+        log_info "Automated backup already scheduled"
+    fi
+}
+
+# Remove automated backup schedule
+unschedule_backup() {
+    if crontab -l 2>/dev/null | grep -q "backup-restore.sh backup"; then
+        crontab -l 2>/dev/null | grep -v "backup-restore.sh backup" | crontab -
+        log_success "Automated backup unscheduled"
+    else
+        log_info "No automated backup schedule found"
+    fi
 }
 
 # Validate environment
@@ -244,6 +296,44 @@ backup_configuration() {
     log_success "Configuration backup complete"
 }
 
+# Encrypt backup (if enabled)
+encrypt_backup() {
+    local archive_path="$1"
+
+    if [ "$ENCRYPT_BACKUPS" != "true" ]; then
+        echo "$archive_path"
+        return 0
+    fi
+
+    log_info "Encrypting backup..."
+
+    # Generate or use existing encryption key
+    local key_file="$BACKUP_ROOT/backup-key.pem"
+    if [ ! -f "$key_file" ]; then
+        if [ -n "$BACKUP_ENCRYPTION_KEY" ]; then
+            echo -n "$BACKUP_ENCRYPTION_KEY" | openssl enc -base64 -d > "$key_file" 2>/dev/null || \
+            echo -n "$BACKUP_ENCRYPTION_KEY" > "$key_file"
+        else
+            openssl rand -base64 32 > "$key_file"
+        fi
+        chmod 600 "$key_file"
+        log_info "Generated backup encryption key"
+    fi
+
+    # Encrypt the archive
+    local encrypted_archive="${archive_path}.enc"
+    if openssl enc -aes-256-cbc -salt -in "$archive_path" -out "$encrypted_archive" -pass file:"$key_file"; then
+        # Remove unencrypted archive
+        rm -f "$archive_path"
+
+        log_success "Backup encrypted: $encrypted_archive"
+        echo "$encrypted_archive"
+    else
+        log_error "Backup encryption failed"
+        echo "$archive_path"
+    fi
+}
+
 # Compress backup
 compress_backup() {
     log_info "Compressing backup..."
@@ -258,10 +348,13 @@ compress_backup() {
     local size=$(du -sh "$archive_path" | cut -f1)
     log_success "Backup compressed: $archive_path ($size)"
 
+    # Encrypt if enabled
+    local final_archive=$(encrypt_backup "$archive_path")
+
     # Remove uncompressed directory
     rm -rf "$BACKUP_DIR"
 
-    echo "$archive_path"
+    echo "$final_archive"
 }
 
 # Cleanup old backups
@@ -557,6 +650,8 @@ Commands:
     restore <archive>   Restore from backup archive
     list                List available backups
     cleanup             Clean up old backups only
+    schedule <type>     Schedule automated backups (daily/weekly/monthly)
+    unschedule          Remove automated backup schedule
 
 Options:
     --name NAME         Custom backup name (default: auto-generated)
@@ -642,6 +737,16 @@ main() {
             ;;
         cleanup)
             cleanup_old_backups
+            ;;
+        schedule)
+            if [ -z "$2" ]; then
+                log_error "Schedule type required (daily/weekly/monthly)"
+                exit 1
+            fi
+            schedule_backup "$2"
+            ;;
+        unschedule)
+            unschedule_backup
             ;;
         --help|-h|"")
             show_usage

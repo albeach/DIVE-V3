@@ -102,5 +102,76 @@
     "resources": "Zasoby",
     "upload": "Prześlij",
     "detail": "Szczegóły"
+  },
+  "federation": {
+    "local": "Lokalny",
+    "federated": "Sfederowany"
+  },
+  "classifications": {
+    "unclassified": "NIETAJNY",
+    "restricted": "OGRANICZONY",
+    "confidential": "POUFNY",
+    "secret": "TAJNY",
+    "topSecret": "ŚCIŚLE TAJNY"
+  },
+  "auth": {
+    "signInToView": "Zaloguj się, aby zobaczyć zasoby",
+    "needAuthentication": "Musisz być uwierzytelniony, aby uzyskać dostęp do zasobów koalicji."
+  },
+  "sorting": {
+    "titleAZ": "Tytuł A-Z",
+    "titleZA": "Tytuł Z-A",
+    "newest": "Najnowszy",
+    "oldest": "Najstarszy"
+  },
+  "bentoDashboard": {
+    "totalDocuments": "Razem dokumentów",
+    "ztdfEncrypted": "Szyfrowane ZTDF",
+    "local": "Lokalny",
+    "federated": "Sfederowany",
+    "classification": "Klasyfikacja",
+    "instances": "instancji"
+  },
+  "viewModes": {
+    "grid": "Siatka",
+    "list": "Lista",
+    "compact": "Kompaktowy"
+  },
+  "bulkActions": {
+    "selected": "wybrany",
+    "deselectAll": "Odznacz wszystko",
+    "selectAll": "Zaznacz wszystko",
+    "export": "Eksportuj",
+    "compare": "Porównaj",
+    "compareTooltip": {
+      "selectMin": "Wybierz co najmniej 2 elementy do porównania",
+      "maxItems": "Może porównać maksymalnie 4 elementy",
+      "compareSelected": "Porównaj wybrane elementy"
+    }
+  },
+  "comparison": {
+    "title": "Porównaj zasoby",
+    "closeTooltip": "Zamknij (Escape)",
+    "metadata": "Metadane"
+  },
+  "bookmarks": {
+    "emptyState": {
+      "title": "Jeszcze brak zakładek",
+      "description": "Dodaj zakładki do dokumentów i polityk dla szybkiego dostępu. Kliknij ikonę zakładki przy dowolnym zasobie, aby zapisać go tutaj."
+    }
+  },
+  "dateRange": {
+    "creationDate": "Data utworzenia",
+    "quickSelect": "Szybki wybór",
+    "today": "Dzisiaj",
+    "last7Days": "Ostatnie 7 dni",
+    "last30Days": "Ostatnie 30 dni",
+    "last90Days": "Ostatnie 90 dni",
+    "thisMonth": "Ten miesiąc",
+    "lastMonth": "Poprzedni miesiąc",
+    "customRange": "Zakres niestandardowy",
+    "placeholder": "Filtruj według zakresu dat",
+    "clickToStart": "Kliknij datę, aby rozpocząć wybór",
+    "clickToComplete": "Kliknij inną datę, aby zakończyć zakres"
   }
 }

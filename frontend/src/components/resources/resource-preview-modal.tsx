@@ -18,6 +18,7 @@
 'use client';
 
 import React, { useEffect, useCallback, useRef, useId } from 'react';
+import { useTranslation } from '@/hooks/useTranslation';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useRouter } from 'next/navigation';
@@ -102,6 +103,7 @@ export default function ResourcePreviewModal({
   hasNext,
   userAttributes,
 }: ResourcePreviewModalProps) {
+  const { t } = useTranslation('resources');
   const router = useRouter();
   const modalRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -343,9 +345,9 @@ export default function ResourcePreviewModal({
                         <span
                           className={`px-3 py-1 rounded-lg text-sm font-bold ${classColors.bg} ${classColors.text} border ${classColors.border}`}
                           role="status"
-                          aria-label={`Classification: ${resource.classification.replace('_', ' ')}`}
+                          aria-label={`Classification: ${t(`classifications.${resource.classification.toLowerCase()}`)}`}
                         >
-                          {resource.classification.replace('_', ' ')}
+                          {t(`classifications.${resource.classification.toLowerCase()}`)}
                         </span>
                         {resource.originRealm && (
                           <span className="px-2 py-1 rounded-lg text-xs font-bold bg-white/50 dark:bg-gray-800/50 text-gray-700 dark:text-gray-300">

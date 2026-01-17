@@ -4,14 +4,20 @@
  * Unauthenticated endpoints for public-facing features
  *
  * Routes:
- * - GET /api/idps/public - List enabled IdPs for login page
+ * - GET /api/idps/public - List enabled IdPs for login page (MongoDB-validated)
  * - POST /api/public/sp-registration - Self-service SP registration (Phase 4)
+ * 
+ * ARCHITECTURE DECISION (Jan 2026):
+ * MongoDB is the SOURCE OF TRUTH for active federation partners.
+ * The /api/idps/public endpoint validates Keycloak IdPs against MongoDB spokes
+ * to ensure UI only shows IdPs for running/registered spokes.
  */
 
 import { Router, Request, Response } from 'express';
 import axios from 'axios';
 import https from 'https';
 import { keycloakAdminService } from '../services/keycloak-admin.service';
+import { hubSpokeRegistry } from '../services/hub-spoke-registry.service';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -27,7 +33,13 @@ const router = Router();
  * Public endpoint to list enabled Identity Providers for login page
  * No authentication required - this is for unauthenticated users selecting their IdP
  *
- * UX Enhancement: Filters out self-referential IdP (don't show "USA" on USA Hub)
+ * FILTERING LAYERS:
+ * 1. Keycloak IdPs - Technical IdP configuration
+ * 2. Self-exclusion - Don't show "USA" IdP on USA Hub
+ * 3. MongoDB Validation - Only show IdPs with active spokes (SOURCE OF TRUTH)
+ * 
+ * ARCHITECTURE: MongoDB spokes collection is the source of truth.
+ * If MongoDB is unavailable, falls back to Keycloak-only filtering with warning.
  */
 router.get('/idps/public', async (req: Request, res: Response): Promise<void> => {
     const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
@@ -35,35 +47,79 @@ router.get('/idps/public', async (req: Request, res: Response): Promise<void> =>
     try {
         logger.info('Public: List enabled IdPs request', { requestId });
 
-        // Get all IdPs from Keycloak
+        // 1. Get all IdPs from Keycloak
         const result = await keycloakAdminService.listIdentityProviders();
 
-        // Get current instance code (USA, FRA, GBR, etc.)
+        // 2. Get current instance code (USA, FRA, GBR, etc.)
         const currentInstance = (process.env.INSTANCE_CODE || 'USA').toUpperCase();
         const selfIdpAlias = `${currentInstance.toLowerCase()}-idp`;
 
-        // Filter to only enabled IdPs AND exclude self-referential IdP
-        // Don't show "United States" on USA Hub - that's confusing!
-        const enabledIdps = result.idps.filter(idp =>
+        // 3. Filter: enabled IdPs, exclude self-referential IdP
+        let filteredIdps = result.idps.filter(idp =>
             idp.enabled && idp.alias !== selfIdpAlias
         );
 
-        logger.info('Public: Returning enabled IdPs (excluding self)', {
+        // 4. MongoDB Validation Layer - Filter by active spokes (SOURCE OF TRUTH)
+        let mongoValidated = false;
+        let activeSpokeCodes: string[] = [];
+        try {
+            activeSpokeCodes = await hubSpokeRegistry.getActiveSpokeCodes();
+            
+            if (activeSpokeCodes.length > 0) {
+                const beforeCount = filteredIdps.length;
+                filteredIdps = filteredIdps.filter(idp => {
+                    const instanceCode = hubSpokeRegistry.extractInstanceCodeFromAlias(idp.alias);
+                    return instanceCode && activeSpokeCodes.includes(instanceCode);
+                });
+                mongoValidated = true;
+                
+                logger.info('Public: MongoDB validation applied', {
+                    requestId,
+                    beforeCount,
+                    afterCount: filteredIdps.length,
+                    activeSpokeCodes,
+                    filtered: beforeCount - filteredIdps.length
+                });
+            } else {
+                // No spokes in MongoDB - this is a fresh hub or MongoDB issue
+                // Keep Keycloak IdPs but log warning
+                logger.warn('Public: No active spokes in MongoDB - returning Keycloak IdPs only', {
+                    requestId,
+                    keycloakIdPCount: filteredIdps.length
+                });
+            }
+        } catch (mongoError) {
+            // MongoDB unavailable - graceful degradation to Keycloak-only
+            logger.warn('Public: MongoDB unavailable, falling back to Keycloak IdPs only', {
+                requestId,
+                error: mongoError instanceof Error ? mongoError.message : 'Unknown error'
+            });
+        }
+
+        logger.info('Public: Returning IdPs', {
             requestId,
             total: result.total,
-            enabled: enabledIdps.length,
-            filtered: `Excluded ${selfIdpAlias}`
+            returned: filteredIdps.length,
+            excluded: `Self=${selfIdpAlias}`,
+            mongoValidated,
+            source: mongoValidated ? 'keycloak+mongodb' : 'keycloak'
         });
 
         res.status(200).json({
             success: true,
-            idps: enabledIdps.map(idp => ({
+            idps: filteredIdps.map(idp => ({
                 alias: idp.alias,
                 displayName: idp.displayName,
                 protocol: idp.protocol,
                 enabled: idp.enabled
             })),
-            total: enabledIdps.length
+            total: filteredIdps.length,
+            // Metadata for debugging/monitoring
+            _meta: {
+                source: mongoValidated ? 'keycloak+mongodb' : 'keycloak',
+                mongoValidated,
+                activeSpokeCodes: mongoValidated ? activeSpokeCodes : undefined
+            }
         });
     } catch (error) {
         logger.error('Failed to list public IdPs', {

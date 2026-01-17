@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import cors from 'cors';
 import helmet from 'helmet';
+import axios from 'axios';
 import { config } from 'dotenv';
 import { logger } from './utils/logger';
 import { errorHandler } from './middleware/error.middleware';
@@ -38,6 +39,8 @@ import notificationCountRoutes from './routes/notifications-count.routes';
 import activityRoutes from './routes/activity.routes';  // User activity endpoints
 import swaggerRoutes from './routes/swagger.routes';  // API Documentation (OpenAPI/Swagger)
 import clearanceManagementRoutes from './routes/clearance-management.routes';  // Phase 3: Clearance management
+import spifRoutes from './routes/spif.routes';  // STANAG 4774 SPIF marking rules
+import documentConvertRoutes from './routes/document-convert.routes';  // Server-side document conversion
 import { initializeThemesCollection } from './services/idp-theme.service';
 import { KeycloakConfigSyncService } from './services/keycloak-config-sync.service';
 import { mongoKasRegistryStore } from './models/kas-registry.model';  // Phase 4: Cross-instance KAS (MongoDB SSOT)
@@ -153,6 +156,8 @@ app.use('/api/spoke', spokeRoutes);  // Phase 5: Spoke resilience operations (fa
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/notifications-count', notificationCountRoutes);
 app.use('/api/activity', activityRoutes);  // User activity endpoints
+app.use('/api/spif', spifRoutes);  // STANAG 4774 SPIF marking rules and country codes
+app.use('/api/documents', documentConvertRoutes);  // Server-side document conversion (DOCX to HTML/PDF)
 app.use('/api-docs', swaggerRoutes);  // API Documentation (OpenAPI/Swagger UI)
 
 // Federation endpoints (Phase 1)
@@ -367,17 +372,112 @@ function startServer() {
     }
 
     // Phase 5: Initialize spoke heartbeat service
+    // Also handles auto-registration for development mode
     console.log('🔄 Initializing spoke heartbeat service...');
     try {
       const spokeId = process.env.SPOKE_ID || process.env.INSTANCE_CODE || 'local';
       const instanceCode = process.env.INSTANCE_CODE || 'USA';
       const hubUrl = process.env.HUB_URL || 'https://hub.dive25.com';
-      const spokeToken = process.env.SPOKE_OPAL_TOKEN || process.env.SPOKE_TOKEN;
+      let spokeToken = process.env.SPOKE_OPAL_TOKEN || process.env.SPOKE_TOKEN;
 
       console.log('🔄 Heartbeat config:', { spokeId, instanceCode, hubUrl, hasToken: !!spokeToken });
 
+      // AUTO-REGISTRATION FOR DEVELOPMENT MODE
+      // If no token exists and we're in development, try to auto-register with the hub
+      const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+      const enableAutoRegister = isDevelopment || process.env.AUTO_REGISTER_SPOKE === 'true';
+
+      if (!spokeToken && enableAutoRegister) {
+        logger.info('No spoke token found, attempting auto-registration with Hub', {
+          spokeId,
+          instanceCode,
+          hubUrl,
+          mode: isDevelopment ? 'development' : 'auto-register enabled'
+        });
+
+        try {
+          // Build registration request with minimal info for development
+          const registrationRequest = {
+            instanceCode: instanceCode,
+            name: `${instanceCode} Federation Spoke`,
+            description: `Auto-registered spoke for ${instanceCode}`,
+            baseUrl: process.env.SPOKE_BASE_URL || `https://dive-spoke-${instanceCode.toLowerCase()}.dive25.local`,
+            apiUrl: process.env.SPOKE_API_URL || `https://dive-spoke-${instanceCode.toLowerCase()}.dive25.local:3001`,
+            idpUrl: process.env.SPOKE_IDP_URL || `https://${instanceCode.toLowerCase()}-keycloak.dive25.local:8443`,
+            requestedScopes: ['policy:base', 'sync:receive', 'audit:write'],
+            contactEmail: process.env.SPOKE_CONTACT_EMAIL || `admin@${instanceCode.toLowerCase()}.dive25.com`,
+            skipValidation: true  // Skip IdP validation for development
+          };
+
+          const httpsAgent = new https.Agent({
+            rejectUnauthorized: false  // Development only - self-signed certs
+          });
+
+          const response = await axios.post(
+            `${hubUrl}/api/federation/register`,
+            registrationRequest,
+            {
+              httpsAgent,
+              timeout: 15000,
+              headers: {
+                'Content-Type': 'application/json',
+                'X-Auto-Register': 'true'
+              }
+            }
+          );
+
+          if (response.data?.success && response.data?.token?.token) {
+            spokeToken = response.data.token.token;
+            logger.info('Spoke auto-registration successful', {
+              spokeId: response.data.spokeId,
+              instanceCode,
+              status: response.data.status,
+              tokenReceived: !!spokeToken
+            });
+          } else if (response.data?.success && response.data?.status === 'pending') {
+            logger.warn('Spoke registration pending approval - heartbeat will be disabled until approved', {
+              spokeId: response.data.spokeId,
+              instanceCode,
+              message: response.data.message
+            });
+          } else {
+            logger.warn('Spoke auto-registration response unexpected', {
+              instanceCode,
+              response: response.data
+            });
+          }
+        } catch (regError) {
+          // Non-fatal: registration might fail if hub is not ready or already registered
+          const errorMessage = regError instanceof Error ? regError.message : 'Unknown error';
+          const axiosError = regError as any;
+
+          if (axiosError?.response?.status === 409) {
+            // Already registered - try to get existing token info
+            logger.info('Spoke already registered with Hub (409 Conflict)', {
+              instanceCode,
+              message: axiosError?.response?.data?.message
+            });
+            // Token must be obtained through approval or stored config
+          } else if (axiosError?.code === 'ECONNREFUSED' || axiosError?.code === 'ENOTFOUND') {
+            logger.warn('Hub not reachable for auto-registration - heartbeat disabled', {
+              instanceCode,
+              hubUrl,
+              error: errorMessage
+            });
+          } else {
+            logger.warn('Spoke auto-registration failed', {
+              instanceCode,
+              error: errorMessage,
+              status: axiosError?.response?.status
+            });
+          }
+        }
+      }
+
       if (!spokeToken) {
-        logger.warn('SPOKE_OPAL_TOKEN or SPOKE_TOKEN not configured, heartbeat service disabled');
+        logger.warn('SPOKE_OPAL_TOKEN or SPOKE_TOKEN not configured, heartbeat service disabled', {
+          autoRegisterAttempted: enableAutoRegister
+        });
       } else {
         logger.info('Initializing spoke heartbeat service', { spokeId, instanceCode, hubUrl });
 

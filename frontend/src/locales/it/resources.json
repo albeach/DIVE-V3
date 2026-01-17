@@ -102,5 +102,76 @@
     "resources": "Risorse",
     "upload": "Carica",
     "detail": "Dettagli"
+  },
+  "federation": {
+    "local": "Locale",
+    "federated": "Federato"
+  },
+  "classifications": {
+    "unclassified": "NON CLASSIFICATO",
+    "restricted": "RISERVATO",
+    "confidential": "CONFIDENZIALE",
+    "secret": "SEGRETO",
+    "topSecret": "SEGRETISSIMO"
+  },
+  "auth": {
+    "signInToView": "Accedi per vedere le risorse",
+    "needAuthentication": "Devi essere autenticato per accedere alle risorse della coalizione."
+  },
+  "sorting": {
+    "titleAZ": "Titolo A-Z",
+    "titleZA": "Titolo Z-A",
+    "newest": "Più recente",
+    "oldest": "Più vecchio"
+  },
+  "bentoDashboard": {
+    "totalDocuments": "Documenti totali",
+    "ztdfEncrypted": "Crittografato ZTDF",
+    "local": "Locale",
+    "federated": "Federato",
+    "classification": "Classificazione",
+    "instances": "istanze"
+  },
+  "viewModes": {
+    "grid": "Griglia",
+    "list": "Lista",
+    "compact": "Compatto"
+  },
+  "bulkActions": {
+    "selected": "selezionato",
+    "deselectAll": "Deseleziona tutto",
+    "selectAll": "Seleziona tutto",
+    "export": "Esporta",
+    "compare": "Confronta",
+    "compareTooltip": {
+      "selectMin": "Seleziona almeno 2 elementi da confrontare",
+      "maxItems": "Può confrontare fino a 4 elementi",
+      "compareSelected": "Confronta elementi selezionati"
+    }
+  },
+  "comparison": {
+    "title": "Confronta risorse",
+    "closeTooltip": "Chiudi (Escape)",
+    "metadata": "Metadati"
+  },
+  "bookmarks": {
+    "emptyState": {
+      "title": "Ancora nessun segnalibro",
+      "description": "Contrassegna documenti e politiche per accesso rapido. Clicca sull'icona del segnalibro su qualsiasi risorsa per salvarla qui."
+    }
+  },
+  "dateRange": {
+    "creationDate": "Data di creazione",
+    "quickSelect": "Selezione rapida",
+    "today": "Oggi",
+    "last7Days": "Ultimi 7 giorni",
+    "last30Days": "Ultimi 30 giorni",
+    "last90Days": "Ultimi 90 giorni",
+    "thisMonth": "Questo mese",
+    "lastMonth": "Mese scorso",
+    "customRange": "Intervallo personalizzato",
+    "placeholder": "Filtra per intervallo di date",
+    "clickToStart": "Fare clic su una data per iniziare la selezione",
+    "clickToComplete": "Fare clic su un'altra data per completare l'intervallo"
   }
 }

@@ -49,7 +49,7 @@ _load_hub_deploy() {
 }
 
 _load_hub_spokes() {
-    [ -z "$DIVE_HUB_SPOKES_LOADED" ] && source "${_HUB_MODULES_DIR}/spokes.sh"
+    [ -z "$DIVE_HUB_SPOKES_LOADED" ] && source "${DIVE_ROOT}/scripts/dive-modules/hub-spokes.sh"
 }
 
 _load_hub_status() {
@@ -103,7 +103,7 @@ module_hub() {
         fix)            _load_hub_fix && hub_fix "$@" ;;
         cleanup-legacy) _load_hub_cleanup && hub_cleanup_legacy "$@" ;;
         logs)           _load_hub_status && hub_logs "$@" ;;
-        spokes)         _load_hub_spokes && hub_spokes "$@" ;;
+        spokes)         _load_hub_spokes && hub_spokes_main "$@" ;;
         push-policy)    _load_hub_policy && hub_push_policy "$@" ;;
         seed)           _load_hub_seed && hub_seed "$@" ;;
         amr)            _load_hub_amr && hub_amr "$@" ;;

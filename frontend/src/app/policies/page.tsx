@@ -37,7 +37,7 @@ export default async function PoliciesPage() {
     <PageLayout
       user={session.user}
       breadcrumbs={[
-        { label: 'Policies', href: null }
+        { label: 'nav.policyTools.name', href: null, translate: true, namespace: 'common' }
       ]}
       noPadding
     >

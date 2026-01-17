@@ -67,12 +67,12 @@ export default function UploadPage() {
   const displayMarking = useMemo(() => {
     const nationalLabel = getNationalClassification(classification, userCountry);
     const isDifferent = nationalLabel !== classification;
-    
+
     // Dual-format marking (ACP-240 Section 4.3)
-    const classificationPart = isDifferent 
+    const classificationPart = isDifferent
       ? `${nationalLabel} / ${classification} (${userCountry})`
       : classification;
-    
+
     const parts = [classificationPart];
     if (releasabilityTo.length > 0 && releasabilityTo.length <= 3) {
       parts.push(`REL TO ${releasabilityTo.join(', ')}`);
@@ -129,7 +129,7 @@ export default function UploadPage() {
       if (description.trim()) {
         formData.append('description', description.trim());
       }
-      
+
       // ACP-240 Section 4.3: Original classification equivalency
       const originalClassification = getNationalClassification(classification, userCountry);
       formData.append('originalClassification', originalClassification);
@@ -190,7 +190,7 @@ export default function UploadPage() {
   }
 
   return (
-    <PageLayout 
+    <PageLayout
       user={session.user}
       breadcrumbs={[
         { label: 'Upload', href: null }
@@ -421,7 +421,7 @@ export default function UploadPage() {
                     <dt className="text-xs font-medium text-gray-500 mb-1">Handling Caveats</dt>
                     <dd className="flex flex-wrap gap-1">
                       {caveats.map(caveat => (
-                        <span 
+                        <span
                           key={caveat}
                           className="inline-flex items-center px-2 py-1 rounded-md bg-amber-100 text-amber-800 text-xs font-bold font-mono"
                         >

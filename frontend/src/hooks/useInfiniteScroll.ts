@@ -36,6 +36,7 @@ export interface ISortOptions {
 export interface IFacetItem {
   value: string;
   count: number;
+  approximate?: boolean; // Whether count is estimated (for federated queries)
 }
 
 export interface IFacets {

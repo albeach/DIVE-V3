@@ -1,6 +1,6 @@
 /**
  * Resources Components Index
- * 
+ *
  * Centralized exports for all resource-related components.
  * Import from '@/components/resources' for cleaner imports.
  */
@@ -84,7 +84,7 @@ export { default as BulkActionsToolbar, SelectionIndicator } from './bulk-action
 
 export { default as ResourceComparisonView } from './resource-comparison-view';
 
-export { default as DateRangePicker, DateRangeDisplay } from './date-range-picker';
+export { default as DateRangePicker } from './date-range-picker';
 export type { DateRange } from './date-range-picker';
 
 export {
@@ -136,3 +136,18 @@ export {
   default as MobileResourceDrawer,
   useSwipeToOpen
 } from './mobile-resource-drawer';
+
+// ============================================
+// Phase 5: STANAG 4774/4778 Marking Components
+// ============================================
+
+// Marking Renderer - Security marking overlays (banners, badges, watermarks)
+export {
+  MarkingRenderer,
+  PortionMark,
+  TextWithPortionMarkings,
+  StandaloneClassificationBadge,
+  DEFAULT_MARKING_OPTIONS,
+  type IMarkingDisplayOptions,
+  type MarkingRendererProps,
+} from './MarkingRenderer';

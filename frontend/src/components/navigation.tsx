@@ -48,6 +48,7 @@ import { LocaleSelector } from '@/components/navigation/LocaleSelector';
 // TEMPORARY: ThemeToggle disabled until container rebuild picks up next-themes
 // import { ThemeToggle } from '@/components/navigation/ThemeToggle';
 import { navItems, adminItems, getNationalClearance, getCountryName } from '@/components/navigation/nav-config';
+import { useTranslation } from '@/hooks/useTranslation';
 import { useInstanceTheme } from '@/components/ui/theme-provider';
 import { InstanceFlag } from '@/components/ui/instance-hero-badge';
 
@@ -66,6 +67,7 @@ export default function Navigation({ user }: INavigationProps) {
     const pathname = usePathname();
     const { isOpen: identityOpenGlobal, open: openIdentity, close: closeIdentity } = useIdentityDrawer();
     const { instanceCode, instanceName, theme } = useInstanceTheme();
+    const { t } = useTranslation('common');
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
     const [adminDropdownOpen, setAdminDropdownOpen] = useState(false);
     // PHASE 1.2: Removed unused 'identityOpen' state - now using unified user menu
@@ -284,8 +286,8 @@ export default function Navigation({ user }: INavigationProps) {
                                                         animationDelay: `${index * 50}ms`,
                                                         '--tw-ring-color': 'rgba(var(--instance-primary-rgb, 68, 151, 172), 0.5)'
                                                     } as React.CSSProperties}
-                                                    aria-label={`${item.name} menu`}
-                                                    onMouseEnter={() => setHoveredNavItem(item.name)}
+                                                    aria-label={`${t(item.name)} menu`}
+                                                    onMouseEnter={() => setHoveredNavItem(t(item.name))}
                                                     onMouseLeave={() => setHoveredNavItem(null)}
                                                 >
                                                     {/* Enhanced hover background with instance gradient */}
@@ -320,8 +322,8 @@ export default function Navigation({ user }: INavigationProps) {
                                                             }`}
                                                             style={active ? { backgroundImage: 'var(--instance-banner-bg)' } : undefined}
                                                         >
-                                                            <span className="xl:hidden">{item.shortName || item.name}</span>
-                                                            <span className="hidden xl:inline">{item.name}</span>
+                                                            <span className="xl:hidden">{item.shortName ? t(item.shortName) : t(item.name)}</span>
+                                                            <span className="hidden xl:inline">{t(item.name)}</span>
                                                         </span>
 
                                                         <ChevronDown className="w-3 h-3 xl:w-3.5 xl:h-3.5 text-gray-500 transition-transform duration-300 group-data-[state=open]:rotate-180" strokeWidth={2.5} />
@@ -339,9 +341,9 @@ export default function Navigation({ user }: INavigationProps) {
                                                     )}
 
                                                     {/* Tooltip on hover */}
-                                                    {hoveredNavItem === item.name && !active && (
+                                                    {hoveredNavItem === t(item.name) && !active && (
                                                         <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-gray-900/95 backdrop-blur-sm text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap animate-fade-in z-50 pointer-events-none">
-                                                            {item.description}
+                                                            {t(item.description)}
                                                             <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-900/95 rotate-45" />
                                                         </div>
                                                     )}
@@ -384,7 +386,7 @@ export default function Navigation({ user }: INavigationProps) {
                                                                 style={{ animationDelay: `${catIndex * 75}ms` }}
                                                             >
                                                                 <DropdownMenu.Label className="text-[10px] font-bold uppercase tracking-wider text-gray-500 mb-3 px-1">
-                                                                    {category.category}
+                                                                    {t(category.category)}
                                                                 </DropdownMenu.Label>
                                                                 <div className="space-y-1">
                                                                     {category.items.map((subItem) => {
@@ -401,7 +403,7 @@ export default function Navigation({ user }: INavigationProps) {
                                                                                     />
                                                                                     <div className="flex-1">
                                                                                         <div className="text-sm font-semibold text-gray-900">
-                                                                                            {subItem.name}
+                                                                                            {t(subItem.name)}
                                                                                         </div>
                                                                                     </div>
                                                                                     <ArrowRight className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
@@ -462,8 +464,8 @@ export default function Navigation({ user }: INavigationProps) {
                                                         }`}
                                                         style={active ? { backgroundImage: 'var(--instance-banner-bg)' } : undefined}
                                                     >
-                                                        <span className="xl:hidden">{item.shortName || item.name}</span>
-                                                        <span className="hidden xl:inline">{item.name}</span>
+                                                        <span className="xl:hidden">{item.shortName ? t(item.shortName) : t(item.name)}</span>
+                                                        <span className="hidden xl:inline">{t(item.name)}</span>
                                                     </span>
                                                 </div>
 
@@ -795,9 +797,9 @@ export default function Navigation({ user }: INavigationProps) {
                                                         }`}
                                                         style={active ? { backgroundImage: 'var(--instance-banner-bg)' } : undefined}
                                                     >
-                                                        {item.name}
+                                                        {t(item.name)}
                                                     </span>
-                                                    <p className="text-xs text-gray-600 mt-0.5 line-clamp-1">{item.description}</p>
+                                                    <p className="text-xs text-gray-600 mt-0.5 line-clamp-1">{t(item.description)}</p>
                                                 </div>
 
                                                 {/* Arrow indicator */}

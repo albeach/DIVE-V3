@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { FeatureShowcaseCard } from './feature-showcase-card';
 import { EducationalTooltip } from './educational-tooltip';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface IdP {
   alias: string;
@@ -50,59 +51,65 @@ interface DashboardOverviewProps {
 }
 
 export function DashboardOverview({ idps, stats, loading = false }: DashboardOverviewProps) {
+  const { t } = useTranslation('dashboard');
+
   const features = [
     {
-      title: 'Browse Documents',
-      description: 'Access classified resources securely',
-      educational: 'Every document access is evaluated against OPA policies. Your clearance, country, and COI memberships determine what you can view.',
+      title: t('overview.features.browseDocuments.title'),
+      description: t('overview.features.browseDocuments.description'),
+      educational: t('overview.features.browseDocuments.educational'),
       icon: <FileText className="w-7 h-7 text-white" />,
       href: '/resources',
       gradient: 'from-blue-500 to-indigo-600',
       size: 'large' as const,
       stats: [
-        { label: 'accessible', value: stats.documentsAccessible || 0 },
-        { label: 'auth rate', value: stats.authorizationRate || '100%' },
+        { label: t('overview.features.browseDocuments.stats.accessible'), value: stats.documentsAccessible || 0 },
+        { label: t('overview.features.browseDocuments.stats.authRate'), value: stats.authorizationRate || '100%' },
       ],
-      badges: ['Policy-Enforced', 'End-to-End Encrypted', 'Audit Logged'],
+      badges: [
+        t('overview.features.browseDocuments.badges.policyEnforced'),
+        t('overview.features.browseDocuments.badges.endToEndEncrypted'),
+        t('overview.features.browseDocuments.badges.auditLogged')
+      ],
     },
     {
-      title: 'Federation Network',
-      description: 'Cross-partner identity federation',
-      educational: 'Authenticate with your home IdP and access resources across coalition partners. Federation enables seamless collaboration while maintaining security.',
+      title: t('overview.features.federationNetwork.title'),
+      description: t('overview.features.federationNetwork.description'),
+      educational: t('overview.features.federationNetwork.educational'),
       icon: <Globe className="w-7 h-7 text-white" />,
       href: '/admin/federation',
       gradient: 'from-emerald-500 to-teal-600',
       size: 'medium' as const,
       stats: [
-        { label: 'partners', value: stats.federationPartners || idps.length },
+        { label: t('overview.features.federationNetwork.stats.partners'), value: stats.federationPartners || idps.length },
       ],
     },
     {
-      title: 'Upload Document',
-      description: 'Secure document upload',
-      educational: 'Upload documents with automatic ZTDF encryption and ACP-240 compliant labeling. Set classification and releasability at upload time.',
+      title: t('overview.features.uploadDocument.title'),
+      description: t('overview.features.uploadDocument.description'),
+      educational: t('overview.features.uploadDocument.educational'),
       icon: <Upload className="w-7 h-7 text-white" />,
       href: '/upload',
       gradient: 'from-cyan-500 to-blue-600',
       size: 'medium' as const,
-      badges: ['ZTDF Encryption'],
+      badges: [t('overview.features.uploadDocument.badges.ztdfEncryption')],
     },
     {
-      title: 'Authorization Policies',
-      description: 'OPA Rego policies',
-      educational: 'Explore the modular policy suite powering DIVE\'s ABAC engine. View policy hierarchy, test decisions, and understand rule logic.',
+      title: t('overview.features.authorizationPolicies.title'),
+      description: t('overview.features.authorizationPolicies.description'),
+      educational: t('overview.features.authorizationPolicies.educational'),
       icon: <ShieldCheck className="w-7 h-7 text-white" />,
       href: '/policies',
       gradient: 'from-purple-500 to-pink-600',
       size: 'medium' as const,
       stats: [
-        { label: 'policies', value: stats.policyCount || 41 },
+        { label: t('overview.features.authorizationPolicies.stats.policies'), value: stats.policyCount || 41 },
       ],
     },
     {
-      title: 'Integration Guide',
-      description: 'ADatP-5663 × ACP-240',
-      educational: 'Interactive tutorial explaining how identity federation (ADatP-5663) and access control (ACP-240) work together.',
+      title: t('overview.features.integrationGuide.title'),
+      description: t('overview.features.integrationGuide.description'),
+      educational: t('overview.features.integrationGuide.educational'),
       icon: <BookOpen className="w-7 h-7 text-white" />,
       href: '/integration/federation-vs-object',
       gradient: 'from-amber-500 to-orange-600',
@@ -110,9 +117,9 @@ export function DashboardOverview({ idps, stats, loading = false }: DashboardOve
       isNew: true,
     },
     {
-      title: 'API Documentation',
-      description: 'Interactive API reference',
-      educational: 'Explore all DIVE V3 endpoints, test requests live, and view request/response examples. Perfect for developers integrating with the coalition ICAM platform.',
+      title: t('overview.features.apiDocumentation.title'),
+      description: t('overview.features.apiDocumentation.description'),
+      educational: t('overview.features.apiDocumentation.educational'),
       icon: <Code className="w-7 h-7 text-white" />,
       href: '/api-docs',
       gradient: 'from-indigo-500 to-purple-600',
@@ -124,21 +131,21 @@ export function DashboardOverview({ idps, stats, loading = false }: DashboardOve
       isNew: true,
     },
     {
-      title: 'KAS Encryption',
-      description: 'Key Access Service',
-      educational: 'Policy-bound key release for encrypted content. KAS re-evaluates authorization before releasing decryption keys.',
+      title: t('overview.features.kasEncryption.title'),
+      description: t('overview.features.kasEncryption.description'),
+      educational: t('overview.features.kasEncryption.educational'),
       icon: <Key className="w-7 h-7 text-white" />,
       href: '/kas',
       gradient: 'from-rose-500 to-red-600',
       size: 'medium' as const,
       stats: [
-        { label: 'encrypted', value: stats.encryptedResources || 0 },
+        { label: t('overview.features.kasEncryption.stats.encrypted'), value: stats.encryptedResources || 0 },
       ],
     },
     {
-      title: 'Compliance',
-      description: 'NATO standards adherence',
-      educational: 'Monitor compliance with ACP-240, STANAG 4774/5636, and other coalition security requirements.',
+      title: t('overview.features.compliance.title'),
+      description: t('overview.features.compliance.description'),
+      educational: t('overview.features.compliance.educational'),
       icon: <Scale className="w-7 h-7 text-white" />,
       href: '/compliance',
       gradient: 'from-violet-500 to-purple-600',
@@ -173,8 +180,8 @@ export function DashboardOverview({ idps, stats, loading = false }: DashboardOve
               <Sparkles className="w-5 h-5 text-white" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-slate-900">How DIVE V3 Works</h3>
-              <p className="text-xs text-slate-600">Coalition ICAM in action</p>
+              <h3 className="text-lg font-bold text-slate-900">{t('overview.sections.howDiveWorks.title')}</h3>
+              <p className="text-xs text-slate-600">{t('overview.sections.howDiveWorks.subtitle')}</p>
             </div>
           </div>
 
@@ -182,31 +189,27 @@ export function DashboardOverview({ idps, stats, loading = false }: DashboardOve
             <div className="flex items-start gap-3 p-3 rounded-lg bg-white/60 backdrop-blur-sm">
               <div className="w-6 h-6 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">1</div>
               <div>
-                <p className="font-semibold text-slate-900">Federated Authentication</p>
+                <p className="font-semibold text-slate-900">{t('overview.sections.howDiveWorks.steps.federatedAuth.title')}</p>
                 <div className="text-xs mt-1">
-                  Login via your home <EducationalTooltip term="Federation">IdP</EducationalTooltip>.
-                  Keycloak brokers identity across coalition partners.
+                  {t('overview.sections.howDiveWorks.steps.federatedAuth.description')}
                 </div>
               </div>
             </div>
             <div className="flex items-start gap-3 p-3 rounded-lg bg-white/60 backdrop-blur-sm">
               <div className="w-6 h-6 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">2</div>
               <div>
-                <p className="font-semibold text-slate-900">Policy Evaluation</p>
+                <p className="font-semibold text-slate-900">{t('overview.sections.howDiveWorks.steps.policyEval.title')}</p>
                 <div className="text-xs mt-1">
-                  <EducationalTooltip term="PEP">PEP</EducationalTooltip> sends your attributes to{' '}
-                  <EducationalTooltip term="OPA">OPA</EducationalTooltip> for{' '}
-                  <EducationalTooltip term="ABAC">ABAC</EducationalTooltip> decision.
+                  {t('overview.sections.howDiveWorks.steps.policyEval.description')}
                 </div>
               </div>
             </div>
             <div className="flex items-start gap-3 p-3 rounded-lg bg-white/60 backdrop-blur-sm">
               <div className="w-6 h-6 rounded-full bg-blue-500 text-white flex items-center justify-center text-xs font-bold flex-shrink-0">3</div>
               <div>
-                <p className="font-semibold text-slate-900">Secure Access</p>
+                <p className="font-semibold text-slate-900">{t('overview.sections.howDiveWorks.steps.secureAccess.title')}</p>
                 <div className="text-xs mt-1">
-                  If authorized, access resource. For encrypted content,{' '}
-                  <EducationalTooltip term="KAS">KAS</EducationalTooltip> releases decryption key.
+                  {t('overview.sections.howDiveWorks.steps.secureAccess.description')}
                 </div>
               </div>
             </div>
@@ -219,35 +222,34 @@ export function DashboardOverview({ idps, stats, loading = false }: DashboardOve
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
               <Zap className="w-5 h-5 text-white" />
             </div>
-            <h3 className="text-lg font-bold text-slate-900">Quick Tips</h3>
+            <h3 className="text-lg font-bold text-slate-900">{t('overview.sections.quickTips.title')}</h3>
           </div>
 
           <div className="space-y-3">
             <div className="flex items-start gap-3 p-3 rounded-lg bg-white/60 backdrop-blur-sm">
               <Award className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-semibold text-slate-900">Your attributes are read-only</p>
+                <p className="text-sm font-semibold text-slate-900">{t('overview.sections.quickTips.tips.readOnlyAttributes.title')}</p>
                 <div className="text-xs text-slate-600 mt-1">
-                  <EducationalTooltip term="Clearance">Clearance</EducationalTooltip> and{' '}
-                  <EducationalTooltip term="COI">COI</EducationalTooltip> are managed by your home IdP admin
+                  {t('overview.sections.quickTips.tips.readOnlyAttributes.description')}
                 </div>
               </div>
             </div>
             <div className="flex items-start gap-3 p-3 rounded-lg bg-white/60 backdrop-blur-sm">
               <Award className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-semibold text-slate-900">All actions are audited</p>
+                <p className="text-sm font-semibold text-slate-900">{t('overview.sections.quickTips.tips.auditLogging.title')}</p>
                 <div className="text-xs text-slate-600 mt-1">
-                  Every authorization decision is logged for <EducationalTooltip term="ACP-240">ACP-240</EducationalTooltip> compliance
+                  {t('overview.sections.quickTips.tips.auditLogging.description')}
                 </div>
               </div>
             </div>
             <div className="flex items-start gap-3 p-3 rounded-lg bg-white/60 backdrop-blur-sm">
               <Award className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
               <div>
-                <p className="text-sm font-semibold text-slate-900">Cross-partner collaboration</p>
+                <p className="text-sm font-semibold text-slate-900">{t('overview.sections.quickTips.tips.crossPartner.title')}</p>
                 <p className="text-xs text-slate-600 mt-1">
-                  Users from partner IdPs may access your documents if <EducationalTooltip term="Releasability">releasability</EducationalTooltip> permits
+                  {t('overview.sections.quickTips.tips.crossPartner.description')}
                 </p>
               </div>
             </div>
@@ -269,15 +271,15 @@ export function DashboardOverview({ idps, stats, loading = false }: DashboardOve
                 <Globe className="w-5 h-5 text-white" />
               </div>
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Active Federation Partners</h3>
-                <p className="text-xs text-slate-600">{idps.length} identity providers available</p>
+                <h3 className="text-lg font-bold text-slate-900">{t('overview.sections.federationPartners.title')}</h3>
+                <p className="text-xs text-slate-600">{idps.length} {t('overview.sections.federationPartners.providersAvailable')}</p>
               </div>
             </div>
             <Link
               href="/admin/federation"
               className="text-sm text-blue-600 hover:text-blue-700 font-medium flex items-center gap-1"
             >
-              View all
+              {t('overview.sections.federationPartners.viewAll')}
               <ArrowRight className="w-4 h-4" />
             </Link>
           </div>
@@ -317,14 +319,14 @@ export function DashboardOverview({ idps, stats, loading = false }: DashboardOve
           <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center">
             <Activity className="w-5 h-5 text-white" />
           </div>
-          <h3 className="text-lg font-bold text-slate-900">System Status</h3>
+          <h3 className="text-lg font-bold text-slate-900">{t('overview.sections.systemStatus.title')}</h3>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           {[
-            { name: 'OPA Policy Engine', status: 'Operational' },
-            { name: 'Keycloak Auth', status: 'Operational' },
-            { name: 'Resource API', status: 'Operational' },
+            { name: t('overview.sections.systemStatus.services.opaEngine'), status: t('overview.sections.systemStatus.status.operational') },
+            { name: t('overview.sections.systemStatus.services.keycloakAuth'), status: t('overview.sections.systemStatus.status.operational') },
+            { name: t('overview.sections.systemStatus.services.resourceApi'), status: t('overview.sections.systemStatus.status.operational') },
           ].map((service, idx) => (
             <div
               key={idx}

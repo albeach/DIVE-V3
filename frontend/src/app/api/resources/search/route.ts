@@ -16,6 +16,7 @@ import { auth } from '@/auth';
 import { db } from '@/lib/db';
 import { accounts } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { updateAccountTokensByUserId } from '@/lib/db/operations';
 
 export const dynamic = 'force-dynamic';
 
@@ -48,7 +49,7 @@ export async function POST(request: NextRequest) {
                 .where(eq(accounts.userId, session.user.id))
                 .limit(1);
             account = accountResults[0];
-            
+
             if (!account?.access_token) {
                 console.error('[SearchAPI] No access token in account', {
                     userId: session.user.id.substring(0, 8) + '...',
@@ -58,18 +59,18 @@ export async function POST(request: NextRequest) {
                     { status: 401 }
                 );
             }
-            
+
             // CRITICAL FIX: Check if token is expired and refresh if needed
             const currentTime = Math.floor(Date.now() / 1000);
             const timeUntilExpiry = (account.expires_at || 0) - currentTime;
             const needsRefresh = timeUntilExpiry <= 60; // Less than 1 minute
-            
+
             if (needsRefresh && account.refresh_token) {
                 console.log('[SearchAPI] Token needs refresh', {
                     userId: session.user.id.substring(0, 8) + '...',
                     timeUntilExpiry,
                 });
-                
+
                 try {
                     const refreshUrl = `${process.env.KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/token`;
                     const response = await fetch(refreshUrl, {
@@ -82,9 +83,9 @@ export async function POST(request: NextRequest) {
                             refresh_token: account.refresh_token!,
                         }),
                     });
-                    
+
                     const tokens = await response.json();
-                    
+
                     if (!response.ok) {
                         console.error('[SearchAPI] Token refresh failed', { error: tokens.error });
                         return NextResponse.json(
@@ -92,19 +93,17 @@ export async function POST(request: NextRequest) {
                             { status: 401 }
                         );
                     }
-                    
+
                     const newExpiresAt = currentTime + tokens.expires_in;
-                    await db.update(accounts)
-                        .set({
-                            access_token: tokens.access_token,
-                            id_token: tokens.id_token,
-                            expires_at: newExpiresAt,
-                            refresh_token: tokens.refresh_token || account.refresh_token,
-                        })
-                        .where(eq(accounts.userId, session.user.id));
-                    
+                    await updateAccountTokensByUserId(session.user.id, {
+                        access_token: tokens.access_token,
+                        id_token: tokens.id_token,
+                        expires_at: newExpiresAt,
+                        refresh_token: tokens.refresh_token || account.refresh_token,
+                    });
+
                     account.access_token = tokens.access_token;
-                    
+
                     console.log('[SearchAPI] Token refreshed successfully');
                 } catch (refreshError) {
                     console.error('[SearchAPI] Token refresh exception:', refreshError);

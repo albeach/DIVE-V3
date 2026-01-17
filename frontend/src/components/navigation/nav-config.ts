@@ -97,74 +97,74 @@ export interface NavItem {
 // Width calculation: 4 items × ~80px = 320px + logo (200px) + user menu (80px) = 600px → Fits comfortably!
 export const navItems: NavItem[] = [
     {
-        name: 'Dashboard',
-        shortName: 'Home',  // Shorter label for lg breakpoint
+        name: 'nav.dashboard',
+        shortName: 'nav.home',  // Shorter label for lg breakpoint
         href: '/dashboard',
         icon: LayoutDashboard,
-        description: 'Overview and quick stats',
+        description: 'nav.dashboard.description',
         hasMegaMenu: false
     },
     {
-        name: 'Documents',
-        shortName: 'Docs',  // Shorter label for lg breakpoint
+        name: 'nav.documents.name',
+        shortName: 'nav.documents.shortName',  // Shorter label for lg breakpoint
         href: '/resources',
         icon: FileText,
-        description: 'Classified resource library',
+        description: 'nav.documents.description',
         hasMegaMenu: true,
         megaMenuItems: [
             {
-                category: 'Browse',
+                category: 'nav.documents.browse',
                 items: [
-                    { name: 'All Documents', href: '/resources', icon: Library },
-                    { name: 'Recent', href: '/resources?sort=recent', icon: Clock },
-                    { name: 'Favorites', href: '/resources?filter=favorites', icon: Star },
+                    { name: 'nav.documents.allDocuments', href: '/resources', icon: Library },
+                    { name: 'nav.documents.recent', href: '/resources?sort=recent', icon: Clock },
+                    { name: 'nav.documents.favorites', href: '/resources?filter=favorites', icon: Star },
                 ]
             },
             {
-                category: 'Actions',
+                category: 'nav.documents.actions',
                 items: [
-                    { name: 'My Activity', href: '/activity', icon: Clock },
-                    { name: 'Request Access', href: '/resources/request', icon: Unlock },
+                    { name: 'nav.documents.myActivity', href: '/activity', icon: Clock },
+                    { name: 'nav.documents.requestAccess', href: '/resources/request', icon: Unlock },
                 ]
             }
         ]
     },
     {
-        name: 'Upload',
-        shortName: 'Upload',  // Same - already short
+        name: 'nav.upload.name',
+        shortName: 'nav.upload.shortName',  // Same - already short
         href: '/upload',
         icon: ArrowUpCircle,
-        description: 'Upload classified documents',
+        description: 'nav.upload.description',
         hasMegaMenu: false
     },
     {
-        name: 'Policy Tools',
-        shortName: 'Policies',  // Shorter label for lg breakpoint
+        name: 'nav.policyTools.name',
+        shortName: 'nav.policyTools.shortName',  // Shorter label for lg breakpoint
         href: '/policies',
         icon: Settings,
-        description: 'Authorization policies and compliance',
+        description: 'nav.policyTools.description',
         hasMegaMenu: true,
         megaMenuItems: [
             {
-                category: 'Explore',
+                category: 'nav.policyTools.explore',
                 items: [
-                    { name: 'Policy Library', href: '/policies', icon: Library },
-                    { name: 'Policy Sandbox', href: '/policies/sandbox', icon: Sparkles },
+                    { name: 'nav.policyTools.policyLibrary', href: '/policies', icon: Library },
+                    { name: 'nav.policyTools.policySandbox', href: '/policies/sandbox', icon: Sparkles },
                 ]
             },
             {
-                category: 'Sandbox Workspaces',
+                category: 'nav.policyTools.sandboxWorkspaces',
                 items: [
-                    { name: 'Builder', href: '/policies/sandbox?tab=builder', icon: Hammer },
-                    { name: 'My Policies', href: '/policies/sandbox?tab=policies', icon: FolderOpen },
-                    { name: 'Test', href: '/policies/sandbox?tab=test', icon: FlaskConical },
-                    { name: 'Reference', href: '/policies/sandbox?tab=reference', icon: BookOpen },
+                    { name: 'nav.policyTools.builder', href: '/policies/sandbox?tab=builder', icon: Hammer },
+                    { name: 'nav.policyTools.myPolicies', href: '/policies/sandbox?tab=policies', icon: FolderOpen },
+                    { name: 'nav.policyTools.test', href: '/policies/sandbox?tab=test', icon: FlaskConical },
+                    { name: 'nav.policyTools.reference', href: '/policies/sandbox?tab=reference', icon: BookOpen },
                 ]
             },
             {
-                category: 'Compliance',
+                category: 'nav.policyTools.compliance',
                 items: [
-                    { name: 'Standards & Compliance', href: '/compliance', icon: CheckCircle2 },
+                    { name: 'nav.policyTools.standardsCompliance', href: '/compliance', icon: CheckCircle2 },
                 ]
             },
         ]
@@ -174,66 +174,66 @@ export const navItems: NavItem[] = [
 // Admin menu items
 export const adminItems = [
     {
-        name: 'Dashboard',
+        name: 'nav.admin.dashboard',
         href: '/admin/dashboard',
         icon: BarChart3,
         badge: null,
-        description: 'Admin overview'
+        description: 'nav.admin.dashboard.description'
     },
     {
-        name: 'SP Registry',
+        name: 'nav.admin.spRegistry',
         href: '/admin/sp-registry',
         icon: Building2,
         badge: null,
-        description: 'Manage Service Providers'
+        description: 'nav.admin.spRegistry.description'
     },
     {
-        name: 'Certificates',
+        name: 'nav.admin.certificates',
         href: '/admin/certificates',
         icon: FileCheck,
         badge: null,
-        description: 'Manage PKI certs'
+        description: 'nav.admin.certificates.description'
     },
     {
-        name: 'IdP Governance',
+        name: 'nav.admin.idpGovernance',
         href: '/admin/analytics',
         icon: Settings,
         badge: null,
-        description: 'Identity governance'
+        description: 'nav.admin.idpGovernance.description'
     },
     {
-        name: 'IdP Management',
+        name: 'nav.admin.idpManagement',
         href: '/admin/idp',
         icon: Key,
         badge: null,
-        description: 'Configure identity providers'
+        description: 'nav.admin.idpManagement.description'
     },
     {
-        name: 'Approvals',
+        name: 'nav.admin.approvals',
         href: '/admin/approvals',
         icon: CheckSquare,
         badge: '3',
-        description: 'Pending approvals'
+        description: 'nav.admin.approvals.description'
     },
     {
-        name: 'Audit Logs',
+        name: 'nav.admin.auditLogs',
         href: '/admin/logs',
         icon: ScrollText,
         badge: null,
-        description: 'View audit trail'
+        description: 'nav.admin.auditLogs.description'
     },
     {
-        name: 'OPA Policy',
+        name: 'nav.admin.opaPolicy',
         href: '/admin/opa-policy',
         icon: Settings,
         badge: 'DEMO',
-        description: 'Real-time policy editing'
+        description: 'nav.admin.opaPolicy.description'
     },
     {
-        name: 'Integration Guide',
+        name: 'nav.admin.integrationGuide',
         href: '/integration/federation-vs-object',
         icon: BookOpen,
         badge: 'NEW',
-        description: '5663 × 240 Interactive Tutorial'
+        description: 'nav.admin.integrationGuide.description'
     },
 ];

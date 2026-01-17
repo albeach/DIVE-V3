@@ -12,7 +12,8 @@
 
 HUB_COMPOSE_FILE="${DIVE_ROOT}/docker-compose.hub.yml"
 HUB_DATA_DIR="${DIVE_ROOT}/data/hub"
-HUB_CERTS_DIR="${DIVE_ROOT}/keycloak/certs"
+# SSOT: Hub certificates are in instances/hub/certs
+HUB_CERTS_DIR="${DIVE_ROOT}/instances/hub/certs"
 HUB_LOGS_DIR="${DIVE_ROOT}/logs/hub"
 
 # Hub API endpoints
@@ -42,7 +43,7 @@ FEDERATION_ADMIN_KEY="${FEDERATION_ADMIN_KEY:-dive-hub-admin-key}"hub_init() {
 
     # 2. Generate secrets if not present
     log_step "Checking secrets..."
-    if [ ! -f "${DIVE_ROOT}/.env.hub" ]; then
+    if [ ! -f "${DIVE_ROOT}/instances/hub/.env" ]; then
         log_info "Generating ephemeral secrets for hub..."
         _hub_generate_secrets
     else
@@ -100,7 +101,7 @@ _hub_generate_secrets() {
     export OPAL_AUTH_MASTER_TOKEN="${OPAL_AUTH_MASTER_TOKEN:-$(openssl rand -base64 32 | tr -d '/+=')}"
 
     # Save to .env.hub for reference (do not commit)
-    cat > "${DIVE_ROOT}/.env.hub" << EOF
+    cat > "${DIVE_ROOT}/instances/hub/.env" << EOF
 # Hub Secrets (auto-generated, do not commit)
 KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD}
 POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -112,7 +113,7 @@ REDIS_PASSWORD_USA=${REDIS_PASSWORD_USA}
 REDIS_PASSWORD_BLACKLIST=${REDIS_PASSWORD_BLACKLIST}
 OPAL_AUTH_MASTER_TOKEN=${OPAL_AUTH_MASTER_TOKEN}
 EOF
-    chmod 600 "${DIVE_ROOT}/.env.hub"
+    chmod 600 "${DIVE_ROOT}/instances/hub/.env"
     log_info "Secrets saved to .env.hub (gitignored)"
 }
 _hub_generate_certs() {
@@ -234,13 +235,13 @@ hub_deploy() {
         log_success "✓ Loaded secrets from GCP Secret Manager (SSOT)"
 
         # Update .env.hub with GCP values for consistency
-        if [ -f "${DIVE_ROOT}/.env.hub" ]; then
+        if [ -f "${DIVE_ROOT}/instances/hub/.env" ]; then
             log_info "Syncing GCP secrets → .env.hub"
-            cp "${DIVE_ROOT}/.env.hub" "${DIVE_ROOT}/.env.hub.bak.$(date +%Y%m%d-%H%M%S)"
+            cp "${DIVE_ROOT}/instances/hub/.env" "${DIVE_ROOT}/instances/hub/.env.bak.$(date +%Y%m%d-%H%M%S)"
         fi
 
         # Write GCP secrets to .env.hub
-        cat > "${DIVE_ROOT}/.env.hub" << EOF
+        cat > "${DIVE_ROOT}/instances/hub/.env" << EOF
 # Hub Secrets (from GCP Secret Manager SSOT)
 # Last synced: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
@@ -265,15 +266,15 @@ MONGO_PASSWORD_USA=${MONGO_PASSWORD}
 AUTH_SECRET_USA=${AUTH_SECRET}
 KEYCLOAK_CLIENT_SECRET_USA=${KEYCLOAK_CLIENT_SECRET}
 EOF
-        chmod 600 "${DIVE_ROOT}/.env.hub"
+        chmod 600 "${DIVE_ROOT}/instances/hub/.env"
         log_success "✓ .env.hub synced with GCP secrets"
 
-    elif [ -f "${DIVE_ROOT}/.env.hub" ]; then
+    elif [ -f "${DIVE_ROOT}/instances/hub/.env" ]; then
         # Fallback to .env.hub if GCP unavailable
         log_warn "GCP unavailable - using local .env.hub (may be stale)"
         log_warn "For SSOT persistence, authenticate: gcloud auth application-default login"
         set -a
-        source "${DIVE_ROOT}/.env.hub"
+        source "${DIVE_ROOT}/instances/hub/.env"
         set +a
         log_info "Secrets loaded from .env.hub"
     else
@@ -387,121 +388,138 @@ _hub_apply_terraform() {
     fi
 
     # ==========================================================================
-    # Generate Dynamic Federation Partners Configuration
+    # Generate Dynamic Federation Partners from MongoDB (SSOT)
     # ==========================================================================
-    # Scan instances/ directory for deployed spokes and generate federation_partners
-    # for hub.auto.tfvars. This creates incoming federation clients automatically.
+    # BEST PRACTICE: Read from MongoDB federation_spokes collection
+    # This is the runtime SSOT for active spoke registrations
     # ==========================================================================
 
-    log_step "Scanning for deployed spokes..."
+    log_step "Querying MongoDB for registered spokes (SSOT)..."
     local federation_partners_hcl=$'{\n'
+    local incoming_secrets_hcl=$'{\n'
     local spokes_found=0
 
-    if [ -d "${DIVE_ROOT}/instances" ]; then
-        for spoke_dir in "${DIVE_ROOT}/instances/"*/; do
-            [ ! -d "$spoke_dir" ] && continue
+    # Check if MongoDB is accessible
+    local mongo_container="dive-hub-mongodb"
+    local mongo_password=""
 
-            local spoke_code=$(basename "$spoke_dir" | tr '[:lower:]' '[:upper:]')
-            local config_file="${spoke_dir}config.json"
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${mongo_container}$"; then
+        mongo_password=$(docker exec "$mongo_container" printenv MONGO_INITDB_ROOT_PASSWORD 2>/dev/null || echo "")
 
-            # Skip if no config.json (not a valid spoke)
-            [ ! -f "$config_file" ] && continue
+        if [ -n "$mongo_password" ]; then
+            # Query MongoDB for approved spokes
+            local spokes_json
+            spokes_json=$(docker exec "$mongo_container" mongosh --quiet \
+                -u admin -p "$mongo_password" \
+                --authenticationDatabase admin \
+                --eval "
+                    use('dive-v3');
+                    JSON.stringify(
+                        db.federation_spokes.find(
+                            { status: 'approved' },
+                            { instanceCode: 1, name: 1, idpUrl: 1, idpPublicUrl: 1, apiUrl: 1, baseUrl: 1, _id: 0 }
+                        ).toArray()
+                    );
+                " 2>/dev/null || echo "[]")
 
-            log_verbose "  Found spoke: ${spoke_code}"
+            # Parse spokes from MongoDB response
+            if [ -n "$spokes_json" ] && [ "$spokes_json" != "[]" ]; then
+                local spoke_count
+                spoke_count=$(echo "$spokes_json" | jq 'length' 2>/dev/null || echo "0")
 
-            # Extract spoke metadata from config.json
-            local spoke_name=$(jq -r '.name // "Unknown"' "$config_file" 2>/dev/null || echo "Unknown")
-            local spoke_port=$(jq -r '.keycloak_https_port // 8443' "$config_file" 2>/dev/null || echo "8443")
-            local container_name="dive-spoke-${spoke_code,,}-keycloak"
+                log_info "Found ${spoke_count} approved spoke(s) in MongoDB"
 
-            # Load federation secret from GCP (if available)
-            local federation_secret=""
-            if check_gcloud; then
-                local secret_name="dive-v3-federation-usa-${spoke_code,,}"
-                federation_secret=$(gcloud secrets versions access latest \
-                    --secret="$secret_name" --project=dive25 2>/dev/null || echo "")
+                # Generate HCL for each spoke
+                echo "$spokes_json" | jq -c '.[]' 2>/dev/null | while read -r spoke; do
+                    local instance_code=$(echo "$spoke" | jq -r '.instanceCode // empty')
+                    local spoke_name=$(echo "$spoke" | jq -r '.name // empty')
+                    local idp_url=$(echo "$spoke" | jq -r '.idpPublicUrl // .idpUrl // empty')
+                    local frontend_url=$(echo "$spoke" | jq -r '.baseUrl // empty')
 
-                if [ -n "$federation_secret" ]; then
-                    log_verbose "    ✓ Loaded secret from GCP: ${secret_name}"
-                else
-                    log_verbose "    ⚠ No GCP secret found: ${secret_name}"
-                fi
+                    [ -z "$instance_code" ] && continue
+
+                    local code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
+                    local container_name="dive-spoke-${code_lower}-keycloak"
+
+                    log_verbose "  Processing spoke: ${instance_code} (${spoke_name})"
+
+                    # Load federation secret from GCP
+                    local federation_secret=""
+                    if check_gcloud; then
+                        local secret_name="dive-v3-federation-usa-${code_lower}"
+                        federation_secret=$(gcloud secrets versions access latest \
+                            --secret="$secret_name" --project=dive25 2>/dev/null || echo "")
+                    fi
+
+                    # Append to HCL (write to temp file to avoid subshell issues)
+                    echo "  \"${code_lower}\" = {" >> "${tf_dir}/.federation_partners.tmp"
+                    echo "    instance_code         = \"${instance_code}\"" >> "${tf_dir}/.federation_partners.tmp"
+                    echo "    instance_name         = \"${spoke_name:-${instance_code} Instance}\"" >> "${tf_dir}/.federation_partners.tmp"
+                    echo "    idp_url               = \"${idp_url}\"" >> "${tf_dir}/.federation_partners.tmp"
+                    echo "    idp_internal_url      = \"https://${container_name}:8443\"" >> "${tf_dir}/.federation_partners.tmp"
+                    echo "    frontend_url          = \"${frontend_url}\"" >> "${tf_dir}/.federation_partners.tmp"
+                    echo "    enabled               = true" >> "${tf_dir}/.federation_partners.tmp"
+                    echo "    client_secret         = \"${federation_secret}\"" >> "${tf_dir}/.federation_partners.tmp"
+                    echo "    disable_trust_manager = true" >> "${tf_dir}/.federation_partners.tmp"
+                    echo "  }" >> "${tf_dir}/.federation_partners.tmp"
+
+                    # Append to secrets HCL
+                    if [ -n "$federation_secret" ]; then
+                        echo "  \"${code_lower}\" = \"${federation_secret}\"" >> "${tf_dir}/.incoming_secrets.tmp"
+                    fi
+                done
+
+                spokes_found=$spoke_count
+            else
+                log_info "No approved spokes found in MongoDB - Hub will start without federation partners"
             fi
-
-            # Generate HCL entry for this spoke (using $'...\n...' for proper newlines)
-            federation_partners_hcl+=$'  \"'${spoke_code,,}$'\" = {\n'
-            federation_partners_hcl+=$'    instance_code         = \"'${spoke_code}$'\"\n'
-            federation_partners_hcl+=$'    instance_name         = \"'${spoke_name}$'\"\n'
-            federation_partners_hcl+=$'    idp_url               = \"https://localhost:'${spoke_port}$'\"\n'
-            federation_partners_hcl+=$'    idp_internal_url      = \"https://'${container_name}$':8443\"\n'
-            federation_partners_hcl+=$'    enabled               = true\n'
-            federation_partners_hcl+=$'    client_secret         = \"'${federation_secret}$'\"\n'
-            federation_partners_hcl+=$'    disable_trust_manager = true\n'
-            federation_partners_hcl+=$'  }\n'
-
-            spokes_found=$((spokes_found + 1))
-        done
+        else
+            log_warn "Could not get MongoDB password - skipping federation partner generation"
+        fi
+    else
+        log_warn "MongoDB container not running - skipping federation partner generation"
     fi
 
-    federation_partners_hcl+=$'}'
-
-    log_info "Discovered ${spokes_found} spoke(s) for federation"
-
-    # ==========================================================================
-    # Generate Incoming Federation Secrets Map
-    # ==========================================================================
-    # These are the secrets spokes use to authenticate TO the Hub.
-    # GCP Secret Name: dive-v3-federation-usa-{spoke}
-    # ==========================================================================
-
-    local incoming_secrets_hcl=$'{\n'
-
-    if check_gcloud && [ $spokes_found -gt 0 ]; then
-        log_step "Loading incoming federation secrets from GCP..."
-
-        for spoke_dir in "${DIVE_ROOT}/instances/"*/; do
-            [ ! -d "$spoke_dir" ] && continue
-            local spoke_code=$(basename "$spoke_dir" | tr '[:lower:]' '[:upper:]')
-            [ ! -f "${spoke_dir}config.json" ] && continue
-
-            local secret_name="dive-v3-federation-usa-${spoke_code,,}"
-            local secret_value=$(gcloud secrets versions access latest \
-                --secret="$secret_name" --project=dive25 2>/dev/null || echo "")
-
-            if [ -n "$secret_value" ]; then
-                incoming_secrets_hcl+=$'  \"'${spoke_code,,}$'\" = \"'${secret_value}$'\"\n'
-                log_verbose "  ✓ ${spoke_code}: ${secret_name}"
-            fi
-        done
-
-        log_success "Loaded ${spokes_found} federation secret(s)"
+    # Read temp files and build final HCL
+    if [ -f "${tf_dir}/.federation_partners.tmp" ]; then
+        federation_partners_hcl+=$(cat "${tf_dir}/.federation_partners.tmp")
+        rm -f "${tf_dir}/.federation_partners.tmp"
     fi
+    federation_partners_hcl+=$'\n}'
 
-    incoming_secrets_hcl+=$'}'
+    if [ -f "${tf_dir}/.incoming_secrets.tmp" ]; then
+        incoming_secrets_hcl+=$(cat "${tf_dir}/.incoming_secrets.tmp")
+        rm -f "${tf_dir}/.incoming_secrets.tmp"
+    fi
+    incoming_secrets_hcl+=$'\n}'
 
     # ==========================================================================
-    # Write hub.auto.tfvars (Auto-generated Federation Config)
+    # Write hub.auto.tfvars (Auto-generated Federation Config from MongoDB)
     # ==========================================================================
     cat > "${tf_dir}/hub.auto.tfvars" << EOF
 # =============================================================================
 # Auto-generated Hub Federation Configuration
 # =============================================================================
-# Generated by: hub.sh deployment script
+# Generated by: hub deployment script
+# Source: MongoDB dive-v3.federation_spokes collection (SSOT)
 # Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
-# Spokes Found: ${spokes_found}
+# Approved Spokes: ${spokes_found}
 #
-# This file is regenerated on every 'dive hub deploy' to reflect current
-# spoke registrations from the instances/ directory.
+# This file is regenerated on every 'dive hub deploy' / 'dive deploy hub'
+# Spoke registrations come from the /api/federation/register endpoint
+# which persists to MongoDB.
+#
+# DO NOT EDIT MANUALLY - changes will be overwritten!
 # =============================================================================
 
-# Federation Partners (Spokes)
+# Federation Partners (from MongoDB federation_spokes)
 federation_partners = ${federation_partners_hcl}
 
 # Incoming Federation Secrets (from GCP Secret Manager)
 incoming_federation_secrets = ${incoming_secrets_hcl}
 EOF
 
-    log_success "Generated hub.auto.tfvars with ${spokes_found} federation partner(s)"
+    log_success "Generated hub.auto.tfvars with ${spokes_found} federation partner(s) from MongoDB"
 
     # ==========================================================================
     # Apply Terraform
@@ -620,9 +638,9 @@ hub_up() {
     ensure_shared_network
 
     # Load secrets
-    if [ -f "${DIVE_ROOT}/.env.hub" ]; then
+    if [ -f "${DIVE_ROOT}/instances/hub/.env" ]; then
         set -a
-        source "${DIVE_ROOT}/.env.hub"
+        source "${DIVE_ROOT}/instances/hub/.env"
         set +a
     else
         log_error ".env.hub file not found - run 'hub init' first"
@@ -643,7 +661,7 @@ hub_up() {
 
     # Use --env-file to ensure all environment variables are passed to docker compose
     # Use --build to ensure custom images (like Keycloak with extensions) are rebuilt
-    docker compose -f "$HUB_COMPOSE_FILE" --env-file "${DIVE_ROOT}/.env.hub" up -d --build || {
+    docker compose -f "$HUB_COMPOSE_FILE" --env-file "${DIVE_ROOT}/instances/hub/.env" up -d --build || {
         log_error "Failed to start hub services"
         return 1
     }

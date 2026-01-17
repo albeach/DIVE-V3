@@ -109,6 +109,14 @@ cmd_deploy() {
         COMPOSE_FILE="docker-compose.pilot.yml"
     fi
 
+    # Set COMPOSE_PROJECT_NAME based on target for correct container naming
+    if [ "$target" = "hub" ]; then
+        export COMPOSE_PROJECT_NAME="dive-hub"
+    else
+        export COMPOSE_PROJECT_NAME="${COMPOSE_PROJECT_NAME:-dive-v3}"
+    fi
+    log_verbose "Using COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME"
+
     log_step "Step 4: Stopping existing containers..."
     docker compose -f "$COMPOSE_FILE" down -v --remove-orphans 2>/dev/null || true
 
@@ -133,8 +141,17 @@ cmd_deploy() {
     done
 
     log_step "Step 8: Applying Terraform configuration..."
-    cd "${DIVE_ROOT}/terraform/pilot" || exit 1
-    [ ! -d ".terraform" ] && terraform init
+
+    # Use terraform/hub for hub deployments, terraform/pilot for others
+    local tf_dir
+    if [ "$target" = "hub" ]; then
+        tf_dir="${DIVE_ROOT}/terraform/hub"
+    else
+        tf_dir="${DIVE_ROOT}/terraform/pilot"
+    fi
+
+    cd "$tf_dir" || exit 1
+    [ ! -d ".terraform" ] && terraform init -upgrade
     # Ensure Keycloak admin credentials are available to the provider
     export KEYCLOAK_USER="${KEYCLOAK_ADMIN_USERNAME:-admin}"
     export KEYCLOAK_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD}"
@@ -146,9 +163,23 @@ cmd_deploy() {
     cd "${DIVE_ROOT}" || exit 1
 
     log_step "Step 9: Seeding database..."
-    # shellcheck source=db.sh disable=SC1091
-    source "$(dirname "${BASH_SOURCE[0]}")/db.sh"
-    cmd_seed "$INSTANCE" || log_warn "Seeding may have issues (check logs)"
+    if [ "$target" = "hub" ]; then
+        # Use hub_seed (SSOT) for hub deployments - 5000 ZTDF resources by default
+        # This includes COI key initialization, user seeding, and ZTDF resources
+        local hub_seed_script="${DIVE_ROOT}/scripts/dive-modules/hub/seed.sh"
+        if [ -f "$hub_seed_script" ]; then
+            # shellcheck source=hub/seed.sh disable=SC1091
+            source "$hub_seed_script"
+            hub_seed 5000 || log_warn "Seeding may have issues (check logs)"
+        else
+            log_warn "Hub seed script not found at $hub_seed_script"
+        fi
+    else
+        # Use cmd_seed for non-hub deployments (spokes use their own pipeline)
+        # shellcheck source=db.sh disable=SC1091
+        source "$(dirname "${BASH_SOURCE[0]}")/db.sh"
+        cmd_seed 5000 "$INSTANCE" || log_warn "Seeding may have issues (check logs)"
+    fi
 
     log_step "Step 10: Verifying deployment..."
     cmd_health

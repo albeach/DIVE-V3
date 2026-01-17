@@ -34,6 +34,23 @@
     "download": "Télécharger",
     "requestAccess": "Demander l'accès"
   },
+  "emptyStates": {
+    "noResults": {
+      "title": "Aucun résultat trouvé",
+      "description": "Nous n'avons trouvé aucun document correspondant à \"{{query}}\". Essayez d'ajuster vos termes de recherche ou vos filtres.",
+      "clearSearch": "Effacer la recherche"
+    },
+    "noMatchingDocuments": {
+      "title": "Aucun document correspondant",
+      "description": "Vos filtres actuels ne correspondent à aucun document. Essayez d'assouplir vos critères de filtrage.",
+      "clearFilters": "Effacer les filtres"
+    },
+    "error": {
+      "title": "Une erreur s'est produite",
+      "description": "Nous avons rencontré une erreur lors du chargement des documents. Veuillez réessayer.",
+      "tryAgain": "Réessayer"
+    }
+  },
   "detail": {
     "title": "Détails de la ressource",
     "metadata": "Métadonnées",
@@ -92,11 +109,75 @@
     "coiNotMember": "Vous n'êtes pas membre de la COI requise"
   },
   "classifications": {
-    "unclassified": "Non classifié",
-    "restricted": "Restreint",
-    "confidential": "Confidentiel",
-    "secret": "Secret",
-    "topSecret": "Très secret"
+    "unclassified": "NON CLASSIFIÉ",
+    "restricted": "RESTREINT",
+    "confidential": "CONFIDENTIEL",
+    "secret": "SECRET",
+    "topSecret": "TRÈS SECRET"
+  },
+  "auth": {
+    "signInToView": "Connectez-vous pour voir les ressources",
+    "needAuthentication": "Vous devez être authentifié pour accéder aux ressources de la coalition."
+  },
+  "sorting": {
+    "titleAZ": "Titre A-Z",
+    "titleZA": "Titre Z-A",
+    "newest": "Plus récent",
+    "oldest": "Plus ancien"
+  },
+  "bentoDashboard": {
+    "totalDocuments": "Documents totaux",
+    "ztdfEncrypted": "Chiffré ZTDF",
+    "local": "Local",
+    "federated": "Fédéré",
+    "classification": "Classification",
+    "instances": "instances"
+  },
+  "viewModes": {
+    "grid": "Grille",
+    "list": "Liste",
+    "compact": "Compact"
+  },
+  "bulkActions": {
+    "selected": "sélectionné",
+    "deselectAll": "Tout désélectionner",
+    "selectAll": "Tout sélectionner",
+    "export": "Exporter",
+    "compare": "Comparer",
+    "compareTooltip": {
+      "selectMin": "Sélectionnez au moins 2 éléments à comparer",
+      "maxItems": "Peut comparer jusqu'à 4 éléments",
+      "compareSelected": "Comparer les éléments sélectionnés"
+    }
+  },
+  "comparison": {
+    "title": "Comparer les ressources",
+    "closeTooltip": "Fermer (Échap)",
+    "metadata": "Métadonnées"
+  },
+  "bookmarks": {
+    "emptyState": {
+      "title": "Aucun signet pour le moment",
+      "description": "Marquez des documents et politiques pour un accès rapide. Cliquez sur l'icône de signet sur n'importe quelle ressource pour la sauvegarder ici."
+    }
+  },
+  "dateRange": {
+    "creationDate": "Date de création",
+    "quickSelect": "Sélection rapide",
+    "today": "Aujourd'hui",
+    "last7Days": "7 derniers jours",
+    "last30Days": "30 derniers jours",
+    "last90Days": "90 derniers jours",
+    "thisMonth": "Ce mois",
+    "lastMonth": "Mois dernier",
+    "customRange": "Plage personnalisée",
+    "placeholder": "Filtrer par plage de dates",
+    "clickToStart": "Cliquez sur une date pour commencer la sélection",
+    "clickToComplete": "Cliquez sur une autre date pour compléter la plage"
+  },
+  "federation": {
+    "local": "Local",
+    "federated": "Fédéré"
   },
   "breadcrumbs": {
     "resources": "Ressources",

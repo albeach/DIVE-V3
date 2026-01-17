@@ -12,6 +12,7 @@ import {
   RefreshCw,
   ArrowRight
 } from 'lucide-react';
+import { useTranslation } from '@/hooks/useTranslation';
 import type { IPolicyHierarchy, PolicyLayer } from '@/types/policy.types';
 import { LAYER_CONFIGS } from '@/types/policy.types';
 import PolicyBundleHeader from '@/components/policies/PolicyBundleHeader';
@@ -27,6 +28,7 @@ interface PoliciesPageClientProps {
 type ViewMode = 'layers' | 'tree' | 'graph';
 
 export default function PoliciesPageClient({ hierarchy }: PoliciesPageClientProps) {
+  const { t } = useTranslation('policies');
   const [viewMode, setViewMode] = useState<ViewMode>('layers');
   const [isRefreshing, setIsRefreshing] = useState(false);
 
@@ -39,17 +41,17 @@ export default function PoliciesPageClient({ hierarchy }: PoliciesPageClientProp
             <AlertTriangle className="w-8 h-8 text-amber-400" />
           </div>
           <h2 className="text-xl font-semibold text-gray-200 mb-2">
-            Unable to Load Policies
+            {t('error.unableToLoad')}
           </h2>
           <p className="text-gray-500 mb-6">
-            Could not connect to the backend API. Make sure the backend service is running.
+            {t('error.backendConnection')}
           </p>
           <button
             onClick={() => window.location.reload()}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-gray-200 transition-colors"
           >
             <RefreshCw className="w-4 h-4" />
-            Retry
+            {t('common.retry')}
           </button>
         </div>
       </div>

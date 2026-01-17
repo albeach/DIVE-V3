@@ -9,6 +9,9 @@
 # Mark seed module as loaded
 export DIVE_HUB_SEED_LOADED=1
 
+# Hub data directory (SSOT)
+HUB_DATA_DIR="${DIVE_ROOT}/data/hub"
+
 hub_seed() {
     local resource_count="${1:-5000}"
 

@@ -39,6 +39,7 @@ import { DashboardAuthorization } from './dashboard-authorization';
 import { DashboardResources } from './dashboard-resources';
 import { DashboardActivity } from './dashboard-activity';
 import { GlossaryPopover } from './educational-tooltip';
+import { getNationalClearance } from '@/components/navigation/nav-config';
 
 interface User {
   uniqueID?: string;
@@ -111,6 +112,7 @@ interface DashboardData {
   quickStats: QuickStat[];
   topDenyReasons?: Array<{ reason: string; count: number }>;
   decisionsByCountry?: Record<string, number>;
+  details?: any;
 }
 
 export function DashboardModern({ user, session }: DashboardModernProps) {
@@ -154,7 +156,7 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
       }
 
         if (!statsData) {
-          const statsResponse = await fetch(`${backendUrl}/api/dashboard/stats/public`);
+          const statsResponse = await fetch('/api/dashboard/stats/public');
           if (statsResponse.ok) {
             statsData = await statsResponse.json();
           }
@@ -163,9 +165,9 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
       setData({
         idps: idpData.idps || [],
         quickStats: statsData?.stats || [
-          { value: '0', label: 'Documents Accessible', trend: 'neutral' },
-          { value: '100%', label: 'Authorization Rate', trend: 'neutral' },
-          { value: '<50ms', label: 'Avg Response Time', trend: 'up' },
+          { value: '0', label: t('stats.documentsAccessible'), trend: 'neutral' },
+          { value: '100%', label: t('stats.authorizationRate'), trend: 'neutral' },
+          { value: '<50ms', label: t('stats.avgResponseTime'), trend: 'up' },
         ],
         topDenyReasons: statsData?.details?.topDenyReasons,
         decisionsByCountry: statsData?.details?.decisionsByCountry,
@@ -287,7 +289,7 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
 
                 <div className="space-y-0.5">
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">Instance</span>
+                    <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">{t('instance')}</span>
                     <span className="h-px w-8 bg-gradient-to-r from-slate-500/50 to-transparent" />
                   </div>
                   <h2 className="text-xl font-bold bg-gradient-to-r from-white via-white to-slate-300 bg-clip-text text-transparent">
@@ -315,7 +317,7 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
                   </div>
                   <div className="h-6 w-px bg-gradient-to-b from-transparent via-amber-500/30 to-transparent" />
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-400/80">Federated</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-400/80">{t('federation.federated')}</p>
                     <p className="text-xs font-medium text-white/90">via {userHomeName}</p>
                   </div>
                 </motion.div>
@@ -331,8 +333,8 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
                   </div>
                   <div className="h-6 w-px bg-gradient-to-b from-transparent via-emerald-500/30 to-transparent" />
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400/80">Direct Access</p>
-                    <p className="text-xs font-medium text-white/90">Home Instance</p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400/80">{t('federation.directAccess')}</p>
+                    <p className="text-xs font-medium text-white/90">{t('federation.homeInstance')}</p>
                   </div>
                 </motion.div>
               )}
@@ -357,7 +359,7 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
                 <div className="flex items-center gap-3 flex-wrap">
                   <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100/80 border border-blue-200/60 text-blue-700 text-[11px] font-semibold">
                     <Sparkles className="w-3 h-3" />
-                    Coalition ICAM Platform
+                    {t('platformBadge')}
                   </div>
                   <span className="text-slate-400 text-xs hidden sm:inline">•</span>
                   <span className="text-slate-500 text-xs flex items-center gap-1.5">
@@ -373,7 +375,7 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
                 </div>
 
                 <p className="text-slate-500 text-sm mt-1 line-clamp-1 max-w-xl">
-                  Your secure access to classified resources across the coalition. All actions are protected by ABAC policies and logged for compliance.
+                  {t('description')}
                 </p>
 
                 {/* Quick action buttons - Inline */}
@@ -383,7 +385,7 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition-colors border border-slate-200"
                   >
                     <BookOpen className="w-3.5 h-3.5" />
-                    Glossary
+                    {t('glossary')}
                   </button>
                   <button
                     onClick={() => fetchData(true)}
@@ -391,7 +393,7 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs font-medium transition-colors border border-blue-200 disabled:opacity-50"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-                    Refresh
+                    {t('refresh')}
                   </button>
                 </div>
               </div>
@@ -403,8 +405,8 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
                     <ShieldCheck className="w-4 h-4 text-white" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-[10px] text-slate-500 font-medium leading-none">Clearance</p>
-                    <p className="text-sm font-bold text-slate-900 truncate">{clearanceLevel}</p>
+                    <p className="text-[10px] text-slate-500 font-medium leading-none">{t('clearance')}</p>
+                    <p className="text-sm font-bold text-slate-900 truncate">{getNationalClearance(clearanceLevel, country)}</p>
                   </div>
                 </div>
 
@@ -413,7 +415,7 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
                     <Globe className="w-4 h-4 text-white" />
                   </div>
                   <div className="min-w-0">
-                    <p className="text-[10px] text-slate-500 font-medium leading-none">Country</p>
+                    <p className="text-[10px] text-slate-500 font-medium leading-none">{t('country')}</p>
                     <p className="text-sm font-bold text-slate-900">{country}</p>
                   </div>
                 </div>

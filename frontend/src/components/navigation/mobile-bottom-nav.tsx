@@ -10,16 +10,18 @@
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { Home, FileText, Upload, Shield, MoreHorizontal } from 'lucide-react';
+import { useTranslation } from '@/hooks/useTranslation';
 
 export function MobileBottomNav({ onMoreClick }: { onMoreClick: () => void }) {
     const pathname = usePathname();
-    
+    const { t } = useTranslation('nav');
+
     const tabs = [
-        { icon: Home, label: 'Home', href: '/dashboard' },
-        { icon: FileText, label: 'Docs', href: '/resources' },
-        { icon: Upload, label: 'Upload', href: '/upload' },
-        { icon: Shield, label: 'Policy', href: '/policies' },
-        { icon: MoreHorizontal, label: 'More', href: '#', onClick: onMoreClick },
+        { icon: Home, label: t('nav.home'), href: '/dashboard' },
+        { icon: FileText, label: t('nav.docs'), href: '/resources' },
+        { icon: Upload, label: t('nav.upload.shortName'), href: '/upload' },
+        { icon: Shield, label: t('nav.policyTools.shortName'), href: '/policies' },
+        { icon: MoreHorizontal, label: t('nav.more'), href: '#', onClick: onMoreClick },
     ];
     
     return (

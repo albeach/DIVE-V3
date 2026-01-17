@@ -314,6 +314,31 @@ case "$COMMAND" in
                 source "${MODULES_DIR}/orchestration-test-framework.sh"
                 orch_test_run_category "performance"
                 ;;
+            comprehensive|full|suite)
+                # Phase 4: Comprehensive Testing Suite (80%+ coverage)
+                source "${DIVE_ROOT}/scripts/test-framework.sh"
+                test_cli "$@"
+                ;;
+            cli)
+                # CLI Module Unit Tests
+                source "${DIVE_ROOT}/scripts/test-cli-modules.sh"
+                test_run_cli_module_tests
+                ;;
+            load)
+                # Load Testing Suite (100 req/s target)
+                source "${DIVE_ROOT}/scripts/load-test-suite.sh"
+                load_test_cli "$@"
+                ;;
+            isolation|e2e)
+                # Environment Isolation Tests
+                source "${DIVE_ROOT}/scripts/test-environment-isolation.sh"
+                test_run_environment_isolation_tests
+                ;;
+            security|vulnerabilities)
+                # Security Vulnerability Tests
+                source "${DIVE_ROOT}/scripts/test-security-vulnerabilities.sh"
+                test_run_security_vulnerability_tests
+                ;;
             *)
                 echo "DIVE V3 Testing Framework - Phase 4"
                 echo "==================================="
@@ -333,7 +358,19 @@ case "$COMMAND" in
                 echo "  ./dive test multi load             Load testing scenarios"
                 echo "  ./dive test multi cleanup          Clean up test instances"
                 echo ""
-                echo "Test Coverage:"
+                echo "Comprehensive Testing Suite (Phase 4 - 80%+ Coverage):"
+                echo "  ./dive test comprehensive          Run complete testing suite (all categories)"
+                echo "  ./dive test cli                    CLI module unit tests"
+                echo "  ./dive test load                   Load testing (100 req/s targets)"
+                echo "  ./dive test isolation              Environment isolation tests"
+                echo "  ./dive test security               Security vulnerability tests"
+                echo "  ./dive test suite run unit         Run unit tests only"
+                echo "  ./dive test suite run integration  Run integration tests only"
+                echo "  ./dive test suite run load         Run load tests only"
+                echo "  ./dive test suite coverage         Show test coverage"
+                echo "  ./dive test suite report           Generate test report"
+                echo ""
+                echo "Test Coverage (Phase 4):"
                 echo "  ✅ Circuit breaker functionality"
                 echo "  ✅ Smart retry algorithms"
                 echo "  ✅ State management integrity"
@@ -343,6 +380,12 @@ case "$COMMAND" in
                 echo "  ✅ Multi-instance concurrent deployments"
                 echo "  ✅ Federation scaling validation"
                 echo "  ✅ Enterprise load testing"
+                echo "  ✅ CLI module testing (42 modules)"
+                echo "  ✅ Unit test coverage (80%+ target)"
+                echo "  ✅ Integration test coverage"
+                echo "  ✅ Load testing (100 req/s targets)"
+                echo "  ✅ Environment isolation validation"
+                echo "  ✅ Security vulnerability testing"
                 ;;
         esac
         ;;

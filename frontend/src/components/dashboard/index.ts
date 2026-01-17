@@ -9,7 +9,7 @@ export { DashboardModern } from './dashboard-modern';
 export type { default as DashboardModernDefault } from './dashboard-modern';
 
 // Tab components
-export { DashboardTabs, TABS } from './dashboard-tabs';
+export { DashboardTabs } from './dashboard-tabs';
 export type { DashboardTab } from './dashboard-tabs';
 
 // Tab view components

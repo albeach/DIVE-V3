@@ -1,6 +1,6 @@
 /**
  * Breadcrumbs Component - Phase 3
- * 
+ *
  * Features:
  * - Show breadcrumb trail on detail pages
  * - Clickable parent navigation
@@ -21,6 +21,7 @@ export interface BreadcrumbItem {
   href?: string;
   icon?: React.ReactNode;
   classification?: string;
+  translate?: boolean; // Whether label is a translation key
 }
 
 interface BreadcrumbsProps {
@@ -55,14 +56,14 @@ function classificationColor(classification: string): string {
 
 export function Breadcrumbs({ items, className = '' }: BreadcrumbsProps) {
   return (
-    <nav 
-      aria-label="Breadcrumb" 
+    <nav
+      aria-label="Breadcrumb"
       className={`flex items-center space-x-2 text-sm ${className}`}
     >
       {/* Home icon */}
-      <Link 
-        href="/dashboard" 
-        className="flex items-center text-gray-500 hover:text-[#4497ac] dark:text-gray-400 
+      <Link
+        href="/dashboard"
+        className="flex items-center text-gray-500 hover:text-[#4497ac] dark:text-gray-400
                    dark:hover:text-[#4497ac] transition-colors"
         aria-label="Home"
       >
@@ -83,7 +84,7 @@ export function Breadcrumbs({ items, className = '' }: BreadcrumbsProps) {
             {item.href && !isLast ? (
               <Link
                 href={item.href}
-                className="flex items-center gap-2 text-gray-600 hover:text-[#4497ac] 
+                className="flex items-center gap-2 text-gray-600 hover:text-[#4497ac]
                            dark:text-gray-300 dark:hover:text-[#4497ac] transition-colors"
               >
                 {item.icon && <span className="flex-shrink-0">{item.icon}</span>}
@@ -121,13 +122,13 @@ export function CompactBreadcrumbs({ items, className = '' }: BreadcrumbsProps) 
   const visibleItems = items.length > 2 ? items.slice(-2) : items;
 
   return (
-    <nav 
-      aria-label="Breadcrumb" 
+    <nav
+      aria-label="Breadcrumb"
       className={`flex items-center space-x-2 text-sm ${className}`}
     >
       {/* Home icon */}
-      <Link 
-        href="/dashboard" 
+      <Link
+        href="/dashboard"
         className="flex items-center text-gray-500 hover:text-[#4497ac] transition-colors"
         aria-label="Home"
       >

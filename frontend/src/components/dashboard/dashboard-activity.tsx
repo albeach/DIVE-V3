@@ -28,6 +28,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { EducationalTooltip } from './educational-tooltip';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface AuditEvent {
   id: string;
@@ -61,6 +62,7 @@ export function DashboardActivity({
   lastLogin,
   sessionCount = 0,
 }: DashboardActivityProps) {
+  const { t } = useTranslation('dashboard');
   const [filter, setFilter] = useState<'all' | 'success' | 'failure'>('all');
   const [showAll, setShowAll] = useState(false);
 
@@ -74,28 +76,28 @@ export function DashboardActivity({
   // Default compliance metrics if none provided
   const defaultMetrics: ComplianceMetric[] = complianceMetrics.length > 0 ? complianceMetrics : [
     {
-      name: 'Authentication Compliance',
+      name: t('activity.compliance.authenticationCompliance.name'),
       status: 'compliant',
       score: 100,
-      description: 'All authentications via approved IdPs',
+      description: t('activity.compliance.authenticationCompliance.description'),
     },
     {
-      name: 'Access Control Adherence',
+      name: t('activity.compliance.accessControlAdherence.name'),
       status: 'compliant',
       score: 100,
-      description: 'No unauthorized access attempts',
+      description: t('activity.compliance.accessControlAdherence.description'),
     },
     {
-      name: 'Audit Trail Completeness',
+      name: t('activity.compliance.auditTrailCompleteness.name'),
       status: 'compliant',
       score: 100,
-      description: 'All actions logged per ACP-240',
+      description: t('activity.compliance.auditTrailCompleteness.description'),
     },
     {
-      name: 'Session Security',
+      name: t('activity.compliance.sessionSecurity.name'),
       status: 'compliant',
       score: 100,
-      description: 'Token lifetimes within policy limits',
+      description: t('activity.compliance.sessionSecurity.description'),
     },
   ];
 
@@ -155,7 +157,7 @@ export function DashboardActivity({
             <Activity className="w-8 h-8 text-white/80" />
             <span className="text-3xl font-bold">{auditEvents.length}</span>
           </div>
-          <p className="text-sm text-white/80">Total Events</p>
+          <p className="text-sm text-white/80">{t('activity.stats.totalEvents')}</p>
         </div>
 
         <div className="rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 p-6 shadow-xl text-white">
@@ -165,7 +167,7 @@ export function DashboardActivity({
               {auditEvents.filter(e => e.outcome === 'success').length}
             </span>
           </div>
-          <p className="text-sm text-white/80">Successful Actions</p>
+          <p className="text-sm text-white/80">{t('activity.stats.successfulActions')}</p>
         </div>
 
         <div className="rounded-2xl bg-gradient-to-br from-purple-500 to-pink-600 p-6 shadow-xl text-white">
@@ -175,7 +177,7 @@ export function DashboardActivity({
               {lastLogin ? new Date(lastLogin).toLocaleDateString() : 'Today'}
             </span>
           </div>
-          <p className="text-sm text-white/80">Last Login</p>
+          <p className="text-sm text-white/80">{t('activity.stats.lastLogin')}</p>
         </div>
 
         <div className="rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 p-6 shadow-xl text-white">
@@ -183,7 +185,7 @@ export function DashboardActivity({
             <Users className="w-8 h-8 text-white/80" />
             <span className="text-3xl font-bold">{sessionCount}</span>
           </div>
-          <p className="text-sm text-white/80">Active Sessions</p>
+          <p className="text-sm text-white/80">{t('activity.stats.activeSessions')}</p>
         </div>
       </motion.div>
 
@@ -199,9 +201,9 @@ export function DashboardActivity({
             <Shield className="w-5 h-5 text-white" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-slate-900">Compliance Status</h3>
+            <h3 className="text-lg font-bold text-slate-900">{t('activity.compliance.title')}</h3>
             <p className="text-xs text-slate-600">
-              Your adherence to <EducationalTooltip term="ACP-240">ACP-240</EducationalTooltip> requirements
+              {t('activity.compliance.subtitle')} <EducationalTooltip term="ACP-240">ACP-240</EducationalTooltip> {t('activity.compliance.requirements')}
             </p>
           </div>
         </div>
