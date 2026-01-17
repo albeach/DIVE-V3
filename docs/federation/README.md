@@ -120,6 +120,59 @@ pays: "FR"            →        countryOfAffiliation: "FRA"
 | Fixed schema (no mapping) | Different IdPs use different claim names |
 | **Self-service with validation** ✅ | Fast, validated, partner-controlled |
 
+### Why MongoDB as Federation State Source of Truth? (Jan 2026)
+
+| Alternative | Rejected Because |
+|-------------|------------------|
+| Keycloak IdPs only | No validation against running spokes, shows stale IdPs |
+| File-based registry only | Static, not updated at runtime |
+| Docker container checks only | Transient, no persistence, no audit trail |
+| **MongoDB `federation_spokes` collection** ✅ | Persistent, queryable, audit trail, supports spoke lifecycle |
+
+**Architecture Decision (ADR-2026-01):**
+MongoDB's `federation_spokes` collection is the **source of truth** for active federation partners.
+
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                    FEDERATION STATE ARCHITECTURE                        │
+├────────────────────────────────────────────────────────────────────────┤
+│                                                                         │
+│   LAYER 1: KEYCLOAK         LAYER 2: MONGODB          LAYER 3: DOCKER  │
+│   ─────────────────         ──────────────────        ───────────────  │
+│                                                                         │
+│   Technical IdP config  ──► Operational state    ──► Runtime avail.    │
+│   (can/could connect)       (should show in UI)      (is it running?)  │
+│                                                                         │
+│   9 IdPs configured         3 spokes "approved"      3 containers up   │
+│                                    │                                    │
+│                                    ▼                                    │
+│                              SOURCE OF TRUTH                            │
+│                              for /api/idps/public                       │
+│                                                                         │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+**Key Files:**
+- `backend/src/services/hub-spoke-registry.service.ts` - `getActiveSpokeCodes()`, `filterIdPsByActiveSpokes()`
+- `backend/src/routes/public.routes.ts` - `/api/idps/public` with MongoDB validation
+- `scripts/audit-federation-state.sh` - Audit divergence between layers
+- `backend/src/scripts/clean-stale-idps.ts` - Remove stale Keycloak IdPs
+
+**Validation Flow:**
+```
+GET /api/idps/public
+    │
+    ├── 1. Query Keycloak for all IdPs
+    │
+    ├── 2. Filter: enabled=true, exclude self
+    │
+    ├── 3. Query MongoDB federation_spokes (status='approved')
+    │
+    └── 4. Filter IdPs by active spoke codes
+         │
+         └── Return only IdPs with running, approved spokes
+```
+
 ---
 
 ## Industry Standards Alignment

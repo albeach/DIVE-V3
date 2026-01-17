@@ -9,7 +9,7 @@ export const runtime = 'nodejs';
  */
 export async function GET(
   request: NextRequest,
-  { params }: { params: { alias: string } }
+  { params }: { params: Promise<{ alias: string }> }
 ): Promise<NextResponse> {
   const backendUrl =
     process.env.BACKEND_URL ||
@@ -17,7 +17,7 @@ export async function GET(
     process.env.NEXT_PUBLIC_API_URL ||
     'https://localhost:4000';
 
-  const { alias } = params;
+  const { alias } = await params;
   const target = `${backendUrl}/api/idps/${alias}/health`;
 
   try {

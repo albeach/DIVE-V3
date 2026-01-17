@@ -9,6 +9,58 @@
 # Mark status module as loaded
 export DIVE_HUB_STATUS_LOADED=1
 
+# Hub service URLs (defaults for local development)
+HUB_KEYCLOAK_URL="${HUB_KEYCLOAK_URL:-https://localhost:8443}"
+HUB_BACKEND_URL="${HUB_BACKEND_URL:-https://localhost:4000}"
+HUB_OPA_URL="${HUB_OPA_URL:-https://localhost:8181}"
+HUB_COMPOSE_FILE="${HUB_COMPOSE_FILE:-${DIVE_ROOT}/docker-compose.hub.yml}"
+
+# Helper: Check service health via HTTP
+_hub_check_service() {
+    local name="$1"
+    local url="$2"
+    local timeout="${3:-5}"
+
+    if curl -fsk --max-time "$timeout" "$url" >/dev/null 2>&1; then
+        echo -e "  ${GREEN}✓${NC} $name"
+    else
+        echo -e "  ${RED}✗${NC} $name"
+    fi
+}
+
+# Helper: Get federation statistics from multiple sources
+_hub_get_federation_stats() {
+    # Source 1: MongoDB federation_spokes (RUNTIME SSOT - active registrations)
+    local mongodb_spokes=0
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "dive-hub-mongodb"; then
+        # Get MongoDB password from hub .env file
+        local mongo_password
+        mongo_password=$(grep "^MONGO_PASSWORD=" "${DIVE_ROOT}/instances/hub/.env" | cut -d'=' -f2 | tr -d '"')
+        if [ -n "$mongo_password" ]; then
+            mongodb_spokes=$(docker exec dive-hub-mongodb mongosh --quiet \
+                -u admin -p "$mongo_password" \
+                --authenticationDatabase admin \
+                --eval "use('dive-v3'); db.federation_spokes.countDocuments({status: 'approved'})" 2>/dev/null || echo "0")
+        fi
+    fi
+
+    # Source 2: Terraform federation_partners (Keycloak IdP configuration)
+    local tfvars_partners=0
+    local hub_tfvars="${DIVE_ROOT}/terraform/hub/hub.tfvars"
+    if [ -f "$hub_tfvars" ]; then
+        # Count non-commented entries in federation_partners block
+        tfvars_partners=$(grep -E "^\s+[a-z]{3}\s*=\s*\{" "$hub_tfvars" 2>/dev/null | wc -l | tr -d ' ')
+    fi
+
+    # Source 3: Local instance configs (deployment metadata only)
+    local local_configs=0
+    local_configs=$(ls -d "${DIVE_ROOT}/instances"/*/ 2>/dev/null | grep -v "hub\|shared" | wc -l | tr -d ' ')
+
+    echo "  Active spokes (MongoDB):     ${mongodb_spokes:-0}"
+    echo "  Terraform IdPs configured:   ${tfvars_partners:-0}"
+    echo "  Local instance configs:      ${local_configs:-0}"
+}
+
 hub_status() {
     print_header
     echo -e "${BOLD}DIVE Hub Status${NC}"
@@ -225,9 +277,9 @@ hub_verify() {
         ((checks_failed++))
     fi
 
-    # Check 10: TLS certificates valid
+    # Check 10: TLS certificates valid (SSOT: instances/hub/certs)
     printf "  %-50s" "10. TLS Certificates:"
-    local cert_dir="${DIVE_ROOT}/keycloak/certs"
+    local cert_dir="${DIVE_ROOT}/instances/hub/certs"
     if [ -f "${cert_dir}/certificate.pem" ]; then
         local expiry=$(openssl x509 -enddate -noout -in "${cert_dir}/certificate.pem" 2>/dev/null | cut -d= -f2)
         local expiry_epoch=$(date -j -f "%b %d %H:%M:%S %Y %Z" "$expiry" +%s 2>/dev/null || date -d "$expiry" +%s 2>/dev/null || echo 0)

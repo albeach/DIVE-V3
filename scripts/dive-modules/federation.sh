@@ -98,70 +98,114 @@ federation_status() {
     echo ""
 
     if [ "$DRY_RUN" = true ]; then
-        log_dry "Would query hub API for registered instances"
+        log_dry "Would query MongoDB federation_spokes collection for registered instances"
         return 0
     fi
 
-    # Determine hub URL based on environment
-    local hub_url="https://localhost:4000"
-    if [ "$ENVIRONMENT" = "gcp" ] || [ "$ENVIRONMENT" = "pilot" ]; then
-        hub_url="https://usa-api.dive25.com"
-    fi
-
     echo "  ${CYAN}Environment: ${ENVIRONMENT:-LOCAL}${NC}"
-    echo "  ${CYAN}Hub URL: ${hub_url}${NC}"
+    echo "  ${CYAN}MongoDB SSOT:${NC} federation_spokes collection"
     echo ""
 
-    # Query hub for federation status
-    local response
-    response=$(curl -sk --max-time 10 "${hub_url}/api/federation/status" 2>/dev/null)
-
-    if [ $? -eq 0 ] && [ -n "$response" ]; then
-        # Parse successful response
-        echo "  ${CYAN}Federation Hub:${NC}"
-
-        # Extract hub info
-        local hub_name hub_status
-        hub_name=$(echo "$response" | jq -r '.hub.name // "USA"' 2>/dev/null)
-        hub_status=$(echo "$response" | jq -r '.hub.status // "unknown"' 2>/dev/null)
-
-        case "$hub_status" in
-            "healthy") echo "    $hub_name (Hub): ${GREEN}✓ Operational${NC}" ;;
-            "degraded") echo "    $hub_name (Hub): ${YELLOW}⚠ Degraded${NC}" ;;
-            "down") echo "    $hub_name (Hub): ${RED}✗ Down${NC}" ;;
-            *) echo "    $hub_name (Hub): ${YELLOW}? Status unknown${NC}" ;;
-        esac
-
+    # Check if hub MongoDB is running
+    if ! docker ps --filter "name=dive-hub-mongodb" --format "{{.Names}}" | grep -q "dive-hub-mongodb"; then
+        echo "  ${RED}❌ Hub MongoDB not running${NC}"
         echo ""
-        echo "  ${CYAN}Registered Spokes:${NC}"
+        echo "  Check that the hub is running:"
+        echo "    ./dive hub status"
+        return 1
+    fi
 
-        # Extract instances array
+    # Get MongoDB credentials from hub .env
+    local mongo_password
+    mongo_password=$(grep "^MONGO_PASSWORD=" "${DIVE_ROOT}/instances/hub/.env" | cut -d'=' -f2 | tr -d '"')
+
+    if [ -z "$mongo_password" ]; then
+        echo "  ${RED}❌ Cannot find MongoDB password in hub .env file${NC}"
+        return 1
+    fi
+
+    # Query federation_spokes collection directly from MongoDB SSOT
+    local spokes_data hub_health
+    spokes_data=$(docker exec dive-hub-mongodb mongosh --quiet \
+        -u admin -p "$mongo_password" \
+        --authenticationDatabase admin \
+        --eval "use('dive-v3'); JSON.stringify(db.federation_spokes.find({}, {
+            spokeId: 1,
+            instanceCode: 1,
+            name: 1,
+            status: 1,
+            trustLevel: 1,
+            baseUrl: 1,
+            createdAt: 1,
+            _id: 0
+        }).toArray())" 2>/dev/null | tr -d '\r')  # Remove carriage returns
+
+    # Check hub backend health
+    hub_health=$(curl -sk --max-time 5 "https://localhost:4000/health" | jq -r '.status' 2>/dev/null || echo "unknown")
+
+    # Display hub status
+    echo "  ${CYAN}Federation Hub:${NC}"
+    case "$hub_health" in
+        "healthy") echo "    USA (Hub): ${GREEN}✓ Operational${NC}" ;;
+        "degraded") echo "    USA (Hub): ${YELLOW}⚠ Degraded${NC}" ;;
+        "unhealthy") echo "    USA (Hub): ${RED}✗ Unhealthy${NC}" ;;
+        *) echo "    USA (Hub): ${YELLOW}? Status unknown${NC}" ;;
+    esac
+
+    echo ""
+    echo "  ${CYAN}Registered Spokes:${NC}"
+
+    # Parse and display spokes data
+    if [ -z "$spokes_data" ] || [ "$spokes_data" = "[]" ]; then
+        echo "    ${YELLOW}⚠️  No spokes registered in MongoDB SSOT${NC}"
+        echo ""
+        echo "    ${CYAN}Note:${NC} Spoke deployment updates federation-registry.json but"
+        echo "    ${CYAN}      MongoDB federation_spokes collection is not populated${NC}"
+        echo "    ${CYAN}      This indicates a gap between intended SSOT and implementation${NC}"
+    else
+        # Display approved spokes
         local approved_spokes
-        approved_spokes=$(echo "$response" | jq -r '.instances[] | select(.status == "approved") | "\(.name) (\(.code))"' 2>/dev/null)
+        approved_spokes=$(echo "$spokes_data" | jq -r '.[] | select(.status == "approved") | "\(.name) (\(.instanceCode))"' 2>/dev/null)
 
         if [ -n "$approved_spokes" ]; then
             echo "$approved_spokes" | while read -r spoke; do
                 echo "    ${GREEN}✓${NC} $spoke"
             done
-        else
-            echo "    ${YELLOW}No approved spokes registered${NC}"
         fi
 
-        # Show pending if any
+        # Display pending spokes
         local pending_spokes
-        pending_spokes=$(echo "$response" | jq -r '.instances[] | select(.status == "pending") | "\(.name) (\(.code))"' 2>/dev/null)
+        pending_spokes=$(echo "$spokes_data" | jq -r '.[] | select(.status == "pending") | "\(.name) (\(.instanceCode))"' 2>/dev/null)
+
         if [ -n "$pending_spokes" ]; then
-            echo ""
+            if [ -n "$approved_spokes" ]; then echo ""; fi
             echo "  ${CYAN}Pending Approval:${NC}"
             echo "$pending_spokes" | while read -r spoke; do
                 echo "    ${YELLOW}⏳${NC} $spoke"
             done
         fi
-    else
-        echo "  ${RED}Failed to connect to hub${NC}"
+
+        # Display suspended spokes
+        local suspended_spokes
+        suspended_spokes=$(echo "$spokes_data" | jq -r '.[] | select(.status == "suspended") | "\(.name) (\(.instanceCode))"' 2>/dev/null)
+
+        if [ -n "$suspended_spokes" ]; then
+            echo ""
+            echo "  ${CYAN}Suspended:${NC}"
+            echo "$suspended_spokes" | while read -r spoke; do
+                echo "    ${RED}⏸${NC} $spoke"
+            done
+        fi
+
+        # Show statistics
         echo ""
-        echo "  Check that the hub is running:"
-        echo "    ./dive hub status"
+        local total_spokes active_spokes pending_count suspended_count
+        total_spokes=$(echo "$spokes_data" | jq '. | length' 2>/dev/null || echo "0")
+        active_spokes=$(echo "$spokes_data" | jq '[.[] | select(.status == "approved")] | length' 2>/dev/null || echo "0")
+        pending_count=$(echo "$spokes_data" | jq '[.[] | select(.status == "pending")] | length' 2>/dev/null || echo "0")
+        suspended_count=$(echo "$spokes_data" | jq '[.[] | select(.status == "suspended")] | length' 2>/dev/null || echo "0")
+
+        echo "Total: $total_spokes | Active: $active_spokes | Pending: $pending_count | Suspended: $suspended_count"
     fi
 
     echo ""

@@ -1,22 +1,22 @@
 /**
  * Server-Side Session Validation Utilities
- * 
+ *
  * Modern 2025 security patterns:
  * - All session validation happens server-side
  * - Never expose raw tokens to client
  * - Use database as source of truth for session state
  * - Provide clean abstraction for API routes
- * 
+ *
  * Usage in API routes:
  * ```typescript
  * import { validateSession, getSessionTokens } from '@/lib/session-validation';
- * 
+ *
  * export async function GET() {
  *   const validation = await validateSession();
  *   if (!validation.isValid) {
  *     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
  *   }
- *   
+ *
  *   // Use validation.session.user for user data
  *   // Use getSessionTokens() for token operations (server-side only)
  * }
@@ -27,6 +27,7 @@ import { auth } from '@/auth';
 import { db } from '@/lib/db';
 import { accounts } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { updateAccountTokensByUserId } from '@/lib/db/operations';
 import type { Session } from 'next-auth';
 
 /**
@@ -63,7 +64,7 @@ export interface SessionTokens {
 
 /**
  * Validates current session server-side
- * 
+ *
  * Returns validation result with session data if valid.
  * All token access happens server-side only.
  */
@@ -151,17 +152,17 @@ export async function validateSession(): Promise<SessionValidationResult> {
 
 /**
  * Refresh access token using refresh token
- * 
+ *
  * CRITICAL FIX (Jan 2026): Handle token expiration at API route level
  * This prevents race conditions where session callback hasn't run yet
- * 
+ *
  * @param userId - User ID to refresh tokens for
  * @returns Updated account with fresh tokens
  * @throws Error if refresh fails
  */
 async function refreshAccessToken(userId: string): Promise<any> {
     const refreshUrl = `${process.env.KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/token`;
-    
+
     try {
         // Get current account
         const accountResults = await db
@@ -169,21 +170,21 @@ async function refreshAccessToken(userId: string): Promise<any> {
             .from(accounts)
             .where(eq(accounts.userId, userId))
             .limit(1);
-        
+
         const account = accountResults[0];
         if (!account || !account.refresh_token) {
             throw new Error('No refresh token available');
         }
-        
+
         const currentTime = Math.floor(Date.now() / 1000);
         const timeUntilExpiry = (account.expires_at || 0) - currentTime;
-        
+
         console.log('[SessionValidation] Refreshing token', {
             userId: userId.substring(0, 8) + '...',
             timeUntilExpiry,
             expiresAt: new Date((account.expires_at || 0) * 1000).toISOString(),
         });
-        
+
         // Call Keycloak token endpoint
         const response = await fetch(refreshUrl, {
             method: 'POST',
@@ -197,41 +198,39 @@ async function refreshAccessToken(userId: string): Promise<any> {
                 refresh_token: account.refresh_token,
             }),
         });
-        
+
         const tokens = await response.json();
-        
+
         if (!response.ok) {
             console.error('[SessionValidation] Token refresh failed', {
                 status: response.status,
                 error: tokens.error,
                 error_description: tokens.error_description,
             });
-            
+
             // If refresh token is invalid, session is truly expired
             if (tokens.error === 'invalid_grant' || tokens.error_description?.includes('Session not active')) {
                 console.warn('[SessionValidation] Refresh token expired - user needs to re-login');
                 throw new Error('RefreshTokenExpired');
             }
-            
+
             throw new Error(`Token refresh failed: ${tokens.error || 'Unknown error'}`);
         }
-        
+
         // Update account with new tokens
         const newExpiresAt = currentTime + tokens.expires_in;
-        await db.update(accounts)
-            .set({
-                access_token: tokens.access_token,
-                id_token: tokens.id_token,
-                expires_at: newExpiresAt,
-                refresh_token: tokens.refresh_token || account.refresh_token, // Handle rotation
-            })
-            .where(eq(accounts.userId, userId));
-        
+        await updateAccountTokensByUserId(userId, {
+            access_token: tokens.access_token,
+            id_token: tokens.id_token,
+            expires_at: newExpiresAt,
+            refresh_token: tokens.refresh_token || account.refresh_token, // Handle rotation
+        });
+
         console.log('[SessionValidation] Token refreshed successfully', {
             userId: userId.substring(0, 8) + '...',
             newExpiresAt: new Date(newExpiresAt * 1000).toISOString(),
         });
-        
+
         return {
             ...account,
             access_token: tokens.access_token,
@@ -239,7 +238,7 @@ async function refreshAccessToken(userId: string): Promise<any> {
             expires_at: newExpiresAt,
             refresh_token: tokens.refresh_token || account.refresh_token,
         };
-        
+
     } catch (error) {
         const errorMsg = error instanceof Error ? error.message : 'Unknown error';
         console.error('[SessionValidation] Token refresh error', {
@@ -252,21 +251,21 @@ async function refreshAccessToken(userId: string): Promise<any> {
 
 /**
  * Get session tokens (SERVER-SIDE ONLY)
- * 
+ *
  * ⚠️ WARNING: NEVER expose these tokens to client!
  * Only use in server-side API routes for Keycloak API calls.
- * 
+ *
  * RESILIENT DESIGN (Jan 2026):
  * 1. Validates session exists
  * 2. Checks token expiration
  * 3. Automatically refreshes if expired or near expiry
  * 4. Throws clear errors if refresh fails
- * 
+ *
  * This prevents "Invalid or expired JWT token" errors caused by:
  * - Race conditions (API route runs before session callback)
  * - Token expiration during request processing
  * - Session callback failures
- * 
+ *
  * @throws Error if session invalid or tokens unavailable
  */
 export async function getSessionTokens(): Promise<SessionTokens> {
@@ -290,37 +289,37 @@ export async function getSessionTokens(): Promise<SessionTokens> {
     if (!account || !account.access_token || !account.id_token) {
         throw new Error('Invalid or expired JWT token');
     }
-    
+
     // CRITICAL FIX: Check if token is expired or near expiry
     // This handles the race condition where session callback hasn't run yet
     const currentTime = Math.floor(Date.now() / 1000);
     const timeUntilExpiry = (account.expires_at || 0) - currentTime;
     const isExpired = timeUntilExpiry <= 0;
     const needsRefresh = isExpired || timeUntilExpiry < 60; // Less than 1 minute
-    
+
     if (needsRefresh && account.refresh_token) {
         console.log('[SessionValidation] Token needs refresh', {
             userId: validation.userId.substring(0, 8) + '...',
             timeUntilExpiry,
             isExpired,
         });
-        
+
         try {
             // Attempt to refresh the token
             account = await refreshAccessToken(validation.userId);
-            
+
             // If refresh succeeded, continue with fresh tokens
             console.log('[SessionValidation] Using refreshed tokens');
-            
+
         } catch (refreshError) {
             const errorMsg = refreshError instanceof Error ? refreshError.message : 'Unknown error';
-            
+
             // If refresh token expired, user needs to re-authenticate
             if (errorMsg.includes('RefreshTokenExpired') || errorMsg.includes('invalid_grant')) {
                 console.error('[SessionValidation] Refresh token invalid - session expired');
                 throw new Error('Invalid or expired JWT token');
             }
-            
+
             // For other refresh errors, if token is not yet expired, use existing token
             // This provides resilience against transient Keycloak failures
             if (!isExpired && timeUntilExpiry > 0) {
@@ -347,7 +346,7 @@ export async function getSessionTokens(): Promise<SessionTokens> {
 
 /**
  * Check if user has specific clearance level
- * 
+ *
  * Clearance hierarchy: UNCLASSIFIED < CONFIDENTIAL < SECRET < TOP_SECRET
  */
 export function hasClearance(
@@ -355,7 +354,7 @@ export function hasClearance(
     requiredClearance: string
 ): boolean {
     const clearanceLevels = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
-    
+
     const userLevel = clearanceLevels.indexOf(userClearance || 'UNCLASSIFIED');
     const requiredLevel = clearanceLevels.indexOf(requiredClearance);
 

@@ -49,6 +49,14 @@ export interface IKASKeyRequest {
 
     /** Request ID (for audit trail) */
     requestId: string;
+
+    /** Resource metadata for authorization (passed from backend) */
+    resourceMetadata?: {
+        classification: ClassificationLevel;
+        releasabilityTo: string[];
+        COI: string[];
+        creationDate?: string;
+    };
 }
 
 /**

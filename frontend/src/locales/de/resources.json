@@ -102,5 +102,76 @@
     "resources": "Ressourcen",
     "upload": "Hochladen",
     "detail": "Details"
+  },
+  "federation": {
+    "local": "Lokal",
+    "federated": "Föderiert"
+  },
+  "classifications": {
+    "unclassified": "NICHT KLASSIFIZIERT",
+    "restricted": "EINGESCHRÄNKT",
+    "confidential": "VERTRAULICH",
+    "secret": "GEHEIM",
+    "topSecret": "STRENG GEHEIM"
+  },
+  "auth": {
+    "signInToView": "Anmelden, um Ressourcen zu sehen",
+    "needAuthentication": "Sie müssen authentifiziert sein, um auf Koalitionsressourcen zuzugreifen."
+  },
+  "sorting": {
+    "titleAZ": "Titel A-Z",
+    "titleZA": "Titel Z-A",
+    "newest": "Neueste",
+    "oldest": "Älteste"
+  },
+  "bentoDashboard": {
+    "totalDocuments": "Dokumente insgesamt",
+    "ztdfEncrypted": "ZTDF-verschlüsselt",
+    "local": "Lokal",
+    "federated": "Föderiert",
+    "classification": "Klassifizierung",
+    "instances": "Instanzen"
+  },
+  "viewModes": {
+    "grid": "Raster",
+    "list": "Liste",
+    "compact": "Kompakt"
+  },
+  "bulkActions": {
+    "selected": "ausgewählt",
+    "deselectAll": "Alle abwählen",
+    "selectAll": "Alle auswählen",
+    "export": "Exportieren",
+    "compare": "Vergleichen",
+    "compareTooltip": {
+      "selectMin": "Wählen Sie mindestens 2 Elemente zum Vergleichen aus",
+      "maxItems": "Kann nur bis zu 4 Elemente vergleichen",
+      "compareSelected": "Ausgewählte Elemente vergleichen"
+    }
+  },
+  "comparison": {
+    "title": "Ressourcen vergleichen",
+    "closeTooltip": "Schließen (Escape)",
+    "metadata": "Metadaten"
+  },
+  "bookmarks": {
+    "emptyState": {
+      "title": "Noch keine Lesezeichen",
+      "description": "Markieren Sie Dokumente und Richtlinien für schnellen Zugriff. Klicken Sie auf das Lesezeichensymbol bei jeder Ressource, um sie hier zu speichern."
+    }
+  },
+  "dateRange": {
+    "creationDate": "Erstellungsdatum",
+    "quickSelect": "Schnellauswahl",
+    "today": "Heute",
+    "last7Days": "Letzte 7 Tage",
+    "last30Days": "Letzte 30 Tage",
+    "last90Days": "Letzte 90 Tage",
+    "thisMonth": "Dieser Monat",
+    "lastMonth": "Letzter Monat",
+    "customRange": "Benutzerdefinierter Bereich",
+    "placeholder": "Nach Datumsbereich filtern",
+    "clickToStart": "Klicken Sie auf ein Datum, um die Auswahl zu starten",
+    "clickToComplete": "Klicken Sie auf ein anderes Datum, um den Bereich zu vervollständigen"
   }
 }

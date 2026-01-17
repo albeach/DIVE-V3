@@ -79,6 +79,10 @@
     "validationFailed": "Policy validation failed",
     "evaluationFailed": "Policy evaluation failed"
   },
+  "error": {
+    "unableToLoad": "Impossible de charger les politiques",
+    "backendConnection": "Impossible de se connecter à l'API backend. Assurez-vous que le service backend fonctionne."
+  },
   "breadcrumbs": {
     "policies": "Policies",
     "editor": "Editor",

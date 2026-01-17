@@ -102,5 +102,76 @@
     "resources": "Recursos",
     "upload": "Subir",
     "detail": "Detalles"
+  },
+  "federation": {
+    "local": "Local",
+    "federated": "Federado"
+  },
+  "classifications": {
+    "unclassified": "NO CLASIFICADO",
+    "restricted": "RESTRINGIDO",
+    "confidential": "CONFIDENCIAL",
+    "secret": "SECRETO",
+    "topSecret": "ALTO SECRETO"
+  },
+  "auth": {
+    "signInToView": "Inicie sesión para ver recursos",
+    "needAuthentication": "Necesita estar autenticado para acceder a los recursos de la coalición."
+  },
+  "sorting": {
+    "titleAZ": "Título A-Z",
+    "titleZA": "Título Z-A",
+    "newest": "Más reciente",
+    "oldest": "Más antiguo"
+  },
+  "bentoDashboard": {
+    "totalDocuments": "Documentos totales",
+    "ztdfEncrypted": "Cifrado ZTDF",
+    "local": "Local",
+    "federated": "Federado",
+    "classification": "Clasificación",
+    "instances": "instancias"
+  },
+  "viewModes": {
+    "grid": "Cuadrícula",
+    "list": "Lista",
+    "compact": "Compacto"
+  },
+  "bulkActions": {
+    "selected": "seleccionado",
+    "deselectAll": "Anular selección de todo",
+    "selectAll": "Seleccionar todo",
+    "export": "Exportar",
+    "compare": "Comparar",
+    "compareTooltip": {
+      "selectMin": "Seleccione al menos 2 elementos para comparar",
+      "maxItems": "Puede comparar hasta 4 elementos",
+      "compareSelected": "Comparar elementos seleccionados"
+    }
+  },
+  "comparison": {
+    "title": "Comparar recursos",
+    "closeTooltip": "Cerrar (Escape)",
+    "metadata": "Metadatos"
+  },
+  "bookmarks": {
+    "emptyState": {
+      "title": "Aún no hay marcadores",
+      "description": "Marque documentos y políticas para acceso rápido. Haga clic en el icono de marcador en cualquier recurso para guardarlo aquí."
+    }
+  },
+  "dateRange": {
+    "creationDate": "Fecha de creación",
+    "quickSelect": "Selección rápida",
+    "today": "Hoy",
+    "last7Days": "Últimos 7 días",
+    "last30Days": "Últimos 30 días",
+    "last90Days": "Últimos 90 días",
+    "thisMonth": "Este mes",
+    "lastMonth": "Mes pasado",
+    "customRange": "Rango personalizado",
+    "placeholder": "Filtrar por rango de fechas",
+    "clickToStart": "Haga clic en una fecha para iniciar la selección",
+    "clickToComplete": "Haga clic en otra fecha para completar el rango"
   }
 }

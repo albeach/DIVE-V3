@@ -11,6 +11,7 @@
 
 import React from 'react';
 import { ViewMode } from './advanced-resource-card';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface ViewModeSwitcherProps {
   viewMode: ViewMode;
@@ -18,6 +19,7 @@ interface ViewModeSwitcherProps {
 }
 
 export default function ViewModeSwitcher({ viewMode, onChange }: ViewModeSwitcherProps) {
+  const { t } = useTranslation('resources');
   return (
     <div className="inline-flex items-center bg-white border-2 border-gray-200 rounded-lg p-1 shadow-sm">
       <button
@@ -32,7 +34,7 @@ export default function ViewModeSwitcher({ viewMode, onChange }: ViewModeSwitche
         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
           <path d="M3 4a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 12a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H4a1 1 0 01-1-1v-4zM11 4a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V4zM11 12a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
         </svg>
-        <span className="hidden sm:inline">Grid</span>
+        <span className="hidden sm:inline">{t('viewModes.grid')}</span>
       </button>
 
       <button
@@ -47,7 +49,7 @@ export default function ViewModeSwitcher({ viewMode, onChange }: ViewModeSwitche
         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
           <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
         </svg>
-        <span className="hidden sm:inline">List</span>
+        <span className="hidden sm:inline">{t('viewModes.list')}</span>
       </button>
 
       <button
@@ -62,7 +64,7 @@ export default function ViewModeSwitcher({ viewMode, onChange }: ViewModeSwitche
         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
           <path fillRule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm0 4a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1z" clipRule="evenodd" />
         </svg>
-        <span className="hidden sm:inline">Compact</span>
+        <span className="hidden sm:inline">{t('viewModes.compact')}</span>
       </button>
     </div>
   );

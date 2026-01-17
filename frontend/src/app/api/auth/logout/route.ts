@@ -11,9 +11,7 @@
 
 import { NextResponse } from 'next/server';
 import { auth } from '@/auth';
-import { db } from '@/lib/db';
-import { sessions, accounts } from '@/lib/db/schema';
-import { eq } from 'drizzle-orm';
+import { deleteSessionsByUserId, clearAccountTokensByUserId } from '@/lib/db/operations';
 import { headers } from 'next/headers';
 
 export const dynamic = 'force-dynamic';
@@ -41,25 +39,14 @@ export async function POST() {
 
         // Step 1: Delete ALL sessions for this user
         // This ensures no lingering sessions across devices/tabs
-        const deletedSessions = await db
-            .delete(sessions)
-            .where(eq(sessions.userId, userId));
+        await deleteSessionsByUserId(userId);
 
         console.log('[DIVE] Deleted all sessions for user:', userId);
 
         // Step 2: Clear account tokens
         // CRITICAL: This prevents session recreation by the session callback
         // Without this, the session callback would find the account and recreate the session!
-        await db
-            .update(accounts)
-            .set({
-                access_token: null,
-                id_token: null,
-                refresh_token: null,
-                expires_at: null,
-                session_state: null,
-            })
-            .where(eq(accounts.userId, userId));
+        await clearAccountTokensByUserId(userId);
 
         console.log('[DIVE] Cleared account tokens for user:', userId);
         console.log('[DIVE] Complete logout successful');

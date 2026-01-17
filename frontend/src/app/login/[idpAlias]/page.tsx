@@ -1,6 +1,6 @@
 /**
  * Custom Login Page (Dynamic Route)
- * 
+ *
  * Enhanced themeable login page with:
  * - Split layout: Sign In (left) + Custom Description (right)
  * - Customizable backgrounds via /public/login-backgrounds/
@@ -10,7 +10,7 @@
  * - Glassmorphism design
  * - MFA prompt support
  * - Fully customizable CSS
- * 
+ *
  * To customize:
  * 1. Add background images to /public/login-backgrounds/[idpAlias].jpg
  * 2. Edit /public/login-config.json for text/colors
@@ -130,12 +130,12 @@ export default function CustomLoginPage() {
     // Auto-detect and set locale based on IdP on first load
     useEffect(() => {
         const detectedLocale = getLocaleFromIdP(idpAlias);
-        
+
         // Check if user manually changed locale for THIS specific IdP
         // Store locale preferences per-IdP to allow auto-detection when switching IdPs
         const localeOverrideKey = `dive-v3-locale-override-${idpAlias}`;
         const hasManualOverride = localStorage.getItem(localeOverrideKey);
-        
+
         // If user hasn't manually overridden locale for this IdP, auto-detect
         if (!hasManualOverride && detectedLocale !== locale) {
             console.log(`[i18n] Auto-detecting locale from IdP: ${idpAlias} → ${detectedLocale}`);
@@ -171,7 +171,7 @@ export default function CustomLoginPage() {
         try {
             // Try to load custom configuration
             let rawConfig: any = null;
-            
+
             try {
                 const response = await fetch('/login-config.json');
                 if (response.ok) {
@@ -186,10 +186,10 @@ export default function CustomLoginPage() {
             let customConfig: LoginConfig | null = null;
             if (rawConfig) {
                 // Check if description and displayName are locale-specific objects
-                const localizedDisplayName = typeof rawConfig.displayName === 'object' 
+                const localizedDisplayName = typeof rawConfig.displayName === 'object'
                     ? (rawConfig.displayName[locale] || rawConfig.displayName['en'] || 'Identity Provider')
                     : rawConfig.displayName;
-                
+
                 const localizedDescription = typeof rawConfig.description === 'object' && rawConfig.description[locale]
                     ? rawConfig.description[locale]
                     : (rawConfig.description['en'] || rawConfig.description);
@@ -205,7 +205,7 @@ export default function CustomLoginPage() {
 
             // Fallback to default configuration
             let primary, accent, displayName, backgroundImage;
-            
+
             if (idpAlias.includes('usa') || idpAlias.includes('us-')) {
                 primary = '#B22234';
                 accent = '#3C3B6E';
@@ -358,12 +358,12 @@ export default function CustomLoginPage() {
             if (result.requiresRedirect && result.redirectUrl) {
                 console.log('[Custom Login] IdP broker detected - redirecting to federated login');
                 console.log('[Custom Login] Redirect URL:', result.redirectUrl);
-                
+
                 // Redirect to Authorization Code flow with kc_idp_hint
                 window.location.href = result.redirectUrl;
                 return;
             }
-            
+
             if (result.success) {
                 // Step 2: Create NextAuth session with tokens
                 const sessionResponse = await fetch('/api/auth/custom-session', {
@@ -396,7 +396,7 @@ export default function CustomLoginPage() {
                     if (result.error) {
                         showErrorWithShake(result.error); // Show error if OTP was invalid
                         setLoginAttempts(prev => prev + 1);
-                        
+
                         // Try to extract remaining attempts from error message
                         const attemptMatch = result.error.match(/(\d+)\s+attempts?\s+remaining/i);
                         if (attemptMatch) {
@@ -407,7 +407,7 @@ export default function CustomLoginPage() {
             } else {
                 showErrorWithShake(result.error || 'Invalid username or password');
                 setLoginAttempts(prev => prev + 1);
-                
+
                 // Try to extract remaining attempts from error message
                 const attemptMatch = (result.error || '').match(/(\d+)\s+attempts?\s+remaining/i);
                 if (attemptMatch) {
@@ -427,7 +427,7 @@ export default function CustomLoginPage() {
             setIsLoading(true);
             setError(null);
             const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
-            
+
             // Call the new OTP setup endpoint
             const response = await fetch(`${backendUrl}/api/auth/otp/setup`, {
                 method: 'POST',
@@ -440,7 +440,7 @@ export default function CustomLoginPage() {
             });
 
             const result = await response.json();
-            
+
             // Debug: Log full setup response
             console.log('OTP setup response received:', {
                 success: result.success,
@@ -456,18 +456,18 @@ export default function CustomLoginPage() {
                 setOtpSecret(result.data.secret);
                 setQrCodeUrl(result.data.qrCodeUrl);
                 setUserId(result.data.userId);
-                
+
                 // Debug: Verify state was set
                 console.log('State variables set:', {
                     otpSecret: result.data.secret ? '[REDACTED]' : 'MISSING',
                     qrCodeUrl: result.data.qrCodeUrl ? 'PRESENT' : 'MISSING',
                     userId: result.data.userId || 'MISSING'
                 });
-                
+
                 // Show OTP setup screen
                 setShowOTPSetup(true);
                 setError(null);
-                
+
                 // OTP setup initiated successfully
                 console.log('OTP setup initiated successfully', {
                     username: formData.username,
@@ -487,13 +487,13 @@ export default function CustomLoginPage() {
     const verifyOTPSetup = async (e: React.FormEvent) => {
         e.preventDefault();
         setError(null);
-        
+
         // Validate OTP is exactly 6 digits
         if (!formData.otp || formData.otp.length !== 6) {
             showErrorWithShake('Please enter a 6-digit code from your authenticator app.');
             return;
         }
-        
+
         // Debug: Check state variables BEFORE sending request
         console.log('State check before verify:', {
             otpSecret: otpSecret || 'EMPTY/MISSING',
@@ -502,12 +502,12 @@ export default function CustomLoginPage() {
             otp: formData.otp || 'EMPTY/MISSING',
             idpAlias: idpAlias || 'EMPTY/MISSING'
         });
-        
+
         setIsLoading(true);
 
         try {
             const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
-            
+
             // Prepare payload
             const payload = {
                 idpAlias,
@@ -516,7 +516,7 @@ export default function CustomLoginPage() {
                 otp: formData.otp,
                 userId
             };
-            
+
             // Debug: Log payload (redact sensitive fields)
             console.log('OTP verification payload to be sent:', {
                 idpAlias: payload.idpAlias || 'MISSING',
@@ -525,7 +525,7 @@ export default function CustomLoginPage() {
                 otp: payload.otp ? '[REDACTED]' : 'MISSING',
                 userId: payload.userId || 'MISSING'
             });
-            
+
             // Debug: Log actual payload structure
             console.log('Payload structure check:', {
                 idpAliasType: typeof payload.idpAlias,
@@ -539,7 +539,7 @@ export default function CustomLoginPage() {
                 otpLength: payload.otp?.length || 0,
                 userIdValue: payload.userId
             });
-            
+
             // Step 1: Verify OTP code and create credential via backend
             const verifyResponse = await fetch(`${backendUrl}/api/auth/otp/verify`, {
                 method: 'POST',
@@ -637,7 +637,7 @@ export default function CustomLoginPage() {
                             filter: `blur(${theme.background.blur}px)`
                         }}
                     />
-                    <div 
+                    <div
                         className="absolute inset-0 bg-gradient-to-r from-black/60 to-black/40"
                         style={{ opacity: theme.background.overlayOpacity }}
                     />
@@ -663,7 +663,7 @@ export default function CustomLoginPage() {
                         transition={{ duration: 0.6 }}
                         className="w-full max-w-md mx-auto lg:mx-0"
                     >
-                        <div 
+                        <div
                             className="bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl p-8 md:p-10 border border-white/20"
                         >
                             {/* Logo */}
@@ -877,7 +877,7 @@ export default function CustomLoginPage() {
                                                     <label className="block text-sm font-semibold mb-2 text-gray-700">
                                                         Enter 6-digit code from your app:
                                                     </label>
-                                                    
+
                                                     {/* Error Message - Show here when in OTP setup */}
                                                     {error && showOTPSetup && (
                                                         <div className={`mb-3 p-3 bg-red-50 border border-red-200 rounded-lg ${shake ? 'animate-shake' : ''}`}>
@@ -889,7 +889,7 @@ export default function CustomLoginPage() {
                                                             )}
                                                         </div>
                                                     )}
-                                                    
+
                                                     <input
                                                         type="text"
                                                         value={formData.otp}
@@ -950,19 +950,19 @@ export default function CustomLoginPage() {
                                         type="button"
                                         onClick={() => setShowForgotPasswordInfo(!showForgotPasswordInfo)}
                                         className="inline-flex items-center space-x-1.5 px-3 py-1.5 text-xs font-bold rounded-full transition-all duration-300 hover:scale-105 shadow-sm"
-                                        style={{ 
+                                        style={{
                                             color: theme.colors.primary,
                                             backgroundColor: 'rgba(255, 255, 255, 0.6)'
                                         }}
                                     >
                                         <span>{t('login.forgotPassword')}</span>
-                                        <ChevronDown 
+                                        <ChevronDown
                                             className={`w-3.5 h-3.5 transition-transform duration-300 ${
                                                 showForgotPasswordInfo ? 'rotate-180' : ''
                                             }`}
                                         />
                                     </button>
-                                    
+
                                     {/* Expandable Info */}
                                     <AnimatePresence>
                                         {showForgotPasswordInfo && (
@@ -1006,10 +1006,10 @@ export default function CustomLoginPage() {
                             >
                                 {/* Arrow Icon with continuous subtle animation */}
                                 <motion.div
-                                    animate={{ 
+                                    animate={{
                                         x: [-2, 0, -2]
                                     }}
-                                    transition={{ 
+                                    transition={{
                                         duration: 2,
                                         repeat: Infinity,
                                         ease: "easeInOut"
@@ -1018,12 +1018,12 @@ export default function CustomLoginPage() {
                                 >
                                     <ArrowLeft className="h-5 w-5 transition-transform group-hover:-translate-x-1" />
                                 </motion.div>
-                                
+
                                 <span className="text-base">
                                     {t('login.backToIdPSelection')}
                                 </span>
                             </button>
-                            
+
                             {/* Helper Text */}
                             <p className="text-center text-sm text-white/60 mt-2.5">
                                 {t('login.wrongProvider')}

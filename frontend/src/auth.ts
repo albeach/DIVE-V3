@@ -3,6 +3,7 @@ import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import { db } from "@/lib/db";
 import { accounts, sessions, users, verificationTokens } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { clearAccountTokensByUserId, updateAccountTokensByUserId } from "@/lib/db/operations";
 
 /**
  * Email domain to country mapping for enrichment
@@ -139,9 +140,7 @@ async function refreshAccessToken(account: any) {
             refresh_token: tokens.refresh_token || account.refresh_token, // Handle rotation
         };
 
-        await db.update(accounts)
-            .set(updatedAccount)
-            .where(eq(accounts.userId, account.userId));
+        await updateAccountTokensByUserId(account.userId, updatedAccount);
 
         console.log('[DIVE] Database Updated', {
             userId: account.userId,
@@ -500,15 +499,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                                         console.log('[DIVE] Database session deleted due to invalid refresh token');
 
                                         // Clear account tokens to prevent session recreation
-                                        await db.update(accounts)
-                                            .set({
-                                                access_token: null,
-                                                id_token: null,
-                                                refresh_token: null,
-                                                expires_at: null,
-                                                session_state: null,
-                                            })
-                                            .where(eq(accounts.userId, user.id));
+                                        await clearAccountTokensByUserId(user.id);
                                         console.log('[DIVE] Account tokens cleared');
                                     } catch (cleanupError) {
                                         console.error('[DIVE] Session cleanup error:', cleanupError);
@@ -849,8 +840,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             let accessToken: string | null = null;
             let refreshToken: string | null = null;
 
-            if (sessionData?.userId) {
-                userId = sessionData.userId;
+            if (sessionData && typeof sessionData === 'object' && 'userId' in sessionData) {
+                userId = (sessionData as { userId: string }).userId;
             } else if ('user' in message && message.user) {
                 const user = message.user as any;
                 userId = user.id || null;
@@ -887,15 +878,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             // Without this, the session callback will find the account and recreate the session!
             if (userId) {
                 try {
-                    await db.update(accounts)
-                        .set({
-                            access_token: null,
-                            id_token: null,
-                            refresh_token: null,
-                            expires_at: null,
-                            session_state: null,
-                        })
-                        .where(eq(accounts.userId, userId));
+                    await clearAccountTokensByUserId(userId);
                     console.log('[DIVE] Account tokens cleared for user:', userId);
                 } catch (error) {
                     console.error('[DIVE] Error clearing account tokens:', error);
@@ -980,10 +963,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         async signIn({ user, account, profile }) {
             // DEBUG: Hypothesis 4 - Track sign-in event
             console.log('[DEBUG H4] Sign-in event:', {
-              email: user?.email,
-              provider: account?.provider,
-              hasIdToken: !!account?.id_token,
-              idTokenLength: account?.id_token?.length
+                email: user?.email,
+                provider: account?.provider,
+                hasIdToken: !!account?.id_token,
+                idTokenLength: account?.id_token?.length
             });
 
             // Multi-realm: Handle federated accounts from broker realm
@@ -1006,17 +989,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     });
 
                     // Manually update the account record to ensure fresh tokens
-                    await db.update(accounts)
-                        .set({
-                            access_token: account.access_token as string || null,
-                            id_token: account.id_token as string || null,
-                            refresh_token: account.refresh_token as string || null,
-                            expires_at: account.expires_at as number || null,
-                            token_type: account.token_type as string || null,
-                            scope: account.scope as string || null,
-                            session_state: account.session_state as string || null,
-                        })
-                        .where(eq(accounts.userId, user.id));
+                    await updateAccountTokensByUserId(user.id, {
+                        access_token: account.access_token as string || null,
+                        id_token: account.id_token as string || null,
+                        refresh_token: account.refresh_token as string || null,
+                        expires_at: account.expires_at as number || null,
+                        token_type: account.token_type as string || null,
+                        scope: account.scope as string || null,
+                        session_state: account.session_state as string || null,
+                    });
 
                     console.log('[DIVE] Account tokens updated successfully');
                 } catch (error) {

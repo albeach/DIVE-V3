@@ -22,6 +22,7 @@ import {
   Fingerprint,
 } from 'lucide-react';
 import { EducationalTooltip } from './educational-tooltip';
+import { useTranslation } from '@/hooks/useTranslation';
 
 // Country flag emoji map - All 32 NATO countries + partners
 const countryFlags: Record<string, string> = {
@@ -84,6 +85,8 @@ export function DashboardFederation({
   isFederated,
   stats = {},
 }: DashboardFederationProps) {
+  const { t } = useTranslation('dashboard');
+
   const instanceFlag = countryFlags[currentInstance] || '🌐';
   const instanceName = countryNames[currentInstance] || currentInstance;
   const userFlag = countryFlags[userCountry] || '🌐';
@@ -103,9 +106,9 @@ export function DashboardFederation({
               <Network className="w-8 h-8 text-white" />
             </div>
             <div>
-              <h2 className="text-2xl font-bold">Federation Status</h2>
+              <h2 className="text-2xl font-bold">{t('federation.status.title')}</h2>
               <p className="text-blue-100 text-sm">
-                Your identity and current access context
+                {t('federation.status.subtitle')}
               </p>
             </div>
           </div>
@@ -119,7 +122,7 @@ export function DashboardFederation({
                   <span className="text-2xl">{instanceFlag}</span>
                 </div>
                 <div>
-                  <p className="text-xs text-white/70 font-medium">Federated Access</p>
+                  <p className="text-xs text-white/70 font-medium">{t('federation.status.federatedAccess')}</p>
                   <p className="text-sm font-bold">{userName} → {instanceName}</p>
                 </div>
               </div>
@@ -127,8 +130,8 @@ export function DashboardFederation({
               <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-white/20 backdrop-blur-sm border border-white/30">
                 <span className="text-2xl">{instanceFlag}</span>
                 <div>
-                  <p className="text-xs text-white/70 font-medium">Home Instance</p>
-                  <p className="text-sm font-bold">{instanceName} Portal</p>
+                  <p className="text-xs text-white/70 font-medium">{t('federation.status.homeInstance')}</p>
+                  <p className="text-sm font-bold">{instanceName} {t('federation.status.portal')}</p>
                 </div>
               </div>
             )}
@@ -150,10 +153,10 @@ export function DashboardFederation({
             </div>
             <div>
               <p className="text-2xl font-bold text-slate-900">{idps.length}</p>
-              <p className="text-xs text-slate-600">Federation Partners</p>
+              <p className="text-xs text-slate-600">{t('federation.stats.partners.title')}</p>
             </div>
           </div>
-          <p className="text-xs text-slate-500">Active identity providers in the network</p>
+          <p className="text-xs text-slate-500">{t('federation.stats.partners.description')}</p>
         </div>
 
         <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-lg">
@@ -163,10 +166,10 @@ export function DashboardFederation({
             </div>
             <div>
               <p className="text-2xl font-bold text-slate-900">{stats.crossPartnerAccesses || 0}</p>
-              <p className="text-xs text-slate-600">Cross-Partner Accesses</p>
+              <p className="text-xs text-slate-600">{t('federation.stats.crossPartnerAccesses.title')}</p>
             </div>
           </div>
-          <p className="text-xs text-slate-500">Resources accessed from other partners</p>
+          <p className="text-xs text-slate-500">{t('federation.stats.crossPartnerAccesses.description')}</p>
         </div>
 
         <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-lg">
@@ -176,10 +179,10 @@ export function DashboardFederation({
             </div>
             <div>
               <p className="text-2xl font-bold text-slate-900">{stats.authenticationsToday || 0}</p>
-              <p className="text-xs text-slate-600">Today's Authentications</p>
+              <p className="text-xs text-slate-600">{t('federation.stats.authentications.title')}</p>
             </div>
           </div>
-          <p className="text-xs text-slate-500">Federation logins today</p>
+          <p className="text-xs text-slate-500">{t('federation.stats.authentications.description')}</p>
         </div>
       </motion.div>
 
@@ -195,12 +198,10 @@ export function DashboardFederation({
             <Building2 className="w-6 h-6 text-white" />
           </div>
           <div>
-            <h3 className="text-lg font-bold text-slate-900 mb-2">What is Identity Federation?</h3>
+            <h3 className="text-lg font-bold text-slate-900 mb-2">{t('federation.explanation.title')}</h3>
             <p className="text-sm text-slate-600 leading-relaxed mb-4">
-              <EducationalTooltip term="Federation">Identity federation</EducationalTooltip> enables you to authenticate
-              with your home organization's identity provider and access resources across coalition partners without
-              creating separate accounts. This follows <EducationalTooltip term="STANAG">ADatP-5663</EducationalTooltip> standards
-              for NATO identity management.
+              <EducationalTooltip term="Federation">{t('federation.explanation.federationTerm')}</EducationalTooltip> {t('federation.explanation.description')}
+              <EducationalTooltip term="STANAG">{t('federation.explanation.stanagTerm')}</EducationalTooltip> {t('federation.explanation.standardsText')}
             </p>
             <div className="flex flex-wrap gap-3">
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-blue-200">

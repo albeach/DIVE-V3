@@ -1,9 +1,9 @@
 /**
  * Search Syntax Parser
- * 
+ *
  * Phase 2: Search & Discovery Enhancement
  * Advanced search syntax parser for DIVE V3
- * 
+ *
  * Supports:
  * - Boolean operators: AND, OR, NOT
  * - Exact phrases: "fuel inventory"
@@ -67,34 +67,34 @@ const FIELD_MAPPINGS: Record<string, string> = {
   'class': 'classification',
   'c': 'classification',
   'clearance': 'classification',
-  
+
   // Country/Releasability
   'country': 'releasabilityTo',
   'releasability': 'releasabilityTo',
   'rel': 'releasabilityTo',
-  
+
   // COI
   'coi': 'COI',
   'community': 'COI',
-  
+
   // Instance/Origin
   'instance': 'originRealm',
   'origin': 'originRealm',
   'realm': 'originRealm',
-  
+
   // Encryption
   'encrypted': 'encrypted',
   'enc': 'encrypted',
-  
+
   // Date
   'date': 'creationDate',
   'created': 'creationDate',
   'creationdate': 'creationDate',
-  
+
   // Title
   'title': 'title',
   'name': 'title',
-  
+
   // ID
   'id': 'resourceId',
   'resourceid': 'resourceId',
@@ -150,13 +150,13 @@ export function tokenize(input: string): IToken[] {
       const start = position;
       position++; // Skip opening quote
       let phrase = '';
-      
+
       while (position < chars.length && chars[position] !== quote) {
         phrase += chars[position];
         position++;
       }
       position++; // Skip closing quote
-      
+
       if (phrase) {
         tokens.push({ type: 'PHRASE', value: phrase, position: start });
       }
@@ -174,7 +174,7 @@ export function tokenize(input: string): IToken[] {
     if (/[a-zA-Z0-9_]/.test(char)) {
       const start = position;
       let word = '';
-      
+
       while (position < chars.length && /[a-zA-Z0-9_-]/.test(chars[position])) {
         word += chars[position];
         position++;
@@ -191,18 +191,18 @@ export function tokenize(input: string): IToken[] {
       if (position < chars.length && /[:=<>!~]/.test(chars[position])) {
         let operator = chars[position];
         position++;
-        
+
         // Handle multi-char operators (>=, <=, !=, <>)
         if (position < chars.length && /[=<>]/.test(chars[position])) {
           operator += chars[position];
           position++;
         }
-        
+
         // Skip whitespace after operator
         while (position < chars.length && /\s/.test(chars[position])) {
           position++;
         }
-        
+
         // Get value
         let value = '';
         if (position < chars.length) {
@@ -223,7 +223,7 @@ export function tokenize(input: string): IToken[] {
             }
           }
         }
-        
+
         tokens.push({
           type: 'FIELD',
           value: `${word}${operator}${value}`,
@@ -341,13 +341,13 @@ function parseFieldToken(token: string, negated: boolean): IFieldFilter | null {
   if (!match) return null;
 
   const [, rawField, rawOperator, rawValue] = match;
-  
+
   // Map field name
   const field = FIELD_MAPPINGS[rawField.toLowerCase()] || rawField;
-  
+
   // Map operator
   let operator = COMPARISON_OPERATORS[rawOperator] || '=';
-  
+
   // Handle negation
   if (negated) {
     if (operator === '=') operator = '!=';
@@ -447,7 +447,7 @@ export function buildMongoQuery(parsed: IParsedQuery): Record<string, unknown> {
   // Field filters
   parsed.filters.forEach(filter => {
     const condition: Record<string, unknown> = {};
-    
+
     switch (filter.operator) {
       case '=':
         condition[filter.field] = filter.value;
@@ -474,7 +474,7 @@ export function buildMongoQuery(parsed: IParsedQuery): Record<string, unknown> {
         condition[filter.field] = { $not: { $regex: filter.value, $options: 'i' } };
         break;
     }
-    
+
     // Handle array fields (releasabilityTo, COI)
     if (filter.field === 'releasabilityTo' || filter.field === 'COI') {
       if (filter.operator === '=') {
@@ -545,7 +545,7 @@ export function validateSearchQuery(input: string): { isValid: boolean; errors: 
   }
 
   // Check for invalid field names
-  const fieldMatches = input.match(/([a-zA-Z_]+)[:=]/g) || [];
+  const fieldMatches = input.match(/([a-zA-Z_]+)[:=]/g) ?? ([] as string[]);
   fieldMatches.forEach(match => {
     const field = match.replace(/[:=]$/, '').toLowerCase();
     if (!FIELD_MAPPINGS[field]) {

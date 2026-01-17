@@ -4,11 +4,68 @@
         "tagline": "Coalition-Friendly ICAM Pilot"
     },
     "nav": {
-        "home": "Home",
-        "resources": "Resources",
+        "home": "Strona główna",
+        "docs": "Dokumenty",
+        "upload": "Prześlij",
+        "policies": "Polityki",
+        "more": "Więcej",
+        "dashboard": "Panel sterowania",
+        "dashboard.description": "Szybki przegląd i statystyki",
+        "resources": "Zasoby",
         "admin": "Admin",
-        "dashboard": "Dashboard",
-        "signOut": "Sign Out"
+        "signOut": "Wyloguj",
+        "documents": {
+            "name": "Dokumenty",
+            "shortName": "Dokumenty",
+            "description": "Biblioteka zasobów sklasyfikowanych",
+            "browse": "Przeglądaj",
+            "allDocuments": "Wszystkie dokumenty",
+            "recent": "Najnowsze",
+            "favorites": "Ulubione",
+            "actions": "Akcje",
+            "myActivity": "Moja aktywność",
+            "requestAccess": "Żądaj dostępu"
+        },
+        "upload": {
+            "name": "Prześlij",
+            "shortName": "Prześlij",
+            "description": "Bezpieczne przesyłanie dokumentów"
+        },
+        "policyTools": {
+            "name": "Narzędzia polityki",
+            "shortName": "Polityki",
+            "description": "Polityki autoryzacji i zgodności",
+            "explore": "Eksploruj",
+            "policyLibrary": "Biblioteka polityk",
+            "policySandbox": "Sandbox polityk",
+            "sandboxWorkspaces": "Obszary robocze sandbox",
+            "builder": "Builder",
+            "myPolicies": "Moje polityki",
+            "test": "Test",
+            "reference": "Referencje",
+            "compliance": "Zgodność",
+            "standardsCompliance": "Zgodność ze standardami"
+        },
+        "admin": {
+            "dashboard": "Panel administratora",
+            "dashboard.description": "Administracja systemu i monitorowanie",
+            "spRegistry": "Rejestr dostawców usług",
+            "spRegistry.description": "Zarządzaj zarejestrowanymi dostawcami usług",
+            "certificates": "Zarządzanie certyfikatami",
+            "certificates.description": "Zarządzanie cyklem życia certyfikatów PKI",
+            "idpGovernance": "Zarządzanie IdP",
+            "idpGovernance.description": "Analizy dostawców tożsamości i zarządzanie",
+            "idpManagement": "Zarządzanie IdP",
+            "idpManagement.description": "Konfiguruj i zarządzaj dostawcami tożsamości",
+            "approvals": "Aprobaty",
+            "approvals.description": "Przejrzyj i zatwierdź oczekujące żądania",
+            "auditLogs": "Logi audytu",
+            "auditLogs.description": "Ślady audytu systemu i logi zgodności",
+            "opaPolicy": "Zarządzanie politykami OPA",
+            "opaPolicy.description": "Konfiguracja polityk agenta polityki otwartej",
+            "integrationGuide": "Przewodnik integracji",
+            "integrationGuide.description": "Zasoby integracji dla programistów"
+        }
     },
     "common": {
         "loading": "Loading...",

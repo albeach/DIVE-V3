@@ -320,12 +320,12 @@ get_custom_test_flag() {
 # Uses first 3 characters as base and adds fixed offset
 get_iso_country_offset() {
     local code="${1^^}"
-    
+
     if ! is_iso_country "$code"; then
         echo "-1"
         return 1
     fi
-    
+
     # Generate deterministic offset 40-199 based on code
     # Simple hash: sum of ASCII values mod 160, then add 40
     local sum=0
@@ -334,7 +334,7 @@ get_iso_country_offset() {
         local ascii=$(printf '%d' "'$char")
         sum=$((sum + ascii))
     done
-    
+
     local offset=$(( (sum % 160) + 40 ))
     echo "$offset"
 }
@@ -352,14 +352,14 @@ get_custom_test_offset() {
 # Get ISO country ports
 get_iso_country_ports() {
     local code="${1^^}"
-    
+
     if ! is_iso_country "$code"; then
         echo "# Unknown ISO country: $code" >&2
         return 1
     fi
-    
+
     local offset=$(get_iso_country_offset "$code")
-    
+
     cat << EOF
 SPOKE_PORT_OFFSET=$offset
 SPOKE_FRONTEND_PORT=$((3000 + offset))
@@ -377,14 +377,14 @@ EOF
 # Get custom test code ports
 get_custom_test_ports() {
     local code="${1^^}"
-    
+
     if ! is_custom_test_code "$code"; then
         echo "# Unknown custom test code: $code" >&2
         return 1
     fi
-    
+
     local offset=$(get_custom_test_offset "$code")
-    
+
     cat << EOF
 SPOKE_PORT_OFFSET=$offset
 SPOKE_FRONTEND_PORT=$((3000 + offset))
@@ -433,7 +433,7 @@ count_all_countries() {
     local partner_count=${#PARTNER_NATIONS[@]:-0}
     local iso_count=${#ISO_COUNTRIES[@]}
     local custom_count=${#CUSTOM_TEST_CODES[@]}
-    
+
     echo "Available Country Codes:"
     echo "  NATO Members:    $nato_count"
     echo "  Partner Nations: $partner_count"
@@ -452,7 +452,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
     echo "  DIVE V3 - ISO 3166-1 Alpha-3 Country Database"
     echo "═══════════════════════════════════════════════════════════════════════"
     echo ""
-    
+
     if [ $# -eq 0 ]; then
         count_all_countries
         echo ""
@@ -465,7 +465,7 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
         echo "  ports <CODE>   - Show port assignments"
         exit 0
     fi
-    
+
     case "$1" in
         list-iso)
             list_iso_countries

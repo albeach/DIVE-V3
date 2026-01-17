@@ -8,10 +8,28 @@
  */
 
 const https = require('https');
-const { parse } = require('url');
 const next = require('next');
 const fs = require('fs');
 const path = require('path');
+
+/**
+ * Parse URL using WHATWG URL API (best practice, no deprecation warnings)
+ * Returns an object compatible with what Next.js expects from url.parse()
+ */
+function parseUrl(urlString, baseUrl = 'https://localhost') {
+  try {
+    const url = new URL(urlString, baseUrl);
+    return {
+      pathname: url.pathname,
+      query: Object.fromEntries(url.searchParams.entries()),
+      search: url.search,
+      href: url.href,
+    };
+  } catch {
+    // Fallback for malformed URLs
+    return { pathname: urlString, query: {}, search: '', href: urlString };
+  }
+}
 
 
 const dev = process.env.NODE_ENV !== 'production';
@@ -48,7 +66,7 @@ app.prepare().then(() => {
         console.log(`[HTTP/${req.httpVersion}] ${req.method} ${req.url}`);
       }
 
-      const parsedUrl = parse(req.url, true);
+      const parsedUrl = parseUrl(req.url, `https://${hostname}:${port}`);
 
 
       // Node.js 24 HTTP/2 compatibility: Direct property patching

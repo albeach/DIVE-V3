@@ -9,7 +9,7 @@
 #   ./dive hub up           # start services
 # Notes:
 #   - Secrets come from ./dive load_secrets (GCP or local defaults).
-#   - Certificates are expected in keycloak/certs (mkcert via ./dive up).
+#   - Certificates are expected in instances/hub/certs (SSOT via ./dive certs).
 #   - No spoke/partner services are included here.
 # =============================================================================
 
@@ -42,7 +42,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-postgres
     restart: unless-stopped
     env_file:
-      - .env.hub
+      - /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/hub/.env
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -50,6 +50,7 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./scripts/setup/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
+      - ./scripts/postgres-init:/scripts/postgres-init:ro
     networks:
       - hub-internal
     healthcheck:
@@ -66,7 +67,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-mongodb
     restart: unless-stopped
     env_file:
-      - .env.hub
+      - /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/hub/.env
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
@@ -89,7 +90,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-redis
     restart: unless-stopped
     env_file:
-      - .env.hub
+      - /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/hub/.env
     command: >
       redis-server
       --requirepass ${REDIS_PASSWORD_USA}
@@ -125,7 +126,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-redis-blacklist
     restart: unless-stopped
     env_file:
-      - .env.hub
+      - /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/hub/.env
     command: >
       redis-server
       --requirepass ${REDIS_PASSWORD_BLACKLIST}
@@ -166,7 +167,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-keycloak
     restart: unless-stopped
     env_file:
-      - .env.hub
+      - /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/hub/.env
     entrypoint: ["/bin/bash", "/opt/keycloak/scripts/import-realm.sh"]
     command: ["start-dev", "--spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true", "--features=scripts"]
     environment:
@@ -208,7 +209,7 @@ services:
       - "127.0.0.1:${KEYCLOAK_HTTPS_PORT:-8443}:8443"
       - "127.0.0.1:${KEYCLOAK_MGMT_PORT:-9000}:9000"
     volumes:
-      - ./keycloak/certs:/opt/keycloak/certs:ro
+      - ./instances/hub/certs:/opt/keycloak/certs:ro
       - ./keycloak/themes:/opt/keycloak/themes:ro
       # ADDED (Dec 2025): Mount scripts to pick up local fixes without rebuilding image
       - ./keycloak/scripts:/opt/keycloak/scripts:ro
@@ -246,7 +247,7 @@ services:
       - "127.0.0.1:${OPA_METRICS_PORT:-8182}:8182"
     volumes:
       - ./policies:/policies:ro
-      - ./keycloak/certs:/certs:ro
+      - ./instances/hub/certs:/certs:ro
     networks:
       - hub-internal
     healthcheck:
@@ -266,7 +267,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-backend
     restart: unless-stopped
     env_file:
-      - .env.hub
+      - /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/hub/.env
     environment:
       NODE_ENV: development
       PORT: "4000"
@@ -311,7 +312,7 @@ services:
       - ./backend/src:/app/src
       - ./backend/package.json:/app/package.json:ro
       - ./backend/tsconfig.json:/app/tsconfig.json:ro
-      - ./keycloak/certs:/opt/keycloak/certs:ro
+      - ./instances/hub/certs:/opt/keycloak/certs:ro
       - ./policies:/app/policies:ro
       - ./backend/certs:/app/certs:ro
       - ./certs/mkcert:/app/certs/ca:ro  # mkcert root CA for TLS trust
@@ -381,7 +382,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-kas
     restart: unless-stopped
     env_file:
-      - .env.hub
+      - /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/hub/.env
     healthcheck:
       test: ["CMD-SHELL", "wget --no-check-certificate -q -O- https://localhost:8080/health || exit 1"]
       interval: 15s
@@ -430,7 +431,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-frontend
     restart: unless-stopped
     env_file:
-      - .env.hub
+      - /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/hub/.env
     healthcheck:
       test: ["CMD-SHELL", "curl -ksf https://localhost:3000/ >/dev/null || exit 1"]
       interval: 30s
@@ -478,7 +479,7 @@ services:
       - "localhost:host-gateway"
     volumes:
       - ./frontend:/app
-      - ./keycloak/certs:/opt/keycloak/certs:ro
+      - ./instances/hub/certs:/opt/keycloak/certs:ro
       - ./frontend/certs:/opt/app/certs:ro
       - ./certs/mkcert:/app/certs/ca:ro  # mkcert root CA for TLS trust
       - frontend_node_modules:/app/node_modules
@@ -495,7 +496,7 @@ services:
     restart: unless-stopped
     stop_grace_period: 30s
     env_file:
-      - .env.hub
+      - /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/hub/.env
     environment:
       # Use Redis as broadcast backend for pub/sub
       OPAL_BROADCAST_URI: redis://:${REDIS_PASSWORD_USA}@redis:6379
@@ -568,7 +569,7 @@ services:
       # NOTE: ./policies volume mount removed to prevent duplication with Git-based distribution
       # OPAL fetches policies from GitHub repo: https://github.com/albeach/dive-v3-policies.git
       - ./opal-data-source:/opal-data-source:ro
-      - ./keycloak/certs:/certs:ro
+      - ./instances/hub/certs:/certs:ro
       - ./certs/opal:/opal-keys:ro
     # Uses custom entrypoint from Dockerfile that loads auth keys
     healthcheck:

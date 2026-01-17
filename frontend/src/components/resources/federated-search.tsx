@@ -19,6 +19,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from '@/hooks/useTranslation';
 import { useSession } from 'next-auth/react';
 import { Search, Globe2, Shield, Clock, AlertCircle, CheckCircle, Loader2, Filter, X } from 'lucide-react';
 
@@ -90,6 +91,7 @@ const COIS = ['NATO', 'NATO-COSMIC', 'FVEY', 'CAN-US', 'US-ONLY', 'EU-RESTRICTED
 
 export function FederatedResourceSearch() {
     const { data: session, status } = useSession();
+    const { t } = useTranslation('resources');
 
     // Search state
     const [query, setQuery] = useState('');
@@ -449,7 +451,7 @@ export function FederatedResourceSearch() {
             {results?.results && results.results.length > 0 ? (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {results.results.map((resource) => (
-                        <ResourceCard key={resource.resourceId} resource={resource} />
+                        <ResourceCard key={resource.resourceId} resource={resource} t={t} />
                     ))}
                 </div>
             ) : results && (
@@ -466,7 +468,7 @@ export function FederatedResourceSearch() {
 // Resource Card Sub-component
 // ============================================
 
-function ResourceCard({ resource }: { resource: IFederatedResource }) {
+function ResourceCard({ resource, t }: { resource: IFederatedResource; t: (key: string) => string }) {
     const getClassificationColor = (classification: string) => {
         const colors: Record<string, string> = {
             'UNCLASSIFIED': 'bg-green-500',
@@ -518,7 +520,7 @@ function ResourceCard({ resource }: { resource: IFederatedResource }) {
                             px-2 py-0.5 rounded text-xs font-bold
                             ${getClassificationColor(resource.classification)} text-white
                         `}>
-                            {resource.classification}
+                            {t(`classifications.${resource.classification.toLowerCase()}`)}
                         </span>
                     </div>
 

@@ -1,10 +1,10 @@
 /**
  * KAO (Key Access Object) Selector Component
- * 
+ *
  * Shows users which KAS endpoint will be contacted for decryption
  * Displays Multiple KAOs when available (Multi-KAS architecture)
  * Recommends optimal KAO based on user's country and COI membership
- * 
+ *
  * ACP-240 Section 5.3: Multi-KAS Coalition Architecture
  */
 
@@ -42,49 +42,59 @@ export default function KAOSelector({
     userClearance
 }: KAOSelectorProps) {
     const [showDetails, setShowDetails] = useState(false);
-    
+
     // Determine which KAO is optimal for this user
     const getKAOScore = (kao: typeof kaos[0]) => {
         let score = 0;
         const reasons: string[] = [];
-        
-        // +10 points for matching user's country
-        if (kao.kasId.includes(userCountry.toLowerCase())) {
+
+        // +15 points for exact COI match (all required COIs)
+        if (kao.policyBinding.coiRequired && kao.policyBinding.coiRequired.length > 0) {
+            const hasAllRequired = kao.policyBinding.coiRequired.every(coi => userCOI.includes(coi));
+            if (hasAllRequired) {
+                score += 15;
+                reasons.push('Perfect COI match');
+            } else {
+                const matchingCOIs = kao.policyBinding.coiRequired.filter(coi => userCOI.includes(coi));
+                if (matchingCOIs.length > 0) {
+                    score += 5 * matchingCOIs.length;
+                    reasons.push(`Partial COI: ${matchingCOIs.join(', ')}`);
+                }
+            }
+        } else {
+            // +10 points for no COI required (open access)
             score += 10;
+            reasons.push('Open access');
+        }
+
+        // +8 points for matching user's country
+        if (kao.kasId.includes(userCountry.toLowerCase())) {
+            score += 8;
             reasons.push('National KAS');
         }
-        
-        // +5 points for matching user's COI
-        if (kao.policyBinding.coiRequired) {
-            const matchingCOIs = kao.policyBinding.coiRequired.filter(coi => userCOI.includes(coi));
-            if (matchingCOIs.length > 0) {
-                score += 5 * matchingCOIs.length;
-                reasons.push(`COI: ${matchingCOIs.join(', ')}`);
-            }
-        }
-        
-        // +2 points for single-country KAO (faster, more direct)
+
+        // +3 points for single-country KAO (more focused access control)
         if (kao.policyBinding.countriesAllowed?.length === 1) {
-            score += 2;
-            reasons.push('Direct access');
+            score += 3;
+            reasons.push('Focused access');
         }
-        
+
         return { score, reasons };
     };
-    
+
     const kaoScores = kaos.map(kao => ({
         kao,
         ...getKAOScore(kao)
     }));
-    
+
     const rankedKAOs = kaoScores.sort((a, b) => b.score - a.score);
     const recommendedKAO = rankedKAOs[0];
-    
+
     // Auto-select recommended KAO if none selected
     if (!selectedKaoId && kaos.length > 0) {
         onSelect(recommendedKAO.kao.kaoId);
     }
-    
+
     // Determine KAS endpoint name for display
     const getKASDisplayName = (kasId: string) => {
         if (kasId.includes('fvey')) return 'Five Eyes KAS';
@@ -97,7 +107,7 @@ export default function KAOSelector({
         if (kasId.includes('nzl')) return '🇳🇿 New Zealand KAS';
         return kasId.toUpperCase().replace('-KAS', ' KAS');
     };
-    
+
     if (kaos.length === 0) {
         return (
             <div className="bg-red-50 border-2 border-red-300 rounded-xl p-4">
@@ -113,7 +123,7 @@ export default function KAOSelector({
             </div>
         );
     }
-    
+
     return (
         <div className="bg-gradient-to-br from-white to-blue-50 rounded-xl p-6 border-2 border-blue-200 shadow-lg">
             {/* Header */}
@@ -128,7 +138,7 @@ export default function KAOSelector({
                     </span>
                 )}
             </div>
-            
+
             {/* Multi-KAS Info Banner */}
             {kaos.length > 1 && (
                 <div className="mb-4 bg-blue-100 border border-blue-300 rounded-lg p-4">
@@ -139,10 +149,10 @@ export default function KAOSelector({
                                 🌐 Multi-KAS Architecture Enabled
                             </p>
                             <p className="text-xs text-blue-800">
-                                This document has <strong>{kaos.length} Key Access Objects (KAOs)</strong>, each pointing to a different 
-                                KAS endpoint. We've recommended the one that best matches your profile 
+                                This document has <strong>{kaos.length} Key Access Objects (KAOs)</strong> for redundancy and coalition flexibility.
+                                Each KAO points to a different KAS server and may have different access requirements.
+                                We've automatically selected the best match for your profile
                                 (<strong>{userCountry}</strong>, COI: <strong>{userCOI.length > 0 ? userCOI.join(', ') : 'None'}</strong>).
-                                You can select a different KAO if needed.
                             </p>
                             <button
                                 onClick={() => setShowDetails(!showDetails)}
@@ -154,42 +164,45 @@ export default function KAOSelector({
                     </div>
                 </div>
             )}
-            
+
             {/* Multi-KAS Details (Collapsible) */}
             {showDetails && kaos.length > 1 && (
                 <div className="mb-4 bg-white border border-blue-200 rounded-lg p-4 animate-fade-in">
-                    <h4 className="font-bold text-gray-900 text-sm mb-2">How Multi-KAS Works:</h4>
+                    <h4 className="font-bold text-gray-900 text-sm mb-2">Why Multiple KAOs?</h4>
                     <ul className="text-xs text-gray-700 space-y-2">
                         <li className="flex items-start gap-2">
-                            <span className="text-blue-600 font-bold">1.</span>
-                            <span>Each nation/coalition can host their own <strong>Key Access Service (KAS)</strong></span>
+                            <span className="text-blue-600 font-bold">•</span>
+                            <span><strong>Redundancy:</strong> Multiple KAS servers prevent single points of failure</span>
                         </li>
                         <li className="flex items-start gap-2">
-                            <span className="text-blue-600 font-bold">2.</span>
-                            <span>Documents are encrypted once but have <strong>multiple KAOs</strong> (wrapped keys)</span>
+                            <span className="text-blue-600 font-bold">•</span>
+                            <span><strong>Policy Flexibility:</strong> Different KAOs may have different access requirements</span>
                         </li>
                         <li className="flex items-start gap-2">
-                            <span className="text-blue-600 font-bold">3.</span>
-                            <span>Your client contacts the <strong>optimal KAS</strong> based on your attributes</span>
+                            <span className="text-blue-600 font-bold">•</span>
+                            <span><strong>Geographic Distribution:</strong> Choose the closest or most appropriate KAS</span>
                         </li>
                         <li className="flex items-start gap-2">
-                            <span className="text-blue-600 font-bold">4.</span>
-                            <span>The KAS re-evaluates the policy and releases the decryption key if authorized</span>
+                            <span className="text-blue-600 font-bold">•</span>
+                            <span><strong>Community Access:</strong> Some KAOs serve specific coalition communities</span>
                         </li>
                     </ul>
-                    <p className="text-xs text-blue-700 mt-3 pt-3 border-t border-blue-200">
-                        <strong>Coalition Benefit:</strong> New partners get instant access to historical data without re-encryption!
-                    </p>
+                    <div className="text-xs text-blue-700 mt-3 pt-3 border-t border-blue-200">
+                        <p className="mb-1"><strong>How to Choose:</strong></p>
+                        <p>• Look for "Perfect COI match" or "National KAS" indicators</p>
+                        <p>• Consider geographic proximity for performance</p>
+                        <p>• The recommended option is automatically selected for you</p>
+                    </div>
                 </div>
             )}
-            
+
             {/* KAO Selection Cards */}
             <div className="space-y-3">
                 {rankedKAOs.map(({ kao, score, reasons }, index) => {
                     const isSelected = kao.kaoId === selectedKaoId;
                     const isRecommended = kao.kaoId === recommendedKAO.kao.kaoId;
                     const displayName = getKASDisplayName(kao.kasId);
-                    
+
                     return (
                         <button
                             key={kao.kaoId}
@@ -217,52 +230,69 @@ export default function KAOSelector({
                                             <CheckCircle className="w-4 h-4 text-blue-600" />
                                         )}
                                     </div>
-                                    
-                                    {/* KAO ID */}
-                                    <p className="text-xs text-gray-600 mb-2 font-mono">
-                                        <strong>KAO ID:</strong> {kao.kaoId}
+
+                                    {/* KAO ID and Purpose */}
+                                    <p className="text-xs text-gray-600 mb-2">
+                                        <strong>Purpose:</strong> {kao.kaoId.includes('Alpha') ? 'Alpha Community Access' :
+                                                                   kao.kaoId.includes('Beta') ? 'Beta Community Access' :
+                                                                   kao.kaoId.includes('Gamma') ? 'Gamma Community Access' :
+                                                                   kao.kaoId.includes('FVEY') ? 'Five Eyes Coalition' :
+                                                                   kao.kaoId.includes('NATO') ? 'NATO Alliance' :
+                                                                   'General Access'}
                                     </p>
-                                    
-                                    {/* KAS Endpoint */}
+
+                                    {/* KAS Server Location */}
                                     <p className="text-xs text-gray-600 mb-3">
-                                        <strong>Endpoint:</strong> <span className="font-mono">{kao.kasUrl}</span>
+                                        <strong>KAS Server:</strong> {getKASDisplayName(kao.kasId)}
                                     </p>
-                                    
+
                                     {/* Policy Binding */}
                                     <div className="flex flex-wrap gap-2 text-xs mb-2">
-                                        {kao.policyBinding.coiRequired && kao.policyBinding.coiRequired.length > 0 && (
-                                            <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded font-semibold">
-                                                COI: {kao.policyBinding.coiRequired.join(', ')}
-                                            </span>
-                                        )}
-                                        {kao.policyBinding.countriesAllowed && kao.policyBinding.countriesAllowed.length > 0 && (
-                                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded font-semibold">
-                                                {kao.policyBinding.countriesAllowed.join(', ')}
-                                            </span>
-                                        )}
                                         {kao.policyBinding.clearanceRequired && (
                                             <span className="px-2 py-1 bg-orange-100 text-orange-800 rounded font-semibold">
                                                 {kao.policyBinding.clearanceRequired}
                                             </span>
                                         )}
+                                        {kao.policyBinding.coiRequired && kao.policyBinding.coiRequired.length > 0 ? (
+                                            <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded font-semibold">
+                                                COI: {kao.policyBinding.coiRequired.join(', ')}
+                                            </span>
+                                        ) : (
+                                            <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded font-semibold">
+                                                No COI Required
+                                            </span>
+                                        )}
+                                        {kao.policyBinding.countriesAllowed && kao.policyBinding.countriesAllowed.length > 0 && (
+                                            <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded font-semibold">
+                                                Countries: {kao.policyBinding.countriesAllowed.join(', ')}
+                                            </span>
+                                        )}
                                     </div>
-                                    
+
+                                    {/* KAO Description */}
+                                    <p className="text-xs text-gray-700 mb-2">
+                                        {kao.policyBinding.coiRequired && kao.policyBinding.coiRequired.length > 0
+                                            ? `Requires membership in: ${kao.policyBinding.coiRequired.join(', ')}`
+                                            : 'No community membership required - open access'
+                                        }
+                                    </p>
+
                                     {/* Match Reasons */}
                                     {reasons.length > 0 && (
                                         <div className="flex items-center gap-2 mt-2">
                                             <span className="text-xs text-green-700 font-semibold">
-                                                ✓ Match: {reasons.join(' • ')}
+                                                ✓ {reasons.join(' • ')}
                                             </span>
                                         </div>
                                     )}
-                                    
+
                                     {score === 0 && (
-                                        <p className="text-xs text-gray-500 mt-2">
-                                            Generic KAO - No specific match to your profile
+                                        <p className="text-xs text-amber-600 mt-2 bg-amber-50 p-2 rounded">
+                                            ⚠️ Limited compatibility - may require additional clearances
                                         </p>
                                     )}
                                 </div>
-                                
+
                                 {/* Selection Indicator */}
                                 <div className="flex-shrink-0">
                                     <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${
@@ -282,7 +312,7 @@ export default function KAOSelector({
                     );
                 })}
             </div>
-            
+
             {/* Single KAO Info */}
             {kaos.length === 1 && (
                 <p className="text-xs text-gray-600 mt-3 flex items-center gap-2">
@@ -290,7 +320,7 @@ export default function KAOSelector({
                     Single KAO configuration - This resource uses one KAS endpoint.
                 </p>
             )}
-            
+
             {/* Selected KAO Summary */}
             {selectedKaoId && (
                 <div className="mt-4 pt-4 border-t border-blue-200">

@@ -1,5 +1,6 @@
 {
   "title": "Tableau de bord",
+  "dashboard.title": "Tableau de bord",
   "subtitle": "Aperçu de l'intelligence de la coalition",
   "welcome": "Bon retour, {{name}}",
   "welcomeBack": "Bon retour,",
@@ -7,6 +8,120 @@
   "refreshing": "Actualisation...",
   "refresh": "Actualiser",
   "lastUpdated": "Dernière mise à jour : {{time}}",
+  "platformBadge": "Plateforme ICAM de coalition",
+  "glossary": "Glossaire",
+  "description": "Votre accès sécurisé aux ressources classifiées dans toute la coalition. Toutes les actions sont protégées par des politiques ABAC et enregistrées pour la conformité.",
+  "stats": {
+    "documentsAccessible": "Documents accessibles",
+    "authorizationRate": "Taux d'autorisation",
+    "avgResponseTime": "Temps de réponse moyen"
+  },
+  "federation": {
+    "directAccess": "Accès direct",
+    "homeInstance": "Instance d'origine",
+    "federated": "Fédéré",
+    "status": {
+      "title": "État de la fédération",
+      "subtitle": "Votre identité et contexte d'accès actuel",
+      "federatedAccess": "Accès fédéré",
+      "homeInstance": "Instance d'origine",
+      "portal": "Portail"
+    },
+    "stats": {
+      "partners": {
+        "title": "Partenaires de fédération",
+        "description": "Fournisseurs d'identité actifs dans le réseau"
+      },
+      "crossPartnerAccesses": {
+        "title": "Accès inter-partenaires",
+        "description": "Ressources consultées depuis d'autres partenaires"
+      },
+      "authentications": {
+        "title": "Authentifications d'aujourd'hui",
+        "description": "Connexions de fédération aujourd'hui"
+      }
+    },
+    "explanation": {
+      "title": "Qu'est-ce que la fédération d'identité ?",
+      "federationTerm": "La fédération d'identité",
+      "description": "vous permet de vous authentifier avec le fournisseur d'identité de votre organisation d'origine et d'accéder aux ressources des partenaires de coalition sans créer de comptes séparés. Ceci suit les normes",
+      "stanagTerm": "ADatP-5663",
+      "standardsText": "pour la gestion d'identité OTAN."
+    }
+  },
+  "instance": "Instance",
+  "clearance": "Habilitation",
+  "country": "Pays",
+  "resources": {
+    "accessibleDocuments": "Documents accessibles",
+    "yourUploads": "Vos téléchargements",
+    "recentlyViewed": "Consultés récemment",
+    "resourceStats": "Statistiques des ressources",
+    "resourcesByClassification": "Ressources par niveau de classification",
+    "recentActivity": "Activité récente",
+    "basedOnYourClearance": "Basé sur votre habilitation",
+    "andCountryAffiliation": "et votre affiliation pays",
+    "youCanAccess": "vous pouvez accéder à",
+    "documentsAcross": "documents dans",
+    "differentClassifications": "différentes classifications",
+    "browseAll": "Parcourir tout",
+    "resourceStats": "Statistiques des ressources",
+    "yourAccessContext": "Votre contexte d'accès",
+    "basedOnYourClearance": "Basé sur votre habilitation",
+    "andCountryAffiliation": "et votre affiliation pays",
+    "youCanAccessDocuments": "vous pouvez accéder aux documents jusqu'à la classification",
+    "thatAreReleasableTo": "qui sont diffusables à",
+    "maxClassification": "Classification maximale",
+    "releasability": "Diffusabilité",
+    "mustInclude": "Doit inclure"
+  },
+  "authorization": {
+    "stats": {
+      "allowedRequests": "Requêtes autorisées",
+      "deniedRequests": "Requêtes refusées",
+      "authorizationRate": "Taux d'autorisation",
+      "avgDecisionTime": "Temps de décision moyen"
+    },
+    "profile": {
+      "title": "Votre profil d'autorisation",
+      "subtitle": "Attributs utilisés pour les décisions",
+      "decisions": "ABAC",
+      "current": "Actuel",
+      "countryOfAffiliation": "Pays d'affiliation",
+      "releasabilityTerm": "Diffusabilité",
+      "releasabilityChecked": "vérifiée par rapport à ceci",
+      "coiMemberships": "Adhésions COI"
+    }
+  },
+  "activity": {
+    "stats": {
+      "totalEvents": "Événements totaux",
+      "successfulActions": "Actions réussies",
+      "lastLogin": "Dernière connexion",
+      "activeSessions": "Sessions actives"
+    },
+    "compliance": {
+      "title": "État de conformité",
+      "subtitle": "Votre adhésion aux exigences",
+      "requirements": "ACP-240",
+      "authenticationCompliance": {
+        "name": "Conformité d'authentification",
+        "description": "Toutes les authentifications via des IdP approuvés"
+      },
+      "accessControlAdherence": {
+        "name": "Adhésion au contrôle d'accès",
+        "description": "Aucune tentative d'accès non autorisée"
+      },
+      "auditTrailCompleteness": {
+        "name": "Complétude du journal d'audit",
+        "description": "Toutes les actions enregistrées par ACP-240"
+      },
+      "sessionSecurity": {
+        "name": "Sécurité des sessions",
+        "description": "Durées de vie des jetons dans les limites de la politique"
+      }
+    }
+  },
   "tabs": {
     "overview": "Aperçu",
     "federation": "Fédération",
@@ -26,7 +141,123 @@
     "degraded": "Dégradé",
     "down": "Hors ligne",
     "authorizationRate": "Taux d'autorisation",
-    "systemHealth": "Santé du système"
+    "systemHealth": "Santé du système",
+    "features": {
+      "browseDocuments": {
+        "title": "Parcourir les documents",
+        "description": "Accéder aux ressources classifiées en toute sécurité",
+        "educational": "Chaque accès aux documents est évalué par rapport aux politiques OPA. Votre habilitation, votre pays et vos appartenances COI déterminent ce que vous pouvez consulter.",
+        "stats": {
+          "accessible": "accessibles",
+          "authRate": "taux d'autorisation"
+        },
+        "badges": {
+          "policyEnforced": "Politique appliquée",
+          "endToEndEncrypted": "Chiffrement de bout en bout",
+          "auditLogged": "Journal d'audit"
+        }
+      },
+      "federationNetwork": {
+        "title": "Réseau de fédération",
+        "description": "Fédération d'identité inter-partenaires",
+        "educational": "Authentifiez-vous avec votre IdP d'origine et accédez aux ressources des partenaires de coalition. La fédération permet une collaboration transparente tout en maintenant la sécurité.",
+        "stats": {
+          "partners": "partenaires"
+        }
+      },
+      "uploadDocument": {
+        "title": "Télécharger un document",
+        "description": "Téléchargement sécurisé de documents",
+        "educational": "Téléchargez des documents avec chiffrement ZTDF automatique et étiquetage conforme ACP-240. Définissez la classification et la diffusabilité lors du téléchargement.",
+        "badges": {
+          "ztdfEncryption": "Chiffrement ZTDF"
+        }
+      },
+      "authorizationPolicies": {
+        "title": "Politiques d'autorisation",
+        "description": "Politiques OPA Rego",
+        "educational": "Explorez la suite de politiques modulaires alimentant le moteur ABAC de DIVE. Affichez la hiérarchie des politiques, testez les décisions et comprenez la logique des règles.",
+        "stats": {
+          "policies": "politiques"
+        }
+      },
+      "integrationGuide": {
+        "title": "Guide d'intégration",
+        "description": "ADatP-5663 × ACP-240",
+        "educational": "Tutoriel interactif expliquant comment la fédération d'identité (ADatP-5663) et le contrôle d'accès (ACP-240) fonctionnent ensemble."
+      },
+      "apiDocumentation": {
+        "title": "Documentation API",
+        "description": "Référence API interactive",
+        "educational": "Explorez tous les points de terminaison DIVE V3, testez les requêtes en direct et consultez des exemples de requêtes/réponses. Parfait pour les développeurs intégrant la plateforme ICAM de coalition."
+      },
+      "kasEncryption": {
+        "title": "Chiffrement KAS",
+        "description": "Service d'accès aux clés",
+        "educational": "Libération de clés liée aux politiques pour le contenu chiffré. KAS réévalue l'autorisation avant de libérer les clés de déchiffrement.",
+        "stats": {
+          "encrypted": "chiffrés"
+        }
+      },
+      "compliance": {
+        "title": "Conformité",
+        "description": "Adhésion aux normes OTAN",
+        "educational": "Surveillez la conformité avec ACP-240, STANAG 4774/5636 et autres exigences de sécurité de coalition."
+      }
+    },
+    "sections": {
+      "howDiveWorks": {
+        "title": "Comment fonctionne DIVE V3",
+        "subtitle": "ICAM de coalition en action",
+        "steps": {
+          "federatedAuth": {
+            "title": "Authentification fédérée",
+            "description": "Connectez-vous via votre IdP d'origine. Keycloak gère l'identité entre les partenaires de coalition."
+          },
+          "policyEval": {
+            "title": "Évaluation des politiques",
+            "description": "Le PEP envoie vos attributs à OPA pour une décision ABAC."
+          },
+          "secureAccess": {
+            "title": "Accès sécurisé",
+            "description": "Si autorisé, accédez à la ressource. Pour le contenu chiffré, KAS libère la clé de déchiffrement."
+          }
+        }
+      },
+      "quickTips": {
+        "title": "Conseils rapides",
+        "tips": {
+          "readOnlyAttributes": {
+            "title": "Vos attributs sont en lecture seule",
+            "description": "L'habilitation et les COI sont gérés par l'administrateur de votre IdP d'origine"
+          },
+          "auditLogging": {
+            "title": "Toutes les actions sont auditées",
+            "description": "Chaque décision d'autorisation est enregistrée pour la conformité ACP-240"
+          },
+          "crossPartner": {
+            "title": "Collaboration inter-partenaires",
+            "description": "Les utilisateurs des IdP partenaires peuvent accéder à vos documents si la diffusabilité le permet"
+          }
+        }
+      },
+      "federationPartners": {
+        "title": "Partenaires de fédération actifs",
+        "providersAvailable": "fournisseurs d'identité disponibles",
+        "viewAll": "Voir tout"
+      },
+      "systemStatus": {
+        "title": "État du système",
+        "services": {
+          "opaEngine": "Moteur de politiques OPA",
+          "keycloakAuth": "Authentification Keycloak",
+          "resourceApi": "API de ressources"
+        },
+        "status": {
+          "operational": "Opérationnel"
+        }
+      }
+    }
   },
   "widgets": {
     "recentActivity": {

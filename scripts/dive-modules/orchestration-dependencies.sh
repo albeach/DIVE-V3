@@ -422,8 +422,15 @@ orch_parallel_tier_startup() {
     if [ "$PARALLEL_STARTUP_ENABLED" != "true" ]; then
         log_warn "Parallel startup disabled, using sequential fallback"
 
+        local compose_cmd="docker compose"
+        # Add --env-file flag if .env file exists
+        if [ -f ".env" ]; then
+            compose_cmd="$compose_cmd --env-file .env"
+            log_verbose "Using environment file for sequential startup"
+        fi
+
         for service in "${services[@]}"; do
-            docker compose up -d "$service" || return 1
+            $compose_cmd up -d "$service" || return 1
             orch_wait_healthy_with_retry "dive-spoke-${code_lower}-${service}" 300 "$instance_code" || return 1
         done
 
@@ -433,10 +440,17 @@ orch_parallel_tier_startup() {
     # Start all services simultaneously
     local start_pids=()
     local start_time=$(date +%s)
+    local compose_cmd="docker compose"
+
+    # Add --env-file flag if .env file exists
+    if [ -f ".env" ]; then
+        compose_cmd="$compose_cmd --env-file .env"
+        log_verbose "Using environment file for parallel startup"
+    fi
 
     for service in "${services[@]}"; do
         log_verbose "Starting $service..."
-        (docker compose up -d "$service" >/dev/null 2>&1) &
+        ($compose_cmd up -d "$service" >/dev/null 2>&1) &
         start_pids+=($!)
     done
 
@@ -658,7 +672,14 @@ orch_start_services_tiered() {
     log_info "TIER 3: Frontend (sequential)"
     log_info "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
-    docker compose up -d frontend >/dev/null 2>&1 || return 1
+    local compose_cmd="docker compose"
+    # Add --env-file flag if .env file exists
+    if [ -f ".env" ]; then
+        compose_cmd="$compose_cmd --env-file .env"
+        log_verbose "Using environment file for frontend startup"
+    fi
+
+    $compose_cmd up -d frontend >/dev/null 2>&1 || return 1
 
     if ! orch_wait_healthy_with_retry "dive-spoke-${code_lower}-frontend" 120 "$instance_code"; then
         log_error "Frontend failed to become healthy"

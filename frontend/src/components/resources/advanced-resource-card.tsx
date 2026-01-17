@@ -19,6 +19,7 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslation } from '@/hooks/useTranslation';
 
 export interface IResourceCardData {
   resourceId: string;
@@ -154,6 +155,7 @@ export default function AdvancedResourceCard({
   clickToNavigate = false,
 }: AdvancedResourceCardProps) {
   const router = useRouter();
+  const { t } = useTranslation('resources');
   const classColors = classificationColors[resource.classification] || {
     bg: 'bg-gray-100',
     text: 'text-gray-800',
@@ -183,7 +185,7 @@ export default function AdvancedResourceCard({
             {/* Classification Badge */}
             <div className={`flex-shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-bold border-2 ${classColors.bg} ${classColors.text} ${classColors.border}`}>
               <span className="mr-1">{classificationEmojis[resource.classification]}</span>
-              {resource.classification.replace('_', ' ')}
+              {t(`classifications.${resource.classification.toLowerCase()}`)}
             </div>
 
             {/* Multi-KAS Badge - Only show if more than 1 KAO */}
@@ -302,7 +304,7 @@ export default function AdvancedResourceCard({
               <div className="flex items-center gap-1.5 flex-shrink-0">
                 {/* Classification */}
                 <div className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${classColors.bg} ${classColors.text} ${classColors.border}`}>
-                  {classificationEmojis[resource.classification]} {resource.classification.replace('_', ' ')}
+                  {classificationEmojis[resource.classification]} {t(`classifications.${resource.classification.toLowerCase()}`)}
                 </div>
 
                 {/* Multi-KAS Badge - Only if > 1 KAO */}

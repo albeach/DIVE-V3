@@ -29,8 +29,9 @@ import {
   Check,
   Minus,
 } from 'lucide-react';
-import DateRangePicker, { DateRangeDisplay } from './date-range-picker';
+import DateRangePicker from './date-range-picker';
 import type { DateRange } from './date-range-picker';
+import { useTranslation } from '@/hooks/useTranslation';
 
 // ============================================
 // Types
@@ -451,8 +452,8 @@ export default function FacetedFilters({
   hideZeroCounts = false,
   showLiveCounts = true,
   onRefreshFacets,
-  hasApproximateCounts = false,
-}: FacetedFiltersProps & { hasApproximateCounts?: boolean }) {
+}: FacetedFiltersProps) {
+  const { t } = useTranslation('resources');
 
   // Phase 2: Filter zero-count items if enabled
   const filterZeroCounts = useCallback((items: FacetItem[]): FacetItem[] => {
@@ -466,11 +467,10 @@ export default function FacetedFilters({
     return items.filter(item => item.count > 0);
   }, [hideZeroCounts]);
 
-  // Build facet groups
   const facetGroups: FacetGroup[] = useMemo(() => [
     {
       id: 'classifications',
-      label: 'Classification',
+      label: t('filters.classification'),
       icon: <Shield className="w-4 h-4" />,
       items: filterZeroCounts(facets.classifications),
       type: 'multi' as const,
@@ -478,7 +478,7 @@ export default function FacetedFilters({
     },
     {
       id: 'countries',
-      label: 'Releasable To',
+      label: t('filters.releasability'),
       icon: <Globe2 className="w-4 h-4" />,
       items: filterZeroCounts(facets.countries),
       type: 'multi' as const,
@@ -488,7 +488,7 @@ export default function FacetedFilters({
     },
     {
       id: 'cois',
-      label: 'Communities of Interest',
+      label: t('filters.coi'),
       icon: <Users className="w-4 h-4" />,
       items: filterZeroCounts(facets.cois),
       type: 'multi' as const,
@@ -498,13 +498,14 @@ export default function FacetedFilters({
     },
     {
       id: 'encryptionStatus',
-      label: 'Encryption',
+      label: t('filters.encrypted'),
       icon: <Lock className="w-4 h-4" />,
       items: filterZeroCounts(facets.encryptionStatus),
       type: 'multi' as const,
       defaultExpanded: false,
     },
-  ], [facets, filterZeroCounts]);
+  ], [facets, filterZeroCounts, t]);
+
 
   // Toggle handler for multi-select facets
   const handleToggle = useCallback((groupId: string, value: string) => {
@@ -588,7 +589,7 @@ export default function FacetedFilters({
   const safeTotalCount = typeof totalCount === 'number' ? totalCount : 0;
 
   return (
-    <div className={`bg-white dark:bg-gray-900 border border-gray-200/60 dark:border-gray-700/60 rounded-2xl overflow-hidden shadow-lg backdrop-blur-sm ${className}`} style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)' }}>
+    <div className={`bg-white dark:bg-gray-900 border border-gray-200/60 dark:border-gray-700/60 rounded-2xl shadow-lg backdrop-blur-sm ${className}`} style={{ boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)' }}>
       {/* Header - 2025 Modern Design */}
       <div className="px-5 py-4 bg-gradient-to-br from-gray-50 via-white to-gray-50 dark:from-gray-800 dark:via-gray-800/50 dark:to-gray-800 border-b border-gray-200/80 dark:border-gray-700/80">
         <div className="flex items-center justify-between mb-3">
@@ -596,7 +597,7 @@ export default function FacetedFilters({
             <div className="p-1.5 rounded-lg bg-gradient-to-br from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/30">
               <SlidersHorizontal className="w-4 h-4 text-blue-600 dark:text-blue-400" strokeWidth={2.5} />
             </div>
-            <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 tracking-tight">Filters</h3>
+            <h3 className="text-base font-bold text-gray-900 dark:text-gray-100 tracking-tight">{t('filters.title')}</h3>
             {activeFilterCount > 0 && (
               <span className="px-2 py-0.5 bg-gradient-to-r from-blue-600 to-blue-500 text-white text-xs font-bold rounded-full shadow-sm animate-pulse">
                 {activeFilterCount}
@@ -672,7 +673,6 @@ export default function FacetedFilters({
             onToggle={(value) => handleToggle(group.id, value)}
             userHighlight={(userHighlights as any)[group.id]}
             isLoading={isLoading}
-            hasApproximateCounts={hasApproximateCounts}
           />
         ))
         )}
@@ -685,7 +685,7 @@ export default function FacetedFilters({
                 <Calendar className="w-4 h-4 text-gray-600 dark:text-gray-400" strokeWidth={2.5} />
               </div>
               <span className="text-sm font-bold text-gray-800 dark:text-gray-200 tracking-tight">
-                Creation Date
+                {t('dateRange.creationDate')}
               </span>
               {selectedFilters.dateRange && (
                 <span className="ml-1 px-2 py-0.5 bg-gradient-to-r from-blue-600 to-blue-500 text-white text-xs font-bold rounded-full shadow-sm">
@@ -804,13 +804,15 @@ interface FilterTriggerButtonProps {
 }
 
 export function FilterTriggerButton({ activeCount, onClick }: FilterTriggerButtonProps) {
+  const { t } = useTranslation('resources');
+
   return (
     <button
       onClick={onClick}
       className="lg:hidden flex items-center gap-2 px-4 py-2 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow-sm hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
     >
       <Filter className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Filters</span>
+      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">{t('filters.title')}</span>
       {activeCount > 0 && (
         <span className="px-1.5 py-0.5 bg-blue-600 text-white text-xs font-bold rounded-full">
           {activeCount}

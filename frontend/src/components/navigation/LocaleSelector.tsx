@@ -43,6 +43,9 @@ export function LocaleSelector() {
 
   // Handle locale change
   const handleLocaleChange = (newLocale: Locale) => {
+    // Set manual override with timestamp to prevent automatic locale detection from overriding user choice
+    localStorage.setItem('dive-v3-locale-override', 'true');
+    localStorage.setItem('dive-v3-locale-override-time', Date.now().toString());
     changeLocale(newLocale);
     setIsOpen(false);
   };
@@ -76,7 +79,6 @@ export function LocaleSelector() {
         <span className="text-lg" role="img" aria-label={localeNames[locale]}>
           {localeFlags[locale]}
         </span>
-        <span className="hidden sm:inline">{localeNames[locale]}</span>
         <ChevronDown className={`w-4 h-4 text-gray-600 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 

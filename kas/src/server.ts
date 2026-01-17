@@ -263,48 +263,65 @@ app.post('/request-key', async (req: Request, res: Response) => {
         });
 
         // ============================================
-        // 3. Fetch Resource Metadata (from backend)
+        // 3. Get Resource Metadata (from request or backend)
         // ============================================
         let resource: any;
-        try {
-            const resourceResponse = await axios.get(
-                `${BACKEND_URL}/api/resources/${keyRequest.resourceId}`,
-                {
-                    headers: {
-                        'Authorization': `Bearer ${keyRequest.bearerToken}`,
-                        'x-request-id': requestId
-                    },
-                    timeout: 5000
-                }
-            );
-            resource = resourceResponse.data;
-        } catch (error) {
-            kasLogger.error('Failed to fetch resource metadata', {
+        if (keyRequest.resourceMetadata) {
+            // Use resource metadata passed from backend
+            resource = keyRequest.resourceMetadata;
+            kasLogger.info('Using resource metadata from request', {
                 requestId,
                 resourceId: keyRequest.resourceId,
-                error: error instanceof Error ? error.message : 'Unknown error'
+                classification: resource.classification,
+                releasabilityTo: resource.releasabilityTo?.length || 0,
+                coiCount: resource.COI?.length || 0
             });
-
-            const auditEvent: IKASAuditEvent = {
-                eventType: 'KEY_DENIED',
-                timestamp: new Date().toISOString(),
+        } else {
+            // Fallback: fetch from backend (deprecated - should not happen)
+            kasLogger.warn('Resource metadata not provided in request, falling back to backend fetch', {
                 requestId,
-                subject: uniqueID,
-                resourceId: keyRequest.resourceId,
-                kaoId: keyRequest.kaoId,
-                outcome: 'DENY',
-                reason: 'Resource metadata unavailable',
-                latencyMs: Date.now() - startTime
-            };
-            logKASAuditEvent(auditEvent);
+                resourceId: keyRequest.resourceId
+            });
+            try {
+                const resourceResponse = await axios.get(
+                    `${BACKEND_URL}/api/resources/${keyRequest.resourceId}`,
+                    {
+                        headers: {
+                            'Authorization': `Bearer ${keyRequest.bearerToken}`,
+                            'x-request-id': requestId
+                        },
+                        timeout: 5000
+                    }
+                );
+                resource = resourceResponse.data;
+            } catch (error) {
+                kasLogger.error('Failed to fetch resource metadata', {
+                    requestId,
+                    resourceId: keyRequest.resourceId,
+                    error: error instanceof Error ? error.message : 'Unknown error'
+                });
 
-            res.status(503).json({
-                success: false,
-                error: 'Service Unavailable',
-                denialReason: 'Unable to fetch resource metadata',
-                responseTimestamp: new Date().toISOString()
-            } as IKASKeyResponse);
-            return;
+                const auditEvent: IKASAuditEvent = {
+                    eventType: 'KEY_DENIED',
+                    timestamp: new Date().toISOString(),
+                    requestId,
+                    subject: uniqueID,
+                    resourceId: keyRequest.resourceId,
+                    kaoId: keyRequest.kaoId,
+                    outcome: 'DENY',
+                    reason: 'Resource metadata unavailable',
+                    latencyMs: Date.now() - startTime
+                };
+                logKASAuditEvent(auditEvent);
+
+                res.status(503).json({
+                    success: false,
+                    error: 'Service Unavailable',
+                    denialReason: 'Unable to fetch resource metadata',
+                    responseTimestamp: new Date().toISOString()
+                } as IKASKeyResponse);
+                return;
+            }
         }
 
         // ============================================
