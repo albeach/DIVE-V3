@@ -6,7 +6,8 @@
     "description": "DIVE V3 Spoke Instance for FRA",
     "country": "FRA",
     "organizationType": "government",
-    "contactEmail": "admin@fra.dive25.com"
+    "contactEmail": "admin@fra.dive25.com",
+    "registeredSpokeId": "spoke-fra-91b8e981"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -26,13 +27,14 @@
   },
   "authentication": {},
   "federation": {
-    "status": "unregistered",
+    "status": "pending",
     "requestedScopes": [
       "policy:base",
       "policy:fra",
       "data:federation_matrix",
       "data:trusted_issuers"
-    ]
+    ],
+    "registeredAt": "2026-01-19T00:19:16Z"
   },
   "operational": {
     "heartbeatIntervalMs": 30000,

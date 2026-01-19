@@ -175,15 +175,14 @@ export async function uploadFile(
             title: metadata.title,
             ztdf: ztdfObject,
             legacy: {
-                classification: effectiveClassification,
+                classification: effectiveClassification as any,
                 releasabilityTo: effectiveReleasability,
                 COI: metadata.COI || [],
                 coiOperator: metadata.coiOperator || 'ALL',
                 encrypted: true,
                 encryptedContent: ztdfObject.payload.encryptedChunks[0]?.encryptedData
             },
-            // Add STANAG metadata to resource
-            stanag: stanagMetadata,
+            stanag: stanagMetadata
         };
 
         await createZTDFResource(ztdfResource);
@@ -216,12 +215,6 @@ export async function uploadFile(
                     policyHash: ztdfObject.policy.policyHash || '',
                     payloadHash: ztdfObject.payload.payloadHash || '',
                     kaoCount: ztdfObject.payload.keyAccessObjects.length
-                },
-                stanag: {
-                    displayMarking: stanagMarking.displayMarking,
-                    portionMarking: stanagMarking.portionMarking,
-                    watermarkText: stanagMarking.watermarkText,
-                    hasBDO: !!existingBDO,
                 }
             }
         };

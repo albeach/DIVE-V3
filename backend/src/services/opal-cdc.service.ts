@@ -43,8 +43,15 @@ class OpalCdcService {
       // Register change callback
       mongoOpalDataStore.onDataChange(this.handleChange.bind(this));
 
-      // Start change stream
-      await mongoOpalDataStore.startChangeStream();
+      // Start change stream (may fail on standalone MongoDB - handle gracefully)
+      try {
+        await mongoOpalDataStore.startChangeStream();
+      } catch (changeStreamError) {
+        logger.warn('OPAL change stream initialization failed - using API polling fallback', {
+          error: changeStreamError instanceof Error ? changeStreamError.message : 'Unknown error',
+          hint: 'Change streams require MongoDB replica set. OPAL will use API polling for updates.'
+        });
+      }
 
       this.initialized = true;
       logger.info('OPAL CDC Service initialized - watching for policy data changes');

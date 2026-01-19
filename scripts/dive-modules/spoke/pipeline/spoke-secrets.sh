@@ -14,10 +14,17 @@
 # =============================================================================
 
 # Prevent multiple sourcing
-if [ -n "$SPOKE_SECRETS_LOADED" ]; then
+# BEST PRACTICE (2026-01-18): Only skip if functions actually exist
+# Don't rely solely on guard variable - it can be set even if load failed
+if type spoke_secrets_load &>/dev/null && \
+   type spoke_secrets_validate &>/dev/null && \
+   type spoke_secrets_generate &>/dev/null; then
+    # Functions already available - module was loaded successfully before
     return 0
 fi
-export SPOKE_SECRETS_LOADED=1
+
+# Mark as loaded (set at END after functions defined, not here)
+# This will be set at the end of the module after all functions are defined
 
 # Ensure common functions are loaded
 if [ -z "$DIVE_COMMON_LOADED" ]; then

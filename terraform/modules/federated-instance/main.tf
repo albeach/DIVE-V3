@@ -818,6 +818,51 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "federation_amr" {
 }
 
 # ============================================================================
+# INCOMING FEDERATION CLIENT SCOPES
+# ============================================================================
+# CRITICAL FIX (2026-01-18): Add default client scopes to incoming federation clients
+# Without these scopes, tokens sent to partner won't include DIVE attribute claims
+# Result: Partner's IdP mappers have no claims to import, federated users get empty attributes
+#
+# Root Cause: Protocol mappers alone don't add claims to tokens - they must be in active scopes!
+# The client_scopes must be assigned as defaults for claims to be included.
+#
+# This fixes the issue where users logging in via spoke IdP to Hub had:
+#   - uniqueID: UUID (instead of username)
+#   - countryOfAffiliation: USA (instead of FRA/DEU/GBR)
+#   - clearance: UNCLASSIFIED (instead of actual clearance)
+#
+# With this fix, when USA federates to FRA:
+#   1. FRA has client "dive-v3-broker-usa" with protocol mappers ✅
+#   2. These mappers are now in default scopes ✅ (THIS FIX)
+#   3. Tokens to USA include uniqueID, countryOfAffiliation, clearance ✅
+#   4. USA's IdP mappers import these claims ✅
+#   5. Federated user has correct attributes ✅
+
+resource "keycloak_openid_client_default_scopes" "incoming_federation_defaults" {
+  for_each = var.federation_partners
+
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.incoming_federation[each.key].id
+
+  default_scopes = [
+    "profile",
+    "email",
+    "roles",
+    "web-origins",
+    "acr",
+    "basic",
+    # DIVE custom scopes - CRITICAL for federation claim mapping
+    # These scopes exist in the realm (created by Keycloak or previous Terraform runs)
+    # By referencing them here, protocol mappers will be included in tokens
+    "clearance",
+    "countryOfAffiliation",
+    "uniqueID",
+    "acpCOI",
+  ]
+}
+
+# ============================================================================
 # KEYCLOAK ROLES - COMPREHENSIVE ADMIN ROLE HIERARCHY
 # ============================================================================
 # Role hierarchy for DIVE V3:

@@ -6,7 +6,7 @@
  * Routes:
  * - GET /api/idps/public - List enabled IdPs for login page (MongoDB-validated)
  * - POST /api/public/sp-registration - Self-service SP registration (Phase 4)
- * 
+ *
  * ARCHITECTURE DECISION (Jan 2026):
  * MongoDB is the SOURCE OF TRUTH for active federation partners.
  * The /api/idps/public endpoint validates Keycloak IdPs against MongoDB spokes
@@ -37,7 +37,7 @@ const router = Router();
  * 1. Keycloak IdPs - Technical IdP configuration
  * 2. Self-exclusion - Don't show "USA" IdP on USA Hub
  * 3. MongoDB Validation - Only show IdPs with active spokes (SOURCE OF TRUTH)
- * 
+ *
  * ARCHITECTURE: MongoDB spokes collection is the source of truth.
  * If MongoDB is unavailable, falls back to Keycloak-only filtering with warning.
  */
@@ -64,7 +64,7 @@ router.get('/idps/public', async (req: Request, res: Response): Promise<void> =>
         let activeSpokeCodes: string[] = [];
         try {
             activeSpokeCodes = await hubSpokeRegistry.getActiveSpokeCodes();
-            
+
             if (activeSpokeCodes.length > 0) {
                 const beforeCount = filteredIdps.length;
                 filteredIdps = filteredIdps.filter(idp => {
@@ -72,7 +72,7 @@ router.get('/idps/public', async (req: Request, res: Response): Promise<void> =>
                     return instanceCode && activeSpokeCodes.includes(instanceCode);
                 });
                 mongoValidated = true;
-                
+
                 logger.info('Public: MongoDB validation applied', {
                     requestId,
                     beforeCount,

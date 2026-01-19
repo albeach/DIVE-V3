@@ -241,23 +241,32 @@ export class MongoOpalDataStore {
     // Watch all three collections
     const pipeline = [{ $match: { operationType: { $in: ['insert', 'update', 'delete', 'replace'] } } }];
 
-    this.changeStream = this.db!.watch(pipeline, {
-      fullDocument: 'updateLookup',
-    });
+    try {
+      this.changeStream = this.db!.watch(pipeline, {
+        fullDocument: 'updateLookup',
+      });
 
-    this.changeStream.on('change', (change) => {
-      const collection = (change as { ns?: { coll: string } }).ns?.coll || 'unknown';
-      logger.debug('OPAL data change detected', { collection, operationType: change.operationType });
+      this.changeStream.on('change', (change) => {
+        const collection = (change as { ns?: { coll: string } }).ns?.coll || 'unknown';
+        logger.debug('OPAL data change detected', { collection, operationType: change.operationType });
 
-      // Notify all callbacks
-      this.changeCallbacks.forEach((cb) => cb(collection, change));
-    });
+        // Notify all callbacks
+        this.changeCallbacks.forEach((cb) => cb(collection, change));
+      });
 
-    this.changeStream.on('error', (error) => {
-      logger.error('Change stream error', { error: error.message });
-    });
+      this.changeStream.on('error', (error) => {
+        logger.error('Change stream error', { error: error.message });
+      });
 
-    logger.info('OPAL data change stream started');
+      logger.info('OPAL data change stream started');
+    } catch (error) {
+      // Change streams require replica set - log warning for standalone MongoDB
+      logger.warn('Could not start OPAL data change stream', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        hint: 'Change streams require MongoDB replica set. OPAL data will be updated via polling/API calls.'
+      });
+      // Don't set this.changeStream - leave it null so polling fallback can work
+    }
   }
 
   /**

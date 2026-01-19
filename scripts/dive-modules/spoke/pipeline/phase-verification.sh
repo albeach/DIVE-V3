@@ -15,10 +15,11 @@
 # =============================================================================
 
 # Prevent multiple sourcing
-if [ -n "$SPOKE_PHASE_VERIFICATION_LOADED" ]; then
+# BEST PRACTICE (2026-01-18): Check functions exist, not just guard variable
+if type spoke_phase_verification &>/dev/null; then
     return 0
 fi
-export SPOKE_PHASE_VERIFICATION_LOADED=1
+# Module loaded marker will be set at end after functions defined
 
 # =============================================================================
 # MAIN VERIFICATION PHASE FUNCTION
@@ -62,10 +63,11 @@ spoke_phase_verification() {
         log_warn "Keycloak health check failed"
     fi
 
-    # Step 4: Federation verification (deploy mode)
+    # Step 4: Federation verification (deploy mode) - CRITICAL
     if [ "$pipeline_mode" = "deploy" ]; then
         if ! spoke_verify_federation "$instance_code"; then
-            log_warn "Federation verification incomplete"
+            log_error "Federation verification failed - this is critical for DIVE V3"
+            verification_passed=false
         fi
     fi
 
@@ -83,11 +85,12 @@ spoke_phase_verification() {
     fi
 
     if [ "$verification_passed" = true ]; then
-        log_success "Verification phase complete"
+        log_success "Verification phase complete - all checks passed"
         return 0
     else
-        log_warn "Verification complete with warnings"
-        return 0  # Non-blocking - return success with warnings
+        log_error "Verification failed - critical issues detected"
+        log_error "Deployment cannot proceed with unresolved issues"
+        return 1  # BLOCKING - fail deployment on critical issues
     fi
 }
 
@@ -603,3 +606,5 @@ spoke_verify_quick_health() {
 
     return 0
 }
+
+export SPOKE_PHASE_VERIFICATION_LOADED=1

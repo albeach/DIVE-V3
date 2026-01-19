@@ -16,10 +16,11 @@
 # =============================================================================
 
 # Prevent multiple sourcing
-if [ -n "$SPOKE_PHASE_INITIALIZATION_LOADED" ]; then
+# BEST PRACTICE (2026-01-18): Check functions exist, not just guard variable
+if type spoke_phase_initialization &>/dev/null; then
     return 0
 fi
-export SPOKE_PHASE_INITIALIZATION_LOADED=1
+# Module loaded marker will be set at end after functions defined
 
 # =============================================================================
 # MAIN INITIALIZATION PHASE FUNCTION
@@ -758,3 +759,5 @@ spoke_init_check_drift() {
         log_verbose "Drift detection not available"
     fi
 }
+
+export SPOKE_PHASE_INITIALIZATION_LOADED=1

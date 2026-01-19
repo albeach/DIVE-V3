@@ -144,9 +144,9 @@ export function DashboardFederation({
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.1 }}
-        className="grid grid-cols-1 md:grid-cols-3 gap-4"
+        className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch"
       >
-        <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-lg">
+        <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-lg flex flex-col">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
               <Globe className="w-5 h-5 text-white" />
@@ -159,7 +159,7 @@ export function DashboardFederation({
           <p className="text-xs text-slate-500">{t('federation.stats.partners.description')}</p>
         </div>
 
-        <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-lg">
+        <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-lg flex flex-col">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
               <Activity className="w-5 h-5 text-white" />
@@ -172,7 +172,7 @@ export function DashboardFederation({
           <p className="text-xs text-slate-500">{t('federation.stats.crossPartnerAccesses.description')}</p>
         </div>
 
-        <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-lg">
+        <div className="rounded-2xl bg-white border border-slate-200 p-6 shadow-lg flex flex-col">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center">
               <Fingerprint className="w-5 h-5 text-white" />

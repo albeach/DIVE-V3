@@ -9,10 +9,15 @@
 # =============================================================================
 
 # Prevent multiple sourcing
-if [ -n "$SPOKE_PHASE_SEEDING_LOADED" ]; then
+# BEST PRACTICE (2026-01-18): Check functions exist, not just guard variable
+if type spoke_phase_seeding &>/dev/null && \
+   type spoke_seed_users &>/dev/null && \
+   type spoke_seed_resources &>/dev/null; then
+    # Functions already available - module was loaded successfully
     return 0
 fi
-export SPOKE_PHASE_SEEDING_LOADED=1
+
+# Mark as loaded (will be set at end after all functions defined)
 
 # Load secret management functions
 if [ -z "$SPOKE_SECRETS_LOADED" ]; then
@@ -339,3 +344,6 @@ spoke_seed() {
     log_success "Seeding complete for $code_upper"
     return 0
 }
+
+# Mark module as loaded AFTER all functions are defined (best practice)
+export SPOKE_PHASE_SEEDING_LOADED=1
