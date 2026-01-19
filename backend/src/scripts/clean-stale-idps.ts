@@ -1,14 +1,14 @@
 /**
  * DIVE V3 Clean Stale IdPs Script
- * 
+ *
  * Removes Keycloak IdPs that don't have corresponding running spoke containers.
  * This ensures the UI only shows IdPs for active federation partners.
- * 
+ *
  * Usage:
  *   npx ts-node src/scripts/clean-stale-idps.ts --dry-run    # Preview changes
  *   npx ts-node src/scripts/clean-stale-idps.ts              # Execute cleanup
  *   npx ts-node src/scripts/clean-stale-idps.ts --force      # Skip confirmation
- * 
+ *
  * @version 1.0.0
  * @date 2026-01-17
  */
@@ -71,10 +71,10 @@ function getRunningSpokeCodes(): string[] {
       'docker ps --format "{{.Names}}" 2>/dev/null | grep -E "dive-spoke-" || true',
       { encoding: 'utf-8' }
     );
-    
+
     const codes = new Set<string>();
     const lines = output.trim().split('\n').filter(Boolean);
-    
+
     for (const line of lines) {
       const match = line.match(/dive-spoke-([a-z]+)-/i);
       if (match) {
@@ -113,7 +113,7 @@ async function prompt(question: string): Promise<boolean> {
     input: process.stdin,
     output: process.stdout,
   });
-  
+
   return new Promise((resolve) => {
     rl.question(question, (answer) => {
       rl.close();
@@ -160,10 +160,10 @@ Options:
   console.log('Fetching Keycloak IdPs...');
   const token = await getKeycloakToken();
   const idps = await fetchKeycloakIdPs(token);
-  
+
   console.log('Checking running Docker containers...');
   const runningCodes = getRunningSpokeCodes();
-  
+
   console.log();
   console.log(`📊 Current State:`);
   console.log(`   Keycloak IdPs: ${idps.length}`);
@@ -210,7 +210,7 @@ Options:
   // Delete stale IdPs
   console.log();
   console.log('🗑️  Deleting stale IdPs...');
-  
+
   let deleted = 0;
   let failed = 0;
 
@@ -230,7 +230,7 @@ Options:
   console.log('📝 Summary:');
   console.log(`   Deleted: ${deleted}`);
   console.log(`   Failed: ${failed}`);
-  
+
   // Verify final state
   console.log();
   console.log('Verifying final state...');
@@ -243,7 +243,7 @@ Options:
   if (failed > 0) {
     process.exit(1);
   }
-  
+
   console.log();
   console.log('✅ Cleanup complete!');
 }

@@ -14,17 +14,17 @@
 # Date: 2026-01-13
 # =============================================================================
 
-# FIX (2026-01-15): Clear guard variable if set in parent shell
-# This prevents the guard from blocking module load during deployment
+# FIX (2026-01-18): Simplified guard - always allow reload if functions missing
+# This ensures module loads correctly even when sourced multiple times
 if [ -n "$SPOKE_FEDERATION_LOADED" ]; then
-    # Already loaded in parent - functions should be available
-    # If not, something is wrong with exports
-    if ! type spoke_federation_setup &>/dev/null; then
-        # Functions not available - force reload
-        unset SPOKE_FEDERATION_LOADED
-    else
-        # Functions available - skip reload
+    # Check if critical functions exist
+    if type spoke_federation_create_bidirectional &>/dev/null && \
+       type spoke_federation_setup &>/dev/null; then
+        # Functions available - module already loaded successfully
         return 0
+    else
+        # Guard set but functions missing - force reload
+        unset SPOKE_FEDERATION_LOADED
     fi
 fi
 export SPOKE_FEDERATION_LOADED=1
@@ -35,7 +35,9 @@ export SPOKE_FEDERATION_LOADED=1
 # Load federation-link.sh to make _federation_link_direct() available
 # This is required for automated bidirectional federation
 if [ -z "$DIVE_FEDERATION_LINK_LOADED" ]; then
-    _fed_link_path="${BASH_SOURCE[0]%/*}/../federation-link.sh"
+    # CRITICAL FIX (2026-01-18): Correct path - spoke-federation.sh is in spoke/pipeline/,
+    # federation-link.sh is in modules/ root, so need to go up TWO levels
+    _fed_link_path="${BASH_SOURCE[0]%/*}/../../federation-link.sh"
     if [ -f "$_fed_link_path" ]; then
         source "$_fed_link_path"
     elif [ -f "${DIVE_ROOT}/scripts/dive-modules/federation-link.sh" ]; then
@@ -50,11 +52,17 @@ fi
 # Database-driven federation state management
 # Part of Orchestration Architecture Review
 if [ -z "$FEDERATION_STATE_DB_LOADED" ]; then
+    # CRITICAL FIX (2026-01-18): Path calculation - spoke-federation.sh is in spoke/pipeline/,
+    # federation-state-db.sh is in modules/ root
+    # ${BASH_SOURCE[0]%/*} = scripts/dive-modules/spoke/pipeline
+    # ../../ goes up to scripts/dive-modules/
     _fed_db_path="${BASH_SOURCE[0]%/*}/../../federation-state-db.sh"
     if [ -f "$_fed_db_path" ]; then
         source "$_fed_db_path"
     elif [ -f "${DIVE_ROOT}/scripts/dive-modules/federation-state-db.sh" ]; then
         source "${DIVE_ROOT}/scripts/dive-modules/federation-state-db.sh"
+    else
+        log_verbose "federation-state-db.sh not found - database state tracking unavailable"
     fi
     unset _fed_db_path
 fi
@@ -64,13 +72,13 @@ fi
 # =============================================================================
 
 # Hub Keycloak defaults
-readonly HUB_KC_CONTAINER="${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}"
-# FIX (2026-01-15): Use HUB_REALM from common.sh (dive-v3-broker-usa)
-# LEGACY dive-v3-broker (without suffix) is DEPRECATED
-readonly HUB_REALM="${HUB_REALM:-dive-v3-broker-usa}"
-readonly HUB_IDP_ALIAS_PREFIX="spoke-idp-"
+# NOTE: Use local variables in functions instead of readonly module-level constants
+# to avoid conflicts with common.sh which also defines HUB_REALM as readonly
+: "${HUB_KC_CONTAINER:=dive-hub-keycloak}"
+: "${HUB_REALM:=dive-v3-broker-usa}"
+: "${HUB_IDP_ALIAS_PREFIX:=spoke-idp-}"
 
-# Federation status states
+# Federation status states (safe to make readonly - not used in common.sh)
 readonly FED_STATUS_UNREGISTERED="unregistered"
 readonly FED_STATUS_PENDING="pending"
 readonly FED_STATUS_ACTIVE="active"
@@ -722,9 +730,10 @@ spoke_federation_create_bidirectional() {
         fed_db_update_status "usa" "$code_lower" "HUB_TO_SPOKE" "CREATING" || true
     fi
 
-    # Check if Hub is accessible
-    if ! docker ps --format '{{.Names}}' | grep -q "^${HUB_KC_CONTAINER}$"; then
-        log_warn "Hub Keycloak not running - skipping bidirectional setup"
+    # Check if Hub is accessible (use default if HUB_KC_CONTAINER not set)
+    local hub_container="${HUB_KC_CONTAINER:-dive-hub-keycloak}"
+    if ! docker ps --format '{{.Names}}' | grep -q "^${hub_container}$"; then
+        log_warn "Hub Keycloak not running (expected container: $hub_container)"
         if type fed_db_update_status &>/dev/null; then
             fed_db_update_status "usa" "$code_lower" "HUB_TO_SPOKE" "FAILED" \
                 "Hub Keycloak not running" || true
@@ -755,14 +764,20 @@ spoke_federation_create_bidirectional() {
     # Fallback: Direct implementation
     log_verbose "Creating $code_lower-idp in Hub directly..."
 
-    # Get Hub admin token
+    # Get Hub admin token (use local variable, not constant which may be empty)
+    log_verbose "DEBUG: hub_container='$hub_container', HUB_KC_CONTAINER='${HUB_KC_CONTAINER:-NOT_SET}'"
+    log_verbose "DEBUG: Calling spoke_federation_get_admin_token with container: $hub_container"
+    
     local hub_admin_token
-    hub_admin_token=$(spoke_federation_get_admin_token "$HUB_KC_CONTAINER")
+    hub_admin_token=$(spoke_federation_get_admin_token "$hub_container" "true")  # Enable debug
 
     if [ -z "$hub_admin_token" ]; then
-        log_error "Cannot get Hub admin token"
+        log_error "Cannot get Hub admin token for container: $hub_container"
+        log_error "DEBUG: Check if container is running: docker ps | grep $hub_container"
         return 1
     fi
+    
+    log_verbose "DEBUG: Hub admin token retrieved successfully (${#hub_admin_token} chars)"
 
     # Get spoke details
     local spoke_keycloak_port
@@ -818,7 +833,7 @@ spoke_federation_create_bidirectional() {
 
     # Check if IdP already exists
     local existing_idp
-    existing_idp=$(docker exec "$HUB_KC_CONTAINER" curl -sf \
+    existing_idp=$(docker exec "$hub_container" curl -sf \
         -H "Authorization: Bearer $hub_admin_token" \
         "http://localhost:8080/admin/realms/${HUB_REALM}/identity-provider/instances/${idp_alias}" 2>/dev/null || echo "")
 
@@ -829,7 +844,7 @@ spoke_federation_create_bidirectional() {
 
     # Create IdP
     local create_result
-    create_result=$(docker exec "$HUB_KC_CONTAINER" curl -sf \
+    create_result=$(docker exec "$hub_container" curl -sf \
         -X POST "http://localhost:8080/admin/realms/${HUB_REALM}/identity-provider/instances" \
         -H "Authorization: Bearer $hub_admin_token" \
         -H "Content-Type: application/json" \
@@ -840,7 +855,7 @@ spoke_federation_create_bidirectional() {
 
         # Configure IdP mappers
         if type _configure_idp_mappers &>/dev/null; then
-            _configure_idp_mappers "$HUB_KC_CONTAINER" "$hub_admin_token" "$HUB_REALM" "$idp_alias"
+            _configure_idp_mappers "$hub_container" "$hub_admin_token" "$HUB_REALM" "$idp_alias"
         fi
 
         # ==========================================================================
@@ -983,17 +998,23 @@ EOF
 ##
 spoke_federation_get_admin_token() {
     local container="$1"
+    local debug="${2:-false}"  # Optional debug parameter
 
     # Get admin password - try multiple sources
     local admin_pass=""
+    local source="unknown"
     
     # 1. Try container environment variables
     admin_pass=$(docker exec "$container" printenv KC_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+    [ -n "$admin_pass" ] && source="KC_ADMIN_PASSWORD"
+    
     if [ -z "$admin_pass" ]; then
         admin_pass=$(docker exec "$container" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+        [ -n "$admin_pass" ] && source="KC_BOOTSTRAP_ADMIN_PASSWORD"
     fi
     if [ -z "$admin_pass" ]; then
         admin_pass=$(docker exec "$container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+        [ -n "$admin_pass" ] && source="KEYCLOAK_ADMIN_PASSWORD"
     fi
     
     # 2. Try local environment variables (instance-suffixed)
@@ -1009,19 +1030,42 @@ spoke_federation_get_admin_token() {
         if [ -n "$instance_code" ]; then
             local env_var="KEYCLOAK_ADMIN_PASSWORD_${instance_code}"
             admin_pass="${!env_var}"
-            [ -n "$admin_pass" ] && log_verbose "Using local env var $env_var for admin token"
+            if [ -n "$admin_pass" ]; then
+                source="env:$env_var"
+                log_verbose "Using local env var $env_var for admin token"
+            fi
         fi
     fi
     
     # 3. Try KEYCLOAK_ADMIN_PASSWORD without suffix (legacy)
-    if [ -z "$admin_pass" ] && [ -n "$KEYCLOAK_ADMIN_PASSWORD" ]; then
+    if [ -z "$admin_pass" ] && [ -n "${KEYCLOAK_ADMIN_PASSWORD:-}" ]; then
         admin_pass="$KEYCLOAK_ADMIN_PASSWORD"
+        source="env:KEYCLOAK_ADMIN_PASSWORD"
+    fi
+    
+    # 4. Try GCP Secret Manager for Hub (last resort)
+    if [ -z "$admin_pass" ] && [[ "$container" == "dive-hub-keycloak" ]]; then
+        if type check_gcloud &>/dev/null && check_gcloud 2>/dev/null; then
+            admin_pass=$(gcloud secrets versions access latest --secret="dive-v3-keycloak-usa" --project=dive25 2>/dev/null | tr -d '\n\r')
+            if [ -n "$admin_pass" ]; then
+                source="gcp:dive-v3-keycloak-usa"
+                log_verbose "Retrieved Hub password from GCP Secret Manager"
+            fi
+        fi
     fi
 
     if [ -z "$admin_pass" ]; then
-        log_verbose "Cannot get admin password for $container from any source"
+        log_error "Cannot get admin password for $container from any source"
+        log_error "Tried: container env vars, KEYCLOAK_ADMIN_PASSWORD_*, KEYCLOAK_ADMIN_PASSWORD, GCP secrets"
+        if [ "$debug" = "true" ]; then
+            log_error "Debug: KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-NOT_SET}"
+            log_error "Debug: KEYCLOAK_ADMIN_PASSWORD_USA=${KEYCLOAK_ADMIN_PASSWORD_USA:-NOT_SET}"
+            log_error "Debug: Container running: $(docker ps --filter name=$container --format '{{.Names}}')"
+        fi
         return 1
     fi
+    
+    [ "$debug" = "true" ] && log_verbose "Password source: $source (length: ${#admin_pass})"
 
     # Get token
     local response
@@ -1031,8 +1075,22 @@ spoke_federation_get_admin_token() {
         -d "username=admin" \
         -d "password=${admin_pass}" \
         -d "client_id=admin-cli" 2>/dev/null)
+    
+    if [ -z "$response" ]; then
+        log_error "Token request to $container failed (empty response)"
+        return 1
+    fi
 
-    echo "$response" | grep -o '"access_token":"[^"]*' | cut -d'"' -f4
+    local token
+    token=$(echo "$response" | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+    
+    if [ -z "$token" ]; then
+        log_error "No access_token in response from $container"
+        [ "$debug" = "true" ] && log_error "Response: $response"
+        return 1
+    fi
+    
+    echo "$token"
 }
 
 ##

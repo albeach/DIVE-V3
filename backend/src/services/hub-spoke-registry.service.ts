@@ -895,10 +895,11 @@ class HubSpokeRegistryService extends EventEmitter {
   /**
    * Get spoke's Keycloak admin password
    *
-   * Priority order:
-   * 1. Stored in spoke registration (provided during registration - PREFERRED)
-   * 2. Environment variable (KEYCLOAK_ADMIN_PASSWORD_{CODE})
-   * 3. GCP Secret Manager (production)
+   * SECURITY BEST PRACTICE: Only retrieves password from spoke registration (MongoDB).
+   * Spokes provide their admin password during registration for bidirectional federation.
+   * 
+   * REMOVED: Environment variable and GCP Secret Manager fallbacks (legacy/insecure)
+   * The Hub should NOT store spoke admin passwords - only the spoke itself should know it.
    *
    * CRITICAL: For bidirectional federation, the spoke MUST provide its
    * Keycloak admin password during registration. Without it, we cannot
@@ -907,48 +908,23 @@ class HubSpokeRegistryService extends EventEmitter {
   private async getSpokeKeycloakPassword(spokeInstanceCode: string): Promise<string> {
     const code = spokeInstanceCode.toUpperCase();
 
-    // PRIORITY 1: Check if password was provided in spoke registration
+    // ONLY SOURCE: Spoke registration in MongoDB
     const spoke = await this.store.findByInstanceCode(code);
     if (spoke?.keycloakAdminPassword) {
       logger.info('Using Keycloak password from spoke registration', {
         spokeInstanceCode: code,
-        source: 'registration',
+        source: 'spoke_registration',
+        passwordLength: spoke.keycloakAdminPassword.length
       });
       return spoke.keycloakAdminPassword;
     }
 
-    // PRIORITY 2: Try environment variable
-    const envVar = `KEYCLOAK_ADMIN_PASSWORD_${code}`;
-    if (process.env[envVar]) {
-      logger.info('Using Keycloak password from environment variable', {
-        spokeInstanceCode: code,
-        source: 'environment',
-      });
-      return process.env[envVar];
-    }
-
-    // PRIORITY 3 (Production): Get from GCP Secret Manager
-    try {
-      const { getSecret } = await import('../utils/gcp-secrets');
-      const secretName = `keycloak-${code.toLowerCase()}` as any;
-      const secret = await getSecret(secretName);
-
-      if (!secret) {
-        throw new Error(`GCP secret ${secretName} returned null`);
-      }
-
-      return secret;
-    } catch (error) {
-      logger.error('Failed to get spoke Keycloak password from GCP', {
-        spokeInstanceCode,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        hint: 'Ensure GCP Secret Manager is configured and secret exists',
-      });
-      throw new Error(
-        `Cannot retrieve Keycloak password for ${spokeInstanceCode}. ` +
-        `Ensure GCP secret 'dive-v3-keycloak-${code.toLowerCase()}' exists.`
-      );
-    }
+    // No password available - spoke must provide during registration
+    throw new Error(
+      `No Keycloak admin password available for spoke ${code}. ` +
+      `Spoke must provide 'keycloakAdminPassword' field during registration. ` +
+      `Security: Hub does NOT store spoke passwords in environment or GCP.`
+    );
   }
 
   /**
@@ -1594,24 +1570,24 @@ class HubSpokeRegistryService extends EventEmitter {
   /**
    * Get list of active spoke instance codes from MongoDB
    * This is the SOURCE OF TRUTH for which federation partners are active
-   * 
+   *
    * Used by:
    * - /api/idps/public endpoint to filter IdPs
    * - Dashboard for "Active Federation Partners" count
    * - Federated search for available spokes
-   * 
+   *
    * @returns Array of uppercase instance codes (e.g., ['DEU', 'FRA', 'GBR'])
    */
   async getActiveSpokeCodes(): Promise<string[]> {
     try {
       const activeSpokes = await this.store.findByStatus('approved');
       const codes = activeSpokes.map(spoke => spoke.instanceCode.toUpperCase());
-      
+
       logger.debug('Retrieved active spoke codes from MongoDB', {
         count: codes.length,
         codes
       });
-      
+
       return codes;
     } catch (error) {
       logger.error('Failed to get active spoke codes from MongoDB', {
@@ -1623,7 +1599,7 @@ class HubSpokeRegistryService extends EventEmitter {
 
   /**
    * Validate if a Keycloak IdP alias has a corresponding active spoke in MongoDB
-   * 
+   *
    * @param idpAlias - The IdP alias (e.g., 'deu-idp', 'fra-idp')
    * @returns true if the spoke is registered and active in MongoDB
    */
@@ -1633,10 +1609,10 @@ class HubSpokeRegistryService extends EventEmitter {
       logger.warn('Could not extract instance code from IdP alias', { idpAlias });
       return false;
     }
-    
+
     const spoke = await this.store.findByInstanceCode(instanceCode);
     const isValid = spoke !== null && spoke.status === 'approved';
-    
+
     logger.debug('IdP validation against MongoDB spokes', {
       idpAlias,
       instanceCode,
@@ -1644,19 +1620,19 @@ class HubSpokeRegistryService extends EventEmitter {
       spokeStatus: spoke?.status,
       isValid
     });
-    
+
     return isValid;
   }
 
   /**
    * Filter a list of IdPs to only include those with active spokes in MongoDB
-   * 
+   *
    * @param idps - Array of IdP objects with 'alias' property
    * @returns Filtered array with only IdPs that have active spokes
    */
   async filterIdPsByActiveSpokes<T extends { alias: string }>(idps: T[]): Promise<T[]> {
     const activeCodes = await this.getActiveSpokeCodes();
-    
+
     return idps.filter(idp => {
       const instanceCode = this.extractInstanceCodeFromAlias(idp.alias);
       return instanceCode && activeCodes.includes(instanceCode);
@@ -1703,12 +1679,12 @@ class HubSpokeRegistryService extends EventEmitter {
     if (heartbeatAge < intervalMs * 2) {
       return 'online';
     }
-    
+
     // Degraded: heartbeat within 5x interval (missed a few)
     if (heartbeatAge < intervalMs * 5) {
       return 'degraded';
     }
-    
+
     // Offline: heartbeat too old
     return 'offline';
   }
@@ -1727,14 +1703,14 @@ class HubSpokeRegistryService extends EventEmitter {
   }>> {
     try {
       const activeSpokes = await this.store.findByStatus('approved');
-      
+
       return activeSpokes.map(spoke => ({
         instanceCode: spoke.instanceCode,
         name: spoke.name,
         status: spoke.status,
         runtimeHealth: this.getSpokeRuntimeHealth(spoke),
         lastHeartbeat: spoke.lastHeartbeat || null,
-        heartbeatAgeSeconds: spoke.lastHeartbeat 
+        heartbeatAgeSeconds: spoke.lastHeartbeat
           ? Math.floor((Date.now() - spoke.lastHeartbeat.getTime()) / 1000)
           : null,
       }));

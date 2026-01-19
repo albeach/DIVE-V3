@@ -927,7 +927,7 @@ export const requestKeyHandler = async (
                     auditEventId: crossKASResult.auditEventId,
                     kasDecision: {
                         allow: true,
-                        kasAuthority,
+                        kasAuthority: kasAuth,
                         organization: crossKASResult.organization,
                         isCrossInstance: true
                     }
@@ -937,7 +937,7 @@ export const requestKeyHandler = async (
             logger.info('Cross-KAS key released successfully', {
                 requestId,
                 resourceId,
-                kasAuthority,
+                kasAuthority: kasAuth,
                 organization: crossKASResult.organization,
                 latencyMs: crossKASResult.latencyMs
             });

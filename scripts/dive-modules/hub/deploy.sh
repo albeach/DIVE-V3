@@ -239,8 +239,46 @@ EOF
         log_warn "sync-amr-attributes.sh not found - skipping AMR sync"
     fi
 
-    # Step 11: Verify deployment
-    log_step "Step 11/11: Verifying deployment..."
+    # Step 11: Initialize Orchestration Database (CRITICAL for spoke deployments)
+    log_step "Step 11/12: Initializing orchestration database..."
+    
+    # Check if orchestration database exists
+    if ! docker exec dive-hub-postgres psql -U postgres -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw orchestration; then
+        log_info "Creating orchestration database..."
+        if docker exec dive-hub-postgres psql -U postgres -c "CREATE DATABASE orchestration;" 2>/dev/null; then
+            log_success "✓ Orchestration database created"
+        else
+            log_error "Failed to create orchestration database"
+            return 1
+        fi
+    else
+        log_verbose "Orchestration database already exists"
+    fi
+    
+    # Apply orchestration schema migration (idempotent)
+    if [ -f "${DIVE_ROOT}/scripts/apply-phase2-migration.sh" ]; then
+        log_info "Applying orchestration schema..."
+        # Run migration silently (it's verbose)
+        if bash "${DIVE_ROOT}/scripts/apply-phase2-migration.sh" >/dev/null 2>&1; then
+            log_success "✓ Orchestration schema applied"
+        else
+            log_warn "Schema migration had issues (may already exist)"
+        fi
+    else
+        log_warn "Phase 2 migration script not found"
+    fi
+    
+    # Verify orchestration database is functional
+    if docker exec dive-hub-postgres psql -U postgres -d orchestration -c "SELECT 1" >/dev/null 2>&1; then
+        log_success "✓ Orchestration database functional"
+        export ORCH_DB_ENABLED=true
+    else
+        log_error "Orchestration database not accessible"
+        return 1
+    fi
+
+    # Step 12: Verify deployment
+    log_step "Step 12/12: Verifying deployment..."
     _hub_verify_deployment || log_warn "Some verification checks failed"
 
     echo ""

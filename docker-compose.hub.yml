@@ -42,7 +42,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-postgres
     restart: unless-stopped
     env_file:
-      - /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/hub/.env
+      - .env.hub
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
@@ -67,7 +67,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-mongodb
     restart: unless-stopped
     env_file:
-      - /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/hub/.env
+      - .env.hub
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
       MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
@@ -90,7 +90,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-redis
     restart: unless-stopped
     env_file:
-      - /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/hub/.env
+      - .env.hub
     command: >
       redis-server
       --requirepass ${REDIS_PASSWORD_USA}
@@ -126,7 +126,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-redis-blacklist
     restart: unless-stopped
     env_file:
-      - /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/hub/.env
+      - .env.hub
     command: >
       redis-server
       --requirepass ${REDIS_PASSWORD_BLACKLIST}
@@ -167,7 +167,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-keycloak
     restart: unless-stopped
     env_file:
-      - /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/hub/.env
+      - .env.hub
     entrypoint: ["/bin/bash", "/opt/keycloak/scripts/import-realm.sh"]
     command: ["start-dev", "--spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true", "--features=scripts"]
     environment:
@@ -267,7 +267,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-backend
     restart: unless-stopped
     env_file:
-      - /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/hub/.env
+      - .env.hub
     environment:
       NODE_ENV: development
       PORT: "4000"
@@ -286,13 +286,8 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD_USA}@redis:6379
       # Shared blacklist Redis
       BLACKLIST_REDIS_URL: redis://:${REDIS_PASSWORD_BLACKLIST}@redis-blacklist:6379
-      # Spoke Keycloak admin passwords (for bidirectional federation)
-      # Local dev: Set in .env.hub
-      # Production: Retrieved from GCP Secret Manager via secrets load
-      KEYCLOAK_ADMIN_PASSWORD_GBR: ${KEYCLOAK_ADMIN_PASSWORD_GBR}
-      KEYCLOAK_ADMIN_PASSWORD_FRA: ${KEYCLOAK_ADMIN_PASSWORD_FRA}
-      KEYCLOAK_ADMIN_PASSWORD_CAN: ${KEYCLOAK_ADMIN_PASSWORD_CAN}
-      KEYCLOAK_ADMIN_PASSWORD_DEU: ${KEYCLOAK_ADMIN_PASSWORD_DEU}
+      # NOTE: Spoke Keycloak admin passwords come from spoke registration, NOT environment
+      # The spoke provides its password during registration, stored in MongoDB
       NEXT_PUBLIC_BASE_URL: https://localhost:3000
       # SECURITY: Trust mkcert CA instead of disabling TLS verification
       NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
@@ -382,7 +377,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-kas
     restart: unless-stopped
     env_file:
-      - /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/hub/.env
+      - .env.hub
     healthcheck:
       test: ["CMD-SHELL", "wget --no-check-certificate -q -O- https://localhost:8080/health || exit 1"]
       interval: 15s
@@ -431,7 +426,7 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-frontend
     restart: unless-stopped
     env_file:
-      - /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/hub/.env
+      - .env.hub
     healthcheck:
       test: ["CMD-SHELL", "curl -ksf https://localhost:3000/ >/dev/null || exit 1"]
       interval: 30s
@@ -496,7 +491,7 @@ services:
     restart: unless-stopped
     stop_grace_period: 30s
     env_file:
-      - /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/hub/.env
+      - .env.hub
     environment:
       # Use Redis as broadcast backend for pub/sub
       OPAL_BROADCAST_URI: redis://:${REDIS_PASSWORD_USA}@redis:6379

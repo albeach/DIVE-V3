@@ -15,10 +15,11 @@
 # =============================================================================
 
 # Prevent multiple sourcing
-if [ -n "$SPOKE_PHASE_DEPLOYMENT_LOADED" ]; then
+# BEST PRACTICE (2026-01-18): Check functions exist, not just guard variable
+if type spoke_phase_deployment &>/dev/null; then
     return 0
 fi
-export SPOKE_PHASE_DEPLOYMENT_LOADED=1
+# Module loaded marker will be set at end after functions defined
 
 # =============================================================================
 # MAIN DEPLOYMENT PHASE FUNCTION
@@ -533,16 +534,24 @@ spoke_deployment_provision_opal_token() {
     # Generate JWT token
     log_verbose "Generating OPAL JWT token..."
 
-    # Default OPAL master token (from Hub configuration)
-    local master_token="${OPAL_MASTER_TOKEN:-opal_master_token}"
+    # Get OPAL master token from Hub .env.hub
+    local hub_env_file="${DIVE_ROOT}/.env.hub"
+    local master_token="opal_master_token"  # fallback
 
-    # Request token from OPAL server
+    if [ -f "$hub_env_file" ]; then
+        local env_master_token=$(grep "^OPAL_AUTH_MASTER_TOKEN=" "$hub_env_file" | cut -d= -f2 | tr -d '"')
+        if [ -n "$env_master_token" ]; then
+            master_token="$env_master_token"
+        fi
+    fi
+
+    # Request token from OPAL server (HTTPS with self-signed cert skip)
     local token_response
-    token_response=$(docker exec dive-hub-opal-server curl -sf \
-        -X POST "http://localhost:7002/token" \
+    token_response=$(docker exec dive-hub-opal-server curl -sfk \
+        -X POST "https://localhost:7002/token" \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer $master_token" \
-        -d "{\"client_id\":\"spoke-${code_lower}\",\"scopes\":[\"policy:read\",\"data:read\"]}" 2>/dev/null)
+        -d '{"type": "client"}' 2>/dev/null || echo "")
 
     if [ -n "$token_response" ]; then
         local new_token
@@ -601,3 +610,5 @@ spoke_deployment_restart_services() {
         fi
     done
 }
+
+export SPOKE_PHASE_DEPLOYMENT_LOADED=1

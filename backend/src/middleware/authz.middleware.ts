@@ -713,64 +713,64 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
  * - 100% guaranteed bidirectional SSO
  */
 export async function authenticateJWT(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    const authHeader = req.headers.authorization;
+    try {
+        const authHeader = req.headers.authorization;
 
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'Missing or invalid Authorization header',
-      });
-      return;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            res.status(401).json({
+                error: 'Unauthorized',
+                message: 'Missing or invalid Authorization header',
+            });
+            return;
+        }
+
+        const token = authHeader.substring(7); // Remove 'Bearer ' prefix
+
+        // Use OAuth2 token introspection for validation
+        const introspectionResult = await tokenIntrospectionService.validateToken(token);
+
+        if (!introspectionResult.active) {
+            logger.warn('Token introspection failed', {
+                error: introspectionResult.error,
+                errorDescription: introspectionResult.error_description,
+                issuer: introspectionResult.iss,
+            });
+
+            res.status(401).json({
+                error: 'Unauthorized',
+                message: introspectionResult.error_description || 'Invalid token',
+            });
+            return;
+        }
+
+        // Attach user information to request
+        (req as any).user = {
+            uniqueID: introspectionResult.uniqueID,
+            clearance: introspectionResult.clearance,
+            countryOfAffiliation: introspectionResult.countryOfAffiliation,
+            acpCOI: introspectionResult.acpCOI,
+            sub: introspectionResult.sub,
+            iss: introspectionResult.iss,
+            client_id: introspectionResult.client_id,
+        };
+
+        logger.debug('Token validated via OAuth2 introspection', {
+            subject: introspectionResult.sub,
+            issuer: introspectionResult.iss,
+            uniqueID: introspectionResult.uniqueID,
+        });
+
+        next();
+    } catch (error) {
+        logger.error('JWT authentication failed', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+        });
+
+        res.status(401).json({
+            error: 'Unauthorized',
+            message: 'Token validation failed',
+        });
     }
-
-    const token = authHeader.substring(7); // Remove 'Bearer ' prefix
-
-    // Use OAuth2 token introspection for validation
-    const introspectionResult = await tokenIntrospectionService.validateToken(token);
-
-    if (!introspectionResult.active) {
-      logger.warn('Token introspection failed', {
-        error: introspectionResult.error,
-        errorDescription: introspectionResult.error_description,
-        issuer: introspectionResult.iss,
-      });
-
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: introspectionResult.error_description || 'Invalid token',
-      });
-      return;
-    }
-
-    // Attach user information to request
-    (req as any).user = {
-      uniqueID: introspectionResult.uniqueID,
-      clearance: introspectionResult.clearance,
-      countryOfAffiliation: introspectionResult.countryOfAffiliation,
-      acpCOI: introspectionResult.acpCOI,
-      sub: introspectionResult.sub,
-      iss: introspectionResult.iss,
-      client_id: introspectionResult.client_id,
-    };
-
-    logger.debug('Token validated via OAuth2 introspection', {
-      subject: introspectionResult.sub,
-      issuer: introspectionResult.iss,
-      uniqueID: introspectionResult.uniqueID,
-    });
-
-    next();
-  } catch (error) {
-    logger.error('JWT authentication failed', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-
-    res.status(401).json({
-      error: 'Unauthorized',
-      message: 'Token validation failed',
-    });
-  }
 }
 
 /**
@@ -782,119 +782,203 @@ export async function authenticateJWT(req: Request, res: Response, next: NextFun
  * 3. Enforces the authorization decision
  * 4. Handles obligations (like KAS key release)
  */
+/**
+ * Check if resource is ZTDF-enhanced
+ */
+function isZTDFResource(resource: any): resource is any {
+    return resource && typeof resource === 'object' && 'ztdf' in resource;
+}
+
 export async function authzMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
-  try {
-    // Extract user from JWT validation (set by authenticateJWT)
-    const user = (req as any).user;
-    if (!user) {
-      res.status(401).json({
-        error: 'Unauthorized',
-        message: 'No authenticated user found',
-      });
-      return;
+    try {
+        // Extract user from JWT validation (set by authenticateJWT)
+        const user = (req as any).user;
+        if (!user) {
+            res.status(401).json({
+                error: 'Unauthorized',
+                message: 'No authenticated user found',
+            });
+            return;
+        }
+
+        // Extract resource information from request
+        const resourceId = req.params.id;
+        if (!resourceId) {
+            res.status(400).json({
+                error: 'Bad Request',
+                message: 'Resource ID required for authorization',
+            });
+            return;
+        }
+
+        // Fetch real resource metadata from MongoDB
+        const { getResourceById } = await import('../services/resource.service');
+        const resource = await getResourceById(resourceId);
+
+        if (!resource) {
+            res.status(404).json({
+                error: 'Not Found',
+                message: `Resource ${resourceId} not found`,
+            });
+            return;
+        }
+
+        // Extract resource attributes for OPA (handle both ZTDF and legacy formats)
+        let resourceAttributes: any;
+        if (isZTDFResource(resource)) {
+            resourceAttributes = {
+                resourceId: resource.resourceId,
+                classification: resource.ztdf.policy.securityLabel.classification,
+                releasabilityTo: resource.ztdf.policy.securityLabel.releasabilityTo,
+                COI: resource.ztdf.policy.securityLabel.COI || [],
+                creationDate: resource.ztdf.policy.securityLabel.creationDate,
+                encrypted: true,
+                originalClassification: resource.ztdf.policy.securityLabel.originalClassification,
+                originalCountry: resource.ztdf.policy.securityLabel.originatingCountry,
+                natoEquivalent: resource.ztdf.policy.securityLabel.natoEquivalent,
+            };
+        } else {
+            // Legacy resource format
+            const legacyResource: any = resource;
+            resourceAttributes = {
+                resourceId: legacyResource.resourceId,
+                classification: legacyResource.classification || 'UNCLASSIFIED',
+                releasabilityTo: legacyResource.releasabilityTo || [],
+                COI: legacyResource.COI || [],
+                creationDate: legacyResource.creationDate,
+                encrypted: legacyResource.encrypted || false,
+            };
+        }
+
+        // Build OPA input following the interface specification
+        const opaInput: IOPAInput = {
+            input: {
+                subject: {
+                    authenticated: true,
+                    uniqueID: user.uniqueID,
+                    clearance: user.clearance,
+                    countryOfAffiliation: user.countryOfAffiliation,
+                    acpCOI: user.acpCOI || [],
+                    issuer: user.iss,
+                },
+                action: {
+                    operation: req.method.toLowerCase(),
+                },
+                resource: resourceAttributes,
+                context: {
+                    currentTime: new Date().toISOString(),
+                    sourceIP: req.ip || req.socket?.remoteAddress || 'unknown',
+                    deviceCompliant: true, // Assume compliant for now
+                    requestId: req.headers['x-request-id'] as string || `req-${Date.now()}`,
+                    acr: String(normalizeACR(user.acr)),
+                    amr: normalizeAMR(user.amr),
+                    auth_time: user.auth_time,
+                    tenant: extractTenant(user, req),
+                },
+            },
+        };
+
+        logger.debug('Calling OPA for authorization', {
+            subject: user.uniqueID,
+            resource: resourceId,
+            endpoint: OPA_DECISION_ENDPOINT,
+        });
+
+        // Call OPA with circuit breaker protection
+        let opaResponse: IOPADecision;
+        try {
+            const response = await opaCircuitBreaker.execute(async () => {
+                return await axios.post(OPA_DECISION_ENDPOINT, opaInput, {
+                    headers: { 'Content-Type': 'application/json' },
+                    timeout: 5000,
+                    httpsAgent: new https.Agent({ rejectUnauthorized: false }), // For development
+                });
+            });
+
+            opaResponse = response.data;
+        } catch (opaError) {
+            logger.warn('OPA call failed, falling back to local evaluation', {
+                error: opaError instanceof Error ? opaError.message : 'Unknown OPA error',
+                subject: user.uniqueID,
+                resource: resourceId,
+            });
+
+            // Fallback to local evaluation for development/testing
+            opaResponse = localEvaluateOPA(opaInput);
+        }
+
+        // Store policy evaluation details for frontend replay
+        (req as any).policyEvaluation = {
+            decision: opaResponse.result.allow ? 'ALLOW' : 'DENY',
+            reason: opaResponse.result.reason,
+            evaluation_details: opaResponse.result.evaluation_details,
+        };
+
+        // Check authorization decision
+        if (!opaResponse.result.allow) {
+            logger.info('Authorization denied by OPA', {
+                subject: user.uniqueID,
+                resource: resourceId,
+                reason: opaResponse.result.reason,
+                evaluation_details: opaResponse.result.evaluation_details,
+            });
+
+            // Return structured error response with resource metadata for frontend
+            res.status(403).json({
+                error: 'Forbidden',
+                message: 'Authorization check failed',
+                reason: opaResponse.result.reason,
+                details: {
+                    evaluation_details: opaResponse.result.evaluation_details,
+                    resource: {
+                        resourceId: resourceAttributes.resourceId,
+                        title: resource.title || 'Resource',
+                        classification: resourceAttributes.classification,
+                        releasabilityTo: resourceAttributes.releasabilityTo,
+                        coi: resourceAttributes.COI,
+                    },
+                    subject: {
+                        uniqueID: user.uniqueID,
+                        clearance: user.clearance,
+                        countryOfAffiliation: user.countryOfAffiliation,
+                        acpCOI: user.acpCOI,
+                    },
+                },
+            });
+            return;
+        }
+
+        logger.info('Authorization granted', {
+            subject: user.uniqueID,
+            resource: resourceId,
+            decision: 'ALLOW',
+            reason: opaResponse.result.reason,
+        });
+
+        // Attach authorization obligations (like KAS key requirements)
+        (req as any).authzObligations = opaResponse.result.obligations || [];
+
+        next();
+    } catch (error) {
+        logger.error('Authorization middleware error', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined,
+            resourceId: req.params.id,
+            userId: (req as any).user?.uniqueID,
+        });
+
+        res.status(500).json({
+            error: 'Internal Server Error',
+            message: 'Authorization check failed',
+            details: {
+                resource: {
+                    resourceId: req.params.id,
+                    title: 'Resource',
+                    classification: 'UNKNOWN',
+                    releasabilityTo: [],
+                    coi: [],
+                },
+            },
+        });
     }
-
-    // Extract resource information from request
-    const resourceId = req.params.id;
-    if (!resourceId) {
-      res.status(400).json({
-        error: 'Bad Request',
-        message: 'Resource ID required for authorization',
-      });
-      return;
-    }
-
-    // Get resource metadata (this would be from your resource service)
-    // For now, we'll create a basic structure
-    const resource = {
-      resourceId,
-      classification: 'UNCLASSIFIED', // Would be fetched from DB
-      releasabilityTo: ['USA', 'FRA', 'GBR', 'CAN'], // Would be fetched from DB
-      coi: ['NATO-COSMIC'], // Would be fetched from DB
-    };
-
-    // Build OPA input
-    const opaInput = {
-      input: {
-        subject: {
-          uniqueID: user.uniqueID,
-          clearance: user.clearance,
-          countryOfAffiliation: user.countryOfAffiliation,
-          acpCOI: user.acpCOI || [],
-          authenticated: true,
-        },
-        action: {
-          method: req.method,
-          path: req.path,
-          service: 'resource',
-        },
-        resource: {
-          resourceId: resource.resourceId,
-          classification: resource.classification,
-          releasabilityTo: resource.releasabilityTo,
-          coi: resource.coi,
-        },
-        context: {
-          currentTime: new Date().toISOString(),
-          sourceIP: req.ip,
-          requestId: req.headers['x-request-id'] || `req-${Date.now()}`,
-        },
-      },
-    };
-
-    // Call OPA (this would use your OPA service)
-    // For now, we'll implement a basic check
-    const subjectCountry = user.countryOfAffiliation;
-    const resourceAllowed = resource.releasabilityTo.includes(subjectCountry);
-
-    if (!resourceAllowed) {
-      res.status(403).json({
-        error: 'Forbidden',
-        message: `Access denied: ${subjectCountry} not in releasabilityTo list`,
-        details: {
-          subjectCountry,
-          resourceReleasability: resource.releasabilityTo,
-        },
-      });
-      return;
-    }
-
-    // Check clearance level (basic implementation)
-    const clearanceLevels = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
-    const userClearanceIndex = clearanceLevels.indexOf(user.clearance || 'UNCLASSIFIED');
-    const resourceClearanceIndex = clearanceLevels.indexOf(resource.classification);
-
-    if (userClearanceIndex < resourceClearanceIndex) {
-      res.status(403).json({
-        error: 'Forbidden',
-        message: `Insufficient clearance: ${user.clearance} < ${resource.classification}`,
-        details: {
-          userClearance: user.clearance,
-          resourceClassification: resource.classification,
-        },
-      });
-      return;
-    }
-
-    logger.info('Authorization granted', {
-      subject: user.uniqueID,
-      resource: resourceId,
-      action: req.method,
-      decision: 'ALLOW',
-    });
-
-    // Attach authorization obligations if any (like KAS key requirements)
-    (req as any).authzObligations = [];
-
-    next();
-  } catch (error) {
-    logger.error('Authorization middleware error', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-    });
-
-    res.status(500).json({
-      error: 'Internal Server Error',
-      message: 'Authorization check failed',
-    });
-  }
 }

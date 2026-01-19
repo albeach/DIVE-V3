@@ -71,7 +71,12 @@ declare -A SERVICE_DEPENDENCIES=(
 )
 
 # =============================================================================
-# SERVICE DEPENDENCY VALIDATION (GAP-005 Fix)
+# SERVICE DEPENDENCY VALIDATION (GAP-SD-001 Fix - Phase 4)
+# =============================================================================
+# Enhanced circular dependency detection with:
+# - Visual dependency graph output
+# - Detailed cycle path reporting
+# - Dependency level calculation for parallel startup
 # =============================================================================
 
 ##
@@ -85,6 +90,7 @@ orch_detect_circular_dependencies() {
     log_verbose "Validating service dependency graph for circular dependencies..."
 
     local visited_services=""
+    local cycles_found=0
 
     for service in "${!SERVICE_DEPENDENCIES[@]}"; do
         # Check if already visited
@@ -100,19 +106,135 @@ orch_detect_circular_dependencies() {
 
         if [ $cycle_exit -ne 0 ]; then
             # Cycle detected
+            ((cycles_found++))
             log_error "❌ Circular dependency detected!"
             log_error "Dependency cycle: $cycle_result"
-            log_error "Invalid service configuration - circular dependencies must be resolved"
-            log_error "Please fix SERVICE_DEPENDENCIES in orchestration-framework.sh"
-            return 1
+            
+            # Parse and display the cycle clearly
+            local cycle_services=($cycle_result)
+            log_error ""
+            log_error "  Cycle visualization:"
+            local prev=""
+            for svc in "${cycle_services[@]}"; do
+                if [ -n "$prev" ]; then
+                    log_error "    $prev → $svc"
+                fi
+                prev="$svc"
+            done
+            log_error ""
         fi
 
         # Mark as visited
         visited_services="$visited_services $service"
     done
 
+    if [ $cycles_found -gt 0 ]; then
+        log_error "Found $cycles_found circular dependency chain(s)"
+        log_error "Please fix SERVICE_DEPENDENCIES in orchestration-framework.sh"
+        return 1
+    fi
+
     log_success "✅ No circular dependencies found in service dependency graph"
     return 0
+}
+
+##
+# Print visual dependency graph
+#
+# Arguments:
+#   $1 - Output format: "text" or "mermaid" (default: text)
+##
+orch_print_dependency_graph() {
+    local format="${1:-text}"
+    
+    case "$format" in
+        mermaid)
+            echo "```mermaid"
+            echo "graph TD"
+            for service in "${!SERVICE_DEPENDENCIES[@]}"; do
+                local deps="${SERVICE_DEPENDENCIES[$service]}"
+                if [ "$deps" = "none" ] || [ -z "$deps" ]; then
+                    echo "    ${service}[${service}]"
+                else
+                    IFS=',' read -ra DEP_ARRAY <<< "$deps"
+                    for dep in "${DEP_ARRAY[@]}"; do
+                        dep=$(echo "$dep" | xargs)
+                        echo "    ${dep} --> ${service}"
+                    done
+                fi
+            done
+            echo "```"
+            ;;
+        text|*)
+            echo "=== Service Dependency Graph ==="
+            echo ""
+            
+            # Group by dependency level
+            local max_level=0
+            declare -A service_levels
+            
+            for service in "${!SERVICE_DEPENDENCIES[@]}"; do
+                local level=$(orch_calculate_dependency_level "$service")
+                service_levels["$service"]=$level
+                [ $level -gt $max_level ] && max_level=$level
+            done
+            
+            for ((lvl=0; lvl<=max_level; lvl++)); do
+                echo "Level $lvl ($([ $lvl -eq 0 ] && echo "no dependencies" || echo "depends on level $((lvl-1))"))):"
+                for service in "${!service_levels[@]}"; do
+                    if [ "${service_levels[$service]}" -eq $lvl ]; then
+                        local deps="${SERVICE_DEPENDENCIES[$service]}"
+                        if [ "$deps" = "none" ] || [ -z "$deps" ]; then
+                            echo "  • $service"
+                        else
+                            echo "  • $service ← [$deps]"
+                        fi
+                    fi
+                done
+                echo ""
+            done
+            ;;
+    esac
+}
+
+##
+# Get services at a specific dependency level
+#
+# Arguments:
+#   $1 - Dependency level (0, 1, 2, ...)
+#
+# Returns:
+#   Space-separated list of services at that level
+##
+orch_get_services_at_level() {
+    local target_level="$1"
+    local services=""
+    
+    for service in "${!SERVICE_DEPENDENCIES[@]}"; do
+        local level=$(orch_calculate_dependency_level "$service")
+        if [ "$level" -eq "$target_level" ]; then
+            services="$services $service"
+        fi
+    done
+    
+    echo "$services" | xargs
+}
+
+##
+# Get maximum dependency level in the graph
+#
+# Returns:
+#   Maximum level number
+##
+orch_get_max_dependency_level() {
+    local max_level=0
+    
+    for service in "${!SERVICE_DEPENDENCIES[@]}"; do
+        local level=$(orch_calculate_dependency_level "$service")
+        [ $level -gt $max_level ] && max_level=$level
+    done
+    
+    echo $max_level
 }
 
 ##
@@ -301,105 +423,79 @@ declare -a ORCHESTRATION_ERRORS=()
 orch_acquire_deployment_lock() {
     local instance_code="$1"
     local timeout="${2:-30}"
-    local lock_file="${DIVE_ROOT}/.dive-state/${instance_code}.lock"
-    local lock_fd=200
 
     log_verbose "Attempting to acquire deployment lock for $instance_code (timeout: ${timeout}s)..."
 
-    # Ensure lock directory exists
-    mkdir -p "$(dirname "$lock_file")"
-
-    # Check if flock is available
-    if ! command -v flock >/dev/null 2>&1; then
-        log_verbose "flock not available, using mkdir-based locking (macOS compatible)"
-        # Fallback: mkdir-based locking (atomic on all Unix systems)
-        local lock_dir="${DIVE_ROOT}/.dive-state/${instance_code}.lock.d"
-        local start_time=$(date +%s)
-
-        while [ $(($(date +%s) - start_time)) -lt "$timeout" ]; do
-            if mkdir "$lock_dir" 2>/dev/null; then
-                # Lock acquired
-                ORCH_CONTEXT["lock_acquired"]=true
-                ORCH_CONTEXT["lock_type"]="mkdir"
-
-                # Write lock metadata
-                {
-                    echo "instance_code=$instance_code"
-                    echo "locked_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-                    echo "locked_by=${USER:-system}"
-                    echo "pid=$$"
-                    echo "hostname=$(hostname)"
-                } > "${lock_dir}/metadata"
-
-                log_success "Deployment lock acquired for $instance_code (mkdir)"
-
-                # Also try PostgreSQL advisory lock
-                if type -t orch_db_acquire_lock >/dev/null 2>&1; then
-                    orch_db_acquire_lock "$instance_code" 0 2>/dev/null || true
+    # PRIMARY: Database locking (database-only state management)
+    if type -t orch_db_acquire_lock >/dev/null 2>&1; then
+        if orch_db_acquire_lock "$instance_code" "$timeout"; then
+            # Lock acquired via database
+            ORCH_CONTEXT["lock_acquired"]=true
+            ORCH_CONTEXT["lock_type"]="database"
+            log_success "Deployment lock acquired for $instance_code (database)"
+            return 0
+        else
+            # Database locking failed
+            if orch_db_check_connection; then
+                log_error "Failed to acquire database deployment lock for $instance_code (timeout)"
+                # Show current database lock holder
+                local db_locks=$(docker exec dive-hub-postgres psql -U postgres -d orchestration -c "SELECT instance_code, acquired_at, acquired_by FROM deployment_locks WHERE instance_code = '$(lower "$instance_code")';" 2>/dev/null | tail -n +3 | head -n -2 | xargs 2>/dev/null || echo "")
+                if [ -n "$db_locks" ]; then
+                    log_error "Current database lock holder:"
+                    echo "$db_locks" | while IFS='|' read -r code time user; do
+                        log_error "  instance_code=${code// /}"
+                        log_error "  locked_at=${time// /}"
+                        log_error "  locked_by=${user// /}"
+                    done
                 fi
-
-                return 0
+                return 1
+            else
+                log_warn "Database not available for locking, falling back to file-based locking"
             fi
-
-            sleep 1
-        done
-
-        # Timeout
-        log_error "Failed to acquire deployment lock for $instance_code (timeout)"
-        if [ -d "$lock_dir" ] && [ -f "${lock_dir}/metadata" ]; then
-            log_error "Current lock holder:"
-            cat "${lock_dir}/metadata" | while IFS= read -r line; do
-                log_error "  $line"
-            done
         fi
-        return 1
-    fi
-
-    # flock available, use it
-    touch "$lock_file"
-    exec 200>"$lock_file"
-
-    if flock -x -w "$timeout" 200; then
-        # Lock acquired successfully
-        ORCH_CONTEXT["lock_acquired"]=true
-        ORCH_CONTEXT["lock_fd"]=200
-        ORCH_CONTEXT["lock_type"]="flock"
-
-        # Write lock metadata
-        {
-            echo "instance_code=$instance_code"
-            echo "locked_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            echo "locked_by=${USER:-system}"
-            echo "pid=$$"
-            echo "hostname=$(hostname)"
-        } >&200
-
-        log_success "Deployment lock acquired for $instance_code (flock)"
-
-        # Also try PostgreSQL advisory lock (best-effort)
-        if type -t orch_db_acquire_lock >/dev/null 2>&1; then
-            orch_db_acquire_lock "$instance_code" 0 2>/dev/null || \
-                log_verbose "DB advisory lock unavailable (file lock is sufficient)"
-        fi
-
-        return 0
     else
-        # Lock acquisition failed
-        log_error "Failed to acquire deployment lock for $instance_code"
-        log_error "Another deployment may be in progress"
-        log_error "Lock file: $lock_file"
+        log_warn "Database locking not available, falling back to file-based locking"
+    fi
 
-        if [ -f "$lock_file" ]; then
-            local lock_info=$(cat "$lock_file" 2>/dev/null || echo "Unknown")
-            log_error "Current lock holder:"
-            echo "$lock_info" | while IFS= read -r line; do
-                log_error "  $line"
-            done
+    # FALLBACK: File-based locking (only when database is unavailable)
+    log_verbose "Using file-based locking fallback for $instance_code"
+    local lock_dir="${DIVE_ROOT}/.dive-state/${instance_code}.lock.d"
+    local start_time=$(date +%s)
+
+    # Ensure lock directory exists
+    mkdir -p "$(dirname "$lock_dir")"
+
+    while [ $(($(date +%s) - start_time)) -lt "$timeout" ]; do
+        if mkdir "$lock_dir" 2>/dev/null; then
+            # Lock acquired
+            ORCH_CONTEXT["lock_acquired"]=true
+            ORCH_CONTEXT["lock_type"]="file-fallback"
+
+            # Write lock metadata
+            {
+                echo "instance_code=$instance_code"
+                echo "locked_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                echo "locked_by=${USER:-system}"
+                echo "pid=$$"
+                echo "hostname=$(hostname)"
+            } > "${lock_dir}/metadata"
+
+            log_success "Deployment lock acquired for $instance_code (file-fallback)"
+            return 0
         fi
 
-        exec 200>&-
-        return 1
+        sleep 1
+    done
+
+    # Timeout
+    log_error "Failed to acquire deployment lock for $instance_code (timeout)"
+    if [ -d "$lock_dir" ] && [ -f "${lock_dir}/metadata" ]; then
+        log_error "Current lock holder:"
+        cat "${lock_dir}/metadata" | while IFS='=' read -r key value; do
+            log_error "  $key=$value"
+        done
     fi
+    return 1
 }
 
 ##
@@ -1209,11 +1305,12 @@ orch_calculate_retry_delay() {
 
 ##
 # Calculate dynamic timeout based on historical startup times
-# (Future enhancement - requires orchestration_metrics table)
+# GAP-SD-002 Fix: Now integrated into health check flow
 #
 # Arguments:
 #   $1 - Service name
 #   $2 - Instance code (optional)
+#   $3 - Force recalculation (optional, default: false)
 #
 # Returns:
 #   Dynamic timeout in seconds
@@ -1221,41 +1318,58 @@ orch_calculate_retry_delay() {
 orch_calculate_dynamic_timeout() {
     local service="$1"
     local instance_code="${2:-}"
+    local force_recalc="${3:-false}"
+    
+    local static_timeout="${SERVICE_TIMEOUTS[$service]:-60}"
 
     # Check if database is available for metrics
     if ! orch_db_check_connection 2>/dev/null; then
-        # Fallback to static timeout
-        echo "${SERVICE_TIMEOUTS[$service]}"
+        log_verbose "Dynamic timeout: Database unavailable, using static timeout (${static_timeout}s) for $service"
+        echo "$static_timeout"
         return 0
     fi
 
-    # Query P95 startup time from last 20 deployments
+    # Query P95 startup time from deployment steps
     local p95_startup=0
+    local sample_count=0
+    
     if [ -n "$instance_code" ]; then
-        p95_startup=$(orch_db_exec "
-            SELECT COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_seconds), 0)::INTEGER
+        # Instance-specific query
+        local result
+        result=$(orch_db_exec "
+            SELECT 
+                COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_seconds), 0)::INTEGER as p95,
+                COUNT(*) as samples
             FROM deployment_steps
             WHERE step_name = 'start_${service}'
             AND instance_code = '$(lower "$instance_code")'
             AND status = 'COMPLETED'
             AND started_at > NOW() - INTERVAL '30 days'
-            LIMIT 20
-        " 2>/dev/null | xargs || echo "0")
+        " 2>/dev/null | tail -n 1)
+        
+        p95_startup=$(echo "$result" | cut -d'|' -f1 | xargs)
+        sample_count=$(echo "$result" | cut -d'|' -f2 | xargs)
     else
-        # Query across all instances
-        p95_startup=$(orch_db_exec "
-            SELECT COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_seconds), 0)::INTEGER
+        # Global query across all instances
+        local result
+        result=$(orch_db_exec "
+            SELECT 
+                COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_seconds), 0)::INTEGER as p95,
+                COUNT(*) as samples
             FROM deployment_steps
             WHERE step_name = 'start_${service}'
             AND status = 'COMPLETED'
             AND started_at > NOW() - INTERVAL '30 days'
-            LIMIT 20
-        " 2>/dev/null | xargs || echo "0")
+        " 2>/dev/null | tail -n 1)
+        
+        p95_startup=$(echo "$result" | cut -d'|' -f1 | xargs)
+        sample_count=$(echo "$result" | cut -d'|' -f2 | xargs)
     fi
 
-    # If no historical data, use static timeout
-    if [ "$p95_startup" -eq 0 ]; then
-        echo "${SERVICE_TIMEOUTS[$service]}"
+    # Need at least 3 samples for confidence
+    if [ "${p95_startup:-0}" -eq 0 ] || [ "${sample_count:-0}" -lt 3 ]; then
+        log_verbose "Dynamic timeout: Insufficient data ($sample_count samples), using static timeout (${static_timeout}s) for $service"
+        echo "$static_timeout"
         return 0
     fi
 
@@ -1267,12 +1381,208 @@ orch_calculate_dynamic_timeout() {
     local max_timeout=${SERVICE_MAX_TIMEOUTS[$service]:-300}
 
     if [ "$dynamic_timeout" -lt "$min_timeout" ]; then
+        log_verbose "Dynamic timeout: Clamped to min (${min_timeout}s) for $service (calculated: ${dynamic_timeout}s)"
         echo "$min_timeout"
     elif [ "$dynamic_timeout" -gt "$max_timeout" ]; then
+        log_verbose "Dynamic timeout: Clamped to max (${max_timeout}s) for $service (calculated: ${dynamic_timeout}s)"
         echo "$max_timeout"
     else
+        log_verbose "Dynamic timeout: Using calculated value (${dynamic_timeout}s) for $service (P95: ${p95_startup}s, samples: $sample_count)"
         echo "$dynamic_timeout"
     fi
+}
+
+# =============================================================================
+# PARALLEL SERVICE STARTUP (GAP-SD-001 Fix - Phase 4)
+# =============================================================================
+# Starts services in parallel within each dependency level
+# Level 0 services (no deps) start first, then level 1, etc.
+# =============================================================================
+
+##
+# Start all services for an instance using parallel startup by level
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Services to start (space-separated, or "all" for all services)
+#
+# Returns:
+#   0 - All services started successfully
+#   1 - Some services failed to start
+##
+orch_parallel_startup() {
+    local instance_code="$1"
+    local services="${2:-all}"
+    local code_lower=$(lower "$instance_code")
+    
+    log_info "Starting parallel service startup for $instance_code"
+    
+    # Validate no circular dependencies first
+    if ! orch_detect_circular_dependencies; then
+        log_error "Cannot proceed with parallel startup - circular dependencies detected"
+        return 1
+    fi
+    
+    local max_level=$(orch_get_max_dependency_level)
+    local total_started=0
+    local total_failed=0
+    
+    log_verbose "Service graph has $((max_level + 1)) dependency levels"
+    
+    # Start services level by level
+    for ((level=0; level<=max_level; level++)); do
+        local level_services=$(orch_get_services_at_level $level)
+        
+        if [ -z "$level_services" ]; then
+            continue
+        fi
+        
+        log_info "Starting level $level services: $level_services"
+        
+        # Start all services at this level in parallel
+        local pids=()
+        local service_pid_map=""
+        
+        for service in $level_services; do
+            # Skip if not in requested services list
+            if [ "$services" != "all" ]; then
+                if ! echo " $services " | grep -q " $service "; then
+                    continue
+                fi
+            fi
+            
+            # Start service in background
+            (
+                local timeout=$(orch_calculate_dynamic_timeout "$service" "$instance_code")
+                local container="dive-spoke-${code_lower}-${service}"
+                
+                # Check if already running
+                if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
+                    log_verbose "Service $service already running"
+                    exit 0
+                fi
+                
+                # Start service
+                local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+                if [ -f "$spoke_dir/docker-compose.yml" ]; then
+                    cd "$spoke_dir"
+                    export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
+                    docker compose up -d "$service" >/dev/null 2>&1
+                fi
+                
+                # Wait for health
+                if orch_check_service_health "$instance_code" "$service" "$timeout"; then
+                    exit 0
+                else
+                    exit 1
+                fi
+            ) &
+            
+            local pid=$!
+            pids+=($pid)
+            service_pid_map="$service_pid_map $service:$pid"
+        done
+        
+        # Wait for all services at this level
+        local level_failed=0
+        for pid in "${pids[@]}"; do
+            if wait $pid; then
+                ((total_started++))
+            else
+                ((total_failed++))
+                ((level_failed++))
+                
+                # Find which service failed
+                for mapping in $service_pid_map; do
+                    local svc="${mapping%%:*}"
+                    local spid="${mapping##*:}"
+                    if [ "$spid" = "$pid" ]; then
+                        log_error "Service $svc failed to start at level $level"
+                    fi
+                done
+            fi
+        done
+        
+        # If any service failed at this level, subsequent levels will likely fail
+        if [ $level_failed -gt 0 ]; then
+            log_warn "Level $level had $level_failed failures - subsequent services may fail"
+        fi
+    done
+    
+    # Summary
+    log_info "Parallel startup complete: $total_started started, $total_failed failed"
+    
+    if [ $total_failed -gt 0 ]; then
+        return 1
+    fi
+    return 0
+}
+
+##
+# Get health check dependencies for cascade awareness
+# Returns which services must be healthy before checking a given service
+#
+# Arguments:
+#   $1 - Service name
+#
+# Returns:
+#   Space-separated list of health check dependencies
+##
+orch_get_health_check_dependencies() {
+    local service="$1"
+    local deps="${SERVICE_DEPENDENCIES[$service]}"
+    
+    if [ "$deps" = "none" ] || [ -z "$deps" ]; then
+        echo ""
+        return 0
+    fi
+    
+    # Convert comma-separated to space-separated
+    echo "$deps" | tr ',' ' ' | xargs
+}
+
+##
+# Check service health with cascade awareness
+# Verifies dependencies are healthy before checking target service
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Service name
+#   $3 - Timeout (optional, uses dynamic calculation)
+#   $4 - Skip dependency check (optional, default: false)
+#
+# Returns:
+#   0 - Service is healthy
+#   1 - Service or dependency unhealthy
+##
+orch_check_health_with_cascade() {
+    local instance_code="$1"
+    local service="$2"
+    local timeout="${3:-}"
+    local skip_deps="${4:-false}"
+    
+    # Get dynamic timeout if not specified
+    if [ -z "$timeout" ]; then
+        timeout=$(orch_calculate_dynamic_timeout "$service" "$instance_code")
+    fi
+    
+    # Check dependencies first (cascade awareness)
+    if [ "$skip_deps" != "true" ]; then
+        local deps=$(orch_get_health_check_dependencies "$service")
+        
+        for dep in $deps; do
+            log_verbose "Checking health cascade: $service depends on $dep"
+            
+            local dep_timeout=$(orch_calculate_dynamic_timeout "$dep" "$instance_code")
+            if ! orch_check_service_health "$instance_code" "$dep" "$dep_timeout"; then
+                log_error "Health cascade failed: $dep (dependency of $service) is unhealthy"
+                return 1
+            fi
+        done
+    fi
+    
+    # Now check the target service
+    orch_check_service_health "$instance_code" "$service" "$timeout"
 }
 
 # =============================================================================

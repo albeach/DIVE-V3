@@ -34,7 +34,14 @@ hub_up() {
     # Ensure shared network exists
     ensure_shared_network
 
-    # Load secrets from GCP first (updates environment and .env.hub)
+    # Load existing .env.hub first (provides defaults)
+    if [ -f "${DIVE_ROOT}/.env.hub" ]; then
+        set -a
+        source "${DIVE_ROOT}/.env.hub"
+        set +a
+    fi
+
+    # Load secrets from GCP (overrides .env.hub values with fresh secrets)
     load_gcp_secrets "usa" || {
         log_warn "GCP secrets unavailable - using existing .env.hub"
         if [ ! -f "${DIVE_ROOT}/.env.hub" ]; then
@@ -42,16 +49,6 @@ hub_up() {
             return 1
         fi
     }
-
-    # Load secrets from .env.hub (may have been updated above)
-    if [ -f "${DIVE_ROOT}/.env.hub" ]; then
-        set -a
-        source "${DIVE_ROOT}/.env.hub"
-        set +a
-    else
-        log_error ".env.hub file not found - run 'hub init' first"
-        return 1
-    fi
 
     # Validate client ID configuration
     log_step "Validating client ID configuration..."
@@ -65,8 +62,8 @@ hub_up() {
         return 0
     fi
 
-    # Start services
-    docker compose -f "$HUB_COMPOSE_FILE" --env-file "${DIVE_ROOT}/.env.hub" up -d --build || {
+    # Start services (environment variables take precedence over .env.hub)
+    docker compose -f "$HUB_COMPOSE_FILE" up -d --build || {
         log_error "Failed to start hub services"
         return 1
     }

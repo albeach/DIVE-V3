@@ -235,7 +235,9 @@ export HUB_BACKEND_CONTAINER="${HUB_PROJECT_NAME}-backend"
 export HUB_FRONTEND_CONTAINER="${HUB_PROJECT_NAME}-frontend"
 # FIX (2026-01-15): Hub realm is dive-v3-broker-usa (USA is the hub)
 # LEGACY dive-v3-broker (without suffix) is DEPRECATED and should not exist
-export HUB_REALM="${HUB_REALM:-dive-v3-broker-usa}"
+# FIX (2026-01-18): Use conditional assignment to avoid readonly conflicts with other modules
+: "${HUB_REALM:=dive-v3-broker-usa}"
+export HUB_REALM
 
 # Hub API URL - Environment aware
 # - LOCAL/DEV: Use localhost hub
@@ -774,6 +776,10 @@ load_gcp_secrets() {
     map_if_empty "KEYCLOAK_ADMIN_PASSWORD_${inst_uc}" "$KEYCLOAK_ADMIN_PASSWORD"
     map_if_empty "KEYCLOAK_CLIENT_SECRET_${inst_uc}" "$KEYCLOAK_CLIENT_SECRET"
     map_if_empty "NEXTAUTH_SECRET_${inst_uc}" "$NEXTAUTH_SECRET"
+
+    # Note: Environment variables are now available for docker-compose
+    # The --env-file flag in hub/services.sh ensures .env.hub is still used as fallback
+    log_success "Secrets loaded from GCP"
 
     log_success "Secrets loaded from GCP"
     return 0

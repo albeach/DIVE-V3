@@ -360,33 +360,18 @@ spoke_compose_render_template() {
     template_content="${template_content//\{\{TEMPLATE_HASH\}\}/${TEMPLATE_HASH}}"
     template_content="${template_content//\{\{TEMPLATE_LAST_UPDATED\}\}/${TEMPLATE_LAST_UPDATED}}"
 
-    # Substitute environment variables from .env file
-    if [ -f "${target_dir}/.env" ]; then
-        log_verbose "Substituting environment variables from .env file"
-        while IFS='=' read -r key value; do
-            # Skip comments and empty lines
-            [[ $key =~ ^[[:space:]]*# ]] && continue
-            [[ -z "$key" ]] && continue
-
-            # Strip surrounding quotes from .env value if present
-            clean_value="${value#\"}"  # Remove leading quote
-            clean_value="${clean_value%\"}"  # Remove trailing quote
-
-            # Escape special characters in clean value for sed
-            escaped_value=$(printf '%s\n' "$clean_value" | sed 's/[[\.*^$()+?{|]/\\&/g')
-
-            # Substitute ${KEY} with actual value (only quote if truly necessary for YAML)
-            if [[ "$clean_value" == *"'"* ]] || [[ "$clean_value" == *'"'* ]]; then
-                # Only quote if contains quotes (which would break YAML unquoted)
-                template_content="${template_content//\$\{$key\}/\"$escaped_value\"}"
-            else
-                # Use unquoted value - YAML can handle most special chars unquoted
-                template_content="${template_content//\$\{$key\}/$escaped_value}"
-            fi
-        done < "${target_dir}/.env"
-    else
-        log_warn "No .env file found at ${target_dir}/.env - environment variables will not be substituted"
-    fi
+    # CRITICAL FIX (2026-01-18): Do NOT substitute environment variable values
+    # Docker Compose loads ${VAR_NAME} from .env file at runtime
+    # Only template placeholders {{PLACEHOLDER}} should be substituted
+    # 
+    # REMOVED: .env variable substitution (lines 363-389)
+    # REASON: Caused hardcoded passwords in docker-compose.yml instead of ${POSTGRES_PASSWORD_FRA} references
+    # IMPACT: Terraform apply failed because containers had hardcoded passwords but TF_VAR_* were not set
+    #
+    # The template has ${POSTGRES_PASSWORD_{{INSTANCE_CODE_UPPER}}} which becomes:
+    #   Step 1: Replace {{INSTANCE_CODE_UPPER}} with FRA → ${POSTGRES_PASSWORD_FRA} ✅
+    #   Step 2: Docker Compose loads POSTGRES_PASSWORD_FRA=value from .env at runtime ✅
+    #   [REMOVED Step 3: Don't substitute ${POSTGRES_PASSWORD_FRA} with hardcoded value ❌]
 
     # Write output
     echo "$template_content" > "$output_file"

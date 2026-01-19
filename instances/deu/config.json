@@ -6,7 +6,8 @@
     "description": "DIVE V3 Spoke Instance for DEU",
     "country": "DEU",
     "organizationType": "government",
-    "contactEmail": "admin@deu.dive25.com"
+    "contactEmail": "admin@deu.dive25.com",
+    "registeredSpokeId": "spoke-deu-3134faeb"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -26,13 +27,14 @@
   },
   "authentication": {},
   "federation": {
-    "status": "unregistered",
+    "status": "pending",
     "requestedScopes": [
       "policy:base",
       "policy:deu",
       "data:federation_matrix",
       "data:trusted_issuers"
-    ]
+    ],
+    "registeredAt": "2026-01-19T01:25:57Z"
   },
   "operational": {
     "heartbeatIntervalMs": 30000,

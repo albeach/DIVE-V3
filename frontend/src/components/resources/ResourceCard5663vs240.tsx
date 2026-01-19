@@ -33,12 +33,12 @@ interface IResourceCard5663vs240Props {
 
 /**
  * Resource Card with 5663 vs 240 Comparison
- * 
+ *
  * Displays resource in three modes based on active standards lens:
  * - 5663: Emphasize federation attributes (who can access based on identity)
  * - 240: Emphasize object attributes (how data is protected)
  * - Unified: Show both (default)
- * 
+ *
  * In unified mode, shows side-by-side comparison.
  */
 export function ResourceCard5663vs240({ resource, user, onClick }: IResourceCard5663vs240Props) {
@@ -61,7 +61,7 @@ export function ResourceCard5663vs240({ resource, user, onClick }: IResourceCard
  */
 function UnifiedView({ resource, user, onClick, t }: IResourceCard5663vs240Props & { t: (key: string) => string }) {
   return (
-    <div 
+    <div
       className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 shadow-lg hover:shadow-xl transition-all cursor-pointer"
       onClick={onClick}
     >
@@ -145,7 +145,7 @@ function UnifiedView({ resource, user, onClick, t }: IResourceCard5663vs240Props
  */
 function FederationView({ resource, user, onClick, t }: IResourceCard5663vs240Props & { t: (key: string) => string }) {
   return (
-    <div 
+    <div
       className="bg-gradient-to-br from-indigo-50 to-blue-50 dark:from-indigo-900/20 dark:to-blue-900/20 rounded-xl border-2 border-indigo-200 dark:border-indigo-700 shadow-lg hover:shadow-xl transition-all cursor-pointer"
       onClick={onClick}
     >
@@ -154,7 +154,7 @@ function FederationView({ resource, user, onClick, t }: IResourceCard5663vs240Pr
           <h3 className="font-bold text-gray-900 dark:text-gray-100">{resource.title}</h3>
           <AttributeTag standard="5663" size="sm" />
         </div>
-        
+
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-sm">
             <Globe className="w-4 h-4 text-indigo-600" />
@@ -193,7 +193,7 @@ function FederationView({ resource, user, onClick, t }: IResourceCard5663vs240Pr
  */
 function ObjectView({ resource, onClick, t }: IResourceCard5663vs240Props & { t: (key: string) => string }) {
   return (
-    <div 
+    <div
       className="bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-xl border-2 border-amber-200 dark:border-amber-700 shadow-lg hover:shadow-xl transition-all cursor-pointer"
       onClick={onClick}
     >
@@ -202,7 +202,7 @@ function ObjectView({ resource, onClick, t }: IResourceCard5663vs240Props & { t:
           <h3 className="font-bold text-gray-900 dark:text-gray-100">{resource.title}</h3>
           <AttributeTag standard="240" size="sm" />
         </div>
-        
+
         <div className="space-y-2">
           <div className="flex items-center gap-2 text-sm">
             <FileCheck className="w-4 h-4 text-amber-600" />

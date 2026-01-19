@@ -55,14 +55,24 @@ terraform/hub/
 
 ## Deployment Commands
 
-### Apply Terraform (already done)
+### Apply Terraform (Recommended - Secure Method)
+```bash
+cd terraform/hub
+./run-terraform.sh init
+./run-terraform.sh apply -var-file=hub.tfvars -auto-approve
+```
+
+### Manual Terraform (Advanced)
 ```bash
 cd terraform/hub
 terraform init
 source ../../.env.hub
-TF_VAR_keycloak_admin_password="${KEYCLOAK_ADMIN_PASSWORD}" \
-  terraform apply -var-file=hub.tfvars -auto-approve
+export TF_VAR_keycloak_admin_password="$KEYCLOAK_ADMIN_PASSWORD"
+export TF_VAR_client_secret="$KEYCLOAK_CLIENT_SECRET"
+terraform apply -var-file=hub.tfvars -auto-approve
 ```
+
+**⚠️ WARNING: Never hardcode secrets in terraform.tfvars files!**
 
 ### Via DIVE CLI
 ```bash

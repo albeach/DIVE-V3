@@ -1,10 +1,10 @@
 /**
  * Document Conversion Routes
- * 
+ *
  * Provides server-side document conversion endpoints.
  * Best practice: Convert Office documents (DOCX, XLSX, PPTX) to viewable formats
  * on the server where proper parsing libraries are available.
- * 
+ *
  * Endpoints:
  * - POST /api/documents/convert-to-html - Convert DOCX to HTML for inline viewing
  * - POST /api/documents/convert-to-pdf - Convert Office docs to PDF

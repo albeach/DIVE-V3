@@ -1,9 +1,9 @@
 /**
  * Bulk Actions Toolbar Component (2025)
- * 
+ *
  * Phase 3.2: Power User Features
  * Floating toolbar that appears when resources are selected
- * 
+ *
  * Features:
  * - Selection count display
  * - Export to CSV/JSON/Excel
@@ -65,29 +65,29 @@ interface ExportDropdownProps {
   selectedCount: number;
 }
 
-function ExportDropdown({ 
-  isOpen, 
-  onClose, 
-  onExport, 
+function ExportDropdown({
+  isOpen,
+  onClose,
+  onExport,
   isExporting,
-  selectedCount 
+  selectedCount
 }: ExportDropdownProps) {
   const exportOptions = [
-    { 
-      format: 'csv' as ExportFormat, 
-      label: 'CSV', 
+    {
+      format: 'csv' as ExportFormat,
+      label: 'CSV',
       icon: FileSpreadsheet,
       description: 'Comma-separated values'
     },
-    { 
-      format: 'json' as ExportFormat, 
-      label: 'JSON', 
+    {
+      format: 'json' as ExportFormat,
+      label: 'JSON',
       icon: FileJson,
       description: 'JavaScript Object Notation'
     },
-    { 
-      format: 'excel' as ExportFormat, 
-      label: 'Excel', 
+    {
+      format: 'excel' as ExportFormat,
+      label: 'Excel',
       icon: FileSpreadsheet,
       description: 'Microsoft Excel format'
     },
@@ -98,11 +98,11 @@ function ExportDropdown({
       {isOpen && (
         <>
           {/* Backdrop */}
-          <div 
-            className="fixed inset-0 z-40" 
+          <div
+            className="fixed inset-0 z-40"
             onClick={onClose}
           />
-          
+
           {/* Dropdown */}
           <motion.div
             initial={{ opacity: 0, y: -10, scale: 0.95 }}
@@ -168,7 +168,7 @@ export default function BulkActionsToolbar({
   const handleExport = useCallback(async (format: ExportFormat) => {
     setIsExporting(true);
     setShowExportMenu(false);
-    
+
     try {
       await exportResources(selectedResources, {
         format,
@@ -176,7 +176,7 @@ export default function BulkActionsToolbar({
         includeMetadata: true,
         formatDates: true,
       });
-      
+
       setExportSuccess(`Exported ${selectedCount} items as ${format.toUpperCase()}`);
       setTimeout(() => setExportSuccess(null), 3000);
     } catch (error) {
@@ -250,7 +250,7 @@ export default function BulkActionsToolbar({
                 <span>{t('bulkActions.export')}</span>
                 <ChevronDown className="w-4 h-4" />
               </button>
-              
+
               <ExportDropdown
                 isOpen={showExportMenu}
                 onClose={() => setShowExportMenu(false)}

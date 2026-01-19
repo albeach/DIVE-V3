@@ -1,13 +1,12 @@
 {
   "identity": {
-    "spokeId": "spoke-can-bb52e931",
+    "spokeId": "spoke-can-f2806ddc",
     "instanceCode": "CAN",
-    "name": "--help",
-    "description": "DIVE V3 Spoke Instance for --help",
+    "name": "CAN Instance",
+    "description": "DIVE V3 Spoke Instance for CAN",
     "country": "CAN",
     "organizationType": "government",
-    "contactEmail": "admin@can.dive25.com",
-    "registeredSpokeId": "spoke-can-fcc7dc83"
+    "contactEmail": "admin@can.dive25.com"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -27,15 +26,13 @@
   },
   "authentication": {},
   "federation": {
-    "status": "approved",
+    "status": "unregistered",
     "requestedScopes": [
       "policy:base",
       "policy:can",
       "data:federation_matrix",
       "data:trusted_issuers"
-    ],
-    "registeredAt": "2026-01-13T01:36:20Z",
-    "approvedAt": "2026-01-13T01:36:20Z"
+    ]
   },
   "operational": {
     "heartbeatIntervalMs": 30000,
@@ -48,8 +45,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2026-01-13T00:56:31Z",
-    "lastModified": "2026-01-13T00:56:31Z",
+    "createdAt": "2026-01-18T17:43:08Z",
+    "lastModified": "2026-01-18T17:43:08Z",
     "configHash": ""
   }
 }
