@@ -55,14 +55,14 @@ if [ "$QUICK_MODE" = true ]; then
   echo -e "${BLUE}🔍 DIVE V3 Federation State - Quick Audit${NC}"
   echo "=================================================="
   echo ""
-  
+
   # Get Keycloak IdPs via curl
   echo -e "${YELLOW}🔐 Keycloak IdPs:${NC}"
   KC_TOKEN=$(curl -ks -X POST "https://localhost:8443/realms/master/protocol/openid-connect/token" \
     -H "Content-Type: application/x-www-form-urlencoded" \
     -d "grant_type=password&client_id=admin-cli&username=admin&password=${KC_ADMIN_PASSWORD:-DivePilot2025!SecureAdmin}" \
     | jq -r '.access_token' 2>/dev/null || echo "")
-  
+
   KC_IDPS=""
   if [ -n "$KC_TOKEN" ] && [ "$KC_TOKEN" != "null" ]; then
     KC_IDPS=$(curl -ks "https://localhost:8443/admin/realms/dive-v3-broker-usa/identity-provider/instances" \
@@ -79,7 +79,7 @@ if [ "$QUICK_MODE" = true ]; then
     echo "   (Could not authenticate to Keycloak)"
   fi
   echo ""
-  
+
   # Get running Docker containers
   echo -e "${YELLOW}🐳 Running Spoke Containers:${NC}"
   DOCKER_SPOKES=$(docker ps --format "{{.Names}}" 2>/dev/null | grep -E "dive-spoke-.*-(frontend|backend)" | sed -E 's/dive-spoke-([a-z]+)-.*/\1/' | sort -u | tr '[:lower:]' '[:upper:]' || echo "")
@@ -92,12 +92,12 @@ if [ "$QUICK_MODE" = true ]; then
     DOCKER_COUNT=0
   fi
   echo ""
-  
+
   # Compare
   echo -e "${YELLOW}⚖️ Divergence:${NC}"
   if [ -n "$KC_IDPS" ]; then
     KC_CODES=$(echo "$KC_IDPS" | sed 's/-idp$//' | tr '[:lower:]' '[:upper:]' | sort)
-    
+
     # Find IdPs not in Docker
     STALE=""
     for code in $KC_CODES; do
@@ -109,7 +109,7 @@ if [ "$QUICK_MODE" = true ]; then
         STALE="$STALE $code"
       fi
     done
-    
+
     if [ -n "$STALE" ]; then
       echo -e "   ${RED}❌ Stale IdPs (not running):${NC}$STALE"
     else

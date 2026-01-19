@@ -113,3 +113,7 @@
 .dive-footer a:hover {
     color: #7C3AED;
 }
+/* Enhanced background prominence */
+.dive-background-image {
+    filter: blur(0.5px) saturate(1.6) brightness(0.95) contrast(1.2);
+}

@@ -586,8 +586,8 @@ router.post('/route', async (req: Request, res: Response): Promise<void> => {
         res.json({
             success: routeResult.success,
             route: routeResult.success ? {
-                kasId: routeResult.kasInstance?.kasId,
-                organization: routeResult.kasInstance?.organization,
+                kasId: routeResult.kasServer?.kasId,
+                organization: routeResult.kasServer?.organization,
                 kasUrl: routeResult.routedToUrl,
                 reason: routeResult.reason,
                 fallbackUsed: routeResult.fallbackUsed

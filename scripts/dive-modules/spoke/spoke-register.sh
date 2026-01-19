@@ -11,8 +11,34 @@
 
 # Ensure common functions are loaded
 if [ -z "$DIVE_COMMON_LOADED" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+    # spoke-register.sh is in scripts/dive-modules/spoke/, common.sh is in scripts/dive-modules/
+    source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
     export DIVE_COMMON_LOADED=1
+fi
+
+# Load spoke-federation module for bidirectional setup
+if [ -z "$SPOKE_FEDERATION_LOADED" ]; then
+    # spoke-register.sh is in scripts/dive-modules/spoke/, spoke-federation.sh is in scripts/dive-modules/spoke/pipeline/
+    _spoke_fed_path="$(dirname "${BASH_SOURCE[0]}")/pipeline/spoke-federation.sh"
+    if [ -f "$_spoke_fed_path" ]; then
+        # CRITICAL FIX (2026-01-18): Don't hide errors with 2>/dev/null
+        # We need to see what's failing during module load
+        if ! source "$_spoke_fed_path"; then
+            log_error "CRITICAL: Failed to load spoke-federation module from: $_spoke_fed_path"
+            log_error "Bidirectional federation auto-configuration will not work"
+            # Don't fail registration - just disable auto-config
+            export SPOKE_FEDERATION_AUTO_CONFIG_DISABLED=true
+        fi
+    elif [ -f "${DIVE_ROOT}/scripts/dive-modules/spoke/pipeline/spoke-federation.sh" ]; then
+        if ! source "${DIVE_ROOT}/scripts/dive-modules/spoke/pipeline/spoke-federation.sh"; then
+            log_error "CRITICAL: Failed to load spoke-federation module from DIVE_ROOT"
+            export SPOKE_FEDERATION_AUTO_CONFIG_DISABLED=true
+        fi
+    else
+        log_warn "spoke-federation.sh not found - bidirectional auto-config will fail"
+        export SPOKE_FEDERATION_AUTO_CONFIG_DISABLED=true
+    fi
+    unset _spoke_fed_path
 fi
 
 # Mark this module as loaded
@@ -214,11 +240,16 @@ spoke_register() {
             # Retry up to 15 times with 3 second delay (more robust)
             for attempt in {1..15}; do
                 # Use printenv which is more reliable than env
-                keycloak_password=$(docker exec "$keycloak_container" printenv KC_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+                # Try both old and new Keycloak environment variable names (KC_ADMIN_PASSWORD for legacy, KC_BOOTSTRAP_ADMIN_PASSWORD for Keycloak 26+)
+                keycloak_password=$(docker exec "$keycloak_container" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+                if [ -z "$keycloak_password" ]; then
+                    keycloak_password=$(docker exec "$keycloak_container" printenv KC_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+                fi
 
                 # Verify it's not a default/placeholder password and has reasonable length
-                if [ -n "$keycloak_password" ] && [ ${#keycloak_password} -gt 10 ] && [[ ! "$keycloak_password" =~ ^(admin|password|KeycloakAdmin|test|default) ]]; then
-                    log_info "Retrieved Keycloak password from container $keycloak_container (attempt $attempt)"
+                # Accept any password that looks like a generated secure password (not obvious defaults)
+                if [ -n "$keycloak_password" ] && [ ${#keycloak_password} -gt 10 ] && [[ ! "$keycloak_password" =~ ^(admin|password|KeycloakAdmin|test|default|changeme|secret|123456|admin123)$ ]]; then
+                    log_info "Retrieved Keycloak admin password from container $keycloak_container (attempt $attempt)"
                     break
                 fi
 
@@ -426,6 +457,75 @@ EOF
         echo ""
         echo "Response:"
         echo "$response" | head -20
+        return 1
+    fi
+}
+
+# =============================================================================
+# BIDIRECTIONAL FEDERATION AUTO-CONFIGURATION
+# =============================================================================
+
+##
+# Configure bidirectional federation after spoke approval
+#
+# This function is called automatically after a spoke is approved during
+# registration. It creates the spoke's IdP in the Hub's Keycloak realm,
+# enabling users at the Hub to authenticate via the spoke's IdP (bidirectional SSO).
+#
+# Arguments:
+#   $1 - Instance code (uppercase, e.g., FRA)
+#
+# Returns:
+#   0 - Success
+#   1 - Failure
+#
+# Example:
+#   spoke_configure_federation_after_approval "FRA"
+##
+spoke_configure_federation_after_approval() {
+    local instance_code="$1"
+    
+    if [ -z "$instance_code" ]; then
+        log_error "Instance code required for federation auto-configuration"
+        return 1
+    fi
+    
+    local code_upper=$(upper "$instance_code")
+    
+    # Check if auto-config was disabled due to module loading failure
+    if [ "$SPOKE_FEDERATION_AUTO_CONFIG_DISABLED" = "true" ]; then
+        log_warn "Bidirectional federation auto-config disabled (module failed to load)"
+        log_warn "You can retry manually: ./dive federation link $code_upper"
+        return 1
+    fi
+    
+    # Verify spoke-federation module is loaded
+    if ! type spoke_federation_create_bidirectional &>/dev/null; then
+        log_error "spoke-federation module not loaded - cannot configure bidirectional federation"
+        log_error "This indicates a module loading issue in spoke-register.sh"
+        log_error "Check if scripts/dive-modules/spoke/pipeline/spoke-federation.sh exists"
+        log_error "Try sourcing it manually to see errors"
+        return 1
+    fi
+    
+    # Verify dependency functions exist
+    if ! type spoke_federation_get_admin_token &>/dev/null; then
+        log_error "spoke_federation_get_admin_token function not available"
+        log_error "Module loaded incompletely - missing critical functions"
+        return 1
+    fi
+    
+    log_verbose "All required functions available, proceeding with auto-configuration"
+    
+    # Call the bidirectional federation setup function
+    # This creates {spoke}-idp in Hub Keycloak
+    if spoke_federation_create_bidirectional "$code_upper"; then
+        log_success "Bidirectional federation configured successfully"
+        log_info "Hub users can now authenticate via ${code_upper} IdP"
+        return 0
+    else
+        log_warn "Bidirectional federation setup failed"
+        log_warn "You can retry manually: ./dive federation link $code_upper"
         return 1
     fi
 }

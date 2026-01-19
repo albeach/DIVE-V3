@@ -3,14 +3,18 @@
 # DIVE V3 Error Recovery Module
 # =============================================================================
 # Implements automatic error recovery with retry logic and circuit breakers
-# Part of Phase 3 Orchestration Architecture Review (2026-01-15)
+# Phase 3 Orchestration Architecture Review (2026-01-18)
 # =============================================================================
 # Features:
 # - Retry with exponential backoff and jitter
 # - Circuit breaker pattern (CLOSED → OPEN → HALF_OPEN)
-# - Auto-recovery for top 10+ common errors
+# - Database-persisted circuit breaker state (survives restarts)
+# - Auto-recovery for 15+ common errors
 # - Error correlation and cascade detection
 # - Failure threshold policy enforcement
+#
+# GAP-ER-001 Fix: Circuit breaker state now persisted to database
+# GAP-ER-002 Fix: Added recovery for errors 1201, 1401, 1501, 1106
 # =============================================================================
 
 # Prevent multiple sourcing
@@ -80,17 +84,20 @@ classify_error() {
 
     case "$error_code" in
         # Transient errors (network, timeouts, temporary unavailability)
-        1002|1204|1402|1502)
+        # These may resolve on their own with retry
+        1002|1204|1502)
             echo "TRANSIENT"
             ;;
 
         # Permanent errors (missing prerequisites, auth failures)
-        1001|1006|1103|1106)
+        # These require manual intervention
+        1001|1006|1103)
             echo "PERMANENT"
             ;;
 
         # Recoverable errors (can auto-fix and retry)
-        1101|1004|1202|1207|1301|1302|1303|1003|1308|1505)
+        # GAP-ER-002 Fix: Extended list with 1201, 1401, 1402, 1501, 1106
+        1101|1004|1202|1207|1301|1302|1303|1003|1308|1505|1201|1401|1402|1501|1106)
             echo "RECOVERABLE"
             ;;
 
@@ -420,6 +427,186 @@ orch_circuit_breaker_reset() {
     fi
 }
 
+##
+# GAP-ER-001 FIX: Load circuit breaker state from database
+# This ensures circuit breakers survive script restarts
+#
+# Arguments:
+#   $1 - Operation name
+#
+# Returns:
+#   Circuit breaker data as "state|failure_count|success_count|elapsed_seconds"
+#   Empty string if not found or database unavailable
+##
+orch_circuit_breaker_load() {
+    local operation_name="$1"
+
+    if ! orch_db_check_connection 2>/dev/null; then
+        log_verbose "Database unavailable - cannot load circuit breaker state for $operation_name"
+        return 1
+    fi
+
+    local circuit_data
+    circuit_data=$(orch_db_exec "
+        SELECT 
+            state,
+            failure_count,
+            success_count,
+            COALESCE(EXTRACT(EPOCH FROM (NOW() - last_failure_time))::integer, 999999) as elapsed
+        FROM circuit_breakers 
+        WHERE operation_name='$operation_name'
+    " 2>/dev/null | tr -d ' ')
+
+    if [ -n "$circuit_data" ]; then
+        log_verbose "Loaded circuit breaker state from database: $operation_name -> $circuit_data"
+        echo "$circuit_data"
+        return 0
+    else
+        log_verbose "No persisted circuit breaker state for: $operation_name"
+        return 1
+    fi
+}
+
+##
+# GAP-ER-001 FIX: Initialize or restore circuit breaker for an operation
+# First checks database for existing state, creates new if not found
+#
+# Arguments:
+#   $1 - Operation name
+#   $2 - Initial state (optional, default: CLOSED)
+#
+# Returns:
+#   0 - Success
+#   1 - Failed
+##
+orch_circuit_breaker_init() {
+    local operation_name="$1"
+    local initial_state="${2:-CLOSED}"
+
+    # Try to load existing state from database
+    if orch_db_check_connection 2>/dev/null; then
+        local existing_state
+        existing_state=$(orch_db_exec "SELECT state FROM circuit_breakers WHERE operation_name='$operation_name'" 2>/dev/null | xargs)
+
+        if [ -n "$existing_state" ]; then
+            log_verbose "Circuit breaker $operation_name restored from database: $existing_state"
+            return 0
+        fi
+
+        # No existing state, create new
+        if orch_db_exec "
+            INSERT INTO circuit_breakers (operation_name, state, failure_count, success_count, last_state_change)
+            VALUES ('$operation_name', '$initial_state', 0, 0, NOW())
+            ON CONFLICT (operation_name) DO NOTHING
+        " >/dev/null 2>&1; then
+            log_verbose "Initialized circuit breaker: $operation_name -> $initial_state"
+            return 0
+        fi
+    fi
+
+    log_verbose "Circuit breaker $operation_name initialized (in-memory only)"
+    return 0
+}
+
+##
+# Get status of all circuit breakers
+#
+# Arguments:
+#   $1 - Output format: "table" or "json" (default: table)
+#
+# Returns:
+#   Formatted circuit breaker status on stdout
+##
+orch_circuit_breaker_status() {
+    local format="${1:-table}"
+
+    if ! orch_db_check_connection 2>/dev/null; then
+        echo "Database unavailable - cannot query circuit breaker status"
+        return 1
+    fi
+
+    case "$format" in
+        json)
+            orch_db_exec "
+                SELECT json_agg(row_to_json(cb))
+                FROM (
+                    SELECT 
+                        operation_name,
+                        state,
+                        failure_count,
+                        success_count,
+                        to_char(last_state_change, 'YYYY-MM-DD HH24:MI:SS') as last_change,
+                        to_char(last_failure_time, 'YYYY-MM-DD HH24:MI:SS') as last_failure,
+                        EXTRACT(EPOCH FROM (NOW() - last_failure_time))::integer as cooldown_elapsed
+                    FROM circuit_breakers
+                    ORDER BY operation_name
+                ) cb
+            " 2>/dev/null
+            ;;
+        table|*)
+            echo "=== Circuit Breaker Status ==="
+            printf "%-30s %-10s %-8s %-8s %-20s\n" "OPERATION" "STATE" "FAILURES" "SUCCESS" "LAST CHANGE"
+            printf "%-30s %-10s %-8s %-8s %-20s\n" "─────────" "─────" "────────" "───────" "───────────"
+            
+            orch_db_exec "
+                SELECT 
+                    operation_name,
+                    state,
+                    failure_count,
+                    success_count,
+                    to_char(last_state_change, 'MM-DD HH24:MI')
+                FROM circuit_breakers
+                ORDER BY 
+                    CASE state WHEN 'OPEN' THEN 0 WHEN 'HALF_OPEN' THEN 1 ELSE 2 END,
+                    operation_name
+            " 2>/dev/null | while IFS='|' read -r op state fail succ change; do
+                # Trim whitespace
+                op=$(echo "$op" | xargs)
+                state=$(echo "$state" | xargs)
+                fail=$(echo "$fail" | xargs)
+                succ=$(echo "$succ" | xargs)
+                change=$(echo "$change" | xargs)
+                
+                # Color code state
+                local state_display="$state"
+                case "$state" in
+                    OPEN)      state_display="⚡ OPEN" ;;
+                    HALF_OPEN) state_display="⏳ HALF" ;;
+                    CLOSED)    state_display="✓ CLOSED" ;;
+                esac
+                
+                printf "%-30s %-10s %-8s %-8s %-20s\n" "$op" "$state_display" "$fail" "$succ" "$change"
+            done
+            ;;
+    esac
+}
+
+##
+# Reset all OPEN circuit breakers (for recovery scenarios)
+#
+# Returns:
+#   0 - Success
+#   Number of reset circuits on stdout
+##
+orch_circuit_breaker_reset_all_open() {
+    if ! orch_db_check_connection 2>/dev/null; then
+        log_error "Database unavailable - cannot reset circuit breakers"
+        return 1
+    fi
+
+    local reset_count
+    reset_count=$(orch_db_exec "
+        UPDATE circuit_breakers 
+        SET state='CLOSED', failure_count=0, success_count=0, last_state_change=NOW()
+        WHERE state='OPEN'
+        RETURNING operation_name
+    " 2>/dev/null | wc -l | xargs)
+
+    log_info "Reset $reset_count OPEN circuit breakers to CLOSED"
+    echo "$reset_count"
+    return 0
+}
+
 # =============================================================================
 # AUTO-RECOVERY PROCEDURES
 # =============================================================================
@@ -672,6 +859,259 @@ orch_auto_recover() {
                     fi
                 fi
             fi
+            return 1
+            ;;
+
+        # =====================================================================
+        # GAP-ER-002 FIX: Additional auto-recovery procedures (2026-01-18)
+        # =====================================================================
+
+        1201)  # Container start failure
+            log_info "Auto-recovering: Recreating container with force..."
+
+            # Extract service from context, default to backend
+            local service=$(echo "$error_context" | jq -r '.service // "backend"' 2>/dev/null)
+            local container="dive-spoke-${code_lower}-${service}"
+
+            # Stop and remove existing container
+            docker stop "$container" 2>/dev/null || true
+            docker rm -f "$container" 2>/dev/null || true
+
+            # Clean up any orphaned networks
+            docker network prune -f 2>/dev/null || true
+
+            # Retry with force-recreate using docker-compose
+            local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+            if [ -f "$spoke_dir/docker-compose.yml" ]; then
+                cd "$spoke_dir"
+                export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
+
+                if orch_retry_with_backoff "Container start ($service)" \
+                    docker compose up -d --force-recreate "$service"; then
+                    log_success "✓ Container $service started successfully"
+                    orch_record_recovery "$instance_code" "$error_code" "container_force_recreate" "SUCCESS"
+                    cd - >/dev/null
+                    return 0
+                else
+                    log_error "✗ Container start still failing"
+                    orch_record_recovery "$instance_code" "$error_code" "container_force_recreate" "FAILED"
+                    cd - >/dev/null
+                    return 2
+                fi
+            fi
+
+            log_error "docker-compose.yml not found for $instance_code"
+            return 1
+            ;;
+
+        1401)  # Health check timeout
+            log_info "Auto-recovering: Increasing timeout and retrying health check..."
+
+            # Extract service from context
+            local service=$(echo "$error_context" | jq -r '.service // "keycloak"' 2>/dev/null)
+            local container="dive-spoke-${code_lower}-${service}"
+            local original_timeout=$(echo "$error_context" | jq -r '.timeout // 60' 2>/dev/null)
+            local extended_timeout=$((original_timeout * 2))
+
+            log_info "Extending timeout from ${original_timeout}s to ${extended_timeout}s"
+
+            # Wait with extended timeout
+            local elapsed=0
+            while [ $elapsed -lt $extended_timeout ]; do
+                local health=$(docker inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+
+                if [ "$health" = "healthy" ]; then
+                    log_success "✓ Service $service became healthy after ${elapsed}s (extended timeout)"
+                    orch_record_recovery "$instance_code" "$error_code" "extended_health_wait" "SUCCESS"
+                    return 0
+                fi
+
+                # Check if container is at least running
+                local running=$(docker inspect "$container" --format='{{.State.Running}}' 2>/dev/null)
+                if [ "$running" != "true" ]; then
+                    log_error "Container $service stopped - cannot wait for health"
+                    break
+                fi
+
+                sleep 5
+                ((elapsed += 5))
+            done
+
+            log_error "✗ Health check still failing after extended timeout (${extended_timeout}s)"
+            orch_record_recovery "$instance_code" "$error_code" "extended_health_wait" "FAILED"
+            return 2
+            ;;
+
+        1501)  # Database connection failure
+            log_info "Auto-recovering: Waiting for database with exponential backoff..."
+
+            # Check which database (PostgreSQL or MongoDB)
+            local db_type=$(echo "$error_context" | jq -r '.db_type // "postgres"' 2>/dev/null)
+            local container=""
+
+            case "$db_type" in
+                postgres|postgresql)
+                    container="dive-spoke-${code_lower}-postgres"
+                    ;;
+                mongodb|mongo)
+                    container="dive-spoke-${code_lower}-mongodb"
+                    ;;
+                *)
+                    container="dive-spoke-${code_lower}-postgres"
+                    ;;
+            esac
+
+            # Check if container exists
+            if ! docker ps -a --format '{{.Names}}' | grep -q "^${container}$"; then
+                log_error "Database container $container does not exist"
+                return 1
+            fi
+
+            # Start container if stopped
+            local running=$(docker inspect "$container" --format='{{.State.Running}}' 2>/dev/null)
+            if [ "$running" != "true" ]; then
+                log_info "Starting stopped database container: $container"
+                docker start "$container" 2>/dev/null || true
+            fi
+
+            # Wait for database to accept connections
+            local db_check_cmd=""
+            case "$db_type" in
+                postgres|postgresql)
+                    db_check_cmd="docker exec $container pg_isready -U postgres"
+                    ;;
+                mongodb|mongo)
+                    db_check_cmd="docker exec $container mongosh --eval 'db.runCommand({ping:1})' --quiet"
+                    ;;
+            esac
+
+            if orch_retry_with_backoff "Database connection ($db_type)" bash -c "$db_check_cmd"; then
+                log_success "✓ Database $db_type is accepting connections"
+                orch_record_recovery "$instance_code" "$error_code" "db_connection_wait" "SUCCESS"
+                return 0
+            else
+                log_error "✗ Database still not accepting connections"
+                orch_record_recovery "$instance_code" "$error_code" "db_connection_wait" "FAILED"
+                return 2
+            fi
+            ;;
+
+        1106)  # Keycloak configuration error
+            log_info "Auto-recovering: Resetting Keycloak realm configuration..."
+
+            local kc_container="dive-spoke-${code_lower}-keycloak"
+            local realm_name="dive-v3-broker-${code_lower}"
+
+            # Check if Keycloak is running
+            if ! docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
+                log_error "Keycloak container not running - cannot recover"
+                return 1
+            fi
+
+            # Get admin token
+            local kc_admin_pass
+            kc_admin_pass=$(docker exec "$kc_container" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null || \
+                           docker exec "$kc_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null || echo "")
+
+            if [ -z "$kc_admin_pass" ]; then
+                log_error "Cannot get Keycloak admin password"
+                return 1
+            fi
+
+            # Get admin token
+            local admin_token
+            admin_token=$(docker exec "$kc_container" curl -sf \
+                -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
+                -d "grant_type=password" \
+                -d "username=admin" \
+                -d "password=${kc_admin_pass}" \
+                -d "client_id=admin-cli" 2>/dev/null | jq -r '.access_token // empty')
+
+            if [ -z "$admin_token" ]; then
+                log_error "Cannot authenticate with Keycloak admin"
+                return 2
+            fi
+
+            # Check if realm exists
+            local realm_check
+            realm_check=$(docker exec "$kc_container" curl -sf \
+                -H "Authorization: Bearer $admin_token" \
+                "http://localhost:8080/admin/realms/${realm_name}" 2>/dev/null)
+
+            if echo "$realm_check" | grep -q '"realm"'; then
+                log_info "Realm exists, attempting to update configuration..."
+
+                # Refresh realm keys (common fix for token issues)
+                docker exec "$kc_container" curl -sf \
+                    -X POST \
+                    -H "Authorization: Bearer $admin_token" \
+                    "http://localhost:8080/admin/realms/${realm_name}/keys" 2>/dev/null || true
+
+                log_success "✓ Keycloak realm configuration refreshed"
+                orch_record_recovery "$instance_code" "$error_code" "keycloak_config_refresh" "SUCCESS"
+                return 0
+            else
+                log_info "Realm does not exist, will be created on next deployment"
+                orch_record_recovery "$instance_code" "$error_code" "keycloak_realm_missing" "NEEDS_REDEPLOY"
+                return 2
+            fi
+            ;;
+
+        1402)  # Service dependency timeout
+            log_info "Auto-recovering: Starting dependency services..."
+
+            # Extract the service that timed out and its dependencies
+            local service=$(echo "$error_context" | jq -r '.service // "backend"' 2>/dev/null)
+            local dependencies=""
+
+            # Map service to dependencies
+            case "$service" in
+                backend)
+                    dependencies="postgres mongodb redis keycloak"
+                    ;;
+                frontend)
+                    dependencies="backend"
+                    ;;
+                keycloak)
+                    dependencies="postgres"
+                    ;;
+                opal-client)
+                    dependencies="backend"
+                    ;;
+                *)
+                    dependencies=""
+                    ;;
+            esac
+
+            if [ -z "$dependencies" ]; then
+                log_warn "Unknown service dependencies for: $service"
+                return 1
+            fi
+
+            local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+            if [ -f "$spoke_dir/docker-compose.yml" ]; then
+                cd "$spoke_dir"
+                export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
+
+                # Start dependency services
+                for dep in $dependencies; do
+                    local dep_container="dive-spoke-${code_lower}-${dep}"
+                    log_info "Ensuring dependency service is running: $dep"
+
+                    if ! docker ps --format '{{.Names}}' | grep -q "^${dep_container}$"; then
+                        docker compose up -d "$dep" 2>/dev/null || true
+                    fi
+                done
+
+                # Wait briefly for dependencies to stabilize
+                sleep 10
+
+                cd - >/dev/null
+                log_success "✓ Dependency services started"
+                orch_record_recovery "$instance_code" "$error_code" "start_dependencies" "SUCCESS"
+                return 0
+            fi
+
             return 1
             ;;
 
@@ -1016,10 +1456,18 @@ export -f orch_retry_with_backoff
 export -f orch_circuit_breaker_execute
 export -f orch_circuit_breaker_is_open
 export -f orch_circuit_breaker_reset
+export -f orch_circuit_breaker_load
+export -f orch_circuit_breaker_init
+export -f orch_circuit_breaker_status
+export -f orch_circuit_breaker_reset_all_open
 export -f orch_auto_recover
 export -f orch_record_recovery
 export -f orch_correlate_errors
 export -f orch_check_failure_threshold
 export -f handle_error_with_recovery
 
-log_verbose "Error recovery module loaded (10 functions)"
+# FIX (2026-01-18): Only log if log_verbose function is available
+# Prevents "command not found" errors during module loading
+if type log_verbose &>/dev/null; then
+    log_verbose "Error recovery module loaded (Phase 3: 14 functions, 15 recoverable errors)"
+fi

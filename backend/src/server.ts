@@ -24,6 +24,7 @@ import policiesLabRoutes from './routes/policies-lab.routes';  // Policies Lab
 import oauthRoutes from './routes/oauth.routes';  // OAuth 2.0 for SP federation
 import scimRoutes from './routes/scim.routes';  // SCIM 2.0 user provisioning
 import federationRoutes from './routes/federation.routes';  // Federation endpoints
+import federationSyncRoutes from './routes/federation-sync.routes';  // Phase 5: Federation state sync
 import spManagementRoutes from './routes/sp-management.routes';  // SP Registry management
 import blacklistRoutes from './routes/blacklist.routes';  // Phase 2 GAP-007: Token blacklist
 import dashboardRoutes from './routes/dashboard.routes';  // Dashboard statistics
@@ -164,6 +165,7 @@ app.use('/api-docs', swaggerRoutes);  // API Documentation (OpenAPI/Swagger UI)
 app.use('/oauth', oauthRoutes);  // OAuth 2.0 Authorization Server
 app.use('/scim/v2', scimRoutes);  // SCIM 2.0 User Provisioning
 app.use('/api/federation', federationRoutes);  // Hub-Spoke federation management (Phase 3-5)
+app.use('/api/drift', federationSyncRoutes);  // Phase 5: Federation state drift detection (no auth required)
 app.use('/api/sp-management', spManagementRoutes);  // SP Registry management (admin-only)
 
 // Root endpoint
@@ -267,6 +269,25 @@ function startServer() {
       }
     } else {
       logger.info('Skipping federation cascade initialization (Spoke mode)');
+    }
+
+    // ============================================
+    // PHASE 5: Federation State Drift Detection
+    // ============================================
+    // Start periodic drift detection for three-layer consistency
+    // (Keycloak IdPs, MongoDB spokes, Docker containers)
+    if (isHub) {
+      try {
+        const { federationSyncService } = await import('./services/federation-sync.service');
+        logger.info('Starting federation drift detection service');
+        federationSyncService.startPeriodicCheck();
+        logger.info('Federation drift detection active (5-minute intervals)');
+      } catch (error) {
+        logger.warn('Failed to start federation drift detection', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          impact: 'Manual drift monitoring required'
+        });
+      }
     }
 
     // ============================================

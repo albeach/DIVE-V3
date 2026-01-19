@@ -1,6 +1,6 @@
 /**
  * View Mode Switcher Component (2025)
- * 
+ *
  * Features:
  * - Grid, List, and Compact view modes
  * - Persists preference to localStorage

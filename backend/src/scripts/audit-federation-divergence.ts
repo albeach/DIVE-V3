@@ -1,18 +1,18 @@
 /**
  * DIVE V3 Federation State Audit Script
- * 
+ *
  * Audits and reports divergence between:
  * 1. Keycloak IdPs - What the UI currently shows
  * 2. MongoDB spokes collection - What should be the source of truth
  * 3. Running Docker containers - What's actually available
  * 4. OPAL federation matrix - Policy data
  * 5. Static federation registry - Configuration file
- * 
+ *
  * Usage:
  *   npx ts-node src/scripts/audit-federation-divergence.ts
  *   npx ts-node src/scripts/audit-federation-divergence.ts --json
  *   npx ts-node src/scripts/audit-federation-divergence.ts --fix (dry-run)
- * 
+ *
  * @version 1.0.0
  * @date 2026-01-17
  */
@@ -190,10 +190,10 @@ function fetchDockerContainers(): DockerContainer[] {
       'docker ps --format "{{.Names}}|{{.Status}}" 2>/dev/null | grep -E "dive-spoke-" || true',
       { encoding: 'utf-8' }
     );
-    
+
     const containers: DockerContainer[] = [];
     const lines = output.trim().split('\n').filter(Boolean);
-    
+
     for (const line of lines) {
       const [name, status] = line.split('|');
       // Extract instance code from container name: dive-spoke-fra-backend -> FRA
@@ -283,7 +283,7 @@ function analyzeDivergence(report: AuditReport): void {
   // Determine health
   const staleCount = report.divergence.staleIdPs.length;
   const keycloakNotRunning = report.divergence.inKeycloakNotRunning.length;
-  
+
   report.divergence.healthy = staleCount === 0 && keycloakNotRunning === 0;
 
   // Build summary
@@ -313,19 +313,19 @@ async function runAudit(): Promise<AuditReport> {
   // Fetch all data sources
   console.log('Fetching Keycloak IdPs...');
   const keycloakIdPs = await fetchKeycloakIdPs();
-  
+
   console.log('Fetching MongoDB spokes...');
   const mongoSpokes = await fetchMongoDBSpokes();
-  
+
   console.log('Fetching Docker containers...');
   const dockerContainers = fetchDockerContainers();
-  
+
   console.log('Reading OPAL federation matrix...');
   const federationMatrix = fetchFederationMatrix();
-  
+
   console.log('Reading static federation registry...');
   const staticRegistry = fetchStaticRegistry();
-  
+
   console.log();
 
   // Build report
@@ -410,7 +410,7 @@ function printReport(report: AuditReport, jsonOutput: boolean): void {
   // Divergence Analysis
   console.log('⚖️  DIVERGENCE ANALYSIS');
   console.log('-'.repeat(50));
-  
+
   if (report.divergence.staleIdPs.length > 0) {
     console.log(`   ❌ STALE IdPs (in Keycloak, not in MongoDB, not running):`);
     console.log(`      ${report.divergence.staleIdPs.join(', ')}`);
@@ -442,7 +442,7 @@ function printReport(report: AuditReport, jsonOutput: boolean): void {
   if (!report.divergence.healthy) {
     console.log('💡 RECOMMENDATIONS');
     console.log('-'.repeat(50));
-    
+
     if (report.divergence.staleIdPs.length > 0) {
       console.log(`   1. Remove stale IdPs from Keycloak:`);
       for (const code of report.divergence.staleIdPs) {

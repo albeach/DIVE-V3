@@ -2,8 +2,21 @@
 # =============================================================================
 # DIVE V3 Orchestration State Management - Database Backend
 # =============================================================================
-# Sprint 1: State Management Enhancement
-# PostgreSQL-backed state management with dual-write (file + DB)
+# ADR-001: State Management Consolidation (2026-01-18)
+#
+# This module implements PostgreSQL-backed state management for the DIVE V3
+# orchestration framework. Database is the sole source of truth (SSOT).
+#
+# Modes (controlled by environment variables):
+#   - ORCH_DB_ONLY_MODE=true  (default) - Database-only, fail-fast
+#   - ORCH_DB_DUAL_WRITE=true (deprecated) - Legacy dual-write mode
+#
+# CLI Commands:
+#   ./scripts/orch-db-cli.sh migrate   - Migrate file state to database
+#   ./scripts/orch-db-cli.sh validate  - Check state consistency
+#   ./scripts/orch-db-cli.sh status    - Show deployment states
+#
+# See: docs/architecture/adr/ADR-001-state-management-consolidation.md
 # =============================================================================
 
 # ROOT FIX: Don't return early - let functions get defined
@@ -43,7 +56,23 @@ ORCH_DB_CONN="postgresql://${ORCH_DB_USER}:${ORCH_DB_PASSWORD}@${ORCH_DB_HOST}:$
 
 # Feature flags
 ORCH_DB_ENABLED="${ORCH_DB_ENABLED:-true}"
-ORCH_DB_DUAL_WRITE="${ORCH_DB_DUAL_WRITE:-true}"  # Write to both file and DB
+
+# =============================================================================
+# ADR-001: State Management Consolidation (2026-01-18)
+# =============================================================================
+# ORCH_DB_ONLY_MODE: When enabled, database is the SOLE state store
+#   - No file writes (eliminates dual-write complexity)
+#   - Fail-fast if database unavailable (no silent degradation)
+#   - Files only read for backward-compatible migration
+#
+# Migration path:
+#   1. Set ORCH_DB_ONLY_MODE=false to keep dual-write (legacy)
+#   2. Run: ./dive orch-db migrate (imports file state to DB)
+#   3. Set ORCH_DB_ONLY_MODE=true (database-only mode)
+#   4. Verify: ./dive orch-db validate (consistency check)
+# =============================================================================
+ORCH_DB_ONLY_MODE="${ORCH_DB_ONLY_MODE:-true}"   # ADR-001: Database-only mode (default: enabled)
+ORCH_DB_DUAL_WRITE="${ORCH_DB_DUAL_WRITE:-false}" # DEPRECATED: Legacy dual-write (disabled by default)
 ORCH_DB_SOURCE_OF_TRUTH="${ORCH_DB_SOURCE_OF_TRUTH:-db}" # db or file (CHANGED: db is now SSOT)
 
 # =============================================================================
@@ -112,7 +141,11 @@ orch_db_exec_json() {
 # =============================================================================
 
 ##
-# Set deployment state (dual-write: file + database)
+# Set deployment state
+#
+# ADR-001 Implementation:
+#   - ORCH_DB_ONLY_MODE=true: Database is sole state store (recommended)
+#   - ORCH_DB_DUAL_WRITE=true: Legacy dual-write mode (deprecated)
 #
 # Arguments:
 #   $1 - Instance code (spoke code or "usa" for hub)
@@ -128,22 +161,96 @@ orch_db_set_state() {
     local code_lower
     code_lower=$(lower "$instance_code")
 
-    # Get previous state (from DB if enabled, else from file)
-    local prev_state="UNKNOWN"
-    if [ "$ORCH_DB_ENABLED" = "true" ]; then
-        prev_state=$(orch_db_get_state "$instance_code" 2>/dev/null || echo "UNKNOWN")
-    elif type -t get_deployment_state >/dev/null 2>&1; then
-        prev_state=$(get_deployment_state "$instance_code" 2>/dev/null || echo "UNKNOWN")
+    # ==========================================================================
+    # ADR-001: Database-Only Mode (ORCH_DB_ONLY_MODE=true)
+    # ==========================================================================
+    # This is the recommended mode. Database is the sole state store.
+    # No file writes, no fallbacks, fail-fast on database errors.
+    # ==========================================================================
+    if [ "$ORCH_DB_ONLY_MODE" = "true" ]; then
+        # CRITICAL FIX (2026-01-18): Allow Hub (USA) to deploy without database
+        # Hub deployment CREATES the orchestration database, so it can't depend on it
+        # Spokes and other instances require the database to exist
+        local code_upper=$(upper "$instance_code")
+        if [ "$code_upper" != "USA" ]; then
+            # Require database connection for non-Hub instances - fail fast if unavailable
+            if ! orch_db_check_connection; then
+                log_error "FATAL: Orchestration database unavailable (ORCH_DB_ONLY_MODE=true)"
+                log_error "  → Deployment cannot proceed without database"
+                log_error "  → Ensure Hub is running: ./dive hub up"
+                return 1
+            fi
+        else
+            # Hub deployment - database may not exist yet (will be created)
+            # Try to connect but don't fail if unavailable
+            if ! orch_db_check_connection; then
+                log_verbose "Orchestration database not yet available (Hub will create it)"
+                # Skip database write, return success
+                return 0
+            fi
+        fi
+
+        # Get previous state from database
+        local prev_state
+        prev_state=$(orch_db_exec "SELECT state FROM deployment_states WHERE instance_code='$code_lower' ORDER BY timestamp DESC LIMIT 1" 2>/dev/null | xargs)
+        prev_state="${prev_state:-UNKNOWN}"
+
+        # Prepare SQL-safe values
+        local escaped_reason="${reason//\'/\'\'}"
+        local metadata_sql="NULL"
+        if [ -n "$metadata" ] && [ "$metadata" != "null" ]; then
+            if echo "$metadata" | jq empty >/dev/null 2>&1; then
+                local escaped_json="${metadata//\'/\'\'}"
+                metadata_sql="'$escaped_json'::jsonb"
+            fi
+        fi
+
+        # Execute atomic transaction
+        local sql_transaction="BEGIN;
+INSERT INTO deployment_states (instance_code, state, previous_state, reason, metadata, created_by)
+VALUES ('$code_lower', '$new_state', '$prev_state', '$escaped_reason', $metadata_sql, 'system');
+
+INSERT INTO state_transitions (instance_code, from_state, to_state, metadata, initiated_by)
+VALUES ('$code_lower', '$prev_state', '$new_state', $metadata_sql, 'system');
+COMMIT;"
+
+        local sql_result
+        sql_result=$(orch_db_exec "$sql_transaction" 2>&1)
+        local exit_code=$?
+
+        if [ $exit_code -eq 0 ] && [[ ! "$sql_result" =~ ERROR ]]; then
+            log_verbose "✓ State persisted: $instance_code → $new_state (DB-only)"
+            # Record metric (non-blocking)
+            orch_db_exec "INSERT INTO orchestration_metrics (instance_code, metric_name, metric_value) VALUES ('$code_lower', 'state_transition_success', 1)" >/dev/null 2>&1 || true
+            return 0
+        else
+            log_error "Database transaction failed: $instance_code → $new_state"
+            [ -n "$sql_result" ] && log_error "DB Error: $sql_result"
+            return 1
+        fi
     fi
 
-    # Dual-write phase: Write to both file and database
-    # CRITICAL: Database is SSOT - write to DB first, then file
+    # ==========================================================================
+    # DEPRECATED: Dual-Write Mode (ORCH_DB_DUAL_WRITE=true)
+    # ==========================================================================
+    # Legacy mode for backward compatibility. Will be removed in future versions.
+    # Writes to database first, then to file as cache.
+    # ==========================================================================
     if [ "$ORCH_DB_DUAL_WRITE" = "true" ]; then
+        log_verbose "WARNING: Using deprecated dual-write mode. Set ORCH_DB_ONLY_MODE=true"
+
+        # Get previous state (from DB if enabled, else from file)
+        local prev_state="UNKNOWN"
+        if [ "$ORCH_DB_ENABLED" = "true" ]; then
+            prev_state=$(orch_db_get_state "$instance_code" 2>/dev/null || echo "UNKNOWN")
+        elif type -t get_deployment_state >/dev/null 2>&1; then
+            prev_state=$(get_deployment_state "$instance_code" 2>/dev/null || echo "UNKNOWN")
+        fi
+
         # Write to database FIRST (SSOT) with proper error handling
         if orch_db_check_connection; then
             # Escape SQL strings properly
             local escaped_reason="${reason//\'/\'\'}"
-            local escaped_metadata="$metadata"
 
             # Handle JSON metadata - Simplified NULL handling
             local metadata_sql="NULL"
@@ -176,21 +283,9 @@ COMMIT;"
             if [ $db_exit_code -eq 0 ] && [[ ! "$sql_error_log" =~ ERROR ]]; then
                 log_verbose "✓ State atomically persisted to database: $instance_code -> $new_state"
 
-                # Database write succeeded - now write to file as cache
+                # Database write succeeded - now write to file as cache (DEPRECATED)
                 if type -t set_deployment_state_enhanced >/dev/null 2>&1; then
-                    if set_deployment_state_enhanced "$instance_code" "$new_state" "$reason" "$metadata" 2>/dev/null; then
-                        log_verbose "✓ File cache updated: $instance_code -> $new_state"
-                    else
-                        log_verbose "File write failed (non-critical, DB is SSOT), falling back to simple write"
-                        # Fallback: Simple file write
-                        cat > "${DIVE_ROOT}/.dive-state/${code_lower}.state" << STATE_EOF
-state=$new_state
-timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-version=2.0
-metadata=$metadata
-checksum=$(echo -n "$new_state$(date +%s)" | shasum -a 256 2>/dev/null | cut -d' ' -f1 || echo "none")
-STATE_EOF
-                    fi
+                    set_deployment_state_enhanced "$instance_code" "$new_state" "$reason" "$metadata" 2>/dev/null || true
                 else
                     # Function not available, write directly
                     mkdir -p "${DIVE_ROOT}/.dive-state"
@@ -201,93 +296,112 @@ version=2.0
 metadata=$metadata
 checksum=$(echo -n "$new_state$(date +%s)" | shasum -a 256 2>/dev/null | cut -d' ' -f1 || echo "none")
 STATE_EOF
-                    log_verbose "✓ File cache written directly: $instance_code -> $new_state"
                 fi
 
                 # Record successful transition
                 orch_db_exec "INSERT INTO orchestration_metrics (instance_code, metric_name, metric_value) VALUES ('$code_lower', 'state_transition_success', 1)" >/dev/null 2>&1 || true
             else
-                # Transaction failed - rollback occurred automatically
-                # This IS blocking in DB-SSOT mode (database write must succeed)
+                # Transaction failed - this IS blocking (database is SSOT)
                 log_error "Database write failed (blocking in DB-SSOT mode): $instance_code -> $new_state"
                 if [ -n "$sql_error_log" ]; then
                     log_error "DB Error: $sql_error_log"
                 fi
-                return 1  # Fail if DB write fails (DB is SSOT)
+                return 1
             fi
         else
-            log_verbose "Database connection not available - state written to file only"
-        fi
-    elif [ "$ORCH_DB_ENABLED" = "true" ]; then
-        # Database-only mode (Phase 3)
-        if orch_db_check_connection; then
-            local escaped_reason="${reason//\'/\'\'}"
-            local escaped_metadata="$metadata"
-
-            # Handle JSON metadata properly
-            if [ "$metadata" = "null" ] || [ -z "$metadata" ]; then
-                escaped_metadata="NULL"
-            elif echo "$metadata" | jq empty >/dev/null 2>&1; then
-                escaped_metadata="'${metadata//\'/\'\'}'"
-            else
-                log_warn "Invalid JSON metadata in DB-only mode, using NULL"
-                escaped_metadata="NULL"
+            log_verbose "Database connection not available - state written to file only (DEPRECATED)"
+            # File-only fallback in dual-write mode (legacy behavior)
+            if type -t set_deployment_state_enhanced >/dev/null 2>&1; then
+                set_deployment_state_enhanced "$instance_code" "$new_state" "$reason" "$metadata"
             fi
-
-            # Execute atomic transaction
-            local sql_transaction="BEGIN; INSERT INTO deployment_states (instance_code, state, previous_state, reason, metadata, created_by) VALUES ('$code_lower', '$new_state', '$prev_state', '$escaped_reason', CASE WHEN '$escaped_metadata' = 'NULL' THEN NULL ELSE '$escaped_metadata'::jsonb END, 'system'); INSERT INTO state_transitions (instance_code, from_state, to_state, metadata, initiated_by) VALUES ('$code_lower', '$prev_state', '$new_state', CASE WHEN '$escaped_metadata' = 'NULL' THEN NULL ELSE '$escaped_metadata'::jsonb END, 'system'); COMMIT;"
-
-            if orch_db_exec "$sql_transaction" >/dev/null 2>&1; then
-                log_verbose "✓ State atomically persisted to database (DB-only mode): $instance_code -> $new_state"
-            else
-                log_error "Database transaction failed (DB-only mode) for $instance_code -> $new_state"
-                return 1 # Fail in DB-only mode since there's no fallback
-            fi
-        else
-            log_error "Database unavailable and file-only mode disabled"
-            return 1
         fi
-    else
-        # File-only mode (legacy)
-        set_deployment_state_enhanced "$instance_code" "$new_state" "$reason" "$metadata"
+        return 0
     fi
 
-    # Validate consistency after state change (non-blocking)
-    if type orch_state_validate_consistency &>/dev/null; then
-        orch_state_validate_consistency "$instance_code" "true" || true
+    # ==========================================================================
+    # LEGACY: File-Only Mode
+    # ==========================================================================
+    # Only used if both ORCH_DB_ONLY_MODE and ORCH_DB_DUAL_WRITE are false.
+    # This is not recommended for production use.
+    # ==========================================================================
+    if type -t set_deployment_state_enhanced >/dev/null 2>&1; then
+        set_deployment_state_enhanced "$instance_code" "$new_state" "$reason" "$metadata"
+    else
+        log_error "No state persistence backend available"
+        return 1
     fi
 }
 
 ##
 # Get current deployment state
 #
+# ADR-001 Implementation:
+#   - ORCH_DB_ONLY_MODE=true: Database is sole source (fail-fast if unavailable)
+#   - ORCH_DB_SOURCE_OF_TRUTH=db: Legacy SSOT mode (deprecated)
+#
 # Arguments:
 #   $1 - Instance code
 #
 # Returns:
-#   State name on stdout
+#   State name on stdout (UNKNOWN if no state exists)
+#   Returns 1 if database unavailable in DB-only mode
 ##
 orch_db_get_state() {
     local instance_code="$1"
     local code_lower
     code_lower=$(lower "$instance_code")
 
-    # Choose source based on configuration
-    if [ "$ORCH_DB_SOURCE_OF_TRUTH" = "db" ] && orch_db_check_connection; then
-        # Database is source of truth - query directly
+    # ==========================================================================
+    # ADR-001: Database-Only Mode
+    # ==========================================================================
+    if [ "$ORCH_DB_ONLY_MODE" = "true" ]; then
+        # CRITICAL FIX (2026-01-18): Allow Hub to read state without database during initial deployment
+        local code_upper=$(upper "$instance_code")
+        if [ "$code_upper" != "USA" ]; then
+            # Non-Hub instances require database
+            if ! orch_db_check_connection; then
+                log_error "FATAL: Cannot read state - database unavailable (ORCH_DB_ONLY_MODE=true)"
+                echo "ERROR"
+                return 1
+            fi
+        else
+            # Hub - database may not exist yet
+            if ! orch_db_check_connection; then
+                log_verbose "Orchestration database not available (returning UNKNOWN state)"
+                echo "UNKNOWN"
+                return 0
+            fi
+        fi
+
         local state
         state=$(orch_db_exec "SELECT state FROM deployment_states WHERE instance_code='$code_lower' ORDER BY timestamp DESC LIMIT 1" 2>/dev/null | xargs)
 
-        if [ -n "$state" ] && [ "$state" != "UNKNOWN" ]; then
+        if [ -n "$state" ] && [ "$state" != "" ]; then
             echo "$state"
-            return 0
-        fi
-
-        # Fallback to file if DB returns no records
-        if type -t get_deployment_state >/dev/null 2>&1; then
-            get_deployment_state "$instance_code"
         else
             echo "UNKNOWN"
+        fi
+        return 0
+    fi
+
+    # ==========================================================================
+    # LEGACY: SSOT-Based Mode
+    # ==========================================================================
+    if [ "$ORCH_DB_SOURCE_OF_TRUTH" = "db" ]; then
+        # Database is source of truth - NO FILE FALLBACK
+        if orch_db_check_connection; then
+            local state
+            state=$(orch_db_exec "SELECT state FROM deployment_states WHERE instance_code='$code_lower' ORDER BY timestamp DESC LIMIT 1" 2>/dev/null | xargs)
+
+            if [ -n "$state" ] && [ "$state" != "UNKNOWN" ]; then
+                echo "$state"
+                return 0
+            fi
+            echo "UNKNOWN"
+        else
+            log_error "Orchestration database is not available (required when ORCH_DB_SOURCE_OF_TRUTH=db)"
+            echo "ERROR"
+            return 1
         fi
     else
         # File is source of truth (legacy mode)
@@ -301,11 +415,6 @@ orch_db_get_state() {
                 echo "UNKNOWN"
             fi
         fi
-    fi
-
-    # Validate consistency on read (non-blocking)
-    if type orch_state_validate_consistency &>/dev/null; then
-        orch_state_validate_consistency "$instance_code" "true" >/dev/null 2>&1 || true
     fi
 }
 

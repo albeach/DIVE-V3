@@ -72,7 +72,7 @@ app.prepare().then(() => {
       // Node.js 24 HTTP/2 compatibility: Direct property patching
       // Add the missing methods that Next.js expects
       if (!res._implicitHeader) {
-        res._implicitHeader = function() {}; // No-op for Next.js compatibility
+        res._implicitHeader = function () { }; // No-op for Next.js compatibility
       }
 
       // Ensure HTTP/1.1 style properties exist
@@ -82,7 +82,7 @@ app.prepare().then(() => {
 
       // Override setHeader to filter out HTTP/2 pseudo-headers that Next.js tries to set
       const originalSetHeader = res.setHeader;
-      res.setHeader = function(name, value) {
+      res.setHeader = function (name, value) {
         // Filter out HTTP/2 pseudo-headers that shouldn't be set manually
         if (name && name.startsWith(':')) {
           return; // Ignore pseudo-headers

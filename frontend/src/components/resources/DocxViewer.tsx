@@ -2,13 +2,13 @@
 
 /**
  * DOCX Viewer Component
- * 
+ *
  * Best Practice Implementation:
  * - Uses server-side conversion via backend API
  * - Backend uses mammoth.js for high-fidelity DOCX to HTML
  * - No client-side parsing = no SSR issues
  * - Clean separation of concerns
- * 
+ *
  * Flow:
  * 1. Component receives base64-encoded DOCX content
  * 2. Calls backend /api/documents/convert-to-html endpoint
@@ -182,7 +182,7 @@ export default function DocxViewer({
         style={{ maxHeight: '70vh' }}
       >
         {/* Apply Tailwind typography for proper styling */}
-        <div 
+        <div
           className="prose prose-sm max-w-none prose-headings:text-gray-900 prose-p:text-gray-700 prose-li:text-gray-700 prose-table:border-collapse prose-td:border prose-td:border-gray-300 prose-td:p-2 prose-th:border prose-th:border-gray-300 prose-th:p-2 prose-th:bg-gray-100"
           dangerouslySetInnerHTML={{ __html: htmlContent }}
         />

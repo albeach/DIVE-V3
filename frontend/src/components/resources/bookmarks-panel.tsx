@@ -1,6 +1,6 @@
 /**
  * Bookmarks Panel Component - Phase 3
- * 
+ *
  * A slide-out panel showing all bookmarked documents and policies.
  * Features:
  * - Grouped by type (documents, policies)
@@ -8,7 +8,7 @@
  * - Remove individual bookmarks
  * - Clear all bookmarks
  * - Empty state with guidance
- * 
+ *
  * Accessibility (WCAG 2.1 AA):
  * - role="dialog" with aria-modal="true"
  * - aria-labelledby for panel title
@@ -24,11 +24,11 @@ import Link from 'next/link';
 import { useBookmarks } from '@/hooks/useBookmarks';
 import { useTranslation } from '@/hooks/useTranslation';
 import type { Bookmark } from '@/lib/bookmarks';
-import { 
-  Bookmark as BookmarkIcon, 
-  X, 
-  FileText, 
-  Shield, 
+import {
+  Bookmark as BookmarkIcon,
+  X,
+  FileText,
+  Shield,
   Trash2,
   ExternalLink,
   Clock,
@@ -71,16 +71,16 @@ const classificationEmoji: Record<string, string> = {
 function formatRelativeTime(timestamp: number): string {
   const now = Date.now();
   const diff = now - timestamp;
-  
+
   const minutes = Math.floor(diff / 60000);
   const hours = Math.floor(diff / 3600000);
   const days = Math.floor(diff / 86400000);
-  
+
   if (minutes < 1) return 'Just now';
   if (minutes < 60) return `${minutes}m ago`;
   if (hours < 24) return `${hours}h ago`;
   if (days < 7) return `${days}d ago`;
-  
+
   return new Date(timestamp).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
@@ -98,23 +98,23 @@ interface BookmarkItemProps {
 }
 
 function BookmarkItem({ bookmark, onRemove, onNavigate }: BookmarkItemProps) {
-  const colorClass = bookmark.classification 
+  const colorClass = bookmark.classification
     ? classificationColors[bookmark.classification] || 'bg-gray-100 text-gray-800 border-gray-200'
     : 'bg-gray-100 text-gray-800 border-gray-200';
-  
-  const emoji = bookmark.classification 
+
+  const emoji = bookmark.classification
     ? classificationEmoji[bookmark.classification] || '📄'
     : '📄';
 
   return (
-    <article 
+    <article
       className="group relative flex items-start gap-3 p-3 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-600 hover:shadow-sm transition-all"
       aria-label={`${bookmark.type === 'document' ? 'Document' : 'Policy'}: ${bookmark.title}`}
     >
       {/* Icon */}
-      <div 
+      <div
         className={`flex-shrink-0 w-10 h-10 rounded-lg flex items-center justify-center ${
-          bookmark.type === 'document' 
+          bookmark.type === 'document'
             ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400'
             : 'bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400'
         }`}
@@ -129,7 +129,7 @@ function BookmarkItem({ bookmark, onRemove, onNavigate }: BookmarkItemProps) {
 
       {/* Content */}
       <div className="flex-1 min-w-0">
-        <Link 
+        <Link
           href={bookmark.type === 'document' ? `/resources/${bookmark.id}` : `/policies/${bookmark.id}`}
           onClick={onNavigate}
           className="block focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 rounded"
@@ -138,10 +138,10 @@ function BookmarkItem({ bookmark, onRemove, onNavigate }: BookmarkItemProps) {
             {bookmark.title}
           </h4>
         </Link>
-        
+
         <div className="flex items-center gap-2 mt-1">
           {bookmark.classification && (
-            <span 
+            <span
               className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium border ${colorClass}`}
               role="status"
               aria-label={`Classification: ${bookmark.classification.replace('_', ' ')}`}
@@ -214,7 +214,7 @@ export default function BookmarksPanel({ isOpen, onClose }: BookmarksPanelProps)
   } = useBookmarks();
 
   const { t } = useTranslation('resources');
-  
+
   const panelRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
@@ -243,7 +243,7 @@ export default function BookmarksPanel({ isOpen, onClose }: BookmarksPanelProps)
         e.preventDefault();
         onClose();
       }
-      
+
       // Focus trap within panel
       if (e.key === 'Tab' && panelRef.current) {
         const focusableElements = panelRef.current.querySelectorAll<HTMLElement>(
@@ -283,14 +283,14 @@ export default function BookmarksPanel({ isOpen, onClose }: BookmarksPanelProps)
   return (
     <>
       {/* Backdrop */}
-      <div 
+      <div
         className="fixed inset-0 bg-black/30 backdrop-blur-sm z-40 transition-opacity"
         onClick={onClose}
         aria-hidden="true"
       />
 
       {/* Panel */}
-      <div 
+      <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
@@ -312,7 +312,7 @@ export default function BookmarksPanel({ isOpen, onClose }: BookmarksPanelProps)
               </p>
             </div>
           </div>
-          
+
           <div className="flex items-center gap-2">
             {count > 0 && (
               <button
@@ -420,10 +420,10 @@ interface BookmarkButtonProps {
   showLabel?: boolean;
 }
 
-export function BookmarkButton({ 
-  resourceId, 
-  title, 
-  classification, 
+export function BookmarkButton({
+  resourceId,
+  title,
+  classification,
   type,
   size = 'md',
   showLabel = false,
@@ -440,18 +440,18 @@ export function BookmarkButton({
   const handleToggle = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    
+
     setError(null);
-    
+
     const result = toggle({
       id: resourceId,
       type,
       title,
       classification,
     });
-    
+
     setIsBookmarked(result.isBookmarked);
-    
+
     if (result.error) {
       setError(result.error);
       // Clear error after 3 seconds
@@ -479,8 +479,8 @@ export function BookmarkButton({
         className={`
           ${sizeClasses[size]}
           rounded-lg transition-all duration-200
-          ${isBookmarked 
-            ? 'text-amber-500 bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50' 
+          ${isBookmarked
+            ? 'text-amber-500 bg-amber-50 dark:bg-amber-900/30 hover:bg-amber-100 dark:hover:bg-amber-900/50'
             : 'text-gray-400 hover:text-amber-500 hover:bg-gray-100 dark:hover:bg-gray-700'
           }
           ${!canAdd && !isBookmarked ? 'opacity-50 cursor-not-allowed' : ''}
@@ -488,8 +488,8 @@ export function BookmarkButton({
         `}
         title={isBookmarked ? 'Remove bookmark' : canAdd ? 'Add bookmark' : 'Maximum bookmarks reached'}
       >
-        <BookmarkIcon 
-          className={`${iconSizes[size]} ${isBookmarked ? 'fill-current' : ''}`} 
+        <BookmarkIcon
+          className={`${iconSizes[size]} ${isBookmarked ? 'fill-current' : ''}`}
         />
         {showLabel && (
           <span className="text-xs font-medium">
@@ -497,7 +497,7 @@ export function BookmarkButton({
           </span>
         )}
       </button>
-      
+
       {error && (
         <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-2 py-1 bg-red-600 text-white text-xs rounded whitespace-nowrap z-50">
           {error}

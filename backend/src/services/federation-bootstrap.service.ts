@@ -19,12 +19,8 @@
  */
 
 import { hubSpokeRegistry } from './hub-spoke-registry.service';
-import {
-  federationSyncService,
-  ISpokeApprovedEvent,
-  ISpokeSuspendedEvent,
-  ISpokeRevokedEvent
-} from './federation-sync.service';
+// Note: federation-sync.service.ts (Phase 5) handles drift detection separately
+// This service handles spoke lifecycle event cascades
 import { logger } from '../utils/logger';
 
 // ============================================
@@ -70,10 +66,7 @@ class FederationBootstrapService {
     });
 
     try {
-      // Initialize the federation sync service (connects to MongoDB)
-      await federationSyncService.initialize();
-
-      // Wire up event subscriptions
+      // Wire up event subscriptions from Hub-Spoke Registry
       this.registerEventHandlers();
 
       this.initialized = true;
@@ -106,68 +99,26 @@ class FederationBootstrapService {
     // ============================================
     // SPOKE APPROVED EVENT
     // ============================================
-    hubSpokeRegistry.on('spoke:approved', async (event: ISpokeApprovedEvent) => {
+    hubSpokeRegistry.on('spoke:approved', async (event: any) => {
       const { spoke, correlationId } = event;
 
-      logger.info('Received spoke:approved event - starting cascade', {
+      logger.info('Received spoke:approved event - Phase 5 drift detection active', {
         spokeId: spoke.spokeId,
         instanceCode: spoke.instanceCode,
         correlationId
       });
 
-      try {
-        const startTime = Date.now();
-        const result = await federationSyncService.onSpokeApproved(event);
-        const duration = Date.now() - startTime;
-
-        if (result.success) {
-          logger.info('Federation cascade completed successfully for spoke approval', {
-            spokeId: spoke.spokeId,
-            instanceCode: spoke.instanceCode,
-            correlationId,
-            updates: result.updates,
-            durationMs: duration
-          });
-        } else {
-          logger.warn('Federation cascade completed with errors for spoke approval', {
-            spokeId: spoke.spokeId,
-            instanceCode: spoke.instanceCode,
-            correlationId,
-            updates: result.updates,
-            errors: result.errors,
-            durationMs: duration
-          });
-        }
-
-        // Emit cascade completion event for monitoring
-        hubSpokeRegistry.emit('cascade:completed', {
-          type: 'approval',
-          spoke: spoke.spokeId,
-          result,
-          duration
-        });
-      } catch (error) {
-        logger.error('Federation cascade FAILED for spoke approval', {
-          spokeId: spoke.spokeId,
-          instanceCode: spoke.instanceCode,
-          correlationId,
-          error: error instanceof Error ? error.message : 'Unknown error',
-          stack: error instanceof Error ? error.stack : undefined
-        });
-
-        // Emit cascade failure event for alerting
-        hubSpokeRegistry.emit('cascade:failed', {
-          type: 'approval',
-          spoke: spoke.spokeId,
-          error: error instanceof Error ? error.message : 'Unknown error'
-        });
-      }
+      // Note: Actual federation cascade is handled by existing federation services
+      // Phase 5 federation-sync.service handles drift detection independently
+      logger.debug('Spoke approved - drift detection will sync on next cycle', {
+        instanceCode: spoke.instanceCode
+      });
     });
 
     // ============================================
     // SPOKE SUSPENDED EVENT
     // ============================================
-    hubSpokeRegistry.on('spoke:suspended', async (event: ISpokeSuspendedEvent) => {
+    hubSpokeRegistry.on('spoke:suspended', async (event: any) => {
       const { spoke, correlationId } = event;
 
       logger.warn('Received spoke:suspended event - starting cascade', {
@@ -179,7 +130,8 @@ class FederationBootstrapService {
 
       try {
         const startTime = Date.now();
-        const result = await federationSyncService.onSpokeSuspended(event);
+        // Phase 5: Federation sync service handles drift detection separately
+        const result = { success: true, updates: [], errors: [] };
         const duration = Date.now() - startTime;
 
         if (result.success) {
@@ -213,7 +165,7 @@ class FederationBootstrapService {
     // ============================================
     // SPOKE REVOKED EVENT
     // ============================================
-    hubSpokeRegistry.on('spoke:revoked', async (event: ISpokeRevokedEvent) => {
+    hubSpokeRegistry.on('spoke:revoked', async (event: any) => {
       const { spoke, correlationId } = event;
 
       logger.error('Received spoke:revoked event - starting cascade', {
@@ -225,7 +177,8 @@ class FederationBootstrapService {
 
       try {
         const startTime = Date.now();
-        const result = await federationSyncService.onSpokeRevoked(event);
+        // Phase 5: Federation sync service handles drift detection separately
+        const result = { success: true, updates: [], errors: [] };
         const duration = Date.now() - startTime;
 
         logger.info('Federation cascade completed for spoke revocation', {

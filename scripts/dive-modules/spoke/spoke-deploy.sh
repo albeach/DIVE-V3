@@ -119,9 +119,12 @@ spoke_deploy() {
     fi
 
     # Use pipeline if available and not forcing legacy
+    log_verbose "DEBUG: SPOKE_PIPELINE_AVAILABLE='$SPOKE_PIPELINE_AVAILABLE', use_legacy='$use_legacy'"
     if [ "$SPOKE_PIPELINE_AVAILABLE" = "1" ] && [ "$use_legacy" = false ]; then
         log_info "Deploying $code_upper using pipeline architecture"
+        log_verbose "DEBUG: About to call spoke_pipeline_deploy"
         spoke_pipeline_deploy "$instance_code" "$instance_name"
+        log_verbose "DEBUG: spoke_pipeline_deploy returned"
         return $?
     fi
 
@@ -565,6 +568,7 @@ _spoke_deploy_legacy() {
     # Check if deployment already in progress using enhanced state management
     local current_state
     current_state=$(get_deployment_state_enhanced "$instance_code" 2>/dev/null || echo "UNKNOWN")
+    log_verbose "DEBUG: spoke_deploy current_state = '$current_state'"
 
     case "$current_state" in
         INITIALIZING|DEPLOYING|CONFIGURING|VERIFYING)
@@ -589,6 +593,7 @@ _spoke_deploy_legacy() {
             ;;
     esac
 
+    log_verbose "DEBUG: Passed state check, initializing orchestration context"
     # Default name if not provided
     instance_name="${instance_name:-${code_upper} Instance}"
 

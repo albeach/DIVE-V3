@@ -145,9 +145,17 @@ spoke_containers_start() {
         fi
     fi
 
-    # Traditional approach (fallback or force rebuild)
+    # BEST PRACTICE STAGED STARTUP APPROACH
+    # Start containers in dependency order to ensure proper initialization
+    # Stage 1: Infrastructure (postgres, redis, mongodb, opa)
+    # Stage 2: OPAL Client (depends on infrastructure)
+    # Stage 3: Keycloak (depends on postgres)
+    # Stage 4: Applications (backend, kas, frontend - depend on Keycloak and OPAL)
+
+    log_info "Using best practice staged container startup"
+
     local compose_cmd="docker compose"
-    local compose_args="up -d"
+    local compose_args_base="up -d"
 
     # Add --env-file flag if .env file exists (required for variable substitution)
     if [ -f "$spoke_dir/.env" ]; then
@@ -156,13 +164,100 @@ spoke_containers_start() {
     fi
 
     if [ "$force_rebuild" = "true" ]; then
-        compose_args="$compose_args --build --force-recreate"
-        log_info "Using traditional startup with rebuild"
-    else
-        log_verbose "Using traditional sequential startup"
+        compose_args_base="$compose_args_base --build --force-recreate"
     fi
 
-    # Run docker compose
+    # Stage 1: Start core infrastructure (postgres, redis, mongodb, opa)
+    log_info "Stage 1: Starting core infrastructure containers..."
+    local infra_services="postgres-${code_lower} redis-${code_lower} mongodb-${code_lower} opa-${code_lower}"
+    local compose_args="$compose_args_base $infra_services"
+
+    log_verbose "Infrastructure services: $infra_services"
+    log_verbose "Running: $compose_cmd $compose_args"
+    if ! timeout 60 $compose_cmd $compose_args; then
+        log_error "Failed to start core infrastructure containers (timeout or error)"
+        orch_record_error "$SPOKE_ERROR_COMPOSE_UP" "$ORCH_SEVERITY_CRITICAL" \
+            "Infrastructure startup failed" "containers" \
+            "$(spoke_error_get_remediation $SPOKE_ERROR_COMPOSE_UP $instance_code)"
+        return 1
+    fi
+
+    # Wait for core infrastructure to be healthy
+    log_info "Waiting for core infrastructure to be healthy..."
+    local max_wait=120
+    local waited=0
+
+    while [ $waited -lt $max_wait ]; do
+        local healthy_count=$(docker ps --filter "name=dive-spoke-${code_lower}" --filter "health=healthy" --format '{{.Names}}' | grep -E "(postgres|redis|mongodb|opa)" | wc -l)
+
+        if [ "$healthy_count" -ge 4 ]; then
+            log_info "Core infrastructure healthy (${healthy_count}/4 services) after ${waited}s"
+            break
+        fi
+
+        log_verbose "Infrastructure health: ${healthy_count}/4 services healthy, waiting..."
+        sleep 5
+        waited=$((waited + 5))
+    done
+
+    if [ $waited -ge $max_wait ]; then
+        log_error "Core infrastructure failed to become healthy within ${max_wait}s"
+        return 1
+    fi
+
+    # Stage 2: Start OPAL Client (depends on infrastructure)
+    log_verbose "Stage 2: Starting OPAL Client..."
+    compose_args="$compose_args_base opal-client-${code_lower}"
+
+    log_verbose "Running: $compose_cmd $compose_args"
+    if ! $compose_cmd $compose_args >/dev/null 2>&1; then
+        log_error "Failed to start OPAL Client"
+        orch_record_error "$SPOKE_ERROR_COMPOSE_UP" "$ORCH_SEVERITY_CRITICAL" \
+            "OPAL Client startup failed" "containers" \
+            "$(spoke_error_get_remediation $SPOKE_ERROR_COMPOSE_UP $instance_code)"
+        return 1
+    fi
+
+    # Wait for OPAL Client to be healthy (may take longer due to policy sync)
+    log_verbose "Waiting for OPAL Client to be healthy..."
+    spoke_containers_wait_for_services "$instance_code" "opal-client-${code_lower}" 120
+
+    # Stage 3: Start Keycloak (depends on postgres)
+    log_verbose "Stage 3: Starting Keycloak..."
+    compose_args="$compose_args_base keycloak-${code_lower}"
+
+    log_verbose "Running: $compose_cmd $compose_args"
+    if ! $compose_cmd $compose_args >/dev/null 2>&1; then
+        log_error "Failed to start Keycloak"
+        orch_record_error "$SPOKE_ERROR_COMPOSE_UP" "$ORCH_SEVERITY_CRITICAL" \
+            "Keycloak startup failed" "containers" \
+            "$(spoke_error_get_remediation $SPOKE_ERROR_COMPOSE_UP $instance_code)"
+        return 1
+    fi
+
+    # Wait for Keycloak to be running (not necessarily healthy - realm created later)
+    log_verbose "Waiting for Keycloak to be running..."
+    local max_wait=60
+    local wait_count=0
+    while [ $wait_count -lt $max_wait ]; do
+        if docker ps --filter "name=dive-spoke-${code_lower}-keycloak" --format '{{.Names}}' | grep -q .; then
+            log_verbose "Keycloak container is running"
+            break
+        fi
+        sleep 2
+        wait_count=$((wait_count + 2))
+    done
+
+    if [ $wait_count -ge $max_wait ]; then
+        log_error "Keycloak failed to start within ${max_wait}s"
+        return 1
+    fi
+
+    # Stage 4: Start application containers (backend, kas, frontend)
+    log_verbose "Stage 4: Starting application containers..."
+    local app_services="backend-${code_lower} kas-${code_lower} frontend-${code_lower}"
+    compose_args="$compose_args_base $app_services"
+
     log_verbose "Running: $compose_cmd $compose_args"
     local compose_output
     local compose_exit_code=0
@@ -170,19 +265,20 @@ spoke_containers_start() {
     compose_output=$($compose_cmd $compose_args 2>&1) || compose_exit_code=$?
 
     if [ $compose_exit_code -ne 0 ]; then
-        # Check if containers are actually running despite error
-        if docker ps --format '{{.Names}}' | grep -q "dive-spoke-${code_lower}-postgres"; then
-            log_warn "Docker compose reported error, but containers are running (transient health check failure)"
+        # Check if containers started despite errors
+        if docker ps --format '{{.Names}}' | grep -q "dive-spoke-${code_lower}-backend"; then
+            log_warn "Application containers started despite compose errors (health checks may be pending)"
         else
-            log_error "Failed to start containers"
+            log_error "Failed to start application containers"
             echo "$compose_output" | tail -10
-
             orch_record_error "$SPOKE_ERROR_COMPOSE_UP" "$ORCH_SEVERITY_CRITICAL" \
-                "Docker compose up failed" "containers" \
+                "Application startup failed" "containers" \
                 "$(spoke_error_get_remediation $SPOKE_ERROR_COMPOSE_UP $instance_code)"
             return 1
         fi
     fi
+
+    log_success "All containers started successfully in staged approach"
 
     # Start any containers stuck in "Created" state
     spoke_containers_start_created "$instance_code"
@@ -644,4 +740,53 @@ spoke_containers_force_recreate() {
     docker compose up -d --force-recreate 2>&1 | tail -5
 
     log_success "Containers recreated"
+}
+
+##
+# Wait for specific services to become healthy
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Space-separated list of service names (without instance prefix)
+#   $3 - Timeout in seconds (default: 60)
+#
+# Returns:
+#   0 - All services healthy
+#   1 - Timeout or failure
+##
+spoke_containers_wait_for_services() {
+    local instance_code="$1"
+    local services="$2"
+    local timeout="${3:-60}"
+    local code_lower=$(lower "$instance_code")
+
+    log_verbose "Waiting up to ${timeout}s for services: $services"
+
+    local start_time=$(date +%s)
+    while [ $(($(date +%s) - start_time)) -lt $timeout ]; do
+        local all_healthy=true
+
+        for service in $services; do
+            # Service is in format "service-instance", extract base service name
+            local service_name="${service%%-*}"  # Get part before first dash
+            # Check if service is running and healthy
+            if docker ps --filter "name=dive-spoke-${code_lower}-${service_name}" --filter "health=healthy" --format '{{.Names}}' | grep -q .; then
+                log_verbose "✓ $service is healthy"
+            else
+                log_verbose "⏳ $service not yet healthy"
+                all_healthy=false
+                break
+            fi
+        done
+
+        if [ "$all_healthy" = true ]; then
+            log_verbose "All services are healthy"
+            return 0
+        fi
+
+        sleep 2
+    done
+
+    log_warn "Services did not become healthy within ${timeout}s: $services"
+    return 1
 }

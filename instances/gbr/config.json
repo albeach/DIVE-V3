@@ -6,7 +6,8 @@
     "description": "DIVE V3 Spoke Instance for United Kingdom",
     "country": "GBR",
     "organizationType": "government",
-    "contactEmail": "admin@gbr.dive25.com"
+    "contactEmail": "admin@gbr.dive25.com",
+    "registeredSpokeId": "spoke-gbr-801b9085"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -26,13 +27,14 @@
   },
   "authentication": {},
   "federation": {
-    "status": "unregistered",
+    "status": "pending",
     "requestedScopes": [
       "policy:base",
       "policy:gbr",
       "data:federation_matrix",
       "data:trusted_issuers"
-    ]
+    ],
+    "registeredAt": "2026-01-19T01:52:18Z"
   },
   "operational": {
     "heartbeatIntervalMs": 30000,

@@ -75,6 +75,37 @@ function extractTenantCode(relativePath: string): TenantCode | undefined {
 }
 
 /**
+ * Extract package name from Rego content
+ */
+function extractPackage(content: string): string | undefined {
+    const packageMatch = content.match(/^package\s+(\S+)/m);
+    return packageMatch ? packageMatch[1] : undefined;
+}
+
+/**
+ * Extract test definitions from Rego content
+ */
+function extractTests(content: string): string[] {
+    const tests: string[] = [];
+    const testRegex = /^test_\w+/gm;
+    let match;
+
+    while ((match = testRegex.exec(content)) !== null) {
+        tests.push(match[0]);
+    }
+
+    return tests;
+}
+
+/**
+ * Check if policy is NATO compliant based on extracted standards
+ */
+function isNATOCompliant(content: string): boolean {
+    const compliance = extractNATOCompliance(content);
+    return compliance.length > 0;
+}
+
+/**
  * Extract import statements from Rego content
  */
 function extractImports(content: string): string[] {
@@ -235,23 +266,25 @@ function parsePolicyMetadataFromContent(
     const tenantCode = extractTenantCode(relativePath);
     const packageName = extractPackage(content);
     const imports = extractImports(content);
-    const rules = extractRules(content);
+    const rules = extractRuleNames(content);
     const tests = extractTests(content);
 
     return {
-        id: policyId,
+        policyId,
         name: path.basename(policyId, '.rego'),
-        description: extractDescription(content),
-        layer,
-        tenantCode,
-        path: relativePath,
-        packageName: packageName || 'unknown',
+        description: extractPolicyDescription(content, policyId),
+        version: '1.0.0',
+        package: packageName || 'unknown',
         ruleCount: rules.length,
         testCount: tests.length,
-        importCount: imports.length,
-        natoCompliant: isNATOCompliant(content),
-        lastModified: new Date().toISOString(), // OPA doesn't track this, use current time
-        size: content.length
+        lastModified: new Date().toISOString(),
+        status: 'active' as const,
+        filePath: relativePath,
+        layer,
+        imports,
+        natoCompliance: extractNATOCompliance(content),
+        tenant: tenantCode,
+        relativePath
     };
 }
 

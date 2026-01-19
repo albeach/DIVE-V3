@@ -17,10 +17,11 @@
 # =============================================================================
 
 # Prevent multiple sourcing
-if [ -n "$SPOKE_PHASE_CONFIGURATION_LOADED" ]; then
+# BEST PRACTICE (2026-01-18): Check functions exist, not just guard variable
+if type spoke_phase_configuration &>/dev/null; then
     return 0
 fi
-export SPOKE_PHASE_CONFIGURATION_LOADED=1
+# Module loaded marker will be set at end after functions defined
 
 # =============================================================================
 # LOAD SPOKE FEDERATION MODULE
@@ -109,6 +110,10 @@ spoke_phase_configuration() {
         log_error "To retry: ./dive federation link $code_upper"
         return 1
     fi
+
+    # NOTE: Federation client scopes are now configured in Terraform
+    # terraform/modules/federated-instance/main.tf: keycloak_openid_client_default_scopes.incoming_federation_defaults
+    # This ensures dive-v3-broker-usa clients have uniqueID, countryOfAffiliation, clearance, acpCOI scopes
 
     # Step 2.5: Register in Federation and KAS registries (CRITICAL - required for heartbeat)
     if [ "$pipeline_mode" = "deploy" ]; then
@@ -1041,19 +1046,18 @@ spoke_config_update_redirect_uris() {
 ##
 # Get Keycloak admin token
 #
-# Arguments:
-#   $1 - Keycloak container name
+# DEPRECATED (2026-01-18): This function is now defined in spoke-federation.sh
+# with enhanced error handling, GCP Secret Manager fallback, and debug logging.
+# This duplicate has been removed to prevent function overwriting.
 #
-# Prints:
-#   Admin token
+# The spoke-federation.sh version handles multiple password sources:
+#   1. Container environment variables (KC_ADMIN_PASSWORD, etc.)
+#   2. Local environment variables (KEYCLOAK_ADMIN_PASSWORD_*)
+#   3. GCP Secret Manager (dive-v3-keycloak-usa)
+#
+# Use: spoke_federation_get_admin_token "container-name" "debug-mode"
 ##
-spoke_federation_get_admin_token() {
-    local kc_container="$1"
+# REMOVED: Duplicate function definition
+# Use the enhanced version from spoke-federation.sh instead
 
-    docker exec "$kc_container" curl -sf \
-        -X POST \
-        -H "Content-Type: application/x-www-form-urlencoded" \
-        -d "username=admin&password=${KEYCLOAK_ADMIN_PASSWORD}&grant_type=password&client_id=admin-cli" \
-        "http://localhost:8080/realms/master/protocol/openid-connect/token" 2>/dev/null | \
-        grep -o '"access_token":"[^"]*' | cut -d'"' -f4
-}
+export SPOKE_PHASE_CONFIGURATION_LOADED=1
