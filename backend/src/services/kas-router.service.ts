@@ -202,8 +202,11 @@ class KasRouterService {
 
     try {
       // Make request to target KAS
+      // KAS endpoint is /request-key as defined in kas/src/server.ts  
+      const kasEndpoint = `${kasUrl}/request-key`;
+      
       const response = await axios.post(
-        kasUrl,
+        kasEndpoint,
         {
           resourceId,
           kaoId,
