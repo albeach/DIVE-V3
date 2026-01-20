@@ -592,7 +592,19 @@ export class KeycloakFederationService {
       throw new Error('Keycloak Admin client not initialized');
     }
 
-    const diveScopes = ['clearance', 'countryOfAffiliation', 'acpCOI', 'uniqueID'];
+    // CRITICAL (2026-01-20): Include ALL scopes managed by Terraform
+    // Including ACR/AMR scopes for MFA enforcement across federation
+    const diveScopes = [
+      'clearance', 
+      'countryOfAffiliation', 
+      'acpCOI', 
+      'uniqueID',
+      'acr',        // Built-in Keycloak scope
+      'dive_acr',   // Custom ACR scope
+      'dive_amr',   // Custom AMR scope
+      'user_acr',   // For federation IdP mappers
+      'user_amr',   // For federation IdP mappers
+    ];
 
     try {
       // Get the client UUID
