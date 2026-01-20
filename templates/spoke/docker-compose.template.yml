@@ -234,7 +234,7 @@ services:
     image: openpolicyagent/opa:1.12.1
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-opa
     platform: linux/amd64
-    command: run --server --addr :8181 --set=decision_logs.console=true --set=data_api_enabled=true --set=policies_api_enabled=true --set=tls_cert_file=/certs/certificate.pem --set=tls_private_key_file=/certs/key.pem /policies/base /policies/entrypoints /policies/tenant /policies/org /policies/compat
+    command: run --server --addr :8181 --set=decision_logs.console=true --set=data_api_enabled=true --set=policies_api_enabled=true --tls-cert-file=/certs/certificate.pem --tls-private-key-file=/certs/key.pem --ignore='*.json' /policies/base /policies/entrypoints /policies/tenant /policies/org /policies/compat
     ports:
       - "{{OPA_HOST_PORT}}:8181"
     volumes:
@@ -271,17 +271,10 @@ services:
       # This prevents OPAL from including files with "policies/" prefix duplicates
       # Delimiter is colon (:) for OPAL client config
       OPAL_POLICY_SUBSCRIPTION_DIRS: base:org:tenant:entrypoints:compat
-      # Use inline OPA like Hub - CRITICAL for policy synchronization
-      OPAL_INLINE_OPA_ENABLED: "true"
-      OPAL_INLINE_OPA_CONFIG: |
-        {
-          "addr": "0.0.0.0:8181",
-          "log_level": "info",
-          "log_format": "json",
-          "decision_logs": {
-            "console": true
-          }
-        }
+      # Use external OPA (standalone container) - OPAL pushes policies to it
+      # This avoids inline OPA chicken-and-egg health check issues
+      OPAL_INLINE_OPA_ENABLED: "false"
+      OPAL_POLICY_STORE_URL: https://opa-{{INSTANCE_CODE_LOWER}}:8181
       OPAL_SUBSCRIPTION_ID: {{SPOKE_ID}}
       # Data topics to subscribe to (must match Hub topics)
       OPAL_DATA_TOPICS: policy_data
@@ -291,9 +284,10 @@ services:
       OPAL_RECONNECT_MAX_INTERVAL: 300
       OPAL_POLICY_REFRESH_INTERVAL: 60
       # SSL Certificate Trust - CRITICAL for Hub OPAL server connection
-      SSL_CERT_FILE: /var/opal/certs/rootCA.pem
-      REQUESTS_CA_BUNDLE: /var/opal/certs/rootCA.pem
-      WEBSOCKET_SSL_CERT: /var/opal/certs/rootCA.pem
+      # CA certs are in /ca/ subdirectory, combined in entrypoint
+      SSL_CERT_FILE: /var/opal/hub-certs/ca/rootCA.pem
+      REQUESTS_CA_BUNDLE: /var/opal/hub-certs/ca/rootCA.pem
+      WEBSOCKET_SSL_CERT: /var/opal/hub-certs/ca/rootCA.pem
     ports:
       - "{{OPAL_OPA_PORT}}:8181"  # Expose inline OPA for backend
     volumes:
@@ -306,14 +300,15 @@ services:
     extra_hosts:
       - "localhost:host-gateway"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8181/health"]
+      # Check OPAL client API health (port 7000), not inline OPA
+      test: ["CMD", "curl", "-f", "http://localhost:7000/healthcheck"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 30s
     restart: unless-stopped
     # NO profiles restriction - ALWAYS start for policy sync with Hub
-    # NO dependency on external OPA - using inline OPA
+    # Uses external standalone OPA (opa-{{INSTANCE_CODE_LOWER}})
 
   # ==========================================================================
   # BACKEND API
@@ -348,8 +343,9 @@ services:
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_{{INSTANCE_CODE_UPPER}}}
       # OPA
-      # OPA - Use OPAL client's inline OPA for policy decisions
-      OPA_URL: http://opal-client-{{INSTANCE_CODE_LOWER}}:8181
+      # OPA - Use standalone OPA for policy decisions (HTTPS)
+      # OPAL client pushes policies to standalone OPA
+      OPA_URL: https://opa-{{INSTANCE_CODE_LOWER}}:8181
       # API URL for Swagger/OpenAPI documentation
       API_URL: {{API_URL}}
       # CORS
@@ -387,9 +383,9 @@ services:
       keycloak-{{INSTANCE_CODE_LOWER}}:
         condition: service_healthy  # NEW: Backend validates JWT tokens
       opa-{{INSTANCE_CODE_LOWER}}:
-        condition: service_started  # NEW: Explicit OPA dependency (policies loaded via OPAL)
+        condition: service_healthy  # NEW: Explicit OPA dependency (policies loaded from volume + OPAL)
       opal-client-{{INSTANCE_CODE_LOWER}}:
-        condition: service_healthy  # Ensures policies synced from Hub
+        condition: service_started  # Policies loaded via volume mount (OPAL sync is bonus)
     networks:
       - dive-internal      # Internal spoke communication
       - dive-shared        # CRITICAL: Required for Hub federation and OPAL policy sync
@@ -419,8 +415,8 @@ services:
       BACKEND_URL: https://backend-{{INSTANCE_CODE_LOWER}}:4000
       # SECURITY: Trust mkcert CA instead of disabling TLS verification
       NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
-      # OPA - Use OPAL client's inline OPA for policy decisions
-      OPA_URL: http://opal-client-{{INSTANCE_CODE_LOWER}}:8181
+      # OPA - Use standalone OPA for policy decisions (HTTPS)
+      OPA_URL: https://opa-{{INSTANCE_CODE_LOWER}}:8181
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017?authSource=admin
       MONGODB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
       LOG_LEVEL: info

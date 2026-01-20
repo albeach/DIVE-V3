@@ -19,20 +19,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && \
 # Write to /tmp which is user-writable
 RUN echo '#!/bin/bash\n\
 # Setup CA certificates for SSL trust - write to /tmp (user-writable)\n\
-if [ -f /var/opal/hub-certs/rootCA.pem ]; then\n\
+if [ -f /var/opal/hub-certs/ca/rootCA.pem ]; then\n\
     # Combine Hub and local CA certificates\n\
-    cat /var/opal/hub-certs/rootCA.pem > /tmp/dive-combined-ca.pem\n\
-    if [ -f /var/opal/certs/rootCA.pem ]; then\n\
-        cat /var/opal/certs/rootCA.pem >> /tmp/dive-combined-ca.pem\n\
+    cat /var/opal/hub-certs/ca/rootCA.pem > /tmp/dive-combined-ca.pem\n\
+    if [ -f /var/opal/certs/ca/rootCA.pem ]; then\n\
+        cat /var/opal/certs/ca/rootCA.pem >> /tmp/dive-combined-ca.pem\n\
     fi\n\
     export SSL_CERT_FILE=/tmp/dive-combined-ca.pem\n\
     export REQUESTS_CA_BUNDLE=/tmp/dive-combined-ca.pem\n\
     export WEBSOCKET_SSL_CERT=/tmp/dive-combined-ca.pem\n\
     echo "Combined CA bundle created with Hub and local certificates at /tmp/dive-combined-ca.pem"\n\
-elif [ -f /var/opal/certs/rootCA.pem ]; then\n\
-    export SSL_CERT_FILE=/var/opal/certs/rootCA.pem\n\
-    export REQUESTS_CA_BUNDLE=/var/opal/certs/rootCA.pem\n\
-    export WEBSOCKET_SSL_CERT=/var/opal/certs/rootCA.pem\n\
+elif [ -f /var/opal/certs/ca/rootCA.pem ]; then\n\
+    export SSL_CERT_FILE=/var/opal/certs/ca/rootCA.pem\n\
+    export REQUESTS_CA_BUNDLE=/var/opal/certs/ca/rootCA.pem\n\
+    export WEBSOCKET_SSL_CERT=/var/opal/certs/ca/rootCA.pem\n\
     echo "Using local CA certificate"\n\
 else\n\
     echo "No CA certificates found, using system defaults"\n\
