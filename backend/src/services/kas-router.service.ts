@@ -47,10 +47,10 @@ export interface IKasResponse {
   success: boolean;
   decryptedContent?: string;
   key?: string;
+  dek?: string;  // CRITICAL: DEK from KAS for content decryption
   error?: string;
   denialReason?: string;
   kasId?: string;
-  dek?: string;
   auditEventId?: string;
   organization?: string;
   latencyMs?: number;
@@ -247,9 +247,13 @@ class KasRouterService {
         success: response.data?.success || false,
         decryptedContent: response.data?.decryptedContent,
         key: response.data?.key,
+        dek: response.data?.dek,  // CRITICAL: Backend expects this field for decryption
         error: response.data?.error,
         denialReason: response.data?.denialReason,
         kasId: kasServer.kasId,
+        auditEventId: response.data?.auditEventId,
+        organization: response.data?.kasDecision?.organization,
+        latencyMs: Date.now() - Date.now(), // Will be overwritten by caller
       };
     } catch (error) {
       const axiosError = error as AxiosError;
