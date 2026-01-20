@@ -26,7 +26,7 @@ TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
 
 if docker exec dive-hub-postgres psql -U postgres -d orchestration -c "SELECT 1" >/dev/null 2>&1; then
     log_success "✅ Orchestration database exists and is functional"
-    
+
     # Check tables exist
     TABLES=$(docker exec dive-hub-postgres psql -U postgres -d orchestration -tAc "\dt" 2>/dev/null | wc -l)
     log_info "   Tables created: $TABLES"
@@ -80,12 +80,12 @@ USER_COUNT=$(docker exec dive-spoke-fra-keycloak /opt/keycloak/bin/kcadm.sh get 
 
 if [ "$USER_COUNT" -ge 6 ]; then
     log_success "✅ $USER_COUNT test users created in FRA"
-    
+
     # List users
     docker exec dive-spoke-fra-keycloak /opt/keycloak/bin/kcadm.sh get users \
       -r dive-v3-broker-fra 2>/dev/null | \
       jq -r '.[] | "   - \(.username): \(.attributes.clearance[0] // "none")"'
-    
+
     PASSED_CHECKS=$((PASSED_CHECKS + 1))
 else
     log_error "❌ Only $USER_COUNT users (expected 6+)"
@@ -123,19 +123,19 @@ FRA_IDP=$(docker exec dive-hub-keycloak /opt/keycloak/bin/kcadm.sh get \
 
 if echo "$FRA_IDP" | jq -e '.alias == "fra-idp" and .enabled == true' >/dev/null 2>&1; then
     log_success "✅ fra-idp configured in Hub (USA→FRA working)"
-    
+
     # Check URLs are configured
     AUTH_URL=$(echo "$FRA_IDP" | jq -r '.config.authorizationUrl')
     TOKEN_URL=$(echo "$FRA_IDP" | jq -r '.config.tokenUrl')
-    
+
     if [ -n "$AUTH_URL" ] && [ "$AUTH_URL" != "null" ]; then
         log_info "   Authorization URL: $AUTH_URL"
     fi
-    
+
     if [ -n "$TOKEN_URL" ] && [ "$TOKEN_URL" != "null" ]; then
         log_info "   Token URL: $TOKEN_URL"
     fi
-    
+
     PASSED_CHECKS=$((PASSED_CHECKS + 1))
 else
     log_error "❌ fra-idp missing or disabled in Hub"
@@ -153,11 +153,11 @@ MAPPER_COUNT=$(docker exec dive-hub-keycloak /opt/keycloak/bin/kcadm.sh get \
 
 if [ "$MAPPER_COUNT" -ge 20 ]; then
     log_success "✅ $MAPPER_COUNT IdP attribute mappers configured"
-    
+
     # Check critical mappers exist
     MAPPERS=$(docker exec dive-hub-keycloak /opt/keycloak/bin/kcadm.sh get \
       identity-provider/instances/fra-idp/mappers -r dive-v3-broker-usa 2>/dev/null)
-    
+
     for claim in uniqueID countryOfAffiliation clearance; do
         if echo "$MAPPERS" | jq -e ".[] | select(.config.claim == \"$claim\")" >/dev/null 2>&1; then
             log_info "   ✓ $claim mapper exists"
@@ -165,7 +165,7 @@ if [ "$MAPPER_COUNT" -ge 20 ]; then
             log_warn "   ⚠ $claim mapper missing"
         fi
     done
-    
+
     PASSED_CHECKS=$((PASSED_CHECKS + 1))
 else
     log_error "❌ Only $MAPPER_COUNT mappers (expected 20+)"

@@ -897,7 +897,7 @@ class HubSpokeRegistryService extends EventEmitter {
    *
    * SECURITY BEST PRACTICE: Only retrieves password from spoke registration (MongoDB).
    * Spokes provide their admin password during registration for bidirectional federation.
-   * 
+   *
    * REMOVED: Environment variable and GCP Secret Manager fallbacks (legacy/insecure)
    * The Hub should NOT store spoke admin passwords - only the spoke itself should know it.
    *

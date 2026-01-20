@@ -37,17 +37,17 @@ log_info "==========================================================="
 test_function_exists() {
     log_info ""
     log_info "TEST 1: Verify spoke_configure_federation_after_approval exists"
-    
+
     # Source the module
     source "${PROJECT_ROOT}/scripts/dive-modules/spoke/spoke-register.sh"
-    
+
     if type spoke_configure_federation_after_approval &>/dev/null; then
         log_success "✓ Function spoke_configure_federation_after_approval exists"
     else
         log_error "✗ Function spoke_configure_federation_after_approval not found"
         return 1
     fi
-    
+
     # Verify it loads the federation module
     if type spoke_federation_create_bidirectional &>/dev/null; then
         log_success "✓ spoke-federation module loaded correctly"
@@ -63,21 +63,21 @@ test_function_exists() {
 test_fra_idp_before() {
     log_info ""
     log_info "TEST 2: Check FRA IdP in Hub (before running fix)"
-    
+
     local admin_token
     admin_token=$(curl -sk -X POST 'https://localhost:8443/realms/master/protocol/openid-connect/token' \
         -d 'client_id=admin-cli&username=admin&password=DiveAdminSecure2025!&grant_type=password' 2>/dev/null | \
         grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
-    
+
     if [ -z "$admin_token" ]; then
         log_error "Cannot get Hub admin token"
         return 1
     fi
-    
+
     local fra_idp
     fra_idp=$(curl -sk "https://localhost:8443/admin/realms/dive-v3-broker-usa/identity-provider/instances/fra-idp" \
         -H "Authorization: Bearer $admin_token" 2>/dev/null)
-    
+
     if echo "$fra_idp" | grep -q '"alias":"fra-idp"'; then
         log_info "⚠ fra-idp already exists (test may not be clean)"
         log_info "Deleting existing fra-idp for clean test..."
@@ -95,33 +95,33 @@ test_fra_idp_before() {
 test_reregister_fra() {
     log_info ""
     log_info "TEST 3: Re-register FRA spoke (triggers auto-configuration)"
-    
+
     # Unregister first (clean up MongoDB)
     log_info "Cleaning up existing FRA registration..."
     curl -sk -X DELETE "https://localhost:4000/api/federation/spokes/fra" \
         -H "X-Admin-Key: admin-dev-key" 2>/dev/null || true
     sleep 2
-    
+
     # Re-register FRA
     log_info "Re-registering FRA spoke..."
     local register_output
     register_output=$("${PROJECT_ROOT}/dive" spoke register FRA 2>&1)
-    
+
     echo "$register_output" | grep -q "Registration request submitted" || {
         log_error "Registration failed"
         echo "$register_output"
         return 1
     }
-    
+
     log_success "✓ FRA registration submitted"
-    
+
     # Check for auto-configuration messages
     if echo "$register_output" | grep -q "Auto-configuring bidirectional federation"; then
         log_success "✓ Auto-configuration triggered"
     else
         log_warn "⚠ Auto-configuration message not found in output"
     fi
-    
+
     if echo "$register_output" | grep -q "Bidirectional federation configured"; then
         log_success "✓ Bidirectional federation succeeded"
     elif echo "$register_output" | grep -q "Federation auto-configuration failed"; then
@@ -139,34 +139,34 @@ test_reregister_fra() {
 test_fra_idp_after() {
     log_info ""
     log_info "TEST 4: Verify fra-idp exists in Hub after registration"
-    
+
     local admin_token
     admin_token=$(curl -sk -X POST 'https://localhost:8443/realms/master/protocol/openid-connect/token' \
         -d 'client_id=admin-cli&username=admin&password=DiveAdminSecure2025!&grant_type=password' 2>/dev/null | \
         grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
-    
+
     if [ -z "$admin_token" ]; then
         log_error "Cannot get Hub admin token"
         return 1
     fi
-    
+
     # Wait a few seconds for federation to propagate
     sleep 3
-    
+
     local fra_idp
     fra_idp=$(curl -sk "https://localhost:8443/admin/realms/dive-v3-broker-usa/identity-provider/instances/fra-idp" \
         -H "Authorization: Bearer $admin_token" 2>/dev/null)
-    
+
     if echo "$fra_idp" | grep -q '"alias":"fra-idp"'; then
         log_success "✓ fra-idp exists in Hub"
-        
+
         # Check if enabled
         if echo "$fra_idp" | grep -q '"enabled":true'; then
             log_success "✓ fra-idp is enabled"
         else
             log_warn "⚠ fra-idp exists but is disabled"
         fi
-        
+
         # Check if has authorization URL
         local auth_url
         auth_url=$(echo "$fra_idp" | grep -o '"authorizationUrl":"[^"]*' | cut -d'"' -f4)
@@ -176,7 +176,7 @@ test_fra_idp_after() {
             log_error "✗ fra-idp missing authorizationUrl"
             return 1
         fi
-        
+
         # Check if has token URL
         local token_url
         token_url=$(echo "$fra_idp" | grep -o '"tokenUrl":"[^"]*' | cut -d'"' -f4)
@@ -186,7 +186,7 @@ test_fra_idp_after() {
             log_error "✗ fra-idp missing tokenUrl"
             return 1
         fi
-        
+
         return 0
     else
         log_error "✗ fra-idp NOT found in Hub"
@@ -203,25 +203,25 @@ test_fra_idp_after() {
 test_usa_idp_in_fra() {
     log_info ""
     log_info "TEST 5: Verify usa-idp exists in FRA spoke"
-    
+
     local admin_password="${KEYCLOAK_ADMIN_PASSWORD_FRA:-mFCWpiUotHDbEyApsQv7Ew}"
-    
+
     local admin_token
     admin_token=$(docker exec dive-spoke-fra-keycloak curl -sf \
         -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
         -d "username=admin&password=${admin_password}&grant_type=password&client_id=admin-cli" 2>/dev/null | \
         grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
-    
+
     if [ -z "$admin_token" ]; then
         log_error "Cannot get FRA admin token"
         return 1
     fi
-    
+
     local usa_idp
     usa_idp=$(docker exec dive-spoke-fra-keycloak curl -sf \
         -H "Authorization: Bearer $admin_token" \
         "http://localhost:8080/admin/realms/dive-v3-broker-fra/identity-provider/instances/usa-idp" 2>/dev/null)
-    
+
     if echo "$usa_idp" | grep -q '"alias":"usa-idp"'; then
         log_success "✓ usa-idp exists in FRA (bidirectional complete)"
         return 0
@@ -237,40 +237,40 @@ test_usa_idp_in_fra() {
 main() {
     local test_count=0
     local pass_count=0
-    
+
     # Run tests
     if test_function_exists; then
         pass_count=$((pass_count + 1))
     fi
     test_count=$((test_count + 1))
-    
+
     if test_fra_idp_before; then
         pass_count=$((pass_count + 1))
     fi
     test_count=$((test_count + 1))
-    
+
     if test_reregister_fra; then
         pass_count=$((pass_count + 1))
     fi
     test_count=$((test_count + 1))
-    
+
     if test_fra_idp_after; then
         pass_count=$((pass_count + 1))
     fi
     test_count=$((test_count + 1))
-    
+
     if test_usa_idp_in_fra; then
         pass_count=$((pass_count + 1))
     fi
     test_count=$((test_count + 1))
-    
+
     # Summary
     log_info ""
     log_info "==========================================================="
     log_info "Test Summary"
     log_info "==========================================================="
     log_info "Passed: $pass_count / $test_count"
-    
+
     if [ $pass_count -eq $test_count ]; then
         log_success "✅ ALL TESTS PASSED"
         log_info ""

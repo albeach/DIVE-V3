@@ -301,7 +301,9 @@ spoke_containers_start_created() {
         log_verbose "Starting containers in Created state..."
         for container in $created_containers; do
             log_verbose "Starting $container"
-            docker start "$container" 2>/dev/null || true
+            if ! docker start "$container" 2>/dev/null; then
+                log_verbose "Could not start $container (may already be running)"
+            fi
         done
     fi
 }
@@ -326,13 +328,17 @@ spoke_containers_stop() {
 
     if [ -f "$spoke_dir/docker-compose.yml" ]; then
         cd "$spoke_dir"
-        docker compose down 2>/dev/null || true
+        if ! docker compose down 2>/dev/null; then
+            log_verbose "docker compose down failed (containers may not be running)"
+        fi
     else
         # Fallback: stop containers by name pattern
         local containers
         containers=$(docker ps -q --filter "name=dive-spoke-${code_lower}-" 2>/dev/null)
         if [ -n "$containers" ]; then
-            docker stop $containers 2>/dev/null || true
+            if ! docker stop $containers 2>/dev/null; then
+                log_verbose "Some containers could not be stopped"
+            fi
         fi
     fi
 
@@ -364,13 +370,19 @@ spoke_containers_clean() {
     if [ -f "$spoke_dir/docker-compose.yml" ]; then
         cd "$spoke_dir"
         if [ "$remove_volumes" = "true" ]; then
-            docker compose down -v --remove-orphans 2>/dev/null || true
+            if ! docker compose down -v --remove-orphans 2>/dev/null; then
+                log_verbose "docker compose down with volumes failed"
+            fi
         elif [ "$remove_volumes" = "databases-only" ]; then
             # Stop containers but only remove database volumes
-            docker compose down --remove-orphans 2>/dev/null || true
+            if ! docker compose down --remove-orphans 2>/dev/null; then
+                log_verbose "docker compose down failed"
+            fi
             spoke_containers_clean_database_volumes "$instance_code"
         else
-            docker compose down --remove-orphans 2>/dev/null || true
+            if ! docker compose down --remove-orphans 2>/dev/null; then
+                log_verbose "docker compose down failed"
+            fi
         fi
     fi
 
@@ -378,7 +390,9 @@ spoke_containers_clean() {
     local orphaned
     orphaned=$(docker ps -aq --filter "name=dive-spoke-${code_lower}-" 2>/dev/null)
     if [ -n "$orphaned" ]; then
-        docker rm -f $orphaned 2>/dev/null || true
+        if ! docker rm -f $orphaned 2>/dev/null; then
+            log_verbose "Some orphaned containers could not be removed"
+        fi
     fi
 
     log_success "Containers cleaned"
@@ -410,7 +424,9 @@ spoke_containers_clean_database_volumes() {
     for volume in "${db_volumes[@]}"; do
         if docker volume ls --format '{{.Name}}' | grep -q "^${volume}$"; then
             log_verbose "Removing database volume: $volume"
-            docker volume rm "$volume" 2>/dev/null || true
+            if ! docker volume rm "$volume" 2>/dev/null; then
+                log_verbose "Could not remove volume $volume (may be in use)"
+            fi
         fi
     done
 
@@ -731,7 +747,9 @@ spoke_containers_force_recreate() {
     cd "$spoke_dir"
 
     # Stop existing
-    docker compose down 2>/dev/null || true
+    if ! docker compose down 2>/dev/null; then
+        log_verbose "docker compose down failed (containers may not be running)"
+    fi
 
     # Remove any hash tracking
     rm -f "$spoke_dir/.compose.hash"

@@ -55,10 +55,10 @@ log_fail() {
 run_test() {
     local test_name="$1"
     local test_func="$2"
-    
+
     ((TESTS_RUN++))
     log_test "$test_name"
-    
+
     if $test_func; then
         log_pass "$test_name"
         return 0
@@ -74,12 +74,12 @@ setup_test_env() {
         echo "ERROR: Cannot load common.sh"
         exit 1
     }
-    
+
     source "$DIVE_ROOT/scripts/dive-modules/orchestration-state-db.sh" 2>/dev/null || {
         echo "ERROR: Cannot load orchestration-state-db.sh"
         exit 1
     }
-    
+
     source "$DIVE_ROOT/scripts/dive-modules/error-recovery.sh" 2>/dev/null || {
         echo "ERROR: Cannot load error-recovery.sh"
         exit 1
@@ -161,9 +161,9 @@ test_classify_unknown() {
 test_circuit_breaker_init() {
     # Test: Circuit breaker initialization
     cleanup_test_data
-    
+
     orch_circuit_breaker_init "${TEST_OPERATION}_init"
-    
+
     local state
     state=$(orch_db_get_circuit_state "${TEST_OPERATION}_init")
     [ "$state" = "CLOSED" ]
@@ -172,53 +172,53 @@ test_circuit_breaker_init() {
 test_circuit_breaker_persistence() {
     # Test: Circuit breaker state persists to database (GAP-ER-001)
     cleanup_test_data
-    
+
     local op="${TEST_OPERATION}_persist"
-    
+
     # Update to OPEN state
     orch_db_update_circuit_breaker "$op" "OPEN" 5 0
-    
+
     # Load from database
     local loaded_state
     loaded_state=$(orch_circuit_breaker_load "$op" | cut -d'|' -f1)
-    
+
     [ "$loaded_state" = "OPEN" ]
 }
 
 test_circuit_breaker_transitions() {
     # Test: Circuit breaker state transitions
     cleanup_test_data
-    
+
     local op="${TEST_OPERATION}_transition"
-    
+
     # CLOSED -> OPEN
     orch_db_update_circuit_breaker "$op" "CLOSED" 0 0
     orch_db_update_circuit_breaker "$op" "OPEN" 5 0
     local state1=$(orch_db_get_circuit_state "$op")
-    
+
     # OPEN -> HALF_OPEN
     orch_db_exec "UPDATE circuit_breakers SET state='HALF_OPEN' WHERE operation_name='$op'" >/dev/null 2>&1
     local state2=$(orch_db_get_circuit_state "$op")
-    
+
     # HALF_OPEN -> CLOSED
     orch_db_update_circuit_breaker "$op" "CLOSED" 0 3
     local state3=$(orch_db_get_circuit_state "$op")
-    
+
     [ "$state1" = "OPEN" ] && [ "$state2" = "HALF_OPEN" ] && [ "$state3" = "CLOSED" ]
 }
 
 test_circuit_breaker_reset() {
     # Test: Circuit breaker reset
     cleanup_test_data
-    
+
     local op="${TEST_OPERATION}_reset"
-    
+
     # Set to OPEN
     orch_db_update_circuit_breaker "$op" "OPEN" 5 0
-    
+
     # Reset
     orch_circuit_breaker_reset "$op"
-    
+
     local state
     state=$(orch_db_get_circuit_state "$op")
     [ "$state" = "CLOSED" ]
@@ -227,62 +227,62 @@ test_circuit_breaker_reset() {
 test_circuit_breaker_status() {
     # Test: Circuit breaker status query
     cleanup_test_data
-    
+
     local op="${TEST_OPERATION}_status"
     orch_db_update_circuit_breaker "$op" "CLOSED" 0 10
-    
+
     local status_output
     status_output=$(orch_circuit_breaker_status "table" 2>&1)
-    
+
     echo "$status_output" | grep -q "$op"
 }
 
 test_circuit_breaker_execute_success() {
     # Test: Circuit breaker executes command on CLOSED circuit
     cleanup_test_data
-    
+
     local op="${TEST_OPERATION}_exec_success"
     orch_circuit_breaker_init "$op"
-    
+
     # Execute a successful command
     local result
     result=$(orch_circuit_breaker_execute "$op" echo "success")
     local exit_code=$?
-    
+
     [ $exit_code -eq 0 ]
 }
 
 test_circuit_breaker_open_fast_fail() {
     # Test: Circuit breaker fast-fails when OPEN
     cleanup_test_data
-    
+
     local op="${TEST_OPERATION}_fast_fail"
-    
+
     # Set circuit to OPEN with recent failure (no cooldown elapsed)
     orch_db_exec "
         INSERT INTO circuit_breakers (operation_name, state, failure_count, last_failure_time, last_state_change)
         VALUES ('$op', 'OPEN', 5, NOW(), NOW())
     " >/dev/null 2>&1
-    
+
     # This should fail immediately without executing the command
     orch_circuit_breaker_execute "$op" echo "should not execute" >/dev/null 2>&1
     local exit_code=$?
-    
+
     [ $exit_code -eq 2 ]  # Exit code 2 = circuit open
 }
 
 test_circuit_breaker_failure_threshold() {
     # Test: Circuit breaker opens after failure threshold
     cleanup_test_data
-    
+
     local op="${TEST_OPERATION}_threshold"
     orch_circuit_breaker_init "$op"
-    
+
     # Simulate failures up to threshold
     for i in {1..5}; do
         orch_circuit_breaker_execute "$op" false 2>/dev/null || true
     done
-    
+
     local state
     state=$(orch_db_get_circuit_state "$op")
     [ "$state" = "OPEN" ]
@@ -334,24 +334,24 @@ test_auto_recover_exists_for_1402() {
 test_error_recording() {
     # Test: Errors are recorded to database
     cleanup_test_data
-    
+
     orch_db_record_error "$TEST_INSTANCE" "TEST_ERR" 3 "test" "Test error" "Test remediation" "{}"
-    
+
     local count
     count=$(orch_db_exec "SELECT COUNT(*) FROM orchestration_errors WHERE instance_code='$TEST_INSTANCE'" 2>/dev/null | xargs)
-    
+
     [ "$count" -gt 0 ]
 }
 
 test_recovery_recording() {
     # Test: Recovery attempts are recorded as metrics
     cleanup_test_data
-    
+
     orch_record_recovery "$TEST_INSTANCE" 1101 "test_recovery" "SUCCESS"
-    
+
     local count
     count=$(orch_db_exec "SELECT COUNT(*) FROM orchestration_metrics WHERE instance_code='$TEST_INSTANCE' AND metric_name='auto_recovery'" 2>/dev/null | xargs)
-    
+
     [ "$count" -gt 0 ]
 }
 
@@ -364,7 +364,7 @@ test_retry_succeeds_first_attempt() {
     local result
     result=$(orch_retry_with_backoff "test_success" echo "success")
     local exit_code=$?
-    
+
     [ $exit_code -eq 0 ]
 }
 
@@ -372,14 +372,14 @@ test_retry_fails_after_max() {
     # Test: Retry fails after max attempts
     export ORCH_MAX_RETRIES=2
     export ORCH_INITIAL_DELAY=0.1
-    
+
     orch_retry_with_backoff "test_fail" false 2>/dev/null
     local exit_code=$?
-    
+
     # Reset
     unset ORCH_MAX_RETRIES
     unset ORCH_INITIAL_DELAY
-    
+
     [ $exit_code -eq 1 ]
 }
 
@@ -390,14 +390,14 @@ test_retry_fails_after_max() {
 test_failure_threshold_below() {
     # Test: Deployment continues when below threshold
     cleanup_test_data
-    
+
     # Add some errors but below threshold
     orch_db_record_error "$TEST_INSTANCE" "LOW_ERR" 4 "test" "Low error" "" "{}"
     orch_db_record_error "$TEST_INSTANCE" "LOW_ERR" 4 "test" "Low error" "" "{}"
-    
+
     orch_check_failure_threshold "$TEST_INSTANCE"
     local result=$?
-    
+
     [ $result -eq 0 ]
 }
 
@@ -411,20 +411,20 @@ main() {
     echo "Phase 3: Error Handling & Circuit Breakers"
     echo "=============================================="
     echo ""
-    
+
     # Setup
     setup_test_env
-    
+
     # Check database is available
     if ! orch_db_check_connection 2>/dev/null; then
         echo -e "${RED}ERROR: Database not available. Ensure Hub is running.${NC}"
         echo "  ./dive hub up"
         exit 1
     fi
-    
+
     echo "Database: Connected"
     echo ""
-    
+
     # Error Classification Tests
     echo "--- Error Classification ---"
     run_test "Classify transient error" test_classify_transient || true
@@ -436,7 +436,7 @@ main() {
     run_test "Classify new recoverable 1106" test_classify_new_recoverable_1106 || true
     run_test "Classify unknown error" test_classify_unknown || true
     echo ""
-    
+
     # Circuit Breaker Tests
     echo "--- Circuit Breaker (GAP-ER-001) ---"
     run_test "Circuit breaker init" test_circuit_breaker_init || true
@@ -448,7 +448,7 @@ main() {
     run_test "Circuit breaker open fast fail" test_circuit_breaker_open_fast_fail || true
     run_test "Circuit breaker failure threshold" test_circuit_breaker_failure_threshold || true
     echo ""
-    
+
     # Auto-Recovery Tests
     echo "--- Auto-Recovery (GAP-ER-002) ---"
     run_test "Auto-recover returns 1 for unknown" test_auto_recover_returns_1_for_unknown || true
@@ -458,27 +458,27 @@ main() {
     run_test "Auto-recover exists for 1106" test_auto_recover_exists_for_1106 || true
     run_test "Auto-recover exists for 1402" test_auto_recover_exists_for_1402 || true
     echo ""
-    
+
     # Error Recording Tests
     echo "--- Error Recording ---"
     run_test "Error recording" test_error_recording || true
     run_test "Recovery recording" test_recovery_recording || true
     echo ""
-    
+
     # Retry Logic Tests
     echo "--- Retry Logic ---"
     run_test "Retry succeeds first attempt" test_retry_succeeds_first_attempt || true
     run_test "Retry fails after max" test_retry_fails_after_max || true
     echo ""
-    
+
     # Failure Threshold Tests
     echo "--- Failure Threshold ---"
     run_test "Failure threshold below" test_failure_threshold_below || true
     echo ""
-    
+
     # Cleanup
     cleanup_test_data
-    
+
     # Summary
     echo "=============================================="
     echo "Test Results"
@@ -487,7 +487,7 @@ main() {
     echo -e "Passed: ${GREEN}$TESTS_PASSED${NC}"
     echo -e "Failed: ${RED}$TESTS_FAILED${NC}"
     echo ""
-    
+
     if [ "$TESTS_FAILED" -gt 0 ]; then
         echo -e "${RED}SOME TESTS FAILED${NC}"
         exit 1

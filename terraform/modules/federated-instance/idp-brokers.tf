@@ -40,10 +40,10 @@ resource "keycloak_oidc_identity_provider" "federation_partner" {
   user_info_url = "${local.partner_internal_url[each.key]}/realms/${local.partner_realm[each.key]}/protocol/openid-connect/userinfo"
   jwks_url      = "${local.partner_internal_url[each.key]}/realms/${local.partner_realm[each.key]}/protocol/openid-connect/certs"
 
-  # Client credentials (these would be created in the partner's Keycloak)
-  # NOTE: client_secret is a placeholder until sync-federation-secrets.sh runs post-Terraform
-  # The chicken-and-egg problem: Partner creates the client, we need their secret
-  client_id     = "dive-v3-${lower(var.instance_code)}-client"
+  # Client credentials (these are created in the partner's Keycloak)
+  # The client name format is: dive-v3-broker-{instance-code}
+  # This matches what Terraform creates in spoke realms via incoming_federation client
+  client_id     = "dive-v3-broker-${lower(var.instance_code)}"
   client_secret = each.value.client_secret
 
   # OIDC settings
@@ -65,9 +65,12 @@ resource "keycloak_oidc_identity_provider" "federation_partner" {
   gui_order          = lookup(local.federation_order, each.value.instance_code, 99)
   hide_on_login_page = false
 
-  # MFA Flow Binding
-  # Use simple_post_broker_otp_flow_alias for MFA after federated login
-  post_broker_login_flow_alias = var.simple_post_broker_otp_flow_alias
+  # MFA Flow Binding - DISABLED for Federation (Trust Partner MFA)
+  # CRITICAL FIX: Do NOT enforce post-broker MFA for federated IdPs
+  # Rationale: Partner IdPs already enforce MFA (ACR/AMR claims in token)
+  # Re-requiring MFA enrollment breaks user experience and ignores partner security
+  # Hub should trust partner's authentication including MFA
+  post_broker_login_flow_alias = ""  # Empty = no post-broker flow
 
   # Extra config for attribute mapping
   extra_config = {

@@ -130,54 +130,54 @@ run_test_suite() {
     local suite_name="$1"
     local script_name="${TEST_SUITES[$suite_name]}"
     local script_path="$SCRIPT_DIR/$script_name"
-    
+
     if [ ! -f "$script_path" ]; then
         echo -e "${RED}  ✗ Test script not found: $script_path${NC}"
         SUITE_RESULTS["$suite_name"]="MISSING"
         return 1
     fi
-    
+
     if [ ! -x "$script_path" ]; then
         echo -e "${YELLOW}  ⚠ Making script executable: $script_name${NC}"
         chmod +x "$script_path"
     fi
-    
+
     local suite_start=$(date +%s)
     local output_file=$(mktemp)
-    
+
     echo -e "  Running ${BOLD}$suite_name${NC}..."
-    
+
     # Run the test suite
     if "$script_path" > "$output_file" 2>&1; then
         SUITE_RESULTS["$suite_name"]="PASSED"
     else
         SUITE_RESULTS["$suite_name"]="FAILED"
     fi
-    
+
     local suite_end=$(date +%s)
     SUITE_DURATION["$suite_name"]=$((suite_end - suite_start))
-    
+
     # Parse results from output
     local passed=$(grep "\[PASS\]" "$output_file" 2>/dev/null | wc -l | tr -d ' ' || echo "0")
     local failed=$(grep "\[FAIL\]" "$output_file" 2>/dev/null | wc -l | tr -d ' ' || echo "0")
-    
+
     # Ensure we have valid numbers (strip any whitespace/newlines)
     passed=$(echo "$passed" | tr -d '\n\r ' | grep -E '^[0-9]+$' || echo "0")
     failed=$(echo "$failed" | tr -d '\n\r ' | grep -E '^[0-9]+$' || echo "0")
-    
+
     SUITE_PASSED["$suite_name"]=$passed
     SUITE_FAILED["$suite_name"]=$failed
-    
+
     TOTAL_TESTS=$((TOTAL_TESTS + passed + failed))
     TOTAL_PASSED=$((TOTAL_PASSED + passed))
     TOTAL_FAILED=$((TOTAL_FAILED + failed))
-    
+
     # Display result
     if [ "${SUITE_RESULTS[$suite_name]}" = "PASSED" ]; then
         echo -e "  ${GREEN}✓${NC} $suite_name: ${GREEN}$passed passed${NC}, ${failed} failed (${SUITE_DURATION[$suite_name]}s)"
     else
         echo -e "  ${RED}✗${NC} $suite_name: ${passed} passed, ${RED}$failed failed${NC} (${SUITE_DURATION[$suite_name]}s)"
-        
+
         # Show failed tests if verbose
         if [ "$VERBOSE" = true ]; then
             echo ""
@@ -186,7 +186,7 @@ run_test_suite() {
             done
         fi
     fi
-    
+
     rm -f "$output_file"
 }
 
@@ -196,10 +196,10 @@ run_test_suite() {
 
 run_quick_validation() {
     print_section "Quick Validation Checks"
-    
+
     local checks_passed=0
     local checks_failed=0
-    
+
     # Check 1: Required scripts exist
     echo -e "\n  ${BOLD}Script Existence:${NC}"
     for suite in "${!TEST_SUITES[@]}"; do
@@ -212,7 +212,7 @@ run_quick_validation() {
             ((checks_failed++))
         fi
     done
-    
+
     # Check 2: Core modules exist
     echo -e "\n  ${BOLD}Core Modules:${NC}"
     local modules=(
@@ -221,7 +221,7 @@ run_quick_validation() {
         "scripts/dive-modules/error-recovery.sh"
         "scripts/dive-modules/common.sh"
     )
-    
+
     for module in "${modules[@]}"; do
         if [ -f "$DIVE_ROOT/$module" ]; then
             echo -e "    ${GREEN}✓${NC} $module"
@@ -231,7 +231,7 @@ run_quick_validation() {
             ((checks_failed++))
         fi
     done
-    
+
     # Check 3: Backend services exist
     echo -e "\n  ${BOLD}Backend Services:${NC}"
     local services=(
@@ -239,7 +239,7 @@ run_quick_validation() {
         "backend/src/services/hub-spoke-registry.service.ts"
         "backend/src/routes/federation-sync.routes.ts"
     )
-    
+
     for service in "${services[@]}"; do
         if [ -f "$DIVE_ROOT/$service" ]; then
             echo -e "    ${GREEN}✓${NC} $service"
@@ -249,7 +249,7 @@ run_quick_validation() {
             ((checks_failed++))
         fi
     done
-    
+
     # Check 4: Documentation exists
     echo -e "\n  ${BOLD}Documentation:${NC}"
     local docs=(
@@ -257,7 +257,7 @@ run_quick_validation() {
         "docs/architecture/gap-registry.md"
         "docs/architecture/adr/ADR-001-state-management-consolidation.md"
     )
-    
+
     for doc in "${docs[@]}"; do
         if [ -f "$DIVE_ROOT/$doc" ]; then
             echo -e "    ${GREEN}✓${NC} $doc"
@@ -267,12 +267,12 @@ run_quick_validation() {
             ((checks_failed++))
         fi
     done
-    
+
     echo ""
     echo -e "  ${BOLD}Quick Validation Summary:${NC}"
     echo -e "    Checks passed: ${GREEN}$checks_passed${NC}"
     echo -e "    Checks failed: ${RED}$checks_failed${NC}"
-    
+
     if [ $checks_failed -gt 0 ]; then
         return 1
     fi
@@ -287,7 +287,7 @@ generate_html_report() {
     local report_file="$DIVE_ROOT/tests/orchestration/test-report-$(date +%Y%m%d-%H%M%S).html"
     local end_time=$(date +%s)
     local total_duration=$((end_time - START_TIME))
-    
+
     cat > "$report_file" << EOF
 <!DOCTYPE html>
 <html>
@@ -324,7 +324,7 @@ generate_html_report() {
     <div class="container">
         <h1>🔍 DIVE V3 Orchestration Test Report</h1>
         <p class="timestamp">Generated: $(date '+%Y-%m-%d %H:%M:%S')</p>
-        
+
         <div class="summary">
             <div class="stat total">
                 <div class="stat-value">$TOTAL_TESTS</div>
@@ -339,9 +339,9 @@ generate_html_report() {
                 <div class="stat-label">Failed</div>
             </div>
         </div>
-        
+
         <p class="duration">Total duration: <strong>${total_duration}s</strong></p>
-        
+
         <h2>Test Suite Results</h2>
         <table>
             <tr>
@@ -362,7 +362,7 @@ EOF
         local failed="${SUITE_FAILED[$suite]:-0}"
         local duration="${SUITE_DURATION[$suite]:-0}"
         local status_class="status-$(echo "$status" | tr '[:upper:]' '[:lower:]')"
-        
+
         cat >> "$report_file" << EOF
             <tr>
                 <td><span class="phase-badge phase-$phase_num">Phase $phase_num</span></td>
@@ -378,7 +378,7 @@ EOF
 
     cat >> "$report_file" << EOF
         </table>
-        
+
         <h2>Architecture Review Summary</h2>
         <table>
             <tr><th>Gap ID</th><th>Category</th><th>Status</th></tr>
@@ -393,7 +393,7 @@ EOF
             <tr><td>GAP-FS-001</td><td>Federation State</td><td class="status-passed">✅ Resolved</td></tr>
             <tr><td>GAP-FS-002</td><td>Federation State</td><td class="status-passed">✅ Resolved</td></tr>
         </table>
-        
+
         <h2>Files Created/Modified</h2>
         <ul>
             <li><strong>Phase 2:</strong> orchestration-state-db.sh, orch-db-cli.sh</li>
@@ -416,22 +416,22 @@ EOF
 
 main() {
     print_header
-    
+
     echo -e "  ${BOLD}Configuration:${NC}"
     echo -e "    DIVE_ROOT: $DIVE_ROOT"
     echo -e "    Quick Mode: $QUICK_MODE"
     echo -e "    Generate Report: $GENERATE_REPORT"
     [ -n "$SPECIFIC_SUITE" ] && echo -e "    Specific Suite: $SPECIFIC_SUITE"
-    
+
     # Quick validation
     if [ "$QUICK_MODE" = true ]; then
         run_quick_validation
         exit $?
     fi
-    
+
     # Run test suites
     print_section "Running Test Suites"
-    
+
     if [ -n "$SPECIFIC_SUITE" ]; then
         # Run specific suite
         if [ -z "${TEST_SUITES[$SPECIFIC_SUITE]:-}" ]; then
@@ -446,13 +446,13 @@ main() {
             run_test_suite "$suite" || true
         done
     fi
-    
+
     # Summary
     print_section "Test Summary"
-    
+
     local end_time=$(date +%s)
     local total_duration=$((end_time - START_TIME))
-    
+
     echo ""
     echo -e "  ${BOLD}Results:${NC}"
     echo -e "    Total Tests:  $TOTAL_TESTS"
@@ -460,7 +460,7 @@ main() {
     echo -e "    Failed:       ${RED}$TOTAL_FAILED${NC}"
     echo -e "    Duration:     ${total_duration}s"
     echo ""
-    
+
     # Overall status
     if [ $TOTAL_FAILED -eq 0 ]; then
         echo -e "  ${GREEN}╔═══════════════════════════════════════╗${NC}"
@@ -471,14 +471,14 @@ main() {
         echo -e "  ${RED}║  ✗ SOME TESTS FAILED                  ║${NC}"
         echo -e "  ${RED}╚═══════════════════════════════════════╝${NC}"
     fi
-    
+
     # Generate report if requested
     if [ "$GENERATE_REPORT" = true ]; then
         generate_html_report
     fi
-    
+
     echo ""
-    
+
     # Exit with appropriate code
     [ $TOTAL_FAILED -eq 0 ]
 }

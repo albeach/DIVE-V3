@@ -197,17 +197,28 @@ EOF
         _hub_init_database_schema || log_warn "Database schema initialization failed"
     fi
 
-    # Step 8: Configure client logout URIs (AFTER Terraform creates client)
-    log_step "Step 8/10: Configuring client logout URIs..."
+    # Step 8: Configure client and sync secrets (CRITICAL - AFTER Terraform creates client)
+    log_step "Step 8/10: Configuring client and synchronizing secrets..."
     local client_script="${DIVE_ROOT}/scripts/hub-init/configure-hub-client.sh"
     if [ -x "$client_script" ]; then
         if [ "$DRY_RUN" = true ]; then
             log_dry "Would run: configure-hub-client.sh"
         else
-            "$client_script" || log_warn "Client configuration had issues (non-blocking)"
+            # CRITICAL: Client secret sync must succeed for authentication to work
+            if ! "$client_script"; then
+                log_error "Client configuration FAILED"
+                log_error "This includes:"
+                log_error "  - Client secret synchronization (Keycloak must match GCP)"
+                log_error "  - Logout URI configuration"
+                log_error "Without this, authentication will fail with 'Invalid client credentials'"
+                return 1
+            fi
+            log_success "✓ Client configured and secrets synchronized"
         fi
     else
-        log_warn "configure-hub-client.sh not found - logout may not work"
+        log_error "configure-hub-client.sh not found"
+        log_error "Client secret will not be synchronized - authentication may fail!"
+        return 1
     fi
 
     # Step 8.5: Load trusted issuers into MongoDB
@@ -241,7 +252,7 @@ EOF
 
     # Step 11: Initialize Orchestration Database (CRITICAL for spoke deployments)
     log_step "Step 11/12: Initializing orchestration database..."
-    
+
     # Check if orchestration database exists
     if ! docker exec dive-hub-postgres psql -U postgres -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw orchestration; then
         log_info "Creating orchestration database..."
@@ -254,7 +265,7 @@ EOF
     else
         log_verbose "Orchestration database already exists"
     fi
-    
+
     # Apply orchestration schema migration (idempotent)
     if [ -f "${DIVE_ROOT}/scripts/apply-phase2-migration.sh" ]; then
         log_info "Applying orchestration schema..."
@@ -267,7 +278,7 @@ EOF
     else
         log_warn "Phase 2 migration script not found"
     fi
-    
+
     # Verify orchestration database is functional
     if docker exec dive-hub-postgres psql -U postgres -d orchestration -c "SELECT 1" >/dev/null 2>&1; then
         log_success "✓ Orchestration database functional"
@@ -275,6 +286,33 @@ EOF
     else
         log_error "Orchestration database not accessible"
         return 1
+    fi
+
+    # Step 11.5: Initialize Federation State Schema (CRITICAL for spoke federation)
+    log_step "Step 11.5/12: Initializing federation state schema..."
+    local fed_schema="${DIVE_ROOT}/scripts/sql/002_federation_schema.sql"
+    
+    if [ -f "$fed_schema" ]; then
+        # Check if federation tables already exist
+        local table_exists
+        table_exists=$(docker exec dive-hub-postgres psql -U postgres -d orchestration \
+            -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'federation_links';" 2>/dev/null || echo "0")
+        
+        if [ "$table_exists" = "1" ]; then
+            log_verbose "Federation tables already exist"
+        else
+            log_info "Creating federation state tables..."
+            if docker exec -i dive-hub-postgres psql -U postgres -d orchestration < "$fed_schema" >/dev/null 2>&1; then
+                log_success "✓ Federation state schema created"
+            else
+                log_error "Federation schema creation failed"
+                log_error "Federation state tracking will not work properly"
+                log_warn "This is non-fatal but federation monitoring will be limited"
+            fi
+        fi
+    else
+        log_warn "Federation schema file not found: $fed_schema"
+        log_warn "Federation state tracking will be limited"
     fi
 
     # Step 12: Verify deployment

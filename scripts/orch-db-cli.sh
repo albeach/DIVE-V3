@@ -96,7 +96,7 @@ ensure_database() {
 
 cmd_migrate() {
     local dry_run=false
-    
+
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --dry-run)
@@ -130,7 +130,7 @@ cmd_migrate() {
     # Find all state files
     while IFS= read -r state_file; do
         [ -z "$state_file" ] && continue
-        
+
         local instance_code
         instance_code=$(basename "$state_file" .state)
 
@@ -206,7 +206,7 @@ cmd_migrate() {
 
 cmd_validate() {
     local instance="${1:-}"
-    
+
     ensure_database
 
     log_info "=== State Consistency Validation ==="
@@ -257,7 +257,7 @@ cmd_validate() {
 
     echo ""
     log_info "Checked: $checked instances"
-    
+
     if [ "$inconsistencies" -gt 0 ]; then
         log_error "Found $inconsistencies inconsistencies"
         log_info "Run './scripts/orch-db-cli.sh migrate' to resolve"
@@ -274,7 +274,7 @@ cmd_validate() {
 
 cmd_status() {
     local instance="${1:-}"
-    
+
     ensure_database
 
     log_info "=== Deployment Status ==="
@@ -284,10 +284,10 @@ cmd_status() {
         # Single instance status
         local state
         state=$(orch_db_get_state "$instance")
-        
+
         local last_transition
         last_transition=$(orch_db_exec "SELECT to_char(timestamp, 'YYYY-MM-DD HH24:MI:SS') FROM deployment_states WHERE instance_code='$(lower "$instance")' ORDER BY timestamp DESC LIMIT 1" 2>/dev/null | xargs)
-        
+
         local lock_status="unlocked"
         if orch_db_check_lock_status "$instance"; then
             lock_status="LOCKED"
@@ -304,10 +304,10 @@ cmd_status() {
         # All instances
         printf "%-6s %-12s %-20s %-8s\n" "INST" "STATE" "LAST UPDATED" "LOCKED"
         printf "%-6s %-12s %-20s %-8s\n" "----" "-----" "------------" "------"
-        
+
         local instances
         instances=$(orch_db_exec "SELECT DISTINCT instance_code FROM deployment_states ORDER BY instance_code" 2>/dev/null || true)
-        
+
         for inst in $instances; do
             [ -z "$inst" ] && continue
             local state last_update lock_status
@@ -315,7 +315,7 @@ cmd_status() {
             last_update=$(orch_db_exec "SELECT to_char(timestamp, 'MM-DD HH24:MI') FROM deployment_states WHERE instance_code='$inst' ORDER BY timestamp DESC LIMIT 1" | xargs)
             lock_status="no"
             orch_db_check_lock_status "$inst" && lock_status="YES"
-            
+
             printf "%-6s %-12s %-20s %-8s\n" "$(upper "$inst")" "$state" "${last_update:-never}" "$lock_status"
         done
     fi
@@ -328,7 +328,7 @@ cmd_status() {
 cmd_rollback() {
     local instance="${1:-}"
     local reason="${2:-Manual rollback via CLI}"
-    
+
     if [ -z "$instance" ]; then
         log_error "Usage: rollback <instance> [reason]"
         return 1
@@ -337,7 +337,7 @@ cmd_rollback() {
     ensure_database
 
     log_info "Rolling back state for $(upper "$instance")..."
-    
+
     if orch_db_rollback_state "$instance" "$reason"; then
         log_success "Rollback complete"
         cmd_status "$instance"
@@ -353,7 +353,7 @@ cmd_rollback() {
 
 cmd_unlock() {
     local instance="${1:-}"
-    
+
     if [ -z "$instance" ]; then
         log_error "Usage: unlock <instance>"
         return 1
@@ -362,26 +362,26 @@ cmd_unlock() {
     ensure_database
 
     log_info "Force releasing lock for $(upper "$instance")..."
-    
+
     # Release PostgreSQL advisory lock
     local code_lower
     code_lower=$(lower "$instance")
     local lock_id
     lock_id=$(echo -n "deployment_${code_lower}" | cksum | cut -d' ' -f1)
-    
+
     # Try to release (may fail if we don't hold it, which is fine)
     orch_db_exec "SELECT pg_advisory_unlock_all()" >/dev/null 2>&1 || true
-    
+
     # Update lock record
     orch_db_exec "UPDATE deployment_locks SET released_at = NOW() WHERE instance_code = '$code_lower' AND released_at IS NULL" >/dev/null 2>&1 || true
-    
+
     # Also clean up file-based locks if they exist
     local lock_dir="${DIVE_ROOT}/.dive-state/${code_lower}.lock.d"
     if [ -d "$lock_dir" ]; then
         rm -rf "$lock_dir"
         log_verbose "Removed file-based lock: $lock_dir"
     fi
-    
+
     log_success "Lock released for $(upper "$instance")"
 }
 
@@ -391,7 +391,7 @@ cmd_unlock() {
 
 cmd_circuit_reset() {
     local operation="${1:-}"
-    
+
     if [ -z "$operation" ]; then
         log_error "Usage: circuit-reset <operation>"
         log_info "Available operations:"
@@ -402,7 +402,7 @@ cmd_circuit_reset() {
     ensure_database
 
     log_info "Resetting circuit breaker: $operation"
-    
+
     if orch_db_exec "UPDATE circuit_breakers SET state='CLOSED', failure_count=0, success_count=0, last_state_change=NOW() WHERE operation_name='$operation'" 2>/dev/null; then
         log_success "Circuit breaker reset to CLOSED: $operation"
     else
@@ -417,7 +417,7 @@ cmd_circuit_reset() {
 
 cmd_cleanup() {
     local force=false
-    
+
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --force)
@@ -468,7 +468,7 @@ cmd_cleanup() {
     # Archive state files
     local archive_dir="${DIVE_ROOT}/.dive-state.archive.$(date +%Y%m%d_%H%M%S)"
     mkdir -p "$archive_dir"
-    
+
     log_info "Archiving state files to: $archive_dir"
     mv "$state_dir"/*.state "$archive_dir/" 2>/dev/null || true
 
@@ -486,7 +486,7 @@ cmd_cleanup() {
 cmd_history() {
     local instance="${1:-}"
     local limit="${2:-20}"
-    
+
     if [ -z "$instance" ]; then
         log_error "Usage: history <instance> [limit]"
         return 1
@@ -496,19 +496,19 @@ cmd_history() {
 
     log_info "State transition history for $(upper "$instance") (last $limit):"
     echo ""
-    
+
     printf "%-20s %-12s %-12s %s\n" "TIMESTAMP" "FROM" "TO" "REASON"
     printf "%-20s %-12s %-12s %s\n" "---------" "----" "--" "------"
-    
+
     orch_db_exec "
-        SELECT 
+        SELECT
             to_char(timestamp, 'YYYY-MM-DD HH24:MI:SS'),
             COALESCE(previous_state, '-'),
             state,
             COALESCE(LEFT(reason, 40), '-')
-        FROM deployment_states 
-        WHERE instance_code='$(lower "$instance")' 
-        ORDER BY timestamp DESC 
+        FROM deployment_states
+        WHERE instance_code='$(lower "$instance")'
+        ORDER BY timestamp DESC
         LIMIT $limit
     " 2>/dev/null | while IFS='|' read -r ts from_state to_state reason; do
         printf "%-20s %-12s %-12s %s\n" "$ts" "$from_state" "$to_state" "$reason"

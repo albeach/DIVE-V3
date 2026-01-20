@@ -326,7 +326,10 @@ router.get('/registry', async (_req: Request, res: Response): Promise<void> => {
             kasServers: instances.map(kas => ({
                 kasId: kas.kasId,
                 organization: kas.organization,
+                countryCode: kas.countryCode, // ISO 3166-1 alpha-3 - CRITICAL for instance filtering
+                instanceCode: kas.countryCode, // Alias for backward compatibility
                 kasUrl: kas.kasUrl,
+                internalKasUrl: kas.internalKasUrl,
                 status: kas.status,
                 enabled: kas.enabled,
                 trustLevel: kas.trustLevel,
