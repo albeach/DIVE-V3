@@ -184,7 +184,18 @@ class SpokeConfigService {
     }
   ): Promise<ISpokeFullConfig> {
     const code = instanceCode.toUpperCase();
-    const spokeId = this.generateSpokeId(code);
+    // CRITICAL: Use SPOKE_ID from environment (set during Hub registration)
+    // If not set, generate a new one (development/testing only)
+    const spokeId = process.env.SPOKE_ID || this.generateSpokeId(code);
+    
+    if (!process.env.SPOKE_ID) {
+      logger.warn('SPOKE_ID not found in environment - generating new ID', {
+        instanceCode: code,
+        generatedSpokeId: spokeId,
+        warning: 'This spoke ID will not match Hub registration!'
+      });
+    }
+    
     const instanceDir = path.join(process.cwd(), 'instances', code.toLowerCase());
 
     this.config = {
@@ -494,7 +505,7 @@ class SpokeConfigService {
 
     return {
       identity: {
-        spokeId: (raw.spokeId as string) || this.generateSpokeId(instanceCode),
+        spokeId: (raw.spokeId as string) || process.env.SPOKE_ID || this.generateSpokeId(instanceCode),
         instanceCode,
         name: (raw.name as string) || (raw.instance_name as string) || instanceCode,
         description: raw.description as string | undefined,
