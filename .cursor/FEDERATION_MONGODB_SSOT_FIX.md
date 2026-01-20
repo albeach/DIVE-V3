@@ -1,8 +1,8 @@
 # Federation MongoDB SSOT Implementation
 
-**Date**: 2026-01-20  
-**Issue**: Spoke federated search failing due to static `federation-registry.json` dependency  
-**Root Cause**: Architecture violated MongoDB SSOT principle  
+**Date**: 2026-01-20
+**Issue**: Spoke federated search failing due to static `federation-registry.json` dependency
+**Root Cause**: Architecture violated MongoDB SSOT principle
 
 ---
 
@@ -140,7 +140,7 @@ Static file had:
 
 MongoDB-based discovery generates correct names:
 ```typescript
-containerName: inst.type === 'hub' 
+containerName: inst.type === 'hub'
     ? 'dive-hub-backend'
     : `dive-spoke-${code.toLowerCase()}-backend`
 ```
@@ -263,6 +263,6 @@ docker exec dive-spoke-fra-backend sh -c '
 
 ---
 
-**Status**: ✅ Implemented, testing in progress  
-**Breaking Changes**: None (backward compatible with static file fallback)  
+**Status**: ✅ Implemented, testing in progress
+**Breaking Changes**: None (backward compatible with static file fallback)
 **Ready For**: Clean slate deployment validation

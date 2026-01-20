@@ -297,7 +297,7 @@ export async function searchResources(options: ISearchOptions): Promise<IZTDFRes
 /**
  * Get resource by ID
  * Returns ZTDF-enhanced resource with integrity validation
- * 
+ *
  * Cross-Instance Support: Detects resources from other instances and queries via federation
  * @param resourceId Resource ID to fetch
  * @param authHeader User's Authorization header (for cross-instance queries)
@@ -308,7 +308,7 @@ export async function getResourceById(resourceId: string, authHeader?: string): 
         const instanceMatch = resourceId.match(/^doc-([A-Z]{2,3})-/);
         const resourceInstance = instanceMatch ? instanceMatch[1] : null;
         const currentInstance = process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA';
-        
+
         // If resource is from another instance, query via federation service
         if (resourceInstance && resourceInstance !== currentInstance) {
             logger.info('Cross-instance resource detected, querying via federation', {
@@ -316,27 +316,27 @@ export async function getResourceById(resourceId: string, authHeader?: string): 
                 resourceInstance,
                 currentInstance
             });
-            
+
             try {
                 const { federatedResourceService } = await import('./federated-resource.service');
-                
+
                 // Use direct resource fetch from target instance with user's auth token
                 const federatedResource = await federatedResourceService.getResourceFromInstance(
                     resourceId,
                     resourceInstance,
                     authHeader
                 );
-                
+
                 if (federatedResource) {
                     logger.info('Cross-instance resource fetched successfully', {
                         resourceId,
                         sourceInstance: resourceInstance
                     });
-                    
+
                     // Resource is already in ZTDF format from target instance
                     return federatedResource as IZTDFResource;
                 }
-                
+
                 logger.warn('Cross-instance resource not found', {
                     resourceId,
                     targetInstance: resourceInstance
@@ -351,7 +351,7 @@ export async function getResourceById(resourceId: string, authHeader?: string): 
                 return null;
             }
         }
-        
+
         // Local resource: fetch from MongoDB
         const collection = await getCollection();
         const resource = await collection.findOne({ resourceId });

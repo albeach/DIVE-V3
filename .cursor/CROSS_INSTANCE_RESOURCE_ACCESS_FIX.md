@@ -1,8 +1,8 @@
 # Cross-Instance Resource Access - Implementation
 
-**Date**: 2026-01-20  
-**Issue**: FRA spoke can search USA resources but clicking them returns 404  
-**Root Cause**: Backend only queries local MongoDB, no cross-instance resource routing  
+**Date**: 2026-01-20
+**Issue**: FRA spoke can search USA resources but clicking them returns 404
+**Root Cause**: Backend only queries local MongoDB, no cross-instance resource routing
 
 ---
 
@@ -71,7 +71,7 @@ if (resourceInstance && resourceInstance !== currentInstance) {
         instances: [resourceInstance],
         limit: 1
     }, systemUser);
-    
+
     return searchResult.results[0]; // Cross-instance resource
 }
 
@@ -144,7 +144,7 @@ doc-{INSTANCE}-seed-{timestamp}-{number}
 ### Examples
 
 - `doc-USA-seed-1768895001371-00001` → USA Hub resource
-- `doc-FRA-seed-1768895359827-00001` → FRA spoke resource  
+- `doc-FRA-seed-1768895359827-00001` → FRA spoke resource
 - `doc-GBR-seed-1768895500000-00001` → GBR spoke resource
 
 ### Extraction
@@ -305,8 +305,8 @@ For local development, could enable spoke→hub MongoDB:
 const usaMongoUrl = 'mongodb://admin:password@dive-hub-mongodb:27017/dive-v3';
 ```
 
-**Pros**: Faster (1 hop)  
-**Cons**: Complex networking, security concerns  
+**Pros**: Faster (1 hop)
+**Cons**: Complex networking, security concerns
 **Decision**: Keep HTTP federation (simpler, more secure)
 
 ### Resource Replication (Optional)
@@ -321,7 +321,7 @@ Replicate frequently-accessed resources across instances:
 ## Related Issues
 
 - **Federation MongoDB SSOT**: Enabled cross-instance discovery
-- **Container Name Fix**: Corrected Hub backend name  
+- **Container Name Fix**: Corrected Hub backend name
 - **Federated Search**: Working for resource lists
 
 **Pattern**: Progressive enhancement - identity → search → detail access
@@ -339,6 +339,6 @@ Replicate frequently-accessed resources across instances:
 
 ---
 
-**Status**: ✅ Implemented, ready for user testing  
-**Breaking Changes**: None  
+**Status**: ✅ Implemented, ready for user testing
+**Breaking Changes**: None
 **Deployment**: Hot-reload in containers (no redeploy needed)

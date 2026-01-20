@@ -147,11 +147,11 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "acr_mapper" {
   realm_id            = keycloak_realm.broker.id
   client_scope_id     = keycloak_openid_client_scope.acr.id
   name                = "acr-mapper"
-  
+
   user_attribute      = "acr"
   claim_name          = "acr"          # CRITICAL
   claim_value_type    = "String"
-  
+
   add_to_id_token     = true
   add_to_access_token = true           # CRITICAL
   add_to_userinfo     = true
@@ -169,12 +169,12 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "amr_mapper" {
   realm_id            = keycloak_realm.broker.id
   client_scope_id     = keycloak_openid_client_scope.amr.id
   name                = "amr-mapper"
-  
+
   user_attribute      = "amr"
   claim_name          = "amr"          # CRITICAL
   claim_value_type    = "JSON"
   multivalued         = true
-  
+
   add_to_id_token     = true
   add_to_access_token = true           # CRITICAL
   add_to_userinfo     = true

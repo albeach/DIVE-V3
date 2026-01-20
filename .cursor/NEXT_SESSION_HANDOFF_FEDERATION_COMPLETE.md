@@ -230,7 +230,7 @@ config/federation-registry.json                               (container names -
 
 **Lesson**: **Every claim** needed for authorization must be in access tokens (not just ID tokens)
 
-**Pattern**: 
+**Pattern**:
 - Session (ID token): Has all claims ✅
 - Backend (Access token): Missing claims unless explicitly mapped ❌
 
@@ -316,17 +316,17 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "acr_mapper" {
   realm_id            = keycloak_realm.broker.id
   client_scope_id     = keycloak_openid_client_scope.acr.id
   name                = "acr-mapper"
-  
+
   user_attribute      = "acr"
   claim_name          = "acr"  # CRITICAL: Must be set explicitly
   claim_value_type    = "String"
-  
+
   add_to_id_token     = true
   add_to_access_token = true  # CRITICAL: Must be in access token
   add_to_userinfo     = true
 }
 
-# AMR (Authentication Methods References) Scope  
+# AMR (Authentication Methods References) Scope
 resource "keycloak_openid_client_scope" "amr" {
   realm_id               = keycloak_realm.broker.id
   name                   = "amr"
@@ -339,12 +339,12 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "amr_mapper" {
   realm_id            = keycloak_realm.broker.id
   client_scope_id     = keycloak_openid_client_scope.amr.id
   name                = "amr-mapper"
-  
+
   user_attribute      = "amr"
   claim_name          = "amr"  # CRITICAL: Must be set explicitly
   claim_value_type    = "JSON"  # AMR is array
   multivalued         = true
-  
+
   add_to_id_token     = true
   add_to_access_token = true  # CRITICAL: Must be in access token
   add_to_userinfo     = true
@@ -447,7 +447,7 @@ SCOPE_ID=$(docker exec $CONTAINER /opt/keycloak/bin/kcadm.sh \
 if [ -n "$SCOPE_ID" ]; then
   MAPPER_ID=$(docker exec $CONTAINER /opt/keycloak/bin/kcadm.sh \
     get client-scopes/$SCOPE_ID/protocol-mappers/models -r $REALM | jq -r '.[0].id')
-  
+
   docker exec $CONTAINER /opt/keycloak/bin/kcadm.sh update \
     client-scopes/$SCOPE_ID/protocol-mappers/models/$MAPPER_ID -r $REALM \
     -s 'config."claim.name"=acr' \
@@ -793,7 +793,7 @@ docker logs dive-spoke-fra-backend 2>&1 | \
 docker logs dive-spoke-fra-backend 2>&1 | \
   grep "Initialized federated instance" | tail -2
 
-# Expected: 
+# Expected:
 # FRA: type="local"
 # USA: type="remote"
 ```
