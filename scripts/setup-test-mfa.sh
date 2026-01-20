@@ -1,19 +1,21 @@
 #!/usr/bin/env bash
 # =============================================================================
-# DIVE V3 - Setup Test MFA Credentials
+# DIVE V3 - Setup Test MFA Credentials (Dynamic Multi-Instance)
 # =============================================================================
-# This script sets user attributes for AAL2/AAL3 users to enable proper
-# ABAC testing with the correct ACR/AMR claims.
+# This script automatically discovers ALL running DIVE instances and configures
+# user attributes for AAL testing across all of them.
 #
-# Users and their required authentication levels:
-#   testuser-*-1 (UNCLASSIFIED): AAL1 - Password only (acr=0)
-#   testuser-*-2 (RESTRICTED):   AAL1 - Password only (acr=0)
-#   testuser-*-3 (CONFIDENTIAL): AAL2 - Password + TOTP (acr=1)
-#   testuser-*-4 (SECRET):       AAL2 - Password + TOTP (acr=1)
-#   testuser-*-5 (TOP_SECRET):   AAL3 - Password + WebAuthn (acr=2)
+# User AAL Levels:
+#   testuser-*-1 (UNCLASSIFIED): AAL1 (acr=0, amr=[pwd])
+#   testuser-*-2 (RESTRICTED):   AAL1 (acr=0, amr=[pwd])
+#   testuser-*-3 (CONFIDENTIAL): AAL2 (acr=1, amr=[pwd,otp])
+#   testuser-*-4 (SECRET):       AAL2 (acr=1, amr=[pwd,otp])
+#   testuser-*-5 (TOP_SECRET):   AAL3 (acr=2, amr=[pwd,otp,hwk])
+#   admin-*:      TOP_SECRET:    AAL3 (acr=2, amr=[pwd,otp,hwk])
 # =============================================================================
 
-set -eo pipefail
+set -o pipefail
+# Note: Not using -e because we want to continue even if one instance fails
 
 # Colors
 RED='\033[0;31m'
@@ -23,7 +25,7 @@ BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# Get user configuration
+# Get user configuration based on username pattern
 get_user_config() {
     local username="$1"
     local country="$2"
@@ -104,9 +106,9 @@ setup_user() {
     # Build attributes JSON
     local attrs
     if [ -n "$coi" ]; then
-        attrs="{\"acr\":[\"$acr\"],\"amr\":[$amr_json],\"user_acr\":[\"$acr\"],\"user_amr\":[$amr_json],\"clearance\":[\"$clearance\"],\"countryOfAffiliation\":[\"$country\"],\"uniqueID\":[\"$username\"],\"acpCOI\":[\"$coi\"]}"
+        attrs="{\"acr\":[\"$acr\"],\"amr\":[$amr_json],\"clearance\":[\"$clearance\"],\"countryOfAffiliation\":[\"$country\"],\"uniqueID\":[\"$username\"],\"acpCOI\":[\"$coi\"]}"
     else
-        attrs="{\"acr\":[\"$acr\"],\"amr\":[$amr_json],\"user_acr\":[\"$acr\"],\"user_amr\":[$amr_json],\"clearance\":[\"$clearance\"],\"countryOfAffiliation\":[\"$country\"],\"uniqueID\":[\"$username\"]}"
+        attrs="{\"acr\":[\"$acr\"],\"amr\":[$amr_json],\"clearance\":[\"$clearance\"],\"countryOfAffiliation\":[\"$country\"],\"uniqueID\":[\"$username\"]}"
     fi
 
     # Update user
@@ -128,54 +130,115 @@ setup_user() {
     fi
 }
 
+# Discover and configure an instance
+configure_instance() {
+    local container="$1"
+    local instance_code=""
+    local realm=""
+    local country_code=""
+
+    # Parse container name to get instance code
+    if [[ "$container" == "dive-hub-keycloak" ]]; then
+        instance_code="USA"
+        realm="dive-v3-broker-usa"
+        country_code="USA"
+    elif [[ "$container" =~ dive-spoke-([a-z]+)-keycloak ]]; then
+        local code_lower="${BASH_REMATCH[1]}"
+        instance_code=$(echo "$code_lower" | tr '[:lower:]' '[:upper:]')
+        realm="dive-v3-broker-${code_lower}"
+        country_code="$instance_code"
+    else
+        echo -e "${YELLOW}⚠${NC} Unknown container format: $container"
+        return 1
+    fi
+
+    echo -e "${CYAN}→ Configuring ${instance_code} users...${NC}"
+
+    # Get admin password
+    local admin_pass=""
+    
+    if [ "$instance_code" = "USA" ]; then
+        # Hub uses KC_ADMIN_PASSWORD or KC_BOOTSTRAP_ADMIN_PASSWORD
+        admin_pass=$(docker exec "$container" printenv KC_ADMIN_PASSWORD 2>/dev/null | tr -d '\r\n')
+        if [ -z "$admin_pass" ]; then
+            admin_pass=$(docker exec "$container" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null | tr -d '\r\n')
+        fi
+    else
+        # Spokes use GCP secrets
+        local secret_name="dive-v3-keycloak-$(echo $instance_code | tr '[:upper:]' '[:lower:]')"
+        admin_pass=$(gcloud secrets versions access latest --secret="$secret_name" --project=dive25 2>/dev/null | tr -d '\r\n')
+        
+        # Fallback to container env
+        if [ -z "$admin_pass" ]; then
+            admin_pass=$(docker exec "$container" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null | tr -d '\r\n')
+        fi
+    fi
+
+    if [ -z "$admin_pass" ]; then
+        echo -e "${RED}✗ Could not get admin password for $instance_code${NC}"
+        return 1
+    fi
+
+    # Authenticate
+    docker exec "$container" /opt/keycloak/bin/kcadm.sh config credentials \
+        --server http://localhost:8080 --realm master --user admin --password "$admin_pass" 2>&1 | grep -v "^$" || true
+    echo ""
+
+    # Get all users in the realm
+    local users
+    users=$(docker exec "$container" /opt/keycloak/bin/kcadm.sh get users \
+        -r "$realm" 2>/dev/null | jq -r '.[].username')
+
+    local user_count=0
+    local success_count=0
+
+    # Configure each user
+    for user in $users; do
+        ((user_count++))
+        if setup_user "$realm" "$user" "$country_code" "$container"; then
+            ((success_count++))
+        fi
+    done
+
+    echo ""
+    echo -e "  ${CYAN}Result: ${success_count}/${user_count} users configured${NC}"
+    echo ""
+
+    return 0
+}
+
 # Main
 main() {
     echo ""
     echo -e "${BLUE}╔══════════════════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║     DIVE V3 - Setup Test User Attributes for AAL Testing                    ║${NC}"
+    echo -e "${BLUE}║     DIVE V3 - MFA Test Credential Setup (Auto-Discovery)                    ║${NC}"
     echo -e "${BLUE}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
 
-    # =========================================================================
-    # HUB (USA) USERS
-    # =========================================================================
-    echo -e "${CYAN}→ Configuring Hub (USA) users...${NC}"
+    # Discover all running Keycloak containers
+    echo -e "${CYAN}→ Discovering DIVE instances...${NC}"
+    local keycloak_containers
+    keycloak_containers=$(docker ps --format '{{.Names}}' | grep -E '^dive-(hub|spoke-[a-z]+)-keycloak$' | sort)
 
-    # Get Hub admin password
-    local hub_admin_pass
-    hub_admin_pass=$(docker exec dive-hub-keycloak env 2>/dev/null | grep "KC_ADMIN_PASSWORD=" | cut -d'=' -f2 | tr -d '\r\n')
-    [ -z "$hub_admin_pass" ] && hub_admin_pass="KeycloakAdminSecure123!"
-
-    # Authenticate
-    docker exec dive-hub-keycloak /opt/keycloak/bin/kcadm.sh config credentials \
-        --server http://localhost:8080 --realm master --user admin --password "$hub_admin_pass" 2>&1 | grep -v "^$" || true
-    echo ""
-
-    for user in testuser-usa-1 testuser-usa-2 testuser-usa-3 testuser-usa-4 testuser-usa-5 admin-usa; do
-        setup_user "dive-v3-broker-usa" "$user" "USA" "dive-hub-keycloak"
-    done
-    echo ""
-
-    # =========================================================================
-    # FRA USERS
-    # =========================================================================
-    if docker ps --format '{{.Names}}' | grep -q "dive-spoke-fra-keycloak"; then
-        echo -e "${CYAN}→ Configuring FRA users...${NC}"
-
-        local fra_admin_pass
-        fra_admin_pass=$(gcloud secrets versions access latest --secret=dive-v3-keycloak-fra --project=dive25 2>/dev/null | tr -d '\r\n')
-
-        if [ -n "$fra_admin_pass" ]; then
-            docker exec dive-spoke-fra-keycloak /opt/keycloak/bin/kcadm.sh config credentials \
-                --server http://localhost:8080 --realm master --user admin --password "$fra_admin_pass" 2>&1 | grep -v "^$" || true
-            echo ""
-
-            for user in testuser-fra-1 testuser-fra-2 testuser-fra-3 testuser-fra-4 testuser-fra-5 admin-fra; do
-                setup_user "dive-v3-broker-fra" "$user" "FRA" "dive-spoke-fra-keycloak"
-            done
-            echo ""
-        fi
+    if [ -z "$keycloak_containers" ]; then
+        echo -e "${RED}✗ No DIVE Keycloak containers found${NC}"
+        exit 1
     fi
+
+    local container_count=$(echo "$keycloak_containers" | wc -l | tr -d ' ')
+    echo -e "  Found ${GREEN}${container_count}${NC} instance(s)"
+    echo ""
+
+    # Configure each instance
+    local total_instances=0
+    local success_instances=0
+
+    while IFS= read -r container; do
+        ((total_instances++))
+        if configure_instance "$container"; then
+            ((success_instances++))
+        fi
+    done <<< "$keycloak_containers"
 
     # =========================================================================
     # SUMMARY
@@ -184,12 +247,15 @@ main() {
     echo -e "${BLUE}  Setup Complete                                                               ${NC}"
     echo -e "${BLUE}══════════════════════════════════════════════════════════════════════════════${NC}"
     echo ""
+    echo -e "  ${CYAN}Instances Configured:${NC} ${success_instances}/${total_instances}"
+    echo ""
     echo -e "  ${CYAN}User AAL Levels:${NC}"
     echo -e "    testuser-*-1: UNCLASSIFIED → AAL1 (acr=0, amr=[pwd])"
     echo -e "    testuser-*-2: RESTRICTED   → AAL1 (acr=0, amr=[pwd])"
     echo -e "    testuser-*-3: CONFIDENTIAL → AAL2 (acr=1, amr=[pwd,otp])"
     echo -e "    testuser-*-4: SECRET       → AAL2 (acr=1, amr=[pwd,otp])"
     echo -e "    testuser-*-5: TOP_SECRET   → AAL3 (acr=2, amr=[pwd,otp,hwk])"
+    echo -e "    admin-*:      TOP_SECRET   → AAL3 (acr=2, amr=[pwd,otp,hwk])"
     echo ""
     echo -e "  ${CYAN}OPA Policy ACR Mapping:${NC}"
     echo -e "    acr=0 → AAL1 (single factor)"
