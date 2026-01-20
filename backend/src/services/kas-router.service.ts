@@ -114,7 +114,7 @@ class KasRouterService {
       return {
         success: true,
         kasServer: kas,
-        routedToUrl: kas.kasUrl,
+        routedToUrl: kas.internalKasUrl || kas.kasUrl,
         reason: `Routed to supporting KAS: ${kas.kasId}`,
         fallbackUsed: true,
       };
@@ -145,17 +145,22 @@ class KasRouterService {
       }
     }
 
+    // Use internalKasUrl for Docker container-to-container communication, fallback to kasUrl
+    const targetUrl = originKas.internalKasUrl || originKas.kasUrl;
+
     logger.info('Routing key request', {
       origin,
       requester,
       kasId: originKas.kasId,
       kasUrl: originKas.kasUrl,
+      internalKasUrl: originKas.internalKasUrl,
+      targetUrl,
     });
 
     return {
       success: true,
       kasServer: originKas,
-      routedToUrl: originKas.kasUrl,
+      routedToUrl: targetUrl,
       reason: `Routed to origin KAS: ${originKas.kasId}`,
     };
   }
