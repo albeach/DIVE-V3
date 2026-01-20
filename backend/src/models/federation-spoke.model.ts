@@ -243,10 +243,24 @@ export class MongoSpokeStore {
    */
   async findToken(tokenString: string): Promise<ISpokeToken | null> {
     await this.ensureInitialized();
-    return this.tokensCollection!.findOne({
+    
+    logger.debug('Finding token in MongoDB', {
+      tokenPrefix: tokenString.substring(0, 20),
+      collection: this.tokensCollection?.collectionName,
+      database: this.tokensCollection?.dbName
+    });
+    
+    const result = await this.tokensCollection!.findOne({
       token: tokenString,
       expiresAt: { $gt: new Date() }
     });
+    
+    logger.debug('Token findOne result', {
+      found: !!result,
+      spokeId: result?.spokeId
+    });
+    
+    return result;
   }
 
   /**
