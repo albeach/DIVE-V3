@@ -46,7 +46,7 @@ get_user_config() {
             echo "TOP_SECRET 2 pwd,otp,hwk"
             ;;
         admin-*)
-            echo "TOP_SECRET 1 pwd,otp"
+            echo "TOP_SECRET 2 pwd,otp,hwk"
             ;;
         *)
             echo "UNCLASSIFIED 0 pwd"
