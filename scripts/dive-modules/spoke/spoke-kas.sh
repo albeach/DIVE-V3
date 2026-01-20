@@ -631,7 +631,7 @@ spoke_kas_approve() {
     # Check if auth error (expected in some configurations)
     local error_msg
     error_msg=$(echo "$response" | jq -r '.error // "Unknown error"' 2>/dev/null)
-    
+
     if echo "$error_msg" | grep -qi "authentication\|authorized"; then
         log_warn "KAS approval requires authentication - manual approval needed"
         log_info "Manual approval: Login to Hub as super_admin and approve $kas_id"

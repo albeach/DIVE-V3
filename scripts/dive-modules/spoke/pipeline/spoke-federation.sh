@@ -121,7 +121,7 @@ spoke_federation_setup() {
             log_verbose "State tracking limited - IdP configuration will still work"
             fed_db_available=false
         fi
-        
+
         # Hub→Spoke direction (spoke-idp in hub) - only if first succeeded
         if [ "$fed_db_available" = true ]; then
             if fed_db_upsert_link "usa" "$code_lower" "HUB_TO_SPOKE" "${code_lower}-idp" "PENDING" \
@@ -446,13 +446,13 @@ spoke_federation_configure_idp_mappers() {
 
     for mapper_config in "${mapper_configs[@]}"; do
         IFS=':' read -r mapper_name claim_name user_attr <<< "$mapper_config"
-        
+
         # Check if mapper already exists (prevent duplicates)
         if echo "$existing_mappers" | grep -q "^${mapper_name}$"; then
             log_verbose "  ✓ Mapper exists: $mapper_name (skipping)"
             continue
         fi
-        
+
         # Create mapper
         local mapper_json=$(cat <<EOF
 {
@@ -467,7 +467,7 @@ spoke_federation_configure_idp_mappers() {
 }
 EOF
 )
-        
+
         local result
         result=$(docker exec "$kc_container" curl -sf -w "%{http_code}" -o /dev/null \
             -X POST \
@@ -475,7 +475,7 @@ EOF
             -H "Content-Type: application/json" \
             -d "$mapper_json" \
             "http://localhost:8080/admin/realms/${realm_name}/identity-provider/instances/${idp_alias}/mappers" 2>/dev/null)
-        
+
         if [ "$result" = "201" ]; then
             log_verbose "  ✓ Created mapper: $mapper_name"
         elif [ "$result" = "409" ]; then

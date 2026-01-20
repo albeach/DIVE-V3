@@ -88,7 +88,7 @@ spoke_phase_seeding() {
         total_count=$(docker exec "$mongo_container" bash -c "
             mongosh -u admin -p \"$mongo_password\" --authenticationDatabase admin dive-v3-${code_lower} --quiet --eval 'db.resources.countDocuments({})' 2>/dev/null
         " 2>/dev/null | tail -1 | tr -d '\n\r' || echo "0")
-        
+
         # Check ZTDF-encrypted resources (have encrypted: true AND ztdf.payload.keyAccessObjects)
         encrypted_count=$(docker exec "$mongo_container" bash -c "
             mongosh -u admin -p \"$mongo_password\" --authenticationDatabase admin dive-v3-${code_lower} --quiet --eval 'db.resources.countDocuments({encrypted: true, \"ztdf.payload.keyAccessObjects\": {\$exists: true, \$ne: []}})' 2>/dev/null
@@ -126,7 +126,7 @@ spoke_phase_seeding() {
     else
         log_success "Seeding phase complete (users: ✅, local resources: N/A - using Hub)"
     fi
-    
+
     return 0
 }
 

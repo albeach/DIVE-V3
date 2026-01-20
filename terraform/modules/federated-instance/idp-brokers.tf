@@ -57,7 +57,7 @@ resource "keycloak_oidc_identity_provider" "federation_partner" {
   # First-broker-login settings (FIX: Jan 2026 - Disable account linking prompt)
   # This provides seamless SSO experience for federated users
   first_broker_login_flow_alias = ""  # Empty string disables first-broker-login flow
-  
+
   # Store tokens for later use
   store_token = true
 

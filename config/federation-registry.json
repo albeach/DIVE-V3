@@ -221,7 +221,7 @@
         "_comment": "USA is the primary instance - services use base names without suffix",
         "frontend": {
           "name": "frontend",
-          "containerName": "dive-v3-frontend",
+          "containerName": "dive-hub-frontend",
           "internalPort": 3000,
           "externalPort": 3000,
           "protocol": "https",
@@ -229,7 +229,7 @@
         },
         "backend": {
           "name": "backend",
-          "containerName": "dive-v3-backend",
+          "containerName": "dive-hub-backend",
           "internalPort": 4000,
           "externalPort": 4000,
           "protocol": "https",

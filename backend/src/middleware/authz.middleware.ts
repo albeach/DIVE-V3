@@ -747,6 +747,7 @@ export async function authenticateJWT(req: Request, res: Response, next: NextFun
         }
 
         // Attach user information to request
+        // CRITICAL FIX (2026-01-20): Include ACR/AMR/auth_time for MFA enforcement!
         (req as any).user = {
             uniqueID: introspectionResult.uniqueID,
             clearance: introspectionResult.clearance,
@@ -755,12 +756,18 @@ export async function authenticateJWT(req: Request, res: Response, next: NextFun
             sub: introspectionResult.sub,
             iss: introspectionResult.iss,
             client_id: introspectionResult.client_id,
+            // MFA enforcement attributes (critical for AAL2/AAL3)
+            acr: introspectionResult.acr,
+            amr: introspectionResult.amr,
+            auth_time: introspectionResult.auth_time,
         };
 
         logger.debug('Token validated via OAuth2 introspection', {
             subject: introspectionResult.sub,
             issuer: introspectionResult.iss,
             uniqueID: introspectionResult.uniqueID,
+            acr: introspectionResult.acr,
+            amr: introspectionResult.amr,
         });
 
         next();
@@ -855,6 +862,14 @@ export async function authzMiddleware(req: Request, res: Response, next: NextFun
         }
 
         // Build OPA input following the interface specification
+        // SIMPLIFIED (2026-01-20): Pass ACR/AMR as-is from token - OPA handles parsing
+        logger.info('Building OPA input', {
+            user: user.uniqueID,
+            acr_from_token: user.acr,
+            amr_from_token: user.amr,
+            auth_time: user.auth_time,
+        });
+
         const opaInput: IOPAInput = {
             input: {
                 subject: {
@@ -874,17 +889,20 @@ export async function authzMiddleware(req: Request, res: Response, next: NextFun
                     sourceIP: req.ip || req.socket?.remoteAddress || 'unknown',
                     deviceCompliant: true, // Assume compliant for now
                     requestId: req.headers['x-request-id'] as string || `req-${Date.now()}`,
-                    acr: String(normalizeACR(user.acr)),
-                    amr: normalizeAMR(user.amr),
+                    // CRITICAL: Pass ACR/AMR as-is (string) - OPA parse_aal() handles conversion
+                    acr: user.acr ? String(user.acr) : '0',  // Default to AAL1 if missing
+                    amr: Array.isArray(user.amr) ? user.amr : ['pwd'],  // Default to password-only
                     auth_time: user.auth_time,
                     tenant: extractTenant(user, req),
                 },
             },
         };
 
-        logger.debug('Calling OPA for authorization', {
+        logger.info('OPA input constructed', {
             subject: user.uniqueID,
             resource: resourceId,
+            context_acr: opaInput.input.context.acr,
+            context_amr: opaInput.input.context.amr,
             endpoint: OPA_DECISION_ENDPOINT,
         });
 
