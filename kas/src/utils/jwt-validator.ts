@@ -96,7 +96,7 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
     // CRITICAL: For federation, we must fetch JWKS from the TOKEN'S issuer, not local Keycloak
     let issuerJwksUri: string | null = null;
     const rewriteToInternal = (uri: string): string => {
-        // FEDERATION FIX: Map localhost URLs to correct instance Keycloak based on realm
+        // FEDERATION FIX: Map localhost URLs to correct instance Keycloak based on realm or port
         // A token from USA Hub (localhost:8443/.../dive-v3-broker-usa) should map to keycloak-usa, not local keycloak-fra
         
         // Extract realm from URL if present (e.g., /realms/dive-v3-broker-usa -> usa)
@@ -104,6 +104,17 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
         if (realmMatch) {
             const realmCountry = realmMatch[1].toLowerCase(); // usa, fra, gbr, deu
             const keycloakHost = `https://keycloak-${realmCountry}:8443`;
+            
+            // Handle spoke-specific external ports: 8453 (FRA), 8454 (GBR), 8455 (DEU)
+            if (uri.startsWith('https://localhost:8453/realms/')) {
+                return uri.replace('https://localhost:8453', 'https://keycloak-fra:8443');
+            }
+            if (uri.startsWith('https://localhost:8454/realms/')) {
+                return uri.replace('https://localhost:8454', 'https://keycloak-gbr:8443');
+            }
+            if (uri.startsWith('https://localhost:8455/realms/')) {
+                return uri.replace('https://localhost:8455', 'https://keycloak-deu:8443');
+            }
             
             if (uri.startsWith('https://localhost:8443/realms/')) {
                 return uri.replace('https://localhost:8443', keycloakHost);
@@ -114,6 +125,15 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
         }
         
         // Fallback: if no realm country, use local Keycloak (for base realm)
+        if (uri.startsWith('https://localhost:8453/realms/')) {
+            return uri.replace('https://localhost:8453', process.env.KEYCLOAK_URL || 'https://keycloak:8443');
+        }
+        if (uri.startsWith('https://localhost:8454/realms/')) {
+            return uri.replace('https://localhost:8454', process.env.KEYCLOAK_URL || 'https://keycloak:8443');
+        }
+        if (uri.startsWith('https://localhost:8455/realms/')) {
+            return uri.replace('https://localhost:8455', process.env.KEYCLOAK_URL || 'https://keycloak:8443');
+        }
         if (uri.startsWith('https://localhost:8443/realms/')) {
             return uri.replace('https://localhost:8443', process.env.KEYCLOAK_URL || 'https://keycloak:8443');
         }
@@ -319,6 +339,19 @@ export const verifyToken = async (token: string): Promise<IKeycloakToken> => {
             'http://localhost:8081/realms/dive-v3-broker',
             'https://localhost:8443/realms/dive-v3-broker-usa',
             'https://localhost:8443/realms/dive-v3-broker',
+            'https://localhost:8443/realms/dive-v3-broker-fra',
+            'https://localhost:8443/realms/dive-v3-broker-gbr',
+            'https://localhost:8443/realms/dive-v3-broker-deu',
+            // FRA external port (8453)
+            'https://localhost:8453/realms/dive-v3-broker-fra',
+            'https://localhost:8453/realms/dive-v3-broker',
+            // GBR external port (8454)
+            'https://localhost:8454/realms/dive-v3-broker-gbr',
+            'https://localhost:8454/realms/dive-v3-broker',
+            // DEU external port (8455)
+            'https://localhost:8455/realms/dive-v3-broker-deu',
+            'https://localhost:8455/realms/dive-v3-broker',
+            // Internal container names
             'https://keycloak:8443/realms/dive-v3-broker-usa',
             'https://keycloak:8443/realms/dive-v3-broker',
             'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-broker-usa',
