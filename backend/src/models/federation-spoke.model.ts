@@ -1,9 +1,9 @@
 /**
  * DIVE V3 - Federation Spoke MongoDB Model
- * 
+ *
  * Persists spoke registrations to MongoDB for durability across restarts.
  * Collection: federation_spokes
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-05
  */
@@ -37,12 +37,25 @@ export class MongoSpokeStore {
     if (this.initialized) return;
 
     try {
+      logger.info('Initializing MongoDB Spoke Store', {
+        MONGODB_URL: MONGODB_URL,
+        DB_NAME_constant: DB_NAME,
+        env_MONGODB_DATABASE: process.env.MONGODB_DATABASE
+      });
+
       const client = new MongoClient(MONGODB_URL);
       await client.connect();
       this.db = client.db(DB_NAME);
 
       this.spokesCollection = this.db.collection<ISpokeRegistration>(COLLECTION_SPOKES);
       this.tokensCollection = this.db.collection<ISpokeToken>(COLLECTION_TOKENS);
+
+      logger.info('Collections assigned', {
+        spokesDbName: this.spokesCollection.dbName,
+        tokensDbName: this.tokensCollection.dbName,
+        spokesCollectionName: this.spokesCollection.collectionName,
+        tokensCollectionName: this.tokensCollection.collectionName
+      });
 
       // Create indexes for spokes
       await this.spokesCollection.createIndex({ spokeId: 1 }, { unique: true });
@@ -243,23 +256,25 @@ export class MongoSpokeStore {
    */
   async findToken(tokenString: string): Promise<ISpokeToken | null> {
     await this.ensureInitialized();
-    
-    logger.debug('Finding token in MongoDB', {
+
+    logger.error('FINDTOKEN CALLED', {
       tokenPrefix: tokenString.substring(0, 20),
       collection: this.tokensCollection?.collectionName,
-      database: this.tokensCollection?.dbName
+      database: this.tokensCollection?.dbName,
+      initialized: this.initialized
     });
-    
+
     const result = await this.tokensCollection!.findOne({
       token: tokenString,
       expiresAt: { $gt: new Date() }
     });
-    
-    logger.debug('Token findOne result', {
+
+    logger.error('FINDTOKEN RESULT', {
       found: !!result,
-      spokeId: result?.spokeId
+      spokeId: result?.spokeId,
+      tokenMatches: result?.token === tokenString
     });
-    
+
     return result;
   }
 
