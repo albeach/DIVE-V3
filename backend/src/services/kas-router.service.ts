@@ -88,7 +88,8 @@ class KasRouterService {
     logger.debug('Finding KAS for request', { origin, requester });
 
     // Step 1: Check if origin has a registered KAS
-    const originKasId = `kas-${origin.toLowerCase()}`;
+    // CRITICAL: KAS ID format is {country}-kas not kas-{country}
+    const originKasId = `${origin.toLowerCase()}-kas`;
     const originKas = await mongoKasRegistryStore.findById(originKasId);
 
     if (!originKas) {
