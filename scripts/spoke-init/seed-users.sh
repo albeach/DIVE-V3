@@ -210,16 +210,18 @@ generate_ocean_pseudonym() {
 # Explicit lookup tables for clearance/COI so attributes are never blank
 declare -A CLEARANCE_LEVELS=(
     [1]="UNCLASSIFIED"
-    [2]="CONFIDENTIAL"
-    [3]="SECRET"
-    [4]="TOP_SECRET"
+    [2]="RESTRICTED"
+    [3]="CONFIDENTIAL"
+    [4]="SECRET"
+    [5]="TOP_SECRET"
 )
 
 declare -A CLEARANCE_COIS=(
     [1]=""
     [2]=""
-    [3]="NATO"
-    [4]="NATO-COSMIC,FVEY"
+    [3]=""
+    [4]="NATO"
+    [5]="NATO-COSMIC,FVEY"
 )
 
 # Convert comma-separated COI string into a JSON array, trimming whitespace
@@ -488,24 +490,39 @@ create_user() {
         # Build AMR array based on credentials AND clearance requirements
         # TOP_SECRET requires AAL3 (WebAuthn), CONFIDENTIAL/SECRET require AAL2 (TOTP)
         local amr='["pwd"'
+        local acr="1"  # Default: AAL1 (password only)
+        
         if [[ "$clearance" == "TOP_SECRET" ]]; then
             # TOP_SECRET: require hwk (WebAuthn) - set by requirement
             amr="${amr},\"hwk\""
-        elif [[ "$clearance" == "SECRET" ]] || [[ "$clearance" == "CONFIDENTIAL" ]]; then
-            # CONFIDENTIAL/SECRET: add otp if has it
+            acr="3"  # AAL3
+        elif [[ "$clearance" == "SECRET" ]] || [[ "$clearance" == "CONFIDENTIAL" ]] || [[ "$clearance" == "RESTRICTED" ]]; then
+            # RESTRICTED/CONFIDENTIAL/SECRET: add otp if has it
             [[ "$has_otp" == "true" ]] && amr="${amr},\"otp\""
             [[ "$has_webauthn" == "true" ]] && amr="${amr},\"hwk\""
+            # Calculate ACR based on actual credentials
+            if [[ "$has_webauthn" == "true" ]]; then
+                acr="3"  # AAL3
+            elif [[ "$has_otp" == "true" ]]; then
+                acr="2"  # AAL2
+            fi
         else
             # UNCLASSIFIED: only add methods actually configured
             [[ "$has_otp" == "true" ]] && amr="${amr},\"otp\""
             [[ "$has_webauthn" == "true" ]] && amr="${amr},\"hwk\""
+            # Calculate ACR based on actual credentials
+            if [[ "$has_webauthn" == "true" ]]; then
+                acr="3"
+            elif [[ "$has_otp" == "true" ]]; then
+                acr="2"
+            fi
         fi
         amr="${amr}]"
 
-        log_info "User exists: ${username} (updating with amr=${amr})"
-        # Update attributes on existing user with credential-based AMR
+        log_info "User exists: ${username} (updating with amr=${amr}, acr=${acr})"
+        # Update attributes on existing user with credential-based AMR and calculated ACR
         # FIX: Remove -001 suffix for ACP-240 PII minimization (uniqueID = username)
-        local attrs_update="{\"clearance\": [\"${clearance}\"], \"countryOfAffiliation\": [\"${CODE_UPPER}\"], \"uniqueID\": [\"${username}\"], \"amr\": ${amr}"
+        local attrs_update="{\"clearance\": [\"${clearance}\"], \"countryOfAffiliation\": [\"${CODE_UPPER}\"], \"uniqueID\": [\"${username}\"], \"amr\": ${amr}, \"acr\": [\"${acr}\"]"
         if [[ -n "$acp_coi_json" ]]; then
             attrs_update="${attrs_update}, \"acpCOI\": ${acp_coi_json}"
         fi
@@ -538,17 +555,21 @@ create_user() {
         return 0
     fi
 
-    # Determine initial AMR based on clearance requirements
-    # TOP_SECRET gets hwk (will need to configure WebAuthn)
-    # CONFIDENTIAL/SECRET start with pwd only (will need to configure TOTP)
+    # Determine initial AMR and ACR based on clearance requirements
+    # TOP_SECRET gets hwk (will need to configure WebAuthn) → ACR=3 (AAL3)
+    # CONFIDENTIAL/SECRET/RESTRICTED start with pwd only (will configure TOTP later) → ACR=1 (AAL1)
+    # UNCLASSIFIED: pwd only → ACR=1 (AAL1)
     local initial_amr='["pwd"]'
+    local initial_acr="1"  # AAL1 by default
+    
     if [[ "$clearance" == "TOP_SECRET" ]]; then
         initial_amr='["pwd","hwk"]'
+        initial_acr="3"  # AAL3
     fi
 
     # Build attributes JSON
     # FIX: Remove -001 suffix for ACP-240 PII minimization (uniqueID = username)
-    local attrs="{\"clearance\": [\"${clearance}\"], \"countryOfAffiliation\": [\"${CODE_UPPER}\"], \"uniqueID\": [\"${username}\"], \"amr\": ${initial_amr}"
+    local attrs="{\"clearance\": [\"${clearance}\"], \"countryOfAffiliation\": [\"${CODE_UPPER}\"], \"uniqueID\": [\"${username}\"], \"amr\": ${initial_amr}, \"acr\": [\"${initial_acr}\"]"
     if [[ -n "$acp_coi_json" ]]; then
         attrs="${attrs}, \"acpCOI\": ${acp_coi_json}"
     fi
@@ -618,9 +639,9 @@ create_user() {
         fi
 
         if [[ "$is_admin" == "true" ]]; then
-            log_success "Created admin: ${username} (${clearance}, amr=${initial_amr})"
+            log_success "Created admin: ${username} (${clearance}, amr=${initial_amr}, acr=${initial_acr})"
         else
-            log_success "Created: ${username} (${clearance}, amr=${initial_amr})"
+            log_success "Created: ${username} (${clearance}, amr=${initial_amr}, acr=${initial_acr})"
         fi
         return 0
     else
