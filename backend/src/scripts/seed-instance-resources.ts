@@ -941,19 +941,22 @@ interface IMongoConnection {
 }
 
 async function getMongoDBConnection(config: IInstanceConfig, instanceCode: string): Promise<IMongoConnection & { database: string }> {
+    // CRITICAL: Use MONGODB_DATABASE from environment (SSOT for database name)
+    // This ensures seeding uses the same database as the running backend
+    let database = process.env.MONGODB_DATABASE || config.mongodb.database;
+    
     // Check if MONGODB_URL is set (e.g., when running inside Docker)
     const envMongoUrl = process.env.MONGODB_URL;
     if (envMongoUrl) {
         // Parse the env URL to extract credentials
         const urlMatch = envMongoUrl.match(/mongodb:\/\/([^:]+):([^@]+)@([^:/]+):?(\d+)?\/?(.*)/);
         if (urlMatch) {
-            const [, user, password, host, port, dbPath] = urlMatch;
-            // CRITICAL: Use database from MONGODB_URL, not config (they can differ!)
-            const database = dbPath?.split('?')[0] || config.mongodb.database;
+            const [, user, password, host, port] = urlMatch;
+            // Use database from MONGODB_DATABASE env var (runtime SSOT), not URL path or config
             const uri = `mongodb://${host}:${port || 27017}/${database}`;
             console.log(`   Using MONGODB_URL from environment`);
+            console.log(`   Database: ${database} (from MONGODB_DATABASE env var)`);
             console.log(`   MongoDB URI: ${uri}?authSource=admin`);
-            console.log(`   Database: ${database}`);
             console.log(`   Auth User: ${user}, Password length: ${password.length} chars`);
             return { uri, user, password, database };
         }
@@ -964,7 +967,7 @@ async function getMongoDBConnection(config: IInstanceConfig, instanceCode: strin
     const defaultHost = isDocker ? 'mongo' : 'localhost';
     const host = config.type === 'remote' ? config.deployment.host : defaultHost;
     const port = config.services.mongodb.externalPort;
-    const database = config.mongodb.database;
+    // database already declared above - use it here
     const user = config.mongodb.user;
 
     // Get password from GCP Secret Manager or fallback to environment variable
