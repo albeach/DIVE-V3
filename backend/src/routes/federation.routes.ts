@@ -439,7 +439,7 @@ router.get('/status', async (_req: Request, res: Response): Promise<void> => {
 /**
  * GET /api/federation/discovery
  * MongoDB-based federation discovery (replaces static federation-registry.json)
- * 
+ *
  * SSOT: MongoDB federation_spokes collection
  * Used by spokes to discover federation partners
  */
@@ -581,10 +581,10 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
                 instanceCode: request.instanceCode,
                 idpUrl: request.idpUrl,
                 reason: skipValidation === true ? 'skipValidation flag' :
-                       request.idpUrl.includes('dive-spoke-') ? 'internal container URL' :
-                       request.idpUrl.includes('localhost') ? 'localhost URL' :
-                       request.idpUrl.includes('host.docker.internal') ? 'docker internal URL' :
-                       'environment setting'
+                    request.idpUrl.includes('dive-spoke-') ? 'internal container URL' :
+                        request.idpUrl.includes('localhost') ? 'localhost URL' :
+                            request.idpUrl.includes('host.docker.internal') ? 'docker internal URL' :
+                                'environment setting'
             });
         }
 
@@ -1938,18 +1938,20 @@ router.post('/audit/ingest', requireSpokeToken, async (req: Request, res: Respon
     const instanceCode = (req as any).spoke?.instanceCode;
 
     try {
-        const { entries } = req.body as { entries: Array<{
-            id: string;
-            timestamp: string;
-            eventType: string;
-            subject: { uniqueID: string; countryOfAffiliation: string; clearance?: string };
-            resource?: { resourceId: string; classification?: string; instanceId?: string };
-            action: string;
-            decision: 'allow' | 'deny' | 'error';
-            reason?: string;
-            context?: Record<string, unknown>;
-            offlineEntry: boolean;
-        }> };
+        const { entries } = req.body as {
+            entries: Array<{
+                id: string;
+                timestamp: string;
+                eventType: string;
+                subject: { uniqueID: string; countryOfAffiliation: string; clearance?: string };
+                resource?: { resourceId: string; classification?: string; instanceId?: string };
+                action: string;
+                decision: 'allow' | 'deny' | 'error';
+                reason?: string;
+                context?: Record<string, unknown>;
+                offlineEntry: boolean;
+            }>
+        };
 
         if (!entries || !Array.isArray(entries)) {
             res.status(400).json({

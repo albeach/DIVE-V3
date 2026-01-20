@@ -347,7 +347,7 @@ class FederatedResourceService {
         // Determine API URL (prefer internal Docker network)
         let apiUrl = '';
         const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
-        
+
         if (isDevelopment && backendService?.containerName) {
             // Use Docker internal hostname for inter-container communication
             apiUrl = `https://${backendService.containerName}:${backendService.internalPort || 4000}`;
@@ -359,7 +359,7 @@ class FederatedResourceService {
         // Determine connection mode
         // Only use direct MongoDB for current instance, all others use API mode
         const isCurrentInstance = instanceCode === this.currentInstanceRealm;
-        
+
         let mongoUrl = '';
         let mongoDatabase = '';
         let useApiMode = !isCurrentInstance; // Always use API for remote instances
@@ -403,7 +403,7 @@ class FederatedResourceService {
      */
     private async loadLegacyRegistry(): Promise<void> {
         logger.warn('Using legacy static federation-registry.json (MongoDB discovery failed)');
-        
+
         const registryPaths = [
             path.join(process.cwd(), '..', 'config', 'federation-registry.json'),
             path.join(process.cwd(), 'config', 'federation-registry.json')
@@ -637,25 +637,25 @@ class FederatedResourceService {
                 // Direct MongoDB access
                 const MongoClient = (await import('mongodb')).MongoClient;
                 const client = new MongoClient(instance.mongoUrl);
-                
+
                 await client.connect();
                 const db = client.db(instance.mongoDatabase);
                 const collection = db.collection('resources');
                 const resource = await collection.findOne({ resourceId });
                 await client.close();
-                
+
                 logger.info('Fetched cross-instance resource via MongoDB', {
                     resourceId,
                     sourceInstance: targetInstance,
                     found: !!resource
                 });
-                
+
                 return resource;
             } else {
                 // API mode: Query via HTTP with user's auth token
                 const https = await import('https');
                 const httpsAgent = new https.Agent({ rejectUnauthorized: false });
-                
+
                 if (!authHeader) {
                     logger.warn('No auth header provided for cross-instance resource query', {
                         resourceId,
@@ -663,7 +663,7 @@ class FederatedResourceService {
                     });
                     return null;
                 }
-                
+
                 const response = await fetch(`${instance.apiUrl}/api/resources/${resourceId}`, {
                     headers: {
                         'Authorization': authHeader  // Forward user's token
@@ -671,7 +671,7 @@ class FederatedResourceService {
                     // @ts-ignore - Node fetch agent option
                     agent: httpsAgent
                 });
-                
+
                 if (!response.ok) {
                     logger.warn('Cross-instance resource query failed', {
                         resourceId,
@@ -680,13 +680,13 @@ class FederatedResourceService {
                     });
                     return null;
                 }
-                
+
                 const resource = await response.json();
                 logger.info('Fetched cross-instance resource via API', {
                     resourceId,
                     sourceInstance: targetInstance
                 });
-                
+
                 return resource;
             }
         } catch (error) {

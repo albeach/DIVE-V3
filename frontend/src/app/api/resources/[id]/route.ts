@@ -7,7 +7,7 @@
  * - Client requests resource by ID
  * - Server validates session and handles backend auth
  * - Includes authorization decision from OPA
- * 
+ *
  * RESILIENCE FIX (Jan 2026):
  * - Automatic token refresh if expired
  * - Clear error messages for debugging
@@ -39,7 +39,7 @@ export async function GET(
                 resourceId,
                 userId: validation.userId?.substring(0, 8) + '...',
             });
-            
+
             return NextResponse.json(
                 {
                     error: 'Unauthorized',
@@ -60,7 +60,7 @@ export async function GET(
                 resourceId,
                 userId: validation.userId?.substring(0, 8) + '...',
             });
-            
+
             return NextResponse.json(
                 {
                     error: 'Unauthorized',
@@ -76,10 +76,10 @@ export async function GET(
         const instanceMatch = resourceId.match(/^doc-([A-Z]{2,3})-/);
         const targetInstance = instanceMatch ? instanceMatch[1] : null;
         const currentInstance = process.env.NEXT_PUBLIC_INSTANCE || 'USA';
-        
+
         let backendUrl = process.env.BACKEND_URL || 'https://localhost:4000';
         let isCrossInstance = false;
-        
+
         // Cross-instance routing: If resource is from another instance, use federated endpoint
         if (targetInstance && targetInstance !== currentInstance) {
             isCrossInstance = true;
@@ -88,7 +88,7 @@ export async function GET(
                 targetInstance,
                 currentInstance
             });
-            
+
             // Instead of routing to different backend, use federated resource endpoint
             // The backend will handle cross-instance queries via federated-resource.service
             // This approach:
@@ -96,7 +96,7 @@ export async function GET(
             // 2. Backend handles cross-instance MongoDB queries
             // 3. Maintains consistent authorization flow
         }
-        
+
         console.log('[ResourceAPI] Fetching resource', {
             resourceId,
             backendUrl,
@@ -105,7 +105,7 @@ export async function GET(
             userId: validation.userId?.substring(0, 8) + '...',
             tokenExpiresIn: tokens.expiresAt - Math.floor(Date.now() / 1000),
         });
-        
+
         const response = await fetch(`${backendUrl}/api/resources/${resourceId}`, {
             method: 'GET',
             headers: {
@@ -135,12 +135,12 @@ export async function GET(
 
         // Forward backend response to client
         const data = await response.json();
-        
+
         console.log('[ResourceAPI] Success', {
             resourceId,
             userId: validation.userId?.substring(0, 8) + '...',
         });
-        
+
         return NextResponse.json(data);
 
     } catch (error) {
