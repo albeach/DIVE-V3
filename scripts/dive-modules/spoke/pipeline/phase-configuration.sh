@@ -358,7 +358,15 @@ EOF
             if [ -n "$spoke_token" ]; then
                 log_success "✓ Token received from auto-approval"
 
-                # Update .env with SPOKE_TOKEN
+                # Update .env with SPOKE_ID and SPOKE_TOKEN
+                if [ -n "$registered_spoke_id" ]; then
+                    if grep -q "^SPOKE_ID=" "$spoke_dir/.env" 2>/dev/null; then
+                        sed -i.bak "s|^SPOKE_ID=.*|SPOKE_ID=$registered_spoke_id|" "$spoke_dir/.env"
+                    else
+                        echo "SPOKE_ID=$registered_spoke_id" >> "$spoke_dir/.env"
+                    fi
+                fi
+
                 if grep -q "^SPOKE_TOKEN=" "$spoke_dir/.env" 2>/dev/null; then
                     sed -i.bak "s|^SPOKE_TOKEN=.*|SPOKE_TOKEN=$spoke_token|" "$spoke_dir/.env"
                 else
@@ -366,7 +374,7 @@ EOF
                 fi
                 rm -f "$spoke_dir/.env.bak"
 
-                log_success "✓ SPOKE_TOKEN configured in .env"
+                log_success "✓ SPOKE_ID and SPOKE_TOKEN configured in .env"
                 return 0
             else
                 log_warn "Token not found in auto-approval response - may need manual approval"

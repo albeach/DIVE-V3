@@ -590,7 +590,7 @@ export class TokenIntrospectionService {
       if (!effectiveCredentials) {
         const clientId = process.env.KEYCLOAK_CLIENT_ID;
         const clientSecret = process.env.KEYCLOAK_CLIENT_SECRET;
-        
+
         if (clientId && clientSecret) {
           effectiveCredentials = { clientId, clientSecret };
           logger.debug('Using environment client credentials for token introspection', { clientId });
