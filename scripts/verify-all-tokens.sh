@@ -59,7 +59,7 @@ get_user_token() {
     local client_secret="$4"
     local username="$5"
     local password="$6"
-    
+
     local response
     response=$(curl -sk -X POST "${keycloak_url}/realms/${realm}/protocol/openid-connect/token" \
         -H "Content-Type: application/x-www-form-urlencoded" \
@@ -69,7 +69,7 @@ get_user_token() {
         -d "username=${username}" \
         -d "password=${password}" \
         -d "scope=openid profile email" 2>/dev/null)
-    
+
     echo "$response"
 }
 
@@ -82,32 +82,32 @@ verify_user() {
     local client_id="$5"
     local client_secret="$6"
     local password="$7"
-    
+
     local response
     response=$(get_user_token "$keycloak_url" "$realm" "$client_id" "$client_secret" "$username" "$password")
-    
+
     local error
     error=$(echo "$response" | jq -r '.error // empty' 2>/dev/null)
-    
+
     if [ -n "$error" ]; then
         local error_desc
         error_desc=$(echo "$response" | jq -r '.error_description // .error' 2>/dev/null)
         echo -e "    ${RED}✗${NC} ${username} - ${error_desc}"
         return 1
     fi
-    
+
     local token
     token=$(echo "$response" | jq -r '.access_token' 2>/dev/null)
-    
+
     if [ -z "$token" ] || [ "$token" = "null" ]; then
         echo -e "    ${RED}✗${NC} ${username} - No token received"
         return 1
     fi
-    
+
     # Decode and extract claims
     local claims
     claims=$(decode_jwt "$token")
-    
+
     local uniqueID clearance country acr amr user_acr user_amr acpCOI iss
     uniqueID=$(echo "$claims" | jq -r '.uniqueID // "MISSING"' 2>/dev/null)
     clearance=$(echo "$claims" | jq -r '.clearance // "MISSING"' 2>/dev/null)
@@ -118,7 +118,7 @@ verify_user() {
     user_amr=$(echo "$claims" | jq -r 'if .user_amr then (if (.user_amr | type) == "array" then (.user_amr | join(",")) else .user_amr end) else "N/A" end' 2>/dev/null)
     acpCOI=$(echo "$claims" | jq -r 'if .acpCOI then (if (.acpCOI | type) == "array" then (.acpCOI | join(",")) else .acpCOI end) else "N/A" end' 2>/dev/null)
     iss=$(echo "$claims" | jq -r '.iss // "MISSING"' 2>/dev/null)
-    
+
     # Determine AAL
     local aal="?"
     case "$acr" in
@@ -126,17 +126,17 @@ verify_user() {
         "1") aal="AAL2" ;;
         "2") aal="AAL3" ;;
     esac
-    
+
     # Check status
     local status="${GREEN}✓${NC}"
     if [ "$uniqueID" = "MISSING" ] || [ "$clearance" = "MISSING" ] || [ "$country" = "MISSING" ]; then
         status="${RED}✗${NC}"
     fi
-    
+
     # Display
     printf "    %b %-20s │ %-14s │ %-4s │ ACR=%-1s (%s) │ AMR=[%s]\n" \
         "$status" "$username" "$clearance" "$country" "$acr" "$aal" "$amr"
-    
+
     return 0
 }
 
@@ -145,13 +145,13 @@ test_cross_access() {
     local token="$1"
     local target_url="$2"
     local direction="$3"
-    
+
     local response
     response=$(curl -sk -H "Authorization: Bearer $token" "${target_url}/api/resources?limit=1" 2>/dev/null)
-    
+
     local error
     error=$(echo "$response" | jq -r '.error // empty' 2>/dev/null)
-    
+
     if [ -n "$error" ]; then
         local msg
         msg=$(echo "$response" | jq -r '.message // .error' 2>/dev/null)
@@ -172,17 +172,17 @@ main() {
     echo -e "${BLUE}║     DIVE V3 - Comprehensive Token & Federation Verification                  ║${NC}"
     echo -e "${BLUE}╚══════════════════════════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    
+
     # Initialize secrets
     echo -e "${CYAN}→ Retrieving client secrets...${NC}"
     init_secrets
-    
+
     if [ -z "$HUB_CLIENT_SECRET" ]; then
         echo -e "${RED}✗ Could not retrieve Hub client secret${NC}"
         exit 1
     fi
     echo -e "  Hub: ${HUB_CLIENT_SECRET:0:8}..."
-    
+
     local fra_available=false
     if [ -n "$FRA_CLIENT_SECRET" ]; then
         echo -e "  FRA: ${FRA_CLIENT_SECRET:0:8}..."
@@ -191,7 +191,7 @@ main() {
         echo -e "  FRA: ${YELLOW}Not available${NC}"
     fi
     echo ""
-    
+
     # =========================================================================
     # HUB USERS
     # =========================================================================
@@ -200,23 +200,23 @@ main() {
     echo -e "${BLUE}══════════════════════════════════════════════════════════════════════════════${NC}"
     echo -e "    ${CYAN}User                 │ Clearance      │ Country │ Authentication${NC}"
     echo -e "    ─────────────────────┼────────────────┼─────────┼─────────────────────────"
-    
+
     local hub_users=("testuser-usa-1" "testuser-usa-2" "testuser-usa-3" "testuser-usa-4" "testuser-usa-5" "admin-usa")
     local hub_success=0
-    
+
     for user in "${hub_users[@]}"; do
         local pwd="$TEST_PASSWORD"
         [[ "$user" == admin* ]] && pwd="$ADMIN_PASSWORD"
-        
+
         if verify_user "HUB" "$user" "$HUB_KEYCLOAK_URL" "$HUB_REALM" "$HUB_CLIENT_ID" "$HUB_CLIENT_SECRET" "$pwd"; then
             ((hub_success++))
         fi
     done
-    
+
     echo ""
     echo -e "    ${CYAN}Summary: ${hub_success}/${#hub_users[@]} users verified${NC}"
     echo ""
-    
+
     # =========================================================================
     # FRA USERS
     # =========================================================================
@@ -227,23 +227,23 @@ main() {
         echo -e "${BLUE}══════════════════════════════════════════════════════════════════════════════${NC}"
         echo -e "    ${CYAN}User                 │ Clearance      │ Country │ Authentication${NC}"
         echo -e "    ─────────────────────┼────────────────┼─────────┼─────────────────────────"
-        
+
         local fra_users=("testuser-fra-1" "testuser-fra-2" "testuser-fra-3" "testuser-fra-4" "testuser-fra-5" "admin-fra")
-        
+
         for user in "${fra_users[@]}"; do
             local pwd="$TEST_PASSWORD"
             [[ "$user" == admin* ]] && pwd="$ADMIN_PASSWORD"
-            
+
             if verify_user "FRA" "$user" "$FRA_KEYCLOAK_URL" "$FRA_REALM" "$FRA_CLIENT_ID" "$FRA_CLIENT_SECRET" "$pwd"; then
                 ((fra_success++))
             fi
         done
-        
+
         echo ""
         echo -e "    ${CYAN}Summary: ${fra_success}/${#fra_users[@]} users verified${NC}"
         echo ""
     fi
-    
+
     # =========================================================================
     # CROSS-INSTANCE FEDERATION
     # =========================================================================
@@ -251,12 +251,12 @@ main() {
     echo -e "${BLUE}  CROSS-INSTANCE FEDERATION TESTS                                              ${NC}"
     echo -e "${BLUE}══════════════════════════════════════════════════════════════════════════════${NC}"
     echo ""
-    
+
     # Get Hub token for cross-instance test
     local hub_response hub_token
     hub_response=$(get_user_token "$HUB_KEYCLOAK_URL" "$HUB_REALM" "$HUB_CLIENT_ID" "$HUB_CLIENT_SECRET" "testuser-usa-3" "$TEST_PASSWORD")
     hub_token=$(echo "$hub_response" | jq -r '.access_token // empty' 2>/dev/null)
-    
+
     if [ -n "$hub_token" ] && [ "$hub_token" != "null" ]; then
         echo -e "  ${CYAN}USA → FRA (Hub user accessing Spoke backend)${NC}"
         if [ "$fra_available" = true ]; then
@@ -264,7 +264,7 @@ main() {
         else
             echo -e "    ${YELLOW}⚠${NC} FRA backend not available"
         fi
-        
+
         echo ""
         echo -e "  ${CYAN}USA → USA (Hub user accessing Hub backend)${NC}"
         test_cross_access "$hub_token" "$HUB_BACKEND_URL" "testuser-usa-3 → HUB"
@@ -272,17 +272,17 @@ main() {
         echo -e "  ${RED}✗${NC} Could not get Hub token"
     fi
     echo ""
-    
+
     # Get FRA token for cross-instance test
     if [ "$fra_available" = true ]; then
         local fra_response fra_token
         fra_response=$(get_user_token "$FRA_KEYCLOAK_URL" "$FRA_REALM" "$FRA_CLIENT_ID" "$FRA_CLIENT_SECRET" "testuser-fra-4" "$TEST_PASSWORD")
         fra_token=$(echo "$fra_response" | jq -r '.access_token // empty' 2>/dev/null)
-        
+
         if [ -n "$fra_token" ] && [ "$fra_token" != "null" ]; then
             echo -e "  ${CYAN}FRA → HUB (Spoke user accessing Hub backend)${NC}"
             test_cross_access "$fra_token" "$HUB_BACKEND_URL" "testuser-fra-4 → HUB"
-            
+
             echo ""
             echo -e "  ${CYAN}FRA → FRA (Spoke user accessing Spoke backend)${NC}"
             test_cross_access "$fra_token" "$FRA_BACKEND_URL" "testuser-fra-4 → FRA"
@@ -294,7 +294,7 @@ main() {
         fi
     fi
     echo ""
-    
+
     # =========================================================================
     # FEDERATED QUERY
     # =========================================================================
@@ -302,17 +302,17 @@ main() {
     echo -e "${BLUE}  FEDERATED QUERY TEST                                                         ${NC}"
     echo -e "${BLUE}══════════════════════════════════════════════════════════════════════════════${NC}"
     echo ""
-    
+
     if [ -n "$hub_token" ] && [ "$hub_token" != "null" ]; then
         local fed_response
         fed_response=$(curl -sk -X POST "${HUB_BACKEND_URL}/api/resources/federated-query" \
             -H "Authorization: Bearer $hub_token" \
             -H "Content-Type: application/json" \
             -d '{"query":"","limit":3}' 2>/dev/null)
-        
+
         local fed_err
         fed_err=$(echo "$fed_response" | jq -r '.error // empty' 2>/dev/null)
-        
+
         if [ -n "$fed_err" ]; then
             local fed_msg
             fed_msg=$(echo "$fed_response" | jq -r '.message // .error' 2>/dev/null)
@@ -327,7 +327,7 @@ main() {
         fi
     fi
     echo ""
-    
+
     # =========================================================================
     # TOKEN DECODE SAMPLE
     # =========================================================================
@@ -335,7 +335,7 @@ main() {
     echo -e "${BLUE}  SAMPLE TOKEN DECODE (testuser-usa-3)                                         ${NC}"
     echo -e "${BLUE}══════════════════════════════════════════════════════════════════════════════${NC}"
     echo ""
-    
+
     if [ -n "$hub_token" ] && [ "$hub_token" != "null" ]; then
         local sample_claims
         sample_claims=$(decode_jwt "$hub_token")
@@ -355,7 +355,7 @@ main() {
         }' 2>/dev/null
     fi
     echo ""
-    
+
     # =========================================================================
     # SUMMARY
     # =========================================================================
