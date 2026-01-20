@@ -1,13 +1,13 @@
 {
   "identity": {
-    "spokeId": "spoke-fra-d9ff0189",
+    "spokeId": "spoke-fra-9bafe39b",
     "instanceCode": "FRA",
     "name": "FRA Instance",
     "description": "DIVE V3 Spoke Instance for FRA",
     "country": "FRA",
     "organizationType": "government",
     "contactEmail": "admin@fra.dive25.com",
-    "registeredSpokeId": "spoke-fra-1104df9d"
+    "registeredSpokeId": "spoke-fra-9bafe39b"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",

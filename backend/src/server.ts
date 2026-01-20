@@ -503,7 +503,7 @@ function startServer() {
         logger.info('Initializing spoke heartbeat service', { spokeId, instanceCode, hubUrl });
 
         spokeHeartbeat.initialize({
-          hubUrl: `${hubUrl}/api/federation/heartbeat`,
+          hubUrl: hubUrl,  // Service will add /api/federation/heartbeat path
           spokeId,
           instanceCode,
           spokeToken,
