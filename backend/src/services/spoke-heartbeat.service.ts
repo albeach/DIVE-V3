@@ -239,7 +239,7 @@ class SpokeHeartbeatService extends EventEmitter {
 
       this.emit('success', response);
 
-      logger.debug('Heartbeat sent successfully', {
+      logger.info('Heartbeat sent successfully', {
         syncStatus: response.syncStatus,
         serverTime: response.serverTime,
       });
