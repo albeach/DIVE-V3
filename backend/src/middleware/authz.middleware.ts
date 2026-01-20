@@ -678,6 +678,9 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
             clearance: introspectionResult.clearance,
             countryOfAffiliation: introspectionResult.countryOfAffiliation,
             acpCOI: introspectionResult.acpCOI,
+            acr: introspectionResult.acr,
+            amr: introspectionResult.amr,
+            auth_time: introspectionResult.auth_time,
 
             // Legacy compatibility
             preferred_username: introspectionResult.username,
@@ -811,9 +814,10 @@ export async function authzMiddleware(req: Request, res: Response, next: NextFun
             return;
         }
 
-        // Fetch real resource metadata from MongoDB
+        // Fetch real resource metadata from MongoDB (or cross-instance via federation)
         const { getResourceById } = await import('../services/resource.service');
-        const resource = await getResourceById(resourceId);
+        const authHeader = req.headers['authorization'];
+        const resource = await getResourceById(resourceId, authHeader);
 
         if (!resource) {
             res.status(404).json({
@@ -896,6 +900,16 @@ export async function authzMiddleware(req: Request, res: Response, next: NextFun
             });
 
             opaResponse = response.data;
+            
+            // Check if OPA returned empty response (policies not loaded)
+            if (!opaResponse || !opaResponse.result || Object.keys(opaResponse).length === 0) {
+                logger.warn('OPA returned empty response (policies not loaded), using fallback', {
+                    subject: user.uniqueID,
+                    resource: resourceId,
+                    opaResponse: JSON.stringify(opaResponse)
+                });
+                opaResponse = localEvaluateOPA(opaInput);
+            }
         } catch (opaError) {
             logger.warn('OPA call failed, falling back to local evaluation', {
                 error: opaError instanceof Error ? opaError.message : 'Unknown OPA error',
@@ -905,6 +919,20 @@ export async function authzMiddleware(req: Request, res: Response, next: NextFun
 
             // Fallback to local evaluation for development/testing
             opaResponse = localEvaluateOPA(opaInput);
+        }
+
+        // Validate OPA response structure
+        if (!opaResponse || !opaResponse.result) {
+            logger.error('Invalid OPA response structure', {
+                resourceId,
+                userId: user.uniqueID,
+                opaResponse: JSON.stringify(opaResponse).substring(0, 200)
+            });
+            res.status(500).json({
+                error: 'Authorization Error',
+                message: 'Invalid authorization service response'
+            });
+            return;
         }
 
         // Store policy evaluation details for frontend replay
@@ -957,6 +985,9 @@ export async function authzMiddleware(req: Request, res: Response, next: NextFun
 
         // Attach authorization obligations (like KAS key requirements)
         (req as any).authzObligations = opaResponse.result.obligations || [];
+        
+        // Attach fetched resource to request so controller doesn't fetch again
+        (req as any).resource = resource;
 
         next();
     } catch (error) {

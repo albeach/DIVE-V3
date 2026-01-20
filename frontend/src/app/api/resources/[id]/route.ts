@@ -70,12 +70,38 @@ export async function GET(
             );
         }
 
-        // Proxy request to backend with access token
-        const backendUrl = process.env.BACKEND_URL || 'https://localhost:4000';
+        // Determine target backend based on resourceId prefix (cross-instance routing)
+        // Resource IDs are formatted as: doc-{INSTANCE}-seed-{timestamp}-{number}
+        // Examples: doc-USA-seed-..., doc-FRA-seed-..., doc-GBR-seed-...
+        const instanceMatch = resourceId.match(/^doc-([A-Z]{2,3})-/);
+        const targetInstance = instanceMatch ? instanceMatch[1] : null;
+        const currentInstance = process.env.NEXT_PUBLIC_INSTANCE || 'USA';
+        
+        let backendUrl = process.env.BACKEND_URL || 'https://localhost:4000';
+        let isCrossInstance = false;
+        
+        // Cross-instance routing: If resource is from another instance, use federated endpoint
+        if (targetInstance && targetInstance !== currentInstance) {
+            isCrossInstance = true;
+            console.log('[ResourceAPI] Cross-instance resource detected', {
+                resourceId,
+                targetInstance,
+                currentInstance
+            });
+            
+            // Instead of routing to different backend, use federated resource endpoint
+            // The backend will handle cross-instance queries via federated-resource.service
+            // This approach:
+            // 1. Keeps authentication with current instance
+            // 2. Backend handles cross-instance MongoDB queries
+            // 3. Maintains consistent authorization flow
+        }
         
         console.log('[ResourceAPI] Fetching resource', {
             resourceId,
             backendUrl,
+            targetInstance: targetInstance || currentInstance,
+            crossInstance: targetInstance !== currentInstance,
             userId: validation.userId?.substring(0, 8) + '...',
             tokenExpiresIn: tokens.expiresAt - Math.floor(Date.now() / 1000),
         });

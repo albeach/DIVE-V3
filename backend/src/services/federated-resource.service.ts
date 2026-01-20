@@ -164,32 +164,39 @@ class FederatedResourceService {
             currentInstance: this.currentInstanceRealm
         });
 
-        // Load federation registry
-        const registry = await this.loadFederationRegistry();
+        // Load federation instances from MongoDB (Hub) or Hub API (Spokes)
+        // This replaces the static federation-registry.json file
+        try {
+            const { federationDiscovery } = await import('./federation-discovery.service');
+            const discoveredInstances = await federationDiscovery.getInstances();
 
-        // Initialize instances from registry (if available)
-        if (registry?.instances) {
-            for (const [key, instance] of Object.entries(registry.instances)) {
-                const inst = instance as any;
+            for (const inst of discoveredInstances) {
                 if (!inst.enabled) {
-                    logger.debug(`Instance ${key} is disabled, skipping`);
+                    logger.debug(`Instance ${inst.code} is disabled, skipping`);
                     continue;
                 }
 
                 try {
-                    const federatedInstance = await this.createInstanceConfig(key, inst);
-                    this.instances.set(key.toUpperCase(), federatedInstance);
-                    logger.info(`Initialized federated instance: ${key}`, {
+                    const federatedInstance = await this.createInstanceFromDiscovery(inst);
+                    this.instances.set(inst.code.toUpperCase(), federatedInstance);
+                    logger.info(`Initialized federated instance: ${inst.code}`, {
                         code: federatedInstance.code,
                         type: federatedInstance.type,
-                        database: federatedInstance.mongoDatabase
+                        source: 'mongodb-discovery'
                     });
                 } catch (error) {
-                    logger.error(`Failed to initialize instance ${key}`, {
+                    logger.error(`Failed to initialize instance ${inst.code}`, {
                         error: error instanceof Error ? error.message : 'Unknown error'
                     });
                 }
             }
+        } catch (error) {
+            logger.error('Failed to load federation instances from discovery service', {
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+            // Fall back to static registry as last resort
+            logger.warn('Attempting fallback to static federation-registry.json');
+            await this.loadLegacyRegistry();
         }
 
         // CRITICAL FIX: Ensure current instance is always registered
@@ -331,18 +338,83 @@ class FederatedResourceService {
     }
 
     /**
-     * Load federation registry from config file
+     * Create federated instance from discovery service
      */
-    private async loadFederationRegistry(): Promise<any | null> {
+    private async createInstanceFromDiscovery(inst: any): Promise<IFederatedInstance> {
+        const instanceCode = inst.code.toUpperCase();
+        const backendService = inst.services?.backend;
+
+        // Determine API URL (prefer internal Docker network)
+        let apiUrl = '';
+        const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+        
+        if (isDevelopment && backendService?.containerName) {
+            // Use Docker internal hostname for inter-container communication
+            apiUrl = `https://${backendService.containerName}:${backendService.internalPort || 4000}`;
+        } else {
+            // Use external API URL
+            apiUrl = inst.endpoints.api;
+        }
+
+        // Determine connection mode
+        // Only use direct MongoDB for current instance, all others use API mode
+        const isCurrentInstance = instanceCode === this.currentInstanceRealm;
+        
+        let mongoUrl = '';
+        let mongoDatabase = '';
+        let useApiMode = !isCurrentInstance; // Always use API for remote instances
+
+        if (isCurrentInstance) {
+            // Current instance - use direct MongoDB connection
+            mongoUrl = process.env.MONGODB_URL || process.env.MONGODB_URI || '';
+            mongoDatabase = process.env.MONGODB_DATABASE || `dive-v3-${instanceCode.toLowerCase()}`;
+            logger.debug('Configured current instance with direct MongoDB', {
+                code: instanceCode,
+                database: mongoDatabase
+            });
+        } else {
+            // Remote instance - ALWAYS use API mode (no direct MongoDB access across instances)
+            logger.debug('Configured remote instance with API mode', {
+                code: instanceCode,
+                apiUrl
+            });
+        }
+
+        return {
+            code: instanceCode,
+            name: inst.name,
+            // CRITICAL FIX: Current instance is always 'local', others are 'remote'
+            type: isCurrentInstance ? 'local' : 'remote',
+            enabled: inst.enabled,
+            mongoUrl,
+            mongoDatabase,
+            apiUrl,
+            useApiMode,
+            circuitBreaker: {
+                state: 'closed',
+                failures: 0
+            }
+        };
+    }
+
+    /**
+     * Legacy: Load federation registry from static JSON file (fallback only)
+     * DEPRECATED: Only used if MongoDB discovery fails
+     */
+    private async loadLegacyRegistry(): Promise<void> {
+        logger.warn('Using legacy static federation-registry.json (MongoDB discovery failed)');
+        
         const registryPaths = [
             path.join(process.cwd(), '..', 'config', 'federation-registry.json'),
             path.join(process.cwd(), 'config', 'federation-registry.json')
         ];
 
+        let registry: any = null;
         for (const registryPath of registryPaths) {
             try {
                 if (fs.existsSync(registryPath)) {
-                    return JSON.parse(fs.readFileSync(registryPath, 'utf-8'));
+                    registry = JSON.parse(fs.readFileSync(registryPath, 'utf-8'));
+                    break;
                 }
             } catch (error) {
                 logger.warn('Failed to read federation registry', {
@@ -352,7 +424,28 @@ class FederatedResourceService {
             }
         }
 
-        return null;
+        if (!registry?.instances) {
+            logger.error('No federation registry available');
+            return;
+        }
+
+        // Load instances from static file
+        for (const [key, instance] of Object.entries(registry.instances)) {
+            const inst = instance as any;
+            if (!inst.enabled) {
+                continue;
+            }
+
+            try {
+                const federatedInstance = await this.createInstanceConfig(key, inst);
+                this.instances.set(key.toUpperCase(), federatedInstance);
+                logger.info(`Loaded instance from legacy registry: ${key}`);
+            } catch (error) {
+                logger.error(`Failed to load instance ${key}`, {
+                    error: error instanceof Error ? error.message : 'Unknown error'
+                });
+            }
+        }
     }
 
     /**
@@ -514,6 +607,96 @@ class FederatedResourceService {
             failures: instance.circuitBreaker.failures,
             circuitState: instance.circuitBreaker.state
         });
+    }
+
+    /**
+     * Get a specific resource from a target instance
+     * Used for cross-instance resource detail access
+     * @param authHeader User's Authorization header (required for remote API queries)
+     */
+    async getResourceFromInstance(
+        resourceId: string,
+        targetInstance: string,
+        authHeader?: string
+    ): Promise<any | null> {
+        if (!this.initialized) {
+            await this.initialize();
+        }
+
+        const instance = this.instances.get(targetInstance.toUpperCase());
+        if (!instance || !instance.enabled) {
+            logger.warn('Target instance not found or disabled', {
+                targetInstance,
+                available: Array.from(this.instances.keys())
+            });
+            return null;
+        }
+
+        try {
+            if (!instance.useApiMode && instance.mongoUrl) {
+                // Direct MongoDB access
+                const MongoClient = (await import('mongodb')).MongoClient;
+                const client = new MongoClient(instance.mongoUrl);
+                
+                await client.connect();
+                const db = client.db(instance.mongoDatabase);
+                const collection = db.collection('resources');
+                const resource = await collection.findOne({ resourceId });
+                await client.close();
+                
+                logger.info('Fetched cross-instance resource via MongoDB', {
+                    resourceId,
+                    sourceInstance: targetInstance,
+                    found: !!resource
+                });
+                
+                return resource;
+            } else {
+                // API mode: Query via HTTP with user's auth token
+                const https = await import('https');
+                const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+                
+                if (!authHeader) {
+                    logger.warn('No auth header provided for cross-instance resource query', {
+                        resourceId,
+                        targetInstance
+                    });
+                    return null;
+                }
+                
+                const response = await fetch(`${instance.apiUrl}/api/resources/${resourceId}`, {
+                    headers: {
+                        'Authorization': authHeader  // Forward user's token
+                    },
+                    // @ts-ignore - Node fetch agent option
+                    agent: httpsAgent
+                });
+                
+                if (!response.ok) {
+                    logger.warn('Cross-instance resource query failed', {
+                        resourceId,
+                        targetInstance,
+                        status: response.status
+                    });
+                    return null;
+                }
+                
+                const resource = await response.json();
+                logger.info('Fetched cross-instance resource via API', {
+                    resourceId,
+                    sourceInstance: targetInstance
+                });
+                
+                return resource;
+            }
+        } catch (error) {
+            logger.error('Failed to fetch cross-instance resource', {
+                resourceId,
+                targetInstance,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+            return null;
+        }
     }
 
     /**
