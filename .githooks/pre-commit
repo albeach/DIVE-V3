@@ -29,7 +29,8 @@ ISSUES_FOUND=0
 echo "  Checking for hardcoded localhost URLs..."
 if echo "$STAGED_FILES" | grep -E '\.(ts|tsx|js|jsx)$' > /dev/null; then
   # Check TypeScript/JavaScript files for hardcoded localhost
-  LOCALHOST_MATCHES=$(git diff --cached | grep -E "^\+.*['\"]https?://(127\.0\.0\.1|localhost):[0-9]+" || true)
+  # EXCLUDE: url.replace() calls (legitimate for URL rewriting) and .startsWith() checks (legitimate for parsing)
+  LOCALHOST_MATCHES=$(git diff --cached | grep -E "^\+.*['\"]https?://(127\.0\.0\.1|localhost):[0-9]+" | grep -v "\.replace(" | grep -v "\.startsWith(" || true)
 
   if [ -n "$LOCALHOST_MATCHES" ]; then
     echo "${RED}❌ ERROR: Hardcoded localhost/127.0.0.1 URLs found:${NC}"

@@ -96,7 +96,24 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
     // CRITICAL: For federation, we must fetch JWKS from the TOKEN'S issuer, not local Keycloak
     let issuerJwksUri: string | null = null;
     const rewriteToInternal = (uri: string): string => {
-        // If the issuer is localhost (from dev tokens), prefer the in-cluster Keycloak service
+        // FEDERATION FIX: Map localhost URLs to correct instance Keycloak based on realm
+        // A token from USA Hub (localhost:8443/.../dive-v3-broker-usa) should map to keycloak-usa, not local keycloak-fra
+        
+        // Extract realm from URL if present (e.g., /realms/dive-v3-broker-usa -> usa)
+        const realmMatch = uri.match(/\/realms\/dive-v3-broker-([a-z]{3})/i);
+        if (realmMatch) {
+            const realmCountry = realmMatch[1].toLowerCase(); // usa, fra, gbr, deu
+            const keycloakHost = `https://keycloak-${realmCountry}:8443`;
+            
+            if (uri.startsWith('https://localhost:8443/realms/')) {
+                return uri.replace('https://localhost:8443', keycloakHost);
+            }
+            if (uri.startsWith('http://localhost:8081/realms/')) {
+                return uri.replace('http://localhost:8081', keycloakHost);
+            }
+        }
+        
+        // Fallback: if no realm country, use local Keycloak (for base realm)
         if (uri.startsWith('https://localhost:8443/realms/')) {
             return uri.replace('https://localhost:8443', process.env.KEYCLOAK_URL || 'https://keycloak:8443');
         }
