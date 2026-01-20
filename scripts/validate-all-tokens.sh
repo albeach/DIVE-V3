@@ -60,7 +60,7 @@ get_expected_aal() {
     case "$1" in
         1|2) echo "AAL1" ;;
         3|4) echo "AAL2" ;;
-        5|admin) echo "AAL2" ;;  # admin gets AAL2, testuser-5 gets AAL3
+        5|admin) echo "AAL3" ;;  # admin and testuser-5 get AAL3
         *) echo "AAL1" ;;
     esac
 }
@@ -68,8 +68,8 @@ get_expected_aal() {
 get_expected_acr() {
     case "$1" in
         1|2) echo "0" ;;
-        3|4|admin) echo "1" ;;
-        5) echo "2" ;;
+        3|4) echo "1" ;;
+        5|admin) echo "2" ;;  # admin and testuser-5 get ACR=2 (AAL3)
         *) echo "0" ;;
     esac
 }
@@ -441,7 +441,7 @@ main() {
     echo -e "    testuser-*-3: CONFIDENTIAL → AAL2"
     echo -e "    testuser-*-4: SECRET       → AAL2"
     echo -e "    testuser-*-5: TOP_SECRET   → AAL3"
-    echo -e "    admin-*:      TOP_SECRET   → AAL2"
+    echo -e "    admin-*:      TOP_SECRET   → AAL3"
     echo ""
 
     if [ $FAILED_TESTS -eq 0 ]; then
