@@ -844,24 +844,42 @@ resource "keycloak_openid_client_default_scopes" "incoming_federation_defaults" 
     "web-origins",
     "acr",
     "basic",
-    # DIVE custom scopes - NOW MANAGED BY TERRAFORM (dive-client-scopes.tf)
-    # Ensures protocol mappers have explicit claim.name configuration (SF-026 fix)
+    # DIVE custom scopes - TERRAFORM SSOT (matches dive-client-scopes.tf)
+    # All 9 scopes required for federation to work correctly:
+    # - Core identity: uniqueID, clearance, countryOfAffiliation, acpCOI
+    # - ACR/AMR for MFA: dive_acr, dive_amr, user_acr, user_amr
     keycloak_openid_client_scope.uniqueID.name,
     keycloak_openid_client_scope.clearance.name,
     keycloak_openid_client_scope.countryOfAffiliation.name,
     keycloak_openid_client_scope.acpCOI.name,
+    keycloak_openid_client_scope.dive_acr.name,
+    keycloak_openid_client_scope.dive_amr.name,
+    keycloak_openid_client_scope.user_acr.name,
+    keycloak_openid_client_scope.user_amr.name,
   ]
 
-  # Ensure scopes are created before assignment
+  # Ensure ALL scopes are created before assignment - TERRAFORM SSOT
   depends_on = [
+    # Core DIVE identity scopes
     keycloak_openid_client_scope.uniqueID,
     keycloak_openid_client_scope.clearance,
     keycloak_openid_client_scope.countryOfAffiliation,
     keycloak_openid_client_scope.acpCOI,
+    # ACR/AMR scopes for MFA enforcement
+    keycloak_openid_client_scope.dive_acr,
+    keycloak_openid_client_scope.dive_amr,
+    keycloak_openid_client_scope.user_acr,
+    keycloak_openid_client_scope.user_amr,
+    # Protocol mappers for core scopes
     keycloak_openid_user_attribute_protocol_mapper.uniqueID_mapper,
     keycloak_openid_user_attribute_protocol_mapper.clearance_mapper,
     keycloak_openid_user_attribute_protocol_mapper.countryOfAffiliation_mapper,
     keycloak_openid_user_attribute_protocol_mapper.acpCOI_mapper,
+    # Protocol mappers for ACR/AMR scopes
+    keycloak_openid_user_attribute_protocol_mapper.dive_acr_mapper,
+    keycloak_openid_user_attribute_protocol_mapper.dive_amr_mapper,
+    keycloak_openid_user_attribute_protocol_mapper.user_acr_mapper,
+    keycloak_openid_user_attribute_protocol_mapper.user_amr_mapper,
   ]
 }
 
