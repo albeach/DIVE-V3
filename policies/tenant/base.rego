@@ -105,8 +105,15 @@ default_trusted_issuers := {
 
 # PRODUCTION: Use OPAL-provided data (dynamically updated)
 # This is the PRIMARY source - default_trusted_issuers is only fallback
-trusted_issuers := data.trusted_issuers if {
+# OPAL data comes from Hub backend API which wraps response in {success, trusted_issuers, count}
+trusted_issuers := data.trusted_issuers.trusted_issuers if {
+	data.trusted_issuers.trusted_issuers
+	count(data.trusted_issuers.trusted_issuers) > 0
+} else := data.trusted_issuers if {
+	# Fallback: Direct data without API wrapper
 	data.trusted_issuers
+	is_object(data.trusted_issuers)
+	not data.trusted_issuers.success  # Not an API response
 	count(data.trusted_issuers) > 0
 } else := default_trusted_issuers
 
@@ -153,8 +160,15 @@ default_federation_matrix := {
 }
 
 # PRODUCTION: Use OPAL-provided data (dynamically updated)
-federation_matrix := data.federation_matrix if {
+# OPAL data comes from Hub backend API which wraps response
+federation_matrix := data.federation_matrix.federation_matrix if {
+	data.federation_matrix.federation_matrix
+	count(data.federation_matrix.federation_matrix) > 0
+} else := data.federation_matrix if {
+	# Fallback: Direct data without API wrapper
 	data.federation_matrix
+	is_object(data.federation_matrix)
+	not data.federation_matrix.success  # Not an API response
 	count(data.federation_matrix) > 0
 } else := default_federation_matrix
 
@@ -213,8 +227,14 @@ default_tenant_configs := {
 }
 
 # Use OPAL-provided data if available
-tenant_configs := data.tenant_configs if {
+# OPAL data comes from Hub backend API which wraps response
+tenant_configs := data.tenant_configs.tenant_configs if {
+	data.tenant_configs.tenant_configs
+} else := data.tenant_configs if {
+	# Fallback: Direct data without API wrapper
 	data.tenant_configs
+	is_object(data.tenant_configs)
+	not data.tenant_configs.success  # Not an API response
 } else := default_tenant_configs
 
 # Get configuration for current tenant
