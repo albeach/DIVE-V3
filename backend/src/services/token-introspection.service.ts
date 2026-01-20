@@ -47,6 +47,10 @@ export interface TokenIntrospectionResponse {
   clearance?: string;
   countryOfAffiliation?: string;
   acpCOI?: string[];
+  // Authentication context
+  acr?: string;
+  amr?: string[];
+  auth_time?: number;
   // Error information
   error?: string;
   error_description?: string;
@@ -386,6 +390,9 @@ export class TokenIntrospectionService {
         clearance: verified.clearance,
         countryOfAffiliation: verified.countryOfAffiliation,
         acpCOI: verified.acpCOI,
+        acr: verified.acr,
+        amr: verified.amr,
+        auth_time: verified.auth_time,
       };
     } catch (error) {
       logger.error('JWKS validation failed', {
