@@ -2,16 +2,22 @@
 # DIVE V3 - Custom Client Scopes for ABAC Attributes
 # =============================================================================
 # Creates client scopes with proper protocol mappers for DIVE attributes
-# 
+#
 # CRITICAL FIX (2026-01-19): SF-026 - Explicit claim.name Configuration
 # Previous: Scopes created by backend with claim.name sometimes null
 # Fixed: Terraform creates scopes with explicit claim.name from start
-# 
+#
+# CRITICAL FIX (2026-01-20): ACR/AMR - Cross-Instance MFA Enforcement
+# Previous: Access tokens missing acr/amr claims (ID token only)
+# Fixed: Added acr/amr client scopes with access.token.claim = true
+#
 # Ensures access tokens include:
 # - uniqueID (globally unique identifier)
 # - clearance (classification level)
 # - countryOfAffiliation (ISO 3166-1 alpha-3)
 # - acpCOI (Communities of Interest array)
+# - acr (Authentication Context Class Reference - AAL level)
+# - amr (Authentication Methods References - MFA methods)
 # =============================================================================
 
 # =============================================================================
@@ -24,9 +30,9 @@ resource "keycloak_openid_client_scope" "uniqueID" {
   description            = "DIVE globally unique identifier (ACP-240 §2.1)"
   include_in_token_scope = true
   consent_screen_text    = "Unique identifier for access control"
-  
+
   gui_order = 1
-  
+
   # For existing deployments: import with
   # terraform import module.instance.keycloak_openid_client_scope.uniqueID realm-id/scope-id
   lifecycle {
@@ -41,7 +47,7 @@ resource "keycloak_openid_client_scope" "clearance" {
   description            = "DIVE security clearance level"
   include_in_token_scope = true
   consent_screen_text    = "Security clearance level"
-  
+
   gui_order = 2
 }
 
@@ -51,7 +57,7 @@ resource "keycloak_openid_client_scope" "countryOfAffiliation" {
   description            = "DIVE country of affiliation (ISO 3166-1 alpha-3)"
   include_in_token_scope = true
   consent_screen_text    = "Country of affiliation"
-  
+
   gui_order = 3
 }
 
@@ -61,8 +67,28 @@ resource "keycloak_openid_client_scope" "acpCOI" {
   description            = "DIVE Communities of Interest (ACP-240)"
   include_in_token_scope = true
   consent_screen_text    = "Communities of Interest"
-  
+
   gui_order = 4
+}
+
+resource "keycloak_openid_client_scope" "dive_acr" {
+  realm_id               = keycloak_realm.broker.id
+  name                   = "dive_acr"
+  description            = "DIVE Authentication Context Class Reference (AAL level)"
+  include_in_token_scope = true
+  consent_screen_text    = "Authentication assurance level"
+
+  gui_order = 5
+}
+
+resource "keycloak_openid_client_scope" "dive_amr" {
+  realm_id               = keycloak_realm.broker.id
+  name                   = "dive_amr"
+  description            = "DIVE Authentication Methods References (MFA methods)"
+  include_in_token_scope = true
+  consent_screen_text    = "Authentication methods used"
+
+  gui_order = 6
 }
 
 # =============================================================================
@@ -76,16 +102,16 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "uniqueID_mapper" {
   realm_id        = keycloak_realm.broker.id
   client_scope_id = keycloak_openid_client_scope.uniqueID.id
   name            = "uniqueID-mapper"
-  
+
   # CRITICAL: Explicit claim.name (SF-026 fix)
   claim_name      = "uniqueID"
   user_attribute  = "uniqueID"
-  
+
   # Token inclusion
   add_to_id_token      = true
   add_to_access_token  = true
   add_to_userinfo      = true
-  
+
   # Single-valued attribute configuration
   claim_value_type     = "String"
   multivalued          = false
@@ -96,15 +122,15 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "clearance_mapper" {
   realm_id        = keycloak_realm.broker.id
   client_scope_id = keycloak_openid_client_scope.clearance.id
   name            = "clearance-mapper"
-  
+
   # CRITICAL: Explicit claim.name
   claim_name      = "clearance"
   user_attribute  = "clearance"
-  
+
   add_to_id_token      = true
   add_to_access_token  = true
   add_to_userinfo      = true
-  
+
   claim_value_type     = "String"
   multivalued          = false
   aggregate_attributes = true
@@ -114,15 +140,15 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "countryOfAffiliation_
   realm_id        = keycloak_realm.broker.id
   client_scope_id = keycloak_openid_client_scope.countryOfAffiliation.id
   name            = "countryOfAffiliation-mapper"
-  
+
   # CRITICAL: Explicit claim.name
   claim_name      = "countryOfAffiliation"
   user_attribute  = "countryOfAffiliation"
-  
+
   add_to_id_token      = true
   add_to_access_token  = true
   add_to_userinfo      = true
-  
+
   claim_value_type     = "String"
   multivalued          = false
   aggregate_attributes = true
@@ -132,19 +158,56 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "acpCOI_mapper" {
   realm_id        = keycloak_realm.broker.id
   client_scope_id = keycloak_openid_client_scope.acpCOI.id
   name            = "acpCOI-mapper"
-  
+
   # CRITICAL: Explicit claim.name
   claim_name      = "acpCOI"
   user_attribute  = "acpCOI"
-  
+
   add_to_id_token      = true
   add_to_access_token  = true
   add_to_userinfo      = true
-  
+
   # Multi-valued attribute configuration (array of COIs)
   claim_value_type     = "String"
   multivalued          = true
   aggregate_attributes = false  # Keep as array, don't extract first element
+}
+
+resource "keycloak_openid_user_attribute_protocol_mapper" "dive_acr_mapper" {
+  realm_id        = keycloak_realm.broker.id
+  client_scope_id = keycloak_openid_client_scope.dive_acr.id
+  name            = "dive-acr-mapper"
+
+  # CRITICAL: Explicit claim.name (fixes cross-instance MFA enforcement)
+  claim_name      = "acr"  # Output claim name is still "acr"
+  user_attribute  = "acr"
+
+  add_to_id_token      = true
+  add_to_access_token  = true  # CRITICAL: Must be in access token for Hub ABAC
+  add_to_userinfo      = true
+
+  claim_value_type     = "String"
+  multivalued          = false
+  aggregate_attributes = true
+}
+
+resource "keycloak_openid_user_attribute_protocol_mapper" "dive_amr_mapper" {
+  realm_id        = keycloak_realm.broker.id
+  client_scope_id = keycloak_openid_client_scope.dive_amr.id
+  name            = "dive-amr-mapper"
+
+  # CRITICAL: Explicit claim.name (fixes cross-instance MFA enforcement)
+  claim_name      = "amr"  # Output claim name is still "amr"
+  user_attribute  = "amr"
+
+  add_to_id_token      = true
+  add_to_access_token  = true  # CRITICAL: Must be in access token for Hub ABAC
+  add_to_userinfo      = true
+
+  # Multi-valued attribute (array of authentication methods)
+  claim_value_type     = "String"
+  multivalued          = true
+  aggregate_attributes = false  # Keep as array
 }
 
 # =============================================================================
@@ -168,18 +231,25 @@ resource "keycloak_openid_client_default_scopes" "broker_client_dive_scopes" {
     keycloak_openid_client_scope.clearance.name,
     keycloak_openid_client_scope.countryOfAffiliation.name,
     keycloak_openid_client_scope.acpCOI.name,
+    # MFA enforcement scopes (added 2026-01-20)
+    keycloak_openid_client_scope.dive_acr.name,
+    keycloak_openid_client_scope.dive_amr.name,
   ]
-  
+
   # Ensure scopes are created before assignment
   depends_on = [
     keycloak_openid_client_scope.uniqueID,
     keycloak_openid_client_scope.clearance,
     keycloak_openid_client_scope.countryOfAffiliation,
     keycloak_openid_client_scope.acpCOI,
+    keycloak_openid_client_scope.dive_acr,
+    keycloak_openid_client_scope.dive_amr,
     keycloak_openid_user_attribute_protocol_mapper.uniqueID_mapper,
     keycloak_openid_user_attribute_protocol_mapper.clearance_mapper,
     keycloak_openid_user_attribute_protocol_mapper.countryOfAffiliation_mapper,
     keycloak_openid_user_attribute_protocol_mapper.acpCOI_mapper,
+    keycloak_openid_user_attribute_protocol_mapper.dive_acr_mapper,
+    keycloak_openid_user_attribute_protocol_mapper.dive_amr_mapper,
   ]
 }
 
@@ -191,7 +261,7 @@ resource "keycloak_openid_client_default_scopes" "broker_client_dive_scopes" {
 # 2. Protocol mappers have claim.name set explicitly
 # 3. Mappers are configured for access tokens
 # 4. Scopes are assigned as defaults to clients
-# 
+#
 # Success Criteria:
 # - Access tokens include all DIVE attributes
 # - No manual Keycloak configuration required

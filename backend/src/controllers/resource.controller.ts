@@ -181,8 +181,9 @@ export const getResourceHandler = async (
         const federatedSource = (req as any).federatedSource;
 
         if (!resource) {
-            // Local resource: fetch from MongoDB
-            resource = await getResourceById(id);
+            // Local resource: fetch from MongoDB (or cross-instance via federation)
+            const authHeader = req.headers['authorization'];
+            resource = await getResourceById(id, authHeader);
         }
 
         if (!resource) {
@@ -382,8 +383,9 @@ export const getZTDFDetailsHandler = async (
     try {
         logger.info('Fetching ZTDF details', { requestId, resourceId: id });
 
-        // First try local
-        let resource = await getResourceById(id);
+        // First try local (or cross-instance via federation)
+        const authHeader = req.headers['authorization'];
+        let resource = await getResourceById(id, authHeader);
 
         // If not found locally, check if it's a federated resource
         if (!resource) {
@@ -575,8 +577,9 @@ export const getKASFlowHandler = async (
     try {
         logger.info('Fetching KAS flow status', { requestId, resourceId: id });
 
-        // First try local
-        let resource = await getResourceById(id);
+        // First try local (or cross-instance via federation)
+        const authHeader = req.headers['authorization'];
+        let resource = await getResourceById(id, authHeader);
 
         // If not found locally, check if it's a federated resource
         if (!resource) {
@@ -754,8 +757,9 @@ export const requestKeyHandler = async (
             return;
         }
 
-        // Fetch resource - first try local MongoDB
-        let resource = await getResourceById(resourceId);
+        // Fetch resource - first try local MongoDB (or cross-instance via federation)
+        const authHeader = req.headers['authorization'];
+        let resource = await getResourceById(resourceId, authHeader);
 
         // Phase 4: If not found locally, check if it's a federated resource
         if (!resource) {
@@ -1198,8 +1202,9 @@ export const downloadZTDFHandler = async (
             userAgent: req.headers['user-agent']
         });
 
-        // 1. Fetch resource from MongoDB
-        const resource = await getResourceById(id);
+        // 1. Fetch resource from MongoDB (or cross-instance via federation)
+        const authHeader = req.headers['authorization'];
+        const resource = await getResourceById(id, authHeader);
 
         if (!resource) {
             throw new NotFoundError(`Resource ${id} not found`);

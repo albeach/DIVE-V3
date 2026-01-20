@@ -437,70 +437,64 @@ router.get('/status', async (_req: Request, res: Response): Promise<void> => {
 });
 
 /**
+ * GET /api/federation/discovery
+ * MongoDB-based federation discovery (replaces static federation-registry.json)
+ * 
+ * SSOT: MongoDB federation_spokes collection
+ * Used by spokes to discover federation partners
+ */
+router.get('/discovery', async (_req: Request, res: Response): Promise<void> => {
+    try {
+        const { federationDiscovery } = await import('../services/federation-discovery.service');
+        const instances = await federationDiscovery.getInstances();
+
+        res.json({
+            success: true,
+            source: 'mongodb',
+            timestamp: new Date().toISOString(),
+            instances
+        });
+    } catch (error) {
+        logger.error('Federation discovery failed', {
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        res.status(500).json({
+            error: 'Discovery failed',
+            message: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+});
+
+/**
  * GET /api/federation/instances
- * Dynamically returns all federation instances from federation-registry.json
+ * Legacy endpoint for frontend - now uses MongoDB instead of static file
  * Public endpoint (no auth) - used by frontend for federated search UI
  */
 router.get('/instances', async (_req: Request, res: Response): Promise<void> => {
     try {
-        const registryPaths = [
-            path.join(process.cwd(), '..', 'config', 'federation-registry.json'),
-            path.join(process.cwd(), 'config', 'federation-registry.json')
-        ];
+        const { federationDiscovery } = await import('../services/federation-discovery.service');
+        const instances = await federationDiscovery.getInstances();
 
-        let registry: any = null;
-        for (const registryPath of registryPaths) {
-            if (fs.existsSync(registryPath)) {
-                registry = JSON.parse(fs.readFileSync(registryPath, 'utf-8'));
-                break;
-            }
-        }
-
-        if (!registry?.instances) {
-            res.status(404).json({
-                error: 'Registry not found',
-                message: 'Federation registry not configured'
-            });
-            return;
-        }
-
-        // Map registry instances to frontend-friendly format
-        const instances = Object.entries(registry.instances)
-            .filter(([_key, inst]: [string, any]) => inst.enabled)
-            .map(([key, inst]: [string, any]) => {
-                const backendService = inst.services?.backend;
-                const frontendService = inst.services?.frontend;
-                const keycloakService = inst.services?.keycloak;
-
-                // Build URLs based on development/production
-                const isDev = process.env.NODE_ENV === 'development' || process.env.NODE_ENV !== 'production';
-
-                return {
-                    code: inst.code || key.toUpperCase(),
-                    name: inst.name || key,
-                    type: inst.primary ? 'hub' : 'spoke',
-                    country: inst.code || key.toUpperCase(),
-                    flag: getCountryFlag(inst.code || key.toUpperCase()),
-                    locale: inst.locale || 'en-US',
-                    endpoints: {
-                        app: isDev
-                            ? `https://localhost:${frontendService?.externalPort || 3000}`
-                            : `https://${frontendService?.hostname || `${key}-app.dive25.com`}`,
-                        api: isDev
-                            ? `https://localhost:${backendService?.externalPort || 4000}`
-                            : `https://${backendService?.hostname || `${key}-api.dive25.com`}`,
-                        idp: isDev
-                            ? `https://localhost:${keycloakService?.externalPort || 8443}`
-                            : `https://${keycloakService?.hostname || `${key}-idp.dive25.com`}`,
-                    },
-                    federationStatus: 'approved'
-                };
-            });
+        // Map to frontend-friendly format
+        const formattedInstances = instances.map(inst => ({
+            code: inst.code,
+            name: inst.name,
+            type: inst.type,
+            country: inst.code,
+            flag: getCountryFlag(inst.code),
+            locale: 'en-US',
+            endpoints: {
+                app: inst.endpoints.frontend,
+                api: inst.endpoints.api,
+                idp: inst.endpoints.keycloak
+            },
+            federationStatus: 'approved'
+        }));
 
         res.json({
-            instances,
+            instances: formattedInstances,
             timestamp: new Date().toISOString(),
-            source: 'federation-registry.json'
+            source: 'mongodb'
         });
     } catch (error) {
         logger.error('Failed to load federation instances', {
