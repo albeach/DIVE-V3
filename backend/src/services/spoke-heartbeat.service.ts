@@ -298,6 +298,14 @@ class SpokeHeartbeatService extends EventEmitter {
   private async postHeartbeat(payload: IHeartbeatPayload): Promise<IHeartbeatResponse> {
     return new Promise((resolve, reject) => {
       const url = new URL(`${this.config!.hubUrl}/api/federation/heartbeat`);
+      
+      // DEBUG: Log exact payload being sent
+      logger.debug('Sending heartbeat payload', {
+        spokeId: payload.spokeId,
+        payloadKeys: Object.keys(payload),
+        servicesKeys: Object.keys(payload.services || {}),
+        payloadJSON: JSON.stringify(payload).substring(0, 500)
+      });
 
       const isHttps = url.protocol === 'https:';
       const httpModule = isHttps ? https : http;
