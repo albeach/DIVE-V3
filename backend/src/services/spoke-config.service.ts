@@ -187,7 +187,7 @@ class SpokeConfigService {
     // CRITICAL: Use SPOKE_ID from environment (set during Hub registration)
     // If not set, generate a new one (development/testing only)
     const spokeId = process.env.SPOKE_ID || this.generateSpokeId(code);
-    
+
     if (!process.env.SPOKE_ID) {
       logger.warn('SPOKE_ID not found in environment - generating new ID', {
         instanceCode: code,
@@ -195,7 +195,7 @@ class SpokeConfigService {
         warning: 'This spoke ID will not match Hub registration!'
       });
     }
-    
+
     const instanceDir = path.join(process.cwd(), 'instances', code.toLowerCase());
 
     this.config = {
