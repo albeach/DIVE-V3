@@ -69,6 +69,38 @@ default_trusted_issuers := {
 		"country": "DEU",
 		"trust_level": "HIGH",
 	},
+	# Local Development - Hub Keycloak (port 8443)
+	"https://localhost:8443/realms/dive-v3-broker-usa": {
+		"tenant": "USA",
+		"name": "USA Hub Keycloak (Local Dev)",
+		"country": "USA",
+		"trust_level": "DEVELOPMENT",
+	},
+	"https://localhost:8443/realms/dive-v3-broker": {
+		"tenant": "USA",
+		"name": "USA Hub Keycloak Base Realm (Local Dev)",
+		"country": "USA",
+		"trust_level": "DEVELOPMENT",
+	},
+	# Local Development - Spoke Keycloaks (ports 8453, 8454, 8455)
+	"https://localhost:8453/realms/dive-v3-broker-fra": {
+		"tenant": "FRA",
+		"name": "FRA Spoke Keycloak (Local Dev)",
+		"country": "FRA",
+		"trust_level": "DEVELOPMENT",
+	},
+	"https://localhost:8454/realms/dive-v3-broker-gbr": {
+		"tenant": "GBR",
+		"name": "GBR Spoke Keycloak (Local Dev)",
+		"country": "GBR",
+		"trust_level": "DEVELOPMENT",
+	},
+	"https://localhost:8455/realms/dive-v3-broker-deu": {
+		"tenant": "DEU",
+		"name": "DEU Spoke Keycloak (Local Dev)",
+		"country": "DEU",
+		"trust_level": "DEVELOPMENT",
+	},
 }
 
 # PRODUCTION: Use OPAL-provided data (dynamically updated)
