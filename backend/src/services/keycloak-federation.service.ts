@@ -446,8 +446,10 @@ export class KeycloakFederationService {
         }
       }
 
-      // Assign DIVE scopes to the client
-      await this.assignDiveScopesToClient(clientId);
+      // DISABLED: Scopes now managed by Terraform SSOT (main.tf incoming_federation_defaults)
+      // Runtime assignment removed to avoid race conditions with Terraform-managed resources
+      // See: terraform/modules/federated-instance/main.tf and dive-client-scopes.tf
+      // await this.assignDiveScopesToClient(clientId);
 
     } catch (error) {
       logger.error('Failed to ensure cross-border client', {
@@ -565,8 +567,10 @@ export class KeycloakFederationService {
         }
       }
 
-      // Assign DIVE scopes to the client
-      await this.assignDiveScopesToClient(clientId);
+      // DISABLED: Scopes now managed by Terraform SSOT (main.tf incoming_federation_defaults)
+      // Runtime assignment removed to avoid race conditions with Terraform-managed resources
+      // See: terraform/modules/federated-instance/main.tf and dive-client-scopes.tf
+      // await this.assignDiveScopesToClient(clientId);
 
       // CRITICAL: Create protocol mappers to include attributes in tokens
       // Without these, federation won't work - spoke won't receive user attributes!
@@ -582,98 +586,20 @@ export class KeycloakFederationService {
     }
   }
 
-  /**
-   * Assign DIVE custom scopes to a client
-   *
-   * This allows the client to request DIVE-specific attributes during authentication.
-   */
-  private async assignDiveScopesToClient(clientId: string): Promise<void> {
-    if (!this.kcAdmin) {
-      throw new Error('Keycloak Admin client not initialized');
-    }
-
-    // CRITICAL (2026-01-20): Include ALL scopes managed by Terraform
-    // Including ACR/AMR scopes for MFA enforcement across federation
-    const diveScopes = [
-      'clearance', 
-      'countryOfAffiliation', 
-      'acpCOI', 
-      'uniqueID',
-      'acr',        // Built-in Keycloak scope
-      'dive_acr',   // Custom ACR scope
-      'dive_amr',   // Custom AMR scope
-      'user_acr',   // For federation IdP mappers
-      'user_amr',   // For federation IdP mappers
-    ];
-
-    try {
-      // Get the client UUID
-      const clients = await this.kcAdmin.clients.find({
-        realm: this.realm,
-        clientId: clientId,
-      });
-
-      if (!clients || clients.length === 0) {
-        logger.warn('Client not found when assigning DIVE scopes', {
-          realm: this.realm,
-          clientId,
-        });
-        return;
-      }
-
-      const client = clients[0];
-      const clientUuid = client.id;
-
-      if (!clientUuid) {
-        logger.error('Client UUID is undefined', { clientId });
-        return;
-      }
-
-      // Get all client scopes
-      const allScopes = await this.kcAdmin.clientScopes.find({ realm: this.realm });
-
-      // Assign each DIVE scope as DEFAULT (not optional)
-      // CRITICAL: DEFAULT scopes are automatically included in tokens
-      // OPTIONAL scopes require explicit user consent or scope parameter
-      for (const scopeName of diveScopes) {
-        const scope = allScopes.find((s: any) => s.name === scopeName);
-        if (scope && scope.id) {
-          try {
-            await this.kcAdmin.clients.addDefaultClientScope({
-              id: clientUuid,
-              clientScopeId: scope.id,
-            });
-
-            logger.info('Assigned DIVE scope to client as DEFAULT', {
-              realm: this.realm,
-              clientId,
-              scope: scopeName,
-              reason: 'Must be DEFAULT for automatic inclusion in tokens',
-            });
-          } catch (error) {
-            // Scope may already be assigned
-            logger.debug('Could not assign scope (may already be assigned)', {
-              realm: this.realm,
-              clientId,
-              scope: scopeName,
-            });
-          }
-        }
-      }
-
-      logger.info('DIVE scopes assigned to client', {
-        realm: this.realm,
-        clientId,
-        scopes: diveScopes,
-      });
-    } catch (error) {
-      logger.error('Failed to assign DIVE scopes to client', {
-        realm: this.realm,
-        clientId,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  }
+  // ============================================================================
+  // REMOVED: assignDiveScopesToClient() method
+  // ============================================================================
+  // Client scopes are now managed exclusively by Terraform (SSOT principle)
+  // See: terraform/modules/federated-instance/main.tf (incoming_federation_defaults)
+  // See: terraform/modules/federated-instance/dive-client-scopes.tf
+  //
+  // All 9 DIVE scopes are assigned by Terraform:
+  // - Core identity: uniqueID, clearance, countryOfAffiliation, acpCOI
+  // - ACR/AMR for MFA: dive_acr, dive_amr, user_acr, user_amr, acr (built-in)
+  //
+  // This eliminates race conditions between Terraform and runtime code,
+  // and ensures consistent scope assignments from clean slate deployments.
+  // ============================================================================
 
   /**
    * Ensure protocol mappers exist on a federation client
