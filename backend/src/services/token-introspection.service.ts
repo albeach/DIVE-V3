@@ -372,6 +372,20 @@ export class TokenIntrospectionService {
         clockTolerance: 30, // 30 second clock skew tolerance
       }) as any;
 
+      // DEBUG: Log ALL claims in token to diagnose ACR/AMR issue
+      logger.info('JWT claims extracted', {
+        uniqueID: verified.uniqueID,
+        clearance: verified.clearance,
+        country: verified.countryOfAffiliation,
+        acr: verified.acr,
+        amr: verified.amr,
+        user_acr: (verified as any).user_acr,
+        user_amr: (verified as any).user_amr,
+        dive_acr: (verified as any).dive_acr,
+        dive_amr: (verified as any).dive_amr,
+        allClaimKeys: Object.keys(verified).filter(k => k.includes('acr') || k.includes('amr')),
+      });
+
       // Convert to introspection response format
       return {
         active: true,
@@ -390,8 +404,8 @@ export class TokenIntrospectionService {
         clearance: verified.clearance,
         countryOfAffiliation: verified.countryOfAffiliation,
         acpCOI: verified.acpCOI,
-        acr: verified.acr,
-        amr: verified.amr,
+        acr: verified.acr || (verified as any).user_acr || '0',  // Try fallbacks
+        amr: verified.amr || (verified as any).user_amr || ['pwd'],  // Try fallbacks
         auth_time: verified.auth_time,
       };
     } catch (error) {

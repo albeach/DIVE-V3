@@ -98,14 +98,14 @@ if [ "$UNIQUE_ID" = "$USERNAME" ] && [ "$COUNTRY" = "$EXPECTED_COUNTRY" ] && [ "
     log_info "  ✅ uniqueID: $UNIQUE_ID (username, not UUID)"
     log_info "  ✅ countryOfAffiliation: $COUNTRY (correct country)"
     log_info "  ✅ clearance: $CLEARANCE"
-    
+
     if [ "$FED_IDENTITIES" != "null" ] && [ "$FED_IDENTITIES" != "[]" ]; then
         IDP_PROVIDER=$(echo "$FED_IDENTITIES" | jq -r '.[0].identityProvider // "null"')
         log_info "  ✅ federatedIdentities: $IDP_PROVIDER"
     else
         log_info "  ℹ  federatedIdentities: not set (OK - NextAuth manages this)"
     fi
-    
+
     log_info ""
     log_success "Authorization should work correctly!"
     log_info ""

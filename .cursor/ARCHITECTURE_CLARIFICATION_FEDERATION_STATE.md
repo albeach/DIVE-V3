@@ -12,8 +12,8 @@
 
 **Purpose**: Track federation link status for **operations and monitoring**
 
-**Database**: `orchestration` (PostgreSQL)  
-**Table**: `federation_links`  
+**Database**: `orchestration` (PostgreSQL)
+**Table**: `federation_links`
 
 **Current State**:
 ```sql
@@ -35,8 +35,8 @@ usa → fra | HUB_TO_SPOKE | ACTIVE  ✅
 
 **Purpose**: Track spoke registrations for **Terraform configuration generation**
 
-**Database**: `dive-v3` (MongoDB)  
-**Collection**: `federation_spokes`  
+**Database**: `dive-v3` (MongoDB)
+**Collection**: `federation_spokes`
 
 **Current State**:
 ```json
@@ -168,8 +168,8 @@ federation_partners = {
 
 ### Keep Both Systems (They're Complementary)
 
-**PostgreSQL**: Operational state (link status, health)  
-**MongoDB**: Configuration state (spoke metadata for Terraform)  
+**PostgreSQL**: Operational state (link status, health)
+**MongoDB**: Configuration state (spoke metadata for Terraform)
 
 **Both needed**:
 - PostgreSQL: Real-time monitoring

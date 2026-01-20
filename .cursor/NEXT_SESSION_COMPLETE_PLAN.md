@@ -1,8 +1,8 @@
 # DIVE V3 Spoke Deployment - Eliminate Soft Fails & Achieve True 100% Automation
 
-**Session Date**: 2026-01-19  
-**Previous Session**: 2026-01-18 (6+ hours, fixed 8 root causes, achieved 95% automation)  
-**Status**: Infrastructure working but soft fails hide actual failures  
+**Session Date**: 2026-01-19
+**Previous Session**: 2026-01-18 (6+ hours, fixed 8 root causes, achieved 95% automation)
+**Status**: Infrastructure working but soft fails hide actual failures
 **Priority**: **P0-CRITICAL** - Eliminate dishonest success reporting
 
 ---
@@ -11,7 +11,7 @@
 
 The previous session fixed 8 critical infrastructure bugs and achieved **95% automation** for spoke deployment. However, **soft fail patterns** throughout the codebase claim success even when operations fail, making it impossible to trust deployment status.
 
-**Current State**: 
+**Current State**:
 - ✅ Infrastructure deploys correctly (containers, users, federation)
 - ❌ Success messages lie about what actually worked
 - ❌ Resource seeding claims completion but creates 0 resources
@@ -68,7 +68,7 @@ The previous session fixed 8 critical infrastructure bugs and achieved **95% aut
    - Ensures tokens include uniqueID, countryOfAffiliation, clearance, acpCOI claims
    - File: `terraform/modules/federated-instance/main.tf` (keycloak_openid_client_default_scopes)
 
-**Git Commit**: `17223740` pushed to `origin/main`  
+**Git Commit**: `17223740` pushed to `origin/main`
 **Files Modified**: 19 core files (+387 lines, -116 lines), 32 test/doc files created
 
 ### What Works from Clean Slate ✅
@@ -127,7 +127,7 @@ $ grep "Seeding phase complete" /tmp/fra-clean-slate.log
 
 **Root Cause**: `spoke_seed_resources` calls backend script that fails with:
 ```
-Error: No KAS servers configured for instance FRA. 
+Error: No KAS servers configured for instance FRA.
 Cannot create ZTDF documents without KAS.
 ```
 
@@ -444,7 +444,7 @@ DIVE-V3/
    - Add debug logging at function entry
    - Log all API calls (URL, payload, response)
    - Check if spoke-kas.sh actually loads in pipeline
-   
+
 2. Add validation after registration:
    ```bash
    if spoke_kas_register_mongodb "$code_upper"; then
@@ -452,7 +452,7 @@ DIVE-V3/
        sleep 3  # Wait for propagation
        KAS_EXISTS=$(curl -sk https://localhost:4000/api/kas/registry | \
                     jq -e ".kasServers[] | select(.instanceCode == \"$code_upper\")")
-       
+
        if [ -n "$KAS_EXISTS" ]; then
            log_success "✓ KAS registered and validated in Hub registry"
        else
@@ -532,12 +532,12 @@ DIVE-V3/
 operation_with_validation() {
     local operation_name="$1"
     local validation_check="$2"
-    
+
     log_step "Executing: $operation_name"
-    
+
     if perform_operation; then
         log_verbose "Operation completed, validating..."
-        
+
         if eval "$validation_check"; then
             log_success "✓ $operation_name validated"
             return 0
@@ -853,15 +853,15 @@ docker exec dive-hub-keycloak /opt/keycloak/bin/kcadm.sh \
 
 ## Honest Current State
 
-**Infrastructure Automation**: 95% ✅  
-**Success Reporting**: 60% ❌ (soft fails everywhere)  
+**Infrastructure Automation**: 95% ✅
+**Success Reporting**: 60% ❌ (soft fails everywhere)
 **Overall Trustworthiness**: 70% ⚠️
 
 **To reach 100%**: Fix soft fails, add validation, eliminate dishonest reporting
 
 ---
 
-**Prepared for Next Session By**: AI Agent  
-**Quality Bar**: Brutal honesty, no false claims, validate everything  
-**Authorization**: Full authority to nuke/test as needed (dummy data)  
+**Prepared for Next Session By**: AI Agent
+**Quality Bar**: Brutal honesty, no false claims, validate everything
+**Authorization**: Full authority to nuke/test as needed (dummy data)
 **Constraint**: DIVE CLI only, no docker bypasses, no workarounds

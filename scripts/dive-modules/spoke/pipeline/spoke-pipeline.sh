@@ -445,7 +445,7 @@ spoke_pipeline_rollback() {
     # CRITICAL: Always stop containers on failure
     # Don't rely on checkpoint restoration - just stop everything for clean state
     log_step "Stopping containers to prevent partial deployment state"
-    
+
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     if [ -d "$spoke_dir" ] && [ -f "$spoke_dir/docker-compose.yml" ]; then
         cd "$spoke_dir"
@@ -458,13 +458,13 @@ spoke_pipeline_rollback() {
     else
         log_verbose "No docker-compose.yml found - containers may not be running"
     fi
-    
+
     # Update database state to FAILED
     if type orch_db_set_state &>/dev/null; then
         orch_db_set_state "$instance_code" "FAILED" "Deployment failed at phase: $failed_phase" \
             "{\"failed_phase\":\"$failed_phase\",\"rollback_executed\":true}"
     fi
-    
+
     log_warn "Rollback complete - containers stopped, state marked FAILED"
     log_info "To retry: ./dive spoke deploy $instance_code"
 }

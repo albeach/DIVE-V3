@@ -91,6 +91,26 @@ resource "keycloak_openid_client_scope" "dive_amr" {
   gui_order = 6
 }
 
+resource "keycloak_openid_client_scope" "user_amr" {
+  realm_id               = keycloak_realm.broker.id
+  name                   = "user_amr"
+  description            = "User AMR attribute (for federation IdP mappers)"
+  include_in_token_scope = true
+  consent_screen_text    = "User authentication methods"
+
+  gui_order = 7
+}
+
+resource "keycloak_openid_client_scope" "user_acr" {
+  realm_id               = keycloak_realm.broker.id
+  name                   = "user_acr"
+  description            = "User ACR attribute (for federation IdP mappers)"
+  include_in_token_scope = true
+  consent_screen_text    = "User authentication context"
+
+  gui_order = 8
+}
+
 # =============================================================================
 # PROTOCOL MAPPERS FOR EACH SCOPE
 # =============================================================================
@@ -210,6 +230,42 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "dive_amr_mapper" {
   aggregate_attributes = false  # Keep as array
 }
 
+resource "keycloak_openid_user_attribute_protocol_mapper" "user_amr_mapper" {
+  realm_id        = keycloak_realm.broker.id
+  client_scope_id = keycloak_openid_client_scope.user_amr.id
+  name            = "user-amr-mapper"
+
+  # CRITICAL: Outputs user_amr claim for Hub IdP mappers to read
+  claim_name      = "user_amr"  # Different claim name!
+  user_attribute  = "amr"       # Same user attribute
+
+  add_to_id_token      = true
+  add_to_access_token  = true
+  add_to_userinfo      = true
+
+  claim_value_type     = "String"
+  multivalued          = true
+  aggregate_attributes = false
+}
+
+resource "keycloak_openid_user_attribute_protocol_mapper" "user_acr_mapper" {
+  realm_id        = keycloak_realm.broker.id
+  client_scope_id = keycloak_openid_client_scope.user_acr.id
+  name            = "user-acr-mapper"
+
+  # CRITICAL: Outputs user_acr claim for Hub IdP mappers to read
+  claim_name      = "user_acr"  # Different claim name!
+  user_attribute  = "acr"       # Same user attribute
+
+  add_to_id_token      = true
+  add_to_access_token  = true
+  add_to_userinfo      = true
+
+  claim_value_type     = "String"
+  multivalued          = false
+  aggregate_attributes = true
+}
+
 # =============================================================================
 # ASSIGN DIVE SCOPES AS DEFAULTS TO BROKER CLIENT
 # =============================================================================
@@ -226,14 +282,18 @@ resource "keycloak_openid_client_default_scopes" "broker_client_dive_scopes" {
     "email",
     "roles",
     "web-origins",
+    "acr",  # Built-in Keycloak scope for authentication context
     # DIVE custom scopes - NOW MANAGED BY TERRAFORM
     keycloak_openid_client_scope.uniqueID.name,
     keycloak_openid_client_scope.clearance.name,
     keycloak_openid_client_scope.countryOfAffiliation.name,
     keycloak_openid_client_scope.acpCOI.name,
     # MFA enforcement scopes (added 2026-01-20)
-    keycloak_openid_client_scope.dive_acr.name,
     keycloak_openid_client_scope.dive_amr.name,
+    keycloak_openid_client_scope.dive_acr.name,
+    # Federation IdP mapper scopes (for cross-instance MFA)
+    keycloak_openid_client_scope.user_amr.name,
+    keycloak_openid_client_scope.user_acr.name,
   ]
 
   # Ensure scopes are created before assignment
@@ -244,12 +304,16 @@ resource "keycloak_openid_client_default_scopes" "broker_client_dive_scopes" {
     keycloak_openid_client_scope.acpCOI,
     keycloak_openid_client_scope.dive_acr,
     keycloak_openid_client_scope.dive_amr,
+    keycloak_openid_client_scope.user_acr,
+    keycloak_openid_client_scope.user_amr,
     keycloak_openid_user_attribute_protocol_mapper.uniqueID_mapper,
     keycloak_openid_user_attribute_protocol_mapper.clearance_mapper,
     keycloak_openid_user_attribute_protocol_mapper.countryOfAffiliation_mapper,
     keycloak_openid_user_attribute_protocol_mapper.acpCOI_mapper,
     keycloak_openid_user_attribute_protocol_mapper.dive_acr_mapper,
     keycloak_openid_user_attribute_protocol_mapper.dive_amr_mapper,
+    keycloak_openid_user_attribute_protocol_mapper.user_acr_mapper,
+    keycloak_openid_user_attribute_protocol_mapper.user_amr_mapper,
   ]
 }
 

@@ -800,24 +800,24 @@ function loadFederationRegistry(): IFederationRegistry {
 async function loadKASRegistry(): Promise<IKASRegistry> {
     const instanceCode = process.env.INSTANCE_CODE || 'USA';
     const isSpoke = instanceCode !== 'USA';
-    
+
     // CRITICAL FIX: Spokes should query Hub KAS registry API, not local MongoDB
     // Hub has the centralized KAS registry, spokes don't maintain their own
     if (isSpoke) {
         try {
             const hubBackendUrl = process.env.HUB_BACKEND_URL || 'https://localhost:4000';
             const axios = (await import('axios')).default;
-            
+
             console.log(`   🔍 Querying Hub KAS registry API (spoke mode: ${instanceCode})`);
             const response = await axios.get(`${hubBackendUrl}/api/kas/registry`, {
                 httpsAgent: new (await import('https')).Agent({ rejectUnauthorized: false }),
                 timeout: 10000
             });
-            
+
             if (response.data?.kasServers && response.data.kasServers.length > 0) {
                 const kasServers = response.data.kasServers;
                 console.log(`   ✅ Loaded ${kasServers.length} KAS servers from Hub registry (federated mode)`);
-                
+
                 // Convert API response to legacy format
                 return {
                     kasServers: kasServers.map((k: any) => ({
@@ -852,7 +852,7 @@ async function loadKASRegistry(): Promise<IKASRegistry> {
             console.warn(`   Falling back to local MongoDB/file`);
         }
     }
-    
+
     // Hub mode OR spoke fallback: Try to load from local MongoDB
     try {
         const { MongoKasRegistryStore } = await import('../models/kas-registry.model');
@@ -905,7 +905,7 @@ async function loadKASRegistry(): Promise<IKASRegistry> {
         const content = fs.readFileSync(KAS_REGISTRY_PATH, 'utf-8');
         return JSON.parse(content);
     }
-    
+
     // No KAS registry available - return empty
     console.error('   ❌ No KAS registry available (MongoDB empty, file not found)');
     return {
@@ -983,13 +983,13 @@ async function getMongoDBConnection(config: IInstanceConfig, instanceCode: strin
 
 function getKASServersForInstance(kasRegistry: IKASRegistry, instanceCode: string): IKASServer[] {
     const servers: IKASServer[] = [];
-    
+
     // DEBUG: Log available KAS servers for troubleshooting
     if (kasRegistry.kasServers && kasRegistry.kasServers.length > 0) {
         console.log(`   🔍 Filtering KAS servers for instance: ${instanceCode}`);
         console.log(`   Available KAS servers:`, kasRegistry.kasServers.map(k => `${k.kasId} (country: ${k.countryCode})`).join(', '));
     }
-    
+
     // Find KAS where countryCode matches (SSOT: ISO 3166-1 alpha-3)
     const localKas = kasRegistry.kasServers?.find(k => k.countryCode === instanceCode);
 

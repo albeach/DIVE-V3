@@ -1,6 +1,6 @@
 # CRITICAL - Final Test Required
 
-**Status**: ALL configuration fixed, all sessions deleted, ready for final test  
+**Status**: ALL configuration fixed, all sessions deleted, ready for final test
 
 ---
 
@@ -55,7 +55,7 @@
 4. **Enter TOTP** if prompted
 5. **Try accessing resource**: doc-USA-seed-1768885050376-01455
 
-**Expected**: 
+**Expected**:
 - User created in Hub with federatedIdentities: fra-idp
 - User attributes include uniqueID: "testuser-fra-3"
 - Access token includes uniqueID

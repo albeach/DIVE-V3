@@ -291,13 +291,13 @@ EOF
     # Step 11.5: Initialize Federation State Schema (CRITICAL for spoke federation)
     log_step "Step 11.5/12: Initializing federation state schema..."
     local fed_schema="${DIVE_ROOT}/scripts/sql/002_federation_schema.sql"
-    
+
     if [ -f "$fed_schema" ]; then
         # Check if federation tables already exist
         local table_exists
         table_exists=$(docker exec dive-hub-postgres psql -U postgres -d orchestration \
             -tAc "SELECT COUNT(*) FROM information_schema.tables WHERE table_name = 'federation_links';" 2>/dev/null || echo "0")
-        
+
         if [ "$table_exists" = "1" ]; then
             log_verbose "Federation tables already exist"
         else

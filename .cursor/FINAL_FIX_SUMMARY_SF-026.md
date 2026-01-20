@@ -1,9 +1,9 @@
 # SF-026 Complete Fix Summary - Client Scope Mappers
 
-**Date**: 2026-01-19  
-**Issue**: Missing required attribute: uniqueID in authorization  
-**Root Cause**: Protocol mappers had claim.name: null  
-**Status**: ✅ FIXED (manual + Terraform)  
+**Date**: 2026-01-19
+**Issue**: Missing required attribute: uniqueID in authorization
+**Root Cause**: Protocol mappers had claim.name: null
+**Status**: ✅ FIXED (manual + Terraform)
 
 ---
 
@@ -15,7 +15,7 @@
 
 **Root Cause**:
 - Frontend reads uniqueID from **ID Token** ✅
-- Backend reads uniqueID from **Access Token** ❌  
+- Backend reads uniqueID from **Access Token** ❌
 - Access token missing uniqueID because protocol mapper had `claim.name: null`
 
 ---
@@ -140,16 +140,16 @@ Keycloak will issue fresh tokens with the fixed scope mappers.
 
 ## Bottom Line
 
-**Problem**: Access tokens missing uniqueID (claim.name was null)  
-**Manual Fix**: Applied to running Hub ✅  
-**Terraform Fix**: Implemented for clean deployments ✅  
-**Migration Script**: Created for existing deployments ✅  
-**User Action**: Logout/login to get fresh token with uniqueID ✅  
+**Problem**: Access tokens missing uniqueID (claim.name was null)
+**Manual Fix**: Applied to running Hub ✅
+**Terraform Fix**: Implemented for clean deployments ✅
+**Migration Script**: Created for existing deployments ✅
+**User Action**: Logout/login to get fresh token with uniqueID ✅
 
 **Status**: COMPLETE - Authorization will work after fresh login
 
 ---
 
-**Prepared By**: SF-026 Fix Team  
-**Quality**: Production-ready Terraform + migration script  
+**Prepared By**: SF-026 Fix Team
+**Quality**: Production-ready Terraform + migration script
 **Ready For**: User logout/login to validate
