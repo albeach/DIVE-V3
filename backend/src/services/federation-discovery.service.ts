@@ -1,9 +1,9 @@
 /**
  * Federation Discovery Service
- * 
+ *
  * SSOT: MongoDB federation_spokes collection (for Hub)
  * Replaces static federation-registry.json with dynamic MongoDB queries
- * 
+ *
  * Architecture:
  * - Hub: Queries local MongoDB federation_spokes
  * - Spokes: Query Hub's API to discover federation partners
@@ -57,7 +57,7 @@ class FederationDiscoveryService {
 
     /**
      * Get all federation instances (Hub or Spoke)
-     * 
+     *
      * Hub: Queries MongoDB federation_spokes
      * Spoke: Queries Hub's API with retry logic
      */
@@ -85,11 +85,11 @@ class FederationDiscoveryService {
                         delayMs,
                         error: error instanceof Error ? error.message : 'Unknown'
                     });
-                    
+
                     await new Promise(resolve => setTimeout(resolve, delayMs));
                     return this.getInstances(retryCount + 1);
                 }
-                
+
                 // All retries failed - return just self
                 logger.error('All Hub API queries failed, federation limited to local instance');
                 instances = [this.createCurrentSpokeInstance()];
@@ -207,13 +207,13 @@ class FederationDiscoveryService {
                         backend: {
                             ...i.services?.backend,
                             // Use Docker internal container names for inter-container communication
-                            containerName: i.code === 'USA' 
+                            containerName: i.code === 'USA'
                                 ? 'dive-hub-backend'
                                 : `dive-spoke-${i.code.toLowerCase()}-backend`
                         }
                     }
                 }));
-            
+
             instances.push(...remoteInstances);
         }
 

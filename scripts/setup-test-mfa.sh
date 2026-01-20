@@ -156,7 +156,7 @@ configure_instance() {
 
     # Get admin password
     local admin_pass=""
-    
+
     if [ "$instance_code" = "USA" ]; then
         # Hub uses KC_ADMIN_PASSWORD or KC_BOOTSTRAP_ADMIN_PASSWORD
         admin_pass=$(docker exec "$container" printenv KC_ADMIN_PASSWORD 2>/dev/null | tr -d '\r\n')
@@ -167,7 +167,7 @@ configure_instance() {
         # Spokes use GCP secrets
         local secret_name="dive-v3-keycloak-$(echo $instance_code | tr '[:upper:]' '[:lower:]')"
         admin_pass=$(gcloud secrets versions access latest --secret="$secret_name" --project=dive25 2>/dev/null | tr -d '\r\n')
-        
+
         # Fallback to container env
         if [ -z "$admin_pass" ]; then
             admin_pass=$(docker exec "$container" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null | tr -d '\r\n')

@@ -25,7 +25,7 @@ Successfully fixed **5 critical bugs** affecting cross-instance MFA enforcement 
 
 **Impact**: All cross-instance MFA enforcement broken
 
-**Root Cause**: 
+**Root Cause**:
 ```typescript
 // backend/src/middleware/authz.middleware.ts Line 750-758
 (req as any).user = {
@@ -35,9 +35,9 @@ Successfully fixed **5 critical bugs** affecting cross-instance MFA enforcement 
 };
 ```
 
-**Result**: 
+**Result**:
 - user.acr = undefined
-- normalizeACR(undefined) → 0  
+- normalizeACR(undefined) → 0
 - OPA saw acr="0" → AAL1
 - Denied all RESTRICTED/SECRET resources
 
@@ -208,7 +208,7 @@ admin-fra:      TOP_SECRET    (ACR=3)
 3. Login as testuser-fra-3 / TestUser2025!Pilot
 4. Access CONFIDENTIAL USA resources with matching COI
 
-**Expected**: 
+**Expected**:
 - ✅ AAL2 check passes (authentication_strength_sufficient=true)
 - ✅ MFA verified (mfa_verified=true)
 - ✅ Access granted (if COI matches)
@@ -392,7 +392,7 @@ Token claims: All attributes present
 
 **Phase 3 - Deploy DEU and GBR Spokes** (2-3 hours):
 - Deploy Germany spoke
-- Deploy UK spoke  
+- Deploy UK spoke
 - Test 3-way federation
 - Validate auto-discovery scales
 

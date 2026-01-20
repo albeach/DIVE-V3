@@ -491,7 +491,7 @@ create_user() {
         # TOP_SECRET requires AAL3 (WebAuthn), CONFIDENTIAL/SECRET require AAL2 (TOTP)
         local amr='["pwd"'
         local acr="1"  # Default: AAL1 (password only)
-        
+
         if [[ "$clearance" == "TOP_SECRET" ]]; then
             # TOP_SECRET: require hwk (WebAuthn) - set by requirement
             amr="${amr},\"hwk\""
@@ -561,7 +561,7 @@ create_user() {
     # UNCLASSIFIED: pwd only → ACR=1 (AAL1)
     local initial_amr='["pwd"]'
     local initial_acr="1"  # AAL1 by default
-    
+
     if [[ "$clearance" == "TOP_SECRET" ]]; then
         initial_amr='["pwd","hwk"]'
         initial_acr="3"  # AAL3

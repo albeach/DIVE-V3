@@ -584,8 +584,21 @@ export class TokenIntrospectionService {
         };
       }
 
+      // If no client credentials provided, try to load from environment
+      // This allows backends to automatically use their own credentials for introspection
+      let effectiveCredentials = clientCredentials;
+      if (!effectiveCredentials) {
+        const clientId = process.env.KEYCLOAK_CLIENT_ID;
+        const clientSecret = process.env.KEYCLOAK_CLIENT_SECRET;
+        
+        if (clientId && clientSecret) {
+          effectiveCredentials = { clientId, clientSecret };
+          logger.debug('Using environment client credentials for token introspection', { clientId });
+        }
+      }
+
       // Validate the token
-      const result = await this.introspectToken(token, tokenIssuer, clientCredentials);
+      const result = await this.introspectToken(token, tokenIssuer, effectiveCredentials);
 
       // Log validation result
       if (result.active) {

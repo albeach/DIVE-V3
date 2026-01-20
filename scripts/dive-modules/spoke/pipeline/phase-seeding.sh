@@ -191,7 +191,7 @@ spoke_seed_users() {
     local seed_output
     seed_output=$(bash "$seed_script" "$code_upper" "" "$keycloak_password" 2>&1)
     local seed_exit=$?
-    
+
     if [ $seed_exit -eq 0 ]; then
         log_success "Seeded 6 test users (testuser-${code_lower}-1 through 5, admin-${code_lower})"
         echo "  ✓ testuser-${code_lower}-1 (UNCLASSIFIED)"
