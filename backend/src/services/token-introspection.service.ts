@@ -207,6 +207,54 @@ export class TokenIntrospectionService {
   }
 
   /**
+   * Normalize discovery metadata to replace localhost URLs with Docker DNS
+   * Keycloak returns URLs based on KC_HOSTNAME, but we need internal Docker DNS
+   */
+  private normalizeDiscoveryMetadata(metadata: IdPDiscoveryMetadata, workingBaseUrl: string): IdPDiscoveryMetadata {
+    try {
+      // Extract base URL from the working URL (e.g., https://dive-hub-keycloak:8443/realms/dive-v3-broker-usa)
+      const workingParsed = new URL(workingBaseUrl);
+      const workingBase = `${workingParsed.protocol}//${workingParsed.host}`;
+
+      // Function to replace localhost with the working base URL
+      const normalizeUrl = (url: string | undefined): string | undefined => {
+        if (!url) return url;
+        try {
+          const parsed = new URL(url);
+          // Only normalize localhost URLs
+          if (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') {
+            return `${workingBase}${parsed.pathname}${parsed.search}`;
+          }
+          return url;
+        } catch {
+          return url;
+        }
+      };
+
+      // Normalize all URL fields in the metadata
+      return {
+        ...metadata,
+        issuer: normalizeUrl(metadata.issuer) || metadata.issuer,
+        authorization_endpoint: normalizeUrl(metadata.authorization_endpoint),
+        token_endpoint: normalizeUrl(metadata.token_endpoint),
+        introspection_endpoint: normalizeUrl(metadata.introspection_endpoint),
+        userinfo_endpoint: normalizeUrl(metadata.userinfo_endpoint),
+        end_session_endpoint: normalizeUrl(metadata.end_session_endpoint),
+        jwks_uri: normalizeUrl(metadata.jwks_uri),
+        revocation_endpoint: normalizeUrl(metadata.revocation_endpoint),
+        device_authorization_endpoint: normalizeUrl(metadata.device_authorization_endpoint),
+        registration_endpoint: normalizeUrl(metadata.registration_endpoint),
+      };
+    } catch (error) {
+      logger.warn('Failed to normalize discovery metadata', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        workingBaseUrl,
+      });
+      return metadata; // Return original if normalization fails
+    }
+  }
+
+  /**
    * Discover OAuth2 endpoints for an issuer
    */
   private async discoverEndpoints(issuer: string): Promise<IdPDiscoveryMetadata | null> {
@@ -225,25 +273,32 @@ export class TokenIntrospectionService {
     // Try each URL until one succeeds
     for (const tryUrl of issuerUrls) {
       try {
-        // Try standard .well-known/openid-connect-configuration endpoint
-        const discoveryUrl = `${tryUrl}/.well-known/openid-connect-configuration`;
+        // Try standard .well-known/openid-configuration endpoint (OIDC standard)
+        // Note: Keycloak uses openid-configuration, NOT openid-connect-configuration
+        const discoveryUrl = `${tryUrl}/.well-known/openid-configuration`;
 
         logger.debug('Discovering OAuth2 endpoints', { issuer, tryUrl, discoveryUrl });
 
         const response: AxiosResponse<IdPDiscoveryMetadata> = await this.httpClient.get(discoveryUrl);
 
         if (response.data && response.data.introspection_endpoint) {
-          // Cache the discovery metadata
-          this.discoveryCache.set(cacheKey, response.data);
+          // CRITICAL: Normalize returned URLs to use Docker DNS instead of localhost
+          // Keycloak returns URLs based on KC_HOSTNAME config, but we accessed via tryUrl
+          // Replace the base URL in all returned endpoints with the URL that worked
+          const normalizedMetadata = this.normalizeDiscoveryMetadata(response.data, tryUrl);
+
+          // Cache the normalized discovery metadata
+          this.discoveryCache.set(cacheKey, normalizedMetadata);
 
           logger.info('Discovered OAuth2 endpoints', {
             issuer,
             tryUrl,
-            introspectionEndpoint: response.data.introspection_endpoint,
-            jwksUri: response.data.jwks_uri,
+            introspectionEndpoint: normalizedMetadata.introspection_endpoint,
+            jwksUri: normalizedMetadata.jwks_uri,
+            normalized: normalizedMetadata.introspection_endpoint !== response.data.introspection_endpoint,
           });
 
-          return response.data;
+          return normalizedMetadata;
         } else {
           logger.debug('Incomplete discovery metadata - missing introspection_endpoint', { issuer, tryUrl });
           // Continue to next URL
