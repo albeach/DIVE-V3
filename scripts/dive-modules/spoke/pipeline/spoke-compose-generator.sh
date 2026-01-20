@@ -363,7 +363,7 @@ spoke_compose_render_template() {
     # CRITICAL FIX (2026-01-18): Do NOT substitute environment variable values
     # Docker Compose loads ${VAR_NAME} from .env file at runtime
     # Only template placeholders {{PLACEHOLDER}} should be substituted
-    # 
+    #
     # REMOVED: .env variable substitution (lines 363-389)
     # REASON: Caused hardcoded passwords in docker-compose.yml instead of ${POSTGRES_PASSWORD_FRA} references
     # IMPACT: Terraform apply failed because containers had hardcoded passwords but TF_VAR_* were not set

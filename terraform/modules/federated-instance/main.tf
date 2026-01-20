@@ -667,17 +667,9 @@ resource "keycloak_generic_protocol_mapper" "acr_mapper" {
 # - keycloak_openid_user_attribute_protocol_mapper.federated_acr_mapper
 # - keycloak_openid_user_attribute_protocol_mapper.federated_amr_mapper
 
-resource "keycloak_openid_client_default_scopes" "broker_client_defaults" {
-  realm_id  = keycloak_realm.broker.id
-  client_id = keycloak_openid_client.broker_client.id
-
-  default_scopes = [
-    "profile",
-    "email",
-    "roles",
-    "web-origins",
-  ]
-}
+# NOTE: Broker client default scopes now managed in dive-client-scopes.tf
+# This includes DIVE custom scopes (uniqueID, clearance, countryOfAffiliation, acpCOI)
+# with proper protocol mappers that set claim.name explicitly (SF-026 fix)
 
 # ============================================================================
 # INCOMING FEDERATION CLIENTS
@@ -852,13 +844,24 @@ resource "keycloak_openid_client_default_scopes" "incoming_federation_defaults" 
     "web-origins",
     "acr",
     "basic",
-    # DIVE custom scopes - CRITICAL for federation claim mapping
-    # These scopes exist in the realm (created by Keycloak or previous Terraform runs)
-    # By referencing them here, protocol mappers will be included in tokens
-    "clearance",
-    "countryOfAffiliation",
-    "uniqueID",
-    "acpCOI",
+    # DIVE custom scopes - NOW MANAGED BY TERRAFORM (dive-client-scopes.tf)
+    # Ensures protocol mappers have explicit claim.name configuration (SF-026 fix)
+    keycloak_openid_client_scope.uniqueID.name,
+    keycloak_openid_client_scope.clearance.name,
+    keycloak_openid_client_scope.countryOfAffiliation.name,
+    keycloak_openid_client_scope.acpCOI.name,
+  ]
+  
+  # Ensure scopes are created before assignment
+  depends_on = [
+    keycloak_openid_client_scope.uniqueID,
+    keycloak_openid_client_scope.clearance,
+    keycloak_openid_client_scope.countryOfAffiliation,
+    keycloak_openid_client_scope.acpCOI,
+    keycloak_openid_user_attribute_protocol_mapper.uniqueID_mapper,
+    keycloak_openid_user_attribute_protocol_mapper.clearance_mapper,
+    keycloak_openid_user_attribute_protocol_mapper.countryOfAffiliation_mapper,
+    keycloak_openid_user_attribute_protocol_mapper.acpCOI_mapper,
   ]
 }
 

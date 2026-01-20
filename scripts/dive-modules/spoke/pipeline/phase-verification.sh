@@ -369,7 +369,9 @@ spoke_verify_federation() {
             return 0
         else
             echo "  ⚠️  Federation incomplete"
-            echo "$fed_status" | jq -r '"\(.spoke_to_hub | if . then "✅" else "❌" end) Spoke → Hub\n\(.hub_to_spoke | if . then "✅" else "❌" end) Hub → Spoke"' 2>/dev/null || true
+            if ! echo "$fed_status" | jq -r '"\(.spoke_to_hub | if . then "✅" else "❌" end) Spoke → Hub\n\(.hub_to_spoke | if . then "✅" else "❌" end) Hub → Spoke"' 2>/dev/null; then
+                log_verbose "Could not parse federation status (jq may not be available)"
+            fi
         fi
     fi
 
@@ -426,7 +428,7 @@ spoke_verify_api_health() {
         # First check Docker's health status (most reliable)
         local docker_health
         docker_health=$(docker inspect --format='{{.State.Health.Status}}' "$backend_container" 2>/dev/null || echo "")
-        
+
         if [ "$docker_health" = "healthy" ]; then
             echo "  ✅ Backend API: healthy"
         else
@@ -457,7 +459,7 @@ spoke_verify_api_health() {
         # First check Docker's health status (most reliable for Next.js)
         local docker_health
         docker_health=$(docker inspect --format='{{.State.Health.Status}}' "$frontend_container" 2>/dev/null || echo "")
-        
+
         if [ "$docker_health" = "healthy" ]; then
             echo "  ✅ Frontend: healthy"
         else
@@ -486,7 +488,7 @@ spoke_verify_api_health() {
         # First check Docker's health status (most reliable)
         local docker_health
         docker_health=$(docker inspect --format='{{.State.Health.Status}}' "$opa_container" 2>/dev/null || echo "")
-        
+
         if [ "$docker_health" = "healthy" ]; then
             echo "  ✅ OPA: healthy"
         else

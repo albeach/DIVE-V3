@@ -30,6 +30,7 @@ log_success() { echo -e "${GREEN}✓${NC} $1"; }
 log_warn()  { echo -e "${YELLOW}⚠${NC} $1"; }
 log_error() { echo -e "${RED}✗${NC} $1"; }
 log_info()  { echo -e "${CYAN}ℹ${NC} $1"; }
+log_verbose() { echo -e "${CYAN}  ${NC}$1"; }
 
 # Configuration
 KEYCLOAK_URL="${KEYCLOAK_URL:-https://localhost:8443}"
@@ -124,6 +125,92 @@ if [ -z "$CLIENT_UUID" ] || [ "$CLIENT_UUID" == "null" ]; then
     fi
 else
     log_success "Found existing client: ${CLIENT_UUID}"
+fi
+
+# =============================================================================
+# CRITICAL: Sync Client Secret from GCP (SSOT)
+# =============================================================================
+# SF-027 FIX: Ensure Keycloak client secret matches what frontend/backend use
+# Without this, authentication fails with "Invalid client credentials"
+# =============================================================================
+
+log_step "Synchronizing client secret from GCP (SSOT)..."
+
+# Get secret from environment (loaded from GCP by hub deployment)
+GCP_CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET:-}"
+
+# Fallback: Try to get from frontend container
+if [ -z "$GCP_CLIENT_SECRET" ]; then
+    GCP_CLIENT_SECRET=$(docker exec dive-hub-frontend printenv KEYCLOAK_CLIENT_SECRET 2>/dev/null || echo "")
+fi
+
+# Fallback: Try to get from backend container
+if [ -z "$GCP_CLIENT_SECRET" ]; then
+    GCP_CLIENT_SECRET=$(docker exec dive-hub-backend printenv KEYCLOAK_CLIENT_SECRET 2>/dev/null || echo "")
+fi
+
+if [ -z "$GCP_CLIENT_SECRET" ]; then
+    log_error "Cannot get client secret from GCP or containers"
+    log_error "This will cause authentication failures!"
+    exit 1
+fi
+
+log_verbose "Client secret from GCP/containers: ${GCP_CLIENT_SECRET:0:10}..."
+
+# Get current secret from Keycloak
+KEYCLOAK_SECRET=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/client-secret" \
+    -H "Authorization: Bearer ${TOKEN}" | jq -r '.value // empty')
+
+if [ -z "$KEYCLOAK_SECRET" ]; then
+    log_warn "Client has no secret in Keycloak - setting it now"
+    
+    # Use REST API to set the secret
+    HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" \
+        -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -H "Content-Type: application/json" \
+        -d "{\"secret\":\"${GCP_CLIENT_SECRET}\"}")
+    
+    if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "200" ]; then
+        log_success "✓ Client secret set from GCP"
+        KEYCLOAK_SECRET="${GCP_CLIENT_SECRET}"
+    else
+        log_error "✗ Failed to set client secret (HTTP $HTTP_CODE)"
+        exit 1
+    fi
+elif [ "$KEYCLOAK_SECRET" != "$GCP_CLIENT_SECRET" ]; then
+    log_warn "Client secret mismatch detected!"
+    log_warn "  Keycloak: ${KEYCLOAK_SECRET:0:10}..."
+    log_warn "  GCP/Env:  ${GCP_CLIENT_SECRET:0:10}..."
+    log_warn "  Updating Keycloak to match GCP (SSOT)..."
+    
+    # Update client secret via REST API
+    HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" \
+        -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}" \
+        -H "Authorization: Bearer ${TOKEN}" \
+        -H "Content-Type: application/json" \
+        -d "{\"secret\":\"${GCP_CLIENT_SECRET}\"}")
+    
+    if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "200" ]; then
+        # Verify it was set correctly
+        VERIFY_SECRET=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/client-secret" \
+            -H "Authorization: Bearer ${TOKEN}" | jq -r '.value')
+        
+        if [ "$VERIFY_SECRET" = "$GCP_CLIENT_SECRET" ]; then
+            log_success "✓ Client secret synchronized with GCP"
+        else
+            log_error "✗ Secret sync verification failed!"
+            log_error "  Expected: ${GCP_CLIENT_SECRET:0:10}..."
+            log_error "  Got:      ${VERIFY_SECRET:0:10}..."
+            log_error "  This is a critical issue - frontend/backend will fail to authenticate"
+            exit 1
+        fi
+    else
+        log_error "✗ Failed to update client secret (HTTP $HTTP_CODE)"
+        exit 1
+    fi
+else
+    log_success "✓ Client secret already matches GCP (in sync)"
 fi
 
 # Get current client configuration

@@ -228,7 +228,7 @@ DIVE-V3/
 export ALLOW_INSECURE_LOCAL_DEVELOPMENT=true
 ./dive hub deploy
 
-# 3. Deploy FRA spoke  
+# 3. Deploy FRA spoke
 ./dive spoke deploy FRA "France"
 
 # 4. Verify Terraform completed
@@ -277,7 +277,7 @@ curl -k https://localhost:8443/admin/realms/dive-v3-broker-usa/identity-provider
 - `@scripts/dive-modules/spoke/spoke-deploy.sh` - Main deployment orchestrator
 - `@scripts/dive-modules/spoke/pipeline/phase-deployment.sh` - Container deployment
 
-### Secret Management  
+### Secret Management
 - Check how secrets are loaded for spokes vs. Hub
 - Understand `ALLOW_INSECURE_LOCAL_DEVELOPMENT=true` behavior
 
@@ -330,7 +330,7 @@ The session is complete when:
 - [ ] `./dive spoke deploy FRA "France"` completes without errors
 - [ ] Terraform apply succeeds and creates realm + users
 - [ ] FRA shows status="approved" in MongoDB
-- [ ] Drift detection shows FRA as "synchronized" 
+- [ ] Drift detection shows FRA as "synchronized"
 - [ ] User can log in via FRA IdP at https://localhost:3000
 - [ ] Same process works for DEU spoke
 - [ ] All tested from clean slate (nuke + redeploy)

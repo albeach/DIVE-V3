@@ -55,7 +55,7 @@ Conduct a **full architectural review** of DIVE V3's orchestration logic with fo
 ```mermaid
 graph TB
     CLI[./dive spoke deploy DEU]
-    
+
     subgraph "Orchestration Framework"
         Lock[Acquire Deployment Lock<br/>GAP-001: Concurrent Protection]
         Preflight[Phase 1: PREFLIGHT<br/>- Validate no conflicts<br/>- Check Hub availability<br/>- Detect circular deps]
@@ -65,23 +65,23 @@ graph TB
         Verify[Phase 5: VERIFICATION<br/>- Test IdP federation<br/>- Validate policy distribution<br/>- Health endpoint checks]
         State[(PostgreSQL State DB<br/>deployment_states<br/>state_transitions<br/>orchestration_checkpoints)]
     end
-    
+
     CLI --> Lock
     Lock --> Preflight
     Preflight --> Init
     Init --> Deploy
     Deploy --> Config
     Config --> Verify
-    
+
     Preflight -.->|Record state| State
     Init -.->|Record state| State
     Deploy -.->|Record state| State
     Config -.->|Record state| State
     Verify -.->|Record state| State
-    
+
     Verify --> Complete[State: COMPLETE]
     Verify --> Failed[State: FAILED<br/>Auto-rollback?]
-    
+
     style Lock fill:#f9f,stroke:#333
     style State fill:#bbf,stroke:#333
     style Failed fill:#fbb,stroke:#333
@@ -353,11 +353,11 @@ For each identified gap, document:
 1. **Document Current State** (SMART: Complete by end of Week 1)
    - Success Metric: 100% of orchestration code paths mapped
    - Deliverable: Architecture diagram (Mermaid) + sequence diagrams
-   
+
 2. **Prioritize Gaps** (SMART: Complete by end of Week 1)
    - Success Metric: All gaps categorized (CRITICAL/HIGH/MEDIUM/LOW)
    - Deliverable: Gap registry with severity scores
-   
+
 3. **Design Solutions** (SMART: Complete by end of Week 2)
    - Success Metric: Each CRITICAL gap has 2+ solution proposals
    - Deliverable: ADR (Architecture Decision Record) for each solution
@@ -381,11 +381,11 @@ For each identified gap, document:
 1. **Eliminate Dual-Write** (SMART: Zero file writes by end of Week 4)
    - Success Metric: All state operations use `orch_db_set_state()` only
    - Deliverable: Database-only state management
-   
+
 2. **Implement Atomic Checkpoints** (SMART: 100% checkpoint success by end of Week 5)
    - Success Metric: No checkpoint corruption in 50 test deployments
    - Deliverable: Transaction-wrapped checkpoint creation
-   
+
 3. **Validate Rollback** (SMART: 100% rollback success by end of Week 5)
    - Success Metric: Rollback works in all failure scenarios
    - Deliverable: Automated rollback tests
@@ -450,11 +450,11 @@ For each identified gap, document:
 1. **Persistent Circuit Breakers** (SMART: Circuit state survives restarts by end of Week 7)
    - Success Metric: Circuit breaker state in database, not memory
    - Deliverable: `circuit_breakers` table integration
-   
+
 2. **Context-Aware Retry** (SMART: 50% reduction in retry latency by end of Week 8)
    - Success Metric: Retry delays match operation characteristics
    - Deliverable: Retry strategy matrix (operation → delay calculation)
-   
+
 3. **Automated Recovery** (SMART: 80% of transient failures auto-recover by end of Week 8)
    - Success Metric: Circuit breakers prevent cascading failures
    - Deliverable: Recovery playbooks for common failures
@@ -512,11 +512,11 @@ For each identified gap, document:
 1. **Dynamic Timeout Calculation** (SMART: Zero false-positive timeouts by end of Week 10)
    - Success Metric: Timeouts based on P95 historical startup times
    - Deliverable: `orch_calculate_dynamic_timeout()` fully implemented
-   
+
 2. **Parallel Service Startup** (SMART: 30% reduction in total startup time by end of Week 11)
    - Success Metric: Services at same dependency level start in parallel
    - Deliverable: Dependency-level batching
-   
+
 3. **Comprehensive Health Validation** (SMART: 100% health check coverage by end of Week 11)
    - Success Metric: All services have multi-level health checks
    - Deliverable: Health check matrix (service → Docker/HTTP/custom)
@@ -572,11 +572,11 @@ For each identified gap, document:
 1. **MongoDB as Single Source of Truth** (SMART: Zero state drift by end of Week 13)
    - Success Metric: `federation_spokes` drives all IdP visibility
    - Deliverable: `/api/idps/public` reads only from MongoDB
-   
+
 2. **Automated Drift Detection** (SMART: Daily audit reports by end of Week 14)
    - Success Metric: Detect Keycloak ↔ MongoDB divergence
    - Deliverable: `audit-federation-state.sh` runs in cron
-   
+
 3. **Stale IdP Cleanup** (SMART: Zero orphaned IdPs by end of Week 14)
    - Success Metric: `clean-stale-idps.ts` removes Keycloak IdPs without active spokes
    - Deliverable: Weekly cleanup job
@@ -633,11 +633,11 @@ For each identified gap, document:
 1. **Comprehensive Test Suite** (SMART: 100 E2E test scenarios by end of Week 16)
    - Success Metric: All critical paths covered
    - Deliverable: `tests/orchestration/` directory
-   
+
 2. **Chaos Engineering** (SMART: System survives 20 failure scenarios)
    - Success Metric: Resilience to network failures, OOM, disk full
    - Deliverable: Chaos testing framework
-   
+
 3. **Performance Benchmarking** (SMART: Baseline metrics established)
    - Success Metric: Deployment time, error rate, resource usage
    - Deliverable: Grafana dashboards + alerting

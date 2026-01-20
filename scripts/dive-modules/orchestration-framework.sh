@@ -109,7 +109,7 @@ orch_detect_circular_dependencies() {
             ((cycles_found++))
             log_error "❌ Circular dependency detected!"
             log_error "Dependency cycle: $cycle_result"
-            
+
             # Parse and display the cycle clearly
             local cycle_services=($cycle_result)
             log_error ""
@@ -146,7 +146,7 @@ orch_detect_circular_dependencies() {
 ##
 orch_print_dependency_graph() {
     local format="${1:-text}"
-    
+
     case "$format" in
         mermaid)
             echo "```mermaid"
@@ -168,17 +168,17 @@ orch_print_dependency_graph() {
         text|*)
             echo "=== Service Dependency Graph ==="
             echo ""
-            
+
             # Group by dependency level
             local max_level=0
             declare -A service_levels
-            
+
             for service in "${!SERVICE_DEPENDENCIES[@]}"; do
                 local level=$(orch_calculate_dependency_level "$service")
                 service_levels["$service"]=$level
                 [ $level -gt $max_level ] && max_level=$level
             done
-            
+
             for ((lvl=0; lvl<=max_level; lvl++)); do
                 echo "Level $lvl ($([ $lvl -eq 0 ] && echo "no dependencies" || echo "depends on level $((lvl-1))"))):"
                 for service in "${!service_levels[@]}"; do
@@ -209,14 +209,14 @@ orch_print_dependency_graph() {
 orch_get_services_at_level() {
     local target_level="$1"
     local services=""
-    
+
     for service in "${!SERVICE_DEPENDENCIES[@]}"; do
         local level=$(orch_calculate_dependency_level "$service")
         if [ "$level" -eq "$target_level" ]; then
             services="$services $service"
         fi
     done
-    
+
     echo "$services" | xargs
 }
 
@@ -228,12 +228,12 @@ orch_get_services_at_level() {
 ##
 orch_get_max_dependency_level() {
     local max_level=0
-    
+
     for service in "${!SERVICE_DEPENDENCIES[@]}"; do
         local level=$(orch_calculate_dependency_level "$service")
         [ $level -gt $max_level ] && max_level=$level
     done
-    
+
     echo $max_level
 }
 
@@ -1319,7 +1319,7 @@ orch_calculate_dynamic_timeout() {
     local service="$1"
     local instance_code="${2:-}"
     local force_recalc="${3:-false}"
-    
+
     local static_timeout="${SERVICE_TIMEOUTS[$service]:-60}"
 
     # Check if database is available for metrics
@@ -1332,12 +1332,12 @@ orch_calculate_dynamic_timeout() {
     # Query P95 startup time from deployment steps
     local p95_startup=0
     local sample_count=0
-    
+
     if [ -n "$instance_code" ]; then
         # Instance-specific query
         local result
         result=$(orch_db_exec "
-            SELECT 
+            SELECT
                 COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_seconds), 0)::INTEGER as p95,
                 COUNT(*) as samples
             FROM deployment_steps
@@ -1346,14 +1346,14 @@ orch_calculate_dynamic_timeout() {
             AND status = 'COMPLETED'
             AND started_at > NOW() - INTERVAL '30 days'
         " 2>/dev/null | tail -n 1)
-        
+
         p95_startup=$(echo "$result" | cut -d'|' -f1 | xargs)
         sample_count=$(echo "$result" | cut -d'|' -f2 | xargs)
     else
         # Global query across all instances
         local result
         result=$(orch_db_exec "
-            SELECT 
+            SELECT
                 COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_seconds), 0)::INTEGER as p95,
                 COUNT(*) as samples
             FROM deployment_steps
@@ -1361,7 +1361,7 @@ orch_calculate_dynamic_timeout() {
             AND status = 'COMPLETED'
             AND started_at > NOW() - INTERVAL '30 days'
         " 2>/dev/null | tail -n 1)
-        
+
         p95_startup=$(echo "$result" | cut -d'|' -f1 | xargs)
         sample_count=$(echo "$result" | cut -d'|' -f2 | xargs)
     fi
@@ -1414,35 +1414,35 @@ orch_parallel_startup() {
     local instance_code="$1"
     local services="${2:-all}"
     local code_lower=$(lower "$instance_code")
-    
+
     log_info "Starting parallel service startup for $instance_code"
-    
+
     # Validate no circular dependencies first
     if ! orch_detect_circular_dependencies; then
         log_error "Cannot proceed with parallel startup - circular dependencies detected"
         return 1
     fi
-    
+
     local max_level=$(orch_get_max_dependency_level)
     local total_started=0
     local total_failed=0
-    
+
     log_verbose "Service graph has $((max_level + 1)) dependency levels"
-    
+
     # Start services level by level
     for ((level=0; level<=max_level; level++)); do
         local level_services=$(orch_get_services_at_level $level)
-        
+
         if [ -z "$level_services" ]; then
             continue
         fi
-        
+
         log_info "Starting level $level services: $level_services"
-        
+
         # Start all services at this level in parallel
         local pids=()
         local service_pid_map=""
-        
+
         for service in $level_services; do
             # Skip if not in requested services list
             if [ "$services" != "all" ]; then
@@ -1450,18 +1450,18 @@ orch_parallel_startup() {
                     continue
                 fi
             fi
-            
+
             # Start service in background
             (
                 local timeout=$(orch_calculate_dynamic_timeout "$service" "$instance_code")
                 local container="dive-spoke-${code_lower}-${service}"
-                
+
                 # Check if already running
                 if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
                     log_verbose "Service $service already running"
                     exit 0
                 fi
-                
+
                 # Start service
                 local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
                 if [ -f "$spoke_dir/docker-compose.yml" ]; then
@@ -1469,7 +1469,7 @@ orch_parallel_startup() {
                     export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
                     docker compose up -d "$service" >/dev/null 2>&1
                 fi
-                
+
                 # Wait for health
                 if orch_check_service_health "$instance_code" "$service" "$timeout"; then
                     exit 0
@@ -1477,12 +1477,12 @@ orch_parallel_startup() {
                     exit 1
                 fi
             ) &
-            
+
             local pid=$!
             pids+=($pid)
             service_pid_map="$service_pid_map $service:$pid"
         done
-        
+
         # Wait for all services at this level
         local level_failed=0
         for pid in "${pids[@]}"; do
@@ -1491,7 +1491,7 @@ orch_parallel_startup() {
             else
                 ((total_failed++))
                 ((level_failed++))
-                
+
                 # Find which service failed
                 for mapping in $service_pid_map; do
                     local svc="${mapping%%:*}"
@@ -1502,16 +1502,16 @@ orch_parallel_startup() {
                 done
             fi
         done
-        
+
         # If any service failed at this level, subsequent levels will likely fail
         if [ $level_failed -gt 0 ]; then
             log_warn "Level $level had $level_failed failures - subsequent services may fail"
         fi
     done
-    
+
     # Summary
     log_info "Parallel startup complete: $total_started started, $total_failed failed"
-    
+
     if [ $total_failed -gt 0 ]; then
         return 1
     fi
@@ -1531,12 +1531,12 @@ orch_parallel_startup() {
 orch_get_health_check_dependencies() {
     local service="$1"
     local deps="${SERVICE_DEPENDENCIES[$service]}"
-    
+
     if [ "$deps" = "none" ] || [ -z "$deps" ]; then
         echo ""
         return 0
     fi
-    
+
     # Convert comma-separated to space-separated
     echo "$deps" | tr ',' ' ' | xargs
 }
@@ -1560,19 +1560,19 @@ orch_check_health_with_cascade() {
     local service="$2"
     local timeout="${3:-}"
     local skip_deps="${4:-false}"
-    
+
     # Get dynamic timeout if not specified
     if [ -z "$timeout" ]; then
         timeout=$(orch_calculate_dynamic_timeout "$service" "$instance_code")
     fi
-    
+
     # Check dependencies first (cascade awareness)
     if [ "$skip_deps" != "true" ]; then
         local deps=$(orch_get_health_check_dependencies "$service")
-        
+
         for dep in $deps; do
             log_verbose "Checking health cascade: $service depends on $dep"
-            
+
             local dep_timeout=$(orch_calculate_dynamic_timeout "$dep" "$instance_code")
             if ! orch_check_service_health "$instance_code" "$dep" "$dep_timeout"; then
                 log_error "Health cascade failed: $dep (dependency of $service) is unhealthy"
@@ -1580,7 +1580,7 @@ orch_check_health_with_cascade() {
             fi
         done
     fi
-    
+
     # Now check the target service
     orch_check_service_health "$instance_code" "$service" "$timeout"
 }

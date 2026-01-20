@@ -798,7 +798,62 @@ function loadFederationRegistry(): IFederationRegistry {
 }
 
 async function loadKASRegistry(): Promise<IKASRegistry> {
-    // Try to load from MongoDB (SSOT) first
+    const instanceCode = process.env.INSTANCE_CODE || 'USA';
+    const isSpoke = instanceCode !== 'USA';
+    
+    // CRITICAL FIX: Spokes should query Hub KAS registry API, not local MongoDB
+    // Hub has the centralized KAS registry, spokes don't maintain their own
+    if (isSpoke) {
+        try {
+            const hubBackendUrl = process.env.HUB_BACKEND_URL || 'https://localhost:4000';
+            const axios = (await import('axios')).default;
+            
+            console.log(`   🔍 Querying Hub KAS registry API (spoke mode: ${instanceCode})`);
+            const response = await axios.get(`${hubBackendUrl}/api/kas/registry`, {
+                httpsAgent: new (await import('https')).Agent({ rejectUnauthorized: false }),
+                timeout: 10000
+            });
+            
+            if (response.data?.kasServers && response.data.kasServers.length > 0) {
+                const kasServers = response.data.kasServers;
+                console.log(`   ✅ Loaded ${kasServers.length} KAS servers from Hub registry (federated mode)`);
+                
+                // Convert API response to legacy format
+                return {
+                    kasServers: kasServers.map((k: any) => ({
+                        kasId: k.kasId,
+                        organization: k.organization,
+                        countryCode: k.countryCode || k.instanceCode, // Use countryCode from API
+                        kasUrl: k.kasUrl,
+                        internalKasUrl: k.internalKasUrl || k.kasUrl,
+                        authMethod: 'jwt' as const,
+                        authConfig: {
+                            jwtIssuer: k.authConfig?.jwtIssuer || '',
+                            jwtAudience: 'dive-v3-broker'
+                        },
+                        trustLevel: k.trustLevel || 'medium',
+                        supportedCountries: k.supportedCountries || [],
+                        supportedCOIs: k.supportedCOIs || [],
+                        metadata: {
+                            version: '1.0.0',
+                            capabilities: k.metadata?.capabilities || [],
+                            contact: k.contact || '',
+                            lastVerified: new Date().toISOString()
+                        }
+                    })),
+                    version: '2.0',
+                    federationTrust: {
+                        trustMatrix: {} // Federation trust handled by Hub
+                    }
+                };
+            }
+        } catch (error) {
+            console.warn(`   ⚠️ Could not query Hub KAS registry API: ${error instanceof Error ? error.message : 'Unknown'}`);
+            console.warn(`   Falling back to local MongoDB/file`);
+        }
+    }
+    
+    // Hub mode OR spoke fallback: Try to load from local MongoDB
     try {
         const { MongoKasRegistryStore } = await import('../models/kas-registry.model');
         const kasStore = new MongoKasRegistryStore();
@@ -816,9 +871,9 @@ async function loadKASRegistry(): Promise<IKASRegistry> {
                 kasServers: activeServers.map(k => ({
                     kasId: k.kasId,
                     organization: k.organization,
-                    countryCode: k.kasId.split('-')[0].toUpperCase(), // Extract from kasId (e.g., hun-kas -> HUN)
+                    countryCode: k.countryCode, // Use actual countryCode field
                     kasUrl: k.kasUrl,
-                    internalKasUrl: k.kasUrl, // Use same URL for now
+                    internalKasUrl: k.internalKasUrl || k.kasUrl,
                     authMethod: k.authMethod,
                     authConfig: {
                         jwtIssuer: k.authConfig.jwtIssuer,
@@ -845,9 +900,19 @@ async function loadKASRegistry(): Promise<IKASRegistry> {
         console.warn('   ⚠️ Could not load from MongoDB, falling back to file');
     }
 
-    // Fallback to file
-    const content = fs.readFileSync(KAS_REGISTRY_PATH, 'utf-8');
-    return JSON.parse(content);
+    // Final fallback to static file
+    if (fs.existsSync(KAS_REGISTRY_PATH)) {
+        const content = fs.readFileSync(KAS_REGISTRY_PATH, 'utf-8');
+        return JSON.parse(content);
+    }
+    
+    // No KAS registry available - return empty
+    console.error('   ❌ No KAS registry available (MongoDB empty, file not found)');
+    return {
+        kasServers: [],
+        version: '2.0',
+        federationTrust: { trustMatrix: {} }
+    };
 }
 
 function getInstanceConfig(registry: IFederationRegistry, instanceCode: string): IInstanceConfig {
@@ -918,11 +983,21 @@ async function getMongoDBConnection(config: IInstanceConfig, instanceCode: strin
 
 function getKASServersForInstance(kasRegistry: IKASRegistry, instanceCode: string): IKASServer[] {
     const servers: IKASServer[] = [];
+    
+    // DEBUG: Log available KAS servers for troubleshooting
+    if (kasRegistry.kasServers && kasRegistry.kasServers.length > 0) {
+        console.log(`   🔍 Filtering KAS servers for instance: ${instanceCode}`);
+        console.log(`   Available KAS servers:`, kasRegistry.kasServers.map(k => `${k.kasId} (country: ${k.countryCode})`).join(', '));
+    }
+    
     // Find KAS where countryCode matches (SSOT: ISO 3166-1 alpha-3)
     const localKas = kasRegistry.kasServers?.find(k => k.countryCode === instanceCode);
 
     if (localKas) {
+        console.log(`   ✅ Found local KAS for ${instanceCode}: ${localKas.kasId}`);
         servers.push(localKas);
+    } else {
+        console.warn(`   ⚠️  No KAS server found with countryCode=${instanceCode}`);
     }
 
     // Add trusted partner KAS servers from trust matrix
@@ -933,11 +1008,13 @@ function getKASServersForInstance(kasRegistry: IKASRegistry, instanceCode: strin
         for (const partnerKasId of trustMatrix[localKasId]) {
             const partnerKas = kasRegistry.kasServers?.find(k => k.kasId === partnerKasId);
             if (partnerKas) {
+                console.log(`   ✅ Added trusted partner KAS: ${partnerKas.kasId}`);
                 servers.push(partnerKas);
             }
         }
     }
 
+    console.log(`   📊 Total KAS servers for ${instanceCode}: ${servers.length}`);
     return servers;
 }
 

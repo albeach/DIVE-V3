@@ -448,12 +448,12 @@ orch_circuit_breaker_load() {
 
     local circuit_data
     circuit_data=$(orch_db_exec "
-        SELECT 
+        SELECT
             state,
             failure_count,
             success_count,
             COALESCE(EXTRACT(EPOCH FROM (NOW() - last_failure_time))::integer, 999999) as elapsed
-        FROM circuit_breakers 
+        FROM circuit_breakers
         WHERE operation_name='$operation_name'
     " 2>/dev/null | tr -d ' ')
 
@@ -530,7 +530,7 @@ orch_circuit_breaker_status() {
             orch_db_exec "
                 SELECT json_agg(row_to_json(cb))
                 FROM (
-                    SELECT 
+                    SELECT
                         operation_name,
                         state,
                         failure_count,
@@ -547,16 +547,16 @@ orch_circuit_breaker_status() {
             echo "=== Circuit Breaker Status ==="
             printf "%-30s %-10s %-8s %-8s %-20s\n" "OPERATION" "STATE" "FAILURES" "SUCCESS" "LAST CHANGE"
             printf "%-30s %-10s %-8s %-8s %-20s\n" "─────────" "─────" "────────" "───────" "───────────"
-            
+
             orch_db_exec "
-                SELECT 
+                SELECT
                     operation_name,
                     state,
                     failure_count,
                     success_count,
                     to_char(last_state_change, 'MM-DD HH24:MI')
                 FROM circuit_breakers
-                ORDER BY 
+                ORDER BY
                     CASE state WHEN 'OPEN' THEN 0 WHEN 'HALF_OPEN' THEN 1 ELSE 2 END,
                     operation_name
             " 2>/dev/null | while IFS='|' read -r op state fail succ change; do
@@ -566,7 +566,7 @@ orch_circuit_breaker_status() {
                 fail=$(echo "$fail" | xargs)
                 succ=$(echo "$succ" | xargs)
                 change=$(echo "$change" | xargs)
-                
+
                 # Color code state
                 local state_display="$state"
                 case "$state" in
@@ -574,7 +574,7 @@ orch_circuit_breaker_status() {
                     HALF_OPEN) state_display="⏳ HALF" ;;
                     CLOSED)    state_display="✓ CLOSED" ;;
                 esac
-                
+
                 printf "%-30s %-10s %-8s %-8s %-20s\n" "$op" "$state_display" "$fail" "$succ" "$change"
             done
             ;;
@@ -596,7 +596,7 @@ orch_circuit_breaker_reset_all_open() {
 
     local reset_count
     reset_count=$(orch_db_exec "
-        UPDATE circuit_breakers 
+        UPDATE circuit_breakers
         SET state='CLOSED', failure_count=0, success_count=0, last_state_change=NOW()
         WHERE state='OPEN'
         RETURNING operation_name

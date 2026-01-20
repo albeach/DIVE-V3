@@ -6,7 +6,7 @@
  *
  * Routes (mounted at /api/drift):
  * - GET /api/drift/status - Drift detection health summary
- * - GET /api/drift/report - Current drift report  
+ * - GET /api/drift/report - Current drift report
  * - GET /api/drift/events - Drift event history
  * - GET /api/drift/states - Detailed layer states
  * - POST /api/drift/reconcile - Execute reconciliation (admin only)
