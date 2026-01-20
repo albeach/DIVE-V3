@@ -4,9 +4,9 @@
 
 You are continuing work on DIVE V3, a coalition-friendly federated identity and access management (ICAM) system. The previous session (2026-01-19, 8+ hours) completed **comprehensive soft fail elimination** through rigorous user testing, discovering and fixing **29+ soft fail patterns** and **14 critical bugs**.
 
-**Git Commit**: `8934b2e6` - "fix(federation): eliminate 29+ soft fails, fix critical federation bugs"  
-**Status**: Federation working end-to-end, ZTDF encryption working, authorization working  
-**Validated**: User tested actual login flows, all issues found and fixed  
+**Git Commit**: `8934b2e6` - "fix(federation): eliminate 29+ soft fails, fix critical federation bugs"
+**Status**: Federation working end-to-end, ZTDF encryption working, authorization working
+**Validated**: User tested actual login flows, all issues found and fixed
 
 ---
 
@@ -126,7 +126,7 @@ export ALLOW_INSECURE_LOCAL_DEVELOPMENT=true
 # Deploy FRA
 ./dive spoke deploy FRA "France" 2>&1 | tee /tmp/fra-clean-slate-$(date +%Y%m%d-%H%M%S).log
 
-# Validate FRA deployment  
+# Validate FRA deployment
 # - No soft fail messages
 # - Honest reporting (plaintext vs encrypted distinguished)
 # - DIVE scopes assigned to federation client
@@ -178,13 +178,13 @@ Once clean slate validation passes:
 
 ## What NOT to Do (Common Pitfalls)
 
-❌ **Don't trust success messages** - Validate actual state  
-❌ **Don't add `|| true`** - Makes failures visible  
-❌ **Don't skip validation** - Every claim must be checked  
-❌ **Don't use manual docker commands** - Use DIVE CLI only  
-❌ **Don't accept duplicates** - Single SSOT for everything  
-❌ **Don't create local users in Hub** - Should only be federated users from spokes  
-❌ **Don't assume old tokens work** - User must logout/login after scope changes  
+❌ **Don't trust success messages** - Validate actual state
+❌ **Don't add `|| true`** - Makes failures visible
+❌ **Don't skip validation** - Every claim must be checked
+❌ **Don't use manual docker commands** - Use DIVE CLI only
+❌ **Don't accept duplicates** - Single SSOT for everything
+❌ **Don't create local users in Hub** - Should only be federated users from spokes
+❌ **Don't assume old tokens work** - User must logout/login after scope changes
 
 ---
 
@@ -210,7 +210,7 @@ Once clean slate validation passes:
 
 ---
 
-**Quality Bar**: Best practice, persistent, resilient solutions with full testing  
-**Authorization**: Nuke/clean Docker resources as needed (all data is DUMMY/FAKE)  
-**Constraint**: DIVE CLI ONLY - NO manual docker commands  
+**Quality Bar**: Best practice, persistent, resilient solutions with full testing
+**Authorization**: Nuke/clean Docker resources as needed (all data is DUMMY/FAKE)
+**Constraint**: DIVE CLI ONLY - NO manual docker commands
 **Standard**: NO EXCEPTIONS, NO SHORTCUTS, NO WORKAROUNDS

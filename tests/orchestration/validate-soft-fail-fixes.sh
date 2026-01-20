@@ -36,20 +36,20 @@ USER_COUNT=$(docker exec dive-spoke-fra-keycloak /opt/keycloak/bin/kcadm.sh get 
 
 if [ "$USER_COUNT" -ge 6 ]; then
     log_success "✅ User seeding: $USER_COUNT users created (expected: >= 6)"
-    
+
     # Validate user attributes
     log_verbose "Validating user attributes..."
     ATTRS_OK=true
-    
+
     for user_num in 1 3 5; do
         USERNAME="testuser-fra-${user_num}"
         ATTRS=$(docker exec dive-spoke-fra-keycloak /opt/keycloak/bin/kcadm.sh get users \
           -r dive-v3-broker-fra -q username=$USERNAME 2>/dev/null | \
           jq -r '.[0].attributes | {uniqueID, countryOfAffiliation, clearance}' 2>/dev/null)
-        
+
         UNIQUE_ID=$(echo "$ATTRS" | jq -r '.uniqueID[0] // "null"')
         COUNTRY=$(echo "$ATTRS" | jq -r '.countryOfAffiliation[0] // "null"')
-        
+
         if [ "$UNIQUE_ID" = "$USERNAME" ] && [ "$COUNTRY" = "FRA" ]; then
             log_verbose "  ✓ $USERNAME: uniqueID=$UNIQUE_ID, country=$COUNTRY"
         else
@@ -57,7 +57,7 @@ if [ "$USER_COUNT" -ge 6 ]; then
             ATTRS_OK=false
         fi
     done
-    
+
     if [ "$ATTRS_OK" = true ]; then
         PASSED_CHECKS=$((PASSED_CHECKS + 1))
         log_success "✓ User attributes validated correctly"
@@ -128,7 +128,7 @@ KAS_EXISTS=$(curl -sk https://localhost:4000/api/kas/registry 2>/dev/null | \
 if [ -n "$KAS_EXISTS" ]; then
     PASSED_CHECKS=$((PASSED_CHECKS + 1))
     log_success "✅ KAS registered: FRA KAS found in Hub registry"
-    
+
     # Show KAS details
     KAS_ID=$(echo "$KAS_EXISTS" | jq -r '.kasId')
     KAS_STATUS=$(echo "$KAS_EXISTS" | jq -r '.status // "unknown"')
@@ -155,7 +155,7 @@ MISSING_SECRETS=()
 
 for container in backend frontend; do
     CONTAINER_NAME="dive-spoke-fra-${container}"
-    
+
     if docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
         # Check for Postgres password
         POSTGRES_PW=$(docker exec "$CONTAINER_NAME" env | grep "POSTGRES_PASSWORD_FRA" | cut -d= -f2 || echo "")
@@ -163,7 +163,7 @@ for container in backend frontend; do
             MISSING_SECRETS+=("${CONTAINER_NAME}:POSTGRES_PASSWORD_FRA")
             SECRETS_OK=false
         fi
-        
+
         # Check for Mongo password
         MONGO_PW=$(docker exec "$CONTAINER_NAME" env | grep "MONGO_PASSWORD_FRA" | cut -d= -f2 || echo "")
         if [ -z "$MONGO_PW" ]; then
@@ -215,7 +215,7 @@ TOTAL_CHECKS=$((TOTAL_CHECKS + 1))
 
 if [ -f "/tmp/fra-deployment.log" ]; then
     SOFT_FAIL_COUNT=$(grep -c "had issues (continuing)" /tmp/fra-deployment.log 2>/dev/null || echo "0")
-    
+
     if [ "$SOFT_FAIL_COUNT" -eq 0 ]; then
         PASSED_CHECKS=$((PASSED_CHECKS + 1))
         log_success "✅ No soft fail messages in deployment log"
@@ -246,7 +246,7 @@ FRA_IDP=$(docker exec dive-hub-keycloak /opt/keycloak/bin/kcadm.sh get \
 if echo "$FRA_IDP" | jq -e '.alias == "fra-idp" and .enabled == true' >/dev/null 2>&1; then
     PASSED_CHECKS=$((PASSED_CHECKS + 1))
     log_success "✅ Federation validated: fra-idp configured in Hub"
-    
+
     # Check URLs are configured
     AUTH_URL=$(echo "$FRA_IDP" | jq -r '.config.authorizationUrl')
     if [ -n "$AUTH_URL" ] && [ "$AUTH_URL" != "null" ]; then

@@ -14,7 +14,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 
 export function MobileBottomNav({ onMoreClick }: { onMoreClick: () => void }) {
     const pathname = usePathname();
-    const { t } = useTranslation('nav');
+    const { t } = useTranslation('common');
 
     const tabs = [
         { icon: Home, label: t('nav.home'), href: '/dashboard' },

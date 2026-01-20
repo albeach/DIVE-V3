@@ -851,7 +851,7 @@ resource "keycloak_openid_client_default_scopes" "incoming_federation_defaults" 
     keycloak_openid_client_scope.countryOfAffiliation.name,
     keycloak_openid_client_scope.acpCOI.name,
   ]
-  
+
   # Ensure scopes are created before assignment
   depends_on = [
     keycloak_openid_client_scope.uniqueID,

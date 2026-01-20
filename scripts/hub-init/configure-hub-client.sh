@@ -163,14 +163,14 @@ KEYCLOAK_SECRET=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/$
 
 if [ -z "$KEYCLOAK_SECRET" ]; then
     log_warn "Client has no secret in Keycloak - setting it now"
-    
+
     # Use REST API to set the secret
     HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" \
         -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}" \
         -H "Authorization: Bearer ${TOKEN}" \
         -H "Content-Type: application/json" \
         -d "{\"secret\":\"${GCP_CLIENT_SECRET}\"}")
-    
+
     if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "200" ]; then
         log_success "✓ Client secret set from GCP"
         KEYCLOAK_SECRET="${GCP_CLIENT_SECRET}"
@@ -183,19 +183,19 @@ elif [ "$KEYCLOAK_SECRET" != "$GCP_CLIENT_SECRET" ]; then
     log_warn "  Keycloak: ${KEYCLOAK_SECRET:0:10}..."
     log_warn "  GCP/Env:  ${GCP_CLIENT_SECRET:0:10}..."
     log_warn "  Updating Keycloak to match GCP (SSOT)..."
-    
+
     # Update client secret via REST API
     HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" \
         -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}" \
         -H "Authorization: Bearer ${TOKEN}" \
         -H "Content-Type: application/json" \
         -d "{\"secret\":\"${GCP_CLIENT_SECRET}\"}")
-    
+
     if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "200" ]; then
         # Verify it was set correctly
         VERIFY_SECRET=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/clients/${CLIENT_UUID}/client-secret" \
             -H "Authorization: Bearer ${TOKEN}" | jq -r '.value')
-        
+
         if [ "$VERIFY_SECRET" = "$GCP_CLIENT_SECRET" ]; then
             log_success "✓ Client secret synchronized with GCP"
         else

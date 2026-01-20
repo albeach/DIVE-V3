@@ -1,7 +1,7 @@
 # IMMEDIATE ACTION REQUIRED - Fresh Login Needed
 
-**Status**: All fixes complete, but you need to logout/login  
-**Reason**: Your current access token was issued BEFORE scope mapper fixes  
+**Status**: All fixes complete, but you need to logout/login
+**Reason**: Your current access token was issued BEFORE scope mapper fixes
 
 ---
 
@@ -24,11 +24,11 @@
 
 ## What I Fixed
 
-✅ **All 27 Soft Fails Eliminated**  
-✅ **Client Secret Synchronized** (Keycloak = GCP = Containers)  
-✅ **Scope Mappers Fixed** (claim.name now set for all 4 DIVE scopes)  
-✅ **Federation Working** (IdP URLs, client ID, post-broker flow)  
-✅ **ZTDF Encryption Working** (100 encrypted resources)  
+✅ **All 27 Soft Fails Eliminated**
+✅ **Client Secret Synchronized** (Keycloak = GCP = Containers)
+✅ **Scope Mappers Fixed** (claim.name now set for all 4 DIVE scopes)
+✅ **Federation Working** (IdP URLs, client ID, post-broker flow)
+✅ **ZTDF Encryption Working** (100 encrypted resources)
 
 **Everything is fixed** - you just need a fresh token!
 
@@ -87,5 +87,5 @@ The new login will get fresh tokens from Keycloak with ALL the fixes:
 
 ---
 
-**Action**: Refresh page, login via FRA IdP, try resource access  
+**Action**: Refresh page, login via FRA IdP, try resource access
 **Expected**: Authorization works with uniqueID present

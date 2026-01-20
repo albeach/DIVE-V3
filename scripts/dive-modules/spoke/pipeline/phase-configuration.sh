@@ -136,18 +136,18 @@ spoke_phase_configuration() {
     log_step "Step 3/6: Validating secrets"
     if ! spoke_config_sync_secrets "$instance_code"; then
         log_warn "Secret sync function failed"
-        
+
         # VALIDATION: Check if critical secrets actually exist
         local critical_secrets_ok=true
         local missing_secrets=()
-        
+
         for secret_var in "POSTGRES_PASSWORD_${code_upper}" "MONGO_PASSWORD_${code_upper}" "KEYCLOAK_ADMIN_PASSWORD_${code_upper}"; do
             if [ -z "${!secret_var}" ]; then
                 missing_secrets+=("$secret_var")
                 critical_secrets_ok=false
             fi
         done
-        
+
         if [ "$critical_secrets_ok" = false ]; then
             log_error "CRITICAL: Missing required secrets:"
             for secret in "${missing_secrets[@]}"; do
@@ -194,23 +194,23 @@ spoke_phase_configuration() {
     log_step "Step 6/6: Validating Terraform state"
     local realm_name="dive-v3-broker-${code_lower}"
     local kc_container="dive-spoke-${code_lower}-keycloak"
-    
+
     if ! docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
         log_verbose "Keycloak container not running - skipping validation"
         return 0
     fi
-    
+
     # Give Keycloak a brief moment to load realm configuration after Terraform apply
     # Keycloak caches realm configs, may need a moment to refresh
     log_verbose "Waiting for Keycloak to load realm configuration..."
     sleep 3
-    
+
     # Validate realm is actually accessible (not just that Keycloak is running)
     local realm_check
     realm_check=$(docker exec "$kc_container" curl -sf \
         "http://localhost:8080/realms/${realm_name}" 2>/dev/null | \
         jq -r '.realm // empty' 2>/dev/null)
-    
+
     if [ "$realm_check" = "$realm_name" ]; then
         log_success "✓ Terraform validated: realm '$realm_name' is accessible"
     else
@@ -218,13 +218,13 @@ spoke_phase_configuration() {
         log_error "Terraform applied but realm is not accessible"
         log_error "Expected realm: $realm_name"
         log_error "Keycloak response: ${realm_check:-empty}"
-        
+
         # Debug info
         log_verbose "Checking Keycloak health..."
         local kc_health
         kc_health=$(docker exec "$kc_container" curl -sf "http://localhost:8080/health" 2>/dev/null || echo "UNHEALTHY")
         log_verbose "Keycloak health: $kc_health"
-        
+
         log_error "This indicates Terraform state/Keycloak inconsistency"
         log_error "Manual check: docker exec $kc_container curl -sf http://localhost:8080/realms/$realm_name"
         return 1
