@@ -186,9 +186,13 @@ spoke_seed_users() {
         return 1
     fi
 
-    # Run seeding script
+    # Run seeding script (capture output for debugging)
     log_verbose "Running: $seed_script $code_upper"
-    if bash "$seed_script" "$code_upper" "" "$keycloak_password" &>/dev/null; then
+    local seed_output
+    seed_output=$(bash "$seed_script" "$code_upper" "" "$keycloak_password" 2>&1)
+    local seed_exit=$?
+    
+    if [ $seed_exit -eq 0 ]; then
         log_success "Seeded 6 test users (testuser-${code_lower}-1 through 5, admin-${code_lower})"
         echo "  ✓ testuser-${code_lower}-1 (UNCLASSIFIED)"
         echo "  ✓ testuser-${code_lower}-2 (RESTRICTED)"
@@ -198,7 +202,9 @@ spoke_seed_users() {
         echo "  ✓ admin-${code_lower} (TOP_SECRET, admin)"
         return 0
     else
-        log_error "User seeding failed"
+        log_error "User seeding failed (exit code: $seed_exit)"
+        log_verbose "Seeding output:"
+        echo "$seed_output" | head -20
         return 1
     fi
 }
