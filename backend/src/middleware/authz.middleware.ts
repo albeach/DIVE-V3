@@ -262,6 +262,52 @@ function loadTrustedIssuerTenantMap(): Record<string, string> {
 }
 
 /**
+ * Get effective ACR value for OPA policy evaluation
+ * Uses user_acr (from user attributes) when it indicates higher AAL than session ACR
+ * This allows AAL testing without requiring actual MFA registration
+ */
+const getEffectiveAcr = (user: any): string => {
+    const sessionAcr = user.acr ? String(user.acr) : '0';
+    const userAcr = user.user_acr ? String(user.user_acr) : null;
+
+    // If user_acr is set and higher than session ACR, use it
+    if (userAcr && parseInt(userAcr, 10) > parseInt(sessionAcr, 10)) {
+        logger.debug('Using user_acr for AAL testing', {
+            sessionAcr,
+            userAcr,
+            uniqueID: user.uniqueID,
+        });
+        return userAcr;
+    }
+
+    return sessionAcr;
+};
+
+/**
+ * Get effective AMR value for OPA policy evaluation
+ * Uses user_amr (from user attributes) when user_acr indicates higher AAL
+ * This allows AAL testing without requiring actual MFA registration
+ */
+const getEffectiveAmr = (user: any): string[] => {
+    const sessionAmr = Array.isArray(user.amr) ? user.amr : ['pwd'];
+    const userAmr = Array.isArray(user.user_amr) ? user.user_amr : null;
+    const sessionAcr = user.acr ? String(user.acr) : '0';
+    const userAcr = user.user_acr ? String(user.user_acr) : null;
+
+    // If user_acr is set and higher, use user_amr for consistency
+    if (userAcr && parseInt(userAcr, 10) > parseInt(sessionAcr, 10) && userAmr) {
+        logger.debug('Using user_amr for AAL testing', {
+            sessionAmr,
+            userAmr,
+            uniqueID: user.uniqueID,
+        });
+        return userAmr;
+    }
+
+    return sessionAmr;
+};
+
+/**
  * Extract tenant from token issuer or request context
  * Used for multi-tenant policy isolation
  */
@@ -757,9 +803,14 @@ export async function authenticateJWT(req: Request, res: Response, next: NextFun
             iss: introspectionResult.iss,
             client_id: introspectionResult.client_id,
             // MFA enforcement attributes (critical for AAL2/AAL3)
+            // Session-based ACR/AMR from actual authentication
             acr: introspectionResult.acr,
             amr: introspectionResult.amr,
             auth_time: introspectionResult.auth_time,
+            // User attribute ACR/AMR for testing/simulation
+            // These allow AAL testing without requiring actual MFA registration
+            user_acr: (introspectionResult as any).user_acr,
+            user_amr: (introspectionResult as any).user_amr,
         };
 
         logger.debug('Token validated via OAuth2 introspection', {
@@ -889,9 +940,11 @@ export async function authzMiddleware(req: Request, res: Response, next: NextFun
                     sourceIP: req.ip || req.socket?.remoteAddress || 'unknown',
                     deviceCompliant: true, // Assume compliant for now
                     requestId: req.headers['x-request-id'] as string || `req-${Date.now()}`,
-                    // CRITICAL: Pass ACR/AMR as-is (string) - OPA parse_aal() handles conversion
-                    acr: user.acr ? String(user.acr) : '0',  // Default to AAL1 if missing
-                    amr: Array.isArray(user.amr) ? user.amr : ['pwd'],  // Default to password-only
+                    // ACR/AMR for OPA policy evaluation
+                    // Use user_acr/user_amr when they indicate higher AAL (for testing)
+                    // This allows AAL testing without requiring actual MFA registration
+                    acr: getEffectiveAcr(user),
+                    amr: getEffectiveAmr(user),
                     auth_time: user.auth_time,
                     tenant: extractTenant(user, req),
                 },
@@ -918,7 +971,7 @@ export async function authzMiddleware(req: Request, res: Response, next: NextFun
             });
 
             opaResponse = response.data;
-            
+
             // Check if OPA returned empty response (policies not loaded)
             if (!opaResponse || !opaResponse.result || Object.keys(opaResponse).length === 0) {
                 logger.warn('OPA returned empty response (policies not loaded), using fallback', {
@@ -1003,7 +1056,7 @@ export async function authzMiddleware(req: Request, res: Response, next: NextFun
 
         // Attach authorization obligations (like KAS key requirements)
         (req as any).authzObligations = opaResponse.result.obligations || [];
-        
+
         // Attach fetched resource to request so controller doesn't fetch again
         (req as any).resource = resource;
 
