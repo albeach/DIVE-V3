@@ -271,7 +271,7 @@ spoke_secrets_load_from_gcp() {
         return 0
     else
         log_warn "Only loaded $secrets_loaded/${#SPOKE_REQUIRED_SECRETS[@]} required secrets from GCP"
-        
+
         # Report which secrets failed to load
         if [ ${#failed_secrets[@]} -gt 0 ]; then
             log_warn "Missing GCP secrets: ${failed_secrets[*]}"
@@ -282,7 +282,7 @@ spoke_secrets_load_from_gcp() {
                 log_verbose "  echo -n 'YOUR_SECRET' | gcloud secrets versions add $gcp_name --data-file=- --project=$project"
             done
         fi
-        
+
         return 1
     fi
 }
@@ -586,8 +586,10 @@ spoke_secrets_sync() {
     # Step 3: Sync Keycloak client secret
     spoke_secrets_sync_keycloak_client "$instance_code" || return 1
 
-    # Step 4: Sync federation secrets (if Hub is available)
-    spoke_secrets_sync_federation "$instance_code" || true  # Non-blocking
+    # Step 4: Sync federation secrets (if Hub is available - non-blocking)
+    if ! spoke_secrets_sync_federation "$instance_code"; then
+        log_verbose "Federation secret sync failed (non-critical - Hub may not be available)"
+    fi
 
     log_success "Secret synchronization complete"
     return 0
@@ -712,10 +714,12 @@ spoke_secrets_sync_federation() {
 
     # Load federation sync module if available
     if [ -f "${DIVE_ROOT}/scripts/dive-modules/federation-setup.sh" ]; then
-        source "${DIVE_ROOT}/scripts/dive-modules/federation-setup.sh" 2>/dev/null || true
-
-        if type sync_hub_to_spoke_secrets &>/dev/null; then
-            sync_hub_to_spoke_secrets "$code_upper" 2>/dev/null || true
+        if source "${DIVE_ROOT}/scripts/dive-modules/federation-setup.sh" 2>/dev/null; then
+            if type sync_hub_to_spoke_secrets &>/dev/null; then
+                if ! sync_hub_to_spoke_secrets "$code_upper" 2>/dev/null; then
+                    log_verbose "Hub-to-spoke secret sync failed (non-critical)"
+                fi
+            fi
         fi
     fi
 

@@ -484,21 +484,21 @@ EOF
 ##
 spoke_configure_federation_after_approval() {
     local instance_code="$1"
-    
+
     if [ -z "$instance_code" ]; then
         log_error "Instance code required for federation auto-configuration"
         return 1
     fi
-    
+
     local code_upper=$(upper "$instance_code")
-    
+
     # Check if auto-config was disabled due to module loading failure
     if [ "$SPOKE_FEDERATION_AUTO_CONFIG_DISABLED" = "true" ]; then
         log_warn "Bidirectional federation auto-config disabled (module failed to load)"
         log_warn "You can retry manually: ./dive federation link $code_upper"
         return 1
     fi
-    
+
     # Verify spoke-federation module is loaded
     if ! type spoke_federation_create_bidirectional &>/dev/null; then
         log_error "spoke-federation module not loaded - cannot configure bidirectional federation"
@@ -507,16 +507,16 @@ spoke_configure_federation_after_approval() {
         log_error "Try sourcing it manually to see errors"
         return 1
     fi
-    
+
     # Verify dependency functions exist
     if ! type spoke_federation_get_admin_token &>/dev/null; then
         log_error "spoke_federation_get_admin_token function not available"
         log_error "Module loaded incompletely - missing critical functions"
         return 1
     fi
-    
+
     log_verbose "All required functions available, proceeding with auto-configuration"
-    
+
     # Call the bidirectional federation setup function
     # This creates {spoke}-idp in Hub Keycloak
     if spoke_federation_create_bidirectional "$code_upper"; then

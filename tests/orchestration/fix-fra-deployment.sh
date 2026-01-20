@@ -103,7 +103,7 @@ total_count=0
 for container in $(docker ps --filter "name=dive-spoke-fra-" --format '{{.Names}}'); do
     total_count=$((total_count + 1))
     health=$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo "none")
-    
+
     if [ "$health" = "healthy" ] || [ "$health" = "none" ]; then
         healthy_count=$((healthy_count + 1))
         log_success "✓ $container: healthy"
@@ -162,10 +162,10 @@ while [ $waited -lt $max_wait ]; do
         log_success "✓ Keycloak is ready"
         break
     fi
-    
+
     sleep 3
     waited=$((waited + 3))
-    
+
     if [ $((waited % 15)) -eq 0 ]; then
         log_info "  Waited ${waited}s / ${max_wait}s..."
     fi

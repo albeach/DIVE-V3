@@ -96,7 +96,9 @@ spoke_phase_deployment() {
 
     # CRITICAL PRE-FLIGHT: Ensure OPAL key is configured
     # This fixes OPAL client for both new and existing spokes
-    spoke_ensure_opal_key_configured "$instance_code" || true
+    if ! spoke_ensure_opal_key_configured "$instance_code"; then
+        log_verbose "OPAL key auto-configuration skipped (may not be needed)"
+    fi
 
     # Step 1: Start containers
     local force_rebuild="false"
@@ -566,9 +568,11 @@ spoke_deployment_provision_opal_token() {
                 echo "SPOKE_OPAL_TOKEN=$new_token" >> "$env_file"
             fi
 
-            # Update running container
-            docker exec "dive-spoke-${code_lower}-opal-client" \
-                sh -c "export SPOKE_OPAL_TOKEN=$new_token" 2>/dev/null || true
+            # Update running container (best effort - container may not support runtime env update)
+            if ! docker exec "dive-spoke-${code_lower}-opal-client" \
+                sh -c "export SPOKE_OPAL_TOKEN=$new_token" 2>/dev/null; then
+                log_verbose "Could not update OPAL token in running container (restart may be needed)"
+            fi
 
             log_success "OPAL token provisioned"
             return 0
@@ -606,7 +610,9 @@ spoke_deployment_restart_services() {
         local container="dive-spoke-${code_lower}-${service}"
 
         if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
-            docker restart "$container" 2>/dev/null || true
+            if ! docker restart "$container" 2>/dev/null; then
+                log_verbose "Could not restart $container (may not be running)"
+            fi
         fi
     done
 }

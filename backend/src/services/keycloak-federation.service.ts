@@ -115,12 +115,12 @@ export class KeycloakFederationService {
 
     const keycloakUrl = process.env.KEYCLOAK_URL || 'https://localhost:8443';
     const adminUser = process.env.KEYCLOAK_ADMIN || 'admin';
-    
+
     // Get admin password - try instance-specific first, then generic
     const instanceCode = (process.env.INSTANCE_CODE || 'USA').toUpperCase();
-    const adminPassword = process.env[`KEYCLOAK_ADMIN_PASSWORD_${instanceCode}`] || 
-                          process.env.KEYCLOAK_ADMIN_PASSWORD ||
-                          process.env.KC_ADMIN_PASSWORD;
+    const adminPassword = process.env[`KEYCLOAK_ADMIN_PASSWORD_${instanceCode}`] ||
+      process.env.KEYCLOAK_ADMIN_PASSWORD ||
+      process.env.KC_ADMIN_PASSWORD;
 
     if (!adminPassword) {
       throw new Error(`KEYCLOAK_ADMIN_PASSWORD not configured (tried KEYCLOAK_ADMIN_PASSWORD_${instanceCode}, KEYCLOAK_ADMIN_PASSWORD, KC_ADMIN_PASSWORD)`);

@@ -191,9 +191,12 @@ _spoke_pipeline_execute_internal() {
     # Set initial state AFTER preflight passes (not before)
     if [ $phase_result -eq 0 ]; then
         log_verbose "Preflight passed, setting state to INITIALIZING..."
-        orch_db_set_state "$code_upper" "INITIALIZING" "" \
-            "{\"mode\":\"$pipeline_mode\",\"instance_name\":\"$instance_name\"}" || true
-        log_verbose "State set to INITIALIZING"
+        if orch_db_set_state "$code_upper" "INITIALIZING" "" \
+            "{\"mode\":\"$pipeline_mode\",\"instance_name\":\"$instance_name\"}"; then
+            log_verbose "State set to INITIALIZING"
+        else
+            log_verbose "Could not update state to INITIALIZING (database may be unavailable)"
+        fi
     fi
 
     # Phase 2: Initialization (skip for 'up' mode)
@@ -372,7 +375,9 @@ spoke_pipeline_run_phase() {
     # Create checkpoint before critical phases
     if [[ "$phase_name" =~ ^(DEPLOYMENT|CONFIGURATION)$ ]]; then
         if type orch_create_checkpoint &>/dev/null; then
-            orch_create_checkpoint "$instance_code" "$phase_name" "Starting $phase_name phase" 2>/dev/null || true
+            if ! orch_create_checkpoint "$instance_code" "$phase_name" "Starting $phase_name phase" 2>/dev/null; then
+                log_verbose "Could not create checkpoint for $phase_name (database may be unavailable)"
+            fi
         fi
     fi
 
@@ -433,21 +438,35 @@ spoke_pipeline_run_phase() {
 spoke_pipeline_rollback() {
     local instance_code="$1"
     local failed_phase="$2"
+    local code_lower=$(lower "$instance_code")
 
     log_warn "Attempting rollback for $instance_code after $failed_phase failure"
 
-    # Find latest checkpoint before failure
-    if type orch_find_latest_checkpoint &>/dev/null; then
-        local checkpoint
-        checkpoint=$(orch_find_latest_checkpoint "$instance_code")
-
-        if [ -n "$checkpoint" ]; then
-            log_info "Rolling back to checkpoint: $checkpoint"
-            if type orch_execute_rollback &>/dev/null; then
-                orch_execute_rollback "$instance_code" "Phase $failed_phase failed" "$ROLLBACK_CONTAINERS"
-            fi
+    # CRITICAL: Always stop containers on failure
+    # Don't rely on checkpoint restoration - just stop everything for clean state
+    log_step "Stopping containers to prevent partial deployment state"
+    
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    if [ -d "$spoke_dir" ] && [ -f "$spoke_dir/docker-compose.yml" ]; then
+        cd "$spoke_dir"
+        if docker compose down 2>&1 | grep -q "Removed\|Stopped"; then
+            log_success "✓ Containers stopped successfully"
+        else
+            log_warn "⚠ Container stop may have failed (check manually)"
         fi
+        cd "$DIVE_ROOT"
+    else
+        log_verbose "No docker-compose.yml found - containers may not be running"
     fi
+    
+    # Update database state to FAILED
+    if type orch_db_set_state &>/dev/null; then
+        orch_db_set_state "$instance_code" "FAILED" "Deployment failed at phase: $failed_phase" \
+            "{\"failed_phase\":\"$failed_phase\",\"rollback_executed\":true}"
+    fi
+    
+    log_warn "Rollback complete - containers stopped, state marked FAILED"
+    log_info "To retry: ./dive spoke deploy $instance_code"
 }
 
 ##

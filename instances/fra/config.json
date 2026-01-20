@@ -7,7 +7,7 @@
     "country": "FRA",
     "organizationType": "government",
     "contactEmail": "admin@fra.dive25.com",
-    "registeredSpokeId": "spoke-fra-91b8e981"
+    "registeredSpokeId": "spoke-fra-ee18ad42"
   },
   "endpoints": {
     "hubUrl": "https://localhost:4000",
@@ -34,7 +34,7 @@
       "data:federation_matrix",
       "data:trusted_issuers"
     ],
-    "registeredAt": "2026-01-19T00:19:16Z"
+    "registeredAt": "2026-01-20T05:02:55Z"
   },
   "operational": {
     "heartbeatIntervalMs": 30000,

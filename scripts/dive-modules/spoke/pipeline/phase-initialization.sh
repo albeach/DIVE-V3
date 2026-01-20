@@ -340,8 +340,11 @@ spoke_init_generate_env() {
     # New behavior: Always create full template (SSOT principle)
     # Backup existing file if present
     if [ -f "$env_file" ]; then
-        cp "$env_file" "${env_file}.bak.$(date +%Y%m%d-%H%M%S)" 2>/dev/null || true
-        log_verbose "Backed up existing .env, regenerating complete template"
+        if cp "$env_file" "${env_file}.bak.$(date +%Y%m%d-%H%M%S)" 2>/dev/null; then
+            log_verbose "Backed up existing .env, regenerating complete template"
+        else
+            log_verbose "Could not backup .env file (proceeding with regeneration)"
+        fi
     fi
 
     # ALWAYS create complete .env template
@@ -488,8 +491,10 @@ spoke_init_prepare_certificates() {
             log_warn "Existing certificate missing required SAN: $required_san"
             log_warn "Regenerating certificate with federation-compatible SANs..."
             # Backup old certificate
-            mv "$spoke_dir/certs/certificate.pem" "$spoke_dir/certs/certificate.pem.backup-$(date +%Y%m%d)" 2>/dev/null || true
-            mv "$spoke_dir/certs/key.pem" "$spoke_dir/certs/key.pem.backup-$(date +%Y%m%d)" 2>/dev/null || true
+            mv "$spoke_dir/certs/certificate.pem" "$spoke_dir/certs/certificate.pem.backup-$(date +%Y%m%d)" 2>/dev/null || \
+                log_verbose "Could not backup old certificate"
+            mv "$spoke_dir/certs/key.pem" "$spoke_dir/certs/key.pem.backup-$(date +%Y%m%d)" 2>/dev/null || \
+                log_verbose "Could not backup old key"
         fi
     fi
 

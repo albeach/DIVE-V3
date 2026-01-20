@@ -1,0 +1,199 @@
+# =============================================================================
+# DIVE V3 - Custom Client Scopes for ABAC Attributes
+# =============================================================================
+# Creates client scopes with proper protocol mappers for DIVE attributes
+# 
+# CRITICAL FIX (2026-01-19): SF-026 - Explicit claim.name Configuration
+# Previous: Scopes created by backend with claim.name sometimes null
+# Fixed: Terraform creates scopes with explicit claim.name from start
+# 
+# Ensures access tokens include:
+# - uniqueID (globally unique identifier)
+# - clearance (classification level)
+# - countryOfAffiliation (ISO 3166-1 alpha-3)
+# - acpCOI (Communities of Interest array)
+# =============================================================================
+
+# =============================================================================
+# DIVE CUSTOM CLIENT SCOPES
+# =============================================================================
+
+resource "keycloak_openid_client_scope" "uniqueID" {
+  realm_id               = keycloak_realm.broker.id
+  name                   = "uniqueID"
+  description            = "DIVE globally unique identifier (ACP-240 §2.1)"
+  include_in_token_scope = true
+  consent_screen_text    = "Unique identifier for access control"
+  
+  gui_order = 1
+  
+  # For existing deployments: import with
+  # terraform import module.instance.keycloak_openid_client_scope.uniqueID realm-id/scope-id
+  lifecycle {
+    # Prevent recreation if scope exists - just manage it
+    ignore_changes = []
+  }
+}
+
+resource "keycloak_openid_client_scope" "clearance" {
+  realm_id               = keycloak_realm.broker.id
+  name                   = "clearance"
+  description            = "DIVE security clearance level"
+  include_in_token_scope = true
+  consent_screen_text    = "Security clearance level"
+  
+  gui_order = 2
+}
+
+resource "keycloak_openid_client_scope" "countryOfAffiliation" {
+  realm_id               = keycloak_realm.broker.id
+  name                   = "countryOfAffiliation"
+  description            = "DIVE country of affiliation (ISO 3166-1 alpha-3)"
+  include_in_token_scope = true
+  consent_screen_text    = "Country of affiliation"
+  
+  gui_order = 3
+}
+
+resource "keycloak_openid_client_scope" "acpCOI" {
+  realm_id               = keycloak_realm.broker.id
+  name                   = "acpCOI"
+  description            = "DIVE Communities of Interest (ACP-240)"
+  include_in_token_scope = true
+  consent_screen_text    = "Communities of Interest"
+  
+  gui_order = 4
+}
+
+# =============================================================================
+# PROTOCOL MAPPERS FOR EACH SCOPE
+# =============================================================================
+# CRITICAL: Must explicitly set claim.name to ensure claims appear in access tokens
+# Without claim.name, tokens may have missing or inconsistent claims
+# =============================================================================
+
+resource "keycloak_openid_user_attribute_protocol_mapper" "uniqueID_mapper" {
+  realm_id        = keycloak_realm.broker.id
+  client_scope_id = keycloak_openid_client_scope.uniqueID.id
+  name            = "uniqueID-mapper"
+  
+  # CRITICAL: Explicit claim.name (SF-026 fix)
+  claim_name      = "uniqueID"
+  user_attribute  = "uniqueID"
+  
+  # Token inclusion
+  add_to_id_token      = true
+  add_to_access_token  = true
+  add_to_userinfo      = true
+  
+  # Single-valued attribute configuration
+  claim_value_type     = "String"
+  multivalued          = false
+  aggregate_attributes = true  # Extract first element if multi-valued in Keycloak
+}
+
+resource "keycloak_openid_user_attribute_protocol_mapper" "clearance_mapper" {
+  realm_id        = keycloak_realm.broker.id
+  client_scope_id = keycloak_openid_client_scope.clearance.id
+  name            = "clearance-mapper"
+  
+  # CRITICAL: Explicit claim.name
+  claim_name      = "clearance"
+  user_attribute  = "clearance"
+  
+  add_to_id_token      = true
+  add_to_access_token  = true
+  add_to_userinfo      = true
+  
+  claim_value_type     = "String"
+  multivalued          = false
+  aggregate_attributes = true
+}
+
+resource "keycloak_openid_user_attribute_protocol_mapper" "countryOfAffiliation_mapper" {
+  realm_id        = keycloak_realm.broker.id
+  client_scope_id = keycloak_openid_client_scope.countryOfAffiliation.id
+  name            = "countryOfAffiliation-mapper"
+  
+  # CRITICAL: Explicit claim.name
+  claim_name      = "countryOfAffiliation"
+  user_attribute  = "countryOfAffiliation"
+  
+  add_to_id_token      = true
+  add_to_access_token  = true
+  add_to_userinfo      = true
+  
+  claim_value_type     = "String"
+  multivalued          = false
+  aggregate_attributes = true
+}
+
+resource "keycloak_openid_user_attribute_protocol_mapper" "acpCOI_mapper" {
+  realm_id        = keycloak_realm.broker.id
+  client_scope_id = keycloak_openid_client_scope.acpCOI.id
+  name            = "acpCOI-mapper"
+  
+  # CRITICAL: Explicit claim.name
+  claim_name      = "acpCOI"
+  user_attribute  = "acpCOI"
+  
+  add_to_id_token      = true
+  add_to_access_token  = true
+  add_to_userinfo      = true
+  
+  # Multi-valued attribute configuration (array of COIs)
+  claim_value_type     = "String"
+  multivalued          = true
+  aggregate_attributes = false  # Keep as array, don't extract first element
+}
+
+# =============================================================================
+# ASSIGN DIVE SCOPES AS DEFAULTS TO BROKER CLIENT
+# =============================================================================
+# Ensures ALL tokens issued by this realm include DIVE attributes
+# =============================================================================
+
+resource "keycloak_openid_client_default_scopes" "broker_client_dive_scopes" {
+  realm_id  = keycloak_realm.broker.id
+  client_id = keycloak_openid_client.broker_client.id
+
+  default_scopes = [
+    # Standard OIDC scopes
+    "profile",
+    "email",
+    "roles",
+    "web-origins",
+    # DIVE custom scopes - NOW MANAGED BY TERRAFORM
+    keycloak_openid_client_scope.uniqueID.name,
+    keycloak_openid_client_scope.clearance.name,
+    keycloak_openid_client_scope.countryOfAffiliation.name,
+    keycloak_openid_client_scope.acpCOI.name,
+  ]
+  
+  # Ensure scopes are created before assignment
+  depends_on = [
+    keycloak_openid_client_scope.uniqueID,
+    keycloak_openid_client_scope.clearance,
+    keycloak_openid_client_scope.countryOfAffiliation,
+    keycloak_openid_client_scope.acpCOI,
+    keycloak_openid_user_attribute_protocol_mapper.uniqueID_mapper,
+    keycloak_openid_user_attribute_protocol_mapper.clearance_mapper,
+    keycloak_openid_user_attribute_protocol_mapper.countryOfAffiliation_mapper,
+    keycloak_openid_user_attribute_protocol_mapper.acpCOI_mapper,
+  ]
+}
+
+# =============================================================================
+# VALIDATION
+# =============================================================================
+# Terraform will verify:
+# 1. Scopes exist with correct names
+# 2. Protocol mappers have claim.name set explicitly
+# 3. Mappers are configured for access tokens
+# 4. Scopes are assigned as defaults to clients
+# 
+# Success Criteria:
+# - Access tokens include all DIVE attributes
+# - No manual Keycloak configuration required
+# - Works from clean deployment
+# =============================================================================

@@ -21,7 +21,11 @@ fi
 
 # Load secret management functions
 if [ -z "$SPOKE_SECRETS_LOADED" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/spoke-secrets.sh" 2>/dev/null || true
+    if source "$(dirname "${BASH_SOURCE[0]}")/spoke-secrets.sh" 2>/dev/null; then
+        log_verbose "spoke-secrets.sh loaded successfully" >/dev/null
+    else
+        log_verbose "spoke-secrets.sh not available (secret functions may not work)" >/dev/null
+    fi
 fi
 
 # =============================================================================
@@ -55,14 +59,58 @@ spoke_phase_seeding() {
         return 0
     fi
 
-    # Step 1: Seed test users
+    # Step 1: Seed test users (CRITICAL - MUST succeed)
+    log_step "Step 1/2: Seeding test users"
     if ! spoke_seed_users "$instance_code"; then
-        log_warn "User seeding had issues (continuing)"
+        log_error "User seeding FAILED - cannot deploy spoke without test users"
+        log_error "Spoke is unusable without users for testing/login"
+        return 1
+    fi
+    log_success "✓ Test users seeded successfully"
+
+    # Step 2: Seed ZTDF resources (optional for spokes - they can use Hub resources via federation)
+    log_step "Step 2/2: Seeding ZTDF resources (optional)"
+    local resource_seeding_failed=false
+    if ! spoke_seed_resources "$instance_code" 5000; then
+        resource_seeding_failed=true
+        log_warn "ZTDF resource seeding failed (likely: KAS not configured for this spoke)"
     fi
 
-    # Step 2: Seed ZTDF resources
-    if ! spoke_seed_resources "$instance_code" 5000; then
-        log_warn "Resource seeding had issues (continuing)"
+    # Validate actual resource count AND type to be honest about what happened
+    local mongo_container="dive-spoke-${code_lower}-mongodb"
+    local mongo_password_var="MONGO_PASSWORD_${code_upper}"
+    local mongo_password="${!mongo_password_var}"
+    local total_count=0
+    local encrypted_count=0
+
+    if docker ps --format '{{.Names}}' | grep -q "^${mongo_container}$" && [ -n "$mongo_password" ]; then
+        # Check total resources
+        total_count=$(docker exec "$mongo_container" bash -c "
+            mongosh -u admin -p \"$mongo_password\" --authenticationDatabase admin dive-v3-${code_lower} --quiet --eval 'db.resources.countDocuments({})' 2>/dev/null
+        " 2>/dev/null | tail -1 | tr -d '\n\r' || echo "0")
+        
+        # Check ZTDF-encrypted resources (have encrypted: true AND ztdf.payload.keyAccessObjects)
+        encrypted_count=$(docker exec "$mongo_container" bash -c "
+            mongosh -u admin -p \"$mongo_password\" --authenticationDatabase admin dive-v3-${code_lower} --quiet --eval 'db.resources.countDocuments({encrypted: true, \"ztdf.payload.keyAccessObjects\": {\$exists: true, \$ne: []}})' 2>/dev/null
+        " 2>/dev/null | tail -1 | tr -d '\n\r' || echo "0")
+    fi
+
+    # Report honestly what was created
+    if [ "$encrypted_count" -gt 0 ]; then
+        log_success "✓ ZTDF-encrypted resources: $encrypted_count documents"
+        echo "  ✓ AES-256-GCM encryption"
+        echo "  ✓ Policy-bound key access"
+        echo "  ✓ Multi-KAS support"
+    elif [ "$total_count" -gt 0 ]; then
+        log_warn "⚠ Plaintext resources: $total_count documents (ZTDF encryption failed)"
+        echo "  • Resources are NOT encrypted (KAS not configured)"
+        echo "  • Plaintext is NOT production-ready for classified data"
+        echo "  • Consider: Either configure KAS OR use Hub resources via federation"
+    else
+        log_info "ℹ Spoke has 0 local resources (will use Hub resources via federation)"
+        echo "  • Spokes can access Hub's 5,000 resources via federated search"
+        echo "  • This is NORMAL for spoke instances"
+        echo "  • Local ZTDF resources require KAS registration (optional)"
     fi
 
     # Create seeding checkpoint
@@ -70,7 +118,15 @@ spoke_phase_seeding() {
         orch_create_checkpoint "$instance_code" "SEEDING" "Seeding phase completed"
     fi
 
-    log_success "Seeding phase complete"
+    # HONEST reporting - distinguish between users (critical), encrypted vs plaintext resources
+    if [ "$encrypted_count" -gt 0 ]; then
+        log_success "Seeding phase complete (users: ✅, ZTDF encrypted: ✅ $encrypted_count)"
+    elif [ "$total_count" -gt 0 ]; then
+        log_success "Seeding phase complete (users: ✅, plaintext: ⚠️  $total_count - not encrypted)"
+    else
+        log_success "Seeding phase complete (users: ✅, local resources: N/A - using Hub)"
+    fi
+    
     return 0
 }
 
@@ -170,9 +226,11 @@ spoke_seed_resources() {
 
     log_step "Seeding $resource_count ZTDF resources for $code_upper..."
 
-    # Load secrets for verification
+    # Load secrets for verification (best effort)
     if type spoke_secrets_load &>/dev/null; then
-        spoke_secrets_load "$instance_code" 2>/dev/null || true
+        if ! spoke_secrets_load "$instance_code" 2>/dev/null; then
+            log_verbose "Secret loading failed (may already be loaded)"
+        fi
     fi
 
     # Check if MongoDB is running

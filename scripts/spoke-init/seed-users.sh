@@ -510,7 +510,7 @@ create_user() {
             attrs_update="${attrs_update}, \"acpCOI\": ${acp_coi_json}"
         fi
         attrs_update="${attrs_update}}"
-        
+
         # CRITICAL FIX (2026-01-18): Don't hide errors - we need to see if attribute update fails
         local update_response
         update_response=$(kc_curl -w "\nHTTP_CODE:%{http_code}" -X PUT \
@@ -524,9 +524,9 @@ create_user() {
                 \"lastName\": \"${last_name}\",
                 \"attributes\": ${attrs_update}
             }" 2>&1)
-        
+
         local http_code=$(echo "$update_response" | grep "HTTP_CODE:" | cut -d: -f2)
-        
+
         if [[ "$http_code" == "204" || "$http_code" == "200" ]]; then
             log_verbose "✓ Updated ${username} attributes"
         else
@@ -534,7 +534,7 @@ create_user() {
             log_error "Response: $(echo "$update_response" | grep -v HTTP_CODE | head -3)"
             # Don't return 0 if update failed - this is critical
         fi
-        
+
         return 0
     fi
 

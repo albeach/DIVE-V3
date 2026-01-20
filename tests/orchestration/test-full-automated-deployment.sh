@@ -69,7 +69,7 @@ if [ "$CLEAN_SLATE" = "yes" ]; then
     NEED_FRA_DEPLOY=true
 else
     log_info "Skipping nuke - testing with existing deployment"
-    
+
     # Check what needs to be deployed
     if [ "$hub_containers" -eq 0 ]; then
         NEED_HUB_DEPLOY=true
@@ -77,7 +77,7 @@ else
         NEED_HUB_DEPLOY=false
         log_info "Hub already running - will skip deployment"
     fi
-    
+
     if [ "$fra_containers" -eq 0 ]; then
         NEED_FRA_DEPLOY=true
     else
@@ -109,7 +109,7 @@ if [ "$NEED_HUB_DEPLOY" = "true" ]; then
     sleep 15
 else
     log_info "Hub already running - verifying health..."
-    
+
     if curl -sk https://localhost:4000/health 2>/dev/null | grep -q "healthy"; then
         log_success "✓ Hub is healthy"
     else
@@ -156,7 +156,7 @@ log_info "=========================================="
 # Check for seeding phase in logs
 if grep -q "Seeding phase for FRA" "$deployment_log"; then
     log_success "✓ Seeding phase executed"
-    
+
     # Check if users were created
     if grep -q "Seeded.*test users" "$deployment_log"; then
         log_success "✓ Test users created during deployment"
@@ -186,11 +186,11 @@ log_info "Users found: $user_count"
 
 if [ "$user_count" -ge 5 ]; then
     log_success "✓ Test users exist ($user_count users)"
-    
+
     # List users
     docker exec dive-spoke-fra-keycloak /opt/keycloak/bin/kcadm.sh get users -r dive-v3-broker-fra 2>/dev/null | \
         jq -r '.[] | "  - \(.username): \(.attributes.clearance[0] // "none")"'
-    
+
     SEEDING_AUTOMATED=true
 else
     log_error "✗ NO test users found (expected 5-6, got $user_count)"

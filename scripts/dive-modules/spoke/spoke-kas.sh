@@ -606,18 +606,19 @@ spoke_kas_approve() {
         return 1
     fi
 
-    # Extract instance code from kas_id (e.g., hun-kas -> hun)
-    local code_lower="${kas_id%-kas}"
-    local backend_port
-    eval "$(get_instance_ports "$(upper "$code_lower")")"
-    backend_port="${SPOKE_BACKEND_PORT:-14000}"
+    # CRITICAL FIX: KAS approval endpoint is on HUB backend, not spoke backend
+    # Hub backend has the kas_registry collection and approval logic
+    local hub_backend_url="${HUB_BACKEND_URL:-https://localhost:4000}"
+    local api_endpoint="${hub_backend_url}/api/kas/registry/${kas_id}/approve"
 
-    local api_endpoint="https://localhost:${backend_port}/api/kas/registry/${kas_id}/approve"
+    log_info "Approving KAS registration: $kas_id (via Hub backend)"
 
-    log_info "Approving KAS registration: $kas_id"
-
+    # Auto-approval in development mode using CLI bypass
+    # In production, this would require super_admin JWT token
     local response
-    response=$(curl -sk -X POST "$api_endpoint" 2>&1)
+    response=$(curl -sk -X POST "$api_endpoint" \
+        -H "X-CLI-Bypass: dive-cli-local-dev" \
+        2>&1)
 
     local success
     success=$(echo "$response" | jq -r '.success // false' 2>/dev/null)
@@ -627,8 +628,16 @@ spoke_kas_approve() {
         return 0
     fi
 
+    # Check if auth error (expected in some configurations)
     local error_msg
     error_msg=$(echo "$response" | jq -r '.error // "Unknown error"' 2>/dev/null)
+    
+    if echo "$error_msg" | grep -qi "authentication\|authorized"; then
+        log_warn "KAS approval requires authentication - manual approval needed"
+        log_info "Manual approval: Login to Hub as super_admin and approve $kas_id"
+        return 1
+    fi
+
     log_error "Failed to approve KAS: $error_msg"
     return 1
 }

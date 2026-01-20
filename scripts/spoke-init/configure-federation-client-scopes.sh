@@ -61,12 +61,12 @@ for scope in "${REQUIRED_SCOPES[@]}"; do
     # Get scope ID
     SCOPE_ID=$(docker exec "$KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get client-scopes \
       -r "$REALM_NAME" 2>/dev/null | jq -r ".[] | select(.name == \"$scope\") | .id")
-    
+
     if [ -z "$SCOPE_ID" ] || [ "$SCOPE_ID" = "null" ]; then
         echo "⚠ Client scope '$scope' not found in realm (skipping)"
         continue
     fi
-    
+
     # Add as default client scope
     if docker exec "$KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh update \
         clients/$CLIENT_UUID/default-client-scopes/$SCOPE_ID -r "$REALM_NAME" 2>/dev/null; then

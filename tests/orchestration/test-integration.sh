@@ -64,10 +64,10 @@ log_skip() {
 run_test() {
     local test_name="$1"
     local test_func="$2"
-    
+
     ((TESTS_RUN++))
     log_test "$test_name"
-    
+
     if $test_func; then
         log_pass "$test_name"
         return 0
@@ -100,31 +100,31 @@ source_modules() {
 test_state_with_error_recovery() {
     # Integration: State changes trigger error recovery when failing
     local test_instance="int-test-$(date +%s)"
-    
+
     # Set initial state
     orch_db_set_state "$test_instance" "INITIALIZING" '{"test":"integration"}'
-    
+
     # Simulate error during deployment
     orch_db_record_error "$test_instance" "1201" 2 "test" "Simulated container failure" "Restart container" "{}"
-    
+
     # Check error was recorded
     local error_count
     error_count=$(orch_db_exec "SELECT COUNT(*) FROM orchestration_errors WHERE instance_code='$test_instance'" 2>/dev/null | xargs)
-    
+
     # Cleanup
     orch_db_exec "DELETE FROM orchestration_errors WHERE instance_code='$test_instance'" >/dev/null 2>&1
     orch_db_exec "DELETE FROM deployment_states WHERE instance_code='$test_instance'" >/dev/null 2>&1
-    
+
     [ "${error_count:-0}" -gt 0 ]
 }
 
 test_state_rollback_with_checkpoint() {
     # Integration: State rollback uses checkpoint system
     local test_instance="int-rollback-$(date +%s)"
-    
+
     # Set initial state
     orch_db_set_state "$test_instance" "DEPLOYING" '{"phase":"initial"}'
-    
+
     # Create checkpoint
     local checkpoint_id
     checkpoint_id=$(orch_db_exec "
@@ -132,26 +132,26 @@ test_state_rollback_with_checkpoint() {
         VALUES ('$test_instance', 'pre-deploy', '{\"state\":\"checkpoint\"}')
         RETURNING checkpoint_id
     " 2>/dev/null | xargs)
-    
+
     # Simulate failure and rollback
     orch_db_set_state "$test_instance" "FAILED" '{"error":"simulated"}'
-    
+
     # Rollback to checkpoint
     if [ -n "$checkpoint_id" ]; then
         orch_db_exec "
-            UPDATE deployment_states 
+            UPDATE deployment_states
             SET state='ROLLED_BACK', metadata='{\"rollback_checkpoint\":\"$checkpoint_id\"}'
             WHERE instance_code='$test_instance'
         " >/dev/null 2>&1
     fi
-    
+
     local final_state
     final_state=$(orch_db_get_state "$test_instance")
-    
+
     # Cleanup
     orch_db_exec "DELETE FROM deployment_checkpoints WHERE instance_code='$test_instance'" >/dev/null 2>&1
     orch_db_exec "DELETE FROM deployment_states WHERE instance_code='$test_instance'" >/dev/null 2>&1
-    
+
     [ "$final_state" = "ROLLED_BACK" ]
 }
 
@@ -161,32 +161,32 @@ test_state_rollback_with_checkpoint() {
 
 test_dependency_graph_with_timeouts() {
     # Integration: Dependency graph uses dynamic timeouts
-    
+
     # Get timeout for a service
     local timeout
     timeout=$(orch_calculate_dynamic_timeout "keycloak" "test")
-    
+
     # Timeout should be within bounds
     local min=${SERVICE_MIN_TIMEOUTS["keycloak"]:-180}
     local max=${SERVICE_MAX_TIMEOUTS["keycloak"]:-300}
-    
+
     [ "$timeout" -ge "$min" ] && [ "$timeout" -le "$max" ]
 }
 
 test_health_cascade_with_circuit_breaker() {
     # Integration: Health checks integrate with circuit breaker
     local test_op="int-health-cb-$(date +%s)"
-    
+
     # Initialize circuit breaker
     orch_circuit_breaker_init "$test_op"
-    
+
     # Get circuit breaker state
     local state
     state=$(orch_db_get_circuit_state "$test_op")
-    
+
     # Cleanup
     orch_db_exec "DELETE FROM circuit_breakers WHERE operation_name='$test_op'" >/dev/null 2>&1
-    
+
     [ "$state" = "CLOSED" ]
 }
 
@@ -199,10 +199,10 @@ test_federation_api_with_drift_detection() {
     if ! check_hub_running; then
         return 0  # Skip if hub not running
     fi
-    
+
     local response
     response=$(curl -sf "${HUB_API_URL}/api/federation/health" 2>/dev/null)
-    
+
     # Should return valid health data
     echo "$response" | jq -e '.success == true and .data.totalInstances != null' >/dev/null 2>&1
 }
@@ -212,13 +212,13 @@ test_federation_reconciliation_dry_run() {
     if ! check_hub_running; then
         return 0  # Skip if hub not running
     fi
-    
+
     # Run dry-run reconciliation
     local response
     response=$(curl -sf -X POST "${HUB_API_URL}/api/federation/reconcile" \
         -H "Content-Type: application/json" \
         -d '{"dryRun": true}' 2>/dev/null)
-    
+
     # Should complete without errors
     echo "$response" | jq -e '.success == true and .data.dryRun == true' >/dev/null 2>&1
 }
@@ -232,11 +232,11 @@ test_cli_state_operations() {
     if [ ! -x "$DIVE_ROOT/scripts/orch-db-cli.sh" ]; then
         return 1
     fi
-    
+
     # Run status command
     local output
     output=$("$DIVE_ROOT/scripts/orch-db-cli.sh" status 2>&1 || true)
-    
+
     # Should produce output without errors
     [ -n "$output" ]
 }
@@ -244,21 +244,21 @@ test_cli_state_operations() {
 test_lock_with_state_transition() {
     # Integration: Lock protects state transitions
     local test_instance="int-lock-$(date +%s)"
-    
+
     # Acquire lock
     if orch_db_acquire_lock "$test_instance" 5; then
         # Set state while holding lock
         orch_db_set_state "$test_instance" "LOCKED_DEPLOY" '{"locked":true}'
-        
+
         local state
         state=$(orch_db_get_state "$test_instance")
-        
+
         # Release lock
         orch_db_release_lock "$test_instance"
-        
+
         # Cleanup
         orch_db_exec "DELETE FROM deployment_states WHERE instance_code='$test_instance'" >/dev/null 2>&1
-        
+
         [ "$state" = "LOCKED_DEPLOY" ]
     else
         return 1
@@ -272,25 +272,25 @@ test_lock_with_state_transition() {
 test_error_correlation_with_metrics() {
     # Integration: Errors are correlated and metrics recorded
     local test_instance="int-corr-$(date +%s)"
-    
+
     # Record multiple errors
     orch_db_record_error "$test_instance" "1201" 2 "test" "Error 1" "" "{}"
     orch_db_record_error "$test_instance" "1402" 2 "test" "Error 2" "" "{}"
-    
+
     # Record metric
     orch_db_record_metric "$test_instance" "error_count" 2 "count" '{"source":"test"}'
-    
+
     # Verify both exist
     local error_count
     error_count=$(orch_db_exec "SELECT COUNT(*) FROM orchestration_errors WHERE instance_code='$test_instance'" 2>/dev/null | xargs)
-    
+
     local metric_count
     metric_count=$(orch_db_exec "SELECT COUNT(*) FROM orchestration_metrics WHERE instance_code='$test_instance'" 2>/dev/null | xargs)
-    
+
     # Cleanup
     orch_db_exec "DELETE FROM orchestration_errors WHERE instance_code='$test_instance'" >/dev/null 2>&1
     orch_db_exec "DELETE FROM orchestration_metrics WHERE instance_code='$test_instance'" >/dev/null 2>&1
-    
+
     [ "${error_count:-0}" -gt 0 ] && [ "${metric_count:-0}" -gt 0 ]
 }
 
@@ -304,16 +304,16 @@ main() {
     echo "Phase 6: Testing & Validation"
     echo "=============================================="
     echo ""
-    
+
     # Check prerequisites
     echo "Checking prerequisites..."
-    
+
     if ! source_modules; then
         echo -e "${RED}ERROR: Cannot load required modules${NC}"
         exit 1
     fi
     echo -e "  ${GREEN}✓${NC} Modules loaded"
-    
+
     local db_available=false
     if check_database_available; then
         db_available=true
@@ -321,7 +321,7 @@ main() {
     else
         echo -e "  ${YELLOW}⚠${NC} Database not available (some tests will be skipped)"
     fi
-    
+
     local hub_available=false
     if check_hub_running; then
         hub_available=true
@@ -329,9 +329,9 @@ main() {
     else
         echo -e "  ${YELLOW}⚠${NC} Hub API not available (some tests will be skipped)"
     fi
-    
+
     echo ""
-    
+
     # State + Error Recovery Integration
     echo "--- State + Error Recovery Integration ---"
     if [ "$db_available" = true ]; then
@@ -343,7 +343,7 @@ main() {
         ((TESTS_SKIPPED += 2))
     fi
     echo ""
-    
+
     # Service Dependencies + Health Integration
     echo "--- Service Dependencies + Health Integration ---"
     run_test "Dependency graph with timeouts" test_dependency_graph_with_timeouts || true
@@ -354,7 +354,7 @@ main() {
         ((TESTS_SKIPPED++))
     fi
     echo ""
-    
+
     # Federation Sync + API Integration
     echo "--- Federation Sync + API Integration ---"
     if [ "$hub_available" = true ]; then
@@ -366,7 +366,7 @@ main() {
         ((TESTS_SKIPPED += 2))
     fi
     echo ""
-    
+
     # CLI + State + Locks Integration
     echo "--- CLI + State + Locks Integration ---"
     run_test "CLI state operations" test_cli_state_operations || true
@@ -377,7 +377,7 @@ main() {
         ((TESTS_SKIPPED++))
     fi
     echo ""
-    
+
     # Error Correlation + Metrics Integration
     echo "--- Error Correlation + Metrics Integration ---"
     if [ "$db_available" = true ]; then
@@ -387,7 +387,7 @@ main() {
         ((TESTS_SKIPPED++))
     fi
     echo ""
-    
+
     # Summary
     echo "=============================================="
     echo "Integration Test Results"
@@ -397,7 +397,7 @@ main() {
     echo -e "Failed:  ${RED}$TESTS_FAILED${NC}"
     echo -e "Skipped: ${BLUE}$TESTS_SKIPPED${NC}"
     echo ""
-    
+
     if [ "$TESTS_FAILED" -gt 0 ]; then
         echo -e "${RED}SOME INTEGRATION TESTS FAILED${NC}"
         exit 1

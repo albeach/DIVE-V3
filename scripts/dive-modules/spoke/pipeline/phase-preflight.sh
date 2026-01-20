@@ -399,7 +399,9 @@ spoke_preflight_cleanup_stale_containers() {
             # Remove if exited, dead, or orphaned
             if [[ "$container_status" == "exited" ]] || [[ "$container_status" == "dead" ]]; then
                 log_verbose "Removing stopped container: $container"
-                docker rm -f "$container" 2>/dev/null || true
+                if ! docker rm -f "$container" 2>/dev/null; then
+                    log_verbose "Could not remove $container (may not exist or be in use)"
+                fi
             else
                 # Check if container's network still exists
                 local expected_network="${code_lower}_dive-${code_lower}-network"
@@ -410,7 +412,9 @@ spoke_preflight_cleanup_stale_containers() {
 
                     if [ -z "$on_shared" ]; then
                         log_verbose "Removing orphaned container (no network): $container"
-                        docker rm -f "$container" 2>/dev/null || true
+                        if ! docker rm -f "$container" 2>/dev/null; then
+                            log_verbose "Could not remove $container (may be in use)"
+                        fi
                     fi
                 fi
             fi
@@ -426,7 +430,9 @@ spoke_preflight_cleanup_stale_containers() {
             status=$(docker inspect "$container" --format '{{.State.Status}}' 2>/dev/null)
             if [[ "$status" != "running" ]]; then
                 log_verbose "Removing non-running container: $container ($status)"
-                docker rm -f "$container" 2>/dev/null || true
+                if ! docker rm -f "$container" 2>/dev/null; then
+                    log_verbose "Could not remove $container (may be in use)"
+                fi
             fi
         fi
     done
@@ -529,8 +535,8 @@ spoke_preflight_clean_database_volumes() {
     for container in "${containers[@]}"; do
         if docker ps -a --format '{{.Names}}' | grep -q "^${container}$"; then
             log_verbose "Stopping $container"
-            docker stop "$container" 2>/dev/null || true
-            docker rm "$container" 2>/dev/null || true
+            docker stop "$container" 2>/dev/null || log_verbose "Could not stop $container"
+            docker rm "$container" 2>/dev/null || log_verbose "Could not remove $container"
         fi
     done
 
@@ -546,7 +552,9 @@ spoke_preflight_clean_database_volumes() {
     for volume in "${volumes[@]}"; do
         if docker volume ls --format '{{.Name}}' | grep -q "^${volume}$"; then
             log_verbose "Removing volume: $volume"
-            docker volume rm "$volume" 2>/dev/null || true
+            if ! docker volume rm "$volume" 2>/dev/null; then
+                log_verbose "Could not remove volume $volume (may be in use by running container)"
+            fi
         fi
     done
 
