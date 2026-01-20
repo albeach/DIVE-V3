@@ -272,7 +272,7 @@ services:
       NODE_ENV: development
       PORT: "4000"
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb:27017
-      MONGODB_DATABASE: dive-v3
+      MONGODB_DATABASE: dive-v3-hub
       OPA_URL: https://opa:8181
       KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker-usa
@@ -396,7 +396,7 @@ services:
       NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
       OPA_URL: https://opa:8181
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb:27017?authSource=admin
-      MONGODB_DATABASE: dive-v3
+      MONGODB_DATABASE: dive-v3-hub
       LOG_LEVEL: info
       KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker-usa
