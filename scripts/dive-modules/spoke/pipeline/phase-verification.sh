@@ -341,47 +341,145 @@ spoke_verify_keycloak_health() {
 # =============================================================================
 
 ##
-# Verify federation configuration
+# Verify federation configuration with exponential backoff retry
+#
+# Federation verification in the deployment pipeline uses exponential backoff
+# to handle Keycloak's eventual consistency after IdP creation.
+#
+# Retry pattern: 3s, 6s, 12s, 24s (4 attempts, ~45s total)
 #
 # Arguments:
 #   $1 - Instance code
 #
 # Returns:
 #   0 - Federation configured
-#   1 - Federation incomplete
+#   1 - Federation incomplete (non-blocking)
 ##
 spoke_verify_federation() {
     local instance_code="$1"
     local code_upper=$(upper "$instance_code")
     local code_lower=$(lower "$instance_code")
 
-    log_step "Verifying federation configuration..."
+    log_step "Verifying federation configuration with exponential backoff..."
 
-    # Use spoke-federation.sh verification
-    if type spoke_federation_verify &>/dev/null; then
-        local fed_status
-        fed_status=$(spoke_federation_verify "$instance_code")
+    # Retry configuration
+    local max_retries=4
+    local base_delay=3
+    local verification_passed=false
+    local fed_status=""
 
-        echo "$fed_status" | grep -v '^{' | head -3
+    for ((attempt=1; attempt<=max_retries; attempt++)); do
+        local delay=$((base_delay * (2 ** (attempt - 1))))  # 3, 6, 12, 24 seconds
 
-        if echo "$fed_status" | grep -q '"bidirectional":true'; then
-            echo "  ✅ Bidirectional federation active"
-            return 0
-        else
-            echo "  ⚠️  Federation incomplete"
-            if ! echo "$fed_status" | jq -r '"\(.spoke_to_hub | if . then "✅" else "❌" end) Spoke → Hub\n\(.hub_to_spoke | if . then "✅" else "❌" end) Hub → Spoke"' 2>/dev/null; then
-                log_verbose "Could not parse federation status (jq may not be available)"
+        log_verbose "Federation verification attempt $attempt/$max_retries..."
+
+        # Use spoke-federation.sh verification if available
+        if type spoke_federation_verify &>/dev/null; then
+            fed_status=$(spoke_federation_verify "$instance_code" 2>/dev/null)
+
+            # Check for successful bidirectional federation
+            if echo "$fed_status" | grep -q '"bidirectional":true'; then
+                # Additionally verify OIDC endpoints are functional
+                if _spoke_verify_federation_oidc_endpoints "$instance_code"; then
+                    verification_passed=true
+                    break
+                else
+                    log_verbose "IdPs configured but OIDC endpoints not yet ready"
+                fi
             fi
         fi
-    fi
 
-    # Fallback: Basic IdP check
+        # Wait before retry (except on last attempt)
+        if [ $attempt -lt $max_retries ] && [ "$verification_passed" != "true" ]; then
+            log_verbose "Waiting ${delay}s for Keycloak eventual consistency (attempt $attempt)..."
+            sleep $delay
+        fi
+    done
+
+    # Report results
+    if [ "$verification_passed" = "true" ]; then
+        echo "  ✅ Bidirectional federation active (verified after $attempt attempts)"
+        echo "$fed_status" | grep -v '^{' | head -3 || true
+        return 0
+    else
+        # Federation incomplete - show detailed status
+        echo "  ⚠️  Federation verification incomplete after $max_retries attempts"
+        echo "  ℹ️  This is expected for eventual consistency - typically resolves within 60 seconds"
+
+        if [ -n "$fed_status" ]; then
+            # Parse and display status using jq if available
+            if command -v jq &>/dev/null; then
+                local spoke_to_hub hub_to_spoke
+                spoke_to_hub=$(echo "$fed_status" | jq -r '.spoke_to_hub // false')
+                hub_to_spoke=$(echo "$fed_status" | jq -r '.hub_to_spoke // false')
+
+                echo "      $( [ "$spoke_to_hub" = "true" ] && echo "✅" || echo "❌" ) Spoke → Hub (usa-idp in spoke)"
+                echo "      $( [ "$hub_to_spoke" = "true" ] && echo "✅" || echo "❌" ) Hub → Spoke (${code_lower}-idp in Hub)"
+            fi
+        fi
+
+        echo ""
+        echo "  Manual verification: ./dive federation verify $code_upper"
+        echo "  Manual fix: ./dive federation link $code_upper"
+
+        # Fallback: Basic IdP check for debugging
+        _spoke_verify_federation_fallback "$instance_code"
+
+        return 0  # Non-blocking - federation is often eventually consistent
+    fi
+}
+
+##
+# Verify OIDC discovery endpoints for federation
+# Helper function for spoke_verify_federation()
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - OIDC endpoints reachable
+#   1 - OIDC endpoints not reachable
+##
+_spoke_verify_federation_oidc_endpoints() {
+    local instance_code="$1"
+    local code_lower=$(lower "$instance_code")
+
+    local spoke_realm="dive-v3-broker-${code_lower}"
+    local hub_realm="dive-v3-broker-usa"
+
+    # Get spoke Keycloak port
+    local spoke_kc_port
+    if [ -f "${DIVE_ROOT}/instances/${code_lower}/config.json" ]; then
+        spoke_kc_port=$(jq -r '.endpoints.idpPublicUrl // "https://localhost:8443"' \
+            "${DIVE_ROOT}/instances/${code_lower}/config.json" 2>/dev/null | grep -o ':[0-9]*' | tr -d ':')
+    fi
+    spoke_kc_port="${spoke_kc_port:-8443}"
+
+    # Test both OIDC discovery endpoints (quick test - 3s timeout)
+    local spoke_ok hub_ok
+    spoke_ok=$(curl -sk --max-time 3 "https://localhost:${spoke_kc_port}/realms/${spoke_realm}/.well-known/openid-configuration" 2>/dev/null | grep -c '"issuer"' || echo "0")
+    hub_ok=$(curl -sk --max-time 3 "https://localhost:8443/realms/${hub_realm}/.well-known/openid-configuration" 2>/dev/null | grep -c '"issuer"' || echo "0")
+
+    [ "$spoke_ok" -ge 1 ] && [ "$hub_ok" -ge 1 ]
+}
+
+##
+# Fallback IdP check when spoke_federation_verify is not available
+# Helper function for spoke_verify_federation()
+#
+# Arguments:
+#   $1 - Instance code
+##
+_spoke_verify_federation_fallback() {
+    local instance_code="$1"
+    local code_lower=$(lower "$instance_code")
+
     local kc_container="dive-spoke-${code_lower}-keycloak"
     local realm_name="dive-v3-broker-${code_lower}"
 
     if docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
         local admin_token
-        admin_token=$(spoke_federation_get_admin_token "$kc_container")
+        admin_token=$(spoke_federation_get_admin_token "$kc_container" 2>/dev/null)
 
         if [ -n "$admin_token" ]; then
             local idp_list
@@ -390,14 +488,12 @@ spoke_verify_federation() {
                 "http://localhost:8080/admin/realms/${realm_name}/identity-provider/instances" 2>/dev/null || echo "[]")
 
             if echo "$idp_list" | grep -q '"alias":"usa-idp"'; then
-                echo "  ✅ usa-idp configured in spoke"
+                log_verbose "Fallback check: usa-idp exists in spoke"
             else
-                echo "  ⚠️  usa-idp not configured"
+                log_verbose "Fallback check: usa-idp NOT found in spoke"
             fi
         fi
     fi
-
-    return 0
 }
 
 # =============================================================================
