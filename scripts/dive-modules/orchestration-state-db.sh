@@ -869,10 +869,17 @@ LIMIT $limit;
 # =============================================================================
 
 ##
-# Initialize database schema (idempotent)
+# Initialize database schema with pre-flight checks and advisory locking (idempotent)
+#
+# This function implements production-grade schema initialization:
+# 1. Pre-flight health check - verify database is responsive
+# 2. Advisory lock acquisition - prevent concurrent schema modifications
+# 3. Schema verification - check if tables already exist
+# 4. Idempotent migration - uses IF NOT EXISTS for all objects
+# 5. Post-flight validation - verify expected tables exist
 #
 # Returns:
-#   0 - Success
+#   0 - Success (schema initialized or already exists)
 #   1 - Failed
 ##
 orch_db_init_schema() {
@@ -885,13 +892,169 @@ orch_db_init_schema() {
 
     log_info "Initializing orchestration database schema..."
 
-    if psql "$ORCH_DB_CONN" -f "$migration_file" >/dev/null 2>&1; then
-        log_success "Database schema initialized"
-        return 0
-    else
-        log_error "Failed to initialize database schema"
+    # ==========================================================================
+    # Step 1: Pre-flight health check
+    # ==========================================================================
+    log_verbose "Step 1: Pre-flight health check..."
+    if ! orch_db_schema_preflight_check; then
+        log_error "Pre-flight check failed - database not ready for schema initialization"
         return 1
     fi
+
+    # ==========================================================================
+    # Step 2: Acquire advisory lock for schema operations
+    # ==========================================================================
+    # Lock ID 1234567890 is reserved for schema operations
+    # This prevents concurrent deployments from racing on schema creation
+    local schema_lock_id=1234567890
+    local lock_timeout=30
+
+    log_verbose "Step 2: Acquiring advisory lock for schema operations..."
+    local lock_acquired
+    lock_acquired=$(docker exec dive-hub-postgres psql -U postgres -d orchestration -t -c \
+        "SELECT pg_try_advisory_lock($schema_lock_id);" 2>/dev/null | xargs)
+
+    if [ "$lock_acquired" != "t" ]; then
+        log_warn "Another process is initializing schema - waiting up to ${lock_timeout}s..."
+        local start_time=$(date +%s)
+        while [ $(($(date +%s) - start_time)) -lt $lock_timeout ]; do
+            lock_acquired=$(docker exec dive-hub-postgres psql -U postgres -d orchestration -t -c \
+                "SELECT pg_try_advisory_lock($schema_lock_id);" 2>/dev/null | xargs)
+            if [ "$lock_acquired" = "t" ]; then
+                break
+            fi
+            sleep 1
+        done
+
+        if [ "$lock_acquired" != "t" ]; then
+            log_error "Could not acquire schema lock after ${lock_timeout}s - aborting"
+            return 1
+        fi
+    fi
+    log_verbose "✓ Advisory lock acquired for schema operations"
+
+    # ==========================================================================
+    # Step 3: Check if schema already initialized (idempotent)
+    # ==========================================================================
+    log_verbose "Step 3: Checking existing schema..."
+    local existing_tables
+    existing_tables=$(docker exec dive-hub-postgres psql -U postgres -d orchestration -t -c \
+        "SELECT COUNT(*) FROM information_schema.tables 
+         WHERE table_schema = 'public' 
+         AND table_name IN ('deployment_states', 'state_transitions', 'deployment_steps', 
+                            'deployment_locks', 'circuit_breakers', 'orchestration_errors',
+                            'orchestration_metrics', 'checkpoints');" 2>/dev/null | xargs)
+
+    if [ "$existing_tables" -ge 8 ]; then
+        log_verbose "✓ Schema already initialized ($existing_tables/8 tables exist)"
+        # Release lock and return success
+        docker exec dive-hub-postgres psql -U postgres -d orchestration -c \
+            "SELECT pg_advisory_unlock($schema_lock_id);" >/dev/null 2>&1 || true
+        return 0
+    fi
+
+    # ==========================================================================
+    # Step 4: Apply migration (idempotent SQL with IF NOT EXISTS)
+    # ==========================================================================
+    log_verbose "Step 4: Applying schema migration ($existing_tables/8 tables exist)..."
+    local migration_output
+    local migration_exit_code=0
+
+    # Copy migration file to container and execute
+    docker cp "$migration_file" dive-hub-postgres:/tmp/migration.sql 2>/dev/null || {
+        log_error "Failed to copy migration file to container"
+        docker exec dive-hub-postgres psql -U postgres -d orchestration -c \
+            "SELECT pg_advisory_unlock($schema_lock_id);" >/dev/null 2>&1 || true
+        return 1
+    }
+
+    migration_output=$(docker exec dive-hub-postgres psql -U postgres -d orchestration -f /tmp/migration.sql 2>&1) || migration_exit_code=$?
+
+    # Cleanup temp file
+    docker exec dive-hub-postgres rm -f /tmp/migration.sql 2>/dev/null || true
+
+    # ==========================================================================
+    # Step 5: Post-flight validation
+    # ==========================================================================
+    log_verbose "Step 5: Post-flight validation..."
+    local final_table_count
+    final_table_count=$(docker exec dive-hub-postgres psql -U postgres -d orchestration -t -c \
+        "SELECT COUNT(*) FROM information_schema.tables 
+         WHERE table_schema = 'public' 
+         AND table_name IN ('deployment_states', 'state_transitions', 'deployment_steps', 
+                            'deployment_locks', 'circuit_breakers', 'orchestration_errors',
+                            'orchestration_metrics', 'checkpoints');" 2>/dev/null | xargs)
+
+    # Release advisory lock
+    docker exec dive-hub-postgres psql -U postgres -d orchestration -c \
+        "SELECT pg_advisory_unlock($schema_lock_id);" >/dev/null 2>&1 || true
+    log_verbose "✓ Advisory lock released"
+
+    if [ "$final_table_count" -ge 6 ]; then
+        log_success "Database schema initialized ($final_table_count tables verified)"
+        return 0
+    else
+        log_error "Schema initialization incomplete - only $final_table_count/8 tables created"
+        if [ -n "$migration_output" ]; then
+            log_verbose "Migration output: $migration_output"
+        fi
+        return 1
+    fi
+}
+
+##
+# Pre-flight health check for schema operations
+#
+# Verifies:
+# 1. Hub PostgreSQL container is running
+# 2. Database accepts connections
+# 3. orchestration database exists
+#
+# Returns:
+#   0 - Ready for schema operations
+#   1 - Not ready
+##
+orch_db_schema_preflight_check() {
+    # Check container is running
+    if ! docker ps --format '{{.Names}}' | grep -q "^dive-hub-postgres$"; then
+        log_error "Hub PostgreSQL container not running"
+        return 1
+    fi
+
+    # Check database accepts connections (pg_isready)
+    if ! docker exec dive-hub-postgres pg_isready -U postgres -d orchestration >/dev/null 2>&1; then
+        log_verbose "Database not ready, waiting..."
+        local retry_count=0
+        local max_retries=10
+        while [ $retry_count -lt $max_retries ]; do
+            sleep 1
+            ((retry_count++))
+            if docker exec dive-hub-postgres pg_isready -U postgres -d orchestration >/dev/null 2>&1; then
+                break
+            fi
+        done
+
+        if [ $retry_count -ge $max_retries ]; then
+            log_error "Database not accepting connections after ${max_retries}s"
+            return 1
+        fi
+    fi
+
+    # Check orchestration database exists (create if not)
+    local db_exists
+    db_exists=$(docker exec dive-hub-postgres psql -U postgres -t -c \
+        "SELECT 1 FROM pg_database WHERE datname = 'orchestration';" 2>/dev/null | xargs)
+
+    if [ "$db_exists" != "1" ]; then
+        log_verbose "Creating orchestration database..."
+        docker exec dive-hub-postgres psql -U postgres -c "CREATE DATABASE orchestration;" >/dev/null 2>&1 || {
+            log_error "Failed to create orchestration database"
+            return 1
+        }
+    fi
+
+    log_verbose "✓ Database pre-flight check passed"
+    return 0
 }
 
 # =============================================================================

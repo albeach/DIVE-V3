@@ -173,31 +173,58 @@ spoke_federation_setup() {
         log_warn "Federation secret sync incomplete (non-blocking)"
     fi
 
-    # Step 4: Verify bidirectional connectivity with retry
-    # Federation resources may take a moment to propagate in Keycloak
-    local max_verify_retries=3
-    local verify_delay=5
+    # ==========================================================================
+    # Step 4: Clear Keycloak Caches for Immediate Verification
+    # ==========================================================================
+    # Keycloak has internal caches that can cause federation verification to fail
+    # immediately after IdP creation. Clear caches to ensure consistent state.
+    # Reference: https://www.keycloak.org/docs/latest/server_admin/#clearing-caches
+    # ==========================================================================
+    log_verbose "Clearing Keycloak caches for reliable verification..."
+    _spoke_federation_clear_keycloak_cache "$instance_code"
+
+    # ==========================================================================
+    # Step 5: Verify bidirectional connectivity with EXPONENTIAL BACKOFF
+    # ==========================================================================
+    # Federation resources may take a moment to propagate in Keycloak.
+    # Uses exponential backoff: 2s, 4s, 8s, 16s, 32s (5 attempts, ~62s total)
+    # Also tests OIDC discovery endpoints before declaring success.
+    # ==========================================================================
+    local max_verify_retries=5
+    local base_delay=2
     local verification_passed=false
+    local verification_result=""
 
     for ((i=1; i<=max_verify_retries; i++)); do
-        log_verbose "Verification attempt $i/$max_verify_retries..."
+        local delay=$((base_delay * (2 ** (i - 1))))  # Exponential backoff: 2, 4, 8, 16, 32
 
-        local verification_result
+        log_info "Federation verification attempt $i/$max_verify_retries..."
+
         verification_result=$(spoke_federation_verify "$instance_code" 2>/dev/null)
 
         if echo "$verification_result" | grep -q '"bidirectional":true'; then
-            verification_passed=true
-            log_success "Bidirectional federation established (attempt $i)"
-            break
-        elif echo "$verification_result" | grep -q '"spoke_to_hub":true.*"hub_to_spoke":true\|"hub_to_spoke":true.*"spoke_to_hub":true'; then
-            verification_passed=true
-            log_success "Bidirectional federation established (attempt $i)"
-            break
-        else
-            if [ $i -lt $max_verify_retries ]; then
-                log_verbose "Verification pending, waiting ${verify_delay}s before retry..."
-                sleep $verify_delay
+            # Bidirectional flag is set - now verify OIDC endpoints are actually reachable
+            if _spoke_federation_verify_oidc_endpoints "$instance_code"; then
+                verification_passed=true
+                log_success "Bidirectional federation established and verified (attempt $i)"
+                break
+            else
+                log_verbose "IdPs exist but OIDC discovery endpoints not ready yet"
             fi
+        elif echo "$verification_result" | grep -q '"spoke_to_hub":true.*"hub_to_spoke":true\|"hub_to_spoke":true.*"spoke_to_hub":true'; then
+            # Both directions exist - verify OIDC
+            if _spoke_federation_verify_oidc_endpoints "$instance_code"; then
+                verification_passed=true
+                log_success "Bidirectional federation established and verified (attempt $i)"
+                break
+            else
+                log_verbose "IdPs exist but OIDC discovery endpoints not ready yet"
+            fi
+        fi
+
+        if [ $i -lt $max_verify_retries ]; then
+            log_verbose "Verification pending, waiting ${delay}s before retry (exponential backoff)..."
+            sleep $delay
         fi
     done
 
@@ -205,9 +232,129 @@ spoke_federation_setup() {
         return 0
     else
         log_warn "Federation verification incomplete after $max_verify_retries attempts"
-        log_warn "This is non-blocking - federation may still work"
+        log_warn "This is expected for eventual consistency - federation may work within 60 seconds"
+        log_info "Manual verification: ./dive federation verify $code_upper"
         echo "$verification_result"
-        return 0  # Non-blocking - verification can fail temporarily
+        return 0  # Non-blocking - verification can fail temporarily due to eventual consistency
+    fi
+}
+
+# =============================================================================
+# KEYCLOAK CACHE MANAGEMENT (Production Resilience Enhancement)
+# =============================================================================
+
+##
+# Clear Keycloak realm cache to ensure federation changes are immediately visible
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - Cache cleared (or not needed)
+##
+_spoke_federation_clear_keycloak_cache() {
+    local instance_code="$1"
+    local code_lower=$(lower "$instance_code")
+
+    # Clear spoke Keycloak cache
+    local spoke_kc_container="dive-spoke-${code_lower}-keycloak"
+    local spoke_realm="dive-v3-broker-${code_lower}"
+
+    if docker ps --format '{{.Names}}' | grep -q "^${spoke_kc_container}$"; then
+        local admin_token
+        admin_token=$(spoke_federation_get_admin_token "$spoke_kc_container" 2>/dev/null)
+
+        if [ -n "$admin_token" ]; then
+            # Clear realm cache (idempotent operation)
+            docker exec "$spoke_kc_container" curl -sf -X POST \
+                -H "Authorization: Bearer $admin_token" \
+                "http://localhost:8080/admin/realms/${spoke_realm}/clear-realm-cache" 2>/dev/null || true
+
+            # Clear user cache
+            docker exec "$spoke_kc_container" curl -sf -X POST \
+                -H "Authorization: Bearer $admin_token" \
+                "http://localhost:8080/admin/realms/${spoke_realm}/clear-user-cache" 2>/dev/null || true
+
+            log_verbose "✓ Cleared Keycloak cache for ${spoke_realm}"
+        fi
+    fi
+
+    # Clear Hub Keycloak cache
+    local hub_kc_container="${HUB_KC_CONTAINER:-dive-hub-keycloak}"
+    local hub_realm="${HUB_REALM:-dive-v3-broker-usa}"
+
+    if docker ps --format '{{.Names}}' | grep -q "^${hub_kc_container}$"; then
+        local hub_admin_token
+        hub_admin_token=$(spoke_federation_get_admin_token "$hub_kc_container" 2>/dev/null)
+
+        if [ -n "$hub_admin_token" ]; then
+            docker exec "$hub_kc_container" curl -sf -X POST \
+                -H "Authorization: Bearer $hub_admin_token" \
+                "http://localhost:8080/admin/realms/${hub_realm}/clear-realm-cache" 2>/dev/null || true
+
+            docker exec "$hub_kc_container" curl -sf -X POST \
+                -H "Authorization: Bearer $hub_admin_token" \
+                "http://localhost:8080/admin/realms/${hub_realm}/clear-user-cache" 2>/dev/null || true
+
+            log_verbose "✓ Cleared Keycloak cache for ${hub_realm}"
+        fi
+    fi
+
+    return 0
+}
+
+##
+# Verify OIDC discovery endpoints are reachable for federation
+# This ensures the IdPs are actually functional, not just configured
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - Both OIDC endpoints reachable
+#   1 - One or more endpoints not reachable
+##
+_spoke_federation_verify_oidc_endpoints() {
+    local instance_code="$1"
+    local code_lower=$(lower "$instance_code")
+
+    local spoke_realm="dive-v3-broker-${code_lower}"
+    local hub_realm="${HUB_REALM:-dive-v3-broker-usa}"
+
+    local spoke_oidc_ok=false
+    local hub_oidc_ok=false
+
+    # Get spoke Keycloak port from instance config
+    local spoke_kc_port
+    if [ -f "${DIVE_ROOT}/instances/${code_lower}/config.json" ]; then
+        spoke_kc_port=$(jq -r '.endpoints.idpPublicUrl // "https://localhost:8443"' \
+            "${DIVE_ROOT}/instances/${code_lower}/config.json" | grep -o ':[0-9]*' | tr -d ':')
+    fi
+    spoke_kc_port="${spoke_kc_port:-8443}"
+
+    # Test Spoke OIDC discovery endpoint
+    local spoke_discovery_url="https://localhost:${spoke_kc_port}/realms/${spoke_realm}/.well-known/openid-configuration"
+    if curl -sk --max-time 5 "$spoke_discovery_url" 2>/dev/null | grep -q '"issuer"'; then
+        spoke_oidc_ok=true
+        log_verbose "✓ Spoke OIDC discovery: ${spoke_realm}"
+    else
+        log_verbose "✗ Spoke OIDC discovery not ready: $spoke_discovery_url"
+    fi
+
+    # Test Hub OIDC discovery endpoint
+    local hub_discovery_url="https://localhost:8443/realms/${hub_realm}/.well-known/openid-configuration"
+    if curl -sk --max-time 5 "$hub_discovery_url" 2>/dev/null | grep -q '"issuer"'; then
+        hub_oidc_ok=true
+        log_verbose "✓ Hub OIDC discovery: ${hub_realm}"
+    else
+        log_verbose "✗ Hub OIDC discovery not ready: $hub_discovery_url"
+    fi
+
+    # Both must be reachable for federation to work
+    if [ "$spoke_oidc_ok" = true ] && [ "$hub_oidc_ok" = true ]; then
+        return 0
+    else
+        return 1
     fi
 }
 
