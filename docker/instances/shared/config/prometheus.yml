@@ -13,7 +13,7 @@ global:
     environment: 'local'
 
 rule_files:
-  - rules/*.yml
+  - prometheus/rules/*.yml
 
 alerting:
   alertmanagers:
