@@ -12,19 +12,19 @@
   },
   "filters": {
     "title": "Filtros",
-    "clearAll": "Borrar todo",
+    "clearAll": "Limpiar todo",
     "classification": "Clasificación",
-    "releasability": "Difusibilidad",
+    "releasability": "Difusión",
     "coi": "Comunidad de interés",
     "dateRange": "Rango de fechas",
-    "encrypted": "Solo recursos cifrados",
+    "encrypted": "Solo recursos encriptados",
     "apply": "Aplicar filtros",
     "reset": "Restablecer"
   },
   "table": {
     "title": "Título",
     "classification": "Clasificación",
-    "releasability": "Difusibilidad",
+    "releasability": "Difusión",
     "created": "Creado",
     "modified": "Modificado",
     "actions": "Acciones",
@@ -33,6 +33,23 @@
     "delete": "Eliminar",
     "download": "Descargar",
     "requestAccess": "Solicitar acceso"
+  },
+  "emptyStates": {
+    "noResults": {
+      "title": "No se encontraron resultados",
+      "description": "No pudimos encontrar documentos que coincidan con \"{{query}}\". Intente ajustar sus términos de búsqueda o filtros.",
+      "clearSearch": "Limpiar búsqueda"
+    },
+    "noMatchingDocuments": {
+      "title": "No hay documentos coincidentes",
+      "description": "Sus filtros actuales no coinciden con ningún documento. Intente relajar sus criterios de filtro.",
+      "clearFilters": "Limpiar filtros"
+    },
+    "error": {
+      "title": "Ocurrió un error",
+      "description": "Encontramos un error al cargar los documentos. Por favor, inténtelo de nuevo.",
+      "tryAgain": "Intentar de nuevo"
+    }
   },
   "detail": {
     "title": "Detalles del recurso",
@@ -48,9 +65,9 @@
   },
   "upload": {
     "title": "Subir recurso",
-    "dragDrop": "Arrastra y suelta archivos aquí, o haz clic para explorar",
+    "dragDrop": "Arrastre y suelte archivos aquí, o haga clic para navegar",
     "selectFile": "Seleccionar archivo",
-    "maxSize": "Tamaño máximo de archivo: {{size}}MB",
+    "maxSize": "Tamaño máximo del archivo: {{size}}MB",
     "allowedTypes": "Tipos permitidos: {{types}}",
     "metadata": {
       "title": "Metadatos del recurso",
@@ -59,15 +76,15 @@
       "description": "Descripción",
       "descriptionPlaceholder": "Ingrese la descripción del recurso",
       "classification": "Nivel de clasificación",
-      "releasability": "Difusible a",
+      "releasability": "Difundible a",
       "coi": "Comunidades de interés",
       "tags": "Etiquetas",
-      "encryption": "Cifrado"
+      "encryption": "Encriptación"
     },
     "uploading": "Subiendo...",
     "uploadProgress": "{{percent}}% subido",
     "uploadSuccess": "Recurso subido exitosamente",
-    "uploadError": "Error al subir recurso",
+    "uploadError": "Error al subir el recurso",
     "cancel": "Cancelar subida"
   },
   "access": {
@@ -83,20 +100,13 @@
   },
   "errors": {
     "notFound": "Recurso no encontrado",
-    "accessDenied": "No tienes permiso para acceder a este recurso",
-    "loadFailed": "Error al cargar recurso",
-    "uploadFailed": "Error al subir recurso",
-    "deleteFailed": "Error al eliminar recurso",
+    "accessDenied": "No tiene permisos para acceder a este recurso",
+    "loadFailed": "Error al cargar el recurso",
+    "uploadFailed": "Error al subir el recurso",
+    "deleteFailed": "Error al eliminar el recurso",
     "insufficientClearance": "Nivel de autorización insuficiente",
-    "countryNotReleased": "Recurso no difusible a su país",
-    "coiNotMember": "No eres miembro de la COI requerida"
-  },
-  "classifications": {
-    "unclassified": "No clasificado",
-    "restricted": "Restringido",
-    "confidential": "Confidencial",
-    "secret": "Secreto",
-    "topSecret": "Alto secreto"
+    "countryNotReleased": "Recurso no difundido a su país",
+    "coiNotMember": "No es miembro de la COI requerida"
   },
   "breadcrumbs": {
     "resources": "Recursos",
@@ -112,11 +122,11 @@
     "restricted": "RESTRINGIDO",
     "confidential": "CONFIDENCIAL",
     "secret": "SECRETO",
-    "topSecret": "ALTO SECRETO"
+    "topSecret": "TOP SECRETO"
   },
   "auth": {
     "signInToView": "Inicie sesión para ver recursos",
-    "needAuthentication": "Necesita estar autenticado para acceder a los recursos de la coalición."
+    "needAuthentication": "Necesita estar autenticado para acceder a recursos de la coalición."
   },
   "sorting": {
     "titleAZ": "Título A-Z",
@@ -126,11 +136,15 @@
   },
   "bentoDashboard": {
     "totalDocuments": "Documentos totales",
-    "ztdfEncrypted": "Cifrado ZTDF",
+    "ztdfEncrypted": "Encriptado ZTDF",
     "local": "Local",
     "federated": "Federado",
     "classification": "Clasificación",
-    "instances": "instancias"
+    "instances": "instancias",
+    "accessRate": "Tasa de acceso",
+    "avgAge": "Edad promedio",
+    "topCOIs": "Top COI",
+    "coalition": "Coalición"
   },
   "viewModes": {
     "grid": "Cuadrícula",
@@ -139,7 +153,7 @@
   },
   "bulkActions": {
     "selected": "seleccionado",
-    "deselectAll": "Anular selección de todo",
+    "deselectAll": "Deseleccionar todo",
     "selectAll": "Seleccionar todo",
     "export": "Exportar",
     "compare": "Comparar",
@@ -156,7 +170,7 @@
   },
   "bookmarks": {
     "emptyState": {
-      "title": "Aún no hay marcadores",
+      "title": "Sin marcadores aún",
       "description": "Marque documentos y políticas para acceso rápido. Haga clic en el icono de marcador en cualquier recurso para guardarlo aquí."
     }
   },
@@ -171,7 +185,7 @@
     "lastMonth": "Mes pasado",
     "customRange": "Rango personalizado",
     "placeholder": "Filtrar por rango de fechas",
-    "clickToStart": "Haga clic en una fecha para iniciar la selección",
+    "clickToStart": "Haga clic en una fecha para comenzar la selección",
     "clickToComplete": "Haga clic en otra fecha para completar el rango"
   }
 }

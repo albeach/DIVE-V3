@@ -19,7 +19,7 @@ import rego.v1
 policy_version := {
 	"version": "2.1.0",
 	"bundleId": "dive-v3-global-policies",
-	"timestamp": "2025-11-28T00:00:00Z",
+	"timestamp": "2026-01-20T00:00:00Z",
 	"gitCommit": "phase4-option-a",
 	"modules": [
 		"dive.authorization",

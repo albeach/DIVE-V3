@@ -73,9 +73,15 @@ function extractMarkingData(markingDataList: any[]): { en: string; fr: string; p
     if (!markingDataList) return result;
 
     for (const markingData of markingDataList) {
-        const phrase = markingData.$.phrase || markingData._ || '';
-        const lang = markingData.$?.['xml:lang'] || 'en';
-        const codes = markingData.code || [];
+        // Extract values (xmlns mode returns objects)
+        const phraseAttr = markingData.$.phrase;
+        const phrase = typeof phraseAttr === 'string' ? phraseAttr : phraseAttr?.value || markingData._ || '';
+        
+        const langAttr = markingData.$?.['xml:lang'];
+        const lang = typeof langAttr === 'string' ? langAttr : langAttr?.value || 'en';
+        
+        // Extract code values from array
+        const codes = (markingData.code || []).map((c: any) => c._ || c);
 
         // Check if this is a portion marking
         if (codes.includes('portionMarking')) {
@@ -103,9 +109,10 @@ function parseClassifications(classificationsXml: any): Map<string, IClassificat
     }
 
     for (const classXml of classificationsXml.securityClassification) {
-        const name = classXml.$.name;
-        const lacv = parseInt(classXml.$.lacv, 10);
-        const hierarchy = parseInt(classXml.$.hierarchy, 10);
+        // Extract attribute values (xmlns mode returns objects with .value property)
+        const name = typeof classXml.$.name === 'string' ? classXml.$.name : classXml.$.name?.value || '';
+        const lacv = parseInt(typeof classXml.$.lacv === 'string' ? classXml.$.lacv : classXml.$.lacv?.value || '0', 10);
+        const hierarchy = parseInt(typeof classXml.$.hierarchy === 'string' ? classXml.$.hierarchy : classXml.$.hierarchy?.value || '0', 10);
 
         const markingData = extractMarkingData(classXml.markingData || []);
 
@@ -130,14 +137,21 @@ function parseClassifications(classificationsXml: any): Map<string, IClassificat
 function parseMarkingQualifier(qualifierXml: any): IMarkingQualifier | undefined {
     if (!qualifierXml) return undefined;
 
+    // Extract markingCode (handle xmlns object format)
+    const markingCodeAttr = qualifierXml.$.markingCode;
+    const markingCode = typeof markingCodeAttr === 'string' ? markingCodeAttr : markingCodeAttr?.value || 'pageTop';
+
     const qualifier: IMarkingQualifier = {
-        markingCode: qualifierXml.$.markingCode || 'pageTop',
+        markingCode,
     };
 
     const qualifiers = qualifierXml.qualifier || [];
     for (const q of qualifiers) {
-        const code = q.$.qualifierCode;
-        const value = q.$.markingQualifier;
+        const codeAttr = q.$.qualifierCode;
+        const code = typeof codeAttr === 'string' ? codeAttr : codeAttr?.value;
+        
+        const valueAttr = q.$.markingQualifier;
+        const value = typeof valueAttr === 'string' ? valueAttr : valueAttr?.value;
 
         if (code === 'prefix') qualifier.prefix = value;
         else if (code === 'separator') qualifier.separator = value;
@@ -151,25 +165,42 @@ function parseMarkingQualifier(qualifierXml: any): IMarkingQualifier | undefined
  * Parse security category tag set from SPIF XML
  */
 function parseCategoryTagSet(tagSetXml: any): ISecurityCategoryTagSet {
+    // Extract attributes (handle xmlns object format)
+    const nameAttr = tagSetXml.$.name;
+    const name = typeof nameAttr === 'string' ? nameAttr : nameAttr?.value || '';
+    
+    const idAttr = tagSetXml.$.id;
+    const id = typeof idAttr === 'string' ? idAttr : idAttr?.value || '';
+
     const tagSet: ISecurityCategoryTagSet = {
-        name: tagSetXml.$.name,
-        id: tagSetXml.$.id,
+        name,
+        id,
         tags: [],
     };
 
     const categoryTags = tagSetXml.securityCategoryTag || [];
     for (const tagXml of categoryTags) {
+        const tagNameAttr = tagXml.$.name;
+        const tagName = typeof tagNameAttr === 'string' ? tagNameAttr : tagNameAttr?.value || '';
+        
+        const tagTypeAttr = tagXml.$.tagType;
+        const tagType = typeof tagTypeAttr === 'string' ? tagTypeAttr : tagTypeAttr?.value || '';
+
         const tag: ISecurityCategoryTag = {
-            name: tagXml.$.name,
-            tagType: tagXml.$.tagType as any,
+            name: tagName,
+            tagType: tagType as any,
             categories: new Map(),
             qualifier: parseMarkingQualifier(tagXml.markingQualifier?.[0]),
         };
 
         const categories = tagXml.tagCategory || [];
         for (const catXml of categories) {
-            const code = catXml.$.name;
-            const lacv = parseInt(catXml.$.lacv, 10);
+            const codeAttr = catXml.$.name;
+            const code = typeof codeAttr === 'string' ? codeAttr : codeAttr?.value || '';
+            
+            const lacvAttr = catXml.$.lacv;
+            const lacv = parseInt(typeof lacvAttr === 'string' ? lacvAttr : lacvAttr?.value || '0', 10);
+            
             const markingData = extractMarkingData(catXml.markingData || []);
 
             tag.categories.set(code, {
@@ -202,15 +233,28 @@ function parseMemberships(extensionsXml: any): Map<string, IMembership> {
 
     const membershipList = nspifMemberships['nspif:membership'] || [];
     for (const membershipXml of membershipList) {
-        const name = membershipXml.$?.['nspif:name'] || membershipXml.$.name;
+        // Extract name (handle xmlns object format)
+        const nameAttr = membershipXml.$?.['nspif:name'] || membershipXml.$.name;
+        const name = typeof nameAttr === 'string' ? nameAttr : nameAttr?.value || '';
+        
         const members: IMembership['members'] = [];
 
         const memberList = membershipXml['nspif:member'] || [];
         for (const memberXml of memberList) {
+            const codeAttr = memberXml.$?.['nspif:name'] || memberXml.$.name;
+            const code = typeof codeAttr === 'string' ? codeAttr : codeAttr?.value || '';
+            
+            const lacvAttr = memberXml.$?.['nspif:lacv'] || memberXml.$.lacv;
+            const lacv = parseInt(typeof lacvAttr === 'string' ? lacvAttr : lacvAttr?.value || '0', 10);
+            
+            const obsoleteAttr = memberXml.$?.['nspif:obsolete'];
+            const obsoleteValue = typeof obsoleteAttr === 'string' ? obsoleteAttr : obsoleteAttr?.value;
+            const obsolete = obsoleteValue === 'true';
+
             members.push({
-                code: memberXml.$?.['nspif:name'] || memberXml.$.name,
-                lacv: parseInt(memberXml.$?.['nspif:lacv'] || memberXml.$.lacv, 10),
-                obsolete: memberXml.$?.['nspif:obsolete'] === 'true',
+                code,
+                lacv,
+                obsolete,
             });
         }
 
@@ -244,15 +288,28 @@ export async function parseSPIF(): Promise<ISPIFData> {
     const result = await parser.parseStringPromise(xmlContent);
     const spifRoot = result.SPIF;
 
-    // Extract policy info
+    // Extract policy info (handle xmlns object format)
     const defaultPolicy = spifRoot.defaultSecurityPolicyId?.[0]?.$ || {};
     const securityPolicy = spifRoot.securityPolicyId?.[0]?.$ || defaultPolicy;
 
+    // Extract attribute values
+    const policyNameAttr = securityPolicy.name;
+    const policyName = typeof policyNameAttr === 'string' ? policyNameAttr : policyNameAttr?.value || 'NATO';
+    
+    const policyIdAttr = securityPolicy.id;
+    const policyId = typeof policyIdAttr === 'string' ? policyIdAttr : policyIdAttr?.value || '1.3.26.1.3.1';
+    
+    const versionAttr = spifRoot.$.version;
+    const version = typeof versionAttr === 'string' ? versionAttr : versionAttr?.value || '1';
+    
+    const creationDateAttr = spifRoot.$.creationDate;
+    const creationDate = typeof creationDateAttr === 'string' ? creationDateAttr : creationDateAttr?.value || '';
+
     const spifData: ISPIFData = {
-        policyName: securityPolicy.name || 'NATO',
-        policyId: securityPolicy.id || '1.3.26.1.3.1',
-        version: spifRoot.$.version || '1',
-        creationDate: spifRoot.$.creationDate || '',
+        policyName,
+        policyId,
+        version,
+        creationDate,
         classifications: parseClassifications(spifRoot.securityClassifications?.[0]),
         categorySets: new Map(),
         memberships: new Map(),
@@ -296,10 +353,11 @@ export async function getSPIFMarkingRules(): Promise<ISPIFMarkingRules> {
     const rules: ISPIFMarkingRules = {
         classifications: new Map(),
         countries: new Map(),
+        // Use STANAG 4774 compliant prefix "REL TO" instead of SPIF's "Releasable To"
         releasableToQualifier: {
             markingCode: 'pageTop',
-            prefix: RELEASABILITY_PREFIX,
-            separator: RELEASABILITY_SEPARATOR,
+            prefix: RELEASABILITY_PREFIX,  // "REL TO" per STANAG 4774
+            separator: RELEASABILITY_SEPARATOR,  // ", "
         },
         specialCategories: new Map(),
         memberships: new Map(),
@@ -320,9 +378,10 @@ export async function getSPIFMarkingRules(): Promise<ISPIFMarkingRules> {
 
     if (releasableToSet) {
         for (const tag of releasableToSet.tags) {
-            if (tag.qualifier) {
-                rules.releasableToQualifier = tag.qualifier;
-            }
+            // NOTE: Don't override releasableToQualifier from SPIF
+            // The SPIF file has "Releasable To" but STANAG 4774 uses "REL TO"
+            // We keep the config constant RELEASABILITY_PREFIX = "REL TO"
+            
             for (const [code, country] of tag.categories) {
                 rules.countries.set(code, country.name);
             }
@@ -394,15 +453,12 @@ export async function generateMarking(
         normalizedClassification.substring(0, 2);
 
     // Build releasability phrase
+    // STANAG 4774: Use ISO 3166-1 alpha-3 country codes (FRA, USA, GBR) NOT full names
     let releasabilityPhrase = '';
     if (releasabilityTo && releasabilityTo.length > 0) {
-        const countryNames = releasabilityTo.map(code => {
-            const country = rules.countries.get(code);
-            return country ? country[language] : code;
-        });
-
+        // Use country codes directly for STANAG 4774 compliance
         const qualifier = rules.releasableToQualifier;
-        releasabilityPhrase = `${qualifier.prefix || RELEASABILITY_PREFIX} ${countryNames.join(qualifier.separator || RELEASABILITY_SEPARATOR)}`;
+        releasabilityPhrase = `${qualifier.prefix || RELEASABILITY_PREFIX} ${releasabilityTo.join(qualifier.separator || RELEASABILITY_SEPARATOR)}`;
     }
 
     // Build special categories phrase

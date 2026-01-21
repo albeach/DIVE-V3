@@ -1,7 +1,7 @@
 {
   "title": "Dashboard",
   "dashboard.title": "Dashboard",
-  "subtitle": "Koalitionsintelligenz-Übersicht",
+  "subtitle": "Koalitionsnachrichtendienst-Überblick",
   "welcome": "Willkommen zurück, {{name}}",
   "welcomeBack": "Willkommen zurück,",
   "loading": "Dashboard wird geladen...",
@@ -10,25 +10,21 @@
   "lastUpdated": "Zuletzt aktualisiert: {{time}}",
   "platformBadge": "Koalitions-ICAM-Plattform",
   "glossary": "Glossar",
-  "description": "Ihr sicherer Zugang zu klassifizierten Ressourcen in der gesamten Koalition. Alle Aktionen werden durch ABAC-Richtlinien geschützt und für die Compliance protokolliert.",
-  "loading": "Dashboard wird geladen...",
-  "refreshing": "Aktualisieren...",
-  "refresh": "Aktualisieren",
-  "lastUpdated": "Zuletzt aktualisiert: {{time}}",
+  "description": "Ihr sicherer Zugriff auf klassifizierte Ressourcen in der gesamten Koalition. Alle Aktionen werden durch ABAC-Richtlinien geschützt und zur Compliance protokolliert.",
   "stats": {
     "documentsAccessible": "Zugängliche Dokumente",
     "authorizationRate": "Autorisierungsrate",
-    "avgResponseTime": "Durchschn. Antwortzeit"
+    "avgResponseTime": "Durchschnittliche Antwortzeit"
   },
   "federation": {
     "directAccess": "Direkter Zugriff",
-    "homeInstance": "Heimatinstanz",
+    "homeInstance": "Heimat-Instanz",
     "federated": "Föderiert",
     "status": {
       "title": "Föderationsstatus",
-      "subtitle": "Ihre aktuelle Identität und Zugangskontext",
+      "subtitle": "Ihr aktueller Identitäts- und Zugriffskontext",
       "federatedAccess": "Föderierter Zugriff",
-      "homeInstance": "Heimatinstanz",
+      "homeInstance": "Heimat-Instanz",
       "portal": "Portal"
     },
     "stats": {
@@ -48,9 +44,9 @@
     "explanation": {
       "title": "Was ist Identitätsföderation?",
       "federationTerm": "Identitätsföderation",
-      "description": "ermöglicht Ihnen, sich mit dem Identitätsanbieter Ihrer Organisation zu authentifizieren und auf Ressourcen von Koalitionspartnern zuzugreifen, ohne separate Konten zu erstellen. Dies folgt den",
+      "description": "ermöglicht es Ihnen, sich mit dem Identitätsanbieter Ihrer Organisation zu authentifizieren und auf Ressourcen von Koalitionspartnern zuzugreifen, ohne separate Konten zu erstellen. Dies folgt den",
       "stanagTerm": "ADatP-5663",
-      "standardsText": "Standards für NATO-Identitätsmanagement."
+      "standardsText": "Standards für die NATO-Identitätsverwaltung."
     }
   },
   "resources": {
@@ -62,23 +58,23 @@
     "recentActivity": "Kürzliche Aktivität",
     "basedOnYourClearance": "Basierend auf Ihrer Freigabe",
     "andCountryAffiliation": "und Ihrer Länderzugehörigkeit",
-    "youCanAccess": "Sie können zugreifen auf",
+    "youCanAccess": "Sie können zugreifen",
     "documentsAcross": "Dokumente über",
     "differentClassifications": "verschiedene Klassifizierungen",
     "browseAll": "Alle durchsuchen",
-    "yourAccessContext": "Ihr Zugangskontext",
+    "yourAccessContext": "Ihr Zugriffskontext",
     "youCanAccessDocuments": "Sie können auf Dokumente bis zur Klassifizierung zugreifen",
-    "thatAreReleasableTo": "die freigegeben werden können für",
-    "maxClassification": "Maximale Klassifizierung",
-    "releasability": "Freigabe",
+    "thatAreReleasableTo": "die freigegeben sind für",
+    "maxClassification": "Max. Klassifizierung",
+    "releasability": "Freigabefähigkeit",
     "mustInclude": "Muss enthalten"
   },
   "authorization": {
     "stats": {
-      "allowedRequests": "Erlaubte Anfragen",
+      "allowedRequests": "Zugelassene Anfragen",
       "deniedRequests": "Abgelehnte Anfragen",
       "authorizationRate": "Autorisierungsrate",
-      "avgDecisionTime": "Durchschn. Entscheidungszeit"
+      "avgDecisionTime": "Durchschnittliche Entscheidungszeit"
     },
     "profile": {
       "title": "Ihr Autorisierungsprofil",
@@ -86,14 +82,14 @@
       "decisions": "ABAC",
       "current": "Aktuell",
       "countryOfAffiliation": "Länderzugehörigkeit",
-      "releasabilityTerm": "Freigabe",
+      "releasabilityTerm": "Freigabefähigkeit",
       "releasabilityChecked": "gegen dies geprüft",
       "coiMemberships": "COI-Mitgliedschaften"
     }
   },
   "activity": {
     "stats": {
-      "totalEvents": "Gesamte Ereignisse",
+      "totalEvents": "Gesamtanzahl Ereignisse",
       "successfulActions": "Erfolgreiche Aktionen",
       "lastLogin": "Letzte Anmeldung",
       "activeSessions": "Aktive Sitzungen"
@@ -103,15 +99,15 @@
       "subtitle": "Ihre Einhaltung der Anforderungen",
       "requirements": "ACP-240",
       "authenticationCompliance": {
-        "name": "Authentifizierung-Compliance",
+        "name": "Authentifizierungscompliance",
         "description": "Alle Authentifizierungen über genehmigte IdPs"
       },
       "accessControlAdherence": {
-        "name": "Zugangskontroll-Einhaltung",
-        "description": "Keine unautorisierten Zugriffsversuche"
+        "name": "Einhaltung der Zugriffskontrolle",
+        "description": "Keine nicht autorisierten Zugriffsversuche"
       },
       "auditTrailCompleteness": {
-        "name": "Audit-Trail-Vollständigkeit",
+        "name": "Vollständigkeit der Audit-Trail",
         "description": "Alle Aktionen gemäß ACP-240 protokolliert"
       },
       "sessionSecurity": {
@@ -129,29 +125,29 @@
   },
   "overview": {
     "title": "Systemübersicht",
-    "totalResources": "Ressourcen gesamt",
+    "totalResources": "Gesamtressourcen",
     "activeUsers": "Aktive Benutzer",
     "requestsToday": "Anfragen heute",
-    "avgResponseTime": "Durchschn. Antwortzeit",
+    "avgResponseTime": "Durchschnittliche Antwortzeit",
     "uptime": "Systemverfügbarkeit",
     "healthStatus": "Gesundheitsstatus",
     "healthy": "Gesund",
-    "degraded": "Beeinträchtigt",
+    "degraded": "Degradiert",
     "down": "Ausgefallen",
     "authorizationRate": "Autorisierungsrate",
-    "systemHealth": "Systemzustand",
+    "systemHealth": "Systemgesundheit",
     "features": {
       "browseDocuments": {
         "title": "Dokumente durchsuchen",
         "description": "Sicherer Zugriff auf klassifizierte Ressourcen",
-        "educational": "Jeder Dokumentenzugriff wird gegen OPA-Richtlinien bewertet. Ihre Freigabe, Ihr Land und COI-Mitgliedschaften bestimmen, was Sie einsehen können.",
+        "educational": "Jeder Dokumentenzugriff wird gegen OPA-Richtlinien ausgewertet. Ihre Freigabe, Ihr Land und Ihre COI-Mitgliedschaften bestimmen, was Sie sehen können.",
         "stats": {
           "accessible": "zugänglich",
-          "authRate": "Auth-Rate"
+          "authRate": "Autorisierungsrate"
         },
         "badges": {
           "policyEnforced": "Richtlinie erzwungen",
-          "endToEndEncrypted": "Ende-zu-Ende verschlüsselt",
+          "endToEndEncrypted": "Ende-zu-Ende-verschlüsselt",
           "auditLogged": "Audit protokolliert"
         }
       },
@@ -166,7 +162,7 @@
       "uploadDocument": {
         "title": "Dokument hochladen",
         "description": "Sicheres Hochladen von Dokumenten",
-        "educational": "Laden Sie Dokumente mit automatischer ZTDF-Verschlüsselung und ACP-240-konformer Kennzeichnung hoch. Stellen Sie Klassifizierung und Freigabe während des Hochladens ein.",
+        "educational": "Laden Sie Dokumente mit automatischer ZTDF-Verschlüsselung und ACP-240-konformer Beschriftung hoch. Legen Sie Klassifizierung und Freigabefähigkeit beim Hochladen fest.",
         "badges": {
           "ztdfEncryption": "ZTDF-Verschlüsselung"
         }
@@ -174,7 +170,7 @@
       "authorizationPolicies": {
         "title": "Autorisierungsrichtlinien",
         "description": "OPA Rego-Richtlinien",
-        "educational": "Erkunden Sie die modulare Richtlinien-Suite, die die ABAC-Engine von DIVE antreibt. Zeigen Sie Richtlinienhierarchie an, testen Sie Entscheidungen und verstehen Sie die Regel-Logik.",
+        "educational": "Entdecken Sie die modulare Richtliniensuite, die die ABAC-Engine von DIVE antreibt. Zeigen Sie die Richtlinienhierarchie an, testen Sie Entscheidungen und verstehen Sie die Regel-Logik.",
         "stats": {
           "policies": "Richtlinien"
         }
@@ -182,25 +178,25 @@
       "integrationGuide": {
         "title": "Integrationsleitfaden",
         "description": "ADatP-5663 × ACP-240",
-        "educational": "Interaktives Tutorial, das erklärt, wie Identitätsföderation (ADatP-5663) und Zugangskontrolle (ACP-240) zusammen funktionieren."
+        "educational": "Interaktives Tutorial, das erklärt, wie Identitätsföderation (ADatP-5663) und Zugriffskontrolle (ACP-240) zusammen funktionieren."
       },
       "apiDocumentation": {
         "title": "API-Dokumentation",
         "description": "Interaktive API-Referenz",
-        "educational": "Erkunden Sie alle DIVE V3-Endpunkte, testen Sie Live-Anfragen und zeigen Sie Anfrage-/Antwort-Beispiele an. Perfekt für Entwickler, die die Koalitions-ICAM-Plattform integrieren."
+        "educational": "Entdecken Sie alle DIVE V3-Endpunkte, testen Sie Live-Anfragen und zeigen Sie Anfrage/Antwort-Beispiele an. Perfekt für Entwickler, die die Koalitions-ICAM-Plattform integrieren."
       },
       "kasEncryption": {
         "title": "KAS-Verschlüsselung",
-        "description": "Schlüsselzugriffsdienst",
-        "educational": "Richtliniengebundene Schlüsselfreigabe für verschlüsselte Inhalte. KAS bewertet die Autorisierung erneut, bevor Entschlüsselungsschlüssel freigegeben werden.",
+        "description": "Key Access Service",
+        "educational": "Richtliniengebundene Schlüssel-Freigabe für verschlüsselte Inhalte. KAS wertet die Richtlinie erneut aus, bevor Entschlüsselungsschlüssel freigegeben werden.",
         "stats": {
           "encrypted": "verschlüsselt"
         }
       },
       "compliance": {
         "title": "Compliance",
-        "description": "Einhaltung NATO-Standards",
-        "educational": "Überwachen Sie die Compliance mit ACP-240, STANAG 4774/5636 und anderen Koalitionssicherheitsanforderungen."
+        "description": "Einhaltung der NATO-Normen",
+        "educational": "Überwachen Sie die Einhaltung von ACP-240, STANAG 4774/5636 und anderen Koalitionssicherheitsanforderungen."
       }
     },
     "sections": {
@@ -213,17 +209,17 @@
             "description": "Melden Sie sich über Ihren Heim-IdP an. Keycloak verwaltet Identitäten über Koalitionspartner hinweg."
           },
           "policyEval": {
-            "title": "Richtlinienbewertung",
+            "title": "Richtlinienauswertung",
             "description": "PEP sendet Ihre Attribute an OPA für ABAC-Entscheidung."
           },
           "secureAccess": {
             "title": "Sicherer Zugriff",
-            "description": "Bei Autorisierung greifen Sie auf die Ressource zu. Für verschlüsselte Inhalte gibt KAS den Entschlüsselungsschlüssel frei."
+            "description": "Wenn autorisiert, greifen Sie auf die Ressource zu. Für verschlüsselte Inhalte gibt KAS den Entschlüsselungsschlüssel frei."
           }
         }
       },
       "quickTips": {
-        "title": "Schnelltipps",
+        "title": "Schnell-Tipps",
         "tips": {
           "readOnlyAttributes": {
             "title": "Ihre Attribute sind schreibgeschützt",
@@ -231,17 +227,17 @@
           },
           "auditLogging": {
             "title": "Alle Aktionen werden auditiert",
-            "description": "Jede Autorisierungsentscheidung wird für ACP-240-Compliance protokolliert"
+            "description": "Jede Autorisierungsentscheidung wird zur ACP-240-Compliance protokolliert"
           },
           "crossPartner": {
             "title": "Partnerübergreifende Zusammenarbeit",
-            "description": "Benutzer von Partner-IdPs können auf Ihre Dokumente zugreifen, wenn die Freigabe dies erlaubt"
+            "description": "Benutzer von Partner-IdPs können auf Ihre Dokumente zugreifen, wenn die Freigabefähigkeit dies erlaubt"
           }
         }
       },
       "federationPartners": {
         "title": "Aktive Föderationspartner",
-        "providersAvailable": "Identitätsanbieter verfügbar",
+        "providersAvailable": "verfügbare Identitätsanbieter",
         "viewAll": "Alle anzeigen"
       },
       "systemStatus": {
@@ -252,20 +248,20 @@
           "resourceApi": "Ressourcen-API"
         },
         "status": {
-          "operational": "Betriebsbereit"
+          "operational": "Operativ"
         }
       }
     }
   },
   "widgets": {
     "recentActivity": {
-      "title": "Letzte Aktivität",
-      "noActivity": "Keine aktuelle Aktivität",
+      "title": "Kürzliche Aktivität",
+      "noActivity": "Keine kürzliche Aktivität",
       "viewAll": "Alle anzeigen"
     },
     "recentResources": {
-      "title": "Kürzlich aufgerufene Ressourcen",
-      "noResources": "Keine Ressourcen kürzlich aufgerufen"
+      "title": "Kürzlich abgerufene Ressourcen",
+      "noResources": "Kürzlich keine Ressourcen abgerufen"
     },
     "notifications": {
       "title": "Benachrichtigungen",
@@ -287,7 +283,7 @@
     },
     "kasStatus": {
       "title": "KAS-Status",
-      "totalKAS": "Gesamt-KAS-Endpunkte",
+      "totalKAS": "Gesamtanzahl KAS-Endpunkte",
       "healthyKAS": "Gesund",
       "unhealthyKAS": "Ungesund",
       "viewKAS": "Multi-KAS anzeigen"
@@ -296,7 +292,7 @@
       "title": "Zugriffsanfragen",
       "pending": "Ausstehend",
       "granted": "Heute gewährt",
-      "denied": "Heute verweigert",
+      "denied": "Heute abgelehnt",
       "viewRequests": "Alle Anfragen anzeigen"
     },
     "securityMetrics": {
@@ -304,14 +300,14 @@
       "authFailures": "Auth-Fehler (24h)",
       "policyDenials": "Richtlinienablehnungen (24h)",
       "suspiciousActivity": "Verdächtige Aktivität",
-      "viewAuditLog": "Audit-Protokoll anzeigen"
+      "viewAuditLog": "Audit-Log anzeigen"
     }
   },
   "charts": {
     "requestsOverTime": "Anfragen im Zeitverlauf",
     "accessByCountry": "Zugriff nach Land",
     "classificationDistribution": "Klassifizierungsverteilung",
-    "responseTimeTrends": "Antwortzeittrends",
+    "responseTimeTrends": "Antwortzeit-Trends",
     "today": "Heute",
     "week": "Diese Woche",
     "month": "Dieser Monat",
@@ -323,14 +319,6 @@
     "last7Days": "Letzte 7 Tage",
     "last30Days": "Letzte 30 Tage",
     "customRange": "Benutzerdefinierter Bereich"
-  },
-  "userInfo": {
-    "clearance": "Freigabe",
-    "country": "Land",
-    "coi": "COI",
-    "role": "Rolle",
-    "lastLogin": "Letzte Anmeldung",
-    "sessions": "Aktive Sitzungen"
   },
   "breadcrumbs": {
     "dashboard": "Dashboard"

@@ -244,6 +244,7 @@ services:
       - ./keycloak/certs:/opt/keycloak/certs:ro
       - ./policies:/app/policies:ro
       - ./config:/app/config:ro
+      - ./NATO_Security_Policy.xml:/app/NATO_Security_Policy.xml:ro
     depends_on:
       hub-keycloak:
         condition: service_healthy
@@ -525,6 +526,8 @@ services:
       BLACKLIST_REDIS_URL: redis://:${REDIS_PASSWORD_BLACKLIST}@hub-redis-blacklist:6379
       KEYCLOAK_URL: https://spoke-keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker-${SPOKE_CODE_LOWER:-spoke}
+      KEYCLOAK_CLIENT_ID: dive-v3-broker-${SPOKE_CODE_LOWER:-spoke}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_SPOKE:?set by pilot.sh}
       KEYCLOAK_ISSUER: https://${SPOKE_HOSTNAME:-${SPOKE_CODE_LOWER:-spoke}-idp.dive25.com}/realms/dive-v3-broker-${SPOKE_CODE_LOWER:-spoke}
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_SPOKE}
@@ -541,6 +544,7 @@ services:
       - ./instances/${SPOKE_CODE_LOWER:-gbr}/certs:/app/certs:ro
       - ./instances/${SPOKE_CODE_LOWER:-gbr}/certs:/opt/keycloak/certs:ro
       - ./config:/app/config:ro
+      - ./NATO_Security_Policy.xml:/app/NATO_Security_Policy.xml:ro
     depends_on:
       spoke-mongodb:
         condition: service_healthy

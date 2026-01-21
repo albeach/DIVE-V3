@@ -1,34 +1,30 @@
 {
   "title": "Dashboard",
   "dashboard.title": "Dashboard",
-  "subtitle": "Coalitie-intelligentie overzicht",
+  "subtitle": "Coalitie-informatieoverzicht",
   "welcome": "Welkom terug, {{name}}",
   "welcomeBack": "Welkom terug,",
   "loading": "Dashboard laden...",
   "refreshing": "Vernieuwen...",
   "refresh": "Vernieuwen",
   "lastUpdated": "Laatst bijgewerkt: {{time}}",
-  "platformBadge": "Coalitie-ICAM-platform",
+  "platformBadge": "Coalitie-ICAM-Platform",
   "glossary": "Woordenlijst",
   "description": "Uw beveiligde toegang tot geclassificeerde bronnen in de gehele coalitie. Alle acties worden beschermd door ABAC-beleid en geregistreerd voor compliance.",
-  "loading": "Dashboard laden...",
-  "refreshing": "Vernieuwen...",
-  "refresh": "Vernieuwen",
-  "lastUpdated": "Laatst bijgewerkt: {{time}}",
   "stats": {
-    "documentsAccessible": "Toegankelijke documenten",
-    "authorizationRate": "Autorisatieverhouding",
-    "avgResponseTime": "Gem. reactietijd"
+    "documentsAccessible": "Toegankelijke Documenten",
+    "authorizationRate": "Autorisatiepercentage",
+    "avgResponseTime": "Gemiddelde Responstijd"
   },
   "federation": {
-    "directAccess": "Directe toegang",
-    "homeInstance": "Thuissituatie",
+    "directAccess": "Directe Toegang",
+    "homeInstance": "Home-instantie",
     "federated": "Gefedereerd",
     "status": {
       "title": "Federatiestatus",
-      "subtitle": "Uw huidige identiteit en toegangskader",
-      "federatedAccess": "Gefedereerde toegang",
-      "homeInstance": "Thuissituatie",
+      "subtitle": "Uw huidige identiteits- en toegangskader",
+      "federatedAccess": "Gefedereerde Toegang",
+      "homeInstance": "Home-instantie",
       "portal": "Portaal"
     },
     "stats": {
@@ -37,51 +33,51 @@
         "description": "Actieve identiteitsproviders in het netwerk"
       },
       "crossPartnerAccesses": {
-        "title": "Cross-partner toegang",
-        "description": "Bronnen geopend vanaf andere partners"
+        "title": "Cross-partner Toegangen",
+        "description": "Bronnen geopend vanuit andere partners"
       },
       "authentications": {
-        "title": "Authenticaties van vandaag",
+        "title": "Authenticaties Vandaag",
         "description": "Federatieverbindingen vandaag"
       }
     },
     "explanation": {
-      "title": "Wat is identiteitsfederatie?",
+      "title": "Wat is Identiteitsfederatie?",
       "federationTerm": "Identiteitsfederatie",
-      "description": "laat u zich authenticeren met de identiteitsprovider van uw thuisorganisatie en toegang krijgen tot coalitiepartnerbronnen zonder aparte accounts aan te maken. Dit volgt de",
+      "description": "stelt u in staat om te authenticeren met de identiteitsprovider van uw organisatie en toegang te krijgen tot coalitiepartnerbronnen zonder aparte accounts te maken. Dit volgt de",
       "stanagTerm": "ADatP-5663",
       "standardsText": "standaarden voor NATO-identiteitsbeheer."
     }
   },
   "resources": {
-    "accessibleDocuments": "Toegankelijke documenten",
-    "yourUploads": "Uw uploads",
-    "recentlyViewed": "Recent bekeken",
+    "accessibleDocuments": "Toegankelijke Documenten",
+    "yourUploads": "Uw Uploads",
+    "recentlyViewed": "Onlangs Bekeken",
     "resourceStats": "Bronstatistieken",
-    "resourcesByClassification": "Bronnen per classificatie",
-    "recentActivity": "Recente activiteit",
-    "basedOnYourClearance": "Gebaseerd op uw vrijgave",
+    "resourcesByClassification": "Bronnen per Classificatie",
+    "recentActivity": "Recente Activiteit",
+    "basedOnYourClearance": "Gebaseerd op uw autorisatie",
     "andCountryAffiliation": "en uw landsaansluiting",
-    "youCanAccess": "u kunt toegang krijgen tot",
-    "documentsAcross": "documenten in",
+    "youCanAccess": "u kunt toegang krijgen",
+    "documentsAcross": "documenten over",
     "differentClassifications": "verschillende classificaties",
-    "browseAll": "Alles doorbladeren",
-    "yourAccessContext": "Uw toegangskader",
+    "browseAll": "Alles Bladeren",
+    "yourAccessContext": "Uw Toegangskader",
     "youCanAccessDocuments": "u kunt toegang krijgen tot documenten tot de classificatie",
-    "thatAreReleasableTo": "die vrijgegeven kunnen worden aan",
-    "maxClassification": "Maximale classificatie",
+    "thatAreReleasableTo": "die vrijgegeven worden aan",
+    "maxClassification": "Max. Classificatie",
     "releasability": "Vrijgeefbaarheid",
-    "mustInclude": "Moet bevatten"
+    "mustInclude": "Moet Bevatten"
   },
   "authorization": {
     "stats": {
-      "allowedRequests": "Toegestane verzoeken",
-      "deniedRequests": "Geweigerde verzoeken",
-      "authorizationRate": "Autorisatieverhouding",
-      "avgDecisionTime": "Gem. beslissingstijd"
+      "allowedRequests": "Toegestane Verzoeken",
+      "deniedRequests": "Geweigerde Verzoeken",
+      "authorizationRate": "Autorisatiepercentage",
+      "avgDecisionTime": "Gemiddelde Beslistijd"
     },
     "profile": {
-      "title": "Uw autorisatieprofiel",
+      "title": "Uw Autorisatieprofiel",
       "subtitle": "Attributen gebruikt voor beslissingen",
       "decisions": "ABAC",
       "current": "Huidig",
@@ -93,25 +89,25 @@
   },
   "activity": {
     "stats": {
-      "totalEvents": "Totaal gebeurtenissen",
-      "successfulActions": "Succesvolle acties",
-      "lastLogin": "Laatste login",
-      "activeSessions": "Actieve sessies"
+      "totalEvents": "Totaal Aantal Gebeurtenissen",
+      "successfulActions": "Succesvolle Acties",
+      "lastLogin": "Laatste Aanmelding",
+      "activeSessions": "Actieve Sessies"
     },
     "compliance": {
       "title": "Compliance-status",
       "subtitle": "Uw naleving van vereisten",
       "requirements": "ACP-240",
       "authenticationCompliance": {
-        "name": "Authenticatie-compliance",
-        "description": "Alle authenticaties via goedgekeurde IdP's"
+        "name": "Authenticatiecompliance",
+        "description": "Alle authenticaties via goedgekeurde IdPs"
       },
       "accessControlAdherence": {
-        "name": "Toegangscontrole-naleving",
-        "description": "Geen ongeautoriseerde toegangspogingen"
+        "name": "Naleving Toegangscontrole",
+        "description": "Geen niet-geautoriseerde toegangspogingen"
       },
       "auditTrailCompleteness": {
-        "name": "Audittrail-volledigheid",
+        "name": "Volledigheid Audittrail",
         "description": "Alle acties geregistreerd volgens ACP-240"
       },
       "sessionSecurity": {
@@ -129,44 +125,44 @@
   },
   "overview": {
     "title": "Systeemoverzicht",
-    "totalResources": "Totaal bronnen",
-    "activeUsers": "Actieve gebruikers",
-    "requestsToday": "Verzoeken vandaag",
-    "avgResponseTime": "Gem. reactietijd",
-    "uptime": "Systeembeschikbaarheid",
+    "totalResources": "Totaal Bronnen",
+    "activeUsers": "Actieve Gebruikers",
+    "requestsToday": "Verzoeken Vandaag",
+    "avgResponseTime": "Gemiddelde Responstijd",
+    "uptime": "Systeem Uptime",
     "healthStatus": "Gezondheidsstatus",
     "healthy": "Gezond",
-    "degraded": "Verminderd",
-    "down": "Offline",
-    "authorizationRate": "Autorisatieverhouding",
+    "degraded": "Gedegradeerd",
+    "down": "Uitgeschakeld",
+    "authorizationRate": "Autorisatiepercentage",
     "systemHealth": "Systeemgezondheid",
     "features": {
       "browseDocuments": {
-        "title": "Documenten doorbladeren",
+        "title": "Documenten Bladeren",
         "description": "Beveiligde toegang tot geclassificeerde bronnen",
-        "educational": "Elke documenttoegang wordt geëvalueerd tegen OPA-beleid. Uw vrijgave, land en COI-lidmaatschappen bepalen wat u kunt zien.",
+        "educational": "Elke documenttoegang wordt geëvalueerd tegen OPA-beleid. Uw autorisatie, land en COI-lidmaatschappen bepalen wat u kunt zien.",
         "stats": {
           "accessible": "toegankelijk",
-          "authRate": "auth-verhouding"
+          "authRate": "autorisatiepercentage"
         },
         "badges": {
-          "policyEnforced": "Beleid afgedwongen",
-          "endToEndEncrypted": "End-to-end versleuteld",
-          "auditLogged": "Audit geregistreerd"
+          "policyEnforced": "Beleid Afgedwongen",
+          "endToEndEncrypted": "End-to-End Versleuteld",
+          "auditLogged": "Audit Geregistreerd"
         }
       },
       "federationNetwork": {
         "title": "Federatienetwerk",
         "description": "Cross-partner identiteitsfederatie",
-        "educational": "Authenticeer met uw thuis-IdP en krijg toegang tot coalitiepartnerbronnen. Federatie maakt naadloze samenwerking mogelijk terwijl veiligheid wordt gehandhaafd.",
+        "educational": "Authenticeer met uw home-IdP en verkrijg toegang tot coalitiepartnerbronnen. Federatie maakt naadloze samenwerking mogelijk terwijl veiligheid behouden blijft.",
         "stats": {
           "partners": "partners"
         }
       },
       "uploadDocument": {
-        "title": "Document uploaden",
-        "description": "Beveiligde documentupload",
-        "educational": "Upload documenten met automatische ZTDF-versleuteling en ACP-240-conforme labeling. Stel classificatie en vrijgeefbaarheid in tijdens upload.",
+        "title": "Document Uploaden",
+        "description": "Beveiligd document uploaden",
+        "educational": "Upload documenten met automatische ZTDF-versleuteling en ACP-240-conforme labeling. Stel classificatie en vrijgeefbaarheid in bij uploaden.",
         "badges": {
           "ztdfEncryption": "ZTDF-versleuteling"
         }
@@ -174,9 +170,9 @@
       "authorizationPolicies": {
         "title": "Autorisatiebeleid",
         "description": "OPA Rego-beleid",
-        "educational": "Verken de modulaire beleidssuite die de ABAC-engine van DIVE aandrijft. Bekijk beleidshiërarchie, test beslissingen en begrijp regel-logica.",
+        "educational": "Ontdek de modulaire beleidssuite die de ABAC-engine van DIVE aandrijft. Bekijk beleidshiërarchie, test beslissingen en begrijp regel-logica.",
         "stats": {
-          "policies": "beleidsregels"
+          "policies": "beleid"
         }
       },
       "integrationGuide": {
@@ -187,50 +183,50 @@
       "apiDocumentation": {
         "title": "API-documentatie",
         "description": "Interactieve API-referentie",
-        "educational": "Verken alle DIVE V3-eindpunten, test live verzoeken en bekijk verzoek/antwoordvoorbeelden. Perfect voor ontwikkelaars die het coalitie-ICAM-platform integreren."
+        "educational": "Ontdek alle DIVE V3-eindpunten, test live verzoeken en bekijk verzoek/antwoord-voorbeelden. Perfect voor ontwikkelaars die het coalitie-ICAM-platform integreren."
       },
       "kasEncryption": {
         "title": "KAS-versleuteling",
-        "description": "Sleuteltoegangsservice",
-        "educational": "Beleid-gebonden sleutelrelease voor versleutelde inhoud. KAS her-evalueert autorisatie voordat decryptiesleutels worden vrijgegeven.",
+        "description": "Key Access Service",
+        "educational": "Beleidsgebonden sleuteluitgifte voor versleutelde inhoud. KAS evalueert beleid opnieuw voordat ontsleutelingssleutels worden vrijgegeven.",
         "stats": {
           "encrypted": "versleuteld"
         }
       },
       "compliance": {
         "title": "Compliance",
-        "description": "Naleving NATO-standaarden",
-        "educational": "Monitor naleving met ACP-240, STANAG 4774/5636 en andere coalitie-beveiligingseisen."
+        "description": "Naleving van NATO-normen",
+        "educational": "Monitor naleving van ACP-240, STANAG 4774/5636 en andere coalitiebeveiligingseisen."
       }
     },
     "sections": {
       "howDiveWorks": {
-        "title": "Hoe DIVE V3 werkt",
+        "title": "Hoe DIVE V3 Werkt",
         "subtitle": "Coalitie-ICAM in actie",
         "steps": {
           "federatedAuth": {
-            "title": "Gefedereerde authenticatie",
-            "description": "Log in via uw thuis-IdP. Keycloak beheert identiteiten via coalitiepartners."
+            "title": "Gefedereerde Authenticatie",
+            "description": "Log in via uw home-IdP. Keycloak beheert identiteit over coalitiepartners."
           },
           "policyEval": {
             "title": "Beleidsevaluatie",
             "description": "PEP stuurt uw attributen naar OPA voor ABAC-besluit."
           },
           "secureAccess": {
-            "title": "Beveiligde toegang",
-            "description": "Als geautoriseerd, krijg toegang tot de bron. Voor versleutelde inhoud geeft KAS de decryptiesleutel vrij."
+            "title": "Beveiligde Toegang",
+            "description": "Als geautoriseerd, verkrijg toegang tot de bron. Voor versleutelde inhoud geeft KAS de ontsleutelingssleutel vrij."
           }
         }
       },
       "quickTips": {
-        "title": "Snelle tips",
+        "title": "Snelle Tips",
         "tips": {
           "readOnlyAttributes": {
             "title": "Uw attributen zijn alleen-lezen",
-            "description": "Vrijgave en COI's worden beheerd door uw thuis-IdP-beheerder"
+            "description": "Autorisatie en COI's worden beheerd door uw home-IdP-beheerder"
           },
           "auditLogging": {
-            "title": "Alle acties worden gecontroleerd",
+            "title": "Alle acties worden geaudit",
             "description": "Elke autorisatiebeslissing wordt geregistreerd voor ACP-240-compliance"
           },
           "crossPartner": {
@@ -240,9 +236,9 @@
         }
       },
       "federationPartners": {
-        "title": "Actieve federatiepartners",
-        "providersAvailable": "identiteitsproviders beschikbaar",
-        "viewAll": "Alles bekijken"
+        "title": "Actieve Federatiepartners",
+        "providersAvailable": "beschikbare identiteitsproviders",
+        "viewAll": "Alles Bekijken"
       },
       "systemStatus": {
         "title": "Systeemstatus",
@@ -259,83 +255,75 @@
   },
   "widgets": {
     "recentActivity": {
-      "title": "Recente activiteit",
+      "title": "Recente Activiteit",
       "noActivity": "Geen recente activiteit",
-      "viewAll": "Alles bekijken"
+      "viewAll": "Alles Bekijken"
     },
     "recentResources": {
-      "title": "Recent geopende bronnen",
-      "noResources": "Geen bronnen recent geopend"
+      "title": "Onlangs Geopende Bronnen",
+      "noResources": "Geen bronnen onlangs geopend"
     },
     "notifications": {
       "title": "Meldingen",
       "noNotifications": "Geen nieuwe meldingen",
-      "markAllRead": "Alles als gelezen markeren"
+      "markAllRead": "Alles Als Gelezen Markeren"
     },
     "quickActions": {
-      "title": "Snelle acties",
-      "uploadResource": "Bron uploaden",
-      "browseResources": "Bronnen verkennen",
-      "viewPolicies": "Beleid bekijken",
-      "manageUsers": "Gebruikers beheren"
+      "title": "Snelle Acties",
+      "uploadResource": "Bron Uploaden",
+      "browseResources": "Bronnen Bladeren",
+      "viewPolicies": "Beleid Bekijken",
+      "manageUsers": "Gebruikers Beheren"
     },
     "federationStatus": {
       "title": "Federatiestatus",
-      "connectedSpokes": "Verbonden spaken",
-      "activeFederations": "Actieve federaties",
-      "viewFederation": "Federatie bekijken"
+      "connectedSpokes": "Verbonden Stralen",
+      "activeFederations": "Actieve Federaties",
+      "viewFederation": "Federatie Bekijken"
     },
     "kasStatus": {
       "title": "KAS-status",
-      "totalKAS": "Totaal KAS-eindpunten",
+      "totalKAS": "Totaal Aantal KAS-eindpunten",
       "healthyKAS": "Gezond",
       "unhealthyKAS": "Ongezond",
-      "viewKAS": "Multi-KAS bekijken"
+      "viewKAS": "Multi-KAS Bekijken"
     },
     "accessRequests": {
       "title": "Toegangsverzoeken",
-      "pending": "In behandeling",
-      "granted": "Vandaag verleend",
-      "denied": "Vandaag geweigerd",
-      "viewRequests": "Alle verzoeken bekijken"
+      "pending": "In Behandeling",
+      "granted": "Vandaag Toegekend",
+      "denied": "Vandaag Geweigerd",
+      "viewRequests": "Alle Verzoeken Bekijken"
     },
     "securityMetrics": {
       "title": "Beveiligingsstatistieken",
-      "authFailures": "Auth-fouten (24u)",
+      "authFailures": "Auth-falen (24u)",
       "policyDenials": "Beleidsweigeringen (24u)",
-      "suspiciousActivity": "Verdachte activiteit",
-      "viewAuditLog": "Auditlogboek bekijken"
+      "suspiciousActivity": "Verdachte Activiteit",
+      "viewAuditLog": "Auditlog Bekijken"
     }
   },
   "charts": {
-    "requestsOverTime": "Verzoeken in de tijd",
-    "accessByCountry": "Toegang per land",
+    "requestsOverTime": "Verzoeken in de Tijd",
+    "accessByCountry": "Toegang per Land",
     "classificationDistribution": "Classificatieverdeling",
-    "responseTimeTrends": "Reactietijdtrends",
+    "responseTimeTrends": "Responstijdtrends",
     "today": "Vandaag",
-    "week": "Deze week",
-    "month": "Deze maand",
-    "custom": "Aangepast bereik"
+    "week": "Deze Week",
+    "month": "Deze Maand",
+    "custom": "Aangepaste Periode"
   },
   "filters": {
     "timeRange": "Tijdsbereik",
-    "last24Hours": "Laatste 24 uur",
-    "last7Days": "Laatste 7 dagen",
-    "last30Days": "Laatste 30 dagen",
-    "customRange": "Aangepast bereik"
-  },
-  "userInfo": {
-    "clearance": "Machtiging",
-    "country": "Land",
-    "coi": "COI",
-    "role": "Rol",
-    "lastLogin": "Laatste login",
-    "sessions": "Actieve sessies"
+    "last24Hours": "Laatste 24 Uur",
+    "last7Days": "Laatste 7 Dagen",
+    "last30Days": "Laatste 30 Dagen",
+    "customRange": "Aangepaste Periode"
   },
   "breadcrumbs": {
     "dashboard": "Dashboard"
   },
   "instance": "Instantie",
-  "clearance": "Machtiging",
+  "clearance": "Autorisatie",
   "country": "Land"
 }

@@ -14,7 +14,6 @@
  * @see https://www.keycloak.org/docs/latest/securing_apps/#logout
  */
 
-import { signOut } from 'next-auth/react';
 import { getSessionSyncManager } from '@/lib/session-sync-manager';
 
 interface LogoutOptions {
@@ -98,10 +97,29 @@ export async function federatedLogout(options: LogoutOptions = {}): Promise<void
       // Continue with local cleanup
     }
 
-    // STEP 3: NextAuth signOut (clears cookies)
-    console.log('[DIVE Logout] Step 3: NextAuth signOut...');
-    await signOut({ redirect: false });
-    console.log('[DIVE Logout] ✅ NextAuth signOut complete');
+    // STEP 3: Clear NextAuth cookies manually (avoid NextAuth signOut conflicts)
+    console.log('[DIVE Logout] Step 3: Clearing NextAuth cookies...');
+    try {
+        // Clear NextAuth session cookies manually to avoid conflicts
+        const cookiesToClear = [
+            'next-auth.session-token',
+            'authjs.session-token',
+            '__Secure-next-auth.session-token',
+            '__Secure-authjs.session-token'
+        ];
+
+        cookiesToClear.forEach(cookieName => {
+            // Set cookie to empty value with immediate expiration
+            document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;`;
+            // Also try secure versions for HTTPS
+            document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; secure;`;
+        });
+
+        console.log('[DIVE Logout] ✅ NextAuth cookies cleared manually');
+    } catch (cookieError) {
+        console.warn('[DIVE Logout] ⚠️ Cookie clearing error:', cookieError);
+        // Continue with logout even if cookie clearing fails
+    }
 
     // STEP 4: Clear browser storage
     console.log('[DIVE Logout] Step 4: Clearing browser storage...');
@@ -137,17 +155,32 @@ export async function federatedLogout(options: LogoutOptions = {}): Promise<void
 
   } catch (error) {
     console.error('[DIVE Logout] ❌ Logout error:', error);
-    
+
     // Emergency cleanup
     try {
       localStorage.clear();
       sessionStorage.clear();
+
+      // Clear cookies as final fallback
+      const cookiesToClear = [
+        'next-auth.session-token',
+        'authjs.session-token',
+        '__Secure-next-auth.session-token',
+        '__Secure-authjs.session-token'
+      ];
+
+      cookiesToClear.forEach(cookieName => {
+        document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;`;
+        document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; secure;`;
+      });
+
     } catch (e) {
-      // Ignore
+      console.error('[DIVE Logout] Emergency cleanup failed:', e);
     }
-    
-    // Force redirect to home
+
+    // Force redirect to home even if cleanup fails
     if (typeof window !== 'undefined') {
+      console.log('[DIVE Logout] Forcing redirect to:', redirectUrl);
       window.location.href = redirectUrl;
     }
   }

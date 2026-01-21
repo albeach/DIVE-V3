@@ -202,9 +202,9 @@ export function DashboardActivity({
           </div>
           <div>
             <h3 className="text-lg font-bold text-slate-900">{t('activity.compliance.title')}</h3>
-            <p className="text-xs text-slate-600">
+            <div className="text-xs text-slate-600">
               {t('activity.compliance.subtitle')} <EducationalTooltip term="ACP-240">ACP-240</EducationalTooltip> {t('activity.compliance.requirements')}
-            </p>
+            </div>
           </div>
         </div>
 
@@ -250,11 +250,11 @@ export function DashboardActivity({
           </div>
           <div>
             <h3 className="text-lg font-bold text-slate-900 mb-2">Why Audit Trails Matter</h3>
-            <p className="text-sm text-slate-600 leading-relaxed mb-4">
+            <div className="text-sm text-slate-600 leading-relaxed mb-4">
               Every action in DIVE V3 is logged for <EducationalTooltip term="ACP-240">ACP-240</EducationalTooltip> compliance.
               This audit trail enables security investigations, policy refinement, and accountability.
               Logs are retained for 90 days minimum per <EducationalTooltip term="STANAG">STANAG</EducationalTooltip> requirements.
-            </p>
+            </div>
             <div className="flex flex-wrap gap-3">
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-indigo-200">
                 <CheckCircle2 className="w-4 h-4 text-indigo-600" />
