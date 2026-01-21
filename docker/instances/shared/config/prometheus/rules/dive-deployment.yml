@@ -1,0 +1,256 @@
+# =============================================================================
+# DIVE V3 Deployment & Federation Alert Rules
+# =============================================================================
+# Phase 2: Monitoring & Observability Enhancement
+# Reference: Production Resilience Foundations (2026-01-21)
+# =============================================================================
+
+groups:
+  # ===========================================================================
+  # DEPLOYMENT STATUS ALERTS
+  # ===========================================================================
+  - name: dive_deployment
+    rules:
+      # Spoke Deployment Failed
+      - alert: SpokeDeploymentFailed
+        expr: dive_v3_spoke_deployment_success == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: deployment
+        annotations:
+          summary: "Spoke {{ $labels.instance_code }} deployment failed"
+          description: "Deployment for spoke {{ $labels.instance_code }} has failed. Check logs with: ./dive spoke logs {{ $labels.instance_code }}"
+          runbook_url: "https://docs.dive-v3.io/runbooks/spoke-deployment-failure"
+
+      # Hub Not Ready
+      - alert: HubNotReady
+        expr: up{job="hub-backend"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: hub
+        annotations:
+          summary: "Hub backend is not responding"
+          description: "Hub backend has been down for more than 5 minutes. Spokes cannot authenticate or federate."
+          runbook_url: "https://docs.dive-v3.io/runbooks/hub-backend-down"
+
+      # Container Unhealthy
+      - alert: DIVEContainerUnhealthy
+        expr: |
+          container_health_status{container=~"dive-.*"} != 1
+        for: 10m
+        labels:
+          severity: warning
+          component: container
+        annotations:
+          summary: "DIVE container {{ $labels.container }} is unhealthy"
+          description: "Container {{ $labels.container }} has been unhealthy for more than 10 minutes."
+
+      # Deployment Duration Too Long
+      - alert: DeploymentDurationHigh
+        expr: |
+          dive_v3_spoke_deployment_duration_seconds > 600
+        for: 1m
+        labels:
+          severity: warning
+          component: deployment
+        annotations:
+          summary: "Deployment for {{ $labels.instance_code }} taking too long"
+          description: "Spoke {{ $labels.instance_code }} deployment has been running for {{ $value | humanizeDuration }}."
+
+  # ===========================================================================
+  # FEDERATION ALERTS
+  # ===========================================================================
+  - name: dive_federation
+    rules:
+      # Federation Link Down
+      - alert: FederationLinkDown
+        expr: |
+          dive_v3_federation_verification_status{direction="bidirectional"} == 0
+        for: 5m
+        labels:
+          severity: critical
+          component: federation
+        annotations:
+          summary: "Federation between {{ $labels.source }} and {{ $labels.target }} is down"
+          description: "Bidirectional federation between {{ $labels.source }} and {{ $labels.target }} has been unavailable for 5 minutes. SSO will not work."
+          runbook_url: "https://docs.dive-v3.io/runbooks/federation-down"
+
+      # Federation Verification Failing
+      - alert: FederationVerificationFailing
+        expr: |
+          increase(dive_v3_federation_verification_failures_total[10m]) > 3
+        for: 5m
+        labels:
+          severity: warning
+          component: federation
+        annotations:
+          summary: "Federation verification failing for {{ $labels.instance_code }}"
+          description: "Federation verification for {{ $labels.instance_code }} has failed {{ $value }} times in the last 10 minutes."
+
+      # IdP Configuration Missing
+      - alert: IdPNotConfigured
+        expr: |
+          dive_v3_idp_configured{direction="spoke_to_hub"} == 0 or
+          dive_v3_idp_configured{direction="hub_to_spoke"} == 0
+        for: 10m
+        labels:
+          severity: warning
+          component: federation
+        annotations:
+          summary: "IdP not configured for {{ $labels.instance_code }}"
+          description: "Identity Provider configuration is missing for {{ $labels.instance_code }} ({{ $labels.direction }}). Run: ./dive federation link {{ $labels.instance_code }}"
+
+      # Federation Latency High
+      - alert: FederationLatencyHigh
+        expr: |
+          histogram_quantile(0.95,
+            rate(dive_v3_federation_latency_seconds_bucket[5m])
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+          component: federation
+        annotations:
+          summary: "High federation latency for {{ $labels.instance_code }}"
+          description: "Federation p95 latency for {{ $labels.instance_code }} is {{ $value }}s (threshold: 2s). This may impact user login experience."
+
+  # ===========================================================================
+  # DATABASE & STATE ALERTS
+  # ===========================================================================
+  - name: dive_database
+    rules:
+      # Orchestration Database Unavailable
+      - alert: OrchestrationDBDown
+        expr: |
+          pg_up{datname="orchestration"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "Orchestration database is unavailable"
+          description: "PostgreSQL orchestration database has been unavailable for 2 minutes. Deployment state tracking is impacted."
+
+      # MongoDB Connection Issues
+      - alert: MongoDBConnectionIssues
+        expr: |
+          increase(mongodb_connections_totalcreated[5m]) == 0 and 
+          mongodb_connections_current > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "MongoDB connection pool stagnant on {{ $labels.instance }}"
+          description: "No new MongoDB connections created in 5 minutes on {{ $labels.instance }}. May indicate connection pool exhaustion."
+
+      # State Transition Failures
+      - alert: StateTransitionFailures
+        expr: |
+          increase(dive_v3_state_transition_failures_total[10m]) > 5
+        for: 5m
+        labels:
+          severity: warning
+          component: orchestration
+        annotations:
+          summary: "State transition failures for {{ $labels.instance_code }}"
+          description: "{{ $value }} state transition failures in the last 10 minutes for {{ $labels.instance_code }}."
+
+  # ===========================================================================
+  # SERVICE HEALTH ALERTS
+  # ===========================================================================
+  - name: dive_service_health
+    rules:
+      # Backend API Down
+      - alert: BackendAPIDown
+        expr: |
+          up{job=~".*-backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: backend
+        annotations:
+          summary: "Backend API {{ $labels.job }} is down"
+          description: "Backend API {{ $labels.job }} ({{ $labels.instance }}) has been down for 2 minutes."
+
+      # OPA Policy Engine Down
+      - alert: OPADown
+        expr: |
+          up{job=~".*-opa"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: opa
+        annotations:
+          summary: "OPA policy engine {{ $labels.job }} is down"
+          description: "OPA {{ $labels.job }} ({{ $labels.instance }}) has been down for 2 minutes. Authorization decisions will fail."
+
+      # Keycloak Health Degraded
+      - alert: KeycloakDegraded
+        expr: |
+          keycloak_health_status != 1
+        for: 5m
+        labels:
+          severity: warning
+          component: keycloak
+        annotations:
+          summary: "Keycloak health degraded on {{ $labels.instance }}"
+          description: "Keycloak on {{ $labels.instance }} is reporting degraded health for 5 minutes."
+
+      # High Error Rate
+      - alert: HighErrorRate
+        expr: |
+          rate(http_requests_total{status=~"5.."}[5m]) / 
+          (rate(http_requests_total[5m]) + 0.001) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "High error rate on {{ $labels.job }}"
+          description: "Error rate on {{ $labels.job }} is {{ $value | humanizePercentage }} over the last 5 minutes."
+
+      # Request Latency High
+      - alert: HighRequestLatency
+        expr: |
+          histogram_quantile(0.95,
+            rate(http_request_duration_seconds_bucket[5m])
+          ) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: api
+        annotations:
+          summary: "High request latency on {{ $labels.job }}"
+          description: "p95 request latency on {{ $labels.job }} is {{ $value }}s (threshold: 1s)."
+
+  # ===========================================================================
+  # CERTIFICATE & SECURITY ALERTS
+  # ===========================================================================
+  - name: dive_security
+    rules:
+      # Certificate Expiring Soon
+      - alert: CertificateExpiringSoon
+        expr: |
+          dive_v3_certificate_expiry_days < 30
+        for: 1h
+        labels:
+          severity: warning
+          component: security
+        annotations:
+          summary: "Certificate expiring soon for {{ $labels.instance_code }}"
+          description: "TLS certificate for {{ $labels.instance_code }} expires in {{ $value }} days. Renew before expiration."
+
+      # Invalid JWT Tokens
+      - alert: HighInvalidTokenRate
+        expr: |
+          increase(dive_v3_invalid_jwt_total[10m]) > 10
+        for: 5m
+        labels:
+          severity: info
+          component: security
+        annotations:
+          summary: "High invalid JWT rate on {{ $labels.instance }}"
+          description: "{{ $value }} invalid JWT tokens rejected in the last 10 minutes on {{ $labels.instance }}. May indicate attack or misconfiguration."
