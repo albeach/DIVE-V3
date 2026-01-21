@@ -11,6 +11,7 @@ import { motion } from 'framer-motion';
 import Link from 'next/link';
 import { ArrowRight, Info } from 'lucide-react';
 import { useState } from 'react';
+import { CountUpNumber } from '@/components/ui/countup-number';
 
 export interface FeatureCardProps {
   title: string;
@@ -58,7 +59,7 @@ export function FeatureShowcaseCard({
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: delay * 0.1, duration: 0.5 }}
-      className={`${sizeClasses[size]}`}
+      className={`${sizeClasses[size]} h-full`}
     >
       <Link
         href={href}
@@ -67,6 +68,7 @@ export function FeatureShowcaseCard({
           bg-gradient-to-br ${gradient}
           ${paddingClasses[size]} shadow-lg hover:shadow-2xl
           transition-all duration-500 hover:scale-[1.02]
+          h-full
         `}
       >
         {/* Background pattern */}
@@ -91,9 +93,9 @@ export function FeatureShowcaseCard({
           </div>
         )}
 
-        <div className="relative z-10">
+        <div className="relative z-10 h-full flex flex-col">
           {/* Header */}
-          <div className="flex items-start justify-between mb-4">
+          <div className="flex items-start justify-between mb-4 flex-shrink-0">
             <div className="flex items-center gap-4">
               <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-lg group-hover:scale-110 group-hover:rotate-3 transition-all duration-500">
                 {icon}
@@ -134,15 +136,33 @@ export function FeatureShowcaseCard({
           {/* Stats */}
           {stats.length > 0 && (
             <div className={`flex flex-wrap gap-3 ${size === 'large' ? 'mb-6' : 'mb-4'}`}>
-              {stats.map((stat, idx) => (
-                <div
-                  key={idx}
-                  className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20"
-                >
-                  <span className="text-lg font-bold text-white">{stat.value}</span>
-                  <span className="text-xs text-white/70">{stat.label}</span>
-                </div>
-              ))}
+              {stats.map((stat, idx) => {
+                // Check if this is the Documents Accessible stat
+                const isDocumentsAccessible = stat.label === 'Documents Accessible' || stat.label === 'accessible';
+                const numericValue = isDocumentsAccessible
+                  ? (typeof stat.value === 'string' ? parseInt(stat.value.toString().replace(/[^0-9]/g, '')) : stat.value as number) || 0
+                  : (typeof stat.value === 'string' ? parseInt(stat.value.replace(/[^0-9]/g, '')) : stat.value as number) || 0;
+
+                return (
+                  <div
+                    key={idx}
+                    className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/10 backdrop-blur-sm border border-white/20"
+                  >
+                    {isDocumentsAccessible ? (
+                      <CountUpNumber
+                        value={numericValue}
+                        duration={2.5}
+                        delay={delay * 0.1 + idx * 0.3}
+                        animate={true}
+                        className="text-lg font-bold text-white"
+                      />
+                    ) : (
+                      <span className="text-lg font-bold text-white">{stat.value}</span>
+                    )}
+                    <span className="text-xs text-white/70">{stat.label}</span>
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -159,6 +179,9 @@ export function FeatureShowcaseCard({
               ))}
             </div>
           )}
+
+          {/* Spacer to fill height */}
+          <div className="flex-grow" />
         </div>
       </Link>
     </motion.div>

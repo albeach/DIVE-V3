@@ -14,7 +14,6 @@
  */
 
 import { useEffect } from 'react';
-import { signOut } from 'next-auth/react';
 
 export function LogoutListener({ children }: { children: React.ReactNode }) {
     useEffect(() => {
@@ -24,15 +23,26 @@ export function LogoutListener({ children }: { children: React.ReactNode }) {
             
             if (event.data === 'logout-complete') {
                 console.log('[DIVE] Received logout-complete message from iframe');
-                
+
                 try {
-                    // Call NextAuth signOut to clear any remaining state
-                    await signOut({ redirect: false });
-                    console.log('[DIVE] NextAuth signOut complete');
-                    
+                    // Clear any remaining NextAuth cookies
+                    const cookiesToClear = [
+                        'next-auth.session-token',
+                        'authjs.session-token',
+                        '__Secure-next-auth.session-token',
+                        '__Secure-authjs.session-token'
+                    ];
+
+                    cookiesToClear.forEach(cookieName => {
+                        document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/;`;
+                        document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; secure;`;
+                    });
+
+                    console.log('[DIVE] Remaining cookies cleared');
+
                     // Redirect to home page
                     window.location.href = '/';
-                    
+
                 } catch (error) {
                     console.error('[DIVE] Error completing logout:', error);
                     // Force redirect anyway

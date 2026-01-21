@@ -2,11 +2,11 @@
   "title": "Risorse",
   "subtitle": "Gestire e accedere alle risorse informative della coalizione",
   "list": {
-    "title": "Browser delle risorse",
+    "title": "Browser risorse",
     "searchPlaceholder": "Cerca risorse per titolo, classificazione o tag...",
     "noResults": "Nessuna risorsa trovata",
     "totalResources": "{{count}} risorse",
-    "showing": "Visualizzazione di {{start}}-{{end}} di {{total}}",
+    "showing": "Mostrando {{start}}-{{end}} di {{total}}",
     "loadMore": "Carica altro",
     "refresh": "Aggiorna"
   },
@@ -14,7 +14,7 @@
     "title": "Filtri",
     "clearAll": "Cancella tutto",
     "classification": "Classificazione",
-    "releasability": "Rilasciabilità",
+    "releasability": "Diffusibilità",
     "coi": "Comunità di interesse",
     "dateRange": "Intervallo di date",
     "encrypted": "Solo risorse crittografate",
@@ -24,7 +24,7 @@
   "table": {
     "title": "Titolo",
     "classification": "Classificazione",
-    "releasability": "Rilasciabilità",
+    "releasability": "Diffusibilità",
     "created": "Creato",
     "modified": "Modificato",
     "actions": "Azioni",
@@ -34,69 +34,79 @@
     "download": "Scarica",
     "requestAccess": "Richiedi accesso"
   },
+  "emptyStates": {
+    "noResults": {
+      "title": "Nessun risultato trovato",
+      "description": "Non abbiamo trovato documenti che corrispondano a \"{{query}}\". Prova a regolare i termini di ricerca o i filtri.",
+      "clearSearch": "Cancella ricerca"
+    },
+    "noMatchingDocuments": {
+      "title": "Nessun documento corrispondente",
+      "description": "I tuoi filtri attuali non corrispondono a nessun documento. Prova ad allentare i tuoi criteri di filtro.",
+      "clearFilters": "Cancella filtri"
+    },
+    "error": {
+      "title": "Si è verificato un errore",
+      "description": "Abbiamo riscontrato un errore durante il caricamento dei documenti. Riprova.",
+      "tryAgain": "Riprova"
+    }
+  },
   "detail": {
     "title": "Dettagli risorsa",
     "metadata": "Metadati",
     "resourceId": "ID risorsa",
     "createdBy": "Creato da",
-    "createdDate": "Data di creazione",
+    "createdDate": "Data creazione",
     "lastModified": "Ultima modifica",
     "fileSize": "Dimensione file",
-    "contentType": "Tipo di contenuto",
+    "contentType": "Tipo contenuto",
     "accessLog": "Registro accessi",
-    "noAccessHistory": "Nessuna cronologia di accesso disponibile"
+    "noAccessHistory": "Nessuna cronologia accessi disponibile"
   },
   "upload": {
     "title": "Carica risorsa",
-    "dragDrop": "Trascina e rilascia i file qui, o clicca per sfogliare",
+    "dragDrop": "Trascina e rilascia i file qui, o fai clic per sfogliare",
     "selectFile": "Seleziona file",
     "maxSize": "Dimensione massima file: {{size}}MB",
     "allowedTypes": "Tipi consentiti: {{types}}",
     "metadata": {
       "title": "Metadati risorsa",
       "titleLabel": "Titolo",
-      "titlePlaceholder": "Inserisci il titolo della risorsa",
+      "titlePlaceholder": "Inserisci titolo risorsa",
       "description": "Descrizione",
-      "descriptionPlaceholder": "Inserisci la descrizione della risorsa",
-      "classification": "Livello di classificazione",
-      "releasability": "Rilasciabile a",
+      "descriptionPlaceholder": "Inserisci descrizione risorsa",
+      "classification": "Livello classificazione",
+      "releasability": "Diffondibile a",
       "coi": "Comunità di interesse",
       "tags": "Tag",
       "encryption": "Crittografia"
     },
-    "uploading": "Caricamento in corso...",
+    "uploading": "Caricamento...",
     "uploadProgress": "{{percent}}% caricato",
     "uploadSuccess": "Risorsa caricata con successo",
     "uploadError": "Errore nel caricamento della risorsa",
     "cancel": "Annulla caricamento"
   },
   "access": {
-    "requesting": "Richiesta accesso in corso...",
-    "granted": "Accesso concesso",
+    "requesting": "Richiesta accesso...",
+    "granted": "Accesso concess",
     "denied": "Accesso negato",
-    "pending": "Accesso in sospeso",
+    "pending": "Accesso in attesa",
     "reasonDenied": "Motivo: {{reason}}",
-    "requestKey": "Richiedi chiave di decrittazione",
-    "keyReceived": "Chiave di decrittazione ricevuta",
-    "decrypting": "Decrittazione in corso...",
-    "decrypted": "Decrittato con successo"
+    "requestKey": "Richiedi chiave decrittografia",
+    "keyReceived": "Chiave decrittografia ricevuta",
+    "decrypting": "Decrittografia...",
+    "decrypted": "Decrittografato con successo"
   },
   "errors": {
     "notFound": "Risorsa non trovata",
-    "accessDenied": "Non hai il permesso di accedere a questa risorsa",
-    "loadFailed": "Caricamento risorsa fallito",
-    "uploadFailed": "Caricamento risorsa fallito",
-    "deleteFailed": "Eliminazione risorsa fallita",
-    "insufficientClearance": "Livello di autorizzazione insufficiente",
-    "countryNotReleased": "Risorsa non rilasciata al tuo paese",
+    "accessDenied": "Non hai permessi per accedere a questa risorsa",
+    "loadFailed": "Errore nel caricamento della risorsa",
+    "uploadFailed": "Errore nel caricamento della risorsa",
+    "deleteFailed": "Errore nell'eliminazione della risorsa",
+    "insufficientClearance": "Livello autorizzazione insufficiente",
+    "countryNotReleased": "Risorsa non diffusa al tuo paese",
     "coiNotMember": "Non sei membro della COI richiesta"
-  },
-  "classifications": {
-    "unclassified": "Non classificato",
-    "restricted": "Riservato",
-    "confidential": "Confidenziale",
-    "secret": "Segreto",
-    "topSecret": "Segretissimo"
   },
   "breadcrumbs": {
     "resources": "Risorse",
@@ -130,7 +140,11 @@
     "local": "Locale",
     "federated": "Federato",
     "classification": "Classificazione",
-    "instances": "istanze"
+    "instances": "istanze",
+    "accessRate": "Tasso di accesso",
+    "avgAge": "Età media",
+    "topCOIs": "Top COI",
+    "coalition": "Coalizione"
   },
   "viewModes": {
     "grid": "Griglia",
@@ -156,12 +170,12 @@
   },
   "bookmarks": {
     "emptyState": {
-      "title": "Ancora nessun segnalibro",
-      "description": "Contrassegna documenti e politiche per accesso rapido. Clicca sull'icona del segnalibro su qualsiasi risorsa per salvarla qui."
+      "title": "Nessun segnalibro ancora",
+      "description": "Aggiungi segnalibri a documenti e politiche per accesso rapido. Fai clic sull'icona segnalibro su qualsiasi risorsa per salvarla qui."
     }
   },
   "dateRange": {
-    "creationDate": "Data di creazione",
+    "creationDate": "Data creazione",
     "quickSelect": "Selezione rapida",
     "today": "Oggi",
     "last7Days": "Ultimi 7 giorni",
@@ -170,8 +184,8 @@
     "thisMonth": "Questo mese",
     "lastMonth": "Mese scorso",
     "customRange": "Intervallo personalizzato",
-    "placeholder": "Filtra per intervallo di date",
-    "clickToStart": "Fare clic su una data per iniziare la selezione",
-    "clickToComplete": "Fare clic su un'altra data per completare l'intervallo"
+    "placeholder": "Filtra per intervallo date",
+    "clickToStart": "Fai clic su una data per iniziare la selezione",
+    "clickToComplete": "Fai clic su un'altra data per completare l'intervallo"
   }
 }

@@ -8,9 +8,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateSession, getSessionTokens } from '@/lib/session-validation';
 
-const BACKEND_URL = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
+// For frontend API routes, browsers need to call external backend URLs, not internal Docker network URLs
+const BACKEND_URL = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL || 'https://localhost:4000';
 
 export const dynamic = 'force-dynamic';
+
+// Import HTTPS agent for self-signed certificates (development)
+if (process.env.NODE_ENV !== 'production') {
+  // Allow self-signed certificates for local development
+}
 
 export async function GET(request: NextRequest): Promise<NextResponse> {
     try {

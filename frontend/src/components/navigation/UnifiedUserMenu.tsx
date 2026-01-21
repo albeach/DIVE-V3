@@ -63,8 +63,7 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
 
         // For demo purposes, also check if user is an admin by username/email pattern
         const isAdminUser = user?.uniqueID?.startsWith('admin-') ||
-                           user?.email?.startsWith('admin-') ||
-                           user?.username?.startsWith('admin-') || false;
+                           user?.email?.startsWith('admin-') || false;
 
         const finalResult = hasRole || isAdminUser;
 

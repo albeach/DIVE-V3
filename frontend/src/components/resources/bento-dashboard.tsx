@@ -298,7 +298,7 @@ export default function BentoDashboard({
         >
           <div className="flex items-center gap-1 mb-1">
             <Eye className="w-4 h-4 text-white/70" />
-            <span className="text-[10px] text-white/70">Access Rate</span>
+            <span className="text-[10px] text-white/70">{t('bentoDashboard.accessRate')}</span>
           </div>
           <div className="text-xl font-bold">
             {accessRate !== undefined ? `${Math.round(accessRate)}%` : '—'}
@@ -315,7 +315,7 @@ export default function BentoDashboard({
         >
           <div className="flex items-center gap-1 mb-1">
             <FileText className="w-4 h-4 text-white/70" />
-            <span className="text-[10px] text-white/70">Avg Age</span>
+            <span className="text-[10px] text-white/70">{t('bentoDashboard.avgAge')}</span>
           </div>
           <div className="text-xl font-bold">
             {averageDocAge !== undefined ? `${Math.round(averageDocAge)}d` : '—'}
@@ -330,7 +330,7 @@ export default function BentoDashboard({
         >
           <div className="flex items-center gap-1.5 mb-2">
             <Globe2 className="w-4 h-4 text-gray-500 dark:text-gray-400" />
-            <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">Top COIs</span>
+            <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">{t('bentoDashboard.topCOIs')}</span>
           </div>
           <div className="space-y-1">
             {topCOIs?.slice(0, 2).map((coi, index) => (
@@ -351,7 +351,7 @@ export default function BentoDashboard({
         >
           <div className="flex items-center gap-1.5 mb-2">
             <Server className="w-4 h-4 text-slate-400" />
-            <span className="text-xs font-semibold text-slate-300">Coalition</span>
+            <span className="text-xs font-semibold text-slate-300">{t('bentoDashboard.coalition')}</span>
           </div>
           <div className="space-y-1 text-center">
             <div className="text-xs">

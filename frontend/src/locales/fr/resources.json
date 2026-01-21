@@ -64,35 +64,43 @@
     "noAccessHistory": "Aucun historique d'accès disponible"
   },
   "upload": {
-    "title": "Télécharger une ressource",
+    "title": "Téléverser une ressource",
     "dragDrop": "Glissez et déposez les fichiers ici, ou cliquez pour parcourir",
     "selectFile": "Sélectionner un fichier",
-    "maxSize": "Taille maximale du fichier : {{size}}MB",
-    "allowedTypes": "Types autorisés : {{types}}",
+    "maxSize": "Taille maximale du fichier: {{size}}MB",
+    "allowedTypes": "Types autorisés: {{types}}",
     "metadata": {
       "title": "Métadonnées de la ressource",
       "titleLabel": "Titre",
-      "titlePlaceholder": "Entrez le titre de la ressource",
+      "titlePlaceholder": "Saisir le titre de la ressource",
       "description": "Description",
-      "descriptionPlaceholder": "Entrez la description de la ressource",
+      "descriptionPlaceholder": "Saisir la description de la ressource",
       "classification": "Niveau de classification",
       "releasability": "Diffusable à",
       "coi": "Communautés d'intérêt",
-      "tags": "Tags",
+      "tags": "Étiquettes",
       "encryption": "Chiffrement"
     },
-    "uploading": "Téléchargement en cours...",
-    "uploadProgress": "{{percent}}% téléchargé",
-    "uploadSuccess": "Ressource téléchargée avec succès",
-    "uploadError": "Échec du téléchargement de la ressource",
-    "cancel": "Annuler le téléchargement"
+    "uploading": "Téléversement en cours...",
+    "uploadProgress": "{{percent}}% téléversé",
+    "uploadSuccess": "Ressource téléversée avec succès",
+    "uploadError": "Erreur lors du téléversement de la ressource",
+    "cancel": "Annuler le téléversement",
+    "permissions": {
+      "title": "Vos autorisations",
+      "subtitle": "Limites de téléversement selon votre profil",
+      "yourClearance": "Votre habilitation",
+      "yourCountry": "Votre pays",
+      "maxClassification": "Classification maximale",
+      "warning": "Vous ne pouvez téléverser que des documents de classification égale ou inférieure à votre habilitation."
+    }
   },
   "access": {
     "requesting": "Demande d'accès en cours...",
     "granted": "Accès accordé",
     "denied": "Accès refusé",
     "pending": "Accès en attente",
-    "reasonDenied": "Raison : {{reason}}",
+    "reasonDenied": "Raison: {{reason}}",
     "requestKey": "Demander la clé de déchiffrement",
     "keyReceived": "Clé de déchiffrement reçue",
     "decrypting": "Déchiffrement en cours...",
@@ -100,13 +108,22 @@
   },
   "errors": {
     "notFound": "Ressource introuvable",
-    "accessDenied": "Vous n'avez pas la permission d'accéder à cette ressource",
-    "loadFailed": "Échec du chargement de la ressource",
-    "uploadFailed": "Échec du téléchargement de la ressource",
-    "deleteFailed": "Échec de la suppression de la ressource",
+    "accessDenied": "Vous n'avez pas l'autorisation d'accéder à cette ressource",
+    "loadFailed": "Erreur lors du chargement de la ressource",
+    "uploadFailed": "Erreur lors du téléversement de la ressource",
+    "deleteFailed": "Erreur lors de la suppression de la ressource",
     "insufficientClearance": "Niveau d'habilitation insuffisant",
-    "countryNotReleased": "Ressource non diffusée à votre pays",
+    "countryNotReleased": "Ressource non diffusée vers votre pays",
     "coiNotMember": "Vous n'êtes pas membre de la COI requise"
+  },
+  "breadcrumbs": {
+    "resources": "Ressources",
+    "upload": "Téléverser",
+    "detail": "Détails"
+  },
+  "federation": {
+    "local": "Local",
+    "federated": "Fédéré"
   },
   "classifications": {
     "unclassified": "NON CLASSIFIÉ",
@@ -131,7 +148,11 @@
     "local": "Local",
     "federated": "Fédéré",
     "classification": "Classification",
-    "instances": "instances"
+    "instances": "instances",
+    "accessRate": "Taux d'accès",
+    "avgAge": "Âge moyen",
+    "topCOIs": "Top COI",
+    "coalition": "Coalition"
   },
   "viewModes": {
     "grid": "Grille",
@@ -146,7 +167,7 @@
     "compare": "Comparer",
     "compareTooltip": {
       "selectMin": "Sélectionnez au moins 2 éléments à comparer",
-      "maxItems": "Peut comparer jusqu'à 4 éléments",
+      "maxItems": "Peut comparer au maximum 4 éléments",
       "compareSelected": "Comparer les éléments sélectionnés"
     }
   },
@@ -158,7 +179,7 @@
   "bookmarks": {
     "emptyState": {
       "title": "Aucun signet pour le moment",
-      "description": "Marquez des documents et politiques pour un accès rapide. Cliquez sur l'icône de signet sur n'importe quelle ressource pour la sauvegarder ici."
+      "description": "Ajoutez des signets à des documents et politiques pour un accès rapide. Cliquez sur l'icône de signet dans toute ressource pour l'enregistrer ici."
     }
   },
   "dateRange": {
@@ -168,20 +189,11 @@
     "last7Days": "7 derniers jours",
     "last30Days": "30 derniers jours",
     "last90Days": "90 derniers jours",
-    "thisMonth": "Ce mois",
-    "lastMonth": "Mois dernier",
+    "thisMonth": "Ce mois-ci",
+    "lastMonth": "Le mois dernier",
     "customRange": "Plage personnalisée",
     "placeholder": "Filtrer par plage de dates",
     "clickToStart": "Cliquez sur une date pour commencer la sélection",
     "clickToComplete": "Cliquez sur une autre date pour compléter la plage"
-  },
-  "federation": {
-    "local": "Local",
-    "federated": "Fédéré"
-  },
-  "breadcrumbs": {
-    "resources": "Ressources",
-    "upload": "Télécharger",
-    "detail": "Détails"
   }
 }

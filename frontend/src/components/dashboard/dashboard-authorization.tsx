@@ -128,9 +128,9 @@ export function DashboardAuthorization({
           </div>
           <div>
             <h3 className="text-lg font-bold text-slate-900">{t('authorization.profile.title')}</h3>
-            <p className="text-xs text-slate-600">
+            <div className="text-xs text-slate-600">
               {t('authorization.profile.subtitle')} <EducationalTooltip term="ABAC">ABAC</EducationalTooltip> {t('authorization.profile.decisions')}
-            </p>
+            </div>
           </div>
         </div>
 
@@ -139,9 +139,9 @@ export function DashboardAuthorization({
           <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
             <div className="flex items-center gap-2 mb-3">
               <ShieldCheck className="w-5 h-5 text-blue-600" />
-              <p className="text-sm font-semibold text-slate-900">
+              <div className="text-sm font-semibold text-slate-900">
                 <EducationalTooltip term="Clearance">Clearance Level</EducationalTooltip>
-              </p>
+              </div>
             </div>
             <div className="space-y-2">
               {clearanceLevels.map((level, idx) => (
@@ -185,9 +185,9 @@ export function DashboardAuthorization({
               }</span>
               <div>
                 <p className="text-sm font-bold text-slate-900">{userCountry}</p>
-                <p className="text-xs text-slate-600">
+                <div className="text-xs text-slate-600">
                   <EducationalTooltip term="Releasability">{t('authorization.profile.releasabilityTerm')}</EducationalTooltip> {t('authorization.profile.releasabilityChecked')}
-                </p>
+                </div>
               </div>
             </div>
           </div>
@@ -196,9 +196,9 @@ export function DashboardAuthorization({
           <div className="p-4 rounded-xl bg-slate-50 border border-slate-200">
             <div className="flex items-center gap-2 mb-3">
               <Users className="w-5 h-5 text-purple-600" />
-              <p className="text-sm font-semibold text-slate-900">
+              <div className="text-sm font-semibold text-slate-900">
                 <EducationalTooltip term="COI">{t('authorization.profile.coiMemberships')}</EducationalTooltip>
-              </p>
+              </div>
             </div>
             {userCOI.length > 0 ? (
               <div className="flex flex-wrap gap-2">
@@ -234,11 +234,11 @@ export function DashboardAuthorization({
           </div>
           <div className="flex-1">
             <h3 className="text-lg font-bold text-slate-900 mb-2">How Authorization Works</h3>
-            <p className="text-sm text-slate-600 leading-relaxed mb-4">
+            <div className="text-sm text-slate-600 leading-relaxed mb-4">
               Every resource access is evaluated by <EducationalTooltip term="OPA">OPA</EducationalTooltip> using{' '}
               <EducationalTooltip term="Rego">Rego</EducationalTooltip> policies.
               The <EducationalTooltip term="PDP">PDP</EducationalTooltip> checks your attributes against resource requirements.
-            </p>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
               <div className="flex flex-col items-center gap-2 p-3 rounded-lg bg-white border border-purple-200">
@@ -301,24 +301,24 @@ export function DashboardAuthorization({
           <div className="space-y-2">
             {displayedDecisions.map((decision, idx) => (
               <motion.div
-                key={decision.id}
+                key={`${decision.timestamp}-${decision.resource?.resourceId || decision.resourceId}-${idx}`}
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.05 * idx }}
                 className={`flex items-center gap-4 p-4 rounded-xl border ${
-                  decision.decision === 'allow'
+                  decision.decision === 'ALLOW'
                     ? 'bg-green-50 border-green-200'
                     : 'bg-red-50 border-red-200'
                 }`}
               >
-                {decision.decision === 'allow' ? (
+                {decision.decision === 'ALLOW' ? (
                   <CheckCircle2 className="w-6 h-6 text-green-600" />
                 ) : (
                   <XCircle className="w-6 h-6 text-red-600" />
                 )}
 
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-slate-900">{decision.resourceId}</p>
+                  <p className="text-sm font-medium text-slate-900">{decision.resource?.resourceId || decision.resourceId}</p>
                   <p className="text-xs text-slate-600">{decision.reason}</p>
                 </div>
 

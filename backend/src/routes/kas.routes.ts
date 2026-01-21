@@ -355,11 +355,12 @@ router.get('/registry', async (_req: Request, res: Response): Promise<void> => {
  * /api/kas/registry/:kasId/approve:
  *   post:
  *     summary: Approve a pending KAS registration
- *     description: Admin endpoint to approve a pending KAS registration
+ *     description: |
+ *       Admin endpoint to approve a pending KAS registration.
+ *       Requires super_admin role.
  *     tags: [KAS, Admin]
  *     security:
  *       - BearerAuth: []
- *     description: Requires super_admin role
  */
 router.post('/registry/:kasId/approve', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -393,9 +394,10 @@ router.post('/registry/:kasId/approve', requireSuperAdmin, async (req: Request, 
  * /api/kas/registry/:kasId/suspend:
  *   post:
  *     summary: Suspend a KAS instance
- *     description: Admin endpoint to suspend a KAS instance
+ *     description: |
+ *       Admin endpoint to suspend a KAS instance.
+ *       Requires super_admin role.
  *     tags: [KAS, Admin]
- *     description: Requires super_admin role
  */
 router.post('/registry/:kasId/suspend', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -458,9 +460,10 @@ router.post('/registry/:kasId/heartbeat', async (req: Request, res: Response): P
  * /api/kas/registry/:kasId:
  *   delete:
  *     summary: Remove a KAS instance
- *     description: Admin endpoint to remove a KAS from the registry
+ *     description: |
+ *       Admin endpoint to remove a KAS from the registry.
+ *       Requires super_admin role.
  *     tags: [KAS, Admin]
- *     description: Requires super_admin role
  */
 router.delete('/registry/:kasId', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -611,9 +614,10 @@ router.post('/route', async (req: Request, res: Response): Promise<void> => {
  * /api/kas/test-connectivity/:kasId:
  *   post:
  *     summary: Test connectivity to a KAS instance
- *     description: Pings a KAS instance to verify it's reachable
+ *     description: |
+ *       Pings a KAS instance to verify it's reachable.
+ *       Requires super_admin role.
  *     tags: [KAS, Admin]
- *     description: Requires super_admin role
  */
 router.post('/test-connectivity/:kasId', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {

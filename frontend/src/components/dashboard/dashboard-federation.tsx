@@ -199,10 +199,10 @@ export function DashboardFederation({
           </div>
           <div>
             <h3 className="text-lg font-bold text-slate-900 mb-2">{t('federation.explanation.title')}</h3>
-            <p className="text-sm text-slate-600 leading-relaxed mb-4">
+            <div className="text-sm text-slate-600 leading-relaxed mb-4">
               <EducationalTooltip term="Federation">{t('federation.explanation.federationTerm')}</EducationalTooltip> {t('federation.explanation.description')}
               <EducationalTooltip term="STANAG">{t('federation.explanation.stanagTerm')}</EducationalTooltip> {t('federation.explanation.standardsText')}
-            </p>
+            </div>
             <div className="flex flex-wrap gap-3">
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-blue-200">
                 <CheckCircle2 className="w-4 h-4 text-blue-600" />

@@ -271,6 +271,9 @@ services:
     environment:
       NODE_ENV: development
       PORT: "4000"
+      INSTANCE_CODE: USA
+      INSTANCE_NAME: "United States"
+      INSTANCE_REALM: USA
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb:27017
       MONGODB_DATABASE: dive-v3-hub
       OPA_URL: https://opa:8181
@@ -311,6 +314,7 @@ services:
       - ./policies:/app/policies:ro
       - ./backend/certs:/app/certs:ro
       - ./certs/mkcert:/app/certs/ca:ro  # mkcert root CA for TLS trust
+      - ./NATO_Security_Policy.xml:/app/NATO_Security_Policy.xml:ro
       - ./backend/logs:/app/logs
       - ./config:/app/config:ro
       # Docker socket for running OPA tests via docker exec

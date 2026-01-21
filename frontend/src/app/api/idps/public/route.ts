@@ -9,10 +9,11 @@ if (process.env.NODE_ENV !== 'production') {
 }
 
 export async function GET(_req: NextRequest): Promise<NextResponse> {
+  // For frontend API routes, browsers need external URLs, not internal Docker network URLs
   const backendUrl =
-    process.env.BACKEND_URL ||
     process.env.NEXT_PUBLIC_BACKEND_URL ||
     process.env.NEXT_PUBLIC_API_URL ||
+    process.env.BACKEND_URL ||
     'https://localhost:4000';
 
   const target = `${backendUrl}/api/idps/public`;

@@ -48,10 +48,14 @@ interface DashboardOverviewProps {
     encryptedResources?: number;
   };
   loading?: boolean;
+  userRoles?: string[];
 }
 
-export function DashboardOverview({ idps, stats, loading = false }: DashboardOverviewProps) {
+export function DashboardOverview({ idps, stats, loading = false, userRoles = [] }: DashboardOverviewProps) {
   const { t } = useTranslation('dashboard');
+  
+  // Check if user has admin role
+  const isAdmin = userRoles.includes('admin') || userRoles.includes('realm-admin') || userRoles.includes('federation-admin');
 
   const features = [
     {
@@ -72,7 +76,8 @@ export function DashboardOverview({ idps, stats, loading = false }: DashboardOve
         t('overview.features.browseDocuments.badges.auditLogged')
       ],
     },
-    {
+    // Federation Network - Admin only
+    ...(isAdmin ? [{
       title: t('overview.features.federationNetwork.title'),
       description: t('overview.features.federationNetwork.description'),
       educational: t('overview.features.federationNetwork.educational'),
@@ -83,7 +88,7 @@ export function DashboardOverview({ idps, stats, loading = false }: DashboardOve
       stats: [
         { label: t('overview.features.federationNetwork.stats.partners'), value: stats.federationPartners || idps.length },
       ],
-    },
+    }] : []),
     {
       title: t('overview.features.uploadDocument.title'),
       description: t('overview.features.uploadDocument.description'),
@@ -156,7 +161,7 @@ export function DashboardOverview({ idps, stats, loading = false }: DashboardOve
   return (
     <div className="space-y-8">
       {/* Feature Cards Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-stretch">
         {features.map((feature, idx) => (
           <FeatureShowcaseCard
             key={feature.title}

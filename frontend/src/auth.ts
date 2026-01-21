@@ -309,6 +309,33 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 }
 
                 // Return profile with all DIVE attributes
+                // Get current instance - for direct access, ALWAYS use instance country
+                const currentInstance = process.env.NEXT_PUBLIC_INSTANCE || 'USA';
+
+                // CRITICAL FIX: For direct instance access, use instance country
+                // This ensures users accessing FRA portal are treated as FRA users
+                // The stored countryOfAffiliation should only matter for federated access
+                let countryOfAffiliation: string;
+
+                if (currentInstance !== 'USA') {
+                    // Direct instance access - use instance country
+                    const instanceToCountry: Record<string, string> = {
+                        'FRA': 'FRA', 'GBR': 'GBR', 'DEU': 'DEU', 'CAN': 'CAN',
+                        'ITA': 'ITA', 'ESP': 'ESP', 'NLD': 'NLD', 'POL': 'POL',
+                        'BEL': 'BEL', 'DNK': 'DNK', 'ISL': 'ISL', 'LUX': 'LUX',
+                        'NOR': 'NOR', 'PRT': 'PRT', 'GRC': 'GRC', 'TUR': 'TUR',
+                        'CZE': 'CZE', 'HUN': 'HUN', 'SVK': 'SVK', 'SVN': 'SVN',
+                        'BGR': 'BGR', 'EST': 'EST', 'LVA': 'LVA', 'LTU': 'LTU',
+                        'HRV': 'HRV', 'ALB': 'ALB', 'MNE': 'MNE', 'MKD': 'MKD',
+                        'FIN': 'FIN', 'SWE': 'SWE', 'AUS': 'AUS', 'NZL': 'NZL',
+                        'JPN': 'JPN', 'KOR': 'KOR', 'ROU': 'ROU'
+                    };
+                    countryOfAffiliation = instanceToCountry[currentInstance] || currentInstance;
+                } else {
+                    // USA instance or unknown - use stored country
+                    countryOfAffiliation = profile.countryOfAffiliation || profile.country || 'USA';
+                }
+
                 return {
                     id: profile.sub,
                     name: profile.name || profile.preferred_username || profile.sub,
@@ -316,7 +343,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     image: profile.picture,
                     uniqueID: profile.uniqueID || profile.preferred_username || profile.sub,
                     clearance: profile.clearance || 'UNCLASSIFIED',
-                    countryOfAffiliation: profile.countryOfAffiliation || profile.country || 'UNKNOWN',
+                    countryOfAffiliation: countryOfAffiliation,
                     acpCOI: profile.acpCOI || profile.aciCOI || [],
                     roles: profile.realm_access?.roles || profile.roles || [],
                 };

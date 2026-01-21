@@ -221,7 +221,7 @@ export function DashboardResources({
                 <Lock className="w-5 h-5 text-blue-600" />
                 <div>
                   <p className="text-xs font-medium text-slate-900">Encrypted Content</p>
-                  <p className="text-xs text-slate-600"><EducationalTooltip term="KAS">KAS</EducationalTooltip> key required</p>
+                  <div className="text-xs text-slate-600"><EducationalTooltip term="KAS">KAS</EducationalTooltip> key required</div>
                 </div>
               </div>
             </div>

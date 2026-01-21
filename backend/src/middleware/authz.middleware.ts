@@ -15,6 +15,7 @@ import { IRequestWithSP } from '../types/sp-federation.types';
 import { opaCircuitBreaker, keycloakCircuitBreaker } from '../utils/circuit-breaker';
 import { decisionCacheService } from '../services/decision-cache.service';
 import { auditService } from '../services/audit.service';
+import { decisionLogService } from '../services/decision-log.service';
 
 // ============================================
 // PEP (Policy Enforcement Point) Middleware
@@ -851,6 +852,8 @@ function isZTDFResource(resource: any): resource is any {
 }
 
 export async function authzMiddleware(req: Request, res: Response, next: NextFunction): Promise<void> {
+    const startTime = Date.now();
+
     try {
         // Extract user from JWT validation (set by authenticateJWT)
         const user = (req as any).user;
@@ -1011,6 +1014,17 @@ export async function authzMiddleware(req: Request, res: Response, next: NextFun
             decision: opaResponse.result.allow ? 'ALLOW' : 'DENY',
             reason: opaResponse.result.reason,
             evaluation_details: opaResponse.result.evaluation_details,
+            subject: {
+                clearance: user.clearance,
+                country: user.countryOfAffiliation,
+                coi: user.acpCOI,
+            },
+            resource: {
+                resourceId: resourceAttributes.resourceId,
+                classification: resourceAttributes.classification,
+                releasabilityTo: resourceAttributes.releasabilityTo,
+                coi: resourceAttributes.COI,
+            },
         };
 
         // Check authorization decision
@@ -1020,6 +1034,74 @@ export async function authzMiddleware(req: Request, res: Response, next: NextFun
                 resource: resourceId,
                 reason: opaResponse.result.reason,
                 evaluation_details: opaResponse.result.evaluation_details,
+            });
+
+            // Audit log the deny decision
+            auditService.logAccessDeny({
+                subject: {
+                    uniqueID: user.uniqueID,
+                    clearance: user.clearance,
+                    countryOfAffiliation: user.countryOfAffiliation,
+                    acpCOI: user.acpCOI,
+                    issuer: user.iss,
+                },
+                resource: {
+                    resourceId: resourceAttributes.resourceId,
+                    classification: resourceAttributes.classification,
+                    releasabilityTo: resourceAttributes.releasabilityTo,
+                    COI: resourceAttributes.COI,
+                    encrypted: resourceAttributes.encrypted,
+                },
+                decision: {
+                    allow: false,
+                    reason: opaResponse.result.reason,
+                },
+                context: {
+                    requestId: req.headers['x-request-id'] as string || `req-${Date.now()}`,
+                    sourceIP: req.ip,
+                },
+                latencyMs: Date.now() - startTime,
+            });
+
+            // Log decision to decisions collection for dashboard
+            logger.info('Logging DENY decision to decision service', {
+                subject: user.uniqueID,
+                resource: resourceAttributes.resourceId,
+                decision: 'DENY'
+            });
+            await decisionLogService.logDecision({
+                timestamp: new Date().toISOString(),
+                requestId: req.headers['x-request-id'] as string || `req-${Date.now()}`,
+                subject: {
+                    uniqueID: user.uniqueID,
+                    clearance: user.clearance,
+                    clearanceOriginal: user.clearance,
+                    clearanceCountry: user.countryOfAffiliation,
+                    countryOfAffiliation: user.countryOfAffiliation,
+                    acpCOI: user.acpCOI,
+                },
+                resource: {
+                    resourceId: resourceAttributes.resourceId,
+                    classification: resourceAttributes.classification,
+                    originalClassification: resourceAttributes.originalClassification,
+                    originalCountry: resourceAttributes.originalCountry,
+                    releasabilityTo: resourceAttributes.releasabilityTo,
+                    COI: resourceAttributes.COI,
+                },
+                action: {
+                    operation: req.method.toLowerCase(),
+                },
+                decision: 'DENY',
+                reason: opaResponse.result.reason,
+                evaluation_details: opaResponse.result.evaluation_details,
+                obligations: opaResponse.result.obligations,
+                latency_ms: Date.now() - startTime,
+                context: {
+                    sourceIP: req.ip || req.socket?.remoteAddress || 'unknown',
+                    acr: getEffectiveAcr(user),
+                    amr: getEffectiveAmr(user),
+                    auth_time: user.auth_time,
+                },
             });
 
             // Return structured error response with resource metadata for frontend
@@ -1039,8 +1121,24 @@ export async function authzMiddleware(req: Request, res: Response, next: NextFun
                     subject: {
                         uniqueID: user.uniqueID,
                         clearance: user.clearance,
-                        countryOfAffiliation: user.countryOfAffiliation,
-                        acpCOI: user.acpCOI,
+                        country: user.countryOfAffiliation,
+                        coi: user.acpCOI,
+                    },
+                },
+                policyEvaluation: {
+                    decision: 'DENY',
+                    reason: opaResponse.result.reason,
+                    evaluation_details: opaResponse.result.evaluation_details,
+                    subject: {
+                        clearance: user.clearance,
+                        country: user.countryOfAffiliation,
+                        coi: user.acpCOI,
+                    },
+                    resource: {
+                        resourceId: resourceAttributes.resourceId,
+                        classification: resourceAttributes.classification,
+                        releasabilityTo: resourceAttributes.releasabilityTo,
+                        coi: resourceAttributes.COI,
                     },
                 },
             });
@@ -1052,6 +1150,74 @@ export async function authzMiddleware(req: Request, res: Response, next: NextFun
             resource: resourceId,
             decision: 'ALLOW',
             reason: opaResponse.result.reason,
+        });
+
+        // Audit log the grant decision
+        auditService.logAccessGrant({
+            subject: {
+                uniqueID: user.uniqueID,
+                clearance: user.clearance,
+                countryOfAffiliation: user.countryOfAffiliation,
+                acpCOI: user.acpCOI,
+                issuer: user.iss,
+            },
+            resource: {
+                resourceId: resourceAttributes.resourceId,
+                classification: resourceAttributes.classification,
+                releasabilityTo: resourceAttributes.releasabilityTo,
+                COI: resourceAttributes.COI,
+                encrypted: resourceAttributes.encrypted,
+            },
+            decision: {
+                allow: true,
+                reason: opaResponse.result.reason,
+            },
+            context: {
+                requestId: req.headers['x-request-id'] as string || `req-${Date.now()}`,
+                sourceIP: req.ip,
+            },
+            latencyMs: Date.now() - startTime,
+        });
+
+        // Log decision to decisions collection for dashboard
+        logger.info('Logging ALLOW decision to decision service', {
+            subject: user.uniqueID,
+            resource: resourceAttributes.resourceId,
+            decision: 'ALLOW'
+        });
+        await decisionLogService.logDecision({
+            timestamp: new Date().toISOString(),
+            requestId: req.headers['x-request-id'] as string || `req-${Date.now()}`,
+            subject: {
+                uniqueID: user.uniqueID,
+                clearance: user.clearance,
+                clearanceOriginal: user.clearance,
+                clearanceCountry: user.countryOfAffiliation,
+                countryOfAffiliation: user.countryOfAffiliation,
+                acpCOI: user.acpCOI,
+            },
+            resource: {
+                resourceId: resourceAttributes.resourceId,
+                classification: resourceAttributes.classification,
+                originalClassification: resourceAttributes.originalClassification,
+                originalCountry: resourceAttributes.originalCountry,
+                releasabilityTo: resourceAttributes.releasabilityTo,
+                COI: resourceAttributes.COI,
+            },
+            action: {
+                operation: req.method.toLowerCase(),
+            },
+            decision: 'ALLOW',
+            reason: opaResponse.result.reason,
+            evaluation_details: opaResponse.result.evaluation_details,
+            obligations: opaResponse.result.obligations,
+            latency_ms: Date.now() - startTime,
+            context: {
+                sourceIP: req.ip || req.socket?.remoteAddress || 'unknown',
+                acr: getEffectiveAcr(user),
+                amr: getEffectiveAmr(user),
+                auth_time: user.auth_time,
+            },
         });
 
         // Attach authorization obligations (like KAS key requirements)

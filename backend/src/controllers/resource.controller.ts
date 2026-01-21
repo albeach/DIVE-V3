@@ -232,10 +232,15 @@ export const getResourceHandler = async (
             let stanagMarkings = resource.stanag;
             if (!stanagMarkings) {
                 try {
+                    // Detect language based on user's country for localized classification labels
+                    const user = (req as any).enrichedUser || (req as any).user;
+                    const userCountry = user?.countryOfAffiliation || 'USA';
+                    const language = userCountry === 'FRA' ? 'fr' : 'en';
+                    
                     const marking = await generateMarking(
                         classification,
                         releasabilityTo,
-                        { COI, caveats: resource.ztdf.policy.securityLabel.caveats }
+                        { COI, caveats: resource.ztdf.policy.securityLabel.caveats, language }
                     );
                     stanagMarkings = {
                         displayMarking: marking.displayMarking,
