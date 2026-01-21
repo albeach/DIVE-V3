@@ -119,12 +119,16 @@ export async function uploadFile(
         }
 
         // 5. Generate STANAG-compliant marking using SPIF (STANAG 4774)
+        // Detect language based on uploader's country (for localized classification labels)
+        const language = uploader.countryOfAffiliation === 'FRA' ? 'fr' : 'en';
+        
         const stanagMarking = await generateMarking(
             effectiveClassification,
             effectiveReleasability,
             {
                 COI: metadata.COI,
                 caveats: metadata.caveats,
+                language,
             }
         );
 

@@ -378,7 +378,6 @@ export const paginatedSearchHandler = async (
 
     // Classification filter
     if (filters.classifications && filters.classifications.length > 0) {
-      mongoFilter.$or = mongoFilter.$or || [];
       mongoFilter.$and = mongoFilter.$and || [];
       mongoFilter.$and.push({
         $or: [

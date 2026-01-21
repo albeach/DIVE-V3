@@ -28,6 +28,26 @@ interface PolicyDecisionReplayProps {
   };
 }
 
+// National classification mappings for localization
+const NATIONAL_CLASSIFICATIONS: Record<string, Record<string, string>> = {
+  USA: { UNCLASSIFIED: 'UNCLASSIFIED', CONFIDENTIAL: 'CONFIDENTIAL', SECRET: 'SECRET', TOP_SECRET: 'TOP SECRET' },
+  GBR: { UNCLASSIFIED: 'OFFICIAL', CONFIDENTIAL: 'CONFIDENTIAL', SECRET: 'SECRET', TOP_SECRET: 'TOP SECRET' },
+  FRA: { UNCLASSIFIED: 'NON CLASSIFIÉ', CONFIDENTIAL: 'CONFIDENTIEL DÉFENSE', SECRET: 'SECRET DÉFENSE', TOP_SECRET: 'TRÈS SECRET DÉFENSE' },
+  CAN: { UNCLASSIFIED: 'UNCLASSIFIED', CONFIDENTIAL: 'CONFIDENTIAL', SECRET: 'SECRET', TOP_SECRET: 'TOP SECRET' },
+  DEU: { UNCLASSIFIED: 'OFFEN', CONFIDENTIAL: 'VS-VERTRAULICH', SECRET: 'GEHEIM', TOP_SECRET: 'STRENG GEHEIM' },
+  AUS: { UNCLASSIFIED: 'UNCLASSIFIED', CONFIDENTIAL: 'CONFIDENTIAL', SECRET: 'SECRET', TOP_SECRET: 'TOP SECRET' },
+  NZL: { UNCLASSIFIED: 'UNCLASSIFIED', CONFIDENTIAL: 'CONFIDENTIAL', SECRET: 'SECRET', TOP_SECRET: 'TOP SECRET' },
+  ESP: { UNCLASSIFIED: 'NO CLASIFICADO', CONFIDENTIAL: 'CONFIDENCIAL', SECRET: 'SECRETO', TOP_SECRET: 'ALTO SECRETO' },
+  ITA: { UNCLASSIFIED: 'NON CLASSIFICATO', CONFIDENTIAL: 'CONFIDENZIALE', SECRET: 'SEGRETO', TOP_SECRET: 'SEGRETISSIMO' },
+  POL: { UNCLASSIFIED: 'NIEJAWNE', CONFIDENTIAL: 'POUFNE', SECRET: 'TAJNE', TOP_SECRET: 'ŚCIŚLE TAJNE' },
+};
+
+function getLocalizedClassification(classification: string | undefined, userCountry: string | undefined): string {
+  if (!classification) return 'N/A';
+  if (!userCountry) return classification;
+  return NATIONAL_CLASSIFICATIONS[userCountry]?.[classification] || classification;
+}
+
 /**
  * Policy Decision Replay Component for Resource Pages
  *
@@ -159,7 +179,7 @@ export function PolicyDecisionReplay({
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-gray-600 dark:text-gray-400">Class:</span>
-                  <span className="font-mono font-semibold">{resourceAttributes.classification || 'N/A'}</span>
+                  <span className="font-mono font-semibold">{getLocalizedClassification(resourceAttributes.classification, subjectAttributes?.countryOfAffiliation)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600 dark:text-gray-400">Release:</span>
@@ -264,7 +284,7 @@ export function PolicyDecisionReplay({
               <div className="space-y-1 text-xs">
                 <div className="flex justify-between">
                   <span className="text-gray-600 dark:text-gray-400">Class:</span>
-                  <span className="font-mono font-semibold">{resourceAttributes.classification || 'N/A'}</span>
+                  <span className="font-mono font-semibold">{getLocalizedClassification(resourceAttributes.classification, subjectAttributes?.countryOfAffiliation)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600 dark:text-gray-400">Release:</span>
@@ -281,37 +301,7 @@ export function PolicyDecisionReplay({
               </div>
             </motion.div>
 
-            {/* Decision Indicator */}
-            {currentStep >= steps.length && (
-              <motion.div
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                transition={{ duration: 0.2 }}
-                className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-10"
-              >
-                <div className={`
-                  px-6 py-3 rounded-2xl shadow-2xl backdrop-blur-xl border-2
-                  ${decision === "ALLOW"
-                    ? "bg-green-500/90 border-green-300"
-                    : "bg-red-500/90 border-red-300"
-                  }
-                `}>
-                  <div className="flex items-center gap-2 text-white">
-                    {decision === "ALLOW" ? (
-                      <>
-                        <CheckCircle className="w-5 h-5" />
-                        <span className="font-bold">ACCESS GRANTED</span>
-                      </>
-                    ) : (
-                      <>
-                        <XCircle className="w-5 h-5" />
-                        <span className="font-bold">ACCESS DENIED</span>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </motion.div>
-            )}
+            {/* Decision Indicator - REMOVED: Distracting overlay */}
           </div>
         </div>
       )}

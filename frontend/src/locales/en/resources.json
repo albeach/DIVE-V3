@@ -34,6 +34,23 @@
     "download": "Download",
     "requestAccess": "Request Access"
   },
+  "emptyStates": {
+    "noResults": {
+      "title": "No results found",
+      "description": "We couldn't find any documents matching \"{{query}}\". Try adjusting your search terms or filters.",
+      "clearSearch": "Clear search"
+    },
+    "noMatchingDocuments": {
+      "title": "No matching documents",
+      "description": "Your current filters don't match any documents. Try loosening your filter criteria.",
+      "clearFilters": "Clear filters"
+    },
+    "error": {
+      "title": "An error occurred",
+      "description": "We encountered an error while loading documents. Please try again.",
+      "tryAgain": "Try again"
+    }
+  },
   "detail": {
     "title": "Resource Details",
     "metadata": "Metadata",
@@ -68,7 +85,15 @@
     "uploadProgress": "{{percent}}% uploaded",
     "uploadSuccess": "Resource uploaded successfully",
     "uploadError": "Failed to upload resource",
-    "cancel": "Cancel Upload"
+    "cancel": "Cancel Upload",
+    "permissions": {
+      "title": "Your Permissions",
+      "subtitle": "Upload limits based on your profile",
+      "yourClearance": "Your Clearance",
+      "yourCountry": "Your Country",
+      "maxClassification": "Max Classification",
+      "warning": "You can only upload documents at or below your clearance level."
+    }
   },
   "access": {
     "requesting": "Requesting Access...",
@@ -123,7 +148,11 @@
     "local": "Local",
     "federated": "Federated",
     "classification": "Classification",
-    "instances": "instances"
+    "instances": "instances",
+    "accessRate": "Access Rate",
+    "avgAge": "Avg Age",
+    "topCOIs": "Top COIs",
+    "coalition": "Coalition"
   },
   "viewModes": {
     "grid": "Grid",

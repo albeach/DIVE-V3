@@ -40,6 +40,7 @@ import { DashboardResources } from './dashboard-resources';
 import { DashboardActivity } from './dashboard-activity';
 import { GlossaryPopover } from './educational-tooltip';
 import { getNationalClearance } from '@/components/navigation/nav-config';
+import { CountUpNumber } from '@/components/ui/countup-number';
 
 interface User {
   uniqueID?: string;
@@ -48,6 +49,7 @@ interface User {
   acpCOI?: string[];
   name?: string;
   email?: string;
+  roles?: string[];
 }
 
 // Country flag emoji map - All 32 NATO countries + partners
@@ -449,16 +451,34 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
           transition={{ delay: 0.2 }}
           className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch"
         >
-          {data.quickStats.map((stat, idx) => (
-          <div
-            key={idx}
-            className="group relative overflow-hidden rounded-2xl bg-white border border-slate-200 p-6 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 flex flex-col"
-          >
-              <div className="flex items-start justify-between mb-2">
-              <div>
-                <p className="text-3xl font-bold text-slate-900">{stat.value}</p>
-                <p className="text-sm text-slate-600 mt-1">{stat.label}</p>
-              </div>
+          {data.quickStats.map((stat, idx) => {
+            // Check if this is the Documents Accessible metric
+            const isDocumentsAccessible = stat.label === 'Documents Accessible';
+            const numericValue = isDocumentsAccessible
+              ? parseInt(stat.value.toString().replace(/[^0-9]/g, '')) || 0
+              : (typeof stat.value === 'string' ? parseInt(stat.value.replace(/[^0-9]/g, '')) || 0 : stat.value as number);
+
+            return (
+              <div
+                key={idx}
+                className="group relative overflow-hidden rounded-2xl bg-white border border-slate-200 p-6 shadow-lg hover:shadow-xl transition-all duration-300 hover:-translate-y-1 flex flex-col"
+              >
+                  <div className="flex items-start justify-between mb-2">
+                  <div>
+                    {isDocumentsAccessible ? (
+                      <p className="text-3xl font-bold text-slate-900">
+                        <CountUpNumber
+                          value={numericValue as number}
+                          duration={2.5}
+                          delay={idx * 0.2}
+                          animate={true}
+                        />
+                      </p>
+                    ) : (
+                      <p className="text-3xl font-bold text-slate-900">{stat.value}</p>
+                    )}
+                    <p className="text-sm text-slate-600 mt-1">{stat.label}</p>
+                  </div>
               <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
                 stat.trend === 'up' ? 'bg-green-100' : stat.trend === 'down' ? 'bg-red-100' : 'bg-slate-100'
               }`}>
@@ -477,9 +497,10 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
               </div>
             )}
 
-            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
-          </div>
-        ))}
+                  <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
+                </div>
+              );
+            })}
         </motion.div>
 
         {/* Tab Navigation */}
@@ -510,6 +531,7 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
                   federationPartners: data.idps.length,
                 }}
                 loading={loading}
+                userRoles={(session?.user as any)?.roles || []}
               />
             )}
 

@@ -84,8 +84,7 @@ export default function Navigation({ user }: INavigationProps) {
 
         // For demo purposes, also check if user is an admin by username/email pattern
         const isAdminUser = user?.uniqueID?.startsWith('admin-') ||
-                           user?.email?.startsWith('admin-') ||
-                           user?.username?.startsWith('admin-') || false;
+                           user?.email?.startsWith('admin-') || false;
 
         const finalResult = hasRole || isAdminUser;
 
@@ -100,7 +99,7 @@ export default function Navigation({ user }: INavigationProps) {
             });
         }
         return finalResult;
-    }, [user?.roles, user?.uniqueID, user?.email, user?.username]);
+    }, [user?.roles, user?.uniqueID, user?.email]);
 
     // PHASE 3: Memoize isActive function
     const isActive = useCallback((href: string) => {
@@ -381,8 +380,8 @@ export default function Navigation({ user }: INavigationProps) {
                                                         <div className="flex items-center gap-3">
                                                             <item.icon className="w-6 h-6" style={{ color: 'var(--instance-primary)' }} strokeWidth={2.5} />
                                                             <div>
-                                                                <h3 className="font-bold text-gray-900 text-base">{item.name}</h3>
-                                                                <p className="text-xs text-gray-600">{item.description}</p>
+                                                                <h3 className="font-bold text-gray-900 text-base">{t(item.name)}</h3>
+                                                                <p className="text-xs text-gray-600">{t(item.description)}</p>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -491,9 +490,9 @@ export default function Navigation({ user }: INavigationProps) {
                                                 )}
 
                                                 {/* Tooltip on hover */}
-                                                {hoveredNavItem === item.name && !active && (
+                                                {hoveredNavItem === t(item.name) && !active && (
                                                     <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 px-3 py-1.5 bg-gray-900/95 backdrop-blur-sm text-white text-xs font-medium rounded-lg shadow-xl whitespace-nowrap animate-fade-in z-50 pointer-events-none">
-                                                        {item.description}
+                                                        {t(item.description)}
                                                         <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-gray-900/95 rotate-45" />
                                                     </div>
                                                 )}
@@ -898,7 +897,7 @@ export default function Navigation({ user }: INavigationProps) {
                                                                     }`}
                                                                     style={active ? { backgroundImage: 'var(--instance-banner-bg)' } : undefined}
                                                                 >
-                                                                    {item.name}
+                                                                    {t(item.name)}
                                                                 </span>
                                                                 {item.badge && (
                                                                     <span
@@ -909,7 +908,7 @@ export default function Navigation({ user }: INavigationProps) {
                                                                     </span>
                                                                 )}
                                                             </div>
-                                                            <p className="text-xs text-gray-600 mt-0.5 line-clamp-1">{item.description}</p>
+                                                            <p className="text-xs text-gray-600 mt-0.5 line-clamp-1">{t(item.description)}</p>
                                                         </div>
 
                                                         {/* Arrow indicator */}

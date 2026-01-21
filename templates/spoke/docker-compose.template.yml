@@ -234,11 +234,12 @@ services:
     image: openpolicyagent/opa:1.12.1
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-opa
     platform: linux/amd64
-    command: run --server --addr :8181 --set=decision_logs.console=true --set=data_api_enabled=true --set=policies_api_enabled=true --tls-cert-file=/certs/certificate.pem --tls-private-key-file=/certs/key.pem --ignore='*.json' /policies/base /policies/entrypoints /policies/tenant /policies/org /policies/compat
+    command: run --server --addr :8181 --set=decision_logs.console=true --set=data_api_enabled=true --set=policies_api_enabled=true --tls-cert-file=/certs/certificate.pem --tls-private-key-file=/certs/key.pem
     ports:
       - "{{OPA_HOST_PORT}}:8181"
     volumes:
-      - ../../policies:/policies:ro
+      # REMOVED: ../../policies:/policies:ro
+      # Policies now loaded exclusively via OPAL (proper GitOps)
       - ./cache/policies:/var/opa/cache
       - ./certs:/certs:ro
     networks:
@@ -277,8 +278,11 @@ services:
       OPAL_POLICY_STORE_URL: https://opa-{{INSTANCE_CODE_LOWER}}:8181
       OPAL_SUBSCRIPTION_ID: {{SPOKE_ID}}
       # Data topics to subscribe to (must match Hub topics)
-      OPAL_DATA_TOPICS: policy_data
+      # CRITICAL: Subscribe to ALL data topics for dynamic trusted issuers, federation matrix, etc.
+      OPAL_DATA_TOPICS: policy_data,trusted_issuers,federation_matrix,tenant_configs
       OPAL_LOG_LEVEL: INFO
+      # Enable data updater to receive dynamic data from Hub
+      OPAL_DATA_UPDATER_ENABLED: "true"
       OPAL_KEEP_ALIVE_TIMEOUT: 60
       OPAL_RECONNECT_INTERVAL: 5
       OPAL_RECONNECT_MAX_INTERVAL: 300
@@ -327,6 +331,7 @@ services:
       PORT: "4000"
       INSTANCE_CODE: {{INSTANCE_CODE_UPPER}}
       INSTANCE_NAME: "{{INSTANCE_NAME}}"
+      INSTANCE_REALM: {{INSTANCE_CODE_UPPER}}
       SPOKE_ID: {{SPOKE_ID}}
       SPOKE_MODE: "true"
       # MongoDB
@@ -337,6 +342,8 @@ services:
       # Keycloak (internal Docker network URL for backend API calls)
       KEYCLOAK_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
       KEYCLOAK_REALM: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
+      KEYCLOAK_CLIENT_ID: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_{{INSTANCE_CODE_UPPER}}}
       KEYCLOAK_ISSUER: {{IDP_BASE_URL}}/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}}
       # CRITICAL: Include Hub issuer for cross-instance federation
       TRUSTED_ISSUERS: {{IDP_BASE_URL}}/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}},https://keycloak-{{INSTANCE_CODE_LOWER}}:8443/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}},https://localhost:8443/realms/dive-v3-broker,https://keycloak:8443/realms/dive-v3-broker,https://usa-idp.dive25.com/realms/dive-v3-broker
@@ -346,6 +353,8 @@ services:
       # OPA - Use standalone OPA for policy decisions (HTTPS)
       # OPAL client pushes policies to standalone OPA
       OPA_URL: https://opa-{{INSTANCE_CODE_LOWER}}:8181
+      # KAS - Local Key Access Service for this spoke
+      KAS_URL: https://kas-{{INSTANCE_CODE_LOWER}}:8080
       # API URL for Swagger/OpenAPI documentation
       API_URL: {{API_URL}}
       # CORS
@@ -365,6 +374,7 @@ services:
       - ./certs:/app/certs:rw
       - ./certs:/opt/keycloak/certs:ro
       - ./certs/ca:/app/certs/ca:ro  # Instance-specific CA for TLS trust
+      - ../../NATO_Security_Policy.xml:/app/NATO_Security_Policy.xml:ro
       - ./config.json:/app/instance-config.json:ro  # Instance-specific config
       - ../../config/federation-registry.json:/app/config/federation-registry.json:ro
       # NOTE: kas-registry.json mount REMOVED in Phase 3 (MongoDB KAS Registry Migration)
@@ -509,8 +519,8 @@ services:
         condition: service_healthy
     healthcheck:
       # FIXED: Use HTTPS (Next.js serves HTTPS only via custom server.js)
-      # Test root endpoint which always exists
-      test: ["CMD", "wget", "--no-check-certificate", "--quiet", "--spider", "https://127.0.0.1:3000/", "--timeout=10"]
+      # Test root endpoint which always exists - using curl for better HTTPS support
+      test: ["CMD", "curl", "-k", "-f", "-m", "10", "https://127.0.0.1:3000/"]
       interval: 15s
       timeout: 10s
       retries: 5

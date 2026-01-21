@@ -331,31 +331,32 @@ export default function ResourceDetailPage() {
           setResource(null);
 
           // Extract policy evaluation data from denial response
-          const evalDetails = errorData.details?.evaluation_details || errorData.details;
+          const policyEval = errorData.policyEvaluation || errorData.details?.policyEvaluation;
+          const evalDetails = policyEval?.evaluation_details || errorData.details?.evaluation_details || errorData.details;
           const steps = extractPolicyStepsFromDetails(evalDetails || {});
-          
+
           // If no steps extracted but we have a denial, create a fallback denial step
           const finalSteps = steps.length > 0 ? steps : [
             {
               rule: "authorization_check",
               result: "FAIL" as const,
-              reason: errorData.details?.reason || errorData.message || "Authorization denied",
+              reason: policyEval?.reason || errorData.details?.reason || errorData.message || "Authorization denied",
               attributes: ["subject", "resource", "context"]
             }
           ];
-          
+
           setPolicyEvaluation({
             decision: "DENY",
             steps: finalSteps,
             subjectAttributes: {
-              clearance: errorData.details?.subject?.clearance,
-              countryOfAffiliation: errorData.details?.subject?.country,
-              acpCOI: errorData.details?.subject?.coi
+              clearance: policyEval?.subject?.clearance || errorData.details?.subject?.clearance,
+              countryOfAffiliation: policyEval?.subject?.country || errorData.details?.subject?.countryOfAffiliation || errorData.details?.subject?.country,
+              acpCOI: policyEval?.subject?.coi || errorData.details?.subject?.acpCOI || errorData.details?.subject?.coi
             },
             resourceAttributes: {
-              classification: errorData.details?.resource?.classification,
-              releasabilityTo: errorData.details?.resource?.releasabilityTo,
-              COI: errorData.details?.resource?.coi
+              classification: policyEval?.resource?.classification || errorData.details?.resource?.classification,
+              releasabilityTo: policyEval?.resource?.releasabilityTo || errorData.details?.resource?.releasabilityTo,
+              COI: policyEval?.resource?.coi || errorData.details?.resource?.COI || errorData.details?.resource?.coi
             }
           });
 
@@ -382,7 +383,7 @@ export default function ResourceDetailPage() {
           // Use real policy evaluation data from backend if available
           if (data.policyEvaluation?.evaluation_details) {
             const steps = extractPolicyStepsFromDetails(data.policyEvaluation.evaluation_details);
-            
+
             // If no steps were extracted but access was granted, create fallback steps
             const finalSteps = steps.length > 0 ? steps : [
               {
@@ -410,7 +411,7 @@ export default function ResourceDetailPage() {
                 attributes: ["subject.acpCOI", "resource.COI"]
               }
             ];
-            
+
             setPolicyEvaluation({
               decision: "ALLOW",
               steps: finalSteps,
