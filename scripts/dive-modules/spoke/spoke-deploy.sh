@@ -1451,7 +1451,9 @@ _spoke_deploy_legacy() {
                         local compose_dir="${DIVE_ROOT}/instances/${code_lower}"
                         if [ -f "$compose_dir/docker-compose.yml" ]; then
                             cd "$compose_dir"
-                            if docker compose up -d "backend-${code_lower}" >/dev/null 2>&1; then
+                            # CRITICAL: --force-recreate required because docker compose doesn't
+                            # detect .env changes as a reason to recreate the container
+                            if docker compose up -d --force-recreate "backend-${code_lower}" >/dev/null 2>&1; then
                                 log_success "✓ Backend recreated with new SPOKE_ID and TOKEN"
                                 cd "$DIVE_ROOT"
                                 
