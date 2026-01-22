@@ -414,13 +414,17 @@ EOF
                     if [ -f "$compose_dir/docker-compose.yml" ]; then
                         # CRITICAL: --force-recreate required because docker compose doesn't
                         # detect .env changes as a reason to recreate the container
-                        log_verbose "Running: cd $compose_dir && docker compose up -d --force-recreate backend-${code_lower}"
+                        log_info "Recreating backend using: docker compose -f $compose_dir/docker-compose.yml up -d --force-recreate backend-${code_lower}"
                         local recreate_output
-                        recreate_output=$(cd "$compose_dir" && docker compose up -d --force-recreate "backend-${code_lower}" 2>&1)
+                        # Use -f flag to specify compose file from any directory
+                        recreate_output=$(docker compose -f "$compose_dir/docker-compose.yml" --env-file "$compose_dir/.env" up -d --force-recreate "backend-${code_lower}" 2>&1)
                         local recreate_exit=$?
+                        
+                        log_info "Docker compose exit: $recreate_exit"
+                        [ -n "$recreate_output" ] && log_verbose "Output: $recreate_output"
+                        
                         if [ $recreate_exit -eq 0 ]; then
                             log_success "✓ Spoke backend recreated with new SPOKE_ID and TOKEN"
-                            log_verbose "Recreate output: $recreate_output"
                             
                             # Wait for backend to be healthy
                             local wait_count=0

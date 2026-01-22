@@ -3,7 +3,7 @@
 # =============================================================================
 # Generated At: {{TIMESTAMP}}
 # Template Hash: {{TEMPLATE_HASH}}
-# Spoke ID: {{SPOKE_ID}}
+# Instance Code: {{INSTANCE_CODE_UPPER}}
 # NOTE: This file is auto-generated from templates/spoke/docker-compose.template.yml
 #       Do not edit directly - changes will be overwritten on next deployment
 # =============================================================================
@@ -49,7 +49,6 @@
 #   {{INSTANCE_CODE_UPPER}} - 3-letter uppercase code (e.g., NZL)
 #   {{INSTANCE_CODE_LOWER}} - 3-letter lowercase code (e.g., nzl)
 #   {{INSTANCE_NAME}}       - Human-readable name
-#   {{SPOKE_ID}}            - Unique spoke identifier
 #   {{IDP_HOSTNAME}}        - Keycloak hostname
 #   {{API_URL}}             - Backend API URL
 #   {{BASE_URL}}            - Frontend URL
@@ -277,7 +276,8 @@ services:
       # This avoids inline OPA chicken-and-egg health check issues
       OPAL_INLINE_OPA_ENABLED: "false"
       OPAL_POLICY_STORE_URL: https://opa-{{INSTANCE_CODE_LOWER}}:8181
-      OPAL_SUBSCRIPTION_ID: {{SPOKE_ID}}
+      # SSOT: Use INSTANCE_CODE for subscription, not spokeId (Hub is SSOT for spokeId)
+      OPAL_SUBSCRIPTION_ID: spoke-{{INSTANCE_CODE_LOWER}}
       # Data topics to subscribe to (must match Hub topics)
       # CRITICAL: Subscribe to ALL data topics for dynamic trusted issuers, federation matrix, etc.
       OPAL_DATA_TOPICS: policy_data,trusted_issuers,federation_matrix,tenant_configs
@@ -334,10 +334,10 @@ services:
       INSTANCE_CODE: {{INSTANCE_CODE_UPPER}}
       INSTANCE_NAME: "{{INSTANCE_NAME}}"
       INSTANCE_REALM: {{INSTANCE_CODE_UPPER}}
-      # CRITICAL FIX (2026-01-22): Use env var reference instead of hardcoded value
-      # ROOT CAUSE: Spoke ID is generated at init, but may change during registration
-      # FIX: Read SPOKE_ID from .env at runtime so restarts pick up updates
-      SPOKE_ID: ${SPOKE_ID:-{{SPOKE_ID}}}
+      # SSOT ARCHITECTURE (2026-01-22): No SPOKE_ID here
+      # Backend queries Hub MongoDB at startup to get spokeId using INSTANCE_CODE
+      # This eliminates spokeId mismatch issues that caused heartbeat failures
+      INSTANCE_CODE: {{INSTANCE_CODE_UPPER}}
       SPOKE_MODE: "true"
       # MongoDB
       MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/dive-v3-{{INSTANCE_CODE_LOWER}}?authSource=admin
