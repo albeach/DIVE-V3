@@ -338,7 +338,21 @@ services:
       MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/dive-v3-{{INSTANCE_CODE_LOWER}}?authSource=admin
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/dive-v3-{{INSTANCE_CODE_LOWER}}?authSource=admin
       MONGODB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
+      # Local Redis for session cache
       REDIS_URL: redis://redis-{{INSTANCE_CODE_LOWER}}:6379
+      # ==========================================================================
+      # SHARED BLACKLIST REDIS (ACP-240 Cross-Instance Token Revocation)
+      # ==========================================================================
+      # Connects to Hub's centralized blacklist Redis for federation-wide token
+      # revocation. When a user logs out on any spoke, their tokens are revoked
+      # across ALL federated instances (GAP-010 remediation).
+      #
+      # Requirements:
+      # - Spoke must be on dive-shared Docker network (default for local dev)
+      # - REDIS_PASSWORD_BLACKLIST must be set in spoke's .env (from GCP secret)
+      # - For remote Hub: Update dive-hub-redis-blacklist to Hub's actual hostname
+      # ==========================================================================
+      BLACKLIST_REDIS_URL: redis://:${REDIS_PASSWORD_BLACKLIST}@dive-hub-redis-blacklist:6379
       # Keycloak (internal Docker network URL for backend API calls)
       KEYCLOAK_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
       KEYCLOAK_REALM: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
@@ -366,6 +380,10 @@ services:
       SPOKE_CONFIG_PATH: /app/config/config.json
       DIVE_POLICY_CACHE_PATH: /app/cache/policies
       DIVE_AUDIT_QUEUE_PATH: /app/cache/audit
+      # Multimedia/FFmpeg Configuration (STANAG 4774/4778)
+      FFMPEG_PATH: /usr/bin/ffmpeg
+      MAX_MULTIMEDIA_UPLOAD_SIZE_MB: "500"
+      MAX_UPLOAD_SIZE_MB: "100"
     ports:
       - "{{BACKEND_HOST_PORT}}:4000"
     volumes:

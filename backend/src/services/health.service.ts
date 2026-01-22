@@ -120,6 +120,7 @@ export interface IDetailedHealth extends IBasicHealth {
         redis?: IServiceHealth;
         kas?: IServiceHealth;
         cache?: IServiceHealth;
+        blacklistRedis?: IServiceHealth;
     };
     metrics: {
         activeIdPs: number;
@@ -275,6 +276,8 @@ class HealthService {
                 redis: redisHealth,
                 kas: kasHealth,
                 cache: cacheHealth,
+                // Include blacklist Redis in services for visibility
+                blacklistRedis: blacklistRedisHealth,
             },
             metrics,
             memory,
