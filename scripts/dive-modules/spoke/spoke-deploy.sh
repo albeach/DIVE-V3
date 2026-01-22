@@ -1424,6 +1424,17 @@ _spoke_deploy_legacy() {
                             fi
                             rm -f "$spoke_dir/.env.bak"
                             log_success "✓ SPOKE_ID updated in .env"
+                            
+                            # ==========================================================================
+                            # CRITICAL FIX (2026-01-22): Also update docker-compose.yml fallback
+                            # ==========================================================================
+                            # ROOT CAUSE: Old docker-compose.yml has stale SPOKE_ID fallback
+                            local compose_file="$spoke_dir/docker-compose.yml"
+                            if [ -f "$compose_file" ]; then
+                                sed -i.bak "s|\${SPOKE_ID:-spoke-[a-z]*-[a-f0-9]*}|\${SPOKE_ID:-$spoke_id}|g" "$compose_file"
+                                rm -f "$compose_file.bak"
+                                log_verbose "Updated docker-compose.yml SPOKE_ID fallback"
+                            fi
                         fi
                     fi
                     
