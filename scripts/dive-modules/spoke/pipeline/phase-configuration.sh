@@ -377,6 +377,21 @@ EOF
                 log_success "✓ SPOKE_ID and SPOKE_TOKEN configured in .env"
                 
                 # ==========================================================================
+                # CRITICAL FIX (2026-01-22): Also update docker-compose.yml fallback value
+                # ==========================================================================
+                # ROOT CAUSE: nuke doesn't remove instances/ directory, so old docker-compose.yml
+                # persists with stale SPOKE_ID fallback. When new deployment runs, the container
+                # is created with old fallback before .env is updated.
+                # FIX: Update the fallback value in docker-compose.yml to match new SPOKE_ID
+                local compose_file="$spoke_dir/docker-compose.yml"
+                if [ -f "$compose_file" ] && [ -n "$registered_spoke_id" ]; then
+                    # Update the SPOKE_ID fallback pattern: ${SPOKE_ID:-spoke-xxx-xxxxxxxx}
+                    sed -i.bak "s|\${SPOKE_ID:-spoke-[a-z]*-[a-f0-9]*}|\${SPOKE_ID:-$registered_spoke_id}|g" "$compose_file"
+                    rm -f "$compose_file.bak"
+                    log_verbose "Updated docker-compose.yml SPOKE_ID fallback to $registered_spoke_id"
+                fi
+                
+                # ==========================================================================
                 # CRITICAL FIX (2026-01-22): Restart spoke backend to pick up new credentials
                 # ==========================================================================
                 # ROOT CAUSE: Backend container was started BEFORE registration, so it has
