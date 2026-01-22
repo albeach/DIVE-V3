@@ -1450,12 +1450,15 @@ _spoke_deploy_legacy() {
                         
                         local compose_dir="${DIVE_ROOT}/instances/${code_lower}"
                         if [ -f "$compose_dir/docker-compose.yml" ]; then
-                            cd "$compose_dir"
                             # CRITICAL: --force-recreate required because docker compose doesn't
                             # detect .env changes as a reason to recreate the container
-                            if docker compose up -d --force-recreate "backend-${code_lower}" >/dev/null 2>&1; then
+                            log_verbose "Running: cd $compose_dir && docker compose up -d --force-recreate backend-${code_lower}"
+                            local recreate_output
+                            recreate_output=$(cd "$compose_dir" && docker compose up -d --force-recreate "backend-${code_lower}" 2>&1)
+                            local recreate_exit=$?
+                            if [ $recreate_exit -eq 0 ]; then
                                 log_success "✓ Backend recreated with new SPOKE_ID and TOKEN"
-                                cd "$DIVE_ROOT"
+                                log_verbose "Recreate output: $recreate_output"
                                 
                                 # Wait for backend to be healthy
                                 local wait_count=0
@@ -1469,8 +1472,8 @@ _spoke_deploy_legacy() {
                                     wait_count=$((wait_count + 1))
                                 done
                             else
-                                cd "$DIVE_ROOT"
-                                log_warn "Could not recreate backend - may need manual restart"
+                                log_warn "Could not recreate backend (exit code: $recreate_exit)"
+                                log_warn "Output: $recreate_output"
                             fi
                         fi
                     fi
