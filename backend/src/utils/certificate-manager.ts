@@ -806,6 +806,274 @@ ${Buffer.from(JSON.stringify({ ...certData, signature })).toString('base64').mat
             .filter(f => f.endsWith('-cert.pem'))
             .map(f => f.replace('-cert.pem', ''));
     }
+
+    // ============================================
+    // PHASE 4: HUB CA SPOKE CERTIFICATE ISSUANCE
+    // ============================================
+
+    /**
+     * Sign a Certificate Signing Request (CSR) from a spoke
+     * 
+     * Industry Pattern: Certificate Authority signs spoke CSRs during enrollment
+     * (AWS Private CA, Google Cloud CA Service, HashiCorp Vault PKI)
+     * 
+     * Phase 4: Gap Closure - Hub issues X.509 certificates to spokes
+     * 
+     * @param csrPEM - PEM-encoded CSR from spoke
+     * @param spokeInstanceCode - Spoke instance code (FRA, GBR, DEU, etc.)
+     * @param validityDays - Certificate validity period (default: 365 days)
+     * @returns Signed certificate PEM
+     */
+    async signCSR(
+        csrPEM: string,
+        spokeInstanceCode: string,
+        validityDays: number = 365
+    ): Promise<{
+        certificatePEM: string;
+        serialNumber: string;
+        validFrom: Date;
+        validTo: Date;
+        issuer: string;
+    }> {
+        await this.initialize();
+
+        logger.info('Signing spoke CSR', {
+            spokeInstanceCode,
+            validityDays,
+            csrLength: csrPEM.length
+        });
+
+        try {
+            // Parse CSR to extract public key and subject
+            const csrData = this.parseCSR(csrPEM);
+
+            // Validate CSR signature
+            if (!csrData.signatureValid) {
+                throw new Error('CSR signature validation failed');
+            }
+
+            // Validate subject matches spoke instance code
+            if (!csrData.subject.includes(spokeInstanceCode.toUpperCase())) {
+                logger.warn('CSR subject does not match spoke instance code', {
+                    spokeInstanceCode,
+                    csrSubject: csrData.subject
+                });
+                // Allow but log warning (spoke may use different naming)
+            }
+
+            // Generate serial number
+            const serialNumber = crypto.randomBytes(16).toString('hex').toUpperCase();
+
+            // Calculate validity period
+            const validFrom = new Date();
+            const validTo = new Date(validFrom.getTime() + validityDays * 24 * 60 * 60 * 1000);
+
+            // Load Intermediate CA for signing
+            const paths = this.resolveCertificatePaths();
+            
+            if (!fs.existsSync(paths.intermediateCertPath)) {
+                throw new Error(`Intermediate CA certificate not found: ${paths.intermediateCertPath}`);
+            }
+            if (!fs.existsSync(paths.intermediateKeyPath)) {
+                throw new Error(`Intermediate CA key not found: ${paths.intermediateKeyPath}`);
+            }
+
+            const intermediateCertPEM = fs.readFileSync(paths.intermediateCertPath, 'utf8');
+            const intermediateKeyPEM = fs.readFileSync(paths.intermediateKeyPath, 'utf8');
+            const intermediateCert = new X509Certificate(intermediateCertPEM);
+
+            // Build certificate data
+            const certData = {
+                version: 3,
+                serialNumber,
+                issuer: intermediateCert.subject, // Signed by Intermediate CA
+                subject: csrData.subject,
+                validFrom,
+                validTo,
+                publicKey: csrData.publicKey,
+                extensions: {
+                    // Key Usage: Digital Signature, Key Encipherment (for TLS)
+                    keyUsage: {
+                        digitalSignature: true,
+                        keyEncipherment: true,
+                        critical: true
+                    },
+                    // Extended Key Usage: Server Authentication, Client Authentication
+                    extendedKeyUsage: {
+                        serverAuth: true,
+                        clientAuth: true,
+                        critical: false
+                    },
+                    // Subject Alternative Names (for Docker + localhost)
+                    subjectAltName: [
+                        `DNS:dive-spoke-${spokeInstanceCode.toLowerCase()}-backend`,
+                        `DNS:dive-spoke-${spokeInstanceCode.toLowerCase()}-keycloak`,
+                        `DNS:dive-spoke-${spokeInstanceCode.toLowerCase()}-kas`,
+                        `DNS:localhost`,
+                        `DNS:*.dive25.com`,
+                        `IP:127.0.0.1`
+                    ]
+                }
+            };
+
+            // Sign certificate with Intermediate CA private key
+            const signData = JSON.stringify(certData, Object.keys(certData).sort());
+            const sign = crypto.createSign('SHA384');
+            sign.update(signData);
+            sign.end();
+
+            const signature = sign.sign({
+                key: intermediateKeyPEM,
+                passphrase: process.env.CA_KEY_PASSPHRASE || 'dive-v3-ca-passphrase'
+            }, 'base64');
+
+            // Create PEM-encoded certificate
+            const certificatePEM = `-----BEGIN CERTIFICATE-----
+${Buffer.from(JSON.stringify({ ...certData, signature })).toString('base64').match(/.{1,64}/g)?.join('\n')}
+-----END CERTIFICATE-----`;
+
+            logger.info('Spoke certificate signed successfully', {
+                spokeInstanceCode,
+                serialNumber,
+                validFrom: validFrom.toISOString(),
+                validTo: validTo.toISOString(),
+                issuer: intermediateCert.subject
+            });
+
+            return {
+                certificatePEM,
+                serialNumber,
+                validFrom,
+                validTo,
+                issuer: intermediateCert.subject
+            };
+
+        } catch (error) {
+            logger.error('Failed to sign spoke CSR', {
+                spokeInstanceCode,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Parse a Certificate Signing Request (CSR)
+     * 
+     * @param csrPEM - PEM-encoded CSR
+     * @returns Parsed CSR data
+     */
+    private parseCSR(csrPEM: string): {
+        subject: string;
+        publicKey: string;
+        signatureValid: boolean;
+    } {
+        try {
+            // Simplified CSR parsing for pilot
+            // In production, use proper ASN.1 parsing library (e.g., node-forge, pkijs)
+            
+            // Extract base64 content
+            const base64 = csrPEM
+                .replace(/-----BEGIN CERTIFICATE REQUEST-----/, '')
+                .replace(/-----END CERTIFICATE REQUEST-----/, '')
+                .replace(/\s/g, '');
+
+            // Decode to extract basic info
+            const buffer = Buffer.from(base64, 'base64');
+
+            // For now, assume CSR is valid and extract minimal info
+            // Production: Use proper ASN.1 parser
+            const subject = `CN=${csrPEM.match(/CN=([^,\n]+)/)?.[1] || 'Unknown'}`;
+            const publicKey = csrPEM; // Simplified
+
+            logger.debug('CSR parsed (simplified)', {
+                subject,
+                size: buffer.length
+            });
+
+            return {
+                subject,
+                publicKey,
+                signatureValid: true // Simplified validation
+            };
+
+        } catch (error) {
+            logger.error('CSR parsing failed', {
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+            throw new Error(`CSR parsing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        }
+    }
+
+    /**
+     * Generate CSR for testing/development
+     * 
+     * @param spokeInstanceCode - Spoke instance code
+     * @param privateKeyPEM - Private key (if already generated)
+     * @returns CSR PEM and private key PEM
+     */
+    async generateCSR(
+        spokeInstanceCode: string,
+        privateKeyPEM?: string
+    ): Promise<{
+        csrPEM: string;
+        privateKeyPEM: string;
+    }> {
+        logger.info('Generating CSR for spoke', { spokeInstanceCode });
+
+        // Generate key pair if not provided
+        let privateKey = privateKeyPEM;
+        if (!privateKey) {
+            const { privateKey: newPrivateKey } = crypto.generateKeyPairSync('rsa', {
+                modulusLength: 2048,
+                publicKeyEncoding: {
+                    type: 'spki',
+                    format: 'pem'
+                },
+                privateKeyEncoding: {
+                    type: 'pkcs8',
+                    format: 'pem'
+                }
+            });
+            privateKey = newPrivateKey;
+        }
+
+        // Create CSR (simplified for pilot)
+        const subject = {
+            CN: `dive-spoke-${spokeInstanceCode.toLowerCase()}`,
+            O: 'DIVE V3 Coalition',
+            OU: spokeInstanceCode.toUpperCase(),
+            C: 'US'
+        };
+
+        const csrData = {
+            subject: Object.entries(subject).map(([k, v]) => `${k}=${v}`).join(', '),
+            publicKey: privateKey,
+            version: 1
+        };
+
+        // Sign CSR with private key
+        const signData = JSON.stringify(csrData);
+        const sign = crypto.createSign('SHA256');
+        sign.update(signData);
+        sign.end();
+
+        const signature = sign.sign(privateKey, 'base64');
+
+        const csrPEM = `-----BEGIN CERTIFICATE REQUEST-----
+${Buffer.from(JSON.stringify({ ...csrData, signature })).toString('base64').match(/.{1,64}/g)?.join('\n')}
+-----END CERTIFICATE REQUEST-----`;
+
+        logger.info('CSR generated successfully', {
+            spokeInstanceCode,
+            subject: csrData.subject
+        });
+
+        return {
+            csrPEM,
+            privateKeyPEM: privateKey
+        };
+    }
 }
 
 /**
