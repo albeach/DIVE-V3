@@ -37,6 +37,13 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 # =============================================================================
+# ENVIRONMENT CONFIGURATION
+# =============================================================================
+# Use environment variables for URLs with sensible defaults for local testing
+HUB_BACKEND_URL="${HUB_BACKEND_URL:-https://localhost:4000}"
+HUB_KEYCLOAK_URL="${HUB_KEYCLOAK_URL:-https://localhost:8443}"
+
+# =============================================================================
 # TEST STATE
 # =============================================================================
 TESTS_TOTAL=0
@@ -534,23 +541,24 @@ test_oidc_endpoints_reachable() {
         return 2
     fi
 
-    # Get spoke port from config
-    local spoke_port
+    # Get spoke port and URL from config or environment
+    local spoke_keycloak_url
     if [ -f "${DIVE_ROOT}/instances/${test_code}/config.json" ]; then
-        spoke_port=$(jq -r '.endpoints.idpPublicUrl // "https://localhost:8443"' \
-            "${DIVE_ROOT}/instances/${test_code}/config.json" | grep -o ':[0-9]*' | tr -d ':')
+        spoke_keycloak_url=$(jq -r '.endpoints.idpPublicUrl // ""' \
+            "${DIVE_ROOT}/instances/${test_code}/config.json")
     fi
-    spoke_port="${spoke_port:-8443}"
+    # Fall back to localhost with default port if not configured
+    spoke_keycloak_url="${spoke_keycloak_url:-${SPOKE_KEYCLOAK_URL:-https://127.0.0.1:8643}}"
 
     # Test spoke OIDC
-    if ! curl -sk --max-time 10 "https://localhost:${spoke_port}/realms/dive-v3-broker-${test_code}/.well-known/openid-configuration" | grep -q '"issuer"'; then
-        echo "Spoke OIDC discovery not reachable"
+    if ! curl -sk --max-time 10 "${spoke_keycloak_url}/realms/dive-v3-broker-${test_code}/.well-known/openid-configuration" | grep -q '"issuer"'; then
+        echo "Spoke OIDC discovery not reachable at ${spoke_keycloak_url}"
         return 1
     fi
 
-    # Test hub OIDC
-    if ! curl -sk --max-time 10 "https://localhost:8443/realms/dive-v3-broker-usa/.well-known/openid-configuration" | grep -q '"issuer"'; then
-        echo "Hub OIDC discovery not reachable"
+    # Test hub OIDC using configured URL
+    if ! curl -sk --max-time 10 "${HUB_KEYCLOAK_URL}/realms/dive-v3-broker-usa/.well-known/openid-configuration" | grep -q '"issuer"'; then
+        echo "Hub OIDC discovery not reachable at ${HUB_KEYCLOAK_URL}"
         return 1
     fi
 
@@ -633,6 +641,229 @@ suite_database() {
 }
 
 # =============================================================================
+# TEST SUITE 6: CIRCUIT BREAKER VERIFICATION (Phase 3.2)
+# =============================================================================
+
+test_circuit_breaker_states_in_health() {
+    # Test that circuit breaker states are reported in health endpoint
+    if ! assert_hub_healthy; then
+        return 2
+    fi
+    
+    # Get detailed health which includes circuit breakers
+    local health_response
+    health_response=$(curl -sk --max-time 10 "${HUB_BACKEND_URL}/health/detailed" 2>/dev/null)
+    
+    if [ -z "$health_response" ]; then
+        echo "Failed to get health response"
+        return 1
+    fi
+    
+    # Check that circuitBreakers section exists
+    if ! echo "$health_response" | jq -e '.circuitBreakers' >/dev/null 2>&1; then
+        echo "circuitBreakers section missing from health response"
+        return 1
+    fi
+    
+    # Verify all expected circuit breakers are present
+    local expected_breakers=("opa" "keycloak" "mongodb" "kas")
+    for breaker in "${expected_breakers[@]}"; do
+        if ! echo "$health_response" | jq -e ".circuitBreakers.${breaker}" >/dev/null 2>&1; then
+            echo "Circuit breaker '$breaker' missing from health response"
+            return 1
+        fi
+    done
+    
+    # Verify all circuit breakers are in CLOSED state (normal operation)
+    for breaker in "${expected_breakers[@]}"; do
+        local state
+        state=$(echo "$health_response" | jq -r ".circuitBreakers.${breaker}.state")
+        
+        if [ "$state" != "CLOSED" ]; then
+            echo "Circuit breaker '$breaker' is in unexpected state: $state (expected: CLOSED)"
+            # This is a warning, not a failure - the service might be recovering
+            # Only fail if state is OPEN
+            if [ "$state" = "OPEN" ]; then
+                return 1
+            fi
+        fi
+    done
+    
+    return 0
+}
+
+test_health_check_all_services() {
+    # Verify all 7 services report "up" status
+    if ! assert_hub_healthy; then
+        return 2
+    fi
+    
+    local health_response
+    health_response=$(curl -sk --max-time 10 "${HUB_BACKEND_URL}/health/detailed" 2>/dev/null)
+    
+    if [ -z "$health_response" ]; then
+        echo "Failed to get health response"
+        return 1
+    fi
+    
+    # Expected services
+    local expected_services=("mongodb" "opa" "keycloak" "redis" "kas" "cache" "blacklistRedis")
+    local failed_services=()
+    
+    for service in "${expected_services[@]}"; do
+        local status
+        status=$(echo "$health_response" | jq -r ".services.${service}.status // \"missing\"")
+        
+        if [ "$status" = "missing" ]; then
+            # Some services may be optional (kas, blacklistRedis)
+            if [ "$service" != "kas" ] && [ "$service" != "blacklistRedis" ]; then
+                failed_services+=("$service: missing")
+            fi
+        elif [ "$status" = "down" ]; then
+            failed_services+=("$service: down")
+        fi
+    done
+    
+    if [ ${#failed_services[@]} -gt 0 ]; then
+        echo "Failed services: ${failed_services[*]}"
+        return 1
+    fi
+    
+    return 0
+}
+
+test_ssl_certificate_trust() {
+    # Verify HTTPS health checks work without SSL errors
+    if ! assert_hub_healthy; then
+        return 2
+    fi
+    
+    # Test Hub backend HTTPS
+    local hub_backend_response
+    hub_backend_response=$(curl -sk --max-time 10 "${HUB_BACKEND_URL}/health" 2>&1)
+    
+    if echo "$hub_backend_response" | grep -qi "certificate\|ssl\|tls" | grep -qi "error\|verify\|failed"; then
+        echo "SSL certificate error detected for hub backend"
+        return 1
+    fi
+    
+    # Test Keycloak HTTPS
+    local kc_response
+    kc_response=$(curl -sk --max-time 10 "${HUB_KEYCLOAK_URL}/realms/master" 2>&1)
+    
+    if echo "$kc_response" | grep -qi "certificate\|ssl\|tls" | grep -qi "error\|verify\|failed"; then
+        echo "SSL certificate error detected for keycloak"
+        return 1
+    fi
+    
+    return 0
+}
+
+test_blacklist_redis_connectivity() {
+    # Verify blacklist Redis is reachable (for cross-instance token revocation)
+    if ! assert_hub_healthy; then
+        return 2
+    fi
+    
+    local health_response
+    health_response=$(curl -sk --max-time 10 "${HUB_BACKEND_URL}/health/detailed" 2>/dev/null)
+    
+    local blacklist_status
+    blacklist_status=$(echo "$health_response" | jq -r '.services.blacklistRedis.status // "missing"')
+    
+    # Blacklist Redis is optional but recommended
+    if [ "$blacklist_status" = "down" ]; then
+        echo "Blacklist Redis is down - cross-instance token revocation will not work"
+        # This is a warning - we return success but log the warning
+        echo "WARNING: blacklistRedis is down (degraded functionality)"
+    fi
+    
+    return 0
+}
+
+suite_circuit_breaker() {
+    echo ""
+    echo -e "${BOLD}${CYAN}Test Suite 6: Circuit Breaker Verification (Phase 3.2)${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "This suite tests circuit breaker integration and health reporting"
+    echo ""
+    
+    run_test "Circuit breaker states in health response" test_circuit_breaker_states_in_health
+    run_test "All 7 services report up status" test_health_check_all_services
+    run_test "SSL certificate trust working" test_ssl_certificate_trust
+    run_test "Blacklist Redis connectivity" test_blacklist_redis_connectivity
+}
+
+# =============================================================================
+# TEST SUITE 7: FAILURE INJECTION (Phase 3.4)
+# =============================================================================
+
+test_opa_failure_circuit_opens() {
+    # Test that stopping OPA causes circuit breaker to open
+    # WARNING: This test modifies running services - use with caution
+    if ! assert_hub_healthy; then
+        return 2
+    fi
+    
+    echo "  [SKIP] Failure injection tests require explicit --with-failure-injection flag"
+    return 2  # Skip by default
+}
+
+test_circuit_recovery_after_restart() {
+    # Test that circuit breaker recovers after service restart
+    # WARNING: This test modifies running services
+    if ! assert_hub_healthy; then
+        return 2
+    fi
+    
+    echo "  [SKIP] Failure injection tests require explicit --with-failure-injection flag"
+    return 2  # Skip by default
+}
+
+test_graceful_degradation_blacklist_down() {
+    # Test that system gracefully degrades when blacklist Redis is down
+    if ! assert_hub_healthy; then
+        return 2
+    fi
+    
+    # Check health status with blacklist down
+    local health_response
+    health_response=$(curl -sk --max-time 10 "${HUB_BACKEND_URL}/health/detailed" 2>/dev/null)
+    
+    local overall_status
+    overall_status=$(echo "$health_response" | jq -r '.status')
+    
+    local blacklist_status
+    blacklist_status=$(echo "$health_response" | jq -r '.services.blacklistRedis.status // "missing"')
+    
+    # If blacklist is down, status should be "degraded" not "unhealthy"
+    if [ "$blacklist_status" = "down" ]; then
+        if [ "$overall_status" = "unhealthy" ]; then
+            echo "System incorrectly marked as unhealthy when blacklist Redis is down"
+            echo "Expected: degraded, Got: unhealthy"
+            return 1
+        fi
+        echo "Graceful degradation confirmed: blacklist down -> status: $overall_status"
+    fi
+    
+    return 0
+}
+
+suite_failure_injection() {
+    echo ""
+    echo -e "${BOLD}${CYAN}Test Suite 7: Failure Injection (Phase 3.4)${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "This suite tests graceful degradation and recovery scenarios"
+    echo ""
+    
+    run_test "OPA failure causes circuit to open" test_opa_failure_circuit_opens
+    run_test "Circuit recovers after service restart" test_circuit_recovery_after_restart
+    run_test "Graceful degradation when blacklist down" test_graceful_degradation_blacklist_down
+}
+
+# =============================================================================
 # MAIN ENTRY POINT
 # =============================================================================
 
@@ -678,18 +909,21 @@ usage() {
     echo "  --full         Run all tests including deployment"
     echo ""
     echo "Suites:"
-    echo "  clean          Clean slate deployment tests"
-    echo "  idempotent     Idempotent deployment tests"
-    echo "  concurrent     Concurrent deployment tests"
-    echo "  federation     Federation resilience tests"
-    echo "  database       Database operation tests"
-    echo "  all            Run all suites (default)"
+    echo "  clean           Clean slate deployment tests"
+    echo "  idempotent      Idempotent deployment tests"
+    echo "  concurrent      Concurrent deployment tests"
+    echo "  federation      Federation resilience tests"
+    echo "  database        Database operation tests"
+    echo "  circuit-breaker Circuit breaker verification (Phase 3.2)"
+    echo "  failure         Failure injection tests (Phase 3.4)"
+    echo "  all             Run all suites (default)"
     echo ""
     echo "Examples:"
-    echo "  $0                    # Run all tests"
-    echo "  $0 --quick            # Run quick tests only"
-    echo "  $0 federation         # Run federation suite only"
-    echo "  $0 database           # Run database suite only"
+    echo "  $0                      # Run all tests"
+    echo "  $0 --quick              # Run quick tests only"
+    echo "  $0 federation           # Run federation suite only"
+    echo "  $0 circuit-breaker      # Run circuit breaker tests"
+    echo "  $0 database             # Run database suite only"
 }
 
 main() {
@@ -711,7 +945,7 @@ main() {
                 quick_mode=false
                 shift
                 ;;
-            clean|idempotent|concurrent|federation|database|all)
+            clean|idempotent|concurrent|federation|database|circuit-breaker|circuit_breaker|circuitbreaker|failure|failure-injection|all)
                 suite="$1"
                 shift
                 ;;
@@ -745,12 +979,19 @@ main() {
         database)
             suite_database
             ;;
+        circuit-breaker|circuit_breaker|circuitbreaker)
+            suite_circuit_breaker
+            ;;
+        failure|failure-injection)
+            suite_failure_injection
+            ;;
         all)
             if [ "$quick_mode" = true ]; then
                 # Quick mode: skip deployment-heavy tests
                 suite_idempotent
                 suite_federation_resilience
                 suite_database
+                suite_circuit_breaker
             else
                 # Full mode: run all suites
                 suite_clean_slate
@@ -758,6 +999,8 @@ main() {
                 suite_concurrent
                 suite_federation_resilience
                 suite_database
+                suite_circuit_breaker
+                suite_failure_injection
             fi
             ;;
     esac

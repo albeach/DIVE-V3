@@ -280,6 +280,102 @@ groups:
           description: "p95 request latency on {{ $labels.job }} is {{ $value }}s (threshold: 1s)."
 
   # ===========================================================================
+  # CIRCUIT BREAKER ALERTS (Phase 3.2)
+  # ===========================================================================
+  - name: dive_circuit_breaker
+    rules:
+      # Circuit Breaker Open - Critical service protection triggered
+      - alert: CircuitBreakerOpen
+        expr: |
+          dive_v3_circuit_breaker_state == 2
+        for: 1m
+        labels:
+          severity: critical
+          component: resilience
+        annotations:
+          summary: "Circuit breaker OPEN for {{ $labels.service }} on {{ $labels.instance }}"
+          description: "The circuit breaker for {{ $labels.service }} has opened due to repeated failures. Requests are being rejected to prevent cascading failures."
+          runbook_url: "https://docs.dive-v3.io/runbooks/circuit-breaker-open"
+      
+      # Circuit Breaker Half-Open - Testing recovery
+      - alert: CircuitBreakerHalfOpen
+        expr: |
+          dive_v3_circuit_breaker_state == 1
+        for: 5m
+        labels:
+          severity: warning
+          component: resilience
+        annotations:
+          summary: "Circuit breaker in HALF_OPEN state for {{ $labels.service }}"
+          description: "The circuit breaker for {{ $labels.service }} is testing recovery. If this persists, the service may be unstable."
+      
+      # High Circuit Breaker Reject Rate
+      - alert: HighCircuitBreakerRejects
+        expr: |
+          increase(dive_v3_circuit_breaker_rejects_total[5m]) > 10
+        for: 2m
+        labels:
+          severity: warning
+          component: resilience
+        annotations:
+          summary: "High circuit breaker reject rate for {{ $labels.service }}"
+          description: "{{ $value }} requests rejected by circuit breaker for {{ $labels.service }} in the last 5 minutes."
+      
+      # Circuit Breaker Failure Threshold Approaching
+      - alert: CircuitBreakerFailuresHigh
+        expr: |
+          dive_v3_circuit_breaker_failures >= 3
+        for: 1m
+        labels:
+          severity: warning
+          component: resilience
+        annotations:
+          summary: "Circuit breaker failures approaching threshold for {{ $labels.service }}"
+          description: "{{ $labels.service }} has {{ $value }} failures. Circuit will open at 5 failures."
+
+  # ===========================================================================
+  # DATABASE CONNECTION POOL ALERTS (Phase 3.3)
+  # ===========================================================================
+  - name: dive_db_connections
+    rules:
+      # Database Connection Pool Exhausted
+      - alert: DBConnectionPoolExhausted
+        expr: |
+          dive_v3_db_connections_active / dive_v3_db_connections_total > 0.9
+        for: 5m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "Database connection pool near exhaustion for {{ $labels.db_type }}"
+          description: "{{ $labels.db_type }} connection pool is {{ $value | humanizePercentage }} utilized. Active connections may be blocked."
+          runbook_url: "https://docs.dive-v3.io/runbooks/db-pool-exhausted"
+      
+      # Database Connection Errors
+      - alert: DBConnectionErrors
+        expr: |
+          increase(dive_v3_db_connection_errors_total[5m]) > 5
+        for: 2m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Database connection errors for {{ $labels.db_type }}"
+          description: "{{ $value }} connection errors for {{ $labels.db_type }} in the last 5 minutes."
+      
+      # No Idle Connections (potential pool starvation)
+      - alert: DBNoIdleConnections
+        expr: |
+          dive_v3_db_connections_idle == 0 and dive_v3_db_connections_active > 0
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "No idle database connections for {{ $labels.db_type }}"
+          description: "All {{ $labels.db_type }} connections are active with no idle connections. New requests may be delayed."
+
+  # ===========================================================================
   # CERTIFICATE & SECURITY ALERTS
   # ===========================================================================
   - name: dive_security
