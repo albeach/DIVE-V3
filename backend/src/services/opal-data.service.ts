@@ -22,6 +22,7 @@ import fs from 'fs';
 import path from 'path';
 import { opalClient, IOPALPublishResult, IOPALDataEntry } from './opal-client';
 import { logger } from '../utils/logger';
+import { mongoOpalDataStore } from '../models/trusted-issuer.model';
 
 // ============================================
 // TYPES
@@ -337,6 +338,7 @@ class OPALDataService {
 
   /**
    * Update trusted issuer and sync to OPAL
+   * SSOT ARCHITECTURE: Uses MongoDB as single source of truth
    */
   async updateTrustedIssuer(
     issuerUrl: string,
@@ -344,64 +346,95 @@ class OPALDataService {
   ): Promise<IOPALPublishResult> {
     logger.info('Updating trusted issuer', { issuerUrl, tenant: issuer.tenant });
 
-    // Load current data
-    const data = this.loadJsonFile<{ trusted_issuers: Record<string, ITrustedIssuer> }>(
-      this.getDataFilePath(TRUSTED_ISSUERS_FILE)
-    ) || { trusted_issuers: {} };
-
-    // Update issuer
-    data.trusted_issuers[issuerUrl] = issuer;
-
-    // Save to file
-    this.saveJsonFile(this.getDataFilePath(TRUSTED_ISSUERS_FILE), {
-      ...data,
-      _metadata: {
-        ...(data as any)._metadata,
-        lastUpdated: new Date().toISOString()
+    try {
+      // SSOT: Use MongoDB instead of static JSON files
+      const existing = await mongoOpalDataStore.findIssuerByUrl(issuerUrl);
+      
+      if (existing) {
+        // Update existing issuer
+        await mongoOpalDataStore.updateIssuer(issuerUrl, {
+          tenant: issuer.tenant,
+          name: issuer.name,
+          country: issuer.country,
+          trustLevel: issuer.trust_level as 'HIGH' | 'MEDIUM' | 'DEVELOPMENT' | 'LOW',
+          realm: issuer.realm,
+          enabled: issuer.enabled ?? true,
+        });
+      } else {
+        // Add new issuer
+        await mongoOpalDataStore.addIssuer({
+          issuerUrl,
+          tenant: issuer.tenant,
+          name: issuer.name,
+          country: issuer.country,
+          trustLevel: issuer.trust_level as 'HIGH' | 'MEDIUM' | 'DEVELOPMENT' | 'LOW',
+          realm: issuer.realm,
+          enabled: issuer.enabled ?? true,
+        });
       }
-    });
 
-    // Publish to OPAL
-    return opalClient.publishInlineData(
-      'trusted_issuers',
-      data.trusted_issuers,
-      `Updated trusted issuer: ${issuerUrl}`
-    );
+      // Get all issuers from MongoDB for OPAL publish
+      const allIssuers = await mongoOpalDataStore.getIssuersForOpal();
+
+      // Publish to OPAL
+      return opalClient.publishInlineData(
+        'trusted_issuers',
+        allIssuers,
+        `Updated trusted issuer: ${issuerUrl}`
+      );
+    } catch (error) {
+      logger.error('Failed to update trusted issuer in MongoDB', {
+        issuerUrl,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      
+      return {
+        success: false,
+        message: 'Failed to update trusted issuer',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      };
+    }
   }
 
   /**
    * Remove trusted issuer and sync to OPAL
+   * SSOT ARCHITECTURE: Uses MongoDB as single source of truth
    */
   async removeTrustedIssuer(issuerUrl: string): Promise<IOPALPublishResult> {
     logger.info('Removing trusted issuer', { issuerUrl });
 
-    // Load current data
-    const data = this.loadJsonFile<{ trusted_issuers: Record<string, ITrustedIssuer> }>(
-      this.getDataFilePath(TRUSTED_ISSUERS_FILE)
-    ) || { trusted_issuers: {} };
+    try {
+      // SSOT: Use MongoDB instead of static JSON files
+      await mongoOpalDataStore.removeIssuer(issuerUrl);
 
-    // Remove issuer
-    delete data.trusted_issuers[issuerUrl];
+      // Get all issuers from MongoDB for OPAL publish
+      const allIssuers = await mongoOpalDataStore.getIssuersForOpal();
 
-    // Save to file
-    this.saveJsonFile(this.getDataFilePath(TRUSTED_ISSUERS_FILE), {
-      ...data,
-      _metadata: {
-        ...(data as any)._metadata,
-        lastUpdated: new Date().toISOString()
-      }
-    });
-
-    // Publish to OPAL
-    return opalClient.publishInlineData(
-      'trusted_issuers',
-      data.trusted_issuers,
-      `Removed trusted issuer: ${issuerUrl}`
-    );
+      // Publish to OPAL
+      return opalClient.publishInlineData(
+        'trusted_issuers',
+        allIssuers,
+        `Removed trusted issuer: ${issuerUrl}`
+      );
+    } catch (error) {
+      logger.error('Failed to remove trusted issuer from MongoDB', {
+        issuerUrl,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      
+      return {
+        success: false,
+        message: 'Failed to remove trusted issuer',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      };
+    }
   }
 
   /**
    * Update federation matrix and sync to OPAL
+   * SSOT ARCHITECTURE: Uses MongoDB as single source of truth
    */
   async updateFederationMatrix(
     tenant: string,
@@ -409,43 +442,53 @@ class OPALDataService {
   ): Promise<IOPALPublishResult> {
     logger.info('Updating federation matrix', { tenant, partners });
 
-    // Load current data
-    const data = this.loadJsonFile<{ federation_matrix: Record<string, string[]> }>(
-      this.getDataFilePath(FEDERATION_MATRIX_FILE)
-    ) || { federation_matrix: {} };
+    try {
+      // SSOT: Use MongoDB instead of static JSON files
+      await mongoOpalDataStore.setFederationTrust(tenant.toUpperCase(), partners.map(p => p.toUpperCase()));
 
-    // Update tenant's partners
-    data.federation_matrix[tenant] = partners;
+      // Get full federation matrix from MongoDB for OPAL publish
+      const federationMatrix = await mongoOpalDataStore.getFederationMatrix();
 
-    // Save to file
-    this.saveJsonFile(this.getDataFilePath(FEDERATION_MATRIX_FILE), {
-      ...data,
-      _metadata: {
-        ...(data as any)._metadata,
-        lastUpdated: new Date().toISOString()
-      }
-    });
-
-    // Publish to OPAL
-    return opalClient.publishInlineData(
-      'federation_matrix',
-      data.federation_matrix,
-      `Updated federation partners for: ${tenant}`
-    );
+      // Publish to OPAL
+      return opalClient.publishInlineData(
+        'federation_matrix',
+        federationMatrix,
+        `Updated federation partners for: ${tenant}`
+      );
+    } catch (error) {
+      logger.error('Failed to update federation matrix in MongoDB', {
+        tenant,
+        partners,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      
+      return {
+        success: false,
+        message: 'Failed to update federation matrix',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      };
+    }
   }
 
   /**
    * Get current federation matrix (read-only)
+   * SSOT ARCHITECTURE: Uses MongoDB as single source of truth
    */
   async getFederationMatrix(): Promise<Record<string, string[]>> {
-    const data = this.loadJsonFile<{ federation_matrix: Record<string, string[]> }>(
-      this.getDataFilePath(FEDERATION_MATRIX_FILE)
-    );
-    return data?.federation_matrix || {};
+    try {
+      return await mongoOpalDataStore.getFederationMatrix();
+    } catch (error) {
+      logger.warn('Failed to get federation matrix from MongoDB, returning empty', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      return {};
+    }
   }
 
   /**
    * Add bidirectional federation link
+   * SSOT ARCHITECTURE: Uses MongoDB as single source of truth
    */
   async addFederationLink(
     tenantA: string,
@@ -453,46 +496,40 @@ class OPALDataService {
   ): Promise<IOPALPublishResult> {
     logger.info('Adding federation link', { tenantA, tenantB });
 
-    // Load current data
-    const data = this.loadJsonFile<{ federation_matrix: Record<string, string[]> }>(
-      this.getDataFilePath(FEDERATION_MATRIX_FILE)
-    ) || { federation_matrix: {} };
+    try {
+      // SSOT: Use MongoDB instead of static JSON files
+      // Add bidirectional links
+      await mongoOpalDataStore.addFederationTrust(tenantA.toUpperCase(), tenantB.toUpperCase());
+      await mongoOpalDataStore.addFederationTrust(tenantB.toUpperCase(), tenantA.toUpperCase());
 
-    // Ensure arrays exist
-    if (!data.federation_matrix[tenantA]) {
-      data.federation_matrix[tenantA] = [];
-    }
-    if (!data.federation_matrix[tenantB]) {
-      data.federation_matrix[tenantB] = [];
-    }
+      // Get full federation matrix from MongoDB for OPAL publish
+      const federationMatrix = await mongoOpalDataStore.getFederationMatrix();
 
-    // Add bidirectional links
-    if (!data.federation_matrix[tenantA].includes(tenantB)) {
-      data.federation_matrix[tenantA].push(tenantB);
+      // Publish to OPAL
+      return opalClient.publishInlineData(
+        'federation_matrix',
+        federationMatrix,
+        `Added federation link: ${tenantA} ↔ ${tenantB}`
+      );
+    } catch (error) {
+      logger.error('Failed to add federation link in MongoDB', {
+        tenantA,
+        tenantB,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      
+      return {
+        success: false,
+        message: 'Failed to add federation link',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      };
     }
-    if (!data.federation_matrix[tenantB].includes(tenantA)) {
-      data.federation_matrix[tenantB].push(tenantA);
-    }
-
-    // Save to file
-    this.saveJsonFile(this.getDataFilePath(FEDERATION_MATRIX_FILE), {
-      ...data,
-      _metadata: {
-        ...(data as any)._metadata,
-        lastUpdated: new Date().toISOString()
-      }
-    });
-
-    // Publish to OPAL
-    return opalClient.publishInlineData(
-      'federation_matrix',
-      data.federation_matrix,
-      `Added federation link: ${tenantA} ↔ ${tenantB}`
-    );
   }
 
   /**
    * Remove bidirectional federation link
+   * SSOT ARCHITECTURE: Uses MongoDB as single source of truth
    */
   async removeFederationLink(
     tenantA: string,
@@ -500,42 +537,41 @@ class OPALDataService {
   ): Promise<IOPALPublishResult> {
     logger.info('Removing federation link', { tenantA, tenantB });
 
-    // Load current data
-    const data = this.loadJsonFile<{ federation_matrix: Record<string, string[]> }>(
-      this.getDataFilePath(FEDERATION_MATRIX_FILE)
-    ) || { federation_matrix: {} };
+    try {
+      // SSOT: Use MongoDB instead of static JSON files
+      // Remove bidirectional links
+      await mongoOpalDataStore.removeFederationTrust(tenantA.toUpperCase(), tenantB.toUpperCase());
+      await mongoOpalDataStore.removeFederationTrust(tenantB.toUpperCase(), tenantA.toUpperCase());
 
-    // Remove bidirectional links
-    if (data.federation_matrix[tenantA]) {
-      data.federation_matrix[tenantA] = data.federation_matrix[tenantA].filter(
-        t => t !== tenantB
+      // Get full federation matrix from MongoDB for OPAL publish
+      const federationMatrix = await mongoOpalDataStore.getFederationMatrix();
+
+      // Publish to OPAL
+      return opalClient.publishInlineData(
+        'federation_matrix',
+        federationMatrix,
+        `Removed federation link: ${tenantA} ↔ ${tenantB}`
       );
+    } catch (error) {
+      logger.error('Failed to remove federation link from MongoDB', {
+        tenantA,
+        tenantB,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      
+      return {
+        success: false,
+        message: 'Failed to remove federation link',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      };
     }
-    if (data.federation_matrix[tenantB]) {
-      data.federation_matrix[tenantB] = data.federation_matrix[tenantB].filter(
-        t => t !== tenantA
-      );
-    }
-
-    // Save to file
-    this.saveJsonFile(this.getDataFilePath(FEDERATION_MATRIX_FILE), {
-      ...data,
-      _metadata: {
-        ...(data as any)._metadata,
-        lastUpdated: new Date().toISOString()
-      }
-    });
-
-    // Publish to OPAL
-    return opalClient.publishInlineData(
-      'federation_matrix',
-      data.federation_matrix,
-      `Removed federation link: ${tenantA} ↔ ${tenantB}`
-    );
   }
 
   /**
    * Update COI membership and sync to OPAL
+   * NOTE: COI membership is managed in-memory for now
+   * TODO: Add MongoDB collection for COI membership if needed
    */
   async updateCOIMembership(
     coiName: string,
@@ -543,33 +579,20 @@ class OPALDataService {
   ): Promise<IOPALPublishResult> {
     logger.info('Updating COI membership', { coiName, memberCount: members.length });
 
-    // Load current data
-    const data = this.loadJsonFile<{ coi_members: Record<string, string[]> }>(
-      this.getDataFilePath(COI_MEMBERS_FILE)
-    ) || { coi_members: {} };
+    // Update in-memory state
+    this.dataState.coi_members[coiName] = members;
 
-    // Update COI members
-    data.coi_members[coiName] = members;
-
-    // Save to file
-    this.saveJsonFile(this.getDataFilePath(COI_MEMBERS_FILE), {
-      ...data,
-      _metadata: {
-        ...(data as any)._metadata,
-        lastUpdated: new Date().toISOString()
-      }
-    });
-
-    // Publish to OPAL
+    // Publish to OPAL (in-memory only, no file persistence)
     return opalClient.publishInlineData(
       'coi_members',
-      data.coi_members,
+      this.dataState.coi_members,
       `Updated COI membership: ${coiName}`
     );
   }
 
   /**
    * Update tenant configuration and sync to OPAL
+   * SSOT ARCHITECTURE: Uses MongoDB as single source of truth
    */
   async updateTenantConfig(
     tenant: string,
@@ -577,33 +600,40 @@ class OPALDataService {
   ): Promise<IOPALPublishResult> {
     logger.info('Updating tenant configuration', { tenant });
 
-    // Load current data
-    const data = this.loadJsonFile<{ tenant_configs: Record<string, ITenantConfig> }>(
-      this.getDataFilePath(TENANT_CONFIGS_FILE)
-    ) || { tenant_configs: {} };
+    try {
+      // SSOT: Use MongoDB instead of static JSON files
+      await mongoOpalDataStore.setTenantConfig(tenant, {
+        name: config.name || tenant,
+        locale: config.locale || 'en-US',
+        mfa_required_above: config.mfa_required_above || 'UNCLASSIFIED',
+        max_session_hours: config.max_session_hours || 8,
+        default_coi: config.default_coi || ['NATO'],
+        allow_industry_access: config.allow_industry_access ?? true,
+        industry_max_classification: config.industry_max_classification || 'CONFIDENTIAL',
+      });
 
-    // Merge config
-    data.tenant_configs[tenant] = {
-      ...data.tenant_configs[tenant],
-      ...config,
-      code: tenant
-    } as ITenantConfig;
+      // Get all tenant configs from MongoDB for OPAL publish
+      const allTenantConfigs = await mongoOpalDataStore.getAllTenantConfigs();
 
-    // Save to file
-    this.saveJsonFile(this.getDataFilePath(TENANT_CONFIGS_FILE), {
-      ...data,
-      _metadata: {
-        ...(data as any)._metadata,
-        lastUpdated: new Date().toISOString()
-      }
-    });
-
-    // Publish to OPAL
-    return opalClient.publishInlineData(
-      'tenant_configs',
-      data.tenant_configs,
-      `Updated tenant configuration: ${tenant}`
-    );
+      // Publish to OPAL
+      return opalClient.publishInlineData(
+        'tenant_configs',
+        allTenantConfigs,
+        `Updated tenant configuration: ${tenant}`
+      );
+    } catch (error) {
+      logger.error('Failed to update tenant config in MongoDB', {
+        tenant,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      
+      return {
+        success: false,
+        message: 'Failed to update tenant configuration',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      };
+    }
   }
 
   /**
