@@ -1643,9 +1643,11 @@ orch_create_checkpoint() {
         local code_lower=$(lower "$instance_code")
         local escaped_description="${description//\'/\'\'}"
 
+        # CRITICAL FIX (2026-01-22): Use correct table name 'checkpoints' not 'orchestration_checkpoints'
+        # ROOT CAUSE: Table name mismatch between schema and code caused INSERT failures
         orch_db_exec "
-        INSERT INTO orchestration_checkpoints (
-            checkpoint_id, instance_code, phase, description, created_at
+        INSERT INTO checkpoints (
+            checkpoint_id, instance_code, checkpoint_level, description, created_at
         ) VALUES (
             '$checkpoint_id', '$code_lower', '$level', '$escaped_description', NOW()
         )" >/dev/null 2>&1 || true
@@ -1848,9 +1850,10 @@ orch_find_latest_checkpoint() {
     fi
 
     local checkpoint_id
+    # CRITICAL FIX (2026-01-22): Use correct table name 'checkpoints'
     checkpoint_id=$(orch_db_exec "
         SELECT checkpoint_id
-        FROM orchestration_checkpoints
+        FROM checkpoints
         WHERE instance_code = '$code_lower'
         ORDER BY created_at DESC
         LIMIT 1
