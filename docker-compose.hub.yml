@@ -32,6 +32,8 @@ volumes:
   frontend_node_modules:
   frontend_next:
   authzforce_data:
+  authzforce_server:        # Prevent anonymous volume from base image
+  authzforce_tomcat_conf:   # Prevent anonymous volume from base image
 
 services:
   # ---------------------------------------------------------------------------
@@ -296,6 +298,8 @@ services:
       NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
       OPAL_SERVER_URL: https://opal-server:7002
       OPAL_DATA_TOPICS: policy_data
+      # OPAL client token for publishing data updates to OPAL server
+      OPAL_CLIENT_TOKEN: ${OPAL_AUTH_MASTER_TOKEN}
       # Docker exec configuration for running OPA tests
       OPA_CONTAINER: ${COMPOSE_PROJECT_NAME}-opa
       OPA_POLICIES_PATH: /policies
@@ -357,6 +361,10 @@ services:
     ports:
       - "127.0.0.1:${AUTHZFORCE_PORT:-8282}:8080"
     volumes:
+      # Named volumes to prevent anonymous volumes from base image
+      - authzforce_server:/opt/authzforce-ce-server
+      - authzforce_tomcat_conf:/usr/local/tomcat/conf
+      # Application-specific mounts (override subdirs of authzforce_server)
       - ./authzforce/conf:/opt/authzforce-ce-server/conf:ro
       - authzforce_data:/opt/authzforce-ce-server/data
       - ./policies/uploads:/policies:ro
