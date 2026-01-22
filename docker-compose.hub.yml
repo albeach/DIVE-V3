@@ -277,7 +277,6 @@ services:
       OPAL_LOG_LEVEL: INFO
       # Authentication - Get token from OPAL server using master token
       OPAL_CLIENT_TOKEN: ${OPAL_CLIENT_TOKEN:-}
-      OPAL_AUTH_PUBLIC_KEY: ${OPAL_AUTH_PUBLIC_KEY}
       # Policy subscription directories (same as spokes)
       OPAL_POLICY_SUBSCRIPTION_DIRS: base:org:tenant:entrypoints:compat
       # Use external OPA (standalone container)
