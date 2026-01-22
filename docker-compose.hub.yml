@@ -293,12 +293,12 @@ services:
       OPAL_RECONNECT_INTERVAL: 5
       OPAL_RECONNECT_MAX_INTERVAL: 300
       OPAL_POLICY_REFRESH_INTERVAL: 60
-      # SSL Certificate Trust
+      # SSL Certificate Trust (same path pattern as spokes)
       SSL_CERT_FILE: /var/opal/certs/ca/rootCA.pem
       REQUESTS_CA_BUNDLE: /var/opal/certs/ca/rootCA.pem
       WEBSOCKET_SSL_CERT: /var/opal/certs/ca/rootCA.pem
     volumes:
-      - ./instances/hub/certs:/var/opal/certs:ro
+      - ./instances/hub/certs:/var/opal/hub-certs:ro
       - ./certs/mkcert:/var/opal/certs/ca:ro
     networks:
       - hub-internal
