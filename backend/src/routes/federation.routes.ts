@@ -1290,9 +1290,15 @@ router.post('/heartbeat', requireSpokeToken, async (req: Request, res: Response)
         // Get current version for comparison
         const currentVersion = policySyncService.getCurrentVersion();
 
+        // SSOT ARCHITECTURE (2026-01-22): Include spokeId in response
+        // The spoke backend uses SPOKE_TOKEN for auth, and Hub returns the
+        // authoritative spokeId from its MongoDB. This allows spoke to cache
+        // its identity without needing to store spokeId in .env or config.json
         res.json({
             success: true,
             serverTime: new Date().toISOString(),
+            spokeId: spoke.spokeId,  // Hub's authoritative spokeId
+            instanceCode: spoke.instanceCode,
             currentPolicyVersion: currentVersion.version,
             syncStatus: parsed.data.policyVersion === currentVersion.version ? 'current' : 'behind'
         });
