@@ -230,15 +230,23 @@ EOF
     fi
 
     # Step 9: Seed test users and resources
-    log_step "Step 9/11: Seeding test users and 5000 ZTDF resources..."
+    log_step "Step 9/12: Seeding test users and 5000 ZTDF resources..."
     if [ -d "${DIVE_ROOT}/scripts/hub-init" ]; then
         _load_hub_seed && hub_seed 5000 || log_warn "Seeding failed - you can run './dive hub seed' later"
     else
         log_info "Hub seed scripts not found, skipping"
     fi
 
+    # Step 9.5: Register Hub KAS in federation registry (CRITICAL for multi-KAS)
+    log_step "Step 9.5/12: Registering Hub KAS in federation registry..."
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would register Hub KAS in MongoDB registry"
+    else
+        _load_hub_seed && _hub_register_kas || log_warn "Hub KAS registration failed (non-fatal)"
+    fi
+
     # Step 10: Sync AMR attributes (CRITICAL for MFA)
-    log_step "Step 10/11: Syncing AMR attributes for MFA users..."
+    log_step "Step 10/12: Syncing AMR attributes for MFA users..."
     local sync_amr_script="${DIVE_ROOT}/scripts/sync-amr-attributes.sh"
     if [ -f "$sync_amr_script" ]; then
         if bash "$sync_amr_script" --realm "dive-v3-broker-usa" 2>/dev/null; then
@@ -251,7 +259,7 @@ EOF
     fi
 
     # Step 11: Initialize Orchestration Database (CRITICAL for spoke deployments)
-    log_step "Step 11/12: Initializing orchestration database..."
+    log_step "Step 11/13: Initializing orchestration database..."
 
     # Check if orchestration database exists
     if ! docker exec dive-hub-postgres psql -U postgres -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw orchestration; then
@@ -289,7 +297,7 @@ EOF
     fi
 
     # Step 11.5: Initialize Federation State Schema (CRITICAL for spoke federation)
-    log_step "Step 11.5/12: Initializing federation state schema..."
+    log_step "Step 11.5/13: Initializing federation state schema..."
     local fed_schema="${DIVE_ROOT}/scripts/sql/002_federation_schema.sql"
 
     if [ -f "$fed_schema" ]; then
@@ -316,7 +324,7 @@ EOF
     fi
 
     # Step 12: Verify deployment
-    log_step "Step 12/12: Verifying deployment..."
+    log_step "Step 12/13: Verifying deployment..."
     _hub_verify_deployment || log_warn "Some verification checks failed"
 
     echo ""
@@ -833,83 +841,15 @@ _hub_cleanup_conflicting_resources() {
 }
 
 _hub_load_trusted_issuers() {
-    # Load trusted issuers from JSON file into MongoDB
-    # This ensures the USA hub issuer is automatically registered during deployment
-
-    local backend_container="${HUB_BACKEND_CONTAINER:-dive-hub-backend}"
-    local trusted_issuers_file="${DIVE_ROOT}/backend/data/opal/trusted_issuers.json"
-
-    # Check if backend container is running
-    if ! docker ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
-        log_error "Backend container '${backend_container}' is not running"
-        return 1
-    fi
-
-    # Check if trusted_issuers.json exists
-    if [ ! -f "$trusted_issuers_file" ]; then
-        log_warn "trusted_issuers.json not found at ${trusted_issuers_file}"
-        return 1
-    fi
-
-    log_info "Loading trusted issuers from JSON into MongoDB..."
-
-    # Use the backend container to run a script that loads the JSON data into MongoDB
-    if docker exec "$backend_container" node -e "
-        const { mongoOpalDataStore } = require('./dist/models/trusted-issuer.model.js');
-        const fs = require('fs');
-        const path = require('path');
-
-        async function loadIssuers() {
-            try {
-                await mongoOpalDataStore.initialize();
-
-                // Read trusted_issuers.json
-                const issuersFile = path.join(process.cwd(), 'backend', 'data', 'opal', 'trusted_issuers.json');
-                if (!fs.existsSync(issuersFile)) {
-                    console.error('trusted_issuers.json not found');
-                    process.exit(1);
-                }
-
-                const data = JSON.parse(fs.readFileSync(issuersFile, 'utf8'));
-                const issuers = data.trusted_issuers || {};
-
-                console.log(\`Found \${Object.keys(issuers).length} issuers in JSON file\`);
-
-                // Load each issuer into MongoDB
-                for (const [issuerUrl, metadata] of Object.entries(issuers)) {
-                    try {
-                        await mongoOpalDataStore.addIssuer({
-                            issuerUrl,
-                            tenant: metadata.tenant,
-                            name: metadata.name,
-                            country: metadata.country,
-                            trustLevel: metadata.trust_level || 'DEVELOPMENT',
-                            realm: metadata.realm || issuerUrl.split('/').pop(),
-                            enabled: metadata.enabled !== false,
-                        });
-                        console.log(\`✓ Loaded issuer: \${issuerUrl}\`);
-                    } catch (error) {
-                        if (error.message && error.message.includes('duplicate key')) {
-                            console.log(\`⚠ Issuer already exists: \${issuerUrl}\`);
-                        } else {
-                            console.error(\`✗ Failed to load issuer \${issuerUrl}:\`, error.message);
-                        }
-                    }
-                }
-
-                console.log('Trusted issuers loading complete');
-            } catch (error) {
-                console.error('Failed to load trusted issuers:', error.message);
-                process.exit(1);
-            }
-        }
-
-        loadIssuers();
-    " 2>&1; then
-        log_success "Trusted issuers loaded into MongoDB"
-        return 0
-    else
-        log_error "Failed to load trusted issuers into MongoDB"
-        return 1
-    fi
+    # DEPRECATED: Trusted issuers are now managed exclusively through the database
+    # via API endpoints (POST /api/opal/trusted-issuers)
+    # 
+    # Spoke registration automatically creates trusted issuer entries in MongoDB.
+    # No manual JSON file loading is required.
+    
+    log_info "Trusted issuer management via database (no JSON loading needed)"
+    log_verbose "Trusted issuers are automatically created during spoke registration"
+    
+    # Return success - this is not an error condition
+    return 0
 }
