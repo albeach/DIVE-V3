@@ -5,8 +5,8 @@
 
 import { Collection, Db, MongoClient } from 'mongodb';
 import { logger } from '../utils/logger';
-import { 
-  IExternalSP, 
+import {
+  IExternalSP,
   ISPRegistrationRequest
 } from '../types/sp-federation.types';
 import { generateSecureSecret } from '../utils/oauth.utils';
@@ -43,13 +43,13 @@ export class SPManagementService {
     if (!this.collection) {
       const db = await this.getDb();
       this.collection = db.collection<IExternalSP>('external_sps');
-      
+
       // Create indexes
       await this.collection.createIndex({ spId: 1 }, { unique: true });
       await this.collection.createIndex({ clientId: 1 }, { unique: true });
       await this.collection.createIndex({ status: 1 });
       await this.collection.createIndex({ country: 1 });
-      
+
       logger.info('SP Management Service initialized');
     }
   }
@@ -64,9 +64,22 @@ export class SPManagementService {
         realmName: 'master'
       });
 
+      // SECURITY: No hardcoded fallbacks - fail fast if credentials not configured
+      const adminUsername = process.env.KEYCLOAK_ADMIN_USERNAME;
+      const adminPassword = process.env.KEYCLOAK_ADMIN_PASSWORD;
+
+      if (!adminUsername || !adminPassword || adminPassword === 'admin') {
+        throw new Error(
+          'FATAL: Keycloak admin credentials not configured.\n' +
+          'Required environment variables:\n' +
+          '  KEYCLOAK_ADMIN_USERNAME (default: admin)\n' +
+          '  KEYCLOAK_ADMIN_PASSWORD (must not be "admin")'
+        );
+      }
+
       await this.kcAdminClient.auth({
-        username: process.env.KEYCLOAK_ADMIN_USERNAME || 'admin',
-        password: process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin',
+        username: adminUsername,
+        password: adminPassword,
         grantType: 'password',
         clientId: 'admin-cli'
       });
@@ -80,14 +93,14 @@ export class SPManagementService {
    */
   async registerSP(request: ISPRegistrationRequest): Promise<IExternalSP> {
     await this.initialize();
-    
+
     try {
       // Validate technical requirements
       await this.validateTechnicalRequirements(request);
-      
+
       // Generate OAuth client in Keycloak
       const client = await this.createOAuthClient(request);
-      
+
       // Create SP record
       const sp: IExternalSP = {
         spId: this.generateSPId(),
@@ -117,20 +130,20 @@ export class SPManagementService {
         createdAt: new Date(),
         updatedAt: new Date()
       };
-      
+
       // Save to database
       await this.collection!.insertOne(sp);
-      
+
       // Notify approvers
       await this.notifyApprovers(sp);
-      
+
       logger.info('External SP registered', {
         spId: sp.spId,
         name: sp.name,
         country: sp.country,
         clientId: sp.clientId
       });
-      
+
       return sp;
     } catch (error) {
       logger.error('Failed to register SP', {
@@ -168,7 +181,7 @@ export class SPManagementService {
     limit?: number;
   }): Promise<{ sps: IExternalSP[]; total: number; page: number; limit: number; totalPages: number }> {
     await this.initialize();
-    
+
     const query: any = {};
     if (filter.status) query.status = filter.status;
     if (filter.country) query.country = filter.country;
@@ -180,11 +193,11 @@ export class SPManagementService {
         { 'technicalContact.email': { $regex: filter.search, $options: 'i' } }
       ];
     }
-    
+
     const page = filter.page || 1;
     const limit = filter.limit || 20;
     const skip = (page - 1) * limit;
-    
+
     const total = await this.collection!.countDocuments(query);
     const sps = await this.collection!
       .find(query)
@@ -192,7 +205,7 @@ export class SPManagementService {
       .limit(limit)
       .sort({ createdAt: -1 })
       .toArray();
-    
+
     return {
       sps,
       total,
@@ -207,10 +220,10 @@ export class SPManagementService {
    */
   async updateSP(spId: string, updates: Partial<IExternalSP>): Promise<IExternalSP | null> {
     await this.initialize();
-    
+
     // Remove fields that shouldn't be updated directly
     const { spId: _, clientId: __, clientSecret: ___, createdAt: ____, ...safeUpdates } = updates as any;
-    
+
     const result = await this.collection!.findOneAndUpdate(
       { spId },
       {
@@ -221,7 +234,7 @@ export class SPManagementService {
       },
       { returnDocument: 'after' }
     );
-    
+
     return result || null;
   }
 
@@ -230,12 +243,12 @@ export class SPManagementService {
    */
   async deleteSP(spId: string): Promise<boolean> {
     await this.initialize();
-    
+
     const sp = await this.getBySPId(spId);
     if (!sp) {
       return false;
     }
-    
+
     // Delete client from Keycloak
     try {
       const kcAdmin = await this.initializeKeycloak();
@@ -248,12 +261,12 @@ export class SPManagementService {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
     }
-    
+
     // Delete from database
     const result = await this.collection!.deleteOne({ spId });
-    
+
     logger.info('SP deleted', { spId, clientId: sp.clientId });
-    
+
     return result.deletedCount === 1;
   }
 
@@ -262,7 +275,7 @@ export class SPManagementService {
    */
   async approveSP(spId: string, approve: boolean, reason?: string, approvedBy?: string): Promise<IExternalSP | null> {
     await this.initialize();
-    
+
     if (approve) {
       // Approve SP - call the internal approval method
       await this._approveSPInternal(spId, approvedBy || 'system');
@@ -277,10 +290,10 @@ export class SPManagementService {
           }
         }
       );
-      
+
       logger.info('SP rejected', { spId, reason, rejectedBy: approvedBy });
     }
-    
+
     return this.getBySPId(spId);
   }
 
@@ -289,15 +302,15 @@ export class SPManagementService {
    */
   async regenerateClientSecret(spId: string): Promise<{ clientSecret: string } | null> {
     await this.initialize();
-    
+
     const sp = await this.getBySPId(spId);
     if (!sp || sp.clientType !== 'confidential') {
       return null;
     }
-    
+
     // Generate new secret
     const newSecret = generateSecureSecret();
-    
+
     // Update in Keycloak
     try {
       const kcAdmin = await this.initializeKeycloak();
@@ -313,7 +326,7 @@ export class SPManagementService {
       });
       throw new Error('Failed to regenerate client secret');
     }
-    
+
     // Update in database (hashed)
     await this.collection!.updateOne(
       { spId },
@@ -324,9 +337,9 @@ export class SPManagementService {
         }
       }
     );
-    
+
     logger.info('Client secret regenerated', { spId, clientId: sp.clientId });
-    
+
     return { clientSecret: newSecret };
   }
 
@@ -335,11 +348,11 @@ export class SPManagementService {
    */
   async getActivityLogs(spId: string, limit: number = 50, offset: number = 0): Promise<any[]> {
     await this.initialize();
-    
+
     // In a production system, this would query a separate activity logs collection
     // For now, return empty array as placeholder
     logger.info('Activity logs requested', { spId, limit, offset });
-    
+
     return [];
   }
 
@@ -357,23 +370,23 @@ export class SPManagementService {
   private async _approveSPInternal(spId: string, approvedBy: string): Promise<void> {
     await this.initialize();
     const kcAdmin = await this.initializeKeycloak();
-    
+
     const sp = await this.getBySPId(spId);
     if (!sp) {
       throw new Error('SP not found');
     }
-    
+
     if (sp.status !== 'PENDING') {
       throw new Error('SP is not in pending status');
     }
-    
+
     // Enable client in Keycloak
     kcAdmin.setConfig({ realmName: SP_REALM_NAME });
     await kcAdmin.clients.update(
       { id: sp.clientId },
       { enabled: true }
     );
-    
+
     // Update SP status
     await this.collection!.updateOne(
       { spId },
@@ -386,7 +399,7 @@ export class SPManagementService {
         }
       }
     );
-    
+
     logger.info('SP approved', {
       spId,
       approvedBy,
@@ -400,19 +413,19 @@ export class SPManagementService {
   async suspendSP(spId: string, reason: string, suspendedBy?: string): Promise<IExternalSP | null> {
     await this.initialize();
     const kcAdmin = await this.initializeKeycloak();
-    
+
     const sp = await this.getBySPId(spId);
     if (!sp) {
       throw new Error('SP not found');
     }
-    
+
     // Disable client in Keycloak
     kcAdmin.setConfig({ realmName: SP_REALM_NAME });
     await kcAdmin.clients.update(
       { id: sp.clientId },
       { enabled: false }
     );
-    
+
     // Update SP status
     await this.collection!.updateOne(
       { spId },
@@ -423,14 +436,14 @@ export class SPManagementService {
         }
       }
     );
-    
+
     logger.warn('SP suspended', {
       spId,
       reason,
       suspendedBy,
       clientId: sp.clientId
     });
-    
+
     return this.getBySPId(spId);
   }
 
@@ -439,7 +452,7 @@ export class SPManagementService {
    */
   async updateLastActivity(spId: string): Promise<void> {
     await this.initialize();
-    
+
     await this.collection!.updateOne(
       { spId },
       {
@@ -457,11 +470,11 @@ export class SPManagementService {
     // Validate JWKS URI is accessible
     if (request.jwksUri) {
       try {
-        const response = await axios.get(request.jwksUri, { 
+        const response = await axios.get(request.jwksUri, {
           timeout: 5000,
           validateStatus: (status) => status === 200
         });
-        
+
         if (!response.data.keys || !Array.isArray(response.data.keys)) {
           throw new Error('Invalid JWKS format');
         }
@@ -469,7 +482,7 @@ export class SPManagementService {
         throw new Error(`JWKS URI validation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
       }
     }
-    
+
     // Validate redirect URIs
     for (const uri of request.redirectUris) {
       try {
@@ -481,19 +494,19 @@ export class SPManagementService {
         throw new Error(`Invalid redirect URI: ${uri}`);
       }
     }
-    
+
     // Validate scopes
     const validScopes = [
       'openid', 'profile', 'email', 'offline_access',
       'resource:read', 'resource:write', 'resource:search'
     ];
-    
+
     for (const scope of request.allowedScopes) {
       if (!validScopes.includes(scope)) {
         throw new Error(`Invalid scope: ${scope}`);
       }
     }
-    
+
     // Validate grant types
     const validGrantTypes = ['authorization_code', 'refresh_token', 'client_credentials'];
     for (const grant of request.allowedGrantTypes) {
@@ -508,13 +521,13 @@ export class SPManagementService {
    */
   private async createOAuthClient(request: ISPRegistrationRequest): Promise<any> {
     const kcAdmin = await this.initializeKeycloak();
-    
+
     // Ensure external SP realm exists
     kcAdmin.setConfig({ realmName: SP_REALM_NAME });
-    
+
     const clientId = `sp-${request.country.toLowerCase()}-${Date.now()}`;
     const clientSecret = request.clientType === 'confidential' ? generateSecureSecret() : undefined;
-    
+
     const client = {
       clientId,
       secret: clientSecret,
@@ -538,13 +551,13 @@ export class SPManagementService {
         'dive.v3.sp.org.type': request.organizationType
       },
       defaultClientScopes: ['openid', 'profile', 'email'],
-      optionalClientScopes: request.allowedScopes.filter(s => 
+      optionalClientScopes: request.allowedScopes.filter(s =>
         !['openid', 'profile', 'email'].includes(s)
       )
     };
-    
+
     const created = await kcAdmin.clients.create(client);
-    
+
     return {
       ...client,
       id: created.id

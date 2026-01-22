@@ -403,14 +403,22 @@ declare -A ORCH_CONTEXT=(
 declare -a ORCHESTRATION_ERRORS=()
 
 # =============================================================================
-# CONCURRENT DEPLOYMENT PROTECTION (GAP-001 Fix)
+# CONCURRENT DEPLOYMENT PROTECTION (GAP-001 Fix - PostgreSQL Only)
 # =============================================================================
-# Implements file-based and PostgreSQL advisory locks to prevent
-# concurrent deployments of the same instance from corrupting state
+# Uses PostgreSQL advisory locks exclusively to prevent concurrent deployments
+# of the same instance from corrupting state.
+#
+# NOTE (2026-01-22): File-based locking has been REMOVED as part of the
+# database-only state management refactoring. PostgreSQL advisory locks
+# are now the SOLE locking mechanism.
+#
+# For Hub (USA) deployments where the database doesn't exist yet:
+# - Lock is skipped (Hub creates the database)
+# - Concurrent Hub deployments are prevented by Docker container names
 # =============================================================================
 
 ##
-# Acquire deployment lock for instance (file-based with PostgreSQL fallback)
+# Acquire deployment lock for instance (PostgreSQL advisory lock only)
 #
 # Arguments:
 #   $1 - Instance code
@@ -423,83 +431,59 @@ declare -a ORCHESTRATION_ERRORS=()
 orch_acquire_deployment_lock() {
     local instance_code="$1"
     local timeout="${2:-30}"
+    local code_upper=$(upper "$instance_code")
 
     log_verbose "Attempting to acquire deployment lock for $instance_code (timeout: ${timeout}s)..."
 
-    # PRIMARY: Database locking (database-only state management)
+    # SPECIAL CASE: Hub (USA) deployment
+    # Hub creates the orchestration database, so it can't use database locking initially
+    if [ "$code_upper" = "USA" ]; then
+        if ! type -t orch_db_check_connection >/dev/null 2>&1 || ! orch_db_check_connection; then
+            log_verbose "Hub deployment - database not yet available, skipping database lock"
+            ORCH_CONTEXT["lock_acquired"]=true
+            ORCH_CONTEXT["lock_type"]="hub-bootstrap"
+            log_success "Deployment lock acquired for $instance_code (hub-bootstrap mode)"
+            return 0
+        fi
+    fi
+
+    # PostgreSQL advisory locking (MANDATORY for non-Hub instances)
     if type -t orch_db_acquire_lock >/dev/null 2>&1; then
         if orch_db_acquire_lock "$instance_code" "$timeout"; then
-            # Lock acquired via database
             ORCH_CONTEXT["lock_acquired"]=true
             ORCH_CONTEXT["lock_type"]="database"
-            log_success "Deployment lock acquired for $instance_code (database)"
+            log_success "Deployment lock acquired for $instance_code (PostgreSQL advisory lock)"
             return 0
         else
-            # Database locking failed
-            if orch_db_check_connection; then
-                log_error "Failed to acquire database deployment lock for $instance_code (timeout)"
+            # Database locking failed - fail fast, no file-based fallback
+            if orch_db_check_connection 2>/dev/null; then
+                log_error "Failed to acquire deployment lock for $instance_code (timeout)"
                 # Show current database lock holder
-                local db_locks=$(docker exec dive-hub-postgres psql -U postgres -d orchestration -c "SELECT instance_code, acquired_at, acquired_by FROM deployment_locks WHERE instance_code = '$(lower "$instance_code")';" 2>/dev/null | tail -n +3 | head -n -2 | xargs 2>/dev/null || echo "")
+                local db_locks=$(docker exec dive-hub-postgres psql -U postgres -d orchestration -t -c "SELECT instance_code, acquired_at, acquired_by FROM deployment_locks WHERE instance_code = '$(lower "$instance_code")';" 2>/dev/null | head -1)
                 if [ -n "$db_locks" ]; then
-                    log_error "Current database lock holder:"
-                    echo "$db_locks" | while IFS='|' read -r code time user; do
-                        log_error "  instance_code=${code// /}"
-                        log_error "  locked_at=${time// /}"
-                        log_error "  locked_by=${user// /}"
-                    done
+                    log_error "Current lock holder:"
+                    echo "$db_locks" | tr '|' '\n' | xargs -I {} echo "  {}"
                 fi
+                log_error ""
+                log_error "To force-release the lock (if deployment crashed):"
+                log_error "  ./dive spoke clean-locks $instance_code"
                 return 1
             else
-                log_warn "Database not available for locking, falling back to file-based locking"
+                log_error "FATAL: Orchestration database unavailable"
+                log_error "  → Deployment cannot proceed without database"
+                log_error "  → Ensure Hub is running: ./dive hub up"
+                return 1
             fi
         fi
     else
-        log_warn "Database locking not available, falling back to file-based locking"
+        log_error "FATAL: Database locking function not available"
+        log_error "  → Source orchestration-state-db.sh first"
+        return 1
     fi
-
-    # FALLBACK: File-based locking (only when database is unavailable)
-    log_verbose "Using file-based locking fallback for $instance_code"
-    local lock_dir="${DIVE_ROOT}/.dive-state/${instance_code}.lock.d"
-    local start_time=$(date +%s)
-
-    # Ensure lock directory exists
-    mkdir -p "$(dirname "$lock_dir")"
-
-    while [ $(($(date +%s) - start_time)) -lt "$timeout" ]; do
-        if mkdir "$lock_dir" 2>/dev/null; then
-            # Lock acquired
-            ORCH_CONTEXT["lock_acquired"]=true
-            ORCH_CONTEXT["lock_type"]="file-fallback"
-
-            # Write lock metadata
-            {
-                echo "instance_code=$instance_code"
-                echo "locked_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-                echo "locked_by=${USER:-system}"
-                echo "pid=$$"
-                echo "hostname=$(hostname)"
-            } > "${lock_dir}/metadata"
-
-            log_success "Deployment lock acquired for $instance_code (file-fallback)"
-            return 0
-        fi
-
-        sleep 1
-    done
-
-    # Timeout
-    log_error "Failed to acquire deployment lock for $instance_code (timeout)"
-    if [ -d "$lock_dir" ] && [ -f "${lock_dir}/metadata" ]; then
-        log_error "Current lock holder:"
-        cat "${lock_dir}/metadata" | while IFS='=' read -r key value; do
-            log_error "  $key=$value"
-        done
-    fi
-    return 1
 }
 
 ##
-# Release deployment lock for instance
+# Release deployment lock for instance (PostgreSQL advisory lock only)
 #
 # Arguments:
 #   $1 - Instance code
@@ -518,31 +502,18 @@ orch_release_deployment_lock() {
 
     log_verbose "Releasing deployment lock for $instance_code..."
 
-    # Release lock based on type
-    local lock_type="${ORCH_CONTEXT["lock_type"]:-flock}"
+    local lock_type="${ORCH_CONTEXT["lock_type"]:-database}"
 
-    if [ "$lock_type" = "mkdir" ]; then
-        # Remove mkdir lock directory
-        local lock_dir="${DIVE_ROOT}/.dive-state/${instance_code}.lock.d"
-        rm -rf "$lock_dir" 2>/dev/null || true
-    else
-        # Release flock
-        local lock_fd="${ORCH_CONTEXT["lock_fd"]}"
-        if [ "$lock_fd" -gt 0 ]; then
-            if command -v flock >/dev/null 2>&1; then
-                flock -u "$lock_fd" 2>/dev/null || true
-            fi
-            eval "exec ${lock_fd}>&-" 2>/dev/null || true
+    # Release PostgreSQL advisory lock
+    if [ "$lock_type" = "database" ]; then
+        if type -t orch_db_release_lock >/dev/null 2>&1; then
+            orch_db_release_lock "$instance_code" 2>/dev/null || true
         fi
     fi
+    # hub-bootstrap mode doesn't have a lock to release
 
-    # Release PostgreSQL advisory lock (if acquired)
-    if type -t orch_db_release_lock >/dev/null 2>&1; then
-        orch_db_release_lock "$instance_code" 2>/dev/null || true
-    fi
-
+    # Reset context
     ORCH_CONTEXT["lock_acquired"]=false
-    ORCH_CONTEXT["lock_fd"]=0
     ORCH_CONTEXT["lock_type"]=""
 
     log_success "Deployment lock released for $instance_code"
@@ -550,7 +521,7 @@ orch_release_deployment_lock() {
 }
 
 ##
-# Execute function with deployment lock protection
+# Execute function with deployment lock protection (PostgreSQL advisory lock)
 #
 # Arguments:
 #   $1 - Instance code
@@ -566,13 +537,13 @@ orch_with_deployment_lock() {
     shift 2
     local func_args=("$@")
 
-    # Acquire lock
+    # Acquire PostgreSQL advisory lock
     if ! orch_acquire_deployment_lock "$instance_code"; then
         orch_record_error "LOCK_ACQUISITION_FAILED" \
             "$ORCH_SEVERITY_CRITICAL" \
             "Could not acquire deployment lock for $instance_code" \
             "deployment-lock" \
-            "Wait for current deployment to complete or manually remove lock: .dive-state/${instance_code}.lock" \
+            "Wait for current deployment to complete or run: ./dive spoke clean-locks $instance_code" \
             "{\"instance_code\":\"$instance_code\"}"
         return 1
     fi

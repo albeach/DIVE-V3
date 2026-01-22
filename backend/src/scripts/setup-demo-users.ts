@@ -1,15 +1,15 @@
 /**
  * DIVE V3 - Demo Users Setup Script
- * 
+ *
  * Creates demo users for presentation with:
  * - 4 users per instance (DEU, USA, FRA, GBR)
  * - Predictable passwords
  * - Pre-configured MFA with predictable OTP codes
  * - Super admin users with super_admin role
- * 
+ *
  * Usage:
  *   npm run ts-node backend/src/scripts/setup-demo-users.ts
- * 
+ *
  * Demo Credentials:
  *   Users: demo-{instance}-{1-4} (e.g., demo-usa-1)
  *   Password: Demo2025!Secure
@@ -20,8 +20,8 @@
 import KcAdminClient from '@keycloak/keycloak-admin-client';
 import axios from 'axios';
 import speakeasy from 'speakeasy';
-import { execSync } from 'child_process';
 import dotenv from 'dotenv';
+import { getKeycloakPassword } from '../utils/gcp-secrets';
 
 dotenv.config();
 
@@ -71,34 +71,18 @@ const CLEARANCE_LEVELS = {
 // UTILITY FUNCTIONS
 // ============================================
 
+/**
+ * Get admin password using centralized gcp-secrets utility
+ * Consolidated: Uses gcp-secrets.ts as single source of truth
+ */
 async function getAdminPassword(instance: string): Promise<string> {
-    const envVar = `KEYCLOAK_ADMIN_PASSWORD_${instance}`;
-    const password = process.env[envVar] || process.env.KEYCLOAK_ADMIN_PASSWORD;
-    
-    if (password && password !== 'admin') {
-        return password;
-    }
-
-    try {
-        const secretName = `dive-v3-keycloak-${instance.toLowerCase()}`;
-        const result = execSync(
-            `gcloud secrets versions access latest --secret=${secretName} --project=dive25 2>/dev/null`,
-            { encoding: 'utf-8' }
-        );
-        if (result.trim()) {
-            return result.trim();
-        }
-    } catch (error) {
-        // GCP not available, use default
-    }
-
-    return 'DivePilot2025!SecureAdmin';
+    return getKeycloakPassword(instance.toLowerCase());
 }
 
 async function getAdminToken(keycloakUrl: string, instance: string): Promise<string> {
     const adminPassword = await getAdminPassword(instance);
     const tokenUrl = `${keycloakUrl}/realms/master/protocol/openid-connect/token`;
-    
+
     const response = await axios.post(
         tokenUrl,
         new URLSearchParams({
@@ -143,7 +127,7 @@ async function createDemoUser(
 ): Promise<void> {
     const username = `demo-${instance.toLowerCase()}-${level}`;
     const config = CLEARANCE_LEVELS[level as keyof typeof CLEARANCE_LEVELS];
-    
+
     console.log(`  Creating user: ${username} (${config.clearance})`);
 
     try {
@@ -159,7 +143,7 @@ async function createDemoUser(
         if (existingUsers && existingUsers.length > 0) {
             userId = existingUsers[0].id!;
             console.log(`    User exists, updating...`);
-            
+
             // Update user
             await client.users.update(
                 { realm: REALM, id: userId },
@@ -217,10 +201,10 @@ async function createDemoUser(
         console.log(`    Password set`);
 
         // Set required action for MFA (CONFIGURE_TOTP for SECRET/CONFIDENTIAL, webauthn for TOP_SECRET)
-        const requiredActions = config.clearance === 'TOP_SECRET' 
+        const requiredActions = config.clearance === 'TOP_SECRET'
             ? ['webauthn-register-passwordless']
             : ['CONFIGURE_TOTP'];
-        
+
         await client.users.update(
             { realm: REALM, id: userId },
             { requiredActions }
@@ -246,7 +230,7 @@ async function createSuperAdminUser(
     keycloakUrl: string
 ): Promise<void> {
     const username = `admin-${instance.toLowerCase()}`;
-    
+
     console.log(`  Creating super admin: ${username}`);
 
     try {
@@ -338,9 +322,9 @@ async function storeOTPSecretInRedis(userId: string, secret: string): Promise<vo
     try {
         // Import Redis client dynamically
         const { storePendingOTPSecret } = await import('../services/otp-redis.service');
-        
+
         const stored = await storePendingOTPSecret(userId, secret, 86400 * 365); // 1 year TTL for demo
-        
+
         if (!stored) {
             console.warn(`    WARNING: Could not store OTP secret in Redis for ${userId}`);
         }
@@ -362,7 +346,7 @@ async function testUserLogin(
 ): Promise<boolean> {
     try {
         const tokenUrl = `${keycloakUrl}/realms/${REALM}/protocol/openid-connect/token`;
-        
+
         const response = await axios.post(
             tokenUrl,
             new URLSearchParams({
@@ -388,7 +372,7 @@ async function testSuperAdminAccess(
 ): Promise<{ hasToken: boolean; hasSuperAdminRole: boolean }> {
     try {
         const tokenUrl = `${keycloakUrl}/realms/${REALM}/protocol/openid-connect/token`;
-        
+
         const response = await axios.post(
             tokenUrl,
             new URLSearchParams({

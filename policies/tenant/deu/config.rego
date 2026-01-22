@@ -38,40 +38,16 @@ classification_mapping := {
 # ============================================
 # Germany Trusted Issuers
 # ============================================
-
-deu_trusted_issuers := {
-	"https://deu-idp.dive25.com/realms/dive-v3-broker": {
-		"name": "DIVE V3 Germany Keycloak",
-		"country": "DEU",
-		"trust_level": "HIGH",
-		"mfa_capable": true,
-	},
-	"https://sso.bundeswehr.de": {
-		"name": "Bundeswehr SSO",
-		"country": "DEU",
-		"trust_level": "HIGH",
-		"mfa_capable": true,
-	},
-	"https://sso.bnd.de": {
-		"name": "BND SSO",
-		"country": "DEU",
-		"trust_level": "HIGH",
-		"mfa_capable": true,
-	},
-	"https://deu-idp.prosecurity.biz/realms/dive-v3-broker": {
-		"name": "DIVE V3 Germany Prosecurity",
-		"country": "DEU",
-		"trust_level": "HIGH",
-		"mfa_capable": true,
-	},
-}
+# SSOT: Trusted issuers loaded from OPAL data (MongoDB)
+# Use dive.tenant.base.trusted_issuers which loads from data layer
+# No hardcoded issuers in tenant config (MongoDB is SSOT)
 
 # ============================================
 # Germany Federation Partners
 # ============================================
-# NATO core members
-
-federation_partners := {"USA", "FRA", "GBR", "NLD", "BEL", "POL"}
+# SSOT: Federation matrix loaded from OPAL data (MongoDB)
+# Use dive.tenant.base.federation_matrix which loads from data layer
+# No hardcoded federation partners in tenant config (MongoDB is SSOT)
 
 # ============================================
 # Germany Policy Settings
@@ -87,10 +63,11 @@ allow_industry := true
 # ============================================
 
 is_deu_trusted_issuer(issuer) if {
-	deu_trusted_issuers[issuer]
+	data.dive.tenant.base.is_trusted_issuer(issuer)
+	data.dive.tenant.base.issuer_metadata(issuer).tenant == "DEU"
 }
 
 is_federated_partner(country) if {
-	country in federation_partners
+	data.dive.tenant.base.can_federate("DEU", country)
 }
 

@@ -42,71 +42,24 @@ current_tenant := tenant if {
 # In production, this is loaded from OPAL (data.trusted_issuers).
 # The default_trusted_issuers provides fallback for development only.
 
-# DEVELOPMENT FALLBACK ONLY - Production uses OPAL data
+# MINIMAL FALLBACK - Production uses OPAL data (MongoDB SSOT)
+# This fallback should rarely be used - only if OPAL data not loaded
 default_trusted_issuers := {
-	# Production External Issuers
-	"https://usa-idp.dive25.com/realms/dive-v3-broker": {
-		"tenant": "USA",
-		"name": "USA Keycloak",
-		"country": "USA",
-		"trust_level": "HIGH",
-	},
-	"https://fra-idp.dive25.com/realms/dive-v3-broker": {
-		"tenant": "FRA",
-		"name": "France Keycloak",
-		"country": "FRA",
-		"trust_level": "HIGH",
-	},
-	"https://gbr-idp.dive25.com/realms/dive-v3-broker": {
-		"tenant": "GBR",
-		"name": "UK Keycloak",
-		"country": "GBR",
-		"trust_level": "HIGH",
-	},
-	"https://deu-idp.prosecurity.biz/realms/dive-v3-broker": {
-		"tenant": "DEU",
-		"name": "Germany Keycloak",
-		"country": "DEU",
-		"trust_level": "HIGH",
-	},
-	# Local Development - Hub Keycloak (port 8443)
+	# Minimal localhost fallback for development
 	"https://localhost:8443/realms/dive-v3-broker-usa": {
 		"tenant": "USA",
 		"name": "USA Hub Keycloak (Local Dev)",
 		"country": "USA",
 		"trust_level": "DEVELOPMENT",
-	},
-	"https://localhost:8443/realms/dive-v3-broker": {
-		"tenant": "USA",
-		"name": "USA Hub Keycloak Base Realm (Local Dev)",
-		"country": "USA",
-		"trust_level": "DEVELOPMENT",
-	},
-	# Local Development - Spoke Keycloaks (ports 8453, 8454, 8455)
-	"https://localhost:8453/realms/dive-v3-broker-fra": {
-		"tenant": "FRA",
-		"name": "FRA Spoke Keycloak (Local Dev)",
-		"country": "FRA",
-		"trust_level": "DEVELOPMENT",
-	},
-	"https://localhost:8454/realms/dive-v3-broker-gbr": {
-		"tenant": "GBR",
-		"name": "GBR Spoke Keycloak (Local Dev)",
-		"country": "GBR",
-		"trust_level": "DEVELOPMENT",
-	},
-	"https://localhost:8455/realms/dive-v3-broker-deu": {
-		"tenant": "DEU",
-		"name": "DEU Spoke Keycloak (Local Dev)",
-		"country": "DEU",
-		"trust_level": "DEVELOPMENT",
+		"enabled": true,
 	},
 }
 
 # PRODUCTION: Use OPAL-provided data (dynamically updated)
 # This is the PRIMARY source - default_trusted_issuers is only fallback
 # OPAL data comes from Hub backend API which wraps response in {success, trusted_issuers, count}
-trusted_issuers := data.trusted_issuers.trusted_issuers if {
+# NOTE: Renamed to active_trusted_issuers to avoid recursion with data path
+active_trusted_issuers := data.trusted_issuers.trusted_issuers if {
 	data.trusted_issuers.trusted_issuers
 	count(data.trusted_issuers.trusted_issuers) > 0
 } else := data.trusted_issuers if {
@@ -123,23 +76,23 @@ trusted_issuers := data.trusted_issuers.trusted_issuers if {
 
 # Check if issuer is trusted
 is_trusted_issuer(issuer) if {
-	trusted_issuers[issuer]
+	active_trusted_issuers[issuer]
 }
 
 # Get issuer metadata
 issuer_metadata(issuer) := meta if {
-	meta := trusted_issuers[issuer]
+	meta := active_trusted_issuers[issuer]
 } else := {}
 
 # Get tenant for issuer
 issuer_to_tenant := {iss: meta.tenant |
-	some iss, meta in trusted_issuers
+	some iss, meta in active_trusted_issuers
 }
 
 # Get all issuers for a tenant
 tenant_issuers(tenant) := issuers if {
 	issuers := {iss |
-		some iss, meta in trusted_issuers
+		some iss, meta in active_trusted_issuers
 		meta.tenant == tenant
 	}
 }
@@ -151,17 +104,14 @@ tenant_issuers(tenant) := issuers if {
 # Uses bilateral trust model per ACP-240.
 # PRODUCTION: Loaded from OPAL data for dynamic updates.
 
-# DEVELOPMENT FALLBACK ONLY
-default_federation_matrix := {
-	"USA": {"FRA", "GBR", "DEU"},
-	"FRA": {"USA", "GBR", "DEU"},
-	"GBR": {"USA", "FRA", "DEU"},
-	"DEU": {"USA", "FRA", "GBR"},
-}
+# MINIMAL FALLBACK - Production uses OPAL data (MongoDB SSOT)
+# Empty fallback forces explicit federation configuration via MongoDB
+default_federation_matrix := {}
 
 # PRODUCTION: Use OPAL-provided data (dynamically updated)
 # OPAL data comes from Hub backend API which wraps response
-federation_matrix := data.federation_matrix.federation_matrix if {
+# NOTE: Renamed to active_federation_matrix to avoid recursion with data path
+active_federation_matrix := data.federation_matrix.federation_matrix if {
 	data.federation_matrix.federation_matrix
 	count(data.federation_matrix.federation_matrix) > 0
 } else := data.federation_matrix if {
@@ -178,12 +128,12 @@ can_federate(tenant_a, tenant_b) if {
 }
 
 can_federate(tenant_a, tenant_b) if {
-	tenant_b in federation_matrix[tenant_a]
+	tenant_b in active_federation_matrix[tenant_a]
 }
 
 # Get federation partners for a tenant
 federation_partners(tenant) := partners if {
-	partners := federation_matrix[tenant]
+	partners := active_federation_matrix[tenant]
 } else := set()
 
 # ============================================
@@ -198,37 +148,14 @@ default_tenant_configs := {
 		"locale": "en-US",
 		"mfa_required_above": "UNCLASSIFIED",
 		"max_session_hours": 10,
-		"default_coi": ["US-ONLY", "FVEY", "NATO"],
-	},
-	"FRA": {
-		"code": "FRA",
-		"name": "France",
-		"locale": "fr-FR",
-		"mfa_required_above": "UNCLASSIFIED",
-		"max_session_hours": 8,
-		"default_coi": ["FRA-US", "FVEY", "NATO"],
-	},
-	"GBR": {
-		"code": "GBR",
-		"name": "United Kingdom",
-		"locale": "en-GB",
-		"mfa_required_above": "UNCLASSIFIED",
-		"max_session_hours": 8,
-		"default_coi": ["GBR-US", "FVEY", "NATO"],
-	},
-	"DEU": {
-		"code": "DEU",
-		"name": "Germany",
-		"locale": "de-DE",
-		"mfa_required_above": "UNCLASSIFIED",
-		"max_session_hours": 8,
-		"default_coi": ["DEU-US", "NATO"],
+		"default_coi": ["US-ONLY", "NATO"],
 	},
 }
 
 # Use OPAL-provided data if available
 # OPAL data comes from Hub backend API which wraps response
-tenant_configs := data.tenant_configs.tenant_configs if {
+# NOTE: Renamed to active_tenant_configs to avoid recursion with data path
+active_tenant_configs := data.tenant_configs.tenant_configs if {
 	data.tenant_configs.tenant_configs
 } else := data.tenant_configs if {
 	# Fallback: Direct data without API wrapper
@@ -239,7 +166,7 @@ tenant_configs := data.tenant_configs.tenant_configs if {
 
 # Get configuration for current tenant
 current_tenant_config := config if {
-	config := tenant_configs[current_tenant]
+	config := active_tenant_configs[current_tenant]
 } else := {
 	"code": current_tenant,
 	"name": "Unknown",

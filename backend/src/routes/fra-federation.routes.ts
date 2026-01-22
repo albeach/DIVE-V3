@@ -11,8 +11,19 @@ import { FRAFederationService } from '../services/fra-federation.service';
 const router = Router();
 const federationService = new FRAFederationService();
 
-// Initialize service on startup
-federationService.initialize().catch(console.error);
+// Initialize service on startup with proper error handling
+federationService.initialize().catch((error) => {
+  console.error('FRA Federation Service initialization failed:', {
+    error: error instanceof Error ? error.message : 'Unknown error',
+    stack: error instanceof Error ? error.stack : undefined,
+    timestamp: new Date().toISOString(),
+    component: 'FRAFederationRoutes',
+    operation: 'initialize',
+    severity: 'HIGH',
+    action: 'Federation sync will be unavailable until service restarts'
+  });
+  // Service continues but sync will be unavailable
+});
 
 // Middleware to ensure correlation ID
 const ensureCorrelationId = (req: Request, res: Response, next: Function) => {

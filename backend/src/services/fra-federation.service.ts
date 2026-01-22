@@ -381,12 +381,28 @@ export class FRAFederationService {
       try {
         await this.syncWithUSA();
       } catch (error) {
-        console.error('Scheduled sync failed:', error);
+        // Log with structured context for observability
+        console.error('Scheduled sync failed:', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          stack: error instanceof Error ? error.stack : undefined,
+          timestamp: new Date().toISOString(),
+          component: 'FRAFederationService',
+          operation: 'scheduledSync'
+        });
       }
     }, this.SYNC_INTERVAL);
 
-    // Also run immediately
-    this.syncWithUSA().catch(console.error);
+    // Run initial sync with proper error handling
+    this.syncWithUSA().catch((error) => {
+      console.error('Initial sync failed:', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        timestamp: new Date().toISOString(),
+        component: 'FRAFederationService',
+        operation: 'initialSync'
+      });
+      // Don't throw - service should continue even if initial sync fails
+    });
   }
 
   /**

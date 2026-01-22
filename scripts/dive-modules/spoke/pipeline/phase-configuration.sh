@@ -67,6 +67,38 @@ spoke_phase_configuration() {
     export USE_TERRAFORM_SSOT=true
 
     # ==========================================================================
+    # CRITICAL: Load secrets BEFORE any operations that need them
+    # ==========================================================================
+    # Secrets must be loaded at start of configuration phase because:
+    # 1. Environment exports don't persist across subshells from preflight phase
+    # 2. Terraform needs KEYCLOAK_ADMIN_PASSWORD_${CODE}, KEYCLOAK_CLIENT_SECRET_${CODE}
+    # 3. Federation setup needs credentials for Keycloak API calls
+
+    log_step "Loading secrets for configuration phase"
+    if type spoke_secrets_load &>/dev/null; then
+        if ! spoke_secrets_load "$code_upper" "load" 2>/dev/null; then
+            log_verbose "Secret loading via function failed, trying .env file"
+        fi
+    fi
+
+    # Also source .env directly to ensure variables are available
+    if [ -f "$spoke_dir/.env" ]; then
+        set -a  # Export all variables
+        source "$spoke_dir/.env" 2>/dev/null || true
+        set +a
+    fi
+
+    # Verify critical secrets are available
+    local keycloak_pwd_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
+    local client_secret_var="KEYCLOAK_CLIENT_SECRET_${code_upper}"
+    if [ -z "${!keycloak_pwd_var}" ] || [ -z "${!client_secret_var}" ]; then
+        log_warn "Secrets not found in environment, attempting GCP reload"
+        if type spoke_secrets_load &>/dev/null; then
+            spoke_secrets_load "$code_upper" "load" || true
+        fi
+    fi
+
+    # ==========================================================================
     # CRITICAL STEPS - Pipeline stops on failure
     # ==========================================================================
 
@@ -375,7 +407,7 @@ EOF
                 rm -f "$spoke_dir/.env.bak"
 
                 log_success "✓ SPOKE_ID and SPOKE_TOKEN configured in .env"
-                
+
                 # ==========================================================================
                 # CRITICAL FIX (2026-01-22): Also update docker-compose.yml fallback value
                 # ==========================================================================
@@ -390,7 +422,7 @@ EOF
                     rm -f "$compose_file.bak"
                     log_verbose "Updated docker-compose.yml SPOKE_ID fallback to $registered_spoke_id"
                 fi
-                
+
                 # ==========================================================================
                 # CRITICAL FIX (2026-01-22): Restart spoke backend to pick up new credentials
                 # ==========================================================================
@@ -408,7 +440,7 @@ EOF
                 local backend_container="dive-spoke-${code_lower}-backend"
                 if docker ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
                     log_step "Recreating spoke backend to pick up updated federation credentials..."
-                    
+
                     # Use docker compose to recreate with updated .env
                     local compose_dir="${DIVE_ROOT}/instances/${code_lower}"
                     if [ -f "$compose_dir/docker-compose.yml" ]; then
@@ -419,13 +451,13 @@ EOF
                         # Use -f flag to specify compose file from any directory
                         recreate_output=$(docker compose -f "$compose_dir/docker-compose.yml" --env-file "$compose_dir/.env" up -d --force-recreate "backend-${code_lower}" 2>&1)
                         local recreate_exit=$?
-                        
+
                         log_info "Docker compose exit: $recreate_exit"
                         [ -n "$recreate_output" ] && log_verbose "Output: $recreate_output"
-                        
+
                         if [ $recreate_exit -eq 0 ]; then
                             log_success "✓ Spoke backend recreated with new SPOKE_ID and TOKEN"
-                            
+
                             # Wait for backend to be healthy
                             local wait_count=0
                             while [ $wait_count -lt 30 ]; do
@@ -445,7 +477,7 @@ EOF
                         log_warn "docker-compose.yml not found at $compose_dir"
                     fi
                 fi
-                
+
                 return 0
             else
                 log_warn "Token not found in auto-approval response - may need manual approval"

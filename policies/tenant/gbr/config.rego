@@ -40,40 +40,16 @@ classification_mapping := {
 # ============================================
 # UK Trusted Issuers
 # ============================================
-
-gbr_trusted_issuers := {
-	"https://gbr-idp.dive25.com/realms/dive-v3-broker": {
-		"name": "DIVE V3 UK Keycloak",
-		"country": "GBR",
-		"trust_level": "HIGH",
-		"mfa_capable": true,
-	},
-	"https://sso.mod.uk": {
-		"name": "UK Ministry of Defence",
-		"country": "GBR",
-		"trust_level": "HIGH",
-		"mfa_capable": true,
-	},
-	"https://sso.gchq.gov.uk": {
-		"name": "GCHQ SSO",
-		"country": "GBR",
-		"trust_level": "HIGH",
-		"mfa_capable": true,
-	},
-	"https://sso.mi5.gov.uk": {
-		"name": "MI5 SSO",
-		"country": "GBR",
-		"trust_level": "HIGH",
-		"mfa_capable": true,
-	},
-}
+# SSOT: Trusted issuers loaded from OPAL data (MongoDB)
+# Use dive.tenant.base.trusted_issuers which loads from data layer
+# No hardcoded issuers in tenant config (MongoDB is SSOT)
 
 # ============================================
 # UK Federation Partners
 # ============================================
-# Five Eyes + NATO core members
-
-federation_partners := {"USA", "CAN", "AUS", "NZL", "FRA", "DEU"}
+# SSOT: Federation matrix loaded from OPAL data (MongoDB)
+# Use dive.tenant.base.federation_matrix which loads from data layer
+# No hardcoded federation partners in tenant config (MongoDB is SSOT)
 
 # ============================================
 # UK Policy Settings
@@ -89,10 +65,11 @@ allow_industry := true
 # ============================================
 
 is_gbr_trusted_issuer(issuer) if {
-	gbr_trusted_issuers[issuer]
+	data.dive.tenant.base.is_trusted_issuer(issuer)
+	data.dive.tenant.base.issuer_metadata(issuer).tenant == "GBR"
 }
 
 is_federated_partner(country) if {
-	country in federation_partners
+	data.dive.tenant.base.can_federate("GBR", country)
 }
 
