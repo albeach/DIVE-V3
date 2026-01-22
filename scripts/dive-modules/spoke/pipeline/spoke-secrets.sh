@@ -437,6 +437,39 @@ spoke_secrets_sync_to_env() {
         fi
     done
 
+    # ==========================================================================
+    # SHARED BLACKLIST REDIS PASSWORD (ACP-240 Cross-Instance Token Revocation)
+    # ==========================================================================
+    # This secret is shared across all instances (Hub + all spokes) for
+    # federation-wide token revocation. Load from Hub's .env or GCP.
+    # ==========================================================================
+    local blacklist_password=""
+    
+    # Try to load from Hub's .env first (local development)
+    if [ -f "${DIVE_ROOT}/.env.hub" ]; then
+        blacklist_password=$(grep "^REDIS_PASSWORD_BLACKLIST=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d'=' -f2)
+    fi
+    
+    # Try GCP if not found locally
+    if [ -z "$blacklist_password" ] && check_gcloud 2>/dev/null; then
+        blacklist_password=$(gcloud secrets versions access latest --secret="dive-v3-redis-blacklist" --project="${GCP_PROJECT:-dive25}" 2>/dev/null || true)
+    fi
+    
+    # Sync blacklist password to spoke .env if available
+    if [ -n "$blacklist_password" ]; then
+        if [ -f "$env_file" ] && grep -q "^REDIS_PASSWORD_BLACKLIST=" "$env_file"; then
+            sed -i.tmp "s|^REDIS_PASSWORD_BLACKLIST=.*|REDIS_PASSWORD_BLACKLIST=${blacklist_password}|" "$env_file"
+            rm -f "${env_file}.tmp"
+        else
+            echo "" >> "$env_file"
+            echo "# Shared Blacklist Redis (from Hub - for cross-instance token revocation)" >> "$env_file"
+            echo "REDIS_PASSWORD_BLACKLIST=${blacklist_password}" >> "$env_file"
+        fi
+        log_verbose "Synced shared blacklist Redis password"
+    else
+        log_warn "Could not load shared blacklist Redis password - cross-instance token revocation will be limited"
+    fi
+
     log_verbose "Secrets synced to .env"
     return 0
 }
