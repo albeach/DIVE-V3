@@ -854,6 +854,28 @@ cmd_nuke() {
         rm -f "${DIVE_ROOT}/terraform/pilot/.terraform.lock.hcl" 2>/dev/null || true
     fi
 
+    # SSOT ARCHITECTURE (2026-01-22): Clean spoke instance directories
+    # These directories cause stale IdPs to be created when Hub deploys
+    # Only preserve hub/ and shared/ directories
+    if [ "$target_type" = "all" ]; then
+        log_verbose "  Cleaning spoke instance directories (SSOT)..."
+        for spoke_dir in "${DIVE_ROOT}/instances"/*; do
+            local dirname=$(basename "$spoke_dir")
+            # Preserve hub and shared directories
+            if [[ "$dirname" != "hub" && "$dirname" != "shared" && "$dirname" != "usa" ]]; then
+                log_verbose "    Removing ${dirname}/..."
+                rm -rf "$spoke_dir"
+            fi
+        done
+        log_verbose "  Spoke instance directories cleaned"
+    elif [ "$target_type" = "spoke" ] && [ -n "$target_instance" ]; then
+        local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
+        if [ -d "${DIVE_ROOT}/instances/${instance_lower}" ]; then
+            log_verbose "  Removing instance directory: ${instance_lower}/"
+            rm -rf "${DIVE_ROOT}/instances/${instance_lower}"
+        fi
+    fi
+
     # =========================================================================
     # VERIFICATION
     # =========================================================================
