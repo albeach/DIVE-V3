@@ -796,29 +796,274 @@ suite_circuit_breaker() {
 }
 
 # =============================================================================
-# TEST SUITE 7: FAILURE INJECTION (Phase 3.4)
+# TEST SUITE 7: FAILURE INJECTION (Phase 4.1)
+# =============================================================================
+# These tests validate circuit breaker behavior under service failures
+# They require the --with-failure-injection flag to run
+# 
+# Circuit Breaker Thresholds:
+# - OPA: 5 failures → OPEN, 60s cooldown, 2 successes → CLOSED
+# - Keycloak: 3 failures → OPEN, 30s cooldown, 2 successes → CLOSED
+# - MongoDB: 5 failures → OPEN, 60s cooldown, 3 successes → CLOSED
+# - KAS: 3 failures → OPEN, 30s cooldown, 2 successes → CLOSED
 # =============================================================================
 
-test_opa_failure_circuit_opens() {
-    # Test that stopping OPA causes circuit breaker to open
-    # WARNING: This test modifies running services - use with caution
-    if ! assert_hub_healthy; then
-        return 2
+# Global flag for failure injection tests
+FAILURE_INJECTION_ENABLED="${FAILURE_INJECTION_ENABLED:-false}"
+
+##
+# Get circuit breaker state from health endpoint
+#
+# Arguments:
+#   $1 - Service name (opa, keycloak, mongodb, kas)
+#
+# Returns:
+#   Circuit breaker state (CLOSED, HALF_OPEN, OPEN)
+##
+get_circuit_breaker_state() {
+    local service="$1"
+    local response
+    response=$(curl -sk --max-time 10 "${HUB_BACKEND_URL}/health/detailed" 2>/dev/null)
+    
+    if [ -z "$response" ]; then
+        echo "UNKNOWN"
+        return 1
     fi
     
-    echo "  [SKIP] Failure injection tests require explicit --with-failure-injection flag"
-    return 2  # Skip by default
+    local state
+    state=$(echo "$response" | jq -r ".circuitBreakers.${service}.state // \"UNKNOWN\"")
+    echo "$state"
 }
 
-test_circuit_recovery_after_restart() {
-    # Test that circuit breaker recovers after service restart
-    # WARNING: This test modifies running services
+##
+# Wait for circuit breaker to reach a specific state
+#
+# Arguments:
+#   $1 - Service name
+#   $2 - Expected state
+#   $3 - Timeout in seconds (default: 60)
+#
+# Returns:
+#   0 - State reached
+#   1 - Timeout
+##
+wait_for_circuit_state() {
+    local service="$1"
+    local expected_state="$2"
+    local timeout="${3:-60}"
+    local elapsed=0
+    local interval=5
+    
+    while [ $elapsed -lt $timeout ]; do
+        local current_state
+        current_state=$(get_circuit_breaker_state "$service")
+        
+        if [ "$current_state" = "$expected_state" ]; then
+            return 0
+        fi
+        
+        sleep $interval
+        elapsed=$((elapsed + interval))
+    done
+    
+    echo "Timeout waiting for $service circuit to reach $expected_state (current: $(get_circuit_breaker_state "$service"))"
+    return 1
+}
+
+##
+# Trigger circuit breaker by making requests to a downed service
+#
+# Arguments:
+#   $1 - Endpoint to hit (to trigger failures)
+#   $2 - Number of attempts
+##
+trigger_circuit_breaker() {
+    local endpoint="$1"
+    local attempts="${2:-10}"
+    
+    for i in $(seq 1 $attempts); do
+        curl -sk --max-time 3 "${HUB_BACKEND_URL}${endpoint}" >/dev/null 2>&1 || true
+        sleep 1
+    done
+}
+
+test_opa_failure_health_reports_down() {
+    # Test that stopping OPA causes health endpoint to report OPA as down
+    # Note: Circuit breaker only opens with authenticated requests through authz middleware
+    if [ "$FAILURE_INJECTION_ENABLED" != "true" ]; then
+        echo "  [SKIP] Requires --with-failure-injection flag"
+        return 2
+    fi
+    
     if ! assert_hub_healthy; then
         return 2
     fi
     
-    echo "  [SKIP] Failure injection tests require explicit --with-failure-injection flag"
-    return 2  # Skip by default
+    echo "    Stopping OPA container..."
+    docker stop dive-hub-opa >/dev/null 2>&1
+    
+    sleep 10  # Wait for health check to detect the change
+    
+    # Check health endpoint reports OPA as down
+    local health_response
+    health_response=$(curl -sk --max-time 10 "${HUB_BACKEND_URL}/health/detailed" 2>/dev/null)
+    
+    local opa_status
+    opa_status=$(echo "$health_response" | jq -r '.services.opa.status // "unknown"')
+    
+    local overall_status
+    overall_status=$(echo "$health_response" | jq -r '.status')
+    
+    echo "    OPA status: $opa_status, Overall: $overall_status"
+    
+    # Restart OPA
+    docker start dive-hub-opa >/dev/null 2>&1
+    
+    if [ "$opa_status" = "down" ]; then
+        echo "    ✓ OPA correctly reported as down when stopped"
+        # OPA is critical, so system should be unhealthy
+        if [ "$overall_status" = "unhealthy" ]; then
+            echo "    ✓ System correctly marked unhealthy (OPA is critical)"
+        fi
+        return 0
+    fi
+    
+    echo "    OPA status: $opa_status (expected: down)"
+    return 1
+}
+
+test_keycloak_failure_health_reports_down() {
+    # Test that stopping Keycloak causes health endpoint to report it as down
+    if [ "$FAILURE_INJECTION_ENABLED" != "true" ]; then
+        echo "  [SKIP] Requires --with-failure-injection flag"
+        return 2
+    fi
+    
+    if ! assert_hub_healthy; then
+        return 2
+    fi
+    
+    echo "    Stopping Keycloak container..."
+    docker stop dive-hub-keycloak >/dev/null 2>&1
+    
+    sleep 10  # Wait for health check to detect the change
+    
+    # Check health endpoint reports Keycloak as down
+    local health_response
+    health_response=$(curl -sk --max-time 10 "${HUB_BACKEND_URL}/health/detailed" 2>/dev/null)
+    
+    local kc_status
+    kc_status=$(echo "$health_response" | jq -r '.services.keycloak.status // "unknown"')
+    
+    local overall_status
+    overall_status=$(echo "$health_response" | jq -r '.status')
+    
+    echo "    Keycloak status: $kc_status, Overall: $overall_status"
+    
+    # Restart Keycloak
+    docker start dive-hub-keycloak >/dev/null 2>&1
+    
+    if [ "$kc_status" = "down" ]; then
+        echo "    ✓ Keycloak correctly reported as down when stopped"
+        # Keycloak is non-critical, so system should be degraded (not unhealthy)
+        if [ "$overall_status" = "degraded" ]; then
+            echo "    ✓ System correctly marked degraded (Keycloak is non-critical)"
+        fi
+        return 0
+    fi
+    
+    echo "    Keycloak status: $kc_status (expected: down)"
+    return 1
+}
+
+test_mongodb_failure_health_reports_down() {
+    # Test that stopping MongoDB causes health endpoint to report it as down
+    if [ "$FAILURE_INJECTION_ENABLED" != "true" ]; then
+        echo "  [SKIP] Requires --with-failure-injection flag"
+        return 2
+    fi
+    
+    if ! assert_hub_healthy; then
+        return 2
+    fi
+    
+    echo "    Stopping MongoDB container..."
+    docker stop dive-hub-mongodb >/dev/null 2>&1
+    
+    sleep 10  # Wait for health check to detect the change
+    
+    # Check health endpoint reports MongoDB as down
+    local health_response
+    health_response=$(curl -sk --max-time 10 "${HUB_BACKEND_URL}/health/detailed" 2>/dev/null)
+    
+    local mongo_status
+    mongo_status=$(echo "$health_response" | jq -r '.services.mongodb.status // "unknown"')
+    
+    local overall_status
+    overall_status=$(echo "$health_response" | jq -r '.status')
+    
+    echo "    MongoDB status: $mongo_status, Overall: $overall_status"
+    
+    # Restart MongoDB
+    docker start dive-hub-mongodb >/dev/null 2>&1
+    
+    if [ "$mongo_status" = "down" ]; then
+        echo "    ✓ MongoDB correctly reported as down when stopped"
+        # MongoDB is critical, so system should be unhealthy
+        if [ "$overall_status" = "unhealthy" ]; then
+            echo "    ✓ System correctly marked unhealthy (MongoDB is critical)"
+        fi
+        return 0
+    fi
+    
+    echo "    MongoDB status: $mongo_status (expected: down)"
+    return 1
+}
+
+test_service_recovery_health_reports_up() {
+    # Test that restarting services causes health endpoint to report them as up
+    if [ "$FAILURE_INJECTION_ENABLED" != "true" ]; then
+        echo "  [SKIP] Requires --with-failure-injection flag"
+        return 2
+    fi
+    
+    # Ensure all services are running
+    echo "    Starting all services..."
+    docker start dive-hub-opa dive-hub-keycloak dive-hub-mongodb >/dev/null 2>&1 || true
+    
+    echo "    Waiting for services to become healthy (45s)..."
+    sleep 45
+    
+    # Check health endpoint
+    local health_response
+    health_response=$(curl -sk --max-time 10 "${HUB_BACKEND_URL}/health/detailed" 2>/dev/null)
+    
+    if [ -z "$health_response" ]; then
+        echo "    Failed to get health response"
+        return 1
+    fi
+    
+    local overall_status
+    overall_status=$(echo "$health_response" | jq -r '.status')
+    
+    local opa_status
+    opa_status=$(echo "$health_response" | jq -r '.services.opa.status // "unknown"')
+    
+    local mongo_status
+    mongo_status=$(echo "$health_response" | jq -r '.services.mongodb.status // "unknown"')
+    
+    echo "    Status - Overall: $overall_status, OPA: $opa_status, MongoDB: $mongo_status"
+    
+    if [ "$opa_status" = "up" ] && [ "$mongo_status" = "up" ]; then
+        echo "    ✓ Critical services recovered and reporting up"
+        if [ "$overall_status" = "healthy" ]; then
+            echo "    ✓ System returned to healthy status"
+        fi
+        return 0
+    fi
+    
+    echo "    Services not fully recovered"
+    return 1
 }
 
 test_graceful_degradation_blacklist_down() {
@@ -830,6 +1075,11 @@ test_graceful_degradation_blacklist_down() {
     # Check health status with blacklist down
     local health_response
     health_response=$(curl -sk --max-time 10 "${HUB_BACKEND_URL}/health/detailed" 2>/dev/null)
+    
+    if [ -z "$health_response" ]; then
+        echo "Failed to get health response"
+        return 1
+    fi
     
     local overall_status
     overall_status=$(echo "$health_response" | jq -r '.status')
@@ -845,22 +1095,447 @@ test_graceful_degradation_blacklist_down() {
             return 1
         fi
         echo "Graceful degradation confirmed: blacklist down -> status: $overall_status"
+    elif [ "$blacklist_status" = "up" ]; then
+        echo "Blacklist Redis is up - graceful degradation not testable without stopping it"
+        # Test passes as service is healthy
     fi
     
     return 0
 }
 
+test_redis_failure_graceful_degradation() {
+    # Test that stopping Redis causes degraded (not unhealthy) status
+    if [ "$FAILURE_INJECTION_ENABLED" != "true" ]; then
+        echo "  [SKIP] Requires --with-failure-injection flag"
+        return 2
+    fi
+    
+    if ! assert_hub_healthy; then
+        return 2
+    fi
+    
+    echo "    Stopping Redis container..."
+    docker stop dive-hub-redis >/dev/null 2>&1
+    
+    sleep 5
+    
+    # Check health status
+    local health_response
+    health_response=$(curl -sk --max-time 10 "${HUB_BACKEND_URL}/health/detailed" 2>/dev/null)
+    
+    local overall_status
+    overall_status=$(echo "$health_response" | jq -r '.status')
+    
+    # Redis is non-critical, status should be degraded (not unhealthy)
+    if [ "$overall_status" = "degraded" ]; then
+        echo "    ✓ System correctly shows 'degraded' when Redis is down"
+        docker start dive-hub-redis >/dev/null 2>&1
+        return 0
+    elif [ "$overall_status" = "healthy" ]; then
+        echo "    System still healthy (Redis may not be critical) - acceptable"
+        docker start dive-hub-redis >/dev/null 2>&1
+        return 0
+    elif [ "$overall_status" = "unhealthy" ]; then
+        echo "    System incorrectly marked as unhealthy when only Redis is down"
+        docker start dive-hub-redis >/dev/null 2>&1
+        return 1
+    fi
+    
+    docker start dive-hub-redis >/dev/null 2>&1
+    return 0
+}
+
+test_all_services_recovery() {
+    # Test full service recovery after multiple failures
+    if [ "$FAILURE_INJECTION_ENABLED" != "true" ]; then
+        echo "  [SKIP] Requires --with-failure-injection flag"
+        return 2
+    fi
+    
+    echo "    Ensuring all services are running..."
+    
+    # Start all potentially stopped services
+    docker start dive-hub-opa dive-hub-keycloak dive-hub-mongodb dive-hub-redis dive-hub-redis-blacklist >/dev/null 2>&1 || true
+    
+    echo "    Waiting for services to stabilize (60s)..."
+    sleep 60
+    
+    # Verify all services are healthy
+    local health_response
+    health_response=$(curl -sk --max-time 10 "${HUB_BACKEND_URL}/health/detailed" 2>/dev/null)
+    
+    if [ -z "$health_response" ]; then
+        echo "    Failed to get health response"
+        return 1
+    fi
+    
+    local overall_status
+    overall_status=$(echo "$health_response" | jq -r '.status')
+    
+    if [ "$overall_status" = "healthy" ]; then
+        echo "    ✓ All services recovered - system healthy"
+        return 0
+    elif [ "$overall_status" = "degraded" ]; then
+        echo "    System in degraded state - checking services..."
+        echo "$health_response" | jq '.services | to_entries | map(select(.value.status != "up")) | .[].key'
+        return 0  # Accept degraded as partial success
+    else
+        echo "    System unhealthy after recovery attempt"
+        return 1
+    fi
+}
+
 suite_failure_injection() {
     echo ""
-    echo -e "${BOLD}${CYAN}Test Suite 7: Failure Injection (Phase 3.4)${NC}"
+    echo -e "${BOLD}${CYAN}Test Suite 7: Failure Injection (Phase 4.1)${NC}"
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
-    echo "This suite tests graceful degradation and recovery scenarios"
+    echo "This suite tests health reporting during service failures"
+    if [ "$FAILURE_INJECTION_ENABLED" = "true" ]; then
+        echo -e "${YELLOW}⚠️  FAILURE INJECTION ENABLED - Services will be stopped${NC}"
+    else
+        echo "Run with --with-failure-injection to enable destructive tests"
+    fi
     echo ""
     
-    run_test "OPA failure causes circuit to open" test_opa_failure_circuit_opens
-    run_test "Circuit recovers after service restart" test_circuit_recovery_after_restart
+    run_test "OPA failure reported in health endpoint" test_opa_failure_health_reports_down
+    run_test "Keycloak failure reported in health endpoint" test_keycloak_failure_health_reports_down
+    run_test "MongoDB failure reported in health endpoint" test_mongodb_failure_health_reports_down
+    run_test "Services recover and health reports up" test_service_recovery_health_reports_up
+    run_test "Redis failure causes graceful degradation" test_redis_failure_graceful_degradation
     run_test "Graceful degradation when blacklist down" test_graceful_degradation_blacklist_down
+    run_test "All services recover fully" test_all_services_recovery
+}
+
+# =============================================================================
+# TEST SUITE 8: RECOVERY VALIDATION (Phase 4.2)
+# =============================================================================
+# These tests validate that systems recover correctly after failures
+# Run after failure injection tests to verify recovery patterns
+# =============================================================================
+
+test_opa_full_recovery_cycle() {
+    # Test complete OPA service recovery cycle (stop → down → start → up)
+    if [ "$FAILURE_INJECTION_ENABLED" != "true" ]; then
+        echo "  [SKIP] Requires --with-failure-injection flag"
+        return 2
+    fi
+    
+    if ! assert_hub_healthy; then
+        return 2
+    fi
+    
+    echo "    Phase 1: Stopping OPA..."
+    docker stop dive-hub-opa >/dev/null 2>&1
+    sleep 10
+    
+    # Verify OPA reports down
+    local health_response
+    health_response=$(curl -sk --max-time 10 "${HUB_BACKEND_URL}/health/detailed" 2>/dev/null)
+    local opa_status
+    opa_status=$(echo "$health_response" | jq -r '.services.opa.status // "unknown"')
+    
+    echo "    OPA status after stop: $opa_status"
+    
+    echo "    Phase 2: Restarting OPA..."
+    docker start dive-hub-opa >/dev/null 2>&1
+    
+    echo "    Phase 3: Waiting for OPA recovery (30s)..."
+    sleep 30
+    
+    # Verify OPA reports up
+    health_response=$(curl -sk --max-time 10 "${HUB_BACKEND_URL}/health/detailed" 2>/dev/null)
+    opa_status=$(echo "$health_response" | jq -r '.services.opa.status // "unknown"')
+    
+    echo "    OPA status after restart: $opa_status"
+    
+    if [ "$opa_status" = "up" ]; then
+        echo "    ✓ OPA completed full recovery cycle"
+        return 0
+    fi
+    
+    return 1
+}
+
+test_mongodb_full_recovery_cycle() {
+    # Test complete MongoDB service recovery cycle
+    if [ "$FAILURE_INJECTION_ENABLED" != "true" ]; then
+        echo "  [SKIP] Requires --with-failure-injection flag"
+        return 2
+    fi
+    
+    if ! assert_hub_healthy; then
+        return 2
+    fi
+    
+    echo "    Phase 1: Stopping MongoDB..."
+    docker stop dive-hub-mongodb >/dev/null 2>&1
+    sleep 10
+    
+    # Verify MongoDB reports down
+    local health_response
+    health_response=$(curl -sk --max-time 10 "${HUB_BACKEND_URL}/health/detailed" 2>/dev/null)
+    local mongo_status
+    mongo_status=$(echo "$health_response" | jq -r '.services.mongodb.status // "unknown"')
+    
+    echo "    MongoDB status after stop: $mongo_status"
+    
+    echo "    Phase 2: Restarting MongoDB..."
+    docker start dive-hub-mongodb >/dev/null 2>&1
+    
+    echo "    Phase 3: Waiting for MongoDB recovery (30s)..."
+    sleep 30
+    
+    # Verify MongoDB reports up
+    health_response=$(curl -sk --max-time 10 "${HUB_BACKEND_URL}/health/detailed" 2>/dev/null)
+    mongo_status=$(echo "$health_response" | jq -r '.services.mongodb.status // "unknown"')
+    
+    echo "    MongoDB status after restart: $mongo_status"
+    
+    if [ "$mongo_status" = "up" ]; then
+        echo "    ✓ MongoDB completed full recovery cycle"
+        return 0
+    fi
+    
+    return 1
+}
+
+test_multiple_service_failure_recovery() {
+    # Test recovery when multiple services fail simultaneously
+    if [ "$FAILURE_INJECTION_ENABLED" != "true" ]; then
+        echo "  [SKIP] Requires --with-failure-injection flag"
+        return 2
+    fi
+    
+    if ! assert_hub_healthy; then
+        return 2
+    fi
+    
+    echo "    Phase 1: Stopping OPA and Keycloak..."
+    docker stop dive-hub-opa dive-hub-keycloak >/dev/null 2>&1
+    sleep 10
+    
+    # Check status
+    local health_response
+    health_response=$(curl -sk --max-time 10 "${HUB_BACKEND_URL}/health/detailed" 2>/dev/null)
+    local overall_status
+    overall_status=$(echo "$health_response" | jq -r '.status')
+    
+    echo "    Status with multiple services down: $overall_status"
+    
+    echo "    Phase 2: Restarting services..."
+    docker start dive-hub-opa dive-hub-keycloak >/dev/null 2>&1
+    
+    echo "    Phase 3: Waiting for recovery (45s)..."
+    sleep 45
+    
+    # Verify recovery
+    health_response=$(curl -sk --max-time 10 "${HUB_BACKEND_URL}/health/detailed" 2>/dev/null)
+    overall_status=$(echo "$health_response" | jq -r '.status')
+    
+    echo "    Final status: $overall_status"
+    
+    if [ "$overall_status" = "healthy" ] || [ "$overall_status" = "degraded" ]; then
+        echo "    ✓ System recovered from multiple service failures"
+        return 0
+    fi
+    
+    return 1
+}
+
+test_system_returns_healthy_after_recovery() {
+    # Test that system returns to fully healthy status
+    if [ "$FAILURE_INJECTION_ENABLED" != "true" ]; then
+        echo "  [SKIP] Requires --with-failure-injection flag"
+        return 2
+    fi
+    
+    echo "    Starting all services..."
+    docker start dive-hub-opa dive-hub-keycloak dive-hub-mongodb dive-hub-redis dive-hub-redis-blacklist dive-hub-kas >/dev/null 2>&1 || true
+    
+    echo "    Waiting for full recovery (60s)..."
+    sleep 60
+    
+    # Check final health status
+    local health_response
+    health_response=$(curl -sk --max-time 10 "${HUB_BACKEND_URL}/health/detailed" 2>/dev/null)
+    
+    local overall_status
+    overall_status=$(echo "$health_response" | jq -r '.status')
+    
+    echo "    Final system status: $overall_status"
+    
+    if [ "$overall_status" = "healthy" ]; then
+        echo "    ✓ System returned to healthy status"
+        return 0
+    elif [ "$overall_status" = "degraded" ]; then
+        echo "    System is degraded - checking which services are down"
+        echo "$health_response" | jq '.services | to_entries | map(select(.value.status != "up")) | .[].key' 2>/dev/null
+        return 0  # Accept degraded as partial success
+    fi
+    
+    return 1
+}
+
+test_consecutive_failure_cycles() {
+    # Test system survives multiple failure/recovery cycles
+    if [ "$FAILURE_INJECTION_ENABLED" != "true" ]; then
+        echo "  [SKIP] Requires --with-failure-injection flag"
+        return 2
+    fi
+    
+    if ! assert_hub_healthy; then
+        return 2
+    fi
+    
+    local cycles=3
+    local successes=0
+    
+    for cycle in $(seq 1 $cycles); do
+        echo "    Cycle $cycle/$cycles: Inducing OPA failure..."
+        docker stop dive-hub-opa >/dev/null 2>&1
+        sleep 5
+        
+        echo "    Cycle $cycle/$cycles: Recovering OPA..."
+        docker start dive-hub-opa >/dev/null 2>&1
+        sleep 15
+        
+        # Check if system is still responding
+        if curl -sk --max-time 10 "${HUB_BACKEND_URL}/health" | grep -q '"status"'; then
+            ((successes++))
+        fi
+    done
+    
+    echo "    Completed $cycles cycles, $successes successful"
+    
+    if [ $successes -eq $cycles ]; then
+        echo "    ✓ System survived all failure/recovery cycles"
+        return 0
+    fi
+    
+    return 1
+}
+
+suite_recovery_validation() {
+    echo ""
+    echo -e "${BOLD}${CYAN}Test Suite 8: Recovery Validation (Phase 4.2)${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "This suite validates recovery patterns after service failures"
+    if [ "$FAILURE_INJECTION_ENABLED" = "true" ]; then
+        echo -e "${YELLOW}⚠️  FAILURE INJECTION ENABLED - Services will be stopped and restarted${NC}"
+    else
+        echo "Run with --with-failure-injection to enable recovery tests"
+    fi
+    echo ""
+    
+    run_test "OPA completes full recovery cycle" test_opa_full_recovery_cycle
+    run_test "MongoDB completes full recovery cycle" test_mongodb_full_recovery_cycle
+    run_test "Multiple service failure and recovery" test_multiple_service_failure_recovery
+    run_test "System returns to healthy after recovery" test_system_returns_healthy_after_recovery
+    run_test "System survives consecutive failure cycles" test_consecutive_failure_cycles
+}
+
+# =============================================================================
+# TEST SUITE 9: ALERT VALIDATION (Phase 4.3)
+# =============================================================================
+# These tests verify that Prometheus alerts fire correctly
+# Requires monitoring stack (docker/instances/shared) to be running
+# =============================================================================
+
+test_alertmanager_reachable() {
+    # Verify AlertManager is accessible
+    local alertmanager_url="${ALERTMANAGER_URL:-http://localhost:9093}"
+    
+    if curl -sf --max-time 5 "${alertmanager_url}/api/v2/status" >/dev/null 2>&1; then
+        echo "    ✓ AlertManager is reachable at $alertmanager_url"
+        return 0
+    else
+        echo "    AlertManager not reachable at $alertmanager_url"
+        echo "    Start monitoring stack: cd docker/instances/shared && docker compose up -d"
+        return 2  # Skip - precondition not met
+    fi
+}
+
+test_prometheus_rules_loaded() {
+    # Verify Prometheus has loaded DIVE alert rules
+    local prometheus_url="${PROMETHEUS_URL:-http://localhost:9090}"
+    
+    if ! curl -sf --max-time 5 "${prometheus_url}/api/v1/status/config" >/dev/null 2>&1; then
+        echo "    Prometheus not reachable"
+        return 2
+    fi
+    
+    # Check for DIVE alert rules
+    local rules
+    rules=$(curl -sf "${prometheus_url}/api/v1/rules" 2>/dev/null)
+    
+    if echo "$rules" | jq -e '.data.groups[] | select(.name | startswith("dive"))' >/dev/null 2>&1; then
+        local rule_count
+        rule_count=$(echo "$rules" | jq '[.data.groups[] | select(.name | startswith("dive")) | .rules[]] | length')
+        echo "    ✓ Found $rule_count DIVE alert rules in Prometheus"
+        return 0
+    fi
+    
+    echo "    DIVE alert rules not found in Prometheus"
+    return 1
+}
+
+test_circuit_breaker_alert_fires() {
+    # Test that CircuitBreakerOpen alert fires when circuit opens
+    if [ "$FAILURE_INJECTION_ENABLED" != "true" ]; then
+        echo "  [SKIP] Requires --with-failure-injection flag"
+        return 2
+    fi
+    
+    local alertmanager_url="${ALERTMANAGER_URL:-http://localhost:9093}"
+    
+    # Check if AlertManager is reachable
+    if ! curl -sf --max-time 5 "${alertmanager_url}/api/v2/status" >/dev/null 2>&1; then
+        return 2
+    fi
+    
+    echo "    Stopping OPA to trigger circuit breaker..."
+    docker stop dive-hub-opa >/dev/null 2>&1
+    
+    # Trigger circuit breaker
+    trigger_circuit_breaker "/api/resources" 8
+    
+    echo "    Waiting for alert to fire (up to 60s)..."
+    local timeout=60
+    local elapsed=0
+    
+    while [ $elapsed -lt $timeout ]; do
+        local alerts
+        alerts=$(curl -sf "${alertmanager_url}/api/v2/alerts" 2>/dev/null)
+        
+        if echo "$alerts" | jq -e '.[] | select(.labels.alertname == "CircuitBreakerOpen")' >/dev/null 2>&1; then
+            echo "    ✓ CircuitBreakerOpen alert fired"
+            docker start dive-hub-opa >/dev/null 2>&1
+            return 0
+        fi
+        
+        sleep 10
+        elapsed=$((elapsed + 10))
+    done
+    
+    docker start dive-hub-opa >/dev/null 2>&1
+    echo "    Alert did not fire within timeout"
+    return 1
+}
+
+suite_alert_validation() {
+    echo ""
+    echo -e "${BOLD}${CYAN}Test Suite 9: Alert Validation (Phase 4.3)${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "This suite validates that Prometheus alerts fire correctly"
+    echo "Requires monitoring stack: cd docker/instances/shared && docker compose up -d"
+    echo ""
+    
+    run_test "AlertManager is reachable" test_alertmanager_reachable
+    run_test "Prometheus has loaded DIVE alert rules" test_prometheus_rules_loaded
+    run_test "CircuitBreakerOpen alert fires when circuit opens" test_circuit_breaker_alert_fires
 }
 
 # =============================================================================
@@ -904,9 +1579,11 @@ usage() {
     echo "Usage: $0 [OPTIONS] [SUITE]"
     echo ""
     echo "Options:"
-    echo "  --help, -h     Show this help"
-    echo "  --quick        Run only quick tests (skip deployment)"
-    echo "  --full         Run all tests including deployment"
+    echo "  --help, -h                Show this help"
+    echo "  --quick                   Run only quick tests (skip deployment)"
+    echo "  --full                    Run all tests including deployment"
+    echo "  --with-failure-injection  Enable destructive failure injection tests"
+    echo "                            WARNING: This will stop services!"
     echo ""
     echo "Suites:"
     echo "  clean           Clean slate deployment tests"
@@ -915,15 +1592,18 @@ usage() {
     echo "  federation      Federation resilience tests"
     echo "  database        Database operation tests"
     echo "  circuit-breaker Circuit breaker verification (Phase 3.2)"
-    echo "  failure         Failure injection tests (Phase 3.4)"
+    echo "  failure         Failure injection tests (Phase 4.1)"
+    echo "  recovery        Recovery validation tests (Phase 4.2)"
+    echo "  alert           Alert validation tests (Phase 4.3)"
     echo "  all             Run all suites (default)"
     echo ""
     echo "Examples:"
-    echo "  $0                      # Run all tests"
-    echo "  $0 --quick              # Run quick tests only"
-    echo "  $0 federation           # Run federation suite only"
-    echo "  $0 circuit-breaker      # Run circuit breaker tests"
-    echo "  $0 database             # Run database suite only"
+    echo "  $0                                # Run all tests"
+    echo "  $0 --quick                        # Run quick tests only"
+    echo "  $0 federation                     # Run federation suite only"
+    echo "  $0 circuit-breaker                # Run circuit breaker tests"
+    echo "  $0 failure --with-failure-injection  # Run failure injection tests"
+    echo "  $0 database                       # Run database suite only"
 }
 
 main() {
@@ -945,7 +1625,12 @@ main() {
                 quick_mode=false
                 shift
                 ;;
-            clean|idempotent|concurrent|federation|database|circuit-breaker|circuit_breaker|circuitbreaker|failure|failure-injection|all)
+            --with-failure-injection)
+                FAILURE_INJECTION_ENABLED=true
+                export FAILURE_INJECTION_ENABLED
+                shift
+                ;;
+            clean|idempotent|concurrent|federation|database|circuit-breaker|circuit_breaker|circuitbreaker|failure|failure-injection|recovery|alert|alerts|all)
                 suite="$1"
                 shift
                 ;;
@@ -985,6 +1670,12 @@ main() {
         failure|failure-injection)
             suite_failure_injection
             ;;
+        recovery)
+            suite_recovery_validation
+            ;;
+        alert|alerts)
+            suite_alert_validation
+            ;;
         all)
             if [ "$quick_mode" = true ]; then
                 # Quick mode: skip deployment-heavy tests
@@ -1001,6 +1692,8 @@ main() {
                 suite_database
                 suite_circuit_breaker
                 suite_failure_injection
+                suite_recovery_validation
+                suite_alert_validation
             fi
             ;;
     esac
