@@ -1,0 +1,26 @@
+{
+  "_metadata": {
+    "description": "Minimal base data for Hub OPA bundle (cold start fallback only)",
+    "note": "Hub backend queries MongoDB directly - this is NOT the source of truth",
+    "ssot": "MongoDB via backend API",
+    "updated": "2026-01-22"
+  },
+  "trusted_issuers": {
+    "success": true,
+    "count": 0,
+    "trusted_issuers": {},
+    "timestamp": "2026-01-22T00:00:00Z"
+  },
+  "federation_matrix": {
+    "success": true,
+    "count": 0,
+    "federation_matrix": {},
+    "timestamp": "2026-01-22T00:00:00Z"
+  },
+  "tenant_configs": {
+    "success": true,
+    "count": 0,
+    "tenant_configs": {},
+    "timestamp": "2026-01-22T00:00:00Z"
+  }
+}
