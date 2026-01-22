@@ -40,33 +40,16 @@ classification_mapping := {
 # ============================================
 # France Trusted Issuers
 # ============================================
-
-fra_trusted_issuers := {
-	"https://fra-idp.dive25.com/realms/dive-v3-broker": {
-		"name": "DIVE V3 France Keycloak",
-		"country": "FRA",
-		"trust_level": "HIGH",
-		"mfa_capable": true,
-	},
-	"https://authentification.defense.gouv.fr": {
-		"name": "Ministère des Armées",
-		"country": "FRA",
-		"trust_level": "HIGH",
-		"mfa_capable": true,
-	},
-	"https://sso.dgse.gouv.fr": {
-		"name": "DGSE SSO",
-		"country": "FRA",
-		"trust_level": "HIGH",
-		"mfa_capable": true,
-	},
-}
+# SSOT: Trusted issuers loaded from OPAL data (MongoDB)
+# Use dive.tenant.base.trusted_issuers which loads from data layer
+# No hardcoded issuers in tenant config (MongoDB is SSOT)
 
 # ============================================
 # France Federation Partners
 # ============================================
-
-federation_partners := {"USA", "GBR", "DEU", "BEL", "ESP", "ITA"}
+# SSOT: Federation matrix loaded from OPAL data (MongoDB)
+# Use dive.tenant.base.federation_matrix which loads from data layer
+# No hardcoded federation partners in tenant config (MongoDB is SSOT)
 
 # ============================================
 # France Policy Settings
@@ -82,10 +65,11 @@ allow_industry := true
 # ============================================
 
 is_fra_trusted_issuer(issuer) if {
-	fra_trusted_issuers[issuer]
+	data.dive.tenant.base.is_trusted_issuer(issuer)
+	data.dive.tenant.base.issuer_metadata(issuer).tenant == "FRA"
 }
 
 is_federated_partner(country) if {
-	country in federation_partners
+	data.dive.tenant.base.can_federate("FRA", country)
 }
 

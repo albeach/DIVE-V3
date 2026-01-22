@@ -1,0 +1,325 @@
+# =============================================================================
+# DIVE V3 Alerting Rules
+# =============================================================================
+# Prometheus alerting rules for deployment, federation, and system health
+# =============================================================================
+
+groups:
+  # =============================================
+  # Deployment Alerts
+  # =============================================
+  - name: dive_deployment_alerts
+    rules:
+      - alert: DeploymentFailed
+        expr: dive_deployment_state{state="FAILED"} == 1
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Deployment failed for {{ $labels.instance }}"
+          description: "Instance {{ $labels.instance }} deployment has failed. Check logs for details."
+          runbook_url: "https://dive-docs.example.com/runbooks/deployment-failed"
+
+      - alert: DeploymentStuck
+        expr: dive_deployment_state{state="IN_PROGRESS"} == 1 and time() - dive_deployment_start_time > 600
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Deployment stuck for {{ $labels.instance }}"
+          description: "Instance {{ $labels.instance }} deployment has been in progress for more than 10 minutes."
+          runbook_url: "https://dive-docs.example.com/runbooks/deployment-stuck"
+
+      - alert: DeploymentSlowStartup
+        expr: dive_deployment_duration_seconds{component="hub"} > 600
+        for: 0m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Slow Hub deployment detected"
+          description: "Hub deployment took {{ $value | humanizeDuration }} (target: <10m)"
+
+      - alert: DeploymentHighFailureRate
+        expr: |
+          sum(rate(dive_deployment_errors_total[1h])) /
+          sum(rate(dive_deployment_total[1h])) > 0.2
+        for: 15m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High deployment failure rate"
+          description: "Deployment failure rate is {{ $value | humanizePercentage }} (>20% threshold)"
+
+  # =============================================
+  # Federation Alerts
+  # =============================================
+  - name: dive_federation_alerts
+    rules:
+      - alert: FederationLinkDown
+        expr: dive_federation_health == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: identity
+        annotations:
+          summary: "Federation link down: {{ $labels.source }} → {{ $labels.target }}"
+          description: "Federation link between {{ $labels.source }} and {{ $labels.target }} is unhealthy."
+          runbook_url: "https://dive-docs.example.com/runbooks/federation-link-down"
+
+      - alert: FederationHeartbeatStale
+        expr: time() - dive_federation_last_heartbeat_timestamp > 300
+        for: 1m
+        labels:
+          severity: warning
+          team: identity
+        annotations:
+          summary: "Stale federation heartbeat for {{ $labels.spoke }}"
+          description: "No heartbeat from {{ $labels.spoke }} in {{ $value | humanizeDuration }}"
+
+      - alert: FederationDriftDetected
+        expr: dive_federation_drift_detected == 1
+        for: 0m
+        labels:
+          severity: warning
+          team: identity
+        annotations:
+          summary: "Federation configuration drift detected"
+          description: "Configuration drift detected for {{ $labels.source }} → {{ $labels.target }}"
+
+      - alert: SSOTestFailure
+        expr: dive_sso_test_success == 0
+        for: 5m
+        labels:
+          severity: critical
+          team: identity
+        annotations:
+          summary: "SSO test failed for {{ $labels.spoke }}"
+          description: "SSO authentication test failed for spoke {{ $labels.spoke }}"
+
+  # =============================================
+  # Circuit Breaker Alerts
+  # =============================================
+  - name: dive_circuit_breaker_alerts
+    rules:
+      - alert: CircuitBreakerOpen
+        expr: dive_circuit_breaker_state == 1
+        for: 0m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Circuit breaker open: {{ $labels.circuit }}"
+          description: "Circuit breaker {{ $labels.circuit }} is in OPEN state due to failures."
+
+      - alert: CircuitBreakerHighFailures
+        expr: dive_circuit_breaker_failures > 3
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High failures on circuit breaker: {{ $labels.circuit }}"
+          description: "Circuit breaker {{ $labels.circuit }} has {{ $value }} failures."
+
+      - alert: MultipleCircuitBreakersOpen
+        expr: count(dive_circuit_breaker_state == 1) >= 2
+        for: 1m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Multiple circuit breakers open"
+          description: "{{ $value }} circuit breakers are in OPEN state - system degraded."
+
+  # =============================================
+  # Lock/Orchestration Alerts
+  # =============================================
+  - name: dive_orchestration_alerts
+    rules:
+      - alert: LockContention
+        expr: dive_active_locks > 3
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High lock contention detected"
+          description: "{{ $value }} locks are currently held - possible contention issue."
+
+      - alert: StaleLockDetected
+        expr: time() - dive_lock_acquired_timestamp > 1800
+        for: 1m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Stale lock detected for {{ $labels.instance }}"
+          description: "Lock for {{ $labels.instance }} has been held for {{ $value | humanizeDuration }}"
+
+      - alert: StateTransitionFailed
+        expr: increase(dive_state_transition_failures_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "State transition failed for {{ $labels.instance }}"
+          description: "Invalid state transition from {{ $labels.from_state }} to {{ $labels.to_state }}"
+
+  # =============================================
+  # Container Health Alerts
+  # =============================================
+  - name: dive_container_alerts
+    rules:
+      - alert: KeycloakUnhealthy
+        expr: dive_container_health{container=~".*keycloak.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: identity
+        annotations:
+          summary: "Keycloak unhealthy: {{ $labels.container }}"
+          description: "Keycloak container {{ $labels.container }} is unhealthy."
+
+      - alert: PostgresUnhealthy
+        expr: dive_container_health{container=~".*postgres.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: database
+        annotations:
+          summary: "PostgreSQL unhealthy: {{ $labels.container }}"
+          description: "PostgreSQL container {{ $labels.container }} is unhealthy."
+
+      - alert: BackendUnhealthy
+        expr: dive_container_health{container=~".*backend.*"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: backend
+        annotations:
+          summary: "Backend unhealthy: {{ $labels.container }}"
+          description: "Backend container {{ $labels.container }} is unhealthy."
+
+      - alert: ContainerRestartLoop
+        expr: increase(dive_container_restart_count[15m]) > 3
+        for: 0m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Container restart loop: {{ $labels.container }}"
+          description: "Container {{ $labels.container }} restarted {{ $value }} times in 15 minutes."
+
+  # =============================================
+  # Error Rate Alerts
+  # =============================================
+  - name: dive_error_alerts
+    rules:
+      - alert: HighErrorRate
+        expr: |
+          sum(rate(dive_deployment_errors_total[5m])) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "High error rate detected"
+          description: "Error rate is {{ $value | humanize }} errors/second."
+
+      - alert: CriticalErrorOccurred
+        expr: increase(dive_deployment_errors_total{severity="critical"}[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Critical error in {{ $labels.component }}"
+          description: "Critical error type {{ $labels.error_type }} occurred in {{ $labels.component }}"
+
+      - alert: AutoRecoveryFailed
+        expr: increase(dive_auto_recovery_failed_total[10m]) > 2
+        for: 0m
+        labels:
+          severity: critical
+          team: platform
+        annotations:
+          summary: "Auto-recovery failing repeatedly"
+          description: "{{ $value }} auto-recovery failures in the last 10 minutes."
+
+      - alert: RecoveryRateDegraded
+        expr: |
+          sum(increase(dive_auto_recovery_success_total[1h])) /
+          (sum(increase(dive_auto_recovery_success_total[1h])) +
+           sum(increase(dive_auto_recovery_failed_total[1h]))) < 0.95
+        for: 30m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Recovery success rate below 95%"
+          description: "Recovery success rate is {{ $value | humanizePercentage }} (target: 95%)"
+
+  # =============================================
+  # Secret Management Alerts
+  # =============================================
+  - name: dive_secret_alerts
+    rules:
+      - alert: SecretRotationRequired
+        expr: time() - dive_secret_last_rotation_timestamp > 2592000
+        for: 0m
+        labels:
+          severity: warning
+          team: security
+        annotations:
+          summary: "Secret rotation required for {{ $labels.secret }}"
+          description: "Secret {{ $labels.secret }} has not been rotated in 30 days."
+
+      - alert: SecretAccessFailed
+        expr: increase(dive_secret_access_failures_total[5m]) > 0
+        for: 0m
+        labels:
+          severity: critical
+          team: security
+        annotations:
+          summary: "Failed to access secret from GCP"
+          description: "Cannot access secret {{ $labels.secret }} - system may be degraded."
+
+  # =============================================
+  # SLA Alerts
+  # =============================================
+  - name: dive_sla_alerts
+    rules:
+      - alert: SLADeploymentTimeExceeded
+        expr: dive_deployment_duration_seconds{component="hub"} > 600
+        for: 0m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Hub deployment SLA exceeded"
+          description: "Hub deployment took {{ $value | humanizeDuration }} (SLA: 10m)"
+
+      - alert: SLASpokeDeploymentTimeExceeded
+        expr: dive_deployment_duration_seconds{component="spoke"} > 480
+        for: 0m
+        labels:
+          severity: warning
+          team: platform
+        annotations:
+          summary: "Spoke deployment SLA exceeded"
+          description: "Spoke {{ $labels.instance }} deployment took {{ $value | humanizeDuration }} (SLA: 8m)"
+
+      - alert: SLAFederationLatencyHigh
+        expr: dive_federation_heartbeat_latency_seconds > 60
+        for: 5m
+        labels:
+          severity: warning
+          team: identity
+        annotations:
+          summary: "Federation latency SLA exceeded"
+          description: "Federation latency to {{ $labels.spoke }} is {{ $value | humanizeDuration }} (SLA: 1m)"

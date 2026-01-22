@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/usr/local/bin/bash
 # =============================================================================
-# DIVE V3 CLI - Modular Unified Management Script
+# DIVE V3 CLI - Modular Unified Management Script (v5.0.0 - Consolidated)
 # =============================================================================
 # Usage:
 #   ./dive [options] [command] [subcommand] [args...]
@@ -13,13 +13,17 @@
 #   --quiet                  Suppress non-essential output
 #
 # Examples:
-#   ./dive up                      # Start locally with defaults
-#   ./dive --dry-run deploy        # Preview full deployment
-#   ./dive --env gcp up            # Start with GCP secrets
-#   ./dive pilot up                # Start on remote pilot VM
+#   ./dive hub deploy              # Deploy Hub
+#   ./dive spoke deploy ALB        # Deploy Albania spoke
+#   ./dive federation link ALB     # Link federation
+#   ./dive cleanup --all --force   # Clean everything
 # =============================================================================
 
 set -e
+
+# CLI Version
+DIVE_CLI_VERSION="5.0.0"
+DIVE_CLI_BUILD_DATE="2026-01-22"
 
 # Project root
 DIVE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -29,15 +33,34 @@ export DIVE_ROOT
 MODULES_DIR="${DIVE_ROOT}/scripts/dive-modules"
 
 # =============================================================================
-# LOAD COMMON MODULE
+# MODULE LOADER - Consolidated paths preferred
 # =============================================================================
 
+# Load module with fallback to old location
+load_module() {
+    local new_path="$1"
+    local old_path="$2"
+
+    if [ -f "${MODULES_DIR}/${new_path}" ]; then
+        source "${MODULES_DIR}/${new_path}"
+    elif [ -f "${MODULES_DIR}/${old_path}" ]; then
+        source "${MODULES_DIR}/${old_path}"
+    else
+        log_error "Module not found: $new_path (or $old_path)"
+        return 1
+    fi
+}
+
+# =============================================================================
+# LOAD CORE MODULES
+# =============================================================================
+
+# Load common functions (SSOT)
 if [ -f "${MODULES_DIR}/common.sh" ]; then
     source "${MODULES_DIR}/common.sh"
     export DIVE_COMMON_LOADED=1
 else
     echo "ERROR: Common module not found at ${MODULES_DIR}/common.sh"
-    echo "Please ensure the dive-modules directory exists."
     exit 1
 fi
 
@@ -69,8 +92,12 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -h|--help)
-            source "${MODULES_DIR}/help.sh"
+            load_module "utilities/help.sh" "help.sh"
             cmd_help
+            exit 0
+            ;;
+        --version|-V)
+            echo "DIVE CLI v${DIVE_CLI_VERSION} (${DIVE_CLI_BUILD_DATE})"
             exit 0
             ;;
         *)
@@ -89,105 +116,154 @@ shift || true
 cd "$DIVE_ROOT"
 
 case "$COMMAND" in
-    # Core commands (core.sh)
-    up|down|restart|logs|ps|exec)
-        source "${MODULES_DIR}/core.sh"
-        case "$COMMAND" in
-            up)      cmd_up "$@" ;;
-            down)    cmd_down "$@" ;;
-            restart) cmd_restart "$@" ;;
-            logs)    cmd_logs "$@" ;;
-            ps)      cmd_ps "$@" ;;
-            exec)    cmd_exec "$@" ;;
-        esac
-        ;;
-    
-    # Status commands (status.sh)
-    status|health|validate|info)
-        source "${MODULES_DIR}/status.sh"
-        case "$COMMAND" in
-            status)   cmd_status "$@" ;;
-            health)   cmd_health "$@" ;;
-            validate) cmd_validate "$@" ;;
-            info)     cmd_info "$@" ;;
-        esac
-        ;;
-    
-    # Deployment commands (deploy.sh)
-    deploy|reset|clean|nuke)
-        source "${MODULES_DIR}/deploy.sh"
-        case "$COMMAND" in
-            deploy) cmd_deploy "$@" ;;
-            reset)  cmd_reset "$@" ;;
-            clean)  cmd_reset "$@" ;;
-            nuke)   cmd_nuke ;;
-        esac
-        ;;
-    
-    # Database commands (db.sh)
-    seed|backup|restore)
-        source "${MODULES_DIR}/db.sh"
-        case "$COMMAND" in
-            seed)    cmd_seed "$@" ;;
-            backup)  cmd_backup ;;
-            restore) cmd_restore "$@" ;;
-        esac
-        ;;
-    
-    # Terraform commands (terraform.sh)
-    tf|terraform)
-        source "${MODULES_DIR}/terraform.sh"
-        module_terraform "$@"
-        ;;
-    
-    # Secrets commands (secrets.sh)
-    secrets)
-        source "${MODULES_DIR}/secrets.sh"
-        module_secrets "$@"
-        ;;
-    
-    # Pilot VM commands (pilot.sh)
-    pilot)
-        source "${MODULES_DIR}/pilot.sh"
-        module_pilot "$@"
-        ;;
-    
-    # Federation commands (federation.sh)
-    federation|fed)
-        source "${MODULES_DIR}/federation.sh"
-        module_federation "$@"
-        ;;
-    
-    # Hub commands (federation.sh)
+    # Hub commands (deployment/hub.sh)
     hub)
-        source "${MODULES_DIR}/federation.sh"
+        load_module "deployment/hub.sh" "hub.sh"
         module_hub "$@"
         ;;
-    
-    # Spoke commands (spoke.sh)
+
+    # Spoke commands (deployment/spoke.sh)
     spoke)
-        source "${MODULES_DIR}/spoke.sh"
+        load_module "deployment/spoke.sh" "spoke.sh"
         module_spoke "$@"
         ;;
-    
-    # SP Client commands (sp.sh)
-    sp)
-        source "${MODULES_DIR}/sp.sh"
-        module_sp "$@"
+
+    # Federation commands (federation/setup.sh)
+    federation|fed)
+        load_module "federation/setup.sh" "federation.sh"
+        module_federation "$@"
         ;;
-    
-    # Policy commands (policy.sh)
+
+    # Secrets commands (configuration/secrets.sh)
+    secrets)
+        load_module "configuration/secrets.sh" "secrets.sh"
+        module_secrets "$@"
+        ;;
+
+    # Terraform commands (configuration/terraform.sh)
+    tf|terraform)
+        load_module "configuration/terraform.sh" "terraform.sh"
+        module_terraform "$@"
+        ;;
+
+    # Orchestration database commands (orchestration/state.sh)
+    orch-db)
+        load_module "orchestration/state.sh" "orchestration-state-db.sh"
+        module_orch_db "$@"
+        ;;
+
+    # Policy commands (utilities/policy.sh)
     policy)
-        source "${MODULES_DIR}/policy.sh"
+        load_module "utilities/policy.sh" "policy.sh"
         module_policy "$@"
         ;;
-    
+
+    # SP Client commands (utilities/sp.sh)
+    sp)
+        load_module "utilities/sp.sh" "sp.sh"
+        module_sp "$@"
+        ;;
+
+    # Pilot VM commands (utilities/pilot.sh)
+    pilot)
+        load_module "utilities/pilot.sh" "pilot.sh"
+        module_pilot "$@"
+        ;;
+
+    # Cleanup commands (deployment/rollback.sh)
+    cleanup)
+        load_module "deployment/rollback.sh" "deploy.sh"
+        cmd_cleanup "$@"
+        ;;
+
+    # Core commands (core.sh) - legacy support
+    up|down|restart|logs|ps|exec)
+        if [ -f "${MODULES_DIR}/core.sh" ]; then
+            source "${MODULES_DIR}/core.sh"
+            case "$COMMAND" in
+                up)      cmd_up "$@" ;;
+                down)    cmd_down "$@" ;;
+                restart) cmd_restart "$@" ;;
+                logs)    cmd_logs "$@" ;;
+                ps)      cmd_ps "$@" ;;
+                exec)    cmd_exec "$@" ;;
+            esac
+        else
+            log_error "Core module not found. Use 'hub' or 'spoke' commands instead."
+            exit 1
+        fi
+        ;;
+
+    # Status commands (status.sh) - legacy support
+    status|health|validate|info)
+        if [ -f "${MODULES_DIR}/status.sh" ]; then
+            source "${MODULES_DIR}/status.sh"
+            case "$COMMAND" in
+                status)   cmd_status "$@" ;;
+                health)   cmd_health "$@" ;;
+                validate) cmd_validate "$@" ;;
+                info)     cmd_info "$@" ;;
+            esac
+        else
+            log_error "Status module not found"
+            exit 1
+        fi
+        ;;
+
+    # Deployment commands (deploy.sh) - legacy support
+    deploy|reset|clean|nuke)
+        if [ -f "${MODULES_DIR}/deploy.sh" ]; then
+            source "${MODULES_DIR}/deploy.sh"
+            case "$COMMAND" in
+                deploy) cmd_deploy "$@" ;;
+                reset)  cmd_reset "$@" ;;
+                clean)  cmd_reset "$@" ;;
+                nuke)
+                    load_module "deployment/rollback.sh" "deploy.sh"
+                    cmd_nuke
+                    ;;
+            esac
+        else
+            load_module "deployment/rollback.sh" "deploy.sh"
+            case "$COMMAND" in
+                deploy) log_error "Use './dive hub deploy' or './dive spoke deploy <CODE>'" ;;
+                reset|clean) cmd_cleanup "$@" ;;
+                nuke) cmd_nuke ;;
+            esac
+        fi
+        ;;
+
+    # Database commands - legacy support
+    seed|backup|restore)
+        if [ -f "${MODULES_DIR}/db.sh" ]; then
+            source "${MODULES_DIR}/db.sh"
+            case "$COMMAND" in
+                seed)    cmd_seed "$@" ;;
+                backup)  cmd_backup ;;
+                restore) cmd_restore "$@" ;;
+            esac
+        else
+            load_module "utilities/backup.sh" ""
+            case "$COMMAND" in
+                backup)  backup_create "$@" ;;
+                restore) backup_restore "$@" ;;
+                seed)    log_error "Use './dive hub seed' or './dive spoke seed <CODE>'" ;;
+            esac
+        fi
+        ;;
+
     # Help
     help|--help|-h)
-        source "${MODULES_DIR}/help.sh"
+        load_module "utilities/help.sh" "help.sh"
         cmd_help
         ;;
-    
+
+    # Version
+    version)
+        echo "DIVE CLI v${DIVE_CLI_VERSION} (${DIVE_CLI_BUILD_DATE})"
+        echo "Architecture: Consolidated (30 modules)"
+        ;;
+
     # Unknown command
     *)
         log_error "Unknown command: $COMMAND"
@@ -196,10 +272,3 @@ case "$COMMAND" in
         exit 1
         ;;
 esac
-
-
-
-
-
-
-

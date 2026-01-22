@@ -87,6 +87,16 @@ deu = {
     client_secret         = ""  # Loaded from GCP: dive-v3-federation-deu-usa
     disable_trust_manager = true
   }
+est = {
+    instance_code         = "EST"
+    instance_name         = "EST Instance"
+    idp_url               = "https://localhost:8451"
+    idp_internal_url      = "https://dive-spoke-est-keycloak:8443"
+    frontend_url          = "https://localhost:3008"
+    enabled               = true
+    client_secret         = ""  # Loaded from GCP: dive-v3-federation-est-usa
+    disable_trust_manager = true
+  }
 }
 
 # =============================================================================

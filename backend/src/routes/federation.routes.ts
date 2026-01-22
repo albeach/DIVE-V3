@@ -2932,17 +2932,22 @@ function getPublicIdpUrl(instanceCode: string): string {
 
 /**
  * Helper: Get remote Keycloak admin password
+ *
+ * CONSOLIDATED: Uses gcp-secrets.ts as single source of truth for GCP/env vars
+ * Federation-specific: Also checks spoke registry for stored passwords
  */
 async function getRemoteKeycloakPassword(instanceCode: string): Promise<string> {
     const code = instanceCode.toUpperCase();
+    const codeLower = instanceCode.toLowerCase();
 
-    // PRIMARY: Check spoke registry for stored password from registration
+    // PRIORITY 1: Check spoke registry for stored password from registration
+    // This is federation-specific: spokes register their credentials during onboarding
     try {
         const spoke = await hubSpokeRegistry.getSpokeByInstanceCode(code);
-        if (spoke?.keycloakAdminPassword) {
+        if (spoke?.keycloakAdminPassword && spoke.keycloakAdminPassword.length >= 12) {
             logger.info('Using stored Keycloak password from spoke registry', {
                 instanceCode,
-                hasPassword: !!spoke.keycloakAdminPassword
+                hasPassword: true
             });
             return spoke.keycloakAdminPassword;
         }
@@ -2953,54 +2958,22 @@ async function getRemoteKeycloakPassword(instanceCode: string): Promise<string> 
         });
     }
 
-    // SECONDARY: Try environment variable (for manual override)
-    const envVar = `KEYCLOAK_ADMIN_PASSWORD_${code}`;
-    if (process.env[envVar]) {
-        logger.info('Using Keycloak password from environment variable', {
-            instanceCode,
-            envVar
-        });
-        return process.env[envVar];
-    }
-
-    // TERTIARY: For local dev, try to get from container or use same password
-    if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
-        // Try to get from the spoke's container directly
-        try {
-            const containerName = `dive-spoke-${code.toLowerCase()}-keycloak`;
-            // This would require executing a command, but we can't do that from Node.js easily
-            // For now, fall back to environment variable
-            return process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin';
-        } catch {
-            return process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin';
-        }
-    }
-
-    // QUATERNARY: Production: GCP Secret Manager
+    // PRIORITY 2: Use centralized gcp-secrets utility (GCP Secret Manager + env vars)
+    // This consolidates all other secret retrieval logic into one place
     try {
-        const { getSecret } = await import('../utils/gcp-secrets');
-        const secretName = `keycloak-${code.toLowerCase()}` as any;
-        const secret = await getSecret(secretName);
-        if (secret) {
-            logger.info('Using Keycloak password from GCP Secret Manager', {
-                instanceCode,
-                secretName
-            });
-            return secret;
-        }
+        const { getKeycloakPassword } = await import('../utils/gcp-secrets');
+        const password = await getKeycloakPassword(codeLower);
+        logger.info('Using Keycloak password from gcp-secrets utility', {
+            instanceCode
+        });
+        return password;
     } catch (error) {
-        logger.debug('Could not get password from GCP Secret Manager', {
+        logger.error('Keycloak admin password not available via gcp-secrets - failing fast', {
             instanceCode,
             error: error instanceof Error ? error.message : 'Unknown'
         });
+        throw error; // Propagate the error from gcp-secrets which has detailed instructions
     }
-
-    // LAST RESORT: Use fallback
-    logger.warn('Using fallback Keycloak password - bidirectional federation may fail', {
-        instanceCode,
-        fallback: 'admin'
-    });
-    return process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin';
 }
 
 /**

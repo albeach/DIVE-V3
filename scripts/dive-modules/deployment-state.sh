@@ -2,8 +2,21 @@
 # =============================================================================
 # DIVE V3 Enhanced Deployment State Management Framework
 # =============================================================================
-# Enterprise-grade state management with corruption detection,
-# automatic cleanup, and atomic transactions
+#
+# ⚠️  DEPRECATED (2026-01-22) - DO NOT USE
+#
+# This file-based state management has been REMOVED as part of ADR-001:
+# State Management Consolidation. All state is now stored in PostgreSQL.
+#
+# Migration:
+#   - State is now managed by: scripts/dive-modules/orchestration-state-db.sh
+#   - Database: PostgreSQL (orchestration database)
+#   - No file-based state (.dive-state/ directory is no longer used)
+#
+# This file remains for backward compatibility but functions are no-ops
+# that redirect to the database backend.
+#
+# See: docs/architecture/adr/ADR-001-state-management-consolidation.md
 # =============================================================================
 
 # Prevent multiple sourcing
@@ -11,6 +24,9 @@ if [ -n "$DEPLOYMENT_STATE_LOADED" ]; then
     return 0
 fi
 export DEPLOYMENT_STATE_LOADED=1
+
+# DEPRECATION WARNING
+echo "⚠️  WARNING: deployment-state.sh is DEPRECATED. State is now in PostgreSQL." >&2
 
 # Source common utilities
 if [ -f "$(dirname "${BASH_SOURCE[0]}")/common.sh" ]; then
@@ -207,15 +223,15 @@ declare -A VALID_TRANSITIONS=(
     ["$STATE_CONFIGURING|$STATE_FAILED"]=1
     ["$STATE_VERIFYING|$STATE_COMPLETE"]=1
     ["$STATE_VERIFYING|$STATE_FAILED"]=1
-    
+
     # Failure handling
     ["$STATE_FAILED|$STATE_ROLLING_BACK"]=1
     ["$STATE_ROLLING_BACK|$STATE_CLEANUP"]=1
     ["$STATE_CLEANUP|$STATE_UNKNOWN"]=1
-    
+
     # Cleanup transitions
     ["$STATE_COMPLETE|$STATE_CLEANUP"]=1
-    
+
     # Redeploy transitions (allow redeployment from COMPLETE or FAILED)
     ["$STATE_COMPLETE|$STATE_INITIALIZING"]=1
     ["$STATE_FAILED|$STATE_INITIALIZING"]=1
