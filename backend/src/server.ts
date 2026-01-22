@@ -48,6 +48,7 @@ import { mongoKasRegistryStore } from './models/kas-registry.model';  // Phase 4
 import { policyVersionMonitor } from './services/policy-version-monitor.service';  // Phase 4: Policy drift
 import { spokeFailover } from './services/spoke-failover.service';  // Phase 5: Circuit breaker
 import { spokeAuditQueue } from './services/spoke-audit-queue.service';  // Phase 5: Audit queue
+import { spokeIdentityService } from './services/spoke-identity.service';  // SSOT: Hub-assigned spokeId
 import { spokeHeartbeat } from './services/spoke-heartbeat.service';  // Phase 5: Heartbeat service
 import { federationBootstrap } from './services/federation-bootstrap.service';  // Phase 1 Fix: Federation cascade
 import { authzCacheService } from './services/authz-cache.service';  // Phase 2: Distributed cache invalidation
@@ -392,136 +393,73 @@ function startServer() {
       // Non-fatal: audit queue service disabled
     }
 
-    // Phase 5: Initialize spoke heartbeat service
-    // Also handles auto-registration for development mode
-    console.log('🔄 Initializing spoke heartbeat service...');
-    try {
-      const spokeId = process.env.SPOKE_ID || process.env.INSTANCE_CODE || 'local';
-      const instanceCode = process.env.INSTANCE_CODE || 'USA';
-      const hubUrl = process.env.HUB_URL || 'https://hub.dive25.com';
-      let spokeToken = process.env.SPOKE_OPAL_TOKEN || process.env.SPOKE_TOKEN;
-
-      console.log('🔄 Heartbeat config:', { spokeId, instanceCode, hubUrl, hasToken: !!spokeToken });
-
-      // AUTO-REGISTRATION FOR DEVELOPMENT MODE
-      // If no token exists and we're in development, try to auto-register with the hub
-      const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
-      const enableAutoRegister = isDevelopment || process.env.AUTO_REGISTER_SPOKE === 'true';
-
-      if (!spokeToken && enableAutoRegister) {
-        logger.info('No spoke token found, attempting auto-registration with Hub', {
-          spokeId,
-          instanceCode,
-          hubUrl,
-          mode: isDevelopment ? 'development' : 'auto-register enabled'
+    // ============================================
+    // PHASE 5: Spoke Identity Service (SSOT Architecture)
+    // ============================================
+    // CRITICAL: Hub MongoDB is the SINGLE SOURCE OF TRUTH for spokeId
+    // The spoke queries Hub at startup to get its identity, NOT from env vars
+    // This eliminates the spokeId mismatch issues that caused heartbeat failures
+    console.log('🔄 Initializing spoke identity service...');
+    
+    const isSpokeMode = process.env.SPOKE_MODE === 'true';
+    
+    if (isSpokeMode) {
+      try {
+        // Initialize spoke identity from Hub (authoritative source)
+        // This will:
+        // 1. Query Hub for spokeId based on INSTANCE_CODE
+        // 2. Cache in local MongoDB for offline resilience
+        // 3. Throw error if Hub unavailable AND no cache exists
+        const identity = await spokeIdentityService.initialize();
+        
+        logger.info('Spoke identity initialized from Hub (SSOT)', {
+          spokeId: identity.spokeId,
+          instanceCode: identity.instanceCode,
+          status: identity.status,
+          hasToken: !!identity.token,
         });
 
-        try {
-          // Build registration request with minimal info for development
-          const registrationRequest = {
-            instanceCode: instanceCode,
-            name: `${instanceCode} Federation Spoke`,
-            description: `Auto-registered spoke for ${instanceCode}`,
-            baseUrl: process.env.SPOKE_BASE_URL || `https://dive-spoke-${instanceCode.toLowerCase()}.dive25.local`,
-            apiUrl: process.env.SPOKE_API_URL || `https://dive-spoke-${instanceCode.toLowerCase()}.dive25.local:3001`,
-            idpUrl: process.env.SPOKE_IDP_URL || `https://${instanceCode.toLowerCase()}-keycloak.dive25.local:8443`,
-            requestedScopes: ['policy:base', 'sync:receive', 'audit:write'],
-            contactEmail: process.env.SPOKE_CONTACT_EMAIL || `admin@${instanceCode.toLowerCase()}.dive25.com`,
-            skipValidation: true  // Skip IdP validation for development
-          };
-
-          const httpsAgent = new https.Agent({
-            rejectUnauthorized: false  // Development only - self-signed certs
+        // Now initialize heartbeat with Hub-assigned identity
+        const hubUrl = process.env.HUB_URL || 'https://dive-hub-backend:4000';
+        
+        if (identity.status === 'approved' && identity.token) {
+          spokeHeartbeat.initialize({
+            hubUrl: hubUrl,
+            spokeId: identity.spokeId,  // From Hub, NOT from env
+            instanceCode: identity.instanceCode,
+            spokeToken: identity.token,  // From Hub registration
+            intervalMs: parseInt(process.env.HEARTBEAT_INTERVAL_MS || '30000'),
+            timeoutMs: parseInt(process.env.HEARTBEAT_TIMEOUT_MS || '10000'),
+            maxQueueSize: parseInt(process.env.HEARTBEAT_MAX_QUEUE_SIZE || '10'),
+            maxRetries: parseInt(process.env.HEARTBEAT_MAX_RETRIES || '3'),
           });
 
-          const response = await axios.post(
-            `${hubUrl}/api/federation/register`,
-            registrationRequest,
-            {
-              httpsAgent,
-              timeout: 15000,
-              headers: {
-                'Content-Type': 'application/json',
-                'X-Auto-Register': 'true'
-              }
-            }
-          );
-
-          if (response.data?.success && response.data?.token?.token) {
-            spokeToken = response.data.token.token;
-            logger.info('Spoke auto-registration successful', {
-              spokeId: response.data.spokeId,
-              instanceCode,
-              status: response.data.status,
-              tokenReceived: !!spokeToken
-            });
-          } else if (response.data?.success && response.data?.status === 'pending') {
-            logger.warn('Spoke registration pending approval - heartbeat will be disabled until approved', {
-              spokeId: response.data.spokeId,
-              instanceCode,
-              message: response.data.message
-            });
-          } else {
-            logger.warn('Spoke auto-registration response unexpected', {
-              instanceCode,
-              response: response.data
-            });
-          }
-        } catch (regError) {
-          // Non-fatal: registration might fail if hub is not ready or already registered
-          const errorMessage = regError instanceof Error ? regError.message : 'Unknown error';
-          const axiosError = regError as any;
-
-          if (axiosError?.response?.status === 409) {
-            // Already registered - try to get existing token info
-            logger.info('Spoke already registered with Hub (409 Conflict)', {
-              instanceCode,
-              message: axiosError?.response?.data?.message
-            });
-            // Token must be obtained through approval or stored config
-          } else if (axiosError?.code === 'ECONNREFUSED' || axiosError?.code === 'ENOTFOUND') {
-            logger.warn('Hub not reachable for auto-registration - heartbeat disabled', {
-              instanceCode,
-              hubUrl,
-              error: errorMessage
-            });
-          } else {
-            logger.warn('Spoke auto-registration failed', {
-              instanceCode,
-              error: errorMessage,
-              status: axiosError?.response?.status
-            });
-          }
+          spokeHeartbeat.start();
+          logger.info('Spoke heartbeat service initialized and started', {
+            spokeId: identity.spokeId,
+            instanceCode: identity.instanceCode,
+            hubUrl,
+            intervalMs: 30000,
+          });
+        } else {
+          logger.warn('Spoke not approved or missing token - heartbeat disabled', {
+            spokeId: identity.spokeId,
+            status: identity.status,
+            hasToken: !!identity.token,
+          });
         }
-      }
-
-      if (!spokeToken) {
-        logger.warn('SPOKE_OPAL_TOKEN or SPOKE_TOKEN not configured, heartbeat service disabled', {
-          autoRegisterAttempted: enableAutoRegister
+      } catch (identityError) {
+        logger.error('Failed to initialize spoke identity', {
+          error: identityError instanceof Error ? identityError.message : 'Unknown error',
+          impact: 'Heartbeat service disabled - spoke cannot communicate with Hub',
         });
-      } else {
-        logger.info('Initializing spoke heartbeat service', { spokeId, instanceCode, hubUrl });
-
-        spokeHeartbeat.initialize({
-          hubUrl: hubUrl,  // Service will add /api/federation/heartbeat path
-          spokeId,
-          instanceCode,
-          spokeToken,
-          intervalMs: parseInt(process.env.HEARTBEAT_INTERVAL_MS || '30000'), // 30 seconds
-          timeoutMs: parseInt(process.env.HEARTBEAT_TIMEOUT_MS || '10000'), // 10 seconds
-          maxQueueSize: parseInt(process.env.HEARTBEAT_MAX_QUEUE_SIZE || '10'),
-          maxRetries: parseInt(process.env.HEARTBEAT_MAX_RETRIES || '3'),
-        });
-
-        spokeHeartbeat.start();
-        logger.info('Spoke heartbeat service initialized and started');
+        // Continue startup - spoke can still serve local requests
       }
-    } catch (error) {
-      logger.warn('Failed to initialize spoke heartbeat service', {
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      // Non-fatal: heartbeat service disabled
+    } else {
+      // Hub mode - no spoke identity needed
+      logger.info('Hub mode - skipping spoke identity initialization');
     }
+
   };
 
   if (HTTPS_ENABLED) {

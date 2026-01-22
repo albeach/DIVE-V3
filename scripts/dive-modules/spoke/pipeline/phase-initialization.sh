@@ -172,86 +172,29 @@ spoke_init_generate_config() {
     fi
 
     # ==========================================================================
-    # CRITICAL FIX (2026-01-22): DO NOT generate local spokeId
+    # SSOT ARCHITECTURE (2026-01-22): Hub MongoDB is the SINGLE SOURCE OF TRUTH
     # ==========================================================================
-    # ROOT CAUSE: Local spokeId generation creates IDs that don't match Hub's
-    # generated IDs. Hub uses crypto.randomBytes(4).toString('hex') to create:
-    #   spoke-<instanceCode>-<random8chars>
-    # 
-    # ARCHITECTURE: Hub MongoDB is SSOT for spokeId
-    # - Spoke should NOT generate its own spokeId
-    # - Spoke registers with Hub, Hub generates spokeId
-    # - Spoke uses Hub-assigned spokeId for all operations
+    # NO LOCAL spokeId GENERATION - Backend queries Hub at startup
     #
-    # FIX: Use placeholder until Hub assigns real spokeId during registration
-    local spoke_id="PENDING_REGISTRATION"
+    # Flow:
+    # 1. Shell scripts use INSTANCE_CODE only (static identifier)
+    # 2. Containers start with INSTANCE_CODE in environment
+    # 3. Backend's spokeIdentityService queries Hub for spokeId
+    # 4. Hub MongoDB returns the authoritative spokeId
+    # 5. Backend caches in local MongoDB for offline resilience
+    #
+    # Benefits:
+    # - No spokeId mismatch issues
+    # - No complex sync between .env, config.json, docker-compose
+    # - Single source of truth in Hub MongoDB
+    # - Automatic offline resilience via local cache
+    # ==========================================================================
 
     # Get contact email from env or generate default
     local contact_email="${CONTACT_EMAIL:-admin@${code_lower}.dive25.com}"
 
-    # Get Hub URL - use localhost for curl from host, Docker name for containers
-    local hub_url="${HUB_URL:-https://localhost:4000}"
+    # Hub URL for containers (Docker internal network)
     local hub_url_internal="https://dive-hub-backend:4000"
-    
-    # ==========================================================================
-    # Try to register with Hub NOW to get real spokeId BEFORE container start
-    # ==========================================================================
-    log_verbose "Attempting early registration with Hub to get spokeId..."
-    if curl -sk --max-time 5 "${hub_url}/api/health" >/dev/null 2>&1; then
-        log_verbose "Hub is available - registering to get spokeId"
-        
-        # Load Keycloak admin password for bidirectional federation
-        local kc_admin_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
-        local kc_admin_pass="${!kc_admin_var}"
-        
-        # Fallback: check if generic password exists
-        if [ -z "$kc_admin_pass" ]; then
-            kc_admin_pass="${KEYCLOAK_ADMIN_PASSWORD:-}"
-        fi
-        
-        # Register with Hub to get spokeId
-        local reg_payload=$(cat <<REGEOF
-{
-  "instanceCode": "$code_upper",
-  "name": "$code_upper Instance",
-  "baseUrl": "https://localhost:${SPOKE_FRONTEND_PORT}",
-  "apiUrl": "https://localhost:${SPOKE_BACKEND_PORT}",
-  "idpUrl": "https://dive-spoke-${code_lower}-keycloak:8443",
-  "idpPublicUrl": "https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT}",
-  "requestedScopes": ["policy:base", "policy:org", "policy:tenant"],
-  "contactEmail": "$contact_email",
-  "keycloakAdminPassword": "$kc_admin_pass",
-  "skipValidation": true
-}
-REGEOF
-)
-        
-        local reg_response
-        reg_response=$(curl -sk --max-time 30 -X POST "${hub_url}/api/federation/register" \
-            -H "Content-Type: application/json" \
-            -d "$reg_payload" 2>&1)
-        
-        local hub_spoke_id=$(echo "$reg_response" | jq -r '.spoke.spokeId // empty' 2>/dev/null)
-        local hub_token=$(echo "$reg_response" | jq -r '.token.token // empty' 2>/dev/null)
-        
-        if [ -n "$hub_spoke_id" ] && [ "$hub_spoke_id" != "null" ]; then
-            spoke_id="$hub_spoke_id"
-            log_success "✓ Got spokeId from Hub: $spoke_id"
-            
-            # Store token if received
-            if [ -n "$hub_token" ] && [ "$hub_token" != "null" ]; then
-                export SPOKE_TOKEN_EARLY="$hub_token"
-                log_success "✓ Got SPOKE_TOKEN from Hub"
-            fi
-        else
-            log_warn "Hub registration didn't return spokeId - will retry during configuration"
-            # Generate temporary ID for config.json (will be updated during config phase)
-            spoke_id="spoke-${code_lower}-temp-$(openssl rand -hex 4)"
-        fi
-    else
-        log_verbose "Hub not available - using temporary spokeId (will be updated during registration)"
-        spoke_id="spoke-${code_lower}-temp-$(openssl rand -hex 4)"
-    fi
 
     # Build URLs
     local base_url="https://localhost:${SPOKE_FRONTEND_PORT}"
@@ -261,10 +204,10 @@ REGEOF
     local kas_url="https://localhost:${SPOKE_KAS_PORT}"
 
     # Create config.json
+    # NOTE: spokeId is NOT included - backend queries Hub for this at startup (SSOT)
     cat > "$spoke_dir/config.json" << EOF
 {
   "identity": {
-    "spokeId": "$spoke_id",
     "instanceCode": "$code_upper",
     "name": "$code_upper Instance",
     "description": "DIVE V3 Spoke Instance for $code_upper",
@@ -273,9 +216,9 @@ REGEOF
     "contactEmail": "$contact_email"
   },
   "endpoints": {
-    "hubUrl": "$hub_url",
-    "hubApiUrl": "${hub_url}/api",
-    "hubOpalUrl": "${hub_url//:4000/:7002}",
+    "hubUrl": "$hub_url_internal",
+    "hubApiUrl": "${hub_url_internal}/api",
+    "hubOpalUrl": "https://dive-hub-opal-server:7002",
     "baseUrl": "$base_url",
     "apiUrl": "$api_url",
     "idpUrl": "$idp_url",
@@ -320,7 +263,8 @@ EOF
         log_success "Configuration generated: $spoke_dir/config.json"
 
         # Create .env file with config variables
-        spoke_init_generate_env "$instance_code" "$spoke_id" "$base_url" "$api_url" "$idp_url" "$idp_public_url" "$kas_url" "$hub_url"
+        # NOTE: No SPOKE_ID - backend queries Hub at startup (SSOT architecture)
+        spoke_init_generate_env "$instance_code" "$base_url" "$api_url" "$idp_url" "$idp_public_url" "$kas_url" "$hub_url_internal"
 
         # CRITICAL FIX (2026-01-15): Sync secrets to .env BEFORE containers start
         # Root cause: Containers were starting with incomplete .env (missing secrets)
@@ -432,14 +376,17 @@ spoke_get_hub_opal_public_key() {
 }
 
 spoke_init_generate_env() {
+    # ==========================================================================
+    # SSOT ARCHITECTURE (2026-01-22): No SPOKE_ID in .env
+    # Backend queries Hub at startup to get spokeId (Hub MongoDB is SSOT)
+    # ==========================================================================
     local instance_code="$1"
-    local spoke_id="$2"
-    local base_url="$3"
-    local api_url="$4"
-    local idp_url="$5"
-    local idp_public_url="$6"
-    local kas_url="$7"
-    local hub_url="$8"
+    local base_url="$2"
+    local api_url="$3"
+    local idp_url="$4"
+    local idp_public_url="$5"
+    local kas_url="$6"
+    local hub_url="$7"
 
     local code_upper=$(upper "$instance_code")
     local code_lower=$(lower "$instance_code")
@@ -454,57 +401,46 @@ spoke_init_generate_env() {
         log_success "Retrieved OPAL public key for authentication"
     else
         log_warn "OPAL public key not available (OPAL client will use no-auth mode)"
-        # Leave empty - docker-compose will use unset variable, OPAL client handles gracefully
         opal_public_key=""
     fi
 
-    # CRITICAL FIX (2026-01-15): Always regenerate complete .env template
-    # Previous behavior: Early return if file existed, causing incomplete .env files
-    # New behavior: Always create full template (SSOT principle)
     # Backup existing file if present
     if [ -f "$env_file" ]; then
         if cp "$env_file" "${env_file}.bak.$(date +%Y%m%d-%H%M%S)" 2>/dev/null; then
             log_verbose "Backed up existing .env, regenerating complete template"
-        else
-            log_verbose "Could not backup .env file (proceeding with regeneration)"
         fi
     fi
 
-    # ALWAYS create complete .env template
+    # Create .env file
+    # NOTE: NO SPOKE_ID - backend queries Hub at startup (SSOT architecture)
     cat > "$env_file" << EOF
-# ${code_upper} Spoke Configuration (GCP Secret Manager references)
+# ${code_upper} Spoke Configuration
 # Generated: $(date -u +"%Y-%m-%dT%H:%M:%SZ")
-# Secrets loaded from GCP Secret Manager at runtime
+#
+# SSOT ARCHITECTURE: NO SPOKE_ID HERE
+# The backend queries Hub MongoDB at startup to get the authoritative spokeId.
+# This eliminates spokeId mismatch issues that caused heartbeat failures.
 
 # GCP Project for secrets
 GCP_PROJECT=${GCP_PROJECT:-dive25}
 
-# Instance identification
-SPOKE_ID=$spoke_id
+# Instance identification (static - used to query Hub for spokeId)
 INSTANCE_CODE=$code_upper
 
-# URLs and endpoints (public configuration)
+# URLs and endpoints
 APP_URL=$base_url
 API_URL=$api_url
 IDP_URL=$idp_url
 IDP_PUBLIC_URL=$idp_public_url
 KAS_URL=$kas_url
-# CRITICAL: Use Docker internal network name for Hub - containers can't reach localhost
-HUB_URL=$hub_url_internal
+HUB_URL=$hub_url
 
 # Federation configuration
-# CRITICAL FIX (2026-01-14): Use internal Docker network URL for Hub OPAL server
-# External domain (hub.dive25.com) not reachable from local containers
-# OPAL client needs WebSocket connection to Hub OPAL server on dive-shared network
-# CRITICAL FIX (2026-01-15): Hub OPAL server uses TLS - must use https:// not http://
 HUB_OPAL_URL=https://dive-hub-opal-server:7002
 SPOKE_OPAL_TOKEN=
-SPOKE_TOKEN=${SPOKE_TOKEN_EARLY:-}
 OPAL_LOG_LEVEL=INFO
 
-# OPAL Authentication (public key from Hub OPAL server)
-# CRITICAL FIX: OPAL client requires valid public key for authentication
-# Fetched from Hub OPAL server at deployment time
+# OPAL Authentication
 OPAL_AUTH_PUBLIC_KEY="$opal_public_key"
 
 # Cloudflare tunnel (if configured)
@@ -519,8 +455,6 @@ TUNNEL_TOKEN=
 # - dive-v3-auth-secret-${code_lower}   (JWT/Auth secret)
 # - dive-v3-keycloak-client-secret      (Shared client secret)
 # - dive-v3-redis-blacklist             (Redis password)
-#
-# Use './dive secrets create ${code_upper}' to generate missing secrets
 # =============================================================================
 EOF
 
