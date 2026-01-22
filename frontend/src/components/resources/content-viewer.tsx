@@ -26,7 +26,10 @@ import {
   File,
   Shield,
   FileCode,
+  Music,
+  Film,
 } from 'lucide-react';
+import { AudioPlayer, VideoPlayer } from '@/components/multimedia';
 import {
   MarkingRenderer,
   TextWithPortionMarkings,
@@ -114,6 +117,8 @@ export default function ContentViewer({
   const getContentCategory = () => {
     if (contentType.startsWith('image/')) return 'image';
     if (contentType === 'application/pdf') return 'pdf';
+    if (contentType.startsWith('audio/')) return 'audio';
+    if (contentType.startsWith('video/')) return 'video';
     if (contentType === 'text/markdown') return 'markdown';
     if (contentType.startsWith('text/')) return 'text';
     if (contentType.includes('openxmlformats') || contentType === 'application/msword') return 'docx';
@@ -436,6 +441,44 @@ export default function ContentViewer({
     );
   };
 
+  // Render audio content with STANAG classification overlay
+  const renderAudio = () => {
+    return (
+      <AudioPlayer
+        src={dataUrl || ''}
+        classification={classification}
+        displayMarking={effectiveMarking.displayMarking}
+        releasabilityTo={releasabilityTo}
+        watermarkText={effectiveMarking.watermarkText}
+        title={title}
+        onDownload={handleDownload}
+        onPlaybackEvent={(event, position) => {
+          // Audit logging for multimedia playback events
+          console.log(`[Audit] Audio ${event} at ${position}s - Resource: ${resourceId}`);
+        }}
+      />
+    );
+  };
+
+  // Render video content with STANAG classification overlays
+  const renderVideo = () => {
+    return (
+      <VideoPlayer
+        src={dataUrl || ''}
+        classification={classification}
+        displayMarking={effectiveMarking.displayMarking}
+        releasabilityTo={releasabilityTo}
+        watermarkText={effectiveMarking.watermarkText}
+        title={title}
+        onDownload={handleDownload}
+        onPlaybackEvent={(event, position) => {
+          // Audit logging for multimedia playback events
+          console.log(`[Audit] Video ${event} at ${position}s - Resource: ${resourceId}`);
+        }}
+      />
+    );
+  };
+
   // Render generic document
   const renderDocument = () => (
     <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-12 text-center border-2 border-blue-200">
@@ -466,6 +509,10 @@ export default function ContentViewer({
         return renderImage();
       case 'pdf':
         return renderPDF();
+      case 'audio':
+        return renderAudio();
+      case 'video':
+        return renderVideo();
       case 'text':
         return renderText();
       case 'markdown':
@@ -485,6 +532,10 @@ export default function ContentViewer({
         return <ImageIcon className={`${iconClass} ${!isFullscreen && 'text-blue-600'}`} />;
       case 'pdf':
         return <FileText className={`${iconClass} ${!isFullscreen && 'text-red-600'}`} />;
+      case 'audio':
+        return <Music className={`${iconClass} ${!isFullscreen && 'text-orange-600'}`} />;
+      case 'video':
+        return <Film className={`${iconClass} ${!isFullscreen && 'text-pink-600'}`} />;
       case 'text':
         return <FileText className={`${iconClass} ${!isFullscreen && 'text-green-600'}`} />;
       case 'markdown':

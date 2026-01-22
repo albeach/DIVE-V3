@@ -104,12 +104,17 @@ export default function UploadPage() {
   const { locale } = useLocale();
   const shouldReduceMotion = useReducedMotion();
 
+  // User info (needs to be before form state for initialization)
+  const userClearance = session?.user?.clearance || 'UNCLASSIFIED';
+  const userCountry = session?.user?.countryOfAffiliation || CURRENT_INSTANCE;
+  const userCOI = (session?.user as any)?.acpCOI || [];
+
   // Form state
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [classification, setClassification] = useState('UNCLASSIFIED');
-  const [releasabilityTo, setReleasabilityTo] = useState<string[]>([CURRENT_INSTANCE]);
+  const [releasabilityTo, setReleasabilityTo] = useState<string[]>([userCountry]);
   const [COI, setCOI] = useState<string[]>([]);
   const [caveats, setCaveats] = useState<string[]>([]);
 
@@ -125,11 +130,6 @@ export default function UploadPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
-  // User info
-  const userClearance = session?.user?.clearance || 'UNCLASSIFIED';
-  const userCountry = session?.user?.countryOfAffiliation || CURRENT_INSTANCE;
-  const userCOI = (session?.user as any)?.acpCOI || [];
-
   // Draft management
   const { hasDraft, draftAge, saveDraft, restoreDraft, clearDraft, dismissDraft, isSaving } =
     useUploadDraft();
@@ -139,6 +139,19 @@ export default function UploadPage() {
     onUndo: (action) => uploadToast.undone(action),
     onRedo: (action) => uploadToast.redone(action),
   });
+
+  // Auto-select user's country in releasability when session loads
+  useEffect(() => {
+    if (session && userCountry && !releasabilityTo.includes(userCountry)) {
+      setReleasabilityTo(prev => {
+        // Only update if the current value is just the default instance
+        if (prev.length === 1 && prev[0] === CURRENT_INSTANCE && prev[0] !== userCountry) {
+          return [userCountry];
+        }
+        return prev;
+      });
+    }
+  }, [session, userCountry]);
 
   // Calculate current step for progress indicator
   const currentStep = useMemo(() => {
@@ -477,7 +490,7 @@ export default function UploadPage() {
           const selectedFile = e.target.files?.[0];
           if (selectedFile) setFile(selectedFile);
         }}
-        accept=".pdf,.doc,.docx,.txt,.md,.csv,.png,.jpg,.jpeg,.gif,.json,.xml"
+        accept=".pdf,.doc,.docx,.txt,.md,.csv,.png,.jpg,.jpeg,.gif,.json,.xml,.mp3,.m4a,.wav,.ogg,.webm,.mp4"
       />
 
       {/* Header */}

@@ -1,13 +1,191 @@
-# Keep Docker build contexts clean and avoid macOS artifacts
+# =============================================================================
+# DIVE V3 .dockerignore
+# =============================================================================
+# Optimizes Docker builds by excluding unnecessary files
+# Reduces build context size and improves build performance
+# =============================================================================
+
+# Version control
 .git
+.gitignore
+.gitattributes
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Node.js
 node_modules
-**/.DS_Store
-**/._*
-dist
-build
-.next
 npm-debug.log*
+yarn-debug.log*
 yarn-error.log*
+.npm
+.yarn
 
+# Python
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+env
+venv
+ENV
+env.bak
+venv.bak
 
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+lerna-debug.log*
 
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage
+*.lcov
+
+# nyc test coverage
+.nyc_output
+
+# Dependency directories
+jspm_packages/# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Microbundle cache
+.rpt2_cache/
+.rts2_cache_cjs/
+.rts2_cache_es/
+.rts2_cache_umd/
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# dotenv environment variables file
+.env
+.env.test
+.env.production
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local# parcel-bundler cache (https://parceljs.org/)
+.cache
+.parcel-cache# Next.js build output
+.next
+out# Nuxt.js build / generate output
+.nuxt
+dist
+
+# Gatsby files
+.cache/
+public
+
+# Storybook build outputs
+.out
+.storybook-out
+storybook-static
+
+# Temporary folders
+tmp/
+temp/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Testing
+test/
+tests/
+*.test.js
+*.spec.js
+coverage/
+
+# Build artifacts
+build/
+dist/
+target/
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Certificates and secrets (should not be in image)
+certs/
+*.key
+*.pem
+*.crt
+*.p12
+
+# Terraform state
+*.tfstate
+*.tfstate.backup
+.terraform/
+
+# Kubernetes
+k8s/
+*.yaml
+!docker/daemon.json
+
+# Monitoring and logs
+monitoring/
+*.log
+
+# Scripts (not needed in runtime images)
+scripts/
+
+# Configuration that shouldn't be in images
+config/
+instances/
+.terraform/
+
+# Large data files
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Development tools
+.editorconfig
+.husky/
+.pre-commit
+.prettiest
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+Jenkinsfile

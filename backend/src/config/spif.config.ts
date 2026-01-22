@@ -77,10 +77,25 @@ export const MARKING_SEPARATOR = ' // ';
  * Supported MIME types for BDO extraction
  */
 export const BDO_SUPPORTED_MIME_TYPES = [
+    // Documents
     'application/pdf',
     'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+
+    // Audio (STANAG 4778: XMP sidecar for MP3/WAV/OGG, embedded XMP for M4A)
+    'audio/mpeg',        // MP3 - XMP sidecar
+    'audio/mp4',         // M4A - XMP embedded in atoms
+    'audio/x-m4a',       // M4A alternative MIME type
+    'audio/wav',         // WAV - XMP sidecar
+    'audio/x-wav',       // WAV alternative
+    'audio/webm',        // WebM audio - XMP sidecar
+    'audio/ogg',         // OGG - XMP sidecar
+
+    // Video (STANAG 4778: embedded XMP for MP4, sidecar for others)
+    'video/mp4',         // MP4 - XMP embedded in atoms
+    'video/webm',        // WebM - XMP sidecar
+    'video/ogg',         // OGG - XMP sidecar
 ];
 
 /**

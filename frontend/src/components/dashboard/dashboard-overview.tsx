@@ -53,7 +53,7 @@ interface DashboardOverviewProps {
 
 export function DashboardOverview({ idps, stats, loading = false, userRoles = [] }: DashboardOverviewProps) {
   const { t } = useTranslation('dashboard');
-  
+
   // Check if user has admin role
   const isAdmin = userRoles.includes('admin') || userRoles.includes('realm-admin') || userRoles.includes('federation-admin');
 

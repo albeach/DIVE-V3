@@ -76,10 +76,10 @@ function extractMarkingData(markingDataList: any[]): { en: string; fr: string; p
         // Extract values (xmlns mode returns objects)
         const phraseAttr = markingData.$.phrase;
         const phrase = typeof phraseAttr === 'string' ? phraseAttr : phraseAttr?.value || markingData._ || '';
-        
+
         const langAttr = markingData.$?.['xml:lang'];
         const lang = typeof langAttr === 'string' ? langAttr : langAttr?.value || 'en';
-        
+
         // Extract code values from array
         const codes = (markingData.code || []).map((c: any) => c._ || c);
 
@@ -149,7 +149,7 @@ function parseMarkingQualifier(qualifierXml: any): IMarkingQualifier | undefined
     for (const q of qualifiers) {
         const codeAttr = q.$.qualifierCode;
         const code = typeof codeAttr === 'string' ? codeAttr : codeAttr?.value;
-        
+
         const valueAttr = q.$.markingQualifier;
         const value = typeof valueAttr === 'string' ? valueAttr : valueAttr?.value;
 
@@ -168,7 +168,7 @@ function parseCategoryTagSet(tagSetXml: any): ISecurityCategoryTagSet {
     // Extract attributes (handle xmlns object format)
     const nameAttr = tagSetXml.$.name;
     const name = typeof nameAttr === 'string' ? nameAttr : nameAttr?.value || '';
-    
+
     const idAttr = tagSetXml.$.id;
     const id = typeof idAttr === 'string' ? idAttr : idAttr?.value || '';
 
@@ -182,7 +182,7 @@ function parseCategoryTagSet(tagSetXml: any): ISecurityCategoryTagSet {
     for (const tagXml of categoryTags) {
         const tagNameAttr = tagXml.$.name;
         const tagName = typeof tagNameAttr === 'string' ? tagNameAttr : tagNameAttr?.value || '';
-        
+
         const tagTypeAttr = tagXml.$.tagType;
         const tagType = typeof tagTypeAttr === 'string' ? tagTypeAttr : tagTypeAttr?.value || '';
 
@@ -197,10 +197,10 @@ function parseCategoryTagSet(tagSetXml: any): ISecurityCategoryTagSet {
         for (const catXml of categories) {
             const codeAttr = catXml.$.name;
             const code = typeof codeAttr === 'string' ? codeAttr : codeAttr?.value || '';
-            
+
             const lacvAttr = catXml.$.lacv;
             const lacv = parseInt(typeof lacvAttr === 'string' ? lacvAttr : lacvAttr?.value || '0', 10);
-            
+
             const markingData = extractMarkingData(catXml.markingData || []);
 
             tag.categories.set(code, {
@@ -236,17 +236,17 @@ function parseMemberships(extensionsXml: any): Map<string, IMembership> {
         // Extract name (handle xmlns object format)
         const nameAttr = membershipXml.$?.['nspif:name'] || membershipXml.$.name;
         const name = typeof nameAttr === 'string' ? nameAttr : nameAttr?.value || '';
-        
+
         const members: IMembership['members'] = [];
 
         const memberList = membershipXml['nspif:member'] || [];
         for (const memberXml of memberList) {
             const codeAttr = memberXml.$?.['nspif:name'] || memberXml.$.name;
             const code = typeof codeAttr === 'string' ? codeAttr : codeAttr?.value || '';
-            
+
             const lacvAttr = memberXml.$?.['nspif:lacv'] || memberXml.$.lacv;
             const lacv = parseInt(typeof lacvAttr === 'string' ? lacvAttr : lacvAttr?.value || '0', 10);
-            
+
             const obsoleteAttr = memberXml.$?.['nspif:obsolete'];
             const obsoleteValue = typeof obsoleteAttr === 'string' ? obsoleteAttr : obsoleteAttr?.value;
             const obsolete = obsoleteValue === 'true';
@@ -295,13 +295,13 @@ export async function parseSPIF(): Promise<ISPIFData> {
     // Extract attribute values
     const policyNameAttr = securityPolicy.name;
     const policyName = typeof policyNameAttr === 'string' ? policyNameAttr : policyNameAttr?.value || 'NATO';
-    
+
     const policyIdAttr = securityPolicy.id;
     const policyId = typeof policyIdAttr === 'string' ? policyIdAttr : policyIdAttr?.value || '1.3.26.1.3.1';
-    
+
     const versionAttr = spifRoot.$.version;
     const version = typeof versionAttr === 'string' ? versionAttr : versionAttr?.value || '1';
-    
+
     const creationDateAttr = spifRoot.$.creationDate;
     const creationDate = typeof creationDateAttr === 'string' ? creationDateAttr : creationDateAttr?.value || '';
 
@@ -381,7 +381,7 @@ export async function getSPIFMarkingRules(): Promise<ISPIFMarkingRules> {
             // NOTE: Don't override releasableToQualifier from SPIF
             // The SPIF file has "Releasable To" but STANAG 4774 uses "REL TO"
             // We keep the config constant RELEASABILITY_PREFIX = "REL TO"
-            
+
             for (const [code, country] of tag.categories) {
                 rules.countries.set(code, country.name);
             }

@@ -127,7 +127,7 @@ export function BentoCard({
         >
           {/* Subtle gradient overlay for depth */}
           <div className="absolute inset-0 bg-gradient-to-br from-white/50 to-transparent dark:from-gray-700/30 pointer-events-none" />
-          
+
           {/* Card content */}
           <div className="relative z-10 h-full">{children}</div>
         </motion.div>
@@ -349,14 +349,14 @@ export function BentoStepIndicator({
   const shouldReduceMotion = useReducedMotion();
 
   return (
-    <div 
+    <div
       className="-mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 mb-6 bg-gradient-to-r from-blue-50/50 via-indigo-50/30 to-purple-50/50 dark:from-blue-950/20 dark:via-indigo-950/10 dark:to-purple-950/20 py-4"
-      role="progressbar" 
-      aria-valuenow={currentStep} 
-      aria-valuemin={1} 
+      role="progressbar"
+      aria-valuenow={currentStep}
+      aria-valuemin={1}
       aria-valuemax={totalSteps}
     >
-      <div className="max-w-7xl mx-auto flex items-center justify-between">
+      <div className="max-w-4xl mx-auto flex items-center justify-center">
       {stepLabels.map((label, index) => {
         const stepNumber = index + 1;
         const isCompleted = stepNumber < currentStep;

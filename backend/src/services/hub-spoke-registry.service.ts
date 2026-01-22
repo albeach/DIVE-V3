@@ -475,6 +475,9 @@ class HubSpokeRegistryService extends EventEmitter {
       apiUrl: request.apiUrl,
       idpUrl: request.idpUrl,
       idpPublicUrl: request.idpPublicUrl, // Add public-facing IdP URL
+      // Internal API URL for Docker network communication (Hub→Spoke)
+      // Format: https://dive-spoke-{code}-backend:4000
+      internalApiUrl: `https://dive-spoke-${request.instanceCode.toLowerCase()}-backend:4000`,
       publicKey: request.publicKey,
       certificatePEM: request.certificatePEM,
       certificateFingerprint: certFingerprint,

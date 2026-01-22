@@ -55,6 +55,25 @@ jest.mock('../services/idp-validation.service', () => ({
   }
 }));
 
+// Mock keycloak-federation.service to avoid actual HTTP calls during unit tests
+jest.mock('../services/keycloak-federation.service', () => ({
+  keycloakFederationService: {
+    createBidirectionalFederation: jest.fn(() => Promise.resolve({ success: true })),
+    createIdPForSpoke: jest.fn(() => Promise.resolve({ success: true, idpAlias: 'test-idp' })),
+    deleteIdPForSpoke: jest.fn(() => Promise.resolve({ success: true })),
+    getFederatedSpokesList: jest.fn(() => Promise.resolve([]))
+  }
+}));
+
+// Mock opal-data.service for dynamic trust updates
+jest.mock('../services/opal-data.service', () => ({
+  opalDataService: {
+    updateTrustedIssuer: jest.fn(() => Promise.resolve({ success: true })),
+    removeTrustedIssuer: jest.fn(() => Promise.resolve({ success: true })),
+    updateFederationMatrix: jest.fn(() => Promise.resolve({ success: true }))
+  }
+}));
+
 // ============================================
 // TEST DATA
 // ============================================
@@ -68,7 +87,8 @@ const validRegistrationRequest: IRegistrationRequest = {
   idpUrl: 'https://nzl-idp.nzdf.mil.nz',
   requestedScopes: ['policy:base', 'policy:fvey', 'data:federation_matrix'],
   contactEmail: 'admin@nzdf.mil.nz',
-  validateEndpoints: false // Skip for unit tests
+  validateEndpoints: false, // Skip for unit tests
+  keycloakAdminPassword: 'TestAdminPassword2025!' // Required for bidirectional federation
 };
 
 // Note: Certificate validation tests require valid PEM format certificates.
