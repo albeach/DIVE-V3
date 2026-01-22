@@ -163,6 +163,59 @@ groups:
   # ===========================================================================
   - name: dive_service_health
     rules:
+      # Service Health Degraded (Phase 3 Enhancement)
+      # Uses dive_v3_service_health metric from /health/detailed endpoint
+      - alert: ServiceHealthDegraded
+        expr: |
+          dive_v3_service_health{service="backend"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          component: backend
+        annotations:
+          summary: "Service {{ $labels.service }} health degraded on {{ $labels.instance }}"
+          description: "The {{ $labels.service }} service on {{ $labels.instance }} has been reporting unhealthy status for 5 minutes. Check /health/detailed endpoint for specifics."
+          runbook_url: "https://docs.dive-v3.io/runbooks/service-health-degraded"
+
+      # OPA Health Metric (Phase 3 Enhancement)
+      - alert: OPAHealthDegraded
+        expr: |
+          dive_v3_opa_health == 0
+        for: 3m
+        labels:
+          severity: critical
+          component: opa
+        annotations:
+          summary: "OPA policy engine unhealthy on {{ $labels.instance }}"
+          description: "OPA policy engine on {{ $labels.instance }} has been unhealthy for 3 minutes. Authorization decisions will fail."
+          runbook_url: "https://docs.dive-v3.io/runbooks/opa-health-degraded"
+
+      # MongoDB Health Metric (Phase 3 Enhancement)
+      - alert: MongoDBHealthDegraded
+        expr: |
+          dive_v3_mongodb_health == 0
+        for: 3m
+        labels:
+          severity: critical
+          component: database
+        annotations:
+          summary: "MongoDB unhealthy on {{ $labels.instance }}"
+          description: "MongoDB on {{ $labels.instance }} has been unhealthy for 3 minutes. Resource operations will fail."
+          runbook_url: "https://docs.dive-v3.io/runbooks/mongodb-health-degraded"
+
+      # Redis Health Metric (Phase 3 Enhancement)
+      - alert: RedisHealthDegraded
+        expr: |
+          dive_v3_redis_health == 0
+        for: 3m
+        labels:
+          severity: warning
+          component: cache
+        annotations:
+          summary: "Redis unhealthy on {{ $labels.cluster }}"
+          description: "Redis on {{ $labels.cluster }} has been unhealthy for 3 minutes. Caching and blacklist operations may be impacted."
+          runbook_url: "https://docs.dive-v3.io/runbooks/redis-health-degraded"
+
       # Backend API Down
       - alert: BackendAPIDown
         expr: |
