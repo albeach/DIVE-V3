@@ -56,7 +56,38 @@ enable_mfa = true
 #   1. Spoke deploys → registers with Hub → MongoDB entry created
 #   2. Hub deployment → queries MongoDB → generates hub.auto.tfvars
 #   3. Terraform applies → uses hub.auto.tfvars (overrides this empty map)
-federation_partners = {}
+federation_partners = {
+tst = {
+    instance_code         = "TST"
+    instance_name         = "TST Instance"
+    idp_url               = "https://localhost:8643"
+    idp_internal_url      = "https://dive-spoke-tst-keycloak:8443"
+    frontend_url          = "https://localhost:3200"
+    enabled               = true
+    client_secret         = ""  # Loaded from GCP: dive-v3-federation-tst-usa
+    disable_trust_manager = true
+  }
+fra = {
+    instance_code         = "FRA"
+    instance_name         = "FRA Instance"
+    idp_url               = "https://localhost:8453"
+    idp_internal_url      = "https://dive-spoke-fra-keycloak:8443"
+    frontend_url          = "https://localhost:3010"
+    enabled               = true
+    client_secret         = ""  # Loaded from GCP: dive-v3-federation-fra-usa
+    disable_trust_manager = true
+  }
+deu = {
+    instance_code         = "DEU"
+    instance_name         = "DEU Instance"
+    idp_url               = "https://localhost:8454"
+    idp_internal_url      = "https://dive-spoke-deu-keycloak:8443"
+    frontend_url          = "https://localhost:3011"
+    enabled               = true
+    client_secret         = ""  # Loaded from GCP: dive-v3-federation-deu-usa
+    disable_trust_manager = true
+  }
+}
 
 # =============================================================================
 # Note: Sensitive variables should be set via environment:

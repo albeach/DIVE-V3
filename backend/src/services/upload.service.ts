@@ -17,7 +17,12 @@ import {
     IUploadMetadata,
     IUploaderInfo,
     IUploadResult,
-    IFileValidation
+    IFileValidation,
+    isAudioMimeType,
+    isVideoMimeType,
+    isMultimediaMimeType,
+    MAX_FILE_SIZE,
+    MAX_MULTIMEDIA_FILE_SIZE,
 } from '../types/upload.types';
 import {
     IZTDFObject,
@@ -27,6 +32,7 @@ import {
 import {
     ISTANAGResourceMetadata,
     IBindingDataObject,
+    IMultimediaMetadata,
 } from '../types/stanag.types';
 import {
     encryptContent,
@@ -38,6 +44,18 @@ import { createZTDFResource } from './resource.service';
 import { validateCOICoherenceOrThrow } from './coi-validation.service';
 import { extractBDO, createBDOFromMetadata } from './bdo-parser.service';
 import { generateMarking } from './spif-parser.service';
+import {
+    extractMultimediaMetadata,
+    validateMultimediaForClassification,
+    supportsEmbeddedXMP,
+    IMultimediaMetadata as IExtractedMultimediaMetadata,
+} from './multimedia-metadata.service';
+import {
+    embedXMPInMP4,
+    createXMPSidecar,
+    getXMPSidecarFilename,
+    requiresXMPSidecar,
+} from './xmp-metadata.service';
 
 /**
  * Upload file and convert to ZTDF
@@ -55,7 +73,11 @@ export async function uploadFile(
     uploader: IUploaderInfo
 ): Promise<IUploadResult> {
 
-    const uploadId = `doc-upload-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
+    // Generate resourceId with uploader's country code for provenance tracking
+    // Format: doc-<COUNTRY>-upload-<timestamp>-<random>
+    // Example: doc-USA-upload-1769078958301-0aed9424
+    const uploaderCountry = uploader.countryOfAffiliation || 'UNK';
+    const uploadId = `doc-${uploaderCountry}-upload-${Date.now()}-${crypto.randomBytes(4).toString('hex')}`;
 
     logger.info('Processing file upload', {
         uploadId,
@@ -63,7 +85,8 @@ export async function uploadFile(
         mimeType,
         fileSize: fileBuffer.length,
         classification: metadata.classification,
-        uploader: uploader.uniqueID
+        uploader: uploader.uniqueID,
+        uploaderCountry
     });
 
     try {
@@ -118,10 +141,66 @@ export async function uploadFile(
             throw new Error(`File validation failed: ${validation.errors.join(', ')}`);
         }
 
+        // 4.5 Extract multimedia metadata (for audio/video files)
+        let multimediaMetadata: IMultimediaMetadata | undefined;
+        let processedBuffer = fileBuffer;
+        let xmpSidecarContent: string | undefined;
+
+        if (isMultimediaMimeType(mimeType)) {
+            try {
+                logger.info('Extracting multimedia metadata', { uploadId, mimeType });
+
+                // Extract audio/video metadata
+                const extractedMetadata = await extractMultimediaMetadata(fileBuffer, mimeType);
+
+                // Validate against classification policy
+                const policyValidation = validateMultimediaForClassification(
+                    extractedMetadata,
+                    effectiveClassification,
+                    fileBuffer.length
+                );
+
+                if (!policyValidation.valid) {
+                    throw new Error(`Multimedia policy validation failed: ${policyValidation.errors.join(', ')}`);
+                }
+
+                multimediaMetadata = {
+                    duration: extractedMetadata.duration,
+                    bitrate: extractedMetadata.bitrate,
+                    codec: extractedMetadata.codec,
+                    resolution: (extractedMetadata as any).resolution,
+                    sampleRate: extractedMetadata.sampleRate,
+                    channels: extractedMetadata.channels,
+                    hasAudio: extractedMetadata.hasAudio,
+                    hasVideo: extractedMetadata.hasVideo,
+                    format: extractedMetadata.format,
+                    width: (extractedMetadata as any).width,
+                    height: (extractedMetadata as any).height,
+                    frameRate: (extractedMetadata as any).frameRate,
+                    aspectRatio: (extractedMetadata as any).aspectRatio,
+                    videoCodec: (extractedMetadata as any).videoCodec,
+                    audioCodec: (extractedMetadata as any).audioCodec,
+                };
+
+                logger.info('Multimedia metadata extracted', {
+                    uploadId,
+                    duration: multimediaMetadata.duration,
+                    hasAudio: multimediaMetadata.hasAudio,
+                    hasVideo: multimediaMetadata.hasVideo,
+                    codec: multimediaMetadata.codec,
+                });
+            } catch (mmError) {
+                logger.warn('Multimedia metadata extraction failed, continuing without it', {
+                    uploadId,
+                    error: mmError instanceof Error ? mmError.message : 'Unknown error',
+                });
+            }
+        }
+
         // 5. Generate STANAG-compliant marking using SPIF (STANAG 4774)
         // Detect language based on uploader's country (for localized classification labels)
         const language = uploader.countryOfAffiliation === 'FRA' ? 'fr' : 'en';
-        
+
         const stanagMarking = await generateMarking(
             effectiveClassification,
             effectiveReleasability,
@@ -151,6 +230,63 @@ export async function uploadFile(
             }
         );
 
+        // 6.5 Handle XMP metadata binding for multimedia files (STANAG 4778)
+        if (isMultimediaMimeType(mimeType)) {
+            try {
+                if (requiresXMPSidecar(mimeType)) {
+                    // Create XMP sidecar for MP3, WAV, WebM, OGG
+                    xmpSidecarContent = createXMPSidecar(
+                        originalFilename,
+                        bdo.originatorConfidentialityLabel,
+                        {
+                            title: metadata.title,
+                            creator: uploader.uniqueID,
+                            mimeType,
+                        }
+                    );
+
+                    if (multimediaMetadata) {
+                        multimediaMetadata.xmpEmbedded = false;
+                        multimediaMetadata.xmpSidecarFilename = getXMPSidecarFilename(originalFilename);
+                    }
+
+                    logger.info('Created XMP sidecar for multimedia', {
+                        uploadId,
+                        mimeType,
+                        sidecarFilename: getXMPSidecarFilename(originalFilename),
+                    });
+                } else {
+                    // Embed XMP in MP4/M4A
+                    processedBuffer = await embedXMPInMP4(
+                        fileBuffer,
+                        bdo.originatorConfidentialityLabel,
+                        {
+                            title: metadata.title,
+                            creator: uploader.uniqueID,
+                        }
+                    );
+
+                    if (multimediaMetadata) {
+                        multimediaMetadata.xmpEmbedded = true;
+                    }
+
+                    logger.info('Embedded XMP in MP4/M4A', {
+                        uploadId,
+                        mimeType,
+                        originalSize: fileBuffer.length,
+                        processedSize: processedBuffer.length,
+                    });
+                }
+            } catch (xmpError) {
+                logger.warn('XMP processing failed, continuing without XMP binding', {
+                    uploadId,
+                    error: xmpError instanceof Error ? xmpError.message : 'Unknown error',
+                });
+                // Use original buffer if XMP processing fails
+                processedBuffer = fileBuffer;
+            }
+        }
+
         // 7. Create STANAG resource metadata
         const stanagMetadata: ISTANAGResourceMetadata = {
             bdo,
@@ -161,8 +297,8 @@ export async function uploadFile(
             natoEquivalent: effectiveClassification,
         };
 
-        // 8. Convert file to base64 for encryption
-        const base64Content = fileBuffer.toString('base64');
+        // 8. Convert file to base64 for encryption (use processed buffer for multimedia)
+        const base64Content = processedBuffer.toString('base64');
 
         // 9. Create ZTDF object
         const ztdfObject = await convertToZTDF(
@@ -186,8 +322,20 @@ export async function uploadFile(
                 encrypted: true,
                 encryptedContent: ztdfObject.payload.encryptedChunks[0]?.encryptedData
             },
-            stanag: stanagMetadata
+            stanag: stanagMetadata,
+            // Add multimedia metadata if present
+            multimedia: multimediaMetadata,
         };
+
+        // Store XMP sidecar content in the resource if created
+        if (xmpSidecarContent && ztdfResource.multimedia) {
+            // Note: In production, store sidecar in GridFS and save fileId
+            // For now, we just track that a sidecar exists
+            logger.debug('XMP sidecar created for resource', {
+                uploadId,
+                sidecarFilename: multimediaMetadata?.xmpSidecarFilename,
+            });
+        }
 
         await createZTDFResource(ztdfResource);
 
@@ -197,6 +345,9 @@ export async function uploadFile(
             displayMarking: stanagMarking.displayMarking,
             coiOperator: metadata.coiOperator || 'ALL',
             hasBDO: !!existingBDO,
+            isMultimedia: !!multimediaMetadata,
+            hasXmpEmbedded: multimediaMetadata?.xmpEmbedded,
+            duration: multimediaMetadata?.duration,
         });
 
         // 11. Return result (include full ZTDF for classification equivalency tests)
@@ -244,7 +395,7 @@ function extractReleasabilityFromBDO(bdo: IBindingDataObject | null): string[] {
     // Look for releasability category
     const releasabilityCategory = categories.find(
         c => c.tagName.toLowerCase().includes('releasab') ||
-             c.tagSetId === '1.3.26.1.4.2'
+            c.tagSetId === '1.3.26.1.4.2'
     );
 
     return releasabilityCategory?.values || [];
@@ -260,6 +411,15 @@ function validateFile(fileBuffer: Buffer, mimeType: string): IFileValidation {
     // Validate file size
     if (fileBuffer.length === 0) {
         errors.push('File is empty');
+    }
+
+    // File size limits based on content type
+    const isMultimedia = isMultimediaMimeType(mimeType);
+    const maxSize = isMultimedia ? MAX_MULTIMEDIA_FILE_SIZE : MAX_FILE_SIZE;
+    if (fileBuffer.length > maxSize) {
+        const maxSizeMB = Math.round(maxSize / (1024 * 1024));
+        const fileSizeMB = (fileBuffer.length / (1024 * 1024)).toFixed(1);
+        errors.push(`File size ${fileSizeMB}MB exceeds maximum ${maxSizeMB}MB for ${isMultimedia ? 'multimedia' : 'document'} files`);
     }
 
     // Magic number validation (basic check)
@@ -284,6 +444,49 @@ function validateFile(fileBuffer: Buffer, mimeType: string): IFileValidation {
         const header = fileBuffer.slice(0, 3);
         if (!(header[0] === 0xFF && header[1] === 0xD8 && header[2] === 0xFF)) {
             errors.push('File does not appear to be a valid JPEG (magic number mismatch)');
+        }
+    }
+
+    // MP3: FF FB or FF FA or FF F3 or ID3 (ID3 tag)
+    if (mimeType === 'audio/mpeg') {
+        const header = fileBuffer.slice(0, 3);
+        const isMP3Frame = header[0] === 0xFF && (header[1] & 0xE0) === 0xE0;
+        const isID3 = header.toString('ascii').startsWith('ID3');
+        if (!isMP3Frame && !isID3) {
+            warnings.push('File may not be a valid MP3 (magic number check inconclusive)');
+        }
+    }
+
+    // MP4/M4A: ftyp at offset 4-8
+    if (mimeType === 'video/mp4' || mimeType === 'audio/mp4' || mimeType === 'audio/x-m4a') {
+        const ftypCheck = fileBuffer.slice(4, 8).toString('ascii');
+        if (ftypCheck !== 'ftyp') {
+            warnings.push('File may not be a valid MP4/M4A (ftyp atom not found)');
+        }
+    }
+
+    // WAV: RIFF....WAVE
+    if (mimeType === 'audio/wav' || mimeType === 'audio/x-wav') {
+        const riff = fileBuffer.slice(0, 4).toString('ascii');
+        const wave = fileBuffer.slice(8, 12).toString('ascii');
+        if (riff !== 'RIFF' || wave !== 'WAVE') {
+            errors.push('File does not appear to be a valid WAV (RIFF/WAVE header not found)');
+        }
+    }
+
+    // WebM: 1A 45 DF A3 (EBML header)
+    if (mimeType === 'video/webm' || mimeType === 'audio/webm') {
+        const header = fileBuffer.slice(0, 4);
+        if (!(header[0] === 0x1A && header[1] === 0x45 && header[2] === 0xDF && header[3] === 0xA3)) {
+            warnings.push('File may not be a valid WebM (EBML header not found)');
+        }
+    }
+
+    // OGG: OggS
+    if (mimeType === 'audio/ogg' || mimeType === 'video/ogg') {
+        const header = fileBuffer.slice(0, 4).toString('ascii');
+        if (header !== 'OggS') {
+            errors.push('File does not appear to be a valid OGG (OggS header not found)');
         }
     }
 

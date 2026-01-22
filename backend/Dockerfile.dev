@@ -4,7 +4,11 @@ WORKDIR /app
 
 # Install bash, curl, docker-cli, and su-exec for robust scripting and development
 # Best practice: Use bash for complex scripts, proper HTTP client instead of BusyBox wget
-RUN apk add --no-cache bash curl docker-cli su-exec ca-certificates tzdata jq
+# STANAG 4774/4778: FFmpeg required for multimedia watermarking
+RUN apk add --no-cache bash curl docker-cli su-exec ca-certificates tzdata jq \
+    ffmpeg \
+    && apk add --no-cache --virtual .build-deps python3 make g++ \
+    && apk del .build-deps
 
 # Install dependencies
 COPY package.json package-lock.json* ./

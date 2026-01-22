@@ -1,8 +1,8 @@
 /**
  * DIVE V3 - Audit Service
- * 
+ *
  * Provides ACP-240 compliant authorization decision audit logging.
- * 
+ *
  * Features:
  * - Structured JSON logging for all authorization decisions
  * - Correlation ID tracking for request tracing
@@ -10,7 +10,7 @@
  * - Separate audit log file for compliance review
  * - Decision replay support (stores full input/output)
  * - Retention policy support (90 days minimum per ACP-240)
- * 
+ *
  * Log Fields (ACP-240 Section 5.2):
  * - timestamp: ISO 8601 UTC
  * - eventType: ACCESS_GRANT | ACCESS_DENY | DECRYPT | KEY_RELEASE
@@ -19,7 +19,7 @@
  * - decision: Allow/Deny with reason
  * - policyVersion: Version of policy that made decision
  * - correlationId: Request tracking ID
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */
@@ -48,7 +48,9 @@ export type AuditEventType =
   | 'POLICY_VIOLATION'
   | 'FEDERATION_AUTH'
   | 'TOKEN_REVOKED'
-  | 'CACHE_INVALIDATION';
+  | 'CACHE_INVALIDATION'
+  | 'MULTIMEDIA_PLAYBACK'
+  | 'MULTIMEDIA_DOWNLOAD';
 
 export interface IAuditSubject {
   /** User unique identifier (NOT full name/email for PII minimization) */
@@ -637,6 +639,115 @@ class AuditService {
     };
 
     this.log(entry);
+  }
+
+  /**
+   * Log a multimedia playback event (audio/video)
+   *
+   * STANAG 4774/4778 Enhancement: Tracks playback events for classified media.
+   * Events: play, pause, seek, ended
+   */
+  logMultimediaPlayback(params: {
+    subject: IAuditSubject;
+    resource: IAuditResource;
+    event: 'play' | 'pause' | 'seek' | 'ended';
+    position?: number;
+    duration?: number;
+    mediaType: 'audio' | 'video';
+    context: Partial<IAuditContext>;
+  }): void {
+    const entry: IAuditEntry = {
+      timestamp: new Date().toISOString(),
+      eventType: 'MULTIMEDIA_PLAYBACK',
+      subject: params.subject,
+      resource: params.resource,
+      decision: {
+        allow: true,
+        reason: `Multimedia ${params.event} event`,
+        evaluationDetails: {
+          event: params.event,
+          position: params.position,
+          duration: params.duration,
+          mediaType: params.mediaType,
+          percentageWatched: params.duration && params.position
+            ? Math.round((params.position / params.duration) * 100)
+            : undefined,
+        }
+      },
+      context: {
+        correlationId: params.context.correlationId || this.generateCorrelationId(),
+        ...params.context
+      },
+      policyVersion: this.policyVersion,
+      service: this.config.serviceName,
+      environment: this.environment
+    };
+
+    this.log(entry);
+
+    // Log significant events (play, ended) at info level
+    if (params.event === 'play' || params.event === 'ended') {
+      logger.info('Multimedia playback event', {
+        eventType: 'MULTIMEDIA_PLAYBACK',
+        event: params.event,
+        subject: entry.subject.uniqueID,
+        resource: entry.resource.resourceId,
+        classification: entry.resource.classification,
+        mediaType: params.mediaType,
+        correlationId: entry.context.correlationId
+      });
+    }
+  }
+
+  /**
+   * Log a multimedia download event
+   *
+   * Downloads of classified audio/video require audit tracking.
+   * Watermarked downloads are tracked separately for forensics.
+   */
+  logMultimediaDownload(params: {
+    subject: IAuditSubject;
+    resource: IAuditResource;
+    mediaType: 'audio' | 'video';
+    watermarked: boolean;
+    context: Partial<IAuditContext>;
+    latencyMs?: number;
+  }): void {
+    const entry: IAuditEntry = {
+      timestamp: new Date().toISOString(),
+      eventType: 'MULTIMEDIA_DOWNLOAD',
+      subject: params.subject,
+      resource: params.resource,
+      decision: {
+        allow: true,
+        reason: 'Multimedia download authorized',
+        evaluationDetails: {
+          mediaType: params.mediaType,
+          watermarked: params.watermarked,
+        }
+      },
+      context: {
+        correlationId: params.context.correlationId || this.generateCorrelationId(),
+        ...params.context
+      },
+      policyVersion: this.policyVersion,
+      latencyMs: params.latencyMs,
+      service: this.config.serviceName,
+      environment: this.environment
+    };
+
+    this.log(entry);
+    this.mirrorToACP240(entry, 'DECRYPT', 'multimedia_download');
+
+    logger.info('Multimedia download', {
+      eventType: 'MULTIMEDIA_DOWNLOAD',
+      subject: entry.subject.uniqueID,
+      resource: entry.resource.resourceId,
+      classification: entry.resource.classification,
+      mediaType: params.mediaType,
+      watermarked: params.watermarked,
+      correlationId: entry.context.correlationId
+    });
   }
 
   /**

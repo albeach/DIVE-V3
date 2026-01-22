@@ -37,6 +37,7 @@ export interface ITrustedIssuer {
   protocol?: 'oidc' | 'saml';
   federation_class?: 'NATIONAL' | 'PARTNER' | 'LOCAL';
   jwks_uri?: string;
+  realm?: string;
 }
 
 export interface IFederationPartner {

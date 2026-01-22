@@ -1,7 +1,7 @@
 /**
  * Upload Middleware
  * Week 3.2: File Upload Validation and Configuration
- * 
+ *
  * Handles file upload with Multer, validates file type and size
  * ACP-240 compliant with fail-closed security
  */
@@ -57,7 +57,19 @@ const fileFilter = (
         'text/csv': ['csv'],
         'image/png': ['png'],
         'image/jpeg': ['jpg', 'jpeg'],
-        'image/gif': ['gif']
+        'image/gif': ['gif'],
+        // Audio (STANAG 4774/4778)
+        'audio/mpeg': ['mp3'],
+        'audio/mp4': ['m4a'],
+        'audio/x-m4a': ['m4a'],
+        'audio/wav': ['wav'],
+        'audio/x-wav': ['wav'],
+        'audio/webm': ['webm'],
+        'audio/ogg': ['ogg'],
+        // Video (STANAG 4774/4778)
+        'video/mp4': ['mp4'],
+        'video/webm': ['webm'],
+        'video/ogg': ['ogv', 'ogg']
     };
 
     const expectedExtensions = validExtensions[file.mimetype];

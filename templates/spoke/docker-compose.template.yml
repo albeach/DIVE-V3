@@ -331,13 +331,11 @@ services:
       # SECURITY: Trust mkcert CA instead of disabling TLS verification
       NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
       PORT: "4000"
+      # SSOT ARCHITECTURE (2026-01-22): Backend uses INSTANCE_CODE to query Hub for spokeId
+      # No SPOKE_ID environment variable - Hub MongoDB is single source of truth
       INSTANCE_CODE: {{INSTANCE_CODE_UPPER}}
       INSTANCE_NAME: "{{INSTANCE_NAME}}"
       INSTANCE_REALM: {{INSTANCE_CODE_UPPER}}
-      # SSOT ARCHITECTURE (2026-01-22): No SPOKE_ID here
-      # Backend queries Hub MongoDB at startup to get spokeId using INSTANCE_CODE
-      # This eliminates spokeId mismatch issues that caused heartbeat failures
-      INSTANCE_CODE: {{INSTANCE_CODE_UPPER}}
       SPOKE_MODE: "true"
       # MongoDB
       MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/dive-v3-{{INSTANCE_CODE_LOWER}}?authSource=admin
