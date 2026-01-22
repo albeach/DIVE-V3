@@ -7,6 +7,7 @@ import Redis from 'ioredis';
 import { logger } from '../utils/logger';
 import { getAllCircuitBreakerStats, CircuitState } from '../utils/circuit-breaker';
 import { authzCacheService } from './authz-cache.service';
+import { prometheusMetrics } from './prometheus-metrics.service';
 
 // ============================================
 // Health Check Service (Phase 3)
@@ -167,10 +168,80 @@ export interface ILivenessCheck {
 class HealthService {
     private startTime: Date;
     private mongoClient: MongoClient | null = null;
+    private metricsIntervalId: NodeJS.Timeout | null = null;
+    
+    // Metrics update interval (10 seconds)
+    private readonly METRICS_UPDATE_INTERVAL_MS = 10000;
 
     constructor() {
         this.startTime = new Date();
         logger.info('Health service initialized');
+        
+        // Start periodic metrics publishing (Phase 3.2)
+        this.startMetricsPolling();
+    }
+    
+    /**
+     * Start periodic polling to update Prometheus metrics (Phase 3.2)
+     * Updates circuit breaker states every 10 seconds
+     */
+    private startMetricsPolling(): void {
+        this.metricsIntervalId = setInterval(() => {
+            this.publishCircuitBreakerMetrics();
+        }, this.METRICS_UPDATE_INTERVAL_MS);
+        
+        // Publish initial metrics immediately
+        this.publishCircuitBreakerMetrics();
+        
+        logger.info('Started periodic circuit breaker metrics polling', {
+            intervalMs: this.METRICS_UPDATE_INTERVAL_MS
+        });
+    }
+    
+    /**
+     * Publish circuit breaker states to Prometheus (Phase 3.2)
+     * Called periodically by metricsPolling
+     */
+    private publishCircuitBreakerMetrics(): void {
+        try {
+            const cbStats = getAllCircuitBreakerStats();
+            
+            for (const [service, stats] of Object.entries(cbStats)) {
+                // Update circuit breaker state gauge
+                prometheusMetrics.setCircuitBreakerState(
+                    service,
+                    stats.state as 'CLOSED' | 'HALF_OPEN' | 'OPEN'
+                );
+                
+                // Update failure count
+                prometheusMetrics.setCircuitBreakerFailures(service, stats.failures);
+                
+                // Log state changes for debugging
+                if (stats.state !== CircuitState.CLOSED) {
+                    logger.debug('Circuit breaker metric published', {
+                        service,
+                        state: stats.state,
+                        failures: stats.failures,
+                        rejectCount: stats.rejectCount
+                    });
+                }
+            }
+        } catch (error) {
+            logger.error('Failed to publish circuit breaker metrics', {
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
+    }
+    
+    /**
+     * Stop metrics polling (for cleanup)
+     */
+    stopMetricsPolling(): void {
+        if (this.metricsIntervalId) {
+            clearInterval(this.metricsIntervalId);
+            this.metricsIntervalId = null;
+            logger.info('Stopped circuit breaker metrics polling');
+        }
     }
 
     /**
@@ -265,6 +336,16 @@ class HealthService {
             status = HealthStatus.DEGRADED;
         }
 
+        // Publish service health metrics to Prometheus (Phase 3.2)
+        this.publishServiceHealthMetrics({
+            mongodb: mongoHealth,
+            opa: opaHealth,
+            keycloak: keycloakHealth,
+            redis: redisHealth,
+            kas: kasHealth,
+            blacklistRedis: blacklistRedisHealth,
+        });
+        
         return {
             status,
             timestamp: new Date().toISOString(),
@@ -283,6 +364,48 @@ class HealthService {
             memory,
             circuitBreakers,
         };
+    }
+    
+    /**
+     * Publish service health metrics to Prometheus (Phase 3.2)
+     */
+    private publishServiceHealthMetrics(services: Record<string, IServiceHealth | undefined>): void {
+        try {
+            for (const [service, health] of Object.entries(services)) {
+                if (health) {
+                    const isHealthy = health.status === 'up';
+                    
+                    // Map service names to appropriate Prometheus method
+                    switch (service) {
+                        case 'opa':
+                            prometheusMetrics.setOPAHealth(
+                                process.env.INSTANCE_NAME || 'default',
+                                isHealthy
+                            );
+                            break;
+                        case 'mongodb':
+                            prometheusMetrics.setMongoHealth(
+                                process.env.MONGODB_REPLICA_SET || 'standalone',
+                                isHealthy
+                            );
+                            break;
+                        case 'redis':
+                        case 'blacklistRedis':
+                            prometheusMetrics.setRedisHealth(
+                                service === 'redis' ? 'cache' : 'blacklist',
+                                isHealthy
+                            );
+                            break;
+                        default:
+                            prometheusMetrics.setServiceHealth(service, isHealthy);
+                    }
+                }
+            }
+        } catch (error) {
+            logger.error('Failed to publish service health metrics', {
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+        }
     }
 
     /**

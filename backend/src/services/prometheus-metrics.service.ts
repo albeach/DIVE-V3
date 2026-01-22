@@ -124,6 +124,18 @@ class PrometheusMetricsService {
   private opaTestsPassed!: Gauge;
   private opaTestsFailed!: Gauge;
   
+  // Circuit Breaker Metrics (Phase 3.2)
+  private circuitBreakerState!: Gauge;
+  private circuitBreakerFailures!: Gauge;
+  private circuitBreakerRejects!: Counter;
+  private circuitBreakerTransitions!: Counter;
+  
+  // Database Connection Pool Metrics (Phase 3.3)
+  private dbConnectionsActive!: Gauge;
+  private dbConnectionsIdle!: Gauge;
+  private dbConnectionsTotal!: Gauge;
+  private dbConnectionErrors!: Counter;
+  
   constructor() {
     // Create a custom registry
     this.registry = new Registry();
@@ -149,6 +161,8 @@ class PrometheusMetricsService {
     this.initializeHealthMetrics();
     this.initializeOPALMetrics();
     this.initializeRateLimitMetrics();
+    this.initializeCircuitBreakerMetrics();
+    this.initializeDBConnectionMetrics();
     
     logger.info('Prometheus metrics service initialized', {
       prefix: this.prefix,
@@ -499,6 +513,85 @@ class PrometheusMetricsService {
       name: `${this.prefix}_rate_limit_active_keys`,
       help: 'Number of active rate limit keys being tracked',
       labelNames: ['limiter_type'],
+      registers: [this.registry]
+    });
+  }
+  
+  /**
+   * Initialize Circuit Breaker metrics (Phase 3.2)
+   * 
+   * Circuit breaker pattern prevents cascading failures.
+   * States: CLOSED (0) = normal, HALF_OPEN (1) = testing, OPEN (2) = failing
+   */
+  private initializeCircuitBreakerMetrics(): void {
+    // Circuit breaker state gauge (0=CLOSED, 1=HALF_OPEN, 2=OPEN)
+    this.circuitBreakerState = new Gauge({
+      name: `${this.prefix}_circuit_breaker_state`,
+      help: 'Circuit breaker state (0=CLOSED, 1=HALF_OPEN, 2=OPEN)',
+      labelNames: ['service'],
+      registers: [this.registry]
+    });
+    
+    // Circuit breaker failure count gauge
+    this.circuitBreakerFailures = new Gauge({
+      name: `${this.prefix}_circuit_breaker_failures`,
+      help: 'Current failure count for circuit breaker',
+      labelNames: ['service'],
+      registers: [this.registry]
+    });
+    
+    // Circuit breaker reject counter
+    this.circuitBreakerRejects = new Counter({
+      name: `${this.prefix}_circuit_breaker_rejects_total`,
+      help: 'Total requests rejected due to open circuit breaker',
+      labelNames: ['service'],
+      registers: [this.registry]
+    });
+    
+    // Circuit breaker state transition counter
+    this.circuitBreakerTransitions = new Counter({
+      name: `${this.prefix}_circuit_breaker_transitions_total`,
+      help: 'Total circuit breaker state transitions',
+      labelNames: ['service', 'from_state', 'to_state'],
+      registers: [this.registry]
+    });
+  }
+  
+  /**
+   * Initialize Database Connection Pool metrics (Phase 3.3)
+   * 
+   * Monitors MongoDB and PostgreSQL connection pools for resilience.
+   */
+  private initializeDBConnectionMetrics(): void {
+    // Active database connections
+    this.dbConnectionsActive = new Gauge({
+      name: `${this.prefix}_db_connections_active`,
+      help: 'Number of active database connections',
+      labelNames: ['db_type'],
+      registers: [this.registry]
+    });
+    
+    // Idle database connections
+    this.dbConnectionsIdle = new Gauge({
+      name: `${this.prefix}_db_connections_idle`,
+      help: 'Number of idle database connections',
+      labelNames: ['db_type'],
+      registers: [this.registry]
+    });
+    
+    // Total database connections
+    this.dbConnectionsTotal = new Gauge({
+      name: `${this.prefix}_db_connections_total`,
+      help: 'Total database connections in pool',
+      labelNames: ['db_type'],
+      registers: [this.registry]
+    });
+    
+    // Database connection errors counter
+    this.dbConnectionErrors = new Counter({
+      name: `${this.prefix}_db_connection_errors_total`,
+      help: 'Total database connection errors',
+      labelNames: ['db_type', 'error_type'],
       registers: [this.registry]
     });
   }
@@ -940,6 +1033,87 @@ class PrometheusMetricsService {
    */
   setRateLimitActiveKeys(limiterType: string, count: number): void {
     this.rateLimitActiveKeys.set({ limiter_type: limiterType }, count);
+  }
+  
+  // ============================================
+  // CIRCUIT BREAKER METRIC METHODS (Phase 3.2)
+  // ============================================
+  
+  /**
+   * Update circuit breaker state metric
+   * 
+   * @param service - Service name (opa, keycloak, mongodb, kas)
+   * @param state - Circuit state: 'CLOSED' (0), 'HALF_OPEN' (1), 'OPEN' (2)
+   */
+  setCircuitBreakerState(service: string, state: 'CLOSED' | 'HALF_OPEN' | 'OPEN'): void {
+    const stateValue = state === 'CLOSED' ? 0 : state === 'HALF_OPEN' ? 1 : 2;
+    this.circuitBreakerState.set({ service }, stateValue);
+  }
+  
+  /**
+   * Update circuit breaker failure count
+   */
+  setCircuitBreakerFailures(service: string, failures: number): void {
+    this.circuitBreakerFailures.set({ service }, failures);
+  }
+  
+  /**
+   * Record a circuit breaker reject (when circuit is OPEN)
+   */
+  recordCircuitBreakerReject(service: string): void {
+    this.circuitBreakerRejects.inc({ service });
+  }
+  
+  /**
+   * Record a circuit breaker state transition
+   */
+  recordCircuitBreakerTransition(service: string, fromState: string, toState: string): void {
+    this.circuitBreakerTransitions.inc({
+      service,
+      from_state: fromState,
+      to_state: toState
+    });
+  }
+  
+  /**
+   * Bulk update all circuit breaker stats from health service
+   * 
+   * @param stats - Circuit breaker stats from getAllCircuitBreakerStats()
+   */
+  updateCircuitBreakerStats(stats: Record<string, {
+    state: string;
+    failures: number;
+    rejectCount: number;
+  }>): void {
+    for (const [service, stat] of Object.entries(stats)) {
+      this.setCircuitBreakerState(service, stat.state as 'CLOSED' | 'HALF_OPEN' | 'OPEN');
+      this.setCircuitBreakerFailures(service, stat.failures);
+    }
+  }
+  
+  // ============================================
+  // DATABASE CONNECTION METRIC METHODS (Phase 3.3)
+  // ============================================
+  
+  /**
+   * Update database connection pool metrics
+   */
+  setDBConnectionMetrics(params: {
+    dbType: 'mongodb' | 'postgres';
+    active: number;
+    idle: number;
+    total: number;
+  }): void {
+    this.dbConnectionsActive.set({ db_type: params.dbType }, params.active);
+    this.dbConnectionsIdle.set({ db_type: params.dbType }, params.idle);
+    this.dbConnectionsTotal.set({ db_type: params.dbType }, params.total);
+  }
+  
+  /**
+   * Record a database connection error
+   */
+  recordDBConnectionError(dbType: 'mongodb' | 'postgres', errorType: string): void {
+    this.dbConnectionErrors.inc({ db_type: dbType, error_type: errorType });
   }
 
   // ============================================
