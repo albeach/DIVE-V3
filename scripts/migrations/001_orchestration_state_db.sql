@@ -189,8 +189,17 @@ CREATE TABLE IF NOT EXISTS checkpoints (
     metadata JSONB,
 
     -- Checkpoint level validation
+    -- CRITICAL FIX (2026-01-22): Added all orchestration pipeline phases
+    -- ROOT CAUSE: Schema only had old phase names, not the actual pipeline phases
     CONSTRAINT valid_checkpoint_level CHECK (
-        checkpoint_level IN ('CONTAINER', 'CONFIG', 'KEYCLOAK', 'FEDERATION', 'COMPLETE')
+        checkpoint_level IN (
+            -- Original phases (kept for backwards compatibility)
+            'CONTAINER', 'CONFIG', 'KEYCLOAK', 'FEDERATION', 'COMPLETE',
+            -- Orchestration pipeline phases (actual phases used by spoke-deploy.sh)
+            'PREFLIGHT', 'INITIALIZATION', 'DEPLOYMENT', 'CONFIGURATION', 'VERIFICATION',
+            -- Additional states
+            'ROLLBACK', 'FAILED', 'CANCELLED'
+        )
     )
 );
 
