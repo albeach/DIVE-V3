@@ -435,7 +435,11 @@ class HealthService {
 
     /**
      * Check Keycloak health
-     * Uses /health/ready endpoint (Keycloak 17+ quarkus-based health endpoint)
+     * 
+     * Health check priority:
+     * 1. /health/ready (Keycloak 17+ with health-enabled=true)
+     * 2. /health (older Keycloak versions)
+     * 3. /realms/master (always works - checks if Keycloak is serving)
      */
     private async checkKeycloak(): Promise<IServiceHealth> {
         const startTime = Date.now();
@@ -449,42 +453,47 @@ class HealthService {
             config.httpsAgent = healthCheckHttpsAgent;
         }
 
+        // Try health endpoints first
+        const healthEndpoints = ['/health/ready', '/health'];
+        
+        for (const endpoint of healthEndpoints) {
+            try {
+                const response = await axios.get(`${keycloakUrl}${endpoint}`, { ...config, timeout: 2000 });
+                const responseTime = Date.now() - startTime;
+                return {
+                    status: responseTime < 500 ? 'up' : 'degraded',
+                    responseTime,
+                    details: response.data,
+                };
+            } catch {
+                // Try next endpoint
+            }
+        }
+
+        // Final fallback: check /realms/master (always available)
+        // This confirms Keycloak is running even if health endpoints are disabled
         try {
-            // Keycloak 17+ uses /health/ready for readiness probes
-            const response = await axios.get(`${keycloakUrl}/health/ready`, config);
-
+            await axios.get(`${keycloakUrl}/realms/master`, { ...config, timeout: 2000 });
             const responseTime = Date.now() - startTime;
-
             return {
                 status: responseTime < 500 ? 'up' : 'degraded',
                 responseTime,
-                details: response.data,
+                details: { note: 'Health endpoints not enabled, verified via /realms/master' },
             };
         } catch (error) {
             const responseTime = Date.now() - startTime;
+            
+            logger.error('Keycloak health check failed', {
+                keycloakUrl,
+                error: error instanceof Error ? error.message : 'Unknown error',
+                hasCACerts: !!caCertificates,
+            });
 
-            // Fallback: try /health endpoint (older Keycloak versions)
-            try {
-                const fallbackResponse = await axios.get(`${keycloakUrl}/health`, { ...config, timeout: 2000 });
-                const totalTime = Date.now() - startTime;
-                return {
-                    status: totalTime < 500 ? 'up' : 'degraded',
-                    responseTime: totalTime,
-                    details: fallbackResponse.data,
-                };
-            } catch (fallbackError) {
-                logger.error('Keycloak health check failed', {
-                    keycloakUrl,
-                    error: error instanceof Error ? error.message : 'Unknown error',
-                    hasCACerts: !!caCertificates,
-                });
-
-                return {
-                    status: 'down',
-                    responseTime,
-                    error: error instanceof Error ? error.message : 'Connection failed',
-                };
-            }
+            return {
+                status: 'down',
+                responseTime,
+                error: error instanceof Error ? error.message : 'Connection failed',
+            };
         }
     }
 
