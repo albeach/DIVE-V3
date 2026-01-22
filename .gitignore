@@ -110,6 +110,8 @@ terraform/crash.*.log
 terraform/*.tfvars
 terraform/*.tfvars.json
 !terraform/terraform.tfvars.example
+# SSOT: Track hub.tfvars template (should have empty federation_partners)
+!terraform/hub/hub.tfvars
 terraform/.terraform.lock.hcl
 
 # OS
