@@ -537,8 +537,8 @@ services:
       # CRITICAL FIX (2026-01-15): Include root (.) for admin policies and other root-level files
       # Without root, files like admin_authorization_policy.rego are excluded
       OPAL_POLICY_SOURCE_DIRS: .,base,org,tenant,entrypoints,compat
-      # Multiple data topics for real-time policy data distribution (Phase 2)
-      OPAL_DATA_TOPICS_DEFAULT: policy_data,trusted_issuers,federation_matrix,tenant_configs
+      # Multiple data topics for real-time policy data distribution (Phase 2-3)
+      OPAL_DATA_TOPICS_DEFAULT: policy_data,trusted_issuers,federation_matrix,tenant_configs,coi_definitions
       OPAL_INLINE_OPA_CONFIG: "false"
       OPAL_LOG_LEVEL: DEBUG
       OPAL_LOG_FORMAT: text
@@ -581,6 +581,12 @@ services:
                 "url": "https://host.docker.internal:4000/api/opal/tenant-configs",
                 "topics": ["tenant_configs"],
                 "dst_path": "tenant_configs",
+                "config": {"headers": {"Accept": "application/json"}}
+              },
+              {
+                "url": "https://host.docker.internal:4000/api/opal/coi-definitions",
+                "topics": ["coi_definitions"],
+                "dst_path": "coi_definitions",
                 "config": {"headers": {"Accept": "application/json"}}
               }
             ]

@@ -45,52 +45,15 @@ export interface IEnhancedSecurityLabel {
 }
 
 // ============================================
-// COI Membership Registry
+// COI Membership Registry (MongoDB SSOT)
 // ============================================
 
 /**
- * Static COI → Country Membership Map (DEPRECATED - for backwards compatibility only)
+ * COI Membership is now stored in MongoDB coi_definitions collection.
+ * NO static fallbacks - fail-fast if MongoDB unavailable (best practice).
  * 
- * **IMPORTANT:** This is maintained for backwards compatibility and testing.
- * Production code should use getCOIMembershipMapFromDB() which queries
- * the MongoDB COI Keys collection as the single source of truth.
- * 
- * @deprecated Use getCOIMembershipMapFromDB() instead
+ * See: models/coi-definition.model.ts
  */
-export const COI_MEMBERSHIP: Record<string, Set<string>> = {
-    'US-ONLY': new Set(['USA']),
-    'CAN-US': new Set(['CAN', 'USA']),
-    'GBR-US': new Set(['GBR', 'USA']),
-    'FRA-US': new Set(['FRA', 'USA']),
-    'DEU-US': new Set(['DEU', 'USA']), // Germany-US bilateral
-    'FVEY': new Set(['USA', 'GBR', 'CAN', 'AUS', 'NZL']),
-    'NATO': new Set([
-        'ALB', 'BEL', 'BGR', 'CAN', 'HRV', 'CZE', 'DNK', 'EST', 'FIN', 'FRA',
-        'DEU', 'GBR', 'GRC', 'HUN', 'ISL', 'ITA', 'LVA', 'LTU', 'LUX', 'MNE', 'NLD',
-        'MKD', 'NOR', 'POL', 'PRT', 'ROU', 'SVK', 'SVN', 'ESP', 'SWE', 'TUR', 'USA'
-    ]),
-    'NATO-COSMIC': new Set([
-        // COSMIC TOP SECRET is NATO's highest classification - all NATO members
-        'ALB', 'BEL', 'BGR', 'CAN', 'HRV', 'CZE', 'DNK', 'EST', 'FIN', 'FRA',
-        'DEU', 'GBR', 'GRC', 'HUN', 'ISL', 'ITA', 'LVA', 'LTU', 'LUX', 'MNE', 'NLD',
-        'MKD', 'NOR', 'POL', 'PRT', 'ROU', 'SVK', 'SVN', 'ESP', 'SWE', 'TUR', 'USA'
-    ]),
-    'EU-RESTRICTED': new Set([
-        'AUT', 'BEL', 'BGR', 'HRV', 'CYP', 'CZE', 'DNK', 'EST', 'FIN', 'FRA',
-        'DEU', 'GRC', 'HUN', 'IRL', 'ITA', 'LVA', 'LTU', 'LUX', 'MLT', 'NLD',
-        'POL', 'PRT', 'ROU', 'SVK', 'SVN', 'ESP', 'SWE'
-    ]),
-    'AUKUS': new Set(['AUS', 'GBR', 'USA']),
-    'QUAD': new Set(['USA', 'AUS', 'IND', 'JPN']),
-    'NORTHCOM': new Set(['USA', 'CAN', 'MEX']),
-    'EUCOM': new Set(['USA', 'DEU', 'GBR', 'FRA', 'ITA', 'ESP', 'POL']),
-    'PACOM': new Set(['USA', 'JPN', 'KOR', 'AUS', 'NZL', 'PHL']),
-    'CENTCOM': new Set(['USA', 'SAU', 'ARE', 'QAT', 'KWT', 'BHR', 'JOR', 'EGY']),
-    'SOCOM': new Set(['USA', 'GBR', 'CAN', 'AUS', 'NZL']), // FVEY special ops
-    'Alpha': new Set([]), // No country affiliation
-    'Beta': new Set([]), // No country affiliation
-    'Gamma': new Set([]) // No country affiliation
-};
 
 /**
  * Get COI Membership Map from MongoDB (single source of truth)
@@ -101,27 +64,34 @@ export const COI_MEMBERSHIP: Record<string, Set<string>> = {
  */
 async function getCOIMembershipMapFromDB(): Promise<Record<string, Set<string>>> {
     try {
-        const dbMembershipMap = await getCOIMembershipMap();
+        const { mongoCoiDefinitionStore } = await import('../models/coi-definition.model');
 
-        // Merge database results with static COI_MEMBERSHIP for resilience
-        // Static map acts as a fallback for COIs not yet in the database
-        const mergedMap: Record<string, Set<string>> = { ...COI_MEMBERSHIP };
+        // Ensure initialized
+        await mongoCoiDefinitionStore.initialize();
 
-        // Override with database values (database is source of truth when available)
-        for (const [coiId, members] of Object.entries(dbMembershipMap)) {
-            mergedMap[coiId] = members;
+        // Get all COI definitions from MongoDB (SSOT - no fallbacks!)
+        const map = await mongoCoiDefinitionStore.getCoiMembershipMapForOpa();
+
+        // Convert arrays to Sets for API compatibility
+        const result: Record<string, Set<string>> = {};
+        for (const [coiId, members] of Object.entries(map)) {
+            result[coiId] = new Set(members);
         }
 
-        // Special handling for NATO-COSMIC (requires NATO membership)
-        if (mergedMap['NATO-COSMIC']) {
-            // NATO-COSMIC inherits NATO membership
-            mergedMap['NATO-COSMIC'] = mergedMap['NATO'] || new Set();
-        }
+        logger.debug('COI membership map loaded from MongoDB SSOT', {
+            coiCount: Object.keys(result).length,
+            cois: Object.keys(result)
+        });
 
-        return mergedMap;
+        return result;
     } catch (error) {
-        logger.warn('Failed to load COI membership from database, falling back to static map', { error });
-        return COI_MEMBERSHIP; // Fallback for resilience
+        logger.error('CRITICAL: Failed to load COI membership from MongoDB', {
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        
+        // FAIL-FAST: No fallback (best practice for proof of concept)
+        // If MongoDB is down, we should know about it immediately
+        throw new Error(`COI membership unavailable: ${error instanceof Error ? error.message : 'MongoDB connection failed'}`);
     }
 }
 
@@ -467,8 +437,10 @@ export function suggestCOIOperator(cois: string[]): { operator: COIOperator; rea
 // Exports
 // ============================================
 
+// COI_MEMBERSHIP removed - now in MongoDB (coi_definitions collection)
+// Best Practice: No static exports, use getCOIMembershipMapFromDB()
+
 export {
-    COI_MEMBERSHIP as COI_COUNTRY_MEMBERSHIP,
     MUTUAL_EXCLUSIONS as COI_MUTUAL_EXCLUSIONS,
     SUBSET_SUPERSET_PAIRS as COI_SUBSET_SUPERSET_PAIRS
 };
