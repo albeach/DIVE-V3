@@ -641,7 +641,32 @@ spoke_verify_generate_report() {
     local container_status
     container_status=$(spoke_containers_status "$instance_code" 2>/dev/null || echo '{"running":0,"total":0}')
 
-    # Build report
+    # ==========================================================================
+    # PORT DISCOVERY for report (use Docker ports as SSOT)
+    # ==========================================================================
+    local frontend_port backend_port keycloak_port
+
+    # Query Docker for actual port mappings
+    frontend_port=$(docker port "dive-spoke-${code_lower}-frontend" 3000/tcp 2>/dev/null | cut -d: -f2 | head -1)
+    backend_port=$(docker port "dive-spoke-${code_lower}-backend" 4000/tcp 2>/dev/null | cut -d: -f2 | head -1)
+    keycloak_port=$(docker port "dive-spoke-${code_lower}-keycloak" 8443/tcp 2>/dev/null | cut -d: -f2 | head -1)
+
+    # Fallback to centralized port calculation if Docker query fails
+    if [ -z "$frontend_port" ] || [ -z "$backend_port" ] || [ -z "$keycloak_port" ]; then
+        if type get_instance_ports &>/dev/null; then
+            eval "$(get_instance_ports "$code_upper")"
+            frontend_port="${frontend_port:-$SPOKE_FRONTEND_PORT}"
+            backend_port="${backend_port:-$SPOKE_BACKEND_PORT}"
+            keycloak_port="${keycloak_port:-$SPOKE_KEYCLOAK_HTTPS_PORT}"
+        fi
+    fi
+
+    # Final fallbacks
+    frontend_port="${frontend_port:-3000}"
+    backend_port="${backend_port:-4000}"
+    keycloak_port="${keycloak_port:-8443}"
+
+    # Build report with discovered ports
     cat > "$report_file" << EOF
 {
     "instance": "$code_upper",
@@ -656,9 +681,9 @@ spoke_verify_generate_report() {
         "api": true
     },
     "endpoints": {
-        "frontend": "https://localhost:${SPOKE_FRONTEND_PORT:-13000}",
-        "backend": "https://localhost:${SPOKE_BACKEND_PORT:-14000}",
-        "keycloak": "https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT:-18443}"
+        "frontend": "https://localhost:${frontend_port}",
+        "backend": "https://localhost:${backend_port}",
+        "keycloak": "https://localhost:${keycloak_port}"
     }
 }
 EOF
@@ -717,6 +742,11 @@ spoke_verify_quick_health() {
 # comprehensive health status including MongoDB, OPA, Keycloak, Redis,
 # KAS, cache, and circuit breaker states.
 #
+# Port Discovery Order (SSOT compliance):
+#   1. Docker port mapping (most reliable - actual runtime state)
+#   2. Instance config.json endpoints.apiUrl field
+#   3. get_instance_ports() function (centralized calculation)
+#
 # Arguments:
 #   $1 - Instance code
 #
@@ -731,18 +761,47 @@ spoke_verify_health_detailed() {
 
     log_step "Running detailed health check via backend API..."
 
-    # Get backend URL from instance config
-    local backend_port
-    local config_file="${DIVE_ROOT}/instances/${code_lower}/config.json"
+    # ==========================================================================
+    # PORT DISCOVERY (Priority order for reliability)
+    # ==========================================================================
+    local backend_port=""
+    local backend_container="dive-spoke-${code_lower}-backend"
 
-    if [ -f "$config_file" ]; then
-        backend_port=$(jq -r '.ports.backend // 4000' "$config_file" 2>/dev/null)
-    else
-        # Default ports based on instance
-        backend_port="${SPOKE_BACKEND_PORT:-4010}"
+    # Method 1: Query Docker for actual port mapping (most reliable)
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${backend_container}$"; then
+        backend_port=$(docker port "$backend_container" 4000/tcp 2>/dev/null | cut -d: -f2 | head -1)
+        if [ -n "$backend_port" ]; then
+            log_verbose "Port discovered from Docker: $backend_port"
+        fi
     fi
 
+    # Method 2: Parse from instance config.json (apiUrl field)
+    if [ -z "$backend_port" ]; then
+        local config_file="${DIVE_ROOT}/instances/${code_lower}/config.json"
+        if [ -f "$config_file" ]; then
+            local api_url
+            api_url=$(jq -r '.endpoints.apiUrl // ""' "$config_file" 2>/dev/null)
+            if [ -n "$api_url" ] && [ "$api_url" != "null" ]; then
+                backend_port=$(echo "$api_url" | grep -o ':[0-9]*' | tr -d ':' | tail -1)
+                [ -n "$backend_port" ] && log_verbose "Port discovered from config.json: $backend_port"
+            fi
+        fi
+    fi
+
+    # Method 3: Use centralized port calculation (SSOT fallback)
+    if [ -z "$backend_port" ]; then
+        if type get_instance_ports &>/dev/null; then
+            eval "$(get_instance_ports "$code_upper")"
+            backend_port="${SPOKE_BACKEND_PORT}"
+            log_verbose "Port calculated via get_instance_ports: $backend_port"
+        fi
+    fi
+
+    # Final fallback (should rarely be needed)
+    backend_port="${backend_port:-4000}"
+
     local backend_url="https://localhost:${backend_port}"
+    log_verbose "Using backend URL: $backend_url"
     local health_response
     local exit_code=0
 
