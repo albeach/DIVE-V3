@@ -1439,26 +1439,37 @@ _spoke_deploy_legacy() {
                         log_success "✓ Spoke token saved to .env"
                     fi
                     
-                    # Restart backend to pick up new SPOKE_ID and SPOKE_TOKEN
+                    # ==========================================================================
+                    # CRITICAL FIX (2026-01-22): Use docker compose up, NOT docker restart
+                    # ==========================================================================
+                    # ROOT CAUSE: docker restart doesn't re-read .env file
+                    # FIX: Use docker compose up -d to recreate with updated environment
                     local backend_container="dive-spoke-${code_lower}-backend"
                     if docker ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
-                        log_step "Restarting backend to pick up updated federation credentials..."
-                        if docker restart "$backend_container" >/dev/null 2>&1; then
-                            log_success "✓ Backend restarted with new SPOKE_ID and TOKEN"
-                            
-                            # Wait for backend to be healthy
-                            local wait_count=0
-                            while [ $wait_count -lt 30 ]; do
-                                local health=$(docker inspect "$backend_container" --format '{{.State.Health.Status}}' 2>/dev/null)
-                                if [ "$health" = "healthy" ]; then
-                                    log_success "✓ Backend healthy"
-                                    break
-                                fi
-                                sleep 2
-                                wait_count=$((wait_count + 1))
-                            done
-                        else
-                            log_warn "Could not restart backend - may need manual restart"
+                        log_step "Recreating backend to pick up updated federation credentials..."
+                        
+                        local compose_dir="${DIVE_ROOT}/instances/${code_lower}"
+                        if [ -f "$compose_dir/docker-compose.yml" ]; then
+                            cd "$compose_dir"
+                            if docker compose up -d "backend-${code_lower}" >/dev/null 2>&1; then
+                                log_success "✓ Backend recreated with new SPOKE_ID and TOKEN"
+                                cd "$DIVE_ROOT"
+                                
+                                # Wait for backend to be healthy
+                                local wait_count=0
+                                while [ $wait_count -lt 30 ]; do
+                                    local health=$(docker inspect "$backend_container" --format '{{.State.Health.Status}}' 2>/dev/null)
+                                    if [ "$health" = "healthy" ]; then
+                                        log_success "✓ Backend healthy"
+                                        break
+                                    fi
+                                    sleep 2
+                                    wait_count=$((wait_count + 1))
+                                done
+                            else
+                                cd "$DIVE_ROOT"
+                                log_warn "Could not recreate backend - may need manual restart"
+                            fi
                         fi
                     fi
                     ;;
