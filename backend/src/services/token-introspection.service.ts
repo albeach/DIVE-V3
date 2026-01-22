@@ -81,6 +81,10 @@ export interface IdPDiscoveryMetadata {
   grant_types_supported: string[];
   token_endpoint_auth_methods_supported: string[];
   claims_supported: string[];
+  // Optional OIDC discovery fields
+  end_session_endpoint?: string;
+  device_authorization_endpoint?: string;
+  registration_endpoint?: string;
 }
 
 /**

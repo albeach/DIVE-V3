@@ -796,6 +796,17 @@ load_local_defaults() {
     export KEYCLOAK_CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET:-LocalClientSecret123!}"
     export JWT_SECRET="${JWT_SECRET:-$AUTH_SECRET}"
     export NEXTAUTH_SECRET="${NEXTAUTH_SECRET:-$AUTH_SECRET}"
+    
+    # Export instance-suffixed variables (matching load_gcp_secrets behavior)
+    local inst_uc=$(echo "${INSTANCE:-USA}" | tr '[:lower:]' '[:upper:]')
+    eval "export POSTGRES_PASSWORD_${inst_uc}='${POSTGRES_PASSWORD}'"
+    eval "export KEYCLOAK_ADMIN_PASSWORD_${inst_uc}='${KEYCLOAK_ADMIN_PASSWORD}'"
+    eval "export MONGO_PASSWORD_${inst_uc}='${MONGO_PASSWORD}'"
+    eval "export AUTH_SECRET_${inst_uc}='${AUTH_SECRET}'"
+    eval "export KEYCLOAK_CLIENT_SECRET_${inst_uc}='${KEYCLOAK_CLIENT_SECRET}'"
+    eval "export REDIS_PASSWORD_${inst_uc}='${REDIS_PASSWORD}'"
+    export REDIS_PASSWORD_BLACKLIST="${REDIS_PASSWORD}"
+    
     # SSOT naming conventions for docker-compose
     export KC_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD"
     export OPAL_AUTH_MASTER_TOKEN=$(echo -n "opal-${AUTH_SECRET}" | openssl dgst -sha256 | awk '{print $2}' | cut -c1-64)
@@ -1025,6 +1036,18 @@ get_instance_ports() {
             UKR) port_offset=37 ;;
             *)   port_offset=$(( ($(echo "$code_upper" | cksum | cut -d' ' -f1) % 10) + 38 )) ;;
         esac
+    elif type -t is_custom_test_code &>/dev/null && is_custom_test_code "$code_upper" 2>/dev/null; then
+        # Custom test codes (TST, DEV, QAA, etc.) get offsets 200+ from iso-countries.sh
+        if type -t get_custom_test_offset &>/dev/null; then
+            port_offset=$(get_custom_test_offset "$code_upper" 2>/dev/null || echo "200")
+        else
+            port_offset=200  # Default for test codes if function not available
+        fi
+    elif type -t is_iso_country &>/dev/null && is_iso_country "$code_upper" 2>/dev/null; then
+        # ISO countries (non-NATO, non-Partner) use calculated offsets 40-199
+        if type -t get_iso_country_offset &>/dev/null; then
+            port_offset=$(get_iso_country_offset "$code_upper" 2>/dev/null || echo "40")
+        fi
     else
         # Unknown countries: use hash-based offset (48+) to avoid conflicts
         port_offset=$(( ($(echo "$code_upper" | cksum | cut -d' ' -f1) % 20) + 48 ))
