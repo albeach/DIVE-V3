@@ -375,6 +375,36 @@ EOF
                 rm -f "$spoke_dir/.env.bak"
 
                 log_success "✓ SPOKE_ID and SPOKE_TOKEN configured in .env"
+                
+                # ==========================================================================
+                # CRITICAL FIX (2026-01-22): Restart spoke backend to pick up new credentials
+                # ==========================================================================
+                # ROOT CAUSE: Backend container was started BEFORE registration, so it has
+                # the OLD spoke_id from config.json. Registration creates a NEW spoke_id in
+                # Hub MongoDB. Without restart, heartbeat fails because IDs don't match.
+                # FIX: Restart backend after .env is updated with new SPOKE_ID and SPOKE_TOKEN
+                local backend_container="dive-spoke-${code_lower}-backend"
+                if docker ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
+                    log_step "Restarting spoke backend to pick up updated federation credentials..."
+                    if docker restart "$backend_container" >/dev/null 2>&1; then
+                        log_success "✓ Spoke backend restarted with new SPOKE_ID and TOKEN"
+                        
+                        # Wait for backend to be healthy
+                        local wait_count=0
+                        while [ $wait_count -lt 30 ]; do
+                            local health=$(docker inspect "$backend_container" --format '{{.State.Health.Status}}' 2>/dev/null)
+                            if [ "$health" = "healthy" ]; then
+                                log_success "✓ Spoke backend healthy"
+                                break
+                            fi
+                            sleep 2
+                            wait_count=$((wait_count + 1))
+                        done
+                    else
+                        log_warn "Could not restart backend - may need manual restart"
+                    fi
+                fi
+                
                 return 0
             else
                 log_warn "Token not found in auto-approval response - may need manual approval"
