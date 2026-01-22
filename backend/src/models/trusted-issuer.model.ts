@@ -110,8 +110,12 @@ export class MongoOpalDataStore {
         collections: [COLLECTION_ISSUERS, COLLECTION_FED_MATRIX, COLLECTION_TENANT_CONFIGS],
       });
 
-      // Seed from static files if collections are empty
-      await this.seedFromStaticFiles();
+      // SSOT ARCHITECTURE (2026-01-22): DO NOT seed from static JSON files
+      // MongoDB is the Single Source of Truth. Data is populated dynamically:
+      // - Hub deployment registers USA's trusted issuer
+      // - Spoke deployment registers spoke's trusted issuer via Hub API
+      // - Federation links are created during spoke registration
+      // Static files (policies/data.json) should NOT be used for seeding
     } catch (error) {
       logger.error('Failed to initialize MongoDB OPAL Data Store', {
         error: error instanceof Error ? error.message : 'Unknown error',
