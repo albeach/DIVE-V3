@@ -49,6 +49,7 @@ log_success() { echo -e "${GREEN}✓${NC} $1"; }
 log_warn() { echo -e "${YELLOW}⚠${NC} $1"; }
 log_error() { echo -e "${RED}✗${NC} $1"; }
 log_step() { echo -e "${CYAN}▶${NC} $1"; }
+log_verbose() { [[ -n "${VERBOSE:-}" ]] && echo -e "${BLUE}  ${NC} $1" || true; }
 
 if [[ -z "$INSTANCE_CODE" ]]; then
     echo "Usage: $0 <INSTANCE_CODE> [KEYCLOAK_URL] [ADMIN_PASSWORD]"
@@ -292,34 +293,32 @@ log_success "Authenticated"
 # =============================================================================
 # Configure User Profile (Keycloak 26+ requires this for custom attributes)
 # =============================================================================
+# CRITICAL: DIVE attributes MUST have "view":["admin","user"] to be included
+# in tokens during federation. This is a Keycloak 26+ requirement.
+# We ALWAYS update the profile to ensure permissions are correct.
 log_step "Configuring User Profile for DIVE attributes..."
 
-# Check if DIVE attributes are already in the profile
-EXISTING_ATTRS=$(kc_curl -H "Authorization: Bearer $TOKEN" \
-    "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users/profile" | jq -r '.attributes[].name' | tr '\n' ' ')
-
-if [[ ! "$EXISTING_ATTRS" =~ "clearance" ]] || [[ ! "$EXISTING_ATTRS" =~ "amr" ]]; then
-    kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users/profile" \
-        -H "Authorization: Bearer $TOKEN" \
-        -H "Content-Type: application/json" \
-        -d '{
-          "attributes": [
-            {"name":"username","displayName":"${username}","validations":{"length":{"min":3,"max":255},"username-prohibited-characters":{},"up-username-not-idn-homograph":{}},"permissions":{"view":["admin","user"],"edit":["admin","user"]},"multivalued":false},
-            {"name":"email","displayName":"${email}","validations":{"email":{},"length":{"max":255}},"required":{"roles":["user"]},"permissions":{"view":["admin","user"],"edit":["admin","user"]},"multivalued":false},
-            {"name":"firstName","displayName":"${firstName}","validations":{"length":{"max":255},"person-name-prohibited-characters":{}},"required":{"roles":["user"]},"permissions":{"view":["admin","user"],"edit":["admin","user"]},"multivalued":false},
-            {"name":"lastName","displayName":"${lastName}","validations":{"length":{"max":255},"person-name-prohibited-characters":{}},"required":{"roles":["user"]},"permissions":{"view":["admin","user"],"edit":["admin","user"]},"multivalued":false},
-            {"name":"clearance","displayName":"Security Clearance","permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":false},
-            {"name":"countryOfAffiliation","displayName":"Country of Affiliation","permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":false},
-            {"name":"uniqueID","displayName":"Unique Identifier","permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":false},
-            {"name":"acpCOI","displayName":"Community of Interest","permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":true},
-            {"name":"amr","displayName":"Authentication Methods","permissions":{"view":["admin"],"edit":["admin"]},"multivalued":true}
-          ],
-          "groups":[{"name":"user-metadata","displayHeader":"User metadata","displayDescription":"Attributes, which refer to user metadata"},{"name":"dive-attributes","displayHeader":"DIVE Attributes","displayDescription":"Security clearance and coalition attributes"}]
-        }' > /dev/null 2>&1
-    log_success "DIVE attributes added to User Profile"
-else
-    log_info "User Profile already configured"
-fi
+# Always update the User Profile to ensure correct permissions
+# Keycloak 26+ restricts token claims based on User Profile view permissions
+kc_curl -X PUT "${KEYCLOAK_INTERNAL_URL}/admin/realms/${REALM_NAME}/users/profile" \
+    -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "attributes": [
+        {"name":"username","displayName":"${username}","validations":{"length":{"min":3,"max":255},"username-prohibited-characters":{},"up-username-not-idn-homograph":{}},"permissions":{"view":["admin","user"],"edit":["admin","user"]},"multivalued":false},
+        {"name":"email","displayName":"${email}","validations":{"email":{},"length":{"max":255}},"permissions":{"view":["admin","user"],"edit":["admin","user"]},"multivalued":false},
+        {"name":"firstName","displayName":"${firstName}","validations":{"length":{"max":255},"person-name-prohibited-characters":{}},"permissions":{"view":["admin","user"],"edit":["admin","user"]},"multivalued":false},
+        {"name":"lastName","displayName":"${lastName}","validations":{"length":{"max":255},"person-name-prohibited-characters":{}},"permissions":{"view":["admin","user"],"edit":["admin","user"]},"multivalued":false},
+        {"name":"clearance","displayName":"Security Clearance","permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":false},
+        {"name":"countryOfAffiliation","displayName":"Country of Affiliation","permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":false},
+        {"name":"uniqueID","displayName":"Unique Identifier","permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":false},
+        {"name":"acpCOI","displayName":"Community of Interest","permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":true},
+        {"name":"amr","displayName":"Authentication Methods","permissions":{"view":["admin"],"edit":["admin"]},"multivalued":true},
+        {"name":"acr","displayName":"Authentication Context","permissions":{"view":["admin"],"edit":["admin"]},"multivalued":false}
+      ],
+      "groups":[{"name":"user-metadata","displayHeader":"User metadata","displayDescription":"Attributes, which refer to user metadata"},{"name":"dive-attributes","displayHeader":"DIVE Attributes","displayDescription":"Security clearance and coalition attributes"}]
+    }' > /dev/null 2>&1
+log_success "User Profile configured with DIVE attributes (view permissions set for federation)"
 
 # =============================================================================
 # Create Roles (Spoke-specific: spoke_admin)
