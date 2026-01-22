@@ -19,6 +19,7 @@
  */
 
 import { hubSpokeRegistry } from './hub-spoke-registry.service';
+import { opalClient } from './opal-client';
 // Note: federation-sync.service.ts (Phase 5) handles drift detection separately
 // This service handles spoke lifecycle event cascades
 import { logger } from '../utils/logger';
@@ -138,6 +139,9 @@ class FederationBootstrapService {
         issuerUrl,
         tenant: instanceCode.toUpperCase(),
       });
+
+      // Publish to OPAL so all connected clients get the Hub issuer
+      await this.publishTrustedIssuersToOpal(`Hub ${instanceCode} initialized`);
     } catch (error) {
       logger.error('Failed to register Hub trusted issuer', {
         instanceCode,
@@ -166,19 +170,27 @@ class FederationBootstrapService {
       }
 
       // Build the spoke's issuer URL
+      // CRITICAL: Use PUBLIC URL - this is what appears in JWT tokens
       // Spokes use dynamic ports: https://localhost:{port}/realms/dive-v3-broker-{code}
       const realmName = `dive-v3-broker-${instanceCode.toLowerCase()}`;
       
-      // Get the spoke's API URL which contains the port
-      // Format: https://localhost:8643/realms/dive-v3-broker-tst (for TST spoke)
-      // We need to extract the Keycloak port from spoke config or calculate it
+      // Priority order for issuer URL:
+      // 1. idpPublicUrl - the URL that tokens will contain (for browser access)
+      // 2. Calculate from port offset (development fallback)
+      // 3. Production domain format
+      // NOTE: Do NOT use idpUrl (Docker internal URL) - tokens use public URLs
       let issuerUrl: string;
       
-      if (spoke.idpUrl) {
-        // Use the IdP URL directly if available
-        issuerUrl = spoke.idpUrl.includes('/realms/')
-          ? spoke.idpUrl
-          : `${spoke.idpUrl}/realms/${realmName}`;
+      if (spoke.idpPublicUrl) {
+        // Use the PUBLIC IdP URL - this matches what tokens will contain
+        issuerUrl = spoke.idpPublicUrl.includes('/realms/')
+          ? spoke.idpPublicUrl
+          : `${spoke.idpPublicUrl}/realms/${realmName}`;
+        logger.debug('Using idpPublicUrl for trusted issuer', {
+          instanceCode,
+          idpPublicUrl: spoke.idpPublicUrl,
+          issuerUrl,
+        });
       } else if (process.env.NODE_ENV === 'production') {
         issuerUrl = `https://${instanceCode.toLowerCase()}-idp.dive25.com/realms/${realmName}`;
       } else {
@@ -188,41 +200,136 @@ class FederationBootstrapService {
         const portOffset = this.calculatePortOffset(instanceCode);
         const keycloakPort = 8443 + portOffset;
         issuerUrl = `https://localhost:${keycloakPort}/realms/${realmName}`;
+        logger.debug('Calculated issuer URL from port offset', {
+          instanceCode,
+          portOffset,
+          keycloakPort,
+          issuerUrl,
+        });
       }
 
       // Check if issuer already exists
       const existing = await mongoOpalDataStore.findIssuerByUrl(issuerUrl);
-      if (existing) {
-        logger.debug('Spoke trusted issuer already registered', {
+      if (!existing) {
+        // Register the spoke's trusted issuer with PUBLIC URL
+        await mongoOpalDataStore.addIssuer({
+          issuerUrl,
+          tenant: instanceCode.toUpperCase(),
+          name: `${instanceCode.toUpperCase()} Spoke Keycloak`,
+          country: instanceCode.toUpperCase(),
+          trustLevel: 'HIGH',
+          realm: realmName,
+          enabled: true,
+        });
+
+        logger.info('Registered spoke trusted issuer (SSOT) - public URL', {
+          instanceCode,
+          issuerUrl,
+          tenant: instanceCode.toUpperCase(),
+        });
+      } else {
+        logger.debug('Spoke trusted issuer already registered (public URL)', {
           instanceCode,
           issuerUrl,
           tenant: existing.tenant
         });
-        return;
       }
 
-      // Register the spoke's trusted issuer
-      await mongoOpalDataStore.addIssuer({
-        issuerUrl,
-        tenant: instanceCode.toUpperCase(),
-        name: `${instanceCode.toUpperCase()} Spoke Keycloak`,
-        country: instanceCode.toUpperCase(),
-        trustLevel: 'HIGH',
-        realm: realmName,
-        enabled: true,
-      });
+      // Also register the Docker internal URL for container-to-container auth
+      // This is used when backend services communicate within Docker network
+      if (spoke.idpUrl && spoke.idpUrl !== spoke.idpPublicUrl) {
+        const internalIssuerUrl = spoke.idpUrl.includes('/realms/')
+          ? spoke.idpUrl
+          : `${spoke.idpUrl}/realms/${realmName}`;
+        
+        const existingInternal = await mongoOpalDataStore.findIssuerByUrl(internalIssuerUrl);
+        if (!existingInternal) {
+          await mongoOpalDataStore.addIssuer({
+            issuerUrl: internalIssuerUrl,
+            tenant: instanceCode.toUpperCase(),
+            name: `${instanceCode.toUpperCase()} Spoke Keycloak (internal)`,
+            country: instanceCode.toUpperCase(),
+            trustLevel: 'HIGH',
+            realm: realmName,
+            enabled: true,
+          });
 
-      logger.info('Registered spoke trusted issuer (SSOT)', {
-        instanceCode,
-        issuerUrl,
-        tenant: instanceCode.toUpperCase(),
-      });
+          logger.info('Registered spoke trusted issuer (SSOT) - internal URL', {
+            instanceCode,
+            issuerUrl: internalIssuerUrl,
+            tenant: instanceCode.toUpperCase(),
+          });
+        }
+      }
+
+      // CRITICAL: Publish updated trusted issuers to OPAL
+      // Since MongoDB change streams require replica set (which we don't have),
+      // we must manually push updates after adding issuers
+      await this.publishTrustedIssuersToOpal(`Spoke ${instanceCode} registered`);
+
     } catch (error) {
       logger.error('Failed to register spoke trusted issuer', {
         instanceCode,
         error: error instanceof Error ? error.message : 'Unknown error',
       });
       throw error;
+    }
+  }
+
+  /**
+   * Publish all trusted issuers to OPAL
+   * This ensures all connected OPA instances receive the updated issuer list
+   */
+  private async publishTrustedIssuersToOpal(reason: string): Promise<void> {
+    try {
+      const { mongoOpalDataStore } = await import('../models/trusted-issuer.model');
+      
+      // Get all issuers in OPAL-compatible format
+      const issuers = await mongoOpalDataStore.getAllIssuers();
+      
+      // Convert to the format OPAL expects: { "url": { tenant, country, ... }, ... }
+      const opalFormat: Record<string, unknown> = {};
+      for (const issuer of issuers) {
+        opalFormat[issuer.issuerUrl] = {
+          tenant: issuer.tenant,
+          name: issuer.name,
+          country: issuer.country,
+          trust_level: issuer.trustLevel,
+          realm: issuer.realm,
+          enabled: issuer.enabled,
+        };
+      }
+
+      // Publish to OPAL - this will trigger all clients to fetch updated data
+      const result = await opalClient.publishInlineData(
+        'trusted_issuers',
+        {
+          success: true,
+          timestamp: new Date().toISOString(),
+          count: issuers.length,
+          trusted_issuers: opalFormat,
+        },
+        reason
+      );
+
+      if (result.success) {
+        logger.info('Published trusted issuers to OPAL', {
+          reason,
+          issuerCount: issuers.length,
+          transactionId: result.transactionId,
+        });
+      } else {
+        logger.warn('OPAL publish returned unsuccessful', {
+          reason,
+          error: result.error,
+        });
+      }
+    } catch (error) {
+      logger.error('Failed to publish trusted issuers to OPAL', {
+        reason,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      // Don't throw - issuer is already added to MongoDB, OPAL sync is secondary
     }
   }
 
