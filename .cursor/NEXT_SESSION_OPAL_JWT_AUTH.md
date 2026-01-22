@@ -61,6 +61,33 @@ Backend logs:
 
 The token `b4016...` is the raw master token (not a JWT starting with `eyJ`).
 
+### OPAL Authentication Model
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    OPAL TOKEN AUTHENTICATION FLOW                            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│  MASTER TOKEN (Secret):                                                      │
+│    - Stored in .env as OPAL_AUTH_MASTER_TOKEN                               │
+│    - Used ONLY to request JWTs from /token endpoint                         │
+│    - NEVER sent directly to /data/config or other API endpoints             │
+│                                                                              │
+│  JWT TOKEN (Client credential):                                              │
+│    - Obtained by POSTing to /token with master token                        │
+│    - Contains claims: { peer_type: 'client', expired: '<timestamp>' }       │
+│    - Signed with RS256 algorithm                                            │
+│    - Has expiration (typically 1 year)                                      │
+│    - Used in Authorization header for all OPAL API calls                    │
+│                                                                              │
+│  Flow:                                                                       │
+│    1. Client sends: POST /token { Authorization: Bearer <master_token> }    │
+│    2. Server returns: { token: "eyJ...", details: { expired: "..." } }      │
+│    3. Client uses JWT: GET/POST /data/config { Authorization: Bearer <jwt> }│
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
 ---
 
 ## 🔍 EXISTING LOGIC AUDIT
@@ -72,8 +99,80 @@ The token `b4016...` is the raw master token (not a JWT starting with `eyJ`).
 | `backend/src/services/opal-token.service.ts` | Generates JWT from OPAL server `/token` endpoint | COMPLETE - correctly fetches JWT |
 | `backend/src/services/opal-client.ts` | Publishes data to OPAL server | NEEDS FIX - uses raw master token |
 | `backend/src/services/opal-data.service.ts` | MongoDB SSOT for OPAL data | COMPLETE - uses MongoDB |
-| `scripts/provision-opal-tokens.sh` | Provisions JWT for spoke .env files | COMPLETE |
-| `backend/src/routes/federation.routes.ts` | Issues JWT during spoke registration | COMPLETE |
+| `backend/src/models/trusted-issuer.model.ts` | MongoDB store for trusted issuers, federation matrix | COMPLETE - SSOT |
+
+### Existing opal-token.service.ts (WORKING - USE THIS)
+
+```typescript
+// backend/src/services/opal-token.service.ts
+// This service CORRECTLY fetches JWT from OPAL server
+
+class OPALTokenService {
+  private masterToken: string;
+  private opalServerUrl: string;
+
+  constructor() {
+    this.masterToken = process.env.OPAL_AUTH_MASTER_TOKEN || '';
+    this.opalServerUrl = process.env.OPAL_SERVER_URL || 'https://opal-server:7002';
+  }
+
+  // This method correctly uses master token to get JWT
+  async generateClientToken(spokeId: string, instanceCode: string): Promise<IOPALClientToken> {
+    const response = await this.fetchOPALToken();  // Uses master token here
+    return {
+      token: response.token,  // This IS the JWT (starts with eyJ...)
+      expiresAt: new Date(response.details.expired),
+      clientId: response.details.id,
+      type: 'opal_client'
+    };
+  }
+
+  private async fetchOPALToken(): Promise<IOPALTokenResponse> {
+    const response = await fetch(`${this.opalServerUrl}/token`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${this.masterToken}`,  // Master token for auth
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ type: 'client' })
+    });
+    return await response.json();  // Returns JWT token
+  }
+}
+
+export const opalTokenService = new OPALTokenService();
+```
+
+### Existing opal-client.ts (BROKEN - NEEDS FIX)
+
+```typescript
+// backend/src/services/opal-client.ts
+// PROBLEM: Uses raw master token instead of JWT
+
+class OPALClient {
+  private config: IOPALClientConfig;
+
+  constructor(config: Partial<IOPALClientConfig> = {}) {
+    this.config = { ...DEFAULT_CONFIG, ...config };
+    // BUG: this.config.clientToken is OPAL_CLIENT_TOKEN which is master token
+  }
+
+  private async fetchWithRetry(url: string, options: RequestInit = {}): Promise<Response> {
+    const fetchOptions: RequestInit = {
+      ...options,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+        // BUG: Uses raw master token - OPAL expects JWT here!
+        ...(this.config.clientToken && { 
+          'Authorization': `Bearer ${this.config.clientToken}` 
+        })
+      }
+    };
+    // ...
+  }
+}
+```
 
 ### Current Token Flow (Spokes - WORKING)
 
@@ -97,160 +196,248 @@ The token `b4016...` is the raw master token (not a JWT starting with `eyJ`).
 
 ---
 
-## 🛠️ SOLUTION ARCHITECTURE
+## 🛠️ SOLUTION: Enhance opal-client.ts to Use JWT via opalTokenService
 
-### Option A: Hub Backend Uses opalTokenService (RECOMMENDED)
+### Implementation Approach
 
-**Approach:** Hub backend should obtain a JWT from `opalTokenService` on startup, similar to how spokes get their tokens.
+The fix is simple: `opal-client.ts` should use `opalTokenService` to obtain a JWT instead of using the raw master token. This reuses existing, tested logic.
 
-**Implementation:**
-1. Modify `opal-client.ts` to fetch JWT via `opalTokenService.generateClientToken()` on initialization
-2. Cache the JWT and refresh before expiry
-3. Use JWT in Authorization header instead of raw master token
+### Modified opal-client.ts
 
-**Pros:**
-- Consistent with spoke token flow
-- Uses existing, tested `opalTokenService`
-- JWT has proper expiry handling
+```typescript
+/**
+ * DIVE V3 - OPAL Client
+ * 
+ * Enhanced to use JWT authentication via opalTokenService.
+ * The Hub backend obtains a JWT from the OPAL server's /token endpoint,
+ * then uses that JWT for all subsequent API calls.
+ */
 
-**Cons:**
-- Requires startup coordination (OPAL server must be ready)
+import { logger } from '../utils/logger';
+import { opalTokenService } from './opal-token.service';
 
-### Option B: OPAL Server Accepts Master Token as Admin
+// ... existing interfaces remain unchanged ...
 
-**Approach:** Configure OPAL server to accept master token for admin operations.
+class OPALClient {
+  private config: IOPALClientConfig;
+  private isEnabled: boolean;
+  
+  // NEW: JWT management
+  private jwt: string | null = null;
+  private jwtExpiry: Date | null = null;
+  private jwtInitPromise: Promise<void> | null = null;
 
-**Cons:**
-- Would require OPAL server configuration changes
-- Less secure (master token has full access)
-- Not aligned with JWT-based authentication model
+  constructor(config: Partial<IOPALClientConfig> = {}) {
+    this.config = { ...DEFAULT_CONFIG, ...config };
+    this.isEnabled = process.env.OPAL_ENABLED !== 'false' && 
+                     !!process.env.OPAL_SERVER_URL;
+    
+    if (this.isEnabled) {
+      logger.info('OPAL client initialized', {
+        serverUrl: this.config.serverUrl,
+        topics: this.config.dataTopics,
+        timeoutMs: this.config.timeoutMs
+      });
+      
+      // Initialize JWT asynchronously
+      this.initializeJwt();
+    } else {
+      logger.info('OPAL client disabled - using static policy data');
+    }
+  }
 
-### RECOMMENDATION: Option A
+  /**
+   * Initialize JWT with retry logic for startup timing
+   * OPAL server may not be ready immediately when backend starts
+   */
+  private async initializeJwt(): Promise<void> {
+    if (this.jwtInitPromise) return this.jwtInitPromise;
+    
+    this.jwtInitPromise = (async () => {
+      const maxAttempts = 5;
+      const retryDelayMs = 5000;
+      
+      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          await this.refreshJwt();
+          if (this.jwt) {
+            logger.info('OPAL client JWT initialized successfully', {
+              attempt,
+              expiresAt: this.jwtExpiry?.toISOString()
+            });
+            return;
+          }
+        } catch (error) {
+          logger.warn(`OPAL JWT initialization attempt ${attempt}/${maxAttempts} failed`, {
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
+          
+          if (attempt < maxAttempts) {
+            await new Promise(resolve => setTimeout(resolve, retryDelayMs));
+          }
+        }
+      }
+      
+      logger.error('Failed to initialize OPAL JWT after all attempts - push notifications will fail');
+    })();
+    
+    return this.jwtInitPromise;
+  }
+
+  /**
+   * Refresh JWT from OPAL server using opalTokenService
+   */
+  private async refreshJwt(): Promise<void> {
+    try {
+      const tokenData = await opalTokenService.generateClientToken(
+        'hub-backend',
+        process.env.INSTANCE_CODE || 'USA'
+      );
+      
+      this.jwt = tokenData.token;
+      this.jwtExpiry = tokenData.expiresAt;
+      
+      logger.debug('OPAL JWT refreshed', {
+        clientId: tokenData.clientId,
+        expiresAt: this.jwtExpiry.toISOString()
+      });
+    } catch (error) {
+      logger.error('Failed to refresh OPAL JWT', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Ensure we have a valid JWT, refreshing if necessary
+   * Returns null if JWT cannot be obtained (graceful degradation)
+   */
+  private async ensureJwt(): Promise<string | null> {
+    // Wait for initialization if in progress
+    if (this.jwtInitPromise) {
+      await this.jwtInitPromise;
+    }
+    
+    // Check if JWT exists and is not expired (with 5 minute buffer)
+    if (this.jwt && this.jwtExpiry) {
+      const bufferMs = 5 * 60 * 1000; // 5 minutes
+      const now = new Date();
+      const expiryWithBuffer = new Date(this.jwtExpiry.getTime() - bufferMs);
+      
+      if (now < expiryWithBuffer) {
+        return this.jwt;
+      }
+      
+      logger.info('OPAL JWT expiring soon, refreshing');
+    }
+    
+    // Try to refresh JWT
+    try {
+      await this.refreshJwt();
+      return this.jwt;
+    } catch (error) {
+      logger.warn('Could not refresh OPAL JWT, operating without push capability', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      return null;
+    }
+  }
+
+  /**
+   * Make HTTP request with retry logic
+   * ENHANCED: Uses JWT from ensureJwt() instead of raw master token
+   */
+  private async fetchWithRetry(
+    url: string,
+    options: RequestInit = {}
+  ): Promise<Response> {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
+
+    // Get JWT (may return null if unavailable)
+    const jwt = await this.ensureJwt();
+
+    const fetchOptions: RequestInit = {
+      ...options,
+      signal: controller.signal,
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+        // FIXED: Use JWT instead of raw master token
+        ...(jwt && { 'Authorization': `Bearer ${jwt}` })
+      }
+    };
+
+    let lastError: Error | null = null;
+
+    for (let attempt = 1; attempt <= this.config.retryAttempts; attempt++) {
+      try {
+        const response = await fetch(url, fetchOptions);
+        clearTimeout(timeout);
+        return response;
+      } catch (error) {
+        lastError = error instanceof Error ? error : new Error(String(error));
+        
+        if (attempt < this.config.retryAttempts) {
+          logger.warn('OPAL request failed, retrying', {
+            url,
+            attempt,
+            maxAttempts: this.config.retryAttempts,
+            error: lastError.message
+          });
+          await new Promise(resolve => setTimeout(resolve, this.config.retryDelayMs));
+        }
+      }
+    }
+
+    clearTimeout(timeout);
+    throw lastError || new Error('OPAL request failed');
+  }
+
+  // ... rest of class methods remain unchanged ...
+}
+```
+
+### Changes Summary
+
+| Change | Location | Description |
+|--------|----------|-------------|
+| Import `opalTokenService` | Line 17 | Reuse existing JWT generation logic |
+| Add JWT state fields | Lines 22-24 | `jwt`, `jwtExpiry`, `jwtInitPromise` |
+| Add `initializeJwt()` | Constructor | Async init with retry for startup timing |
+| Add `refreshJwt()` | New method | Calls `opalTokenService.generateClientToken()` |
+| Add `ensureJwt()` | New method | Get valid JWT, refresh if needed |
+| Modify `fetchWithRetry()` | Lines 40-50 | Use `ensureJwt()` instead of `config.clientToken` |
 
 ---
 
 ## 📝 IMPLEMENTATION PLAN
 
-### Phase 1: Enhance opal-client.ts to Use JWT
+### Phase 1: Enhance opal-client.ts
 
-**File:** `backend/src/services/opal-client.ts`
+1. **Add JWT management methods** to `OPALClient` class
+2. **Import `opalTokenService`** from existing service
+3. **Modify `fetchWithRetry()`** to use JWT
+4. **Add initialization retry** for startup timing
 
-```typescript
-// CHANGES NEEDED:
-
-// 1. Import opalTokenService
-import { opalTokenService } from './opal-token.service';
-
-// 2. Add JWT management to OPALClient class
-class OPALClient {
-  private jwt: string | null = null;
-  private jwtExpiry: Date | null = null;
-  
-  // 3. Initialize JWT on construction (async init pattern)
-  async ensureJwt(): Promise<string | null> {
-    // If JWT exists and not expired (with 5 min buffer), return it
-    if (this.jwt && this.jwtExpiry && new Date() < new Date(this.jwtExpiry.getTime() - 5 * 60 * 1000)) {
-      return this.jwt;
-    }
-    
-    // Fetch new JWT from OPAL server
-    try {
-      const token = await opalTokenService.generateClientToken('hub-backend', 'USA');
-      this.jwt = token.token;
-      this.jwtExpiry = token.expiresAt;
-      logger.info('OPAL JWT obtained for Hub backend', { expiresAt: this.jwtExpiry });
-      return this.jwt;
-    } catch (error) {
-      logger.error('Failed to obtain OPAL JWT', { error: error.message });
-      return null;
-    }
-  }
-  
-  // 4. Modify fetchWithRetry to get JWT dynamically
-  private async fetchWithRetry(url: string, options: RequestInit = {}): Promise<Response> {
-    const jwt = await this.ensureJwt();
-    
-    const fetchOptions: RequestInit = {
-      ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-        ...(jwt && { 'Authorization': `Bearer ${jwt}` })
-      }
-    };
-    // ... rest of method
-  }
-}
-```
-
-### Phase 2: Handle Startup Timing
-
-**Issue:** `opalTokenService.generateClientToken()` requires OPAL server to be running.
-
-**Solution:** Lazy initialization with retry:
-
-```typescript
-// In opal-client.ts
-private jwtInitPromise: Promise<void> | null = null;
-
-async initializeJwt(): Promise<void> {
-  if (this.jwtInitPromise) return this.jwtInitPromise;
-  
-  this.jwtInitPromise = (async () => {
-    for (let attempt = 1; attempt <= 5; attempt++) {
-      try {
-        await this.ensureJwt();
-        if (this.jwt) {
-          logger.info('OPAL client JWT initialized');
-          return;
-        }
-      } catch (error) {
-        logger.warn(`OPAL JWT init attempt ${attempt}/5 failed`, { error: error.message });
-        await new Promise(r => setTimeout(r, 5000)); // Wait 5s between retries
-      }
-    }
-    logger.error('Failed to initialize OPAL JWT after 5 attempts');
-  })();
-  
-  return this.jwtInitPromise;
-}
-```
-
-### Phase 3: Remove Raw Master Token from docker-compose
+### Phase 2: Remove OPAL_CLIENT_TOKEN from docker-compose
 
 **File:** `docker-compose.hub.yml`
 
 ```yaml
-# REMOVE THIS LINE:
-OPAL_CLIENT_TOKEN: ${OPAL_AUTH_MASTER_TOKEN}
+# REMOVE this line - no longer needed:
+# OPAL_CLIENT_TOKEN: ${OPAL_AUTH_MASTER_TOKEN}
 
-# The backend will now fetch its own JWT from the OPAL server
+# The backend now obtains its own JWT via opalTokenService
 ```
 
-### Phase 4: Testing
+### Phase 3: Testing
 
-1. **Unit Test:** Mock `opalTokenService` and verify JWT is used in requests
-2. **Integration Test:** Deploy Hub, verify trusted issuer push succeeds
-3. **E2E Test:** Deploy Hub + Spoke, add new trusted issuer, verify it appears in spoke OPA
-
----
-
-## 🔎 FILES TO MODIFY
-
-### Primary Changes
-
-| File | Change |
-|------|--------|
-| `backend/src/services/opal-client.ts` | Add JWT management via `opalTokenService` |
-| `docker-compose.hub.yml` | Remove `OPAL_CLIENT_TOKEN` line (backend fetches own JWT) |
-
-### Files to Audit (DO NOT MODIFY unless necessary)
-
-| File | Reason |
-|------|--------|
-| `backend/src/services/opal-token.service.ts` | Already correctly fetches JWT - may need minor enhancements |
-| `backend/src/services/opal-data.service.ts` | Already uses MongoDB SSOT - no changes needed |
-| `scripts/provision-opal-tokens.sh` | For spoke tokens - no changes needed |
+1. **Clean slate deployment**
+2. **Verify JWT acquisition** in backend logs
+3. **Verify push succeeds** (no 401 errors)
+4. **Verify spoke receives updates** (check OPA data)
 
 ---
 
@@ -268,15 +455,15 @@ OPAL_CLIENT_TOKEN: ${OPAL_AUTH_MASTER_TOKEN}
 
 ```bash
 # Check Hub backend logs for JWT initialization
-docker logs dive-hub-backend 2>&1 | grep -i "OPAL JWT"
-# Expected: "OPAL JWT obtained for Hub backend"
+docker logs dive-hub-backend 2>&1 | grep -i "OPAL.*JWT"
+# Expected: "OPAL client JWT initialized successfully"
 ```
 
 ### Step 3: Verify Data Push Works
 
 ```bash
 # Check for successful OPAL publish
-docker logs dive-hub-backend 2>&1 | grep -i "OPAL data update published"
+docker logs dive-hub-backend 2>&1 | grep -i "published successfully"
 # Expected: "OPAL data update published successfully"
 
 # Should NOT see 401 errors
@@ -287,135 +474,97 @@ docker logs dive-hub-backend 2>&1 | grep "401" | grep -i opal
 ### Step 4: Verify Spoke Receives Update
 
 ```bash
-# Check TST OPA has trusted issuers
+# Check TST OPA has all trusted issuers (without restart)
 curl -ks https://localhost:10181/v1/data/trusted_issuers | jq '.result.trusted_issuers | keys'
-# Expected: Should include both USA and TST issuers without requiring restart
+# Expected: Should include USA, TST issuers
+```
+
+### Step 5: Test Dynamic Update
+
+```bash
+# Register a new spoke and verify it propagates
+./dive spoke deploy dev
+
+# Check TST OPA immediately has DEV issuer
+curl -ks https://localhost:10181/v1/data/trusted_issuers | jq '.result.trusted_issuers | keys'
+# Expected: Should include DEV issuer without TST restart
 ```
 
 ---
 
-## 📊 CURRENT DATA FLOW (After MongoDB Refactor)
+## 📊 DATA FLOW (After Fix)
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                         DATA FLOW ARCHITECTURE                               │
+│                         CORRECTED DATA FLOW                                  │
 ├─────────────────────────────────────────────────────────────────────────────┤
 │                                                                              │
-│  1. SPOKE REGISTRATION                                                       │
-│     ┌─────────┐    ┌───────────┐    ┌──────────────┐                        │
-│     │  Spoke  │───▶│ Hub API   │───▶│ MongoDB      │                        │
-│     │ Request │    │           │    │ (SSOT)       │                        │
-│     └─────────┘    └───────────┘    └──────────────┘                        │
-│                           │                │                                 │
-│                           │                │                                 │
-│  2. OPAL DATA PUBLISH (CURRENTLY BROKEN - 401)                              │
-│                           │                │                                 │
-│                           ▼                ▼                                 │
-│     ┌───────────────────────────────────────────────┐                       │
-│     │            opal-data.service.ts               │                       │
-│     │  updateTrustedIssuer() -> MongoDB + OPAL push │                       │
-│     └───────────────────────────────────────────────┘                       │
+│  1. BACKEND STARTUP                                                          │
+│     ┌─────────────┐    ┌───────────────┐    ┌──────────────┐                │
+│     │  OPALClient │───▶│opalTokenService│───▶│ OPAL Server  │               │
+│     │ constructor │    │generateClient │    │   /token     │               │
+│     │             │    │Token()        │    │              │               │
+│     │             │◀───│               │◀───│ Returns JWT  │               │
+│     │ Store JWT   │    │               │    │ (eyJ...)     │               │
+│     └─────────────┘    └───────────────┘    └──────────────┘               │
+│                                                                              │
+│  2. DATA PUBLISH (NOW WORKS)                                                 │
+│     ┌─────────────────────────────────────────────────────────┐             │
+│     │            opal-data.service.ts                         │             │
+│     │  updateTrustedIssuer() -> MongoDB + opal-client.ts      │             │
+│     └─────────────────────────────────────────────────────────┘             │
 │                           │                                                  │
 │                           ▼                                                  │
-│     ┌───────────────────────────────────────────────┐                       │
-│     │              opal-client.ts                   │                       │
-│     │  publishInlineData() -> OPAL server           │                       │
-│     │  ❌ Currently uses raw master token          │                       │
-│     │  ✅ Should use JWT from opalTokenService     │                       │
-│     └───────────────────────────────────────────────┘                       │
+│     ┌─────────────────────────────────────────────────────────┐             │
+│     │              opal-client.ts                             │             │
+│     │  publishInlineData()                                    │             │
+│     │  ✅ ensureJwt() gets valid JWT                         │             │
+│     │  ✅ Sends: Authorization: Bearer <JWT>                 │             │
+│     └─────────────────────────────────────────────────────────┘             │
 │                           │                                                  │
-│                           ▼ (Currently fails with 401)                       │
-│     ┌───────────────────────────────────────────────┐                       │
-│     │              OPAL Server                      │                       │
-│     │  /data/config endpoint                        │                       │
-│     │  Expects: Authorization: Bearer <JWT>         │                       │
-│     │  Receives: Authorization: Bearer <master>     │                       │
-│     └───────────────────────────────────────────────┘                       │
+│                           ▼ (200 OK)                                         │
+│     ┌─────────────────────────────────────────────────────────┐             │
+│     │              OPAL Server                                │             │
+│     │  /data/config endpoint                                  │             │
+│     │  Validates JWT ✓                                        │             │
+│     │  Notifies connected clients via pub/sub                 │             │
+│     └─────────────────────────────────────────────────────────┘             │
 │                           │                                                  │
-│                           ▼ (When fixed)                                     │
-│     ┌───────────────────────────────────────────────┐                       │
-│     │          Spoke OPAL Clients                   │                       │
-│     │  Receive push notification                    │                       │
-│     │  Fetch updated data from Hub API              │                       │
-│     └───────────────────────────────────────────────┘                       │
+│                           ▼ (Push notification)                              │
+│     ┌─────────────────────────────────────────────────────────┐             │
+│     │          Spoke OPAL Clients                             │             │
+│     │  Receive push notification                              │             │
+│     │  Fetch updated data from Hub /api/opal/* endpoints      │             │
+│     └─────────────────────────────────────────────────────────┘             │
 │                           │                                                  │
 │                           ▼                                                  │
-│     ┌───────────────────────────────────────────────┐                       │
-│     │              Spoke OPA                        │                       │
-│     │  Updated trusted_issuers, federation_matrix   │                       │
-│     └───────────────────────────────────────────────┘                       │
+│     ┌─────────────────────────────────────────────────────────┐             │
+│     │              Spoke OPA                                  │             │
+│     │  Updated trusted_issuers, federation_matrix             │             │
+│     │  REAL-TIME SYNC ✓                                      │             │
+│     └─────────────────────────────────────────────────────────┘             │
 │                                                                              │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 🔗 RELEVANT CODE REFERENCES
+## 🔗 FILES TO MODIFY
 
-### opal-token.service.ts (lines 54-86) - JWT Generation Logic
+### Primary Changes
 
-```typescript
-async generateClientToken(spokeId: string, instanceCode: string): Promise<IOPALClientToken> {
-  // Uses master token to request JWT from OPAL server /token endpoint
-  const response = await this.fetchOPALToken();
-  return {
-    token: response.token,  // This is the JWT (starts with eyJ)
-    expiresAt: new Date(response.details.expired),
-    clientId: response.details.id,
-    type: 'opal_client'
-  };
-}
+| File | Change |
+|------|--------|
+| `backend/src/services/opal-client.ts` | Add JWT management via `opalTokenService` |
+| `docker-compose.hub.yml` | Remove `OPAL_CLIENT_TOKEN` line (optional cleanup) |
 
-private async fetchOPALToken(): Promise<IOPALTokenResponse> {
-  const response = await fetch(`${this.opalServerUrl}/token`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${this.masterToken}`,  // Master token here
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ type: 'client' })
-  });
-  return await response.json();  // Returns JWT
-}
-```
+### Files to Audit (DO NOT MODIFY unless necessary)
 
-### opal-client.ts (lines 121-164) - Where JWT Should Be Used
-
-```typescript
-private async fetchWithRetry(url: string, options: RequestInit = {}): Promise<Response> {
-  const fetchOptions: RequestInit = {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-      // THIS IS THE PROBLEM - uses raw master token
-      ...(this.config.clientToken && { 
-        'Authorization': `Bearer ${this.config.clientToken}` 
-      })
-    }
-  };
-  // ...
-}
-```
-
----
-
-## 📁 PROJECT STRUCTURE (Relevant Files)
-
-```
-backend/src/services/
-├── opal-client.ts              # ❌ NEEDS FIX: Use JWT instead of master token
-├── opal-token.service.ts       # ✅ COMPLETE: Correctly fetches JWT from OPAL server
-├── opal-data.service.ts        # ✅ COMPLETE: Uses MongoDB SSOT
-├── federation-bootstrap.service.ts  # Uses opal-data.service for trusted issuer registration
-└── hub-spoke-registry.service.ts    # Uses opal-data.service for federation
-
-docker-compose.hub.yml          # Remove OPAL_CLIENT_TOKEN environment variable
-
-scripts/
-├── provision-opal-tokens.sh    # For spoke JWT provisioning (no changes needed)
-└── generate-opal-certs.sh      # Generates JWT signing keys (no changes needed)
-```
+| File | Reason |
+|------|--------|
+| `backend/src/services/opal-token.service.ts` | Already correctly fetches JWT - USE AS IS |
+| `backend/src/services/opal-data.service.ts` | Already uses MongoDB SSOT - no changes needed |
+| `backend/src/models/trusted-issuer.model.ts` | MongoDB SSOT store - no changes needed |
 
 ---
 
@@ -426,12 +575,14 @@ scripts/
 - [ ] `publishInlineData()` returns `success: true` (not 401)
 - [ ] New trusted issuers appear in spoke OPA within 30 seconds (without restart)
 - [ ] JWT refresh works before expiry
+- [ ] All existing tests continue to pass
 
 ### Qualitative
 - [ ] No static JSON files for OPAL data (MongoDB is SSOT)
 - [ ] Uses existing `opalTokenService` (no duplicate token logic)
 - [ ] Proper error handling for JWT acquisition failures
 - [ ] Graceful degradation if OPAL server unavailable
+- [ ] Clear logging for troubleshooting
 
 ---
 
@@ -450,17 +601,20 @@ git log --oneline -1
 docker logs dive-hub-backend 2>&1 | grep -i "401" | tail -5
 ```
 
-### Step 2: Read Existing Token Service
+### Step 2: Read Existing Services
 
 ```bash
-# Understand how JWT is currently generated for spokes
-cat backend/src/services/opal-token.service.ts
+# Understand existing token service (DO NOT MODIFY - USE IT)
+# File: backend/src/services/opal-token.service.ts
+
+# Understand current opal-client (NEEDS FIX)
+# File: backend/src/services/opal-client.ts
 ```
 
 ### Step 3: Implement Changes
 
-1. Modify `opal-client.ts` to use `opalTokenService` for JWT
-2. Remove `OPAL_CLIENT_TOKEN` from `docker-compose.hub.yml`
+1. Enhance `opal-client.ts` to use `opalTokenService` for JWT
+2. Remove `OPAL_CLIENT_TOKEN` from `docker-compose.hub.yml` (optional)
 3. Test with clean deployment
 
 ### Step 4: Verify and Commit
@@ -470,38 +624,116 @@ cat backend/src/services/opal-token.service.ts
 ./dive hub deploy
 ./dive spoke deploy tst
 
+# Verify JWT obtained
+docker logs dive-hub-backend 2>&1 | grep -i "OPAL.*JWT"
+
 # Verify no 401 errors
-docker logs dive-hub-backend 2>&1 | grep -i opal
+docker logs dive-hub-backend 2>&1 | grep -i "401.*opal"
 
 # Commit changes
 git add -A
-git commit -m "fix(opal): Use JWT for Hub backend OPAL authentication"
+git commit -m "fix(opal): Use JWT for Hub backend OPAL authentication
+
+- Enhanced opal-client.ts to use opalTokenService for JWT generation
+- Added JWT caching with automatic refresh before expiry
+- Added retry logic for OPAL server startup timing
+- Removed dependency on OPAL_CLIENT_TOKEN environment variable
+
+This fixes the 401 error when Hub backend publishes data to OPAL server,
+enabling real-time push notifications to spoke OPAL clients."
 git push
 ```
 
 ---
 
-## 📚 REFERENCE DOCUMENTATION
+## 📚 REFERENCE: SSOT Architecture Summary
 
-### OPAL Authentication Model
-- OPAL uses JWT tokens for client authentication
-- Master token is an **admin secret** used to request JWTs, not for direct API access
-- JWTs are issued by OPAL server's `/token` endpoint
-- JWTs have expiry and should be refreshed before expiry
+### Data Storage (MongoDB is SSOT)
 
-### Files Audit Summary
+| Collection | Purpose | Updated By |
+|------------|---------|------------|
+| `trusted_issuers` | Token issuer registry | `mongoOpalDataStore.addIssuer()` |
+| `federation_matrix` | Bilateral trust | `mongoOpalDataStore.setFederationTrust()` |
+| `tenant_configs` | Per-tenant policy config | `mongoOpalDataStore.setTenantConfig()` |
+| `federation_spokes` | Registered spokes | `hubSpokeRegistry` |
 
-| File | SSOT Role | Auth Method |
-|------|-----------|-------------|
-| MongoDB `trusted_issuers` | Trusted issuer registry | N/A (database) |
-| MongoDB `federation_matrix` | Federation trust matrix | N/A (database) |
-| MongoDB `tenant_configs` | Tenant configurations | N/A (database) |
-| `.env.hub` | Secrets only (`OPAL_AUTH_MASTER_TOKEN`) | N/A (secrets) |
-| Spoke `.env` | `SPOKE_OPAL_TOKEN` (JWT for OPAL connection) | JWT |
-| Hub backend | Should use JWT from `opalTokenService` | JWT (to be fixed) |
+### NO Static JSON Files
+
+| What | How |
+|------|-----|
+| Trusted issuers | MongoDB `trusted_issuers` collection |
+| Federation matrix | MongoDB `federation_matrix` collection |
+| OPAL data | Fetched from `/api/opal/*` endpoints backed by MongoDB |
+| JWT tokens | Generated dynamically via `opalTokenService` |
+
+### Environment Variables (.env) - ONLY for Secrets
+
+| Variable | Purpose |
+|----------|---------|
+| `OPAL_AUTH_MASTER_TOKEN` | Admin secret to request JWTs |
+| `MONGODB_URL` | Database connection |
+| `KEYCLOAK_CLIENT_SECRET` | IDP client credential |
+
+---
+
+## 🏗️ ARCHITECTURE CONTEXT
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    DIVE V3 OPAL AUTHENTICATION ARCHITECTURE                  │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│    HUB (USA)                                                                 │
+│    ┌────────────────────────────────────────────────────────────────────┐   │
+│    │  Backend (:4000)                                                   │   │
+│    │  ┌──────────────────────────────────────────────────────────────┐ │   │
+│    │  │ opal-client.ts                                               │ │   │
+│    │  │  - Publishes data updates                                    │ │   │
+│    │  │  - Uses JWT from opalTokenService                           │ │   │
+│    │  │  - Caches JWT with auto-refresh                             │ │   │
+│    │  └──────────────────────────────────────────────────────────────┘ │   │
+│    │                           │                                        │   │
+│    │                           │ imports                                │   │
+│    │                           ▼                                        │   │
+│    │  ┌──────────────────────────────────────────────────────────────┐ │   │
+│    │  │ opal-token.service.ts                                        │ │   │
+│    │  │  - Fetches JWT from OPAL server /token                       │ │   │
+│    │  │  - Uses OPAL_AUTH_MASTER_TOKEN for auth                      │ │   │
+│    │  │  - Returns signed JWT (eyJ...)                               │ │   │
+│    │  └──────────────────────────────────────────────────────────────┘ │   │
+│    │                           │                                        │   │
+│    │                           │ calls                                  │   │
+│    │                           ▼                                        │   │
+│    │  ┌──────────────────────────────────────────────────────────────┐ │   │
+│    │  │ opal-data.service.ts                                         │ │   │
+│    │  │  - Uses MongoDB as SSOT                                      │ │   │
+│    │  │  - Calls opalClient.publishInlineData() for sync             │ │   │
+│    │  └──────────────────────────────────────────────────────────────┘ │   │
+│    └────────────────────────────────────────────────────────────────────┘   │
+│                           │                                                  │
+│                           ▼                                                  │
+│    ┌────────────────────────────────────────────────────────────────────┐   │
+│    │  OPAL Server (:7002)                                              │   │
+│    │  - /token endpoint: Issues JWTs (requires master token)           │   │
+│    │  - /data/config endpoint: Receives updates (requires JWT)         │   │
+│    │  - Pushes notifications to connected OPAL clients                 │   │
+│    └────────────────────────────────────────────────────────────────────┘   │
+│                           │                                                  │
+│              ┌────────────┴────────────┐                                    │
+│              ▼                         ▼                                    │
+│    ┌─────────────────┐      ┌─────────────────┐                             │
+│    │ TST OPAL Client │      │ DEV OPAL Client │                             │
+│    │ (Spoke)         │      │ (Spoke)         │                             │
+│    │                 │      │                 │                             │
+│    │ Uses JWT from   │      │ Uses JWT from   │                             │
+│    │ registration    │      │ registration    │                             │
+│    └─────────────────┘      └─────────────────┘                             │
+│                                                                              │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
 **END OF SESSION HANDOFF**
 
-**Next Action:** Implement JWT-based authentication in `opal-client.ts` using existing `opalTokenService`.
+**Next Action:** Implement JWT-based authentication in `opal-client.ts` using existing `opalTokenService`. The solution is straightforward - reuse existing logic, don't create new token generation code.
