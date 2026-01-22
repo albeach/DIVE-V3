@@ -108,6 +108,147 @@ hub_health() {
     return $exit_code
 }
 
+##
+# Hub detailed health check using backend /health/detailed endpoint
+# Phase 3.1: Production Resilience Enhancement
+#
+# This function calls the backend's /health/detailed endpoint to get
+# comprehensive health status including MongoDB, OPA, Keycloak, Redis,
+# KAS, cache, and circuit breaker states.
+#
+# Returns:
+#   0 - All services healthy
+#   1 - Some services unhealthy/degraded
+##
+hub_health_detailed() {
+    echo -e "${BOLD}Hub Detailed Health Check (API-based)${NC}"
+    echo ""
+
+    local backend_url="${HUB_BACKEND_URL:-https://localhost:4000}"
+    local health_response
+    local exit_code=0
+
+    # Call the backend's /health/detailed endpoint
+    health_response=$(curl -sfk --max-time 10 "${backend_url}/health/detailed" 2>/dev/null)
+
+    if [ -z "$health_response" ]; then
+        echo -e "  ${RED}✗${NC} Backend API not responding at ${backend_url}/health/detailed"
+        return 1
+    fi
+
+    # Parse overall status
+    local overall_status
+    overall_status=$(echo "$health_response" | jq -r '.status // "unknown"' 2>/dev/null)
+
+    case "$overall_status" in
+        healthy)
+            echo -e "  Overall Status: ${GREEN}✓ HEALTHY${NC}"
+            ;;
+        degraded)
+            echo -e "  Overall Status: ${YELLOW}⚠ DEGRADED${NC}"
+            exit_code=1
+            ;;
+        unhealthy)
+            echo -e "  Overall Status: ${RED}✗ UNHEALTHY${NC}"
+            exit_code=1
+            ;;
+        *)
+            echo -e "  Overall Status: ${RED}? UNKNOWN${NC}"
+            exit_code=1
+            ;;
+    esac
+
+    echo ""
+    echo -e "${CYAN}Service Dependencies:${NC}"
+
+    # Parse individual service statuses
+    local services=("mongodb" "opa" "keycloak" "redis" "kas" "cache")
+
+    for service in "${services[@]}"; do
+        local svc_status
+        local svc_response_time
+        local svc_error
+
+        svc_status=$(echo "$health_response" | jq -r ".services.${service}.status // \"N/A\"" 2>/dev/null)
+        svc_response_time=$(echo "$health_response" | jq -r ".services.${service}.responseTime // \"N/A\"" 2>/dev/null)
+        svc_error=$(echo "$health_response" | jq -r ".services.${service}.error // \"\"" 2>/dev/null)
+
+        case "$svc_status" in
+            up)
+                if [ "$svc_response_time" != "N/A" ] && [ "$svc_response_time" != "null" ]; then
+                    echo -e "  ${service}: ${GREEN}✓${NC} up (${svc_response_time}ms)"
+                else
+                    echo -e "  ${service}: ${GREEN}✓${NC} up"
+                fi
+                ;;
+            degraded)
+                echo -e "  ${service}: ${YELLOW}⚠${NC} degraded"
+                ;;
+            down)
+                if [ -n "$svc_error" ] && [ "$svc_error" != "null" ]; then
+                    echo -e "  ${service}: ${RED}✗${NC} down - ${svc_error}"
+                else
+                    echo -e "  ${service}: ${RED}✗${NC} down"
+                fi
+                exit_code=1
+                ;;
+            N/A|null)
+                echo -e "  ${service}: ${DIM}○${NC} not configured"
+                ;;
+            *)
+                echo -e "  ${service}: ${YELLOW}?${NC} ${svc_status}"
+                ;;
+        esac
+    done
+
+    # Parse circuit breaker states if available
+    local cb_count
+    cb_count=$(echo "$health_response" | jq '.circuitBreakers | length' 2>/dev/null)
+
+    if [ -n "$cb_count" ] && [ "$cb_count" != "null" ] && [ "$cb_count" -gt 0 ]; then
+        echo ""
+        echo -e "${CYAN}Circuit Breakers:${NC}"
+        
+        echo "$health_response" | jq -r '.circuitBreakers | to_entries[] | "\(.key):\(.value.state)"' 2>/dev/null | while read -r line; do
+            local cb_name=$(echo "$line" | cut -d: -f1)
+            local cb_state=$(echo "$line" | cut -d: -f2)
+            
+            case "$cb_state" in
+                CLOSED)
+                    echo -e "  ${cb_name}: ${GREEN}✓${NC} closed (healthy)"
+                    ;;
+                HALF_OPEN)
+                    echo -e "  ${cb_name}: ${YELLOW}⚠${NC} half-open (recovering)"
+                    ;;
+                OPEN)
+                    echo -e "  ${cb_name}: ${RED}✗${NC} open (failing)"
+                    ;;
+            esac
+        done
+    fi
+
+    # Parse memory usage
+    local mem_used mem_total mem_pct
+    mem_used=$(echo "$health_response" | jq -r '.memory.used // 0' 2>/dev/null)
+    mem_total=$(echo "$health_response" | jq -r '.memory.total // 0' 2>/dev/null)
+    mem_pct=$(echo "$health_response" | jq -r '.memory.percentage // 0' 2>/dev/null)
+
+    if [ "$mem_used" != "0" ] && [ "$mem_used" != "null" ]; then
+        echo ""
+        echo -e "${CYAN}Memory Usage:${NC}"
+        if [ "$mem_pct" -gt 90 ]; then
+            echo -e "  ${RED}⚠${NC} ${mem_used}MB / ${mem_total}MB (${mem_pct}%)"
+        elif [ "$mem_pct" -gt 75 ]; then
+            echo -e "  ${YELLOW}○${NC} ${mem_used}MB / ${mem_total}MB (${mem_pct}%)"
+        else
+            echo -e "  ${GREEN}✓${NC} ${mem_used}MB / ${mem_total}MB (${mem_pct}%)"
+        fi
+    fi
+
+    echo ""
+    return $exit_code
+}
+
 hub_status_brief() {
     echo ""
     echo -e "${CYAN}Hub Status Summary:${NC}"
