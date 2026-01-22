@@ -81,27 +81,39 @@ server.listen(PORT, async () => {
   // ============================================
   // PHASE 5: Spoke Identity & Heartbeat (SSOT Architecture)
   // ============================================
-  // Hub MongoDB is the SINGLE SOURCE OF TRUTH for spokeId
-  // Spoke queries Hub at startup to get its identity
+  // SSOT ARCHITECTURE (2026-01-22):
+  // Hub MongoDB is the Single Source of Truth for spokeId.
+  // SPOKE_TOKEN (from registration) is the identity - Hub knows which spokeId it belongs to.
+  // Flow: Start heartbeat with SPOKE_TOKEN → Hub validates → returns spokeId → cache locally
   if (!isHub) {
-    try {
-      // Initialize spoke identity from Hub (authoritative source)
-      const identity = await spokeIdentityService.initialize();
-      
-      logger.info('Spoke identity initialized from Hub (SSOT)', {
-        spokeId: identity.spokeId,
-        instanceCode: identity.instanceCode,
-        status: identity.status,
-      });
+    const hubUrl = process.env.HUB_URL || 'https://dive-hub-backend:4000';
+    const instanceCode = process.env.INSTANCE_CODE || '';
+    const spokeToken = process.env.SPOKE_TOKEN || '';
 
-      const hubUrl = process.env.HUB_URL || 'https://dive-hub-backend:4000';
+    if (!instanceCode) {
+      logger.error('INSTANCE_CODE environment variable is required for spoke mode');
+    } else if (!spokeToken) {
+      logger.error('SPOKE_TOKEN environment variable is required for spoke mode. Register the spoke first.');
+    } else {
+      try {
+        // Step 1: Initialize spoke identity service (loads cached identity, sets up listeners)
+        const identity = await spokeIdentityService.initialize();
+        
+        logger.info('Spoke identity service initialized', {
+          spokeId: identity.spokeId,
+          instanceCode: identity.instanceCode,
+          verifiedByHub: identity.verifiedByHub,
+          hasToken: !!identity.token,
+        });
 
-      if (identity.status === 'approved' && identity.token) {
+        // Step 2: Start heartbeat with SPOKE_TOKEN
+        // Hub validates token and returns authoritative spokeId in response
+        // The spokeId passed here is just for initial payload - Hub ignores it
         spokeHeartbeat.initialize({
           hubUrl: hubUrl,
-          spokeId: identity.spokeId,  // From Hub, NOT from env
-          instanceCode: identity.instanceCode,
-          spokeToken: identity.token,
+          spokeId: identity.spokeId,  // Cached or placeholder - Hub will return authoritative one
+          instanceCode: instanceCode,
+          spokeToken: spokeToken,      // SPOKE_TOKEN is the real identity
           intervalMs: parseInt(process.env.HEARTBEAT_INTERVAL_MS || '30000'),
           timeoutMs: parseInt(process.env.HEARTBEAT_TIMEOUT_MS || '10000'),
           maxQueueSize: parseInt(process.env.HEARTBEAT_MAX_QUEUE_SIZE || '10'),
@@ -109,23 +121,25 @@ server.listen(PORT, async () => {
         });
 
         spokeHeartbeat.start();
-        logger.info('Spoke heartbeat service initialized with Hub-assigned identity', {
-          spokeId: identity.spokeId,
-          instanceCode: identity.instanceCode,
+        logger.info('Spoke heartbeat service started', {
+          instanceCode,
           hubUrl,
           intervalMs: 30000,
         });
-      } else {
-        logger.warn('Spoke not approved - heartbeat disabled', {
-          spokeId: identity.spokeId,
-          status: identity.status,
+
+        // Step 3: Wait for Hub to verify identity (optional - can proceed with cached)
+        // This happens asynchronously via heartbeat's identityVerified event
+        if (!identity.verifiedByHub) {
+          logger.info('Waiting for Hub to verify spoke identity via first heartbeat...');
+          // Don't block startup - identity service will update when heartbeat succeeds
+        }
+      } catch (identityError) {
+        logger.error('Failed to initialize spoke identity/heartbeat', {
+          error: identityError instanceof Error ? identityError.message : 'Unknown error',
+          impact: 'Heartbeat service disabled - spoke cannot communicate with Hub',
         });
+        // Continue startup - spoke can still serve local requests
       }
-    } catch (error) {
-      logger.error('Failed to initialize spoke identity', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        impact: 'Heartbeat service disabled',
-      });
     }
   }
 });

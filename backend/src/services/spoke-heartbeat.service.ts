@@ -61,6 +61,10 @@ export interface IServiceHealth {
 export interface IHeartbeatResponse {
   success: boolean;
   serverTime: string;
+  // SSOT ARCHITECTURE (2026-01-22): Hub returns authoritative spokeId
+  // Spoke caches this - no need to store spokeId in .env or config.json
+  spokeId?: string;       // Hub's authoritative spokeId from MongoDB
+  instanceCode?: string;  // Instance code for verification
   currentPolicyVersion: string;
   syncStatus: 'current' | 'behind' | 'stale';
   actions?: IHubAction[];
@@ -107,6 +111,13 @@ class SpokeHeartbeatService extends EventEmitter {
   private lastSuccessfulHeartbeat: Date | null = null;
   private lastHeartbeatResponse: IHeartbeatResponse | null = null;
   private startTime: Date = new Date();
+
+  // SSOT ARCHITECTURE (2026-01-22): Hub-assigned identity
+  // Hub is the Single Source of Truth for spokeId. On successful heartbeat,
+  // Hub returns the authoritative spokeId from its MongoDB. This is cached here.
+  private hubAssignedSpokeId: string | null = null;
+  private hubAssignedInstanceCode: string | null = null;
+  private identityVerified = false;
 
   // Health check cache
   private serviceHealth: IHeartbeatPayload['services'] = {
@@ -220,6 +231,27 @@ class SpokeHeartbeatService extends EventEmitter {
       this.lastSuccessfulHeartbeat = new Date();
       this.lastHeartbeatResponse = response;
 
+      // SSOT ARCHITECTURE (2026-01-22): Cache Hub-assigned identity
+      // Hub validates SPOKE_TOKEN and returns authoritative spokeId from its MongoDB
+      if (response.spokeId) {
+        const isFirstVerification = !this.identityVerified;
+        this.hubAssignedSpokeId = response.spokeId;
+        this.hubAssignedInstanceCode = response.instanceCode || this.config?.instanceCode || null;
+        this.identityVerified = true;
+
+        if (isFirstVerification) {
+          logger.info('Spoke identity verified by Hub', {
+            hubAssignedSpokeId: this.hubAssignedSpokeId,
+            hubAssignedInstanceCode: this.hubAssignedInstanceCode,
+            configSpokeId: this.config?.spokeId,
+          });
+          this.emit('identityVerified', {
+            spokeId: this.hubAssignedSpokeId,
+            instanceCode: this.hubAssignedInstanceCode,
+          });
+        }
+      }
+
       // Process any actions from Hub
       if (response.actions && response.actions.length > 0) {
         await this.processHubActions(response.actions);
@@ -242,6 +274,7 @@ class SpokeHeartbeatService extends EventEmitter {
       logger.info('Heartbeat sent successfully', {
         syncStatus: response.syncStatus,
         serverTime: response.serverTime,
+        hubAssignedSpokeId: this.hubAssignedSpokeId,
       });
 
       return response;
@@ -730,6 +763,60 @@ class SpokeHeartbeatService extends EventEmitter {
    */
   getLastResponse(): IHeartbeatResponse | null {
     return this.lastHeartbeatResponse;
+  }
+
+  // ============================================
+  // SSOT ARCHITECTURE: HUB-ASSIGNED IDENTITY
+  // ============================================
+
+  /**
+   * Get Hub-assigned spokeId (SSOT)
+   * Returns null if identity not yet verified by Hub
+   */
+  getHubAssignedSpokeId(): string | null {
+    return this.hubAssignedSpokeId;
+  }
+
+  /**
+   * Get Hub-assigned instanceCode
+   * Returns null if identity not yet verified by Hub
+   */
+  getHubAssignedInstanceCode(): string | null {
+    return this.hubAssignedInstanceCode;
+  }
+
+  /**
+   * Check if identity has been verified by Hub
+   */
+  isIdentityVerified(): boolean {
+    return this.identityVerified;
+  }
+
+  /**
+   * Wait for identity verification from Hub
+   * Useful at startup when services need spokeId
+   */
+  async waitForIdentityVerification(timeoutMs = 30000): Promise<{ spokeId: string; instanceCode: string }> {
+    if (this.identityVerified && this.hubAssignedSpokeId) {
+      return {
+        spokeId: this.hubAssignedSpokeId,
+        instanceCode: this.hubAssignedInstanceCode || this.config?.instanceCode || '',
+      };
+    }
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        this.removeListener('identityVerified', handler);
+        reject(new Error(`Identity verification timed out after ${timeoutMs}ms`));
+      }, timeoutMs);
+
+      const handler = (identity: { spokeId: string; instanceCode: string }) => {
+        clearTimeout(timeout);
+        resolve(identity);
+      };
+
+      this.once('identityVerified', handler);
+    });
   }
 
   /**
