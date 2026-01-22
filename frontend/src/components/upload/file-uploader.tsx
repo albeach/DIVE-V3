@@ -38,20 +38,35 @@ interface FileUploaderProps {
 }
 
 const ACCEPTED_FILE_TYPES = {
+  // Documents
   'application/pdf': ['.pdf'],
   'application/msword': ['.doc'],
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
   'text/plain': ['.txt'],
   'text/markdown': ['.md'],
   'text/csv': ['.csv'],
+  'application/json': ['.json'],
+  'application/xml': ['.xml'],
+  // Images
   'image/png': ['.png'],
   'image/jpeg': ['.jpg', '.jpeg'],
   'image/gif': ['.gif'],
-  'application/json': ['.json'],
-  'application/xml': ['.xml'],
+  // Audio (STANAG 4774/4778 compliant)
+  'audio/mpeg': ['.mp3'],
+  'audio/mp4': ['.m4a'],
+  'audio/x-m4a': ['.m4a'],  // M4A alternative MIME type
+  'audio/wav': ['.wav'],
+  'audio/x-wav': ['.wav'],
+  'audio/webm': ['.webm'],
+  'audio/ogg': ['.ogg'],
+  // Video (STANAG 4774/4778 compliant)
+  'video/mp4': ['.mp4'],
+  'video/webm': ['.webm'],
+  'video/ogg': ['.ogg'],
 };
 
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+// 500MB max for multimedia files
+const MAX_FILE_SIZE = 500 * 1024 * 1024;
 
 // Animation variants
 const dropzoneVariants = {

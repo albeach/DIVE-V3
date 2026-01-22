@@ -172,6 +172,47 @@ export interface ISTANAGResourceMetadata {
 }
 
 /**
+ * Multimedia metadata for audio/video files
+ * Used for STANAG 4774/4778 compliant multimedia resources
+ */
+export interface IMultimediaMetadata {
+    /** Duration in seconds */
+    duration?: number;
+    /** Bitrate in kbps */
+    bitrate?: number;
+    /** Primary codec (e.g., 'h264', 'aac', 'mp3') */
+    codec?: string;
+    /** Video resolution (e.g., '1920x1080') */
+    resolution?: string;
+    /** Sample rate in Hz (audio) */
+    sampleRate?: number;
+    /** Number of audio channels (1=mono, 2=stereo) */
+    channels?: number;
+    /** Whether file contains audio stream */
+    hasAudio?: boolean;
+    /** Whether file contains video stream */
+    hasVideo?: boolean;
+    /** Container format (e.g., 'mp4', 'webm', 'mp3') */
+    format?: string;
+    /** Video width in pixels */
+    width?: number;
+    /** Video height in pixels */
+    height?: number;
+    /** Frame rate (video) */
+    frameRate?: number;
+    /** Aspect ratio (e.g., '16:9') */
+    aspectRatio?: string;
+    /** Video codec name */
+    videoCodec?: string;
+    /** Audio codec name */
+    audioCodec?: string;
+    /** XMP sidecar filename (for formats that don't support embedding) */
+    xmpSidecarFilename?: string;
+    /** Whether XMP is embedded or in sidecar */
+    xmpEmbedded?: boolean;
+}
+
+/**
  * Classification hierarchy levels (lower = less sensitive)
  */
 export const CLASSIFICATION_HIERARCHY: Record<string, number> = {

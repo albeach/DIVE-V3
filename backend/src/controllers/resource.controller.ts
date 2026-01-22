@@ -236,7 +236,7 @@ export const getResourceHandler = async (
                     const user = (req as any).enrichedUser || (req as any).user;
                     const userCountry = user?.countryOfAffiliation || 'USA';
                     const language = userCountry === 'FRA' ? 'fr' : 'en';
-                    
+
                     const marking = await generateMarking(
                         classification,
                         releasabilityTo,

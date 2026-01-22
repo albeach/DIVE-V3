@@ -1,18 +1,16 @@
 {
   "identity": {
-    "spokeId": "spoke-deu-ae7c58cd",
     "instanceCode": "DEU",
     "name": "DEU Instance",
     "description": "DIVE V3 Spoke Instance for DEU",
     "country": "DEU",
     "organizationType": "government",
-    "contactEmail": "admin@deu.dive25.com",
-    "registeredSpokeId": "spoke-deu-3134faeb"
+    "contactEmail": "admin@deu.dive25.com"
   },
   "endpoints": {
-    "hubUrl": "https://localhost:4000",
-    "hubApiUrl": "https://localhost:4000/api",
-    "hubOpalUrl": "https://localhost:7002",
+    "hubUrl": "https://dive-hub-backend:4000",
+    "hubApiUrl": "https://dive-hub-backend:4000/api",
+    "hubOpalUrl": "https://dive-hub-opal-server:7002",
     "baseUrl": "https://localhost:3011",
     "apiUrl": "https://localhost:4011",
     "idpUrl": "https://dive-spoke-deu-keycloak:8443",
@@ -27,14 +25,13 @@
   },
   "authentication": {},
   "federation": {
-    "status": "pending",
+    "status": "unregistered",
     "requestedScopes": [
       "policy:base",
       "policy:deu",
       "data:federation_matrix",
       "data:trusted_issuers"
-    ],
-    "registeredAt": "2026-01-19T01:25:57Z"
+    ]
   },
   "operational": {
     "heartbeatIntervalMs": 30000,
@@ -47,8 +44,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2026-01-14T06:05:45Z",
-    "lastModified": "2026-01-14T06:05:45Z",
+    "createdAt": "2026-01-22T13:26:48Z",
+    "lastModified": "2026-01-22T13:26:49Z",
     "configHash": ""
   }
 }
