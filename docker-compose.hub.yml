@@ -298,8 +298,9 @@ services:
       NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
       OPAL_SERVER_URL: https://opal-server:7002
       OPAL_DATA_TOPICS: policy_data
-      # OPAL client token for publishing data updates to OPAL server
-      OPAL_CLIENT_TOKEN: ${OPAL_AUTH_MASTER_TOKEN}
+      # OPAL JWT Auth: Backend obtains its own JWT via opalTokenService (see opal-client.ts)
+      # The OPAL_AUTH_MASTER_TOKEN is used internally by opalTokenService to request JWTs
+      OPAL_AUTH_MASTER_TOKEN: ${OPAL_AUTH_MASTER_TOKEN}
       # Docker exec configuration for running OPA tests
       OPA_CONTAINER: ${COMPOSE_PROJECT_NAME}-opa
       OPA_POLICIES_PATH: /policies

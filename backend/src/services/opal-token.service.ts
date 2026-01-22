@@ -1,27 +1,35 @@
 /**
  * OPAL Token Service
  *
- * Generates JWT tokens for OPAL clients by calling the OPAL server's token endpoint.
- * These tokens allow spoke OPAL clients to connect and subscribe to policy updates.
+ * Generates JWT tokens for OPAL interactions by calling the OPAL server's token endpoint.
+ * 
+ * OPAL Token Types:
+ * - `client`: For OPAL clients to connect and subscribe to policy/data updates
+ * - `datasource`: For data publishers to push data updates to OPAL server
  *
  * Token flow:
  * 1. Hub uses OPAL_AUTH_MASTER_TOKEN to authenticate with OPAL server
  * 2. OPAL server returns a signed JWT with RS256 algorithm
- * 3. Spoke uses this JWT as OPAL_CLIENT_TOKEN to connect
+ * 3. Token is used for specific operations based on peer_type:
+ *    - client: Spoke OPAL clients use this to subscribe to updates
+ *    - datasource: Hub backend uses this to publish data updates
  */
 
 import { logger } from '../utils/logger';
 import https from 'https';
+
+// Token types supported by OPAL
+type OPALPeerType = 'client' | 'datasource';
 
 interface IOPALTokenResponse {
   token: string;
   type: 'bearer';
   details: {
     id: string;
-    type: 'client';
+    type: OPALPeerType;
     expired: string;
     claims: {
-      peer_type: 'client';
+      peer_type: OPALPeerType;
     };
   };
 }
@@ -31,6 +39,13 @@ interface IOPALClientToken {
   expiresAt: Date;
   clientId: string;
   type: 'opal_client';
+}
+
+interface IOPALDatasourceToken {
+  token: string;
+  expiresAt: Date;
+  clientId: string;
+  type: 'opal_datasource';
 }
 
 class OPALTokenService {
@@ -50,6 +65,7 @@ class OPALTokenService {
   /**
    * Generate an OPAL client JWT for a spoke.
    * This token allows the spoke's OPAL client to connect to the Hub's OPAL server.
+   * Token type: 'client' (peer_type: PeerType.client)
    */
   async generateClientToken(spokeId: string, instanceCode: string): Promise<IOPALClientToken> {
     if (!this.masterToken) {
@@ -57,8 +73,8 @@ class OPALTokenService {
     }
 
     try {
-      // Fetch token from OPAL server
-      const response = await this.fetchOPALToken();
+      // Fetch CLIENT type token from OPAL server
+      const response = await this.fetchOPALToken('client');
 
       const token: IOPALClientToken = {
         token: response.token,
@@ -86,9 +102,51 @@ class OPALTokenService {
   }
 
   /**
-   * Fetch a client token from the OPAL server's /token endpoint.
+   * Generate an OPAL datasource JWT for data publishing.
+   * This token allows the Hub backend to publish data updates to the OPAL server.
+   * Token type: 'datasource' (peer_type: PeerType.datasource)
+   * 
+   * OPAL requires datasource tokens for:
+   * - POST /data/config (data update notifications)
+   * - Any endpoint that modifies OPAL data
    */
-  private async fetchOPALToken(): Promise<IOPALTokenResponse> {
+  async generateDatasourceToken(serviceId: string): Promise<IOPALDatasourceToken> {
+    if (!this.masterToken) {
+      throw new Error('OPAL master token not configured');
+    }
+
+    try {
+      // Fetch DATASOURCE type token from OPAL server
+      const response = await this.fetchOPALToken('datasource');
+
+      const token: IOPALDatasourceToken = {
+        token: response.token,
+        expiresAt: new Date(response.details.expired),
+        clientId: response.details.id,
+        type: 'opal_datasource'
+      };
+
+      logger.info('OPAL datasource token generated', {
+        serviceId,
+        clientId: token.clientId,
+        expiresAt: token.expiresAt.toISOString()
+      });
+
+      return token;
+    } catch (error) {
+      logger.error('Failed to generate OPAL datasource token', {
+        serviceId,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Fetch a token from the OPAL server's /token endpoint.
+   * @param peerType - 'client' for subscriptions, 'datasource' for data publishing
+   */
+  private async fetchOPALToken(peerType: OPALPeerType): Promise<IOPALTokenResponse> {
     const url = new URL('/token', this.opalServerUrl);
 
     // Create custom HTTPS agent to handle self-signed certs
@@ -102,7 +160,7 @@ class OPALTokenService {
         'Authorization': `Bearer ${this.masterToken}`,
         'Content-Type': 'application/json'
       },
-      body: JSON.stringify({ type: 'client' }),
+      body: JSON.stringify({ type: peerType }),
       // @ts-ignore - Node.js fetch supports agent
       agent
     });
