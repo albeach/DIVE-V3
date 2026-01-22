@@ -795,6 +795,39 @@ router.get('/tenant-configs', async (_req: Request, res: Response): Promise<void
 });
 
 /**
+ * GET /api/opal/coi-definitions
+ * Get all COI definitions from MongoDB (Phase 3: Gap Closure)
+ * 
+ * MongoDB SSOT for ALL COI types:
+ * - Country-based COIs (NATO, FVEY, etc.)
+ * - Program-based COIs (Alpha, Beta, etc.)
+ * - Auto-updated coalition COIs (NATO auto-updates from active federation)
+ */
+router.get('/coi-definitions', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const { mongoCoiDefinitionStore } = await import('../models/coi-definition.model');
+    
+    await mongoCoiDefinitionStore.initialize();
+    const coiMap = await mongoCoiDefinitionStore.getCoiMembershipMapForOpa();
+
+    res.json({
+      success: true,
+      coi_definitions: coiMap,
+      count: Object.keys(coiMap).length,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error('Failed to get COI definitions', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve COI definitions',
+    });
+  }
+});
+
+/**
  * PUT /api/opal/tenant-configs/:code
  * Create or update a tenant configuration (super_admin only)
  */
