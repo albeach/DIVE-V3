@@ -705,4 +705,205 @@ spoke_verify_quick_health() {
     return 0
 }
 
+# =============================================================================
+# DETAILED HEALTH CHECK (Phase 3.1)
+# =============================================================================
+
+##
+# Spoke detailed health check using backend /health/detailed endpoint
+# Phase 3.1: Production Resilience Enhancement
+#
+# This function calls the spoke backend's /health/detailed endpoint to get
+# comprehensive health status including MongoDB, OPA, Keycloak, Redis,
+# KAS, cache, and circuit breaker states.
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - All services healthy
+#   1 - Some services unhealthy/degraded
+##
+spoke_verify_health_detailed() {
+    local instance_code="$1"
+    local code_lower=$(lower "$instance_code")
+    local code_upper=$(upper "$instance_code")
+
+    log_step "Running detailed health check via backend API..."
+
+    # Get backend URL from instance config
+    local backend_port
+    local config_file="${DIVE_ROOT}/instances/${code_lower}/config.json"
+
+    if [ -f "$config_file" ]; then
+        backend_port=$(jq -r '.ports.backend // 4000' "$config_file" 2>/dev/null)
+    else
+        # Default ports based on instance
+        backend_port="${SPOKE_BACKEND_PORT:-4010}"
+    fi
+
+    local backend_url="https://localhost:${backend_port}"
+    local health_response
+    local exit_code=0
+
+    # Retry logic with exponential backoff (3 attempts)
+    local max_retries=3
+    local attempt=1
+    local delay=2
+
+    while [ $attempt -le $max_retries ]; do
+        health_response=$(curl -sfk --max-time 10 "${backend_url}/health/detailed" 2>/dev/null)
+
+        if [ -n "$health_response" ]; then
+            break
+        fi
+
+        if [ $attempt -lt $max_retries ]; then
+            log_verbose "Health endpoint not responding, retry $attempt/$max_retries in ${delay}s..."
+            sleep $delay
+            delay=$((delay * 2))
+        fi
+        ((attempt++))
+    done
+
+    if [ -z "$health_response" ]; then
+        echo "  ⚠️  Backend API not responding at ${backend_url}/health/detailed"
+        echo "      Falling back to Docker container health checks"
+        return 1
+    fi
+
+    # Parse overall status
+    local overall_status
+    overall_status=$(echo "$health_response" | jq -r '.status // "unknown"' 2>/dev/null)
+
+    case "$overall_status" in
+        healthy)
+            echo "  ✅ Overall Status: HEALTHY"
+            ;;
+        degraded)
+            echo "  ⚠️  Overall Status: DEGRADED"
+            exit_code=1
+            ;;
+        unhealthy)
+            echo "  ❌ Overall Status: UNHEALTHY"
+            exit_code=1
+            ;;
+        *)
+            echo "  ❓ Overall Status: UNKNOWN"
+            exit_code=1
+            ;;
+    esac
+
+    # Parse individual service statuses
+    local services=("mongodb" "opa" "keycloak" "redis" "kas" "cache")
+
+    for service in "${services[@]}"; do
+        local svc_status
+        local svc_response_time
+        local svc_error
+
+        svc_status=$(echo "$health_response" | jq -r ".services.${service}.status // \"N/A\"" 2>/dev/null)
+        svc_response_time=$(echo "$health_response" | jq -r ".services.${service}.responseTime // \"N/A\"" 2>/dev/null)
+        svc_error=$(echo "$health_response" | jq -r ".services.${service}.error // \"\"" 2>/dev/null)
+
+        case "$svc_status" in
+            up)
+                if [ "$svc_response_time" != "N/A" ] && [ "$svc_response_time" != "null" ]; then
+                    echo "      ✅ ${service}: up (${svc_response_time}ms)"
+                else
+                    echo "      ✅ ${service}: up"
+                fi
+                ;;
+            degraded)
+                echo "      ⚠️  ${service}: degraded"
+                ;;
+            down)
+                if [ -n "$svc_error" ] && [ "$svc_error" != "null" ]; then
+                    echo "      ❌ ${service}: down - ${svc_error}"
+                else
+                    echo "      ❌ ${service}: down"
+                fi
+                exit_code=1
+                ;;
+            N/A|null)
+                echo "      ○ ${service}: not configured"
+                ;;
+            *)
+                echo "      ? ${service}: ${svc_status}"
+                ;;
+        esac
+    done
+
+    # Parse circuit breaker states if available
+    local cb_count
+    cb_count=$(echo "$health_response" | jq '.circuitBreakers | length' 2>/dev/null)
+
+    if [ -n "$cb_count" ] && [ "$cb_count" != "null" ] && [ "$cb_count" -gt 0 ]; then
+        echo ""
+        echo "  Circuit Breakers:"
+
+        echo "$health_response" | jq -r '.circuitBreakers | to_entries[] | "\(.key):\(.value.state)"' 2>/dev/null | while read -r line; do
+            local cb_name=$(echo "$line" | cut -d: -f1)
+            local cb_state=$(echo "$line" | cut -d: -f2)
+
+            case "$cb_state" in
+                CLOSED)
+                    echo "      ✅ ${cb_name}: closed (healthy)"
+                    ;;
+                HALF_OPEN)
+                    echo "      ⚠️  ${cb_name}: half-open (recovering)"
+                    ;;
+                OPEN)
+                    echo "      ❌ ${cb_name}: open (failing)"
+                    ;;
+            esac
+        done
+    fi
+
+    # Log uptime
+    local uptime
+    uptime=$(echo "$health_response" | jq -r '.uptime // 0' 2>/dev/null)
+    if [ "$uptime" != "0" ] && [ "$uptime" != "null" ]; then
+        local uptime_human
+        if [ "$uptime" -ge 3600 ]; then
+            uptime_human="$((uptime / 3600))h $((uptime % 3600 / 60))m"
+        elif [ "$uptime" -ge 60 ]; then
+            uptime_human="$((uptime / 60))m $((uptime % 60))s"
+        else
+            uptime_human="${uptime}s"
+        fi
+        echo ""
+        echo "  Uptime: ${uptime_human}"
+    fi
+
+    return $exit_code
+}
+
+##
+# Verify API health with detailed endpoint fallback
+# Phase 3.1: Enhanced API health verification
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - APIs healthy
+#   1 - Issues detected
+##
+spoke_verify_api_health_detailed() {
+    local instance_code="$1"
+    local code_lower=$(lower "$instance_code")
+
+    log_step "Verifying API health (detailed)..."
+
+    # First try the detailed health endpoint
+    if spoke_verify_health_detailed "$instance_code"; then
+        return 0
+    fi
+
+    # Fallback to Docker container checks
+    log_verbose "Falling back to Docker container health checks..."
+    spoke_verify_api_health "$instance_code"
+}
+
 export SPOKE_PHASE_VERIFICATION_LOADED=1
