@@ -309,10 +309,32 @@ if [[ "$CURRENT_ISSUERS" != *"https://localhost:8443/realms/dive-v3-broker-usa"*
 
     log_success "Updated TRUSTED_ISSUERS in docker-compose.yml"
 
+    # ==========================================================================
+    # CRITICAL FIX (2026-01-22): Ensure correct SPOKE_ID before recreating container
+    # ==========================================================================
+    # ROOT CAUSE: docker-compose up -d recreates container and interpolates env vars.
+    # If SPOKE_ID in docker-compose.yml doesn't match .env, heartbeat will fail.
+    # FIX: Read current SPOKE_ID from .env and ensure compose references it correctly.
+    local current_spoke_id=""
+    if [ -f "$INSTANCE_DIR/.env" ]; then
+        current_spoke_id=$(grep "^SPOKE_ID=" "$INSTANCE_DIR/.env" 2>/dev/null | cut -d= -f2)
+    fi
+    
+    if [ -n "$current_spoke_id" ]; then
+        log_info "Ensuring docker-compose.yml uses current SPOKE_ID: $current_spoke_id"
+        # The compose file should use ${SPOKE_ID:-fallback} which reads from .env
+        # If it has a hardcoded value, update it to use the env var reference
+        if grep -q "SPOKE_ID: spoke-" "$COMPOSE_FILE" && ! grep -q 'SPOKE_ID: \${SPOKE_ID:-' "$COMPOSE_FILE"; then
+            sed -i.bak 's|SPOKE_ID: spoke-[a-zA-Z0-9-]*|SPOKE_ID: \${SPOKE_ID:-'"$current_spoke_id"'}|' "$COMPOSE_FILE"
+            rm -f "${COMPOSE_FILE}.bak"
+            log_success "Updated docker-compose.yml to use SPOKE_ID from .env"
+        fi
+    fi
+    
     # Restart the spoke backend to pick up changes
     log_info "Restarting spoke backend to apply changes..."
     cd "$INSTANCE_DIR"
-    docker-compose up -d "backend-${INSTANCE_LOWER}" 2>/dev/null || true
+    docker compose up -d "backend-${INSTANCE_LOWER}" 2>/dev/null || true
     cd "$DIVE_ROOT"
 else
     log_info "Hub issuers already configured in spoke"
