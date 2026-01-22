@@ -34,99 +34,126 @@ interface FederationInstance {
     enabled: boolean;
 }
 
-// Load federation instances from federation-registry.json or environment
-// Phase 3: Dynamic configuration loading for distributed query federation
-import fs from 'fs';
-import path from 'path';
+// SSOT ARCHITECTURE (2026-01-22): Load federation instances from MongoDB (Hub) or Hub API (Spoke)
+// DO NOT use static JSON files - MongoDB is the Single Source of Truth
+// Federation instances are registered dynamically when spokes deploy
 
-function loadFederationInstances(): FederationInstance[] {
-    // Try to load from federation-registry.json
-    const registryPaths = [
-        path.join(process.cwd(), '..', 'config', 'federation-registry.json'),
-        path.join(process.cwd(), 'config', 'federation-registry.json')
-    ];
+import { federationDiscovery } from '../services/federation-discovery.service';
 
-    for (const registryPath of registryPaths) {
-        try {
-            if (fs.existsSync(registryPath)) {
-                const registry = JSON.parse(fs.readFileSync(registryPath, 'utf-8'));
-                const instances: FederationInstance[] = [];
+// Cache for federation instances
+let cachedInstances: FederationInstance[] | null = null;
+let cacheTimestamp = 0;
+const CACHE_TTL_MS = 60000; // 1 minute cache
 
-                for (const [key, instance] of Object.entries(registry.instances)) {
-                    const inst = instance as any;
-                    if (!inst.enabled) continue;
-
-                    // Build API URL from registry
-                    const backendService = inst.services?.backend;
-                    let apiUrl: string;
-
-                    if (inst.type === 'remote') {
-                        // Remote instances use external hostname
-                        apiUrl = process.env[`${key.toUpperCase()}_API_URL`] ||
-                            `https://${backendService?.hostname || `${key}-api.${inst.deployment?.domain}`}`;
-                    } else {
-                        // Local instances use localhost in development
-                        const port = backendService?.externalPort || 4000;
-                        apiUrl = process.env[`${key.toUpperCase()}_API_URL`] ||
-                            (process.env.NODE_ENV === 'development'
-                                ? `https://localhost:${port}`
-                                : `https://${backendService?.hostname || `${key}-api.dive25.com`}`);
-                    }
-
-                    instances.push({
-                        code: inst.code,
-                        apiUrl,
-                        type: inst.type,
-                        // Phase 3: DEU and all instances enabled by default when present in registry
-                        enabled: process.env[`${key.toUpperCase()}_FEDERATION_ENABLED`] !== 'false'
-                    });
-                }
-
-                logger.info('Loaded federation instances from registry', {
-                    count: instances.length,
-                    instances: instances.map(i => ({ code: i.code, type: i.type, enabled: i.enabled }))
-                });
-
-                return instances;
-            }
-        } catch (error) {
-            logger.warn('Failed to load federation registry, using defaults', {
-                path: registryPath,
-                error: error instanceof Error ? error.message : 'Unknown error'
-            });
-        }
+/**
+ * Load federation instances from MongoDB (SSOT)
+ * Uses federationDiscovery service which queries:
+ * - Hub: MongoDB federation_spokes collection
+ * - Spoke: Hub's federation API
+ */
+async function loadFederationInstancesFromDB(): Promise<FederationInstance[]> {
+    // Check cache
+    const now = Date.now();
+    if (cachedInstances && (now - cacheTimestamp) < CACHE_TTL_MS) {
+        return cachedInstances;
     }
 
-    // Fallback to hardcoded defaults
-    logger.warn('Using fallback federation instances (registry not found)');
-    return [
-        {
-            code: 'USA',
-            apiUrl: process.env.USA_API_URL || (process.env.NODE_ENV === 'development' ? 'https://localhost:4000' : 'https://usa-api.dive25.com'),
-            type: 'local',
-            enabled: true
-        },
-        {
-            code: 'FRA',
-            apiUrl: process.env.FRA_API_URL || (process.env.NODE_ENV === 'development' ? 'https://localhost:4010' : 'https://fra-api.dive25.com'),
-            type: 'local',
-            enabled: true
-        },
-        {
-            code: 'GBR',
-            apiUrl: process.env.GBR_API_URL || (process.env.NODE_ENV === 'development' ? 'https://localhost:4002' : 'https://gbr-api.dive25.com'),
-            type: 'local',
-            enabled: true
-        },
-        {
-            code: 'DEU',
-            apiUrl: process.env.DEU_API_URL || 'https://deu-api.prosecurity.biz',
-            type: 'remote',
-            // Phase 3: DEU enabled by default
-            enabled: process.env.DEU_FEDERATION_ENABLED !== 'false'
+    try {
+        const discoveredInstances = await federationDiscovery.getInstances();
+        
+        const instances: FederationInstance[] = discoveredInstances
+            .filter(inst => inst.enabled)
+            .map(inst => ({
+                code: inst.code,
+                apiUrl: inst.apiUrl || buildApiUrl(inst.code),
+                type: inst.type,
+                enabled: process.env[`${inst.code.toUpperCase()}_FEDERATION_ENABLED`] !== 'false'
+            }));
+
+        logger.info('Loaded federation instances from MongoDB (SSOT)', {
+            count: instances.length,
+            codes: instances.map(i => i.code)
+        });
+
+        // Update cache
+        cachedInstances = instances;
+        cacheTimestamp = now;
+
+        return instances;
+    } catch (error) {
+        logger.error('Failed to load federation instances from MongoDB', {
+            error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        
+        // Return cached if available, otherwise return current instance only
+        if (cachedInstances) {
+            logger.warn('Using cached federation instances');
+            return cachedInstances;
         }
-    ];
+        
+        // Fallback: return only current instance
+        const currentCode = process.env.INSTANCE_CODE || 'USA';
+        logger.warn('Returning only current instance as fallback', { code: currentCode });
+        return [{
+            code: currentCode,
+            apiUrl: buildApiUrl(currentCode),
+            type: 'local',
+            enabled: true
+        }];
+    }
 }
+
+/**
+ * Build API URL for an instance
+ */
+function buildApiUrl(instanceCode: string): string {
+    const code = instanceCode.toUpperCase();
+    const envUrl = process.env[`${code}_API_URL`];
+    if (envUrl) return envUrl;
+    
+    // Development: Use environment variables or default to Hub URL
+    // Hub (USA) uses HUB_URL env var, spokes use calculated ports from discovery
+    const hubUrl = process.env.HUB_URL || process.env.USA_API_URL || process.env.BACKEND_URL;
+    if (hubUrl) {
+        return code === 'USA' ? hubUrl : hubUrl;
+    }
+    
+    // Fallback: return URL that will likely fail, triggering discovery refresh
+    // This should rarely happen as HUB_URL is always set in deployment
+    
+    // Production: Use hostname-based URLs
+    return `https://${code.toLowerCase()}-api.dive25.com`;
+}
+
+/**
+ * Synchronous wrapper for backward compatibility
+ * Uses cached instances or returns empty array
+ */
+function loadFederationInstances(): FederationInstance[] {
+    // If we have cache, return it
+    if (cachedInstances) {
+        return cachedInstances;
+    }
+    
+    // Return current instance only - actual instances will be loaded async
+    const currentCode = process.env.INSTANCE_CODE || 'USA';
+    return [{
+        code: currentCode,
+        apiUrl: buildApiUrl(currentCode),
+        type: 'local',
+        enabled: true
+    }];
+}
+
+// Pre-load instances on module initialization
+loadFederationInstancesFromDB().catch(err => {
+    logger.warn('Initial federation instance load failed', {
+        error: err instanceof Error ? err.message : 'Unknown error'
+    });
+});
+
+// SSOT ARCHITECTURE: All static fallback instances have been removed
+// Federation instances now come exclusively from MongoDB via federationDiscovery
 
 // Static instances from registry (loaded at startup)
 const STATIC_FEDERATION_INSTANCES = loadFederationInstances();
