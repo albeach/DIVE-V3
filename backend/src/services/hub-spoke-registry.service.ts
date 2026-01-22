@@ -49,7 +49,9 @@ export interface ISpokeRegistration {
   // Certificate/Auth
   publicKey?: string;
   certificateFingerprint?: string;
-  certificatePEM?: string;  // Full certificate for mTLS
+  certificatePEM?: string;  // Full certificate for mTLS (Hub-signed or self-signed)
+  certificateSerialNumber?: string;  // Phase 4: Serial number of Hub-issued certificate
+  certificateIssuedByHub?: boolean;  // Phase 4: True if Hub CA signed this certificate
   certificateSubject?: string;
   certificateIssuer?: string;
   certificateNotBefore?: Date;
@@ -134,7 +136,8 @@ export interface IRegistrationRequest {
   idpUrl: string;
   idpPublicUrl?: string; // Public-facing IdP URL (localhost or domain)
   publicKey?: string;
-  certificatePEM?: string;  // X.509 certificate for mTLS
+  certificatePEM?: string;  // X.509 certificate for mTLS (self-signed or existing)
+  certificateCSR?: string;  // Phase 4: CSR for Hub CA to sign
   requestedScopes: string[];
   contactEmail: string;
   validateEndpoints?: boolean;  // Whether to validate IdP endpoints
@@ -397,15 +400,58 @@ class HubSpokeRegistryService extends EventEmitter {
 
     const spokeId = this.generateSpokeId(request.instanceCode);
 
-    // Validate X.509 certificate if provided
+    // PHASE 4: HUB CA CERTIFICATE ISSUANCE
+    // If spoke provides CSR, Hub CA signs it and returns certificate
+    // This replaces self-signed/mkcert certificates with Hub-issued certificates
     let certValidation: ICertificateValidation | undefined;
     let certSubject: string | undefined;
     let certIssuer: string | undefined;
     let certNotBefore: Date | undefined;
     let certNotAfter: Date | undefined;
     let certFingerprint: string | undefined;
+    let certSerialNumber: string | undefined;
+    let certIssuedByHub: boolean = false;
+    let hubIssuedCertPEM: string | undefined;
 
-    if (request.certificatePEM) {
+    if (request.certificateCSR) {
+      // CSR provided - Hub CA signs it
+      try {
+        const { certificateManager } = await import('../utils/certificate-manager');
+        
+        const signedCert = await certificateManager.signCSR(
+          request.certificateCSR,
+          request.instanceCode,
+          365 // 1 year validity
+        );
+
+        // Use Hub-signed certificate
+        hubIssuedCertPEM = signedCert.certificatePEM;
+        certSubject = signedCert.issuer; // Subject from CSR
+        certIssuer = signedCert.issuer; // Intermediate CA
+        certNotBefore = signedCert.validFrom;
+        certNotAfter = signedCert.validTo;
+        certSerialNumber = signedCert.serialNumber;
+        certIssuedByHub = true;
+
+        // Validate Hub-signed certificate
+        certValidation = await this.validateCertificate(hubIssuedCertPEM);
+        certFingerprint = certValidation.fingerprint;
+
+        logger.info('Hub CA signed spoke certificate', {
+          instanceCode: request.instanceCode,
+          serialNumber: certSerialNumber,
+          validUntil: signedCert.validTo.toISOString()
+        });
+
+      } catch (error) {
+        logger.error('Failed to sign spoke CSR', {
+          instanceCode: request.instanceCode,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        throw new Error(`CSR signing failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      }
+    } else if (request.certificatePEM) {
+      // Self-signed or existing certificate provided
       certValidation = await this.validateCertificate(request.certificatePEM);
 
       if (!certValidation.valid && certValidation.errors.length > 0) {
@@ -479,7 +525,9 @@ class HubSpokeRegistryService extends EventEmitter {
       // Format: https://dive-spoke-{code}-backend:4000
       internalApiUrl: `https://dive-spoke-${request.instanceCode.toLowerCase()}-backend:4000`,
       publicKey: request.publicKey,
-      certificatePEM: request.certificatePEM,
+      certificatePEM: hubIssuedCertPEM || request.certificatePEM, // Use Hub-signed cert if available
+      certificateSerialNumber: certSerialNumber,
+      certificateIssuedByHub: certIssuedByHub,
       certificateFingerprint: certFingerprint,
       certificateSubject: certSubject,
       certificateIssuer: certIssuer,
