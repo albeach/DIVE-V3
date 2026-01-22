@@ -259,9 +259,9 @@ services:
       - --addr=0.0.0.0:8181
       - --tls-cert-file=/certs/certificate.pem
       - --tls-private-key-file=/certs/key.pem
+      - --log-level=info
       - --bundle
       - /policies
-      - --log-level=info
     ports:
       - "127.0.0.1:${OPA_PORT:-8181}:8181"
       - "127.0.0.1:${OPA_METRICS_PORT:-8182}:8182"
