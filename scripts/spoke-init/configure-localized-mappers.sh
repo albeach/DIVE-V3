@@ -141,6 +141,8 @@ echo "    ${LOCAL_COI} → acpCOI"
 echo ""
 
 # Add localized attributes to user profile if not present
+# CRITICAL: Keycloak 26+ requires view: ["admin", "user"] for attributes to be
+# included in tokens during federation. Without this, federation will fail!
 NEW_ATTRS='[]'
 for attr in "$LOCAL_CLEARANCE" "$LOCAL_COUNTRY" "$LOCAL_UNIQUEID" "$LOCAL_COI"; do
     if [ -n "$attr" ] && [ "$attr" != "null" ]; then
@@ -153,7 +155,7 @@ for attr in "$LOCAL_CLEARANCE" "$LOCAL_COUNTRY" "$LOCAL_UNIQUEID" "$LOCAL_COI"; 
             NEW_ATTRS=$(echo "$NEW_ATTRS" | jq ". + [{
                 \"name\": \"${attr}\",
                 \"displayName\": \"${attr} (${COUNTRY_NAME})\",
-                \"permissions\": {\"view\": [\"admin\"], \"edit\": [\"admin\"]},
+                \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\"]},
                 \"multivalued\": ${MULTIVALUED}
             }]")
         fi

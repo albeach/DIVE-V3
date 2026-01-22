@@ -9,11 +9,20 @@
       "displayName": "Pavardė",
       "required": true,
       "permissions": {
-        "view": ["admin", "user"],
-        "edit": ["admin", "user"]
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
       },
       "validations": {
-        "length": {"min": 1, "max": 255}
+        "length": {
+          "min": 1,
+          "max": 255
+        }
       }
     },
     {
@@ -21,11 +30,20 @@
       "displayName": "Vardas",
       "required": true,
       "permissions": {
-        "view": ["admin", "user"],
-        "edit": ["admin", "user"]
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
       },
       "validations": {
-        "length": {"min": 1, "max": 255}
+        "length": {
+          "min": 1,
+          "max": 255
+        }
       }
     },
     {
@@ -33,8 +51,14 @@
       "displayName": "Elektroninis Paštas",
       "required": true,
       "permissions": {
-        "view": ["admin", "user"],
-        "edit": ["admin", "user"]
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin",
+          "user"
+        ]
       },
       "validations": {
         "email": {}
@@ -45,11 +69,17 @@
       "displayName": "Asmens Kodas",
       "required": false,
       "permissions": {
-        "view": ["admin"],
-        "edit": ["admin"]
+        "view": [
+          "admin"
+        ],
+        "edit": [
+          "admin"
+        ]
       },
       "validations": {
-        "length": {"max": 50}
+        "length": {
+          "max": 50
+        }
       }
     },
     {
@@ -57,11 +87,19 @@
       "displayName": "Country of Affiliation",
       "required": true,
       "permissions": {
-        "view": ["admin", "user"],
-        "edit": ["admin"]
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin"
+        ]
       },
       "validations": {
-        "length": {"min": 3, "max": 3},
+        "length": {
+          "min": 3,
+          "max": 3
+        },
         "pattern": "^[A-Z]{3}$"
       }
     },
@@ -70,11 +108,21 @@
       "displayName": "Security Clearance",
       "required": true,
       "permissions": {
-        "view": ["admin"],
-        "edit": ["admin"]
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin"
+        ]
       },
       "validations": {
-        "options": ["UNCLASSIFIED", "CONFIDENTIAL", "SECRET", "TOP_SECRET"]
+        "options": [
+          "UNCLASSIFIED",
+          "CONFIDENTIAL",
+          "SECRET",
+          "TOP_SECRET"
+        ]
       }
     },
     {
@@ -82,11 +130,19 @@
       "displayName": "Unique Identifier",
       "required": true,
       "permissions": {
-        "view": ["admin", "user"],
-        "edit": ["admin"]
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin"
+        ]
       },
       "validations": {
-        "length": {"min": 1, "max": 255}
+        "length": {
+          "min": 1,
+          "max": 255
+        }
       }
     },
     {
@@ -95,8 +151,13 @@
       "multivalued": true,
       "required": false,
       "permissions": {
-        "view": ["admin", "user"],
-        "edit": ["admin"]
+        "view": [
+          "admin",
+          "user"
+        ],
+        "edit": [
+          "admin"
+        ]
       }
     }
   ]
