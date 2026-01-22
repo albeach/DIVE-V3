@@ -757,6 +757,26 @@ class HubSpokeRegistryService extends EventEmitter {
       // Don't fail spoke approval, but log warning
     }
 
+    // AUTO-REGISTER KAS INSTANCE (Phase 1: Gap Closure)
+    // Automatically register spoke's KAS in Hub KAS registry
+    // This enables cross-instance encrypted document access immediately
+    try {
+      await this.registerSpokeKAS(spoke);
+      logger.info('KAS auto-registered during spoke approval', {
+        spokeId,
+        instanceCode: spoke.instanceCode,
+        kasId: `${spoke.instanceCode.toLowerCase()}-kas`
+      });
+    } catch (error) {
+      logger.warn('KAS auto-registration failed (non-blocking)', {
+        spokeId,
+        instanceCode: spoke.instanceCode,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        impact: 'Encrypted document sharing may not work until KAS manually registered'
+      });
+      // Don't fail spoke approval - KAS can be registered manually later if needed
+    }
+
     return spoke;
   }
 
@@ -896,6 +916,198 @@ class HubSpokeRegistryService extends EventEmitter {
   }
 
   /**
+   * Auto-register spoke's KAS instance during approval
+   * 
+   * Industry Pattern: Service discovery and automatic registration (Teleport pattern)
+   * When spoke is approved, ALL services should be registered automatically.
+   * 
+   * This method:
+   * 1. Determines spoke's KAS URLs (internal Docker + public)
+   * 2. Registers in MongoDB kas_registry collection
+   * 3. Approves KAS for immediate use
+   * 4. Sets up federation trust (spoke KAS ↔ Hub KAS)
+   * 
+   * @param spoke - The approved spoke instance
+   */
+  private async registerSpokeKAS(spoke: ISpokeRegistration): Promise<void> {
+    const { mongoKasRegistryStore } = await import('../models/kas-registry.model');
+    
+    const instanceCode = spoke.instanceCode.toUpperCase();
+    const kasId = `${instanceCode.toLowerCase()}-kas`;
+    
+    // Check if KAS already registered (idempotent)
+    const existing = await mongoKasRegistryStore.findById(kasId);
+    if (existing) {
+      logger.info('KAS already registered for spoke', {
+        kasId,
+        instanceCode,
+        status: existing.status
+      });
+      
+      // If suspended, reactivate on spoke approval
+      if (existing.status === 'suspended') {
+        await mongoKasRegistryStore.approve(kasId);
+        logger.info('Reactivated suspended KAS', { kasId, instanceCode });
+      }
+      
+      return;
+    }
+    
+    // Determine KAS URLs based on environment
+    const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+    const portOffset = this.getPortOffsetForCountry(instanceCode);
+    
+    const internalKasUrl = `https://dive-spoke-${instanceCode.toLowerCase()}-kas:8080`;
+    const publicKasUrl = isDevelopment
+      ? `https://localhost:${10000 + portOffset}`
+      : `https://${instanceCode.toLowerCase()}-kas.dive25.com`;
+    
+    // Determine spoke's Keycloak issuer for KAS JWT authentication
+    const spokeKeycloakHttpsPort = isDevelopment ? (8443 + portOffset) : 443;
+    const spokeKeycloakIssuer = isDevelopment
+      ? `https://localhost:${spokeKeycloakHttpsPort}/realms/dive-v3-broker-${instanceCode.toLowerCase()}`
+      : `https://${instanceCode.toLowerCase()}-idp.dive25.com/realms/dive-v3-broker-${instanceCode.toLowerCase()}`;
+    
+    logger.info('Registering spoke KAS instance', {
+      kasId,
+      instanceCode,
+      internalUrl: internalKasUrl,
+      publicUrl: publicKasUrl,
+      jwtIssuer: spokeKeycloakIssuer
+    });
+    
+    // Register KAS instance in MongoDB
+    const kasInstance = await mongoKasRegistryStore.register({
+      kasId,
+      organization: spoke.name,
+      countryCode: instanceCode,
+      kasUrl: publicKasUrl,
+      internalKasUrl,
+      authMethod: 'jwt', // KAS uses JWT bearer tokens from spoke Keycloak
+      authConfig: {
+        jwtIssuer: spokeKeycloakIssuer
+      },
+      trustLevel: this.mapKASTrustLevel(spoke.trustLevel),
+      supportedCountries: [instanceCode],
+      supportedCOIs: spoke.allowedPolicyScopes.filter(s => s.startsWith('coi:')).map(s => s.replace('coi:', '')),
+      metadata: {
+        version: spoke.version || '1.0.0',
+        capabilities: ['encrypt', 'decrypt', 'rewrap', 'policy-evaluation'],
+        contact: `admin@${instanceCode.toLowerCase()}.dive25.com`,
+        registeredAt: new Date(),
+        lastHeartbeat: new Date()
+      },
+      enabled: true
+    });
+    
+    // AUTO-APPROVE KAS (no manual approval needed if spoke approved)
+    await mongoKasRegistryStore.approve(kasId);
+    
+    // Set up KAS federation trust (bidirectional)
+    const hubInstanceCode = process.env.INSTANCE_CODE || 'USA';
+    const hubKasId = `${hubInstanceCode.toLowerCase()}-kas`;
+    
+    // Hub KAS trusts spoke KAS
+    const hubAgreement = await mongoKasRegistryStore.getFederationAgreement(hubInstanceCode);
+    const hubTrustedKAS = hubAgreement?.trustedKAS || [];
+    if (!hubTrustedKAS.includes(kasId)) {
+      hubTrustedKAS.push(kasId);
+      await mongoKasRegistryStore.setFederationAgreement(
+        hubInstanceCode,
+        hubTrustedKAS,
+        spoke.maxClassificationAllowed,
+        spoke.allowedPolicyScopes.filter(s => s.startsWith('coi:')).map(s => s.replace('coi:', ''))
+      );
+    }
+    
+    // Spoke KAS trusts hub KAS (bidirectional)
+    await mongoKasRegistryStore.setFederationAgreement(
+      instanceCode,
+      [hubKasId],
+      spoke.maxClassificationAllowed,
+      spoke.allowedPolicyScopes.filter(s => s.startsWith('coi:')).map(s => s.replace('coi:', ''))
+    );
+    
+    logger.info('KAS instance registered and approved automatically', {
+      kasId,
+      instanceCode,
+      status: 'active',
+      federationTrust: `${hubKasId} ↔ ${kasId}`,
+      autoApproved: true
+    });
+  }
+  
+  /**
+   * Map spoke trust level to KAS trust level
+   */
+  private mapKASTrustLevel(spokeTrustLevel: ISpokeRegistration['trustLevel']): 'high' | 'medium' | 'low' {
+    switch (spokeTrustLevel) {
+      case 'national':
+      case 'bilateral':
+        return 'high';
+      case 'partner':
+        return 'medium';
+      case 'development':
+      default:
+        return 'low';
+    }
+  }
+
+  /**
+   * Suspend spoke's KAS instance
+   */
+  private async suspendSpokeKAS(spoke: ISpokeRegistration, reason: string): Promise<void> {
+    const { mongoKasRegistryStore } = await import('../models/kas-registry.model');
+    const kasId = `${spoke.instanceCode.toLowerCase()}-kas`;
+    
+    await mongoKasRegistryStore.suspend(kasId, reason);
+    logger.info('KAS suspended for spoke', { kasId, instanceCode: spoke.instanceCode, reason });
+  }
+
+  /**
+   * Reactivate spoke's KAS instance
+   */
+  private async reactivateSpokeKAS(spoke: ISpokeRegistration): Promise<void> {
+    const { mongoKasRegistryStore } = await import('../models/kas-registry.model');
+    const kasId = `${spoke.instanceCode.toLowerCase()}-kas`;
+    
+    const existing = await mongoKasRegistryStore.findById(kasId);
+    if (existing && existing.status === 'suspended') {
+      await mongoKasRegistryStore.approve(kasId);
+      logger.info('KAS reactivated for spoke', { kasId, instanceCode: spoke.instanceCode });
+    } else if (!existing) {
+      // KAS doesn't exist - register it now
+      await this.registerSpokeKAS(spoke);
+    }
+  }
+
+  /**
+   * Remove spoke's KAS instance (permanent)
+   */
+  private async removeSpokeKAS(spoke: ISpokeRegistration): Promise<void> {
+    const { mongoKasRegistryStore } = await import('../models/kas-registry.model');
+    const kasId = `${spoke.instanceCode.toLowerCase()}-kas`;
+    
+    const removed = await mongoKasRegistryStore.remove(kasId);
+    if (removed) {
+      logger.info('KAS removed for revoked spoke', { kasId, instanceCode: spoke.instanceCode });
+    }
+    
+    // Remove from Hub's trusted KAS list
+    const hubInstanceCode = process.env.INSTANCE_CODE || 'USA';
+    const hubAgreement = await mongoKasRegistryStore.getFederationAgreement(hubInstanceCode);
+    if (hubAgreement) {
+      const updatedTrustedKAS = hubAgreement.trustedKAS.filter(k => k !== kasId);
+      await mongoKasRegistryStore.setFederationAgreement(
+        hubInstanceCode,
+        updatedTrustedKAS,
+        hubAgreement.maxClassification,
+        hubAgreement.allowedCOIs
+      );
+    }
+  }
+
+  /**
    * Get spoke's Keycloak admin password
    *
    * SECURITY BEST PRACTICE: Only retrieves password from spoke registration (MongoDB).
@@ -1005,6 +1217,18 @@ class HubSpokeRegistryService extends EventEmitter {
       });
     }
 
+    // SUSPEND KAS INSTANCE (Phase 1: Gap Closure)
+    // Prevent encrypted document access from suspended spoke
+    try {
+      await this.suspendSpokeKAS(spoke, reason);
+    } catch (error) {
+      logger.warn('Failed to suspend KAS during spoke suspension', {
+        spokeId,
+        instanceCode: spoke.instanceCode,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+
     // ============================================
     // EVENT-DRIVEN CASCADE (Phase 1)
     // ============================================
@@ -1096,6 +1320,18 @@ class HubSpokeRegistryService extends EventEmitter {
       }
     }
 
+    // REACTIVATE KAS (Phase 1: Gap Closure)
+    // Re-enable KAS access when spoke unsuspended
+    try {
+      await this.reactivateSpokeKAS(spoke);
+    } catch (error) {
+      logger.warn('Failed to reactivate KAS during spoke unsuspension', {
+        spokeId,
+        instanceCode: spoke.instanceCode,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+
     // Emit event
     const correlationId = `spoke-unsuspension-${uuidv4()}`;
     this.emit('spoke:unsuspended', {
@@ -1163,6 +1399,18 @@ class HubSpokeRegistryService extends EventEmitter {
       await this.updateOPATrustForSpoke(spoke, 'remove');
     } catch (error) {
       logger.error('Failed to remove OPA trust data during spoke revocation', {
+        spokeId,
+        instanceCode: spoke.instanceCode,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+
+    // REMOVE KAS INSTANCE (Phase 1: Gap Closure)
+    // Permanently remove spoke's KAS from registry
+    try {
+      await this.removeSpokeKAS(spoke);
+    } catch (error) {
+      logger.warn('Failed to remove KAS during spoke revocation', {
         spokeId,
         instanceCode: spoke.instanceCode,
         error: error instanceof Error ? error.message : 'Unknown error'
