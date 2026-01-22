@@ -262,18 +262,48 @@ spoke_compose_get_spoke_id() {
     local code_lower="$1"
     local target_dir="$2"
 
-    # Try to get from existing config.json
+    # ==========================================================================
+    # CRITICAL FIX (2026-01-22): Get spokeId from Hub (SSOT), not local generation
+    # ==========================================================================
+    # Priority:
+    # 1. .env file (set during registration)
+    # 2. config.json (may have Hub-assigned ID)
+    # 3. Query Hub MongoDB directly
+    # 4. Use placeholder (will fail heartbeat until properly registered)
+    
+    # Priority 1: Check .env file (most up-to-date after registration)
+    if [ -f "$target_dir/.env" ]; then
+        local env_id
+        env_id=$(grep "^SPOKE_ID=" "$target_dir/.env" 2>/dev/null | cut -d= -f2)
+        if [ -n "$env_id" ] && [[ ! "$env_id" =~ ^spoke-.*-temp- ]] && [ "$env_id" != "PENDING_REGISTRATION" ]; then
+            echo "$env_id"
+            return
+        fi
+    fi
+    
+    # Priority 2: Check config.json
     if [ -f "$target_dir/config.json" ]; then
         local existing_id
         existing_id=$(grep -o '"spokeId"[[:space:]]*:[[:space:]]*"[^"]*"' "$target_dir/config.json" 2>/dev/null | head -1 | cut -d'"' -f4)
-        if [ -n "$existing_id" ]; then
+        if [ -n "$existing_id" ] && [[ ! "$existing_id" =~ ^spoke-.*-temp- ]] && [ "$existing_id" != "PENDING_REGISTRATION" ]; then
             echo "$existing_id"
             return
         fi
     fi
-
-    # Generate new unique ID
-    echo "spoke-${code_lower}-$(openssl rand -hex 4)"
+    
+    # Priority 3: Query Hub MongoDB via API
+    local hub_api="${HUB_URL:-https://localhost:4000}"
+    local code_upper="${code_lower^^}"
+    local hub_spoke_id
+    hub_spoke_id=$(curl -sk --max-time 5 "${hub_api}/api/federation/spokes?instanceCode=${code_upper}" 2>/dev/null | jq -r '.spokes[0].spokeId // empty' 2>/dev/null)
+    if [ -n "$hub_spoke_id" ] && [ "$hub_spoke_id" != "null" ]; then
+        echo "$hub_spoke_id"
+        return
+    fi
+    
+    # Priority 4: Use placeholder (registration required)
+    log_warn "No valid spokeId found - spoke must be registered with Hub"
+    echo "spoke-${code_lower}-UNREGISTERED"
 }
 
 ##

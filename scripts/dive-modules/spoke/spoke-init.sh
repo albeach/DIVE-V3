@@ -458,8 +458,35 @@ _spoke_init_internal() {
     mkdir -p "$spoke_dir/cloudflared"
     mkdir -p "$spoke_dir/logs"
 
-    # Generate unique IDs
-    local spoke_id="spoke-${code_lower}-$(openssl rand -hex 4)"
+    # ==========================================================================
+    # CRITICAL FIX (2026-01-22): DO NOT generate local spokeId
+    # ==========================================================================
+    # ROOT CAUSE: Local spokeId generation creates IDs that don't match Hub's
+    # Hub MongoDB is SSOT for spokeId - will be assigned during registration
+    # Use placeholder until Hub assigns real spokeId
+    local spoke_id="PENDING_REGISTRATION"
+    
+    # Try to register with Hub NOW to get real spokeId
+    local hub_api="${HUB_URL:-https://localhost:4000}"
+    if curl -sk --max-time 5 "${hub_api}/api/health" >/dev/null 2>&1; then
+        log_verbose "Hub available - requesting spokeId"
+        local reg_response
+        reg_response=$(curl -sk --max-time 30 -X POST "${hub_api}/api/federation/register" \
+            -H "Content-Type: application/json" \
+            -d "{\"instanceCode\":\"$code_upper\",\"name\":\"$instance_name\",\"baseUrl\":\"$base_url\",\"apiUrl\":\"$api_url\",\"idpUrl\":\"$idp_url\",\"idpPublicUrl\":\"$idp_public_url\",\"requestedScopes\":[\"policy:base\",\"policy:org\",\"policy:tenant\"],\"contactEmail\":\"$contact_email\",\"skipValidation\":true}" 2>&1)
+        
+        local hub_spoke_id=$(echo "$reg_response" | jq -r '.spoke.spokeId // empty' 2>/dev/null)
+        if [ -n "$hub_spoke_id" ] && [ "$hub_spoke_id" != "null" ]; then
+            spoke_id="$hub_spoke_id"
+            log_success "✓ Got spokeId from Hub: $spoke_id"
+        fi
+    fi
+    
+    # If still pending, use temp ID (will be updated during registration)
+    if [ "$spoke_id" = "PENDING_REGISTRATION" ]; then
+        spoke_id="spoke-${code_lower}-temp-$(openssl rand -hex 4)"
+        log_verbose "Using temporary spokeId (will be updated during registration)"
+    fi
 
     # Extract hostname from IdP URL for Keycloak config
     local idp_hostname=$(echo "$idp_url" | sed 's|https://||' | cut -d: -f1)
