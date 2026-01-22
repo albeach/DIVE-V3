@@ -868,6 +868,14 @@ cmd_nuke() {
             fi
         done
         log_verbose "  Spoke instance directories cleaned"
+        
+        # SSOT ARCHITECTURE: Clean Terraform state to prevent stale IdPs
+        log_verbose "  Cleaning Terraform state files (SSOT)..."
+        rm -f "${DIVE_ROOT}/terraform/hub/terraform.tfstate"* 2>/dev/null || true
+        rm -f "${DIVE_ROOT}/terraform/hub/hub.auto.tfvars" 2>/dev/null || true
+        rm -f "${DIVE_ROOT}/terraform/spoke/terraform.tfstate"* 2>/dev/null || true
+        rm -f "${DIVE_ROOT}/terraform/spoke/spoke.auto.tfvars" 2>/dev/null || true
+        log_verbose "  Terraform state cleaned"
     elif [ "$target_type" = "spoke" ] && [ -n "$target_instance" ]; then
         local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
         if [ -d "${DIVE_ROOT}/instances/${instance_lower}" ]; then
