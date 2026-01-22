@@ -1,5 +1,7 @@
 import axios from 'axios';
 import * as https from 'https';
+import * as fs from 'fs';
+import * as path from 'path';
 import { MongoClient } from 'mongodb';
 import Redis from 'ioredis';
 import { logger } from '../utils/logger';
@@ -11,6 +13,69 @@ import { authzCacheService } from './authz-cache.service';
 // ============================================
 // Purpose: Monitor system health and dependencies
 // Endpoints: /health, /health/detailed, /health/ready, /health/live
+
+// ============================================
+// HTTPS Agent Configuration (Phase 3.1)
+// ============================================
+// Creates a reusable HTTPS agent that trusts mkcert CA certificates
+// This ensures all health checks work with HTTPS services
+//
+// CA Certificate Loading Priority:
+//   1. /app/certs/ca/rootCA.pem (Docker container mount)
+//   2. NODE_EXTRA_CA_CERTS environment variable path
+//   3. System CA store (includes mkcert if installed locally)
+// ============================================
+
+/**
+ * Load CA certificates for HTTPS health checks
+ * Supports both Docker container paths and local development
+ */
+function loadCACertificates(): Buffer[] | undefined {
+    const caPaths = [
+        '/app/certs/ca/rootCA.pem',           // Docker container path
+        process.env.NODE_EXTRA_CA_CERTS,      // Environment variable
+        path.join(process.cwd(), 'certs', 'ca', 'rootCA.pem'),  // Local dev
+    ].filter(Boolean) as string[];
+
+    const loadedCerts: Buffer[] = [];
+
+    for (const caPath of caPaths) {
+        try {
+            if (fs.existsSync(caPath)) {
+                const cert = fs.readFileSync(caPath);
+                loadedCerts.push(cert);
+                logger.debug('Loaded CA certificate for health checks', { path: caPath });
+            }
+        } catch (err) {
+            logger.debug('Could not load CA certificate', { path: caPath, error: err });
+        }
+    }
+
+    return loadedCerts.length > 0 ? loadedCerts : undefined;
+}
+
+// Load CA certs once at module initialization
+const caCertificates = loadCACertificates();
+
+/**
+ * Create a shared HTTPS agent for health check requests
+ * Trusts mkcert CA certificates for secure TLS verification
+ */
+function createHealthCheckHttpsAgent(): https.Agent {
+    return new https.Agent({
+        minVersion: 'TLSv1.2',
+        // Use loaded CA certs, or let Node.js use system CA (which NODE_EXTRA_CA_CERTS augments)
+        ca: caCertificates,
+        // Enable TLS verification when CA certs are available, otherwise allow self-signed
+        rejectUnauthorized: caCertificates ? true : false,
+        // Keep connections alive for performance
+        keepAlive: true,
+        maxSockets: 10,
+    });
+}
+
+// Shared HTTPS agent instance for all health check requests
+const healthCheckHttpsAgent = createHealthCheckHttpsAgent();
 
 // MongoDB configuration
 const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
@@ -326,18 +391,13 @@ class HealthService {
         const opaUrl = process.env.OPA_URL || 'http://localhost:8181';
 
         try {
-            let config: any = {
+            const config: any = {
                 timeout: 5000,
             };
 
-            // Configure HTTPS agent for HTTPS URLs
+            // Use shared HTTPS agent for HTTPS URLs (trusts mkcert CA)
             if (opaUrl.startsWith('https://')) {
-                config.httpsAgent = new https.Agent({
-                    minVersion: 'TLSv1.2',
-                    rejectUnauthorized: false, // Allow self-signed certs in development
-                    // Also disable hostname checking
-                    checkServerIdentity: () => undefined,
-                });
+                config.httpsAgent = healthCheckHttpsAgent;
             }
 
             const response = await axios.get(`${opaUrl}/health`, config);
@@ -360,6 +420,7 @@ class HealthService {
                 opaUrl,
                 error: errorMessage,
                 hasHttpsAgent: opaUrl.startsWith('https://'),
+                hasCACerts: !!caCertificates,
             });
 
             return {
@@ -374,15 +435,23 @@ class HealthService {
 
     /**
      * Check Keycloak health
+     * Uses /health/ready endpoint (Keycloak 17+ quarkus-based health endpoint)
      */
     private async checkKeycloak(): Promise<IServiceHealth> {
         const startTime = Date.now();
         const keycloakUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
 
+        // Build axios config with HTTPS agent if needed
+        const config: any = {
+            timeout: 5000,
+        };
+        if (keycloakUrl.startsWith('https://')) {
+            config.httpsAgent = healthCheckHttpsAgent;
+        }
+
         try {
-            const response = await axios.get(`${keycloakUrl}/health`, {
-                timeout: 5000,
-            });
+            // Keycloak 17+ uses /health/ready for readiness probes
+            const response = await axios.get(`${keycloakUrl}/health/ready`, config);
 
             const responseTime = Date.now() - startTime;
 
@@ -394,17 +463,20 @@ class HealthService {
         } catch (error) {
             const responseTime = Date.now() - startTime;
 
-            // Keycloak might not have /health endpoint, try root
+            // Fallback: try /health endpoint (older Keycloak versions)
             try {
-                await axios.get(keycloakUrl, { timeout: 2000 });
+                const fallbackResponse = await axios.get(`${keycloakUrl}/health`, { ...config, timeout: 2000 });
                 const totalTime = Date.now() - startTime;
                 return {
                     status: totalTime < 500 ? 'up' : 'degraded',
                     responseTime: totalTime,
+                    details: fallbackResponse.data,
                 };
-            } catch {
+            } catch (fallbackError) {
                 logger.error('Keycloak health check failed', {
+                    keycloakUrl,
                     error: error instanceof Error ? error.message : 'Unknown error',
+                    hasCACerts: !!caCertificates,
                 });
 
                 return {
@@ -429,10 +501,16 @@ class HealthService {
 
         const startTime = Date.now();
 
+        // Build axios config with HTTPS agent if needed
+        const config: any = {
+            timeout: 5000,
+        };
+        if (kasUrl.startsWith('https://')) {
+            config.httpsAgent = healthCheckHttpsAgent;
+        }
+
         try {
-            const response = await axios.get(`${kasUrl}/health`, {
-                timeout: 5000,
-            });
+            const response = await axios.get(`${kasUrl}/health`, config);
 
             const responseTime = Date.now() - startTime;
 
@@ -445,7 +523,9 @@ class HealthService {
             const responseTime = Date.now() - startTime;
 
             logger.error('KAS health check failed', {
+                kasUrl,
                 error: error instanceof Error ? error.message : 'Unknown error',
+                hasCACerts: !!caCertificates,
             });
 
             return {
