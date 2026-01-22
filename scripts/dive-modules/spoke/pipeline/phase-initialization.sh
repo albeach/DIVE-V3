@@ -171,17 +171,87 @@ spoke_init_generate_config() {
         SPOKE_KAS_PORT=8080
     fi
 
-    # Generate unique spoke ID
-    local spoke_id="spoke-${code_lower}-$(openssl rand -hex 4)"
+    # ==========================================================================
+    # CRITICAL FIX (2026-01-22): DO NOT generate local spokeId
+    # ==========================================================================
+    # ROOT CAUSE: Local spokeId generation creates IDs that don't match Hub's
+    # generated IDs. Hub uses crypto.randomBytes(4).toString('hex') to create:
+    #   spoke-<instanceCode>-<random8chars>
+    # 
+    # ARCHITECTURE: Hub MongoDB is SSOT for spokeId
+    # - Spoke should NOT generate its own spokeId
+    # - Spoke registers with Hub, Hub generates spokeId
+    # - Spoke uses Hub-assigned spokeId for all operations
+    #
+    # FIX: Use placeholder until Hub assigns real spokeId during registration
+    local spoke_id="PENDING_REGISTRATION"
 
     # Get contact email from env or generate default
     local contact_email="${CONTACT_EMAIL:-admin@${code_lower}.dive25.com}"
 
-    # Get Hub URL from env or use default
-    # CRITICAL FIX (2026-01-22): Use Docker internal network name, not localhost
-    # ROOT CAUSE: localhost:4000 from inside a container reaches the spoke backend, not Hub
-    # FIX: Use dive-hub-backend:4000 which is resolvable on dive-shared network
-    local hub_url="${HUB_URL:-https://dive-hub-backend:4000}"
+    # Get Hub URL - use localhost for curl from host, Docker name for containers
+    local hub_url="${HUB_URL:-https://localhost:4000}"
+    local hub_url_internal="https://dive-hub-backend:4000"
+    
+    # ==========================================================================
+    # Try to register with Hub NOW to get real spokeId BEFORE container start
+    # ==========================================================================
+    log_verbose "Attempting early registration with Hub to get spokeId..."
+    if curl -sk --max-time 5 "${hub_url}/api/health" >/dev/null 2>&1; then
+        log_verbose "Hub is available - registering to get spokeId"
+        
+        # Load Keycloak admin password for bidirectional federation
+        local kc_admin_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
+        local kc_admin_pass="${!kc_admin_var}"
+        
+        # Fallback: check if generic password exists
+        if [ -z "$kc_admin_pass" ]; then
+            kc_admin_pass="${KEYCLOAK_ADMIN_PASSWORD:-}"
+        fi
+        
+        # Register with Hub to get spokeId
+        local reg_payload=$(cat <<REGEOF
+{
+  "instanceCode": "$code_upper",
+  "name": "$code_upper Instance",
+  "baseUrl": "https://localhost:${SPOKE_FRONTEND_PORT}",
+  "apiUrl": "https://localhost:${SPOKE_BACKEND_PORT}",
+  "idpUrl": "https://dive-spoke-${code_lower}-keycloak:8443",
+  "idpPublicUrl": "https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT}",
+  "requestedScopes": ["policy:base", "policy:org", "policy:tenant"],
+  "contactEmail": "$contact_email",
+  "keycloakAdminPassword": "$kc_admin_pass",
+  "skipValidation": true
+}
+REGEOF
+)
+        
+        local reg_response
+        reg_response=$(curl -sk --max-time 30 -X POST "${hub_url}/api/federation/register" \
+            -H "Content-Type: application/json" \
+            -d "$reg_payload" 2>&1)
+        
+        local hub_spoke_id=$(echo "$reg_response" | jq -r '.spoke.spokeId // empty' 2>/dev/null)
+        local hub_token=$(echo "$reg_response" | jq -r '.token.token // empty' 2>/dev/null)
+        
+        if [ -n "$hub_spoke_id" ] && [ "$hub_spoke_id" != "null" ]; then
+            spoke_id="$hub_spoke_id"
+            log_success "✓ Got spokeId from Hub: $spoke_id"
+            
+            # Store token if received
+            if [ -n "$hub_token" ] && [ "$hub_token" != "null" ]; then
+                export SPOKE_TOKEN_EARLY="$hub_token"
+                log_success "✓ Got SPOKE_TOKEN from Hub"
+            fi
+        else
+            log_warn "Hub registration didn't return spokeId - will retry during configuration"
+            # Generate temporary ID for config.json (will be updated during config phase)
+            spoke_id="spoke-${code_lower}-temp-$(openssl rand -hex 4)"
+        fi
+    else
+        log_verbose "Hub not available - using temporary spokeId (will be updated during registration)"
+        spoke_id="spoke-${code_lower}-temp-$(openssl rand -hex 4)"
+    fi
 
     # Build URLs
     local base_url="https://localhost:${SPOKE_FRONTEND_PORT}"
@@ -419,7 +489,8 @@ API_URL=$api_url
 IDP_URL=$idp_url
 IDP_PUBLIC_URL=$idp_public_url
 KAS_URL=$kas_url
-HUB_URL=$hub_url
+# CRITICAL: Use Docker internal network name for Hub - containers can't reach localhost
+HUB_URL=$hub_url_internal
 
 # Federation configuration
 # CRITICAL FIX (2026-01-14): Use internal Docker network URL for Hub OPAL server
@@ -428,6 +499,7 @@ HUB_URL=$hub_url
 # CRITICAL FIX (2026-01-15): Hub OPAL server uses TLS - must use https:// not http://
 HUB_OPAL_URL=https://dive-hub-opal-server:7002
 SPOKE_OPAL_TOKEN=
+SPOKE_TOKEN=${SPOKE_TOKEN_EARLY:-}
 OPAL_LOG_LEVEL=INFO
 
 # OPAL Authentication (public key from Hub OPAL server)
