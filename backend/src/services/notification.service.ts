@@ -8,7 +8,9 @@ export type NotificationType =
     | 'document_shared'
     | 'upload_complete'
     | 'system'
-    | 'security';
+    | 'security'
+    | 'federation_event'
+    | 'admin_action';
 
 export interface INotification {
     id: string;
@@ -21,6 +23,8 @@ export interface INotification {
     resourceId?: string;
     actionUrl?: string;
     severity?: 'info' | 'success' | 'warning' | 'error';
+    priority?: 'low' | 'medium' | 'high' | 'critical';
+    metadata?: Record<string, unknown>;
     createdAt?: Date;
     updatedAt?: Date;
 }
@@ -176,6 +180,131 @@ class NotificationService {
         };
         await col.updateOne({ userId }, update, { upsert: true });
         return this.getPreferences(userId);
+    }
+
+    /**
+     * Create admin notification (sent to all Hub admin users)
+     * 
+     * Phase 2: Gap Closure - Admin awareness of pending spoke registrations
+     * 
+     * This method finds all users with 'hub_admin' or 'super_admin' roles
+     * and creates a notification for each.
+     * 
+     * @param notification - Notification details (without userId)
+     */
+    async createAdminNotification(notification: {
+        type: NotificationType;
+        title: string;
+        message: string;
+        actionUrl?: string;
+        priority?: 'low' | 'medium' | 'high' | 'critical';
+        metadata?: Record<string, unknown>;
+    }): Promise<string[]> {
+        try {
+            // Get all admin users
+            const adminUsers = await this.getAdminUsers();
+            
+            if (adminUsers.length === 0) {
+                logger.warn('No admin users found - cannot create admin notification', {
+                    title: notification.title
+                });
+                return [];
+            }
+
+            // Create notification for each admin
+            const notificationIds: string[] = [];
+            const timestamp = new Date().toISOString();
+
+            for (const adminUserId of adminUsers) {
+                const id = await this.create({
+                    userId: adminUserId,
+                    type: notification.type,
+                    title: notification.title,
+                    message: notification.message,
+                    timestamp,
+                    read: false,
+                    actionUrl: notification.actionUrl,
+                    severity: this.priorityToSeverity(notification.priority),
+                    priority: notification.priority,
+                    metadata: notification.metadata
+                });
+                notificationIds.push(id);
+            }
+
+            logger.info('Admin notification created for all admins', {
+                title: notification.title,
+                adminCount: adminUsers.length,
+                notificationIds: notificationIds.length,
+                priority: notification.priority
+            });
+
+            return notificationIds;
+
+        } catch (error) {
+            logger.error('Failed to create admin notification', {
+                title: notification.title,
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+            throw error;
+        }
+    }
+
+    /**
+     * Get all admin user IDs
+     * Queries user collection for users with hub_admin or super_admin roles
+     */
+    private async getAdminUsers(): Promise<string[]> {
+        try {
+            await this.connect();
+            if (!this.db) return [];
+
+            const usersCollection = this.db.collection('users');
+            
+            // Find users with admin roles
+            const adminDocs = await usersCollection.find({
+                $or: [
+                    { roles: 'hub_admin' },
+                    { roles: 'super_admin' },
+                    { role: 'hub_admin' },
+                    { role: 'super_admin' }
+                ]
+            }).toArray();
+
+            // Extract uniqueID from admin users
+            const adminUserIds = adminDocs
+                .map(doc => doc.uniqueID || doc.email || doc.username)
+                .filter(id => !!id) as string[];
+
+            logger.debug('Found admin users for notifications', {
+                count: adminUserIds.length
+            });
+
+            return adminUserIds;
+
+        } catch (error) {
+            logger.warn('Failed to fetch admin users', {
+                error: error instanceof Error ? error.message : 'Unknown error'
+            });
+            // Return empty array if can't fetch admins
+            return [];
+        }
+    }
+
+    /**
+     * Map priority to severity
+     */
+    private priorityToSeverity(priority?: string): 'info' | 'success' | 'warning' | 'error' {
+        switch (priority) {
+            case 'critical':
+                return 'error';
+            case 'high':
+                return 'warning';
+            case 'medium':
+                return 'info';
+            case 'low':
+            default:
+                return 'info';
+        }
     }
 }
 
