@@ -173,7 +173,9 @@ bundle.tar.gz
 policies/.bundle/
 
 # Database backups
+# Ignore SQL dumps but not migration files
 *.sql
+!scripts/migrations/*.sql
 *.dump
 *.backup
 
