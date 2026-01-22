@@ -272,22 +272,50 @@ _spoke_up_legacy() {
 
     cleanup_stale_containers "$code_lower"
 
-    # Auto-provision OPAL JWT if missing or empty (resilience)
-    if [ -z "${SPOKE_OPAL_TOKEN:-}" ]; then
-        log_info "OPAL token not found, attempting to provision..."
-        if [ -f "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" ]; then
-            if "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" "$code_lower" >/dev/null 2>&1; then
-                log_success "OPAL token provisioned automatically"
-                # Re-source .env to pick up the new token
-                set -a
-                source "$spoke_dir/.env"
-                set +a
+    # ==========================================================================
+    # CRITICAL FIX (2026-01-22): Provision OPAL JWT BEFORE container startup
+    # ==========================================================================
+    # ROOT CAUSE: OPAL client with empty token enters infinite 403 loop
+    # SOLUTION: Provision token here, don't suppress errors, fail visibly
+    local current_opal_token=""
+    if [ -f "$spoke_dir/.env" ]; then
+        current_opal_token=$(grep "^SPOKE_OPAL_TOKEN=" "$spoke_dir/.env" 2>/dev/null | cut -d= -f2 | tr -d '\n\r"')
+    fi
+    
+    if [ -z "$current_opal_token" ]; then
+        log_step "OPAL token not found - provisioning BEFORE container startup..."
+        
+        # Check if Hub OPAL server is running
+        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "dive-hub-opal-server"; then
+            if [ -f "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" ]; then
+                # CRITICAL: Don't suppress errors - we need to see failures
+                local prov_output
+                local prov_exit
+                prov_output=$("${DIVE_ROOT}/scripts/provision-opal-tokens.sh" "$code_lower" 2>&1) && prov_exit=0 || prov_exit=$?
+                
+                if [ $prov_exit -eq 0 ]; then
+                    log_success "✓ OPAL token provisioned before container startup"
+                    # Re-source .env to pick up the new token
+                    set -a
+                    source "$spoke_dir/.env" 2>/dev/null || true
+                    set +a
+                else
+                    log_error "OPAL token provisioning failed:"
+                    echo "$prov_output" | tail -10
+                    echo ""
+                    log_warn "OPAL client will fail to connect without a valid token"
+                    log_info "Fix: Ensure Hub is running, then: ./dive spoke opal-token $code_upper"
+                fi
             else
-                log_warn "Could not provision OPAL token (Hub may not be reachable)"
-                echo "  OPAL client will retry connection after spoke starts"
-                echo "  Run manually: ./dive spoke opal-token $code_upper"
+                log_warn "OPAL provisioning script not found"
             fi
+        else
+            log_warn "Hub OPAL server not running - cannot provision token"
+            log_info "Start Hub first: ./dive hub deploy"
+            log_info "Then provision token: ./dive spoke opal-token $code_upper"
         fi
+    else
+        log_success "✓ OPAL token already configured"
     fi
 
     # ==========================================================================
@@ -364,20 +392,64 @@ _spoke_up_legacy() {
     fi
     echo "[DEBUG] load_secrets completed successfully"
 
-    # Write loaded secrets to .env file so docker-compose can access them
-    # This ensures secrets are available to containers at startup
+    # ==========================================================================
+    # CRITICAL FIX (2026-01-22): Write secrets with CORRECT instance suffix
+    # ==========================================================================
+    # ROOT CAUSE BUG: Secrets were hardcoded to _NZL suffix regardless of instance
+    # This caused Terraform to fail (expects _${code_upper} suffix)
+    # → realm not created → registration fails → spoke suspended
+    #
+    # FIX: Use dynamic ${code_upper} suffix for all secrets
     log_info "Writing secrets to .env file for docker-compose..."
-    log_info "Debug: POSTGRES_PASSWORD_NZL=${POSTGRES_PASSWORD_NZL:-NOT_SET}"
-    {
-        echo "# Secrets loaded from GCP Secret Manager at $(date)"
-        echo "POSTGRES_PASSWORD_NZL=$POSTGRES_PASSWORD_NZL"
-        echo "MONGO_PASSWORD_NZL=$MONGO_PASSWORD_NZL"
-        echo "KEYCLOAK_ADMIN_PASSWORD_NZL=$KEYCLOAK_ADMIN_PASSWORD_NZL"
-        echo "AUTH_SECRET_NZL=$AUTH_SECRET_NZL"
-        echo "KEYCLOAK_CLIENT_SECRET_NZL=$KEYCLOAK_CLIENT_SECRET_NZL"
-        echo "KEYCLOAK_CLIENT_SECRET=$KEYCLOAK_CLIENT_SECRET"
-        echo "REDIS_BLACKLIST_PASSWORD=$REDIS_PASSWORD"
-    } >> "$spoke_dir/.env"
+    
+    # Get secrets with instance suffix (from .env or environment)
+    local pg_pass_var="POSTGRES_PASSWORD_${code_upper}"
+    local mongo_pass_var="MONGO_PASSWORD_${code_upper}"
+    local kc_admin_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
+    local auth_secret_var="AUTH_SECRET_${code_upper}"
+    local kc_client_var="KEYCLOAK_CLIENT_SECRET_${code_upper}"
+    
+    # Try to get from environment first, then from .env file
+    local pg_pass="${!pg_pass_var}"
+    local mongo_pass="${!mongo_pass_var}"
+    local kc_admin="${!kc_admin_var}"
+    local auth_secret="${!auth_secret_var}"
+    local kc_client="${!kc_client_var}"
+    
+    # Fallback: Read from .env file if not in environment
+    if [ -z "$pg_pass" ] && [ -f "$spoke_dir/.env" ]; then
+        pg_pass=$(grep "^POSTGRES_PASSWORD_${code_upper}=" "$spoke_dir/.env" 2>/dev/null | cut -d= -f2)
+    fi
+    if [ -z "$mongo_pass" ] && [ -f "$spoke_dir/.env" ]; then
+        mongo_pass=$(grep "^MONGO_PASSWORD_${code_upper}=" "$spoke_dir/.env" 2>/dev/null | cut -d= -f2)
+    fi
+    if [ -z "$kc_admin" ] && [ -f "$spoke_dir/.env" ]; then
+        kc_admin=$(grep "^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=" "$spoke_dir/.env" 2>/dev/null | cut -d= -f2)
+    fi
+    if [ -z "$auth_secret" ] && [ -f "$spoke_dir/.env" ]; then
+        auth_secret=$(grep "^AUTH_SECRET_${code_upper}=" "$spoke_dir/.env" 2>/dev/null | cut -d= -f2)
+    fi
+    if [ -z "$kc_client" ] && [ -f "$spoke_dir/.env" ]; then
+        kc_client=$(grep "^KEYCLOAK_CLIENT_SECRET_${code_upper}=" "$spoke_dir/.env" 2>/dev/null | cut -d= -f2)
+    fi
+    
+    log_verbose "Debug: POSTGRES_PASSWORD_${code_upper}=${pg_pass:0:10}..."
+    log_verbose "Debug: KEYCLOAK_ADMIN_PASSWORD_${code_upper}=${kc_admin:0:10}..."
+    
+    # Export secrets with correct instance suffix for Terraform
+    export "POSTGRES_PASSWORD_${code_upper}=${pg_pass}"
+    export "MONGO_PASSWORD_${code_upper}=${mongo_pass}"
+    export "KEYCLOAK_ADMIN_PASSWORD_${code_upper}=${kc_admin}"
+    export "AUTH_SECRET_${code_upper}=${auth_secret}"
+    export "KEYCLOAK_CLIENT_SECRET_${code_upper}=${kc_client}"
+    
+    # Also export generic names for backward compatibility
+    export KEYCLOAK_ADMIN_PASSWORD="$kc_admin"
+    export KEYCLOAK_CLIENT_SECRET="$kc_client"
+    export POSTGRES_PASSWORD="$pg_pass"
+    export MONGO_PASSWORD="$mongo_pass"
+    
+    log_info "✓ Secrets exported with ${code_upper} suffix for Terraform"
 
     # Force compose project per spoke to avoid cross-stack collisions when a global
     # COMPOSE_PROJECT_NAME is already exported (e.g., hub set to dive-v3).
@@ -994,20 +1066,56 @@ _spoke_deploy_legacy() {
         opal_token=$(grep "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null | cut -d= -f2)
     fi
 
-    # OPAL Token Provisioning (LOCAL/DEV only for auto-approval)
-    if [ -z "$opal_token" ] || [ "$opal_token" = "placeholder-token-awaiting-hub-approval" ]; then
-        # Check if we're in LOCAL/DEV environment for auto-provisioning
+    # ==========================================================================
+    # OPAL Token Provisioning - CRITICAL for policy enforcement
+    # FIXED (2026-01-22): Don't suppress errors, restart OPAL client after provisioning
+    # ==========================================================================
+    if [ -z "$opal_token" ] || [ "$opal_token" = "placeholder-token-awaiting-hub-approval" ] || [ "$opal_token" = "" ]; then
         local env_type="${DIVE_ENV:-local}"
         if [[ "$env_type" =~ ^(local|dev|development)$ ]]; then
             log_step "🤖 DEV MODE: Auto-provisioning OPAL client JWT..."
-            if [ -f "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" ]; then
-                if "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" "$code_lower" 2>/dev/null; then
+            
+            # Check if Hub OPAL server is running
+            if ! docker ps --format '{{.Names}}' | grep -q "dive-hub-opal-server"; then
+                log_warn "Hub OPAL server not running - cannot provision token"
+                echo "      Start Hub first: ./dive hub deploy"
+            elif [ -f "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" ]; then
+                # CRITICAL FIX: Don't suppress errors - we need to see what's failing
+                local opal_output
+                local opal_exit_code
+                opal_output=$("${DIVE_ROOT}/scripts/provision-opal-tokens.sh" "$code_lower" 2>&1) && opal_exit_code=0 || opal_exit_code=$?
+                
+                if [ $opal_exit_code -eq 0 ]; then
                     log_success "🎉 OPAL JWT auto-provisioned (DEV mode)"
+                    
+                    # CRITICAL: Restart OPAL client to pick up new token
+                    local opal_container="dive-spoke-${code_lower}-opal-client"
+                    if docker ps --format '{{.Names}}' | grep -q "^${opal_container}$"; then
+                        log_step "Restarting OPAL client with new token..."
+                        if docker restart "$opal_container" >/dev/null 2>&1; then
+                            log_success "✓ OPAL client restarted"
+                            
+                            # Wait for OPAL client to connect
+                            sleep 5
+                            local opal_health
+                            opal_health=$(docker inspect "$opal_container" --format '{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+                            if [ "$opal_health" = "healthy" ]; then
+                                log_success "✓ OPAL client healthy"
+                            else
+                                log_warn "OPAL client status: $opal_health (may need time to connect)"
+                            fi
+                        else
+                            log_warn "Could not restart OPAL client"
+                        fi
+                    fi
                 else
-                    log_warn "Auto-provisioning failed (Hub may not be reachable)"
-                    log_info "Falling back to manual provisioning"
-                    echo "      Run: ./dive spoke opal-token $code_upper"
+                    log_error "OPAL provisioning failed (exit code: $opal_exit_code)"
+                    echo "$opal_output" | tail -10
+                    echo ""
+                    echo "      Manual fix: ./dive spoke opal-token $code_upper"
                 fi
+            else
+                log_warn "OPAL provisioning script not found"
             fi
         else
             # PRODUCTION: Require manual approval
@@ -1022,6 +1130,17 @@ _spoke_deploy_legacy() {
         echo "      Run: ./dive spoke register $code_upper && ./dive spoke opal-token $code_upper"
     else
         log_success "OPAL token configured - full federation active"
+        
+        # Verify OPAL client is healthy even when token exists
+        local opal_container="dive-spoke-${code_lower}-opal-client"
+        if docker ps --format '{{.Names}}' | grep -q "^${opal_container}$"; then
+            local opal_health
+            opal_health=$(docker inspect "$opal_container" --format '{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+            if [ "$opal_health" != "healthy" ]; then
+                log_warn "OPAL client unhealthy despite having token - restarting..."
+                docker restart "$opal_container" >/dev/null 2>&1 || true
+            fi
+        fi
     fi
     echo ""
 
@@ -1260,7 +1379,110 @@ _spoke_deploy_legacy() {
             ;;
         *)
             log_step "Submitting formal registration to Hub..."
-            INSTANCE="$code_lower" spoke_register 2>/dev/null || true
+            
+            # CRITICAL FIX (2026-01-22): DO NOT suppress registration errors
+            # Previous: INSTANCE="$code_lower" spoke_register 2>/dev/null || true
+            # This hid all errors and caused silent failures
+            local reg_output
+            local reg_exit_code
+            reg_output=$(INSTANCE="$code_lower" spoke_register 2>&1) && reg_exit_code=0 || reg_exit_code=$?
+            
+            if [ $reg_exit_code -ne 0 ]; then
+                log_warn "Registration command exited with code $reg_exit_code"
+                echo "$reg_output" | tail -20
+            fi
+            
+            # CRITICAL: Verify spoke status after registration (may be suspended)
+            log_step "Verifying spoke registration status..."
+            local hub_api_url="${HUB_API_URL:-https://localhost:4000}"
+            local spoke_status_response
+            spoke_status_response=$(curl -sk "${hub_api_url}/api/federation/spokes?instanceCode=${code_upper}" 2>/dev/null)
+            
+            local spoke_status=$(echo "$spoke_status_response" | jq -r '.spokes[0].status // empty' 2>/dev/null)
+            local spoke_id=$(echo "$spoke_status_response" | jq -r '.spokes[0].spokeId // empty' 2>/dev/null)
+            
+            case "$spoke_status" in
+                approved)
+                    log_success "✓ Spoke approved and active"
+                    
+                    # ==========================================================================
+                    # CRITICAL FIX (2026-01-22): Update SPOKE_ID and restart backend
+                    # ==========================================================================
+                    # ROOT CAUSE: Backend was started with OLD spoke_id, but registration
+                    # creates a NEW spoke_id in Hub. Heartbeat fails because IDs don't match.
+                    # FIX: Update .env with new spoke_id and restart backend
+                    
+                    # Update SPOKE_ID in .env if it changed
+                    if [ -n "$spoke_id" ] && [ "$spoke_id" != "null" ]; then
+                        local current_spoke_id=$(grep "^SPOKE_ID=" "$spoke_dir/.env" 2>/dev/null | cut -d= -f2)
+                        if [ "$spoke_id" != "$current_spoke_id" ]; then
+                            log_info "Updating SPOKE_ID: $current_spoke_id → $spoke_id"
+                            if grep -q "^SPOKE_ID=" "$spoke_dir/.env" 2>/dev/null; then
+                                sed -i.bak "s|^SPOKE_ID=.*|SPOKE_ID=$spoke_id|" "$spoke_dir/.env"
+                            else
+                                echo "SPOKE_ID=$spoke_id" >> "$spoke_dir/.env"
+                            fi
+                            rm -f "$spoke_dir/.env.bak"
+                            log_success "✓ SPOKE_ID updated in .env"
+                        fi
+                    fi
+                    
+                    # Extract and save token if available
+                    local spoke_token=$(echo "$spoke_status_response" | jq -r '.spokes[0].token // empty' 2>/dev/null)
+                    if [ -n "$spoke_token" ] && [ "$spoke_token" != "null" ]; then
+                        if grep -q "^SPOKE_TOKEN=" "$spoke_dir/.env" 2>/dev/null; then
+                            sed -i.bak "s|^SPOKE_TOKEN=.*|SPOKE_TOKEN=$spoke_token|" "$spoke_dir/.env"
+                        else
+                            echo "SPOKE_TOKEN=$spoke_token" >> "$spoke_dir/.env"
+                        fi
+                        rm -f "$spoke_dir/.env.bak"
+                        log_success "✓ Spoke token saved to .env"
+                    fi
+                    
+                    # Restart backend to pick up new SPOKE_ID and SPOKE_TOKEN
+                    local backend_container="dive-spoke-${code_lower}-backend"
+                    if docker ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
+                        log_step "Restarting backend to pick up updated federation credentials..."
+                        if docker restart "$backend_container" >/dev/null 2>&1; then
+                            log_success "✓ Backend restarted with new SPOKE_ID and TOKEN"
+                            
+                            # Wait for backend to be healthy
+                            local wait_count=0
+                            while [ $wait_count -lt 30 ]; do
+                                local health=$(docker inspect "$backend_container" --format '{{.State.Health.Status}}' 2>/dev/null)
+                                if [ "$health" = "healthy" ]; then
+                                    log_success "✓ Backend healthy"
+                                    break
+                                fi
+                                sleep 2
+                                wait_count=$((wait_count + 1))
+                            done
+                        else
+                            log_warn "Could not restart backend - may need manual restart"
+                        fi
+                    fi
+                    ;;
+                pending)
+                    log_warn "⚠ Spoke status: PENDING - requires Hub admin approval"
+                    echo "  Run: Hub admin must approve via dashboard or API"
+                    ;;
+                suspended)
+                    log_error "✗ Spoke status: SUSPENDED - federation failed"
+                    local suspend_reason=$(echo "$spoke_status_response" | jq -r '.spokes[0].suspendReason // .spokes[0].message // "Unknown"' 2>/dev/null)
+                    echo "  Reason: $suspend_reason"
+                    echo ""
+                    echo "  This usually means bidirectional federation failed."
+                    echo "  Ensure KEYCLOAK_ADMIN_PASSWORD_${code_upper} is correct in .env"
+                    echo "  Then retry: ./dive spoke register ${code_upper}"
+                    ;;
+                *)
+                    if [ -z "$spoke_status" ]; then
+                        log_warn "Could not verify spoke status (Hub may not be reachable)"
+                    else
+                        log_warn "Spoke status: $spoke_status"
+                    fi
+                    ;;
+            esac
             echo ""
             ;;
     esac
@@ -1766,23 +1988,55 @@ _spoke_deploy_legacy() {
         final_opal_token=$(grep "^SPOKE_OPAL_TOKEN=" "$final_env_file" 2>/dev/null | cut -d= -f2 | tr -d '\n\r"')
     fi
 
-    if [[ "$final_opal_token" =~ ^placeholder- ]]; then
+    # FIXED (2026-01-22): Check for both placeholder AND empty tokens
+    if [[ "$final_opal_token" =~ ^placeholder- ]] || [ -z "$final_opal_token" ]; then
         # Only attempt auto-provisioning in DEV environments
         local env_type="${DIVE_ENV:-local}"
         if [[ "$env_type" =~ ^(local|dev|development)$ ]]; then
             log_step "🤖 DEV MODE: Final OPAL token activation attempt..."
-            # Final attempt to provision token (Hub might be ready now)
-            if [ -f "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" ]; then
-                if "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" "$code_lower" 2>/dev/null; then
+            
+            # Check Hub OPAL server is available
+            if ! docker ps --format '{{.Names}}' | grep -q "dive-hub-opal-server"; then
+                log_warn "Hub OPAL server not running - skipping final token provisioning"
+            elif [ -f "${DIVE_ROOT}/scripts/provision-opal-tokens.sh" ]; then
+                # CRITICAL FIX: Don't suppress errors - show what's failing
+                local final_opal_output
+                local final_opal_exit
+                final_opal_output=$("${DIVE_ROOT}/scripts/provision-opal-tokens.sh" "$code_lower" 2>&1) && final_opal_exit=0 || final_opal_exit=$?
+                
+                if [ $final_opal_exit -eq 0 ]; then
                     log_success "🎉 OPAL token provisioned automatically!"
                     log_success "✅ Full federation activated - restarting services"
-                    # Restart opal-client with real token
-                    (cd "$spoke_dir" && docker compose restart opal-client-${code_lower} 2>/dev/null || true)
-                    (cd "$spoke_dir" && docker compose restart kas-${code_lower} 2>/dev/null || true)
+                    
+                    # Restart opal-client and kas with real token (use full container names)
+                    local opal_container="dive-spoke-${code_lower}-opal-client"
+                    local kas_container="dive-spoke-${code_lower}-kas"
+                    
+                    if docker ps --format '{{.Names}}' | grep -q "^${opal_container}$"; then
+                        docker restart "$opal_container" >/dev/null 2>&1 || true
+                        log_success "✓ OPAL client restarted"
+                    fi
+                    
+                    if docker ps --format '{{.Names}}' | grep -q "^${kas_container}$"; then
+                        docker restart "$kas_container" >/dev/null 2>&1 || true
+                        log_success "✓ KAS restarted"
+                    fi
+                    
+                    # Verify OPAL client becomes healthy
+                    sleep 5
+                    local final_opal_health
+                    final_opal_health=$(docker inspect "$opal_container" --format '{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+                    if [ "$final_opal_health" = "healthy" ]; then
+                        log_success "✅ OPAL client healthy - policy sync active"
+                    else
+                        log_warn "OPAL client status: $final_opal_health"
+                        log_info "   OPAL may take a few seconds to connect to Hub"
+                    fi
                 else
-                    log_info "🤖 OPAL token still pending - will auto-activate when Hub is ready"
-                    log_info "   Services started with placeholders for testing"
-                    log_info "   Full functionality available after: ./dive spoke register $code_upper"
+                    log_warn "🤖 OPAL token provisioning failed"
+                    echo "$final_opal_output" | tail -5
+                    log_info "   Services started with placeholder tokens for testing"
+                    log_info "   Full functionality: ./dive spoke opal-token $code_upper"
                 fi
             fi
         else
@@ -2089,10 +2343,21 @@ _spoke_create_admin_user() {
 
     log_info "Ensuring admin user exists for Terraform authentication ($code_upper)..."
 
-    # Get admin credentials from environment
-    local admin_pass="${KEYCLOAK_ADMIN_PASSWORD_NZL}"
+    # CRITICAL FIX (2026-01-22): Use dynamic instance suffix, not hardcoded _NZL
+    local admin_pass_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
+    local admin_pass="${!admin_pass_var}"
+    
+    # Fallback: Try generic name or read from .env
     if [ -z "$admin_pass" ]; then
-        log_error "KEYCLOAK_ADMIN_PASSWORD_NZL not set"
+        admin_pass="${KEYCLOAK_ADMIN_PASSWORD}"
+    fi
+    if [ -z "$admin_pass" ] && [ -f "${DIVE_ROOT}/instances/${code_lower}/.env" ]; then
+        admin_pass=$(grep "^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=" "${DIVE_ROOT}/instances/${code_lower}/.env" 2>/dev/null | cut -d= -f2)
+    fi
+    
+    if [ -z "$admin_pass" ]; then
+        log_error "KEYCLOAK_ADMIN_PASSWORD_${code_upper} not set"
+        log_error "Check that secrets are loaded: grep KEYCLOAK instances/${code_lower}/.env"
         return 1
     fi
 

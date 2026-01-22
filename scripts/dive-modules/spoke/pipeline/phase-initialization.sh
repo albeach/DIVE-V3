@@ -178,7 +178,10 @@ spoke_init_generate_config() {
     local contact_email="${CONTACT_EMAIL:-admin@${code_lower}.dive25.com}"
 
     # Get Hub URL from env or use default
-    local hub_url="${HUB_URL:-https://localhost:4000}"
+    # CRITICAL FIX (2026-01-22): Use Docker internal network name, not localhost
+    # ROOT CAUSE: localhost:4000 from inside a container reaches the spoke backend, not Hub
+    # FIX: Use dive-hub-backend:4000 which is resolvable on dive-shared network
+    local hub_url="${HUB_URL:-https://dive-hub-backend:4000}"
 
     # Build URLs
     local base_url="https://localhost:${SPOKE_FRONTEND_PORT}"
@@ -255,6 +258,56 @@ EOF
         if type spoke_secrets_sync_to_env &>/dev/null; then
             log_verbose "Syncing secrets to .env before container startup"
             spoke_secrets_sync_to_env "$instance_code" || log_warn "Secret sync had issues (continuing)"
+        fi
+
+        # ==========================================================================
+        # CRITICAL FIX (2026-01-22): Provision OPAL token BEFORE container startup
+        # ==========================================================================
+        # ROOT CAUSE: OPAL client was starting with empty token, causing:
+        #   - Infinite 403 Forbidden retry loop
+        #   - OPAL client never becoming healthy
+        #   - KAS failing to start (depends on OPAL client healthy)
+        # SOLUTION: Provision token during initialization, before docker compose up
+        log_verbose "Attempting to provision OPAL token before container startup..."
+        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "dive-hub-opal-server"; then
+            log_verbose "Hub OPAL server detected - provisioning token"
+            local hub_env_file="${DIVE_ROOT}/.env.hub"
+            local master_token=""
+            
+            if [ -f "$hub_env_file" ]; then
+                master_token=$(grep "^OPAL_AUTH_MASTER_TOKEN=" "$hub_env_file" 2>/dev/null | cut -d= -f2)
+            fi
+            
+            if [ -n "$master_token" ]; then
+                # Request JWT from OPAL server
+                local token_response
+                token_response=$(curl -sk --max-time 10 \
+                    -X POST "https://localhost:7002/token" \
+                    -H "Authorization: Bearer ${master_token}" \
+                    -H "Content-Type: application/json" \
+                    -d '{"type": "client"}' 2>/dev/null || echo "")
+                
+                local opal_token=""
+                if [ -n "$token_response" ]; then
+                    opal_token=$(echo "$token_response" | jq -r '.token // empty' 2>/dev/null)
+                fi
+                
+                if [ -n "$opal_token" ] && [[ "$opal_token" =~ ^eyJ ]]; then
+                    # Update .env file with the token
+                    local env_file="$spoke_dir/.env"
+                    if [ -f "$env_file" ]; then
+                        sed -i.bak "s|^SPOKE_OPAL_TOKEN=.*|SPOKE_OPAL_TOKEN=$opal_token|" "$env_file"
+                        rm -f "$env_file.bak"
+                        log_success "✓ OPAL token provisioned during initialization"
+                    fi
+                else
+                    log_warn "Could not get OPAL token from Hub (will retry after container start)"
+                fi
+            else
+                log_verbose "Hub master token not found - OPAL token will be provisioned later"
+            fi
+        else
+            log_verbose "Hub OPAL server not running - OPAL token will be provisioned later"
         fi
 
         return 0
