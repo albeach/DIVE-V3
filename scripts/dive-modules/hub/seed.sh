@@ -144,3 +144,158 @@ hub_seed() {
     echo ""
     echo "  ABAC is now functional - users see resources based on clearance level"
 }
+
+# =============================================================================
+# HUB KAS AUTO-REGISTRATION (Phase 3: MongoDB-Only Architecture)
+# =============================================================================
+# Register Hub KAS instance in MongoDB via Backend API
+# This ensures the Hub KAS appears in the KAS registry for multi-KAS federation
+# =============================================================================
+
+_hub_register_kas() {
+    log_step "Registering Hub KAS in federation registry..."
+
+    local hub_backend_container="${BACKEND_CONTAINER:-dive-hub-backend}"
+    local kas_id="hub-kas-usa"
+    local kas_url="https://dive-hub-kas:8080"
+
+    # Dry run check
+    if [ "$DRY_RUN" = true ]; then
+        log_dry "Would register Hub KAS (${kas_id}) in MongoDB registry"
+        return 0
+    fi
+
+    # Wait for backend API to be ready
+    log_info "Waiting for backend API to be ready..."
+    local max_wait=60
+    local waited=0
+    while ! docker exec "$hub_backend_container" curl -sf http://localhost:4000/health > /dev/null 2>&1; do
+        sleep 2
+        waited=$((waited + 2))
+        if [ $waited -ge $max_wait ]; then
+            log_error "Backend API not ready after ${max_wait}s"
+            return 1
+        fi
+        log_verbose "Waiting for backend... (${waited}s/${max_wait}s)"
+    done
+    log_success "Backend API is ready"
+
+    # Check if already registered
+    local already_registered=$(docker exec "$hub_backend_container" curl -sk \
+        http://localhost:4000/api/kas/registry 2>/dev/null | \
+        jq -r ".kasServers[]? | select(.kasId == \"${kas_id}\") | .kasId" 2>/dev/null)
+
+    if [ "$already_registered" = "$kas_id" ]; then
+        log_success "Hub KAS already registered: ${kas_id}"
+        
+        # Verify status
+        local current_status=$(docker exec "$hub_backend_container" curl -sk \
+            http://localhost:4000/api/kas/registry 2>/dev/null | \
+            jq -r ".kasServers[]? | select(.kasId == \"${kas_id}\") | .status" 2>/dev/null)
+        
+        if [ "$current_status" = "active" ]; then
+            log_success "✓ Hub KAS verified in registry (status: active)"
+        else
+            log_warn "Hub KAS status is '${current_status}' - may need approval"
+        fi
+        return 0
+    fi
+
+    # Read public key (generate if missing)
+    local public_key_path="${DIVE_ROOT}/certs/hub-pki/hub-kas-public.pem"
+    if [ ! -f "$public_key_path" ]; then
+        log_warn "Hub KAS public key not found, generating..."
+        mkdir -p "${DIVE_ROOT}/certs/hub-pki"
+        openssl genrsa -out "${DIVE_ROOT}/certs/hub-pki/hub-kas-private.pem" 4096 2>/dev/null
+        openssl rsa -in "${DIVE_ROOT}/certs/hub-pki/hub-kas-private.pem" \
+            -pubout -out "$public_key_path" 2>/dev/null
+        log_success "Generated Hub KAS key pair"
+    fi
+
+    local public_key
+    if [ -f "$public_key_path" ]; then
+        public_key=$(cat "$public_key_path" | base64 | tr -d '\n')
+    else
+        public_key=""
+        log_warn "Could not read public key, proceeding without it"
+    fi
+
+    # Register Hub KAS via API
+    log_info "Registering Hub KAS: ${kas_id}..."
+    
+    local response
+    response=$(docker exec "$hub_backend_container" curl -sk -w "\n%{http_code}" -X POST \
+        http://localhost:4000/api/kas/register \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"kasId\": \"${kas_id}\",
+            \"organization\": \"DIVE Hub (USA)\",
+            \"countryCode\": \"USA\",
+            \"kasUrl\": \"https://localhost:10000\",
+            \"internalKasUrl\": \"${kas_url}\",
+            \"authMethod\": \"jwt\",
+            \"authConfig\": {
+                \"jwtIssuer\": \"https://localhost:8443/realms/dive-v3-broker-usa\"
+            },
+            \"trustLevel\": \"high\",
+            \"supportedCountries\": [\"USA\"],
+            \"supportedCOIs\": [\"NATO\", \"FVEY\", \"US-ONLY\"],
+            \"metadata\": {
+                \"version\": \"1.0.0\",
+                \"capabilities\": [\"ztdf-encryption\", \"policy-enforcement\"],
+                \"contact\": \"admin@dive-hub.mil\"
+            },
+            \"enabled\": true
+        }" 2>&1)
+
+    # Extract HTTP code from response
+    local http_code
+    http_code=$(echo "$response" | tail -1)
+    local body
+    body=$(echo "$response" | sed '$d')
+
+    # Check response
+    if [[ "$http_code" =~ ^(200|201)$ ]]; then
+        log_success "Hub KAS registered: ${kas_id}"
+
+        # Auto-approve Hub KAS (trusted by default)
+        # Use CLI bypass header for dev mode approval
+        log_info "Auto-approving Hub KAS..."
+        docker exec "$hub_backend_container" curl -sk -X POST \
+            "http://localhost:4000/api/kas/registry/${kas_id}/approve" \
+            -H "Content-Type: application/json" \
+            -H "x-cli-bypass: dive-cli-local-dev" > /dev/null 2>&1
+
+        # Small delay for database write
+        sleep 1
+
+        # Verify registration
+        local verified
+        verified=$(docker exec "$hub_backend_container" curl -sk \
+            http://localhost:4000/api/kas/registry 2>/dev/null | \
+            jq -r ".kasServers[]? | select(.kasId == \"${kas_id}\") | .status" 2>/dev/null)
+
+        if [ "$verified" = "active" ]; then
+            log_success "✓ Hub KAS verified in registry (status: active)"
+            echo ""
+            echo "  KAS Details:"
+            echo "    - kasId:       ${kas_id}"
+            echo "    - Organization: DIVE Hub (USA)"
+            echo "    - Country:     USA"
+            echo "    - Status:      active"
+            echo ""
+            return 0
+        else
+            log_warn "Hub KAS registered but status is '${verified:-unknown}'"
+            log_warn "Try approving manually: ./dive kas approve ${kas_id}"
+            return 0
+        fi
+    elif [ "$http_code" = "409" ]; then
+        log_success "Hub KAS already exists (HTTP 409)"
+        return 0
+    else
+        log_error "Failed to register Hub KAS (HTTP ${http_code:-000})"
+        log_error "Response: $body"
+        return 1
+    fi
+}
