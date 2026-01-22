@@ -916,6 +916,116 @@ prepare_all_certificates() {
 }
 
 # =============================================================================
+# MKCERT CA SYNC (Phase 3.1)
+# =============================================================================
+# Quickly sync local mkcert CA to all instances
+# This is useful when switching development machines or after mkcert reinstall
+# =============================================================================
+
+##
+# Sync local mkcert root CA to all instances
+#
+# This command copies the current local mkcert CA to:
+# - All spoke instances (instances/*/certs/ca/rootCA.pem)
+# - Hub instance (instances/hub/certs/ca/rootCA.pem)
+# - All truststore directories
+#
+# Use this when:
+# - Setting up a new development machine
+# - After reinstalling mkcert
+# - When SSL health checks fail due to CA mismatch
+#
+# Arguments:
+#   None
+#
+# Returns:
+#   0 - All instances synced
+#   1 - Sync failed
+##
+sync_mkcert_ca_to_all() {
+    ensure_dive_root
+
+    if ! check_mkcert_ready; then
+        log_error "mkcert not ready. Run: mkcert -install"
+        return 1
+    fi
+
+    local ca_path
+    ca_path=$(get_mkcert_ca_path)
+    local ca_issuer
+    ca_issuer=$(openssl x509 -in "$ca_path" -issuer -noout 2>/dev/null | sed 's/issuer=//')
+
+    echo ""
+    echo -e "${BOLD}Syncing mkcert CA to All Instances${NC}"
+    echo ""
+    echo -e "  Local CA: ${CYAN}$ca_path${NC}"
+    echo -e "  Issuer:   ${CYAN}$ca_issuer${NC}"
+    echo ""
+
+    local success=0
+    local fail=0
+    local skipped=0
+
+    # Sync to all instance directories
+    for dir in "${DIVE_ROOT}"/instances/*/; do
+        local instance
+        instance=$(basename "$dir")
+        
+        # Skip non-instance directories
+        [[ "$instance" == "shared" ]] && continue
+        
+        local targets=(
+            "$dir/certs/ca/rootCA.pem"
+            "$dir/certs/rootCA.pem"
+            "$dir/truststores/mkcert-rootCA.pem"
+        )
+        
+        local instance_updated=false
+        
+        for target_dir in "${targets[@]}"; do
+            local target_parent
+            target_parent=$(dirname "$target_dir")
+            
+            # Only create and copy if parent directory exists or can be created
+            if [ -d "$target_parent" ] || mkdir -p "$target_parent" 2>/dev/null; then
+                if [ -f "$target_dir" ]; then
+                    # Check if update needed (compare CA subjects)
+                    local existing_issuer
+                    existing_issuer=$(openssl x509 -in "$target_dir" -issuer -noout 2>/dev/null | sed 's/issuer=//')
+                    if [ "$existing_issuer" = "$ca_issuer" ]; then
+                        continue  # Already up to date
+                    fi
+                fi
+                
+                if cp "$ca_path" "$target_dir" 2>/dev/null; then
+                    chmod 644 "$target_dir"
+                    instance_updated=true
+                fi
+            fi
+        done
+        
+        if $instance_updated; then
+            echo -e "  ${GREEN}✓${NC} $(upper "$instance")"
+            success=$((success + 1))
+        else
+            skipped=$((skipped + 1))
+        fi
+    done
+
+    echo ""
+    echo -e "${BOLD}Sync Complete:${NC} $success updated, $skipped already current"
+    echo ""
+
+    if [ $success -gt 0 ]; then
+        log_info "Note: Restart services to load new CA certificates"
+        echo "  Hub:   docker compose -f docker-compose.hub.yml restart"
+        echo "  Spoke: cd instances/<code> && docker compose restart"
+    fi
+
+    return 0
+}
+
+# =============================================================================
 # MODULE DISPATCH
 # =============================================================================
 
@@ -942,6 +1052,9 @@ module_certificates() {
         generate-spoke)
             generate_spoke_certificate "$@"
             ;;
+        sync-ca)
+            sync_mkcert_ca_to_all
+            ;;
         verify)
             verify_federation_certificates "$@"
             ;;
@@ -966,11 +1079,13 @@ module_certificates_help() {
     echo "  ${CYAN}install-hub-ca${NC}              Install mkcert CA in Hub truststore"
     echo "  ${CYAN}install-spoke-ca${NC} <spoke>    Install mkcert CA in spoke truststore"
     echo "  ${CYAN}generate-spoke${NC} <spoke>      Generate spoke certificate"
+    echo "  ${CYAN}sync-ca${NC}                     Sync local mkcert CA to all instances"
     echo "  ${CYAN}verify${NC} [spoke]              Verify certificate configuration"
     echo "  ${CYAN}verify-all${NC}                  Verify certificates for all spokes"
     echo "  ${CYAN}check${NC}                       Check mkcert prerequisites"
     echo ""
     echo "Examples:"
+    echo "  ./dive certs sync-ca                   # Sync local mkcert CA everywhere"
     echo "  ./dive certs prepare-federation alb    # Full setup for ALB spoke"
     echo "  ./dive certs prepare-all               # Full setup for all spokes"
     echo "  ./dive certs update-hub-sans           # Add all spokes to Hub cert"
