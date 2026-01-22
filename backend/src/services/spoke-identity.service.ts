@@ -3,23 +3,24 @@
  *
  * SINGLE SOURCE OF TRUTH ARCHITECTURE:
  * - Hub MongoDB is the authoritative source for spokeId
- * - Spoke queries Hub at startup to get its identity
+ * - Spoke uses SPOKE_TOKEN for authentication
+ * - Hub validates token on heartbeat and returns authoritative spokeId
  * - Local MongoDB cache used only when Hub is unavailable
  *
- * NO MORE:
- * - Local spokeId generation
- * - SPOKE_ID environment variable
- * - config.json spokeId field
- * - docker-compose.yml SPOKE_ID fallback
+ * FLOW:
+ * 1. Shell scripts register spoke with Hub → Hub generates spokeId + token
+ * 2. Shell scripts store SPOKE_TOKEN in .env
+ * 3. Backend starts heartbeat with SPOKE_TOKEN
+ * 4. Hub validates token → returns spokeId in heartbeat response
+ * 5. Backend caches spokeId for local use
  *
- * @version 1.0.0
+ * @version 2.0.0
  * @date 2026-01-22
  */
 
-import axios, { AxiosError } from 'axios';
-import https from 'https';
 import { logger } from '../utils/logger';
-import { spokeIdentityCacheStore, ISpokeIdentityCache } from '../models/spoke-identity-cache.model';
+import { spokeIdentityCacheStore } from '../models/spoke-identity-cache.model';
+import { spokeHeartbeat } from './spoke-heartbeat.service';
 
 // ============================================
 // TYPES
@@ -30,18 +31,8 @@ export interface ISpokeIdentity {
   instanceCode: string;
   token: string;
   status: 'pending' | 'approved' | 'suspended' | 'revoked';
-  allowedScopes?: string[];
-}
-
-export interface IHubSpokeResponse {
-  spokeId: string;
-  instanceCode: string;
-  status: string;
-  token?: {
-    token: string;
-    expiresAt?: string;
-  };
-  allowedScopes?: string[];
+  verifiedByHub: boolean;
+  cachedAt?: Date;
 }
 
 // ============================================
@@ -51,21 +42,20 @@ export interface IHubSpokeResponse {
 class SpokeIdentityService {
   private identity: ISpokeIdentity | null = null;
   private initialized = false;
-  private hubUrl: string = '';
   private instanceCode: string = '';
-
-  // HTTPS agent for self-signed certs in development
-  private httpsAgent = new https.Agent({
-    rejectUnauthorized: false,
-  });
+  private spokeToken: string = '';
+  private hubUrl: string = '';
 
   /**
-   * Initialize spoke identity by querying Hub
-   * This is the ONLY way to get a valid spokeId
+   * Initialize spoke identity from environment and heartbeat
+   * 
+   * SPOKE_TOKEN is the identity - Hub knows which spokeId it belongs to.
+   * On first heartbeat, Hub returns the authoritative spokeId.
    */
   async initialize(): Promise<ISpokeIdentity> {
-    // Get instance code from environment (static, never changes)
+    // Get configuration from environment
     this.instanceCode = process.env.INSTANCE_CODE || '';
+    this.spokeToken = process.env.SPOKE_TOKEN || '';
     this.hubUrl = process.env.HUB_URL || 'https://dive-hub-backend:4000';
 
     if (!this.instanceCode) {
@@ -75,102 +65,112 @@ class SpokeIdentityService {
       );
     }
 
+    if (!this.spokeToken) {
+      throw new Error(
+        'SPOKE_TOKEN environment variable is required. ' +
+        'Register the spoke first using: ./dive spoke deploy <CODE>'
+      );
+    }
+
     logger.info('Initializing spoke identity', {
       instanceCode: this.instanceCode,
+      hasToken: !!this.spokeToken,
       hubUrl: this.hubUrl,
     });
 
-    // Try to get identity from Hub (authoritative)
+    // Try to load cached identity first (for quick startup)
+    const cached = await this.loadCachedIdentity();
+    if (cached) {
+      this.identity = cached;
+      logger.info('Loaded cached spoke identity', {
+        spokeId: cached.spokeId,
+        instanceCode: cached.instanceCode,
+        cachedAt: cached.cachedAt,
+      });
+    }
+
+    // Initialize heartbeat service to get Hub-verified identity
     try {
-      this.identity = await this.fetchIdentityFromHub();
-      this.initialized = true;
-
-      logger.info('Spoke identity obtained from Hub', {
-        spokeId: this.identity.spokeId,
-        instanceCode: this.identity.instanceCode,
-        status: this.identity.status,
-      });
-
-      // Cache for offline resilience
-      await this.cacheIdentity(this.identity);
-
-      return this.identity;
-    } catch (hubError) {
-      logger.warn('Hub unavailable, checking local cache', {
-        error: (hubError as Error).message,
-        hubUrl: this.hubUrl,
-      });
-
-      // Fall back to cached identity
-      const cached = await this.loadCachedIdentity();
-      if (cached) {
-        this.identity = cached;
-        this.initialized = true;
-
-        logger.info('Using cached spoke identity (offline mode)', {
-          spokeId: this.identity.spokeId,
-          instanceCode: this.identity.instanceCode,
-          cachedAt: cached.cachedAt,
+      // Start heartbeat service if not already running
+      if (!spokeHeartbeat.isRunning()) {
+        // Listen for identity verification from heartbeat
+        spokeHeartbeat.on('identityVerified', async (verified: { spokeId: string; instanceCode: string }) => {
+          await this.handleIdentityVerified(verified);
         });
 
+        // Heartbeat is started by server.ts, not here
+        // But we can check if Hub has already verified identity
+      }
+
+      // Check if heartbeat already verified identity
+      if (spokeHeartbeat.isIdentityVerified()) {
+        const hubSpokeId = spokeHeartbeat.getHubAssignedSpokeId();
+        const hubInstanceCode = spokeHeartbeat.getHubAssignedInstanceCode();
+        
+        if (hubSpokeId) {
+          this.identity = {
+            spokeId: hubSpokeId,
+            instanceCode: hubInstanceCode || this.instanceCode,
+            token: this.spokeToken,
+            status: 'approved', // If heartbeat succeeded, spoke is approved
+            verifiedByHub: true,
+          };
+
+          await this.cacheIdentity(this.identity);
+        }
+      }
+
+      // If we have any identity (cached or Hub-verified), we can proceed
+      if (this.identity) {
+        this.initialized = true;
         return this.identity;
       }
 
-      // No Hub and no cache - cannot start
-      throw new Error(
-        `Cannot initialize spoke identity: Hub unavailable at ${this.hubUrl} ` +
-        `and no cached identity found for ${this.instanceCode}. ` +
-        'Ensure Hub is running and spoke is registered.'
-      );
+      // No cached identity - wait for first heartbeat to verify
+      // This is handled by server.ts starting heartbeat
+      logger.info('No cached identity, waiting for Hub verification via heartbeat');
+      
+      // Return a temporary identity with SPOKE_TOKEN
+      // The actual spokeId will be updated when heartbeat succeeds
+      this.identity = {
+        spokeId: `pending-${this.instanceCode.toLowerCase()}`,
+        instanceCode: this.instanceCode,
+        token: this.spokeToken,
+        status: 'pending',
+        verifiedByHub: false,
+      };
+      this.initialized = true;
+      
+      return this.identity;
+    } catch (error) {
+      logger.error('Failed to initialize spoke identity', {
+        error: (error as Error).message,
+        instanceCode: this.instanceCode,
+      });
+      throw error;
     }
   }
 
   /**
-   * Fetch spoke identity from Hub MongoDB (authoritative source)
+   * Handle identity verification from heartbeat service
+   * Called when Hub validates SPOKE_TOKEN and returns spokeId
    */
-  private async fetchIdentityFromHub(): Promise<ISpokeIdentity> {
-    // First try to get existing registration
-    try {
-      const response = await axios.get<{ spokes: IHubSpokeResponse[] }>(
-        `${this.hubUrl}/api/federation/spokes`,
-        {
-          params: { instanceCode: this.instanceCode },
-          httpsAgent: this.httpsAgent,
-          timeout: 10000,
-        }
-      );
+  private async handleIdentityVerified(verified: { spokeId: string; instanceCode: string }): Promise<void> {
+    logger.info('Identity verified by Hub via heartbeat', {
+      spokeId: verified.spokeId,
+      instanceCode: verified.instanceCode,
+      previousSpokeId: this.identity?.spokeId,
+    });
 
-      const spoke = response.data.spokes?.find(
-        s => s.instanceCode.toUpperCase() === this.instanceCode.toUpperCase()
-      );
+    this.identity = {
+      spokeId: verified.spokeId,
+      instanceCode: verified.instanceCode,
+      token: this.spokeToken,
+      status: 'approved',
+      verifiedByHub: true,
+    };
 
-      if (spoke && spoke.spokeId) {
-        return {
-          spokeId: spoke.spokeId,
-          instanceCode: spoke.instanceCode,
-          token: spoke.token?.token || process.env.SPOKE_TOKEN || '',
-          status: spoke.status as ISpokeIdentity['status'],
-          allowedScopes: spoke.allowedScopes,
-        };
-      }
-
-      // Spoke not registered - this is an error
-      throw new Error(
-        `Spoke ${this.instanceCode} not found in Hub. ` +
-        'Register the spoke first using: ./dive spoke register <CODE>'
-      );
-    } catch (error) {
-      if (axios.isAxiosError(error)) {
-        const axiosError = error as AxiosError;
-        if (axiosError.code === 'ECONNREFUSED' || axiosError.code === 'ETIMEDOUT') {
-          throw new Error(`Hub unavailable at ${this.hubUrl}`);
-        }
-        if (axiosError.response?.status === 404) {
-          throw new Error(`Spoke ${this.instanceCode} not registered with Hub`);
-        }
-      }
-      throw error;
-    }
+    await this.cacheIdentity(this.identity);
   }
 
   /**
@@ -183,7 +183,6 @@ class SpokeIdentityService {
         token: identity.token,
         status: identity.status,
         hubUrl: this.hubUrl,
-        allowedScopes: identity.allowedScopes,
       });
 
       logger.debug('Spoke identity cached locally', {
@@ -209,11 +208,11 @@ class SpokeIdentityService {
         return {
           spokeId: cached.spokeId,
           instanceCode: cached.instanceCode,
-          token: cached.spokeToken,
+          token: cached.spokeToken || this.spokeToken,
           status: cached.status,
-          allowedScopes: cached.allowedScopes,
+          verifiedByHub: true, // Cached means it was previously verified
           cachedAt: cached.cachedAt,
-        } as ISpokeIdentity & { cachedAt: Date };
+        };
       }
 
       return null;
@@ -226,34 +225,41 @@ class SpokeIdentityService {
   }
 
   /**
-   * Refresh identity from Hub (called periodically or on demand)
+   * Wait for Hub verification (for services that need confirmed spokeId)
    */
-  async refresh(): Promise<ISpokeIdentity> {
-    if (!this.initialized) {
-      return this.initialize();
+  async waitForHubVerification(timeoutMs = 30000): Promise<ISpokeIdentity> {
+    if (this.identity?.verifiedByHub) {
+      return this.identity;
     }
 
+    logger.info('Waiting for Hub to verify identity via heartbeat', {
+      timeoutMs,
+      instanceCode: this.instanceCode,
+    });
+
     try {
-      this.identity = await this.fetchIdentityFromHub();
+      const verified = await spokeHeartbeat.waitForIdentityVerification(timeoutMs);
+      
+      this.identity = {
+        spokeId: verified.spokeId,
+        instanceCode: verified.instanceCode,
+        token: this.spokeToken,
+        status: 'approved',
+        verifiedByHub: true,
+      };
+
       await this.cacheIdentity(this.identity);
-
-      logger.debug('Spoke identity refreshed from Hub', {
-        spokeId: this.identity.spokeId,
-      });
-
       return this.identity;
     } catch (error) {
-      // Keep existing identity on refresh failure
-      logger.warn('Failed to refresh identity from Hub', {
-        error: (error as Error).message,
-        keepingCurrent: this.identity?.spokeId,
-      });
-
-      if (!this.identity) {
-        throw error;
+      // If timeout, fall back to cached if available
+      if (this.identity) {
+        logger.warn('Hub verification timed out, using current identity', {
+          spokeId: this.identity.spokeId,
+          verifiedByHub: this.identity.verifiedByHub,
+        });
+        return this.identity;
       }
-
-      return this.identity;
+      throw error;
     }
   }
 
@@ -270,9 +276,14 @@ class SpokeIdentityService {
   }
 
   /**
-   * Get spokeId
+   * Get spokeId (may be pending if not yet verified by Hub)
    */
   getSpokeId(): string {
+    // Prefer Hub-verified spokeId from heartbeat
+    const hubVerified = spokeHeartbeat.getHubAssignedSpokeId();
+    if (hubVerified) {
+      return hubVerified;
+    }
     return this.getIdentity().spokeId;
   }
 
@@ -280,7 +291,7 @@ class SpokeIdentityService {
    * Get token
    */
   getToken(): string {
-    return this.getIdentity().token;
+    return this.spokeToken || this.getIdentity().token;
   }
 
   /**
@@ -295,6 +306,13 @@ class SpokeIdentityService {
    */
   isInitialized(): boolean {
     return this.initialized;
+  }
+
+  /**
+   * Check if identity has been verified by Hub
+   */
+  isVerifiedByHub(): boolean {
+    return this.identity?.verifiedByHub || spokeHeartbeat.isIdentityVerified();
   }
 
   /**
