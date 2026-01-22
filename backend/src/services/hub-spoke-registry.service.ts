@@ -526,6 +526,18 @@ class HubSpokeRegistryService extends EventEmitter {
       keycloakPasswordProvided: !!request.keycloakAdminPassword,
     });
 
+    // EMIT EVENT FOR ADMIN NOTIFICATION (Phase 2: Gap Closure)
+    // Alert Hub admins that a new spoke is pending approval
+    // Industry Pattern: Immediate notification of pending approvals (workflow automation)
+    const correlationId = `spoke-registration-${uuidv4()}`;
+    this.emit('spoke:registered', {
+      spoke,
+      timestamp: new Date(),
+      requiresApproval: true,
+      contactEmail: request.contactEmail,
+      correlationId
+    });
+
     return spoke;
   }
 
@@ -775,6 +787,24 @@ class HubSpokeRegistryService extends EventEmitter {
         impact: 'Encrypted document sharing may not work until KAS manually registered'
       });
       // Don't fail spoke approval - KAS can be registered manually later if needed
+    }
+
+    // AUTO-UPDATE COI MEMBERSHIPS (Phase 3: Gap Closure)
+    // Update coalition COIs (NATO, NATO-COSMIC) based on active federation
+    // Industry Pattern: Auto-discovery and dynamic group membership
+    try {
+      await this.updateCoiMembershipsForFederation();
+      logger.info('COI memberships auto-updated from active federation', {
+        spokeId,
+        instanceCode: spoke.instanceCode
+      });
+    } catch (error) {
+      logger.warn('COI membership auto-update failed (non-blocking)', {
+        spokeId,
+        instanceCode: spoke.instanceCode,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      // Don't fail spoke approval
     }
 
     return spoke;
@@ -1054,6 +1084,50 @@ class HubSpokeRegistryService extends EventEmitter {
   }
 
   /**
+   * Update COI memberships based on active federation
+   * 
+   * Phase 3: Gap Closure - Auto-update coalition COIs (NATO, NATO-COSMIC) when spokes join/leave
+   * 
+   * Industry Pattern: Dynamic group membership from active directory/federation
+   * Examples: AWS IAM groups, Azure AD groups, Okta groups
+   * 
+   * This method:
+   * 1. Gets all active (approved) spoke country codes
+   * 2. Updates NATO COI members to include active NATO-member spokes
+   * 3. Updates NATO-COSMIC COI members (same as NATO)
+   * 4. Publishes to OPAL for real-time distribution
+   */
+  private async updateCoiMembershipsForFederation(): Promise<void> {
+    const { mongoCoiDefinitionStore } = await import('../models/coi-definition.model');
+    
+    // Get all active spokes
+    const activeSpokes = await this.store.findByStatus('approved');
+    const activeSpokeCountryCodes = activeSpokes.map(s => s.instanceCode.toUpperCase());
+    
+    // Add Hub instance
+    const hubInstanceCode = (process.env.INSTANCE_CODE || 'USA').toUpperCase();
+    if (!activeSpokeCountryCodes.includes(hubInstanceCode)) {
+      activeSpokeCountryCodes.push(hubInstanceCode);
+    }
+    
+    // Update NATO COI (auto-update only NATO-member countries that are active)
+    await mongoCoiDefinitionStore.updateNATOFromFederation(activeSpokeCountryCodes);
+    
+    // Publish to OPAL for distribution to all spokes
+    const coiMap = await mongoCoiDefinitionStore.getCoiMembershipMapForOpa();
+    await opalClient.publishInlineData(
+      'coi_definitions',
+      coiMap,
+      `Auto-update from federation (${activeSpokeCountryCodes.length} active instances)`
+    );
+    
+    logger.info('COI memberships auto-updated and distributed via OPAL', {
+      activeInstances: activeSpokeCountryCodes.length,
+      instances: activeSpokeCountryCodes
+    });
+  }
+
+  /**
    * Suspend spoke's KAS instance
    */
   private async suspendSpokeKAS(spoke: ISpokeRegistration, reason: string): Promise<void> {
@@ -1229,6 +1303,18 @@ class HubSpokeRegistryService extends EventEmitter {
       });
     }
 
+    // AUTO-UPDATE COI MEMBERSHIPS (Phase 3: Gap Closure)
+    // Remove suspended spoke from coalition COIs
+    try {
+      await this.updateCoiMembershipsForFederation();
+    } catch (error) {
+      logger.warn('COI membership auto-update failed during suspension', {
+        spokeId,
+        instanceCode: spoke.instanceCode,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+
     // ============================================
     // EVENT-DRIVEN CASCADE (Phase 1)
     // ============================================
@@ -1332,6 +1418,18 @@ class HubSpokeRegistryService extends EventEmitter {
       });
     }
 
+    // AUTO-UPDATE COI MEMBERSHIPS (Phase 3: Gap Closure)
+    // Re-add unsuspended spoke to coalition COIs
+    try {
+      await this.updateCoiMembershipsForFederation();
+    } catch (error) {
+      logger.warn('COI membership auto-update failed during unsuspension', {
+        spokeId,
+        instanceCode: spoke.instanceCode,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+
     // Emit event
     const correlationId = `spoke-unsuspension-${uuidv4()}`;
     this.emit('spoke:unsuspended', {
@@ -1411,6 +1509,18 @@ class HubSpokeRegistryService extends EventEmitter {
       await this.removeSpokeKAS(spoke);
     } catch (error) {
       logger.warn('Failed to remove KAS during spoke revocation', {
+        spokeId,
+        instanceCode: spoke.instanceCode,
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+
+    // AUTO-UPDATE COI MEMBERSHIPS (Phase 3: Gap Closure)
+    // Remove revoked spoke from coalition COIs
+    try {
+      await this.updateCoiMembershipsForFederation();
+    } catch (error) {
+      logger.warn('COI membership auto-update failed during revocation', {
         spokeId,
         instanceCode: spoke.instanceCode,
         error: error instanceof Error ? error.message : 'Unknown error'
