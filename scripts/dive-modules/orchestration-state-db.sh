@@ -30,10 +30,12 @@ if [ -z "$DIVE_COMMON_LOADED" ]; then
     export DIVE_COMMON_LOADED=1
 fi
 
-# Load deployment-state.sh for file-based fallback
-if [ -f "$(dirname "${BASH_SOURCE[0]}")/deployment-state.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/deployment-state.sh"
-fi
+# NOTE: File-based state (deployment-state.sh) has been REMOVED as part of
+# the database-only state management refactoring (ADR-001).
+# All state is now stored in PostgreSQL. See:
+#   - docs/architecture/adr/ADR-001-state-management-consolidation.md
+#
+# The .dive-state/ directory is no longer used.
 
 # Load state recovery module for consistency validation
 if [ -f "$(dirname "${BASH_SOURCE[0]}")/orchestration-state-recovery.sh" ]; then
@@ -58,22 +60,23 @@ ORCH_DB_CONN="postgresql://${ORCH_DB_USER}:${ORCH_DB_PASSWORD}@${ORCH_DB_HOST}:$
 ORCH_DB_ENABLED="${ORCH_DB_ENABLED:-true}"
 
 # =============================================================================
-# ADR-001: State Management Consolidation (2026-01-18)
+# ADR-001: State Management Consolidation (2026-01-22)
 # =============================================================================
-# ORCH_DB_ONLY_MODE: When enabled, database is the SOLE state store
+# PostgreSQL is the SOLE state store. No file-based fallbacks.
 #   - No file writes (eliminates dual-write complexity)
 #   - Fail-fast if database unavailable (no silent degradation)
-#   - Files only read for backward-compatible migration
+#   - No backward compatibility with file-based state
 #
-# Migration path:
-#   1. Set ORCH_DB_ONLY_MODE=false to keep dual-write (legacy)
-#   2. Run: ./dive orch-db migrate (imports file state to DB)
-#   3. Set ORCH_DB_ONLY_MODE=true (database-only mode)
-#   4. Verify: ./dive orch-db validate (consistency check)
+# BREAKING CHANGE: File-based state has been REMOVED
+#   - .dive-state/ directory is no longer used
+#   - deployment-state.sh is DEPRECATED and no longer loaded
+#   - ORCH_DB_DUAL_WRITE is no longer supported
+#
+# This is a non-reversible change to establish clear SSOT.
 # =============================================================================
-ORCH_DB_ONLY_MODE="${ORCH_DB_ONLY_MODE:-true}"   # ADR-001: Database-only mode (default: enabled)
-ORCH_DB_DUAL_WRITE="${ORCH_DB_DUAL_WRITE:-false}" # DEPRECATED: Legacy dual-write (disabled by default)
-ORCH_DB_SOURCE_OF_TRUTH="${ORCH_DB_SOURCE_OF_TRUTH:-db}" # db or file (CHANGED: db is now SSOT)
+ORCH_DB_ONLY_MODE="true"   # MANDATORY: Database-only mode (cannot be disabled)
+# REMOVED: ORCH_DB_DUAL_WRITE - dual-write mode no longer supported
+# REMOVED: ORCH_DB_SOURCE_OF_TRUTH - database is always SSOT
 
 # =============================================================================
 # DATABASE CONNECTION HELPERS
@@ -137,15 +140,113 @@ orch_db_exec_json() {
 }
 
 # =============================================================================
+# STATE MACHINE VALIDATION
+# =============================================================================
+# Strict enforcement of valid state transitions
+# Invalid transitions trigger automatic rollback
+# =============================================================================
+
+# Valid deployment states (only set if not already defined)
+[ -z "${VALID_STATES:-}" ] && readonly VALID_STATES="UNKNOWN INITIALIZING DEPLOYING CONFIGURING VERIFYING COMPLETE FAILED ROLLING_BACK CLEANUP"
+
+# Valid state transitions (from -> to)
+# Format: "FROM_STATE:TO_STATE1,TO_STATE2,..."
+declare -A VALID_TRANSITIONS=(
+    ["UNKNOWN"]="INITIALIZING,FAILED"
+    ["INITIALIZING"]="DEPLOYING,FAILED,CLEANUP"
+    ["DEPLOYING"]="CONFIGURING,FAILED,ROLLING_BACK"
+    ["CONFIGURING"]="VERIFYING,FAILED,ROLLING_BACK"
+    ["VERIFYING"]="COMPLETE,FAILED,ROLLING_BACK"
+    ["COMPLETE"]="INITIALIZING,CLEANUP,FAILED"
+    ["FAILED"]="INITIALIZING,CLEANUP,ROLLING_BACK"
+    ["ROLLING_BACK"]="FAILED,CLEANUP,UNKNOWN"
+    ["CLEANUP"]="UNKNOWN,INITIALIZING"
+)
+
+##
+# Validate state transition
+#
+# Arguments:
+#   $1 - From state
+#   $2 - To state
+#
+# Returns:
+#   0 - Valid transition
+#   1 - Invalid transition
+##
+orch_validate_state_transition() {
+    local from_state="$1"
+    local to_state="$2"
+
+    # Allow any transition to FAILED (emergency)
+    if [ "$to_state" = "FAILED" ]; then
+        return 0
+    fi
+
+    # Check if from_state has valid transitions defined
+    local valid_targets="${VALID_TRANSITIONS[$from_state]:-}"
+    if [ -z "$valid_targets" ]; then
+        log_warn "Unknown from_state: $from_state (allowing transition)"
+        return 0
+    fi
+
+    # Check if to_state is in the list of valid targets
+    if [[ ",$valid_targets," =~ ",$to_state," ]]; then
+        return 0
+    fi
+
+    log_error "Invalid state transition: $from_state → $to_state"
+    log_error "Valid transitions from $from_state: $valid_targets"
+    return 1
+}
+
+##
+# Get valid transitions for a state
+#
+# Arguments:
+#   $1 - Current state
+#
+# Returns:
+#   Comma-separated list of valid target states
+##
+orch_get_valid_transitions() {
+    local current_state="$1"
+    echo "${VALID_TRANSITIONS[$current_state]:-FAILED}"
+}
+
+##
+# Check if state is terminal
+#
+# Arguments:
+#   $1 - State
+#
+# Returns:
+#   0 - Is terminal state
+#   1 - Not terminal state
+##
+orch_is_terminal_state() {
+    local state="$1"
+    case "$state" in
+        COMPLETE|FAILED|CLEANUP)
+            return 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+}
+
+# =============================================================================
 # STATE MANAGEMENT FUNCTIONS (Database Backend)
 # =============================================================================
 
 ##
-# Set deployment state
+# Set deployment state with strict validation
 #
 # ADR-001 Implementation:
-#   - ORCH_DB_ONLY_MODE=true: Database is sole state store (recommended)
-#   - ORCH_DB_DUAL_WRITE=true: Legacy dual-write mode (deprecated)
+#   - ORCH_DB_ONLY_MODE=true: Database is sole state store (mandatory)
+#   - Strict state machine enforcement
+#   - Automatic rollback on invalid transitions
 #
 # Arguments:
 #   $1 - Instance code (spoke code or "usa" for hub)
@@ -195,6 +296,26 @@ orch_db_set_state() {
         prev_state=$(orch_db_exec "SELECT state FROM deployment_states WHERE instance_code='$code_lower' ORDER BY timestamp DESC LIMIT 1" 2>/dev/null | xargs)
         prev_state="${prev_state:-UNKNOWN}"
 
+        # ==========================================================================
+        # STATE MACHINE VALIDATION
+        # ==========================================================================
+        # Validate state transition before proceeding
+        if ! orch_validate_state_transition "$prev_state" "$new_state"; then
+            local valid_targets
+            valid_targets=$(orch_get_valid_transitions "$prev_state")
+            log_error "State transition blocked: $prev_state → $new_state"
+            log_error "Valid transitions from $prev_state: $valid_targets"
+
+            # Record invalid transition attempt
+            orch_db_exec "
+INSERT INTO orchestration_errors (instance_code, error_code, severity, component, message, remediation)
+VALUES ('$code_lower', 'INVALID_STATE_TRANSITION', 2, 'state-machine',
+        'Invalid transition: $prev_state → $new_state',
+        'Use one of: $valid_targets');" >/dev/null 2>&1 || true
+
+            return 1
+        fi
+
         # Prepare SQL-safe values
         local escaped_reason="${reason//\'/\'\'}"
         local metadata_sql="NULL"
@@ -230,106 +351,15 @@ COMMIT;"
         fi
     fi
 
-    # ==========================================================================
-    # DEPRECATED: Dual-Write Mode (ORCH_DB_DUAL_WRITE=true)
-    # ==========================================================================
-    # Legacy mode for backward compatibility. Will be removed in future versions.
-    # Writes to database first, then to file as cache.
-    # ==========================================================================
-    if [ "$ORCH_DB_DUAL_WRITE" = "true" ]; then
-        log_verbose "WARNING: Using deprecated dual-write mode. Set ORCH_DB_ONLY_MODE=true"
-
-        # Get previous state (from DB if enabled, else from file)
-        local prev_state="UNKNOWN"
-        if [ "$ORCH_DB_ENABLED" = "true" ]; then
-            prev_state=$(orch_db_get_state "$instance_code" 2>/dev/null || echo "UNKNOWN")
-        elif type -t get_deployment_state >/dev/null 2>&1; then
-            prev_state=$(get_deployment_state "$instance_code" 2>/dev/null || echo "UNKNOWN")
-        fi
-
-        # Write to database FIRST (SSOT) with proper error handling
-        if orch_db_check_connection; then
-            # Escape SQL strings properly
-            local escaped_reason="${reason//\'/\'\'}"
-
-            # Handle JSON metadata - Simplified NULL handling
-            local metadata_sql="NULL"
-            if [ -n "$metadata" ] && [ "$metadata" != "null" ]; then
-                # Validate JSON
-                if echo "$metadata" | jq empty >/dev/null 2>&1; then
-                    # Escape single quotes for SQL
-                    local escaped_json="${metadata//\'/\'\'}"
-                    metadata_sql="'$escaped_json'::jsonb"
-                else
-                    log_verbose "Invalid JSON metadata, using NULL"
-                fi
-            fi
-
-            # Build SQL transaction with proper NULL handling
-            local sql_transaction="BEGIN;
-INSERT INTO deployment_states (instance_code, state, previous_state, reason, metadata, created_by)
-VALUES ('$code_lower', '$new_state', '$prev_state', '$escaped_reason', $metadata_sql, 'system');
-
-INSERT INTO state_transitions (instance_code, from_state, to_state, metadata, initiated_by)
-VALUES ('$code_lower', '$prev_state', '$new_state', $metadata_sql, 'system');
-
-COMMIT;"
-
-            # Execute the transaction with better error capturing
-            local sql_error_log
-            sql_error_log=$(orch_db_exec "$sql_transaction" 2>&1)
-            local db_exit_code=$?
-
-            if [ $db_exit_code -eq 0 ] && [[ ! "$sql_error_log" =~ ERROR ]]; then
-                log_verbose "✓ State atomically persisted to database: $instance_code -> $new_state"
-
-                # Database write succeeded - now write to file as cache (DEPRECATED)
-                if type -t set_deployment_state_enhanced >/dev/null 2>&1; then
-                    set_deployment_state_enhanced "$instance_code" "$new_state" "$reason" "$metadata" 2>/dev/null || true
-                else
-                    # Function not available, write directly
-                    mkdir -p "${DIVE_ROOT}/.dive-state"
-                    cat > "${DIVE_ROOT}/.dive-state/${code_lower}.state" << STATE_EOF
-state=$new_state
-timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-version=2.0
-metadata=$metadata
-checksum=$(echo -n "$new_state$(date +%s)" | shasum -a 256 2>/dev/null | cut -d' ' -f1 || echo "none")
-STATE_EOF
-                fi
-
-                # Record successful transition
-                orch_db_exec "INSERT INTO orchestration_metrics (instance_code, metric_name, metric_value) VALUES ('$code_lower', 'state_transition_success', 1)" >/dev/null 2>&1 || true
-            else
-                # Transaction failed - this IS blocking (database is SSOT)
-                log_error "Database write failed (blocking in DB-SSOT mode): $instance_code -> $new_state"
-                if [ -n "$sql_error_log" ]; then
-                    log_error "DB Error: $sql_error_log"
-                fi
-                return 1
-            fi
-        else
-            log_verbose "Database connection not available - state written to file only (DEPRECATED)"
-            # File-only fallback in dual-write mode (legacy behavior)
-            if type -t set_deployment_state_enhanced >/dev/null 2>&1; then
-                set_deployment_state_enhanced "$instance_code" "$new_state" "$reason" "$metadata"
-            fi
-        fi
-        return 0
-    fi
-
-    # ==========================================================================
-    # LEGACY: File-Only Mode
-    # ==========================================================================
-    # Only used if both ORCH_DB_ONLY_MODE and ORCH_DB_DUAL_WRITE are false.
-    # This is not recommended for production use.
-    # ==========================================================================
-    if type -t set_deployment_state_enhanced >/dev/null 2>&1; then
-        set_deployment_state_enhanced "$instance_code" "$new_state" "$reason" "$metadata"
-    else
-        log_error "No state persistence backend available"
-        return 1
-    fi
+    # NOTE: ORCH_DB_ONLY_MODE is always true - the above block is always executed
+    # The code below is unreachable but kept as documentation of what was removed:
+    #
+    # REMOVED (2026-01-22):
+    #   - ORCH_DB_DUAL_WRITE mode: No longer writes to both DB and files
+    #   - File-only fallback: No longer writes state to .dive-state/ files
+    #   - set_deployment_state_enhanced: File-based function no longer called
+    #
+    # All state is now in PostgreSQL only. Fail-fast if database unavailable.
 }
 
 ##
@@ -352,70 +382,40 @@ orch_db_get_state() {
     code_lower=$(lower "$instance_code")
 
     # ==========================================================================
-    # ADR-001: Database-Only Mode
+    # ADR-001: Database-Only Mode (MANDATORY)
     # ==========================================================================
-    if [ "$ORCH_DB_ONLY_MODE" = "true" ]; then
-        # CRITICAL FIX (2026-01-18): Allow Hub to read state without database during initial deployment
-        local code_upper=$(upper "$instance_code")
-        if [ "$code_upper" != "USA" ]; then
-            # Non-Hub instances require database
-            if ! orch_db_check_connection; then
-                log_error "FATAL: Cannot read state - database unavailable (ORCH_DB_ONLY_MODE=true)"
-                echo "ERROR"
-                return 1
-            fi
-        else
-            # Hub - database may not exist yet
-            if ! orch_db_check_connection; then
-                log_verbose "Orchestration database not available (returning UNKNOWN state)"
-                echo "UNKNOWN"
-                return 0
-            fi
-        fi
-
-        local state
-        state=$(orch_db_exec "SELECT state FROM deployment_states WHERE instance_code='$code_lower' ORDER BY timestamp DESC LIMIT 1" 2>/dev/null | xargs)
-
-        if [ -n "$state" ] && [ "$state" != "" ]; then
-            echo "$state"
-        else
-            echo "UNKNOWN"
-        fi
-        return 0
-    fi
-
-    # ==========================================================================
-    # LEGACY: SSOT-Based Mode
-    # ==========================================================================
-    if [ "$ORCH_DB_SOURCE_OF_TRUTH" = "db" ]; then
-        # Database is source of truth - NO FILE FALLBACK
-        if orch_db_check_connection; then
-            local state
-            state=$(orch_db_exec "SELECT state FROM deployment_states WHERE instance_code='$code_lower' ORDER BY timestamp DESC LIMIT 1" 2>/dev/null | xargs)
-
-            if [ -n "$state" ] && [ "$state" != "UNKNOWN" ]; then
-                echo "$state"
-                return 0
-            fi
-            echo "UNKNOWN"
-        else
-            log_error "Orchestration database is not available (required when ORCH_DB_SOURCE_OF_TRUTH=db)"
+    # CRITICAL FIX: Allow Hub to read state without database during initial deployment
+    # Hub deployment CREATES the orchestration database, so it can't depend on it
+    local code_upper=$(upper "$instance_code")
+    if [ "$code_upper" != "USA" ]; then
+        # Non-Hub instances require database
+        if ! orch_db_check_connection; then
+            log_error "FATAL: Cannot read state - database unavailable"
+            log_error "  → Ensure Hub is running: ./dive hub up"
             echo "ERROR"
             return 1
         fi
     else
-        # File is source of truth (legacy mode)
-        if type -t get_deployment_state >/dev/null 2>&1; then
-            get_deployment_state "$instance_code"
-        else
-            # Fallback: Read file directly
-            if [ -f "${DIVE_ROOT}/.dive-state/${code_lower}.state" ]; then
-                grep "^state=" "${DIVE_ROOT}/.dive-state/${code_lower}.state" 2>/dev/null | cut -d= -f2 || echo "UNKNOWN"
-            else
-                echo "UNKNOWN"
-            fi
+        # Hub - database may not exist yet during initial deployment
+        if ! orch_db_check_connection; then
+            log_verbose "Orchestration database not available (returning UNKNOWN state)"
+            echo "UNKNOWN"
+            return 0
         fi
     fi
+
+    local state
+    state=$(orch_db_exec "SELECT state FROM deployment_states WHERE instance_code='$code_lower' ORDER BY timestamp DESC LIMIT 1" 2>/dev/null | xargs)
+
+    if [ -n "$state" ] && [ "$state" != "" ]; then
+        echo "$state"
+    else
+        echo "UNKNOWN"
+    fi
+    return 0
+
+    # NOTE: File-based fallback has been REMOVED (2026-01-22)
+    # All state is now in PostgreSQL only. No .dive-state/ files are used.
 }
 
 ##
@@ -785,6 +785,212 @@ orch_db_get_latest_checkpoint() {
     orch_db_exec "SELECT get_latest_checkpoint('$code_lower');" | xargs
 }
 
+##
+# List all checkpoints for instance
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Limit (optional, default: 10)
+#
+# Returns:
+#   Table of checkpoints (id, level, created_at, description)
+##
+orch_db_list_checkpoints() {
+    local instance_code="$1"
+    local limit="${2:-10}"
+    local code_lower
+    code_lower=$(lower "$instance_code")
+
+    if ! orch_db_check_connection; then
+        log_error "Database not available"
+        return 1
+    fi
+
+    orch_db_exec "
+SELECT checkpoint_id, checkpoint_level, created_at, description
+FROM checkpoints
+WHERE instance_code='$code_lower'
+ORDER BY created_at DESC
+LIMIT $limit;
+"
+}
+
+##
+# Restore to checkpoint (database state only)
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Checkpoint ID (optional, defaults to latest)
+#
+# Returns:
+#   0 - Success
+#   1 - Failure
+##
+orch_db_restore_checkpoint() {
+    local instance_code="$1"
+    local checkpoint_id="${2:-}"
+    local code_lower
+    code_lower=$(lower "$instance_code")
+
+    if ! orch_db_check_connection; then
+        log_error "Database not available for checkpoint restore"
+        return 1
+    fi
+
+    # Get checkpoint ID if not provided
+    if [ -z "$checkpoint_id" ]; then
+        checkpoint_id=$(orch_db_get_latest_checkpoint "$instance_code")
+        if [ -z "$checkpoint_id" ]; then
+            log_error "No checkpoint found for $instance_code"
+            return 1
+        fi
+    fi
+
+    log_info "Restoring checkpoint: $checkpoint_id for $instance_code..."
+
+    # Get checkpoint metadata
+    local checkpoint_data
+    checkpoint_data=$(orch_db_exec "
+SELECT checkpoint_level, file_path, description, created_at
+FROM checkpoints
+WHERE checkpoint_id='$checkpoint_id' AND instance_code='$code_lower';
+" | head -1)
+
+    if [ -z "$checkpoint_data" ]; then
+        log_error "Checkpoint not found: $checkpoint_id"
+        return 1
+    fi
+
+    # Reset deployment state to checkpoint state
+    local checkpoint_level
+    checkpoint_level=$(echo "$checkpoint_data" | awk -F'|' '{print $1}' | xargs)
+
+    # Determine state based on checkpoint level
+    local target_state="UNKNOWN"
+    case "$checkpoint_level" in
+        PREFLIGHT) target_state="INITIALIZING" ;;
+        INITIALIZATION) target_state="INITIALIZING" ;;
+        DEPLOYMENT) target_state="DEPLOYING" ;;
+        CONFIGURATION) target_state="CONFIGURING" ;;
+        VERIFICATION) target_state="VERIFYING" ;;
+        *) target_state="UNKNOWN" ;;
+    esac
+
+    # Update state (using the set_state function ensures proper transition logging)
+    orch_db_set_state "$instance_code" "$target_state" "Restored from checkpoint: $checkpoint_id"
+
+    log_success "✓ Restored to checkpoint: $checkpoint_id (state: $target_state)"
+    return 0
+}
+
+##
+# Cleanup old checkpoints
+#
+# Arguments:
+#   $1 - Instance code (or 'all' for all instances)
+#   $2 - Days to keep (default: 7)
+#
+# Returns:
+#   Number of checkpoints deleted
+##
+orch_db_cleanup_checkpoints() {
+    local instance_code="${1:-all}"
+    local days_to_keep="${2:-7}"
+
+    if ! orch_db_check_connection; then
+        log_error "Database not available"
+        return 1
+    fi
+
+    local sql_filter="created_at < NOW() - INTERVAL '$days_to_keep days'"
+    if [ "$instance_code" != "all" ]; then
+        local code_lower=$(lower "$instance_code")
+        sql_filter="$sql_filter AND instance_code='$code_lower'"
+    fi
+
+    local deleted_count
+    deleted_count=$(orch_db_exec "
+WITH deleted AS (
+    DELETE FROM checkpoints
+    WHERE $sql_filter
+    RETURNING *
+)
+SELECT COUNT(*) FROM deleted;
+" | xargs)
+
+    log_info "Cleaned up $deleted_count old checkpoints (older than $days_to_keep days)"
+    echo "$deleted_count"
+}
+
+##
+# Validate checkpoint integrity
+# Checks that checkpoint database records are consistent
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - All checkpoints valid
+#   1 - Issues found
+##
+orch_db_validate_checkpoints() {
+    local instance_code="$1"
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local issues=0
+
+    if ! orch_db_check_connection; then
+        log_error "Database not available"
+        return 1
+    fi
+
+    log_info "Validating checkpoints for $instance_code..."
+
+    # Check for orphaned checkpoints (no corresponding state)
+    local orphaned
+    orphaned=$(orch_db_exec "
+SELECT COUNT(*)
+FROM checkpoints c
+WHERE c.instance_code='$code_lower'
+AND NOT EXISTS (
+    SELECT 1 FROM deployment_states ds
+    WHERE ds.instance_code = c.instance_code
+);
+" | xargs)
+
+    if [ "$orphaned" -gt 0 ]; then
+        log_warn "Found $orphaned orphaned checkpoints (no corresponding deployment state)"
+        ((issues++))
+    fi
+
+    # Check for duplicate checkpoint IDs
+    local duplicates
+    duplicates=$(orch_db_exec "
+SELECT COUNT(*)
+FROM (
+    SELECT checkpoint_id
+    FROM checkpoints
+    WHERE instance_code='$code_lower'
+    GROUP BY checkpoint_id
+    HAVING COUNT(*) > 1
+) dups;
+" | xargs)
+
+    if [ "$duplicates" -gt 0 ]; then
+        log_warn "Found $duplicates duplicate checkpoint IDs"
+        ((issues++))
+    fi
+
+    # Summary
+    if [ $issues -eq 0 ]; then
+        log_success "✓ All checkpoints valid for $instance_code"
+        return 0
+    else
+        log_warn "⚠ Found $issues issues with checkpoints for $instance_code"
+        return 1
+    fi
+}
+
 # =============================================================================
 # QUERY FUNCTIONS (Observability)
 # =============================================================================
@@ -939,9 +1145,9 @@ orch_db_init_schema() {
     log_verbose "Step 3: Checking existing schema..."
     local existing_tables
     existing_tables=$(docker exec dive-hub-postgres psql -U postgres -d orchestration -t -c \
-        "SELECT COUNT(*) FROM information_schema.tables 
-         WHERE table_schema = 'public' 
-         AND table_name IN ('deployment_states', 'state_transitions', 'deployment_steps', 
+        "SELECT COUNT(*) FROM information_schema.tables
+         WHERE table_schema = 'public'
+         AND table_name IN ('deployment_states', 'state_transitions', 'deployment_steps',
                             'deployment_locks', 'circuit_breakers', 'orchestration_errors',
                             'orchestration_metrics', 'checkpoints');" 2>/dev/null | xargs)
 
@@ -979,9 +1185,9 @@ orch_db_init_schema() {
     log_verbose "Step 5: Post-flight validation..."
     local final_table_count
     final_table_count=$(docker exec dive-hub-postgres psql -U postgres -d orchestration -t -c \
-        "SELECT COUNT(*) FROM information_schema.tables 
-         WHERE table_schema = 'public' 
-         AND table_name IN ('deployment_states', 'state_transitions', 'deployment_steps', 
+        "SELECT COUNT(*) FROM information_schema.tables
+         WHERE table_schema = 'public'
+         AND table_name IN ('deployment_states', 'state_transitions', 'deployment_steps',
                             'deployment_locks', 'circuit_breakers', 'orchestration_errors',
                             'orchestration_metrics', 'checkpoints');" 2>/dev/null | xargs)
 

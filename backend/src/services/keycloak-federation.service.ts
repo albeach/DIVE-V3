@@ -1644,22 +1644,28 @@ export class KeycloakFederationService {
       });
     }
 
-    // Fallback: Use env var or well-known dev secret
-    // CROSS_BORDER_CLIENT_SECRET should be set in .env for local dev
+    // Fallback: Use env var only (no hardcoded defaults)
     const envSecret = process.env.CROSS_BORDER_CLIENT_SECRET;
-    if (envSecret) {
+    if (envSecret && envSecret.length >= 16) {
       logger.debug('Using CROSS_BORDER_CLIENT_SECRET from environment', { secretName });
       return envSecret;
     }
 
-    // Final fallback: standard dev secret (matches spoke init-keycloak.sh default)
-    // In production, this MUST be overridden via GCP Secret Manager
-    const fallbackSecret = 'cross-border-secret-2025';
-    logger.warn('Using standard fallback cross-border secret (SET IN PRODUCTION)', {
+    // FAIL FAST: No hardcoded fallbacks - security requirement
+    const errorMessage = `FATAL: Federation secret not found for ${secretName}.\n` +
+      `Required: Configure secret in one of:\n` +
+      `  1. GCP Secret Manager: ${secretName} (project: dive25)\n` +
+      `  2. Environment variable: CROSS_BORDER_CLIENT_SECRET\n\n` +
+      `To create the secret:\n` +
+      `  gcloud secrets create ${secretName} --project=dive25\n` +
+      `  echo -n "$(openssl rand -base64 32)" | gcloud secrets versions add ${secretName} --data-file=-`;
+
+    logger.error('Federation secret not available - failing fast', {
       secretName,
-      hint: 'Set CROSS_BORDER_CLIENT_SECRET or configure GCP secrets'
+      message: 'No hardcoded fallbacks allowed'
     });
-    return fallbackSecret;
+
+    throw new Error(errorMessage);
   }
 }
 

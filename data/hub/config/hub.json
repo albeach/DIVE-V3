@@ -1,22 +1,6 @@
 {
-  "identity": {
-    "hubId": "hub-2e2784e2",
-    "name": "DIVE V3 Federation Hub",
-    "description": "Central policy management and federation hub",
-    "version": "1.0.0"
-  },
-  "endpoints": {
-    "baseUrl": "https://hub.dive25.com",
-    "apiUrl": "https://hub.dive25.com/api",
-    "opalUrl": "https://hub.dive25.com:7002",
-    "keycloakUrl": "https://hub.dive25.com:8443"
-  },
-  "federation": {
-    "enabled": true,
-    "allowAutoApproval": false,
-    "requireCertificate": false,
-    "defaultTrustLevel": "development",
-    "defaultScopes": ["policy:read", "heartbeat:write"],
-    "tokenValidityMs": 86400000
-  }
+  "hub_id": "dive-hub",
+  "realm": "dive-v3-broker",
+  "created": "2026-01-22",
+  "spokes": []
 }

@@ -1,16 +1,21 @@
 /**
  * Create Super Admin Users Only
- * 
+ *
  * Creates super admin users directly via Keycloak Admin API
  * Bypasses password policy issues by using admin API directly
  */
 
 import KcAdminClient from '@keycloak/keycloak-admin-client';
-import axios from 'axios';
-import { execSync } from 'child_process';
+import { getKeycloakPassword } from '../utils/gcp-secrets';
 
 const REALM = 'dive-v3-broker';
-const SUPER_ADMIN_PASSWORD = 'Admin2025!SecurePassword123'; // 28 chars - exceeds all policies
+// SECURITY: Super admin password must come from environment variable - no hardcoded defaults
+const SUPER_ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD;
+if (!SUPER_ADMIN_PASSWORD || SUPER_ADMIN_PASSWORD.length < 12) {
+    console.error('FATAL: SUPER_ADMIN_PASSWORD environment variable not set or too short (min 12 chars).');
+    console.error('Set it via: export SUPER_ADMIN_PASSWORD="YourSecurePassword123!"');
+    process.exit(1);
+}
 
 const INSTANCES = [
     { code: 'USA', url: 'https://localhost:8443', container: 'dive-v3-keycloak' },
@@ -18,20 +23,12 @@ const INSTANCES = [
     { code: 'GBR', url: 'https://localhost:8445', container: 'dive-v3-keycloak-gbr' }
 ];
 
+/**
+ * Get admin password using centralized gcp-secrets utility
+ * Consolidated: Uses gcp-secrets.ts as single source of truth
+ */
 async function getAdminPassword(instance: string): Promise<string> {
-    try {
-        const secretName = `dive-v3-keycloak-${instance.toLowerCase()}`;
-        const result = execSync(
-            `gcloud secrets versions access latest --secret=${secretName} --project=dive25 2>/dev/null`,
-            { encoding: 'utf-8' }
-        );
-        if (result.trim()) {
-            return result.trim();
-        }
-    } catch (error) {
-        // Fallback
-    }
-    return 'DivePilot2025!SecureAdmin';
+    return getKeycloakPassword(instance.toLowerCase());
 }
 
 async function createSuperAdmin(instance: { code: string; url: string; container: string }) {
@@ -205,6 +202,13 @@ async function main() {
 }
 
 if (require.main === module) {
-    main().catch(console.error);
+    main().catch((error) => {
+        console.error('Script failed:', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined,
+            timestamp: new Date().toISOString()
+        });
+        process.exit(1);
+    });
 }
 

@@ -85,27 +85,33 @@ to_unix_seconds(iso_time) := seconds if {
 }
 
 # Issuer Trust Validation (ADatP-5663 §3.8)
-trusted_issuers := {
-	"https://keycloak:8080/realms/dive-v3-usa",
-	"https://keycloak:8080/realms/dive-v3-fra",
-	"https://keycloak:8080/realms/dive-v3-can",
-	"https://keycloak:8080/realms/dive-v3-deu",
-	"https://keycloak:8080/realms/dive-v3-gbr",
-	"https://keycloak:8080/realms/dive-v3-ita",
-	"https://keycloak:8080/realms/dive-v3-esp",
-	"https://keycloak:8080/realms/dive-v3-pol",
-	"https://keycloak:8080/realms/dive-v3-nld",
-	"https://keycloak:8080/realms/dive-v3-industry",
-	"https://keycloak:8080/realms/dive-v3-broker",
-	# Localhost variants (for development)
-	"http://localhost:8081/realms/dive-v3-usa",
-	"http://localhost:8081/realms/dive-v3-broker",
+# SSOT: Uses trusted_issuers from external data (OPAL/MongoDB)
+# Data is provided via OPAL data layer: data.dive.federation.trusted_issuers
+# Fallback: If no external data, deny by default (fail-secure)
+
+# Get trusted issuers from external data layer (OPAL pushes from MongoDB)
+# Expected structure: { "issuer_url": { "tenant": "...", "enabled": true, ... } }
+# NOTE: Renamed to active_trusted_issuers to avoid recursion with data.dive.federation.trusted_issuers
+active_trusted_issuers := issuers if {
+	# Try to get from data layer first (OPAL/MongoDB SSOT)
+	data.dive.federation.trusted_issuers
+	issuers := {issuer_url |
+		some issuer_url, issuer_data in data.dive.federation.trusted_issuers
+		issuer_data.enabled == true
+	}
+} else := {} # Fallback: empty set (fail-secure - deny all if no data)
+
+is_issuer_not_trusted := msg if {
+	issuer := input.subject.issuer
+	count(active_trusted_issuers) == 0
+	msg := "No trusted issuers configured (OPAL data not loaded)"
 }
 
 is_issuer_not_trusted := msg if {
 	issuer := input.subject.issuer
-	not issuer in trusted_issuers
-	msg := sprintf("Issuer %s not in trusted federation", [issuer])
+	count(active_trusted_issuers) > 0
+	not issuer in active_trusted_issuers
+	msg := sprintf("Issuer %s not in trusted federation (known issuers: %v)", [issuer, count(active_trusted_issuers)])
 }
 
 # MFA Verification (ADatP-5663 §5.1.2)
@@ -260,7 +266,7 @@ has_federation_agreement if {
 	origin  # Must have origin realm
 	
 	# Check if user's country has agreement with origin
-	federation_matrix[user_country][_] == origin
+	active_federation_matrix[user_country][_] == origin
 }
 
 has_federation_agreement if {
@@ -269,22 +275,22 @@ has_federation_agreement if {
 	origin  # Must have origin realm
 	
 	# Symmetric: check if origin has agreement with user's country
-	federation_matrix[origin][_] == user_country
+	active_federation_matrix[origin][_] == user_country
 }
 
 # Federation matrix: which countries can federate with which
-# Based on existing federation agreements in DIVE V3
-federation_matrix := {
-	"USA": ["FRA", "GBR", "DEU", "CAN", "ITA", "ESP", "POL", "NLD"],
-	"FRA": ["USA", "GBR", "DEU", "ITA", "ESP", "POL", "NLD"],
-	"GBR": ["USA", "FRA", "DEU", "CAN", "ITA", "ESP", "POL", "NLD"],
-	"DEU": ["USA", "FRA", "GBR", "ITA", "ESP", "POL", "NLD"],
-	"CAN": ["USA", "GBR"],
-	"ITA": ["USA", "FRA", "GBR", "DEU", "ESP", "POL", "NLD"],
-	"ESP": ["USA", "FRA", "GBR", "DEU", "ITA", "POL", "NLD"],
-	"POL": ["USA", "FRA", "GBR", "DEU", "ITA", "ESP", "NLD"],
-	"NLD": ["USA", "FRA", "GBR", "DEU", "ITA", "ESP", "POL"],
-}
+# SSOT: Uses federation_matrix from external data (OPAL/MongoDB)
+# Data is provided via OPAL data layer: data.dive.federation.federation_matrix
+# Fallback: Empty matrix (fail-secure - no federation allowed if no data)
+
+# Get federation matrix from external data layer (OPAL pushes from MongoDB)
+# Expected structure: { "USA": ["FRA", "GBR"], "FRA": ["USA", "GBR"], ... }
+# NOTE: Renamed to active_federation_matrix to avoid recursion with data.dive.federation.federation_matrix
+active_federation_matrix := matrix if {
+	# Try to get from data layer first (OPAL/MongoDB SSOT)
+	data.dive.federation.federation_matrix
+	matrix := data.dive.federation.federation_matrix
+} else := {} # Fallback: empty matrix (fail-secure - no federation if no data)
 
 # Federated search result filter
 # Returns true if a federated resource should be included in search results

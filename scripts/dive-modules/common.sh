@@ -786,35 +786,28 @@ load_gcp_secrets() {
 }
 
 load_local_defaults() {
-    log_warn "Local/dev mode: using fixed defaults for reproducibility (override via env)."
-    export KEYCLOAK_ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-KeycloakAdminSecure123!}"
-    export KC_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD"  # SSOT naming for docker-compose
-    export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-LocalPgSecure123!}"
-    export MONGO_PASSWORD="${MONGO_PASSWORD:-LocalMongoSecure123!}"
-    export REDIS_PASSWORD="${REDIS_PASSWORD:-LocalRedisSecure123!}"
-    export AUTH_SECRET="${AUTH_SECRET:-LocalAuthSecure123!}"
-    export KEYCLOAK_CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET:-LocalClientSecret123!}"
-    export JWT_SECRET="${JWT_SECRET:-$AUTH_SECRET}"
-    export NEXTAUTH_SECRET="${NEXTAUTH_SECRET:-$AUTH_SECRET}"
-    
-    # Export instance-suffixed variables (matching load_gcp_secrets behavior)
-    local inst_uc=$(echo "${INSTANCE:-USA}" | tr '[:lower:]' '[:upper:]')
-    eval "export POSTGRES_PASSWORD_${inst_uc}='${POSTGRES_PASSWORD}'"
-    eval "export KEYCLOAK_ADMIN_PASSWORD_${inst_uc}='${KEYCLOAK_ADMIN_PASSWORD}'"
-    eval "export MONGO_PASSWORD_${inst_uc}='${MONGO_PASSWORD}'"
-    eval "export AUTH_SECRET_${inst_uc}='${AUTH_SECRET}'"
-    eval "export KEYCLOAK_CLIENT_SECRET_${inst_uc}='${KEYCLOAK_CLIENT_SECRET}'"
-    eval "export REDIS_PASSWORD_${inst_uc}='${REDIS_PASSWORD}'"
-    export REDIS_PASSWORD_BLACKLIST="${REDIS_PASSWORD}"
-    
-    # SSOT naming conventions for docker-compose
-    export KC_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD"
-    export OPAL_AUTH_MASTER_TOKEN=$(echo -n "opal-${AUTH_SECRET}" | openssl dgst -sha256 | awk '{print $2}' | cut -c1-64)
-    # Terraform variables
-    export TF_VAR_keycloak_admin_password="$KEYCLOAK_ADMIN_PASSWORD"
-    export TF_VAR_client_secret="$KEYCLOAK_CLIENT_SECRET"
-    export TF_VAR_test_user_password="${TF_VAR_test_user_password:-KeycloakAdminSecure123!}"
-    export TF_VAR_admin_user_password="${TF_VAR_admin_user_password:-$TF_VAR_test_user_password}"
+    # SECURITY: No hardcoded defaults - fail fast if secrets not available
+    # All secrets MUST come from GCP Secret Manager or explicit environment variables
+    log_error "FATAL: load_local_defaults() called but hardcoded secrets have been removed."
+    log_error "Secrets MUST be loaded from GCP Secret Manager."
+    log_error ""
+    log_error "To fix this issue:"
+    log_error "  1. Ensure GCP authentication: gcloud auth application-default login"
+    log_error "  2. Set USE_GCP_SECRETS=true"
+    log_error "  3. Run: ./dive secrets ensure ${INSTANCE:-usa}"
+    log_error ""
+    log_error "Required secrets in GCP Secret Manager (project: dive25):"
+    log_error "  - dive-v3-keycloak-{instance}"
+    log_error "  - dive-v3-postgres-{instance}"
+    log_error "  - dive-v3-mongodb-{instance}"
+    log_error "  - dive-v3-auth-secret-{instance}"
+    log_error "  - dive-v3-keycloak-client-secret"
+    log_error "  - dive-v3-redis-blacklist"
+    log_error ""
+    log_error "If you need to generate secrets for a new instance:"
+    log_error "  ./scripts/sync-gcp-secrets.sh create ${INSTANCE:-usa}"
+
+    return 1
 }
 
 load_secrets() {

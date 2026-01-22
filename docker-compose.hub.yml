@@ -231,7 +231,7 @@ services:
       start_period: 120s
 
   # ---------------------------------------------------------------------------
-  # OPA - Policy Decision Point
+  # OPA - Policy Decision Point (receives data from OPAL Client)
   # ---------------------------------------------------------------------------
   opa:
     image: openpolicyagent/opa:1.12.1
@@ -243,14 +243,11 @@ services:
       - --addr=0.0.0.0:8181
       - --tls-cert-file=/certs/certificate.pem
       - --tls-private-key-file=/certs/key.pem
-      - --bundle
-      - /policies
       - --log-level=info
     ports:
       - "127.0.0.1:${OPA_PORT:-8181}:8181"
       - "127.0.0.1:${OPA_METRICS_PORT:-8182}:8182"
     volumes:
-      - ./policies:/policies:ro
       - ./instances/hub/certs:/certs:ro
     networks:
       - hub-internal
@@ -260,6 +257,49 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+
+  # ---------------------------------------------------------------------------
+  # OPAL Client - Receives policy + data from OPAL Server, pushes to Hub OPA
+  # ---------------------------------------------------------------------------
+  opal-client:
+    image: permitio/opal-client:latest
+    container_name: ${COMPOSE_PROJECT_NAME}-opal-client
+    restart: unless-stopped
+    env_file:
+      - .env.hub
+    environment:
+      # OPAL Server connection
+      OPAL_SERVER_URL: https://opal-server:7002
+      OPAL_LOG_LEVEL: DEBUG
+      OPAL_CLIENT_LOG_LEVEL: DEBUG
+      # Connect to local OPA instance
+      OPAL_POLICY_STORE_URL: https://opa:8181
+      # Data store synchronization
+      OPAL_DATA_STORE_CONN_URL: https://opa:8181
+      # Enable inline OPA configuration
+      OPAL_INLINE_OPA_CONFIG: "true"
+      # Subscribe to all data topics
+      OPAL_DATA_TOPICS: policy_data,trusted_issuers,federation_matrix,tenant_configs
+      # Fetch policy bundle from OPAL Server
+      OPAL_FETCH_POLICY_ON_CONNECT: "true"
+      # Authentication - Get token from OPAL server
+      OPAL_AUTH_MASTER_TOKEN: ${OPAL_AUTH_MASTER_TOKEN}
+      # TLS configuration for self-signed certs
+      REQUESTS_CA_BUNDLE: /certs/rootCA.pem
+      SSL_CERT_FILE: /certs/rootCA.pem
+    volumes:
+      - ./certs/mkcert:/certs:ro
+    networks:
+      - hub-internal
+    depends_on:
+      - opa
+      - opal-server
+    healthcheck:
+      test: ["CMD", "sh", "-c", "wget -q --spider http://localhost:7000/healthcheck || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
   # ---------------------------------------------------------------------------
   # Backend API - serves policy data for OPAL and Hub admin APIs
