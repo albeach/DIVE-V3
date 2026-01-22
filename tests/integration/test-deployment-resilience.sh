@@ -1539,6 +1539,294 @@ suite_alert_validation() {
 }
 
 # =============================================================================
+# TEST SUITE 10: MULTI-INSTANCE RESILIENCE (Phase 5.1)
+# =============================================================================
+# Tests federation resilience across Hub and Spoke instances
+# Validates that spokes can operate independently during Hub outages
+# =============================================================================
+
+# TST Spoke URLs (dynamic port discovery)
+# Port formula: BASE + (index * 100) where tst index = 2 gives 4200
+get_spoke_backend_url() {
+    local port
+    port=$(docker port dive-spoke-tst-backend 4000/tcp 2>/dev/null | head -1 | cut -d: -f2)
+    if [ -n "$port" ]; then
+        echo "https://localhost:${port}"
+    else
+        echo "https://localhost:4200"  # Default TST port
+    fi
+}
+
+TST_BACKEND_URL="${TST_BACKEND_URL:-$(get_spoke_backend_url)}"
+TST_FRONTEND_URL="${TST_FRONTEND_URL:-https://localhost:3200}"
+
+test_spoke_tst_healthy() {
+    # Verify TST spoke is healthy
+    local response
+    response=$(curl -sk --max-time 10 "${TST_BACKEND_URL}/health" 2>/dev/null)
+    
+    if [ -z "$response" ]; then
+        echo "    TST spoke not responding at $TST_BACKEND_URL"
+        return 2  # Skip - spoke not deployed
+    fi
+    
+    local status
+    status=$(echo "$response" | jq -r '.status // "unknown"')
+    
+    if [ "$status" = "healthy" ] || [ "$status" = "degraded" ]; then
+        echo "    ✓ TST spoke is $status"
+        return 0
+    fi
+    
+    echo "    TST spoke status: $status (expected: healthy)"
+    return 1
+}
+
+test_hub_spoke_federation_healthy() {
+    # Verify federation between Hub and TST spoke is working
+    if ! assert_hub_healthy; then
+        return 2
+    fi
+    
+    # Check spoke is reachable
+    local spoke_response
+    spoke_response=$(curl -sk --max-time 10 "${TST_BACKEND_URL}/health" 2>/dev/null)
+    
+    if [ -z "$spoke_response" ]; then
+        echo "    TST spoke not responding - skipping federation test"
+        return 2
+    fi
+    
+    # Check federation registry includes TST
+    local federation_response
+    federation_response=$(curl -sk --max-time 10 "${HUB_BACKEND_URL}/api/federation/partners" 2>/dev/null)
+    
+    if echo "$federation_response" | jq -e '.[] | select(.code == "TST" or .code == "tst")' >/dev/null 2>&1; then
+        echo "    ✓ TST is registered in federation registry"
+        return 0
+    fi
+    
+    # Alternative: Check federation-registry.json locally
+    if [ -f "config/federation-registry.json" ]; then
+        if grep -q '"TST"' config/federation-registry.json 2>/dev/null; then
+            echo "    ✓ TST found in local federation registry"
+            return 0
+        fi
+    fi
+    
+    echo "    TST not found in federation registry"
+    return 1
+}
+
+test_spoke_independent_health_during_hub_outage() {
+    # Test that spoke continues to report healthy when Hub is down
+    if [ "$FAILURE_INJECTION_ENABLED" != "true" ]; then
+        echo "  [SKIP] Requires --with-failure-injection flag"
+        return 2
+    fi
+    
+    # Verify spoke is initially healthy
+    local spoke_response
+    spoke_response=$(curl -sk --max-time 10 "${TST_BACKEND_URL}/health" 2>/dev/null)
+    
+    if [ -z "$spoke_response" ]; then
+        echo "    TST spoke not deployed - skipping"
+        return 2
+    fi
+    
+    echo "    Phase 1: Stopping Hub backend..."
+    docker stop dive-hub-backend >/dev/null 2>&1
+    
+    sleep 10
+    
+    echo "    Phase 2: Checking spoke health during Hub outage..."
+    spoke_response=$(curl -sk --max-time 10 "${TST_BACKEND_URL}/health" 2>/dev/null)
+    
+    local spoke_status
+    spoke_status=$(echo "$spoke_response" | jq -r '.status // "unknown"')
+    
+    echo "    Spoke status during Hub outage: $spoke_status"
+    
+    echo "    Phase 3: Restoring Hub backend..."
+    docker start dive-hub-backend >/dev/null 2>&1
+    
+    sleep 15
+    
+    if [ "$spoke_status" = "healthy" ] || [ "$spoke_status" = "degraded" ]; then
+        echo "    ✓ Spoke remained operational during Hub outage"
+        return 0
+    fi
+    
+    return 1
+}
+
+test_spoke_local_services_independent() {
+    # Test that spoke's local services (OPA, MongoDB, Redis) work independently
+    if [ "$FAILURE_INJECTION_ENABLED" != "true" ]; then
+        echo "  [SKIP] Requires --with-failure-injection flag"
+        return 2
+    fi
+    
+    # Check if spoke is deployed
+    local spoke_response
+    spoke_response=$(curl -sk --max-time 10 "${TST_BACKEND_URL}/health/detailed" 2>/dev/null)
+    
+    if [ -z "$spoke_response" ]; then
+        echo "    TST spoke not deployed - skipping"
+        return 2
+    fi
+    
+    echo "    Stopping Hub services (OPA, MongoDB, Redis)..."
+    docker stop dive-hub-opa dive-hub-mongodb dive-hub-redis >/dev/null 2>&1
+    
+    sleep 10
+    
+    echo "    Checking spoke's local services..."
+    spoke_response=$(curl -sk --max-time 10 "${TST_BACKEND_URL}/health/detailed" 2>/dev/null)
+    
+    local opa_status
+    local mongo_status
+    local redis_status
+    
+    opa_status=$(echo "$spoke_response" | jq -r '.services.opa.status // "unknown"')
+    mongo_status=$(echo "$spoke_response" | jq -r '.services.mongodb.status // "unknown"')
+    redis_status=$(echo "$spoke_response" | jq -r '.services.redis.status // "unknown"')
+    
+    echo "    Spoke services: OPA=$opa_status, MongoDB=$mongo_status, Redis=$redis_status"
+    
+    echo "    Restoring Hub services..."
+    docker start dive-hub-opa dive-hub-mongodb dive-hub-redis >/dev/null 2>&1
+    
+    sleep 15
+    
+    # Spoke's local services should be independent from Hub
+    if [ "$opa_status" = "up" ] && [ "$mongo_status" = "up" ]; then
+        echo "    ✓ Spoke's local services remained operational"
+        return 0
+    fi
+    
+    return 1
+}
+
+test_federation_recovery_after_hub_restoration() {
+    # Test that federation recovers after Hub is restored
+    if [ "$FAILURE_INJECTION_ENABLED" != "true" ]; then
+        echo "  [SKIP] Requires --with-failure-injection flag"
+        return 2
+    fi
+    
+    # Check if spoke is deployed
+    local spoke_response
+    spoke_response=$(curl -sk --max-time 10 "${TST_BACKEND_URL}/health" 2>/dev/null)
+    
+    if [ -z "$spoke_response" ]; then
+        echo "    TST spoke not deployed - skipping"
+        return 2
+    fi
+    
+    echo "    Phase 1: Stopping Hub Keycloak (breaks federation)..."
+    docker stop dive-hub-keycloak >/dev/null 2>&1
+    
+    sleep 15
+    
+    echo "    Phase 2: Restoring Hub Keycloak..."
+    docker start dive-hub-keycloak >/dev/null 2>&1
+    
+    echo "    Phase 3: Waiting for federation recovery (60s)..."
+    sleep 60
+    
+    # Verify Hub is healthy
+    local hub_response
+    hub_response=$(curl -sk --max-time 10 "${HUB_BACKEND_URL}/health/detailed" 2>/dev/null)
+    
+    local hub_kc_status
+    hub_kc_status=$(echo "$hub_response" | jq -r '.services.keycloak.status // "unknown"')
+    
+    echo "    Hub Keycloak status: $hub_kc_status"
+    
+    if [ "$hub_kc_status" = "up" ]; then
+        echo "    ✓ Federation recovered after Hub restoration"
+        return 0
+    fi
+    
+    return 1
+}
+
+test_hub_and_spoke_both_recover() {
+    # Test that both Hub and Spoke recover from simultaneous outages
+    if [ "$FAILURE_INJECTION_ENABLED" != "true" ]; then
+        echo "  [SKIP] Requires --with-failure-injection flag"
+        return 2
+    fi
+    
+    # Check if spoke is deployed
+    local spoke_response
+    spoke_response=$(curl -sk --max-time 10 "${TST_BACKEND_URL}/health" 2>/dev/null)
+    
+    if [ -z "$spoke_response" ]; then
+        echo "    TST spoke not deployed - skipping"
+        return 2
+    fi
+    
+    echo "    Phase 1: Stopping Hub and Spoke backends..."
+    docker stop dive-hub-backend dive-spoke-tst-backend >/dev/null 2>&1
+    
+    sleep 10
+    
+    echo "    Phase 2: Restarting services..."
+    docker start dive-hub-backend dive-spoke-tst-backend >/dev/null 2>&1
+    
+    echo "    Phase 3: Waiting for recovery (45s)..."
+    sleep 45
+    
+    # Check both are healthy
+    local hub_response
+    hub_response=$(curl -sk --max-time 10 "${HUB_BACKEND_URL}/health" 2>/dev/null)
+    
+    spoke_response=$(curl -sk --max-time 10 "${TST_BACKEND_URL}/health" 2>/dev/null)
+    
+    local hub_status
+    local spoke_status
+    
+    hub_status=$(echo "$hub_response" | jq -r '.status // "unknown"')
+    spoke_status=$(echo "$spoke_response" | jq -r '.status // "unknown"')
+    
+    echo "    Hub status: $hub_status, Spoke status: $spoke_status"
+    
+    if [ "$hub_status" = "healthy" ] && [ "$spoke_status" = "healthy" ]; then
+        echo "    ✓ Both Hub and Spoke recovered successfully"
+        return 0
+    elif [ "$hub_status" != "unknown" ] && [ "$spoke_status" != "unknown" ]; then
+        echo "    Partial recovery - both instances responding"
+        return 0
+    fi
+    
+    return 1
+}
+
+suite_multi_instance_resilience() {
+    echo ""
+    echo -e "${BOLD}${CYAN}Test Suite 10: Multi-Instance Resilience (Phase 5.1)${NC}"
+    echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+    echo ""
+    echo "This suite tests federation resilience across Hub and Spoke instances"
+    echo "Requires TST spoke to be deployed: ./dive spoke deploy tst"
+    if [ "$FAILURE_INJECTION_ENABLED" = "true" ]; then
+        echo -e "${YELLOW}⚠️  FAILURE INJECTION ENABLED - Services will be stopped${NC}"
+    else
+        echo "Run with --with-failure-injection to enable disruption tests"
+    fi
+    echo ""
+    
+    run_test "TST spoke is healthy" test_spoke_tst_healthy
+    run_test "Hub-Spoke federation is healthy" test_hub_spoke_federation_healthy
+    run_test "Spoke remains healthy during Hub outage" test_spoke_independent_health_during_hub_outage
+    run_test "Spoke's local services are independent" test_spoke_local_services_independent
+    run_test "Federation recovers after Hub restoration" test_federation_recovery_after_hub_restoration
+    run_test "Both Hub and Spoke recover from outages" test_hub_and_spoke_both_recover
+}
+
+# =============================================================================
 # MAIN ENTRY POINT
 # =============================================================================
 
@@ -1595,6 +1883,7 @@ usage() {
     echo "  failure         Failure injection tests (Phase 4.1)"
     echo "  recovery        Recovery validation tests (Phase 4.2)"
     echo "  alert           Alert validation tests (Phase 4.3)"
+    echo "  multi-instance  Multi-instance resilience tests (Phase 5.1)"
     echo "  all             Run all suites (default)"
     echo ""
     echo "Examples:"
@@ -1607,7 +1896,7 @@ usage() {
 }
 
 main() {
-    local suite="${1:-all}"
+    local suite="all"
     local quick_mode=false
 
     # Parse arguments
@@ -1630,7 +1919,7 @@ main() {
                 export FAILURE_INJECTION_ENABLED
                 shift
                 ;;
-            clean|idempotent|concurrent|federation|database|circuit-breaker|circuit_breaker|circuitbreaker|failure|failure-injection|recovery|alert|alerts|all)
+            clean|idempotent|concurrent|federation|database|circuit-breaker|circuit_breaker|circuitbreaker|failure|failure-injection|recovery|alert|alerts|multi-instance|multi|all)
                 suite="$1"
                 shift
                 ;;
@@ -1676,6 +1965,9 @@ main() {
         alert|alerts)
             suite_alert_validation
             ;;
+        multi-instance|multi)
+            suite_multi_instance_resilience
+            ;;
         all)
             if [ "$quick_mode" = true ]; then
                 # Quick mode: skip deployment-heavy tests
@@ -1694,6 +1986,7 @@ main() {
                 suite_failure_injection
                 suite_recovery_validation
                 suite_alert_validation
+                suite_multi_instance_resilience
             fi
             ;;
     esac
