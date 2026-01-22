@@ -81,6 +81,7 @@ volumes:
   mongodb_config:  # MongoDB config directory (prevent anonymous volume)
   redis_data:
   opal_cache:
+  opal_backup:     # OPAL client backup directory (prevent anonymous volume from base image)
   frontend_modules:
   frontend_next:
   backend_node_modules:
@@ -296,6 +297,7 @@ services:
       - "{{OPAL_OPA_PORT}}:8181"  # Expose inline OPA for backend
     volumes:
       - opal_cache:/var/opal/cache
+      - opal_backup:/opal/backup  # Prevent anonymous volume from base image
       - ./certs:/var/opal/certs:ro
       - ../../instances/hub/certs:/var/opal/hub-certs:ro  # Mount Hub CA for SSL trust
     networks:
@@ -332,7 +334,10 @@ services:
       INSTANCE_CODE: {{INSTANCE_CODE_UPPER}}
       INSTANCE_NAME: "{{INSTANCE_NAME}}"
       INSTANCE_REALM: {{INSTANCE_CODE_UPPER}}
-      SPOKE_ID: {{SPOKE_ID}}
+      # CRITICAL FIX (2026-01-22): Use env var reference instead of hardcoded value
+      # ROOT CAUSE: Spoke ID is generated at init, but may change during registration
+      # FIX: Read SPOKE_ID from .env at runtime so restarts pick up updates
+      SPOKE_ID: ${SPOKE_ID:-{{SPOKE_ID}}}
       SPOKE_MODE: "true"
       # MongoDB
       MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/dive-v3-{{INSTANCE_CODE_LOWER}}?authSource=admin
