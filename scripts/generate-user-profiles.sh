@@ -90,7 +90,7 @@ create_user_profile() {
       "displayName": "Security Clearance",
       "required": true,
       "permissions": {
-        "view": ["admin"],
+        "view": ["admin", "user"],
         "edit": ["admin"]
       },
       "validations": {
