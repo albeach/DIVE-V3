@@ -383,25 +383,42 @@ EOF
                 # the OLD spoke_id from config.json. Registration creates a NEW spoke_id in
                 # Hub MongoDB. Without restart, heartbeat fails because IDs don't match.
                 # FIX: Restart backend after .env is updated with new SPOKE_ID and SPOKE_TOKEN
+                # ==========================================================================
+                # CRITICAL FIX (2026-01-22): Use docker compose up, NOT docker restart
+                # ==========================================================================
+                # ROOT CAUSE: docker restart just restarts the container with its EXISTING
+                # environment variables. It does NOT re-read the .env file.
+                # FIX: Use docker compose up -d which recreates the container with updated
+                # environment from .env file
                 local backend_container="dive-spoke-${code_lower}-backend"
                 if docker ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
-                    log_step "Restarting spoke backend to pick up updated federation credentials..."
-                    if docker restart "$backend_container" >/dev/null 2>&1; then
-                        log_success "✓ Spoke backend restarted with new SPOKE_ID and TOKEN"
-                        
-                        # Wait for backend to be healthy
-                        local wait_count=0
-                        while [ $wait_count -lt 30 ]; do
-                            local health=$(docker inspect "$backend_container" --format '{{.State.Health.Status}}' 2>/dev/null)
-                            if [ "$health" = "healthy" ]; then
-                                log_success "✓ Spoke backend healthy"
-                                break
-                            fi
-                            sleep 2
-                            wait_count=$((wait_count + 1))
-                        done
+                    log_step "Recreating spoke backend to pick up updated federation credentials..."
+                    
+                    # Use docker compose to recreate with updated .env
+                    local compose_dir="${DIVE_ROOT}/instances/${code_lower}"
+                    if [ -f "$compose_dir/docker-compose.yml" ]; then
+                        cd "$compose_dir"
+                        if docker compose up -d "backend-${code_lower}" >/dev/null 2>&1; then
+                            log_success "✓ Spoke backend recreated with new SPOKE_ID and TOKEN"
+                            cd "$DIVE_ROOT"
+                            
+                            # Wait for backend to be healthy
+                            local wait_count=0
+                            while [ $wait_count -lt 30 ]; do
+                                local health=$(docker inspect "$backend_container" --format '{{.State.Health.Status}}' 2>/dev/null)
+                                if [ "$health" = "healthy" ]; then
+                                    log_success "✓ Spoke backend healthy"
+                                    break
+                                fi
+                                sleep 2
+                                wait_count=$((wait_count + 1))
+                            done
+                        else
+                            cd "$DIVE_ROOT"
+                            log_warn "Could not recreate backend - may need manual restart"
+                        fi
                     else
-                        log_warn "Could not restart backend - may need manual restart"
+                        log_warn "docker-compose.yml not found at $compose_dir"
                     fi
                 fi
                 
