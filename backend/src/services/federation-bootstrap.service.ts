@@ -387,6 +387,56 @@ class FederationBootstrapService {
     }
 
     // ============================================
+    // SPOKE REGISTERED EVENT (Phase 2: Gap Closure)
+    // ============================================
+    // Alert Hub admins when new spoke registers (pending approval)
+    hubSpokeRegistry.on('spoke:registered', async (event: any) => {
+      const { spoke, contactEmail, correlationId } = event;
+
+      logger.info('Received spoke:registered event - creating admin notification', {
+        spokeId: spoke.spokeId,
+        instanceCode: spoke.instanceCode,
+        name: spoke.name,
+        status: spoke.status,
+        contactEmail,
+        correlationId
+      });
+
+      try {
+        // Create persistent notification for Hub admins
+        const { notificationService } = await import('./notification.service');
+        
+        await notificationService.createAdminNotification({
+          type: 'federation_event',
+          title: 'Spoke Registration Pending',
+          message: `New spoke "${spoke.name}" (${spoke.instanceCode}) requires approval`,
+          actionUrl: '/admin/federation/spokes',
+          priority: 'high',
+          metadata: {
+            spokeId: spoke.spokeId,
+            instanceCode: spoke.instanceCode,
+            spokeName: spoke.name,
+            contactEmail,
+            correlationId,
+            certificateProvided: !!spoke.certificatePEM,
+            certificateValid: spoke.certificateValidationResult?.valid
+          }
+        });
+
+        logger.info('Admin notification created for pending spoke registration', {
+          instanceCode: spoke.instanceCode,
+          spokeId: spoke.spokeId
+        });
+      } catch (error) {
+        logger.warn('Failed to create admin notification for spoke registration', {
+          instanceCode: spoke.instanceCode,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
+        // Non-blocking: Notification failure doesn't affect registration
+      }
+    });
+
+    // ============================================
     // SPOKE APPROVED EVENT
     // ============================================
     hubSpokeRegistry.on('spoke:approved', async (event: any) => {
@@ -412,6 +462,33 @@ class FederationBootstrapService {
         });
         // Don't throw - the spoke is already approved, issuer registration failure
         // should not block the approval flow
+      }
+
+      // CREATE ADMIN NOTIFICATION FOR SPOKE APPROVAL (Phase 2: Gap Closure)
+      try {
+        const { notificationService } = await import('./notification.service');
+        
+        await notificationService.createAdminNotification({
+          type: 'federation_event',
+          title: 'Spoke Approved',
+          message: `Federation spoke "${spoke.name}" (${spoke.instanceCode}) has been approved and is now active`,
+          actionUrl: '/admin/federation/spokes',
+          priority: 'medium',
+          metadata: {
+            spokeId: spoke.spokeId,
+            instanceCode: spoke.instanceCode,
+            spokeName: spoke.name,
+            approvedBy: event.approvedBy,
+            correlationId,
+            allowedScopes: spoke.allowedPolicyScopes,
+            trustLevel: spoke.trustLevel
+          }
+        });
+      } catch (error) {
+        logger.warn('Failed to create admin notification for spoke approval', {
+          instanceCode: spoke.instanceCode,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
       }
 
       // Note: Actual federation cascade is handled by existing federation services
