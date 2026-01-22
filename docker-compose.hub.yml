@@ -231,7 +231,23 @@ services:
       start_period: 120s
 
   # ---------------------------------------------------------------------------
-  # OPA - Policy Decision Point (receives data from OPAL Client)
+  # OPA - Policy Decision Point (Hub loads bundle directly - INDUSTRY STANDARD)
+  # ---------------------------------------------------------------------------
+  # Architecture Note:
+  #   Hub OPA loads policies from local bundle (standard OPA pattern)
+  #   Spokes use OPAL clients to receive updates from Hub OPAL Server
+  #   Hub does NOT need OPAL client (would be antipattern per OPAL docs)
+  #
+  # Data Loading:
+  #   - Policies: Static bundle from /policies directory
+  #   - Base Data: Minimal fallbacks in bundle (for cold start)
+  #   - Dynamic Data: Backend API queries MongoDB directly (no OPAL needed)
+  #
+  # Why Hub Doesn't Need OPAL Client:
+  #   1. Hub IS the source of truth (MongoDB)
+  #   2. Hub backend queries MongoDB directly
+  #   3. Only spokes need OPAL to receive updates from Hub
+  #   4. OPAL Server + Client on same instance = antipattern (OPAL Discussion #390)
   # ---------------------------------------------------------------------------
   opa:
     image: openpolicyagent/opa:1.12.1
@@ -243,11 +259,13 @@ services:
       - --addr=0.0.0.0:8181
       - --tls-cert-file=/certs/certificate.pem
       - --tls-private-key-file=/certs/key.pem
+      - --bundle=/policies
       - --log-level=info
     ports:
       - "127.0.0.1:${OPA_PORT:-8181}:8181"
       - "127.0.0.1:${OPA_METRICS_PORT:-8182}:8182"
     volumes:
+      - ./policies:/policies:ro
       - ./instances/hub/certs:/certs:ro
     networks:
       - hub-internal
@@ -257,59 +275,6 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
-
-  # ---------------------------------------------------------------------------
-  # OPAL Client - Receives policy + data from OPAL Server, pushes to Hub OPA
-  # ---------------------------------------------------------------------------
-  opal-client:
-    build:
-      context: ./docker
-      dockerfile: opal-client.Dockerfile
-    container_name: ${COMPOSE_PROJECT_NAME}-opal-client
-    restart: unless-stopped
-    entrypoint: ["/bin/bash", "-c"]
-    command: ["/usr/local/bin/opal-entrypoint.sh"]
-    env_file:
-      - .env.hub
-    environment:
-      # Hub OPAL Server connection (internal Docker network)
-      OPAL_SERVER_URL: https://opal-server:7002
-      OPAL_LOG_LEVEL: INFO
-      # Authentication - Get token from OPAL server using master token
-      OPAL_CLIENT_TOKEN: ${OPAL_CLIENT_TOKEN:-}
-      # Policy subscription directories (same as spokes)
-      OPAL_POLICY_SUBSCRIPTION_DIRS: base:org:tenant:entrypoints:compat
-      # Use external OPA (standalone container)
-      OPAL_INLINE_OPA_ENABLED: "false"
-      OPAL_POLICY_STORE_URL: https://opa:8181
-      # Subscription ID for Hub
-      OPAL_SUBSCRIPTION_ID: hub-usa
-      # Subscribe to all data topics
-      OPAL_DATA_TOPICS: policy_data,trusted_issuers,federation_matrix,tenant_configs
-      # Enable data updater
-      OPAL_DATA_UPDATER_ENABLED: "true"
-      OPAL_KEEP_ALIVE_TIMEOUT: 60
-      OPAL_RECONNECT_INTERVAL: 5
-      OPAL_RECONNECT_MAX_INTERVAL: 300
-      OPAL_POLICY_REFRESH_INTERVAL: 60
-      # SSL Certificate Trust (same path pattern as spokes)
-      SSL_CERT_FILE: /var/opal/certs/ca/rootCA.pem
-      REQUESTS_CA_BUNDLE: /var/opal/certs/ca/rootCA.pem
-      WEBSOCKET_SSL_CERT: /var/opal/certs/ca/rootCA.pem
-    volumes:
-      - ./instances/hub/certs:/var/opal/hub-certs:ro
-      - ./certs/mkcert:/var/opal/certs/ca:ro
-    networks:
-      - hub-internal
-    depends_on:
-      - opa
-      - opal-server
-    healthcheck:
-      test: ["CMD", "curl", "-kf", "https://localhost:7000/healthcheck"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
 
   # ---------------------------------------------------------------------------
   # Backend API - serves policy data for OPAL and Hub admin APIs

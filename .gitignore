@@ -307,14 +307,18 @@ gcp/
 # Checkpoints (generated)
 
 # OPAL SSOT: MongoDB is the single source of truth
-# Static JSON data files should NOT be committed
+# Block legacy polluted static data files
 policies/data.json
+policies/policy_data.json
 policies/tenant/*/data.json
 backend/data/opal/trusted_issuers.json
 backend/data/opal/federation_matrix.json
 backend/data/opal/tenant_configs.json
 opal-data-source/trusted_issuers.json
 opal-data-source/federation_matrix.json
+
+# Exception: Allow minimal-base-data.json (bundle fallback data - intentional)
+!policies/data/minimal-base-data.json
 
 # Exception: Keep policy .rego files (policy logic, not data)
 !policies/**/*.rego
