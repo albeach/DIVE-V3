@@ -15,6 +15,7 @@ import app from './server';
 import { federationBootstrap } from './services/federation-bootstrap.service';
 import { authzCacheService } from './services/authz-cache.service';
 import { spokeHeartbeat } from './services/spoke-heartbeat.service';
+import { spokeIdentityService } from './services/spoke-identity.service';
 import { logger } from './utils/logger';
 
 const PORT = parseInt(process.env.PORT || '4000', 10);
@@ -78,45 +79,53 @@ server.listen(PORT, async () => {
   }
 
   // ============================================
-  // PHASE 5: Spoke Heartbeat Service (for policy sync tracking)
+  // PHASE 5: Spoke Identity & Heartbeat (SSOT Architecture)
   // ============================================
-  // Only spokes need to send heartbeats to the Hub
+  // Hub MongoDB is the SINGLE SOURCE OF TRUTH for spokeId
+  // Spoke queries Hub at startup to get its identity
   if (!isHub) {
     try {
-      const spokeId = process.env.SPOKE_ID || process.env.INSTANCE_CODE || 'local';
-      const instanceCode = process.env.INSTANCE_CODE || 'USA';
-      const hubUrl = process.env.HUB_URL || 'https://hub.dive25.com';
-      const spokeToken = process.env.SPOKE_OPAL_TOKEN || process.env.SPOKE_TOKEN;
+      // Initialize spoke identity from Hub (authoritative source)
+      const identity = await spokeIdentityService.initialize();
+      
+      logger.info('Spoke identity initialized from Hub (SSOT)', {
+        spokeId: identity.spokeId,
+        instanceCode: identity.instanceCode,
+        status: identity.status,
+      });
 
-      logger.info('Initializing spoke heartbeat service', { spokeId, instanceCode, hubUrl, hasToken: !!spokeToken });
+      const hubUrl = process.env.HUB_URL || 'https://dive-hub-backend:4000';
 
-      if (!spokeToken) {
-        logger.warn('SPOKE_OPAL_TOKEN or SPOKE_TOKEN not configured, heartbeat service disabled');
-      } else {
+      if (identity.status === 'approved' && identity.token) {
         spokeHeartbeat.initialize({
-          hubUrl: hubUrl,  // The service adds /api/federation/heartbeat internally
-          spokeId,
-          instanceCode,
-          spokeToken,
-          intervalMs: parseInt(process.env.HEARTBEAT_INTERVAL_MS || '30000'), // 30 seconds
-          timeoutMs: parseInt(process.env.HEARTBEAT_TIMEOUT_MS || '10000'), // 10 seconds
+          hubUrl: hubUrl,
+          spokeId: identity.spokeId,  // From Hub, NOT from env
+          instanceCode: identity.instanceCode,
+          spokeToken: identity.token,
+          intervalMs: parseInt(process.env.HEARTBEAT_INTERVAL_MS || '30000'),
+          timeoutMs: parseInt(process.env.HEARTBEAT_TIMEOUT_MS || '10000'),
           maxQueueSize: parseInt(process.env.HEARTBEAT_MAX_QUEUE_SIZE || '10'),
           maxRetries: parseInt(process.env.HEARTBEAT_MAX_RETRIES || '3'),
         });
 
         spokeHeartbeat.start();
-        logger.info('Spoke heartbeat service initialized and started', {
-          spokeId,
-          instanceCode,
-          hubUrl: hubUrl,
-          intervalMs: 30000
+        logger.info('Spoke heartbeat service initialized with Hub-assigned identity', {
+          spokeId: identity.spokeId,
+          instanceCode: identity.instanceCode,
+          hubUrl,
+          intervalMs: 30000,
+        });
+      } else {
+        logger.warn('Spoke not approved - heartbeat disabled', {
+          spokeId: identity.spokeId,
+          status: identity.status,
         });
       }
     } catch (error) {
-      logger.warn('Failed to initialize spoke heartbeat service', {
-        error: error instanceof Error ? error.message : 'Unknown error'
+      logger.error('Failed to initialize spoke identity', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        impact: 'Heartbeat service disabled',
       });
-      // Non-fatal: heartbeat service disabled
     }
   }
 });
