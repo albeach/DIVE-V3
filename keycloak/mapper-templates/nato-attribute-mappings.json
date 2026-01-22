@@ -595,6 +595,101 @@
         "SECRET": "SECRET",
         "TOP_SECRET": "TOP_SECRET"
       }
+    },
+    "TST": {
+      "name": "Test Instance",
+      "language": "English",
+      "is_test_code": true,
+      "description": "Test/development instance using standard DIVE V3 attributes",
+      "attributes": {
+        "clearance": "clearance",
+        "countryOfAffiliation": "countryOfAffiliation",
+        "uniqueID": "uniqueID",
+        "acpCOI": "acpCOI"
+      },
+      "clearance_values": {
+        "UNCLASSIFIED": "UNCLASSIFIED",
+        "RESTRICTED": "RESTRICTED",
+        "CONFIDENTIAL": "CONFIDENTIAL",
+        "SECRET": "SECRET",
+        "TOP_SECRET": "TOP_SECRET"
+      }
+    },
+    "DEV": {
+      "name": "Development Instance",
+      "language": "English",
+      "is_test_code": true,
+      "description": "Development instance using standard DIVE V3 attributes",
+      "attributes": {
+        "clearance": "clearance",
+        "countryOfAffiliation": "countryOfAffiliation",
+        "uniqueID": "uniqueID",
+        "acpCOI": "acpCOI"
+      },
+      "clearance_values": {
+        "UNCLASSIFIED": "UNCLASSIFIED",
+        "RESTRICTED": "RESTRICTED",
+        "CONFIDENTIAL": "CONFIDENTIAL",
+        "SECRET": "SECRET",
+        "TOP_SECRET": "TOP_SECRET"
+      }
+    },
+    "STG": {
+      "name": "Staging Instance",
+      "language": "English",
+      "is_test_code": true,
+      "description": "Staging instance using standard DIVE V3 attributes",
+      "attributes": {
+        "clearance": "clearance",
+        "countryOfAffiliation": "countryOfAffiliation",
+        "uniqueID": "uniqueID",
+        "acpCOI": "acpCOI"
+      },
+      "clearance_values": {
+        "UNCLASSIFIED": "UNCLASSIFIED",
+        "RESTRICTED": "RESTRICTED",
+        "CONFIDENTIAL": "CONFIDENTIAL",
+        "SECRET": "SECRET",
+        "TOP_SECRET": "TOP_SECRET"
+      }
+    },
+    "QA1": {
+      "name": "QA Instance 1",
+      "language": "English",
+      "is_test_code": true,
+      "description": "QA testing instance 1 using standard DIVE V3 attributes",
+      "attributes": {
+        "clearance": "clearance",
+        "countryOfAffiliation": "countryOfAffiliation",
+        "uniqueID": "uniqueID",
+        "acpCOI": "acpCOI"
+      },
+      "clearance_values": {
+        "UNCLASSIFIED": "UNCLASSIFIED",
+        "RESTRICTED": "RESTRICTED",
+        "CONFIDENTIAL": "CONFIDENTIAL",
+        "SECRET": "SECRET",
+        "TOP_SECRET": "TOP_SECRET"
+      }
+    },
+    "QA2": {
+      "name": "QA Instance 2",
+      "language": "English",
+      "is_test_code": true,
+      "description": "QA testing instance 2 using standard DIVE V3 attributes",
+      "attributes": {
+        "clearance": "clearance",
+        "countryOfAffiliation": "countryOfAffiliation",
+        "uniqueID": "uniqueID",
+        "acpCOI": "acpCOI"
+      },
+      "clearance_values": {
+        "UNCLASSIFIED": "UNCLASSIFIED",
+        "RESTRICTED": "RESTRICTED",
+        "CONFIDENTIAL": "CONFIDENTIAL",
+        "SECRET": "SECRET",
+        "TOP_SECRET": "TOP_SECRET"
+      }
     }
   }
 }
