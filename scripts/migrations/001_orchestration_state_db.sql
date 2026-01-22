@@ -109,8 +109,9 @@ CREATE TABLE IF NOT EXISTS deployment_locks (
     CONSTRAINT unique_active_lock UNIQUE (instance_code, lock_id, acquired_at)
 );
 
-CREATE INDEX idx_deployment_locks_instance ON deployment_locks(instance_code);
-CREATE INDEX idx_deployment_locks_active ON deployment_locks(instance_code)
+-- CRITICAL FIX (2026-01-22): Added IF NOT EXISTS for idempotency
+CREATE INDEX IF NOT EXISTS idx_deployment_locks_instance ON deployment_locks(instance_code);
+CREATE INDEX IF NOT EXISTS idx_deployment_locks_active ON deployment_locks(instance_code)
     WHERE released_at IS NULL;
 
 -- Circuit breaker state (fail-fast pattern)
