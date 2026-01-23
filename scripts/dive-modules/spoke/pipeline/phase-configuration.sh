@@ -872,13 +872,24 @@ spoke_config_apply_terraform() {
             fi
 
             if [ "$terraform_success" = false ]; then
-                log_warn "Terraform apply failed after retries"
+                log_error "Terraform apply failed after retries"
+                log_error "Check Keycloak logs: docker logs dive-spoke-${code_lower}-keycloak"
                 return 1
             fi
 
             log_success "Terraform configuration applied"
-            echo "  ✓ Keycloak realm 'dive-v3-broker-${code_lower}' created"
-            echo "  ✓ Client 'dive-v3-broker-${code_lower}' configured"
+            echo "  ✓ Keycloak realm 'dive-v3-broker-${code_lower}' created (Terraform)"
+            echo "  ✓ Client 'dive-v3-broker-${code_lower}' configured (Terraform)"
+
+            # CRITICAL: Verify realm actually exists and is accessible
+            log_step "Verifying Terraform created realm successfully..."
+            if ! spoke_config_verify_realm "$instance_code"; then
+                log_error "CRITICAL: Realm verification FAILED"
+                log_error "Terraform apply succeeded but realm is not accessible"
+                log_error "This indicates Terraform state/Keycloak inconsistency"
+                return 1
+            fi
+
             return 0
         fi
     fi
@@ -891,6 +902,63 @@ spoke_config_apply_terraform() {
 
     log_warn "Terraform module not available - Keycloak configuration may be incomplete"
     return 0
+}
+
+# =============================================================================
+# REALM VERIFICATION
+# =============================================================================
+
+##
+# Verify spoke Keycloak realm exists and is accessible
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - Success
+#   1 - Failure
+##
+spoke_config_verify_realm() {
+    local instance_code="$1"
+    local code_lower=$(lower "$instance_code")
+    local realm="dive-v3-broker-${code_lower}"
+    local kc_container="dive-spoke-${code_lower}-keycloak"
+    local max_retries=10
+    local retry_delay=3
+
+    log_verbose "Verifying realm '$realm' exists and is accessible..."
+
+    # Give Keycloak a brief moment to load realm configuration after Terraform
+    # Keycloak caches realm configs, may need a moment to refresh
+    sleep 3
+
+    for i in $(seq 1 $max_retries); do
+        # Check if realm is accessible via internal endpoint
+        local realm_check
+        realm_check=$(docker exec "$kc_container" curl -sf \
+            "http://localhost:8080/realms/${realm}" 2>/dev/null | \
+            jq -r '.realm // empty' 2>/dev/null)
+
+        if [ "$realm_check" = "$realm" ]; then
+            log_success "✓ Realm '$realm' verified and accessible"
+            return 0
+        fi
+
+        if [ $i -lt $max_retries ]; then
+            log_verbose "Retry $i/$max_retries: Waiting ${retry_delay}s for realm to become accessible..."
+            sleep $retry_delay
+        fi
+    done
+
+    # If we get here, realm doesn't exist or isn't accessible
+    log_error "Realm '$realm' not accessible after $max_retries attempts"
+    log_error ""
+    log_error "Debug steps:"
+    log_error "  1. Check realm exists: docker exec $kc_container curl -sf http://localhost:8080/realms/$realm | jq .realm"
+    log_error "  2. Check Keycloak logs: docker logs $kc_container | tail -50"
+    log_error "  3. Verify Terraform state: cd terraform/spoke && terraform show"
+    
+    return 1
 }
 
 # =============================================================================
