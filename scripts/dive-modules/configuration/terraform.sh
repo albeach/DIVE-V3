@@ -265,6 +265,32 @@ terraform_apply_spoke() {
     fi
 
     terraform_init "$TF_SPOKE_DIR" || return 1
+    
+    # CRITICAL: Select or create workspace for this spoke instance
+    # Each spoke must have its own workspace to maintain separate state
+    (
+        cd "$TF_SPOKE_DIR"
+        
+        if terraform workspace list | grep -qw "$code_lower"; then
+            log_verbose "Selecting existing workspace: $code_lower"
+            terraform workspace select "$code_lower" >/dev/null 2>&1
+        else
+            log_verbose "Creating new workspace: $code_lower"
+            terraform workspace new "$code_lower" >/dev/null 2>&1
+        fi
+        
+        # Verify we're on the correct workspace
+        local current_workspace
+        current_workspace=$(terraform workspace show)
+        if [ "$current_workspace" != "$code_lower" ]; then
+            log_error "CRITICAL: Terraform workspace mismatch!"
+            log_error "Expected: $code_lower, Current: $current_workspace"
+            return 1
+        fi
+        
+        log_verbose "Terraform workspace: $current_workspace"
+    ) || return 1
+    
     # Instance code must be uppercase per ISO 3166-1 alpha-3 validation
     terraform_apply "$TF_SPOKE_DIR" "spoke.tfvars" -var="instance_code=${code_upper}"
 }
