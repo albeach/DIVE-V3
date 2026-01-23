@@ -386,7 +386,12 @@ hub_configure_keycloak() {
     # Check if Keycloak is ready
     local kc_ready=false
     for i in {1..30}; do
-        if docker exec dive-hub-keycloak curl -sf http://localhost:8080/health/ready >/dev/null 2>&1; then
+        # Keycloak health endpoint is on management port 9000 (HTTPS)
+        if docker exec dive-hub-keycloak curl -sfk https://localhost:9000/health/ready >/dev/null 2>&1; then
+            kc_ready=true
+            break
+        # Fallback: check if master realm is accessible
+        elif docker exec dive-hub-keycloak curl -sf http://localhost:8080/realms/master >/dev/null 2>&1; then
             kc_ready=true
             break
         fi
