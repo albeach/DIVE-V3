@@ -1826,7 +1826,7 @@ federation_sync_secrets() {
 
     # Load spoke module for spoke_sync_federation_secrets function
     if [ -z "$DIVE_SPOKE_LOADED" ]; then
-        source "$(dirname "${BASH_SOURCE[0]}")/spoke.sh" 2>/dev/null || true
+        source "$(dirname "${BASH_SOURCE[0]}")/deployment/spoke.sh" 2>/dev/null || true
     fi
 
     local spoke_upper="${spoke_code^^}"

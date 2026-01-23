@@ -836,7 +836,7 @@ spoke_config_apply_terraform() {
 
     # Load terraform module if available
     if [ -f "${DIVE_ROOT}/scripts/dive-modules/terraform.sh" ]; then
-        source "${DIVE_ROOT}/scripts/dive-modules/terraform.sh"
+        source "${DIVE_ROOT}/scripts/dive-modules/configuration/terraform.sh"
 
         # Check if terraform_spoke function exists
         if type terraform_spoke &>/dev/null; then
