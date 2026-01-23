@@ -100,7 +100,19 @@ hub_deploy() {
     # Configure Keycloak
     log_info "Phase 5: Keycloak configuration"
     if ! hub_configure_keycloak; then
-        log_warn "Keycloak configuration incomplete (may need manual setup)"
+        log_error "CRITICAL: Keycloak configuration FAILED"
+        log_error "Hub is unusable without realm configuration"
+        log_error "Fix Keycloak issues and redeploy"
+        return 1
+    fi
+
+    # Verify realm exists after configuration
+    log_info "Phase 5.5: Verifying realm creation"
+    if ! hub_verify_realm; then
+        log_error "CRITICAL: Realm verification FAILED"  
+        log_error "Keycloak configuration completed but realm doesn't exist"
+        log_error "This indicates Terraform or Keycloak state issues"
+        return 1
     fi
 
     local end_time=$(date +%s)
@@ -400,6 +412,42 @@ hub_configure_keycloak() {
 
     log_success "Keycloak configuration complete"
     return 0
+}
+
+##
+# Verify Keycloak realm exists
+##
+hub_verify_realm() {
+    local realm="dive-v3-broker-usa"
+    local keycloak_url="https://localhost:8443"
+    local max_retries=10
+    local retry_delay=3
+
+    log_verbose "Verifying realm '$realm' exists..."
+
+    for i in $(seq 1 $max_retries); do
+        # Check if realm exists
+        local realm_response
+        realm_response=$(curl -sk --max-time 10 "${keycloak_url}/realms/${realm}" 2>/dev/null)
+        
+        if [ $? -eq 0 ]; then
+            local realm_name
+            realm_name=$(echo "$realm_response" | jq -r '.realm // empty' 2>/dev/null)
+
+            if [ "$realm_name" = "$realm" ]; then
+                log_success "Realm '$realm' verified"
+                return 0
+            fi
+        fi
+
+        if [ $i -lt $max_retries ]; then
+            log_verbose "Retry $i/$max_retries: Waiting ${retry_delay}s..."
+            sleep $retry_delay
+        fi
+    done
+
+    log_error "Realm '$realm' not found after $max_retries attempts"
+    return 1
 }
 
 ##
