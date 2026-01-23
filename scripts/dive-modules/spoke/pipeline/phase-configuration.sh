@@ -590,12 +590,13 @@ spoke_config_approve_and_get_token() {
 }
 
 ##
-# Register spoke in federation-registry.json and MongoDB kas_registry collection
-# CRITICAL: Required for ZTDF resource seeding and federated search
+# Register spoke in Hub MongoDB registries (MongoDB SSOT architecture)
+# CRITICAL: Required for spoke heartbeat and federated operations
 #
-# Architecture (as of Phase 3):
-#   - Federation registry: file-based (federation-registry.json) - unchanged
-#   - KAS registry: MongoDB-backed (kas_registry collection) - NEW
+# Architecture (2026-01-23 - MongoDB SSOT):
+#   - Spoke registry: MongoDB federation_spokes collection (via Hub API)
+#   - KAS registry: MongoDB kas_registry collection (via Hub API)
+#   - REMOVED: federation-registry.json (deprecated file-based approach)
 #
 # Arguments:
 #   $1 - Instance code
@@ -614,20 +615,12 @@ spoke_config_register_in_registries() {
         return 1
     fi
 
-    # Step 1: Register in federation-registry.json (file-based legacy)
-    local fed_reg_script="${DIVE_ROOT}/scripts/spoke-init/register-spoke-federation.sh"
-    if [ -f "$fed_reg_script" ]; then
-        log_verbose "Updating federation-registry.json"
-        if bash "$fed_reg_script" "$code_upper" 2>/dev/null; then
-            log_verbose "✓ Federation registry updated"
-        else
-            log_warn "Federation registry update had issues"
-        fi
-    else
-        log_warn "Federation registry script not found: $fed_reg_script"
-    fi
+    # REMOVED (2026-01-23): federation-registry.json is deprecated
+    # MongoDB is the single source of truth for federation
+    # Spoke registration happens via Hub API: POST /api/federation/register
+    # which persists directly to MongoDB federation_spokes collection
 
-    # Step 2: Register KAS in MongoDB (replaces file-based kas-registry.json)
+    # Step 1: Register KAS in MongoDB (MongoDB SSOT architecture)
     # Load spoke-kas.sh if not already loaded
     if [ -z "$DIVE_SPOKE_KAS_LOADED" ]; then
         if [ -f "${DIVE_ROOT}/scripts/dive-modules/spoke/spoke-kas.sh" ]; then
