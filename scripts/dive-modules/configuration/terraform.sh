@@ -292,7 +292,17 @@ terraform_apply_spoke() {
     ) || return 1
     
     # Instance code must be uppercase per ISO 3166-1 alpha-3 validation
-    terraform_apply "$TF_SPOKE_DIR" "spoke.tfvars" -var="instance_code=${code_upper}"
+    # Spoke tfvars are in terraform/countries/<code>.tfvars (not terraform/spoke/spoke.tfvars)
+    local tfvars_file="${DIVE_ROOT}/terraform/countries/${code_lower}.tfvars"
+    
+    if [ ! -f "$tfvars_file" ]; then
+        log_error "Country tfvars file not found: $tfvars_file"
+        log_error "Spoke Terraform requires country-specific configuration"
+        return 1
+    fi
+    
+    log_verbose "Using tfvars: $tfvars_file"
+    terraform_apply "$TF_SPOKE_DIR" "$tfvars_file" -var="instance_code=${code_upper}"
 }
 
 ##
@@ -304,6 +314,7 @@ terraform_apply_spoke() {
 terraform_plan_spoke() {
     local instance_code="$1"
     local code_upper=$(upper "$instance_code")
+    local code_lower=$(lower "$instance_code")
 
     if [ ! -d "$TF_SPOKE_DIR" ]; then
         log_warn "Spoke Terraform directory not found"
@@ -311,8 +322,17 @@ terraform_plan_spoke() {
     fi
 
     terraform_init "$TF_SPOKE_DIR" || return 1
+    
+    # Spoke tfvars are in terraform/countries/<code>.tfvars
+    local tfvars_file="${DIVE_ROOT}/terraform/countries/${code_lower}.tfvars"
+    
+    if [ ! -f "$tfvars_file" ]; then
+        log_error "Country tfvars file not found: $tfvars_file"
+        return 1
+    fi
+    
     # Instance code must be uppercase per ISO 3166-1 alpha-3 validation
-    terraform_plan "$TF_SPOKE_DIR" "spoke.tfvars" -var="instance_code=${code_upper}"
+    terraform_plan "$TF_SPOKE_DIR" "$tfvars_file" -var="instance_code=${code_upper}"
 }
 
 # =============================================================================
