@@ -116,7 +116,12 @@ orch_db_exec() {
     fi
 
     # Use docker exec for reliable execution
-    docker exec dive-hub-postgres psql -U postgres -d orchestration -t -c "$query" 2>/dev/null || return 1
+    # CRITICAL: Don't suppress stderr - we need to see actual errors
+    # Note: psql outputs "BEGIN" and "COMMIT" on stdout which is normal
+    docker exec dive-hub-postgres psql -U postgres -d orchestration -t -c "$query" 2>&1
+    
+    # Return psql exit code directly
+    return $?
 }
 
 ##
@@ -339,14 +344,28 @@ COMMIT;"
         sql_result=$(orch_db_exec "$sql_transaction" 2>&1)
         local exit_code=$?
 
+        # psql outputs "BEGIN" and "COMMIT" which are normal, not errors
+        # Only check for actual ERROR messages from PostgreSQL
         if [ $exit_code -eq 0 ] && [[ ! "$sql_result" =~ ERROR ]]; then
             log_verbose "✓ State persisted: $instance_code → $new_state (DB-only)"
             # Record metric (non-blocking)
             orch_db_exec "INSERT INTO orchestration_metrics (instance_code, metric_name, metric_value) VALUES ('$code_lower', 'state_transition_success', 1)" >/dev/null 2>&1 || true
             return 0
+        elif [ $exit_code -eq 0 ]; then
+            # Exit code 0 but output contains text - check if it's just BEGIN/COMMIT
+            if [[ "$sql_result" =~ ^(BEGIN|COMMIT|INSERT|SELECT)[[:space:]]*$ ]]; then
+                # This is normal psql output, not an error
+                log_verbose "✓ State persisted: $instance_code → $new_state (DB-only)"
+                return 0
+            else
+                # Has other content - might be an error
+                log_error "Database transaction failed: $instance_code → $new_state"
+                log_error "DB Error: $sql_result"
+                return 1
+            fi
         else
-            log_error "Database transaction failed: $instance_code → $new_state"
-            [ -n "$sql_result" ] && log_error "DB Error: $sql_result"
+            log_error "Database transaction failed: $instance_code → $new_state (exit code: $exit_code)"
+            [ -n "$sql_result" ] && log_verbose "DB Output: $sql_result"
             return 1
         fi
     fi
