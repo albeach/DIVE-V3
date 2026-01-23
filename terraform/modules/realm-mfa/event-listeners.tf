@@ -1,40 +1,35 @@
 # ============================================
-# Keycloak Event Listener Configuration (v3.1.0)
+# Keycloak Event Listener Configuration (v3.2.0)
 # ============================================
-# AAL2/MFA Event Logging with Custom AMR Enrichment
+# AAL2/MFA Event Logging with Native AMR/ACR Features
 #
-# KEY CHANGES (v3.1.0 - December 2025):
-# - ✅ RE-ENABLED: "dive-amr-enrichment" Event Listener SPI
+# KEY CHANGES (v3.2.0 - January 24, 2026):
+# - ❌ REMOVED: "dive-amr-enrichment" Event Listener SPI (caused attribute corruption)
+# - ✅ NATIVE: Keycloak 26.5 native AMR/ACR tracking (RFC 8176 compliant)
 # - ✅ NATIVE: oidc-amr-mapper and oidc-acr-mapper for JWT claims
 # - ✅ NATIVE: ACR is automatically set via authenticator execution config
 #
-# Why dive-amr-enrichment is needed:
-# Keycloak 26.4 native authenticator ACR/AMR config ONLY works when the
-# authenticator execution config is properly set. The event listener provides
-# a fallback enrichment for WebAuthn/OTP credentials that ensures AMR claims
-# are properly set even when authentication flows don't set session notes.
+# Why dive-amr-enrichment was removed:
+# The custom event listener had a critical bug where it incorrectly identified
+# federated users as local users, causing user.setAttribute() to OVERWRITE all
+# user attributes including countryOfAffiliation. This broke federation.
 #
-# How it works:
-# 1. User authenticates (password + WebAuthn/OTP)
-# 2. dive-amr-enrichment event listener fires on LOGIN event
-# 3. Event listener checks user credentials and sets AUTH_METHODS_REF
-# 4. oidc-amr-mapper reads AUTH_METHODS_REF and adds to JWT
-# 5. oidc-acr-mapper reads authenticator ACR config and adds to JWT
+# Native Keycloak 26.5 features:
+# 1. Authenticators set session notes (not user attributes) ✅
+# 2. Session notes don't corrupt user data ✅
+# 3. Native oidc-amr-mapper reads session notes and adds to JWT ✅
+# 4. No custom code needed - all functionality built-in ✅
+#
+# Reference: .cursor/AMR_ENRICHMENT_ROOT_CAUSE.md
 
 resource "keycloak_realm_events" "mfa_events" {
   realm_id = var.realm_id
 
   # Enable event listeners
   # jboss-logging: Standard Keycloak event logging for security monitoring
-  # dive-amr-enrichment: Custom AMR enrichment for MFA methods (CRITICAL for AMR population)
-  #
-  # CRITICAL FIX (Jan 2, 2026): dive-amr-enrichment MUST be enabled!
-  # Native Keycloak authenticators don't reliably set AMR session notes.
-  # The event listener fires on LOGIN and sets AUTH_METHODS_REF based on user credentials.
-  # Without this, AMR will be empty or incomplete for MFA users.
+  # NO custom listeners - native Keycloak AMR/ACR tracking is sufficient
   events_listeners = [
-    "jboss-logging",
-    "dive-amr-enrichment"
+    "jboss-logging"
   ]
 
   # Enable user events for LOGIN tracking
