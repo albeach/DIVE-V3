@@ -145,9 +145,9 @@ case "$COMMAND" in
         esac
         ;;
 
-    # Terraform commands (terraform.sh)
+    # Terraform commands (configuration/terraform.sh)
     tf|terraform)
-        source "${MODULES_DIR}/terraform.sh"
+        source "${MODULES_DIR}/configuration/terraform.sh"
         module_terraform "$@"
         ;;
 
@@ -215,15 +215,15 @@ case "$COMMAND" in
         module_federation "$@"
         ;;
 
-    # Hub commands (hub.sh - Phase 3 enhanced spoke management)
+    # Hub commands (deployment/hub.sh - Phase 3 enhanced spoke management)
     hub)
-        source "${MODULES_DIR}/hub.sh"
+        source "${MODULES_DIR}/deployment/hub.sh"
         module_hub "$@"
         ;;
 
-    # Spoke commands (spoke.sh)
+    # Spoke commands (deployment/spoke.sh)
     spoke)
-        source "${MODULES_DIR}/spoke.sh"
+        source "${MODULES_DIR}/deployment/spoke.sh"
         module_spoke "$@"
         ;;
 
@@ -396,11 +396,11 @@ case "$COMMAND" in
         shift || true
         case "$VERIFY_TARGET" in
             hub)
-                source "${MODULES_DIR}/hub.sh"
+                source "${MODULES_DIR}/deployment/hub.sh"
                 hub_verify "$@"
                 ;;
             spoke)
-                source "${MODULES_DIR}/spoke.sh"
+                source "${MODULES_DIR}/deployment/spoke.sh"
                 spoke_verify "$@"
                 ;;
             *)
