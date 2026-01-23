@@ -522,6 +522,20 @@ EOF
     log_success "Generated hub.auto.tfvars with ${spokes_found} federation partner(s) from MongoDB"
 
     # ==========================================================================
+    # Load Secrets Before Terraform
+    # ==========================================================================
+    # Source .env.hub to get secrets in current shell context
+    if [ -f "${DIVE_ROOT}/.env.hub" ]; then
+        set -a
+        source "${DIVE_ROOT}/.env.hub"
+        set +a
+        log_verbose "Secrets loaded from .env.hub for Terraform"
+    else
+        log_error "No .env.hub file found - cannot proceed with Terraform"
+        return 1
+    fi
+
+    # ==========================================================================
     # Apply Terraform
     # ==========================================================================
     (
@@ -534,18 +548,29 @@ EOF
         fi
 
         # Export secrets as TF_VAR_ environment variables
-        export TF_VAR_keycloak_admin_password="${KEYCLOAK_ADMIN_PASSWORD}"
+        # Use correct variable names from .env.hub (KC_ADMIN_PASSWORD, KEYCLOAK_ADMIN_PASSWORD_USA)
+        export TF_VAR_keycloak_admin_password="${KC_ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD_USA:-${KEYCLOAK_ADMIN_PASSWORD}}}"
         export TF_VAR_client_secret="${KEYCLOAK_CLIENT_SECRET}"
-        export TF_VAR_test_user_password="${TEST_USER_PASSWORD:-DiveTestSecure2025!}"
-        export TF_VAR_admin_user_password="${ADMIN_PASSWORD:-DiveAdminSecure2025!}"
+        export TF_VAR_test_user_password="${TEST_USER_PASSWORD:-${KC_ADMIN_PASSWORD}}"
+        export TF_VAR_admin_user_password="${ADMIN_PASSWORD:-${KC_ADMIN_PASSWORD}}"
         export KEYCLOAK_USER="${KEYCLOAK_ADMIN_USERNAME:-admin}"
-        export KEYCLOAK_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD}"
+        export KEYCLOAK_PASSWORD="${KC_ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD_USA:-${KEYCLOAK_ADMIN_PASSWORD}}}"
+
+        # Verify critical variables are set
+        if [ -z "$TF_VAR_keycloak_admin_password" ] || [ -z "$TF_VAR_client_secret" ]; then
+            log_error "CRITICAL: Required Terraform variables not set"
+            log_error "  TF_VAR_keycloak_admin_password: ${TF_VAR_keycloak_admin_password:+SET}"
+            log_error "  TF_VAR_client_secret: ${TF_VAR_client_secret:+SET}"
+            return 1
+        fi
+
+        log_verbose "Terraform variables validated (keycloak_admin_password: SET, client_secret: SET)"
 
         # Apply with hub.tfvars + hub.auto.tfvars (auto-loaded)
         log_verbose "Running terraform apply..."
-        terraform apply -var-file=hub.tfvars -input=false -auto-approve
+        terraform apply -var-file=hub.tfvars -input=false -auto-approve -parallelism=20
     ) || {
-        log_warn "Terraform apply failed"
+        log_error "Terraform apply failed"
         return 1
     }
 
