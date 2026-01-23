@@ -10,9 +10,8 @@
  * 4. Tenant Configs - Per-tenant policy configuration
  * 
  * Data can be loaded from:
- * - Static JSON files (policies/data/*.json)
- * - MongoDB collections (for dynamic updates)
- * - Federation Registry (config/federation-registry.json)
+ * - Static JSON files (policies/data/*.json) - DEPRECATED
+ * - MongoDB collections (SSOT for all dynamic data)
  * 
  * @version 1.0.0
  * @date 2025-12-03

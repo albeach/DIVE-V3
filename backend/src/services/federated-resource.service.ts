@@ -194,9 +194,11 @@ class FederatedResourceService {
             logger.error('Failed to load federation instances from discovery service', {
                 error: error instanceof Error ? error.message : 'Unknown error'
             });
-            // Fall back to static registry as last resort
-            logger.warn('Attempting fallback to static federation-registry.json');
-            await this.loadLegacyRegistry();
+            // No fallback - MongoDB is the sole source of truth
+            throw new Error(
+                `Federation discovery failed: ${error instanceof Error ? error.message : 'Unknown error'}. ` +
+                `MongoDB is the exclusive SSOT for federation data.`
+            );
         }
 
         // CRITICAL FIX: Ensure current instance is always registered
@@ -397,56 +399,6 @@ class FederatedResourceService {
         };
     }
 
-    /**
-     * Legacy: Load federation registry from static JSON file (fallback only)
-     * DEPRECATED: Only used if MongoDB discovery fails
-     */
-    private async loadLegacyRegistry(): Promise<void> {
-        logger.warn('Using legacy static federation-registry.json (MongoDB discovery failed)');
-
-        const registryPaths = [
-            path.join(process.cwd(), '..', 'config', 'federation-registry.json'),
-            path.join(process.cwd(), 'config', 'federation-registry.json')
-        ];
-
-        let registry: any = null;
-        for (const registryPath of registryPaths) {
-            try {
-                if (fs.existsSync(registryPath)) {
-                    registry = JSON.parse(fs.readFileSync(registryPath, 'utf-8'));
-                    break;
-                }
-            } catch (error) {
-                logger.warn('Failed to read federation registry', {
-                    path: registryPath,
-                    error: error instanceof Error ? error.message : 'Unknown error'
-                });
-            }
-        }
-
-        if (!registry?.instances) {
-            logger.error('No federation registry available');
-            return;
-        }
-
-        // Load instances from static file
-        for (const [key, instance] of Object.entries(registry.instances)) {
-            const inst = instance as any;
-            if (!inst.enabled) {
-                continue;
-            }
-
-            try {
-                const federatedInstance = await this.createInstanceConfig(key, inst);
-                this.instances.set(key.toUpperCase(), federatedInstance);
-                logger.info(`Loaded instance from legacy registry: ${key}`);
-            } catch (error) {
-                logger.error(`Failed to load instance ${key}`, {
-                    error: error instanceof Error ? error.message : 'Unknown error'
-                });
-            }
-        }
-    }
 
     /**
      * Create instance configuration with MongoDB connection details

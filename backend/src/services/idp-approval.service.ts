@@ -14,7 +14,6 @@
 import { MongoClient, Db, Collection } from 'mongodb';
 import { logger } from '../utils/logger';
 import { keycloakAdminService } from './keycloak-admin.service';
-import { federationRegistryService } from './federation-registry.service';
 import { IIdPSubmission, IApprovalResponse } from '../types/admin.types';
 import { IApprovalDecision, SLAStatus, IRiskScoringConfig } from '../types/risk-scoring.types';
 
@@ -219,47 +218,13 @@ class IdPApprovalService {
 
             logger.info('IdP created in Keycloak', { alias: createdAlias });
 
-            // Update federation registry if this is a federation partner IdP
-            // Federation IdPs have aliases like "fra-federation", "deu-federation", etc.
-            if (alias.includes('-federation') || alias.endsWith('-federation')) {
-                try {
-                    const targetInstance = federationRegistryService.extractInstanceCodeFromAlias(alias);
-                    const currentInstance = federationRegistryService.getCurrentInstanceCode();
-
-                    if (targetInstance && targetInstance !== currentInstance) {
-                        logger.info('Updating federation registry for federation partner', {
-                            currentInstance,
-                            targetInstance,
-                            alias
-                        });
-
-                        const registryResult = await federationRegistryService.addFederationLink({
-                            sourceInstance: currentInstance,
-                            targetInstance,
-                            bidirectional: true,
-                            updateMetadata: true
-                        });
-
-                        if (registryResult.success) {
-                            logger.info('Federation registry updated successfully', {
-                                changes: registryResult.changes
-                            });
-                        } else {
-                            logger.warn('Failed to update federation registry', {
-                                error: registryResult.error,
-                                message: registryResult.message
-                            });
-                            // Don't fail approval if registry update fails - log warning only
-                        }
-                    }
-                } catch (error) {
-                    logger.warn('Error updating federation registry (non-blocking)', {
-                        alias,
-                        error: error instanceof Error ? error.message : 'Unknown error'
-                    });
-                    // Don't fail approval if registry update fails
-                }
-            }
+            // Federation relationships are now managed by hub-spoke-registry.service.ts
+            // Federation partners are registered via POST /api/federation/register
+            // No need to update static registry - MongoDB is the SSOT
+            logger.debug('Federation managed by hub-spoke-registry service', {
+                alias,
+                isFederationIdP: alias.includes('-federation') || alias.endsWith('-federation')
+            });
 
             // Update submission status
             await collection.updateOne(
