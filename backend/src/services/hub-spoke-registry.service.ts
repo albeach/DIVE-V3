@@ -749,49 +749,29 @@ class HubSpokeRegistryService extends EventEmitter {
     // ============================================
     // AUTOMATIC HUB FEDERATION REGENERATION (Phase 1: 2026-01-24)
     // ============================================
-    // After spoke approval, automatically regenerate Hub's federation config
-    // and re-apply Terraform to create the spoke-idp in Hub Keycloak.
-    //
-    // This eliminates the manual Hub redeploy requirement after spoke registration.
+    // ARCHITECTURE DECISION (2026-01-24 Testing):
+    // The Terraform regeneration approach is REDUNDANT and has been removed.
     // 
-    // Workflow:
-    //   1. Spoke approved → Trigger Hub federation regeneration
-    //   2. Query MongoDB for all approved spokes
-    //   3. Generate hub.auto.tfvars with federation_partners from MongoDB
-    //   4. Run Terraform apply in Hub
-    //   5. Hub Keycloak now has spoke-idp (e.g., fra-idp)
-    //   6. Bidirectional federation complete
-    if (options.autoRegenFederation !== false) {
-      try {
-        logger.info('Triggering automatic Hub federation regeneration', {
-          spokeId,
-          instanceCode: spoke.instanceCode,
-          correlationId
-        });
-
-        await this.regenerateHubFederation(spoke);
-
-        logger.info('Hub federation regenerated successfully', {
-          spokeId,
-          instanceCode: spoke.instanceCode,
-          hubIdpAlias: `${spoke.instanceCode.toLowerCase()}-idp`,
-          bidirectional: true,
-        });
-      } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-
-        logger.error('CRITICAL: Hub federation regeneration failed', {
-          spokeId,
-          instanceCode: spoke.instanceCode,
-          error: errorMessage,
-          impact: 'Hub→Spoke federation will NOT work until Hub manually redeployed',
-        });
-
-        // Don't suspend spoke - federation regeneration can be retried manually
-        // Log warning but continue with other cascades
-        logger.warn('Continuing with spoke approval despite federation regeneration failure');
-      }
-    }
+    // Bidirectional federation is already handled by keycloakFederationService
+    // via Keycloak Admin API in the createFederationIdP() method below.
+    // 
+    // Benefits of Admin API approach over Terraform:
+    //   ✅ No Terraform dependency in backend Docker container
+    //   ✅ Faster execution (direct API calls vs Terraform apply)
+    //   ✅ More scalable (no file system writes)
+    //   ✅ Works in containerized environments
+    //   ✅ Real-time federation (no Terraform state delays)
+    // 
+    // The regenerateHubFederation() and generateHubAutoTfvars() methods remain
+    // available for disaster recovery and GitOps workflows but are not used
+    // in the automatic approval cascade.
+    // 
+    // NOTE: Terraform regeneration attempted but failed during testing with:
+    //       "spawn /bin/sh ENOENT" - Terraform not available in container
+    // 
+    // Verified: Bidirectional federation via Admin API works perfectly
+    //   - Direction 1: fra-idp in Hub (Admin API) ✅
+    //   - Direction 2: usa-idp in Spoke (Terraform during spoke deployment) ✅
 
     // AUTO-LINK IDENTITY PROVIDER (Phase 3 Enhancement)
     // Create BIDIRECTIONAL Keycloak IdP trust for SSO
