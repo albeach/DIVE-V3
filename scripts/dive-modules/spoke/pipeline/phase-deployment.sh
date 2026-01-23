@@ -335,12 +335,13 @@ spoke_deployment_verify_env() {
     if docker ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
         log_verbose "Checking backend environment variables..."
 
-        # Backend environment variables (from docker-compose template)
+        # Backend environment variables (UNSUFFIXED inside container)
+        # Docker Compose reads ${VAR_FRA} from .env, sets VAR (no suffix) in container
         # Backend does NOT have AUTH_SECRET or POSTGRES_PASSWORD - those are frontend-only
         local backend_vars=(
-            "KEYCLOAK_CLIENT_SECRET_${code_upper}"
-            "MONGO_PASSWORD_${code_upper}"
-            "KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
+            "KEYCLOAK_CLIENT_SECRET"
+            "MONGODB_URI"
+            "KEYCLOAK_ADMIN_PASSWORD"
         )
 
         for var in "${backend_vars[@]}"; do
@@ -388,11 +389,12 @@ spoke_deployment_verify_env() {
     if docker ps --format '{{.Names}}' | grep -q "^${frontend_container}$"; then
         log_verbose "Checking frontend environment variables..."
 
-        # Frontend environment variables (from docker-compose template)
+        # Frontend environment variables (UNSUFFIXED inside container)
+        # Docker Compose reads ${VAR_FRA} from .env, sets VAR (no suffix) in container
         local frontend_vars=(
-            "AUTH_SECRET_${code_upper}"
-            "POSTGRES_PASSWORD_${code_upper}"
-            "KEYCLOAK_CLIENT_SECRET_${code_upper}"
+            "NEXTAUTH_SECRET"
+            "DATABASE_URL"
+            "KEYCLOAK_CLIENT_SECRET"
         )
 
         for var in "${frontend_vars[@]}"; do
