@@ -54,9 +54,20 @@ resource "keycloak_oidc_identity_provider" "federation_partner" {
   sync_mode   = "FORCE"
   trust_email = true
 
-  # First-broker-login settings (FIX: Jan 2026 - Disable account linking prompt)
-  # This provides seamless SSO experience for federated users
-  first_broker_login_flow_alias = ""  # Empty string disables first-broker-login flow
+  # First-broker-login settings
+  # CRITICAL (2026-01-24): MUST use "first broker login" flow for attribute import!
+  # 
+  # When first_broker_login_flow_alias = "" (empty), IdP attribute mappers DO NOT EXECUTE!
+  # Result: Hub user created WITHOUT attributes from FRA IdP (countryOfAffiliation missing)
+  # 
+  # The "first broker login" flow:
+  #   1. Executes IdP attribute mappers (imports countryOfAffiliation, clearance, etc.)
+  #   2. Creates user with imported attributes
+  #   3. Links federated identity
+  # 
+  # Keycloak v26+ Best Practice: Use built-in "first broker login" flow
+  # This is required for IdP mappers to execute with syncMode: FORCE
+  first_broker_login_flow_alias = "first broker login"  # Required for attribute import
 
   # Store tokens for later use
   store_token = true
