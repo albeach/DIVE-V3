@@ -128,24 +128,37 @@ terraform_apply() {
     terraform_check || return 1
 
     log_info "Applying Terraform configuration..."
+    log_info "This may take several minutes for complex deployments..."
 
     cd "$tf_dir"
 
-    local cmd="terraform apply -auto-approve"
+    local cmd="terraform apply -auto-approve -parallelism=20"
     [ -n "$var_file" ] && [ -f "$var_file" ] && cmd="$cmd -var-file=$var_file"
 
-    $cmd "$@"
-    local result=$?
-
-    cd - >/dev/null
-
-    if [ $result -eq 0 ]; then
-        log_success "Terraform apply complete"
+    # Execute with progress monitoring
+    log_verbose "Command: $cmd $@"
+    
+    # Create temp file for output
+    local tmp_output=$(mktemp)
+    local start_time=$(date +%s)
+    
+    # Run Terraform with tee to show progress and capture output
+    if $cmd "$@" 2>&1 | tee "$tmp_output"; then
+        local end_time=$(date +%s)
+        local duration=$((end_time - start_time))
+        log_success "Terraform apply complete in ${duration}s"
+        rm -f "$tmp_output"
+        cd - >/dev/null
+        return 0
     else
+        local result=$?
         log_error "Terraform apply failed"
+        log_error "Output saved to: $tmp_output"
+        log_verbose "Recent output:"
+        tail -20 "$tmp_output" 2>/dev/null || true
+        cd - >/dev/null
+        return $result
     fi
-
-    return $result
 }
 
 ##

@@ -166,9 +166,30 @@ EOF
         # Terraform SSOT: Apply Terraform FIRST to create admin user and realm
         log_step "Step 5/9: Applying Terraform (SSOT mode)..."
         if [ -d "${DIVE_ROOT}/terraform/hub" ]; then
-            _hub_apply_terraform || log_warn "Terraform apply skipped or failed"
+            if ! _hub_apply_terraform; then
+                log_error "CRITICAL: Terraform apply FAILED"
+                log_error "Hub realm 'dive-v3-broker-usa' was not created"
+                log_error "Hub is unusable without realm configuration"
+                log_error ""
+                log_error "Options:"
+                log_error "  1. Check Terraform logs above for errors"
+                log_error "  2. Check Keycloak logs: docker logs dive-hub-keycloak"
+                log_error "  3. Manually run: cd terraform/hub && terraform apply"
+                return 1
+            fi
         else
-            log_info "No Terraform config found, skipping"
+            log_error "CRITICAL: No Terraform config found at terraform/hub"
+            log_error "Cannot configure Keycloak without Terraform"
+            return 1
+        fi
+
+        # Verify realm was created successfully
+        log_step "Step 5.5/9: Verifying realm creation..."
+        if ! _hub_verify_realm_exists; then
+            log_error "CRITICAL: Realm verification FAILED"
+            log_error "Terraform completed but realm 'dive-v3-broker-usa' does not exist"
+            log_error "This indicates Terraform state/Keycloak inconsistency"
+            return 1
         fi
 
         # Step 6: Clean up conflicting resources after Terraform
@@ -183,9 +204,25 @@ EOF
         # Step 6: Apply Terraform (if available)
         log_step "Step 6/9: Applying Keycloak configuration..."
         if [ -d "${DIVE_ROOT}/terraform/hub" ]; then
-            _hub_apply_terraform || log_warn "Terraform apply skipped or failed"
+            if ! _hub_apply_terraform; then
+                log_error "CRITICAL: Terraform apply FAILED"
+                log_error "Hub realm 'dive-v3-broker-usa' was not created"
+                log_error "Hub is unusable without realm configuration"
+                return 1
+            fi
         else
-            log_info "No Terraform config found, skipping"
+            log_error "CRITICAL: No Terraform config found at terraform/hub"
+            log_error "Cannot configure Keycloak without Terraform"
+            return 1
+        fi
+
+        # Verify realm was created successfully
+        log_step "Step 6.5/9: Verifying realm creation..."
+        if ! _hub_verify_realm_exists; then
+            log_error "CRITICAL: Realm verification FAILED"
+            log_error "Terraform completed but realm 'dive-v3-broker-usa' does not exist"
+            log_error "This indicates Terraform state/Keycloak inconsistency"
+            return 1
         fi
     fi
 
@@ -575,61 +612,172 @@ _hub_disable_review_profile() {
 _hub_verify_deployment() {
     local errors=0
 
-    # Check Keycloak
+    log_step "Verifying functional deployment state..."
+    echo ""
+
+    # ========================================================================
+    # CRITICAL CHECKS - Must pass
+    # ========================================================================
+
+    # Check 1: Keycloak accessible
+    log_verbose "Checking Keycloak accessibility..."
     if curl -kfs --max-time 5 "${HUB_KEYCLOAK_URL}/realms/master" >/dev/null 2>&1; then
-        log_success "Keycloak: healthy"
+        log_success "✓ Keycloak: accessible"
     else
-        log_error "Keycloak: not responding"
+        log_error "✗ Keycloak: not responding"
         ((errors++))
     fi
 
-    # Check Backend
+    # Check 2: Hub realm exists (CRITICAL - deployment blocker if missing)
+    log_verbose "Checking Hub realm existence..."
+    local realm_response
+    realm_response=$(curl -kfs --max-time 5 "${HUB_KEYCLOAK_URL}/realms/dive-v3-broker-usa" 2>/dev/null)
+    local realm_name=$(echo "$realm_response" | jq -r '.realm // empty' 2>/dev/null)
+    
+    if [ "$realm_name" = "dive-v3-broker-usa" ]; then
+        log_success "✓ Hub realm: exists (dive-v3-broker-usa)"
+    else
+        log_error "✗ Hub realm: MISSING (dive-v3-broker-usa)"
+        log_error "  This is a deployment blocker - Hub cannot function without realm"
+        ((errors++))
+    fi
+
+    # Check 3: Backend API responding
+    log_verbose "Checking Backend API..."
     if curl -kfs --max-time 5 "${HUB_BACKEND_URL}/health" >/dev/null 2>&1; then
-        log_success "Backend: healthy"
+        log_success "✓ Backend API: healthy"
     else
-        log_error "Backend: not responding"
+        log_error "✗ Backend API: not responding"
         ((errors++))
     fi
 
-    # Check OPA (retry logic for startup timing)
+    # Check 4: OPA (retry logic for startup timing)
+    log_verbose "Checking OPA..."
     local opa_healthy=false
-    for i in {1..5}; do  # Increased retries from 3 to 5
-        if curl -kfs --max-time 15 "${HUB_OPA_URL}/health" >/dev/null 2>&1; then  # Increased timeout from 10 to 15
-            log_success "OPA: healthy"
+    for i in {1..5}; do
+        if curl -kfs --max-time 15 "${HUB_OPA_URL}/health" >/dev/null 2>&1; then
+            log_success "✓ OPA: healthy"
             opa_healthy=true
             break
         fi
-        log_info "OPA check attempt $i failed, retrying..."
-        sleep 3  # Increased sleep from 2 to 3
+        sleep 3
     done
     if [ "$opa_healthy" = false ]; then
-        log_error "OPA: not responding after retries (${HUB_OPA_URL}/health)"
+        log_error "✗ OPA: not responding after 5 retries"
         ((errors++))
     fi
 
-    # Check OPAL (retry logic for startup timing)
+    # ========================================================================
+    # NON-CRITICAL CHECKS - Warnings only
+    # ========================================================================
+
+    # Check 5: OPAL Server (optional - used for policy distribution)
+    log_verbose "Checking OPAL Server..."
     local opal_healthy=false
-    for i in {1..5}; do  # Increased retries from 3 to 5
-        if curl -kfs --max-time 15 "${HUB_OPAL_URL}/healthcheck" >/dev/null 2>&1; then  # Increased timeout from 10 to 15
-            log_success "OPAL Server: healthy"
+    for i in {1..5}; do
+        if curl -kfs --max-time 15 "${HUB_OPAL_URL}/healthcheck" >/dev/null 2>&1; then
+            log_success "✓ OPAL Server: healthy"
             opal_healthy=true
             break
         fi
-        log_info "OPAL check attempt $i failed, retrying..."
-        sleep 3  # Increased sleep from 2 to 3
+        sleep 3
     done
     if [ "$opal_healthy" = false ]; then
-        log_warn "OPAL Server: not responding after retries (${HUB_OPAL_URL}/healthcheck - may still be starting)"
+        log_warn "⚠ OPAL Server: not responding (non-critical)"
     fi
 
-    # Check Federation API
+    # Check 6: Federation API (non-critical for initial deployment)
+    log_verbose "Checking Federation API..."
     if curl -kfs --max-time 5 "${HUB_BACKEND_URL}/api/federation/health" >/dev/null 2>&1; then
-        log_success "Federation API: healthy"
+        log_success "✓ Federation API: healthy"
     else
-        log_warn "Federation API: not responding"
+        log_warn "⚠ Federation API: not responding (non-critical)"
     fi
 
-    return $errors
+    # Check 7: MongoDB connection
+    log_verbose "Checking MongoDB..."
+    if docker exec dive-hub-mongodb mongosh --quiet \
+        -u admin -p "${MONGO_PASSWORD:-admin}" --authenticationDatabase admin \
+        --eval 'db.adminCommand("ping")' >/dev/null 2>&1; then
+        log_success "✓ MongoDB: connected"
+    else
+        log_warn "⚠ MongoDB: cannot verify connection (may need password)"
+    fi
+
+    # Check 8: PostgreSQL connection
+    log_verbose "Checking PostgreSQL..."
+    if docker exec dive-hub-postgres pg_isready -U postgres >/dev/null 2>&1; then
+        log_success "✓ PostgreSQL: ready"
+    else
+        log_warn "⚠ PostgreSQL: not ready"
+    fi
+
+    # ========================================================================
+    # SUMMARY
+    # ========================================================================
+
+    echo ""
+    if [ $errors -eq 0 ]; then
+        log_success "All critical checks passed"
+        return 0
+    else
+        log_error "Deployment verification found $errors critical error(s)"
+        log_error "Hub deployment is incomplete - fix errors above"
+        return 1
+    fi
+}
+
+# =============================================================================
+# REALM VERIFICATION - ENSURE KEYCLOAK REALM EXISTS
+# =============================================================================
+
+_hub_verify_realm_exists() {
+    local realm="dive-v3-broker-usa"
+    local keycloak_url="${HUB_KEYCLOAK_URL:-https://localhost:8443}"
+    local max_retries=10
+    local retry_delay=3
+
+    log_verbose "Verifying realm '$realm' exists and is accessible..."
+
+    for i in $(seq 1 $max_retries); do
+        # Check if realm exists via public endpoint
+        local realm_response
+        realm_response=$(curl -sk --max-time 10 "${keycloak_url}/realms/${realm}" 2>/dev/null)
+        local curl_exit=$?
+
+        if [ $curl_exit -eq 0 ]; then
+            # Parse response to verify it's a valid realm response
+            local realm_name
+            realm_name=$(echo "$realm_response" | jq -r '.realm // empty' 2>/dev/null)
+
+            if [ "$realm_name" = "$realm" ]; then
+                log_success "✓ Realm '$realm' exists and is accessible"
+                return 0
+            elif [ -n "$realm_response" ]; then
+                log_verbose "Attempt $i/$max_retries: Realm returned unexpected response"
+            else
+                log_verbose "Attempt $i/$max_retries: Empty response from Keycloak"
+            fi
+        else
+            log_verbose "Attempt $i/$max_retries: curl failed (exit: $curl_exit)"
+        fi
+
+        if [ $i -lt $max_retries ]; then
+            log_verbose "Waiting ${retry_delay}s before retry..."
+            sleep $retry_delay
+        fi
+    done
+
+    # If we get here, realm doesn't exist or isn't accessible
+    log_error "Realm '$realm' does not exist after $max_retries attempts"
+    log_error "Keycloak may still be initializing or Terraform failed silently"
+    log_error ""
+    log_error "Debug steps:"
+    log_error "  1. Check Keycloak: curl -sk $keycloak_url/realms/$realm | jq .realm"
+    log_error "  2. Check Keycloak logs: docker logs dive-hub-keycloak | tail -50"
+    log_error "  3. Verify Terraform state: cd terraform/hub && terraform show"
+    
+    return 1
 }
 
 # =============================================================================
