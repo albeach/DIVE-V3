@@ -329,50 +329,40 @@ hub_init_orchestration_db() {
     # Create orchestration database
     docker exec dive-hub-postgres psql -U postgres -c "CREATE DATABASE orchestration;" >/dev/null 2>&1 || true
 
-    # Create schema
-    docker exec dive-hub-postgres psql -U postgres -d orchestration -c "
-CREATE TABLE IF NOT EXISTS deployment_states (
-    id SERIAL PRIMARY KEY,
-    instance_code VARCHAR(10) NOT NULL,
-    state VARCHAR(20) NOT NULL,
-    message TEXT,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-CREATE TABLE IF NOT EXISTS deployment_locks (
-    id SERIAL PRIMARY KEY,
-    instance_code VARCHAR(10) NOT NULL,
-    lock_id BIGINT NOT NULL,
-    acquired_by VARCHAR(100),
-    acquired_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    released_at TIMESTAMP
-);
-CREATE TABLE IF NOT EXISTS orchestration_errors (
-    id SERIAL PRIMARY KEY,
-    instance_code VARCHAR(10),
-    error_code VARCHAR(50),
-    error_message TEXT,
-    component VARCHAR(50),
-    recoverable BOOLEAN DEFAULT FALSE,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-CREATE TABLE IF NOT EXISTS circuit_breakers (
-    id SERIAL PRIMARY KEY,
-    operation_name VARCHAR(100) NOT NULL UNIQUE,
-    state VARCHAR(20) DEFAULT 'CLOSED',
-    failure_count INTEGER DEFAULT 0,
-    last_failure TIMESTAMP,
-    last_success TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-CREATE TABLE IF NOT EXISTS orchestration_metrics (
-    id SERIAL PRIMARY KEY,
-    instance_code VARCHAR(10),
-    metric_name VARCHAR(100),
-    metric_value FLOAT,
-    labels JSONB,
-    timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-    " >/dev/null 2>&1
+    # Apply full orchestration schema from migration file (CRITICAL - includes state_transitions)
+    if [ -f "${DIVE_ROOT}/scripts/migrations/001_orchestration_state_db.sql" ]; then
+        log_verbose "Applying full orchestration schema..."
+        
+        if docker exec -i dive-hub-postgres psql -U postgres -d orchestration < "${DIVE_ROOT}/scripts/migrations/001_orchestration_state_db.sql" >/dev/null 2>&1; then
+            log_verbose "✓ Orchestration schema applied"
+        else
+            log_error "CRITICAL: Orchestration schema migration FAILED"
+            return 1
+        fi
+
+        # Verify all required tables exist
+        local required_tables=("deployment_states" "state_transitions" "deployment_steps" 
+                               "deployment_locks" "circuit_breakers" "orchestration_errors" 
+                               "orchestration_metrics" "checkpoints")
+        local missing_tables=0
+
+        for table in "${required_tables[@]}"; do
+            if ! docker exec dive-hub-postgres psql -U postgres -d orchestration -c "\d $table" >/dev/null 2>&1; then
+                log_error "Required table missing: $table"
+                missing_tables=$((missing_tables + 1))
+            fi
+        done
+
+        if [ $missing_tables -gt 0 ]; then
+            log_error "CRITICAL: $missing_tables required tables missing"
+            return 1
+        fi
+
+        log_verbose "All 8 orchestration tables verified"
+    else
+        log_error "CRITICAL: Orchestration schema file not found"
+        return 1
+    fi
 
     log_success "Orchestration database initialized"
 }
@@ -406,13 +396,41 @@ hub_configure_keycloak() {
     # Run Terraform if available
     if [ -d "${DIVE_ROOT}/terraform/hub" ] && command -v terraform >/dev/null 2>&1; then
         log_verbose "Running Terraform configuration..."
-        cd "${DIVE_ROOT}/terraform/hub"
-        terraform init -upgrade >/dev/null 2>&1
-        terraform apply -auto-approve -var-file="hub.tfvars" >/dev/null 2>&1 || {
-            log_warn "Terraform apply failed - manual configuration may be needed"
+        
+        # Source .env.hub to get secrets
+        if [ -f "${DIVE_ROOT}/.env.hub" ]; then
+            set -a
+            source "${DIVE_ROOT}/.env.hub"
+            set +a
+        else
+            log_error "No .env.hub file found"
+            return 1
+        fi
+        
+        (
+            cd "${DIVE_ROOT}/terraform/hub"
+            terraform init -upgrade >/dev/null 2>&1
+            
+            # Export Terraform variables
+            export TF_VAR_keycloak_admin_password="${KC_ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD_USA:-${KEYCLOAK_ADMIN_PASSWORD}}}"
+            export TF_VAR_client_secret="${KEYCLOAK_CLIENT_SECRET}"
+            export TF_VAR_test_user_password="${TEST_USER_PASSWORD:-${KC_ADMIN_PASSWORD}}"
+            export TF_VAR_admin_user_password="${ADMIN_PASSWORD:-${KC_ADMIN_PASSWORD}}"
+            export KEYCLOAK_USER="admin"
+            export KEYCLOAK_PASSWORD="${KC_ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD_USA}}"
+            
+            # Verify variables set
+            if [ -z "$TF_VAR_keycloak_admin_password" ] || [ -z "$TF_VAR_client_secret" ]; then
+                log_error "Required Terraform variables not set"
+                return 1
+            fi
+            
+            log_verbose "Terraform variables validated"
+            terraform apply -auto-approve -var-file="hub.tfvars" -parallelism=20
+        ) || {
+            log_error "Terraform apply failed"
             return 1
         }
-        cd - >/dev/null
     fi
 
     log_success "Keycloak configuration complete"
