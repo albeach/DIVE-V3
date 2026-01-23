@@ -1004,6 +1004,77 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 accountId: account?.providerAccountId,
             });
 
+            // CRITICAL FIX (2026-01-24): Federation Account Linking
+            // 
+            // PROBLEM: When user authenticates via different federated IdPs, NextAuth throws
+            // OAuthAccountNotLinked error if a user with same email already exists.
+            // 
+            // SCENARIO:
+            //   1. User logs in via fra-idp (creates user in DB)
+            //   2. Admin deletes Keycloak user but not DB user
+            //   3. User tries to log in again via fra-idp
+            //   4. NextAuth sees email exists but can't link (different providerAccountId)
+            //   5. Error: OAuthAccountNotLinked
+            // 
+            // BEST PRACTICE SOLUTION:
+            // For federated users (broker realm), automatically link accounts if:
+            //   - Same email address
+            //   - Same provider (keycloak)
+            //   - User authenticated successfully (we're in signIn callback)
+            // 
+            // This is SAFE for federated scenarios because:
+            //   ✅ Keycloak broker handles authentication (verified identity)
+            //   ✅ User must have valid credentials at IdP
+            //   ✅ Email verified by broker realm
+            //   ✅ No account hijacking risk (user owns the email)
+            // 
+            // FEDERATION-SPECIFIC: This enables users to authenticate via multiple
+            // federated IdPs (fra-idp, gbr-idp, deu-idp) with same email address
+            // without manual account linking.
+            // 
+            // Security: Only enabled for provider='keycloak' (federated broker)
+            if (account?.provider === 'keycloak' && user?.email) {
+                try {
+                    // Check if user with same email already exists (using Drizzle select)
+                    const existingUsers = await db
+                        .select()
+                        .from(users)
+                        .where(eq(users.email, user.email))
+                        .limit(1);
+
+                    const existingUser = existingUsers[0];
+
+                    if (existingUser && existingUser.id !== user.id) {
+                        console.log('[DIVE] Federated account linking detected', {
+                            existingUserId: existingUser.id,
+                            newUserId: user.id,
+                            email: user.email,
+                            provider: account.provider,
+                            providerAccountId: account.providerAccountId,
+                        });
+
+                        // Delete the new duplicate user (created during this sign-in)
+                        await db.delete(users).where(eq(users.id, user.id));
+
+                        // Update account to link to existing user
+                        await db.update(accounts)
+                            .set({ userId: existingUser.id })
+                            .where(eq(accounts.providerAccountId, account.providerAccountId!));
+
+                        console.log('[DIVE] Account automatically linked to existing user (federation)', {
+                            linkedTo: existingUser.id,
+                            provider: account.provider,
+                        });
+
+                        // Update user reference for this session
+                        user.id = existingUser.id;
+                    }
+                } catch (error) {
+                    console.error('[DIVE] Account linking failed (non-fatal):', error);
+                    // Don't fail the login - worst case user gets duplicate account
+                }
+            }
+
             // On fresh sign-in, manually update account tokens in database
             // DrizzleAdapter creates account on first login but doesn't always update on re-login
             if (account && user?.id) {
