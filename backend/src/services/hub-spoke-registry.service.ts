@@ -684,6 +684,10 @@ class HubSpokeRegistryService extends EventEmitter {
    *
    * Phase 3 Enhancement: Automatically creates Keycloak IdP federation
    * This enables cross-border SSO immediately upon approval.
+   * 
+   * Phase 1 (2026-01-24): Automatic Hub Terraform re-application
+   * After spoke approval, Hub automatically regenerates federation config
+   * and re-applies Terraform to create the spoke-idp in Hub Keycloak.
    */
   async approveSpoke(
     spokeId: string,
@@ -694,6 +698,7 @@ class HubSpokeRegistryService extends EventEmitter {
       maxClassification: string;
       dataIsolationLevel: ISpokeRegistration['dataIsolationLevel'];
       autoLinkIdP?: boolean; // Default true
+      autoRegenFederation?: boolean; // Default true - automatically regenerate Hub federation
     }
   ): Promise<ISpokeRegistration> {
     const spoke = await this.store.findById(spokeId);
@@ -740,6 +745,53 @@ class HubSpokeRegistryService extends EventEmitter {
       approvedBy,
       correlationId
     });
+
+    // ============================================
+    // AUTOMATIC HUB FEDERATION REGENERATION (Phase 1: 2026-01-24)
+    // ============================================
+    // After spoke approval, automatically regenerate Hub's federation config
+    // and re-apply Terraform to create the spoke-idp in Hub Keycloak.
+    //
+    // This eliminates the manual Hub redeploy requirement after spoke registration.
+    // 
+    // Workflow:
+    //   1. Spoke approved → Trigger Hub federation regeneration
+    //   2. Query MongoDB for all approved spokes
+    //   3. Generate hub.auto.tfvars with federation_partners from MongoDB
+    //   4. Run Terraform apply in Hub
+    //   5. Hub Keycloak now has spoke-idp (e.g., fra-idp)
+    //   6. Bidirectional federation complete
+    if (options.autoRegenFederation !== false) {
+      try {
+        logger.info('Triggering automatic Hub federation regeneration', {
+          spokeId,
+          instanceCode: spoke.instanceCode,
+          correlationId
+        });
+
+        await this.regenerateHubFederation(spoke);
+
+        logger.info('Hub federation regenerated successfully', {
+          spokeId,
+          instanceCode: spoke.instanceCode,
+          hubIdpAlias: `${spoke.instanceCode.toLowerCase()}-idp`,
+          bidirectional: true,
+        });
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+        logger.error('CRITICAL: Hub federation regeneration failed', {
+          spokeId,
+          instanceCode: spoke.instanceCode,
+          error: errorMessage,
+          impact: 'Hub→Spoke federation will NOT work until Hub manually redeployed',
+        });
+
+        // Don't suspend spoke - federation regeneration can be retried manually
+        // Log warning but continue with other cascades
+        logger.warn('Continuing with spoke approval despite federation regeneration failure');
+      }
+    }
 
     // AUTO-LINK IDENTITY PROVIDER (Phase 3 Enhancement)
     // Create BIDIRECTIONAL Keycloak IdP trust for SSO
@@ -856,6 +908,173 @@ class HubSpokeRegistryService extends EventEmitter {
     }
 
     return spoke;
+  }
+
+  /**
+   * Regenerate Hub federation configuration and apply Terraform
+   * 
+   * Phase 1 (2026-01-24): Automatic Hub Terraform re-application
+   * 
+   * This method enables automatic Hub→Spoke federation creation after spoke approval.
+   * Instead of requiring manual Hub redeploy, the Hub automatically regenerates its
+   * federation configuration and re-applies Terraform when a spoke is approved.
+   * 
+   * Workflow:
+   *   1. Query MongoDB for all approved spokes
+   *   2. Generate hub.auto.tfvars with federation_partners from MongoDB
+   *   3. Write hub.auto.tfvars to terraform/hub/
+   *   4. Run Terraform apply in Hub
+   *   5. Hub Keycloak now has spoke-idp (e.g., fra-idp)
+   * 
+   * Industry Pattern: GitOps automation - Infrastructure as Code driven by application state
+   * Examples: ArgoCD, Flux, Terraform Cloud
+   * 
+   * @param spoke - The newly approved spoke
+   */
+  private async regenerateHubFederation(spoke: ISpokeRegistration): Promise<void> {
+    logger.info('Regenerating Hub federation configuration', {
+      spokeId: spoke.spokeId,
+      instanceCode: spoke.instanceCode
+    });
+
+    // Get all approved spokes from MongoDB (SSOT)
+    const approvedSpokes = await this.listActiveSpokes();
+
+    logger.info('Generating hub.auto.tfvars from MongoDB', {
+      approvedSpokesCount: approvedSpokes.length,
+      spokeCodes: approvedSpokes.map(s => s.instanceCode)
+    });
+
+    // Generate hub.auto.tfvars content
+    const autoTfvarsContent = this.generateHubAutoTfvars(approvedSpokes);
+
+    // Import terraform executor
+    const { terraformExecutor } = await import('../utils/terraform-executor');
+
+    // Check if Terraform is available
+    const tfAvailable = await terraformExecutor.checkAvailable();
+    if (!tfAvailable) {
+      throw new Error('Terraform not available - cannot regenerate Hub federation');
+    }
+
+    // Write hub.auto.tfvars
+    await terraformExecutor.writeAutoVars('hub', 'hub.auto.tfvars', autoTfvarsContent);
+
+    logger.info('hub.auto.tfvars written, applying Terraform configuration...');
+
+    // Apply Terraform configuration
+    const startTime = Date.now();
+    const result = await terraformExecutor.apply('hub', {
+      autoApprove: true,
+      parallelism: 20,
+      timeout: 600000, // 10 minutes
+    });
+
+    const duration = Date.now() - startTime;
+
+    if (result.success) {
+      logger.info('Hub Terraform re-applied successfully', {
+        duration,
+        spokesCount: approvedSpokes.length,
+        newIdP: `${spoke.instanceCode.toLowerCase()}-idp`,
+        terraformExitCode: result.exitCode
+      });
+    } else {
+      throw new Error(`Terraform apply failed: ${result.stderr}`);
+    }
+  }
+
+  /**
+   * Generate hub.auto.tfvars content from MongoDB approved spokes
+   * 
+   * This replaces the static federation_partners in hub.tfvars with
+   * dynamically generated configuration from MongoDB (SSOT).
+   * 
+   * Format:
+   * ```hcl
+   * federation_partners = {
+   *   fra = {
+   *     instance_code         = "FRA"
+   *     instance_name         = "France"
+   *     idp_url               = "${SPOKE_IDP_URL}"
+   *     idp_internal_url      = "https://dive-spoke-fra-keycloak:8443"
+   *     frontend_url          = "${SPOKE_FRONTEND_URL}"
+   *     enabled               = true
+   *     client_secret         = ""  # Loaded from environment
+   *     disable_trust_manager = true
+   *   }
+   * }
+   * ```
+   * 
+   * @param approvedSpokes - List of approved spokes from MongoDB
+   * @returns Terraform tfvars content (HCL format)
+   */
+  private generateHubAutoTfvars(approvedSpokes: ISpokeRegistration[]): string {
+    const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
+
+    // Start with header
+    let content = `# =============================================================================
+# DIVE V3 Hub - Auto-Generated Federation Partners
+# =============================================================================
+# Auto-generated by Hub-Spoke Registry Service on ${new Date().toISOString()}
+# Source: MongoDB federation_spokes collection (approved spokes only)
+# 
+# DO NOT EDIT MANUALLY - This file is automatically regenerated when:
+#   1. A spoke is approved
+#   2. A spoke is suspended/revoked
+#   3. Hub deployment runs
+# 
+# MongoDB SSOT: ${approvedSpokes.length} approved spoke(s)
+# =============================================================================
+
+federation_partners = {
+`;
+
+    // Add each approved spoke
+    for (const spoke of approvedSpokes) {
+      const code = spoke.instanceCode.toUpperCase();
+      const codeLower = spoke.instanceCode.toLowerCase();
+
+      // Determine URLs based on environment
+      let idpUrl: string;
+      let idpInternalUrl: string;
+      let frontendUrl: string;
+
+      if (isDevelopment) {
+        // Use NATO port convention for local development
+        const portOffset = this.getPortOffsetForCountry(code);
+        const keycloakHttpsPort = 8443 + portOffset;
+        const frontendHttpPort = 3000 + portOffset;
+
+        idpUrl = spoke.idpPublicUrl || `https://localhost:${keycloakHttpsPort}`;
+        idpInternalUrl = spoke.idpUrl || `https://dive-spoke-${codeLower}-keycloak:8443`;
+        frontendUrl = spoke.baseUrl || `https://localhost:${frontendHttpPort}`;
+      } else {
+        // Production: Use external domains
+        idpUrl = spoke.idpPublicUrl || spoke.idpUrl;
+        idpInternalUrl = spoke.idpUrl;
+        frontendUrl = spoke.baseUrl;
+      }
+
+      // Add spoke entry
+      content += `  ${codeLower} = {
+    instance_code         = "${code}"
+    instance_name         = "${spoke.name}"
+    idp_url               = "${idpUrl}"
+    idp_internal_url      = "${idpInternalUrl}"
+    frontend_url          = "${frontendUrl}"
+    enabled               = true
+    client_secret         = ""  # Loaded from GCP: dive-v3-federation-${codeLower}-usa
+    disable_trust_manager = true
+  }
+`;
+    }
+
+    // Close the map
+    content += `}
+`;
+
+    return content;
   }
 
   /**
