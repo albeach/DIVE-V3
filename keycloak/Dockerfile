@@ -75,24 +75,26 @@ RUN mkdir -p /opt/keycloak/data/import && \
     chmod +x /opt/keycloak/scripts/import-realm.sh
 
 # ============================================
-# DIVE V3 Custom SPI Providers (v3.1.0 - January 2026)
+# DIVE V3 Custom SPI Providers - REMOVED (v3.2.0 - January 24, 2026)
 # ============================================
-# CRITICAL FIX: Re-enabled custom AMR mapper (January 2026)
+# CRITICAL FIX: Removed deprecated AMR extension that was corrupting user attributes
 #
-# The native oidc-amr-mapper does NOT work in Keycloak 26 because:
-# 1. It reads "reference" config from authenticator execution configs
-# 2. auth-username-password-form has configurable=false (cannot set reference)
-# 3. Therefore "pwd" is never added to AMR, resulting in amr: []
+# ROOT CAUSE: AMREnrichmentEventListener was incorrectly identifying federated users
+# as local users, calling user.setAttribute() which OVERWROTE all user attributes
+# including countryOfAffiliation. This caused FRA users to appear as USA users.
 #
-# Custom DIVE SPIs provide:
-# - dive-amr-protocol-mapper: Derives AMR from ACR (ACR works correctly)
-#   - ACR "1" → AMR ["pwd"]           (AAL1: password only)
-#   - ACR "2" → AMR ["pwd", "otp"]    (AAL2: password + OTP)
-#   - ACR "3" → AMR ["pwd", "hwk"]    (AAL3: password + WebAuthn)
-# - AMREnrichmentEventListener: Sets session notes for AMR/ACR
+# WHY NATIVE FEATURES WORK:
+# - Keycloak 26 native AMR/ACR features use SESSION NOTES (not user attributes)
+# - Session notes don't modify user attributes, preventing data corruption
+# - Native features properly handle both local and federated authentication
 #
-# Reference: HANDOFF_AMR_ACR_FINAL.md
-COPY --chown=1000:1000 extensions/archived/target/dive-keycloak-extensions.jar /opt/keycloak/providers/
+# REPLACED WITH:
+# - Native Keycloak 26 AMR/ACR tracking (RFC 8176 compliant)
+# - Configured via Terraform protocol mappers (oidc-amr-mapper)
+# - No custom code needed - all functionality built-in
+#
+# Reference: .cursor/AMR_ENRICHMENT_ROOT_CAUSE.md
+# COPY --chown=1000:1000 extensions/archived/target/dive-keycloak-extensions.jar /opt/keycloak/providers/
 
 # ============================================
 # Certificate Trust Configuration
