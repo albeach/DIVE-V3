@@ -221,15 +221,13 @@ dispatch_command() {
     case "$command" in
         # Hub operations
         hub)
-            source "${modules_dir}/deployment/hub.sh" 2>/dev/null || \
-            source "${modules_dir}/hub.sh"
+            source "${modules_dir}/deployment/hub.sh"
             module_hub "$@"
             ;;
 
         # Spoke operations
         spoke)
-            source "${modules_dir}/deployment/spoke.sh" 2>/dev/null || \
-            source "${modules_dir}/spoke.sh"
+            source "${modules_dir}/deployment/spoke.sh"
             module_spoke "$@"
             ;;
 
@@ -249,7 +247,6 @@ dispatch_command() {
 
         # Orchestration database
         orch-db)
-            source "${modules_dir}/orchestration/state.sh" 2>/dev/null || \
             source "${modules_dir}/orchestration-state-db.sh"
             module_orch_db "$@"
             ;;
@@ -270,8 +267,7 @@ dispatch_command() {
 
         # Terraform operations
         tf|terraform)
-            source "${modules_dir}/configuration/terraform.sh" 2>/dev/null || \
-            source "${modules_dir}/terraform.sh"
+            source "${modules_dir}/configuration/terraform.sh"
             module_terraform "$@"
             ;;
 
