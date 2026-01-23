@@ -807,10 +807,20 @@ export class KeycloakFederationService {
         clientSecret,
         clientAuthMethod: 'client_secret_post',
 
-        // Scopes - ONLY request standard OIDC scopes
-        // DIVE attributes (clearance, countryOfAffiliation, acpCOI, uniqueID) come from
-        // protocol mappers on the cross-border client, NOT from scope requests
-        defaultScope: 'openid profile email',
+        // Scopes - Request BOTH standard OIDC AND DIVE custom scopes
+        // CRITICAL FIX (2026-01-24): Must request DIVE custom scopes for attributes to be included
+        // The remote instance has protocol mappers on the federation client that map attributes to claims,
+        // but those claims are only included if the corresponding scope is requested!
+        // 
+        // Without requesting 'countryOfAffiliation' scope:
+        //   - FRA has mapper on dive-v3-broker-usa client ✅
+        //   - FRA user has countryOfAffiliation attribute ✅
+        //   - But mapper doesn't execute (scope not requested) ❌
+        //   - Token missing countryOfAffiliation claim ❌
+        //   - Hub IdP mapper has nothing to import ❌
+        //
+        // Fix: Request all DIVE custom scopes so remote mappers execute
+        defaultScope: 'openid profile email clearance countryOfAffiliation uniqueID acpCOI dive_acr dive_amr user_acr user_amr',
 
         // Token validation
         // In development: disable signature validation for self-signed certs
