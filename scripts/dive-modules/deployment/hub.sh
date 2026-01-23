@@ -35,9 +35,7 @@ elif [ -f "${MODULES_DIR}/orchestration-framework.sh" ]; then
     source "${MODULES_DIR}/orchestration-framework.sh"
 fi
 
-if [ -f "${MODULES_DIR}/orchestration/state.sh" ]; then
-    source "${MODULES_DIR}/orchestration/state.sh"
-elif [ -f "${MODULES_DIR}/orchestration-state-db.sh" ]; then
+if [ -f "${MODULES_DIR}/orchestration-state-db.sh" ]; then
     source "${MODULES_DIR}/orchestration-state-db.sh"
 fi
 

@@ -35,7 +35,7 @@ fi
 
 # Load terraform module for spoke deployments
 if [ -f "$(dirname "${BASH_SOURCE[0]}")/../terraform.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/../terraform.sh"
+    source "$(dirname "${BASH_SOURCE[0]}")/../configuration/terraform.sh"
 fi
 
 # Load pipeline modules (new architecture)
