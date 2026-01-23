@@ -34,7 +34,7 @@ if [ -f "$(dirname "${BASH_SOURCE[0]}")/../orchestration-framework.sh" ]; then
 fi
 
 # Load terraform module for spoke deployments
-if [ -f "$(dirname "${BASH_SOURCE[0]}")/../terraform.sh" ]; then
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../configuration/terraform.sh" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/../configuration/terraform.sh"
 fi
 
