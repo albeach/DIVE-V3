@@ -312,16 +312,41 @@ EOF
     fi
 
     # Apply orchestration schema migration (idempotent)
-    if [ -f "${DIVE_ROOT}/scripts/apply-phase2-migration.sh" ]; then
+    if [ -f "${DIVE_ROOT}/scripts/migrations/001_orchestration_state_db.sql" ]; then
         log_info "Applying orchestration schema..."
-        # Run migration silently (it's verbose)
-        if bash "${DIVE_ROOT}/scripts/apply-phase2-migration.sh" >/dev/null 2>&1; then
+        
+        # Apply SQL migration directly (more reliable than bash script)
+        if docker exec -i dive-hub-postgres psql -U postgres -d orchestration < "${DIVE_ROOT}/scripts/migrations/001_orchestration_state_db.sql" >/dev/null 2>&1; then
             log_success "✓ Orchestration schema applied"
         else
-            log_warn "Schema migration had issues (may already exist)"
+            log_error "CRITICAL: Orchestration schema migration FAILED"
+            log_error "State tracking will not work properly"
+            return 1
         fi
+
+        # Verify all required tables exist
+        local required_tables=("deployment_states" "state_transitions" "deployment_steps" 
+                               "deployment_locks" "circuit_breakers" "orchestration_errors" 
+                               "orchestration_metrics" "checkpoints")
+        local missing_tables=0
+
+        for table in "${required_tables[@]}"; do
+            if ! docker exec dive-hub-postgres psql -U postgres -d orchestration -c "\d $table" >/dev/null 2>&1; then
+                log_error "Required table missing: $table"
+                missing_tables=$((missing_tables + 1))
+            fi
+        done
+
+        if [ $missing_tables -gt 0 ]; then
+            log_error "CRITICAL: $missing_tables required tables missing"
+            return 1
+        fi
+
+        log_success "All 8 orchestration tables verified"
     else
-        log_warn "Phase 2 migration script not found"
+        log_error "CRITICAL: Orchestration schema file not found"
+        log_error "Cannot proceed without database schema"
+        return 1
     fi
 
     # Verify orchestration database is functional
