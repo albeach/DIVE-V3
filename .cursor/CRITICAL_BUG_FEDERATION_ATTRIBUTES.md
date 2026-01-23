@@ -263,10 +263,45 @@ if (federatedFrom) {
 
 ---
 
-**Status:** 🔴 **CRITICAL BUG - Requires Immediate Fix**  
-**Impact:** Federation SSO works, but authorization will fail  
-**Next:** Investigate IdP token claims and broker flow execution  
+## ✅ FIX APPLIED
+
+**Commit:** `0ee9c4bc` - fix(federation): Request DIVE custom scopes in IdP configuration
+
+**Code Change:**
+`backend/src/services/keycloak-federation.service.ts` line 806-824:
+```typescript
+// OLD (BROKEN):
+defaultScope: 'openid profile email',
+
+// NEW (FIXED):
+defaultScope: 'openid profile email clearance countryOfAffiliation uniqueID acpCOI dive_acr dive_amr user_acr user_amr',
+```
+
+**Immediate Remediation (Existing fra-idp):**
+Updated fra-idp in Hub Keycloak to request DIVE custom scopes:
+```
+✅ fra-idp.config.defaultScope now includes: clearance, countryOfAffiliation, uniqueID, acpCOI
+```
+
+**Testing Required:**
+User must log out and re-authenticate via FRA IdP to get fresh token with attributes.
+
+**Expected Result After Re-Login:**
+```json
+{
+  "uniqueID": "testuser-fra-1",
+  "clearance": "UNCLASSIFIED",
+  "countryOfAffiliation": "FRA",  ✅ CORRECT
+  "acpCOI": []
+}
+```
 
 ---
 
-*Documented during Phase 4 testing - 2026-01-24*
+**Status:** ✅ **FIX IMPLEMENTED AND DEPLOYED**  
+**Impact:** Future federation will work correctly, existing users need re-login  
+**Next:** User to test by logging out and back in via FRA IdP  
+
+---
+
+*Fixed during Phase 4 testing - 2026-01-24*
