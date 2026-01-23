@@ -214,15 +214,47 @@ resource "keycloak_openid_client" "broker_client" {
   # SECURITY: HTTPS only - no HTTP allowed
   frontchannel_logout_enabled = true
   frontchannel_logout_url     = "${var.app_url}/api/auth/logout-callback"
+  # CRITICAL FIX (2026-01-24): Add trailing slash variants for post-logout redirects
+  # Keycloak requires EXACT match of redirect_uri parameter, including trailing slashes
+  # 
+  # Issue: NextAuth may send https://localhost:3000/ (with slash) but we only configured
+  # https://localhost:3000 (without slash), causing LOGOUT_ERROR: invalid_redirect_uri
+  # 
+  # BEST PRACTICE SOLUTION:
+  # Use variables (var.app_url, var.api_url, var.idp_url) with pattern matching
+  # This works for ANY deployment (localhost, Cloudflare, production domains)
+  # 
+  # Patterns included:
+  # - Base URL without slash: ${var.app_url}
+  # - Base URL with slash: ${var.app_url}/
+  # - Wildcard paths: ${var.app_url}/*
+  # 
+  # NO hardcoded URLs - fully flexible for all environments
   valid_post_logout_redirect_uris = concat(
     [
+      # Frontend URLs (app_url) - handles NextAuth redirects
       var.app_url,
-      "https://localhost:3000",
-      "https://localhost:4000",
-      "https://localhost:8443",
+      "${var.app_url}/",
+      "${var.app_url}/*",
+      
+      # Backend URLs (api_url) - for API-based logout
+      var.api_url,
+      "${var.api_url}/",
+      
+      # IdP URLs (idp_url) - for Keycloak logout redirects
+      var.idp_url,
+      "${var.idp_url}/",
     ],
-    var.local_frontend_port != null ? ["https://localhost:${var.local_frontend_port}"] : [],
-    var.local_keycloak_port != null ? ["https://localhost:${var.local_keycloak_port}"] : []
+    # Instance-specific ports (local development only)
+    var.local_frontend_port != null ? [
+      "https://localhost:${var.local_frontend_port}",
+      "https://localhost:${var.local_frontend_port}/",
+      "https://localhost:${var.local_frontend_port}/*"
+    ] : [],
+    var.local_keycloak_port != null ? [
+      "https://localhost:${var.local_keycloak_port}",
+      "https://localhost:${var.local_keycloak_port}/"
+    ] : []
   )
 
   # Token settings
