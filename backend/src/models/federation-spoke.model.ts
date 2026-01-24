@@ -10,6 +10,7 @@
 
 import { Collection, Db, MongoClient } from 'mongodb';
 import { logger } from '../utils/logger';
+import { connectToMongoDBWithRetry, retryMongoOperation } from '../utils/mongodb-connection';
 import {
   ISpokeRegistration,
   ISpokeToken
@@ -43,8 +44,8 @@ export class MongoSpokeStore {
         env_MONGODB_DATABASE: process.env.MONGODB_DATABASE
       });
 
-      const client = new MongoClient(MONGODB_URL);
-      await client.connect();
+      // Use production-grade retry logic for replica set initialization
+      const client = await connectToMongoDBWithRetry(MONGODB_URL);
       this.db = client.db(DB_NAME);
 
       this.spokesCollection = this.db.collection<ISpokeRegistration>(COLLECTION_SPOKES);
@@ -57,19 +58,22 @@ export class MongoSpokeStore {
         tokensCollectionName: this.tokensCollection.collectionName
       });
 
-      // Create indexes for spokes
-      await this.spokesCollection.createIndex({ spokeId: 1 }, { unique: true });
-      await this.spokesCollection.createIndex({ instanceCode: 1 }, { unique: true, sparse: true });
-      await this.spokesCollection.createIndex({ status: 1 });
-      await this.spokesCollection.createIndex({ trustLevel: 1 });
-      await this.spokesCollection.createIndex({ 'certificateFingerprint': 1 }, { sparse: true });
-      await this.spokesCollection.createIndex({ lastHeartbeat: 1 }, { sparse: true });
-      await this.spokesCollection.createIndex({ registeredAt: 1 });
+      // Create indexes with retry logic for replica set initialization
+      await retryMongoOperation(async () => {
+        // Indexes for spokes
+        await this.spokesCollection!.createIndex({ spokeId: 1 }, { unique: true });
+        await this.spokesCollection!.createIndex({ instanceCode: 1 }, { unique: true, sparse: true });
+        await this.spokesCollection!.createIndex({ status: 1 });
+        await this.spokesCollection!.createIndex({ trustLevel: 1 });
+        await this.spokesCollection!.createIndex({ 'certificateFingerprint': 1 }, { sparse: true });
+        await this.spokesCollection!.createIndex({ lastHeartbeat: 1 }, { sparse: true });
+        await this.spokesCollection!.createIndex({ registeredAt: 1 });
 
-      // Create indexes for tokens
-      await this.tokensCollection.createIndex({ token: 1 }, { unique: true });
-      await this.tokensCollection.createIndex({ spokeId: 1 });
-      await this.tokensCollection.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // TTL index
+        // Indexes for tokens
+        await this.tokensCollection!.createIndex({ token: 1 }, { unique: true });
+        await this.tokensCollection!.createIndex({ spokeId: 1 });
+        await this.tokensCollection!.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }); // TTL index
+      });
 
       this.initialized = true;
       logger.info('MongoDB Spoke Store initialized', {
