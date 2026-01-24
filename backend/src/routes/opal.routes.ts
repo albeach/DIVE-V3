@@ -853,6 +853,83 @@ router.put('/tenant-configs/:code', requireSuperAdmin, async (req: Request, res:
 });
 
 // ============================================
+// COI MEMBERS FILE GENERATION (SSOT)
+// ============================================
+
+/**
+ * POST /api/opal/generate-coi-members-file
+ * Generate OPAL coi_members.json file from MongoDB (SSOT)
+ * 
+ * This endpoint reads COI definitions from MongoDB and regenerates the static
+ * OPAL file to ensure consistency. MongoDB is the Single Source of Truth.
+ */
+router.post('/generate-coi-members-file', authenticateJWT, requireSuperAdmin, async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const { mongoCoiDefinitionStore } = await import('../models/coi-definition.model');
+    await mongoCoiDefinitionStore.initialize();
+    
+    // Get all COI definitions from MongoDB
+    const cois = await mongoCoiDefinitionStore.findAll();
+    
+    // Build coi_members structure
+    const coiMembers: Record<string, string[]> = {};
+    const coiDetails: Record<string, any> = {};
+    
+    for (const coi of cois) {
+      coiMembers[coi.coiId] = coi.members;
+      coiDetails[coi.coiId] = {
+        name: coi.name,
+        description: coi.description || '',
+        classification_ceiling: coi.coiId.includes('SECRET') || coi.coiId === 'FVEY' ? 'TOP_SECRET' : 'SECRET',
+        membership_type: coi.type === 'program-based' ? 'program' : 'country'
+      };
+    }
+    
+    // Build complete OPAL file structure
+    const opalData = {
+      $schema: './schemas/coi_members.schema.json',
+      _metadata: {
+        version: '1.0.0',
+        lastUpdated: new Date().toISOString(),
+        description: 'OPAL-managed Community of Interest (COI) membership registry for DIVE V3',
+        compliance: ['ACP-240', 'STANAG 4774'],
+        managedBy: 'opal-data-publisher',
+        generatedFrom: 'MongoDB (SSOT)'
+      },
+      coi_members: coiMembers,
+      coi_details: coiDetails
+    };
+    
+    // Write to file
+    const filePath = path.join(process.cwd(), 'data', 'opal', 'coi_members.json');
+    fs.writeFileSync(filePath, JSON.stringify(opalData, null, 2));
+    
+    logger.info('Generated OPAL coi_members.json from MongoDB', {
+      coiCount: cois.length,
+      filePath
+    });
+    
+    res.json({
+      success: true,
+      message: 'OPAL coi_members.json generated from MongoDB',
+      data: {
+        coiCount: cois.length,
+        filePath,
+        timestamp: new Date().toISOString()
+      }
+    });
+  } catch (error) {
+    logger.error('Failed to generate OPAL coi_members.json', {
+      error: error instanceof Error ? error.message : 'Unknown error'
+    });
+    res.status(500).json({
+      error: 'Failed to generate COI members file',
+      message: error instanceof Error ? error.message : 'Unknown error'
+    });
+  }
+});
+
+// ============================================
 // CDC (Change Data Capture) ENDPOINTS
 // ============================================
 

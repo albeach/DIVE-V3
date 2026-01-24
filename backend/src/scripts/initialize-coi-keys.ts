@@ -225,6 +225,33 @@ const COI_DEFINITIONS: ICreateCOIKeyRequest[] = [
         status: 'active',
         color: '#14B8A6', // Teal
         icon: 'Γ'
+    },
+    {
+        coiId: 'TEST-COI',
+        name: 'Test COI',
+        description: 'Test community of interest for development and testing purposes.',
+        memberCountries: ['USA', 'GBR', 'CAN'],
+        status: 'active',
+        color: '#6B7280', // Gray
+        icon: '🧪'
+    },
+    {
+        coiId: 'NEW-COI',
+        name: 'New COI',
+        description: 'Newly established community of interest.',
+        memberCountries: ['USA'],
+        status: 'active',
+        color: '#84CC16', // Lime
+        icon: '🆕'
+    },
+    {
+        coiId: 'PACIFIC-ALLIANCE',
+        name: 'Pacific Alliance',
+        description: 'Pacific regional security partnership between USA, Japan, Australia, and South Korea.',
+        memberCountries: ['USA', 'JPN', 'AUS', 'KOR'],
+        status: 'active',
+        color: '#06B6D4', // Cyan
+        icon: '🌊'
     }
 ];
 
