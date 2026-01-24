@@ -213,7 +213,7 @@ services:
       KC_HTTPS_CLIENT_AUTH: request
       # Trust mkcert root CA for federation with spoke Keycloaks
       KC_TRUSTSTORE_PATHS: /opt/keycloak/certs/mkcert-rootCA.pem
-      KC_LOG_LEVEL: info
+      KC_LOG_LEVEL: "info,org.keycloak.events:debug"
       KC_METRICS_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
       KC_FEATURES: scripts
@@ -233,6 +233,11 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-DiveAdminSecure2025!}
       TEST_USER_PASSWORD: ${TEST_USER_PASSWORD:-DiveTestSecure2025!}
       INSTANCE_CODE: ${INSTANCE:-USA}
+      # OpenTelemetry integration (Keycloak 26.5.2)
+      OTEL_TRACES_EXPORTER: "otlp"
+      OTEL_METRICS_EXPORTER: "otlp"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
+      OTEL_SERVICE_NAME: "keycloak-${INSTANCE_CODE:-usa}"
     ports:
       - "127.0.0.1:${KEYCLOAK_HTTP_PORT:-8080}:8080"
       - "127.0.0.1:${KEYCLOAK_HTTPS_PORT:-8443}:8443"
@@ -424,6 +429,31 @@ services:
       start_period: 60s
     networks:
       - hub-internal
+
+  # ---------------------------------------------------------------------------
+  # OpenTelemetry Collector - Metrics and Tracing
+  # ---------------------------------------------------------------------------
+  otel-collector:
+    image: otel/opentelemetry-collector:latest
+    container_name: ${COMPOSE_PROJECT_NAME}-otel-collector
+    restart: unless-stopped
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    ports:
+      - "127.0.0.1:4317:4317"  # OTLP gRPC
+      - "127.0.0.1:4318:4318"  # OTLP HTTP
+      - "127.0.0.1:8889:8889"  # Prometheus exporter (for Grafana)
+    volumes:
+      - ./monitoring/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
+    networks:
+      - hub-internal
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:13133/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    depends_on:
+      - keycloak
+      - backend
 
   # ---------------------------------------------------------------------------
   # KAS - Key Access Service (Stretch Goal)

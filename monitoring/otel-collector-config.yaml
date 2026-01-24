@@ -65,7 +65,7 @@ exporters:
       environment: "development"
   
   # Export to console for debugging (disable in production)
-  logging:
+  debug:
     verbosity: detailed
     sampling_initial: 5
     sampling_thereafter: 200
@@ -82,18 +82,17 @@ service:
     traces:
       receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [logging]
-      # exporters: [logging, otlp/jaeger]  # Uncomment to enable Jaeger
+      exporters: [debug]
+      # exporters: [debug, otlp/jaeger]  # Uncomment to enable Jaeger
     
     # Metrics pipeline
     metrics:
       receivers: [otlp, prometheus]
       processors: [memory_limiter, batch]
-      exporters: [prometheus, logging]
+      exporters: [prometheus, debug]
   
   telemetry:
     logs:
       level: info
     metrics:
       level: detailed
-      address: 0.0.0.0:8888
