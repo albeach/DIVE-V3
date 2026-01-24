@@ -37,8 +37,8 @@
 # - CRITICAL: dive-shared required for Hub federation and OPAL policy sync
 # - Fixes "getaddrinfo ENOTFOUND hub.dive25.com" errors
 #
-# KEYCLOAK 26.5.0 UPGRADE in 2.9.0:
-# - Updated Keycloak to version 26.5.0 with latest security fixes
+# KEYCLOAK 26.5.2 UPGRADE in 2.9.1:
+# - Updated Keycloak to version 26.5.2 with latest security fixes
 # - Replaced deprecated KEYCLOAK_ADMIN/KEYCLOAK_ADMIN_PASSWORD with KC_ADMIN/KC_ADMIN_PASSWORD
 # - Ensures compatibility with latest Keycloak configuration standards
 # =============================================================================
@@ -98,7 +98,7 @@ services:
   # ==========================================================================
 
   postgres-{{INSTANCE_CODE_LOWER}}:
-    image: postgres:15-alpine
+    image: postgres:18.1-alpine3.23
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-postgres
     environment:
       POSTGRES_USER: keycloak

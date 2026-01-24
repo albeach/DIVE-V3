@@ -40,7 +40,7 @@
         "test:performance:auth": "playwright test tests/e2e/auth-flows.test.ts --grep 'performance'"
     },
     "dependencies": {
-        "@auth/drizzle-adapter": "^1.10.0",
+        "@auth/drizzle-adapter": "^1.11.1",
         "@headlessui/react": "^2.2.9",
         "@heroicons/react": "^2.2.0",
         "@hookform/resolvers": "^5.2.2",
@@ -55,7 +55,7 @@
         "clsx": "^2.1.1",
         "cmdk": "^1.1.1",
         "date-fns": "^3.6.0",
-        "drizzle-orm": "^0.33.0",
+        "drizzle-orm": "^0.45.1",
         "framer-motion": "^11.18.2",
         "fuse.js": "^7.1.0",
         "jwt-decode": "^4.0.0",

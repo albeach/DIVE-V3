@@ -151,7 +151,7 @@
 
 # Keycloak Version - Used by Dockerfile, docker-compose, and Terraform
 # Changelog: https://www.keycloak.org/docs/latest/release_notes/index.html
-export KEYCLOAK_VERSION="26.5.0"
+export KEYCLOAK_VERSION="26.5.2"
 export KEYCLOAK_IMAGE="quay.io/keycloak/keycloak:${KEYCLOAK_VERSION}"
 
 # Node.js Version - Used by frontend/backend Dockerfiles
