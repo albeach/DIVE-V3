@@ -1870,6 +1870,69 @@ async function seedInstance(
         const db = client.db(mongoConnection.database);
         const collection = db.collection('resources');
 
+        // ============================================
+        // PRE-FLIGHT VALIDATION (ZTDF REQUIREMENTS)
+        // ============================================
+        console.log('🔍 Pre-flight validation: Checking ZTDF requirements...\n');
+        
+        // Validate COI definitions exist
+        const coiCollection = db.collection('coi_definitions');
+        const coiCount = await coiCollection.countDocuments();
+        const expectedCoiCount = 22; // Updated from 19 to 22 (2026-01-24)
+        
+        if (coiCount < expectedCoiCount) {
+            throw new Error(
+                `ZTDF validation failed: Insufficient COI definitions in MongoDB.\n` +
+                `Found: ${coiCount}, Expected: ${expectedCoiCount}\n` +
+                `Solution: Run initialize-coi-keys.ts to populate all ${expectedCoiCount} COIs\n` +
+                `Command: docker exec dive-hub-backend npx tsx src/scripts/initialize-coi-keys.ts`
+            );
+        }
+        console.log(`   ✅ COI Definitions: ${coiCount}/${expectedCoiCount}\n`);
+        
+        // Validate all template COIs exist in MongoDB
+        const allTemplateCOIs = new Set<string>();
+        COI_TEMPLATES.forEach(t => t.coi.forEach(c => allTemplateCOIs.add(c)));
+        
+        const existingCOIs = new Set((await coiCollection.find({}).toArray()).map(c => c.coiId));
+        const missingCOIs = Array.from(allTemplateCOIs).filter(c => !existingCOIs.has(c));
+        
+        if (missingCOIs.length > 0) {
+            throw new Error(
+                `ZTDF validation failed: Template COIs not found in MongoDB: ${missingCOIs.join(', ')}\n` +
+                `Solution: Update initialize-coi-keys.ts to include these COIs or remove them from templates`
+            );
+        }
+        console.log(`   ✅ All ${allTemplateCOIs.size} template COIs validated\n`);
+        
+        // Validate KAS servers are available and approved
+        if (kasServers.length === 0) {
+            throw new Error(
+                `ZTDF validation failed: No KAS servers available for instance ${instanceCode}\n` +
+                `Solution: Register and approve KAS server for this instance\n` +
+                `Command: curl -X POST https://localhost:4000/api/kas/register -d '{"kasId":"${instanceCode.toLowerCase()}-kas",...}'`
+            );
+        }
+        
+        // Check KAS approval status
+        const kasCollection = db.collection('kas_registry');
+        const approvedKasCount = await kasCollection.countDocuments({ 
+            status: 'approved',
+            enabled: true 
+        });
+        
+        if (approvedKasCount === 0) {
+            throw new Error(
+                `ZTDF validation failed: No approved KAS servers found\n` +
+                `Available KAS: ${kasServers.map(k => k.kasId).join(', ')}\n` +
+                `Solution: Approve KAS servers in MongoDB (status='approved') or enable auto-approval in dev mode`
+            );
+        }
+        console.log(`   ✅ KAS Servers: ${approvedKasCount} approved, ${kasServers.length} total\n`);
+        
+        console.log('✅ Pre-flight validation passed - ZTDF encryption requirements met\n');
+        console.log('🔐 ACP-240 Compliance: 100% ZTDF encryption enforced (no plaintext fallback)\n');
+
         // Create indexes
         await collection.createIndex({ resourceId: 1 }, { unique: true });
         await collection.createIndex({ 'ztdf.policy.securityLabel.classification': 1 });
