@@ -395,4 +395,83 @@ export async function testMongoDBConnection(
   }
 }
 
+/**
+ * Retry a MongoDB operation that may fail due to replica set initialization
+ * 
+ * This wraps any MongoDB operation (not just connection) with retry logic
+ * for "not primary" errors. Useful for index creation, writes, etc.
+ * 
+ * @param operation Async function to retry
+ * @param retryConfig Retry configuration
+ * @returns Result of the operation
+ * 
+ * @example
+ * ```typescript
+ * await retryMongoOperation(async () => {
+ *   await collection.createIndex({ field: 1 });
+ * });
+ * ```
+ */
+export async function retryMongoOperation<T>(
+  operation: () => Promise<T>,
+  retryConfig: IMongoDBRetryConfig = {}
+): Promise<T> {
+  const config: Required<IMongoDBRetryConfig> = {
+    ...DEFAULT_RETRY_CONFIG,
+    ...retryConfig
+  };
+  
+  let lastError: Error | null = null;
+  
+  for (let attempt = 1; attempt <= config.maxRetries; attempt++) {
+    try {
+      return await operation();
+      
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error('Unknown error');
+      
+      // Check if error is retryable
+      const retryable = isRetryableError(error);
+      const errorMsg = lastError.message;
+      
+      if (!retryable) {
+        // Fatal error - don't retry
+        logger.error('MongoDB operation failed with non-retryable error', {
+          attempt,
+          error: errorMsg,
+          retryable: false
+        });
+        throw lastError;
+      }
+      
+      // Calculate retry delay
+      const delayMs = calculateRetryDelay(attempt, config);
+      
+      // Log retry attempt
+      if (attempt < config.maxRetries) {
+        logger.debug('MongoDB operation failed, retrying...', {
+          attempt,
+          maxRetries: config.maxRetries,
+          error: errorMsg,
+          nextRetryIn: `${delayMs}ms`
+        });
+        
+        await sleep(delayMs);
+      } else {
+        // Final attempt failed
+        logger.error('MongoDB operation failed after all retries', {
+          totalAttempts: config.maxRetries,
+          lastError: errorMsg
+        });
+      }
+    }
+  }
+  
+  // All retries exhausted
+  throw new Error(
+    `MongoDB operation failed after ${config.maxRetries} attempts. ` +
+    `Last error: ${lastError?.message || 'unknown'}`
+  );
+}
+
 export default connectToMongoDBWithRetry;

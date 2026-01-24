@@ -12,7 +12,7 @@
 
 import { Collection, Db, MongoClient } from 'mongodb';
 import { logger } from '../utils/logger';
-import { connectToMongoDBWithRetry } from '../utils/mongodb-connection';
+import { connectToMongoDBWithRetry, retryMongoOperation } from '../utils/mongodb-connection';
 
 const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
 const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
@@ -91,16 +91,18 @@ export class MongoKasRegistryStore {
       this.kasCollection = this.db.collection<IKasInstance>(COLLECTION_KAS_INSTANCES);
       this.agreementsCollection = this.db.collection<IKasFederationAgreement>(COLLECTION_KAS_AGREEMENTS);
 
-      // Create indexes
-      await this.kasCollection.createIndex({ kasId: 1 }, { unique: true });
-      await this.kasCollection.createIndex({ kasUrl: 1 }, { unique: true });
-      await this.kasCollection.createIndex({ countryCode: 1 }); // ISO 3166-1 alpha-3 - SSOT
-      await this.kasCollection.createIndex({ organization: 1 });
-      await this.kasCollection.createIndex({ status: 1 });
-      await this.kasCollection.createIndex({ 'authConfig.jwtIssuer': 1 }, { sparse: true });
-      await this.kasCollection.createIndex({ supportedCountries: 1 });
+      // Create indexes with retry logic for replica set initialization
+      await retryMongoOperation(async () => {
+        await this.kasCollection!.createIndex({ kasId: 1 }, { unique: true });
+        await this.kasCollection!.createIndex({ kasUrl: 1 }, { unique: true });
+        await this.kasCollection!.createIndex({ countryCode: 1 }); // ISO 3166-1 alpha-3 - SSOT
+        await this.kasCollection!.createIndex({ organization: 1 });
+        await this.kasCollection!.createIndex({ status: 1 });
+        await this.kasCollection!.createIndex({ 'authConfig.jwtIssuer': 1 }, { sparse: true });
+        await this.kasCollection!.createIndex({ supportedCountries: 1 });
 
-      await this.agreementsCollection.createIndex({ countryCode: 1 }, { unique: true });
+        await this.agreementsCollection!.createIndex({ countryCode: 1 }, { unique: true });
+      });
 
       this.initialized = true;
       logger.info('MongoDB KAS Registry Store initialized', {
