@@ -256,14 +256,19 @@ class OPALMongoDBSyncService {
       });
 
       this.changeStreams.push(changeStream);
-      logger.info('Started change stream watcher', { collectionName });
+      logger.info('Started change stream watcher', { 
+        collectionName,
+        replicaSet: 'rs0',
+        cdcEnabled: true
+      });
     } catch (error) {
-      // Change streams require replica set - log warning for standalone MongoDB
-      logger.warn('Could not start change stream watcher', {
+      // Change streams require replica set - CRITICAL ERROR since we now require replica set
+      logger.error('CRITICAL: Could not start change stream watcher', {
         collection: collectionName,
         error: error instanceof Error ? error.message : 'Unknown error',
-        hint: 'Change streams require MongoDB replica set. Using polling fallback.'
+        hint: 'MongoDB MUST be configured as replica set (rs0). Check docker-compose configuration.'
       });
+      throw error; // Fail fast - change streams are required for OPAL CDC
     }
   }
 

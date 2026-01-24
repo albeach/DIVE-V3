@@ -118,6 +118,15 @@ services:
   mongodb-{{INSTANCE_CODE_LOWER}}:
     image: mongo:8.0.17
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-mongodb
+    # Use official docker-entrypoint with custom command for replica set + keyFile
+    # KeyFile permissions fixed via init script before MongoDB starts
+    command: >
+      bash -c "
+        cp /data/keyfile/mongo-keyfile /tmp/mongo-keyfile &&
+        chmod 600 /tmp/mongo-keyfile &&
+        chown 999:999 /tmp/mongo-keyfile &&
+        exec docker-entrypoint.sh mongod --replSet rs0 --keyFile /tmp/mongo-keyfile
+      "
     environment:
       MONGO_INITDB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
       MONGO_INITDB_ROOT_USERNAME: admin
@@ -125,6 +134,10 @@ services:
     volumes:
       - mongodb_data:/data/db
       - mongodb_config:/data/configdb  # Prevent anonymous volume creation
+      # Mount replica set keyFile (generated during spoke deployment)
+      - ./mongo-keyfile:/data/keyfile/mongo-keyfile:ro
+      # Mount replica set initialization script (runs via docker-entrypoint-initdb.d)
+      - ../../scripts/mongo-init-replicaset.sh:/docker-entrypoint-initdb.d/01-init-replicaset.sh:ro
     networks:
       - dive-internal
     healthcheck:

@@ -140,6 +140,11 @@ temp-ref/
 secrets/
 .secrets/
 
+# MongoDB Replica Set KeyFiles (CRITICAL - Never commit)
+mongo-keyfile
+**/mongo-keyfile
+instances/*/mongo-keyfile
+
 # Certificate and key files (all variations)
 *.pem
 *.key
