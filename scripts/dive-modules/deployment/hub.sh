@@ -534,18 +534,20 @@ hub_logs() {
 
 ##
 # Seed hub database with test data
+# SSOT: Delegates to hub/seed.sh module for comprehensive seeding
 ##
 hub_seed() {
-    local count="${1:-100}"
-
-    log_info "Seeding hub database with $count test resources..."
-
-    # Run backend seeder
-    docker exec dive-hub-backend npm run seed -- --count "$count" 2>/dev/null || {
-        log_warn "Seeder not available - using direct insert"
-    }
-
-    log_success "Hub seeding complete"
+    local count="${1:-5000}"
+    
+    # Load comprehensive hub seeding module (SSOT)
+    if [ -f "${MODULES_DIR}/hub/seed.sh" ]; then
+        source "${MODULES_DIR}/hub/seed.sh"
+        # Call the comprehensive hub_seed function from the module
+        hub_seed "$count"
+    else
+        log_error "Hub seeding module not found"
+        return 1
+    fi
 }
 
 ##
