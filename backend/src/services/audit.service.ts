@@ -257,6 +257,170 @@ class AuditService {
   }
 
   /**
+   * Initialize PostgreSQL connection pool for audit persistence
+   */
+  private initializePostgreSQL(): void {
+    const dbUrl = process.env.DATABASE_URL;
+    if (!dbUrl) {
+      logger.warn('DATABASE_URL not configured - PostgreSQL audit persistence disabled');
+      return;
+    }
+
+    try {
+      this.pgPool = new Pool({
+        connectionString: dbUrl,
+        max: 10,
+        idleTimeoutMillis: 30000,
+        connectionTimeoutMillis: 5000,
+      });
+
+      logger.info('Audit service PostgreSQL connection pool initialized');
+    } catch (error) {
+      logger.error('Failed to initialize audit PostgreSQL pool', { error });
+    }
+  }
+
+  /**
+   * Persist audit entry to PostgreSQL
+   * Routes to appropriate table based on event type
+   */
+  private async persistToDatabase(entry: IAuditEntry): Promise<void> {
+    if (!this.pgPool) return;
+
+    try {
+      // Route to appropriate table based on event type
+      if (entry.eventType === 'ACCESS_GRANT' || entry.eventType === 'ACCESS_DENY') {
+        await this.persistAuthorizationLog(entry);
+      } else if (entry.eventType === 'FEDERATION_AUTH') {
+        await this.persistFederationLog(entry);
+      } else {
+        await this.persistAuditLog(entry);
+      }
+    } catch (error) {
+      // Non-blocking: log but don't throw
+      logger.warn('PostgreSQL audit persistence failed', {
+        eventType: entry.eventType,
+        error: error instanceof Error ? error.message : 'unknown'
+      });
+    }
+  }
+
+  /**
+   * Persist to authorization_log table
+   */
+  private async persistAuthorizationLog(entry: IAuditEntry): Promise<void> {
+    if (!this.pgPool) return;
+
+    const query = `
+      INSERT INTO authorization_log (
+        timestamp, request_id, user_id, clearance, country_code,
+        coi_memberships, resource_id, classification, releasability_to,
+        resource_cois, decision, reason, opa_decision, latency_ms,
+        instance_code, source_ip, user_agent
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17
+      )
+    `;
+
+    const values = [
+      entry.timestamp,
+      entry.context.requestId || entry.context.correlationId,
+      entry.subject.uniqueID,
+      entry.subject.clearance,
+      entry.subject.countryOfAffiliation,
+      entry.subject.acpCOI || [],
+      entry.resource.resourceId,
+      entry.resource.classification,
+      entry.resource.releasabilityTo || [],
+      entry.resource.COI || [],
+      entry.decision.allow,
+      entry.decision.reason,
+      JSON.stringify(entry.decision.evaluationDetails || {}),
+      entry.latencyMs,
+      process.env.INSTANCE_CODE || 'USA',
+      entry.context.sourceIP,
+      null // user_agent (not tracked in current implementation)
+    ];
+
+    await this.pgPool.query(query, values);
+  }
+
+  /**
+   * Persist to federation_log table
+   */
+  private async persistFederationLog(entry: IAuditEntry): Promise<void> {
+    if (!this.pgPool) return;
+
+    const query = `
+      INSERT INTO federation_log (
+        timestamp, source_realm, target_realm, user_id, event_type,
+        success, error_message, metadata, latency_ms, source_ip
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10
+      )
+    `;
+
+    const sourceRealm = process.env.INSTANCE_CODE || 'USA';
+    const targetRealm = entry.context.federatedFrom || 'UNKNOWN';
+
+    const values = [
+      entry.timestamp,
+      sourceRealm,
+      targetRealm,
+      entry.subject.uniqueID,
+      'FEDERATION_LOGIN',
+      entry.decision.allow,
+      entry.decision.allow ? null : entry.decision.reason,
+      JSON.stringify({
+        issuer: entry.subject.issuer,
+        acr: entry.context.acr,
+        amr: entry.context.amr
+      }),
+      entry.latencyMs,
+      entry.context.sourceIP
+    ];
+
+    await this.pgPool.query(query, values);
+  }
+
+  /**
+   * Persist to general audit_log table
+   */
+  private async persistAuditLog(entry: IAuditEntry): Promise<void> {
+    if (!this.pgPool) return;
+
+    const query = `
+      INSERT INTO audit_log (
+        timestamp, event_type, user_id, session_id, resource_id,
+        action, decision, reason, metadata, instance_code, source_ip, request_id
+      ) VALUES (
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
+      )
+    `;
+
+    const values = [
+      entry.timestamp,
+      entry.eventType,
+      entry.subject.uniqueID,
+      null, // session_id (not tracked in current implementation)
+      entry.resource.resourceId,
+      entry.eventType.toLowerCase(),
+      entry.decision.allow ? 'ALLOW' : 'DENY',
+      entry.decision.reason,
+      JSON.stringify({
+        subject: entry.subject,
+        resource: entry.resource,
+        context: entry.context
+      }),
+      process.env.INSTANCE_CODE || 'USA',
+      entry.context.sourceIP,
+      entry.context.requestId || entry.context.correlationId
+    ];
+
+    await this.pgPool.query(query, values);
+  }
+
+  /**
    * Generate correlation ID if not provided
    */
   private generateCorrelationId(): string {
