@@ -24,7 +24,7 @@ spec:
       restartPolicy: OnFailure
       initContainers:
         - name: wait-for-db
-          image: postgres:15-alpine
+          image: postgres:18.1-alpine3.23
           command:
             - sh
             - -c
