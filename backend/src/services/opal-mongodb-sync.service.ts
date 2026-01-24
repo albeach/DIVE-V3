@@ -22,6 +22,7 @@ import { ChangeStream, ChangeStreamDocument, MongoClient, Db } from 'mongodb';
 import { opalClient, IOPALPublishResult } from './opal-client';
 import { opalDataService, ITrustedIssuer } from './opal-data.service';
 import { logger } from '../utils/logger';
+import { connectToMongoDBWithRetry, verifyReplicaSetStatus } from '../utils/mongodb-connection';
 
 // ============================================
 // TYPES
@@ -140,11 +141,20 @@ class OPALMongoDBSyncService {
         database: MONGODB_DATABASE
       });
 
-      this.client = new MongoClient(MONGODB_URL);
-      await this.client.connect();
+      // Use production-grade retry logic for replica set initialization
+      this.client = await connectToMongoDBWithRetry(MONGODB_URL);
       this.db = this.client.db(MONGODB_DATABASE);
 
-      logger.info('MongoDB connection established for OPAL sync');
+      // Verify replica set status for change streams
+      const status = await verifyReplicaSetStatus(this.client);
+      if (status.isReplicaSet && !status.isPrimary) {
+        logger.warn('MongoDB is replica set but not PRIMARY - change streams may not work yet');
+      }
+
+      logger.info('MongoDB connection established for OPAL sync', {
+        isReplicaSet: status.isReplicaSet,
+        isPrimary: status.isPrimary
+      });
       return true;
     } catch (error) {
       logger.error('Failed to connect to MongoDB for OPAL sync', {

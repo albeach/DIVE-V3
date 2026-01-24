@@ -12,6 +12,7 @@
 
 import { Collection, Db, MongoClient, ObjectId } from 'mongodb';
 import { logger } from '../utils/logger';
+import { connectToMongoDBWithRetry } from '../utils/mongodb-connection';
 import { IPolicyVersion, ISpokeSync } from '../services/policy-sync.service';
 
 const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
@@ -74,8 +75,8 @@ export class PolicyVersionStore {
     if (this.initialized) return;
 
     try {
-      const client = new MongoClient(MONGODB_URL);
-      await client.connect();
+      // Use production-grade retry logic for replica set initialization
+      const client = await connectToMongoDBWithRetry(MONGODB_URL);
       this.db = client.db(DB_NAME);
 
       this.versionsCollection = this.db.collection<IPolicyVersionDocument>(COLLECTION_VERSIONS);

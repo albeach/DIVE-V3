@@ -9,6 +9,7 @@
 import { Collection, Db, MongoClient } from 'mongodb';
 import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
 import { logger } from '../utils/logger';
+import { connectToMongoDBWithRetry } from '../utils/mongodb-connection';
 
 // ============================================
 // Interface
@@ -68,8 +69,8 @@ async function getMongoClient(): Promise<MongoClient> {
 
   try {
     const MONGODB_URL = getMongoDBUrl();
-    const client = new MongoClient(MONGODB_URL);
-    await client.connect();
+    // Use production-grade retry logic for replica set initialization
+    const client = await connectToMongoDBWithRetry(MONGODB_URL);
     cachedClient = client;
     logger.debug('Federation agreement MongoDB connected');
     return client;

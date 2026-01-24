@@ -23,6 +23,7 @@
 
 import { Collection, Db, MongoClient } from 'mongodb';
 import { logger } from '../utils/logger';
+import { connectToMongoDBWithRetry } from '../utils/mongodb-connection';
 
 const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
 const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
@@ -66,8 +67,8 @@ export class MongoCoiDefinitionStore {
     if (this.initialized) return;
 
     try {
-      this.client = new MongoClient(MONGODB_URL);
-      await this.client.connect();
+      // Use production-grade retry logic for replica set initialization
+      this.client = await connectToMongoDBWithRetry(MONGODB_URL);
       this.db = this.client.db(DB_NAME);
 
       this.collection = this.db.collection<ICoiDefinition>(COLLECTION_COI_DEFINITIONS);
