@@ -23,7 +23,7 @@
 
 import { Collection, Db, MongoClient } from 'mongodb';
 import { logger } from '../utils/logger';
-import { connectToMongoDBWithRetry } from '../utils/mongodb-connection';
+import { connectToMongoDBWithRetry, retryMongoOperation } from '../utils/mongodb-connection';
 
 const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
 const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
@@ -73,12 +73,14 @@ export class MongoCoiDefinitionStore {
 
       this.collection = this.db.collection<ICoiDefinition>(COLLECTION_COI_DEFINITIONS);
 
-      // Create indexes
-      await this.collection.createIndex({ coiId: 1 }, { unique: true });
-      await this.collection.createIndex({ type: 1 });
-      await this.collection.createIndex({ members: 1 });
-      await this.collection.createIndex({ enabled: 1 });
-      await this.collection.createIndex({ autoUpdate: 1 });
+      // Create indexes with retry logic for replica set initialization
+      await retryMongoOperation(async () => {
+        await this.collection!.createIndex({ coiId: 1 }, { unique: true });
+        await this.collection!.createIndex({ type: 1 });
+        await this.collection!.createIndex({ members: 1 });
+        await this.collection!.createIndex({ enabled: 1 });
+        await this.collection!.createIndex({ autoUpdate: 1 });
+      });
 
       this.initialized = true;
       logger.info('MongoDB COI Definitions Store initialized', {
