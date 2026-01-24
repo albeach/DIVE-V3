@@ -241,15 +241,18 @@ async function main() {
         console.log('✅ Connected to MongoDB\n');
 
         const db = client.db(DB_NAME);
-        const collection = db.collection('coi_keys');
+        
+        // SSOT: Use coi_definitions collection (matches coi-definition.model.ts)
+        // The coi_keys collection is legacy and no longer used
+        const collection = db.collection('coi_definitions');
 
         // Drop existing collection (fresh start)
         try {
             await collection.drop();
-            console.log('🗑️  Dropped existing coi_keys collection\n');
+            console.log('🗑️  Dropped existing coi_definitions collection\n');
         } catch (error) {
             // Collection might not exist, that's okay
-            console.log('ℹ️  No existing coi_keys collection to drop\n');
+            console.log('ℹ️  No existing coi_definitions collection to drop\n');
         }
 
         // Create indexes
@@ -258,15 +261,23 @@ async function main() {
         await collection.createIndex({ memberCountries: 1 });
         console.log('✅ Created indexes\n');
 
-        // Insert all COI definitions
+        // Insert all COI definitions with proper schema for coi_definitions collection
         const now = new Date();
         const documents = COI_DEFINITIONS.map(def => ({
-            ...def,
-            resourceCount: 0, // Will be computed by service
-            algorithm: 'AES-256-GCM' as const,
-            keyVersion: 1,
-            createdAt: now,
-            updatedAt: now
+            coiId: def.coiId,
+            name: def.name,
+            type: 'coalition' as const, // Most COIs are coalitions
+            members: def.memberCountries,
+            description: def.description,
+            mutable: true, // Allow updates via API
+            autoUpdate: false, // Manual management
+            priority: def.mutuallyExclusiveWith?.includes('US-ONLY') ? 90 : 70, // Higher priority for exclusive COIs
+            metadata: {
+                createdAt: now,
+                updatedAt: now,
+                source: 'migration' as const
+            },
+            enabled: true
         }));
 
         const result = await collection.insertMany(documents);
