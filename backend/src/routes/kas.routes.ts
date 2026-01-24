@@ -256,6 +256,10 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
             return;
         }
 
+        // SSOT: Auto-approve KAS in development mode for seamless ZTDF encryption
+        // Production requires manual approval for security
+        const autoApprove = process.env.NODE_ENV !== 'production' || process.env.KAS_AUTO_APPROVE === 'true';
+        
         // Create registration with ISO 3166-1 alpha-3 countryCode as SSOT
         const kasInstance: Omit<IKasInstance, 'status'> = {
             kasId,
@@ -271,7 +275,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
             // Default supportedCountries to [countryCode] if not provided
             supportedCountries: supportedCountries || [countryCode],
             supportedCOIs: supportedCOIs || ['NATO'],
-            enabled: false, // Disabled until approved
+            enabled: autoApprove, // Auto-enable in development
             metadata: {
                 version: '1.0.0',
                 capabilities: capabilities || ['acp240', 'ztdf'],
@@ -280,12 +284,19 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
         };
 
         const registered = await mongoKasRegistryStore.register(kasInstance);
+        
+        // Auto-approve in development mode
+        if (autoApprove && registered.status === 'pending') {
+            await mongoKasRegistryStore.approve(kasId, 'auto-approved-dev');
+            logger.info('KAS auto-approved (development mode)', { kasId });
+        }
 
         logger.info('KAS registration submitted', {
             kasId,
             organization,
             kasUrl,
-            status: 'pending'
+            status: autoApprove ? 'approved' : 'pending',
+            autoApproved: autoApprove
         });
 
         res.status(201).json({

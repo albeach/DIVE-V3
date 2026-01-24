@@ -104,6 +104,11 @@ export class MongoCoiDefinitionStore {
   /**
    * Seed baseline COI definitions (on clean slate only)
    * 
+   * SSOT NOTE (2026-01-24): This function is deprecated in favor of initialize-coi-keys.ts
+   * which provides all 19 COIs (not just 7 baseline). However, we keep it for safety
+   * to ensure spoke databases are never empty. The initialize-coi-keys.ts script
+   * should be called explicitly during deployment for full COI set.
+   * 
    * Best Practice: Minimal baseline data, auto-updated from federation
    */
   private async seedBaselineCOIs(): Promise<void> {
@@ -113,6 +118,14 @@ export class MongoCoiDefinitionStore {
         logger.debug('COI definitions already seeded', { count });
         return;
       }
+      
+      // SSOT WARNING: This seeds only 7 baseline COIs
+      // For production, initialize-coi-keys.ts should be called to get all 19 COIs
+      logger.warn('Seeding only 7 baseline COIs - initialize-coi-keys.ts should be called for full set', {
+        baseline: 7,
+        full: 19,
+        missing: ['CAN-US', 'GBR-US', 'FRA-US', 'DEU-US', 'AUKUS', 'QUAD', 'EU-RESTRICTED', 'NORTHCOM', 'EUCOM', 'PACOM', 'CENTCOM', 'SOCOM']
+      });
 
       const baselineCOIs: ICoiDefinition[] = [
         // US-Only (never changes)
