@@ -85,8 +85,8 @@ export class MongoCoiDefinitionStore {
         collection: COLLECTION_COI_DEFINITIONS
       });
 
-      // Seed baseline COI definitions if empty
-      await this.seedBaselineCOIs();
+      // REMOVED: seedBaselineCOIs() - deployments must call initialize-coi-keys.ts explicitly
+      // This ensures SSOT (Single Source of Truth) for COI definitions
     } catch (error) {
       logger.error('Failed to initialize MongoDB COI Definitions Store', {
         error: error instanceof Error ? error.message : 'Unknown error'
@@ -101,162 +101,9 @@ export class MongoCoiDefinitionStore {
     }
   }
 
-  /**
-   * Seed baseline COI definitions (on clean slate only)
-   * 
-   * SSOT NOTE (2026-01-24): This function is deprecated in favor of initialize-coi-keys.ts
-   * which provides all 19 COIs (not just 7 baseline). However, we keep it for safety
-   * to ensure spoke databases are never empty. The initialize-coi-keys.ts script
-   * should be called explicitly during deployment for full COI set.
-   * 
-   * Best Practice: Minimal baseline data, auto-updated from federation
-   */
-  private async seedBaselineCOIs(): Promise<void> {
-    try {
-      const count = await this.collection!.countDocuments();
-      if (count > 0) {
-        logger.debug('COI definitions already seeded', { count });
-        return;
-      }
-      
-      // SSOT WARNING: This seeds only 7 baseline COIs
-      // For production, initialize-coi-keys.ts should be called to get all 19 COIs
-      logger.warn('Seeding only 7 baseline COIs - initialize-coi-keys.ts should be called for full set', {
-        baseline: 7,
-        full: 19,
-        missing: ['CAN-US', 'GBR-US', 'FRA-US', 'DEU-US', 'AUKUS', 'QUAD', 'EU-RESTRICTED', 'NORTHCOM', 'EUCOM', 'PACOM', 'CENTCOM', 'SOCOM']
-      });
-
-      const baselineCOIs: ICoiDefinition[] = [
-        // US-Only (never changes)
-        {
-          coiId: 'US-ONLY',
-          name: 'US Only',
-          type: 'country-based',
-          members: ['USA'],
-          description: 'United States only - no foreign release',
-          mutable: false,
-          autoUpdate: false,
-          priority: 100,
-          metadata: {
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            source: 'migration'
-          },
-          enabled: true
-        },
-        // Five Eyes (static members)
-        {
-          coiId: 'FVEY',
-          name: 'Five Eyes',
-          type: 'coalition',
-          members: ['USA', 'GBR', 'CAN', 'AUS', 'NZL'],
-          description: 'Five Eyes intelligence sharing (US, UK, Canada, Australia, New Zealand)',
-          mutable: false,
-          autoUpdate: false,
-          priority: 90,
-          metadata: {
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            source: 'migration'
-          },
-          enabled: true
-        },
-        // NATO (auto-updated from active spokes)
-        {
-          coiId: 'NATO',
-          name: 'NATO',
-          type: 'coalition',
-          members: [], // Will be auto-populated from active NATO-member spokes
-          description: 'North Atlantic Treaty Organization - auto-updated from active federation',
-          mutable: true,
-          autoUpdate: true, // Auto-update when NATO spokes join/leave
-          priority: 80,
-          metadata: {
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            source: 'migration'
-          },
-          enabled: true
-        },
-        // NATO-COSMIC (subset of NATO)
-        {
-          coiId: 'NATO-COSMIC',
-          name: 'NATO COSMIC',
-          type: 'coalition',
-          members: [], // Auto-populated from NATO members
-          description: 'NATO COSMIC TOP SECRET - auto-updated from NATO members',
-          mutable: true,
-          autoUpdate: true,
-          priority: 85,
-          metadata: {
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            source: 'migration'
-          },
-          enabled: true
-        },
-        // Program-based COIs (members assigned per-user in coi_keys)
-        {
-          coiId: 'Alpha',
-          name: 'Project Alpha',
-          type: 'program-based',
-          members: [], // Per-user assignment via coi_keys collection
-          description: 'Program-based COI - members assigned individually',
-          mutable: true,
-          autoUpdate: false,
-          priority: 50,
-          metadata: {
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            source: 'migration'
-          },
-          enabled: true
-        },
-        {
-          coiId: 'Beta',
-          name: 'Project Beta',
-          type: 'program-based',
-          members: [],
-          description: 'Program-based COI - members assigned individually',
-          mutable: true,
-          autoUpdate: false,
-          priority: 50,
-          metadata: {
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            source: 'migration'
-          },
-          enabled: true
-        },
-        {
-          coiId: 'Gamma',
-          name: 'Project Gamma',
-          type: 'program-based',
-          members: [],
-          description: 'Program-based COI - members assigned individually',
-          mutable: true,
-          autoUpdate: false,
-          priority: 50,
-          metadata: {
-            createdAt: new Date(),
-            updatedAt: new Date(),
-            source: 'migration'
-          },
-          enabled: true
-        }
-      ];
-
-      await this.collection!.insertMany(baselineCOIs);
-      logger.info(`Seeded ${baselineCOIs.length} baseline COI definitions`, {
-        coiIds: baselineCOIs.map(c => c.coiId)
-      });
-    } catch (error) {
-      logger.warn('Failed to seed baseline COI definitions', {
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-    }
-  }
+  // DELETED: seedBaselineCOIs() function removed (2026-01-24)
+  // Deployments MUST call initialize-coi-keys.ts explicitly for full 22-COI set
+  // This enforces SSOT (Single Source of Truth) architecture
 
   // ============================================
   // CRUD OPERATIONS

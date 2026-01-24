@@ -2,13 +2,14 @@
   "$schema": "./schemas/coi_members.schema.json",
   "_metadata": {
     "version": "1.0.0",
-    "lastUpdated": "2026-01-17T02:58:11.877Z",
+    "lastUpdated": "2026-01-24T12:00:00.000Z",
     "description": "OPAL-managed Community of Interest (COI) membership registry for DIVE V3",
     "compliance": [
       "ACP-240",
       "STANAG 4774"
     ],
-    "managedBy": "opal-data-publisher"
+    "managedBy": "opal-data-publisher",
+    "generatedFrom": "MongoDB (SSOT) via initialize-coi-keys.ts"
   },
   "coi_members": {
     "US-ONLY": [
@@ -316,6 +317,24 @@
       "description": "Program-specific COI (membership-based)",
       "classification_ceiling": "TOP_SECRET",
       "membership_type": "program"
+    },
+    "TEST-COI": {
+      "name": "Test COI",
+      "description": "Test community of interest for development and testing",
+      "classification_ceiling": "SECRET",
+      "membership_type": "country"
+    },
+    "NEW-COI": {
+      "name": "New COI",
+      "description": "Newly established community of interest",
+      "classification_ceiling": "SECRET",
+      "membership_type": "country"
+    },
+    "PACIFIC-ALLIANCE": {
+      "name": "Pacific Alliance",
+      "description": "Pacific regional security partnership",
+      "classification_ceiling": "SECRET",
+      "membership_type": "country"
     }
   }
 }
