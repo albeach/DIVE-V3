@@ -92,8 +92,8 @@ terraform/modules/federated-instance/
 5. Test with `terraform plan` (should show moves, not recreations)
 6. Apply and validate
 
-**Estimated Time:** 4-6 hours  
-**Risk:** Low (comprehensive plan exists, can rollback via git)  
+**Estimated Time:** 4-6 hours
+**Risk:** Low (comprehensive plan exists, can rollback via git)
 **Value:** Cleaner module structure, easier to maintain, better traceability
 
 ### Priority 2: Implement Comprehensive Auditing (DOCUMENTED, READY TO IMPLEMENT)
@@ -107,15 +107,15 @@ Update `terraform/modules/federated-instance/` to include:
 ```hcl
 resource "keycloak_realm" "broker" {
   # ... existing config ...
-  
+
   events_enabled    = true
   events_expiration = 7776000  # 90 days (compliance)
-  
+
   events_listeners = [
     "jboss-logging",
     "metrics-listener"  # OpenTelemetry support (KC 26.5.2)
   ]
-  
+
   enabled_event_types = [
     "LOGIN", "LOGIN_ERROR", "LOGOUT", "LOGOUT_ERROR",
     "CODE_TO_TOKEN", "REFRESH_TOKEN",
@@ -123,7 +123,7 @@ resource "keycloak_realm" "broker" {
     "CLIENT_LOGIN", "UPDATE_TOTP", "CREDENTIAL_REGISTER",
     # ... comprehensive list in MODERNIZATION_PROGRESS.md
   ]
-  
+
   admin_events_enabled         = true
   admin_events_details_enabled = true
 }
@@ -215,7 +215,7 @@ OTEL_METRICS_EXPORTER: otlp
 OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4317
 ```
 
-**Estimated Time:** 1-2 days  
+**Estimated Time:** 1-2 days
 **Value:** 90-day audit retention, real-time monitoring, compliance validation
 
 ### Priority 3: Federation Testing & Validation (READY TO TEST)
@@ -272,7 +272,31 @@ docker exec dive-hub-postgres psql -U postgres -d dive_v3_app \
 
 ### Priority 4: COI Definition Expansion (INVESTIGATION NEEDED)
 
-**Question Raised:** User indicated there should be 30+ COIs, not 19.
+**Question Raised:** User indicated there was a  PROBLEM: Country-based COIs (NATO, FVEY, EU-RESTRICTED) were hardcoded in
+coi-validation.service.ts. Required code deployment to update. No auto-update
+when federation changed (spoke joins/leaves).
+
+SOLUTION: MongoDB SSOT for ALL COI types with auto-update from active federation.
+
+Implementation:
+- Created coi-definition.model.ts (MongoDB SSOT)
+  • Collection: coi_definitions
+  • Two COI types: country-based, program-based
+  • Auto-update flag for coalition COIs (NATO, NATO-COSMIC)
+  • Baseline seed on clean slate: US-ONLY, FVEY, NATO, Alpha, Beta, Gamma
+  • Methods: upsert, find, updateMembers, updateNATOFromFederation
+
+- Removed hardcoded COI_MEMBERSHIP from coi-validation.service.ts
+  • Deleted 90+ line static map
+  • Removed export COI_COUNTRY_MEMBERSHIP
+  • Updated getCOIMembershipMapFromDB() to use MongoDB only
+  • FAIL-FAST: No fallback (MongoDB down = error, not stale data)
+
+- Auto-update coalition COIs on federation changes:
+  • approveSpoke() → updateCoiMembershipsForFederation()
+  • suspendSpoke() → remove from NATO COI
+  • revokeSpoke() → remove from NATO COI
+  • unsuspendSpoke() → re-add to NATO COI
 
 **Current State:**
 - MongoDB: 19 COIs in both hub and spoke
@@ -282,23 +306,6 @@ docker exec dive-hub-postgres psql -U postgres -d dive_v3_app \
 **Discrepancy:**
 - OPAL file has 3 additional COIs: TEST-COI, NEW-COI, PACIFIC-ALLIANCE
 - These are not in initialize-coi-keys.ts
-
-**Investigation Needed:**
-1. Is `backend/data/opal/coi_members.json` the true SSOT?
-2. Should all 22 COIs from OPAL file be loaded into MongoDB?
-3. Are there additional bilateral COIs needed (POL-US, EST-US, NOR-US, etc.)?
-4. Should there be one bilateral COI for each of the 32 NATO nations?
-
-**If 32 NATO Bilateral COIs Required:**
-- US-ONLY (1)
-- FVEY (1)
-- NATO, NATO-COSMIC (2)
-- 32 bilateral COIs: ALB-US, BEL-US, BGR-US, CAN-US, HRV-US, CZE-US, DNK-US, EST-US, FIN-US, FRA-US, DEU-US, GBR-US, GRC-US, HUN-US, ISL-US, ITA-US, LVA-US, LTU-US, LUX-US, MNE-US, NLD-US, MKD-US, NOR-US, POL-US, PRT-US, ROU-US, SVK-US, SVN-US, ESP-US, SWE-US, TUR-US, USA-USA
-- Regional: AUKUS, QUAD, EU-RESTRICTED (3)
-- Combatant Commands: NORTHCOM, EUCOM, PACOM, CENTCOM, SOCOM (5)
-- Program-based: Alpha, Beta, Gamma (3)
-
-**Total:** ~47 COIs (if all bilateral COIs included)
 
 **Action Required:**
 Investigate user's COI requirements and update initialize-coi-keys.ts to include all necessary COIs.
@@ -324,15 +331,15 @@ Databases:
     * resources: 5000 (100% ZTDF encrypted)
     * federation_spokes: 1 (FRA approved)
     * kas_registry: 6 KAS servers
-  
+
   - PostgreSQL (keycloak_db):
     * Users: 6 (admin, testuser-usa-1-4, admin-usa)
     * Realm: dive-v3-broker-usa
     * IdPs: fra-idp
-  
+
   - PostgreSQL (dive_v3_app):
     * NextAuth tables: user, account, session, verificationToken
-  
+
   - PostgreSQL (orchestration):
     * 8 tables, 6 functions
 
@@ -356,12 +363,12 @@ Databases:
     * coi_definitions: 19 COIs (matches Hub - SSOT)
     * resources: 5000 (100% ZTDF encrypted)
     * kas_registry: fra-kas (approved)
-  
+
   - PostgreSQL:
     * Users: 6 (testuser-fra-1-5, admin-fra)
     * Realm: dive-v3-broker-fra
     * IdPs: usa-idp
-  
+
   - PostgreSQL (dive_v3_app):
     * NextAuth tables: user, account, session, verificationToken
 
@@ -554,7 +561,7 @@ private async seedBaselineCOIs(): Promise<void> {
 // Update initialize() to NOT call seedBaselineCOIs()
 async initialize(): Promise<void> {
   // ... existing init code ...
-  
+
   // REMOVE: await this.seedBaselineCOIs();
   // Deployment MUST call initialize-coi-keys.ts explicitly
 }
@@ -691,7 +698,7 @@ docker exec dive-hub-mongodb mongosh ... --eval "db.resources.countDocuments()"
 if (encryptionFails) { usePlaintext(); }
 
 // ✅ GOOD: Fail fast
-if (encryptionFails) { 
+if (encryptionFails) {
   throw new Error('Encryption failed - check KAS and COI configuration');
 }
 ```
@@ -1302,10 +1309,10 @@ docker ps                        # ❌ Use ./dive ps or ./dive hub status
 
 ### Git Repository
 
-**Branch:** main  
-**Commits:** 23 since modernization start  
-**Range:** 824b9395..2c2126fc  
-**Backup Branch:** pre-modernization-backup-20260124  
+**Branch:** main
+**Commits:** 23 since modernization start
+**Range:** 824b9395..2c2126fc
+**Backup Branch:** pre-modernization-backup-20260124
 **Backup Tag:** pre-modernization-20260124
 
 **Key Commits:**
@@ -1374,14 +1381,14 @@ private async seedBaselineCOIs(): Promise<void> {
 // UPDATE initialize() to NOT call it:
 async initialize(): Promise<void> {
   if (this.initialized) return;
-  
+
   // ... connection and indexes ...
-  
+
   this.initialized = true;
-  
+
   // REMOVE THIS LINE:
   // await this.seedBaselineCOIs();
-  
+
   // Deployment MUST call initialize-coi-keys.ts explicitly
   // If COIs missing, deployment should FAIL (not auto-seed partial data)
 }
@@ -1642,7 +1649,7 @@ npm run test              # Unit tests
 npm run test:integration  # Integration tests
 npm run test:e2e         # E2E tests including federation
 
-cd frontend  
+cd frontend
 npm run test:e2e         # Playwright E2E tests
 
 # All must pass before production

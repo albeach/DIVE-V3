@@ -1,0 +1,85 @@
+{
+  "dashboard": {
+    "title": "DIVE V3 Audit Analytics",
+    "tags": ["audit", "compliance", "acp-240"],
+    "timezone": "browser",
+    "schemaVersion": 38,
+    "version": 1,
+    "refresh": "30s",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Login Activity (Last 24h)",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "SELECT DATE_TRUNC('minute', timestamp) as time, COUNT(*) as value FROM audit_log WHERE event_type IN ('LOGIN', 'LOGIN_ERROR') AND timestamp >= NOW() - INTERVAL '24 hours' GROUP BY time ORDER BY time",
+            "refId": "A",
+            "format": "time_series"
+          }
+        ],
+        "gridPos": {"x": 0, "y": 0, "w": 12, "h": 8}
+      },
+      {
+        "id": 2,
+        "title": "Authorization Decisions (Last 24h)",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "SELECT decision, COUNT(*) FROM authorization_log WHERE timestamp >= NOW() - INTERVAL '24 hours' GROUP BY decision",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"x": 12, "y": 0, "w": 6, "h": 4}
+      },
+      {
+        "id": 3,
+        "title": "Top Denied Resources",
+        "type": "table",
+        "targets": [
+          {
+            "expr": "SELECT resource_id, classification, COUNT(*) as denial_count FROM authorization_log WHERE decision = false AND timestamp >= NOW() - INTERVAL '24 hours' GROUP BY resource_id, classification ORDER BY denial_count DESC LIMIT 10",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"x": 0, "y": 8, "w": 12, "h": 8}
+      },
+      {
+        "id": 4,
+        "title": "Federation Activity",
+        "type": "timeseries",
+        "targets": [
+          {
+            "expr": "SELECT DATE_TRUNC('hour', timestamp) as time, source_realm, COUNT(*) as value FROM federation_log WHERE timestamp >= NOW() - INTERVAL '24 hours' GROUP BY time, source_realm ORDER BY time",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"x": 12, "y": 8, "w": 12, "h": 8}
+      },
+      {
+        "id": 5,
+        "title": "MFA Enforcement (AAL Levels)",
+        "type": "piechart",
+        "targets": [
+          {
+            "expr": "SELECT metadata->>'acr' as aal_level, COUNT(*) FROM audit_log WHERE event_type = 'LOGIN' AND timestamp >= NOW() - INTERVAL '24 hours' GROUP BY aal_level",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"x": 18, "y": 0, "w": 6, "h": 8}
+      },
+      {
+        "id": 6,
+        "title": "Audit Log Retention Status",
+        "type": "stat",
+        "targets": [
+          {
+            "expr": "SELECT COUNT(*) as total, MIN(timestamp) as oldest FROM audit_log",
+            "refId": "A"
+          }
+        ],
+        "gridPos": {"x": 18, "y": 8, "w": 6, "h": 4}
+      }
+    ]
+  }
+}
