@@ -91,6 +91,16 @@ hub_deploy() {
         return 1
     fi
 
+    # Initialize MongoDB replica set (required for OPAL CDC change streams)
+    log_info "Phase 4a: MongoDB replica set initialization"
+    if [ -f "${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh" ]; then
+        if bash "${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh" dive-hub-mongodb admin "$MONGO_PASSWORD"; then
+            log_success "MongoDB replica set initialized - change streams enabled"
+        else
+            log_warn "MongoDB replica set initialization failed - change streams may not work"
+        fi
+    fi
+
     # Initialize orchestration database
     log_info "Phase 4b: Orchestration database"
     hub_init_orchestration_db
@@ -240,14 +250,11 @@ hub_up() {
         return 0
     fi
 
-    # Source environment file for variable interpolation
-    if [ -f "${DIVE_ROOT}/.env.hub" ]; then
-        log_verbose "Loading secrets from .env.hub"
-        set -a
-        source "${DIVE_ROOT}/.env.hub"
-        set +a
-    else
-        log_warn "No .env.hub file found - secrets may be missing"
+    # CRITICAL: Load secrets from GCP or local before starting containers
+    # This ensures all environment variables are available for docker-compose interpolation
+    if ! load_secrets; then
+        log_error "Failed to load secrets - cannot start hub"
+        return 1
     fi
 
     docker compose -f "$HUB_COMPOSE_FILE" up -d
@@ -263,6 +270,19 @@ hub_down() {
     log_info "Stopping hub services..."
 
     cd "$DIVE_ROOT"
+    
+    # CRITICAL: Load secrets before running docker-compose down
+    # Docker Compose needs variable interpolation even for shutdown
+    if ! load_secrets 2>/dev/null; then
+        log_warn "Could not load secrets - using cached .env.hub if available"
+        # Try to source .env.hub as fallback (may exist from previous run)
+        if [ -f "${DIVE_ROOT}/.env.hub" ]; then
+            set -a
+            source "${DIVE_ROOT}/.env.hub"
+            set +a
+        fi
+    fi
+    
     docker compose -f "$HUB_COMPOSE_FILE" down
 
     log_success "Hub services stopped"

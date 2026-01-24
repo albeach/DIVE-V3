@@ -64,11 +64,22 @@ services:
 
   # ---------------------------------------------------------------------------
   # MongoDB - policy/resource data backing store for backend
+  # CONFIGURED AS SINGLE-NODE REPLICA SET for OPAL CDC change streams
   # ---------------------------------------------------------------------------
   mongodb:
     image: mongo:8.0.17
     container_name: ${COMPOSE_PROJECT_NAME}-mongodb
     restart: unless-stopped
+    # Production-grade replica set: copy keyFile to writable location with proper permissions
+    entrypoint: >
+      bash -c "
+        echo '🔐 Preparing MongoDB replica set with keyFile authentication'
+        cp /data/keyfile/mongo-keyfile /tmp/mongo-keyfile
+        chmod 400 /tmp/mongo-keyfile
+        chown 999:999 /tmp/mongo-keyfile
+        echo '✅ KeyFile configured at /tmp/mongo-keyfile'
+        exec /usr/local/bin/docker-entrypoint.sh mongod --replSet rs0 --keyFile /tmp/mongo-keyfile --bind_ip_all
+      "
     env_file:
       - .env.hub
     environment:
@@ -78,13 +89,25 @@ services:
     volumes:
       - mongodb_data:/data/db
       - mongodb_config:/data/configdb
+      # Mount replica set keyFile (will be copied to /tmp with correct permissions)
+      - ./instances/hub/mongo-keyfile:/data/keyfile/mongo-keyfile:ro
+      # Mount initialization script (executed by docker-entrypoint.sh on first run)
+      - ./scripts/mongo-init-replicaset.sh:/docker-entrypoint-initdb.d/01-init-replicaset.sh:ro
     networks:
       - hub-internal
     healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      test: >
+        mongosh admin -u admin -p ${MONGO_PASSWORD} --quiet --eval "
+          try { 
+            const st = rs.status();
+            if (st.members[0].stateStr === 'PRIMARY') quit(0);
+            else quit(1);
+          } catch(e) { quit(1); }
+        "
       interval: 10s
       timeout: 5s
-      retries: 5
+      retries: 15
+      start_period: 40s
 
   # ---------------------------------------------------------------------------
   # Redis - session/blacklist cache (Hardened)
@@ -298,7 +321,7 @@ services:
       INSTANCE_CODE: USA
       INSTANCE_NAME: "United States"
       INSTANCE_REALM: USA
-      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb:27017
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb:27017?authSource=admin&directConnection=true
       MONGODB_DATABASE: dive-v3-hub
       OPA_URL: https://opa:8181
       KEYCLOAK_URL: https://keycloak:8443
