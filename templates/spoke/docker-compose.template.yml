@@ -173,6 +173,8 @@ services:
       KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
       KC_HTTPS_PORT: "8443"
+      # X.509 Client Certificate Authentication (request mode - allows but not requires)
+      KC_HTTPS_CLIENT_AUTH: request
       KC_LOG_LEVEL: info
       KC_FEATURES: scripts
       KC_HEALTH_ENABLED: "true"
