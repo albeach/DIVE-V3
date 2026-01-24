@@ -1917,18 +1917,18 @@ async function seedInstance(
         // Check KAS approval status
         const kasCollection = db.collection('kas_registry');
         const approvedKasCount = await kasCollection.countDocuments({ 
-            status: 'approved',
+            status: 'active',
             enabled: true 
         });
         
         if (approvedKasCount === 0) {
             throw new Error(
-                `ZTDF validation failed: No approved KAS servers found\n` +
+                `ZTDF validation failed: No active KAS servers found\n` +
                 `Available KAS: ${kasServers.map(k => k.kasId).join(', ')}\n` +
-                `Solution: Approve KAS servers in MongoDB (status='approved') or enable auto-approval in dev mode`
+                `Solution: Ensure KAS servers are enabled and active in MongoDB`
             );
         }
-        console.log(`   ✅ KAS Servers: ${approvedKasCount} approved, ${kasServers.length} total\n`);
+        console.log(`   ✅ KAS Servers: ${approvedKasCount} active, ${kasServers.length} total\n`);
         
         console.log('✅ Pre-flight validation passed - ZTDF encryption requirements met\n');
         console.log('🔐 ACP-240 Compliance: 100% ZTDF encryption enforced (no plaintext fallback)\n');
