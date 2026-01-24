@@ -95,16 +95,16 @@ ALL secrets MUST be stored in Google Cloud Secret Manager:
 | `dive-v3-mongodb-fra` | FRA MongoDB root password |
 | `dive-v3-mongodb-gbr` | GBR MongoDB root password |
 | `dive-v3-mongodb-deu` | DEU MongoDB root password |
-| `dive-v3-keycloak-usa` | USA Keycloak admin password |
-| `dive-v3-keycloak-fra` | FRA Keycloak admin password |
-| `dive-v3-keycloak-gbr` | GBR Keycloak admin password |
-| `dive-v3-keycloak-deu` | DEU Keycloak admin password |
+| `dive-v3-keycloak-usa` | USA Keycloak admin password (KC_BOOTSTRAP_ADMIN_PASSWORD_USA) |
+| `dive-v3-keycloak-fra` | FRA Keycloak admin password (KC_BOOTSTRAP_ADMIN_PASSWORD_FRA) |
+| `dive-v3-keycloak-gbr` | GBR Keycloak admin password (KC_BOOTSTRAP_ADMIN_PASSWORD_GBR) |
+| `dive-v3-keycloak-deu` | DEU Keycloak admin password (KC_BOOTSTRAP_ADMIN_PASSWORD_DEU) |
 | `dive-v3-postgres-usa` | USA PostgreSQL password |
 | `dive-v3-postgres-fra` | FRA PostgreSQL password |
 | `dive-v3-postgres-gbr` | GBR PostgreSQL password |
 | `dive-v3-postgres-deu` | DEU PostgreSQL password |
+| `dive-v3-redis-usa` | USA Redis password |
 | `dive-v3-redis-blacklist` | Shared blacklist Redis password |
-| `dive-v3-grafana` | Grafana admin password |
 | `dive-v3-auth-secret-usa` | USA NextAuth secret |
 | `dive-v3-auth-secret-fra` | FRA NextAuth secret |
 | `dive-v3-auth-secret-gbr` | GBR NextAuth secret |
@@ -112,6 +112,31 @@ ALL secrets MUST be stored in Google Cloud Secret Manager:
 | `dive-v3-keycloak-client-secret` | Keycloak client secret |
 | `dive-v3-kas-signing-key` | KAS JWT signing key |
 | `dive-v3-federation-<src>-<tgt>` | Federation secrets (12 bidirectional) |
+
+### Normalized Naming Convention (2026-01-24)
+**Hub Secrets (USA - Default Hub):**
+- `MONGO_PASSWORD_USA` (Hub uses _USA suffix for ALL secrets)
+- `POSTGRES_PASSWORD_USA`
+- `KC_BOOTSTRAP_ADMIN_PASSWORD_USA` (Keycloak 26+ standard)
+- `KC_BOOTSTRAP_ADMIN_USERNAME` (default: `admin`, no suffix needed)
+- `REDIS_PASSWORD_USA`
+- `REDIS_PASSWORD_BLACKLIST` (shared, no suffix)
+
+**Spoke Secrets (Instance-Specific):**
+- `MONGO_PASSWORD_{INSTANCE_CODE}` (e.g., `MONGO_PASSWORD_FRA`)
+- `POSTGRES_PASSWORD_{INSTANCE_CODE}`
+- `KC_BOOTSTRAP_ADMIN_PASSWORD_{INSTANCE_CODE}` (Keycloak 26+ standard)
+- `REDIS_PASSWORD_{INSTANCE_CODE}`
+
+**Keycloak 26+ Variables (Per Keycloak Documentation):**
+- `KC_BOOTSTRAP_ADMIN_USERNAME` (replaces `KEYCLOAK_ADMIN_USERNAME`, `KC_ADMIN`)
+- `KC_BOOTSTRAP_ADMIN_PASSWORD` (replaces `KEYCLOAK_ADMIN_PASSWORD`, `KC_ADMIN_PASSWORD`)
+- Official docs: https://www.keycloak.org/server/all-config
+
+**DEPRECATED Variables (Legacy - Do Not Use):**
+- ❌ `KEYCLOAK_ADMIN_USERNAME` / `KEYCLOAK_ADMIN_PASSWORD` (use `KC_BOOTSTRAP_ADMIN_*`)
+- ❌ `KC_ADMIN` / `KC_ADMIN_PASSWORD` (use `KC_BOOTSTRAP_ADMIN_*`)
+- ❌ Hub secrets without `_USA` suffix (e.g., `MONGO_PASSWORD` → use `MONGO_PASSWORD_USA`)
 
 ### How to Use GCP Secrets in Code
 ```typescript
@@ -457,6 +482,8 @@ docker-compose down -v && ./scripts/dev-start.sh
 11. ❌ **NEVER commit .env files** with real secrets to Git
 12. ❌ **NEVER use string literals** for passwords in TypeScript/JavaScript
 13. ❌ **NEVER inline credentials** in MongoDB/PostgreSQL connection strings
+14. ❌ **NEVER use legacy Keycloak variables** - Use Keycloak 26+ `KC_BOOTSTRAP_ADMIN_*` standard
+15. ❌ **NEVER use Hub secrets without `_USA` suffix** - Hub requires consistent `_{INSTANCE_CODE}` naming
 
 ### Keycloak Specific
 - **Realm**: `dive-v3-broker`
@@ -464,6 +491,8 @@ docker-compose down -v && ./scripts/dev-start.sh
 - **IdP Aliases**: `us-idp`, `france-idp`, `canada-idp`, `industry-idp`
 - **Protocol Mappers**: Map IdP claims → `uniqueID`, `clearance`, `countryOfAffiliation`, `acpCOI`
 - **Admin Console**: http://localhost:8081/admin (admin/admin)
+- **Keycloak 26+ Variables**: Use `KC_BOOTSTRAP_ADMIN_USERNAME` and `KC_BOOTSTRAP_ADMIN_PASSWORD` (replaces deprecated `KEYCLOAK_ADMIN`/`KEYCLOAK_ADMIN_PASSWORD` and `KC_ADMIN`/`KC_ADMIN_PASSWORD`)
+- **Naming Convention**: Hub uses `KC_BOOTSTRAP_ADMIN_PASSWORD_USA`, Spokes use `KC_BOOTSTRAP_ADMIN_PASSWORD_{INSTANCE_CODE}`
 
 ### OPA Specific
 - **Package**: `package dive.authorization`

@@ -149,13 +149,13 @@ export class MongoCoiDefinitionStore {
           },
           enabled: true
         },
-        // NATO (auto-updated from active spokes)
+        // NATO (all 32 members as of 2024)
         {
           coiId: 'NATO',
           name: 'NATO',
           type: 'coalition',
-          members: [], // Will be auto-populated from active NATO-member spokes
-          description: 'North Atlantic Treaty Organization - auto-updated from active federation',
+          members: ['USA', 'GBR', 'FRA', 'DEU', 'ITA', 'ESP', 'POL', 'CAN', 'HUN', 'ROU', 'TUR', 'NLD', 'BEL', 'NOR', 'DNK', 'PRT', 'CZE', 'BGR', 'GRC', 'HRV', 'SVK', 'SVN', 'ALB', 'EST', 'LVA', 'LTU', 'LUX', 'MNE', 'MKD', 'ISL', 'FIN', 'SWE'],
+          description: 'North Atlantic Treaty Organization - all 32 member nations',
           mutable: true,
           autoUpdate: true, // Auto-update when NATO spokes join/leave
           priority: 80,
@@ -176,6 +176,184 @@ export class MongoCoiDefinitionStore {
           mutable: true,
           autoUpdate: true,
           priority: 85,
+          metadata: {
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            source: 'migration'
+          },
+          enabled: true
+        },
+        // Bilateral COIs (country pairs for bilateral sharing)
+        {
+          coiId: 'CAN-US',
+          name: 'Canada-US Bilateral',
+          type: 'bilateral',
+          members: ['CAN', 'USA'],
+          description: 'Canada-United States bilateral information sharing',
+          mutable: false,
+          autoUpdate: false,
+          priority: 75,
+          metadata: {
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            source: 'migration'
+          },
+          enabled: true
+        },
+        {
+          coiId: 'GBR-US',
+          name: 'UK-US Bilateral',
+          type: 'bilateral',
+          members: ['GBR', 'USA'],
+          description: 'United Kingdom-United States bilateral information sharing',
+          mutable: false,
+          autoUpdate: false,
+          priority: 75,
+          metadata: {
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            source: 'migration'
+          },
+          enabled: true
+        },
+        {
+          coiId: 'FRA-US',
+          name: 'France-US Bilateral',
+          type: 'bilateral',
+          members: ['FRA', 'USA'],
+          description: 'France-United States bilateral information sharing',
+          mutable: false,
+          autoUpdate: false,
+          priority: 75,
+          metadata: {
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            source: 'migration'
+          },
+          enabled: true
+        },
+        {
+          coiId: 'DEU-US',
+          name: 'Germany-US Bilateral',
+          type: 'bilateral',
+          members: ['DEU', 'USA'],
+          description: 'Germany-United States bilateral information sharing',
+          mutable: false,
+          autoUpdate: false,
+          priority: 75,
+          metadata: {
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            source: 'migration'
+          },
+          enabled: true
+        },
+        // Regional/Operational COIs
+        {
+          coiId: 'AUKUS',
+          name: 'AUKUS Partnership',
+          type: 'coalition',
+          members: ['AUS', 'GBR', 'USA'],
+          description: 'AUKUS security partnership (Australia, United Kingdom, United States)',
+          mutable: false,
+          autoUpdate: false,
+          priority: 85,
+          metadata: {
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            source: 'migration'
+          },
+          enabled: true
+        },
+        {
+          coiId: 'QUAD',
+          name: 'Quadrilateral Security Dialogue',
+          type: 'coalition',
+          members: ['AUS', 'IND', 'JPN', 'USA'],
+          description: 'Quad strategic dialogue (Australia, India, Japan, United States)',
+          mutable: false,
+          autoUpdate: false,
+          priority: 80,
+          metadata: {
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            source: 'migration'
+          },
+          enabled: true
+        },
+        {
+          coiId: 'NORTHCOM',
+          name: 'US Northern Command',
+          type: 'operational',
+          members: ['USA', 'CAN', 'MEX'],
+          description: 'US Northern Command area of responsibility',
+          mutable: true,
+          autoUpdate: false,
+          priority: 70,
+          metadata: {
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            source: 'migration'
+          },
+          enabled: true
+        },
+        {
+          coiId: 'EUCOM',
+          name: 'US European Command',
+          type: 'operational',
+          members: ['USA', 'GBR', 'FRA', 'DEU', 'ITA', 'ESP', 'POL', 'NOR', 'BEL', 'NLD', 'PRT'],
+          description: 'US European Command area of responsibility',
+          mutable: true,
+          autoUpdate: false,
+          priority: 70,
+          metadata: {
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            source: 'migration'
+          },
+          enabled: true
+        },
+        {
+          coiId: 'PACOM',
+          name: 'US Indo-Pacific Command',
+          type: 'operational',
+          members: ['USA', 'JPN', 'KOR', 'AUS', 'PHL', 'THA', 'SGP', 'NZL'],
+          description: 'US Indo-Pacific Command area of responsibility',
+          mutable: true,
+          autoUpdate: false,
+          priority: 70,
+          metadata: {
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            source: 'migration'
+          },
+          enabled: true
+        },
+        {
+          coiId: 'SOCOM',
+          name: 'US Special Operations Command',
+          type: 'operational',
+          members: ['USA', 'GBR', 'AUS', 'CAN', 'NZL', 'FRA', 'DEU', 'NOR'],
+          description: 'Special Operations coalition partners',
+          mutable: true,
+          autoUpdate: false,
+          priority: 75,
+          metadata: {
+            createdAt: new Date(),
+            updatedAt: new Date(),
+            source: 'migration'
+          },
+          enabled: true
+        },
+        {
+          coiId: 'EU-RESTRICTED',
+          name: 'EU Restricted',
+          type: 'coalition',
+          members: ['AUT', 'BEL', 'BGR', 'HRV', 'CYP', 'CZE', 'DNK', 'EST', 'FIN', 'FRA', 'DEU', 'GRC', 'HUN', 'IRL', 'ITA', 'LVA', 'LTU', 'LUX', 'MLT', 'NLD', 'POL', 'PRT', 'ROU', 'SVK', 'SVN', 'ESP', 'SWE'],
+          description: 'European Union member states restricted information',
+          mutable: true,
+          autoUpdate: false,
+          priority: 70,
           metadata: {
             createdAt: new Date(),
             updatedAt: new Date(),

@@ -263,6 +263,9 @@ export async function getMongoDBPassword(instanceCode: string): Promise<string> 
  * Get Keycloak admin password
  * 
  * SECURITY: No default password fallback! Must have valid credentials.
+ * 
+ * KEYCLOAK 26+ UPDATE: Uses KC_BOOTSTRAP_ADMIN_PASSWORD (new standard)
+ * Falls back to legacy KEYCLOAK_ADMIN_PASSWORD for backward compatibility
  */
 export async function getKeycloakPassword(instanceCode?: string): Promise<string> {
     const secretName = getSecretName('keycloak', instanceCode);
@@ -283,16 +286,23 @@ export async function getKeycloakPassword(instanceCode?: string): Promise<string
         }
     }
     
-    const envPassword = process.env.KEYCLOAK_ADMIN_PASSWORD || process.env.KC_BOOTSTRAP_ADMIN_PASSWORD;
+    // Try environment variables (Keycloak 26+ KC_BOOTSTRAP_ADMIN_PASSWORD first, legacy fallback)
+    const suffix = instanceCode ? `_${instanceCode.toUpperCase()}` : '';
+    const envPassword = process.env[`KC_BOOTSTRAP_ADMIN_PASSWORD${suffix}`] 
+                     || process.env[`KEYCLOAK_ADMIN_PASSWORD${suffix}`]
+                     || process.env.KC_BOOTSTRAP_ADMIN_PASSWORD
+                     || process.env.KEYCLOAK_ADMIN_PASSWORD;
     if (envPassword) {
-        logger.info('Using Keycloak password from environment variable');
+        logger.info('Using Keycloak password from environment variable', {
+            source: process.env[`KC_BOOTSTRAP_ADMIN_PASSWORD${suffix}`] ? 'KC_BOOTSTRAP_ADMIN_PASSWORD' : 'KEYCLOAK_ADMIN_PASSWORD (legacy)'
+        });
         setCachedSecret(secretName, envPassword);
         return envPassword;
     }
     
     throw new Error(
         `Keycloak password not found${instanceCode ? ` for ${instanceCode}` : ''}!\n` +
-        `Run: source ./scripts/sync-gcp-secrets.sh or set KEYCLOAK_ADMIN_PASSWORD`
+        `Run: source ./scripts/sync-gcp-secrets.sh or set KC_BOOTSTRAP_ADMIN_PASSWORD${suffix}`
     );
 }
 

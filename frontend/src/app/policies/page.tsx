@@ -5,10 +5,8 @@ import PoliciesPageClient from "./policies-client";
 import type { IPolicyHierarchy } from "@/types/policy.types";
 
 async function getPolicyHierarchy(): Promise<IPolicyHierarchy | null> {
-  const backendUrl = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
-
   try {
-    const response = await fetch(`${backendUrl}/api/policies/hierarchy`, {
+    const response = await fetch('/api/policies/hierarchy', {
       cache: 'no-store',
     });
 

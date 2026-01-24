@@ -65,15 +65,21 @@ export class SPManagementService {
       });
 
       // SECURITY: No hardcoded fallbacks - fail fast if credentials not configured
-      const adminUsername = process.env.KEYCLOAK_ADMIN_USERNAME;
-      const adminPassword = process.env.KEYCLOAK_ADMIN_PASSWORD;
+      // KEYCLOAK 26+ UPDATE: Use KC_BOOTSTRAP_ADMIN_USERNAME/PASSWORD (new standard)
+      const adminUsername = process.env.KC_BOOTSTRAP_ADMIN_USERNAME || process.env.KEYCLOAK_ADMIN_USERNAME;
+      const adminPassword = process.env.KC_BOOTSTRAP_ADMIN_PASSWORD_USA 
+                         || process.env.KC_BOOTSTRAP_ADMIN_PASSWORD
+                         || process.env.KEYCLOAK_ADMIN_PASSWORD;
 
       if (!adminUsername || !adminPassword || adminPassword === 'admin') {
         throw new Error(
           'FATAL: Keycloak admin credentials not configured.\n' +
           'Required environment variables:\n' +
-          '  KEYCLOAK_ADMIN_USERNAME (default: admin)\n' +
-          '  KEYCLOAK_ADMIN_PASSWORD (must not be "admin")'
+          '  KC_BOOTSTRAP_ADMIN_USERNAME (default: admin)\n' +
+          '  KC_BOOTSTRAP_ADMIN_PASSWORD_USA (must not be "admin")\n' +
+          'Or legacy:\n' +
+          '  KEYCLOAK_ADMIN_USERNAME\n' +
+          '  KEYCLOAK_ADMIN_PASSWORD'
         );
       }
 

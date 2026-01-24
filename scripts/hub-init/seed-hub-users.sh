@@ -41,24 +41,34 @@ log_info()  { echo -e "${CYAN}ℹ${NC} $1"; }
 KEYCLOAK_URL="${KEYCLOAK_URL:-https://localhost:8443}"
 REALM_NAME="${REALM_NAME:-dive-v3-broker-usa}"
 CLIENT_ID="${CLIENT_ID:-dive-v3-broker-usa}"
-ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
-ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-}"
+# Configuration
+KEYCLOAK_URL="${KEYCLOAK_URL:-https://localhost:8443}"
+REALM_NAME="${REALM_NAME:-dive-v3-broker-usa}"
+CLIENT_ID="${CLIENT_ID:-dive-v3-broker-usa}"
+# KEYCLOAK 26+ UPDATE: Use KC_BOOTSTRAP_ADMIN_USERNAME (new standard)
+ADMIN_USER="${KC_BOOTSTRAP_ADMIN_USERNAME:-${KEYCLOAK_ADMIN:-admin}}"
+# Hub uses _USA suffix for normalized naming convention
+ADMIN_PASSWORD="${KC_BOOTSTRAP_ADMIN_PASSWORD_USA:-${KEYCLOAK_ADMIN_PASSWORD:-}}"
 TEST_USER_PASSWORD="${TEST_USER_PASSWORD:-TestUser2025!Pilot}"
 ADMIN_USER_PASSWORD="${ADMIN_USER_PASSWORD:-TestUser2025!SecureAdmin}"
 
 # Get admin password from container if not set
 # Try multiple container names for compatibility (dive-v3-backend, dive-hub-backend, keycloak)
 if [ -z "$ADMIN_PASSWORD" ]; then
-    for container in "dive-v3-backend" "dive-hub-backend" "dive-v3-keycloak"; do
+    for container in "dive-v3-backend" "dive-hub-backend" "dive-v3-keycloak" "dive-hub-keycloak"; do
         if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
-            ADMIN_PASSWORD=$(docker exec "$container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null || echo "")
+            # Try Keycloak 26+ KC_BOOTSTRAP_ADMIN_PASSWORD first, then legacy variables
+            ADMIN_PASSWORD=$(docker exec "$container" printenv KC_BOOTSTRAP_ADMIN_PASSWORD_USA 2>/dev/null || \
+                           docker exec "$container" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null || \
+                           docker exec "$container" printenv KC_ADMIN_PASSWORD 2>/dev/null || \
+                           docker exec "$container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null || echo "")
             [ -n "$ADMIN_PASSWORD" ] && break
         fi
     done
 fi
 
 if [ -z "$ADMIN_PASSWORD" ]; then
-    log_error "KEYCLOAK_ADMIN_PASSWORD not found"
+    log_error "KC_BOOTSTRAP_ADMIN_PASSWORD_USA not found (or legacy KEYCLOAK_ADMIN_PASSWORD)"
     exit 1
 fi
 
@@ -315,13 +325,9 @@ create_user() {
         fi
         amr="${amr}]"
 
-        # Determine AAL level based on clearance
-        local aal_level="1"
-        if [ "$clearance" == "CONFIDENTIAL" ] || [ "$clearance" == "SECRET" ]; then
-            aal_level="2"
-        elif [ "$clearance" == "TOP_SECRET" ]; then
-            aal_level="3"
-        fi
+        # CRITICAL FIX: Remove static AMR/AAL attributes - these must be set dynamically during authentication
+        # OAuth/OIDC requires AMR to reflect actual authentication methods used, not user clearance level
+        # ACR and AMR are set by authentication flows and protocol mappers during login
 
         # Determine dive_roles based on is_admin
         local dive_roles='["user"]'
@@ -329,7 +335,7 @@ create_user() {
             dive_roles='["user","admin","super_admin"]'
         fi
 
-        # Update existing user with credential-based AMR
+        # Update existing user WITHOUT static AMR/AAL (these are set dynamically during auth)
         # FIX: uniqueID = username (no -001 suffix) for ACP-240 PII minimization
         curl -sk -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${user_id}" \
             -H "Authorization: Bearer $TOKEN" \
@@ -344,26 +350,15 @@ create_user() {
                     \"countryOfAffiliation\": [\"USA\"],
                     \"uniqueID\": [\"${username}\"],
                     \"acpCOI\": ${coi_json},
-                    \"amr\": ${amr},
-                    \"aal_level\": [\"${aal_level}\"],
                     \"dive_roles\": ${dive_roles},
                     \"pilot_user\": [\"true\"],
                     \"created_by\": [\"seed-script\"]
                 }
             }" > /dev/null 2>&1
-        log_info "Updated: ${username} (${clearance}, AAL${aal_level}, amr=${amr})"
+        log_info "Updated: ${username} (${clearance})"
     else
-        # Determine initial AMR based on clearance requirements
-        # TOP_SECRET gets hwk (will need to configure WebAuthn)
-        # CONFIDENTIAL/SECRET start with pwd only (will need to configure TOTP)
-        local initial_amr='["pwd"]'
-        local aal_level="1"
-        if [ "$clearance" == "CONFIDENTIAL" ] || [ "$clearance" == "SECRET" ]; then
-            aal_level="2"
-        elif [ "$clearance" == "TOP_SECRET" ]; then
-            initial_amr='["pwd","hwk"]'
-            aal_level="3"
-        fi
+        # CRITICAL FIX: Remove static AMR/AAL attributes from new user creation
+        # These must be set dynamically during authentication
 
         # Determine dive_roles based on is_admin
         local dive_roles='["user"]'
@@ -371,7 +366,7 @@ create_user() {
             dive_roles='["user","admin","super_admin"]'
         fi
 
-        # Create new user
+        # Create new user WITHOUT static AMR/AAL attributes
         # FIX: uniqueID = username (no -001 suffix) for ACP-240 PII minimization
         local http_code=$(curl -sk -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users" \
             -H "Authorization: Bearer $TOKEN" \
@@ -390,8 +385,6 @@ create_user() {
                     \"countryOfAffiliation\": [\"USA\"],
                     \"uniqueID\": [\"${username}\"],
                     \"acpCOI\": ${coi_json},
-                    \"amr\": ${initial_amr},
-                    \"aal_level\": [\"${aal_level}\"],
                     \"dive_roles\": ${dive_roles},
                     \"pilot_user\": [\"true\"],
                     \"created_by\": [\"seed-script\"]
@@ -399,7 +392,7 @@ create_user() {
             }" -o /dev/null -w "%{http_code}")
 
         if [ "$http_code" == "201" ]; then
-            log_success "Created: ${username} (${clearance}, amr=${initial_amr})"
+            log_success "Created: ${username} (${clearance})"
 
             # Get new user ID and assign roles
             user_id=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users?username=${username}" \

@@ -15,13 +15,13 @@ variable "keycloak_url" {
 }
 
 variable "keycloak_admin_username" {
-  description = "Keycloak admin username"
+  description = "Keycloak admin username (Keycloak 26+: KC_BOOTSTRAP_ADMIN_USERNAME)"
   type        = string
   default     = "admin"
 }
 
 variable "keycloak_admin_password" {
-  description = "Keycloak admin password (from GCP Secret Manager: dive-v3-keycloak-usa)"
+  description = "Keycloak admin password (Keycloak 26+: KC_BOOTSTRAP_ADMIN_PASSWORD_USA from GCP Secret Manager: dive-v3-keycloak-usa)"
   type        = string
   sensitive   = true
 }

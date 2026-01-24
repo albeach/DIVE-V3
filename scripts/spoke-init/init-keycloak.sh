@@ -72,11 +72,14 @@ KC_CONTAINER="dive-spoke-${CODE_LOWER}-keycloak"
 
 # FIXED (Dec 2025): ALWAYS prefer container password - it's authoritative
 # The .env file can become stale after container restart/redeploy
-# Priority: 1) Container env var, 2) Instance-specific env var, 3) Generic env var
+# Priority: 1) Container env var (Keycloak 26+), 2) Instance-specific env var, 3) Generic env var
 ADMIN_PASSWORD=""
 if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${KC_CONTAINER}$"; then
-    # Try KC_BOOTSTRAP_ADMIN_PASSWORD first (modern Keycloak), then KEYCLOAK_ADMIN_PASSWORD (legacy)
-    ADMIN_PASSWORD=$(docker exec "$KC_CONTAINER" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+    # KEYCLOAK 26+ UPDATE: Try KC_BOOTSTRAP_ADMIN_PASSWORD_{INSTANCE} first, then legacy
+    ADMIN_PASSWORD=$(docker exec "$KC_CONTAINER" printenv "KC_BOOTSTRAP_ADMIN_PASSWORD_${CODE_UPPER}" 2>/dev/null | tr -d '\n\r')
+    if [ -z "$ADMIN_PASSWORD" ]; then
+        ADMIN_PASSWORD=$(docker exec "$KC_CONTAINER" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+    fi
     if [ -z "$ADMIN_PASSWORD" ]; then
         ADMIN_PASSWORD=$(docker exec "$KC_CONTAINER" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
     fi
@@ -89,8 +92,10 @@ fi
 
 # Fallback to environment variables if container password not available
 if [ -z "$ADMIN_PASSWORD" ]; then
-    INSTANCE_PASSWORD_VAR="KEYCLOAK_ADMIN_PASSWORD_${CODE_UPPER}"
-    ADMIN_PASSWORD="${!INSTANCE_PASSWORD_VAR:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}"
+    # KEYCLOAK 26+ UPDATE: Try KC_BOOTSTRAP_ADMIN_PASSWORD_{CODE} first, then legacy
+    KC_BOOTSTRAP_VAR="KC_BOOTSTRAP_ADMIN_PASSWORD_${CODE_UPPER}"
+    KEYCLOAK_ADMIN_VAR="KEYCLOAK_ADMIN_PASSWORD_${CODE_UPPER}"
+    ADMIN_PASSWORD="${!KC_BOOTSTRAP_VAR:-${!KEYCLOAK_ADMIN_VAR:-${KC_BOOTSTRAP_ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD:-admin}}}}"
     log_warn "Container password not available, using env var fallback"
 fi
 

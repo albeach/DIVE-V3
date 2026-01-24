@@ -48,7 +48,7 @@ services:
       - .env.hub
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_USA}
       POSTGRES_DB: keycloak_db
     volumes:
       - postgres_data:/var/lib/postgresql/data
@@ -73,7 +73,7 @@ services:
       - .env.hub
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD_USA}
       MONGO_INITDB_DATABASE: dive-v3
     volumes:
       - mongodb_data:/data/db
@@ -178,7 +178,7 @@ services:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak_db
       KC_DB_USERNAME: postgres
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD_USA}
       KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:-localhost}
       KC_HOSTNAME_STRICT: "false"
       KC_PROXY_HEADERS: xforwarded
@@ -192,11 +192,9 @@ services:
       KC_METRICS_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
       KC_FEATURES: scripts
-      KC_ADMIN: admin
-      KC_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
-      # Initial admin user creation (Keycloak 26.5.0)
+      # Keycloak 26+ Bootstrap Admin Configuration (replaces deprecated KC_ADMIN*)
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD_USA}
       # Bootstrap realm for Terraform provider authentication
       SKIP_REALM_IMPORT: "true"  # Terraform SSOT: Start empty, configure via Terraform
       # Legacy realm import variables (kept for compatibility, but not used)
@@ -296,7 +294,7 @@ services:
       INSTANCE_CODE: USA
       INSTANCE_NAME: "United States"
       INSTANCE_REALM: USA
-      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb:27017
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_USA}@mongodb:27017
       MONGODB_DATABASE: dive-v3-hub
       OPA_URL: https://opa:8181
       KEYCLOAK_URL: https://keycloak:8443
@@ -304,8 +302,9 @@ services:
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-broker-usa}
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       KEYCLOAK_JWKS_URI: https://keycloak:8443/realms/dive-v3-broker-usa/protocol/openid-connect/certs
-      KEYCLOAK_ADMIN_USERNAME: admin
-      KC_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+      # Keycloak 26+ Bootstrap Admin credentials for backend API access
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_BOOTSTRAP_ADMIN_PASSWORD_USA}
       # Redis configuration
       REDIS_PASSWORD: ${REDIS_PASSWORD_USA}
       REDIS_URL: redis://:${REDIS_PASSWORD_USA}@redis:6379
@@ -428,7 +427,7 @@ services:
       # SECURITY: Trust mkcert CA instead of disabling TLS verification
       NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
       OPA_URL: https://opa:8181
-      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb:27017?authSource=admin
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_USA}@mongodb:27017?authSource=admin
       MONGODB_DATABASE: dive-v3-hub
       LOG_LEVEL: info
       KEYCLOAK_URL: https://keycloak:8443
@@ -493,7 +492,7 @@ services:
       # See: docs/TLS_BEST_PRACTICES_2026.md
       NODE_OPTIONS: "--use-openssl-ca"
       NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem  # Legacy https module support
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/dive_v3_app
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD_USA}@postgres:5432/dive_v3_app
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
     depends_on:

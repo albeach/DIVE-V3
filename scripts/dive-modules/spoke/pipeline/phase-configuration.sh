@@ -325,14 +325,23 @@ spoke_config_register_in_hub_mongodb() {
     fi
 
     # Get Keycloak admin password (CRITICAL for bidirectional federation)
-    local keycloak_password_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
-    local keycloak_password="${!keycloak_password_var}"
+    # KEYCLOAK 26+ UPDATE: Try KC_BOOTSTRAP_ADMIN_PASSWORD first, then legacy
+    local keycloak_password_var_new="KC_BOOTSTRAP_ADMIN_PASSWORD_${code_upper}"
+    local keycloak_password_var_legacy="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
+    local keycloak_password="${!keycloak_password_var_new}"
+    
+    if [ -z "$keycloak_password" ]; then
+        keycloak_password="${!keycloak_password_var_legacy}"
+        keycloak_password_var="$keycloak_password_var_legacy"
+    else
+        keycloak_password_var="$keycloak_password_var_new"
+    fi
 
     # Validate password exists
     if [ -z "$keycloak_password" ]; then
-        log_error "Keycloak admin password not found: $keycloak_password_var"
+        log_error "Keycloak admin password not found: tried KC_BOOTSTRAP_ADMIN_PASSWORD_${code_upper} and KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
         log_error "CRITICAL: Bidirectional federation requires spoke Keycloak password"
-        log_error "Set $keycloak_password_var in environment or spoke .env file"
+        log_error "Set KC_BOOTSTRAP_ADMIN_PASSWORD_${code_upper} in environment or spoke .env file"
         return 1
     fi
 
@@ -809,13 +818,20 @@ spoke_config_apply_terraform() {
     export INSTANCE="$code_lower"
 
     # Export instance-suffixed secrets as TF_VAR environment variables
-    local keycloak_password_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
+    # KEYCLOAK 26+ UPDATE: Try KC_BOOTSTRAP_ADMIN_PASSWORD first, then legacy
+    local keycloak_password_var_new="KC_BOOTSTRAP_ADMIN_PASSWORD_${code_upper}"
+    local keycloak_password_var_legacy="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
     local client_secret_var="KEYCLOAK_CLIENT_SECRET_${code_upper}"
 
-    if [ -n "${!keycloak_password_var}" ]; then
-        export TF_VAR_keycloak_admin_password="${!keycloak_password_var}"
+    # Try Keycloak 26+ variable first, fall back to legacy
+    if [ -n "${!keycloak_password_var_new}" ]; then
+        export TF_VAR_keycloak_admin_password="${!keycloak_password_var_new}"
+        keycloak_password_var="$keycloak_password_var_new"
+    elif [ -n "${!keycloak_password_var_legacy}" ]; then
+        export TF_VAR_keycloak_admin_password="${!keycloak_password_var_legacy}"
+        keycloak_password_var="$keycloak_password_var_legacy"
     else
-        log_error "Missing Keycloak admin password for $code_upper"
+        log_error "Missing Keycloak admin password for $code_upper (tried KC_BOOTSTRAP_ADMIN_PASSWORD_${code_upper} and KEYCLOAK_ADMIN_PASSWORD_${code_upper})"
         return 1
     fi
 

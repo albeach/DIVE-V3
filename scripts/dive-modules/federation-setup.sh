@@ -1101,13 +1101,15 @@ ensure_spoke_client_in_hub() {
     local spoke_realm="dive-v3-broker-${code_lower}"
 
     source "${DIVE_ROOT}/.env.hub" 2>/dev/null || true
-    if [ -z "$KEYCLOAK_ADMIN_PASSWORD" ]; then
-        log_error "KEYCLOAK_ADMIN_PASSWORD not set"
+    # KEYCLOAK 26+ UPDATE: Use KC_BOOTSTRAP_ADMIN_PASSWORD_USA (Hub normalized naming)
+    local admin_password="${KC_BOOTSTRAP_ADMIN_PASSWORD_USA:-${KEYCLOAK_ADMIN_PASSWORD}}"
+    if [ -z "$admin_password" ]; then
+        log_error "KC_BOOTSTRAP_ADMIN_PASSWORD_USA not set (or legacy KEYCLOAK_ADMIN_PASSWORD)"
         return 1
     fi
 
     docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh config credentials \
-        --server http://localhost:8080 --realm master --user admin --password "$KEYCLOAK_ADMIN_PASSWORD" 2>/dev/null || return 1
+        --server http://localhost:8080 --realm master --user admin --password "$admin_password" 2>/dev/null || return 1
 
     local existing_client
     existing_client=$(docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get clients \

@@ -73,13 +73,22 @@ spec:
               value: "8443"
             - name: KC_PROXY_HEADERS
               value: "xforwarded"
-            - name: KEYCLOAK_ADMIN
+            # KEYCLOAK 26+ UPDATE: Use KC_BOOTSTRAP_ADMIN_* variables (new standard)
+            - name: KC_BOOTSTRAP_ADMIN_USERNAME
               value: "admin"
-            - name: KEYCLOAK_ADMIN_PASSWORD
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
               valueFrom:
                 secretKeyRef:
                   name: keycloak-admin
                   key: password
+            # Legacy variables (deprecated - Keycloak 26+ uses KC_BOOTSTRAP_ADMIN_*)
+            # - name: KEYCLOAK_ADMIN
+            #   value: "admin"
+            # - name: KEYCLOAK_ADMIN_PASSWORD
+            #   valueFrom:
+            #     secretKeyRef:
+            #       name: keycloak-admin
+            #       key: password
             - name: KC_FEATURES
               value: "scripts"
             - name: KC_LOG_LEVEL

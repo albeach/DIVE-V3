@@ -41,7 +41,7 @@ readonly SPOKE_REQUIRED_SECRETS=(
     "POSTGRES_PASSWORD"
     "MONGO_PASSWORD"
     "REDIS_PASSWORD"
-    "KEYCLOAK_ADMIN_PASSWORD"
+    "KC_BOOTSTRAP_ADMIN_PASSWORD"
     "KEYCLOAK_CLIENT_SECRET"
     "AUTH_SECRET"
 )
@@ -171,7 +171,7 @@ _map_env_to_gcp_secret() {
         REDIS_PASSWORD)
             echo "dive-v3-redis-${instance_code}"
             ;;
-        KEYCLOAK_ADMIN_PASSWORD)
+        KC_BOOTSTRAP_ADMIN_PASSWORD|KEYCLOAK_ADMIN_PASSWORD)
             echo "dive-v3-keycloak-${instance_code}"
             ;;
         KEYCLOAK_CLIENT_SECRET)

@@ -75,9 +75,17 @@ class KeycloakAdminService {
             return this.accessToken;
         }
 
-        const username = process.env.KEYCLOAK_ADMIN_USER || process.env.KEYCLOAK_ADMIN_USERNAME || 'admin';
-        // Load Keycloak admin password from GCP Secret Manager (KC_ADMIN_PASSWORD for Keycloak v26 consistency)
-        const password = process.env.KC_ADMIN_PASSWORD || process.env.KEYCLOAK_ADMIN_PASSWORD;
+        // KEYCLOAK 26+ UPDATE: Use KC_BOOTSTRAP_ADMIN_USERNAME/PASSWORD (new standard)
+        // Falls back to legacy KEYCLOAK_ADMIN_* for backward compatibility
+        // Hub uses _USA suffix for all secrets (normalized naming convention)
+        const username = process.env.KC_BOOTSTRAP_ADMIN_USERNAME 
+                      || process.env.KEYCLOAK_ADMIN_USER 
+                      || process.env.KEYCLOAK_ADMIN_USERNAME 
+                      || 'admin';
+        const password = process.env.KC_BOOTSTRAP_ADMIN_PASSWORD_USA
+                      || process.env.KC_BOOTSTRAP_ADMIN_PASSWORD 
+                      || process.env.KC_ADMIN_PASSWORD 
+                      || process.env.KEYCLOAK_ADMIN_PASSWORD;
 
         // Always authenticate against master realm for admin operations
         const masterAuthUrl = `${this.axios.defaults.baseURL.replace(/\/$/, '')}/realms/master/protocol/openid-connect/token`;

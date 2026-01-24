@@ -114,16 +114,32 @@ export class KeycloakFederationService {
     }
 
     const keycloakUrl = process.env.KEYCLOAK_URL || 'https://localhost:8443';
-    const adminUser = process.env.KEYCLOAK_ADMIN || 'admin';
+    // KEYCLOAK 26+ UPDATE: Use KC_BOOTSTRAP_ADMIN_USERNAME (new standard)
+    const adminUser = process.env.KC_BOOTSTRAP_ADMIN_USERNAME 
+                   || process.env.KEYCLOAK_ADMIN 
+                   || 'admin';
 
     // Get admin password - try instance-specific first, then generic
+    // Hub uses _USA suffix for normalized naming convention
     const instanceCode = (process.env.INSTANCE_CODE || 'USA').toUpperCase();
-    const adminPassword = process.env[`KEYCLOAK_ADMIN_PASSWORD_${instanceCode}`] ||
-      process.env.KEYCLOAK_ADMIN_PASSWORD ||
-      process.env.KC_ADMIN_PASSWORD;
+    const adminPassword = process.env[`KC_BOOTSTRAP_ADMIN_PASSWORD_${instanceCode}`] 
+                       || process.env[`KEYCLOAK_ADMIN_PASSWORD_${instanceCode}`]
+                       || process.env.KC_BOOTSTRAP_ADMIN_PASSWORD_USA
+                       || process.env.KC_BOOTSTRAP_ADMIN_PASSWORD
+                       || process.env.KEYCLOAK_ADMIN_PASSWORD
+                       || process.env.KC_ADMIN_PASSWORD;
 
     if (!adminPassword) {
-      throw new Error(`KEYCLOAK_ADMIN_PASSWORD not configured (tried KEYCLOAK_ADMIN_PASSWORD_${instanceCode}, KEYCLOAK_ADMIN_PASSWORD, KC_ADMIN_PASSWORD)`);
+      throw new Error(
+        `Keycloak admin password not configured!\n` +
+        `Tried (in order):\n` +
+        `  - KC_BOOTSTRAP_ADMIN_PASSWORD_${instanceCode}\n` +
+        `  - KEYCLOAK_ADMIN_PASSWORD_${instanceCode} (legacy)\n` +
+        `  - KC_BOOTSTRAP_ADMIN_PASSWORD_USA (Hub)\n` +
+        `  - KC_BOOTSTRAP_ADMIN_PASSWORD\n` +
+        `  - KEYCLOAK_ADMIN_PASSWORD (legacy)\n` +
+        `  - KC_ADMIN_PASSWORD (legacy)`
+      );
     }
 
     // Create new client or reuse existing
@@ -1401,7 +1417,10 @@ export class KeycloakFederationService {
     const baseUrl = remoteIdpUrl.replace(/\/realms\/.*$/, '');
 
     // Get admin credentials
-    const adminUsername = process.env.KEYCLOAK_ADMIN || 'admin';
+    // KEYCLOAK 26+ UPDATE: Use KC_BOOTSTRAP_ADMIN_USERNAME (new standard)
+    const adminUsername = process.env.KC_BOOTSTRAP_ADMIN_USERNAME 
+                       || process.env.KEYCLOAK_ADMIN 
+                       || 'admin';
 
     // Determine password based on environment
     const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
@@ -1409,9 +1428,16 @@ export class KeycloakFederationService {
     let passwordsToTry: string[];
 
     if (isDevelopment) {
-      // Local dev: Try multiple common passwords
+      // Local dev: Try multiple common passwords (Keycloak 26+ and legacy)
+      // Extract instance code from realm for instance-specific passwords
+      const instanceCode = remoteRealm.replace('dive-v3-broker-', '').toUpperCase();
+      
       passwordsToTry = [
         remoteAdminPassword,
+        process.env[`KC_BOOTSTRAP_ADMIN_PASSWORD_${instanceCode}`],
+        process.env[`KEYCLOAK_ADMIN_PASSWORD_${instanceCode}`],
+        process.env.KC_BOOTSTRAP_ADMIN_PASSWORD_USA, // Hub
+        process.env.KC_BOOTSTRAP_ADMIN_PASSWORD,
         process.env.KEYCLOAK_ADMIN_PASSWORD,
         'admin',  // Default for local dev
       ].filter(Boolean) as string[];
@@ -1480,7 +1506,7 @@ export class KeycloakFederationService {
     throw new Error(
       `Could not authenticate to remote Keycloak at ${baseUrl}. ` +
       `Tried ${passwordsToTry.length} password(s). ` +
-      `Ensure KEYCLOAK_ADMIN_PASSWORD_{CODE} is set or configure GCP Secret Manager.`
+      `Ensure KC_BOOTSTRAP_ADMIN_PASSWORD_{CODE} or KEYCLOAK_ADMIN_PASSWORD_{CODE} (legacy) is set or configure GCP Secret Manager.`
     );
   }
 
