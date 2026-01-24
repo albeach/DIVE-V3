@@ -5,6 +5,7 @@
 
 import { Collection, Db, MongoClient } from 'mongodb';
 import { logger } from '../utils/logger';
+import { connectToMongoDBWithRetry } from '../utils/mongodb-connection';
 import {
   IExternalSP,
   ISPRegistrationRequest
@@ -28,8 +29,8 @@ export class SPManagementService {
    */
   private async getDb(): Promise<Db> {
     if (!this.db) {
-      const client = new MongoClient(MONGODB_URL);
-      await client.connect();
+      // Use production-grade retry logic for replica set initialization
+      const client = await connectToMongoDBWithRetry(MONGODB_URL);
       this.db = client.db(DB_NAME);
       logger.info('SP Management Service connected to MongoDB');
     }
