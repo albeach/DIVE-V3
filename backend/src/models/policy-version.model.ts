@@ -12,7 +12,7 @@
 
 import { Collection, Db, MongoClient, ObjectId } from 'mongodb';
 import { logger } from '../utils/logger';
-import { connectToMongoDBWithRetry } from '../utils/mongodb-connection';
+import { connectToMongoDBWithRetry, retryMongoOperation } from '../utils/mongodb-connection';
 import { IPolicyVersion, ISpokeSync } from '../services/policy-sync.service';
 
 const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
@@ -82,22 +82,25 @@ export class PolicyVersionStore {
       this.versionsCollection = this.db.collection<IPolicyVersionDocument>(COLLECTION_VERSIONS);
       this.syncCollection = this.db.collection<ISpokeSyncDocument>(COLLECTION_SYNC_STATUS);
 
-      // Create indexes for versions collection
-      await this.versionsCollection.createIndex({ version: 1 }, { unique: true });
-      await this.versionsCollection.createIndex({ timestamp: -1 });
-      await this.versionsCollection.createIndex({ hash: 1 });
-      // TTL index - keep versions for 1 year (also serves as createdAt index)
-      await this.versionsCollection.createIndex(
-        { createdAt: 1 },
-        { expireAfterSeconds: 365 * 24 * 60 * 60 }
-      );
+      // Create indexes with retry logic for replica set initialization
+      await retryMongoOperation(async () => {
+        // Indexes for versions collection
+        await this.versionsCollection!.createIndex({ version: 1 }, { unique: true });
+        await this.versionsCollection!.createIndex({ timestamp: -1 });
+        await this.versionsCollection!.createIndex({ hash: 1 });
+        // TTL index - keep versions for 1 year (also serves as createdAt index)
+        await this.versionsCollection!.createIndex(
+          { createdAt: 1 },
+          { expireAfterSeconds: 365 * 24 * 60 * 60 }
+        );
 
-      // Create indexes for sync status collection
-      await this.syncCollection.createIndex({ spokeId: 1 }, { unique: true });
-      await this.syncCollection.createIndex({ instanceCode: 1 });
-      await this.syncCollection.createIndex({ status: 1 });
-      await this.syncCollection.createIndex({ lastSyncTime: -1 });
-      await this.syncCollection.createIndex({ currentVersion: 1 });
+        // Indexes for sync status collection
+        await this.syncCollection!.createIndex({ spokeId: 1 }, { unique: true });
+        await this.syncCollection!.createIndex({ instanceCode: 1 });
+        await this.syncCollection!.createIndex({ status: 1 });
+        await this.syncCollection!.createIndex({ lastSyncTime: -1 });
+        await this.syncCollection!.createIndex({ currentVersion: 1 });
+      });
 
       this.initialized = true;
       logger.info('Policy Version Store initialized', {
