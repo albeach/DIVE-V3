@@ -158,6 +158,15 @@ hub_deploy() {
         return 1
     fi
 
+    # Phase 7: Seed database with test users and resources
+    log_info "Phase 7: Database seeding"
+    if ! hub_seed 5000; then
+        log_error "Database seeding failed"
+        log_warn "Hub infrastructure deployed but requires manual seeding"
+        log_warn "Run: ./dive hub seed"
+        # Don't fail deployment - seeding can be done manually
+    fi
+
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
 
