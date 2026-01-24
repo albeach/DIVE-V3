@@ -116,56 +116,22 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "incoming_federation_a
 # ============================================================================
 # BROKER CLIENT: ACR/AMR MAPPERS
 # ============================================================================
-# The broker client (for frontend) needs both session-based and user-attribute
-# mappers to handle both local and federated users.
+# REFACTORING NOTE (2026-01-24):
+# The native session-based AMR mapper and user attribute fallback are ALREADY
+# defined in main.tf (lines 641-674). These were duplicates and have been
+# commented out here to prevent conflicts.
+#
+# SINGLE SOURCE OF TRUTH: main.tf contains the authoritative broker client mappers
+# - keycloak_generic_protocol_mapper.amr_mapper (native session)
+# - keycloak_openid_user_attribute_protocol_mapper.amr_user_attribute_fallback
+# - keycloak_generic_protocol_mapper.acr_mapper (native session)
+#
+# This file now contains ONLY the federation client mappers (incoming_federation_*)
+# See: terraform/REFACTORING_PLAN.md for complete consolidation strategy
 
-# Session-based AMR mapper (for local users)
-resource "keycloak_generic_protocol_mapper" "broker_amr_mapper" {
-  realm_id        = keycloak_realm.broker.id
-  client_id       = keycloak_openid_client.broker_client.id
-  name            = "amr (authentication session - native)"
-  protocol        = "openid-connect"
-  protocol_mapper = "oidc-amr-mapper"
-
-  config = {
-    "id.token.claim"            = "true"
-    "access.token.claim"        = "true"
-    "userinfo.token.claim"      = "true"
-    "introspection.token.claim" = "true"
-    "claim.name"                = "amr"
-  }
-}
-
-# User-attribute AMR fallback mapper (for federated users)
-# This reads from user.attribute.amr and outputs to user_amr claim
-# The frontend auth.ts prioritizes user_amr over amr for federated users
-# CRITICAL: claim_value_type MUST be "String" for multivalued arrays, NOT "JSON"
-resource "keycloak_openid_user_attribute_protocol_mapper" "broker_amr_user_attribute" {
-  realm_id            = keycloak_realm.broker.id
-  client_id           = keycloak_openid_client.broker_client.id
-  name                = "amr-user-attribute-fallback"
-  user_attribute      = "amr"
-  claim_name          = "user_amr"
-  claim_value_type    = "String" # CRITICAL: NOT "JSON"!
-  multivalued         = true
-  add_to_id_token     = true
-  add_to_access_token = true
-  add_to_userinfo     = true
-}
-
-# User-attribute ACR fallback mapper (for federated users)
-resource "keycloak_openid_user_attribute_protocol_mapper" "broker_acr_user_attribute" {
-  realm_id            = keycloak_realm.broker.id
-  client_id           = keycloak_openid_client.broker_client.id
-  name                = "acr-user-attribute-fallback"
-  user_attribute      = "acr"
-  claim_name          = "user_acr"
-  claim_value_type    = "String"
-  multivalued         = false
-  add_to_id_token     = true
-  add_to_access_token = true
-  add_to_userinfo     = true
-}
+# DELETED: broker_amr_mapper (duplicate of main.tf amr_mapper)
+# DELETED: broker_amr_user_attribute (duplicate of main.tf amr_user_attribute_fallback)
+# DELETED: broker_acr_user_attribute (ACR fallback not needed - native mapper sufficient)
 
 # ============================================================================
 # MIGRATION NOTES
