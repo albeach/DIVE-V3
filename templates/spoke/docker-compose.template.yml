@@ -353,8 +353,8 @@ services:
       INSTANCE_REALM: {{INSTANCE_CODE_UPPER}}
       SPOKE_MODE: "true"
       # MongoDB
-      MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/dive-v3-{{INSTANCE_CODE_LOWER}}?authSource=admin
-      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/dive-v3-{{INSTANCE_CODE_LOWER}}?authSource=admin
+      MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/dive-v3-{{INSTANCE_CODE_LOWER}}?authSource=admin&directConnection=true
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/?authSource=admin&directConnection=true
       MONGODB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
       # Local Redis for session cache
       REDIS_URL: redis://redis-{{INSTANCE_CODE_LOWER}}:6379
@@ -463,7 +463,7 @@ services:
       NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
       # OPA - Use standalone OPA for policy decisions (HTTPS)
       OPA_URL: https://opa-{{INSTANCE_CODE_LOWER}}:8181
-      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017?authSource=admin
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/?authSource=admin&directConnection=true
       MONGODB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
       LOG_LEVEL: info
       KEYCLOAK_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
