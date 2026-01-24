@@ -50,6 +50,7 @@ spoke_phase_seeding() {
     local code_upper=$(upper "$instance_code")
     local code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    local backend_container="dive-spoke-${code_lower}-backend"
 
     log_info "Seeding phase for $code_upper"
 
@@ -59,8 +60,19 @@ spoke_phase_seeding() {
         return 0
     fi
 
+    # Step 0: Initialize COI Definitions (SSOT - CRITICAL)
+    # MUST run BEFORE resource seeding to ensure all 19 COIs available
+    log_step "Step 0/3: Initializing COI Definitions (SSOT)"
+    log_info "Initializing 19 COI definitions (matches Hub SSOT)..."
+    if ! docker exec "$backend_container" npx tsx src/scripts/initialize-coi-keys.ts --replace 2>&1 | tail -10; then
+        log_error "COI initialization FAILED"
+        log_error "Cannot seed resources without COI definitions"
+        return 1
+    fi
+    log_success "✓ 19 COI definitions initialized (SSOT matches Hub)"
+
     # Step 1: Seed test users (CRITICAL - MUST succeed)
-    log_step "Step 1/2: Seeding test users"
+    log_step "Step 1/3: Seeding test users"
     if ! spoke_seed_users "$instance_code"; then
         log_error "User seeding FAILED - cannot deploy spoke without test users"
         log_error "Spoke is unusable without users for testing/login"
@@ -68,12 +80,14 @@ spoke_phase_seeding() {
     fi
     log_success "✓ Test users seeded successfully"
 
-    # Step 2: Seed ZTDF resources (optional for spokes - they can use Hub resources via federation)
-    log_step "Step 2/2: Seeding ZTDF resources (optional)"
+    # Step 2: Seed ZTDF resources (MANDATORY - no plaintext fallback)
+    log_step "Step 2/3: Seeding ZTDF encrypted resources (MANDATORY)"
     local resource_seeding_failed=false
     if ! spoke_seed_resources "$instance_code" 5000; then
         resource_seeding_failed=true
-        log_warn "ZTDF resource seeding failed (likely: KAS not configured for this spoke)"
+        log_error "ZTDF resource seeding FAILED"
+        log_error "Plaintext fallback is NOT acceptable per ACP-240"
+        # Don't return 1 - continue to verification, but flag the issue
     fi
 
     # Validate actual resource count AND type to be honest about what happened
