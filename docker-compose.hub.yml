@@ -91,23 +91,20 @@ services:
       - mongodb_config:/data/configdb
       # Mount replica set keyFile (will be copied to /tmp with correct permissions)
       - ./instances/hub/mongo-keyfile:/data/keyfile/mongo-keyfile:ro
-      # Mount initialization script (executed by docker-entrypoint.sh on first run)
-      - ./scripts/mongo-init-replicaset.sh:/docker-entrypoint-initdb.d/01-init-replicaset.sh:ro
+      # NOTE: Replica set initialization happens POST-START via deployment script
+      # docker-entrypoint-initdb.d/ runs BEFORE --replSet is applied, so it cannot work
+      # See: scripts/init-mongo-replica-set-post-start.sh (called by hub_deploy())
     networks:
       - hub-internal
     healthcheck:
+      # Check if MongoDB is accepting connections (not PRIMARY status)
+      # PRIMARY status comes after post-start initialization
       test: >
-        mongosh admin -u admin -p ${MONGO_PASSWORD} --quiet --eval "
-          try { 
-            const st = rs.status();
-            if (st.members[0].stateStr === 'PRIMARY') quit(0);
-            else quit(1);
-          } catch(e) { quit(1); }
-        "
-      interval: 10s
-      timeout: 5s
-      retries: 15
-      start_period: 40s
+        mongosh admin -u admin -p ${MONGO_PASSWORD} --quiet --eval "db.adminCommand('ping')" | grep -q "ok"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
 
   # ---------------------------------------------------------------------------
   # Redis - session/blacklist cache (Hardened)
@@ -213,7 +210,7 @@ services:
       KC_HTTPS_CLIENT_AUTH: request
       # Trust mkcert root CA for federation with spoke Keycloaks
       KC_TRUSTSTORE_PATHS: /opt/keycloak/certs/mkcert-rootCA.pem
-      KC_LOG_LEVEL: "info,org.keycloak.events:debug"
+      KC_LOG_LEVEL: "debug,org.keycloak.events:debug,org.keycloak.services:debug,org.keycloak.authentication:debug"
       KC_METRICS_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
       KC_FEATURES: scripts
@@ -292,7 +289,7 @@ services:
       - --set=decision_logs.console=true
       - --set=data_api_enabled=true
       - --set=policies_api_enabled=true
-      - --log-level=info
+      - --log-level=debug
       - /policies
     ports:
       - "127.0.0.1:${OPA_PORT:-8181}:8181"
@@ -322,6 +319,7 @@ services:
       - .env.hub
     environment:
       NODE_ENV: development
+      DEBUG: "*"
       PORT: "4000"
       INSTANCE_CODE: USA
       INSTANCE_NAME: "United States"
@@ -485,7 +483,7 @@ services:
       OPA_URL: https://opa:8181
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb:27017?authSource=admin
       MONGODB_DATABASE: dive-v3-hub
-      LOG_LEVEL: info
+      LOG_LEVEL: debug
       KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker-usa
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-broker-usa}

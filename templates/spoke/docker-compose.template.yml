@@ -136,15 +136,20 @@ services:
       - mongodb_config:/data/configdb  # Prevent anonymous volume creation
       # Mount replica set keyFile (generated during spoke deployment)
       - ./mongo-keyfile:/data/keyfile/mongo-keyfile:ro
-      # Mount replica set initialization script (runs via docker-entrypoint-initdb.d)
-      - ../../scripts/mongo-init-replicaset.sh:/docker-entrypoint-initdb.d/01-init-replicaset.sh:ro
+      # NOTE: Replica set initialization happens POST-START via deployment script
+      # docker-entrypoint-initdb.d/ runs BEFORE --replSet is applied, so it cannot work
+      # See: scripts/init-mongo-replica-set-post-start.sh (called by spoke deployment pipeline)
     networks:
       - dive-internal
     healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      # Check if MongoDB is accepting connections (not PRIMARY status)
+      # PRIMARY status comes after post-start initialization
+      test: >
+        mongosh admin -u admin -p ${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}} --quiet --eval "db.adminCommand('ping')" | grep -q "ok"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 30s
     restart: unless-stopped
 
   redis-{{INSTANCE_CODE_LOWER}}:
