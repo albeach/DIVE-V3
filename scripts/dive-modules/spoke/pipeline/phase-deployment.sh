@@ -115,6 +115,18 @@ spoke_phase_deployment() {
         return 1
     fi
 
+    # Step 2a: Initialize MongoDB replica set (CRITICAL - required for change streams)
+    if ! spoke_deployment_init_mongodb_replica_set "$instance_code"; then
+        log_error "MongoDB replica set initialization failed"
+        return 1
+    fi
+
+    # Step 2b: Wait for MongoDB PRIMARY status
+    if ! spoke_deployment_wait_for_mongodb_primary "$instance_code"; then
+        log_error "MongoDB failed to achieve PRIMARY status"
+        return 1
+    fi
+
     # Step 3: Create admin user for Terraform/Keycloak operations (deploy mode only)
     if [ "$pipeline_mode" = "deploy" ]; then
         spoke_deployment_ensure_admin_user "$instance_code"
@@ -180,6 +192,107 @@ spoke_deployment_wait_for_core_services() {
     done
 
     log_success "Core services healthy"
+    return 0
+}
+
+# =============================================================================
+# MONGODB REPLICA SET INITIALIZATION
+# =============================================================================
+
+##
+# Initialize MongoDB replica set (post-container-start)
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - Initialization successful
+#   1 - Initialization failed
+##
+spoke_deployment_init_mongodb_replica_set() {
+    local instance_code="$1"
+    local code_upper=$(upper "$instance_code")
+    local code_lower=$(lower "$instance_code")
+    
+    local mongo_container="dive-spoke-${code_lower}-mongodb"
+    local init_script="${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh"
+    
+    log_step "Initializing MongoDB replica set for $code_upper..."
+    
+    # Check script exists
+    if [ ! -f "$init_script" ]; then
+        log_error "CRITICAL: MongoDB initialization script not found: $init_script"
+        return 1
+    fi
+    
+    # Get MongoDB password for this instance
+    local mongo_pass_var="MONGO_PASSWORD_${code_upper}"
+    local mongo_pass="${!mongo_pass_var}"
+    
+    if [ -z "$mongo_pass" ]; then
+        log_error "CRITICAL: MongoDB password not set for $code_upper (expected: $mongo_pass_var)"
+        return 1
+    fi
+    
+    # Run initialization script
+    if ! bash "$init_script" "$mongo_container" admin "$mongo_pass"; then
+        log_error "CRITICAL: MongoDB replica set initialization FAILED for $code_upper"
+        log_error "This will cause 'not primary' errors during spoke registration"
+        return 1
+    fi
+    
+    log_success "MongoDB replica set initialized for $code_upper"
+    return 0
+}
+
+##
+# Wait for MongoDB to achieve PRIMARY status
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - PRIMARY achieved
+#   1 - Timeout or error
+##
+spoke_deployment_wait_for_mongodb_primary() {
+    local instance_code="$1"
+    local code_upper=$(upper "$instance_code")
+    local code_lower=$(lower "$instance_code")
+    
+    local mongo_container="dive-spoke-${code_lower}-mongodb"
+    
+    log_step "Waiting for MongoDB PRIMARY status ($code_upper)..."
+    
+    # Get MongoDB password for this instance
+    local mongo_pass_var="MONGO_PASSWORD_${code_upper}"
+    local mongo_pass="${!mongo_pass_var}"
+    
+    local max_wait=60
+    local elapsed=0
+    local is_primary=false
+    
+    while [ $elapsed -lt $max_wait ]; do
+        local state=$(docker exec "$mongo_container" mongosh admin -u admin -p "$mongo_pass" --quiet --eval "rs.status().members[0].stateStr" 2>/dev/null || echo "ERROR")
+        
+        if [ "$state" = "PRIMARY" ]; then
+            is_primary=true
+            log_success "MongoDB achieved PRIMARY status (${elapsed}s) - $code_upper"
+            break
+        fi
+        
+        log_verbose "MongoDB state: $state (waiting for PRIMARY...)"
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+    
+    if [ "$is_primary" != "true" ]; then
+        log_error "CRITICAL: Timeout waiting for MongoDB PRIMARY (${max_wait}s) - $code_upper"
+        local current_state=$(docker exec "$mongo_container" mongosh admin -u admin -p "$mongo_pass" --quiet --eval "rs.status().members[0].stateStr" 2>/dev/null || echo "UNKNOWN")
+        log_error "Current state: $current_state"
+        return 1
+    fi
+    
     return 0
 }
 

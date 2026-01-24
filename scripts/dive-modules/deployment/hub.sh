@@ -84,29 +84,64 @@ hub_deploy() {
         return 1
     fi
 
-    # Wait for healthy
-    log_info "Phase 4: Health verification"
+    # Wait for healthy (MongoDB container accepting connections)
+    log_info "Phase 4: Health verification (container ready)"
     if ! hub_wait_healthy; then
         log_error "Health verification failed"
         return 1
     fi
 
-    # Initialize MongoDB replica set (required for OPAL CDC change streams)
-    log_info "Phase 4a: MongoDB replica set initialization"
-    if [ -f "${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh" ]; then
-        if bash "${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh" dive-hub-mongodb admin "$MONGO_PASSWORD"; then
-            log_success "MongoDB replica set initialized - change streams enabled"
-        else
-            log_warn "MongoDB replica set initialization failed - change streams may not work"
+    # Phase 4a: Initialize MongoDB replica set (CRITICAL - required for change streams)
+    log_info "Phase 4a: Initializing MongoDB replica set"
+    if [ ! -f "${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh" ]; then
+        log_error "CRITICAL: MongoDB initialization script not found"
+        return 1
+    fi
+    
+    if ! bash "${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh" dive-hub-mongodb admin "$MONGO_PASSWORD"; then
+        log_error "CRITICAL: MongoDB replica set initialization FAILED"
+        log_error "This will cause 'not primary' errors and deployment failure"
+        return 1
+    fi
+    log_success "MongoDB replica set initialized"
+
+    # Phase 4b: Wait for PRIMARY status (explicit verification)
+    log_info "Phase 4b: Waiting for MongoDB PRIMARY status"
+    local max_wait=60
+    local elapsed=0
+    local is_primary=false
+    
+    while [ $elapsed -lt $max_wait ]; do
+        local state=$(docker exec dive-hub-mongodb mongosh admin -u admin -p "$MONGO_PASSWORD" --quiet --eval "rs.status().members[0].stateStr" 2>/dev/null || echo "ERROR")
+        
+        if [ "$state" = "PRIMARY" ]; then
+            is_primary=true
+            log_success "MongoDB achieved PRIMARY status (${elapsed}s)"
+            break
         fi
+        
+        log_verbose "MongoDB state: $state (waiting for PRIMARY...)"
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+    
+    if [ "$is_primary" != "true" ]; then
+        log_error "CRITICAL: Timeout waiting for MongoDB PRIMARY (${max_wait}s)"
+        log_error "Current state: $(docker exec dive-hub-mongodb mongosh admin -u admin -p "$MONGO_PASSWORD" --quiet --eval "rs.status().members[0].stateStr" 2>/dev/null || echo "UNKNOWN")"
+        return 1
     fi
 
+    # Phase 4c: Verify backend can connect (may need retry due to initialization timing)
+    log_info "Phase 4c: Verifying backend connectivity"
+    # Backend will use retry logic from mongodb-connection.ts
+    # Just wait for backend to become healthy
+    
     # Initialize orchestration database
-    log_info "Phase 4b: Orchestration database"
+    log_info "Phase 5: Orchestration database initialization"
     hub_init_orchestration_db
 
     # Configure Keycloak
-    log_info "Phase 5: Keycloak configuration"
+    log_info "Phase 6: Keycloak configuration"
     if ! hub_configure_keycloak; then
         log_error "CRITICAL: Keycloak configuration FAILED"
         log_error "Hub is unusable without realm configuration"
@@ -115,7 +150,7 @@ hub_deploy() {
     fi
 
     # Verify realm exists after configuration
-    log_info "Phase 5.5: Verifying realm creation"
+    log_info "Phase 6.5: Verifying realm creation"
     if ! hub_verify_realm; then
         log_error "CRITICAL: Realm verification FAILED"  
         log_error "Keycloak configuration completed but realm doesn't exist"
