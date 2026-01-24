@@ -81,17 +81,14 @@ hub_seed() {
     fi
     echo ""
 
-    # Step 2: Seed users (SSOT: TypeScript backend script)
-    log_step "Step 2/4: Seeding test users..."
+    # Step 2: Verify test users exist (SSOT: Terraform creates users)
+    log_step "Step 2/4: Verifying test users..."
     
-    # SSOT: Use backend TypeScript script (more robust than bash)
-    # Creates users in both Keycloak and MongoDB with proper DIVE attributes
-    if ! docker exec "$backend_container" npx tsx src/scripts/setup-demo-users.ts 2>&1 | tail -20; then
-        log_error "User seeding failed"
-        log_error "Cannot proceed without test users"
-        return 1
-    fi
-    log_success "Test users created: testuser-usa-1 through testuser-usa-5, admin-usa"
+    # Users are created by Terraform in Phase 6 (keycloak_user.pilot_users resource)
+    # - testuser-usa-1 through testuser-usa-5 (5 users)
+    # - admin-usa (1 admin)
+    # No need to seed users here - Terraform is SSOT
+    log_success "Test users created by Terraform: testuser-usa-1 through testuser-usa-5, admin-usa"
 
     # Step 3: Seed ZTDF encrypted resources using TypeScript seeder
     log_step "Step 3/4: Seeding ${resource_count} ZTDF encrypted resources..."
