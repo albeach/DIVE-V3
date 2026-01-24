@@ -183,6 +183,7 @@ policies/.bundle/
 # Ignore SQL dumps but not migration files
 *.sql
 !scripts/migrations/*.sql
+!backend/drizzle/**/*.sql
 *.dump
 *.backup
 

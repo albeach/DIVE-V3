@@ -27,6 +27,7 @@
 import winston from 'winston';
 import path from 'path';
 import fs from 'fs';
+import { Pool } from 'pg';
 import { logger } from '../utils/logger';
 import {
   logACP240Event,
@@ -184,6 +185,7 @@ class AuditService {
   private environment: string;
   private policyVersion: string;
   private entriesLogged: number = 0;
+  private pgPool: Pool | null = null;
 
   constructor(config: Partial<IAuditServiceConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -195,6 +197,9 @@ class AuditService {
     if (!fs.existsSync(logDir)) {
       fs.mkdirSync(logDir, { recursive: true });
     }
+
+    // Initialize PostgreSQL connection pool for audit persistence
+    this.initializePostgreSQL();
 
     // Create dedicated audit logger
     const transports: winston.transport[] = [
@@ -262,8 +267,16 @@ class AuditService {
    * Log an audit entry
    */
   private log(entry: IAuditEntry): void {
+    // Log to file (Winston)
     this.auditLogger.info('', entry);
     this.entriesLogged++;
+    
+    // Persist to PostgreSQL (async, non-blocking)
+    this.persistToDatabase(entry).catch(err => {
+      logger.warn('Audit PostgreSQL persistence failed (non-blocking)', {
+        error: err.message
+      });
+    });
   }
 
   /**
