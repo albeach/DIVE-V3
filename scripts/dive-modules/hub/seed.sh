@@ -81,20 +81,17 @@ hub_seed() {
     fi
     echo ""
 
-    # Step 2: Seed users (includes User Profile configuration)
+    # Step 2: Seed users (SSOT: TypeScript backend script)
     log_step "Step 2/4: Seeding test users..."
-    if [ -x "${SEED_SCRIPTS_DIR}/seed-hub-users.sh" ]; then
-        "${SEED_SCRIPTS_DIR}/seed-hub-users.sh"
-        if [ $? -eq 0 ]; then
-            log_success "Test users created: testuser-usa-1 through testuser-usa-5, admin-usa"
-        else
-            log_error "User seeding failed"
-            return 1
-        fi
-    else
-        log_error "seed-hub-users.sh not found or not executable"
+    
+    # SSOT: Use backend TypeScript script (more robust than bash)
+    # Creates users in both Keycloak and MongoDB with proper DIVE attributes
+    if ! docker exec "$backend_container" npx tsx src/scripts/setup-demo-users.ts 2>&1 | tail -20; then
+        log_error "User seeding failed"
+        log_error "Cannot proceed without test users"
         return 1
     fi
+    log_success "Test users created: testuser-usa-1 through testuser-usa-5, admin-usa"
 
     # Step 3: Seed ZTDF encrypted resources using TypeScript seeder
     log_step "Step 3/4: Seeding ${resource_count} ZTDF encrypted resources..."
