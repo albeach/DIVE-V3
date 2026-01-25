@@ -600,7 +600,7 @@ hub_parallel_startup() {
     # OPTIONAL services: Alternative implementations or dev-only features - deployment continues with warnings
     # STRETCH services: Advanced features for pilot demo - deployment continues with warnings
     local -a CORE_SERVICES=(postgres mongodb redis redis-blacklist keycloak opa backend frontend)
-    local -a OPTIONAL_SERVICES=(authzforce otel-collector)
+    local -a OPTIONAL_SERVICES=(otel-collector)  # authzforce excluded (ADR-001: context failure, 90s timeout)
     local -a STRETCH_SERVICES=(kas opal-server)
 
     # Define hub-specific dependency graph (self-contained to avoid export issues)
@@ -618,14 +618,15 @@ hub_parallel_startup() {
     # Level 0: postgres, mongodb, redis, redis-blacklist, opa (true no-dependency services)
     # Level 1: keycloak (depends on postgres)
     # Level 2: backend (depends on all DBs + keycloak + opa)
-    # Level 3: frontend, authzforce, kas, opal-server, otel-collector (depend on backend/keycloak)
+    # Level 3: frontend, kas, opal-server, otel-collector (depend on backend/keycloak)
+    # Note: authzforce excluded via docker-compose profile (ADR-001)
     
     local -a level_0=("postgres" "mongodb" "redis" "redis-blacklist" "opa")
     local -a level_1=("keycloak")
     local -a level_2=("backend")
-    local -a level_3=("frontend" "authzforce" "kas" "opal-server" "otel-collector")
+    local -a level_3=("frontend" "kas" "opal-server" "otel-collector")
     local max_level=3
-    local total_services=12
+    local total_services=11  # Reduced from 12 (authzforce excluded)
 
     local total_started=0
     local total_failed=0

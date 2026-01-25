@@ -420,13 +420,22 @@ services:
       start_period: 45s
 
   # ---------------------------------------------------------------------------
-  # AuthzForce - XACML Policy Decision Point (optional, for XACML compliance)
+  # AuthzForce - XACML Policy Decision Point (EXCLUDED - See ADR-001)
   # ---------------------------------------------------------------------------
-  # NOTE: AuthzForce runs HTTP internally. This is secure because:
-  #   1. Only accessible within the Docker network (hub-internal)
-  #   2. All external access goes through HTTPS backend/frontend
-  #   3. No sensitive data exposed externally on port 8282
-  # To enable HTTPS, use a reverse proxy (nginx/traefik) in front of AuthzForce
+  # STATUS: Disabled via docker-compose profile (not started by default)
+  # REASON: Tomcat context startup failure causes 90s timeout on every deployment
+  # IMPACT: Zero functional loss - OPA provides all authorization (XACML not required)
+  # RE-ENABLE: docker compose --profile xacml up -d authzforce
+  #
+  # Technical Details:
+  #   - Tomcat starts but WAR deployment fails ("listeners failed to start")
+  #   - Root cause unclear, investigation not justified (OPTIONAL service, no clients)
+  #   - Excluding saves 90s deployment time (59% reduction: 153s → 63s)
+  #
+  # Alternative XACML Support:
+  #   - Option A: Re-enable this service if XACML requirement emerges
+  #   - Option B: Implement OPA XACML compatibility layer (Rego policies)
+  #   - Option C: Evaluate alternative XACML PDPs (AT&T, WSO2 Balana)
   #
   # Platform Note (ARM64 hosts):
   #   AuthzForce image is linux/amd64 only. On ARM64 hosts (Apple Silicon, ARM servers),
@@ -434,12 +443,17 @@ services:
   #   This is acceptable for dev/test environments. For production ARM64, consider:
   #   - Building a native ARM64 image from source, OR
   #   - Using an alternative XACML PDP with ARM64 support
+  #
+  # See: docs/ADR/ADR-001-AUTHZFORCE-EXCLUSION.md
   # ---------------------------------------------------------------------------
   authzforce:
     image: authzforce/server:12.0.1
     platform: linux/amd64  # Explicit for ARM64 hosts (runs via QEMU emulation)
     container_name: ${COMPOSE_PROJECT_NAME}-authzforce
     restart: unless-stopped
+    # EXCLUDED from default deployment (ADR-001: Tomcat context failure, 90s timeout)
+    # Re-enable: docker compose --profile xacml up
+    profiles: ["xacml"]
     # NOTE: Exposing port for debugging only. In production, remove this.
     ports:
       - "127.0.0.1:${AUTHZFORCE_PORT:-8282}:8080"
