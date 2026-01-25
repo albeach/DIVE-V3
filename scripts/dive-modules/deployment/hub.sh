@@ -166,6 +166,59 @@ hub_deploy() {
     phase_times+=("Phase 2 (Initialization): ${phase2_duration}s")
     log_verbose "Phase 2 completed in ${phase2_duration}s"
 
+    # Phase 2.5: Initialize MongoDB replica set (CRITICAL - must run BEFORE parallel startup)
+    # This was previously Phase 4a, but needs to run before backend starts
+    # Backend requires MongoDB replica set for change streams (OPAL)
+    phase_start=$(date +%s)
+    if type progress_set_phase &>/dev/null; then
+        progress_set_phase 2.5 "MongoDB replica set"
+    fi
+    log_info "Phase 2.5: Starting MongoDB and initializing replica set"
+    
+    # Start MongoDB first (Level 0 service, but we need it early)
+    log_verbose "Starting MongoDB container..."
+    if ! ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" up -d mongodb >/dev/null 2>&1; then
+        log_error "CRITICAL: Failed to start MongoDB container"
+        kill $timeout_monitor_pid 2>/dev/null || true
+        return 1
+    fi
+    
+    # Wait for MongoDB container to be healthy
+    log_verbose "Waiting for MongoDB container to be healthy..."
+    local mongo_wait=0
+    local mongo_max_wait=60
+    while [ $mongo_wait -lt $mongo_max_wait ]; do
+        if ${DOCKER_CMD:-docker} ps --filter "name=dive-hub-mongodb" --filter "health=healthy" --format "{{.Names}}" | grep -q "dive-hub-mongodb"; then
+            log_verbose "MongoDB container is healthy"
+            break
+        fi
+        sleep 2
+        mongo_wait=$((mongo_wait + 2))
+    done
+    
+    if [ $mongo_wait -ge $mongo_max_wait ]; then
+        log_warn "MongoDB container not healthy after ${mongo_max_wait}s, attempting replica set init anyway..."
+    fi
+    
+    # Now initialize replica set
+    if [ ! -f "${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh" ]; then
+        log_error "CRITICAL: MongoDB initialization script not found"
+        kill $timeout_monitor_pid 2>/dev/null || true
+        return 1
+    fi
+
+    if ! bash "${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh" dive-hub-mongodb admin "$MONGO_PASSWORD"; then
+        log_error "CRITICAL: MongoDB replica set initialization FAILED"
+        log_error "This will cause 'not primary' errors and backend startup failure"
+        kill $timeout_monitor_pid 2>/dev/null || true
+        return 1
+    fi
+    log_success "MongoDB replica set initialized and PRIMARY"
+    phase_end=$(date +%s)
+    local phase2_5_duration=$((phase_end - phase_start))
+    phase_times+=("Phase 2.5 (MongoDB Replica Set): ${phase2_5_duration}s")
+    log_verbose "Phase 2.5 completed in ${phase2_5_duration}s"
+
     # Phase 3: Start services (now uses parallel startup)
     phase_start=$(date +%s)
     if type progress_set_phase &>/dev/null; then
@@ -189,71 +242,6 @@ hub_deploy() {
     local phase3_duration=$((phase_end - phase_start))
     phase_times+=("Phase 3 (Services): ${phase3_duration}s")
     log_success "Phase 3 completed in ${phase3_duration}s"
-
-    # Phase 4a: Initialize MongoDB replica set (CRITICAL - required for change streams)
-    phase_start=$(date +%s)
-    if type progress_set_phase &>/dev/null; then
-        progress_set_phase 4 "MongoDB initialization"
-    fi
-    log_info "Phase 4a: Initializing MongoDB replica set"
-    if [ ! -f "${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh" ]; then
-        log_error "CRITICAL: MongoDB initialization script not found"
-        kill $timeout_monitor_pid 2>/dev/null || true
-        return 1
-    fi
-
-    if ! bash "${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh" dive-hub-mongodb admin "$MONGO_PASSWORD"; then
-        log_error "CRITICAL: MongoDB replica set initialization FAILED"
-        log_error "This will cause 'not primary' errors and deployment failure"
-        kill $timeout_monitor_pid 2>/dev/null || true
-        return 1
-    fi
-    log_success "MongoDB replica set initialized"
-    phase_end=$(date +%s)
-    local phase4a_duration=$((phase_end - phase_start))
-    phase_times+=("Phase 4a (MongoDB Init): ${phase4a_duration}s")
-    log_verbose "Phase 4a completed in ${phase4a_duration}s"
-
-    # Phase 4b: Wait for PRIMARY status (explicit verification with increased timeout)
-    phase_start=$(date +%s)
-    log_info "Phase 4b: Waiting for MongoDB PRIMARY status"
-    local max_wait=90  # Increased from 60s to 90s
-    local elapsed=0
-    local is_primary=false
-
-    while [ $elapsed -lt $max_wait ]; do
-        local state=$(${DOCKER_CMD:-docker} exec dive-hub-mongodb mongosh admin -u admin -p "$MONGO_PASSWORD" --quiet --eval "rs.status().members[0].stateStr" 2>/dev/null || echo "ERROR")
-
-        if [ "$state" = "PRIMARY" ]; then
-            is_primary=true
-            log_success "MongoDB achieved PRIMARY status (${elapsed}s)"
-            break
-        elif [ "$state" = "ERROR" ]; then
-            log_verbose "MongoDB state: ERROR (replica set may still be initializing...)"
-        else
-            log_verbose "MongoDB state: $state (waiting for PRIMARY...)"
-        fi
-
-        sleep 3  # Check every 3 seconds (more reasonable than 2s)
-        elapsed=$((elapsed + 3))
-    done
-
-    if [ "$is_primary" != "true" ]; then
-        log_error "CRITICAL: Timeout waiting for MongoDB PRIMARY (${max_wait}s)"
-        log_error "This usually indicates:"
-        log_error "  - KeyFile permissions issue (check /tmp/mongo-keyfile in container)"
-        log_error "  - Resource constraints (insufficient CPU/memory)"
-        log_error "  - Network configuration problem"
-        log_error ""
-        log_error "Current state: $(${DOCKER_CMD:-docker} exec dive-hub-mongodb mongosh admin -u admin -p "$MONGO_PASSWORD" --quiet --eval "rs.status().members[0].stateStr" 2>/dev/null || echo "UNKNOWN")"
-        log_error "Check logs: ${DOCKER_CMD:-docker} logs dive-hub-mongodb"
-        kill $timeout_monitor_pid 2>/dev/null || true
-        return 1
-    fi
-    phase_end=$(date +%s)
-    local phase4b_duration=$((phase_end - phase_start))
-    phase_times+=("Phase 4b (MongoDB PRIMARY): ${phase4b_duration}s")
-    log_verbose "Phase 4b completed in ${phase4b_duration}s"
 
     # Phase 4c: Verify backend can connect (may need retry due to initialization timing)
     phase_start=$(date +%s)
@@ -599,6 +587,14 @@ hub_down() {
 hub_parallel_startup() {
     log_info "Starting hub services with dependency-aware parallel orchestration"
 
+    # SERVICE CLASSIFICATION (for graceful degradation)
+    # CORE services: Required for basic identity/authorization flows - deployment fails if these timeout
+    # OPTIONAL services: Alternative implementations or dev-only features - deployment continues with warnings
+    # STRETCH services: Advanced features for pilot demo - deployment continues with warnings
+    local -a CORE_SERVICES=(postgres mongodb redis redis-blacklist keycloak opa backend frontend)
+    local -a OPTIONAL_SERVICES=(authzforce otel-collector)
+    local -a STRETCH_SERVICES=(kas opal-server)
+
     # Define hub-specific dependency graph (self-contained to avoid export issues)
     # Based on docker-compose.hub.yml service dependencies
     declare -A hub_deps=(
@@ -739,6 +735,7 @@ hub_parallel_startup() {
 
         # Wait for all services at this level
         local level_failed=0
+        local level_core_failed=0
         for pid in "${pids[@]}"; do
             local service="${service_pid_map[$pid]}"
 
@@ -752,7 +749,49 @@ hub_parallel_startup() {
             else
                 ((total_failed++))
                 ((level_failed++))
-                log_error "Service $service failed to start at level $level"
+                
+                # Check if this is a CORE, OPTIONAL, or STRETCH service
+                local is_core=false
+                local is_optional=false
+                local is_stretch=false
+                
+                for core_svc in "${CORE_SERVICES[@]}"; do
+                    if [ "$service" = "$core_svc" ]; then
+                        is_core=true
+                        ((level_core_failed++))
+                        break
+                    fi
+                done
+                
+                if ! $is_core; then
+                    for opt_svc in "${OPTIONAL_SERVICES[@]}"; do
+                        if [ "$service" = "$opt_svc" ]; then
+                            is_optional=true
+                            break
+                        fi
+                    done
+                fi
+                
+                if ! $is_core && ! $is_optional; then
+                    for stretch_svc in "${STRETCH_SERVICES[@]}"; do
+                        if [ "$service" = "$stretch_svc" ]; then
+                            is_stretch=true
+                            break
+                        fi
+                    done
+                fi
+                
+                # Log appropriate message based on service classification
+                if $is_core; then
+                    log_error "Service $service failed to start at level $level (CORE - deployment will fail)"
+                elif $is_optional; then
+                    log_warn "Service $service failed to start at level $level (OPTIONAL - deployment will continue)"
+                elif $is_stretch; then
+                    log_warn "Service $service failed to start at level $level (STRETCH - deployment will continue)"
+                else
+                    log_error "Service $service failed to start at level $level (UNKNOWN classification - treating as CORE)"
+                    ((level_core_failed++))
+                fi
 
                 # Record failure in metrics if available
                 if type metrics_record_service_failure &>/dev/null; then
@@ -761,11 +800,14 @@ hub_parallel_startup() {
             fi
         done
 
-        # If any service failed at this level, subsequent levels will likely fail
-        if [ $level_failed -gt 0 ]; then
-            log_error "Level $level had $level_failed failures"
-            log_error "Stopping parallel startup - fix failures and redeploy"
+        # Only fail if CORE services failed at this level
+        if [ $level_core_failed -gt 0 ]; then
+            log_error "Level $level had $level_core_failed CORE service failures"
+            log_error "Stopping parallel startup - fix CORE service failures and redeploy"
             return 1
+        elif [ $level_failed -gt 0 ]; then
+            log_warn "Level $level had $level_failed failures, but all CORE services operational"
+            log_warn "Deployment will continue without optional/stretch services"
         fi
 
         local level_time=$(($(date +%s) - start_time))
@@ -776,18 +818,18 @@ hub_parallel_startup() {
     local total_time=$((end_time - start_time))
 
     # Summary
+    local core_started=$((total_started - total_failed))
     log_success "Parallel startup complete: $total_started services started in ${total_time}s"
+    if [ $total_failed -gt 0 ]; then
+        log_warn "Note: $total_failed optional/stretch services did not start (see warnings above)"
+    fi
 
     # Record metrics
     if type metrics_record_deployment_phase &>/dev/null; then
         metrics_record_deployment_phase "HUB" "hub" "parallel_startup" "$total_time"
     fi
 
-    if [ $total_failed -gt 0 ]; then
-        log_error "Failed services: $total_failed"
-        return 1
-    fi
-
+    # Only fail if CORE services failed (already checked in level loop)
     return 0
 }
 
