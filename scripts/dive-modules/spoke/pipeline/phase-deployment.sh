@@ -92,6 +92,11 @@ spoke_phase_deployment() {
     local code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
+    # =============================================================================
+    # PERFORMANCE TRACKING: Phase timing metrics
+    # =============================================================================
+    local PHASE_START=$(date +%s)
+    
     log_info "Deployment phase for $code_upper"
 
     # CRITICAL PRE-FLIGHT: Ensure OPAL key is configured
@@ -162,7 +167,10 @@ spoke_phase_deployment() {
         return 1
     fi
 
-    log_success "Deployment phase complete"
+    # Calculate and log phase duration
+    local PHASE_END=$(date +%s)
+    local PHASE_DURATION=$((PHASE_END - PHASE_START))
+    log_success "Deployment phase complete in ${PHASE_DURATION}s"
     return 0
 }
 

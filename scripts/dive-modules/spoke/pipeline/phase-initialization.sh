@@ -45,6 +45,11 @@ spoke_phase_initialization() {
     local code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
+    # =============================================================================
+    # PERFORMANCE TRACKING: Phase timing metrics
+    # =============================================================================
+    local PHASE_START=$(date +%s)
+    
     log_info "Initialization phase for $code_upper"
 
     # Step 1: Check if already initialized (redeploy mode skips some steps)
@@ -104,7 +109,10 @@ spoke_phase_initialization() {
         orch_create_checkpoint "$instance_code" "INITIALIZATION" "Initialization phase completed"
     fi
 
-    log_success "Initialization phase complete"
+    # Calculate and log phase duration
+    local PHASE_END=$(date +%s)
+    local PHASE_DURATION=$((PHASE_END - PHASE_START))
+    log_success "Initialization phase complete in ${PHASE_DURATION}s"
     return 0
 }
 

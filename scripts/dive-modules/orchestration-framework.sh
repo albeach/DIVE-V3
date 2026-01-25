@@ -1916,30 +1916,164 @@ orch_rollback_containers() {
 #   $1 - Instance code
 #   $2 - Checkpoint ID
 ##
+##
+# Complete system rollback with comprehensive cleanup
+#
+# This function performs a complete rollback including:
+# 1. Stop and remove all containers
+# 2. Remove Docker networks
+# 3. Clean Terraform state
+# 4. Remove orchestration database entries
+# 5. Clear checkpoints
+# 6. Optionally remove instance directory (--clean-slate)
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Checkpoint ID (unused, kept for compatibility)
+#   $3 - Clean slate flag (optional: "clean-slate" to remove instance directory)
+##
 orch_rollback_complete() {
     local instance_code="$1"
     local checkpoint_id="$2"
+    local clean_slate="${3:-}"
 
-    # CRITICAL SIMPLIFICATION (2026-01-15): Database-only rollback
-    # Root cause: File restoration is unnecessary when using templates (SSOT)
-    # Previous: Restored config files + restarted containers from checkpoint
-    # Fixed: Stop containers + update database state to FAILED
-    #
-    # Recovery: User redeploys, templates regenerate everything correctly
+    log_info "Executing comprehensive rollback for $instance_code..."
+    local code_lower=$(lower "$instance_code")
+    local instance_dir="${DIVE_ROOT}/instances/${code_lower}"
 
-    log_info "Executing rollback for $instance_code..."
+    # Track what was cleaned
+    local cleaned=0
+    local total_steps=6
 
-    # Stop containers
-    orch_rollback_stop_services "$instance_code"
-
-    # Update database state to FAILED
-    if orch_db_check_connection; then
-        local code_lower=$(lower "$instance_code")
-        orch_db_set_state "$instance_code" "FAILED" "Rollback executed - manual redeploy required"
+    # Step 1: Stop and remove all containers with volumes
+    log_step "1/$total_steps: Stopping and removing containers..."
+    if [ -d "$instance_dir" ] && [ -f "$instance_dir/docker-compose.yml" ]; then
+        cd "$instance_dir"
+        if docker compose down -v --remove-orphans 2>&1 | grep -q "Removed\|Stopped"; then
+            log_success "✓ Containers stopped and removed"
+            ((cleaned++))
+        else
+            # Fallback: manually remove containers
+            docker ps -a --filter "name=dive-spoke-${code_lower}-" -q | xargs -r docker rm -f 2>/dev/null && ((cleaned++))
+        fi
+        cd "$DIVE_ROOT"
+    else
+        log_verbose "No docker-compose.yml found - skipping container cleanup"
     fi
 
-    log_success "Rollback complete - stopped containers and updated state to FAILED"
-    log_info "To recover: ./dive spoke deploy $instance_code"
+    # Step 2: Remove Docker networks
+    log_step "2/$total_steps: Cleaning Docker networks..."
+    local networks=$(docker network ls --filter "name=dive-spoke-${code_lower}" -q 2>/dev/null)
+    if [ -n "$networks" ]; then
+        echo "$networks" | xargs -r docker network rm 2>/dev/null && {
+            log_success "✓ Docker networks removed"
+            ((cleaned++))
+        }
+    else
+        log_verbose "No networks to clean"
+    fi
+
+    # Step 3: Clean Terraform state
+    log_step "3/$total_steps: Cleaning Terraform state..."
+    local tf_spoke_dir="${DIVE_ROOT}/terraform/spoke"
+    if [ -d "$tf_spoke_dir" ]; then
+        cd "$tf_spoke_dir"
+
+        # Remove workspace if it exists
+        if terraform workspace list 2>/dev/null | grep -q "$code_lower"; then
+            terraform workspace select default 2>/dev/null || true
+            terraform workspace delete "$code_lower" 2>/dev/null && {
+                log_success "✓ Terraform workspace deleted"
+                ((cleaned++))
+            }
+        else
+            log_verbose "No Terraform workspace to clean"
+        fi
+
+        # Remove state files
+        rm -f "terraform.tfstate.d/${code_lower}/terraform.tfstate" 2>/dev/null
+        rm -rf ".terraform" 2>/dev/null
+
+        cd "$DIVE_ROOT"
+    else
+        log_verbose "Terraform directory not found"
+    fi
+
+    # Step 4: Remove orchestration state
+    log_step "4/$total_steps: Cleaning orchestration database..."
+    if type orch_db_delete_instance &>/dev/null && orch_db_check_connection 2>/dev/null; then
+        if orch_db_delete_instance "$instance_code"; then
+            log_success "✓ Orchestration state removed"
+            ((cleaned++))
+        fi
+    else
+        log_verbose "Database not available or function not found"
+    fi
+
+    # Step 5: Clear checkpoints
+    log_step "5/$total_steps: Clearing checkpoints..."
+    if type spoke_checkpoint_clear_all &>/dev/null; then
+        if spoke_checkpoint_clear_all "$instance_code" "confirm"; then
+            log_success "✓ Checkpoints cleared"
+            ((cleaned++))
+        fi
+    else
+        # Manual checkpoint cleanup
+        if [ -d "$instance_dir/.phases" ]; then
+            rm -rf "$instance_dir/.phases" 2>/dev/null && {
+                log_success "✓ Checkpoints cleared (manual)"
+                ((cleaned++))
+            }
+        fi
+    fi
+
+    # Step 6: Optionally remove instance directory
+    if [ "$clean_slate" = "clean-slate" ]; then
+        log_step "6/$total_steps: Removing instance directory (clean slate)..."
+        if [ -d "$instance_dir" ]; then
+            # Backup critical files before removal
+            local backup_dir="${DIVE_ROOT}/.rollback-backups/${code_lower}-$(date +%Y%m%d-%H%M%S)"
+            mkdir -p "$backup_dir"
+
+            # Backup config files if they exist
+            [ -f "$instance_dir/config.json" ] && cp "$instance_dir/config.json" "$backup_dir/" 2>/dev/null
+            [ -f "$instance_dir/.env" ] && cp "$instance_dir/.env" "$backup_dir/" 2>/dev/null
+
+            # Remove instance directory
+            rm -rf "$instance_dir" 2>/dev/null && {
+                log_success "✓ Instance directory removed (backup: $backup_dir)"
+                ((cleaned++))
+            }
+        else
+            log_verbose "No instance directory to remove"
+        fi
+    else
+        log_verbose "6/$total_steps: Instance directory preserved (use --clean-slate to remove)"
+    fi
+
+    # Summary
+    echo ""
+    if [ $cleaned -gt 0 ]; then
+        log_success "Rollback complete: $cleaned/$total_steps steps completed"
+    else
+        log_warn "Rollback complete: No cleanup performed (nothing to clean)"
+    fi
+
+    # Update database state to FAILED
+    if orch_db_check_connection 2>/dev/null; then
+        orch_db_set_state "$instance_code" "FAILED" "Rollback executed - manual redeploy required" \
+            "{\"rollback_timestamp\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"clean_slate\":\"$clean_slate\"}"
+    fi
+
+    echo ""
+    log_info "Recovery options:"
+    log_info "  • Full redeploy: ./dive spoke deploy $instance_code"
+    if [ "$clean_slate" != "clean-slate" ]; then
+        log_info "  • Clean slate:   ./dive spoke rollback $instance_code --clean-slate"
+    fi
+    echo ""
+
+    return 0
 }
 
 # =============================================================================
@@ -2391,6 +2525,157 @@ orch_cleanup_old_data() {
         xargs -r rm -f 2>/dev/null || true
 
     log_verbose "Old orchestration data cleanup completed"
+}
+
+# =============================================================================
+# STATE CONSISTENCY VALIDATION (Phase 3.3)
+# =============================================================================
+# Validates that orchestration DB state matches actual system state.
+# Detects and corrects inconsistencies like:
+# - DB shows "deployed" but containers not running
+# - DB shows "unregistered" but containers running
+# - DB shows "complete" but realm missing
+# =============================================================================
+
+##
+# Validate state consistency between orchestration DB and actual system
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - State consistent or corrected
+#   1 - Fatal inconsistency that requires manual intervention
+##
+orch_validate_state_consistency() {
+    local instance_code="$1"
+    local code_lower=$(lower "$instance_code")
+
+    log_verbose "Validating state consistency for $instance_code..."
+
+    # Get current DB state
+    local db_state="UNKNOWN"
+    if type orch_db_get_state &>/dev/null && orch_db_check_connection 2>/dev/null; then
+        db_state=$(orch_db_get_state "$instance_code" 2>/dev/null || echo "UNKNOWN")
+    fi
+
+    # Determine actual system state
+    local actual_state=$(orch_determine_actual_state "$instance_code")
+
+    log_verbose "DB state: $db_state | Actual state: $actual_state"
+
+    # If states match, we're good
+    if [ "$db_state" = "$actual_state" ]; then
+        log_verbose "State consistent: $db_state"
+        return 0
+    fi
+
+    # States don't match - auto-correct if possible
+    log_warn "State inconsistency detected:"
+    log_warn "  DB shows: $db_state"
+    log_warn "  Actual:   $actual_state"
+
+    # Auto-correct the DB state
+    if type orch_db_set_state &>/dev/null && orch_db_check_connection 2>/dev/null; then
+        if orch_db_set_state "$instance_code" "$actual_state" "Auto-corrected from $db_state" \
+            "{\"previous_state\":\"$db_state\",\"corrected_at\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}"; then
+            log_success "✓ State corrected: $db_state → $actual_state"
+            return 0
+        else
+            log_error "Failed to correct state in database"
+            return 1
+        fi
+    else
+        log_warn "Cannot auto-correct - database unavailable"
+        return 1
+    fi
+}
+
+##
+# Determine actual deployment state by inspecting the system
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   State name on stdout (UNKNOWN, PARTIAL, COMPLETE, FAILED, etc.)
+##
+orch_determine_actual_state() {
+    local instance_code="$1"
+    local code_lower=$(lower "$instance_code")
+
+    # Check 1: Do containers exist?
+    local container_count=$(docker ps -a --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
+
+    if [ "$container_count" -eq 0 ]; then
+        # No containers = not deployed
+        echo "UNKNOWN"
+        return 0
+    fi
+
+    # Check 2: Are containers running?
+    local running_count=$(docker ps --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
+
+    if [ "$running_count" -eq 0 ]; then
+        # Containers exist but none running = failed or rolled back
+        echo "FAILED"
+        return 0
+    fi
+
+    # Check 3: Are core services healthy?
+    local core_services=("keycloak" "backend" "postgres")
+    local healthy_core=0
+
+    for service in "${core_services[@]}"; do
+        local container="dive-spoke-${code_lower}-${service}"
+        if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
+            local health=$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo "no-healthcheck")
+            if [ "$health" = "healthy" ] || [ "$health" = "no-healthcheck" ]; then
+                ((healthy_core++))
+            fi
+        fi
+    done
+
+    if [ $healthy_core -lt 2 ]; then
+        # Core services not healthy = deploying or failed
+        echo "DEPLOYING"
+        return 0
+    fi
+
+    # Check 4: Does Keycloak realm exist?
+    local kc_container="dive-spoke-${code_lower}-keycloak"
+    local realm="dive-v3-broker-${code_lower}"
+
+    if docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
+        local realm_check=$(docker exec "$kc_container" curl -sf \
+            "http://localhost:8080/realms/${realm}" 2>/dev/null | \
+            jq -r '.realm // empty' 2>/dev/null)
+
+        if [ "$realm_check" != "$realm" ]; then
+            # Containers healthy but realm missing = PARTIAL deployment
+            echo "PARTIAL"
+            return 0
+        fi
+    fi
+
+    # Check 5: Is spoke registered in Hub?
+    local backend_container="dive-spoke-${code_lower}-backend"
+    if docker ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
+        # Check if backend can reach Hub (indicates federation)
+        local hub_check=$(docker exec "$backend_container" curl -sf \
+            "https://dive-hub-backend:4000/health" 2>/dev/null | \
+            jq -r '.status // empty' 2>/dev/null)
+
+        if [ -z "$hub_check" ]; then
+            # Backend running but can't reach Hub = PARTIAL (federation not setup)
+            echo "PARTIAL"
+            return 0
+        fi
+    fi
+
+    # All checks passed = COMPLETE
+    echo "COMPLETE"
+    return 0
 }
 
 # =============================================================================
