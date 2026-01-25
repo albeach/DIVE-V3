@@ -59,9 +59,9 @@ cmd_deploy() {
         log_dry "Step 1: cmd_validate"
         log_dry "Step 2: load_secrets (env=$ENVIRONMENT, instance=$INSTANCE)"
         log_dry "Step 3: check_certs"
-        log_dry "Step 4: docker compose down -v"
-        log_dry "Step 5: docker volume rm postgres_data mongo_data redis_data"
-        log_dry "Step 6: docker compose up -d"
+        log_dry "Step 4: ${DOCKER_CMD:-docker} compose down -v"
+        log_dry "Step 5: ${DOCKER_CMD:-docker} volume rm postgres_data mongo_data redis_data"
+        log_dry "Step 6: ${DOCKER_CMD:-docker} compose up -d"
         log_dry "Step 7: wait 60s + health checks"
         log_dry "Step 8: terraform apply -var-file=$INSTANCE.tfvars"
         log_dry "Step 9: npm run seed:$INSTANCE"
@@ -118,13 +118,13 @@ cmd_deploy() {
     log_verbose "Using COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME"
 
     log_step "Step 4: Stopping existing containers..."
-    docker compose -f "$COMPOSE_FILE" down -v --remove-orphans 2>/dev/null || true
+    ${DOCKER_CMD:-docker} compose -f "$COMPOSE_FILE" down -v --remove-orphans 2>/dev/null || true
 
     log_step "Step 5: Volumes removed via compose down -v"
     # Volumes are automatically removed by 'docker compose down -v' above
 
     log_step "Step 6: Starting infrastructure services..."
-    docker compose -f "$COMPOSE_FILE" up -d
+    ${DOCKER_CMD:-docker} compose -f "$COMPOSE_FILE" up -d
 
     log_step "Step 7: Waiting for services (90s)..."
     local wait_time=0
@@ -199,10 +199,10 @@ cmd_reset() {
     echo ""
 
     if [ "$DRY_RUN" = true ]; then
-        log_dry "Step 1: docker compose down -v --remove-orphans"
+        log_dry "Step 1: ${DOCKER_CMD:-docker} compose down -v --remove-orphans"
         log_dry "Step 2: check_certs"
         log_dry "Step 3: load_secrets"
-        log_dry "Step 4: docker compose up -d"
+        log_dry "Step 4: ${DOCKER_CMD:-docker} compose up -d"
         log_dry "Step 5: sleep 60 && terraform apply"
         return 0
     fi
@@ -229,7 +229,7 @@ checkpoint_create() {
     date -u +%Y-%m-%dT%H:%M:%SZ > "${checkpoint_path}/timestamp"
 
     # Save compose state
-    docker compose ps --format json > "${checkpoint_path}/compose-state.json" 2>/dev/null || echo "[]" > "${checkpoint_path}/compose-state.json"
+    ${DOCKER_CMD:-docker} compose ps --format json > "${checkpoint_path}/compose-state.json" 2>/dev/null || echo "[]" > "${checkpoint_path}/compose-state.json"
 
     # Backup volumes - dynamically discover volumes from compose file
     local compose_file="${COMPOSE_FILE:-docker-compose.yml}"
@@ -243,9 +243,9 @@ checkpoint_create() {
         for vol in $volumes; do
             # Construct full volume name with project prefix
             local full_vol_name="${project_name}_${vol}"
-            if docker volume inspect "$full_vol_name" >/dev/null 2>&1; then
+            if ${DOCKER_CMD:-docker} volume inspect "$full_vol_name" >/dev/null 2>&1; then
                 log_verbose "Backing up volume: ${full_vol_name}"
-                docker run --rm \
+                ${DOCKER_CMD:-docker} run --rm \
                     -v "${full_vol_name}:/data:ro" \
                     -v "${checkpoint_path}:/backup" \
                     alpine tar czf "/backup/${full_vol_name}.tar.gz" -C /data . 2>/dev/null || true
@@ -326,7 +326,7 @@ cmd_rollback() {
 
     # Stop current containers
     log_verbose "Stopping containers..."
-    docker compose down 2>/dev/null || true
+    ${DOCKER_CMD:-docker} compose down 2>/dev/null || true
 
     # Restore volumes - dynamically discover volumes from compose file
     local compose_file="${COMPOSE_FILE:-docker-compose.yml}"
@@ -344,11 +344,11 @@ cmd_rollback() {
             if [ -f "$backup_file" ]; then
                 log_verbose "Restoring volume: ${full_vol_name}"
                 # Remove existing volume
-                docker volume rm "$full_vol_name" 2>/dev/null || true
+                ${DOCKER_CMD:-docker} volume rm "$full_vol_name" 2>/dev/null || true
                 # Create new volume
-                docker volume create "$full_vol_name" >/dev/null
+                ${DOCKER_CMD:-docker} volume create "$full_vol_name" >/dev/null
                 # Restore data
-                docker run --rm \
+                ${DOCKER_CMD:-docker} run --rm \
                     -v "${full_vol_name}:/data" \
                     -v "${checkpoint_path}:/backup:ro" \
                     alpine tar xzf "/backup/${full_vol_name}.tar.gz" -C /data 2>/dev/null || true
@@ -532,7 +532,7 @@ cmd_nuke() {
         for v in $all_volumes; do
             if [ "$target_type" = "orphans" ]; then
                 # Check if dangling
-                if docker volume ls -qf "dangling=true" 2>/dev/null | grep -q "^${v}$"; then
+                if ${DOCKER_CMD:-docker} volume ls -qf "dangling=true" 2>/dev/null | grep -q "^${v}$"; then
                     dive_volumes="$dive_volumes $v"
                 fi
             elif [ -n "$volume_patterns" ] && echo "$v" | grep -qE "$volume_patterns"; then
@@ -613,7 +613,7 @@ cmd_nuke() {
         [ "$network_count" -gt 0 ] && log_dry "Phase 4: Force-remove ${network_count} networks"
         [ "$image_count" -gt 0 ] && log_dry "Phase 5: Remove ${image_count} images"
         if [ "$target_type" = "all" ]; then
-            log_dry "Phase 6: docker system prune -f --volumes"
+            log_dry "Phase 6: ${DOCKER_CMD:-docker} system prune -f --volumes"
             log_dry "Phase 7: Cleanup checkpoint directory"
         fi
         return 0
@@ -649,7 +649,7 @@ cmd_nuke() {
         # Stop only hub
         if [ -f "docker-compose.hub.yml" ]; then
             log_verbose "  Stopping hub"
-            docker compose -f docker-compose.hub.yml -p dive-hub down -v --remove-orphans --timeout 5 2>/dev/null || true
+            ${DOCKER_CMD:-docker} compose -f docker-compose.hub.yml -p dive-hub down -v --remove-orphans --timeout 5 2>/dev/null || true
         fi
     elif [ "$target_type" = "spoke" ]; then
         # Stop only specific spoke
@@ -657,7 +657,7 @@ cmd_nuke() {
         local instance_dir="instances/${instance_lower}"
         if [ -f "${instance_dir}/docker-compose.yml" ]; then
             log_verbose "  Stopping spoke: ${target_instance^^}"
-            (cd "$instance_dir" && docker compose -p "dive-spoke-${instance_lower}" down -v --remove-orphans --timeout 5 2>/dev/null) || true
+            (cd "$instance_dir" && ${DOCKER_CMD:-docker} compose -p "dive-spoke-${instance_lower}" down -v --remove-orphans --timeout 5 2>/dev/null) || true
         fi
     elif [ "$target_type" = "all" ]; then
         # Stop all compose projects
@@ -667,9 +667,9 @@ cmd_nuke() {
                 local project_name=$(grep -m 1 '^name:' "$compose_file" 2>/dev/null | sed 's/name: *//' | tr -d ' "'"'"'')
                 if [ -n "$project_name" ]; then
                     log_verbose "  Stopping project: $project_name"
-                    docker compose -f "$compose_file" -p "$project_name" down -v --remove-orphans --timeout 5 2>/dev/null || true
+                    ${DOCKER_CMD:-docker} compose -f "$compose_file" -p "$project_name" down -v --remove-orphans --timeout 5 2>/dev/null || true
                 else
-                    docker compose -f "$compose_file" down -v --remove-orphans --timeout 5 2>/dev/null || true
+                    ${DOCKER_CMD:-docker} compose -f "$compose_file" down -v --remove-orphans --timeout 5 2>/dev/null || true
                 fi
             fi
         done
@@ -678,7 +678,7 @@ cmd_nuke() {
         for instance_dir in instances/*/; do
             if [ -f "${instance_dir}docker-compose.yml" ]; then
                 log_verbose "  Stopping spoke: $(basename "$instance_dir")"
-                (cd "$instance_dir" && docker compose down -v --remove-orphans --timeout 5 2>/dev/null) || true
+                (cd "$instance_dir" && ${DOCKER_CMD:-docker} compose down -v --remove-orphans --timeout 5 2>/dev/null) || true
             fi
         done
     else
@@ -693,7 +693,7 @@ cmd_nuke() {
 
     local removed_containers=0
     for c in $dive_containers; do
-        if docker rm -f "$c" 2>/dev/null; then
+        if ${DOCKER_CMD:-docker} rm -f "$c" 2>/dev/null; then
             removed_containers=$((removed_containers + 1))
         fi
     done
@@ -701,7 +701,7 @@ cmd_nuke() {
     # Also catch any that weren't in our pattern (by compose project label)
     for label in "com.docker.compose.project=dive-hub" "com.docker.compose.project=dive-v3"; do
         for c in $(docker ps -aq --filter "label=$label" 2>/dev/null); do
-            if docker rm -f "$c" 2>/dev/null; then
+            if ${DOCKER_CMD:-docker} rm -f "$c" 2>/dev/null; then
                 removed_containers=$((removed_containers + 1))
             fi
         done
@@ -717,7 +717,7 @@ cmd_nuke() {
 
     # Named volumes matching our patterns
     for v in $dive_volumes; do
-        if docker volume rm -f "$v" 2>/dev/null; then
+        if ${DOCKER_CMD:-docker} volume rm -f "$v" 2>/dev/null; then
             removed_volumes=$((removed_volumes + 1))
         fi
     done
@@ -725,7 +725,7 @@ cmd_nuke() {
     # Also remove by label
     for label in "com.docker.compose.project=dive-hub" "com.docker.compose.project=dive-v3"; do
         for v in $(docker volume ls -q --filter "label=$label" 2>/dev/null); do
-            if docker volume rm -f "$v" 2>/dev/null; then
+            if ${DOCKER_CMD:-docker} volume rm -f "$v" 2>/dev/null; then
                 removed_volumes=$((removed_volumes + 1))
             fi
         done
@@ -735,7 +735,7 @@ cmd_nuke() {
     if [ "$deep_clean" = true ]; then
         log_verbose "  Deep clean: removing ALL dangling volumes..."
         for v in $(docker volume ls -qf dangling=true 2>/dev/null); do
-            if docker volume rm -f "$v" 2>/dev/null; then
+            if ${DOCKER_CMD:-docker} volume rm -f "$v" 2>/dev/null; then
                 removed_volumes=$((removed_volumes + 1))
             fi
         done
@@ -751,9 +751,9 @@ cmd_nuke() {
     for n in $dive_networks; do
         # Disconnect all containers first
         for container in $(docker network inspect "$n" --format='{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null); do
-            docker network disconnect -f "$n" "$container" 2>/dev/null || true
+            ${DOCKER_CMD:-docker} network disconnect -f "$n" "$container" 2>/dev/null || true
         done
-        if docker network rm "$n" 2>/dev/null; then
+        if ${DOCKER_CMD:-docker} network rm "$n" 2>/dev/null; then
             removed_networks=$((removed_networks + 1))
         fi
     done
@@ -761,7 +761,7 @@ cmd_nuke() {
     # Also remove by label
     for label in "com.docker.compose.project=dive-hub" "com.docker.compose.project=dive-v3"; do
         for n in $(docker network ls -q --filter "label=$label" 2>/dev/null); do
-            docker network rm "$n" 2>/dev/null && removed_networks=$((removed_networks + 1))
+            ${DOCKER_CMD:-docker} network rm "$n" 2>/dev/null && removed_networks=$((removed_networks + 1))
         done
     done
     log_verbose "  Removed $removed_networks networks"
@@ -779,7 +779,7 @@ cmd_nuke() {
                 # For spoke targeting, only remove images for that spoke
                 local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
                 for img in $(docker images --format '{{.ID}} {{.Repository}}' 2>/dev/null | grep "dive-spoke-${instance_lower}" | awk '{print $1}'); do
-                    if docker image rm -f "$img" 2>/dev/null; then
+                    if ${DOCKER_CMD:-docker} image rm -f "$img" 2>/dev/null; then
                         removed_images=$((removed_images + 1))
                     fi
                 done
@@ -787,7 +787,7 @@ cmd_nuke() {
             hub)
                 # For hub targeting, only remove hub images
                 for img in $(docker images --format '{{.ID}} {{.Repository}}' 2>/dev/null | grep "dive-hub" | awk '{print $1}'); do
-                    if docker image rm -f "$img" 2>/dev/null; then
+                    if ${DOCKER_CMD:-docker} image rm -f "$img" 2>/dev/null; then
                         removed_images=$((removed_images + 1))
                     fi
                 done
@@ -796,7 +796,7 @@ cmd_nuke() {
                 # For all targeting, remove all DIVE images
                 for pattern in "dive" "ghcr.io/opentdf"; do
                     for img in $(docker images --format '{{.ID}} {{.Repository}}' 2>/dev/null | grep "$pattern" | awk '{print $1}'); do
-                        if docker image rm -f "$img" 2>/dev/null; then
+                        if ${DOCKER_CMD:-docker} image rm -f "$img" 2>/dev/null; then
                             removed_images=$((removed_images + 1))
                         fi
                     done
@@ -805,7 +805,7 @@ cmd_nuke() {
         esac
 
         # Remove dangling images
-        docker image prune -f 2>/dev/null || true
+        ${DOCKER_CMD:-docker} image prune -f 2>/dev/null || true
         log_verbose "  Removed $removed_images images"
     else
         log_step "Phase 5/7: Skipping images (--keep-images)"
@@ -815,7 +815,7 @@ cmd_nuke() {
     # PHASE 7: SYSTEM PRUNE
     # =========================================================================
     log_step "Phase 6/7: Final system prune..."
-    docker system prune -f --volumes 2>/dev/null || true
+    ${DOCKER_CMD:-docker} system prune -f --volumes 2>/dev/null || true
 
     # =========================================================================
     # PHASE 8: CLEANUP LOCAL STATE
