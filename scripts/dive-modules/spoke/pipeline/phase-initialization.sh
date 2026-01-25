@@ -88,6 +88,17 @@ spoke_phase_initialization() {
 
     # NOTE: Terraform application moved to CONFIGURATION phase (after containers are running)
 
+    # Validate initialization phase completed successfully
+    if ! spoke_checkpoint_initialization "$instance_code"; then
+        log_error "Initialization checkpoint failed - state invalid"
+        if type orch_record_error &>/dev/null; then
+            orch_record_error "${SPOKE_ERROR_CHECKPOINT_FAILED:-1150}" "$ORCH_SEVERITY_CRITICAL" \
+                "Initialization checkpoint validation failed" "initialization" \
+                "Review logs and ensure all required files exist. Check keyfile is a file not directory."
+        fi
+        return 1
+    fi
+
     # Create initialization checkpoint
     if type orch_create_checkpoint &>/dev/null; then
         orch_create_checkpoint "$instance_code" "INITIALIZATION" "Initialization phase completed"
@@ -129,13 +140,57 @@ spoke_init_setup_directories() {
 
     if [ -d "$spoke_dir" ]; then
         log_success "Directory structure created: $spoke_dir"
-        return 0
     else
         orch_record_error "$SPOKE_ERROR_DIRECTORY_SETUP" "$ORCH_SEVERITY_CRITICAL" \
             "Failed to create instance directories" "initialization" \
             "$(spoke_error_get_remediation $SPOKE_ERROR_DIRECTORY_SETUP $instance_code)"
         return 1
     fi
+
+    # ==========================================================================
+    # CRITICAL FIX: Generate MongoDB keyfile for replica set authentication
+    # ==========================================================================
+    # MongoDB requires a keyfile (not directory) for replica set internal auth.
+    # This was missing from the pipeline, causing "cp: -r not specified" errors.
+    # ==========================================================================
+    local keyfile_path="$spoke_dir/mongo-keyfile"
+    
+    # Generate keyfile if it doesn't exist
+    if [ ! -f "$keyfile_path" ]; then
+        log_verbose "Generating MongoDB replica set keyfile"
+        if bash "${DIVE_ROOT}/scripts/generate-mongo-keyfile.sh" "$keyfile_path"; then
+            log_success "✓ MongoDB keyfile generated: $keyfile_path"
+        else
+            orch_record_error "${SPOKE_ERROR_KEYFILE_GENERATE:-1102}" "$ORCH_SEVERITY_CRITICAL" \
+                "Failed to generate MongoDB keyfile" "initialization" \
+                "Check permissions and ensure openssl is available"
+            return 1
+        fi
+    else
+        log_verbose "MongoDB keyfile already exists: $keyfile_path"
+    fi
+
+    # Validate keyfile exists and is a file (not directory)
+    if [ ! -f "$keyfile_path" ] || [ -d "$keyfile_path" ]; then
+        log_error "MongoDB keyfile missing or is a directory (must be file)"
+        orch_record_error "${SPOKE_ERROR_KEYFILE_INVALID:-1103}" "$ORCH_SEVERITY_CRITICAL" \
+            "MongoDB keyfile is not a valid file" "initialization" \
+            "Remove directory and regenerate: rm -rf $keyfile_path && ./dive spoke deploy $instance_code"
+        return 1
+    fi
+
+    # Validate keyfile size (MongoDB requires 6-1024 bytes)
+    local keyfile_size=$(wc -c < "$keyfile_path" | tr -d ' ')
+    if [ "$keyfile_size" -lt 6 ] || [ "$keyfile_size" -gt 1024 ]; then
+        log_error "MongoDB keyfile size invalid: $keyfile_size bytes (must be 6-1024)"
+        orch_record_error "${SPOKE_ERROR_KEYFILE_SIZE:-1104}" "$ORCH_SEVERITY_CRITICAL" \
+            "MongoDB keyfile size out of valid range" "initialization" \
+            "Regenerate keyfile: rm $keyfile_path && ./dive spoke deploy $instance_code"
+        return 1
+    fi
+
+    log_verbose "MongoDB keyfile validated: ${keyfile_size} bytes"
+    return 0
 }
 
 # =============================================================================
@@ -822,6 +877,76 @@ spoke_init_check_drift() {
     else
         log_verbose "Drift detection not available"
     fi
+}
+
+# =============================================================================
+# CHECKPOINT VALIDATION
+# =============================================================================
+
+##
+# Validate initialization phase completed successfully
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - Validation passed
+#   1 - Validation failed
+##
+spoke_checkpoint_initialization() {
+    local instance_code="$1"
+    local code_lower=$(lower "$instance_code")
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    
+    log_verbose "Validating initialization checkpoint for $instance_code"
+    
+    # Check directory structure
+    if [ ! -d "$spoke_dir" ]; then
+        log_error "Checkpoint FAILED: Instance directory missing: $spoke_dir"
+        return 1
+    fi
+    
+    if [ ! -d "$spoke_dir/certs" ]; then
+        log_error "Checkpoint FAILED: Certs directory missing"
+        return 1
+    fi
+    
+    # Check keyfile is file (not directory) - CRITICAL
+    if [ ! -f "$spoke_dir/mongo-keyfile" ]; then
+        log_error "Checkpoint FAILED: MongoDB keyfile missing"
+        return 1
+    fi
+    
+    if [ -d "$spoke_dir/mongo-keyfile" ]; then
+        log_error "Checkpoint FAILED: MongoDB keyfile is a directory (must be file)"
+        return 1
+    fi
+    
+    # Check keyfile size
+    local keyfile_size=$(wc -c < "$spoke_dir/mongo-keyfile" | tr -d ' ')
+    if [ "$keyfile_size" -lt 6 ] || [ "$keyfile_size" -gt 1024 ]; then
+        log_error "Checkpoint FAILED: MongoDB keyfile size invalid: ${keyfile_size} bytes"
+        return 1
+    fi
+    
+    # Check config files exist
+    if [ ! -f "$spoke_dir/config.json" ]; then
+        log_error "Checkpoint FAILED: config.json missing"
+        return 1
+    fi
+    
+    if [ ! -f "$spoke_dir/.env" ]; then
+        log_error "Checkpoint FAILED: .env file missing"
+        return 1
+    fi
+    
+    if [ ! -f "$spoke_dir/docker-compose.yml" ]; then
+        log_error "Checkpoint FAILED: docker-compose.yml missing"
+        return 1
+    fi
+    
+    log_verbose "✓ Initialization checkpoint passed"
+    return 0
 }
 
 export SPOKE_PHASE_INITIALIZATION_LOADED=1

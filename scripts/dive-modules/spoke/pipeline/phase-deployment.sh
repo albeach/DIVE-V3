@@ -151,6 +151,17 @@ spoke_phase_deployment() {
         orch_create_checkpoint "$instance_code" "DEPLOYMENT" "Deployment phase completed"
     fi
 
+    # Validate deployment phase completed successfully
+    if ! spoke_checkpoint_deployment "$instance_code"; then
+        log_error "Deployment checkpoint failed - containers not healthy or MongoDB not PRIMARY"
+        if type orch_record_error &>/dev/null; then
+            orch_record_error "${SPOKE_ERROR_CHECKPOINT_FAILED:-1150}" "$ORCH_SEVERITY_CRITICAL" \
+                "Deployment checkpoint validation failed" "deployment" \
+                "Check container health: docker ps --filter name=dive-spoke-${code_lower}-"
+        fi
+        return 1
+    fi
+
     log_success "Deployment phase complete"
     return 0
 }
@@ -754,6 +765,66 @@ spoke_deployment_restart_services() {
             fi
         fi
     done
+}
+
+# =============================================================================
+# CHECKPOINT VALIDATION
+# =============================================================================
+
+##
+# Validate deployment phase completed successfully
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - Validation passed
+#   1 - Validation failed
+##
+spoke_checkpoint_deployment() {
+    local instance_code="$1"
+    local code_lower=$(lower "$instance_code")
+    
+    log_verbose "Validating deployment checkpoint for $instance_code"
+    
+    # Load secrets if needed for MongoDB password
+    local mongo_password_var="MONGO_PASSWORD_${instance_code}"
+    local mongo_password="${!mongo_password_var}"
+    
+    if [ -z "$mongo_password" ]; then
+        # Try to load from .env
+        local env_file="${DIVE_ROOT}/instances/${code_lower}/.env"
+        if [ -f "$env_file" ]; then
+            mongo_password=$(grep "^MONGO_PASSWORD=" "$env_file" 2>/dev/null | cut -d= -f2)
+        fi
+    fi
+    
+    # Check MongoDB is PRIMARY
+    if [ -n "$mongo_password" ]; then
+        local mongo_state=$(docker exec "dive-spoke-${code_lower}-mongodb" \
+            mongosh admin -u admin -p "$mongo_password" --quiet \
+            --eval "rs.status().members[0].stateStr" 2>/dev/null || echo "ERROR")
+        
+        if [ "$mongo_state" != "PRIMARY" ]; then
+            log_error "Checkpoint FAILED: MongoDB is not PRIMARY (state: $mongo_state)"
+            return 1
+        fi
+    else
+        log_verbose "MongoDB password not available, skipping PRIMARY check"
+    fi
+    
+    # Check all containers healthy
+    local unhealthy=$(docker ps --filter "name=dive-spoke-${code_lower}-" \
+        --format "{{.Names}}\t{{.Status}}" | grep -v "healthy" | wc -l | tr -d ' ')
+    
+    if [ "$unhealthy" != "0" ]; then
+        log_error "Checkpoint FAILED: $unhealthy containers not healthy"
+        docker ps --filter "name=dive-spoke-${code_lower}-" --format "table {{.Names}}\t{{.Status}}"
+        return 1
+    fi
+    
+    log_verbose "✓ Deployment checkpoint passed"
+    return 0
 }
 
 export SPOKE_PHASE_DEPLOYMENT_LOADED=1
