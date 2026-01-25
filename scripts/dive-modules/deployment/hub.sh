@@ -170,7 +170,7 @@ hub_deploy() {
     phase_start=$(date +%s)
     if type progress_set_phase &>/dev/null; then
         progress_set_phase 3 "Starting services"
-        progress_set_services 0 6  # Hub has 6 services
+        progress_set_services 0 12  # Hub has 12 services total
     fi
     log_info "Phase 3: Starting services (parallel mode)"
     if ! hub_up; then
@@ -183,7 +183,7 @@ hub_deploy() {
     fi
     # Update to show all services started
     if type progress_set_services &>/dev/null; then
-        progress_set_services 6 6
+        progress_set_services 12 12
     fi
     phase_end=$(date +%s)
     local phase3_duration=$((phase_end - phase_start))
@@ -610,35 +610,27 @@ hub_parallel_startup() {
         ["frontend"]="backend"
     )
 
-    # Calculate dependency levels manually for hub services
-    # Level 0: postgres, mongodb, redis (no dependencies)
+    # Calculate dependency levels manually for ALL hub services
+    # Level 0: postgres, mongodb, redis, redis-blacklist, opa (true no-dependency services)
     # Level 1: keycloak (depends on postgres)
-    # Level 2: backend (depends on all DBs + keycloak)
-    # Level 3: frontend (depends on backend)
+    # Level 2: backend (depends on all DBs + keycloak + opa)
+    # Level 3: frontend, authzforce, kas, opal-server, otel-collector (depend on backend/keycloak)
     
-    local -a level_0=("postgres" "mongodb" "redis")
+    local -a level_0=("postgres" "mongodb" "redis" "redis-blacklist" "opa")
     local -a level_1=("keycloak")
     local -a level_2=("backend")
-    local -a level_3=("frontend")
+    local -a level_3=("frontend" "authzforce" "kas" "opal-server" "otel-collector")
     local max_level=3
+    local total_services=12
 
     local total_started=0
     local total_failed=0
     local start_time=$(date +%s)
 
-    log_verbose "Service graph has 4 dependency levels (0-3)"
+    log_verbose "Service graph has 4 dependency levels (0-3) with $total_services total services"
 
     # Start services level by level
     for level in 0 1 2 3; do
-        # Get services at this level
-        local level_services=()
-        case $level in
-            0) level_services=("${level_0[@]}") ;;
-            1) level_services=("${level_1[@]}") ;;
-            2) level_services=("${level_2[@]}") ;;
-            3) level_services=("${level_3[@]}") ;;
-        esac
-
         # Get services at this level
         local level_services=()
         case $level in
@@ -664,13 +656,19 @@ hub_parallel_startup() {
                 # Calculate dynamic timeout based on service type
                 local timeout
                 case "$service" in
-                    postgres)     timeout=${TIMEOUT_POSTGRES:-60} ;;
-                    mongodb)      timeout=${TIMEOUT_MONGODB:-90} ;;
-                    redis)        timeout=${TIMEOUT_REDIS:-30} ;;
-                    keycloak)     timeout=${TIMEOUT_KEYCLOAK:-180} ;;
-                    backend)      timeout=${TIMEOUT_BACKEND:-120} ;;
-                    frontend)     timeout=${TIMEOUT_FRONTEND:-90} ;;
-                    *)            timeout=60 ;;
+                    postgres)         timeout=${TIMEOUT_POSTGRES:-60} ;;
+                    mongodb)          timeout=${TIMEOUT_MONGODB:-90} ;;
+                    redis)            timeout=${TIMEOUT_REDIS:-30} ;;
+                    redis-blacklist)  timeout=${TIMEOUT_REDIS:-30} ;;
+                    keycloak)         timeout=${TIMEOUT_KEYCLOAK:-180} ;;
+                    opa)              timeout=${TIMEOUT_OPA:-30} ;;
+                    backend)          timeout=${TIMEOUT_BACKEND:-120} ;;
+                    frontend)         timeout=${TIMEOUT_FRONTEND:-90} ;;
+                    kas)              timeout=${TIMEOUT_KAS:-60} ;;
+                    authzforce)       timeout=${TIMEOUT_AUTHZFORCE:-90} ;;
+                    opal-server)      timeout=${TIMEOUT_OPAL:-60} ;;
+                    otel-collector)   timeout=${TIMEOUT_OTEL:-30} ;;
+                    *)                timeout=60 ;;
                 esac
 
                 local container="${COMPOSE_PROJECT_NAME:-dive-hub}-${service}"
@@ -749,7 +747,7 @@ hub_parallel_startup() {
                 
                 # Update progress with current healthy service count
                 if type progress_set_services &>/dev/null; then
-                    progress_set_services "$total_started" 6
+                    progress_set_services "$total_started" 12
                 fi
             else
                 ((total_failed++))
