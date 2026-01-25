@@ -78,9 +78,10 @@ services:
       - hub-internal
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
 
   # ---------------------------------------------------------------------------
   # MongoDB - policy/resource data backing store for backend
@@ -121,10 +122,10 @@ services:
       # Replica set initialization happens in Phase 4a of deployment
       test: >
         mongosh admin -u admin -p ${MONGO_PASSWORD} --quiet --eval "db.adminCommand('ping')" | grep -q "ok"
-      interval: 5s
-      timeout: 3s
-      retries: 20
-      start_period: 30s
+      interval: 3s
+      timeout: 5s
+      retries: 15
+      start_period: 20s
 
   # ---------------------------------------------------------------------------
   # Redis - session/blacklist cache (Hardened)
@@ -161,10 +162,10 @@ services:
       - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD_USA}", "ping"]
-      interval: 10s
-      timeout: 5s
+      interval: 3s
+      timeout: 3s
       retries: 5
-      start_period: 10s
+      start_period: 5s
 
   # ---------------------------------------------------------------------------
   # Redis Blacklist - Shared token revocation across all instances (GAP-010)
@@ -197,10 +198,10 @@ services:
       - redis_blacklist_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD_BLACKLIST}", "ping"]
-      interval: 10s
-      timeout: 5s
+      interval: 3s
+      timeout: 3s
       retries: 5
-      start_period: 10s
+      start_period: 5s
 
   # ---------------------------------------------------------------------------
   # Redis Exporter - Prometheus metrics
@@ -276,10 +277,10 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -ksf https://localhost:8443/realms/master >/dev/null"]
-      interval: 30s
+      interval: 10s
       timeout: 10s
-      retries: 5
-      start_period: 120s
+      retries: 10
+      start_period: 90s
 
   # ---------------------------------------------------------------------------
   # OPA - Policy Decision Point (Hub loads bundle directly - INDUSTRY STANDARD)
@@ -301,7 +302,7 @@ services:
   #   4. OPAL Server + Client on same instance = antipattern (OPAL Discussion #390)
   # ---------------------------------------------------------------------------
   opa:
-    image: openpolicyagent/opa:1.12.1
+    image: openpolicyagent/opa:1.12.3
     container_name: ${COMPOSE_PROJECT_NAME}-opa
     restart: unless-stopped
     command:
@@ -325,10 +326,10 @@ services:
       - hub-internal
     healthcheck:
       test: ["CMD", "/opa", "version"]
-      interval: 10s
-      timeout: 5s
+      interval: 3s
+      timeout: 3s
       retries: 5
-      start_period: 10s
+      start_period: 5s
 
   # ---------------------------------------------------------------------------
   # Backend API - serves policy data for OPAL and Hub admin APIs
@@ -413,10 +414,10 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://localhost:4000/health || exit 1"]
-      interval: 30s
+      interval: 5s
       timeout: 10s
-      retries: 3
-      start_period: 60s
+      retries: 10
+      start_period: 45s
 
   # ---------------------------------------------------------------------------
   # AuthzForce - XACML Policy Decision Point (optional, for XACML compliance)
@@ -454,10 +455,10 @@ services:
       JAVA_OPTS: -Xms256m -Xmx512m
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/authzforce-ce/domains"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
+      interval: 10s
+      timeout: 8s
+      retries: 8
+      start_period: 45s
     networks:
       - hub-internal
 
@@ -479,9 +480,10 @@ services:
       - hub-internal
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:13133/"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 8
+      start_period: 10s
     depends_on:
       - keycloak
       - backend
@@ -499,10 +501,10 @@ services:
       - .env.hub
     healthcheck:
       test: ["CMD-SHELL", "wget --no-check-certificate -q -O- https://localhost:8080/health || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
+      interval: 5s
+      timeout: 8s
+      retries: 8
+      start_period: 20s
     environment:
       NODE_ENV: development
       KAS_PORT: 8080
@@ -548,10 +550,10 @@ services:
       - .env.hub
     healthcheck:
       test: ["CMD-SHELL", "curl -ksf https://localhost:3000/ >/dev/null || exit 1"]
-      interval: 30s
-      timeout: 15s
-      retries: 10
-      start_period: 120s
+      interval: 10s
+      timeout: 10s
+      retries: 12
+      start_period: 90s
     environment:
       NODE_ENV: development
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://localhost:4000}
@@ -694,10 +696,10 @@ services:
     # Uses custom entrypoint from Dockerfile that loads auth keys
     healthcheck:
       test: ["CMD", "curl", "-k", "-f", "https://localhost:7002/healthcheck"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
+      interval: 5s
+      timeout: 8s
+      retries: 10
+      start_period: 30s
     depends_on:
       - opa
       - backend

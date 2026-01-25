@@ -375,19 +375,22 @@ declare -A SERVICE_TIMEOUTS=(
     ["postgres"]="${TIMEOUT_POSTGRES:-60}"
     ["mongodb"]="${TIMEOUT_MONGODB:-90}"
     ["redis"]="${TIMEOUT_REDIS:-30}"
-    ["keycloak"]="${TIMEOUT_KEYCLOAK:-240}"
+    ["redis-blacklist"]="${TIMEOUT_REDIS_BLACKLIST:-30}"
+    ["keycloak"]="${TIMEOUT_KEYCLOAK:-180}"
     ["backend"]="${TIMEOUT_BACKEND:-120}"
-    ["frontend"]="${TIMEOUT_FRONTEND:-60}"
+    ["frontend"]="${TIMEOUT_FRONTEND:-90}"
     ["opa"]="${TIMEOUT_OPA:-30}"
     ["kas"]="${TIMEOUT_KAS:-60}"
     ["opal-client"]="${TIMEOUT_OPAL_CLIENT:-30}"
-    ["opal-server"]="${TIMEOUT_OPAL_SERVER:-45}"
-    ["authzforce"]="${TIMEOUT_AUTHZFORCE:-60}"
+    ["opal-server"]="${TIMEOUT_OPAL_SERVER:-60}"
+    ["opal-data-source"]="${TIMEOUT_OPAL_DATA_SOURCE:-30}"
+    ["authzforce"]="${TIMEOUT_AUTHZFORCE:-90}"
+    ["otel-collector"]="${TIMEOUT_OTEL_COLLECTOR:-30}"
     ["prometheus"]="${TIMEOUT_PROMETHEUS:-45}"
     ["grafana"]="${TIMEOUT_GRAFANA:-45}"
     ["loki"]="${TIMEOUT_LOKI:-45}"
     ["tempo"]="${TIMEOUT_TEMPO:-45}"
-    ["nginx"]="${TIMEOUT_NGINX:-30}"
+    ["nginx"]="${TIMEOUT_NGINX:-20}"
     ["cloudflared"]="${TIMEOUT_CLOUDFLARED:-30}"
 )
 
@@ -1979,7 +1982,7 @@ orch_rollback_complete() {
             ((cleaned++))
         else
             # Fallback: manually remove containers
-            docker ps -a --filter "name=dive-spoke-${code_lower}-" -q | xargs -r docker rm -f 2>/dev/null && ((cleaned++))
+            docker ps -a --filter "name=dive-spoke-${code_lower}-" -q | grep . | xargs docker rm -f 2>/dev/null && ((cleaned++))
         fi
         cd "$DIVE_ROOT"
     else
@@ -1990,7 +1993,7 @@ orch_rollback_complete() {
     log_step "2/$total_steps: Cleaning Docker networks..."
     local networks=$(docker network ls --filter "name=dive-spoke-${code_lower}" -q 2>/dev/null)
     if [ -n "$networks" ]; then
-        echo "$networks" | xargs -r docker network rm 2>/dev/null && {
+        echo "$networks" | grep . | xargs docker network rm 2>/dev/null && {
             log_success "✓ Docker networks removed"
             ((cleaned++))
         }
@@ -2530,24 +2533,71 @@ EOF
 # Cleanup old metrics and checkpoints
 ##
 orch_cleanup_old_data() {
-    local cutoff_time=$(date -d "$METRICS_RETENTION_HOURS hours ago" +%s)
+    # Portable date calculation (macOS + Linux)
+    local cutoff_time
+    if date -v-"${METRICS_RETENTION_HOURS}H" +%s >/dev/null 2>&1; then
+        # macOS
+        cutoff_time=$(date -v-"${METRICS_RETENTION_HOURS}H" +%s)
+    else
+        # Linux
+        cutoff_time=$(date -d "$METRICS_RETENTION_HOURS hours ago" +%s)
+    fi
 
     log_verbose "Cleaning up old orchestration data..."
 
-    # Clean old checkpoints
-    find "${DIVE_ROOT}/.dive-checkpoints" -type d -name "*" -exec stat -c '%Y %n' {} \; 2>/dev/null | \
-        awk -v cutoff="$cutoff_time" '$1 < cutoff {print $2}' | \
-        xargs -r rm -rf 2>/dev/null || true
+    # Clean old checkpoints (portable stat for macOS + Linux)
+    if command -v stat >/dev/null 2>&1; then
+        if stat -f %m . >/dev/null 2>&1; then
+            # macOS: use -f %m
+            find "${DIVE_ROOT}/.dive-checkpoints" -type d -name "*" 2>/dev/null | while read -r dir; do
+                local mtime=$(stat -f %m "$dir" 2>/dev/null || echo 0)
+                if [ "$mtime" -lt "$cutoff_time" ]; then
+                    rm -rf "$dir" 2>/dev/null || true
+                fi
+            done
+        else
+            # Linux: use -c %Y
+            find "${DIVE_ROOT}/.dive-checkpoints" -type d -name "*" -exec stat -c '%Y %n' {} \; 2>/dev/null | \
+                awk -v cutoff="$cutoff_time" '$1 < cutoff {print $2}' | \
+                | grep . | xargs rm -rf 2>/dev/null || true
+        fi
+    fi
 
-    # Clean old metrics
-    find "${DIVE_ROOT}/logs" -name "orchestration-metrics-*.json" -exec stat -c '%Y %n' {} \; 2>/dev/null | \
-        awk -v cutoff="$cutoff_time" '$1 < cutoff {print $2}' | \
-        xargs -r rm -f 2>/dev/null || true
+    # Clean old metrics (portable stat)
+    if command -v stat >/dev/null 2>&1; then
+        if stat -f %m . >/dev/null 2>&1; then
+            # macOS
+            find "${DIVE_ROOT}/logs" -name "orchestration-metrics-*.json" 2>/dev/null | while read -r file; do
+                local mtime=$(stat -f %m "$file" 2>/dev/null || echo 0)
+                if [ "$mtime" -lt "$cutoff_time" ]; then
+                    rm -f "$file" 2>/dev/null || true
+                fi
+            done
+        else
+            # Linux
+            find "${DIVE_ROOT}/logs" -name "orchestration-metrics-*.json" -exec stat -c '%Y %n' {} \; 2>/dev/null | \
+                awk -v cutoff="$cutoff_time" '$1 < cutoff {print $2}' | \
+                | grep . | xargs rm -f 2>/dev/null || true
+        fi
+    fi
 
-    # Clean old dashboards
-    find "${DIVE_ROOT}/logs" -name "orchestration-dashboard-*.html" -exec stat -c '%Y %n' {} \; 2>/dev/null | \
-        awk -v cutoff="$cutoff_time" '$1 < cutoff {print $2}' | \
-        xargs -r rm -f 2>/dev/null || true
+    # Clean old dashboards (portable stat)
+    if command -v stat >/dev/null 2>&1; then
+        if stat -f %m . >/dev/null 2>&1; then
+            # macOS
+            find "${DIVE_ROOT}/logs" -name "orchestration-dashboard-*.html" 2>/dev/null | while read -r file; do
+                local mtime=$(stat -f %m "$file" 2>/dev/null || echo 0)
+                if [ "$mtime" -lt "$cutoff_time" ]; then
+                    rm -f "$file" 2>/dev/null || true
+                fi
+            done
+        else
+            # Linux
+            find "${DIVE_ROOT}/logs" -name "orchestration-dashboard-*.html" -exec stat -c '%Y %n' {} \; 2>/dev/null | \
+                awk -v cutoff="$cutoff_time" '$1 < cutoff {print $2}' | \
+                | grep . | xargs rm -f 2>/dev/null || true
+        fi
+    fi
 
     log_verbose "Old orchestration data cleanup completed"
 }
