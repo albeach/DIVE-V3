@@ -846,12 +846,47 @@ cmd_nuke() {
         fi
     fi
 
-    # Clean Terraform state if it exists (optional for full reset)
-    if [ "$deep_clean" = true ]; then
-        log_verbose "  Deep clean: removing Terraform state..."
+    # =========================================================================
+    # TERRAFORM STATE CLEANUP (CRITICAL - Prevents "resource already exists" errors)
+    # =========================================================================
+    # ALWAYS clean Terraform state to ensure fresh deployments succeed
+    # This prevents conflicts where Terraform thinks resources exist but they don't
+    log_verbose "  Cleaning Terraform state (prevents resource conflicts)..."
+    
+    # Hub Terraform state
+    if [ -d "${DIVE_ROOT}/terraform/hub" ]; then
+        rm -rf "${DIVE_ROOT}/terraform/hub/.terraform" 2>/dev/null || true
+        rm -f "${DIVE_ROOT}/terraform/hub/terraform.tfstate"* 2>/dev/null || true
+        rm -f "${DIVE_ROOT}/terraform/hub/.terraform.lock.hcl" 2>/dev/null || true
+        rm -f "${DIVE_ROOT}/terraform/hub/hub.auto.tfvars" 2>/dev/null || true
+        log_verbose "    ✓ Hub Terraform state cleaned"
+    fi
+    
+    # Spoke Terraform state
+    if [ -d "${DIVE_ROOT}/terraform/spoke" ]; then
+        rm -rf "${DIVE_ROOT}/terraform/spoke/.terraform" 2>/dev/null || true
+        rm -f "${DIVE_ROOT}/terraform/spoke/terraform.tfstate"* 2>/dev/null || true
+        rm -f "${DIVE_ROOT}/terraform/spoke/.terraform.lock.hcl" 2>/dev/null || true
+        rm -f "${DIVE_ROOT}/terraform/spoke/spoke.auto.tfvars" 2>/dev/null || true
+        log_verbose "    ✓ Spoke Terraform state cleaned"
+    fi
+    
+    # Pilot Terraform state (legacy)
+    if [ -d "${DIVE_ROOT}/terraform/pilot" ]; then
         rm -rf "${DIVE_ROOT}/terraform/pilot/.terraform" 2>/dev/null || true
         rm -f "${DIVE_ROOT}/terraform/pilot/terraform.tfstate"* 2>/dev/null || true
         rm -f "${DIVE_ROOT}/terraform/pilot/.terraform.lock.hcl" 2>/dev/null || true
+        log_verbose "    ✓ Pilot Terraform state cleaned"
+    fi
+    
+    # Terraform backend state (if using local backend)
+    if [ "$deep_clean" = true ]; then
+        log_verbose "  Deep clean: removing all Terraform caches..."
+        find "${DIVE_ROOT}/terraform" -type d -name ".terraform" -exec rm -rf {} + 2>/dev/null || true
+        find "${DIVE_ROOT}/terraform" -type f -name "terraform.tfstate*" -delete 2>/dev/null || true
+        find "${DIVE_ROOT}/terraform" -type f -name ".terraform.lock.hcl" -delete 2>/dev/null || true
+        find "${DIVE_ROOT}/terraform" -type f -name "*.auto.tfvars" -delete 2>/dev/null || true
+        log_verbose "    ✓ All Terraform state removed"
     fi
 
     # SSOT ARCHITECTURE (2026-01-22): Clean spoke instance directories
@@ -868,14 +903,6 @@ cmd_nuke() {
             fi
         done
         log_verbose "  Spoke instance directories cleaned"
-        
-        # SSOT ARCHITECTURE: Clean Terraform state to prevent stale IdPs
-        log_verbose "  Cleaning Terraform state files (SSOT)..."
-        rm -f "${DIVE_ROOT}/terraform/hub/terraform.tfstate"* 2>/dev/null || true
-        rm -f "${DIVE_ROOT}/terraform/hub/hub.auto.tfvars" 2>/dev/null || true
-        rm -f "${DIVE_ROOT}/terraform/spoke/terraform.tfstate"* 2>/dev/null || true
-        rm -f "${DIVE_ROOT}/terraform/spoke/spoke.auto.tfvars" 2>/dev/null || true
-        log_verbose "  Terraform state cleaned"
     elif [ "$target_type" = "spoke" ] && [ -n "$target_instance" ]; then
         local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
         if [ -d "${DIVE_ROOT}/instances/${instance_lower}" ]; then
@@ -981,14 +1008,22 @@ module_deploy_help() {
     echo "  --force, -f         Force destruction (skip confirmation)"
     echo "  --keep-images       Don't remove Docker images"
     echo "  --reset-spokes      Clear spoke registration data (fixes stale spokeIds)"
-    echo "  --deep              Deep clean: remove ALL dangling volumes + Terraform state"
+    echo "  --deep              Deep clean: remove ALL dangling volumes + ALL Terraform state/caches"
     echo ""
     echo -e "${BOLD}Examples:${NC}"
-    echo "  ./dive nuke --yes                    # Standard nuke (all DIVE resources)"
-    echo "  ./dive nuke --yes --deep             # Deep clean (+ dangling volumes + TF state)"
+    echo "  ./dive nuke --yes                    # Standard nuke (all DIVE resources + TF state)"
+    echo "  ./dive nuke --yes --deep             # Deep clean (+ dangling volumes + all TF caches)"
     echo "  ./dive nuke --yes --reset-spokes     # Also clear spoke registrations"
     echo "  ./dive checkpoint create             # Save current state"
     echo "  ./dive rollback                      # Restore from latest checkpoint"
+    echo ""
+    echo -e "${BOLD}Terraform State Management:${NC}"
+    echo "  Standard nuke ALWAYS cleans Terraform state to prevent conflicts:"
+    echo "    • Removes .terraform/ directories"
+    echo "    • Removes terraform.tfstate* files"
+    echo "    • Removes .terraform.lock.hcl files"
+    echo "    • Removes auto-generated .auto.tfvars files"
+    echo "  This ensures fresh deployments succeed without 'resource already exists' errors."
     echo ""
     echo -e "${BOLD}Clean Slate Guarantee:${NC}"
     echo "  The nuke command uses multi-pattern discovery to catch:"
@@ -996,5 +1031,6 @@ module_deploy_help() {
     echo "    • All volumes matching: dive-*, hub_*, {code}_*"
     echo "    • All networks matching: dive-*, hub-*, *-internal"
     echo "    • Compose project labels: dive-hub, dive-v3"
+    echo "    • Terraform state and caches (always cleaned)"
     echo ""
 }
