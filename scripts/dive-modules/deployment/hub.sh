@@ -309,6 +309,21 @@ hub_preflight() {
         return 1
     fi
 
+    # CRITICAL FIX: Create dive-shared network BEFORE docker-compose validates it
+    # docker-compose.hub.yml declares dive-shared as "external: true"
+    # This means Docker expects it to already exist at parse time (not runtime)
+    # Without this, you get: "network dive-shared declared as external, but could not be found"
+    log_verbose "Ensuring dive-shared network exists (required by docker-compose.hub.yml)..."
+    if ! docker network inspect dive-shared >/dev/null 2>&1; then
+        docker network create dive-shared || {
+            log_error "Failed to create dive-shared network"
+            return 1
+        }
+        log_verbose "Created dive-shared network"
+    else
+        log_verbose "dive-shared network already exists"
+    fi
+
     # Check ports
     local ports_to_check="8443 4000 3000 5432 27017"
     for port in $ports_to_check; do
@@ -332,8 +347,8 @@ hub_init() {
     mkdir -p "${DIVE_ROOT}/logs/hub"
     mkdir -p "${DIVE_ROOT}/instances/hub/certs"
 
-    # Create shared network
-    docker network create dive-shared 2>/dev/null || true
+    # Note: dive-shared network is created in hub_preflight() 
+    # (must exist before docker-compose validates external networks)
 
     # Generate certificates if not exists
     local cert_dir="${DIVE_ROOT}/instances/hub/certs"
