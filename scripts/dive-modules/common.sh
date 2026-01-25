@@ -813,20 +813,38 @@ load_local_defaults() {
 load_secrets() {
     case "$ENVIRONMENT" in
         local|dev)
-            # Prefer GCP secrets in dev by default (can be disabled via DEV_USE_GCP_SECRETS=false).
-            # For local, only use GCP when explicitly requested.
+            # Auto-detect GCP authentication status
+            local gcp_available=false
+            if command -v gcloud >/dev/null 2>&1; then
+                if gcloud auth application-default print-access-token &>/dev/null; then
+                    gcp_available=true
+                fi
+            fi
+            
+            # Prefer GCP secrets if available (can be overridden)
             local want_gcp=false
             if [ "$ENVIRONMENT" = "dev" ]; then
-                if [ "${DEV_USE_GCP_SECRETS:-${USE_GCP_SECRETS:-true}}" = "true" ]; then
+                # Dev: Use GCP by default if available
+                if [ "${DEV_USE_GCP_SECRETS:-${USE_GCP_SECRETS:-auto}}" = "auto" ]; then
+                    want_gcp="$gcp_available"
+                elif [ "${DEV_USE_GCP_SECRETS:-${USE_GCP_SECRETS:-true}}" = "true" ]; then
                     want_gcp=true
                 fi
             else
-                if [ "${USE_GCP_SECRETS:-}" = "true" ] || [ "${DEV_USE_GCP_SECRETS:-}" = "true" ]; then
+                # Local: Explicit opt-in or auto-detect
+                if [ "${USE_GCP_SECRETS:-auto}" = "auto" ]; then
+                    want_gcp="$gcp_available"
+                elif [ "${USE_GCP_SECRETS:-}" = "true" ]; then
                     want_gcp=true
                 fi
             fi
 
             if [ "$want_gcp" = true ]; then
+                if [ "$gcp_available" = false ]; then
+                    log_error "GCP secrets requested but gcloud is not authenticated"
+                    log_error "Run: gcloud auth application-default login"
+                    return 1
+                fi
                 ensure_gcp_secrets_exist "$INSTANCE" || return 1
                 load_gcp_secrets "$INSTANCE" || return 1
                 return 0
@@ -838,10 +856,21 @@ load_secrets() {
                 log_error "This should NEVER be used in shared or production environments"
                 load_local_defaults
             else
-                log_error "No GCP Secret Manager access and ALLOW_INSECURE_LOCAL_DEVELOPMENT=false"
+                log_error "No GCP Secret Manager access"
+                if [ "$gcp_available" = false ] && command -v gcloud >/dev/null 2>&1; then
+                    log_error ""
+                    log_error "GCP CLI found but not authenticated. To authenticate:"
+                    log_error "  gcloud auth application-default login"
+                    log_error ""
+                    log_error "Or set USE_GCP_SECRETS=auto to auto-detect (default)"
+                elif ! command -v gcloud >/dev/null 2>&1; then
+                    log_error ""
+                    log_error "GCP CLI not found. Install with:"
+                    log_error "  https://cloud.google.com/sdk/docs/install"
+                    log_error ""
+                fi
                 log_error "For local development without GCP:"
                 log_error "  export ALLOW_INSECURE_LOCAL_DEVELOPMENT=true"
-                log_error "  OR set up GCP authentication"
                 return 1
             fi
             ;;
