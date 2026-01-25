@@ -77,9 +77,9 @@ check_endpoint() {
     local url="$1"
     local name="$2"
     local timeout="${3:-5}"
-    
+
     local status=$(curl -sk -o /dev/null -w "%{http_code}" --max-time "$timeout" "$url" 2>/dev/null || echo "000")
-    
+
     if [ "$status" = "200" ] || [ "$status" = "204" ]; then
         echo -e "    ${GREEN}✓${NC} $name ($status)"
         return 0
@@ -100,68 +100,68 @@ verify_spoke() {
     local name=$(get_country_name "$code")
     local flag=$(get_country_flag "$code")
     local code_lower="${code,,}"
-    
+
     echo ""
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BOLD}  $name ($code) $flag${NC}"
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    
+
     # Get ports
     eval "$(get_country_ports "$code")"
-    
+
     local checks_passed=0
     local checks_total=0
-    
+
     # Check Keycloak
     echo -e "\n  ${CYAN}Keycloak (port $SPOKE_KEYCLOAK_HTTPS_PORT):${NC}"
-    
+
     checks_total=$((checks_total + 1))
     if check_endpoint "https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT}/health/ready" "Health check"; then
         checks_passed=$((checks_passed + 1))
     fi
-    
+
     checks_total=$((checks_total + 1))
     if check_endpoint "https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT}/realms/dive-v3-broker/.well-known/openid-configuration" "OIDC discovery"; then
         checks_passed=$((checks_passed + 1))
     fi
-    
+
     # Check Backend
     echo -e "\n  ${CYAN}Backend API (port $SPOKE_BACKEND_PORT):${NC}"
-    
+
     checks_total=$((checks_total + 1))
     if check_endpoint "https://localhost:${SPOKE_BACKEND_PORT}/health" "Health check"; then
         checks_passed=$((checks_passed + 1))
     fi
-    
+
     checks_total=$((checks_total + 1))
     if check_endpoint "https://localhost:${SPOKE_BACKEND_PORT}/api/federation/status" "Federation status"; then
         checks_passed=$((checks_passed + 1))
     fi
-    
+
     # Check Frontend
     echo -e "\n  ${CYAN}Frontend (port $SPOKE_FRONTEND_PORT):${NC}"
-    
+
     checks_total=$((checks_total + 1))
     if check_endpoint "https://localhost:${SPOKE_FRONTEND_PORT}" "Web UI"; then
         checks_passed=$((checks_passed + 1))
     fi
-    
+
     # Check OPA
     echo -e "\n  ${CYAN}OPA Policy Engine (port $SPOKE_OPA_PORT):${NC}"
-    
+
     checks_total=$((checks_total + 1))
     if check_endpoint "http://localhost:${SPOKE_OPA_PORT}/health" "Health check"; then
         checks_passed=$((checks_passed + 1))
     fi
-    
+
     # Check KAS
     echo -e "\n  ${CYAN}Key Access Service (port $SPOKE_KAS_PORT):${NC}"
-    
+
     checks_total=$((checks_total + 1))
     if check_endpoint "https://localhost:${SPOKE_KAS_PORT}/health" "Health check"; then
         checks_passed=$((checks_passed + 1))
     fi
-    
+
     # Summary for this spoke
     echo ""
     local pass_rate=$((checks_passed * 100 / checks_total))
@@ -182,60 +182,60 @@ verify_hub() {
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BOLD}  Hub (USA) 🇺🇸${NC}"
     echo -e "${BOLD}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    
+
     local checks_passed=0
     local checks_total=0
-    
+
     echo -e "\n  ${CYAN}Keycloak (port 8443):${NC}"
-    
+
     checks_total=$((checks_total + 1))
     if check_endpoint "https://localhost:8443/health/ready" "Health check"; then
         checks_passed=$((checks_passed + 1))
     fi
-    
+
     checks_total=$((checks_total + 1))
     if check_endpoint "https://localhost:8443/realms/dive-v3-broker/.well-known/openid-configuration" "OIDC discovery"; then
         checks_passed=$((checks_passed + 1))
     fi
-    
+
     echo -e "\n  ${CYAN}Backend API (port 4000):${NC}"
-    
+
     checks_total=$((checks_total + 1))
     if check_endpoint "https://localhost:4000/health" "Health check"; then
         checks_passed=$((checks_passed + 1))
     fi
-    
+
     checks_total=$((checks_total + 1))
     if check_endpoint "https://localhost:4000/api/federation/status" "Federation status"; then
         checks_passed=$((checks_passed + 1))
     fi
-    
+
     checks_total=$((checks_total + 1))
     if check_endpoint "https://localhost:4000/api/federation/spokes" "Spoke registry"; then
         checks_passed=$((checks_passed + 1))
     fi
-    
+
     echo -e "\n  ${CYAN}Frontend (port 3000):${NC}"
-    
+
     checks_total=$((checks_total + 1))
     if check_endpoint "https://localhost:3000" "Web UI"; then
         checks_passed=$((checks_passed + 1))
     fi
-    
+
     echo -e "\n  ${CYAN}OPA Policy Engine (port 8181):${NC}"
-    
+
     checks_total=$((checks_total + 1))
     if check_endpoint "http://localhost:8181/health" "Health check"; then
         checks_passed=$((checks_passed + 1))
     fi
-    
+
     echo -e "\n  ${CYAN}OPAL Server (port 7002):${NC}"
-    
+
     checks_total=$((checks_total + 1))
     if check_endpoint "http://localhost:7002/healthcheck" "Health check"; then
         checks_passed=$((checks_passed + 1))
     fi
-    
+
     echo ""
     if [ $checks_passed -eq $checks_total ]; then
         echo -e "  ${GREEN}✓ All checks passed ($checks_passed/$checks_total)${NC}"
@@ -249,14 +249,14 @@ verify_hub() {
 get_running_spokes() {
     # Find running spoke containers and extract country codes
     local running=()
-    
+
     for code in "${!NATO_COUNTRIES[@]}"; do
         local code_lower="${code,,}"
         if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "${code_lower}-keycloak\|keycloak-${code_lower}"; then
             running+=("$code")
         fi
     done
-    
+
     echo "${running[@]}"
 }
 
@@ -273,7 +273,7 @@ if [ ${#COUNTRIES[@]} -eq 0 ]; then
     echo ""
     echo "  Detecting running spokes..."
     COUNTRIES=($(get_running_spokes))
-    
+
     if [ ${#COUNTRIES[@]} -eq 0 ]; then
         echo -e "  ${YELLOW}No spoke containers detected${NC}"
         echo ""
@@ -284,7 +284,7 @@ if [ ${#COUNTRIES[@]} -eq 0 ]; then
         verify_hub
         exit 0
     fi
-    
+
     echo "  Found ${#COUNTRIES[@]} running spoke(s): ${COUNTRIES[*]}"
 fi
 
@@ -331,7 +331,7 @@ if [ ${#COUNTRIES[@]} -gt 0 ]; then
         eval "$(get_country_ports "$code")"
         oidc_url="https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT}/realms/dive-v3-broker/.well-known/openid-configuration"
         status=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 "$oidc_url" 2>/dev/null || echo "000")
-        
+
         if [ "$status" = "200" ]; then
             echo -e "    ${GREEN}✓${NC} USA → $code: OIDC reachable"
         else

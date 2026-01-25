@@ -103,11 +103,11 @@ MISSING_REQUIRED=0
 for spoke_dir in "$PROJECT_ROOT"/instances/*/; do
     local_file="${spoke_dir}docker-compose.yml"
     [[ ! -f "$local_file" ]] && continue
-    
+
     # Skip hub/shared
     dirname=$(basename "$spoke_dir")
     [[ "$dirname" == "hub" || "$dirname" == "shared" ]] && continue
-    
+
     # Check for PASSWORD vars using :? syntax
     if grep -E 'PASSWORD.*\$\{[A-Z_]+\}' "$local_file" 2>/dev/null | grep -qv ':?'; then
         ((MISSING_REQUIRED++))
@@ -231,10 +231,10 @@ NEXTAUTH_INCONSISTENT=0
 for spoke_dir in "$PROJECT_ROOT"/instances/*/; do
     local_file="${spoke_dir}docker-compose.yml"
     [[ ! -f "$local_file" ]] && continue
-    
+
     dirname=$(basename "$spoke_dir")
     [[ "$dirname" == "hub" || "$dirname" == "shared" ]] && continue
-    
+
     # Check for NEXTAUTH_SECRET_* (not just AUTH_SECRET)
     if grep -qE 'NEXTAUTH_SECRET.*\$\{NEXTAUTH_SECRET_' "$local_file" 2>/dev/null; then
         : # Good
@@ -256,11 +256,11 @@ KC_INCONSISTENT=0
 for spoke_dir in "$PROJECT_ROOT"/instances/*/; do
     local_file="${spoke_dir}docker-compose.yml"
     [[ ! -f "$local_file" ]] && continue
-    
+
     dirname=$(basename "$spoke_dir")
     [[ "$dirname" == "hub" || "$dirname" == "shared" ]] && continue
-    
-    # Check for KEYCLOAK_ADMIN_PASSWORD_* 
+
+    # Check for KEYCLOAK_ADMIN_PASSWORD_*
     if grep -qE 'KEYCLOAK_ADMIN_PASSWORD.*\$\{KEYCLOAK_ADMIN_PASSWORD_' "$local_file" 2>/dev/null; then
         : # Good
     else
