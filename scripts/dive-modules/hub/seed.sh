@@ -81,14 +81,22 @@ hub_seed() {
     fi
     echo ""
 
-    # Step 2: Verify test users exist (SSOT: Terraform creates users)
-    log_step "Step 2/4: Verifying test users..."
+    # Step 2: Seed test users (SSOT: scripts/hub-init/seed-hub-users.sh)
+    log_step "Step 2/4: Seeding test users..."
     
-    # Users are created by Terraform in Phase 6 (keycloak_user.pilot_users resource)
-    # - testuser-usa-1 through testuser-usa-5 (5 users)
-    # - admin-usa (1 admin)
-    # No need to seed users here - Terraform is SSOT
-    log_success "Test users created by Terraform: testuser-usa-1 through testuser-usa-5, admin-usa"
+    local seed_users_script="${DIVE_ROOT}/scripts/hub-init/seed-hub-users.sh"
+    if [ ! -f "$seed_users_script" ]; then
+        log_error "Hub user seeding script not found: $seed_users_script"
+        return 1
+    fi
+    
+    # Run seed-hub-users.sh (creates testuser-usa-[1-5] + admin-usa)
+    if ! bash "$seed_users_script" 2>&1 | tail -20; then
+        log_error "User seeding failed"
+        log_error "Cannot proceed without test users"
+        return 1
+    fi
+    log_success "Test users created: testuser-usa-1 through testuser-usa-5, admin-usa"
 
     # Step 3: Seed ZTDF encrypted resources using TypeScript seeder
     log_step "Step 3/4: Seeding ${resource_count} ZTDF encrypted resources..."
