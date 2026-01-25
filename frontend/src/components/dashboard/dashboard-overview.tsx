@@ -49,16 +49,19 @@ interface DashboardOverviewProps {
   };
   loading?: boolean;
   userRoles?: string[];
+  isFederated?: boolean;
 }
 
-export function DashboardOverview({ idps, stats, loading = false, userRoles = [] }: DashboardOverviewProps) {
+export function DashboardOverview({ idps, stats, loading = false, userRoles = [], isFederated = false }: DashboardOverviewProps) {
   const { t } = useTranslation('dashboard');
 
   // Check if user has admin role
   const isAdmin = userRoles.includes('admin') || userRoles.includes('realm-admin') || userRoles.includes('federation-admin');
 
-  const features = [
+  // Define features with conditional ordering based on federation status
+  const allFeatures = [
     {
+      id: 'browse-documents',
       title: t('overview.features.browseDocuments.title'),
       description: t('overview.features.browseDocuments.description'),
       educational: t('overview.features.browseDocuments.educational'),
@@ -66,6 +69,7 @@ export function DashboardOverview({ idps, stats, loading = false, userRoles = []
       href: '/resources',
       gradient: 'from-blue-500 to-indigo-600',
       size: 'large' as const,
+      priority: isFederated ? 2 : 1, // Higher priority for home users
       stats: [
         { label: t('overview.features.browseDocuments.stats.accessible'), value: stats.documentsAccessible || 0 },
         { label: t('overview.features.browseDocuments.stats.authRate'), value: stats.authorizationRate || '100%' },
@@ -76,8 +80,9 @@ export function DashboardOverview({ idps, stats, loading = false, userRoles = []
         t('overview.features.browseDocuments.badges.auditLogged')
       ],
     },
-    // Federation Network - Admin only
+    // Federation Network - Higher priority for federated users
     ...(isAdmin ? [{
+      id: 'federation-network',
       title: t('overview.features.federationNetwork.title'),
       description: t('overview.features.federationNetwork.description'),
       educational: t('overview.features.federationNetwork.educational'),
@@ -85,11 +90,13 @@ export function DashboardOverview({ idps, stats, loading = false, userRoles = []
       href: '/admin/federation',
       gradient: 'from-emerald-500 to-teal-600',
       size: 'medium' as const,
+      priority: isFederated ? 1 : 3, // Much higher priority for federated users
       stats: [
         { label: t('overview.features.federationNetwork.stats.partners'), value: stats.federationPartners || idps.length },
       ],
     }] : []),
     {
+      id: 'upload-document',
       title: t('overview.features.uploadDocument.title'),
       description: t('overview.features.uploadDocument.description'),
       educational: t('overview.features.uploadDocument.educational'),
@@ -97,9 +104,11 @@ export function DashboardOverview({ idps, stats, loading = false, userRoles = []
       href: '/upload',
       gradient: 'from-cyan-500 to-blue-600',
       size: 'medium' as const,
+      priority: isFederated ? 4 : 2, // Higher priority for home users
       badges: [t('overview.features.uploadDocument.badges.ztdfEncryption')],
     },
     {
+      id: 'authorization-policies',
       title: t('overview.features.authorizationPolicies.title'),
       description: t('overview.features.authorizationPolicies.description'),
       educational: t('overview.features.authorizationPolicies.educational'),
@@ -107,11 +116,13 @@ export function DashboardOverview({ idps, stats, loading = false, userRoles = []
       href: '/policies',
       gradient: 'from-purple-500 to-pink-600',
       size: 'medium' as const,
+      priority: isFederated ? 3 : 3, // Equal priority
       stats: [
         { label: t('overview.features.authorizationPolicies.stats.policies'), value: stats.policyCount || 41 },
       ],
     },
     {
+      id: 'integration-guide',
       title: t('overview.features.integrationGuide.title'),
       description: t('overview.features.integrationGuide.description'),
       educational: t('overview.features.integrationGuide.educational'),
@@ -119,9 +130,11 @@ export function DashboardOverview({ idps, stats, loading = false, userRoles = []
       href: '/integration/federation-vs-object',
       gradient: 'from-amber-500 to-orange-600',
       size: 'medium' as const,
+      priority: 5,
       isNew: true,
     },
     {
+      id: 'api-documentation',
       title: t('overview.features.apiDocumentation.title'),
       description: t('overview.features.apiDocumentation.description'),
       educational: t('overview.features.apiDocumentation.educational'),
@@ -129,6 +142,7 @@ export function DashboardOverview({ idps, stats, loading = false, userRoles = []
       href: '/api-docs',
       gradient: 'from-indigo-500 to-purple-600',
       size: 'medium' as const,
+      priority: 6,
       stats: [
         { label: 'endpoints', value: '50+' },
       ],
@@ -136,6 +150,7 @@ export function DashboardOverview({ idps, stats, loading = false, userRoles = []
       isNew: true,
     },
     {
+      id: 'kas-encryption',
       title: t('overview.features.kasEncryption.title'),
       description: t('overview.features.kasEncryption.description'),
       educational: t('overview.features.kasEncryption.educational'),
@@ -143,11 +158,13 @@ export function DashboardOverview({ idps, stats, loading = false, userRoles = []
       href: '/kas',
       gradient: 'from-rose-500 to-red-600',
       size: 'medium' as const,
+      priority: 7,
       stats: [
         { label: t('overview.features.kasEncryption.stats.encrypted'), value: stats.encryptedResources || 0 },
       ],
     },
     {
+      id: 'compliance',
       title: t('overview.features.compliance.title'),
       description: t('overview.features.compliance.description'),
       educational: t('overview.features.compliance.educational'),
@@ -155,8 +172,12 @@ export function DashboardOverview({ idps, stats, loading = false, userRoles = []
       href: '/compliance',
       gradient: 'from-violet-500 to-purple-600',
       size: 'medium' as const,
+      priority: 8,
     },
   ];
+
+  // Sort features by priority (lower number = higher priority)
+  const features = allFeatures.sort((a, b) => (a.priority || 99) - (b.priority || 99));
 
   return (
     <div className="space-y-8">

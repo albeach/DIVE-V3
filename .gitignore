@@ -1,54 +1,99 @@
 # ============================================
-# DIVE V3 Git Ignore
+# DIVE V3 Git Ignore (AGGRESSIVE + CLEANED)
 # ============================================
 
-# Root-level markdown files (local notes, not tracked)
+##########
+# Root-level personal notes / scratch
+##########
 /*.md
 !README.md
-
-# Root-level shell scripts (one-off fixes, not tracked)
 /*.sh
+/*.txt
+!package*.json
 
-# Documentation files (moved to docs/ - keep local only)
+/notes/
+/docs/notes/
+notes/
+bin/
+backups/
+.archive/
+resources/
+# (your prior rule was /resources/ root-only; keeping it root-only)
+#/resources/
+
+##########
+# Docs: keep README(s), ignore local-only notes
+##########
 docs/*.md
-!docs/README.md
+docs/**/*.md
 docs/*.txt
+!docs/README.md
+!docs/**/README.md
+docs/archive/
 
-# Environment files
+##########
+# Environment files / secrets
+##########
 .env
 .env.*
-.env.local
 .env*.local
+.env.local
 .env.production
 .env.development
 !.env.example
-# Pilot spoke selection cache
-.pilot-spoke
 
-# Instance-specific environment files and certificates
-instances/*/.env
-instances/*/.env.*
-instances/*/certs/
-instances/*/certs/*.pem
-instances/*/certs/*.key
-instances/*/certs/*.crt
-instances/*/certs/*.bak*
-# Temporary instance directories
-instances/rou/
-instances/tmp*/
+.env.secrets
+.env.secrets.*
+!.env.secrets.example
 
-# Logs
+.env.cloudflare
+.env.gcp
+gcp/
+
+secrets/
+.secrets/
+.terraform-keys/
+
+##########
+# Logs & runtime artifacts (KILL THEM WITH FIRE)
+##########
 logs/
-!frontend/src/app/api/admin/logs/
-!frontend/src/app/admin/logs/
 *.log
+**/*.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# Dependencies
-node_modules/
+# keep these two app routes tracked (your exceptions)
+!frontend/src/app/api/admin/logs/
+!frontend/src/app/admin/logs/
+
+# common runtime dump/artifact dirs
+**/output/
+**/results/
+**/reports/
+**/cache/
+**/uploads/
+**/tmp/
+**/temp/
+tmp/
+temp/
+.cache/
+temp-ref/
+.dive-state/
+*.state
+
+# If you produce extracted docs/proofs/etc in backend/output, this catches them:
+backend/output/
+backend/uploads/
+tests/results/
+tests/reports/
+
+##########
+# Dependencies / package managers
+##########
+**/node_modules/
 .pnp
 .pnp.*
 .yarn/*
@@ -57,64 +102,55 @@ node_modules/
 !.yarn/releases
 !.yarn/versions
 
-# Testing
+##########
+# Test outputs
+##########
 coverage/
 **/coverage/
 test-results/
 playwright-report/
 .nyc_output/
 
-# Next.js
+##########
+# Next.js / frontend build artifacts + caches
+##########
 .next/
+**/.next/
 out/
 build/
 dist/
 
-# Production
-/build
+# SWC cache (you have frontend/.swc in tree)
+.swc/
+**/.swc/
 
-# Misc
-.DS_Store
-*.pem
-
-# Debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
+# Next/React build chunk junk (if it leaks anywhere)
+**/static/chunks/
+**/static/chunks/**
 
 # Vercel
-.vercel
+.vercel/
 
-# TypeScript
-*.tsbuildinfo
-# next-env.d.ts  # Now tracked in git to avoid runtime permissions issues
-
-# IDE
+##########
+# IDE / local tooling
+##########
 .vscode/*
 !.vscode/settings.json
 .idea/
 *.swp
 *.swo
 *.tmp
+
+# Cursor / Claude local state
+.cursor/
 .claude
 
-# Docker
+# Docker local state
 .docker/
 
-# Terraform
-terraform/.terraform/
-terraform/*.tfstate
-terraform/*.tfstate.*
-terraform/crash.log
-terraform/crash.*.log
-terraform/*.tfvars
-terraform/*.tfvars.json
-!terraform/terraform.tfvars.example
-# SSOT: Track hub.tfvars template (should have empty federation_partners)
-!terraform/hub/hub.tfvars
-terraform/.terraform.lock.hcl
-
-# OS
+##########
+# OS noise
+##########
 .DS_Store
 .DS_Store?
 ._*
@@ -123,74 +159,109 @@ terraform/.terraform.lock.hcl
 ehthumbs.db
 Thumbs.db
 
-# Temporary files
-*.temp
-*.tmp
-/tmp/
-temp-ref/
-.cache/
-
-# Secrets and keys (CRITICAL - Never commit)
-*.key
-*.pem
-*.p12
-*.pfx
-*.crt
-*.cer
-secrets/
-.secrets/
-
-# MongoDB Replica Set KeyFiles (CRITICAL - Never commit)
+##########
+# Certificates / keys (CRITICAL)
+# Default: ignore all cert/key material everywhere.
+# Only allow fixtures/templates explicitly if you want them tracked.
+##########
+**/*.key
+**/*.pem
+**/*.crt
+**/*.cer
+**/*.p12
+**/*.pfx
+**/*.jks
+**/*.p7b
+**/*.p7c
+**/*.csr
 mongo-keyfile
 **/mongo-keyfile
-instances/*/mongo-keyfile
 
-# Certificate and key files (all variations)
-*.pem
-*.key
-*.crt
-*.cer
-*.p12
-*.pfx
-*.jks
-*.p7b
-*.p7c
+# Explicit instance cert locations (belt + suspenders)
+instances/*/certs/
+instances/*/certs/**
 
-# Certificate backups and temporary files
+# Temp instance directories / flags / generated compose
+instances/tmp*/
+instances/rou/
+instances/*/.initialized
+instances/*/.localized
+instances/*/.hub-registered
+instances/*/.env
+instances/*/.env.*
+instances/*/docker-compose.yml
+
+# Pilot spoke selection cache
+.pilot-spoke
+
+# Cloudflared credentials
+cloudflared/tunnel-credentials.json
+
+##########
+# Backups / editor swap / timestamped junk
+##########
 *.bak
 *.bak*
 *.backup
-*certificate.pem.bak*
-*key.pem.bak*
-*certificate.crt.bak*
-*key.key.bak*
+*.old
+*.orig
+*.rej
+*.swx
 
-# Timestamped backup files
-*.bak.20*
-*certificate.pem.bak.20*
-*key.pem.bak.20*
-*tunnel-credentials.json.bak*
-*key.pem.bak.20*
+# "key.pem.bak.XXXXXXX" / "something.bak.20260125" etc
+**/*.bak.[0-9]*
+**/*.bak.20[0-9][0-9]*
+**/*.[0-9][0-9][0-9][0-9][0-9][0-9]  # e.g., file.123456
 
-# Files with timestamp patterns
-*20[0-9][0-9][0-1][0-9][0-3][0-9]*
+# Terraform / tool-generated timestamped backups
+*.backup-*
+**/*.backup-*
+*.bak-*
+**/*.bak-*
 
-# OPA bundles
+##########
+# Terraform (generated state/plan/working dirs)
+##########
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+*.plan
+terraform/crash.log
+terraform/crash.*.log
+terraform/*.tfvars
+terraform/*.tfvars.json
+terraform/instances/*.tfvars
+terraform/instances/*.tfplan
+terraform/tfplan*
+.terraform.lock.hcl
+
+# Exceptions
+!terraform/terraform.tfvars.example
+!terraform/hub/hub.tfvars
+
+##########
+# Java / Maven (Keycloak extensions)
+##########
+**/target/
+**/target/classes/
+keycloak/extensions/**/target/
+
+##########
+# OPA bundles / generated policy artifacts
+##########
 bundle.tar.gz
 policies/.bundle/
+backend/policies/uploads/
 
-# Database backups
-# Ignore SQL dumps but not migration files
-*.sql
-!scripts/migrations/*.sql
-!backend/drizzle/**/*.sql
-*.dump
-*.backup
-
+##########
 # Generated documentation
+##########
 api-docs/generated/
 
-# Python (if any scripts)
+##########
+# Python (if any)
+##########
 __pycache__/
 *.py[cod]
 *$py.class
@@ -198,122 +269,16 @@ __pycache__/
 venv/
 env/
 
-# Keep important empty directories
+##########
+# Keep important empty dirs
+##########
 !backend/logs/.gitkeep
 !kas/logs/.gitkeep
 !frontend/public/.gitkeep
 
-# Resources for reference (exclude root-level resources directory only)
-/resources/
-
-bin/
-notes/
-
-# Policy uploads (runtime user uploads, not source code)
-backend/policies/uploads/
-
-# Backups (local only)
-backups/
-
-# Build artifacts
-**/target/classes/
-keycloak/extensions/target/
-
-# Terraform plan outputs
-terraform/*.txt
-terraform/tfplan*
-
-# Personal notes in root
-*.txt
-!package*.json
-
-# Private notes - not tracked in git
-/notes/
-/docs/notes/
-
-# Archived directories and files (moved from root during cleanup)
-docs/archive/
-
-# Documentation files (keep local only)
-docs/*.md
-!docs/README.md
-docs/**/*.md
-!docs/**/README.md
-
-# One-off scripts and test payloads
-test-download-simple.js
-test-opa-decision.json
-scripts/fix-*.js
-scripts/fix-*.sh
-scripts/clean-*.sh
-scripts/set-*.js
-scripts/*-theme.js
-
-# Temporary instance flags and state files
-instances/*/.initialized
-instances/*/.localized
-instances/*/.hub-registered
-instances/*/.env
-instances/*/.env.*
-
-# Instance-generated docker-compose files (regenerated by spoke init)
-instances/*/docker-compose.yml
-
-# Certificate signing requests and certificates (generated)
-instances/*/certs/*.csr
-instances/*/certs/*.crt
-instances/*/certs/*.pem
-instances/*/certs/*.key
-
-# State files - REMOVED (2026-01-22)
-# State is now stored in PostgreSQL only. See ADR-001.
-.dive-state/
-*.state
-
-# Shared secrets scripts (sensitive)
-docker/instances/shared/load-secrets.sh
-docker/instances/shared/start-redis.sh
-
-*.bak
-*.bak2
-# GitHub Actions Runner (installed on home server, not local)
-actions-runner/
-.env.cloudflare
-cloudflared/tunnel-credentials.json
-
-# Secrets - NEVER COMMIT
-.env.secrets
-.env.secrets.*
-!.env.secrets.example
-
-# ============================================
-# ARCHIVE - Deprecated configs, scripts, docs
-# ============================================
-# Contains deprecated items from repository cleanup
-# These are kept locally for reference but not tracked
-.archive/
-
-# Terraform instance-specific variable files (generated from federation-registry.json)
-terraform/instances/*.tfvars
-terraform/instances/*.tfplan
-
-# Postgres init scripts (generated)
-scripts/postgres-init/
-gcp/
-.env.gcp
-
-# Terraform generated files
-*.plan
-*.tfplan
-
-# ============================================
-# Terraform Service Account Keys (CRITICAL - DO NOT COMMIT)
-# ============================================
-.terraform-keys/
-# Checkpoints (generated)
-
-# OPAL SSOT: MongoDB is the single source of truth
-# Block legacy polluted static data files
+##########
+# OPAL SSOT data blocks (keep your explicit rules)
+##########
 policies/data.json
 policies/policy_data.json
 policies/tenant/*/data.json
@@ -323,8 +288,5 @@ backend/data/opal/tenant_configs.json
 opal-data-source/trusted_issuers.json
 opal-data-source/federation_matrix.json
 
-# Exception: Allow minimal-base-data.json (bundle fallback data - intentional)
 !policies/data/minimal-base-data.json
-
-# Exception: Keep policy .rego files (policy logic, not data)
 !policies/**/*.rego

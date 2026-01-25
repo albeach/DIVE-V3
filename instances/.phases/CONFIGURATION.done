@@ -1,0 +1,9 @@
+{
+  "phase": "CONFIGURATION",
+  "instance_code": "TST",
+  "completed_at": "2026-01-25T13:02:28Z",
+  "hostname": "MacBook-Pro-3.local",
+  "user": "aubreybeach",
+  "duration_seconds": 30,
+  "metadata": {"test":"data"}}
+}

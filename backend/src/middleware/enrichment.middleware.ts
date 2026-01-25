@@ -460,8 +460,13 @@ export async function enrichmentMiddleware(
         }
 
         // Add default COI for the user's country if not already present
+        // CRITICAL FIX (2026-01-25): Smart enrichment to avoid mutual exclusivity violations
+        // - Only add default COIs if user has NO existing COI tags
+        // - This prevents US-ONLY from conflicting with bilateral agreements (FRA-US, GBR-US, etc.)
+        // - Users with explicit COI assignments (NATO, FVEY, bilaterals) should not get defaults
         const countryDefaults = DEFAULT_COI_BY_COUNTRY[payload.countryOfAffiliation];
-        if (countryDefaults) {
+        if (countryDefaults && userCoi.length === 0) {
+            // User has no COI tags - apply defaults
             const originalCoi = [...userCoi];
             for (const defaultCoi of countryDefaults) {
                 if (!userCoi.includes(defaultCoi)) {
@@ -484,6 +489,14 @@ export async function enrichmentMiddleware(
                     finalCoi: userCoi
                 });
             }
+        } else if (userCoi.length > 0) {
+            // User has explicit COI tags - do NOT add defaults
+            logger.debug('enrichment', 'Skipping default COI enrichment (user has explicit COI tags)', {
+                requestId,
+                uniqueID: payload.uniqueID,
+                country: payload.countryOfAffiliation,
+                existingCoi: userCoi
+            });
         } else if (!payload.acpCOI) {
             // No existing COI and no defaults for this country
             payload.acpCOI = '[]';

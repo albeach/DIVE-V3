@@ -301,24 +301,24 @@ export function DashboardAuthorization({
           <div className="space-y-2">
             {displayedDecisions.map((decision, idx) => (
               <motion.div
-                key={`${decision.timestamp}-${decision.resource?.resourceId || decision.resourceId}-${idx}`}
+                key={`${decision.timestamp}-${decision.resourceId}-${idx}`}
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: 0.05 * idx }}
                 className={`flex items-center gap-4 p-4 rounded-xl border ${
-                  decision.decision === 'ALLOW'
+                  decision.decision === 'allow'
                     ? 'bg-green-50 border-green-200'
                     : 'bg-red-50 border-red-200'
                 }`}
               >
-                {decision.decision === 'ALLOW' ? (
+                {decision.decision === 'allow' ? (
                   <CheckCircle2 className="w-6 h-6 text-green-600" />
                 ) : (
                   <XCircle className="w-6 h-6 text-red-600" />
                 )}
 
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-slate-900">{decision.resource?.resourceId || decision.resourceId}</p>
+                  <p className="text-sm font-medium text-slate-900">{decision.resourceId}</p>
                   <p className="text-xs text-slate-600">{decision.reason}</p>
                 </div>
 

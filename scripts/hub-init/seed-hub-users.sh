@@ -493,7 +493,10 @@ create_user "testuser-usa-4" "${HASH4}@pseudonym.dive25.mil" "${PSEUDO4%%:*}" "$
 create_user "testuser-usa-5" "${HASH5}@pseudonym.dive25.mil" "${PSEUDO5%%:*}" "${PSEUDO5##*:}" "TOP_SECRET" "NATO,FVEY" "$TEST_USER_PASSWORD" "false"
 
 log_step "Creating admin user..."
-create_user "admin-usa" "${HASH_ADMIN}@admin.dive25.mil" "Commander" "Lighthouse" "TOP_SECRET" "NATO,FVEY" "$ADMIN_USER_PASSWORD" "true"
+# Admin gets TOP_SECRET clearance + broad COI access for bilateral agreements
+# COI includes: NATO, FVEY, and all USA bilateral agreements (FRA-US, GBR-US, CAN-US, DEU-US)
+# Note: US-ONLY is NOT included (mutually exclusive with bilaterals)
+create_user "admin-usa" "${HASH_ADMIN}@admin.dive25.mil" "Commander" "Lighthouse" "TOP_SECRET" "NATO,FVEY,FRA-US,GBR-US,CAN-US,DEU-US" "$ADMIN_USER_PASSWORD" "true"
 
 # =============================================================================
 # Verification

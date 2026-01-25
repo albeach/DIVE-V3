@@ -514,6 +514,329 @@ const INSTANCE_COUNTRY_AFFILIATIONS: Record<string, {
 };
 
 // ============================================
+// MULTI-FILE TYPE SEEDING CONFIGURATION
+// ============================================
+
+/**
+ * File type categories for distribution grouping
+ */
+type FileTypeCategory = 'document' | 'structured' | 'presentation' | 'multimedia' | 'image' | 'text';
+
+/**
+ * Configuration for each supported file type
+ */
+interface IFileTypeConfig {
+    /** MIME type (e.g., 'application/pdf') */
+    mimeType: string;
+    /** File extension without dot (e.g., 'pdf') */
+    extension: string;
+    /** Category for grouping */
+    category: FileTypeCategory;
+    /** Distribution weight (relative percentage) */
+    weight: number;
+    /** Template filenames from examples directory */
+    templates: string[];
+    /** Whether to generate XMP sidecar */
+    generateXMP: boolean;
+    /** Display name for logging */
+    displayName: string;
+}
+
+/**
+ * Loaded template file with metadata
+ */
+interface ITemplateFile {
+    filename: string;
+    buffer: Buffer;
+    mimeType: string;
+    extension: string;
+    size: number;
+    sha256: string;
+}
+
+/**
+ * Template cache for performance
+ */
+interface ITemplateCache {
+    templates: Map<string, ITemplateFile[]>;
+    loaded: boolean;
+    loadedAt?: Date;
+}
+
+/**
+ * File type configurations with templates from /examples/examples/
+ * Weights sum to 100 for realistic distribution
+ */
+const FILE_TYPE_CONFIGS: IFileTypeConfig[] = [
+    // Documents (40% total)
+    {
+        mimeType: 'application/pdf',
+        extension: 'pdf',
+        category: 'document',
+        weight: 20,
+        templates: ['pdf_NU_d5a24f38.pdf', 'pdf_NR_3b4603b8.pdf', 'pdf_NC_5adbce6e.pdf'],
+        generateXMP: true,
+        displayName: 'PDF'
+    },
+    {
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        extension: 'docx',
+        category: 'document',
+        weight: 20,
+        templates: ['docx_NU_a3c05573.docx', 'docx_NR_a53cb023.docx', 'docx_NC_82797d3f.docx'],
+        generateXMP: false,
+        displayName: 'Word Document'
+    },
+    // Presentations (10%)
+    {
+        mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        extension: 'pptx',
+        category: 'presentation',
+        weight: 10,
+        templates: ['pptx_NU_d84ede3a.pptx', 'pptx_NR_56001dc4.pptx', 'pptx_NC_8887cb3c.pptx'],
+        generateXMP: false,
+        displayName: 'PowerPoint'
+    },
+    // Structured Data (20% total)
+    {
+        mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        extension: 'xlsx',
+        category: 'structured',
+        weight: 8,
+        templates: ['xlsx_NU_1cc225f0.xlsx', 'xlsx_NR_79a55828.xlsx', 'xlsx_NC_5cd830e9.xlsx'],
+        generateXMP: false,
+        displayName: 'Excel'
+    },
+    {
+        mimeType: 'application/json',
+        extension: 'json',
+        category: 'structured',
+        weight: 5,
+        templates: ['json_NC_1227530e.json'],
+        generateXMP: false,
+        displayName: 'JSON'
+    },
+    {
+        mimeType: 'text/csv',
+        extension: 'csv',
+        category: 'structured',
+        weight: 4,
+        templates: ['csv_NR_d33bce9e.csv'],
+        generateXMP: false,
+        displayName: 'CSV'
+    },
+    {
+        mimeType: 'application/xml',
+        extension: 'xml',
+        category: 'structured',
+        weight: 3,
+        templates: ['xml_NU_1e1919b9.xml'],
+        generateXMP: false,
+        displayName: 'XML'
+    },
+    // Multimedia (15% total)
+    {
+        mimeType: 'video/mp4',
+        extension: 'mp4',
+        category: 'multimedia',
+        weight: 7,
+        templates: ['mp4_NU_sample.mp4'],
+        generateXMP: true,
+        displayName: 'MP4 Video'
+    },
+    {
+        mimeType: 'audio/mpeg',
+        extension: 'mp3',
+        category: 'multimedia',
+        weight: 4,
+        templates: ['mp3_NU_sample.mp3'],
+        generateXMP: true,
+        displayName: 'MP3 Audio'
+    },
+    {
+        mimeType: 'audio/mp4',
+        extension: 'm4a',
+        category: 'multimedia',
+        weight: 4,
+        templates: ['m4a_NU_sample.m4a'],
+        generateXMP: true,
+        displayName: 'M4A Audio'
+    },
+    // Images (10% total)
+    {
+        mimeType: 'image/jpeg',
+        extension: 'jpg',
+        category: 'image',
+        weight: 7,
+        templates: ['jpg_NC_d4fbd366.jpg'],
+        generateXMP: true,
+        displayName: 'JPEG Image'
+    },
+    {
+        mimeType: 'image/png',
+        extension: 'png',
+        category: 'image',
+        weight: 3,
+        templates: ['NATO_UNCLASSIFIED_marking_frame_v2.png'],
+        generateXMP: true,
+        displayName: 'PNG Image'
+    },
+    // Text (5% total)
+    {
+        mimeType: 'text/plain',
+        extension: 'txt',
+        category: 'text',
+        weight: 3,
+        templates: ['txt_NU_cc4a1101.txt'],
+        generateXMP: false,
+        displayName: 'Text'
+    },
+    {
+        mimeType: 'text/html',
+        extension: 'html',
+        category: 'text',
+        weight: 2,
+        templates: ['html_NR_6de40c5e.html'],
+        generateXMP: false,
+        displayName: 'HTML'
+    }
+];
+
+/**
+ * Template cache - loaded on first use
+ */
+const templateCache: ITemplateCache = {
+    templates: new Map(),
+    loaded: false
+};
+
+/**
+ * Template directory path
+ */
+const TEMPLATE_DIR = IS_DOCKER
+    ? '/app/examples/examples'
+    : path.join(PROJECT_ROOT, 'examples/examples');
+
+/**
+ * Load all template files from examples directory into cache
+ */
+async function loadTemplates(): Promise<void> {
+    if (templateCache.loaded) return;
+
+    console.log(`\n📁 Loading template files from ${TEMPLATE_DIR}...\n`);
+
+    if (!fs.existsSync(TEMPLATE_DIR)) {
+        console.warn(`   ⚠️  Template directory not found: ${TEMPLATE_DIR}`);
+        console.warn(`   Multi-file seeding will fall back to text-only mode`);
+        templateCache.loaded = true;
+        return;
+    }
+
+    let totalLoaded = 0;
+
+    for (const config of FILE_TYPE_CONFIGS) {
+        const templates: ITemplateFile[] = [];
+
+        for (const filename of config.templates) {
+            const filePath = path.join(TEMPLATE_DIR, filename);
+
+            if (!fs.existsSync(filePath)) {
+                console.warn(`   ⚠️  Template not found: ${filename}`);
+                continue;
+            }
+
+            try {
+                const buffer = fs.readFileSync(filePath);
+                const crypto = await import('crypto');
+                const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
+
+                templates.push({
+                    filename,
+                    buffer,
+                    mimeType: config.mimeType,
+                    extension: config.extension,
+                    size: buffer.length,
+                    sha256
+                });
+            } catch (err) {
+                console.warn(`   ⚠️  Failed to load template ${filename}: ${err}`);
+            }
+        }
+
+        if (templates.length > 0) {
+            templateCache.templates.set(config.extension, templates);
+            totalLoaded += templates.length;
+            console.log(`   ✅ Loaded ${templates.length} ${config.displayName} template(s)`);
+        }
+    }
+
+    templateCache.loaded = true;
+    templateCache.loadedAt = new Date();
+    console.log(`\n   Total: ${totalLoaded} templates loaded\n`);
+}
+
+/**
+ * Select file type based on configured weights
+ */
+function selectFileType(configs: IFileTypeConfig[] = FILE_TYPE_CONFIGS): IFileTypeConfig {
+    const weights = configs.map(c => c.weight);
+    return weightedRandom(configs, weights);
+}
+
+/**
+ * Select random template for a file type from cache
+ */
+function selectTemplate(extension: string): ITemplateFile | null {
+    const templates = templateCache.templates.get(extension);
+    if (!templates || templates.length === 0) return null;
+    return random(templates);
+}
+
+/**
+ * Generate STANAG 4778 BDO (Binding Data Object) XML for a seeded resource
+ * Compliant with ADatP-4778.2 Edition A sidecar binding profile
+ */
+function generateBDO(
+    filename: string,
+    mimeType: string,
+    metadata: {
+        classification: ClassificationLevel;
+        resourceId: string;
+        creationDateTime: string;
+    }
+): string {
+    // Map DIVE classification levels to NATO marking text
+    const classificationMap: Record<string, string> = {
+        'UNCLASSIFIED': 'UNCLASSIFIED',
+        'RESTRICTED': 'RESTRICTED',
+        'CONFIDENTIAL': 'CONFIDENTIAL',
+        'SECRET': 'SECRET',
+        'TOP_SECRET': 'TOP SECRET'
+    };
+
+    const natoClassification = classificationMap[metadata.classification] || metadata.classification;
+
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<mb:BindingInformation xmlns:mb="urn:nato:stanag:4778:bindinginformation:1:0"
+                       xmlns:xmime="http://www.w3.org/2005/05/xmlmime">
+  <mb:MetadataBindingContainer>
+    <mb:MetadataBinding>
+      <mb:Metadata>
+        <slab:originatorConfidentialityLabel xmlns:slab="urn:nato:stanag:4774:confidentialitymetadatalabel:1:0">
+          <slab:ConfidentialityInformation>
+            <slab:PolicyIdentifier>NATO</slab:PolicyIdentifier>
+            <slab:Classification>${natoClassification}</slab:Classification>
+          </slab:ConfidentialityInformation>
+          <slab:CreationDateTime>${metadata.creationDateTime}</slab:CreationDateTime>
+        </slab:originatorConfidentialityLabel>
+      </mb:Metadata>
+      <mb:DataReference URI="./${filename}" xmime:contentType="${mimeType}" />
+    </mb:MetadataBinding>
+  </mb:MetadataBindingContainer>
+</mb:BindingInformation>`;
+}
+
+// ============================================
 // TYPES
 // ============================================
 
@@ -594,10 +917,12 @@ interface ISeedManifest {
         byCOI: Record<string, number>;
         byKASCount: Record<string, number>;
         byIndustryAccess: Record<string, number>;
+        byFileType?: Record<string, number>;
     };
     seedBatchId: string;
     duration_ms: number;
     mongodbUri: string; // Sanitized
+    fileTypeMode?: 'text' | 'multi';
 }
 
 interface ISeedCheckpoint {
@@ -623,6 +948,10 @@ interface ISeedOptions {
     replace: boolean;
     batchSize: number;
     verbose: boolean;
+    /** File type mode: 'text' (legacy), 'multi' (new default) */
+    fileTypeMode: 'text' | 'multi';
+    /** Exclude multimedia files (video/audio) for faster seeding */
+    noMultimedia: boolean;
 }
 
 function parseArgs(): ISeedOptions {
@@ -632,13 +961,18 @@ function parseArgs(): ISeedOptions {
     // This enables Docker exec with: INSTANCE_CODE=EST npm run seed:instance
     const envInstance = process.env.INSTANCE_CODE?.toUpperCase();
 
+    // Check environment for file type mode
+    const envFileTypeMode = process.env.SEED_FILE_TYPE_MODE?.toLowerCase();
+
     const options: ISeedOptions = {
         instance: envInstance || 'USA',  // Use env var or default to USA
         count: 5000,  // Default: 5000 ZTDF encrypted documents per instance
         dryRun: false,
         replace: false,
         batchSize: 100,
-        verbose: false
+        verbose: false,
+        fileTypeMode: (envFileTypeMode === 'text' || envFileTypeMode === 'multi') ? envFileTypeMode : 'multi',
+        noMultimedia: process.env.SEED_NO_MULTIMEDIA === 'true'
     };
 
     for (const arg of args) {
@@ -654,6 +988,15 @@ function parseArgs(): ISeedOptions {
             options.batchSize = parseInt(arg.split('=')[1], 10);
         } else if (arg === '--verbose' || arg === '-v') {
             options.verbose = true;
+        } else if (arg.startsWith('--file-type-mode=')) {
+            const mode = arg.split('=')[1].toLowerCase();
+            if (mode === 'text' || mode === 'multi') {
+                options.fileTypeMode = mode;
+            } else {
+                console.warn(`⚠️  Invalid file type mode: ${mode}. Using default 'multi'.`);
+            }
+        } else if (arg === '--no-multimedia') {
+            options.noMultimedia = true;
         } else if (arg === '--help' || arg === '-h') {
             showHelp();
             process.exit(0);
@@ -765,26 +1108,41 @@ function cleanupOldManifests(): void {
 
 function showHelp(): void {
     console.log(`
-DIVE V3 - Instance-Aware Resource Seeding Script
+DIVE V3 - Instance-Aware Multi-Format Resource Seeding Script
 
 USAGE:
     npm run seed:instance -- [OPTIONS]
 
 OPTIONS:
-    --instance=CODE     Instance to seed: USA, FRA, GBR, DEU, or ALL (default: USA)
-    --count=N           Number of documents to seed (1-20000, default: 5000)
-    --dry-run           Validate templates and show distribution without seeding
-    --replace           Delete existing generated documents before seeding
-    --batch-size=N      Documents per batch (default: 100)
-    --verbose, -v       Show detailed progress
-    --help, -h          Show this help message
+    --instance=CODE         Instance to seed: USA, FRA, GBR, DEU, or ALL (default: USA)
+    --count=N               Number of documents to seed (1-20000, default: 5000)
+    --file-type-mode=MODE   File type mode: text, multi (default: multi)
+    --no-multimedia         Exclude video/audio files from seeding (faster)
+    --dry-run               Validate templates and show distribution without seeding
+    --replace               Delete existing generated documents before seeding
+    --batch-size=N          Documents per batch (default: 100)
+    --verbose, -v           Show detailed progress
+    --help, -h              Show this help message
+
+FILE TYPE MODES:
+    text    - Text files only (legacy behavior, fastest)
+    multi   - Multiple file types with realistic distribution (recommended):
+              PDF (20%), DOCX (20%), XLSX (8%), PPTX (10%), MP4 (7%),
+              MP3 (4%), M4A (4%), JPG (7%), PNG (3%), JSON (5%),
+              CSV (4%), XML (3%), TXT (3%), HTML (2%)
+
+ENVIRONMENT VARIABLES:
+    SEED_FILE_TYPE_MODE     Set default file type mode (text, multi)
+    SEED_NO_MULTIMEDIA      Set to 'true' to exclude video/audio
 
 EXAMPLES:
-    npm run seed:instance -- --instance=USA                # Seed 5000 docs to USA
-    npm run seed:instance -- --instance=FRA --count=5000   # Seed 5000 docs to FRA
-    npm run seed:instance -- --instance=ALL                # Seed all instances
-    npm run seed:instance -- --dry-run --instance=GBR      # Validate without seeding
-    npm run seed:instance -- --instance=DEU --replace      # Replace existing data
+    npm run seed:instance -- --instance=USA                       # Seed 5000 multi-type docs
+    npm run seed:instance -- --instance=USA --file-type-mode=text # Text-only (legacy)
+    npm run seed:instance -- --instance=USA --no-multimedia       # Skip video/audio
+    npm run seed:instance -- --instance=FRA --count=5000          # Seed 5000 docs to FRA
+    npm run seed:instance -- --instance=ALL                       # Seed all instances
+    npm run seed:instance -- --dry-run --instance=GBR             # Validate without seeding
+    npm run seed:instance -- --instance=DEU --replace             # Replace existing data
     `);
 }
 
@@ -944,7 +1302,7 @@ async function getMongoDBConnection(config: IInstanceConfig, instanceCode: strin
     // CRITICAL: Use MONGODB_DATABASE from environment (SSOT for database name)
     // This ensures seeding uses the same database as the running backend
     let database = process.env.MONGODB_DATABASE || config.mongodb.database;
-    
+
     // Check if MONGODB_URL is set (e.g., when running inside Docker)
     const envMongoUrl = process.env.MONGODB_URL;
     if (envMongoUrl) {
@@ -953,10 +1311,12 @@ async function getMongoDBConnection(config: IInstanceConfig, instanceCode: strin
         if (urlMatch) {
             const [, user, password, host, port] = urlMatch;
             // Use database from MONGODB_DATABASE env var (runtime SSOT), not URL path or config
-            const uri = `mongodb://${host}:${port || 27017}/${database}`;
+            // CRITICAL FIX (2026-01-25): Add directConnection=true for single-node replica sets
+            // Without this, MongoClient tries topology discovery using 'localhost' which fails inside Docker
+            const uri = `mongodb://${host}:${port || 27017}/${database}?directConnection=true`;
             console.log(`   Using MONGODB_URL from environment`);
             console.log(`   Database: ${database} (from MONGODB_DATABASE env var)`);
-            console.log(`   MongoDB URI: ${uri}?authSource=admin`);
+            console.log(`   MongoDB URI: ${uri}&authSource=admin`);
             console.log(`   Auth User: ${user}, Password length: ${password.length} chars`);
             return { uri, user, password, database };
         }
@@ -974,10 +1334,11 @@ async function getMongoDBConnection(config: IInstanceConfig, instanceCode: strin
     const password = await getMongoDBPassword(instanceCode);
 
     // URI without credentials - auth passed separately to MongoClient
-    const uri = `mongodb://${host}:${port}/${database}`;
+    // Add directConnection=true for single-node replica sets
+    const uri = `mongodb://${host}:${port}/${database}?directConnection=true`;
 
     // Debug logging
-    console.log(`   MongoDB URI: ${uri}?authSource=admin`);
+    console.log(`   MongoDB URI: ${uri}&authSource=admin`);
     console.log(`   Database: ${database}`);
     console.log(`   Auth User: ${user}, Password length: ${password.length} chars`);
 
@@ -1530,7 +1891,9 @@ async function createZTDFDocument(
     index: number,
     instanceCode: string,
     kasServers: IKASServer[],
-    seedBatchId: string
+    seedBatchId: string,
+    fileTypeMode: 'text' | 'multi' = 'multi',
+    noMultimedia: boolean = false
 ) {
     // Check if KAS servers are available
     if (!kasServers || kasServers.length === 0) {
@@ -1542,14 +1905,11 @@ async function createZTDFDocument(
         throw new Error(`Invalid instance code: ${instanceCode}. Must be ISO 3166-1 alpha-3 (e.g., USA, FRA, GBR) or custom test code (e.g., TST, DEV, QAA).`);
     }
 
-    // Resource ID format: doc-<ISO3166-3>-<batchId>-<sequence>
-    // Example: doc-USA-abc12345-00001
-    const resourceId = `doc-${instanceCode}-${seedBatchId}-${index.toString().padStart(5, '0')}`;
     const classification = selectClassification();
 
     // Use instance-weighted COI template selection
-    const template = selectCOITemplate(instanceCode);
-    const { coi: COI, coiOperator, releasabilityTo, caveats, industryAllowed } = template;
+    const coiTemplate = selectCOITemplate(instanceCode);
+    const { coi: COI, coiOperator, releasabilityTo, caveats, industryAllowed } = coiTemplate;
 
     // Validate all country codes in releasabilityTo are valid ISO 3166-1 alpha-3
     const countryValidation = validateCountryCodes(releasabilityTo);
@@ -1570,7 +1930,7 @@ async function createZTDFDocument(
     });
 
     if (!validation.valid) {
-        throw new Error(`Template validation failed for ${template.description}: ${validation.errors.join('; ')}`);
+        throw new Error(`Template validation failed for ${coiTemplate.description}: ${validation.errors.join('; ')}`);
     }
 
     // Random creation date (past 12 months)
@@ -1579,34 +1939,115 @@ async function createZTDFDocument(
     const creationDate = randomDate(oneYearAgo, new Date());
     const currentTimestamp = new Date().toISOString();
 
-    // Instance-specific title
+    // ============================================
+    // FILE TYPE SELECTION (Multi-format support)
+    // ============================================
+
+    let selectedFileType: IFileTypeConfig;
+    let fileTemplate: ITemplateFile | null = null;
+    let contentBuffer: Buffer;
+    let mimeType: string;
+    let fileExtension: string;
+    let fileCategory: FileTypeCategory;
+    let templateFilename: string | undefined;
+
+    if (fileTypeMode === 'text' || !templateCache.loaded || templateCache.templates.size === 0) {
+        // Legacy text-only mode OR templates not available
+        mimeType = 'text/plain';
+        fileExtension = 'txt';
+        fileCategory = 'text';
+        selectedFileType = FILE_TYPE_CONFIGS.find(c => c.extension === 'txt')!;
+    } else {
+        // Multi-file mode - select file type based on weighted distribution
+        let availableConfigs = FILE_TYPE_CONFIGS;
+
+        // Filter out multimedia if requested
+        if (noMultimedia) {
+            availableConfigs = FILE_TYPE_CONFIGS.filter(c => c.category !== 'multimedia');
+        }
+
+        // Only use file types that have loaded templates
+        availableConfigs = availableConfigs.filter(c => {
+            const templates = templateCache.templates.get(c.extension);
+            return templates && templates.length > 0;
+        });
+
+        if (availableConfigs.length === 0) {
+            // Fallback to text if no templates available
+            mimeType = 'text/plain';
+            fileExtension = 'txt';
+            fileCategory = 'text';
+            selectedFileType = FILE_TYPE_CONFIGS.find(c => c.extension === 'txt')!;
+        } else {
+            selectedFileType = selectFileType(availableConfigs);
+            fileTemplate = selectTemplate(selectedFileType.extension);
+
+            if (fileTemplate) {
+                mimeType = fileTemplate.mimeType;
+                fileExtension = fileTemplate.extension;
+                fileCategory = selectedFileType.category;
+                templateFilename = fileTemplate.filename;
+            } else {
+                // Fallback to text if template selection failed
+                mimeType = 'text/plain';
+                fileExtension = 'txt';
+                fileCategory = 'text';
+                selectedFileType = FILE_TYPE_CONFIGS.find(c => c.extension === 'txt')!;
+            }
+        }
+    }
+
+    // Resource ID format: doc-<ISO3166-3>-<batchId>-<sequence>-<ext>
+    // Example: doc-USA-abc12345-00001-pdf
+    const resourceId = `doc-${instanceCode}-${seedBatchId}-${index.toString().padStart(5, '0')}`;
+
+    // Instance-specific title with file type
     const titlePrefixes = TITLE_TEMPLATES[instanceCode] || TITLE_TEMPLATES.USA;
     const title = `${random(titlePrefixes)} - ${random(TITLE_SUBJECTS)} ${index}`;
 
-    // Generate content
-    const content = `${classification} Document: ${title}\n\n` +
-        `This document contains ${classification.toLowerCase()} information for coalition operations.\n` +
-        `COI: ${COI.length > 0 ? COI.join(', ') : 'None'} (Operator: ${coiOperator})\n` +
-        `Releasable to: ${releasabilityTo.join(', ')}\n` +
-        `${caveats.length > 0 ? `Caveats: ${caveats.join(', ')}\n` : ''}` +
-        `Industry Accessible: ${industryAllowed ? 'Yes' : 'No'}\n` +
-        `\nDocument ID: ${resourceId}\n` +
-        `Instance: ${instanceCode}\n` +
-        `Created: ${creationDate.toISOString()}\n\n` +
-        `OPERATIONAL SUMMARY:\nThis is sample classified content for demonstration purposes.\n` +
-        `Template: ${template.description}`;
+    // Generate content based on mode
+    if (fileTemplate && fileTemplate.buffer) {
+        // Use template file content (binary files like PDF, DOCX, MP4, etc.)
+        contentBuffer = fileTemplate.buffer;
+    } else {
+        // Generate text content (text mode or fallback)
+        const textContent = `${classification} Document: ${title}\n\n` +
+            `This document contains ${classification.toLowerCase()} information for coalition operations.\n` +
+            `COI: ${COI.length > 0 ? COI.join(', ') : 'None'} (Operator: ${coiOperator})\n` +
+            `Releasable to: ${releasabilityTo.join(', ')}\n` +
+            `${caveats.length > 0 ? `Caveats: ${caveats.join(', ')}\n` : ''}` +
+            `Industry Accessible: ${industryAllowed ? 'Yes' : 'No'}\n` +
+            `\nDocument ID: ${resourceId}\n` +
+            `Instance: ${instanceCode}\n` +
+            `Created: ${creationDate.toISOString()}\n\n` +
+            `OPERATIONAL SUMMARY:\nThis is sample classified content for demonstration purposes.\n` +
+            `Template: ${coiTemplate.description}`;
+        contentBuffer = Buffer.from(textContent);
+    }
+
+    // Generate STANAG 4778 BDO (Binding Data Object)
+    const bdoXml = generateBDO(
+        `${resourceId}.${fileExtension}`,
+        mimeType,
+        {
+            classification,
+            resourceId,
+            creationDateTime: currentTimestamp
+        }
+    );
 
     // Encrypt content
     const selectedCOI = COI.length > 0 ? COI[0] : 'DEFAULT';
-    const encryptionResult = encryptContent(content, resourceId, selectedCOI);
+    const encryptionResult = encryptContent(contentBuffer.toString('base64'), resourceId, selectedCOI);
     const wrappedKey = encryptionResult.dek;
 
-    // Create manifest
+    // Create manifest with dynamic content type
     const manifest = {
         version: '1.0',
         objectId: resourceId,
-        objectType: 'document',
-        contentType: 'text/plain',
+        objectType: fileCategory,
+        contentType: mimeType,
+        fileExtension: fileExtension,
         owner: `system-seed-${instanceCode.toLowerCase()}`,
         ownerOrganization: `${instanceCode}_GOVERNMENT`,
         createdAt: currentTimestamp,
@@ -1746,6 +2187,13 @@ async function createZTDFDocument(
         originRealm: instanceCode,
         // Country for localized classification normalization (ACP-240)
         country: instanceCode,
+        // Multi-format file type fields
+        fileType: fileExtension,
+        mimeType: mimeType,
+        fileCategory: fileCategory,
+        templateUsed: templateFilename,
+        // STANAG 4778 Binding Data Object
+        bdoXml: bdoXml,
         // ZTDF structure
         ztdf: ztdfObject,
         // Legacy structure (kept for backwards compatibility)
@@ -1779,10 +2227,20 @@ async function seedInstance(
     const seedBatchId = `seed-${Date.now()}`;
     const config = getInstanceConfig(federationRegistry, instanceCode);
 
+    // Load templates if multi-file mode
+    if (options.fileTypeMode === 'multi') {
+        await loadTemplates();
+    }
+
     // Get MongoDB connection details from GCP Secret Manager or environment
     const gcpAvailable = await isGCPSecretsAvailable();
     const mongoConnection = await getMongoDBConnection(config, instanceCode);
     const kasServers = getKASServersForInstance(kasRegistry, instanceCode);
+
+    // Determine file type mode description
+    const fileTypeModeDesc = options.fileTypeMode === 'multi'
+        ? `multi (PDF, DOCX, XLSX, MP4, etc.)${options.noMultimedia ? ' [no multimedia]' : ''}`
+        : 'text (legacy)';
 
     console.log(`\n🌱 Seeding ${instanceCode} (${config.name})`);
     console.log(`   MongoDB: ${mongoConnection.database} @ port ${config.services.mongodb.externalPort}`);
@@ -1790,6 +2248,7 @@ async function seedInstance(
     console.log(`   KAS Servers: ${kasServers.map(k => k.kasId).join(', ')}`);
     console.log(`   Documents: ${options.count}`);
     console.log(`   Batch Size: ${options.batchSize}`);
+    console.log(`   File Types: ${fileTypeModeDesc}`);
     console.log(`   Mode: ${options.dryRun ? 'DRY RUN' : (options.replace ? 'REPLACE' : 'APPEND')}\n`);
 
     // Initialize distribution counters
@@ -1797,7 +2256,8 @@ async function seedInstance(
         byClassification: {},
         byCOI: {},
         byKASCount: {},
-        byIndustryAccess: { 'true': 0, 'false': 0 }
+        byIndustryAccess: { 'true': 0, 'false': 0 },
+        byFileType: {}
     };
 
     // Validate instance code is ISO 3166-1 alpha-3 or custom test code
@@ -1820,20 +2280,43 @@ async function seedInstance(
             console.log(`   Weight Multiplier: ${affinity.weightMultiplier}x\n`);
         }
 
+        // Get available file type configs for simulation
+        let availableConfigs = FILE_TYPE_CONFIGS;
+        if (options.noMultimedia) {
+            availableConfigs = FILE_TYPE_CONFIGS.filter(c => c.category !== 'multimedia');
+        }
+        // In multi mode, filter to configs with loaded templates
+        if (options.fileTypeMode === 'multi' && templateCache.loaded) {
+            availableConfigs = availableConfigs.filter(c => {
+                const templates = templateCache.templates.get(c.extension);
+                return templates && templates.length > 0;
+            });
+        }
+
         // Simulate distribution with instance-weighted COI selection
         for (let i = 0; i < options.count; i++) {
             const classification = selectClassification();
-            const template = selectCOITemplate(instanceCode); // Instance-weighted selection
+            const coiTemplate = selectCOITemplate(instanceCode); // Instance-weighted selection
 
             distribution.byClassification[classification] = (distribution.byClassification[classification] || 0) + 1;
 
-            const coiKey = template.coi.length > 0 ? template.coi[0] : 'NO_COI';
+            const coiKey = coiTemplate.coi.length > 0 ? coiTemplate.coi[0] : 'NO_COI';
             distribution.byCOI[coiKey] = (distribution.byCOI[coiKey] || 0) + 1;
 
-            const kaoCount = template.coi.length > 1 ? template.coi.length : (Math.random() < 0.5 ? 1 : (Math.random() < 0.67 ? 2 : 3));
+            const kaoCount = coiTemplate.coi.length > 1 ? coiTemplate.coi.length : (Math.random() < 0.5 ? 1 : (Math.random() < 0.67 ? 2 : 3));
             distribution.byKASCount[kaoCount.toString()] = (distribution.byKASCount[kaoCount.toString()] || 0) + 1;
 
-            distribution.byIndustryAccess[template.industryAllowed.toString()]++;
+            distribution.byIndustryAccess[coiTemplate.industryAllowed.toString()]++;
+
+            // Simulate file type selection
+            if (options.fileTypeMode === 'multi' && availableConfigs.length > 0) {
+                const fileType = selectFileType(availableConfigs);
+                distribution.byFileType = distribution.byFileType || {};
+                distribution.byFileType[fileType.extension] = (distribution.byFileType[fileType.extension] || 0) + 1;
+            } else {
+                distribution.byFileType = distribution.byFileType || {};
+                distribution.byFileType['txt'] = (distribution.byFileType['txt'] || 0) + 1;
+            }
         }
 
         showDistributionSummary(distribution, options.count);
@@ -1847,7 +2330,8 @@ async function seedInstance(
             distribution,
             seedBatchId,
             duration_ms: Date.now() - startTime,
-            mongodbUri: `mongodb://***@localhost:${config.services.mongodb.externalPort}/${config.mongodb.database}`
+            mongodbUri: `mongodb://***@localhost:${config.services.mongodb.externalPort}/${config.mongodb.database}`,
+            fileTypeMode: options.fileTypeMode
         };
     }
 
@@ -1874,12 +2358,12 @@ async function seedInstance(
         // PRE-FLIGHT VALIDATION (ZTDF REQUIREMENTS)
         // ============================================
         console.log('🔍 Pre-flight validation: Checking ZTDF requirements...\n');
-        
+
         // Validate COI definitions exist
         const coiCollection = db.collection('coi_definitions');
         const coiCount = await coiCollection.countDocuments();
         const expectedCoiCount = 22; // Updated from 19 to 22 (2026-01-24)
-        
+
         if (coiCount < expectedCoiCount) {
             throw new Error(
                 `ZTDF validation failed: Insufficient COI definitions in MongoDB.\n` +
@@ -1889,14 +2373,14 @@ async function seedInstance(
             );
         }
         console.log(`   ✅ COI Definitions: ${coiCount}/${expectedCoiCount}\n`);
-        
+
         // Validate all template COIs exist in MongoDB
         const allTemplateCOIs = new Set<string>();
         COI_TEMPLATES.forEach(t => t.coi.forEach(c => allTemplateCOIs.add(c)));
-        
+
         const existingCOIs = new Set((await coiCollection.find({}).toArray()).map(c => c.coiId));
         const missingCOIs = Array.from(allTemplateCOIs).filter(c => !existingCOIs.has(c));
-        
+
         if (missingCOIs.length > 0) {
             throw new Error(
                 `ZTDF validation failed: Template COIs not found in MongoDB: ${missingCOIs.join(', ')}\n` +
@@ -1904,7 +2388,7 @@ async function seedInstance(
             );
         }
         console.log(`   ✅ All ${allTemplateCOIs.size} template COIs validated\n`);
-        
+
         // Validate KAS servers are available and approved
         if (kasServers.length === 0) {
             throw new Error(
@@ -1913,14 +2397,14 @@ async function seedInstance(
                 `Command: curl -X POST https://localhost:4000/api/kas/register -d '{"kasId":"${instanceCode.toLowerCase()}-kas",...}'`
             );
         }
-        
+
         // Check KAS approval status
         const kasCollection = db.collection('kas_registry');
-        const approvedKasCount = await kasCollection.countDocuments({ 
+        const approvedKasCount = await kasCollection.countDocuments({
             status: 'active',
-            enabled: true 
+            enabled: true
         });
-        
+
         if (approvedKasCount === 0) {
             throw new Error(
                 `ZTDF validation failed: No active KAS servers found\n` +
@@ -1929,7 +2413,7 @@ async function seedInstance(
             );
         }
         console.log(`   ✅ KAS Servers: ${approvedKasCount} active, ${kasServers.length} total\n`);
-        
+
         console.log('✅ Pre-flight validation passed - ZTDF encryption requirements met\n');
         console.log('🔐 ACP-240 Compliance: 100% ZTDF encryption enforced (no plaintext fallback)\n');
 
@@ -1993,7 +2477,14 @@ async function seedInstance(
                 // Generate documents for this batch
                 const batchPromises = [];
                 for (let i = batchStart; i < batchEnd; i++) {
-                    batchPromises.push(createZTDFDocument(i + 1, instanceCode, kasServers, seedBatchId));
+                    batchPromises.push(createZTDFDocument(
+                        i + 1,
+                        instanceCode,
+                        kasServers,
+                        seedBatchId,
+                        options.fileTypeMode,
+                        options.noMultimedia
+                    ));
                 }
 
                 const batchDocs = await Promise.all(batchPromises);
@@ -2010,6 +2501,11 @@ async function seedInstance(
                     distribution.byKASCount[kaoCount] = (distribution.byKASCount[kaoCount] || 0) + 1;
 
                     distribution.byIndustryAccess[doc.legacy.releasableToIndustry?.toString() || 'false']++;
+
+                    // Track file type distribution
+                    const fileType = doc.fileType || 'txt';
+                    distribution.byFileType = distribution.byFileType || {};
+                    distribution.byFileType[fileType] = (distribution.byFileType[fileType] || 0) + 1;
                 }
 
                 documents.push(...batchDocs);
@@ -2090,12 +2586,13 @@ async function seedInstance(
             instanceCode,
             instanceName: config.name,
             timestamp: new Date().toISOString(),
-            version: '1.0.0',
+            version: '1.1.0',  // Updated version for multi-file support
             totalDocuments: totalCount,
             distribution,
             seedBatchId,
             duration_ms: duration,
-            mongodbUri: `mongodb://***@localhost:${config.services.mongodb.externalPort}/${config.mongodb.database}`
+            mongodbUri: `mongodb://***@localhost:${config.services.mongodb.externalPort}/${config.mongodb.database}`,
+            fileTypeMode: options.fileTypeMode
         };
 
         // Save manifest
@@ -2146,6 +2643,19 @@ function showDistributionSummary(distribution: ISeedManifest['distribution'], to
     console.log(`   Allowed:       ${industryYes.toString().padStart(6)} (${((industryYes / total) * 100).toFixed(1).padStart(5)}%)`);
     console.log(`   Gov-Only:      ${industryNo.toString().padStart(6)} (${((industryNo / total) * 100).toFixed(1).padStart(5)}%)`);
 
+    // Show file type distribution if available
+    if (distribution.byFileType && Object.keys(distribution.byFileType).length > 0) {
+        console.log('\nFile Types:');
+        const sortedFileTypes = Object.entries(distribution.byFileType)
+            .sort((a, b) => b[1] - a[1]);
+        for (const [ext, value] of sortedFileTypes) {
+            const pct = ((value / total) * 100).toFixed(1);
+            const fileConfig = FILE_TYPE_CONFIGS.find(c => c.extension === ext);
+            const displayName = fileConfig?.displayName || ext.toUpperCase();
+            console.log(`   ${displayName.padEnd(15)} ${value.toString().padStart(6)} (${pct.padStart(5)}%)`);
+        }
+    }
+
     console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 }
 
@@ -2155,8 +2665,8 @@ function showDistributionSummary(distribution: ISeedManifest['distribution'], to
 
 async function main() {
     console.log('\n╔══════════════════════════════════════════════════════════════════╗');
-    console.log('║       DIVE V3 - Instance-Aware Resource Seeding Script           ║');
-    console.log('║       Version 1.0.0 - November 29, 2025                           ║');
+    console.log('║       DIVE V3 - Multi-Format Resource Seeding Script             ║');
+    console.log('║       Version 1.1.0 - January 25, 2026                            ║');
     console.log('╚══════════════════════════════════════════════════════════════════╝\n');
 
     // Clean up old seed manifest files before starting
