@@ -343,7 +343,7 @@ resource "keycloak_user" "backend_service_account" {
     clearance_level      = "5"
     acpCOI               = jsonencode(["FVEY", "NATO-COSMIC"])
     organization         = "${var.instance_name} Backend Service"
-    organizationType     = "SYSTEM"
+    organizationType     = "GOV"  # User Profile only accepts: GOV, IND, INT, NGO
     userType             = "service_account"
     pilot_user           = "false"
     created_by           = "terraform"
