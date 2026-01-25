@@ -18,7 +18,27 @@ if [ -z "$DIVE_COMMON_LOADED" ]; then
     export DIVE_COMMON_LOADED=1
 fi
 
+# Load orchestration sub-modules (Phase 2 Enhancement)
+ORCHESTRATION_DIR="$(dirname "${BASH_SOURCE[0]}")/orchestration"
+if [ -f "${ORCHESTRATION_DIR}/errors.sh" ]; then
+    source "${ORCHESTRATION_DIR}/errors.sh"
+fi
+if [ -f "${ORCHESTRATION_DIR}/circuit-breaker.sh" ]; then
+    source "${ORCHESTRATION_DIR}/circuit-breaker.sh"
+fi
+if [ -f "${ORCHESTRATION_DIR}/metrics.sh" ]; then
+    source "${ORCHESTRATION_DIR}/metrics.sh"
+fi
+if [ -f "${ORCHESTRATION_DIR}/locks.sh" ]; then
+    source "${ORCHESTRATION_DIR}/locks.sh"
+fi
+
 # Load enhanced state management
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/orchestration-state-db.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/orchestration-state-db.sh"
+fi
+
+# Load deployment-state.sh for backward compatibility (deprecated)
 if [ -f "$(dirname "${BASH_SOURCE[0]}")/deployment-state.sh" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/deployment-state.sh"
 fi
