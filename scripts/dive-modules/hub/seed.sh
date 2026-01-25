@@ -85,17 +85,19 @@ hub_seed() {
     log_step "Step 2/4: Seeding test users..."
     
     local seed_users_script="${DIVE_ROOT}/scripts/hub-init/seed-hub-users.sh"
+    
     if [ ! -f "$seed_users_script" ]; then
-        log_error "Hub user seeding script not found: $seed_users_script"
+        log_error "User seeding script not found: $seed_users_script"
         return 1
     fi
     
-    # Run seed-hub-users.sh (creates testuser-usa-[1-5] + admin-usa)
+    # Run user seeding script
     if ! bash "$seed_users_script" 2>&1 | tail -20; then
         log_error "User seeding failed"
         log_error "Cannot proceed without test users"
         return 1
     fi
+    
     log_success "Test users created: testuser-usa-1 through testuser-usa-5, admin-usa"
 
     # Step 3: Seed ZTDF encrypted resources using TypeScript seeder
@@ -189,12 +191,12 @@ _hub_register_kas() {
 
     if [ "$already_registered" = "$kas_id" ]; then
         log_success "Hub KAS already registered: ${kas_id}"
-        
+
         # Verify status
         local current_status=$(docker exec "$hub_backend_container" curl -sk \
             http://localhost:4000/api/kas/registry 2>/dev/null | \
             jq -r ".kasServers[]? | select(.kasId == \"${kas_id}\") | .status" 2>/dev/null)
-        
+
         if [ "$current_status" = "active" ]; then
             log_success "✓ Hub KAS verified in registry (status: active)"
         else
@@ -224,7 +226,7 @@ _hub_register_kas() {
 
     # Register Hub KAS via API
     log_info "Registering Hub KAS: ${kas_id}..."
-    
+
     local response
     response=$(docker exec "$hub_backend_container" curl -sk -w "\n%{http_code}" -X POST \
         http://localhost:4000/api/kas/register \
