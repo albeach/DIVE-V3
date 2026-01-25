@@ -111,22 +111,18 @@ UPDATED_COUNT=0
 
 echo "$FILES_TO_UPDATE" | while read -r file; do
     if [ -f "$file" ]; then
+        # Portable sed using temporary file (works on macOS + Linux)
+        local tmpfile=$(mktemp)
+        
         # Migration 1: dive-v3-broker-usa → dive-v3-broker-usa (but NOT dive-v3-broker-usa, dive-v3-broker-fra, etc.)
         if grep -q "dive-v3-broker-usa[^-]" "$file"; then
-            if [[ "$OSTYPE" == "darwin"* ]]; then
-                sed -i '' 's/dive-v3-broker-usa\([^-]\)/dive-v3-broker-usa\1/g' "$file"
-            else
-                sed -i 's/dive-v3-broker-usa\([^-]\)/dive-v3-broker-usa\1/g' "$file"
-            fi
+            sed 's/dive-v3-broker-usa\([^-]\)/dive-v3-broker-usa\1/g' "$file" > "$tmpfile" && mv "$tmpfile" "$file"
         fi
 
         # Migration 2: dive-v3-broker-usa → dive-v3-broker-usa
         if grep -q "dive-v3-broker-usa" "$file"; then
-            if [[ "$OSTYPE" == "darwin"* ]]; then
-                sed -i '' 's/dive-v3-broker-usa/dive-v3-broker-usa/g' "$file"
-            else
-                sed -i 's/dive-v3-broker-usa/dive-v3-broker-usa/g' "$file"
-            fi
+            tmpfile=$(mktemp)
+            sed 's/dive-v3-broker-usa/dive-v3-broker-usa/g' "$file" > "$tmpfile" && mv "$tmpfile" "$file"
         fi
     fi
 done

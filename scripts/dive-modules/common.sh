@@ -1,4 +1,4 @@
-#!/usr/local/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # DIVE V3 CLI - Common Functions
 # =============================================================================
@@ -1103,5 +1103,45 @@ ensure_dive_root() {
         export DIVE_ROOT="$root_path"
     fi
 }
+
+##
+# Detect and return Docker command location
+# Handles Docker Desktop on macOS where docker may not be in PATH
+# Returns full path to docker binary or 'docker' if in PATH
+##
+detect_docker_command() {
+    # Check if docker is in PATH
+    if command -v docker >/dev/null 2>&1; then
+        echo "docker"
+        return 0
+    fi
+
+    # Try common Docker Desktop locations
+    local docker_paths=(
+        "/usr/local/bin/docker"
+        "/Applications/Docker.app/Contents/Resources/bin/docker"
+        "/opt/homebrew/bin/docker"
+    )
+
+    for docker_path in "${docker_paths[@]}"; do
+        if [ -x "$docker_path" ]; then
+            echo "$docker_path"
+            return 0
+        fi
+    done
+
+    # Docker not found
+    return 1
+}
+
+# Initialize Docker command (called once at module load)
+if [ -z "$DOCKER_CMD" ]; then
+    if DOCKER_CMD=$(detect_docker_command); then
+        export DOCKER_CMD
+    else
+        # Don't fail here - let individual commands handle the error
+        export DOCKER_CMD="docker"
+    fi
+fi
 
 

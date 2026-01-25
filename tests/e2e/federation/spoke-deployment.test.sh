@@ -225,7 +225,7 @@ cleanup() {
         cd "$DIVE_ROOT"
         
         # Remove volumes
-        docker volume ls -q | grep "^${TEST_SPOKE_CODE_LOWER}_" | xargs -r docker volume rm 2>/dev/null || true
+        docker volume ls -q | grep "^${TEST_SPOKE_CODE_LOWER}_" | grep . | xargs docker volume rm 2>/dev/null || true
         
         # Remove network
         docker network rm "dive-${TEST_SPOKE_CODE_LOWER}-network" 2>/dev/null || true

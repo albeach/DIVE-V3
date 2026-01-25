@@ -1,4 +1,4 @@
-#!/usr/local/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # DIVE V3 Testing Utilities Module (Consolidated)
 # =============================================================================
@@ -357,10 +357,10 @@ test_cleanup() {
     log_verbose "Cleaning up test artifacts..."
 
     # Remove test containers
-    docker ps -a --filter "name=test-" -q | xargs -r docker rm -f 2>/dev/null || true
+    docker ps -a --filter "name=test-" -q | grep . | xargs docker rm -f 2>/dev/null || true
 
     # Remove test volumes
-    docker volume ls -q --filter "name=test-" | xargs -r docker volume rm 2>/dev/null || true
+    docker volume ls -q --filter "name=test-" | grep . | xargs docker volume rm 2>/dev/null || true
 }
 
 # =============================================================================

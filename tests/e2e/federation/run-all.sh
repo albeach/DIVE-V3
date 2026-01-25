@@ -34,7 +34,7 @@ if ((BASH_VERSINFO[0] < 4)); then
     echo "Current version: $BASH_VERSION"
     echo ""
     echo "On macOS, install modern bash with: brew install bash"
-    echo "Then run with: /opt/homebrew/bin/bash $0"
+    echo "Then rerun this script (it will use env bash via shebang)"
     exit 1
 fi
 
