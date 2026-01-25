@@ -60,6 +60,11 @@ spoke_phase_configuration() {
     local code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
+    # =============================================================================
+    # PERFORMANCE TRACKING: Phase timing metrics
+    # =============================================================================
+    local PHASE_START=$(date +%s)
+    
     log_info "Configuration phase for $code_upper"
 
     # CRITICAL: Set USE_TERRAFORM_SSOT to skip manual protocol mapper creation
@@ -278,7 +283,10 @@ spoke_phase_configuration() {
         return 1
     fi
 
-    log_success "Configuration phase complete"
+    # Calculate and log phase duration
+    local PHASE_END=$(date +%s)
+    local PHASE_DURATION=$((PHASE_END - PHASE_START))
+    log_success "Configuration phase complete in ${PHASE_DURATION}s"
     return 0
 }
 

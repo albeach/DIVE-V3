@@ -78,6 +78,7 @@ _spoke_pipeline_load_modules() {
         "spoke-containers.sh"
         "spoke-federation.sh"
         "spoke-compose-generator.sh"
+        "spoke-checkpoint.sh"
         "phase-preflight.sh"
         "phase-initialization.sh"
         "phase-deployment.sh"
@@ -106,7 +107,7 @@ _spoke_pipeline_load_modules
 # Arguments:
 #   $1 - Instance code (e.g., NZL, FRA)
 #   $2 - Instance name (e.g., "New Zealand Defence")
-#   $3 - Pipeline mode (deploy|up|redeploy)
+#   $3 - Pipeline mode (deploy|up|redeploy|resume)
 #
 # Returns:
 #   0 - Success
@@ -127,6 +128,36 @@ spoke_pipeline_execute() {
         return 1
     fi
 
+    # Handle resume mode
+    local resume_mode=false
+    if [ "$pipeline_mode" = "resume" ]; then
+        resume_mode=true
+        pipeline_mode="$PIPELINE_MODE_DEPLOY"  # Resume uses deploy mode
+
+        # Check if we can resume
+        if type spoke_checkpoint_can_resume &>/dev/null; then
+            if ! spoke_checkpoint_can_resume "$code_upper"; then
+                log_error "Cannot resume - no valid checkpoints found"
+                log_error "Run without --resume to start a new deployment"
+                return 1
+            fi
+
+            # Validate checkpoint consistency
+            if type spoke_checkpoint_validate_state &>/dev/null; then
+                spoke_checkpoint_validate_state "$code_upper" || log_warn "Checkpoint inconsistencies detected (auto-corrected)"
+            fi
+
+            # Show resume info
+            log_info "Resuming deployment for $code_upper"
+            if type spoke_checkpoint_print_resume_info &>/dev/null; then
+                spoke_checkpoint_print_resume_info "$code_upper"
+            fi
+        else
+            log_warn "Checkpoint module not loaded - resume not available"
+            resume_mode=false
+        fi
+    fi
+
     # GAP-001 FIX: Acquire deployment lock to prevent concurrent deployments
     local lock_acquired=false
     if type orch_acquire_deployment_lock &>/dev/null; then
@@ -141,7 +172,7 @@ spoke_pipeline_execute() {
     # CRITICAL: Execute pipeline with guaranteed lock cleanup
     # Use subshell pattern to ensure cleanup happens even on early returns
     local pipeline_result=0
-    _spoke_pipeline_execute_internal "$code_upper" "$instance_name" "$pipeline_mode" "$start_time" || pipeline_result=$?
+    _spoke_pipeline_execute_internal "$code_upper" "$instance_name" "$pipeline_mode" "$start_time" "$resume_mode" || pipeline_result=$?
 
     # ALWAYS release lock (runs whether pipeline succeeded or failed)
     if [ "$lock_acquired" = true ] && type orch_release_deployment_lock &>/dev/null; then
@@ -159,6 +190,7 @@ _spoke_pipeline_execute_internal() {
     local instance_name="$2"
     local pipeline_mode="$3"
     local start_time="$4"
+    local resume_mode="${5:-false}"
 
     # Initialize orchestration context
     orch_init_context "$code_upper" "$instance_name"
@@ -178,12 +210,12 @@ _spoke_pipeline_execute_internal() {
     # Execute phases based on mode
     local phase_result=0
 
-    log_verbose "Starting phase execution (mode: $pipeline_mode)"
+    log_verbose "Starting phase execution (mode: $pipeline_mode, resume: $resume_mode)"
 
     # Phase 1: Preflight (always runs) - MUST run BEFORE setting state
     # This validates no other deployment is in progress
     log_verbose "Executing phase 1: PREFLIGHT"
-    if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_PREFLIGHT" "$pipeline_mode"; then
+    if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_PREFLIGHT" "$pipeline_mode" "$resume_mode"; then
         log_warn "Preflight phase failed, stopping pipeline"
         phase_result=1
     fi
@@ -202,7 +234,7 @@ _spoke_pipeline_execute_internal() {
     # Phase 2: Initialization (skip for 'up' mode)
     if [ $phase_result -eq 0 ] && [ "$pipeline_mode" != "$PIPELINE_MODE_UP" ]; then
         log_verbose "Executing phase 2: INITIALIZATION"
-        if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_INITIALIZATION" "$pipeline_mode"; then
+        if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_INITIALIZATION" "$pipeline_mode" "$resume_mode"; then
             log_warn "Initialization phase failed, stopping pipeline"
             phase_result=1
         fi
@@ -221,7 +253,7 @@ _spoke_pipeline_execute_internal() {
     # Phase 3: Deployment (always runs)
     if [ $phase_result -eq 0 ]; then
         log_verbose "Executing phase 3: DEPLOYMENT"
-        if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_DEPLOYMENT" "$pipeline_mode"; then
+        if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_DEPLOYMENT" "$pipeline_mode" "$resume_mode"; then
             log_warn "Deployment phase failed, stopping pipeline"
             phase_result=1
         fi
@@ -238,7 +270,7 @@ _spoke_pipeline_execute_internal() {
     # Phase 4: Configuration (always runs)
     if [ $phase_result -eq 0 ]; then
         log_verbose "Executing phase 4: CONFIGURATION"
-        if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_CONFIGURATION" "$pipeline_mode"; then
+        if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_CONFIGURATION" "$pipeline_mode" "$resume_mode"; then
             log_warn "Configuration phase failed, stopping pipeline"
             phase_result=1
         fi
@@ -255,7 +287,7 @@ _spoke_pipeline_execute_internal() {
     # Phase 5: Seeding (deploy mode only)
     if [ $phase_result -eq 0 ] && [ "$pipeline_mode" = "$PIPELINE_MODE_DEPLOY" ]; then
         log_verbose "Executing phase 5: SEEDING"
-        if ! spoke_pipeline_run_phase "$code_upper" "SEEDING" "$pipeline_mode"; then
+        if ! spoke_pipeline_run_phase "$code_upper" "SEEDING" "$pipeline_mode" "$resume_mode"; then
             log_warn "Seeding phase failed, stopping pipeline"
             phase_result=1
         fi
@@ -274,7 +306,7 @@ _spoke_pipeline_execute_internal() {
     # Phase 6: Verification (always runs)
     if [ $phase_result -eq 0 ]; then
         log_verbose "Executing phase 6: VERIFICATION"
-        if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_VERIFICATION" "$pipeline_mode"; then
+        if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_VERIFICATION" "$pipeline_mode" "$resume_mode"; then
             log_warn "Verification phase failed, stopping pipeline"
             phase_result=1
         fi
@@ -322,12 +354,13 @@ _spoke_pipeline_execute_internal() {
 }
 
 ##
-# Run a single pipeline phase with error handling
+# Run a single pipeline phase with error handling and checkpoint support
 #
 # Arguments:
 #   $1 - Instance code
 #   $2 - Phase name
 #   $3 - Pipeline mode
+#   $4 - Resume mode (true/false)
 #
 # Returns:
 #   0 - Success
@@ -337,8 +370,18 @@ spoke_pipeline_run_phase() {
     local instance_code="$1"
     local phase_name="$2"
     local pipeline_mode="$3"
+    local resume_mode="${4:-false}"
+
+    # Check if phase should be skipped (resume mode + already complete)
+    if [ "$resume_mode" = "true" ] && type spoke_checkpoint_is_complete &>/dev/null; then
+        if spoke_checkpoint_is_complete "$instance_code" "$phase_name"; then
+            log_info "Skipping $phase_name (already complete - resuming)"
+            return 0
+        fi
+    fi
 
     log_step "Phase: $phase_name"
+    local phase_start=$(date +%s)
 
     # Map pipeline phase names to orchestration states
     local state_name="$phase_name"
@@ -386,7 +429,15 @@ spoke_pipeline_run_phase() {
 
     if type "$phase_function" &>/dev/null; then
         if "$phase_function" "$instance_code" "$pipeline_mode"; then
-            log_success "Phase $phase_name completed"
+            local phase_end=$(date +%s)
+            local phase_duration=$((phase_end - phase_start))
+
+            log_success "Phase $phase_name completed in ${phase_duration}s"
+
+            # Mark phase complete in checkpoint system
+            if type spoke_checkpoint_mark_complete &>/dev/null; then
+                spoke_checkpoint_mark_complete "$instance_code" "$phase_name" "$phase_duration"
+            fi
 
             # Record successful step
             if type orch_db_record_step &>/dev/null; then
