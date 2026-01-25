@@ -59,11 +59,17 @@ variable "client_secret" {
 # =============================================================================
 # TEST USERS
 # =============================================================================
+variable "create_test_users" {
+  description = "Whether to create test users (testuser-usa-[1-5] and admin-usa)"
+  type        = bool
+  default     = true
+}
+
 variable "test_user_password" {
   description = "Test user password (from GCP Secret Manager: dive-v3-test-user-password)"
   type        = string
   sensitive   = true
-  default     = "DiveTestSecure2025!"
+  default     = "TestUser2025!Pilot"
 }
 
 variable "admin_user_password" {
