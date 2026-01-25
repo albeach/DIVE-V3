@@ -19,5 +19,13 @@ provider "keycloak" {
   password  = var.keycloak_admin_password
   url       = coalesce(var.keycloak_url, var.idp_url)
   tls_insecure_skip_verify = true
+  
+  # =============================================================================
+  # PERFORMANCE OPTIMIZATION: Provider timeouts
+  # =============================================================================
+  # Set reasonable timeouts for Keycloak API operations
+  # Prevents hanging on slow API responses during complex realm configurations
+  # =============================================================================
+  timeout = 300  # 5 minutes for API operations
 }
 

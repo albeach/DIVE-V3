@@ -233,6 +233,7 @@ spoke_seed_users() {
 # Arguments:
 #   $1 - Instance code
 #   $2 - Resource count (default: 5000)
+#   $3 - File type mode: text or multi (default: multi)
 #
 # Returns:
 #   0 - Success
@@ -241,10 +242,19 @@ spoke_seed_users() {
 spoke_seed_resources() {
     local instance_code="$1"
     local resource_count="${2:-5000}"
+    local file_type_mode="${3:-multi}"   # NEW: text or multi (default: multi)
     local code_upper=$(upper "$instance_code")
     local code_lower=$(lower "$instance_code")
 
-    log_step "Seeding $resource_count ZTDF resources for $code_upper..."
+    # File type mode description for logging
+    local file_type_desc
+    if [ "$file_type_mode" = "multi" ]; then
+        file_type_desc="multi-type (PDF, DOCX, XLSX, MP4, etc.)"
+    else
+        file_type_desc="text-only (legacy)"
+    fi
+
+    log_step "Seeding $resource_count ZTDF resources for $code_upper ($file_type_desc)..."
 
     # Load secrets for verification (best effort)
     if type spoke_secrets_load &>/dev/null; then
@@ -277,7 +287,7 @@ spoke_seed_resources() {
     seed_output=$(docker exec "$backend_container" bash -c "
         export INSTANCE_CODE='$code_upper'
         cd /app
-        npm run seed:instance -- --instance='$code_upper' --count=$resource_count 2>&1
+        npm run seed:instance -- --instance='$code_upper' --count=$resource_count --file-type-mode='$file_type_mode' 2>&1
     " 2>&1)
 
     local seed_exit=$?
@@ -293,12 +303,15 @@ spoke_seed_resources() {
         " 2>/dev/null | tail -1 | tr -d '\n\r' || echo "0")
 
         if [ -n "$actual_count" ] && [ "$actual_count" -ge "$resource_count" ]; then
-            log_success "Seeded $actual_count ZTDF-encrypted resources"
+            log_success "Seeded $actual_count ZTDF-encrypted resources ($file_type_desc)"
             echo "  ✓ AES-256-GCM encryption"
             echo "  ✓ Locale-aware classification labels"
             echo "  ✓ Multi-KAS key access objects"
             echo "  ✓ COI-based community keys"
             echo "  ✓ Policy-bound encryption"
+            if [ "$file_type_mode" = "multi" ]; then
+                echo "  ✓ Multi-format: PDF, DOCX, XLSX, PPTX, MP4, MP3, etc."
+            fi
             return 0
         else
             log_warn "Seeding completed but verification failed (expected: $resource_count, found: $actual_count)"
@@ -316,11 +329,11 @@ spoke_seed_resources() {
         # Try direct execution of seed script
         seed_output=$(docker exec "$backend_container" bash -c "
             cd /app
-            npx ts-node src/scripts/seed-instance-resources.ts --instance='$code_upper' --count=$resource_count 2>&1
+            npx ts-node src/scripts/seed-instance-resources.ts --instance='$code_upper' --count=$resource_count --file-type-mode='$file_type_mode' 2>&1
         " 2>&1)
 
         if [ $? -eq 0 ]; then
-            log_success "Seeded $resource_count ZTDF-encrypted resources (direct execution)"
+            log_success "Seeded $resource_count ZTDF-encrypted resources (direct execution, $file_type_desc)"
             return 0
         fi
     fi
