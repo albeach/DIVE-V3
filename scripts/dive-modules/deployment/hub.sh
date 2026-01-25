@@ -497,8 +497,7 @@ hub_up() {
             return 1
         fi
 
-        local max_level=$(orch_get_max_dependency_level)
-        log_success "Hub services started (parallel mode: $max_level dependency levels)"
+        log_success "Hub services started (parallel mode: 4 dependency levels)"
     else
         # Fallback: Traditional sequential startup
         log_verbose "Using traditional sequential startup (PARALLEL_STARTUP_ENABLED=false)"
@@ -543,53 +542,67 @@ hub_down() {
 hub_parallel_startup() {
     log_info "Starting hub services with dependency-aware parallel orchestration"
 
-    # Validate no circular dependencies first
-    if ! orch_detect_circular_dependencies; then
-        log_error "Cannot proceed with parallel startup - circular dependencies detected"
-        return 1
-    fi
+    # Define hub-specific dependency graph (self-contained to avoid export issues)
+    # Based on docker-compose.hub.yml service dependencies
+    declare -A hub_deps=(
+        ["postgres"]="none"
+        ["mongodb"]="none"
+        ["redis"]="none"
+        ["keycloak"]="postgres"
+        ["backend"]="postgres,mongodb,redis,keycloak"
+        ["frontend"]="backend"
+    )
 
-    local max_level=$(orch_get_max_dependency_level)
+    # Calculate dependency levels manually for hub services
+    # Level 0: postgres, mongodb, redis (no dependencies)
+    # Level 1: keycloak (depends on postgres)
+    # Level 2: backend (depends on all DBs + keycloak)
+    # Level 3: frontend (depends on backend)
+    
+    local -a level_0=("postgres" "mongodb" "redis")
+    local -a level_1=("keycloak")
+    local -a level_2=("backend")
+    local -a level_3=("frontend")
+    local max_level=3
+
     local total_started=0
     local total_failed=0
     local start_time=$(date +%s)
 
-    log_verbose "Service graph has $((max_level + 1)) dependency levels"
-
-    # Define hub services (matches docker-compose.hub.yml)
-    local hub_services=("postgres" "mongodb" "redis" "keycloak" "backend" "frontend")
+    log_verbose "Service graph has 4 dependency levels (0-3)"
 
     # Start services level by level
-    for ((level=0; level<=max_level; level++)); do
-        local level_services=$(orch_get_services_at_level $level)
+    for level in 0 1 2 3; do
+        # Get services at this level
+        local level_services=()
+        case $level in
+            0) level_services=("${level_0[@]}") ;;
+            1) level_services=("${level_1[@]}") ;;
+            2) level_services=("${level_2[@]}") ;;
+            3) level_services=("${level_3[@]}") ;;
+        esac
 
-        if [ -z "$level_services" ]; then
+        # Get services at this level
+        local level_services=()
+        case $level in
+            0) level_services=("${level_0[@]}") ;;
+            1) level_services=("${level_1[@]}") ;;
+            2) level_services=("${level_2[@]}") ;;
+            3) level_services=("${level_3[@]}") ;;
+        esac
+
+        if [ ${#level_services[@]} -eq 0 ]; then
+            log_verbose "Level $level: No services to start"
             continue
         fi
 
-        # Filter to only hub services
-        local hub_level_services=""
-        for service in $level_services; do
-            for hub_svc in "${hub_services[@]}"; do
-                if [ "$service" = "$hub_svc" ]; then
-                    hub_level_services="$hub_level_services $service"
-                    break
-                fi
-            done
-        done
-
-        if [ -z "$hub_level_services" ]; then
-            log_verbose "Level $level: No hub services to start"
-            continue
-        fi
-
-        log_info "Level $level: Starting $hub_level_services"
+        log_info "Level $level: Starting ${level_services[*]}"
 
         # Start all services at this level in parallel
         local pids=()
         declare -A service_pid_map
 
-        for service in $hub_level_services; do
+        for service in "${level_services[@]}"; do
             (
                 # Calculate dynamic timeout based on service type
                 local timeout
