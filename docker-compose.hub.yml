@@ -5,8 +5,28 @@
 #   Minimal hub footprint for policy distribution (OPAL Server) plus the
 #   supporting identity/policy services required to serve policy data.
 # Usage:
-#   ./dive hub deploy       # uses this compose file
+#   ./dive hub deploy       # uses this compose file (loads env automatically)
 #   ./dive hub up           # start services
+#
+#   Manual usage (when not using dive CLI):
+#   RECOMMENDED: Create symlink for Docker Compose default behavior
+#   ln -sf .env.hub .env
+#   docker compose -f docker-compose.hub.yml up
+#
+#   OR: Use --env-file flag (all commands must include it):
+#   docker compose -f docker-compose.hub.yml --env-file .env.hub up
+#   docker compose -f docker-compose.hub.yml --env-file .env.hub restart backend
+#
+# Environment Variable Loading (Docker Compose Behavior):
+#   Docker Compose interpolates ${VARIABLES} in TWO phases:
+#   1. PARSE PHASE: Loads .env (default filename) OR --env-file for ${VAR} interpolation
+#   2. CONTAINER PHASE: Loads service-level env_file: entries into container environment
+#
+#   CRITICAL: ${MONGO_PASSWORD} in this file needs to exist in PARSE PHASE:
+#   - Option A (Recommended): ln -sf .env.hub .env
+#   - Option B: Always use --env-file .env.hub flag
+#   - Option C: Export vars to shell: export $(cat .env.hub | xargs)
+#
 # Notes:
 #   - Secrets come from ./dive load_secrets (GCP or local defaults).
 #   - Certificates are expected in instances/hub/certs (SSOT via ./dive certs).
@@ -97,8 +117,8 @@ services:
     networks:
       - hub-internal
     healthcheck:
-      # Check if MongoDB is accepting connections (not PRIMARY status)
-      # PRIMARY status comes after post-start initialization
+      # Check if MongoDB is accepting connections (basic connectivity only)
+      # Replica set initialization happens in Phase 4a of deployment
       test: >
         mongosh admin -u admin -p ${MONGO_PASSWORD} --quiet --eval "db.adminCommand('ping')" | grep -q "ok"
       interval: 5s
@@ -130,6 +150,10 @@ services:
       --save 60 10000
     environment:
       REDIS_PASSWORD_USA: ${REDIS_PASSWORD_USA}
+    ports:
+      # Changed from 6379:6379 to avoid conflict with local redis-server
+      # Internal Docker network still uses :6379, only host port changed
+      - "127.0.0.1:6380:6379"
     networks:
       - hub-internal
       - dive-shared
@@ -367,6 +391,7 @@ services:
       - ./policies:/app/policies:ro
       - ./backend/certs:/app/certs:ro
       - ./certs/mkcert:/app/certs/ca:ro  # mkcert root CA for TLS trust
+      - ./examples/examples:/app/examples/examples:ro  # Multi-format seeding templates
       - ./NATO_Security_Policy.xml:/app/NATO_Security_Policy.xml:ro
       - ./backend/logs:/app/logs
       - ./config:/app/config:ro
@@ -401,9 +426,17 @@ services:
   #   2. All external access goes through HTTPS backend/frontend
   #   3. No sensitive data exposed externally on port 8282
   # To enable HTTPS, use a reverse proxy (nginx/traefik) in front of AuthzForce
+  #
+  # Platform Note (ARM64 hosts):
+  #   AuthzForce image is linux/amd64 only. On ARM64 hosts (Apple Silicon, ARM servers),
+  #   Docker uses QEMU emulation which adds ~20% performance overhead but works reliably.
+  #   This is acceptable for dev/test environments. For production ARM64, consider:
+  #   - Building a native ARM64 image from source, OR
+  #   - Using an alternative XACML PDP with ARM64 support
   # ---------------------------------------------------------------------------
   authzforce:
     image: authzforce/server:12.0.1
+    platform: linux/amd64  # Explicit for ARM64 hosts (runs via QEMU emulation)
     container_name: ${COMPOSE_PROJECT_NAME}-authzforce
     restart: unless-stopped
     # NOTE: Exposing port for debugging only. In production, remove this.

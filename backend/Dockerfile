@@ -51,7 +51,8 @@ COPY --from=builder --chown=expressjs:nodejs /app/package.json ./package.json
 COPY --from=builder --chown=expressjs:nodejs /app/tsconfig.json ./tsconfig.json
 
 # Create necessary directories and fix all permissions (including hidden files)
-RUN mkdir -p logs uploads/idp-themes config && \
+# Note: examples directory is mounted via docker-compose for multi-format seeding
+RUN mkdir -p logs uploads/idp-themes config examples/examples && \
     chown -R expressjs:nodejs /app && \
     chmod -R u+rw /app
 

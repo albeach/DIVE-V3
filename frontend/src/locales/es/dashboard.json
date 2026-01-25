@@ -325,5 +325,20 @@
   },
   "instance": "Instancia",
   "clearance": "Autorización",
-  "country": "País"
+  "country": "País",
+  "greetings": {
+    "morning": "Good morning",
+    "afternoon": "Good afternoon",
+    "evening": "Good evening",
+    "lateNight": "Welcome back"
+  },
+  "homeUser": {
+    "subtitle": "Welcome to your home instance",
+    "badge": "Home Instance"
+  },
+  "federatedUser": {
+    "subtitle": "Accessing via {{homeCountry}} → {{currentInstance}}",
+    "badge": "Federated Access",
+    "viewingFrom": "Viewing from"
+  }
 }

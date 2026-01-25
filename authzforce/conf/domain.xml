@@ -1,6 +1,0 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<domainProperties xmlns="http://authzforce.github.io/rest-api-model/xmlns/authz/5">
-  <description>DIVE V3 Policies Lab Domain</description>
-  <rootPolicyRefExpression>urn:dive:lab:root-policy</rootPolicyRefExpression>
-  <refPolicyCombiningAlgId>urn:oasis:names:tc:xacml:3.0:policy-combining-algorithm:deny-unless-permit</refPolicyCombiningAlgId>
-</domainProperties>

@@ -21,6 +21,7 @@ import rego.v1
 
 import data.dive.base.clearance
 import data.dive.base.coi
+import data.dive.base.coi.hierarchy
 import data.dive.base.country
 import data.dive.base.time
 import data.dive.org.nato.classification
@@ -190,37 +191,79 @@ check_country_releasable if {
 } else := false
 
 # ============================================
-# ACP-240 Section 4.5: COI (Community of Interest) Check
+# ACP-240 Section 4.5: COI Check (with Hierarchy)
 # ============================================
 # Validates COI membership requirements.
+# UPDATED (2026-01-25): Now uses hierarchical COI logic where broader
+# COI memberships (NATO, FVEY) grant access to narrower bilateral agreements.
+#
+# Example: User with NATO tag can access FRA-US resources because
+# both France and USA are NATO members, making FRA-US a logical subset.
+#
+# Uses else-chain to return first matching error (avoids OPA conflict).
 
 # Uses else-chain to return first matching error (avoids OPA conflict).
 is_coi_violation := msg if {
-	# US-ONLY requires exact match
+	# US-ONLY requires exact match (no hierarchy applies)
 	"US-ONLY" in input.resource.COI
 	user_coi := object.get(input.subject, "acpCOI", [])
 	not user_coi == ["US-ONLY"]
 	msg := sprintf("Resource requires US-ONLY COI. User has COI: %v", [user_coi])
 } else := msg if {
+	# ALL operator with hierarchical access check
 	count(input.resource.COI) > 0
 	user_coi := object.get(input.subject, "acpCOI", [])
 	count(user_coi) > 0 # User has COI tags
 	operator := object.get(input.resource, "coiOperator", "ALL")
 	operator == "ALL"
-	not coi.has_access_all(user_coi, input.resource.COI)
-	msg := sprintf("COI operator=ALL: user COI %v does not satisfy resource COI %v", [
+	not hierarchy.has_hierarchical_access_all(user_coi, input.resource.COI)
+
+	# Generate detailed error with hierarchy explanation
+	effective_cois := hierarchy.expand_user_cois(user_coi)
+	hierarchy_note := hierarchy.hierarchy_explanation(user_coi, input.resource.COI)
+
+	# Build message with hierarchy note if available
+	hierarchy_note != ""
+	msg := sprintf("COI operator=ALL: user COI %v (effective: %v) does not satisfy resource COI %v [hierarchy: %s]", [
 		user_coi,
+		effective_cois,
+		input.resource.COI,
+		hierarchy_note,
+	])
+} else := msg if {
+	# ALL operator with hierarchical access check (no hierarchy note)
+	count(input.resource.COI) > 0
+	user_coi := object.get(input.subject, "acpCOI", [])
+	count(user_coi) > 0 # User has COI tags
+	operator := object.get(input.resource, "coiOperator", "ALL")
+	operator == "ALL"
+	not hierarchy.has_hierarchical_access_all(user_coi, input.resource.COI)
+
+	# Generate basic error (no hierarchy implications)
+	effective_cois := hierarchy.expand_user_cois(user_coi)
+	hierarchy_note := hierarchy.hierarchy_explanation(user_coi, input.resource.COI)
+	hierarchy_note == ""
+
+	msg := sprintf("COI operator=ALL: user COI %v (effective: %v) does not satisfy resource COI %v", [
+		user_coi,
+		effective_cois,
 		input.resource.COI,
 	])
 } else := msg if {
+	# ANY operator with hierarchical access check
 	count(input.resource.COI) > 0
 	user_coi := object.get(input.subject, "acpCOI", [])
 	count(user_coi) > 0
 	operator := object.get(input.resource, "coiOperator", "ALL")
 	operator == "ANY"
-	not coi.has_access_any(user_coi, input.resource.COI)
-	msg := sprintf("COI operator=ANY: user COI %v does not intersect resource COI %v", [
+	not hierarchy.has_hierarchical_access_any(user_coi, input.resource.COI)
+
+	# Generate detailed error with hierarchy explanation
+	effective_cois := hierarchy.expand_user_cois(user_coi)
+
+	msg := sprintf("COI operator=ANY: user COI %v (effective: %v) does not intersect resource COI %v", [
 		user_coi,
+		effective_cois,
 		input.resource.COI,
 	])
 }

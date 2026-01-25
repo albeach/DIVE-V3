@@ -325,5 +325,20 @@
   },
   "instance": "Instance",
   "clearance": "Habilitation",
-  "country": "Pays"
+  "country": "Pays",
+  "greetings": {
+    "morning": "Bonjour",
+    "afternoon": "Bon après-midi",
+    "evening": "Bonsoir",
+    "lateNight": "Bienvenue"
+  },
+  "homeUser": {
+    "subtitle": "Bienvenue sur votre instance d'origine",
+    "badge": "Instance d'Origine"
+  },
+  "federatedUser": {
+    "subtitle": "Accès via {{homeCountry}} → {{currentInstance}}",
+    "badge": "Accès Fédéré",
+    "viewingFrom": "Consultation depuis"
+  }
 }
