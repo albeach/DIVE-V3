@@ -116,25 +116,25 @@ echo ""
 # -----------------------------------------------------------------------------
 test_status_module_exists() {
     local status_file="${DIVE_ROOT}/scripts/dive-modules/status.sh"
-    
+
     if [ ! -f "$status_file" ]; then
         echo "File not found: $status_file"
         return 1
     fi
-    
+
     local size
     size=$(stat -f%z "$status_file" 2>/dev/null || stat -c%s "$status_file" 2>/dev/null)
-    
+
     if [ "$size" -eq 0 ]; then
         echo "File is empty (0 bytes)"
         return 1
     fi
-    
+
     if [ "$size" -lt 1000 ]; then
         echo "File is too small ($size bytes)"
         return 1
     fi
-    
+
     return 0
 }
 run_test "status.sh module exists and has content" test_status_module_exists
@@ -144,27 +144,27 @@ run_test "status.sh module exists and has content" test_status_module_exists
 # -----------------------------------------------------------------------------
 test_status_command() {
     cd "$DIVE_ROOT" || return 1
-    
+
     local output
     output=$(./dive status 2>&1)
     local exit_code=$?
-    
+
     # Check for key sections in output
     if ! echo "$output" | grep -q "Docker Daemon"; then
         echo "Missing Docker Daemon section"
         return 1
     fi
-    
+
     if ! echo "$output" | grep -q "Containers"; then
         echo "Missing Containers section"
         return 1
     fi
-    
+
     if ! echo "$output" | grep -q "Summary"; then
         echo "Missing Summary section"
         return 1
     fi
-    
+
     return 0
 }
 run_test "./dive status command works" test_status_command
@@ -174,21 +174,21 @@ run_test "./dive status command works" test_status_command
 # -----------------------------------------------------------------------------
 test_health_command() {
     cd "$DIVE_ROOT" || return 1
-    
+
     local output
     output=$(./dive health 2>&1)
-    
+
     # Check for key sections
     if ! echo "$output" | grep -q "Health Check"; then
         echo "Missing Health Check header"
         return 1
     fi
-    
+
     if ! echo "$output" | grep -q "Infrastructure"; then
         echo "Missing Infrastructure section"
         return 1
     fi
-    
+
     return 0
 }
 run_test "./dive health command works" test_health_command
@@ -198,29 +198,29 @@ run_test "./dive health command works" test_health_command
 # -----------------------------------------------------------------------------
 test_validate_without_secrets() {
     cd "$DIVE_ROOT" || return 1
-    
+
     # Unset secrets to test validation
     local old_pg="${POSTGRES_PASSWORD:-}"
     local old_mongo="${MONGO_PASSWORD:-}"
     local old_kc="${KEYCLOAK_ADMIN_PASSWORD:-}"
-    
+
     unset POSTGRES_PASSWORD MONGO_PASSWORD KEYCLOAK_ADMIN_PASSWORD KEYCLOAK_CLIENT_SECRET AUTH_SECRET
-    
+
     local output
     output=$(./dive validate 2>&1)
     local exit_code=$?
-    
+
     # Restore secrets
     [ -n "$old_pg" ] && export POSTGRES_PASSWORD="$old_pg"
     [ -n "$old_mongo" ] && export MONGO_PASSWORD="$old_mongo"
     [ -n "$old_kc" ] && export KEYCLOAK_ADMIN_PASSWORD="$old_kc"
-    
+
     # Check that validation ran (regardless of pass/fail)
     if ! echo "$output" | grep -q "Prerequisites Validation"; then
         echo "Validate command did not run properly"
         return 1
     fi
-    
+
     return 0
 }
 run_test "./dive validate works without secrets exported" test_validate_without_secrets
@@ -230,21 +230,21 @@ run_test "./dive validate works without secrets exported" test_validate_without_
 # -----------------------------------------------------------------------------
 test_compose_config_valid() {
     cd "$DIVE_ROOT" || return 1
-    
+
     # Test main compose file
     if ! POSTGRES_PASSWORD=x MONGO_PASSWORD=x KEYCLOAK_ADMIN_PASSWORD=x KEYCLOAK_CLIENT_SECRET=x AUTH_SECRET=x \
        docker compose -f docker-compose.yml config --services >/dev/null 2>&1; then
         echo "docker-compose.yml is invalid"
         return 1
     fi
-    
+
     # Test hub compose file
     if ! POSTGRES_PASSWORD=x MONGO_PASSWORD=x KEYCLOAK_ADMIN_PASSWORD=x KEYCLOAK_CLIENT_SECRET=x AUTH_SECRET=x \
        docker compose -f docker-compose.hub.yml config --services >/dev/null 2>&1; then
         echo "docker-compose.hub.yml is invalid"
         return 1
     fi
-    
+
     return 0
 }
 run_test "Compose files are valid with dummy secrets" test_compose_config_valid
@@ -254,15 +254,15 @@ run_test "Compose files are valid with dummy secrets" test_compose_config_valid
 # -----------------------------------------------------------------------------
 test_cli_help() {
     cd "$DIVE_ROOT" || return 1
-    
+
     local output
     output=$(./dive help 2>&1)
-    
+
     if ! echo "$output" | grep -q -E "(status|health|up|down|deploy)"; then
         echo "Help output missing expected commands"
         return 1
     fi
-    
+
     return 0
 }
 run_test "./dive help works" test_cli_help
@@ -272,15 +272,15 @@ run_test "./dive help works" test_cli_help
 # -----------------------------------------------------------------------------
 test_brief_command() {
     cd "$DIVE_ROOT" || return 1
-    
+
     local output
     output=$(./dive brief 2>&1)
-    
+
     if ! echo "$output" | grep -q "DIVE V3"; then
         echo "Brief command output unexpected"
         return 1
     fi
-    
+
     return 0
 }
 run_test "./dive brief works" test_brief_command
@@ -290,20 +290,20 @@ run_test "./dive brief works" test_brief_command
 # -----------------------------------------------------------------------------
 test_diagnostics_command() {
     cd "$DIVE_ROOT" || return 1
-    
+
     local output
     output=$(./dive diagnostics 2>&1)
-    
+
     if ! echo "$output" | grep -q "Diagnostics"; then
         echo "Missing Diagnostics header"
         return 1
     fi
-    
+
     if ! echo "$output" | grep -q "Known Issue Detection"; then
         echo "Missing Known Issue Detection section"
         return 1
     fi
-    
+
     return 0
 }
 run_test "./dive diagnostics works" test_diagnostics_command

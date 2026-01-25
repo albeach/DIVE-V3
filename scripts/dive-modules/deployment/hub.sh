@@ -175,6 +175,14 @@ hub_deploy() {
     fi
     log_info "Phase 2.5: Starting MongoDB and initializing replica set"
     
+    # CRITICAL: Load secrets before MongoDB operations
+    # Needed for MONGO_PASSWORD environment variable
+    if ! load_secrets; then
+        log_error "CRITICAL: Failed to load secrets - cannot initialize MongoDB"
+        kill $timeout_monitor_pid 2>/dev/null || true
+        return 1
+    fi
+    
     # Start MongoDB first (Level 0 service, but we need it early)
     log_verbose "Starting MongoDB container..."
     if ! ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" up -d mongodb >/dev/null 2>&1; then
