@@ -29,6 +29,13 @@ webauthn_rp_id = "localhost"
 enable_mfa = true
 
 # =============================================================================
+# TEST USER CREATION
+# =============================================================================
+# CRITICAL: Must be true for development/testing
+# Creates testuser-usa-[1-5] and admin-usa via Terraform
+create_test_users = true
+
+# =============================================================================
 # FEDERATION PARTNERS (SPOKES) - MONGODB IS THE SSOT
 # =============================================================================
 # DO NOT ADD STATIC ENTRIES HERE!
