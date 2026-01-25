@@ -401,6 +401,19 @@ hub_up() {
         return 0
     fi
 
+    # CRITICAL: Ensure dive-shared network exists (required by docker-compose.hub.yml)
+    # This is normally done in hub_preflight(), but hub_up() can be called standalone
+    # docker-compose.hub.yml declares dive-shared as "external: true" which is validated at parse time
+    if ! docker network inspect dive-shared >/dev/null 2>&1; then
+        log_verbose "Creating dive-shared network (required for hub services)..."
+        if ! docker network create dive-shared 2>/dev/null; then
+            log_error "Failed to create dive-shared network"
+            log_error "This network is required by docker-compose.hub.yml (external: true)"
+            return 1
+        fi
+        log_verbose "dive-shared network created"
+    fi
+
     # CRITICAL: Load secrets from GCP or local before starting containers
     # This ensures all environment variables are available for docker-compose interpolation
     if ! load_secrets; then
