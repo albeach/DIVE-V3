@@ -1,4 +1,4 @@
-#!/usr/local/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # DIVE V3 CLI - Secret Synchronization Module
 # =============================================================================
@@ -117,12 +117,9 @@ update_env_var() {
     local var_value="$3"
 
     if grep -q "^${var_name}=" "$env_file"; then
-        # Update existing
-        if [[ "$OSTYPE" == "darwin"* ]]; then
-            sed -i '' "s|^${var_name}=.*|${var_name}=${var_value}|" "$env_file"
-        else
-            sed -i "s|^${var_name}=.*|${var_name}=${var_value}|" "$env_file"
-        fi
+        # Update existing (portable sed for macOS + Linux)
+        local tmpfile=$(mktemp)
+        sed "s|^${var_name}=.*|${var_name}=${var_value}|" "$env_file" > "$tmpfile" && mv "$tmpfile" "$env_file"
     else
         # Append new
         echo "${var_name}=${var_value}" >> "$env_file"

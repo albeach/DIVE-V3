@@ -1,4 +1,4 @@
-#!/usr/local/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # DIVE V3 Orchestration Error Handling (Consolidated)
 # =============================================================================
@@ -239,7 +239,7 @@ orch_auto_recover() {
 
         1207)  # Stale container cleanup failed
             log_info "Auto-recovering: Force removing stale containers..."
-            docker ps -a -q --filter "name=dive-spoke-${code_lower}" | xargs -r docker rm -f >/dev/null 2>&1
+            docker ps -a -q --filter "name=dive-spoke-${code_lower}" | grep . | xargs docker rm -f >/dev/null 2>&1
             return 0
             ;;
 

@@ -1,4 +1,4 @@
-#!/usr/local/bin/bash
+#!/usr/bin/env bash
 # DIVE CLI Documentation Update Script
 # Updates all documentation to reflect new CLI pattern
 # Pattern: ./dive --instance CODE spoke CMD → ./dive spoke CMD CODE
@@ -104,7 +104,9 @@ update_file() {
         new_pattern="${REPLACEMENTS[$old_pattern]}"
 
         if grep -qF "$old_pattern" "$file"; then
-            sed -i '' "s|${old_pattern}|${new_pattern}|g" "$file"
+            # Portable sed (works on macOS and Linux)
+            local tmpfile=$(mktemp)
+            sed "s|${old_pattern}|${new_pattern}|g" "$file" > "$tmpfile" && mv "$tmpfile" "$file"
             local count=$(grep -cF "$new_pattern" "$file" 2>/dev/null || echo 0)
             if [ $count -gt 0 ]; then
                 changes=$((changes + count))

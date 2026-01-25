@@ -1,4 +1,4 @@
-#!/usr/local/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # Update All Spoke Instances - Simplify Naming Convention
 # =============================================================================
@@ -54,37 +54,34 @@ for instance_dir in "$INSTANCES_DIR"/*/; do
         # Create backup
         cp "$compose_file" "${compose_file}.backup-$(date +%Y%m%d-%H%M%S)"
 
+        # Portable sed in-place editing (works on both macOS and Linux)
+        local tmpfile=$(mktemp)
+        
         # Update volume declarations (remove redundant {code}_ prefix)
-        sed -i '' "s/${code}_postgres_data:/postgres_data:/g" "$compose_file"
-        sed -i '' "s/${code}_mongodb_data:/mongodb_data:/g" "$compose_file"
-        sed -i '' "s/${code}_redis_data:/redis_data:/g" "$compose_file"
-        sed -i '' "s/${code}_frontend_modules:/frontend_modules:/g" "$compose_file"
-        sed -i '' "s/${code}_frontend_next:/frontend_next:/g" "$compose_file"
-        sed -i '' "s/${code}_opa_cache:/opa_cache:/g" "$compose_file"
-        sed -i '' "s/${code}_opal_cache:/opal_cache:/g" "$compose_file"
-        sed -i '' "s/${code}_backend_node_modules:/backend_node_modules:/g" "$compose_file"
-        sed -i '' "s/${code}_backend_logs:/backend_logs:/g" "$compose_file"
-        sed -i '' "s/${code}_kas_logs:/kas_logs:/g" "$compose_file"
-
-        # Update volume references in service definitions
-        sed -i '' "s/- ${code}_postgres_data:/- postgres_data:/g" "$compose_file"
-        sed -i '' "s/- ${code}_mongodb_data:/- mongodb_data:/g" "$compose_file"
-        sed -i '' "s/- ${code}_redis_data:/- redis_data:/g" "$compose_file"
-        sed -i '' "s/- ${code}_frontend_modules:/- frontend_modules:/g" "$compose_file"
-        sed -i '' "s/- ${code}_frontend_next:/- frontend_next:/g" "$compose_file"
-        sed -i '' "s/- ${code}_opa_cache:/- opa_cache:/g" "$compose_file"
-        sed -i '' "s/- ${code}_opal_cache:/- opal_cache:/g" "$compose_file"
-        sed -i '' "s/- ${code}_backend_node_modules:/- backend_node_modules:/g" "$compose_file"
-        sed -i '' "s/- ${code}_backend_logs:/- backend_logs:/g" "$compose_file"
-        sed -i '' "s/- ${code}_kas_logs:/- kas_logs:/g" "$compose_file"
-
-        # Update network declarations (simplify to just "internal")
-        sed -i '' "s/${code}-network:/internal:/g" "$compose_file"
-        sed -i '' "s/dive-${code}-network:/internal:/g" "$compose_file"
-
-        # Update network references in services
-        sed -i '' "s/- ${code}-network/- internal/g" "$compose_file"
-        sed -i '' "s/- dive-${code}-network/- internal/g" "$compose_file"
+        sed "s/${code}_postgres_data:/postgres_data:/g; \
+             s/${code}_mongodb_data:/mongodb_data:/g; \
+             s/${code}_redis_data:/redis_data:/g; \
+             s/${code}_frontend_modules:/frontend_modules:/g; \
+             s/${code}_frontend_next:/frontend_next:/g; \
+             s/${code}_opa_cache:/opa_cache:/g; \
+             s/${code}_opal_cache:/opal_cache:/g; \
+             s/${code}_backend_node_modules:/backend_node_modules:/g; \
+             s/${code}_backend_logs:/backend_logs:/g; \
+             s/${code}_kas_logs:/kas_logs:/g; \
+             s/- ${code}_postgres_data:/- postgres_data:/g; \
+             s/- ${code}_mongodb_data:/- mongodb_data:/g; \
+             s/- ${code}_redis_data:/- redis_data:/g; \
+             s/- ${code}_frontend_modules:/- frontend_modules:/g; \
+             s/- ${code}_frontend_next:/- frontend_next:/g; \
+             s/- ${code}_opa_cache:/- opa_cache:/g; \
+             s/- ${code}_opal_cache:/- opal_cache:/g; \
+             s/- ${code}_backend_node_modules:/- backend_node_modules:/g; \
+             s/- ${code}_backend_logs:/- backend_logs:/g; \
+             s/- ${code}_kas_logs:/- kas_logs:/g; \
+             s/${code}-network:/internal:/g; \
+             s/dive-${code}-network:/internal:/g; \
+             s/- ${code}-network/- internal/g; \
+             s/- dive-${code}-network/- internal/g" "$compose_file" > "$tmpfile" && mv "$tmpfile" "$compose_file"
 
         echo -e "  ${GREEN}✓ Updated${NC}"
         ((updated_count++))

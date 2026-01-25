@@ -465,7 +465,16 @@ main() {
                 timestamp=$(echo "$line" | cut -d' ' -f1)
                 size=$(echo "$line" | cut -d' ' -f2)
                 filepath=$(echo "$line" | cut -d' ' -f3-)
-                printf "%-20s %8s %s\n" "$(date -d "@$timestamp" '+%Y-%m-%d %H:%M')" "$(numfmt --to=iec-i --suffix=B "$size")" "$filepath"
+                # Portable date formatting (macOS + Linux)
+                local formatted_date
+                if date -r "$timestamp" '+%Y-%m-%d %H:%M' >/dev/null 2>&1; then
+                    # macOS
+                    formatted_date=$(date -r "$timestamp" '+%Y-%m-%d %H:%M')
+                else
+                    # Linux
+                    formatted_date=$(date -d "@$timestamp" '+%Y-%m-%d %H:%M')
+                fi
+                printf "%-20s %8s %s\n" "$formatted_date" "$(numfmt --to=iec-i --suffix=B "$size")" "$filepath"
             done
             ;;
         verify)

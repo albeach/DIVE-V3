@@ -1,4 +1,4 @@
-#!/usr/local/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # DIVE V3 - Dynamic Keycloak Theme Generator
 # =============================================================================
@@ -283,10 +283,9 @@ CSS
             echo "     → Generated stub ${locale} translation (needs professional translation)"
         fi
 
-        # Update theme.properties to include both locales
-        sed -i.bak "s/locales=en/locales=en,${locale}/" "$theme_dir/login/theme.properties" 2>/dev/null || \
-            sed -i '' "s/locales=en/locales=en,${locale}/" "$theme_dir/login/theme.properties"
-        rm -f "$theme_dir/login/theme.properties.bak"
+        # Update theme.properties to include both locales (portable)
+        local tmpfile=$(mktemp)
+        sed "s/locales=en/locales=en,${locale}/" "$theme_dir/login/theme.properties" > "$tmpfile" && mv "$tmpfile" "$theme_dir/login/theme.properties"
     fi
 
     # Create placeholder background (copy from GBR if exists, otherwise from base)

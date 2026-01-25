@@ -1,4 +1,4 @@
-#!/usr/local/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # DIVE V3 - Comprehensive Test Suite
 # Secret Drift & KAS Terminology Validation

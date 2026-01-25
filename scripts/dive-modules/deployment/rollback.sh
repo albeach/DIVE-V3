@@ -1,4 +1,4 @@
-#!/usr/local/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # DIVE V3 Deployment Rollback Module (Consolidated)
 # =============================================================================
@@ -111,7 +111,7 @@ rollback_spoke() {
     fi
 
     # Remove any running containers
-    docker ps -a --filter "name=dive-spoke-${code_lower}" -q | xargs -r docker rm -f 2>/dev/null || true
+    docker ps -a --filter "name=dive-spoke-${code_lower}" -q | grep . | xargs docker rm -f 2>/dev/null || true
 
     log_success "Spoke $instance_code rollback complete"
 }
@@ -182,7 +182,7 @@ cleanup_all() {
     docker network rm dive-shared 2>/dev/null || true
 
     # Remove volumes
-    docker volume ls -q --filter "name=dive" | xargs -r docker volume rm 2>/dev/null || true
+    docker volume ls -q --filter "name=dive" | grep . | xargs docker volume rm 2>/dev/null || true
 
     # Prune system
     docker system prune -f 2>/dev/null || true
@@ -208,10 +208,10 @@ cleanup_hub() {
     docker compose -f docker-compose.hub.yml down -v 2>/dev/null || true
 
     # Remove Hub containers
-    docker ps -a --filter "name=dive-hub" -q | xargs -r docker rm -f 2>/dev/null || true
+    docker ps -a --filter "name=dive-hub" -q | grep . | xargs docker rm -f 2>/dev/null || true
 
     # Remove Hub volumes
-    docker volume ls -q --filter "name=dive-hub" | xargs -r docker volume rm 2>/dev/null || true
+    docker volume ls -q --filter "name=dive-hub" | grep . | xargs docker volume rm 2>/dev/null || true
 
     # Clean data directory
     rm -rf "${DIVE_ROOT}/data/hub"/* 2>/dev/null || true
@@ -245,10 +245,10 @@ cleanup_spoke() {
     fi
 
     # Remove containers
-    docker ps -a --filter "name=dive-spoke-${code_lower}" -q | xargs -r docker rm -f 2>/dev/null || true
+    docker ps -a --filter "name=dive-spoke-${code_lower}" -q | grep . | xargs docker rm -f 2>/dev/null || true
 
     # Remove volumes
-    docker volume ls -q --filter "name=dive-spoke-${code_lower}" | xargs -r docker volume rm 2>/dev/null || true
+    docker volume ls -q --filter "name=dive-spoke-${code_lower}" | grep . | xargs docker volume rm 2>/dev/null || true
 
     # Remove instance directory
     rm -rf "$spoke_dir" 2>/dev/null || true
@@ -273,14 +273,14 @@ cmd_nuke() {
     log_warn "Nuking all DIVE resources..."
 
     # Stop all DIVE containers
-    docker ps -a --filter "name=dive" -q | xargs -r docker stop 2>/dev/null || true
-    docker ps -a --filter "name=dive" -q | xargs -r docker rm -f 2>/dev/null || true
+    docker ps -a --filter "name=dive" -q | grep . | xargs docker stop 2>/dev/null || true
+    docker ps -a --filter "name=dive" -q | grep . | xargs docker rm -f 2>/dev/null || true
 
     # Remove all DIVE volumes
-    docker volume ls -q --filter "name=dive" | xargs -r docker volume rm 2>/dev/null || true
+    docker volume ls -q --filter "name=dive" | grep . | xargs docker volume rm 2>/dev/null || true
 
     # Remove all DIVE networks
-    docker network ls --filter "name=dive" -q | xargs -r docker network rm 2>/dev/null || true
+    docker network ls --filter "name=dive" -q | grep . | xargs docker network rm 2>/dev/null || true
 
     # Clean instance directories
     rm -rf "${DIVE_ROOT}/instances"/* 2>/dev/null || true

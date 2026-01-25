@@ -251,7 +251,7 @@ services:
   # ==========================================================================
 
   opa-{{INSTANCE_CODE_LOWER}}:
-    image: openpolicyagent/opa:1.12.1
+    image: openpolicyagent/opa:1.12.3
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-opa
     platform: linux/amd64
     command: run --server --addr :8181 --set=decision_logs.console=true --set=data_api_enabled=true --set=policies_api_enabled=true --tls-cert-file=/certs/certificate.pem --tls-private-key-file=/certs/key.pem
