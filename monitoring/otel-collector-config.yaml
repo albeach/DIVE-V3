@@ -9,8 +9,19 @@
 #   https://opentelemetry.io/docs/collector/configuration/
 #
 # Date: 2026-01-24
-# Version: 1.0.0
+# Version: 1.1.0 (2026-01-25: Added health_check extension)
 # =============================================================================
+
+extensions:
+  # Health check extension for Docker health monitoring
+  # Exposes /health endpoint on port 13133 (default)
+  health_check:
+    endpoint: 0.0.0.0:13133
+    path: "/"
+    check_collector_pipeline:
+      enabled: true
+      interval: 5s
+      exporter_failure_threshold: 5
 
 receivers:
   # OTLP receiver for Keycloak and backend traces/metrics
@@ -77,6 +88,9 @@ exporters:
   #     insecure: true
 
 service:
+  # Enable extensions
+  extensions: [health_check]
+  
   pipelines:
     # Traces pipeline
     traces:

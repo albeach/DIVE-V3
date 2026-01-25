@@ -474,16 +474,15 @@ services:
       - "127.0.0.1:4317:4317"  # OTLP gRPC
       - "127.0.0.1:4318:4318"  # OTLP HTTP
       - "127.0.0.1:8889:8889"  # Prometheus exporter (for Grafana)
+      - "127.0.0.1:13133:13133"  # Health check endpoint
     volumes:
       - ./monitoring/otel-collector-config.yaml:/etc/otel-collector-config.yaml:ro
     networks:
       - hub-internal
-    healthcheck:
-      test: ["CMD", "wget", "--spider", "-q", "http://localhost:13133/"]
-      interval: 5s
-      timeout: 5s
-      retries: 8
-      start_period: 10s
+    # Note: No Docker health check for distroless image
+    # The collector's health_check extension runs on port 13133 for external monitoring
+    # Classification: OPTIONAL (observability enhancement, not core functionality)
+    # Relies on restart policy for failure recovery
     depends_on:
       - keycloak
       - backend

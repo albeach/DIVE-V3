@@ -705,11 +705,14 @@ hub_parallel_startup() {
 
                     # Check health status
                     local health=$(${DOCKER_CMD:-docker} inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "none")
+                    
+                    # Trim whitespace and handle empty/none cases
+                    health=$(echo "$health" | tr -d '[:space:]')
 
                     if [ "$health" = "healthy" ]; then
                         log_success "$service is healthy (${elapsed}s)"
                         exit 0
-                    elif [ "$health" = "none" ]; then
+                    elif [ "$health" = "none" ] || [ -z "$health" ]; then
                         # No health check defined, assume healthy if running
                         log_verbose "$service is running (no health check)"
                         exit 0
