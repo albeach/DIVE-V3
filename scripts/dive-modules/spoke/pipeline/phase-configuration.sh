@@ -267,6 +267,17 @@ spoke_phase_configuration() {
         orch_create_checkpoint "$instance_code" "CONFIGURATION" "Configuration phase completed"
     fi
 
+    # Validate configuration phase completed successfully
+    if ! spoke_checkpoint_configuration "$instance_code"; then
+        log_error "Configuration checkpoint failed - realm not accessible"
+        if type orch_record_error &>/dev/null; then
+            orch_record_error "${SPOKE_ERROR_CHECKPOINT_FAILED:-1150}" "$ORCH_SEVERITY_CRITICAL" \
+                "Configuration checkpoint validation failed" "configuration" \
+                "Verify realm exists: curl -sk https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT}/realms/dive-v3-broker-${code_lower}"
+        fi
+        return 1
+    fi
+
     log_success "Configuration phase complete"
     return 0
 }
@@ -1357,5 +1368,52 @@ spoke_config_update_redirect_uris() {
 ##
 # REMOVED: Duplicate function definition
 # Use the enhanced version from spoke-federation.sh instead
+
+# =============================================================================
+# CHECKPOINT VALIDATION
+# =============================================================================
+
+##
+# Validate configuration phase completed successfully
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - Validation passed
+#   1 - Validation failed
+##
+spoke_checkpoint_configuration() {
+    local instance_code="$1"
+    local code_lower=$(lower "$instance_code")
+    
+    log_verbose "Validating configuration checkpoint for $instance_code"
+    
+    # Get port assignment
+    local spoke_keycloak_port
+    if type get_instance_ports &>/dev/null; then
+        eval "$(get_instance_ports "$instance_code")"
+        spoke_keycloak_port="${KEYCLOAK_HTTPS_PORT}"
+    else
+        # Fallback: calculate port from instance position
+        spoke_keycloak_port=8453
+    fi
+    
+    # Verify realm exists
+    local realm="dive-v3-broker-${code_lower}"
+    local keycloak_url="https://localhost:${spoke_keycloak_port}"
+    
+    realm_response=$(curl -sk --max-time 10 "${keycloak_url}/realms/${realm}" 2>/dev/null)
+    realm_name=$(echo "$realm_response" | jq -r '.realm // empty' 2>/dev/null)
+    
+    if [ "$realm_name" != "$realm" ]; then
+        log_error "Checkpoint FAILED: Realm '$realm' not accessible"
+        log_error "URL tested: ${keycloak_url}/realms/${realm}"
+        return 1
+    fi
+    
+    log_verbose "✓ Configuration checkpoint passed"
+    return 0
+}
 
 export SPOKE_PHASE_CONFIGURATION_LOADED=1
