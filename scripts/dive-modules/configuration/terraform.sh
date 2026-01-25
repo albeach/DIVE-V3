@@ -70,7 +70,23 @@ terraform_init() {
     log_info "Initializing Terraform in $tf_dir..."
 
     cd "$tf_dir"
-    terraform init -upgrade >/dev/null 2>&1
+    
+    # ==========================================================================
+    # CRITICAL FIX: Non-interactive Terraform init
+    # ==========================================================================
+    # Clean stale state before init to prevent migration prompts
+    # Use -reconfigure to prevent interactive prompts
+    # Use -input=false to ensure non-interactive operation
+    # ==========================================================================
+    rm -rf ".terraform" 2>/dev/null || true
+    rm -rf "terraform.tfstate.d" 2>/dev/null || true
+    
+    terraform init \
+        -reconfigure \
+        -input=false \
+        -upgrade \
+        -no-color \
+        >/dev/null 2>&1
     local result=$?
     cd - >/dev/null
 
@@ -127,12 +143,12 @@ terraform_apply() {
 
     terraform_check || return 1
 
-    log_info "Applying Terraform configuration..."
-    log_info "This may take several minutes for complex deployments..."
+    log_info "Applying Terraform configuration (this may take 5-10 minutes)..."
+    log_info "Progress: Creating Keycloak realm and resources..."
 
     cd "$tf_dir"
 
-    local cmd="terraform apply -auto-approve -parallelism=20"
+    local cmd="terraform apply -auto-approve -parallelism=20 -compact-warnings -no-color"
     [ -n "$var_file" ] && [ -f "$var_file" ] && cmd="$cmd -var-file=$var_file"
 
     # Execute with progress monitoring
@@ -142,22 +158,60 @@ terraform_apply() {
     local tmp_output=$(mktemp)
     local start_time=$(date +%s)
     
-    # Run Terraform with tee to show progress and capture output
-    if $cmd "$@" 2>&1 | tee "$tmp_output"; then
-        local end_time=$(date +%s)
-        local duration=$((end_time - start_time))
-        log_success "Terraform apply complete in ${duration}s"
-        rm -f "$tmp_output"
-        cd - >/dev/null
-        return 0
-    else
+    # ==========================================================================
+    # CRITICAL FIX: Add timeout for Terraform apply (600s = 10 minutes)
+    # ==========================================================================
+    # Terraform can take 5-10 minutes for complex Keycloak configurations
+    # Previous timeout was too aggressive, causing partial deployments
+    # ==========================================================================
+    log_verbose "Starting Terraform apply with 600s timeout..."
+    echo -n "Progress: "
+    
+    # Run Terraform with timeout in background
+    if timeout 600 $cmd "$@" > "$tmp_output" 2>&1 & then
+        local tf_pid=$!
+        
+        # Show progress dots while Terraform runs
+        while kill -0 $tf_pid 2>/dev/null; do
+            echo -n "."
+            sleep 2
+        done
+        
+        wait $tf_pid
         local result=$?
-        log_error "Terraform apply failed"
-        log_error "Output saved to: $tmp_output"
-        log_verbose "Recent output:"
-        tail -20 "$tmp_output" 2>/dev/null || true
+        echo ""  # New line after progress dots
+        
+        if [ $result -eq 0 ]; then
+            local end_time=$(date +%s)
+            local duration=$((end_time - start_time))
+            log_success "Terraform apply complete in ${duration}s"
+            
+            # Show summary of changes
+            if grep -q "Apply complete" "$tmp_output" 2>/dev/null; then
+                grep "Apply complete" "$tmp_output" | head -1
+            fi
+            
+            rm -f "$tmp_output"
+            cd - >/dev/null
+            return 0
+        elif [ $result -eq 124 ]; then
+            log_error "Terraform apply timed out after 600s"
+            log_error "This may indicate Keycloak is not responding or network issues"
+            log_error "Output saved to: $tmp_output"
+            cd - >/dev/null
+            return 1
+        else
+            log_error "Terraform apply failed"
+            log_error "Output saved to: $tmp_output"
+            log_verbose "Recent output:"
+            tail -20 "$tmp_output" 2>/dev/null || true
+            cd - >/dev/null
+            return $result
+        fi
+    else
+        log_error "Failed to start Terraform apply"
         cd - >/dev/null
-        return $result
+        return 1
     fi
 }
 
