@@ -59,10 +59,34 @@ variable "client_secret" {
 # =============================================================================
 # TEST USERS
 # =============================================================================
+# =============================================================================
+# TEST USERS - SSOT CONFIGURATION
+# =============================================================================
+# User creation SSOT: scripts/hub-init/seed-hub-users.sh
+# This variable exists for backwards compatibility but should remain false.
 variable "create_test_users" {
-  description = "Whether to create test users (testuser-usa-[1-5] and admin-usa)"
+  description = <<-EOT
+    DEPRECATED: User creation via Terraform (SSOT: bash script)
+    
+    Set to false (default). User creation is handled by:
+      scripts/hub-init/seed-hub-users.sh
+    
+    This script runs during Phase 7 of deployment and creates:
+      - testuser-usa-[1-5] (5-level clearance system)
+      - admin-usa (super_admin role)
+    
+    Terraform user creation is disabled to prevent:
+      - State conflicts (users created but Terraform doesn't know)
+      - Duplicate users (both Terraform and script create same users)
+      - Inflexible configuration (can't easily update attributes)
+    
+    Only set to true if you:
+      1. Remove bash script from deployment workflow
+      2. Accept Terraform state management overhead
+      3. Document the architectural change
+  EOT
   type        = bool
-  default     = true
+  default     = false  # SSOT: bash script (scripts/hub-init/seed-hub-users.sh)
 }
 
 variable "test_user_password" {

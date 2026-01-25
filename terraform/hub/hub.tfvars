@@ -29,11 +29,35 @@ webauthn_rp_id = "localhost"
 enable_mfa = true
 
 # =============================================================================
-# TEST USER CREATION
+# TEST USER CREATION - SSOT ENFORCEMENT
 # =============================================================================
-# CRITICAL: Must be true for development/testing
-# Creates testuser-usa-[1-5] and admin-usa via Terraform
-create_test_users = true
+# ⚠️  CRITICAL: User creation DISABLED in Terraform
+#
+# SSOT (Single Source of Truth): scripts/hub-init/seed-hub-users.sh
+#
+# This bash script creates:
+#   - testuser-usa-1 (UNCLASSIFIED, AAL1)
+#   - testuser-usa-2 (RESTRICTED, AAL1)
+#   - testuser-usa-3 (CONFIDENTIAL, AAL2 - MFA required)
+#   - testuser-usa-4 (SECRET, AAL2 - MFA required)
+#   - testuser-usa-5 (TOP_SECRET, AAL3 - WebAuthn required)
+#   - admin-usa (TOP_SECRET, super_admin + hub_admin roles)
+#
+# The script runs during Phase 7 of deployment (hub_seed function).
+#
+# Rationale for bash script SSOT:
+#   1. Flexible: Can check if users exist before creating
+#   2. Idempotent: Safe to run multiple times
+#   3. No state conflicts: Independent of Terraform state
+#   4. Direct API control: Can configure User Profile, mappers, etc.
+#   5. Development-friendly: Works with clean slate deployments
+#
+# DO NOT change to true unless:
+#   1. You remove the bash script from deployment
+#   2. You update Phase 7 in hub.sh
+#   3. You document the architectural change
+# =============================================================================
+create_test_users = false
 
 # =============================================================================
 # FEDERATION PARTNERS (SPOKES) - MONGODB IS THE SSOT

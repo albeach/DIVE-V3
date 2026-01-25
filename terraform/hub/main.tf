@@ -38,6 +38,18 @@ module "instance" {
   login_theme = "dive-v3"
 
   # Test users (Hub gets test users for USA)
+  # SSOT ENFORCEMENT: User creation is handled by scripts/hub-init/seed-hub-users.sh
+  # This script runs in Phase 7 of deployment and creates:
+  #   - testuser-usa-[1-5] (5-level clearance system)
+  #   - admin-usa (super_admin role)
+  # 
+  # Terraform user creation is DISABLED to prevent conflicts and ensure
+  # the bash script remains the single source of truth.
+  #
+  # DO NOT enable Terraform user creation unless you:
+  #   1. Remove scripts/hub-init/seed-hub-users.sh from deployment
+  #   2. Update Phase 7 in scripts/dive-modules/deployment/hub.sh
+  #   3. Document the change in .cursorrules SSOT section
   create_test_users   = false  # SSOT: scripts/hub-init/seed-hub-users.sh (bash script)
   test_user_password  = var.test_user_password
   admin_user_password = var.admin_user_password

@@ -57,6 +57,7 @@ hub_deploy() {
     log_step "Starting Hub deployment..."
 
     local start_time=$(date +%s)
+    local phase_times=()
 
     # Initialize request context
     if type init_request_context &>/dev/null; then
@@ -64,34 +65,55 @@ hub_deploy() {
     fi
 
     # Preflight checks
+    local phase_start=$(date +%s)
     log_info "Phase 1: Preflight checks"
     if ! hub_preflight; then
         log_error "Preflight checks failed"
         return 1
     fi
+    local phase_end=$(date +%s)
+    local phase1_duration=$((phase_end - phase_start))
+    phase_times+=("Phase 1 (Preflight): ${phase1_duration}s")
+    log_verbose "Phase 1 completed in ${phase1_duration}s"
 
     # Initialize
+    phase_start=$(date +%s)
     log_info "Phase 2: Initialization"
     if ! hub_init; then
         log_error "Initialization failed"
         return 1
     fi
+    phase_end=$(date +%s)
+    local phase2_duration=$((phase_end - phase_start))
+    phase_times+=("Phase 2 (Initialization): ${phase2_duration}s")
+    log_verbose "Phase 2 completed in ${phase2_duration}s"
 
     # Start services
+    phase_start=$(date +%s)
     log_info "Phase 3: Starting services"
     if ! hub_up; then
         log_error "Service startup failed"
         return 1
     fi
+    phase_end=$(date +%s)
+    local phase3_duration=$((phase_end - phase_start))
+    phase_times+=("Phase 3 (Services): ${phase3_duration}s")
+    log_verbose "Phase 3 completed in ${phase3_duration}s"
 
     # Wait for healthy (MongoDB container accepting connections)
+    phase_start=$(date +%s)
     log_info "Phase 4: Health verification (container ready)"
     if ! hub_wait_healthy; then
         log_error "Health verification failed"
         return 1
     fi
+    phase_end=$(date +%s)
+    local phase4_duration=$((phase_end - phase_start))
+    phase_times+=("Phase 4 (Health): ${phase4_duration}s")
+    log_verbose "Phase 4 completed in ${phase4_duration}s"
 
     # Phase 4a: Initialize MongoDB replica set (CRITICAL - required for change streams)
+    phase_start=$(date +%s)
     log_info "Phase 4a: Initializing MongoDB replica set"
     if [ ! -f "${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh" ]; then
         log_error "CRITICAL: MongoDB initialization script not found"
@@ -104,8 +126,13 @@ hub_deploy() {
         return 1
     fi
     log_success "MongoDB replica set initialized"
+    phase_end=$(date +%s)
+    local phase4a_duration=$((phase_end - phase_start))
+    phase_times+=("Phase 4a (MongoDB Init): ${phase4a_duration}s")
+    log_verbose "Phase 4a completed in ${phase4a_duration}s"
 
     # Phase 4b: Wait for PRIMARY status (explicit verification)
+    phase_start=$(date +%s)
     log_info "Phase 4b: Waiting for MongoDB PRIMARY status"
     local max_wait=60
     local elapsed=0
@@ -130,17 +157,32 @@ hub_deploy() {
         log_error "Current state: $(docker exec dive-hub-mongodb mongosh admin -u admin -p "$MONGO_PASSWORD" --quiet --eval "rs.status().members[0].stateStr" 2>/dev/null || echo "UNKNOWN")"
         return 1
     fi
+    phase_end=$(date +%s)
+    local phase4b_duration=$((phase_end - phase_start))
+    phase_times+=("Phase 4b (MongoDB PRIMARY): ${phase4b_duration}s")
+    log_verbose "Phase 4b completed in ${phase4b_duration}s"
 
     # Phase 4c: Verify backend can connect (may need retry due to initialization timing)
+    phase_start=$(date +%s)
     log_info "Phase 4c: Verifying backend connectivity"
     # Backend will use retry logic from mongodb-connection.ts
     # Just wait for backend to become healthy
+    phase_end=$(date +%s)
+    local phase4c_duration=$((phase_end - phase_start))
+    phase_times+=("Phase 4c (Backend Verify): ${phase4c_duration}s")
+    log_verbose "Phase 4c completed in ${phase4c_duration}s"
     
     # Initialize orchestration database
+    phase_start=$(date +%s)
     log_info "Phase 5: Orchestration database initialization"
     hub_init_orchestration_db
+    phase_end=$(date +%s)
+    local phase5_duration=$((phase_end - phase_start))
+    phase_times+=("Phase 5 (Orch DB): ${phase5_duration}s")
+    log_verbose "Phase 5 completed in ${phase5_duration}s"
 
     # Configure Keycloak
+    phase_start=$(date +%s)
     log_info "Phase 6: Keycloak configuration"
     if ! hub_configure_keycloak; then
         log_error "CRITICAL: Keycloak configuration FAILED"
@@ -148,8 +190,13 @@ hub_deploy() {
         log_error "Fix Keycloak issues and redeploy"
         return 1
     fi
+    phase_end=$(date +%s)
+    local phase6_duration=$((phase_end - phase_start))
+    phase_times+=("Phase 6 (Keycloak): ${phase6_duration}s")
+    log_verbose "Phase 6 completed in ${phase6_duration}s"
 
     # Verify realm exists after configuration
+    phase_start=$(date +%s)
     log_info "Phase 6.5: Verifying realm creation"
     if ! hub_verify_realm; then
         log_error "CRITICAL: Realm verification FAILED"  
@@ -157,8 +204,13 @@ hub_deploy() {
         log_error "This indicates Terraform or Keycloak state issues"
         return 1
     fi
+    phase_end=$(date +%s)
+    local phase6_5_duration=$((phase_end - phase_start))
+    phase_times+=("Phase 6.5 (Realm Verify): ${phase6_5_duration}s")
+    log_verbose "Phase 6.5 completed in ${phase6_5_duration}s"
 
     # Phase 7: Seed database with test users and resources
+    phase_start=$(date +%s)
     log_info "Phase 7: Database seeding"
     if ! hub_seed 5000; then
         log_error "Database seeding failed"
@@ -166,6 +218,10 @@ hub_deploy() {
         log_warn "Run: ./dive hub seed"
         # Don't fail deployment - seeding can be done manually
     fi
+    phase_end=$(date +%s)
+    local phase7_duration=$((phase_end - phase_start))
+    phase_times+=("Phase 7 (Seeding): ${phase7_duration}s")
+    log_verbose "Phase 7 completed in ${phase7_duration}s"
 
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
@@ -174,6 +230,33 @@ hub_deploy() {
     if type metrics_record_deployment_duration &>/dev/null; then
         metrics_record_deployment_duration "HUB" "hub" "full" "$duration"
     fi
+
+    # Display performance summary
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Deployment Performance Summary"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    for timing in "${phase_times[@]}"; do
+        echo "  $timing"
+    done
+    echo "  ──────────────────────────────────────────────────"
+    echo "  Total Duration: ${duration}s"
+    
+    # Performance analysis
+    if [ $duration -lt 180 ]; then
+        echo "  Performance: ✅ EXCELLENT (< 3 minutes)"
+    elif [ $duration -lt 300 ]; then
+        echo "  Performance: ⚠️  ACCEPTABLE (3-5 minutes)"
+    else
+        echo "  Performance: ❌ SLOW (> 5 minutes)"
+        echo ""
+        echo "  Performance issues detected. Slowest phases:"
+        # Sort and show top 3 slowest phases
+        printf '%s\n' "${phase_times[@]}" | sort -t: -k2 -nr | head -3 | while read -r line; do
+            echo "    • $line"
+        done
+    fi
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
     log_success "Hub deployment complete in ${duration}s"
 
@@ -459,6 +542,22 @@ hub_configure_keycloak() {
     if [ -d "${DIVE_ROOT}/terraform/hub" ] && command -v terraform >/dev/null 2>&1; then
         log_verbose "Running Terraform configuration..."
         
+        # Verify Terraform state is clean (prevents resource conflicts)
+        if [ -f "${DIVE_ROOT}/terraform/hub/terraform.tfstate" ]; then
+            log_warn "Terraform state exists - checking for potential conflicts..."
+            
+            # Count resources in state
+            local state_resources=$(cd "${DIVE_ROOT}/terraform/hub" && terraform state list 2>/dev/null | wc -l | tr -d ' ')
+            
+            if [ "$state_resources" -gt 0 ]; then
+                log_warn "Found $state_resources resources in Terraform state"
+                log_warn "This may cause 'resource already exists' errors"
+                log_info "If deployment fails, run: ./dive nuke --confirm"
+            fi
+        else
+            log_verbose "Clean Terraform state - fresh deployment"
+        fi
+        
         # Source .env.hub to get secrets
         if [ -f "${DIVE_ROOT}/.env.hub" ]; then
             set -a
@@ -471,7 +570,14 @@ hub_configure_keycloak() {
         
         (
             cd "${DIVE_ROOT}/terraform/hub"
-            terraform init -upgrade >/dev/null 2>&1
+            
+            # Initialize Terraform (only if not already initialized)
+            if [ ! -d ".terraform" ]; then
+                log_verbose "Initializing Terraform..."
+                terraform init -upgrade >/dev/null 2>&1
+            else
+                log_verbose "Terraform already initialized"
+            fi
             
             # Export Terraform variables
             export TF_VAR_keycloak_admin_password="${KC_ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD_USA:-${KEYCLOAK_ADMIN_PASSWORD}}}"
@@ -488,7 +594,15 @@ hub_configure_keycloak() {
             fi
             
             log_verbose "Terraform variables validated"
-            terraform apply -auto-approve -var-file="hub.tfvars" -parallelism=20
+            
+            # Apply with performance optimizations
+            log_verbose "Applying Terraform configuration (optimized for performance)..."
+            terraform apply \
+                -auto-approve \
+                -var-file="hub.tfvars" \
+                -parallelism=20 \
+                -compact-warnings \
+                -no-color
         ) || {
             log_error "Terraform apply failed"
             return 1
@@ -533,6 +647,21 @@ hub_verify_realm() {
 
     log_error "Realm '$realm' not found after $max_retries attempts"
     return 1
+}
+
+##
+# Verify hub deployment with automated tests
+##
+hub_verify() {
+    log_info "Running hub deployment validation..."
+    
+    if [ ! -f "${DIVE_ROOT}/tests/validate-hub-deployment.sh" ]; then
+        log_error "Validation script not found"
+        return 1
+    fi
+    
+    bash "${DIVE_ROOT}/tests/validate-hub-deployment.sh"
+    return $?
 }
 
 ##
@@ -651,6 +780,7 @@ module_hub() {
         down|stop)      hub_down "$@" ;;
         reset)          hub_reset "$@" ;;
         status)         hub_status "$@" ;;
+        verify)         hub_verify "$@" ;;
         logs)           hub_logs "$@" ;;
         seed)           hub_seed "$@" ;;
         spokes)
@@ -669,6 +799,7 @@ module_hub() {
             echo "  up        Start hub services"
             echo "  down      Stop hub services"
             echo "  status    Show hub status"
+            echo "  verify    Run deployment validation tests"
             echo "  reset     Reset hub to clean state"
             echo "  logs      View hub logs"
             echo "  seed      Seed database with test data"
@@ -688,6 +819,8 @@ export -f hub_up
 export -f hub_down
 export -f hub_wait_healthy
 export -f hub_configure_keycloak
+export -f hub_verify_realm
+export -f hub_verify
 export -f hub_status
 export -f hub_reset
 export -f hub_logs
