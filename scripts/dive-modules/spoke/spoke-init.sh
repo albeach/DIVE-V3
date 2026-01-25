@@ -1,4 +1,4 @@
-#!/usr/local/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # DIVE V3 CLI - Spoke Initialization Module
 # =============================================================================
@@ -829,30 +829,31 @@ _create_spoke_docker_compose() {
     # Copy template and replace placeholders
     cp "$template_file" "$spoke_dir/docker-compose.yml"
 
-    # Replace placeholders using sed
-    sed -i '' "s|{{TEMPLATE_HASH}}|${template_hash}|g" "$spoke_dir/docker-compose.yml"
-    sed -i '' "s|{{TIMESTAMP}}|${timestamp}|g" "$spoke_dir/docker-compose.yml"
-    sed -i '' "s|{{INSTANCE_CODE_UPPER}}|${code_upper}|g" "$spoke_dir/docker-compose.yml"
-    sed -i '' "s|{{INSTANCE_CODE_LOWER}}|${code_lower}|g" "$spoke_dir/docker-compose.yml"
-    sed -i '' "s|{{INSTANCE_NAME}}|${instance_name}|g" "$spoke_dir/docker-compose.yml"
-    sed -i '' "s|{{SPOKE_ID}}|${spoke_id}|g" "$spoke_dir/docker-compose.yml"
-    sed -i '' "s|{{IDP_HOSTNAME}}|${idp_hostname}|g" "$spoke_dir/docker-compose.yml"
-    sed -i '' "s|{{API_URL}}|${api_base_url}|g" "$spoke_dir/docker-compose.yml"
-    sed -i '' "s|{{BASE_URL}}|${app_base_url}|g" "$spoke_dir/docker-compose.yml"
-    sed -i '' "s|{{IDP_URL}}|${idp_url}|g" "$spoke_dir/docker-compose.yml"
-    sed -i '' "s|{{IDP_BASE_URL}}|${idp_base_url}|g" "$spoke_dir/docker-compose.yml"
-    sed -i '' "s|{{KEYCLOAK_HOST_PORT}}|${keycloak_https_port}|g" "$spoke_dir/docker-compose.yml"
-    sed -i '' "s|{{KEYCLOAK_HTTP_PORT}}|${keycloak_http_port}|g" "$spoke_dir/docker-compose.yml"
-    sed -i '' "s|{{SPOKE_KEYCLOAK_HTTPS_PORT}}|${keycloak_https_port}|g" "$spoke_dir/docker-compose.yml"
-    sed -i '' "s|{{BACKEND_HOST_PORT}}|${backend_host_port}|g" "$spoke_dir/docker-compose.yml"
-    sed -i '' "s|{{FRONTEND_HOST_PORT}}|${frontend_host_port}|g" "$spoke_dir/docker-compose.yml"
-    sed -i '' "s|{{OPA_HOST_PORT}}|${opa_host_port}|g" "$spoke_dir/docker-compose.yml"
-    # Calculate OPAL OPA port (9181 + offset based on instance code)
-    # Simplified to avoid syntax errors with od command output
+    # Portable sed for cross-platform compatibility (macOS + Linux)
+    local tmpfile=$(mktemp)
     local opal_opa_offset=$(echo -n "${code_lower}" | cksum | cut -d' ' -f1)
     local opal_opa_port=$((9181 + (opal_opa_offset % 100)))
-    sed -i '' "s|{{OPAL_OPA_PORT}}|${opal_opa_port}|g" "$spoke_dir/docker-compose.yml"
-    sed -i '' "s|{{KAS_HOST_PORT}}|${kas_host_port}|g" "$spoke_dir/docker-compose.yml"
+    
+    # Replace all placeholders in one go
+    sed "s|{{TEMPLATE_HASH}}|${template_hash}|g; \
+         s|{{TIMESTAMP}}|${timestamp}|g; \
+         s|{{INSTANCE_CODE_UPPER}}|${code_upper}|g; \
+         s|{{INSTANCE_CODE_LOWER}}|${code_lower}|g; \
+         s|{{INSTANCE_NAME}}|${instance_name}|g; \
+         s|{{SPOKE_ID}}|${spoke_id}|g; \
+         s|{{IDP_HOSTNAME}}|${idp_hostname}|g; \
+         s|{{API_URL}}|${api_base_url}|g; \
+         s|{{BASE_URL}}|${app_base_url}|g; \
+         s|{{IDP_URL}}|${idp_url}|g; \
+         s|{{IDP_BASE_URL}}|${idp_base_url}|g; \
+         s|{{KEYCLOAK_HOST_PORT}}|${keycloak_https_port}|g; \
+         s|{{KEYCLOAK_HTTP_PORT}}|${keycloak_http_port}|g; \
+         s|{{SPOKE_KEYCLOAK_HTTPS_PORT}}|${keycloak_https_port}|g; \
+         s|{{BACKEND_HOST_PORT}}|${backend_host_port}|g; \
+         s|{{FRONTEND_HOST_PORT}}|${frontend_host_port}|g; \
+         s|{{OPA_HOST_PORT}}|${opa_host_port}|g; \
+         s|{{OPAL_OPA_PORT}}|${opal_opa_port}|g; \
+         s|{{KAS_HOST_PORT}}|${kas_host_port}|g" "$spoke_dir/docker-compose.yml" > "$tmpfile" && mv "$tmpfile" "$spoke_dir/docker-compose.yml"
 
     log_success "Generated docker-compose.yml from template (always regenerated from SSOT)"
 }

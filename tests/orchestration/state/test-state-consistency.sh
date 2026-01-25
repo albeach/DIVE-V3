@@ -243,7 +243,7 @@ test_6_infer_state_no_containers() {
     cleanup_test_instance
 
     # Ensure no containers exist
-    docker ps -a -q --filter "name=dive-spoke-${TEST_INSTANCE}" | xargs -r docker rm -f >/dev/null 2>&1 || true
+    docker ps -a -q --filter "name=dive-spoke-${TEST_INSTANCE}" | grep . | xargs docker rm -f >/dev/null 2>&1 || true
 
     # Infer state
     orch_state_infer_from_containers "$TEST_INSTANCE"

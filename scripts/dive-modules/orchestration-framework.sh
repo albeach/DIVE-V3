@@ -2579,7 +2579,7 @@ orch_cleanup_old_data() {
             # Linux: use -c %Y
             find "${DIVE_ROOT}/.dive-checkpoints" -type d -name "*" -exec stat -c '%Y %n' {} \; 2>/dev/null | \
                 awk -v cutoff="$cutoff_time" '$1 < cutoff {print $2}' | \
-                | grep . | xargs rm -rf 2>/dev/null || true
+                grep . | xargs rm -rf 2>/dev/null || true
         fi
     fi
 
@@ -2597,7 +2597,7 @@ orch_cleanup_old_data() {
             # Linux
             find "${DIVE_ROOT}/logs" -name "orchestration-metrics-*.json" -exec stat -c '%Y %n' {} \; 2>/dev/null | \
                 awk -v cutoff="$cutoff_time" '$1 < cutoff {print $2}' | \
-                | grep . | xargs rm -f 2>/dev/null || true
+                grep . | xargs rm -f 2>/dev/null || true
         fi
     fi
 
@@ -2615,7 +2615,7 @@ orch_cleanup_old_data() {
             # Linux
             find "${DIVE_ROOT}/logs" -name "orchestration-dashboard-*.html" -exec stat -c '%Y %n' {} \; 2>/dev/null | \
                 awk -v cutoff="$cutoff_time" '$1 < cutoff {print $2}' | \
-                | grep . | xargs rm -f 2>/dev/null || true
+                grep . | xargs rm -f 2>/dev/null || true
         fi
     fi
 

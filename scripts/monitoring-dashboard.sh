@@ -309,8 +309,17 @@ show_recent_logs() {
     echo "-------------------------------------------------------------------------------"
 
     if [ -f "$LOG_FILE" ]; then
+        # Portable date calculation (macOS + Linux)
+        local time_filter
+        if date -v-5M '+%Y-%m-%d %H:%M' >/dev/null 2>&1; then
+            # macOS
+            time_filter=$(date -v-5M '+%Y-%m-%d %H:%M')
+        else
+            # Linux
+            time_filter=$(date -d '5 minutes ago' '+%Y-%m-%d %H:%M')
+        fi
         local recent_logs
-        recent_logs=$(tail -20 "$LOG_FILE" 2>/dev/null | grep "$(date -d '5 minutes ago' '+%Y-%m-%d %H:%M')" || true)
+        recent_logs=$(tail -20 "$LOG_FILE" 2>/dev/null | grep "$time_filter" || true)
 
         if [ -n "$recent_logs" ]; then
             echo "$recent_logs" | tail -10

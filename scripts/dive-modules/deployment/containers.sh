@@ -1,4 +1,4 @@
-#!/usr/local/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # DIVE V3 Container Management Module (Consolidated)
 # =============================================================================
@@ -273,7 +273,7 @@ containers_cleanup_stale() {
 
     # Remove stopped containers
     local removed=$(docker ps -a --filter "name=$container_prefix" --filter "status=exited" -q | wc -l)
-    docker ps -a --filter "name=$container_prefix" --filter "status=exited" -q | xargs -r docker rm 2>/dev/null || true
+    docker ps -a --filter "name=$container_prefix" --filter "status=exited" -q | grep . | xargs docker rm 2>/dev/null || true
 
     log_info "Removed $removed stale containers"
 }
@@ -289,7 +289,7 @@ containers_cleanup_volumes() {
 
     log_info "Cleaning orphaned volumes for $volume_prefix..."
 
-    docker volume ls -q --filter "name=$volume_prefix" --filter "dangling=true" | xargs -r docker volume rm 2>/dev/null || true
+    docker volume ls -q --filter "name=$volume_prefix" --filter "dangling=true" | grep . | xargs docker volume rm 2>/dev/null || true
 }
 
 # =============================================================================

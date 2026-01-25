@@ -1,4 +1,4 @@
-#!/usr/local/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # DIVE V3 Rollback Testing Suite (GAP-003 Fix)
 # =============================================================================
@@ -131,7 +131,7 @@ cleanup_test_instance() {
 
     # Stop and remove all test instance containers
     docker compose -f "${DIVE_ROOT}/instances/${TEST_INSTANCE}/docker-compose.yml" down -v 2>/dev/null || true
-    docker ps -a -q --filter "name=dive-spoke-${TEST_INSTANCE}" | xargs -r docker rm -f 2>/dev/null || true
+    docker ps -a -q --filter "name=dive-spoke-${TEST_INSTANCE}" | grep . | xargs docker rm -f 2>/dev/null || true
 
     # Remove state files
     rm -f "${DIVE_ROOT}/.dive-state/${TEST_INSTANCE}.state"

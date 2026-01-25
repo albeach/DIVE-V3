@@ -164,9 +164,9 @@ phase_nuke() {
         "$DIVE_CLI" nuke --confirm --reset-spokes 2>&1 | tail -20 || true
     else
         # Manual cleanup
-        docker ps -a --filter "name=dive" --format '{{.Names}}' | xargs -r docker rm -f 2>/dev/null || true
-        docker volume ls --filter "name=dive" -q | xargs -r docker volume rm 2>/dev/null || true
-        docker network ls --filter "name=dive" -q | xargs -r docker network rm 2>/dev/null || true
+        docker ps -a --filter "name=dive" --format '{{.Names}}' | grep . | xargs docker rm -f 2>/dev/null || true
+        docker volume ls --filter "name=dive" -q | grep . | xargs docker volume rm 2>/dev/null || true
+        docker network ls --filter "name=dive" -q | grep . | xargs docker network rm 2>/dev/null || true
     fi
 
     # Verify clean

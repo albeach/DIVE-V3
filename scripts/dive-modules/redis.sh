@@ -1,4 +1,4 @@
-#!/usr/local/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # DIVE V3 CLI - Redis Management Module
 # =============================================================================
@@ -625,7 +625,7 @@ redis_blacklist_clear() {
         password="$(get_redis_password "blacklist")"
 
         log_info "Clearing all blacklisted tokens..."
-        docker exec "$container" redis-cli -a "$password" keys "dive-v3:blacklist:*" | xargs -r docker exec "$container" redis-cli -a "$password" del
+        docker exec "$container" redis-cli -a "$password" keys "dive-v3:blacklist:*" | grep . | xargs docker exec "$container" redis-cli -a "$password" del
 
         # Publish clear event to all instances
         docker exec "$container" redis-cli -a "$password" publish "dive-v3:blacklist:clear" "all"

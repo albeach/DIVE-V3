@@ -40,7 +40,7 @@ refresh_frontend() {
 
     # Remove the node_modules volume
     echo "  Removing stale volumes matching: $volume_pattern"
-    docker volume ls -q | grep -E "$volume_pattern" | xargs -r docker volume rm 2>/dev/null || true
+    docker volume ls -q | grep -E "$volume_pattern" | grep . | xargs docker volume rm 2>/dev/null || true
 
     # Start the container (will reinstall deps)
     echo "  Starting container: $container_name"

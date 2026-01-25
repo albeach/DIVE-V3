@@ -8,8 +8,8 @@
 # Don't exit on first error - let tests complete
 set +e
 
-# Ensure jq is in PATH
-export PATH="/usr/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
+# Ensure common tools are in PATH (portable for macOS + Linux)
+export PATH="/usr/bin:/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"
 
 # Load test helpers
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

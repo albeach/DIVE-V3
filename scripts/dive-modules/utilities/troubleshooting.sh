@@ -1,4 +1,4 @@
-#!/usr/local/bin/bash
+#!/usr/bin/env bash
 # =============================================================================
 # DIVE V3 Troubleshooting Utilities (Consolidated)
 # =============================================================================
@@ -263,7 +263,12 @@ fix_spoke() {
     # Fix 2: Regenerate certificates if expired
     local cert_file="${DIVE_ROOT}/instances/${code_lower}/certs/certificate.pem"
     if [ -f "$cert_file" ]; then
-        local expiry_epoch=$(openssl x509 -in "$cert_file" -noout -enddate 2>/dev/null | cut -d= -f2 | xargs -I{} date -d {} +%s 2>/dev/null || echo 0)
+        # Portable date parsing (macOS + Linux)
+        local expiry_date=$(openssl x509 -in "$cert_file" -noout -enddate 2>/dev/null | cut -d= -f2)
+        local expiry_epoch=0
+        if [ -n "$expiry_date" ]; then
+            expiry_epoch=$(date -j -f "%b %d %T %Y %Z" "$expiry_date" +%s 2>/dev/null || date -d "$expiry_date" +%s 2>/dev/null || echo 0)
+        fi
         local now_epoch=$(date +%s)
 
         if [ "${expiry_epoch:-0}" -lt "$now_epoch" ]; then

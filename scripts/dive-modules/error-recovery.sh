@@ -804,7 +804,7 @@ orch_auto_recover() {
             log_info "Auto-recovering: Force removing stale containers..."
 
             local removed_count=$(docker ps -a -q --filter "name=dive-spoke-${code_lower}" | wc -l | xargs)
-            docker ps -a -q --filter "name=dive-spoke-${code_lower}" | xargs -r docker rm -f >/dev/null 2>&1
+            docker ps -a -q --filter "name=dive-spoke-${code_lower}" | grep . | xargs docker rm -f >/dev/null 2>&1
 
             log_success "✓ Force removed $removed_count stale containers"
             orch_record_recovery "$instance_code" "$error_code" "force_container_cleanup" "SUCCESS"
