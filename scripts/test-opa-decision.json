@@ -1,0 +1,27 @@
+{
+  "input": {
+    "subject": {
+      "authenticated": true,
+      "uniqueID": "testuser-usa-unclass@example.mil",
+      "clearance": "UNCLASSIFIED",
+      "countryOfAffiliation": "USA",
+      "acpCOI": []
+    },
+    "action": {
+      "operation": "view"
+    },
+    "resource": {
+      "resourceId": "doc-generated-1763368095416-0093",
+      "classification": "UNCLASSIFIED",
+      "releasabilityTo": ["USA", "GBR", "CAN", "FRA", "DEU"],
+      "COI": ["Alpha", "Beta"],
+      "encrypted": true
+    },
+    "context": {
+      "currentTime": "2025-11-17T08:30:00.000Z",
+      "acr": "0",
+      "amr": ["pwd"],
+      "auth_time": 1731832000
+    }
+  }
+}

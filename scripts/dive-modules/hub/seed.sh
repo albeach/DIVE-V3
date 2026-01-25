@@ -14,17 +14,27 @@ HUB_DATA_DIR="${DIVE_ROOT}/data/hub"
 
 hub_seed() {
     local resource_count="${1:-5000}"
+    local file_type_mode="${2:-multi}"   # NEW: text or multi (default: multi)
 
     # INPUT VALIDATION: Resource count must be a positive integer
     if ! [[ "$resource_count" =~ ^[0-9]+$ ]]; then
         log_error "Resource count must be a positive integer"
         echo ""
-        echo "Usage: ./dive hub seed [count]"
+        echo "Usage: ./dive hub seed [count] [file-type-mode]"
+        echo ""
+        echo "Arguments:"
+        echo "  count            Number of resources to seed (default: 5000)"
+        echo "  file-type-mode   File type mode: text or multi (default: multi)"
+        echo ""
+        echo "File Type Modes:"
+        echo "  text   - Text files only (legacy behavior, fastest)"
+        echo "  multi  - Multiple file types: PDF, DOCX, XLSX, MP4, etc. (recommended)"
         echo ""
         echo "Examples:"
-        echo "  ./dive hub seed          # Seed 5000 resources (default)"
-        echo "  ./dive hub seed 10000    # Seed 10000 resources"
-        echo "  ./dive hub seed 500      # Seed 500 resources (testing)"
+        echo "  ./dive hub seed              # Seed 5000 multi-type resources (default)"
+        echo "  ./dive hub seed 5000 multi   # Seed 5000 multi-type resources"
+        echo "  ./dive hub seed 5000 text    # Seed 5000 text-only resources (legacy)"
+        echo "  ./dive hub seed 500          # Seed 500 multi-type resources (testing)"
         echo ""
         return 1
     fi
@@ -38,10 +48,27 @@ hub_seed() {
         return 1
     fi
 
+    # FILE TYPE MODE VALIDATION
+    if [[ ! "$file_type_mode" =~ ^(text|multi)$ ]]; then
+        log_error "Invalid file type mode: $file_type_mode"
+        echo "  Valid modes: text, multi"
+        echo ""
+        return 1
+    fi
+
+    # Determine file type description for display
+    local file_type_desc
+    if [ "$file_type_mode" = "multi" ]; then
+        file_type_desc="multi (PDF, DOCX, XLSX, PPTX, MP4, MP3, etc.)"
+    else
+        file_type_desc="text (legacy)"
+    fi
+
     print_header
     echo -e "${BOLD}Seeding Hub (USA) with Test Data${NC}"
     echo ""
     echo "  Target: ${resource_count} ZTDF encrypted resources"
+    echo "  Mode:   ${file_type_desc}"
     echo ""
 
     # Check for seed scripts
@@ -119,12 +146,13 @@ hub_seed() {
     if ! docker exec "$backend_container" npx tsx src/scripts/seed-instance-resources.ts \
         --instance=USA \
         --count="${resource_count}" \
+        --file-type-mode="${file_type_mode}" \
         --replace 2>&1; then
         log_error "ZTDF seeding failed"
         log_error "All resources MUST be ZTDF-encrypted per ACP-240 compliance"
         echo ""
         echo "  Retry seeding:"
-        echo "  ./dive hub seed ${resource_count}"
+        echo "  ./dive hub seed ${resource_count} ${file_type_mode}"
         echo ""
         return 1
     fi
@@ -139,11 +167,15 @@ hub_seed() {
     echo ""
     echo "  Test users: testuser-usa-1 through testuser-usa-5, admin-usa"
     echo "  Resources:  ${resource_count} ZTDF encrypted documents"
+    echo "  File Mode:  ${file_type_desc}"
     echo ""
     echo "  Distribution:"
     echo "    - Classifications: UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET"
     echo "    - COIs: 28+ templates (NATO, FVEY, bilateral, multi-COI)"
     echo "    - Releasability: Instance-specific and coalition-wide"
+    if [ "$file_type_mode" = "multi" ]; then
+        echo "    - File Types: PDF (20%), DOCX (20%), XLSX (8%), PPTX (10%), MP4 (7%), etc."
+    fi
     echo "    - All documents have full ZTDF policy structure"
     echo ""
     echo "  ABAC is now functional - users see resources based on clearance level"

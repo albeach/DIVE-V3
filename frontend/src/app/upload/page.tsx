@@ -182,12 +182,14 @@ export default function UploadPage() {
 
   // Push state to history on significant changes
   useEffect(() => {
-    history.pushState({
-      classification,
-      releasabilityTo,
-      COI,
-      caveats,
-    });
+    if (typeof window !== 'undefined') {
+      window.history.pushState({
+        classification,
+        releasabilityTo,
+        COI,
+        caveats,
+      }, '', window.location.href);
+    }
   }, [classification, releasabilityTo, COI, caveats]);
 
   // Restore draft handler

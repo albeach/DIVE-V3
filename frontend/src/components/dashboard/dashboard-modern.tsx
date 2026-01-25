@@ -29,6 +29,7 @@ import {
   RefreshCw,
   BookOpen,
   Info,
+  Home,
 } from 'lucide-react';
 
 // Import tab components
@@ -41,6 +42,8 @@ import { DashboardActivity } from './dashboard-activity';
 import { GlossaryPopover } from './educational-tooltip';
 import { getNationalClearance } from '@/components/navigation/nav-config';
 import { CountUpNumber } from '@/components/ui/countup-number';
+import { CountryAvatar } from '@/components/ui/country-avatar';
+import { getTimeBasedGreeting } from '@/utils/greeting';
 
 interface User {
   uniqueID?: string;
@@ -224,28 +227,28 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
       </div>
 
       <div className="relative z-10 space-y-6">
-        {/* Instance Banner - Modern 2025 Glassmorphism Design */}
+        {/* Instance Banner - Enhanced Modern 2026 Glassmorphism Design */}
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
           className="relative overflow-hidden rounded-2xl"
         >
-          {/* Mesh gradient background */}
+          {/* Mesh gradient background - enhanced */}
           <div className="absolute inset-0 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900" />
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-600/20 via-transparent to-transparent" />
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_var(--tw-gradient-stops))] from-violet-600/15 via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-600/25 via-transparent to-transparent" />
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_var(--tw-gradient-stops))] from-violet-600/20 via-transparent to-transparent" />
 
           {/* Animated grain texture */}
           <div className="absolute inset-0 opacity-[0.015]" style={{
             backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")`,
           }} />
 
-          {/* Glowing orb accent */}
+          {/* Glowing orb accent - enhanced */}
           <motion.div
-            className="absolute -top-12 -right-12 w-32 h-32 bg-blue-500/30 rounded-full blur-3xl"
+            className="absolute -top-12 -right-12 w-40 h-40 bg-blue-500/40 rounded-full blur-3xl"
             animate={{
-              scale: [1, 1.2, 1],
-              opacity: [0.3, 0.4, 0.3],
+              scale: [1, 1.3, 1],
+              opacity: [0.4, 0.5, 0.4],
             }}
             transition={{
               duration: 4,
@@ -254,10 +257,10 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
             }}
           />
           <motion.div
-            className="absolute -bottom-8 left-1/3 w-24 h-24 bg-violet-500/20 rounded-full blur-2xl"
+            className="absolute -bottom-8 left-1/3 w-32 h-32 bg-violet-500/30 rounded-full blur-2xl"
             animate={{
-              scale: [1, 1.15, 1],
-              opacity: [0.2, 0.3, 0.2],
+              scale: [1, 1.2, 1],
+              opacity: [0.3, 0.4, 0.3],
             }}
             transition={{
               duration: 5,
@@ -270,99 +273,151 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
           {/* Content */}
           <div className="relative z-10 px-6 py-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-              {/* Left: Instance info with modern styling */}
+              {/* Left: Instance info with enhanced styling */}
               <div className="flex items-center gap-4">
-                {/* Flag with glassmorphism container */}
+                {/* Flag with enhanced glassmorphism container */}
                 <motion.div
                   className="relative"
-                  whileHover={{ scale: 1.05 }}
+                  whileHover={{ scale: 1.08 }}
                   transition={{ type: "spring", stiffness: 400, damping: 17 }}
                 >
-                  <div className="absolute inset-0 bg-gradient-to-br from-white/10 to-white/5 rounded-xl blur-sm" />
-                  <div className="relative w-14 h-14 rounded-xl bg-gradient-to-br from-white/10 to-white/5 backdrop-blur-sm border border-white/10 flex items-center justify-center shadow-lg shadow-black/20">
-                    <span className="text-3xl">{instanceFlag}</span>
+                  <div className="absolute inset-0 bg-gradient-to-br from-white/15 to-white/5 rounded-xl blur-md" />
+                  <div className="relative w-16 h-16 rounded-xl bg-gradient-to-br from-white/15 to-white/5 backdrop-blur-md border border-white/20 flex items-center justify-center shadow-2xl shadow-black/30">
+                    <span className="text-4xl">{instanceFlag}</span>
                   </div>
-                  {/* Active pulse indicator */}
-                  <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border border-emerald-400" />
+                  {/* Enhanced active pulse indicator */}
+                  <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                    <motion.span
+                      className="absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"
+                      animate={{ scale: [1, 1.4, 1], opacity: [0.75, 0, 0.75] }}
+                      transition={{ duration: 2, repeat: Infinity, ease: "easeOut" }}
+                    />
+                    <span className="relative inline-flex rounded-full h-4 w-4 bg-emerald-500 border-2 border-emerald-400 shadow-lg shadow-emerald-500/50" />
                   </span>
                 </motion.div>
 
-                <div className="space-y-0.5">
+                <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-400">{t('instance')}</span>
-                    <span className="h-px w-8 bg-gradient-to-r from-slate-500/50 to-transparent" />
+                    <span className="text-[11px] font-bold uppercase tracking-[0.25em] text-slate-400">{t('instance')}</span>
+                    <span className="h-px w-10 bg-gradient-to-r from-slate-500/60 to-transparent" />
                   </div>
-                  <h2 className="text-xl font-bold bg-gradient-to-r from-white via-white to-slate-300 bg-clip-text text-transparent">
+                  <h2 className="text-2xl font-bold bg-gradient-to-r from-white via-white to-slate-300 bg-clip-text text-transparent">
                     {instanceName} Portal
                   </h2>
                 </div>
               </div>
 
-              {/* Right: Federation status with pill design */}
+              {/* Right: Enhanced Federation status with improved visual hierarchy */}
               {isFederated ? (
                 <motion.div
-                  className="group flex items-center gap-3 px-4 py-2.5 rounded-full bg-gradient-to-r from-amber-500/10 to-orange-500/10 backdrop-blur-sm border border-amber-500/20 hover:border-amber-500/40 transition-colors cursor-default"
-                  whileHover={{ scale: 1.02 }}
+                  className="group flex items-center gap-3 px-5 py-3 rounded-full bg-gradient-to-r from-amber-500/15 to-orange-500/15 backdrop-blur-md border-2 border-amber-500/30 hover:border-amber-500/50 transition-all cursor-default shadow-lg shadow-amber-500/20"
+                  whileHover={{ scale: 1.03 }}
                   transition={{ type: "spring", stiffness: 400, damping: 17 }}
+                  animate={{
+                    borderColor: ['rgba(245, 158, 11, 0.3)', 'rgba(245, 158, 11, 0.5)', 'rgba(245, 158, 11, 0.3)'],
+                  }}
+                  style={{ animationDuration: '3s', animationIterationCount: 'infinite' }}
                 >
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xl">{userHomeFlag}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-2xl drop-shadow-lg">{userHomeFlag}</span>
                     <motion.div
-                      animate={{ x: [0, 3, 0] }}
+                      animate={{ x: [0, 4, 0] }}
                       transition={{ duration: 1.5, repeat: Infinity, ease: "easeInOut" }}
                     >
-                      <ArrowRight className="w-3.5 h-3.5 text-amber-400/80" />
+                      <ArrowRight className="w-4 h-4 text-amber-300 drop-shadow-lg" />
                     </motion.div>
-                    <span className="text-xl">{instanceFlag}</span>
+                    <span className="text-2xl drop-shadow-lg">{instanceFlag}</span>
                   </div>
-                  <div className="h-6 w-px bg-gradient-to-b from-transparent via-amber-500/30 to-transparent" />
+                  <div className="h-8 w-px bg-gradient-to-b from-transparent via-amber-400/40 to-transparent" />
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-amber-400/80">{t('federation.federated')}</p>
-                    <p className="text-xs font-medium text-white/90">via {userHomeName}</p>
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-amber-300 drop-shadow-md">{t('federation.federated')}</p>
+                    <p className="text-sm font-bold text-white drop-shadow-md">via <span className="text-amber-200">{userHomeName}</span></p>
                   </div>
                 </motion.div>
               ) : (
                 <motion.div
-                  className="group flex items-center gap-3 px-4 py-2.5 rounded-full bg-gradient-to-r from-emerald-500/10 to-teal-500/10 backdrop-blur-sm border border-emerald-500/20 hover:border-emerald-500/40 transition-colors cursor-default"
-                  whileHover={{ scale: 1.02 }}
+                  className="group flex items-center gap-3 px-5 py-3 rounded-full bg-gradient-to-r from-emerald-500/15 to-teal-500/15 backdrop-blur-md border-2 border-emerald-500/30 hover:border-emerald-500/50 transition-all cursor-default shadow-lg shadow-emerald-500/20"
+                  whileHover={{ scale: 1.03 }}
                   transition={{ type: "spring", stiffness: 400, damping: 17 }}
                 >
                   <div className="relative">
-                    <div className="absolute inset-0 bg-emerald-500/30 rounded-full blur-sm" />
-                    <CheckCircle2 className="relative w-5 h-5 text-emerald-400" />
+                    <div className="absolute inset-0 bg-emerald-400/40 rounded-full blur-md" />
+                    <motion.div
+                      animate={{ scale: [1, 1.1, 1] }}
+                      transition={{ duration: 3, repeat: Infinity, ease: "easeInOut" }}
+                    >
+                      <CheckCircle2 className="relative w-6 h-6 text-emerald-300 drop-shadow-lg" />
+                    </motion.div>
                   </div>
-                  <div className="h-6 w-px bg-gradient-to-b from-transparent via-emerald-500/30 to-transparent" />
+                  <div className="h-8 w-px bg-gradient-to-b from-transparent via-emerald-400/40 to-transparent" />
                   <div>
-                    <p className="text-[10px] font-semibold uppercase tracking-wider text-emerald-400/80">{t('federation.directAccess')}</p>
-                    <p className="text-xs font-medium text-white/90">{t('federation.homeInstance')}</p>
+                    <p className="text-[11px] font-bold uppercase tracking-wider text-emerald-300 drop-shadow-md">{t('federation.directAccess')}</p>
+                    <p className="text-sm font-bold text-white drop-shadow-md">{t('federation.homeInstance')}</p>
                   </div>
                 </motion.div>
               )}
             </div>
           </div>
 
-          {/* Bottom border glow */}
-          <div className="absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-blue-500/50 to-transparent" />
+          {/* Enhanced bottom border glow */}
+          <div className={`absolute bottom-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-${isFederated ? 'amber' : 'emerald'}-400/60 to-transparent`} />
         </motion.div>
 
-        {/* Hero Section - Compact Design */}
+        {/* Hero Section - Enhanced with Country Avatar and Dynamic Greeting */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-white via-blue-50/30 to-indigo-50/30 px-5 py-4 shadow-lg border border-slate-200"
+          className={`relative overflow-hidden rounded-2xl px-6 py-6 shadow-lg border ${
+            isFederated
+              ? 'bg-gradient-to-br from-amber-50/80 via-orange-50/40 to-white border-amber-200/60'
+              : 'bg-gradient-to-br from-emerald-50/80 via-teal-50/40 to-white border-emerald-200/60'
+          }`}
         >
           <div className="relative z-10">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-              {/* Left: Welcome message - Compact */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-6">
+              {/* Left: Country Avatar */}
+              <div className="flex-shrink-0">
+                <CountryAvatar
+                  countryCode={country}
+                  size="lg"
+                  clearance={clearanceLevel}
+                  isFederated={isFederated}
+                  showStatus={true}
+                />
+              </div>
+
+              {/* Center: Greeting and Info */}
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-3 flex-wrap">
+                {/* Badge and Status */}
+                <div className="flex items-center gap-2 flex-wrap mb-3">
+                  {isFederated ? (
+                    <motion.div
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-100/90 border border-amber-300/60 text-amber-800"
+                      initial={{ scale: 0.9, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ delay: 0.2 }}
+                    >
+                      <Globe className="w-3.5 h-3.5" />
+                      <span className="text-xs font-semibold">{t('federatedUser.badge')}</span>
+                    </motion.div>
+                  ) : (
+                    <motion.div
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-emerald-100/90 border border-emerald-300/60 text-emerald-800"
+                      initial={{ scale: 0.9, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ delay: 0.2 }}
+                    >
+                      <Home className="w-3.5 h-3.5" />
+                      <span className="text-xs font-semibold">{t('homeUser.badge')}</span>
+                    </motion.div>
+                  )}
+
                   <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-100/80 border border-blue-200/60 text-blue-700 text-[11px] font-semibold">
                     <Sparkles className="w-3 h-3" />
                     {t('platformBadge')}
                   </div>
+
                   <span className="text-slate-400 text-xs hidden sm:inline">•</span>
                   <span className="text-slate-500 text-xs flex items-center gap-1.5">
                     <Clock className="w-3 h-3" />
@@ -370,18 +425,40 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
                   </span>
                 </div>
 
-                <div className="mt-2 flex items-center gap-3">
-                  <h1 className="text-xl lg:text-2xl font-bold text-slate-900 truncate">
-                    {t('welcomeBack')} <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">{pseudonym}</span>
+                {/* Dynamic Greeting */}
+                <div className="flex items-center gap-3 mb-2">
+                  <h1 className="text-2xl lg:text-3xl font-bold text-slate-900">
+                    {t(getTimeBasedGreeting())},{' '}
+                    <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600">
+                      {pseudonym}
+                    </span>
                   </h1>
+                  {!isFederated && (
+                    <motion.div
+                      animate={{ scale: [1, 1.2, 1] }}
+                      transition={{ duration: 2, repeat: Infinity, repeatDelay: 3 }}
+                    >
+                      <CheckCircle2 className="w-6 h-6 text-emerald-500" />
+                    </motion.div>
+                  )}
                 </div>
 
-                <p className="text-slate-500 text-sm mt-1 line-clamp-1 max-w-xl">
-                  {t('description')}
+                {/* Subtitle */}
+                <p className="text-sm lg:text-base font-medium text-slate-600 mb-3">
+                  {isFederated ? (
+                    <>
+                      {t('federatedUser.subtitle', {
+                        homeCountry: userHomeName,
+                        currentInstance: instanceName
+                      })}
+                    </>
+                  ) : (
+                    t('homeUser.subtitle')
+                  )}
                 </p>
 
-                {/* Quick action buttons - Inline */}
-                <div className="flex items-center gap-2 mt-3">
+                {/* Quick action buttons */}
+                <div className="flex items-center gap-2">
                   <button
                     onClick={() => setShowGlossary(true)}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-medium transition-colors border border-slate-200"
@@ -400,10 +477,10 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
                 </div>
               </div>
 
-              {/* Right: Identity badges - Horizontal compact */}
-              <div className="flex flex-wrap lg:flex-nowrap items-center gap-2">
-                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/80 border border-slate-200 shadow-sm">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center">
+              {/* Right: Compact Identity badges */}
+              <div className="flex flex-wrap sm:flex-col gap-2 sm:items-end">
+                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/80 backdrop-blur-sm border border-slate-200 shadow-sm">
+                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center flex-shrink-0">
                     <ShieldCheck className="w-4 h-4 text-white" />
                   </div>
                   <div className="min-w-0">
@@ -412,19 +489,9 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/80 border border-slate-200 shadow-sm">
-                  <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center">
-                    <Globe className="w-4 h-4 text-white" />
-                  </div>
-                  <div className="min-w-0">
-                    <p className="text-[10px] text-slate-500 font-medium leading-none">{t('country')}</p>
-                    <p className="text-sm font-bold text-slate-900">{country}</p>
-                  </div>
-                </div>
-
                 {coi.length > 0 && (
-                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/80 border border-slate-200 shadow-sm">
-                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center">
+                  <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/80 backdrop-blur-sm border border-slate-200 shadow-sm">
+                    <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center flex-shrink-0">
                       <Users className="w-4 h-4 text-white" />
                     </div>
                     <div className="min-w-0">
@@ -433,15 +500,15 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
                     </div>
                   </div>
                 )}
-
-                {/* Last refresh - Compact */}
-                <div className="hidden xl:flex items-center gap-1 text-[10px] text-slate-400 px-2">
-                  <Clock className="w-3 h-3" />
-                  {lastRefresh.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                </div>
               </div>
             </div>
           </div>
+
+          {/* Decorative gradient orbs */}
+          <div className="absolute -top-12 -right-12 w-32 h-32 bg-gradient-to-br from-blue-400/20 to-indigo-400/20 rounded-full blur-3xl pointer-events-none" />
+          <div className={`absolute -bottom-8 -left-8 w-24 h-24 bg-gradient-to-br ${
+            isFederated ? 'from-amber-400/20 to-orange-400/20' : 'from-emerald-400/20 to-teal-400/20'
+          } rounded-full blur-2xl pointer-events-none`} />
         </motion.div>
 
       {/* Quick Stats Bar */}
@@ -532,6 +599,7 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
                 }}
                 loading={loading}
                 userRoles={(session?.user as any)?.roles || []}
+                isFederated={isFederated}
               />
             )}
 

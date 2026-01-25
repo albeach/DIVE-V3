@@ -325,5 +325,20 @@
   },
   "instance": "Instanz",
   "clearance": "Freigabe",
-  "country": "Land"
+  "country": "Land",
+  "greetings": {
+    "morning": "Guten Morgen",
+    "afternoon": "Guten Tag",
+    "evening": "Guten Abend",
+    "lateNight": "Willkommen zurück"
+  },
+  "homeUser": {
+    "subtitle": "Willkommen in Ihrer Heimatinstanz",
+    "badge": "Heimatinstanz"
+  },
+  "federatedUser": {
+    "subtitle": "Zugriff über {{homeCountry}} → {{currentInstance}}",
+    "badge": "Föderierter Zugriff",
+    "viewingFrom": "Anzeige von"
+  }
 }

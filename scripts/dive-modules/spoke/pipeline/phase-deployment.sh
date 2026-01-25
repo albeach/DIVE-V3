@@ -96,7 +96,7 @@ spoke_phase_deployment() {
     # PERFORMANCE TRACKING: Phase timing metrics
     # =============================================================================
     local PHASE_START=$(date +%s)
-    
+
     log_info "Deployment phase for $code_upper"
 
     # CRITICAL PRE-FLIGHT: Ensure OPAL key is configured
@@ -232,34 +232,34 @@ spoke_deployment_init_mongodb_replica_set() {
     local instance_code="$1"
     local code_upper=$(upper "$instance_code")
     local code_lower=$(lower "$instance_code")
-    
+
     local mongo_container="dive-spoke-${code_lower}-mongodb"
     local init_script="${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh"
-    
+
     log_step "Initializing MongoDB replica set for $code_upper..."
-    
+
     # Check script exists
     if [ ! -f "$init_script" ]; then
         log_error "CRITICAL: MongoDB initialization script not found: $init_script"
         return 1
     fi
-    
+
     # Get MongoDB password for this instance
     local mongo_pass_var="MONGO_PASSWORD_${code_upper}"
     local mongo_pass="${!mongo_pass_var}"
-    
+
     if [ -z "$mongo_pass" ]; then
         log_error "CRITICAL: MongoDB password not set for $code_upper (expected: $mongo_pass_var)"
         return 1
     fi
-    
+
     # Run initialization script
     if ! bash "$init_script" "$mongo_container" admin "$mongo_pass"; then
         log_error "CRITICAL: MongoDB replica set initialization FAILED for $code_upper"
         log_error "This will cause 'not primary' errors during spoke registration"
         return 1
     fi
-    
+
     log_success "MongoDB replica set initialized for $code_upper"
     return 0
 }
@@ -278,40 +278,48 @@ spoke_deployment_wait_for_mongodb_primary() {
     local instance_code="$1"
     local code_upper=$(upper "$instance_code")
     local code_lower=$(lower "$instance_code")
-    
+
     local mongo_container="dive-spoke-${code_lower}-mongodb"
-    
+
     log_step "Waiting for MongoDB PRIMARY status ($code_upper)..."
-    
+
     # Get MongoDB password for this instance
     local mongo_pass_var="MONGO_PASSWORD_${code_upper}"
     local mongo_pass="${!mongo_pass_var}"
-    
-    local max_wait=60
+
+    local max_wait=90  # Increased from 60s to 90s
     local elapsed=0
     local is_primary=false
-    
+
     while [ $elapsed -lt $max_wait ]; do
         local state=$(docker exec "$mongo_container" mongosh admin -u admin -p "$mongo_pass" --quiet --eval "rs.status().members[0].stateStr" 2>/dev/null || echo "ERROR")
-        
+
         if [ "$state" = "PRIMARY" ]; then
             is_primary=true
             log_success "MongoDB achieved PRIMARY status (${elapsed}s) - $code_upper"
             break
+        elif [ "$state" = "ERROR" ]; then
+            log_verbose "MongoDB state: ERROR (replica set may still be initializing...)"
+        else
+            log_verbose "MongoDB state: $state (waiting for PRIMARY...)"
         fi
-        
-        log_verbose "MongoDB state: $state (waiting for PRIMARY...)"
-        sleep 2
-        elapsed=$((elapsed + 2))
+
+        sleep 3  # Check every 3 seconds
+        elapsed=$((elapsed + 3))
     done
-    
+
     if [ "$is_primary" != "true" ]; then
         log_error "CRITICAL: Timeout waiting for MongoDB PRIMARY (${max_wait}s) - $code_upper"
+        log_error "This usually indicates:"
+        log_error "  - KeyFile permissions issue"
+        log_error "  - Resource constraints"
+        log_error "  - Network configuration problem"
         local current_state=$(docker exec "$mongo_container" mongosh admin -u admin -p "$mongo_pass" --quiet --eval "rs.status().members[0].stateStr" 2>/dev/null || echo "UNKNOWN")
         log_error "Current state: $current_state"
+        log_error "Check logs: docker logs $mongo_container"
         return 1
     fi
-    
+
     return 0
 }
 
@@ -493,7 +501,7 @@ spoke_deployment_verify_env() {
             "INSTANCE_CODE"
             "SPOKE_MODE"
         )
-        
+
         # Note: SPOKE_ID is now optional (fetched from Hub MongoDB via INSTANCE_CODE)
 
         for var in "${instance_vars[@]}"; do
@@ -545,7 +553,7 @@ spoke_deployment_verify_env() {
         local frontend_instance_vars=(
             "NEXT_PUBLIC_INSTANCE"
         )
-        
+
         # Note: INSTANCE_CODE and SPOKE_MODE are backend-only variables
 
         for var in "${frontend_instance_vars[@]}"; do
@@ -792,13 +800,13 @@ spoke_deployment_restart_services() {
 spoke_checkpoint_deployment() {
     local instance_code="$1"
     local code_lower=$(lower "$instance_code")
-    
+
     log_verbose "Validating deployment checkpoint for $instance_code"
-    
+
     # Load secrets if needed for MongoDB password
     local mongo_password_var="MONGO_PASSWORD_${instance_code}"
     local mongo_password="${!mongo_password_var}"
-    
+
     if [ -z "$mongo_password" ]; then
         # Try to load from .env
         local env_file="${DIVE_ROOT}/instances/${code_lower}/.env"
@@ -806,13 +814,13 @@ spoke_checkpoint_deployment() {
             mongo_password=$(grep "^MONGO_PASSWORD=" "$env_file" 2>/dev/null | cut -d= -f2)
         fi
     fi
-    
+
     # Check MongoDB is PRIMARY
     if [ -n "$mongo_password" ]; then
         local mongo_state=$(docker exec "dive-spoke-${code_lower}-mongodb" \
             mongosh admin -u admin -p "$mongo_password" --quiet \
             --eval "rs.status().members[0].stateStr" 2>/dev/null || echo "ERROR")
-        
+
         if [ "$mongo_state" != "PRIMARY" ]; then
             log_error "Checkpoint FAILED: MongoDB is not PRIMARY (state: $mongo_state)"
             return 1
@@ -820,17 +828,17 @@ spoke_checkpoint_deployment() {
     else
         log_verbose "MongoDB password not available, skipping PRIMARY check"
     fi
-    
+
     # Check all containers healthy
     local unhealthy=$(docker ps --filter "name=dive-spoke-${code_lower}-" \
         --format "{{.Names}}\t{{.Status}}" | grep -v "healthy" | wc -l | tr -d ' ')
-    
+
     if [ "$unhealthy" != "0" ]; then
         log_error "Checkpoint FAILED: $unhealthy containers not healthy"
         docker ps --filter "name=dive-spoke-${code_lower}-" --format "table {{.Names}}\t{{.Status}}"
         return 1
     fi
-    
+
     log_verbose "✓ Deployment checkpoint passed"
     return 0
 }

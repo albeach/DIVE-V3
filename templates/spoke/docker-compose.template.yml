@@ -422,6 +422,7 @@ services:
       # Spokes now use MongoDB kas_registry collection as SSOT for KAS instances
       # Registration happens via: spoke_kas_register_mongodb() -> POST /api/kas/register
       - ../../policies:/app/policies:ro  # Policy metadata for /api/policies endpoint
+      - ../../examples/examples:/app/examples/examples:ro  # Multi-format seeding templates
       - ./cache:/app/cache
       - backend_logs:/app/logs
     depends_on:
