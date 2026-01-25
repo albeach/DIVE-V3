@@ -92,13 +92,13 @@ hub_seed() {
     log_step "Step 1/4: Initializing COI Keys database..."
     local backend_container="${BACKEND_CONTAINER:-dive-hub-backend}"
 
-    if ! docker ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
+    if ! ${DOCKER_CMD:-docker} ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
         log_error "Backend container '${backend_container}' is not running"
         return 1
     fi
 
     log_info "Initializing 35 COI definitions (NATO, FVEY, bilateral agreements, etc.)..."
-    docker exec "$backend_container" npx tsx src/scripts/initialize-coi-keys.ts 2>&1 | tail -10
+    ${DOCKER_CMD:-docker} exec "$backend_container" npx tsx src/scripts/initialize-coi-keys.ts 2>&1 | tail -10
 
     if [ $? -eq 0 ]; then
         log_success "COI Keys initialized (35 COIs covering 32 NATO + 5 partner nations)"
@@ -131,7 +131,7 @@ hub_seed() {
     log_step "Step 3/4: Seeding ${resource_count} ZTDF encrypted resources..."
 
     # Check if backend container is still running
-    if ! docker ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
+    if ! ${DOCKER_CMD:-docker} ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
         log_error "Backend container '${backend_container}' is not running"
         log_error "Cannot seed ZTDF resources without backend container"
         echo ""
@@ -143,7 +143,7 @@ hub_seed() {
 
     # Use ZTDF seeder via TypeScript (SSOT - no plaintext fallback)
     # All resources MUST be ZTDF-encrypted per ACP-240 compliance
-    if ! docker exec "$backend_container" npx tsx src/scripts/seed-instance-resources.ts \
+    if ! ${DOCKER_CMD:-docker} exec "$backend_container" npx tsx src/scripts/seed-instance-resources.ts \
         --instance=USA \
         --count="${resource_count}" \
         --file-type-mode="${file_type_mode}" \
@@ -205,7 +205,7 @@ _hub_register_kas() {
     log_info "Waiting for backend API to be ready..."
     local max_wait=60
     local waited=0
-    while ! docker exec "$hub_backend_container" curl -sf http://localhost:4000/health > /dev/null 2>&1; do
+    while ! ${DOCKER_CMD:-docker} exec "$hub_backend_container" curl -sf http://localhost:4000/health > /dev/null 2>&1; do
         sleep 2
         waited=$((waited + 2))
         if [ $waited -ge $max_wait ]; then
@@ -217,7 +217,7 @@ _hub_register_kas() {
     log_success "Backend API is ready"
 
     # Check if already registered
-    local already_registered=$(docker exec "$hub_backend_container" curl -sk \
+    local already_registered=$(${DOCKER_CMD:-docker} exec "$hub_backend_container" curl -sk \
         http://localhost:4000/api/kas/registry 2>/dev/null | \
         jq -r ".kasServers[]? | select(.kasId == \"${kas_id}\") | .kasId" 2>/dev/null)
 
@@ -225,7 +225,7 @@ _hub_register_kas() {
         log_success "Hub KAS already registered: ${kas_id}"
 
         # Verify status
-        local current_status=$(docker exec "$hub_backend_container" curl -sk \
+        local current_status=$(${DOCKER_CMD:-docker} exec "$hub_backend_container" curl -sk \
             http://localhost:4000/api/kas/registry 2>/dev/null | \
             jq -r ".kasServers[]? | select(.kasId == \"${kas_id}\") | .status" 2>/dev/null)
 
@@ -260,7 +260,7 @@ _hub_register_kas() {
     log_info "Registering Hub KAS: ${kas_id}..."
 
     local response
-    response=$(docker exec "$hub_backend_container" curl -sk -w "\n%{http_code}" -X POST \
+    response=$(${DOCKER_CMD:-docker} exec "$hub_backend_container" curl -sk -w "\n%{http_code}" -X POST \
         http://localhost:4000/api/kas/register \
         -H "Content-Type: application/json" \
         -d "{
@@ -297,7 +297,7 @@ _hub_register_kas() {
         # Auto-approve Hub KAS (trusted by default)
         # Use CLI bypass header for dev mode approval
         log_info "Auto-approving Hub KAS..."
-        docker exec "$hub_backend_container" curl -sk -X POST \
+        ${DOCKER_CMD:-docker} exec "$hub_backend_container" curl -sk -X POST \
             "http://localhost:4000/api/kas/registry/${kas_id}/approve" \
             -H "Content-Type: application/json" \
             -H "x-cli-bypass: dive-cli-local-dev" > /dev/null 2>&1
@@ -307,7 +307,7 @@ _hub_register_kas() {
 
         # Verify registration
         local verified
-        verified=$(docker exec "$hub_backend_container" curl -sk \
+        verified=$(${DOCKER_CMD:-docker} exec "$hub_backend_container" curl -sk \
             http://localhost:4000/api/kas/registry 2>/dev/null | \
             jq -r ".kasServers[]? | select(.kasId == \"${kas_id}\") | .status" 2>/dev/null)
 

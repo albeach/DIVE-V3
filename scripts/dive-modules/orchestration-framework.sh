@@ -106,6 +106,9 @@ declare -A SERVICE_DEPENDENCIES=(
     ["opal-client"]="backend"
 )
 
+# Export array for subshells (required for parallel startup functions)
+export SERVICE_DEPENDENCIES
+
 # =============================================================================
 # SERVICE DEPENDENCY VALIDATION (GAP-SD-001 Fix - Phase 4)
 # =============================================================================
@@ -2966,3 +2969,88 @@ orch_phase_completion() {
     # Implement completion
     return 0
 }
+
+# =============================================================================
+# FUNCTION EXPORTS FOR SUBSHELLS
+# =============================================================================
+# Export all public orchestration functions so they're available in background
+# processes and subshells (e.g., parallel startup in hub_parallel_startup())
+
+# Core dependency management functions (CRITICAL for parallel startup)
+export -f orch_detect_circular_dependencies
+export -f orch_get_max_dependency_level
+export -f orch_get_services_at_level
+export -f orch_calculate_dependency_level
+export -f orch_print_dependency_graph
+
+# Health check functions
+export -f orch_check_service_health
+export -f orch_get_service_health_details
+export -f orch_get_health_check_dependencies
+export -f orch_check_health_with_cascade
+
+# Service startup functions
+export -f orch_wait_for_dependencies
+export -f orch_start_service
+export -f orch_parallel_startup
+
+# Lock management
+export -f orch_acquire_deployment_lock
+export -f orch_release_deployment_lock
+export -f orch_with_deployment_lock
+
+# Context and error handling
+export -f orch_init_context
+export -f orch_record_error
+export -f orch_should_continue
+export -f orch_generate_error_summary
+
+# Circuit breaker functions
+export -f orch_init_circuit_breaker
+export -f orch_is_circuit_open
+export -f orch_record_circuit_success
+export -f orch_record_circuit_failure
+export -f orch_execute_with_circuit_breaker
+
+# Retry and timeout functions
+export -f orch_execute_with_smart_retry
+export -f orch_calculate_retry_delay
+export -f orch_calculate_dynamic_timeout
+
+# Checkpoint and rollback functions
+export -f orch_create_checkpoint
+export -f orch_checkpoint_containers
+export -f orch_checkpoint_configuration
+export -f orch_checkpoint_keycloak
+export -f orch_checkpoint_federation
+export -f orch_execute_rollback
+export -f orch_find_latest_checkpoint
+export -f orch_rollback_stop_services
+export -f orch_rollback_configuration
+export -f orch_rollback_containers
+export -f orch_rollback_complete
+
+# Metrics and monitoring functions
+export -f orch_init_metrics
+export -f orch_start_metrics_collection
+export -f orch_collect_current_metrics
+export -f orch_count_healthy_containers
+export -f orch_get_instance_memory_usage
+export -f orch_check_network_status
+export -f orch_count_open_circuit_breakers
+export -f orch_calculate_failure_probability
+export -f orch_generate_dashboard
+export -f orch_cleanup_old_data
+
+# State management functions
+export -f orch_validate_state_consistency
+export -f orch_determine_actual_state
+
+# Deployment execution functions
+export -f orch_execute_phase
+export -f orch_execute_deployment
+export -f orch_phase_preflight
+export -f orch_phase_initialization
+export -f orch_phase_configuration
+export -f orch_phase_verification
+export -f orch_phase_completion
