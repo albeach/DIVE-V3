@@ -39,6 +39,11 @@ if [ -f "${MODULES_DIR}/orchestration-state-db.sh" ]; then
     source "${MODULES_DIR}/orchestration-state-db.sh"
 fi
 
+# Load deployment progress module (Phase 3 Sprint 2)
+if [ -f "${MODULES_DIR}/utilities/deployment-progress.sh" ]; then
+    source "${MODULES_DIR}/utilities/deployment-progress.sh"
+fi
+
 # =============================================================================
 # HUB CONFIGURATION
 # =============================================================================
@@ -53,6 +58,7 @@ HUB_DATA_DIR="${DIVE_ROOT}/data/hub"
 ##
 # Full hub deployment workflow
 # Phase 3 Sprint 1: Enhanced with timeout enforcement and parallel startup
+# Phase 3 Sprint 2: Enhanced with real-time progress display
 ##
 hub_deploy() {
     log_step "Starting Hub deployment..."
@@ -68,6 +74,11 @@ hub_deploy() {
     # Get deployment timeout (default: 600s = 10 min)
     local deployment_timeout=${TIMEOUT_HUB_DEPLOY:-600}
     log_verbose "Deployment timeout: ${deployment_timeout}s"
+
+    # Initialize real-time progress tracking (Sprint 2)
+    if type progress_init &>/dev/null; then
+        progress_init "hub" "USA" 7
+    fi
 
     # Start timeout monitor in background
     (
@@ -110,18 +121,24 @@ hub_deploy() {
     local timeout_monitor_pid=$!
 
     # Ensure cleanup on exit
-    trap "kill $timeout_monitor_pid 2>/dev/null || true" EXIT
+    trap "kill $timeout_monitor_pid 2>/dev/null || true; progress_cleanup" EXIT
 
     # Initialize request context
     if type init_request_context &>/dev/null; then
         init_request_context "hub-deployment" "deploy"
     fi
 
-    # Preflight checks
+    # Phase 1: Preflight checks
     local phase_start=$(date +%s)
+    if type progress_set_phase &>/dev/null; then
+        progress_set_phase 1 "Preflight checks"
+    fi
     log_info "Phase 1: Preflight checks"
     if ! hub_preflight; then
         log_error "Preflight checks failed"
+        if type progress_fail &>/dev/null; then
+            progress_fail "Preflight checks failed"
+        fi
         kill $timeout_monitor_pid 2>/dev/null || true
         return 1
     fi
@@ -130,11 +147,17 @@ hub_deploy() {
     phase_times+=("Phase 1 (Preflight): ${phase1_duration}s")
     log_verbose "Phase 1 completed in ${phase1_duration}s"
 
-    # Initialize
+    # Phase 2: Initialize
     phase_start=$(date +%s)
+    if type progress_set_phase &>/dev/null; then
+        progress_set_phase 2 "Initialization"
+    fi
     log_info "Phase 2: Initialization"
     if ! hub_init; then
         log_error "Initialization failed"
+        if type progress_fail &>/dev/null; then
+            progress_fail "Initialization failed"
+        fi
         kill $timeout_monitor_pid 2>/dev/null || true
         return 1
     fi
@@ -143,13 +166,24 @@ hub_deploy() {
     phase_times+=("Phase 2 (Initialization): ${phase2_duration}s")
     log_verbose "Phase 2 completed in ${phase2_duration}s"
 
-    # Start services (now uses parallel startup)
+    # Phase 3: Start services (now uses parallel startup)
     phase_start=$(date +%s)
+    if type progress_set_phase &>/dev/null; then
+        progress_set_phase 3 "Starting services"
+        progress_set_services 0 6  # Hub has 6 services
+    fi
     log_info "Phase 3: Starting services (parallel mode)"
     if ! hub_up; then
         log_error "Service startup failed"
+        if type progress_fail &>/dev/null; then
+            progress_fail "Service startup failed"
+        fi
         kill $timeout_monitor_pid 2>/dev/null || true
         return 1
+    fi
+    # Update to show all services started
+    if type progress_set_services &>/dev/null; then
+        progress_set_services 6 6
     fi
     phase_end=$(date +%s)
     local phase3_duration=$((phase_end - phase_start))
@@ -158,6 +192,9 @@ hub_deploy() {
 
     # Phase 4a: Initialize MongoDB replica set (CRITICAL - required for change streams)
     phase_start=$(date +%s)
+    if type progress_set_phase &>/dev/null; then
+        progress_set_phase 4 "MongoDB initialization"
+    fi
     log_info "Phase 4a: Initializing MongoDB replica set"
     if [ ! -f "${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh" ]; then
         log_error "CRITICAL: MongoDB initialization script not found"
@@ -230,6 +267,9 @@ hub_deploy() {
 
     # Initialize orchestration database
     phase_start=$(date +%s)
+    if type progress_set_phase &>/dev/null; then
+        progress_set_phase 5 "Orchestration database"
+    fi
     log_info "Phase 5: Orchestration database initialization"
     hub_init_orchestration_db
     phase_end=$(date +%s)
@@ -239,11 +279,17 @@ hub_deploy() {
 
     # Configure Keycloak
     phase_start=$(date +%s)
+    if type progress_set_phase &>/dev/null; then
+        progress_set_phase 6 "Keycloak configuration"
+    fi
     log_info "Phase 6: Keycloak configuration"
     if ! hub_configure_keycloak; then
         log_error "CRITICAL: Keycloak configuration FAILED"
         log_error "Hub is unusable without realm configuration"
         log_error "Fix Keycloak issues and redeploy"
+        if type progress_fail &>/dev/null; then
+            progress_fail "Keycloak configuration failed"
+        fi
         kill $timeout_monitor_pid 2>/dev/null || true
         return 1
     fi
@@ -259,6 +305,9 @@ hub_deploy() {
         log_error "CRITICAL: Realm verification FAILED"
         log_error "Keycloak configuration completed but realm doesn't exist"
         log_error "This indicates Terraform or Keycloak state issues"
+        if type progress_fail &>/dev/null; then
+            progress_fail "Realm verification failed"
+        fi
         kill $timeout_monitor_pid 2>/dev/null || true
         return 1
     fi
@@ -269,6 +318,9 @@ hub_deploy() {
 
     # Phase 7: Seed database with test users and resources
     phase_start=$(date +%s)
+    if type progress_set_phase &>/dev/null; then
+        progress_set_phase 7 "Database seeding"
+    fi
     log_info "Phase 7: Database seeding"
     if ! hub_seed 5000; then
         log_error "Database seeding failed"
@@ -284,6 +336,11 @@ hub_deploy() {
     # Stop timeout monitor (success)
     kill $timeout_monitor_pid 2>/dev/null || true
     trap - EXIT
+
+    # Mark progress as complete (Sprint 2)
+    if type progress_complete &>/dev/null; then
+        progress_complete
+    fi
 
     local end_time=$(date +%s)
     local duration=$((end_time - start_time))
@@ -689,6 +746,11 @@ hub_parallel_startup() {
 
             if wait $pid; then
                 ((total_started++))
+                
+                # Update progress with current healthy service count
+                if type progress_set_services &>/dev/null; then
+                    progress_set_services "$total_started" 6
+                fi
             else
                 ((total_failed++))
                 ((level_failed++))
