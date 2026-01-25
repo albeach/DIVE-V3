@@ -277,14 +277,102 @@ All success criteria have been met:
 ✅ **Cleanup:** 100% Complete  
 ✅ **Validation:** Passed (0 errors)  
 ✅ **Documentation:** Complete (4 guides)  
-✅ **Git Status:** Clean (2 commits)  
+✅ **Git Status:** Clean (3 commits)  
 ✅ **Archives:** Safely stored  
 ✅ **Recovery:** Fully documented  
+✅ **Enhancements:** Integrated into backup module  
 
-**Status:** ✅ **PRODUCTION READY**
+**Status:** ✅ **PRODUCTION READY + ENHANCED**
+
+---
+
+## 🚀 Enhanced Backup System
+
+The archival strategy defined in BACKUP-ARCHIVAL-STRATEGY.md has been fully integrated into the core backup module (`scripts/dive-modules/utilities/backup.sh`).
+
+### Key Enhancements (v6.0.0)
+
+#### Tier-Based Retention
+- **Tier 1** (Critical): 10-year retention - Production DBs, certs, Terraform state
+- **Tier 2** (Historical): 2-year retention - Documentation archives
+- **Tier 3** (Development): 6-month retention - Dev artifacts, optional components
+- **Tier 4** (Temporary): 30-day retention - Temporary data
+
+#### Security & Integrity
+- ✅ SHA-256 checksum generation and verification
+- ✅ AES-256-CBC encryption support (optional)
+- ✅ Automated integrity validation in listings
+
+#### External Storage Integration
+- ✅ Google Cloud Storage (GCS)
+- ✅ AWS S3
+- ✅ Azure Blob Storage
+- ✅ NAS/local storage
+
+### Usage Examples
+
+```bash
+# Create backup with checksum (automatic)
+dive backup create hub
+
+# Enable encryption for sensitive backups
+BACKUP_ENCRYPT=true dive backup create hub
+
+# Sync to Google Cloud Storage
+EXTERNAL_STORAGE_TYPE=gcs \
+EXTERNAL_STORAGE_PATH=gs://dive-v3-backups \
+dive backup create hub
+
+# List backups with tier and integrity info
+dive backup list
+
+# Cleanup based on tier retention policies
+dive backup cleanup
+
+# Archive old backups (7+ days) to archive directory
+dive backup archive 7
+```
+
+### Configuration
+
+Set environment variables to enable features:
+
+```bash
+# Enable encryption
+export BACKUP_ENCRYPT=true
+
+# Configure external storage (GCS example)
+export EXTERNAL_STORAGE_TYPE=gcs
+export EXTERNAL_STORAGE_PATH=gs://dive-v3-backups
+
+# Customize archive location
+export ARCHIVE_DIR=~/Documents/DIVE-V3-Archives
+
+# Customize tier retention (days)
+export TIER1_RETENTION=3650  # 10 years
+export TIER2_RETENTION=730   # 2 years
+export TIER3_RETENTION=180   # 6 months
+export TIER4_RETENTION=30    # 30 days
+```
+
+### Testing
+
+Comprehensive test suite available:
+
+```bash
+bash tests/backup/test-backup-enhancements.sh
+```
+
+Tests validate:
+- Checksum creation and verification
+- Tier classification logic
+- Retention policy calculations
+- Archive management
+- Encryption key generation
+- Enhanced backup listing
 
 ---
 
 **Last Updated:** 2026-01-25  
 **Maintained By:** DIVE V3 Development Team  
-**Version:** 1.0.0
+**Version:** 2.0.0 (Enhanced with integrated archival strategy)
