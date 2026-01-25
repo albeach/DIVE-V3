@@ -37,8 +37,8 @@ module "instance" {
   # Theme
   login_theme = "dive-v3"
 
-  # Test users (Hub uses scripts/hub-init/seed-hub-users.sh as SSOT)
-  create_test_users   = false  # Users created by seed-hub-users.sh, not Terraform
+  # Test users (Hub gets test users for USA)
+  create_test_users   = false  # SSOT: scripts/hub-init/seed-hub-users.sh (bash script)
   test_user_password  = var.test_user_password
   admin_user_password = var.admin_user_password
 
