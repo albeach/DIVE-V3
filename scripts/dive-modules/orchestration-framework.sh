@@ -54,6 +54,22 @@ readonly PHASE_VERIFICATION="VERIFICATION"
 readonly PHASE_COMPLETION="COMPLETION"
 
 # =============================================================================
+# LOAD TIMEOUT CONFIGURATION
+# =============================================================================
+
+# Load centralized timeout configuration (Phase 2 Enhancement)
+TIMEOUT_CONFIG="${DIVE_ROOT}/config/deployment-timeouts.env"
+if [ -f "$TIMEOUT_CONFIG" ]; then
+    # Load timeout values, allowing environment variable overrides
+    set +u  # Allow unset variables during config load
+    source "$TIMEOUT_CONFIG"
+    set -u
+    log_verbose "Loaded timeout configuration from $TIMEOUT_CONFIG"
+else
+    log_verbose "Timeout config not found at $TIMEOUT_CONFIG, using defaults"
+fi
+
+# =============================================================================
 # SERVICE DEPENDENCY GRAPH
 # =============================================================================
 
@@ -352,31 +368,40 @@ _orch_calc_level() {
 }
 
 # Service startup timeouts (seconds)
-# Updated 2026-01-14: Keycloak timeout increased 180→240s (GAP-002 fix)
-# Rationale: P99 startup time is 150s, need 50%+ margin (was only 17%)
+# Updated 2026-01-25: Migrated to config/deployment-timeouts.env (Phase 2)
+# Values can be overridden via environment variables before deployment
+# Rationale: Each timeout calculated as P99 startup time + safety margin
 declare -A SERVICE_TIMEOUTS=(
-    ["postgres"]=60
-    ["mongodb"]=60
-    ["redis"]=30
-    ["keycloak"]=240      # Increased from 180s - handles P99 (150s) + 60% margin
-    ["backend"]=120
-    ["frontend"]=60
-    ["opa"]=30
-    ["kas"]=60
-    ["opal-client"]=30
+    ["postgres"]="${TIMEOUT_POSTGRES:-60}"
+    ["mongodb"]="${TIMEOUT_MONGODB:-90}"
+    ["redis"]="${TIMEOUT_REDIS:-30}"
+    ["keycloak"]="${TIMEOUT_KEYCLOAK:-240}"
+    ["backend"]="${TIMEOUT_BACKEND:-120}"
+    ["frontend"]="${TIMEOUT_FRONTEND:-60}"
+    ["opa"]="${TIMEOUT_OPA:-30}"
+    ["kas"]="${TIMEOUT_KAS:-60}"
+    ["opal-client"]="${TIMEOUT_OPAL_CLIENT:-30}"
+    ["opal-server"]="${TIMEOUT_OPAL_SERVER:-45}"
+    ["authzforce"]="${TIMEOUT_AUTHZFORCE:-60}"
+    ["prometheus"]="${TIMEOUT_PROMETHEUS:-45}"
+    ["grafana"]="${TIMEOUT_GRAFANA:-45}"
+    ["loki"]="${TIMEOUT_LOKI:-45}"
+    ["tempo"]="${TIMEOUT_TEMPO:-45}"
+    ["nginx"]="${TIMEOUT_NGINX:-30}"
+    ["cloudflared"]="${TIMEOUT_CLOUDFLARED:-30}"
 )
 
-# Timeout bounds for dynamic calculation (future enhancement)
+# Timeout bounds for dynamic calculation (Phase 3 enhancement)
 declare -A SERVICE_MIN_TIMEOUTS=(
-    ["keycloak"]=180
-    ["backend"]=90
-    ["frontend"]=45
+    ["keycloak"]="${TIMEOUT_KEYCLOAK_MIN:-180}"
+    ["backend"]="${TIMEOUT_BACKEND_MIN:-90}"
+    ["frontend"]="${TIMEOUT_FRONTEND_MIN:-45}"
 )
 
 declare -A SERVICE_MAX_TIMEOUTS=(
-    ["keycloak"]=300
-    ["backend"]=180
-    ["frontend"]=90
+    ["keycloak"]="${TIMEOUT_KEYCLOAK_MAX:-300}"
+    ["backend"]="${TIMEOUT_BACKEND_MAX:-180}"
+    ["frontend"]="${TIMEOUT_FRONTEND_MAX:-90}"
 )
 
 # =============================================================================

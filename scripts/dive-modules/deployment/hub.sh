@@ -119,7 +119,7 @@ hub_deploy() {
         log_error "CRITICAL: MongoDB initialization script not found"
         return 1
     fi
-    
+
     if ! bash "${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh" dive-hub-mongodb admin "$MONGO_PASSWORD"; then
         log_error "CRITICAL: MongoDB replica set initialization FAILED"
         log_error "This will cause 'not primary' errors and deployment failure"
@@ -131,30 +131,39 @@ hub_deploy() {
     phase_times+=("Phase 4a (MongoDB Init): ${phase4a_duration}s")
     log_verbose "Phase 4a completed in ${phase4a_duration}s"
 
-    # Phase 4b: Wait for PRIMARY status (explicit verification)
+    # Phase 4b: Wait for PRIMARY status (explicit verification with increased timeout)
     phase_start=$(date +%s)
     log_info "Phase 4b: Waiting for MongoDB PRIMARY status"
-    local max_wait=60
+    local max_wait=90  # Increased from 60s to 90s
     local elapsed=0
     local is_primary=false
-    
+
     while [ $elapsed -lt $max_wait ]; do
         local state=$(docker exec dive-hub-mongodb mongosh admin -u admin -p "$MONGO_PASSWORD" --quiet --eval "rs.status().members[0].stateStr" 2>/dev/null || echo "ERROR")
-        
+
         if [ "$state" = "PRIMARY" ]; then
             is_primary=true
             log_success "MongoDB achieved PRIMARY status (${elapsed}s)"
             break
+        elif [ "$state" = "ERROR" ]; then
+            log_verbose "MongoDB state: ERROR (replica set may still be initializing...)"
+        else
+            log_verbose "MongoDB state: $state (waiting for PRIMARY...)"
         fi
-        
-        log_verbose "MongoDB state: $state (waiting for PRIMARY...)"
-        sleep 2
-        elapsed=$((elapsed + 2))
+
+        sleep 3  # Check every 3 seconds (more reasonable than 2s)
+        elapsed=$((elapsed + 3))
     done
-    
+
     if [ "$is_primary" != "true" ]; then
         log_error "CRITICAL: Timeout waiting for MongoDB PRIMARY (${max_wait}s)"
+        log_error "This usually indicates:"
+        log_error "  - KeyFile permissions issue (check /tmp/mongo-keyfile in container)"
+        log_error "  - Resource constraints (insufficient CPU/memory)"
+        log_error "  - Network configuration problem"
+        log_error ""
         log_error "Current state: $(docker exec dive-hub-mongodb mongosh admin -u admin -p "$MONGO_PASSWORD" --quiet --eval "rs.status().members[0].stateStr" 2>/dev/null || echo "UNKNOWN")"
+        log_error "Check logs: docker logs dive-hub-mongodb"
         return 1
     fi
     phase_end=$(date +%s)
@@ -171,7 +180,7 @@ hub_deploy() {
     local phase4c_duration=$((phase_end - phase_start))
     phase_times+=("Phase 4c (Backend Verify): ${phase4c_duration}s")
     log_verbose "Phase 4c completed in ${phase4c_duration}s"
-    
+
     # Initialize orchestration database
     phase_start=$(date +%s)
     log_info "Phase 5: Orchestration database initialization"
@@ -199,7 +208,7 @@ hub_deploy() {
     phase_start=$(date +%s)
     log_info "Phase 6.5: Verifying realm creation"
     if ! hub_verify_realm; then
-        log_error "CRITICAL: Realm verification FAILED"  
+        log_error "CRITICAL: Realm verification FAILED"
         log_error "Keycloak configuration completed but realm doesn't exist"
         log_error "This indicates Terraform or Keycloak state issues"
         return 1
@@ -241,7 +250,7 @@ hub_deploy() {
     done
     echo "  ──────────────────────────────────────────────────"
     echo "  Total Duration: ${duration}s"
-    
+
     # Performance analysis
     if [ $duration -lt 180 ]; then
         echo "  Performance: ✅ EXCELLENT (< 3 minutes)"
@@ -365,7 +374,7 @@ EOF
 }
 
 ##
-# Start hub services
+# Start hub services with parallel startup optimization (Phase 2 Enhancement)
 ##
 hub_up() {
     log_info "Starting hub services..."
@@ -384,9 +393,33 @@ hub_up() {
         return 1
     fi
 
-    docker compose -f "$HUB_COMPOSE_FILE" up -d
+    # Phase 2 Enhancement: Check if parallel startup is enabled
+    local use_parallel="${PARALLEL_STARTUP_ENABLED:-true}"
 
-    log_success "Hub services started"
+    if [ "$use_parallel" = "true" ] && type orch_parallel_startup &>/dev/null; then
+        log_info "Using parallel service startup (dependency-aware)"
+
+        # Start docker compose in detached mode (containers will be created but may not be fully started)
+        docker compose -f "$HUB_COMPOSE_FILE" up -d --no-recreate 2>/dev/null || \
+        docker compose -f "$HUB_COMPOSE_FILE" up -d
+
+        # Use orchestration framework for intelligent parallel startup and health checking
+        # This respects service dependencies and starts services concurrently where possible
+        if ! orch_parallel_startup "USA" "all"; then
+            log_error "Parallel service startup failed"
+            log_warn "Some services may not be healthy - check logs: ./dive logs"
+            return 1
+        fi
+
+        log_success "Hub services started (parallel mode: $(orch_get_max_dependency_level) levels)"
+    else
+        # Fallback: Traditional sequential startup
+        log_verbose "Using traditional sequential startup (PARALLEL_STARTUP_ENABLED=false)"
+        docker compose -f "$HUB_COMPOSE_FILE" up -d
+
+        log_success "Hub services started (sequential mode)"
+    fi
+
     return 0
 }
 
@@ -397,7 +430,7 @@ hub_down() {
     log_info "Stopping hub services..."
 
     cd "$DIVE_ROOT"
-    
+
     # CRITICAL: Load secrets before running docker-compose down
     # Docker Compose needs variable interpolation even for shutdown
     if ! load_secrets 2>/dev/null; then
@@ -409,7 +442,7 @@ hub_down() {
             set +a
         fi
     fi
-    
+
     docker compose -f "$HUB_COMPOSE_FILE" down
 
     log_success "Hub services stopped"
@@ -477,7 +510,7 @@ hub_init_orchestration_db() {
     # Apply full orchestration schema from migration file (CRITICAL - includes state_transitions)
     if [ -f "${DIVE_ROOT}/scripts/migrations/001_orchestration_state_db.sql" ]; then
         log_verbose "Applying full orchestration schema..."
-        
+
         if docker exec -i dive-hub-postgres psql -U postgres -d orchestration < "${DIVE_ROOT}/scripts/migrations/001_orchestration_state_db.sql" >/dev/null 2>&1; then
             log_verbose "✓ Orchestration schema applied"
         else
@@ -486,8 +519,8 @@ hub_init_orchestration_db() {
         fi
 
         # Verify all required tables exist
-        local required_tables=("deployment_states" "state_transitions" "deployment_steps" 
-                               "deployment_locks" "circuit_breakers" "orchestration_errors" 
+        local required_tables=("deployment_states" "state_transitions" "deployment_steps"
+                               "deployment_locks" "circuit_breakers" "orchestration_errors"
                                "orchestration_metrics" "checkpoints")
         local missing_tables=0
 
@@ -541,14 +574,14 @@ hub_configure_keycloak() {
     # Run Terraform if available
     if [ -d "${DIVE_ROOT}/terraform/hub" ] && command -v terraform >/dev/null 2>&1; then
         log_verbose "Running Terraform configuration..."
-        
+
         # Verify Terraform state is clean (prevents resource conflicts)
         if [ -f "${DIVE_ROOT}/terraform/hub/terraform.tfstate" ]; then
             log_warn "Terraform state exists - checking for potential conflicts..."
-            
+
             # Count resources in state
             local state_resources=$(cd "${DIVE_ROOT}/terraform/hub" && terraform state list 2>/dev/null | wc -l | tr -d ' ')
-            
+
             if [ "$state_resources" -gt 0 ]; then
                 log_warn "Found $state_resources resources in Terraform state"
                 log_warn "This may cause 'resource already exists' errors"
@@ -557,7 +590,7 @@ hub_configure_keycloak() {
         else
             log_verbose "Clean Terraform state - fresh deployment"
         fi
-        
+
         # Source .env.hub to get secrets
         if [ -f "${DIVE_ROOT}/.env.hub" ]; then
             set -a
@@ -567,10 +600,10 @@ hub_configure_keycloak() {
             log_error "No .env.hub file found"
             return 1
         fi
-        
+
         (
             cd "${DIVE_ROOT}/terraform/hub"
-            
+
             # Initialize Terraform (only if not already initialized)
             if [ ! -d ".terraform" ]; then
                 log_verbose "Initializing Terraform..."
@@ -578,7 +611,7 @@ hub_configure_keycloak() {
             else
                 log_verbose "Terraform already initialized"
             fi
-            
+
             # Export Terraform variables
             export TF_VAR_keycloak_admin_password="${KC_ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD_USA:-${KEYCLOAK_ADMIN_PASSWORD}}}"
             export TF_VAR_client_secret="${KEYCLOAK_CLIENT_SECRET}"
@@ -586,15 +619,15 @@ hub_configure_keycloak() {
             export TF_VAR_admin_user_password="${ADMIN_PASSWORD:-${KC_ADMIN_PASSWORD}}"
             export KEYCLOAK_USER="admin"
             export KEYCLOAK_PASSWORD="${KC_ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD_USA}}"
-            
+
             # Verify variables set
             if [ -z "$TF_VAR_keycloak_admin_password" ] || [ -z "$TF_VAR_client_secret" ]; then
                 log_error "Required Terraform variables not set"
                 return 1
             fi
-            
+
             log_verbose "Terraform variables validated"
-            
+
             # Apply with performance optimizations
             log_verbose "Applying Terraform configuration (optimized for performance)..."
             terraform apply \
@@ -628,7 +661,7 @@ hub_verify_realm() {
         # Check if realm exists
         local realm_response
         realm_response=$(curl -sk --max-time 10 "${keycloak_url}/realms/${realm}" 2>/dev/null)
-        
+
         if [ $? -eq 0 ]; then
             local realm_name
             realm_name=$(echo "$realm_response" | jq -r '.realm // empty' 2>/dev/null)
@@ -654,12 +687,12 @@ hub_verify_realm() {
 ##
 hub_verify() {
     log_info "Running hub deployment validation..."
-    
+
     if [ ! -f "${DIVE_ROOT}/tests/validate-hub-deployment.sh" ]; then
         log_error "Validation script not found"
         return 1
     fi
-    
+
     bash "${DIVE_ROOT}/tests/validate-hub-deployment.sh"
     return $?
 }
@@ -731,7 +764,7 @@ hub_logs() {
 ##
 hub_seed() {
     local count="${1:-5000}"
-    
+
     # Load comprehensive hub seeding module (SSOT)
     if [ -f "${MODULES_DIR}/hub/seed.sh" ]; then
         source "${MODULES_DIR}/hub/seed.sh"
