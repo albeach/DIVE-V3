@@ -786,27 +786,34 @@ load_gcp_secrets() {
 }
 
 load_local_defaults() {
-    # SECURITY: No hardcoded defaults - fail fast if secrets not available
-    # All secrets MUST come from GCP Secret Manager or explicit environment variables
-    log_error "FATAL: load_local_defaults() called but hardcoded secrets have been removed."
-    log_error "Secrets MUST be loaded from GCP Secret Manager."
+    # SECURITY: Load from .env.hub if available (contains GCP-synced secrets)
+    # No hardcoded defaults - secrets MUST be in .env file or GCP Secret Manager
+    
+    local env_file="${DIVE_ROOT}/.env.hub"
+    
+    if [ -f "$env_file" ] && [ -s "$env_file" ]; then
+        log_warn "⚠️  USING LOCAL ENV FILE: $env_file"
+        log_warn "This file should contain GCP-synced secrets (use ./dive secrets sync)"
+        
+        # Export variables from .env.hub
+        set -a
+        source "$env_file" 2>/dev/null || {
+            log_error "Failed to source $env_file"
+            return 1
+        }
+        set +a
+        
+        log_success "Secrets loaded from local env file"
+        return 0
+    fi
+    
+    log_error "FATAL: No secrets available (no GCP access and no .env.hub file)"
     log_error ""
     log_error "To fix this issue:"
     log_error "  1. Ensure GCP authentication: gcloud auth application-default login"
-    log_error "  2. Set USE_GCP_SECRETS=true"
-    log_error "  3. Run: ./dive secrets ensure ${INSTANCE:-usa}"
+    log_error "  2. Run: ./dive secrets sync ${INSTANCE:-usa}"
     log_error ""
-    log_error "Required secrets in GCP Secret Manager (project: dive25):"
-    log_error "  - dive-v3-keycloak-{instance}"
-    log_error "  - dive-v3-postgres-{instance}"
-    log_error "  - dive-v3-mongodb-{instance}"
-    log_error "  - dive-v3-auth-secret-{instance}"
-    log_error "  - dive-v3-keycloak-client-secret"
-    log_error "  - dive-v3-redis-blacklist"
-    log_error ""
-    log_error "If you need to generate secrets for a new instance:"
-    log_error "  ./scripts/sync-gcp-secrets.sh create ${INSTANCE:-usa}"
-
+    log_error "Or manually create .env.hub with required secrets"
     return 1
 }
 
