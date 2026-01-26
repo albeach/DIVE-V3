@@ -39,7 +39,7 @@ run_test_suite() {
     local suite_name="$1"
     local test_file="$2"
     
-    ((TOTAL_SUITES++))
+    TOTAL_SUITES=$((TOTAL_SUITES + 1))
     
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -48,7 +48,7 @@ run_test_suite() {
     
     if [ ! -f "$test_file" ]; then
         echo -e "${RED}✗ Test file not found: $test_file${NC}"
-        ((FAILED_SUITES++))
+        FAILED_SUITES=$((FAILED_SUITES + 1))
         return 1
     fi
     
@@ -58,13 +58,13 @@ run_test_suite() {
         local end_time=$(date +%s)
         local duration=$((end_time - start_time))
         echo -e "${GREEN}✓ $suite_name passed (${duration}s)${NC}"
-        ((PASSED_SUITES++))
+        PASSED_SUITES=$((PASSED_SUITES + 1))
         return 0
     else
         local end_time=$(date +%s)
         local duration=$((end_time - start_time))
         echo -e "${RED}✗ $suite_name failed (${duration}s)${NC}"
-        ((FAILED_SUITES++))
+        FAILED_SUITES=$((FAILED_SUITES + 1))
         return 1
     fi
 }
