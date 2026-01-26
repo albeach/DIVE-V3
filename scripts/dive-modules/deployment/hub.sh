@@ -638,9 +638,133 @@ calculate_service_level() {
 }
 
 ##
+# Retry with exponential backoff (Phase 4 Sprint 2)
+# Handles transient failures with configurable retry attempts
+#
+# Arguments:
+#   $1 - Max retry attempts (default: 3)
+#   $2 - Service name (for logging)
+#   $3+ - Command to execute
+#
+# Returns:
+#   0 on success, 1 on final failure
+#
+# Environment Variables:
+#   RETRY_MAX_ATTEMPTS - Override default retry attempts (default: 3)
+#   RETRY_BASE_DELAY - Base delay in seconds (default: 2)
+#   RETRY_MAX_DELAY - Maximum delay in seconds (default: 30)
+##
+retry_with_backoff() {
+    local max_attempts="${RETRY_MAX_ATTEMPTS:-3}"
+    local service_name="$1"
+    shift
+    
+    local attempt=1
+    local delay="${RETRY_BASE_DELAY:-2}"
+    local max_delay="${RETRY_MAX_DELAY:-30}"
+    
+    while [ $attempt -le $max_attempts ]; do
+        # Execute command
+        if "$@"; then
+            if [ $attempt -gt 1 ]; then
+                log_success "$service_name: Recovered after $attempt attempts"
+            fi
+            return 0
+        fi
+        
+        # Check if we should retry
+        if [ $attempt -lt $max_attempts ]; then
+            log_warn "$service_name: Attempt $attempt/$max_attempts failed, retrying in ${delay}s..."
+            sleep "$delay"
+            
+            # Exponential backoff: delay = delay * 2, capped at max_delay
+            delay=$((delay * 2))
+            if [ $delay -gt $max_delay ]; then
+                delay=$max_delay
+            fi
+        else
+            log_error "$service_name: All $max_attempts attempts failed"
+        fi
+        
+        ((attempt++))
+    done
+    
+    return 1
+}
+
+##
+# Circuit breaker for repeated failures (Phase 4 Sprint 2)
+# Prevents infinite retry loops by failing fast after threshold
+#
+# Arguments:
+#   $1 - Service name
+#   $2 - Failure type (e.g., "health_check", "startup")
+#
+# Returns:
+#   0 if circuit is closed (can proceed)
+#   1 if circuit is open (fail fast)
+#
+# Environment Variables:
+#   CIRCUIT_BREAKER_THRESHOLD - Failures before opening (default: 3)
+#   CIRCUIT_BREAKER_TIMEOUT - Reset timeout in seconds (default: 60)
+##
+declare -A CIRCUIT_BREAKER_FAILURES
+declare -A CIRCUIT_BREAKER_LAST_FAILURE
+
+circuit_breaker_check() {
+    local service="$1"
+    local failure_type="$2"
+    local key="${service}:${failure_type}"
+    
+    local threshold="${CIRCUIT_BREAKER_THRESHOLD:-3}"
+    local timeout="${CIRCUIT_BREAKER_TIMEOUT:-60}"
+    local now=$(date +%s)
+    
+    # Check if circuit was opened recently
+    local last_failure="${CIRCUIT_BREAKER_LAST_FAILURE[$key]:-0}"
+    local time_since_failure=$((now - last_failure))
+    
+    # Reset circuit if timeout expired
+    if [ "$time_since_failure" -gt "$timeout" ]; then
+        CIRCUIT_BREAKER_FAILURES[$key]=0
+        CIRCUIT_BREAKER_LAST_FAILURE[$key]=0
+    fi
+    
+    # Check failure count
+    local failures="${CIRCUIT_BREAKER_FAILURES[$key]:-0}"
+    if [ "$failures" -ge "$threshold" ]; then
+        log_error "$service: Circuit breaker OPEN (${failures} consecutive failures)"
+        log_error "$service: Failing fast to prevent cascading failures"
+        return 1
+    fi
+    
+    return 0
+}
+
+circuit_breaker_record_failure() {
+    local service="$1"
+    local failure_type="$2"
+    local key="${service}:${failure_type}"
+    
+    local failures="${CIRCUIT_BREAKER_FAILURES[$key]:-0}"
+    CIRCUIT_BREAKER_FAILURES[$key]=$((failures + 1))
+    CIRCUIT_BREAKER_LAST_FAILURE[$key]=$(date +%s)
+}
+
+circuit_breaker_reset() {
+    local service="$1"
+    local failure_type="$2"
+    local key="${service}:${failure_type}"
+    
+    CIRCUIT_BREAKER_FAILURES[$key]=0
+    CIRCUIT_BREAKER_LAST_FAILURE[$key]=0
+}
+
+##
 # Hub-specific parallel startup using dependency graph
 # Phase 3 Sprint 1: Enables 40-50% faster startup through parallel service orchestration
 # Phase 2 Part 3: Dynamic dependency level calculation
+# Phase 4 Sprint 2: Added retry logic and graceful degradation
 ##
 hub_parallel_startup() {
     log_info "Starting hub services with dependency-aware parallel orchestration"
