@@ -394,7 +394,7 @@ validate_ports() {
         ["backend"]="4000"
         ["keycloak"]="8443"
         ["opa"]="8181"
-        ["kas"]="8085"
+        ["kas"]="8080"
     )
 
     for service in "${!EXPECTED_PORTS[@]}"; do
