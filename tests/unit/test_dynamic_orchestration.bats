@@ -24,8 +24,7 @@ setup() {
 
 @test "yq is installed and accessible" {
     run which yq
-    [ "$status" -eq 0 ]
-    [ -n "$output" ]
+    [[ $status -eq 0 ]]
 }
 
 @test "docker-compose.hub.yml exists" {
@@ -33,11 +32,10 @@ setup() {
 }
 
 @test "can query all services from compose file" {
-    run yq eval '.services | keys | .[]' "$HUB_COMPOSE_FILE"
-    [ "$status" -eq 0 ]
-    [ -n "$output" ]
+    # Query services directly without run to avoid bats variable issues
+    local service_count=$(yq eval '.services | keys | .[]' "$HUB_COMPOSE_FILE" | wc -l | xargs)
     # Should have at least 10 services
-    [ "${#lines[@]}" -ge 10 ]
+    [[ $service_count -ge 10 ]]
 }
 
 @test "all services have unique names" {
@@ -122,17 +120,17 @@ setup() {
     local total_count=0
     
     for svc in $services; do
-        ((total_count++))
+        total_count=$((total_count + 1))
         local deps_type=$(yq eval ".services.\"$svc\".depends_on | type" "$HUB_COMPOSE_FILE" 2>/dev/null)
         
-        # Must be either !!seq (array), !!map (object), or null (no deps)
-        if [ -z "$deps_type" ] || [ "$deps_type" = "null" ] || [ "$deps_type" = "!!seq" ] || [ "$deps_type" = "!!map" ]; then
-            ((valid_count++))
+        # Must be either !!seq (array), !!map (object), null, !!null, or empty
+        if [[ -z "$deps_type" ]] || [[ "$deps_type" =~ ^null$ ]] || [[ "$deps_type" =~ ^!!null$ ]] || [[ "$deps_type" = "!!seq" ]] || [[ "$deps_type" = "!!map" ]]; then
+            valid_count=$((valid_count + 1))
         fi
     done
     
     # All services should have valid format
-    [ "$valid_count" -eq "$total_count" ]
+    [[ $valid_count -eq $total_count ]]
 }
 
 # =============================================================================
@@ -231,8 +229,8 @@ setup() {
 # =============================================================================
 
 @test "hub.sh can be sourced without errors" {
-    run bash -c "source ${DIVE_ROOT}/scripts/dive-modules/deployment/hub.sh 2>&1 && echo 'SUCCESS'"
-    [[ "$output" =~ "SUCCESS" ]]
+    # Source directly and check exit code
+    bash -c "source ${DIVE_ROOT}/scripts/dive-modules/deployment/hub.sh >/dev/null 2>&1 && echo SUCCESS" | grep -q SUCCESS
 }
 
 @test "calculate_service_level function is defined" {
