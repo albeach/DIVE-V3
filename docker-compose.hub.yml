@@ -61,6 +61,9 @@ services:
   # PostgreSQL - backing store for Keycloak / NextAuth
   # ---------------------------------------------------------------------------
   postgres:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "PostgreSQL database for Keycloak user/realm storage"
     image: postgres:18.1-alpine3.23
     container_name: ${COMPOSE_PROJECT_NAME}-postgres
     restart: unless-stopped
@@ -88,6 +91,9 @@ services:
   # CONFIGURED AS SINGLE-NODE REPLICA SET for OPAL CDC change streams
   # ---------------------------------------------------------------------------
   mongodb:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "MongoDB database for resource metadata and audit logs"
     image: mongo:8.0.17
     container_name: ${COMPOSE_PROJECT_NAME}-mongodb
     restart: unless-stopped
@@ -131,6 +137,9 @@ services:
   # Redis - session/blacklist cache (Hardened)
   # ---------------------------------------------------------------------------
   redis:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Redis cache for session state and policy decisions"
     image: redis:7-alpine
     container_name: ${COMPOSE_PROJECT_NAME}-redis
     restart: unless-stopped
@@ -171,6 +180,9 @@ services:
   # Redis Blacklist - Shared token revocation across all instances (GAP-010)
   # ---------------------------------------------------------------------------
   redis-blacklist:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Redis blacklist for revoked JWT tokens"
     image: redis:7-alpine
     container_name: ${COMPOSE_PROJECT_NAME}-redis-blacklist
     restart: unless-stopped
@@ -210,6 +222,9 @@ services:
   # Keycloak - Identity Broker
   # ---------------------------------------------------------------------------
   keycloak:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Keycloak IdP broker for multi-nation SSO"
     build:
       context: ./keycloak
       dockerfile: Dockerfile
@@ -302,6 +317,9 @@ services:
   #   4. OPAL Server + Client on same instance = antipattern (OPAL Discussion #390)
   # ---------------------------------------------------------------------------
   opa:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Open Policy Agent for ABAC authorization decisions"
     image: openpolicyagent/opa:1.12.3
     container_name: ${COMPOSE_PROJECT_NAME}-opa
     restart: unless-stopped
@@ -335,6 +353,9 @@ services:
   # Backend API - serves policy data for OPAL and Hub admin APIs
   # ---------------------------------------------------------------------------
   backend:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Express.js API with PEP for authorization enforcement"
     build:
       context: ./backend
       dockerfile: Dockerfile.dev
@@ -480,6 +501,9 @@ services:
   # OpenTelemetry Collector - Metrics and Tracing
   # ---------------------------------------------------------------------------
   otel-collector:
+    labels:
+      dive.service.class: "optional"
+      dive.service.description: "OpenTelemetry collector for traces/metrics (optional)"
     image: otel/opentelemetry-collector:latest
     container_name: ${COMPOSE_PROJECT_NAME}-otel-collector
     restart: unless-stopped
@@ -505,6 +529,9 @@ services:
   # KAS - Key Access Service (Stretch Goal)
   # ---------------------------------------------------------------------------
   kas:
+    labels:
+      dive.service.class: "stretch"
+      dive.service.description: "Key Access Service for TDF encrypted resources (stretch goal)"
     build:
       context: ./kas
       dockerfile: Dockerfile
@@ -554,6 +581,9 @@ services:
   # Frontend - Next.js Application
   # ---------------------------------------------------------------------------
   frontend:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Next.js React application with NextAuth.js"
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
@@ -618,6 +648,9 @@ services:
   # OPAL Server - Policy distribution hub
   # ---------------------------------------------------------------------------
   opal-server:
+    labels:
+      dive.service.class: "stretch"
+      dive.service.description: "OPAL server for real-time policy distribution (stretch goal)"
     build:
       context: ./docker
       dockerfile: opal-server.Dockerfile
