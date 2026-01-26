@@ -589,8 +589,58 @@ hub_down() {
 }
 
 ##
+# Calculate dependency level for a service (helper function)
+# Level 0 = no dependencies
+# Level N = max(dependency levels) + 1
+#
+# Arguments:
+#   $1 - Service name
+#
+# Returns:
+#   Dependency level (0-based integer)
+##
+calculate_service_level() {
+    local service="$1"
+    local visited_path="${2:-}"  # For cycle detection
+    
+    # Cycle detection
+    if [[ " $visited_path " =~ " $service " ]]; then
+        log_warn "Circular dependency detected: $visited_path -> $service"
+        echo "0"
+        return
+    fi
+    
+    # Get dependencies for this service
+    local deps="${service_deps[$service]}"
+    
+    # No dependencies = level 0
+    if [ "$deps" = "none" ] || [ -z "$deps" ]; then
+        echo "0"
+        return
+    fi
+    
+    # Calculate max level of dependencies
+    local max_dep_level=0
+    for dep in $deps; do
+        # Skip if dependency doesn't exist in our service list
+        if [ -z "${service_deps[$dep]+x}" ]; then
+            continue
+        fi
+        
+        local dep_level=$(calculate_service_level "$dep" "$visited_path $service")
+        if [ $dep_level -gt $max_dep_level ]; then
+            max_dep_level=$dep_level
+        fi
+    done
+    
+    # This service's level = max dependency level + 1
+    echo $((max_dep_level + 1))
+}
+
+##
 # Hub-specific parallel startup using dependency graph
 # Phase 3 Sprint 1: Enables 40-50% faster startup through parallel service orchestration
+# Phase 2 Part 3: Dynamic dependency level calculation
 ##
 hub_parallel_startup() {
     log_info "Starting hub services with dependency-aware parallel orchestration"
@@ -629,60 +679,95 @@ hub_parallel_startup() {
     log_verbose "  OPTIONAL: ${OPTIONAL_SERVICES[*]} (${#OPTIONAL_SERVICES[@]} services)"
     log_verbose "  STRETCH: ${STRETCH_SERVICES[*]} (${#STRETCH_SERVICES[@]} services)"
 
-    # Define hub-specific dependency graph (self-contained to avoid export issues)
-    # Based on docker-compose.hub.yml service dependencies
-    declare -A hub_deps=(
-        ["postgres"]="none"
-        ["mongodb"]="none"
-        ["redis"]="none"
-        ["keycloak"]="postgres"
-        ["backend"]="postgres,mongodb,redis,keycloak"
-        ["frontend"]="backend"
-    )
-
-    # Calculate dependency levels manually for ALL hub services
-    # Level 0: postgres, mongodb, redis, redis-blacklist, opa (true no-dependency services)
-    # Level 1: keycloak (depends on postgres)
-    # Level 2: backend (depends on all DBs + keycloak + opa)
-    # Level 3: frontend, kas, opal-server, otel-collector (depend on backend/keycloak)
-    # Note: authzforce excluded via docker-compose profile (ADR-001)
+    # DYNAMIC DEPENDENCY LEVEL CALCULATION
+    # Parse depends_on from docker-compose.hub.yml and calculate levels automatically
+    log_verbose "Calculating dependency levels dynamically..."
     
-    local -a level_0=("postgres" "mongodb" "redis" "redis-blacklist" "opa")
-    local -a level_1=("keycloak")
-    local -a level_2=("backend")
-    local -a level_3=("frontend" "kas" "opal-server" "otel-collector")
-    local max_level=3
-    local total_services=11  # Reduced from 12 (authzforce excluded)
+    # Build dependency map from compose file
+    # Handle both depends_on formats:
+    #   Simple array: [opa, mongodb]
+    #   Object with conditions: {opa: {condition: ...}, mongodb: {condition: ...}}
+    declare -A service_deps
+    for svc in $all_services; do
+        # Try to get dependencies (handle both array and object formats)
+        local deps_type=$(yq eval ".services.\"$svc\".depends_on | type" "$HUB_COMPOSE_FILE" 2>/dev/null)
+        
+        if [ "$deps_type" = "!!seq" ]; then
+            # Simple array format: [opa, mongodb]
+            local deps=$(yq eval ".services.\"$svc\".depends_on.[]" "$HUB_COMPOSE_FILE" 2>/dev/null | xargs)
+        elif [ "$deps_type" = "!!map" ]; then
+            # Object format with conditions: {opa: {condition: ...}}
+            local deps=$(yq eval ".services.\"$svc\".depends_on | keys | .[]" "$HUB_COMPOSE_FILE" 2>/dev/null | xargs)
+        else
+            # No dependencies or null
+            local deps=""
+        fi
+        
+        if [ -z "$deps" ]; then
+            service_deps["$svc"]="none"
+        else
+            service_deps["$svc"]="$deps"
+        fi
+    done
+    
+    # Calculate dependency level for each service
+    declare -A service_levels
+    declare -A level_services  # Reverse map: level -> services
+    local max_level=0
+    
+    for svc in $all_services; do
+        local level=$(calculate_service_level "$svc")
+        service_levels["$svc"]=$level
+        
+        # Add to level_services map
+        if [ -z "${level_services[$level]}" ]; then
+            level_services[$level]="$svc"
+        else
+            level_services[$level]="${level_services[$level]} $svc"
+        fi
+        
+        # Track max level
+        if [ $level -gt $max_level ]; then
+            max_level=$level
+        fi
+    done
+    
+    log_verbose "Dependency levels calculated (max level: $max_level):"
+    for ((lvl=0; lvl<=max_level; lvl++)); do
+        local services_at_level="${level_services[$lvl]}"
+        if [ -n "$services_at_level" ]; then
+            local count=$(echo "$services_at_level" | wc -w | tr -d ' ')
+            log_verbose "  Level $lvl: $services_at_level ($count services)"
+        fi
+    done
 
+    local total_services=$(echo "$all_services" | wc -w | tr -d ' ')
     local total_started=0
     local total_failed=0
     local start_time=$(date +%s)
 
-    log_verbose "Service graph has 4 dependency levels (0-3) with $total_services total services"
+    log_verbose "Service graph has $((max_level + 1)) dependency levels (0-$max_level) with $total_services total services"
 
     # Start services level by level
-    for level in 0 1 2 3; do
+    for ((level=0; level<=max_level; level++)); do
         # Get services at this level
-        local level_services=()
-        case $level in
-            0) level_services=("${level_0[@]}") ;;
-            1) level_services=("${level_1[@]}") ;;
-            2) level_services=("${level_2[@]}") ;;
-            3) level_services=("${level_3[@]}") ;;
-        esac
-
-        if [ ${#level_services[@]} -eq 0 ]; then
+        local level_services_str="${level_services[$level]}"
+        
+        if [ -z "$level_services_str" ]; then
             log_verbose "Level $level: No services to start"
             continue
         fi
-
-        log_info "Level $level: Starting ${level_services[*]}"
+        
+        # Convert to array
+        local -a current_level_services=($level_services_str)
+        
+        log_info "Level $level: Starting ${current_level_services[*]}"
 
         # Start all services at this level in parallel
         local pids=()
         declare -A service_pid_map
 
-        for service in "${level_services[@]}"; do
+        for service in "${current_level_services[@]}"; do
             (
                 # Calculate dynamic timeout based on service type
                 local timeout
