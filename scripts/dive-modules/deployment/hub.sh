@@ -647,7 +647,19 @@ hub_parallel_startup() {
 
     # DYNAMIC SERVICE CLASSIFICATION (from docker-compose.hub.yml labels)
     # Uses yq to directly query service labels - more reliable than helper functions
-    local all_services=$(yq eval '.services | keys | .[]' "$HUB_COMPOSE_FILE" 2>/dev/null | xargs)
+    local all_services_raw=$(yq eval '.services | keys | .[]' "$HUB_COMPOSE_FILE" 2>/dev/null | xargs)
+    
+    # Filter out profile-only services (e.g., authzforce with profiles: ["xacml"])
+    local all_services=""
+    for svc in $all_services_raw; do
+        local profiles=$(yq eval ".services.\"$svc\".profiles // []" "$HUB_COMPOSE_FILE" 2>/dev/null)
+        if [ "$profiles" != "[]" ] && [ "$profiles" != "null" ] && [ -n "$profiles" ]; then
+            log_verbose "Skipping service '$svc' (in profile: $profiles)"
+            continue  # Skip profile-only services
+        fi
+        all_services="$all_services $svc"
+    done
+    all_services=$(echo $all_services | xargs)  # Trim whitespace
     
     # Discover services by class label
     local CORE_SERVICES_RAW=""
@@ -665,6 +677,16 @@ hub_parallel_startup() {
                 ;;
             stretch)
                 STRETCH_SERVICES_RAW="$STRETCH_SERVICES_RAW $svc"
+                ;;
+            *)
+                # Services without a classification label default to optional
+                # This allows new services to be added without blocking deployments
+                if [ -n "$class" ]; then
+                    log_warn "Unknown service class '$class' for service '$svc', treating as optional"
+                else
+                    log_verbose "Service '$svc' has no dive.service.class label, treating as optional"
+                fi
+                OPTIONAL_SERVICES_RAW="$OPTIONAL_SERVICES_RAW $svc"
                 ;;
         esac
     done
