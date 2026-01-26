@@ -595,13 +595,39 @@ hub_down() {
 hub_parallel_startup() {
     log_info "Starting hub services with dependency-aware parallel orchestration"
 
-    # SERVICE CLASSIFICATION (for graceful degradation)
-    # CORE services: Required for basic identity/authorization flows - deployment fails if these timeout
-    # OPTIONAL services: Alternative implementations or dev-only features - deployment continues with warnings
-    # STRETCH services: Advanced features for pilot demo - deployment continues with warnings
-    local -a CORE_SERVICES=(postgres mongodb redis redis-blacklist keycloak opa backend frontend)
-    local -a OPTIONAL_SERVICES=(otel-collector)  # authzforce excluded (ADR-001: context failure, 90s timeout)
-    local -a STRETCH_SERVICES=(kas opal-server)
+    # DYNAMIC SERVICE CLASSIFICATION (from docker-compose.hub.yml labels)
+    # Uses yq to directly query service labels - more reliable than helper functions
+    local all_services=$(yq eval '.services | keys | .[]' "$HUB_COMPOSE_FILE" 2>/dev/null | xargs)
+    
+    # Discover services by class label
+    local CORE_SERVICES_RAW=""
+    local OPTIONAL_SERVICES_RAW=""
+    local STRETCH_SERVICES_RAW=""
+    
+    for svc in $all_services; do
+        local class=$(yq eval ".services.\"$svc\".labels.\"dive.service.class\" // \"\"" "$HUB_COMPOSE_FILE" 2>/dev/null | tr -d '"')
+        case "$class" in
+            core)
+                CORE_SERVICES_RAW="$CORE_SERVICES_RAW $svc"
+                ;;
+            optional)
+                OPTIONAL_SERVICES_RAW="$OPTIONAL_SERVICES_RAW $svc"
+                ;;
+            stretch)
+                STRETCH_SERVICES_RAW="$STRETCH_SERVICES_RAW $svc"
+                ;;
+        esac
+    done
+    
+    # Convert to arrays and trim whitespace
+    local -a CORE_SERVICES=($(echo $CORE_SERVICES_RAW | xargs))
+    local -a OPTIONAL_SERVICES=($(echo $OPTIONAL_SERVICES_RAW | xargs))
+    local -a STRETCH_SERVICES=($(echo $STRETCH_SERVICES_RAW | xargs))
+    
+    log_verbose "Discovered services dynamically from $HUB_COMPOSE_FILE:"
+    log_verbose "  CORE: ${CORE_SERVICES[*]} (${#CORE_SERVICES[@]} services)"
+    log_verbose "  OPTIONAL: ${OPTIONAL_SERVICES[*]} (${#OPTIONAL_SERVICES[@]} services)"
+    log_verbose "  STRETCH: ${STRETCH_SERVICES[*]} (${#STRETCH_SERVICES[@]} services)"
 
     # Define hub-specific dependency graph (self-contained to avoid export issues)
     # Based on docker-compose.hub.yml service dependencies
