@@ -101,9 +101,9 @@ log_success "Authenticated as $ADMIN_USER"
 # =============================================================================
 log_step "Checking realm: $REALM_NAME..."
 
-REALM_EXISTS=$(docker exec "$KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get realms/$REALM_NAME 2>/dev/null | grep -c "\"realm\"" || echo "0")
+REALM_EXISTS=$(docker exec "$KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get realms/$REALM_NAME 2>/dev/null | grep -c "\"realm\"" 2>/dev/null || echo "0")
 
-if [ "$REALM_EXISTS" -eq 0 ]; then
+if [ "$REALM_EXISTS" -eq 0 ] 2>/dev/null || [ -z "$REALM_EXISTS" ]; then
     log_error "Realm $REALM_NAME not found"
     exit 1
 fi
@@ -130,9 +130,9 @@ create_user() {
     # Check if user already exists
     local user_exists=$(docker exec "$KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get users \
         -r "$REALM_NAME" \
-        -q username="$username" 2>/dev/null | grep -c "\"username\"" || echo "0")
+        -q username="$username" 2>/dev/null | grep -c "\"username\"" 2>/dev/null || echo "0")
 
-    if [ "$user_exists" -gt 0 ]; then
+    if [ "$user_exists" -gt 0 ] 2>/dev/null && [ -n "$user_exists" ]; then
         log_warn "User $username already exists - skipping"
         return 0
     fi
