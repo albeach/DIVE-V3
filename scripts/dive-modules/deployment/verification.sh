@@ -189,8 +189,8 @@ verification_check_keycloak() {
     if [ "$deployment_type" = "hub" ]; then
         kc_port=8443
     else
-        local ports=$(get_instance_ports "$instance_code" 2>/dev/null)
-        kc_port=$(echo "$ports" | jq -r '.keycloak // 8443' 2>/dev/null || echo "8443")
+        eval "$(get_instance_ports "$instance_code" 2>/dev/null)"
+        kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
     fi
 
     # Check HTTPS endpoint
@@ -214,8 +214,8 @@ verification_check_backend() {
     if [ "$deployment_type" = "hub" ]; then
         be_port=4000
     else
-        local ports=$(get_instance_ports "$instance_code" 2>/dev/null)
-        be_port=$(echo "$ports" | jq -r '.backend // 4000' 2>/dev/null || echo "4000")
+        eval "$(get_instance_ports "$instance_code" 2>/dev/null)"
+        be_port="${SPOKE_BACKEND_PORT:-4000}"
     fi
 
     # Check health endpoint
@@ -239,8 +239,8 @@ verification_check_frontend() {
     if [ "$deployment_type" = "hub" ]; then
         fe_port=3000
     else
-        local ports=$(get_instance_ports "$instance_code" 2>/dev/null)
-        fe_port=$(echo "$ports" | jq -r '.frontend // 3000' 2>/dev/null || echo "3000")
+        eval "$(get_instance_ports "$instance_code" 2>/dev/null)"
+        fe_port="${SPOKE_FRONTEND_PORT:-3000}"
     fi
 
     # Check frontend responds

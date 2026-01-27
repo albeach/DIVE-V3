@@ -232,11 +232,10 @@ preflight_check_ports() {
         ports_to_check="8443 4000 3000 5432 27017"
     else
         # Get instance-specific ports
-        local ports=$(get_instance_ports "$instance_code" 2>/dev/null)
-        if [ -n "$ports" ]; then
-            local kc_port=$(echo "$ports" | jq -r '.keycloak // 8443')
-            local be_port=$(echo "$ports" | jq -r '.backend // 4000')
-            local fe_port=$(echo "$ports" | jq -r '.frontend // 3000')
+        if eval "$(get_instance_ports "$instance_code" 2>/dev/null)"; then
+            local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
+            local be_port="${SPOKE_BACKEND_PORT:-4000}"
+            local fe_port="${SPOKE_FRONTEND_PORT:-3000}"
             ports_to_check="$kc_port $be_port $fe_port"
         else
             ports_to_check="8443 4000 3000"
