@@ -171,6 +171,32 @@ export POSTGRES_VERSION="15"
 # =============================================================================
 # LOAD NATO COUNTRIES DATABASE (SSOT for port offsets)
 # =============================================================================
+
+# =============================================================================
+# ENVIRONMENT SETUP
+# =============================================================================
+# Ensure Docker and other tools are in PATH for all execution contexts
+# (main shell, subshells, background processes, etc.)
+
+# Add Docker to PATH if not already present (macOS Docker Desktop)
+if ! command -v docker &>/dev/null; then
+    # Common Docker Desktop locations
+    if [ -d "/Applications/Docker.app/Contents/Resources/bin" ]; then
+        export PATH="/Applications/Docker.app/Contents/Resources/bin:$PATH"
+    fi
+    # Homebrew location
+    if [ -d "/usr/local/bin" ]; then
+        export PATH="/usr/local/bin:$PATH"
+    fi
+    # Homebrew (Apple Silicon)
+    if [ -d "/opt/homebrew/bin" ]; then
+        export PATH="/opt/homebrew/bin:$PATH"
+    fi
+fi
+
+# =============================================================================
+# LOAD NATO COUNTRIES DATABASE (SSOT for port offsets)
+# =============================================================================
 # FIXED (Dec 2025): Load NATO database early so get_instance_ports can use it
 # This must be loaded BEFORE get_instance_ports is called
 # FIX (Dec 2025): Associative arrays can't be exported, so check if array
