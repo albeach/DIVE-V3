@@ -10,7 +10,7 @@
 # =============================================================================
 
 # Prevent multiple sourcing
-[ -n "$COMPOSE_PARSER_LOADED" ] && return 0
+[ -n "${COMPOSE_PARSER_LOADED:-}" ] && return 0
 export COMPOSE_PARSER_LOADED=1
 
 # =============================================================================
@@ -18,7 +18,7 @@ export COMPOSE_PARSER_LOADED=1
 # =============================================================================
 
 # Ensure common functions loaded
-if [ -z "$DIVE_COMMON_LOADED" ]; then
+if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     PARSER_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     MODULES_DIR="$(cd "$PARSER_DIR/.." && pwd)"
     if [ -f "${MODULES_DIR}/common.sh" ]; then

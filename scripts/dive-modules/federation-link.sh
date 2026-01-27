@@ -10,13 +10,13 @@
 # =============================================================================
 
 # Ensure common functions are loaded
-if [ -z "$DIVE_COMMON_LOADED" ]; then
+if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
     export DIVE_COMMON_LOADED=1
 fi
 
 # Load federation-setup for admin token helpers
-if [ -z "$DIVE_FEDERATION_SETUP_LOADED" ]; then
+if [ -z "${DIVE_FEDERATION_SETUP_LOADED:-}" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/federation-setup.sh"
     export DIVE_FEDERATION_SETUP_LOADED=1
 fi
@@ -1825,7 +1825,7 @@ federation_sync_secrets() {
     fi
 
     # Load spoke module for spoke_sync_federation_secrets function
-    if [ -z "$DIVE_SPOKE_LOADED" ]; then
+    if [ -z "${DIVE_SPOKE_LOADED:-}" ]; then
         source "$(dirname "${BASH_SOURCE[0]}")/deployment/spoke.sh" 2>/dev/null || true
     fi
 

@@ -16,7 +16,7 @@
 # =============================================================================
 
 # Prevent multiple sourcing
-if [ -n "$SPOKE_PHASE_CONFIGURATION_LOADED" ]; then
+if [ -n "${SPOKE_PHASE_CONFIGURATION_LOADED:-}" ]; then
     return 0
 fi
 export SPOKE_PHASE_CONFIGURATION_LOADED=1

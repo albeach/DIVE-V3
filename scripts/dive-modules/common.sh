@@ -176,7 +176,7 @@ export POSTGRES_VERSION="15"
 # FIX (Dec 2025): Associative arrays can't be exported, so check if array
 # is actually populated, not just if the flag is set.
 # Also handle case where BASH_SOURCE is empty by using DIVE_ROOT fallback.
-if [ -z "$NATO_COUNTRIES_LOADED" ] || [ "${#NATO_COUNTRIES[@]}" -eq 0 ] 2>/dev/null; then
+if [ -z "${NATO_COUNTRIES_LOADED:-}" ] || [ "${#NATO_COUNTRIES[@]}" -eq 0 ] 2>/dev/null; then
     if [ -n "${BASH_SOURCE[0]}" ]; then
         _NATO_DB_PATH="$(dirname "${BASH_SOURCE[0]}")/../nato-countries.sh"
     elif [ -n "$DIVE_ROOT" ]; then
@@ -980,7 +980,7 @@ _get_spoke_ports() {
     code_lc=$(echo "$code" | tr '[:upper:]' '[:lower:]')
 
     # Load NATO country data to get port offsets
-    if [ -z "$NATO_COUNTRIES_LOADED" ]; then
+    if [ -z "${NATO_COUNTRIES_LOADED:-}" ]; then
         source "$(dirname "${BASH_SOURCE[0]}")/../nato-countries.sh" 2>/dev/null || true
         export NATO_COUNTRIES_LOADED=1
     fi

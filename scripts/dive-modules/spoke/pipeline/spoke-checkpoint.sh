@@ -21,7 +21,7 @@
 # =============================================================================
 
 # Prevent multiple sourcing
-if [ -n "$SPOKE_CHECKPOINT_LOADED" ]; then
+if [ -n "${SPOKE_CHECKPOINT_LOADED:-}" ]; then
     return 0
 fi
 export SPOKE_CHECKPOINT_LOADED=1

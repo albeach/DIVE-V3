@@ -14,7 +14,7 @@
 # =============================================================================
 
 # Prevent multiple sourcing
-if [ -n "$FEDERATION_DRIFT_DETECTION_LOADED" ]; then
+if [ -n "${FEDERATION_DRIFT_DETECTION_LOADED:-}" ]; then
     return 0
 fi
 export FEDERATION_DRIFT_DETECTION_LOADED=1

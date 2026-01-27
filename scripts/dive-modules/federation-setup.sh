@@ -19,13 +19,13 @@
 # =============================================================================
 
 # Ensure common functions are loaded
-if [ -z "$DIVE_COMMON_LOADED" ]; then
+if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
     export DIVE_COMMON_LOADED=1
 fi
 
 # Load NATO countries database for port offsets
-if [ -z "$NATO_COUNTRIES_LOADED" ]; then
+if [ -z "${NATO_COUNTRIES_LOADED:-}" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/../nato-countries.sh" 2>/dev/null || true
     export NATO_COUNTRIES_LOADED=1
 fi
