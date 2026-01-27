@@ -343,7 +343,11 @@ spoke_containers_start() {
 
     # Wait for OPAL Client to be healthy (may take longer due to policy sync)
     log_verbose "Waiting for OPAL Client to be healthy..."
-    spoke_containers_wait_for_services "$instance_code" "opal-client-${code_lower}" 120
+    if ! spoke_containers_wait_for_services "$instance_code" "opal-client-${code_lower}" 120; then
+        log_warn "OPAL Client did not become healthy - deployment will continue but policy enforcement may not work"
+        log_warn "Check OPAL logs: ./dive spoke logs FRA opal-client"
+        # Non-blocking: OPAL is important but spoke can function without it initially
+    fi
 
     # Stage 3: Start Keycloak (depends on postgres)
     log_verbose "Stage 3: Starting Keycloak..."
