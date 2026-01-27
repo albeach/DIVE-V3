@@ -95,7 +95,7 @@ orch_db_check_connection() {
     fi
 
     # Use docker exec for reliable connection (no need for exposed ports)
-    docker exec dive-hub-postgres psql -U postgres -d orchestration -c "SELECT 1" >/dev/null 2>&1
+    ${DOCKER_CMD:-docker} exec dive-hub-postgres psql -U postgres -d orchestration -c "SELECT 1" >/dev/null 2>&1
 }
 
 ##
@@ -118,7 +118,7 @@ orch_db_exec() {
     # Use docker exec for reliable execution
     # CRITICAL: Don't suppress stderr - we need to see actual errors
     # Note: psql outputs "BEGIN" and "COMMIT" on stdout which is normal
-    docker exec dive-hub-postgres psql -U postgres -d orchestration -t -c "$query" 2>&1
+    ${DOCKER_CMD:-docker} exec dive-hub-postgres psql -U postgres -d orchestration -t -c "$query" 2>&1
     
     # Return psql exit code directly
     return $?
@@ -141,7 +141,7 @@ orch_db_exec_json() {
     fi
 
     # Use docker exec with JSON output
-    docker exec dive-hub-postgres psql -U postgres -d orchestration -t -c "COPY ($query) TO STDOUT WITH (FORMAT json)" 2>/dev/null || return 1
+    ${DOCKER_CMD:-docker} exec dive-hub-postgres psql -U postgres -d orchestration -t -c "COPY ($query) TO STDOUT WITH (FORMAT json)" 2>/dev/null || return 1
 }
 
 # =============================================================================
@@ -1175,7 +1175,7 @@ orch_db_init_schema() {
     if [ "$existing_tables" -ge 8 ]; then
         log_verbose "✓ Schema already initialized ($existing_tables/8 tables exist)"
         # Release lock and return success
-        docker exec dive-hub-postgres psql -U postgres -d orchestration -c \
+        ${DOCKER_CMD:-docker} exec dive-hub-postgres psql -U postgres -d orchestration -c \
             "SELECT pg_advisory_unlock($schema_lock_id);" >/dev/null 2>&1 || true
         return 0
     fi
@@ -1188,9 +1188,9 @@ orch_db_init_schema() {
     local migration_exit_code=0
 
     # Copy migration file to container and execute
-    docker cp "$migration_file" dive-hub-postgres:/tmp/migration.sql 2>/dev/null || {
+    ${DOCKER_CMD:-docker} cp "$migration_file" dive-hub-postgres:/tmp/migration.sql 2>/dev/null || {
         log_error "Failed to copy migration file to container"
-        docker exec dive-hub-postgres psql -U postgres -d orchestration -c \
+        ${DOCKER_CMD:-docker} exec dive-hub-postgres psql -U postgres -d orchestration -c \
             "SELECT pg_advisory_unlock($schema_lock_id);" >/dev/null 2>&1 || true
         return 1
     }
@@ -1198,7 +1198,7 @@ orch_db_init_schema() {
     migration_output=$(docker exec dive-hub-postgres psql -U postgres -d orchestration -f /tmp/migration.sql 2>&1) || migration_exit_code=$?
 
     # Cleanup temp file
-    docker exec dive-hub-postgres rm -f /tmp/migration.sql 2>/dev/null || true
+    ${DOCKER_CMD:-docker} exec dive-hub-postgres rm -f /tmp/migration.sql 2>/dev/null || true
 
     # ==========================================================================
     # Step 5: Post-flight validation
@@ -1213,7 +1213,7 @@ orch_db_init_schema() {
                             'orchestration_metrics', 'checkpoints');" 2>/dev/null | xargs)
 
     # Release advisory lock
-    docker exec dive-hub-postgres psql -U postgres -d orchestration -c \
+    ${DOCKER_CMD:-docker} exec dive-hub-postgres psql -U postgres -d orchestration -c \
         "SELECT pg_advisory_unlock($schema_lock_id);" >/dev/null 2>&1 || true
     log_verbose "✓ Advisory lock released"
 
@@ -1249,14 +1249,14 @@ orch_db_schema_preflight_check() {
     fi
 
     # Check database accepts connections (pg_isready)
-    if ! docker exec dive-hub-postgres pg_isready -U postgres -d orchestration >/dev/null 2>&1; then
+    if ! ${DOCKER_CMD:-docker} exec dive-hub-postgres pg_isready -U postgres -d orchestration >/dev/null 2>&1; then
         log_verbose "Database not ready, waiting..."
         local retry_count=0
         local max_retries=10
         while [ $retry_count -lt $max_retries ]; do
             sleep 1
             ((retry_count++))
-            if docker exec dive-hub-postgres pg_isready -U postgres -d orchestration >/dev/null 2>&1; then
+            if ${DOCKER_CMD:-docker} exec dive-hub-postgres pg_isready -U postgres -d orchestration >/dev/null 2>&1; then
                 break
             fi
         done
@@ -1274,7 +1274,7 @@ orch_db_schema_preflight_check() {
 
     if [ "$db_exists" != "1" ]; then
         log_verbose "Creating orchestration database..."
-        docker exec dive-hub-postgres psql -U postgres -c "CREATE DATABASE orchestration;" >/dev/null 2>&1 || {
+        ${DOCKER_CMD:-docker} exec dive-hub-postgres psql -U postgres -c "CREATE DATABASE orchestration;" >/dev/null 2>&1 || {
             log_error "Failed to create orchestration database"
             return 1
         }
@@ -1560,7 +1560,7 @@ orch_db_rollback_state() {
 }
 
 # Note: Database password not needed when using docker exec
-# Connection happens via docker exec dive-hub-postgres, not TCP connection
+# Connection happens via ${DOCKER_CMD:-docker} exec dive-hub-postgres, not TCP connection
 
 # Log module load
 if [ "$ORCH_DB_ENABLED" = "true" ]; then
