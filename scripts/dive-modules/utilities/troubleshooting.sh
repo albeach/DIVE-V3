@@ -112,8 +112,8 @@ diagnose_federation() {
     echo ""
 
     # Get configuration
-    local ports=$(get_instance_ports "$instance_code" 2>/dev/null)
-    local kc_port=$(echo "$ports" | jq -r '.keycloak // 8443')
+    eval "$(get_instance_ports "$instance_code" 2>/dev/null)"
+    local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
     local spoke_url="https://localhost:${kc_port}"
     local spoke_realm="dive-v3-broker-${code_lower}"
 

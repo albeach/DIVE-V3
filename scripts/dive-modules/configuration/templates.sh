@@ -48,12 +48,15 @@ generate_compose_file() {
     local code_lower=$(lower "$instance_code")
 
     # Get ports
-    local ports=$(get_instance_ports "$code_upper" 2>/dev/null || echo '{}')
-    local kc_port=$(echo "$ports" | jq -r '.keycloak // 8443')
-    local be_port=$(echo "$ports" | jq -r '.backend // 4000')
-    local fe_port=$(echo "$ports" | jq -r '.frontend // 3000')
-    local pg_port=$(echo "$ports" | jq -r '.postgres // 5432')
-    local mongo_port=$(echo "$ports" | jq -r '.mongodb // 27017')
+    eval "$(get_instance_ports "$code_upper" 2>/dev/null)" || {
+        log_error "Failed to get ports for $code_upper"
+        return 1
+    }
+    local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
+    local be_port="${SPOKE_BACKEND_PORT:-4000}"
+    local fe_port="${SPOKE_FRONTEND_PORT:-3000}"
+    local pg_port="${SPOKE_POSTGRES_PORT:-5432}"
+    local mongo_port="${SPOKE_MONGODB_PORT:-27017}"
 
     log_info "Generating docker-compose.yml for $code_upper..."
 
@@ -339,19 +342,34 @@ generate_config_file() {
     local code_upper=$(upper "$instance_code")
     local code_lower=$(lower "$instance_code")
 
-    local ports=$(get_instance_ports "$code_upper" 2>/dev/null || echo '{}')
+    # Get ports via eval (not JSON)
+    eval "$(get_instance_ports "$code_upper" 2>/dev/null)" || {
+        log_error "Failed to get ports for $code_upper"
+        return 1
+    }
 
     log_info "Generating config.json for $code_upper..."
 
     mkdir -p "$output_dir"
 
+    # Build JSON manually (get_instance_ports doesn't return JSON)
     cat > "${output_dir}/config.json" << EOF
 {
   "instance_code": "${code_upper}",
   "instance_name": "${instance_name}",
   "created": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
   "version": "5.0.0",
-  "ports": $(echo "$ports" | jq -c '.'),
+  "ports": {
+    "frontend": ${SPOKE_FRONTEND_PORT:-3000},
+    "backend": ${SPOKE_BACKEND_PORT:-4000},
+    "keycloak_https": ${SPOKE_KEYCLOAK_HTTPS_PORT:-8443},
+    "keycloak_http": ${SPOKE_KEYCLOAK_HTTP_PORT:-8100},
+    "postgres": ${SPOKE_POSTGRES_PORT:-5432},
+    "mongodb": ${SPOKE_MONGODB_PORT:-27017},
+    "redis": ${SPOKE_REDIS_PORT:-6379},
+    "opa": ${SPOKE_OPA_PORT:-9100},
+    "kas": ${SPOKE_KAS_PORT:-10000}
+  },
   "realm": "dive-v3-broker-${code_lower}",
   "hub_url": "https://localhost:8443",
   "federation": {
