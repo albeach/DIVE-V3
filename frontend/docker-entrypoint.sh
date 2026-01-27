@@ -25,11 +25,16 @@ echo "[Entrypoint] DIVE V3 Frontend starting..."
 #   4. Node.js fetch() (with --use-openssl-ca) now trusts mkcert certs
 #
 
-if [ -f "/app/certs/ca/rootCA.pem" ]; then
+# Standardized CA location: /app/certs/ca/rootCA.pem
+# This is the single source of truth for mkcert CA in all containers
+CA_PATH="/app/certs/ca/rootCA.pem"
+
+if [ -f "$CA_PATH" ]; then
     echo "[Entrypoint] Installing mkcert CA into system trust store..."
+    echo "[Entrypoint] Found CA at: $CA_PATH"
 
     # Copy CA to system directory (must be .crt extension for Alpine)
-    cp /app/certs/ca/rootCA.pem /usr/local/share/ca-certificates/mkcert-dev-ca.crt
+    cp "$CA_PATH" /usr/local/share/ca-certificates/mkcert-dev-ca.crt
 
     # Update system CA bundle
     update-ca-certificates
@@ -37,8 +42,9 @@ if [ -f "/app/certs/ca/rootCA.pem" ]; then
     echo "[Entrypoint] ✓ mkcert CA installed successfully"
     echo "[Entrypoint] Node.js fetch() will now trust self-signed certificates"
 else
-    echo "[Entrypoint] ⚠️  mkcert CA not found at /app/certs/ca/rootCA.pem"
+    echo "[Entrypoint] ⚠️  mkcert CA not found at: $CA_PATH"
     echo "[Entrypoint] TLS verification may fail for self-signed certificates"
+    echo "[Entrypoint] Expected mount: ./certs/mkcert:/app/certs/ca:ro"
 fi
 
 # =============================================================================

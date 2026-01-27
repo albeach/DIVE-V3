@@ -6,6 +6,14 @@ import { eq } from "drizzle-orm";
 import { clearAccountTokensByUserId, updateAccountTokensByUserId } from "@/lib/db/operations";
 
 /**
+ * BEST PRACTICE: Configure NextAuth to use secure fetch for OIDC provider calls
+ *
+ * NextAuth v5 uses native fetch() which respects NODE_OPTIONS="--use-openssl-ca"
+ * The entrypoint script installs mkcert CA into system trust store
+ * Certificates include both localhost and keycloak (Docker service name) as SANs
+ */
+
+/**
  * Email domain to country mapping for enrichment
  * Week 3: Infer countryOfAffiliation from email domain
  * Phase 3: Added DEU, GBR, ITA, ESP, POL, NLD NATO partners
@@ -248,6 +256,16 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             // Only log debug in development
             if (process.env.NODE_ENV === 'development') {
                 console.log('[NextAuth Debug]', code, message);
+                // Enhanced logging for OAuth token exchange
+                if (typeof code === 'string' && code.includes('token')) {
+                    console.log('[NextAuth Debug Token]', {
+                        code,
+                        message,
+                        clientId: process.env.KEYCLOAK_CLIENT_ID,
+                        hasClientSecret: !!process.env.KEYCLOAK_CLIENT_SECRET,
+                        tokenUrl: `${process.env.KEYCLOAK_BASE_URL || process.env.KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/token`,
+                    });
+                }
             }
         },
     },
@@ -267,7 +285,9 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             // to fetch the config from the internal URL.
             issuer: process.env.AUTH_KEYCLOAK_ISSUER || `${process.env.NEXT_PUBLIC_KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}`,
             // Use wellKnown to fetch OIDC config from internal Docker URL
-            wellKnown: `${process.env.KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/.well-known/openid-configuration`,
+            // CRITICAL: Use KEYCLOAK_BASE_URL (internal Docker network) for server-side calls
+            // KEYCLOAK_URL may be set to external localhost URL which causes TLS verification errors
+            wellKnown: `${process.env.KEYCLOAK_BASE_URL || process.env.KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/.well-known/openid-configuration`,
             authorization: {
                 // Authorization URL must be the external URL (browser redirect)
                 url: `${process.env.NEXT_PUBLIC_KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/auth`,
@@ -275,10 +295,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     scope: "openid profile email",
                 }
             },
-            // Token and userinfo endpoints are called server-side, use internal KEYCLOAK_URL
-            token: `${process.env.KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/token`,
-            userinfo: `${process.env.KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/userinfo`,
-            jwks_endpoint: `${process.env.KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/certs`,
+            // Token and userinfo endpoints are called server-side, use internal KEYCLOAK_BASE_URL
+            // CRITICAL FIX: Use KEYCLOAK_BASE_URL (internal Docker network) to avoid TLS certificate errors
+            // KEYCLOAK_URL may be set to external localhost URL which fails TLS verification from inside container
+            token: `${process.env.KEYCLOAK_BASE_URL || process.env.KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/token`,
+            userinfo: `${process.env.KEYCLOAK_BASE_URL || process.env.KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/userinfo`,
+            jwks_endpoint: `${process.env.KEYCLOAK_BASE_URL || process.env.KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/certs`,
             profile(profile) {
                 // Log profile in development only
                 if (process.env.NODE_ENV === 'development') {
@@ -1005,33 +1027,33 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             });
 
             // CRITICAL FIX (2026-01-24): Federation Account Linking
-            // 
+            //
             // PROBLEM: When user authenticates via different federated IdPs, NextAuth throws
             // OAuthAccountNotLinked error if a user with same email already exists.
-            // 
+            //
             // SCENARIO:
             //   1. User logs in via fra-idp (creates user in DB)
             //   2. Admin deletes Keycloak user but not DB user
             //   3. User tries to log in again via fra-idp
             //   4. NextAuth sees email exists but can't link (different providerAccountId)
             //   5. Error: OAuthAccountNotLinked
-            // 
+            //
             // BEST PRACTICE SOLUTION:
             // For federated users (broker realm), automatically link accounts if:
             //   - Same email address
             //   - Same provider (keycloak)
             //   - User authenticated successfully (we're in signIn callback)
-            // 
+            //
             // This is SAFE for federated scenarios because:
             //   ✅ Keycloak broker handles authentication (verified identity)
             //   ✅ User must have valid credentials at IdP
             //   ✅ Email verified by broker realm
             //   ✅ No account hijacking risk (user owns the email)
-            // 
+            //
             // FEDERATION-SPECIFIC: This enables users to authenticate via multiple
             // federated IdPs (fra-idp, gbr-idp, deu-idp) with same email address
             // without manual account linking.
-            // 
+            //
             // Security: Only enabled for provider='keycloak' (federated broker)
             if (account?.provider === 'keycloak' && user?.email) {
                 try {

@@ -546,9 +546,34 @@ orch_acquire_deployment_lock() {
                 log_error "  ./dive spoke clean-locks $instance_code"
                 return 1
             else
+                # Provide detailed diagnostics
                 log_error "FATAL: Orchestration database unavailable"
-                log_error "  → Deployment cannot proceed without database"
-                log_error "  → Ensure Hub is running: ./dive hub up"
+
+                # Check container status
+                if docker ps --format '{{.Names}}' | grep -q "^dive-hub-postgres$"; then
+                    log_error "  → Container dive-hub-postgres is running"
+                    # Check PostgreSQL readiness
+                    if docker exec dive-hub-postgres pg_isready -U postgres >/dev/null 2>&1; then
+                        log_error "  → PostgreSQL is ready"
+                        # Check database exists
+                        local db_exists
+                        db_exists=$(docker exec dive-hub-postgres psql -U postgres -t -c \
+                            "SELECT 1 FROM pg_database WHERE datname = 'orchestration';" 2>/dev/null | xargs)
+                        if [ "$db_exists" = "1" ]; then
+                            log_error "  → Database 'orchestration' exists"
+                            log_error "  → Connection test failed - check PostgreSQL logs"
+                        else
+                            log_error "  → Database 'orchestration' does not exist"
+                            log_error "  → Run: ./dive hub init-db"
+                        fi
+                    else
+                        log_error "  → PostgreSQL is not ready (waiting for initialization)"
+                        log_error "  → Wait a few seconds and retry"
+                    fi
+                else
+                    log_error "  → Container dive-hub-postgres is not running"
+                    log_error "  → Start Hub: ./dive hub up"
+                fi
                 return 1
             fi
         fi

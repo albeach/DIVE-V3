@@ -26,29 +26,20 @@ export function getSecureHttpsAgent(): https.Agent {
         return cachedAgent;
     }
 
-    const caLocations = [
-        // Docker container mount point
-        '/app/certs/ca/rootCA.pem',
-        // Alternative container mount
-        '/etc/ssl/certs/mkcert-rootCA.pem',
-        // Local development (relative to frontend)
-        path.join(process.cwd(), '../certs/mkcert/rootCA.pem'),
-        // Workspace root
-        path.join(process.cwd(), '../../certs/mkcert/rootCA.pem'),
-    ];
-
+    // Standardized CA location: /app/certs/ca/rootCA.pem
+    // This is the single source of truth for mkcert CA in all containers
+    // Mount: ./certs/mkcert:/app/certs/ca:ro
+    const CA_PATH = '/app/certs/ca/rootCA.pem';
     let caBundle: Buffer | undefined;
 
-    for (const caPath of caLocations) {
-        try {
-            if (fs.existsSync(caPath)) {
-                caBundle = fs.readFileSync(caPath);
-                console.log(`[HTTPS] Loaded mkcert root CA from: ${caPath}`);
-                break;
-            }
-        } catch {
-            // Continue to next location
+    try {
+        if (fs.existsSync(CA_PATH)) {
+            caBundle = fs.readFileSync(CA_PATH);
+            console.log(`[HTTPS] Loaded mkcert root CA from: ${CA_PATH}`);
         }
+    } catch (error) {
+        // CA not found - will fall back to system CAs
+        console.warn(`[HTTPS] mkcert CA not found at ${CA_PATH}`);
     }
 
     if (caBundle) {

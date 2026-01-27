@@ -803,11 +803,11 @@ spoke_config_register_in_registries() {
     # HONEST reporting based on actual results
     if [ "$kas_registered" = true ]; then
         log_success "Registry updates complete (KAS: ✓ registered)"
-        echo "  ✓ federation-registry.json updated (enables federated search)"
+        echo "  ✓ Federation registered in MongoDB (enables federated search)"
         echo "  ✓ MongoDB kas_registry verified (ZTDF encryption enabled)"
     else
         log_success "Registry updates complete (KAS: not registered)"
-        echo "  ✓ federation-registry.json updated (enables federated search)"
+        echo "  ✓ Federation registered in MongoDB (enables federated search)"
         echo "  ℹ MongoDB kas_registry NOT updated - spoke will use Hub resources"
         echo "  • This is NORMAL for spoke deployments"
         echo "  • ZTDF encryption requires KAS (optional feature)"

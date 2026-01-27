@@ -229,14 +229,24 @@ EOF
         log_warn "IdP may already exist or failed: $response"
     fi
 
-    # Step 4: Register in database
+    # Step 4: Register in database (database-driven, not JSON)
     log_info "Step 4: Recording federation in database..."
-    if type orch_db_exec &>/dev/null; then
+    if type fed_db_upsert_link &>/dev/null; then
+        if fed_db_upsert_link "${code_lower}" "usa" "SPOKE_TO_HUB" "${idp_alias}" "ACTIVE" \
+            "dive-v3-broker-${code_lower}"; then
+            log_verbose "✓ Federation link recorded in database: ${code_lower} → usa"
+        else
+            log_warn "Database recording failed (federation will still work, but state tracking limited)"
+        fi
+    elif type orch_db_exec &>/dev/null; then
+        # Fallback to direct SQL if fed_db_upsert_link not available
         orch_db_exec "
             INSERT INTO federation_links (source_code, target_code, direction, idp_alias, status, created_at)
             VALUES ('${code_lower}', 'usa', 'SPOKE_TO_HUB', '${idp_alias}', 'ACTIVE', NOW())
             ON CONFLICT (source_code, target_code, direction) DO UPDATE SET status='ACTIVE', updated_at=NOW()
         " >/dev/null 2>&1 || log_warn "Database recording failed (orch_db_exec not available)"
+    else
+        log_warn "Database functions not available - federation state not tracked"
     fi
 
     log_success "Federation link created for $code_upper"

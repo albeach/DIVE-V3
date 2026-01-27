@@ -269,20 +269,20 @@ spoke_logs() {
         # Service names in docker-compose are: {service}-{code_lower} (e.g., "opal-client-fra")
         local compose_service_name="${service}-${code_lower}"
         local container_name="dive-spoke-${code_lower}-${service}"
-        
+
         # First, try docker compose logs (works for services defined in compose file)
         # Check if service exists in compose file first
         if docker compose config --services 2>/dev/null | grep -q "^${compose_service_name}$"; then
             docker compose logs -f "$compose_service_name" 2>&1
             return $?
         fi
-        
+
         # Fallback: Try direct container logs (works for both running and stopped containers)
         if docker ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^${container_name}$"; then
             docker logs -f "$container_name" 2>&1
             return $?
         fi
-        
+
         # If all else fails, show helpful error
         log_error "Service '$service' not found for spoke $code_upper"
         log_info "Available services: postgres, mongodb, redis, keycloak, opa, opal-client, backend, kas, frontend"

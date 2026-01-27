@@ -830,14 +830,47 @@ spoke_checkpoint_deployment() {
         log_verbose "MongoDB password not available, skipping PRIMARY check"
     fi
 
-    # Check all containers healthy
-    local unhealthy=$(docker ps --filter "name=dive-spoke-${code_lower}-" \
-        --format "{{.Names}}\t{{.Status}}" | grep -v "healthy" | wc -l | tr -d ' ')
+    # Check CORE containers healthy (OPTIONAL services like OPAL client can be unhealthy)
+    # Phase 1 Sprint 1.2: Use dynamic service discovery instead of hardcoded list
+    local core_services=($(compose_get_spoke_services_by_class "$instance_code" "core" 2>/dev/null || echo ""))
+    local unhealthy_core=0
+    local unhealthy_optional=0
 
-    if [ "$unhealthy" != "0" ]; then
-        log_error "Checkpoint FAILED: $unhealthy containers not healthy"
+    # Check each CORE service individually
+    for service in "${core_services[@]}"; do
+        local container="dive-spoke-${code_lower}-${service}"
+        local health_status=$(docker inspect "$container" --format '{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+        
+        if [ "$health_status" != "healthy" ]; then
+            ((unhealthy_core++))
+            log_verbose "CORE service $service is not healthy: $health_status"
+        fi
+    done
+
+    # Count OPTIONAL services that are unhealthy (for logging only)
+    local optional_services=($(compose_get_spoke_services_by_class "$instance_code" "optional" 2>/dev/null || echo ""))
+    for service in "${optional_services[@]}"; do
+        local container="dive-spoke-${code_lower}-${service}"
+        local health_status=$(docker inspect "$container" --format '{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+        
+        if [ "$health_status" != "healthy" ]; then
+            ((unhealthy_optional++))
+            log_verbose "OPTIONAL service $service is not healthy: $health_status (non-blocking)"
+        fi
+    done
+
+    # Only fail if CORE services are unhealthy
+    if [ "$unhealthy_core" != "0" ]; then
+        log_error "Checkpoint FAILED: $unhealthy_core CORE containers not healthy"
         docker ps --filter "name=dive-spoke-${code_lower}-" --format "table {{.Names}}\t{{.Status}}"
         return 1
+    fi
+
+    # Log OPTIONAL service health issues but don't fail
+    if [ "$unhealthy_optional" != "0" ]; then
+        log_verbose "Checkpoint passed: $unhealthy_optional OPTIONAL services not healthy (non-blocking)"
+        log_verbose "OPTIONAL services (like OPAL client) can be unhealthy during deployment"
+        log_verbose "They will be provisioned/configured in the configuration phase"
     fi
 
     log_verbose "✓ Deployment checkpoint passed"

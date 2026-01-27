@@ -64,8 +64,26 @@ FED_DB_RETRY_DELAY="${FED_DB_RETRY_DELAY:-5}"
 fed_db_init_schema() {
     log_info "Initializing federation database schema..."
 
+    # ==========================================================================
+    # ARCHITECTURE CLARIFICATION:
+    # ==========================================================================
+    # Federation schema is initialized ONCE during Hub deployment (hub.sh:1265-1273)
+    # This is a Hub-level PostgreSQL database (orchestration), NOT per-spoke.
+    # All spokes share this same database to track their federation state.
+    #
+    # There are TWO federation state systems:
+    # 1. PostgreSQL (orchestration DB): Deployment/orchestration state
+    #    - federation_links: Keycloak IdP configuration state
+    #    - federation_health: Health check history
+    #    - federation_operations: Audit trail
+    # 2. MongoDB (application DB): Runtime/application state
+    #    - federation_spokes: Spoke registration and heartbeat
+    #    - federation_tokens: Spoke authentication tokens
+    # ==========================================================================
+
     if ! orch_db_check_connection; then
         log_error "Database not available for federation schema initialization"
+        log_error "This requires Hub PostgreSQL (dive-hub-postgres) to be running"
         return 1
     fi
 
@@ -76,12 +94,44 @@ fed_db_init_schema() {
         return 1
     fi
 
-    # Execute schema file
-    if docker exec -i dive-hub-postgres psql -U postgres -d orchestration < "$schema_file" >/dev/null 2>&1; then
+    # Check if schema already exists (idempotent check)
+    if fed_db_schema_exists; then
+        if [ "${VERBOSE:-false}" = "true" ]; then
+            log_verbose "Federation schema already exists (initialized during Hub deployment)"
+            log_verbose "Database: orchestration (PostgreSQL) in dive-hub-postgres"
+            log_verbose "Tables: federation_links, federation_health, federation_operations"
+        fi
+        return 0
+    fi
+
+    # Execute schema file with verbose logging if enabled
+    local output_redirect
+    if [ "${VERBOSE:-false}" = "true" ]; then
+        output_redirect=""
+        log_verbose "Applying federation schema to Hub PostgreSQL..."
+        log_verbose "Schema file: $schema_file"
+        log_verbose "Database: orchestration (PostgreSQL)"
+        log_verbose "Container: dive-hub-postgres"
+    else
+        output_redirect=">/dev/null 2>&1"
+    fi
+
+    if eval "docker exec -i dive-hub-postgres psql -U postgres -d orchestration < \"$schema_file\" $output_redirect"; then
         log_success "Federation schema initialized"
+        if [ "${VERBOSE:-false}" = "true" ]; then
+            log_verbose "✓ Created tables: federation_links, federation_health, federation_operations"
+            log_verbose "✓ This tracks Keycloak IdP configuration state (deployment/orchestration layer)"
+            log_verbose "✓ Runtime spoke registration is in MongoDB federation_spokes collection"
+        fi
         return 0
     else
         log_error "Failed to initialize federation schema"
+        if [ "${VERBOSE:-false}" = "true" ]; then
+            log_error "Schema file: $schema_file"
+            log_error "Database: orchestration (PostgreSQL)"
+            log_error "Container: dive-hub-postgres"
+            log_error "Check Hub PostgreSQL logs: docker logs dive-hub-postgres"
+        fi
         return 1
     fi
 }
@@ -209,7 +259,17 @@ fed_db_update_status() {
     target_code=$(lower "$target_code")
 
     if ! orch_db_check_connection; then
+        log_verbose "Database not available for federation status update"
         return 1
+    fi
+
+    # Ensure federation schema exists
+    if ! fed_db_schema_exists; then
+        log_verbose "Federation schema not initialized, initializing now..."
+        if ! fed_db_init_schema; then
+            log_verbose "Failed to initialize federation schema"
+            return 1
+        fi
     fi
 
     # Escape error message
@@ -227,17 +287,29 @@ fed_db_update_status() {
     # Update retry count based on status
     local retry_clause=""
     if [ "$status" = "FAILED" ]; then
-        retry_clause=", retry_count = retry_count + 1"
+        retry_clause=", retry_count = COALESCE(retry_count, 0) + 1"
     elif [ "$status" = "ACTIVE" ]; then
         retry_clause=", retry_count = 0, last_verified_at = NOW()"
     fi
 
+    # Use UPSERT (INSERT ... ON CONFLICT) to handle case where link doesn't exist yet
+    # This ensures we can update status even if the link was created in a different step
+    local idp_alias="${source_code}-idp"
+    if [ "$direction" = "HUB_TO_SPOKE" ]; then
+        idp_alias="${target_code}-idp"
+    elif [ "$direction" = "SPOKE_TO_HUB" ]; then
+        idp_alias="usa-idp"
+    fi
+
     local sql="
-UPDATE federation_links
-SET status = '$status', updated_at = NOW() $error_clause $retry_clause
-WHERE source_code = '$source_code'
-  AND target_code = '$target_code'
-  AND direction = '$direction';
+INSERT INTO federation_links (source_code, target_code, direction, idp_alias, status, updated_at $([ -n "$error_message" ] && echo ", error_message") $([ -n "$error_code" ] && echo ", last_error_code"))
+VALUES ('$source_code', '$target_code', '$direction', '$idp_alias', '$status', NOW() $([ -n "$error_message" ] && echo ", '$escaped_error'") $([ -n "$error_code" ] && echo ", '$error_code'"))
+ON CONFLICT (source_code, target_code, direction)
+DO UPDATE SET
+    status = EXCLUDED.status,
+    updated_at = NOW()
+    $error_clause
+    $retry_clause;
 "
 
     if orch_db_exec "$sql" >/dev/null 2>&1; then
