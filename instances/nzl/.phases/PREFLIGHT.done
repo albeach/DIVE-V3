@@ -1,9 +1,9 @@
 {
   "phase": "PREFLIGHT",
   "instance_code": "NZL",
-  "completed_at": "2026-01-27T18:08:44Z",
+  "completed_at": "2026-01-27T18:22:47Z",
   "hostname": "MacBook-Pro-3.local",
   "user": "aubreybeach",
-  "duration_seconds": 12,
+  "duration_seconds": 11,
   "metadata": {}
 }

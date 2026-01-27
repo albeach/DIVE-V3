@@ -451,14 +451,30 @@ EOF
                     # Set placeholder token to prevent OPAL client from failing during deployment
                     # Real token will be provisioned in configuration phase after federation
                     local env_file="$spoke_dir/.env"
+                    # Set placeholder token to prevent OPAL client from failing during deployment
+                    # Real token will be provisioned in configuration phase after federation
+                    local env_file="$spoke_dir/.env"
                     if [ -f "$env_file" ]; then
-                        if ! grep -q "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null || \
-                           grep "^SPOKE_OPAL_TOKEN=$" "$env_file" >/dev/null 2>&1; then
-                            sed -i.bak "s|^SPOKE_OPAL_TOKEN=.*|SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision|" "$env_file" 2>/dev/null || \
-                            echo "SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision" >> "$env_file"
-                            rm -f "$env_file.bak" 2>/dev/null
+                        # Check if SPOKE_OPAL_TOKEN is empty or missing
+                        local current_token
+                        current_token=$(grep "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null | cut -d= -f2- | tr -d ' ' || echo "")
+                        
+                        if [ -z "$current_token" ] || [ "$current_token" = "" ]; then
+                            # Token is empty - set placeholder
+                            if grep -q "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null; then
+                                # Update existing empty line
+                                sed -i.bak "s|^SPOKE_OPAL_TOKEN=.*|SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision|" "$env_file"
+                                rm -f "$env_file.bak" 2>/dev/null
+                            else
+                                # Add new line
+                                echo "SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision" >> "$env_file"
+                            fi
                             log_verbose "✓ Set placeholder OPAL token (will be replaced in configuration phase)"
+                        else
+                            log_verbose "OPAL token already set (not empty)"
                         fi
+                    else
+                        log_warn ".env file not found - placeholder token will be set when .env is created"
                     fi
                 fi
             else
@@ -466,11 +482,16 @@ EOF
                 # Set placeholder token
                 local env_file="$spoke_dir/.env"
                 if [ -f "$env_file" ]; then
-                    if ! grep -q "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null || \
-                       grep "^SPOKE_OPAL_TOKEN=$" "$env_file" >/dev/null 2>&1; then
-                        sed -i.bak "s|^SPOKE_OPAL_TOKEN=.*|SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision|" "$env_file" 2>/dev/null || \
-                        echo "SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision" >> "$env_file"
-                        rm -f "$env_file.bak" 2>/dev/null
+                    local current_token
+                    current_token=$(grep "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null | cut -d= -f2- | tr -d ' ' || echo "")
+                    
+                    if [ -z "$current_token" ] || [ "$current_token" = "" ]; then
+                        if grep -q "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null; then
+                            sed -i.bak "s|^SPOKE_OPAL_TOKEN=.*|SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision|" "$env_file"
+                            rm -f "$env_file.bak" 2>/dev/null
+                        else
+                            echo "SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision" >> "$env_file"
+                        fi
                         log_verbose "✓ Set placeholder OPAL token (will be replaced in configuration phase)"
                     fi
                 fi
@@ -480,11 +501,16 @@ EOF
             # Set placeholder token
             local env_file="$spoke_dir/.env"
             if [ -f "$env_file" ]; then
-                if ! grep -q "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null || \
-                   grep "^SPOKE_OPAL_TOKEN=$" "$env_file" >/dev/null 2>&1; then
-                    sed -i.bak "s|^SPOKE_OPAL_TOKEN=.*|SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision|" "$env_file" 2>/dev/null || \
-                    echo "SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision" >> "$env_file"
-                    rm -f "$env_file.bak" 2>/dev/null
+                local current_token
+                current_token=$(grep "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null | cut -d= -f2- | tr -d ' ' || echo "")
+                
+                if [ -z "$current_token" ] || [ "$current_token" = "" ]; then
+                    if grep -q "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null; then
+                        sed -i.bak "s|^SPOKE_OPAL_TOKEN=.*|SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision|" "$env_file"
+                        rm -f "$env_file.bak" 2>/dev/null
+                    else
+                        echo "SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision" >> "$env_file"
+                    fi
                     log_verbose "✓ Set placeholder OPAL token (will be replaced in configuration phase)"
                 fi
             fi
