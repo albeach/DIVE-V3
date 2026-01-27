@@ -37,12 +37,9 @@ const IS_DOCKER = process.env.CONTAINER === 'docker' || fs.existsSync('/.dockere
 // Resolve paths differently for Docker vs local execution
 const BACKEND_ROOT = IS_DOCKER ? '/app' : path.resolve(__dirname, '../..');
 const PROJECT_ROOT = IS_DOCKER ? '/app' : path.resolve(__dirname, '../../..');
-const FEDERATION_REGISTRY_PATH = IS_DOCKER
-    ? '/app/config/federation-registry.json'
-    : path.join(PROJECT_ROOT, 'config/federation-registry.json');
-const KAS_REGISTRY_PATH = IS_DOCKER
-    ? '/app/config/kas-registry.json'
-    : path.join(PROJECT_ROOT, 'config/kas-registry.json');
+// REMOVED: JSON file paths - all data must come from MongoDB (SSOT)
+// Federation registry: MongoDB federation_spokes collection (via Hub API)
+// KAS registry: MongoDB kas_registry collection (via Hub API or local MongoDB)
 const SEED_LOG_DIR = path.join(BACKEND_ROOT, 'logs/seed');
 
 // Ensure log directory exists
@@ -1150,9 +1147,95 @@ EXAMPLES:
 // CONFIGURATION LOADERS
 // ============================================
 
-function loadFederationRegistry(): IFederationRegistry {
-    const content = fs.readFileSync(FEDERATION_REGISTRY_PATH, 'utf-8');
-    return JSON.parse(content);
+/**
+ * Load federation registry from MongoDB (SSOT) - NO JSON FILES
+ * 
+ * For Hub: Query local MongoDB federation_spokes collection
+ * For Spokes: Query Hub API /api/federation/spokes
+ */
+async function loadFederationRegistry(): Promise<IFederationRegistry> {
+    const instanceCode = process.env.INSTANCE_CODE || 'USA';
+    const isSpoke = instanceCode !== 'USA';
+
+    if (isSpoke) {
+        // Spoke mode: Query Hub API
+        try {
+            // NOTE: localhost fallback is acceptable for seeding scripts running in Docker
+            // This is a development/testing environment, not production code
+            const hubBackendUrl = process.env.HUB_BACKEND_URL || process.env.BACKEND_URL || 'https://localhost:4000';
+            const axios = (await import('axios')).default;
+
+            console.log(`   🔍 Querying Hub federation registry API (spoke mode: ${instanceCode})`);
+            const response = await axios.get(`${hubBackendUrl}/api/federation/spokes`, {
+                httpsAgent: new (await import('https')).Agent({ rejectUnauthorized: false }),
+                timeout: 10000
+            });
+
+            if (response.data?.spokes) {
+                const spokes = response.data.spokes;
+                console.log(`   ✅ Loaded ${spokes.length} spokes from Hub registry (federated mode)`);
+                
+                // Convert API response to legacy format
+                const instances: Record<string, IInstanceConfig> = {};
+                for (const spoke of spokes) {
+                    instances[spoke.instanceCode.toLowerCase()] = {
+                        instanceCode: spoke.instanceCode,
+                        name: spoke.name,
+                        services: {
+                            frontend: { externalPort: spoke.frontendPort || 3000 },
+                            backend: { externalPort: spoke.backendPort || 4000 },
+                            keycloak: { externalPort: spoke.keycloakPort || 8443 }
+                        }
+                    };
+                }
+                
+                return { instances, version: '2.0' };
+            }
+        } catch (error) {
+            console.warn(`   ⚠️ Could not query Hub federation registry API: ${error instanceof Error ? error.message : 'Unknown'}`);
+        }
+    }
+
+    // Hub mode: Query local MongoDB
+    try {
+        const { MongoClient } = await import('mongodb');
+        const mongoUrl = process.env.MONGODB_URL || 'mongodb://localhost:27017';
+        const dbName = process.env.MONGODB_DATABASE || 'dive-v3';
+        
+        const client = new MongoClient(mongoUrl);
+        await client.connect();
+        const db = client.db(dbName);
+        const collection = db.collection('federation_spokes');
+        
+        const spokes = await collection.find({}).toArray();
+        await client.close();
+        
+        if (spokes.length > 0) {
+            console.log(`   ✅ Loaded ${spokes.length} spokes from MongoDB (SSOT)`);
+            
+            const instances: Record<string, IInstanceConfig> = {};
+            for (const spoke of spokes) {
+                instances[spoke.instanceCode.toLowerCase()] = {
+                    instanceCode: spoke.instanceCode,
+                    name: spoke.name,
+                    services: {
+                        frontend: { externalPort: spoke.frontendPort || 3000 },
+                        backend: { externalPort: spoke.backendPort || 4000 },
+                        keycloak: { externalPort: spoke.keycloakPort || 8443 }
+                    }
+                };
+            }
+            
+            return { instances, version: '2.0' };
+        }
+    } catch (error) {
+        console.warn('   ⚠️ Could not load from MongoDB');
+    }
+
+    // CRITICAL: NO JSON FILE FALLBACK - MongoDB is SSOT
+    console.error('   ❌ No federation registry available (MongoDB empty)');
+    console.error('   Solution: Register spokes via API or run federation setup');
+    return { instances: {}, version: '2.0' };
 }
 
 async function loadKASRegistry(): Promise<IKASRegistry> {
@@ -1163,7 +1246,9 @@ async function loadKASRegistry(): Promise<IKASRegistry> {
     // Hub has the centralized KAS registry, spokes don't maintain their own
     if (isSpoke) {
         try {
-            const hubBackendUrl = process.env.HUB_BACKEND_URL || 'https://localhost:4000';
+            // NOTE: localhost fallback is acceptable for seeding scripts running in Docker
+            // This is a development/testing environment, not production code
+            const hubBackendUrl = process.env.HUB_BACKEND_URL || process.env.BACKEND_URL || 'https://localhost:4000';
             const axios = (await import('axios')).default;
 
             console.log(`   🔍 Querying Hub KAS registry API (spoke mode: ${instanceCode})`);
@@ -1255,17 +1340,13 @@ async function loadKASRegistry(): Promise<IKASRegistry> {
             };
         }
     } catch (error) {
-        console.warn('   ⚠️ Could not load from MongoDB, falling back to file');
+        console.warn('   ⚠️ Could not load from MongoDB');
     }
 
-    // Final fallback to static file
-    if (fs.existsSync(KAS_REGISTRY_PATH)) {
-        const content = fs.readFileSync(KAS_REGISTRY_PATH, 'utf-8');
-        return JSON.parse(content);
-    }
-
-    // No KAS registry available - return empty
-    console.error('   ❌ No KAS registry available (MongoDB empty, file not found)');
+    // CRITICAL: NO JSON FILE FALLBACK - MongoDB is SSOT
+    // If MongoDB is empty, KAS registry must be populated via API or seeding
+    console.error('   ❌ No KAS registry available (MongoDB empty)');
+    console.error('   Solution: Register KAS servers via API or run KAS seeding');
     return {
         kasServers: [],
         version: '2.0',
@@ -2682,7 +2763,7 @@ async function main() {
 
     // Load configurations
     console.log('📋 Loading configuration...');
-    const federationRegistry = loadFederationRegistry();
+    const federationRegistry = await loadFederationRegistry();
     const kasRegistry = await loadKASRegistry();
     console.log(`   Found ${Object.keys(federationRegistry.instances).length} instances`);
     console.log(`   Found ${kasRegistry.kasServers?.length || 0} KAS servers\n`);

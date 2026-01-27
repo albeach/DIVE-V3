@@ -111,7 +111,8 @@ export class MongoKasRegistryStore {
       });
 
       // Seed from static file if empty
-      await this.seedFromStaticFile();
+      // REMOVED: seedFromStaticFile() - NO JSON FILE LOADING
+      // KAS registry must be populated via API or seeding scripts
     } catch (error) {
       logger.error('Failed to initialize MongoDB KAS Registry Store', {
         error: error instanceof Error ? error.message : 'Unknown error',
@@ -121,80 +122,15 @@ export class MongoKasRegistryStore {
   }
 
   /**
-   * Seed from static JSON file if collection is empty
+   * REMOVED: seedFromStaticFile() - NO JSON FILE LOADING
+   * 
+   * KAS registry must be populated via:
+   * 1. API calls (POST /api/kas/register)
+   * 2. MongoDB seeding scripts
+   * 3. Hub API queries (for spokes)
+   * 
+   * JSON files are NOT used - MongoDB is the Single Source of Truth (SSOT)
    */
-  private async seedFromStaticFile(): Promise<void> {
-    try {
-      const fs = await import('fs');
-      const path = await import('path');
-
-      const count = await this.kasCollection!.countDocuments();
-      if (count === 0) {
-        // Try config/kas-registry.json first, then kas/config/kas-registry.json
-        let registryPath = path.join(process.cwd(), 'config', 'kas-registry.json');
-        if (!fs.existsSync(registryPath)) {
-          registryPath = path.join(process.cwd(), '..', 'kas', 'config', 'kas-registry.json');
-        }
-
-        if (fs.existsSync(registryPath)) {
-          const data = JSON.parse(fs.readFileSync(registryPath, 'utf8'));
-
-          // Seed KAS servers
-          if (data.kasServers) {
-            const instances: IKasInstance[] = data.kasServers.map((instance: Record<string, unknown>) => ({
-              kasId: instance.kasId as string,
-              organization: instance.organization as string,
-              // countryCode: ISO 3166-1 alpha-3 - SSOT for KAS home country
-              countryCode: (instance.countryCode as string) || (instance.supportedCountries as string[])?.[0] || 'USA',
-              kasUrl: instance.kasUrl as string,
-              authMethod: (instance.authMethod as string) || 'jwt',
-              authConfig: instance.authConfig as IKasInstance['authConfig'],
-              trustLevel: (instance.trustLevel as string) || 'medium',
-              supportedCountries: (instance.supportedCountries as string[]) || [],
-              supportedCOIs: (instance.supportedCOIs as string[]) || [],
-              policyTranslation: instance.policyTranslation as IKasInstance['policyTranslation'],
-              metadata: {
-                ...(instance.metadata as Record<string, unknown>),
-                registeredAt: new Date(),
-              },
-              enabled: true,
-              status: 'active' as const,
-            }));
-
-            if (instances.length > 0) {
-              await this.kasCollection!.insertMany(instances);
-              logger.info(`Seeded ${instances.length} KAS instances from static file`);
-            }
-          }
-
-          // Seed federation agreements
-          if (data.federationAgreements) {
-            const agreements: IKasFederationAgreement[] = Object.entries(data.federationAgreements).map(
-              ([code, agreement]: [string, unknown]) => {
-                const a = agreement as Record<string, unknown>;
-                return {
-                  countryCode: code,
-                  trustedKAS: (a.trustedKAS as string[]) || [],
-                  maxClassification: (a.maxClassification as string) || 'SECRET',
-                  allowedCOIs: (a.allowedCOIs as string[]) || ['NATO'],
-                  updatedAt: new Date(),
-                };
-              }
-            );
-
-            if (agreements.length > 0) {
-              await this.agreementsCollection!.insertMany(agreements);
-              logger.info(`Seeded ${agreements.length} KAS federation agreements`);
-            }
-          }
-        }
-      }
-    } catch (error) {
-      logger.warn('Could not seed KAS registry from static file', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-      });
-    }
-  }
 
   private async ensureInitialized(): Promise<void> {
     if (!this.initialized) {
