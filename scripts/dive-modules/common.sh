@@ -672,8 +672,8 @@ load_gcp_secrets() {
     # Use configured project, default to dive25 if not set
     local project="${GCP_PROJECT:-dive25}"
 
-    # Debug: show which project/instance we will query
-    echo "[secrets-debug] project=${project} instance=${inst_lc}"
+    # Debug: show which project/instance we will query (verbose-only to avoid stdout pollution)
+    log_verbose "[secrets-debug] project=${project} instance=${inst_lc}"
 
     log_step "Loading secrets from GCP Secret Manager ($(upper "$instance"))..."
 
@@ -700,7 +700,7 @@ load_gcp_secrets() {
         for name in "$@"; do
             if value=$(gcloud secrets versions access latest --secret="$name" --project="$project" 2>/dev/null); then
                 eval "$var_ref=\"\$value\""
-                echo "[secrets-debug] loaded $name (len=${#value})"
+                log_verbose "[secrets-debug] loaded $name (len=${#value})"
                 return 0
             fi
         done
@@ -736,18 +736,32 @@ load_gcp_secrets() {
     export POSTGRES_PASSWORD KEYCLOAK_ADMIN_PASSWORD MONGO_PASSWORD AUTH_SECRET KEYCLOAK_CLIENT_SECRET REDIS_PASSWORD
 
     # For Hub deployment, also load spoke passwords for federation
+    # FIX: Only load spoke passwords when actually needed (federation setup), not during clean slate hub deployment
+    # Spoke passwords are only needed when:
+    #   1. Setting up federation with existing spokes (federation-link.sh, federation-setup.sh)
+    #   2. Spoke registration operations
+    # They are NOT needed during initial clean slate hub deployment
     if [ "$inst_lc" = "usa" ] || [ "$inst_lc" = "hub" ]; then
-        log_step "Loading spoke Keycloak passwords for federation..."
-        for spoke in gbr fra deu can; do
-            local spoke_uc=$(echo "$spoke" | tr '[:lower:]' '[:upper:]')
-            local spoke_password
-            if spoke_password=$(gcloud secrets versions access latest --secret="dive-v3-keycloak-${spoke}" --project="$project" 2>/dev/null); then
-                eval "export KEYCLOAK_ADMIN_PASSWORD_${spoke_uc}='${spoke_password}'"
-                echo "[secrets-debug] loaded KEYCLOAK_ADMIN_PASSWORD_${spoke_uc} (len=${#spoke_password})"
-            else
-                log_warn "Could not load KEYCLOAK_ADMIN_PASSWORD_${spoke_uc} (spoke may not exist yet)"
-            fi
-        done
+        # Only load spoke passwords if explicitly requested via LOAD_SPOKE_PASSWORDS=true
+        # OR if we're in a context where federation is being set up (detected via function call context)
+        # Default: Skip during clean slate hub deployment to avoid unnecessary GCP calls
+        if [ "${LOAD_SPOKE_PASSWORDS:-false}" = "true" ] || [ "${FEDERATION_SETUP:-false}" = "true" ]; then
+            log_verbose "Loading spoke Keycloak passwords for federation operations..."
+            for spoke in gbr fra deu can; do
+                local spoke_uc=$(echo "$spoke" | tr '[:lower:]' '[:upper:]')
+                local spoke_password
+                if spoke_password=$(gcloud secrets versions access latest --secret="dive-v3-keycloak-${spoke}" --project="$project" 2>/dev/null); then
+                    eval "export KEYCLOAK_ADMIN_PASSWORD_${spoke_uc}='${spoke_password}'"
+                    log_verbose "[secrets-debug] loaded KEYCLOAK_ADMIN_PASSWORD_${spoke_uc} (len=${#spoke_password})"
+                else
+                    log_verbose "Could not load KEYCLOAK_ADMIN_PASSWORD_${spoke_uc} (spoke may not exist yet)"
+                fi
+            done
+        else
+            # Clean slate hub deployment - skip spoke password loading
+            # They will be loaded on-demand when federation is actually set up
+            log_verbose "Skipping spoke password loading (clean slate hub deployment - not needed until federation setup)"
+        fi
     fi
 
     # Align NextAuth/JWT to AUTH secret unless explicitly provided
