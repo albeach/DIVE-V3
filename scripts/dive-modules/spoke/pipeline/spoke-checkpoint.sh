@@ -67,13 +67,9 @@ readonly VALID_PHASES=(
 spoke_checkpoint_mark_complete() {
     local instance_code="$1"
     local phase="$2"
-    local duration="$3"
-    local metadata="$4"
+    local duration="${3:-0}"
+    local metadata="${4:-{}}"
     
-    # Set defaults
-    [ -z "$duration" ] && duration=0
-    [ -z "$metadata" ] && metadata="{}"
-
     # Validate arguments
     if [ -z "$instance_code" ] || [ -z "$phase" ]; then
         log_error "spoke_checkpoint_mark_complete: instance_code and phase required"
