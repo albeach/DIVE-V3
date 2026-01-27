@@ -16,7 +16,7 @@ if [ -z "$DIVE_ROOT" ]; then
 fi
 
 # Ensure common functions are loaded
-if [ -z "$DIVE_COMMON_LOADED" ]; then
+if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
     export DIVE_COMMON_LOADED=1
 fi

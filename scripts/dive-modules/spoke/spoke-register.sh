@@ -10,14 +10,14 @@
 # =============================================================================
 
 # Ensure common functions are loaded
-if [ -z "$DIVE_COMMON_LOADED" ]; then
+if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     # spoke-register.sh is in scripts/dive-modules/spoke/, common.sh is in scripts/dive-modules/
     source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
     export DIVE_COMMON_LOADED=1
 fi
 
 # Load spoke-federation module for bidirectional setup
-if [ -z "$SPOKE_FEDERATION_LOADED" ]; then
+if [ -z "${SPOKE_FEDERATION_LOADED:-}" ]; then
     # spoke-register.sh is in scripts/dive-modules/spoke/, spoke-federation.sh is in scripts/dive-modules/spoke/pipeline/
     _spoke_fed_path="$(dirname "${BASH_SOURCE[0]}")/pipeline/spoke-federation.sh"
     if [ -f "$_spoke_fed_path" ]; then

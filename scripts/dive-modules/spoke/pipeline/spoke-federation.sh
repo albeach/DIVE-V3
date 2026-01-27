@@ -16,7 +16,7 @@
 
 # FIX (2026-01-18): Simplified guard - always allow reload if functions missing
 # This ensures module loads correctly even when sourced multiple times
-if [ -n "$SPOKE_FEDERATION_LOADED" ]; then
+if [ -n "${SPOKE_FEDERATION_LOADED:-}" ]; then
     # Check if critical functions exist
     if type spoke_federation_create_bidirectional &>/dev/null && \
        type spoke_federation_setup &>/dev/null; then
@@ -34,7 +34,7 @@ export SPOKE_FEDERATION_LOADED=1
 # =============================================================================
 # Load federation-link.sh to make _federation_link_direct() available
 # This is required for automated bidirectional federation
-if [ -z "$DIVE_FEDERATION_LINK_LOADED" ]; then
+if [ -z "${DIVE_FEDERATION_LINK_LOADED:-}" ]; then
     # CRITICAL FIX (2026-01-18): Correct path - spoke-federation.sh is in spoke/pipeline/,
     # federation-link.sh is in modules/ root, so need to go up TWO levels
     _fed_link_path="${BASH_SOURCE[0]%/*}/../../federation-link.sh"
@@ -51,7 +51,7 @@ fi
 # =============================================================================
 # Database-driven federation state management
 # Part of Orchestration Architecture Review
-if [ -z "$FEDERATION_STATE_DB_LOADED" ]; then
+if [ -z "${FEDERATION_STATE_DB_LOADED:-}" ]; then
     # CRITICAL FIX (2026-01-18): Path calculation - spoke-federation.sh is in spoke/pipeline/,
     # federation-state-db.sh is in modules/ root
     # ${BASH_SOURCE[0]%/*} = scripts/dive-modules/spoke/pipeline

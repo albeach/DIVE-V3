@@ -16,7 +16,7 @@
 # =============================================================================
 
 # Prevent multiple sourcing
-if [ -n "$SPOKE_CONTAINERS_LOADED" ]; then
+if [ -n "${SPOKE_CONTAINERS_LOADED:-}" ]; then
     return 0
 fi
 export SPOKE_CONTAINERS_LOADED=1

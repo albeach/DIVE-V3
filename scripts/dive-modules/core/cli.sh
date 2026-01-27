@@ -10,7 +10,7 @@
 # =============================================================================
 
 # Ensure we're not double-loaded
-[ -n "$DIVE_CORE_CLI_LOADED" ] && return 0
+[ -n "${DIVE_CORE_CLI_LOADED:-}" ] && return 0
 
 # Load core dependencies
 CORE_DIR="$(dirname "${BASH_SOURCE[0]}")"

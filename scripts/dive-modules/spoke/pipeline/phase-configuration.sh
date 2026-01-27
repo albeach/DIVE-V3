@@ -27,7 +27,7 @@ fi
 # LOAD SPOKE FEDERATION MODULE
 # =============================================================================
 # Load spoke-federation.sh for spoke_federation_setup() function
-if [ -z "$SPOKE_FEDERATION_LOADED" ]; then
+if [ -z "${SPOKE_FEDERATION_LOADED:-}" ]; then
     _spoke_fed_path="${BASH_SOURCE[0]%/*}/spoke-federation.sh"
     if [ -f "$_spoke_fed_path" ]; then
         source "$_spoke_fed_path"
@@ -641,7 +641,7 @@ spoke_config_register_in_registries() {
 
     # Step 1: Register KAS in MongoDB (MongoDB SSOT architecture)
     # Load spoke-kas.sh if not already loaded
-    if [ -z "$DIVE_SPOKE_KAS_LOADED" ]; then
+    if [ -z "${DIVE_SPOKE_KAS_LOADED:-}" ]; then
         if [ -f "${DIVE_ROOT}/scripts/dive-modules/spoke/spoke-kas.sh" ]; then
             source "${DIVE_ROOT}/scripts/dive-modules/spoke/spoke-kas.sh"
         fi

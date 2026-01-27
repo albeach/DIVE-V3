@@ -20,7 +20,7 @@ fi
 # Mark as loaded (will be set at end after all functions defined)
 
 # Load secret management functions
-if [ -z "$SPOKE_SECRETS_LOADED" ]; then
+if [ -z "${SPOKE_SECRETS_LOADED:-}" ]; then
     if source "$(dirname "${BASH_SOURCE[0]}")/spoke-secrets.sh" 2>/dev/null; then
         log_verbose "spoke-secrets.sh loaded successfully" >/dev/null
     else
