@@ -22,34 +22,73 @@ fi
 export SPOKE_CONTAINERS_LOADED=1
 
 # =============================================================================
-# SERVICE DEPENDENCY GRAPH
+# SERVICE DEPENDENCY GRAPH - DYNAMIC DISCOVERY
+# =============================================================================
+# Phase 1 Sprint 1.2 Enhancement: Services discovered dynamically from compose files
+# No hardcoded arrays - parse from docker-compose.yml with dive.service.class labels
 # =============================================================================
 
-# Service startup order (respects dependencies)
-readonly SPOKE_SERVICE_ORDER=(
-    "postgres"
-    "mongodb"
-    "redis"
-    "keycloak"
-    "opa"
-    "backend"
-    "frontend"
-    "kas"
-    "opal-client"
-)
+# Load compose parser utility for dynamic service discovery
+if [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/compose-parser.sh" ]; then
+    source "${DIVE_ROOT}/scripts/dive-modules/utilities/compose-parser.sh"
+fi
 
-# Service dependencies (what must be healthy before starting)
-declare -A SPOKE_SERVICE_DEPS=(
-    ["postgres"]=""
-    ["mongodb"]=""
-    ["redis"]=""
-    ["keycloak"]="postgres"
-    ["opa"]=""
-    ["backend"]="postgres mongodb redis keycloak opa"
-    ["frontend"]="backend"
-    ["kas"]="mongodb backend"
-    ["opal-client"]="backend"
-)
+##
+# Get service order for a spoke instance (dynamically from compose file)
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   Space-separated list of services in dependency order
+##
+spoke_get_service_order() {
+    local instance_code="$1"
+
+    # Get services dynamically from compose file
+    if type compose_get_spoke_services &>/dev/null; then
+        compose_get_spoke_services "$instance_code"
+    else
+        # Fallback to legacy hardcoded list (should not reach here)
+        echo "postgres mongodb redis keycloak opa backend frontend kas opal-client"
+    fi
+}
+
+##
+# Get service dependencies dynamically
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Service name
+#
+# Returns:
+#   Space-separated list of dependencies
+##
+spoke_get_service_deps() {
+    local instance_code="$1"
+    local service="$2"
+
+    if type compose_get_spoke_dependencies &>/dev/null; then
+        local deps=$(compose_get_spoke_dependencies "$instance_code" "$service")
+        if [ "$deps" = "none" ]; then
+            echo ""
+        else
+            # Convert comma-separated to space-separated
+            echo "$deps" | tr ',' ' '
+        fi
+    else
+        # Fallback to legacy hardcoded dependencies
+        case "$service" in
+            postgres|mongodb|redis|opa) echo "" ;;
+            keycloak) echo "postgres" ;;
+            backend) echo "postgres mongodb redis keycloak opa" ;;
+            frontend) echo "backend" ;;
+            kas) echo "mongodb backend" ;;
+            opal-client) echo "backend" ;;
+            *) echo "" ;;
+        esac
+    fi
+}
 
 # Service startup timeouts (seconds)
 # Note: Bash associative arrays don't export well, so we use a function
@@ -177,12 +216,12 @@ spoke_containers_start() {
     # =============================================================================
     log_info "Pre-pulling Docker images in parallel..."
     local pull_start=$(date +%s)
-    
+
     # Start pull in background to continue with preparation
     if $compose_cmd pull --quiet --ignore-pull-failures 2>/dev/null & then
         local pull_pid=$!
         log_verbose "Image pull started (PID: $pull_pid)"
-        
+
         # Wait for pull with timeout
         local pull_timeout=120
         local pull_waited=0
@@ -190,7 +229,7 @@ spoke_containers_start() {
             sleep 2
             pull_waited=$((pull_waited + 2))
         done
-        
+
         # Check if pull completed
         if kill -0 $pull_pid 2>/dev/null; then
             log_verbose "Image pull still running after ${pull_timeout}s, continuing anyway"
@@ -495,8 +534,11 @@ spoke_containers_wait_for_healthy() {
 
     log_step "Waiting for services to become healthy..."
 
+    # Get services dynamically from compose file
+    local service_order=($(spoke_get_service_order "$instance_code"))
+
     # Wait for each service in order
-    for service in "${SPOKE_SERVICE_ORDER[@]}"; do
+    for service in "${service_order[@]}"; do
         local container="dive-spoke-${code_lower}-${service}"
         local timeout=$(spoke_get_service_timeout "$service")
 
@@ -650,7 +692,10 @@ spoke_containers_status() {
     local stopped=0
     local total=0
 
-    for service in "${SPOKE_SERVICE_ORDER[@]}"; do
+    # Get services dynamically from compose file
+    local service_order=($(spoke_get_service_order "$instance_code"))
+
+    for service in "${service_order[@]}"; do
         local container="dive-spoke-${code_lower}-${service}"
 
         if docker ps -a --format '{{.Names}}' | grep -q "^${container}$"; then
@@ -729,7 +774,10 @@ spoke_containers_logs() {
         if [ -n "$service" ]; then
             docker logs --tail="$tail_lines" "dive-spoke-${code_lower}-${service}" 2>/dev/null
         else
-            for svc in "${SPOKE_SERVICE_ORDER[@]}"; do
+            # Get services dynamically from compose file
+            local service_order=($(spoke_get_service_order "$instance_code"))
+
+            for svc in "${service_order[@]}"; do
                 echo "=== $svc ==="
                 docker logs --tail=20 "dive-spoke-${code_lower}-${svc}" 2>/dev/null || echo "No logs"
                 echo ""
