@@ -8,7 +8,13 @@
 
 # Prevent multiple sourcing
 if [ -n "${ORCHESTRATION_FRAMEWORK_LOADED:-}" ]; then
-    return 0
+    # Check if critical data structures exist
+    if declare -p ORCH_CONTEXT &>/dev/null; then
+        return 0
+    else
+        # Guard set but array missing - force reload
+        unset ORCHESTRATION_FRAMEWORK_LOADED
+    fi
 fi
 export ORCHESTRATION_FRAMEWORK_LOADED=1
 
@@ -436,18 +442,18 @@ declare -A SERVICE_MAX_TIMEOUTS=(
 
 # Global orchestration context
 declare -A ORCH_CONTEXT=(
-    ["instance_code"]=""
-    ["instance_name"]=""
-    ["start_time"]=""
-    ["current_phase"]=""
-    ["errors_critical"]=0
-    ["errors_high"]=0
-    ["errors_medium"]=0
-    ["errors_low"]=0
-    ["retry_count"]=0
-    ["checkpoint_enabled"]="true"
-    ["lock_acquired"]="false"
-    ["lock_fd"]=0
+    [instance_code]=""
+    [instance_name]=""
+    [start_time]=""
+    [current_phase]=""
+    [errors_critical]=0
+    [errors_high]=0
+    [errors_medium]=0
+    [errors_low]=0
+    [retry_count]=0
+    [checkpoint_enabled]="true"
+    [lock_acquired]="false"
+    [lock_fd]=0
 )
 
 # Error tracking
@@ -484,6 +490,24 @@ orch_acquire_deployment_lock() {
     local timeout="${2:-30}"
     local code_upper=$(upper "$instance_code")
 
+    # Ensure ORCH_CONTEXT exists (in case module was sourced in subshell)
+    if ! declare -p ORCH_CONTEXT &>/dev/null; then
+        declare -gA ORCH_CONTEXT=(
+            [instance_code]=""
+            [instance_name]=""
+            [start_time]=""
+            [current_phase]=""
+            [errors_critical]=0
+            [errors_high]=0
+            [errors_medium]=0
+            [errors_low]=0
+            [retry_count]=0
+            [checkpoint_enabled]="true"
+            [lock_acquired]="false"
+            [lock_fd]=0
+        )
+    fi
+
     log_verbose "Attempting to acquire deployment lock for $instance_code (timeout: ${timeout}s)..."
 
     # SPECIAL CASE: Hub (USA) deployment
@@ -491,8 +515,8 @@ orch_acquire_deployment_lock() {
     if [ "$code_upper" = "USA" ]; then
         if ! type -t orch_db_check_connection >/dev/null 2>&1 || ! orch_db_check_connection; then
             log_verbose "Hub deployment - database not yet available, skipping database lock"
-            ORCH_CONTEXT["lock_acquired"]="true"
-            ORCH_CONTEXT["lock_type"]="hub-bootstrap"
+            ORCH_CONTEXT[lock_acquired]="true"
+            ORCH_CONTEXT[lock_type]="hub-bootstrap"
             log_success "Deployment lock acquired for $instance_code (hub-bootstrap mode)"
             return 0
         fi
@@ -501,8 +525,10 @@ orch_acquire_deployment_lock() {
     # PostgreSQL advisory locking (MANDATORY for non-Hub instances)
     if type -t orch_db_acquire_lock >/dev/null 2>&1; then
         if orch_db_acquire_lock "$instance_code" "$timeout"; then
-            ORCH_CONTEXT["lock_acquired"]="true"
-            ORCH_CONTEXT["lock_type"]="database"
+            log_verbose "DEBUG: About to set lock_acquired"
+            ORCH_CONTEXT[lock_acquired]="true"
+            log_verbose "DEBUG: lock_acquired set successfully"
+            ORCH_CONTEXT[lock_type]="database"
             log_success "Deployment lock acquired for $instance_code (PostgreSQL advisory lock)"
             return 0
         else
@@ -546,14 +572,14 @@ orch_acquire_deployment_lock() {
 orch_release_deployment_lock() {
     local instance_code="$1"
 
-    if [ "${ORCH_CONTEXT["lock_acquired"]}" != "true" ]; then
+    if [ "${ORCH_CONTEXT[lock_acquired]}" != "true" ]; then
         log_verbose "No lock to release for $instance_code"
         return 1
     fi
 
     log_verbose "Releasing deployment lock for $instance_code..."
 
-    local lock_type="${ORCH_CONTEXT["lock_type"]:-database}"
+    local lock_type="${ORCH_CONTEXT[lock_type]:-database}"
 
     # Release PostgreSQL advisory lock
     if [ "$lock_type" = "database" ]; then
@@ -564,8 +590,8 @@ orch_release_deployment_lock() {
     # hub-bootstrap mode doesn't have a lock to release
 
     # Reset context
-    ORCH_CONTEXT["lock_acquired"]="false"
-    ORCH_CONTEXT["lock_type"]=""
+    ORCH_CONTEXT[lock_acquired]="false"
+    ORCH_CONTEXT[lock_type]=""
 
     log_success "Deployment lock released for $instance_code"
     return 0
@@ -626,16 +652,16 @@ orch_init_context() {
     local instance_code="$1"
     local instance_name="$2"
 
-    ORCH_CONTEXT["instance_code"]="$instance_code"
-    ORCH_CONTEXT["instance_name"]="$instance_name"
-    ORCH_CONTEXT["start_time"]=$(date +%s)
-    ORCH_CONTEXT["current_phase"]="$PHASE_PREFLIGHT"
-    ORCH_CONTEXT["errors_critical"]=0
-    ORCH_CONTEXT["errors_high"]=0
-    ORCH_CONTEXT["errors_medium"]=0
-    ORCH_CONTEXT["errors_low"]=0
-    ORCH_CONTEXT["retry_count"]=0
-    ORCH_CONTEXT["checkpoint_enabled"]="true"
+    ORCH_CONTEXT[instance_code]="$instance_code"
+    ORCH_CONTEXT[instance_name]="$instance_name"
+    ORCH_CONTEXT[start_time]=$(date +%s)
+    ORCH_CONTEXT[current_phase]="$PHASE_PREFLIGHT"
+    ORCH_CONTEXT[errors_critical]=0
+    ORCH_CONTEXT[errors_high]=0
+    ORCH_CONTEXT[errors_medium]=0
+    ORCH_CONTEXT[errors_low]=0
+    ORCH_CONTEXT[retry_count]=0
+    ORCH_CONTEXT[checkpoint_enabled]="true"
 
     ORCHESTRATION_ERRORS=()
 
@@ -669,16 +695,16 @@ orch_record_error() {
     # Update error counters
     case "$severity" in
         $ORCH_SEVERITY_CRITICAL)
-            ((ORCH_CONTEXT["errors_critical"]++))
+            ((ORCH_CONTEXT[errors_critical]++))
             ;;
         $ORCH_SEVERITY_HIGH)
-            ((ORCH_CONTEXT["errors_high"]++))
+            ((ORCH_CONTEXT[errors_high]++))
             ;;
         $ORCH_SEVERITY_MEDIUM)
-            ((ORCH_CONTEXT["errors_medium"]++))
+            ((ORCH_CONTEXT[errors_medium]++))
             ;;
         $ORCH_SEVERITY_LOW)
-            ((ORCH_CONTEXT["errors_low"]++))
+            ((ORCH_CONTEXT[errors_low]++))
             ;;
     esac
 
@@ -715,14 +741,14 @@ orch_should_continue() {
     local max_high="${MAX_HIGH_ERRORS:-3}"
 
     # Always stop on critical errors
-    if [ "${ORCH_CONTEXT["errors_critical"]}" -gt "$max_critical" ]; then
-        log_error "Stopping orchestration due to ${ORCH_CONTEXT["errors_critical"]} critical errors"
+    if [ "${ORCH_CONTEXT[errors_critical]}" -gt "$max_critical" ]; then
+        log_error "Stopping orchestration due to ${ORCH_CONTEXT[errors_critical]} critical errors"
         return 1
     fi
 
     # Stop on too many high-priority errors
-    if [ "${ORCH_CONTEXT["errors_high"]}" -gt "$max_high" ]; then
-        log_error "Stopping orchestration due to ${ORCH_CONTEXT["errors_high"]} high-priority errors"
+    if [ "${ORCH_CONTEXT[errors_high]}" -gt "$max_high" ]; then
+        log_error "Stopping orchestration due to ${ORCH_CONTEXT[errors_high]} high-priority errors"
         return 2
     fi
 
@@ -743,14 +769,14 @@ orch_generate_error_summary() {
         echo "=== DIVE V3 Orchestration Error Summary ==="
         echo "Instance: $instance_code"
         echo "Timestamp: $(date)"
-        echo "Duration: $(($(date +%s) - ORCH_CONTEXT["start_time"])) seconds"
-        echo "Current Phase: ${ORCH_CONTEXT["current_phase"]}"
+        echo "Duration: $(($(date +%s) - ORCH_CONTEXT[start_time])) seconds"
+        echo "Current Phase: ${ORCH_CONTEXT[current_phase]}"
         echo ""
         echo "Error Counts:"
-        echo "  Critical: ${ORCH_CONTEXT["errors_critical"]}"
-        echo "  High: ${ORCH_CONTEXT["errors_high"]}"
-        echo "  Medium: ${ORCH_CONTEXT["errors_medium"]}"
-        echo "  Low: ${ORCH_CONTEXT["errors_low"]}"
+        echo "  Critical: ${ORCH_CONTEXT[errors_critical]}"
+        echo "  High: ${ORCH_CONTEXT[errors_high]}"
+        echo "  Medium: ${ORCH_CONTEXT[errors_medium]}"
+        echo "  Low: ${ORCH_CONTEXT[errors_low]}"
         echo ""
         echo "Error Details (timestamp|code|severity|component|message|remediation|context):"
         printf '%s\n' "${ORCHESTRATION_ERRORS[@]}"
@@ -2150,10 +2176,20 @@ readonly PREDICTIVE_ANALYSIS_ENABLED="true"
 orch_init_metrics() {
     local instance_code="$1"
 
-    DEPLOYMENT_METRICS["${instance_code}_start_time"]=$(date +%s)
-    DEPLOYMENT_METRICS["${instance_code}_phase_start"]=$(date +%s)
-    DEPLOYMENT_METRICS["${instance_code}_error_count"]=0
-    DEPLOYMENT_METRICS["${instance_code}_retry_count"]=0
+    # Ensure DEPLOYMENT_METRICS exists
+    if ! declare -p DEPLOYMENT_METRICS &>/dev/null; then
+        declare -gA DEPLOYMENT_METRICS=()
+    fi
+
+    local key_start="${instance_code}_start_time"
+    local key_phase="${instance_code}_phase_start"
+    local key_errors="${instance_code}_error_count"
+    local key_retries="${instance_code}_retry_count"
+
+    DEPLOYMENT_METRICS[$key_start]=$(date +%s)
+    DEPLOYMENT_METRICS[$key_phase]=$(date +%s)
+    DEPLOYMENT_METRICS[$key_errors]=0
+    DEPLOYMENT_METRICS[$key_retries]=0
 
     # Start background metrics collection
     if [ "$PREDICTIVE_ANALYSIS_ENABLED" = true ]; then
@@ -2244,7 +2280,7 @@ orch_start_metrics_collection() {
     ) >/dev/null 2>&1 &
 
     # Store background PID for potential cleanup
-    ORCH_CONTEXT["metrics_pid"]=$!
+    ORCH_CONTEXT[metrics_pid]=$!
 }
 
 ##
@@ -2262,8 +2298,9 @@ orch_collect_current_metrics() {
     local timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)
     local deployment_duration=0
 
-    if [ -n "${DEPLOYMENT_METRICS[${instance_code}_start_time]}" ]; then
-        deployment_duration=$(( $(date +%s) - DEPLOYMENT_METRICS["${instance_code}_start_time"] ))
+    local key_start="${instance_code}_start_time"
+    if [ -n "${DEPLOYMENT_METRICS[$key_start]:-}" ]; then
+        deployment_duration=$(( $(date +%s) - DEPLOYMENT_METRICS[$key_start] ))
     fi
 
     # Container metrics
@@ -2274,7 +2311,7 @@ orch_collect_current_metrics() {
     # Error metrics
     local error_rate=0
     if [ "$deployment_duration" -gt 0 ]; then
-        error_rate=$(( (ORCH_CONTEXT["errors_critical"] + ORCH_CONTEXT["errors_high"]) * 60 / deployment_duration ))
+        error_rate=$(( (ORCH_CONTEXT[errors_critical] + ORCH_CONTEXT[errors_high]) * 60 / deployment_duration ))
     fi
 
     # Network metrics
@@ -2288,7 +2325,7 @@ orch_collect_current_metrics() {
     "timestamp": "$timestamp",
     "instance_code": "$instance_code",
     "deployment_duration_seconds": $deployment_duration,
-    "current_phase": "${ORCH_CONTEXT["current_phase"]}",
+    "current_phase": "${ORCH_CONTEXT[current_phase]}",
     "container_count": $container_count,
     "healthy_containers": $healthy_containers,
     "total_memory_mb": $total_memory,
@@ -2297,10 +2334,10 @@ orch_collect_current_metrics() {
     "failure_probability": $failure_probability,
     "circuit_breakers_open": $(orch_count_open_circuit_breakers),
     "orchestration_errors": {
-        "critical": ${ORCH_CONTEXT["errors_critical"]},
-        "high": ${ORCH_CONTEXT["errors_high"]},
-        "medium": ${ORCH_CONTEXT["errors_medium"]},
-        "low": ${ORCH_CONTEXT["errors_low"]}
+        "critical": ${ORCH_CONTEXT[errors_critical]},
+        "high": ${ORCH_CONTEXT[errors_high]},
+        "medium": ${ORCH_CONTEXT[errors_medium]},
+        "low": ${ORCH_CONTEXT[errors_low]}
     }
 }
 EOF
@@ -2414,7 +2451,7 @@ orch_calculate_failure_probability() {
     local probability=0
 
     # Factor 1: Error rate (>5 errors/minute = high risk)
-    local error_rate=$(( (ORCH_CONTEXT["errors_critical"] + ORCH_CONTEXT["errors_high"]) * 60 / ($(date +%s) - ORCH_CONTEXT["start_time"]) ))
+    local error_rate=$(( (ORCH_CONTEXT[errors_critical] + ORCH_CONTEXT[errors_high]) * 60 / ($(date +%s) - ORCH_CONTEXT[start_time]) ))
     if [ "$error_rate" -gt 5 ]; then
         probability=$((probability + 40))
     elif [ "$error_rate" -gt 2 ]; then
@@ -2536,15 +2573,15 @@ EOF
         log_warn "Dashboard file not found: $dashboard_file"
     fi
     if [ -f "$dashboard_file" ]; then
-        sed -i.bak "s/PHASE/${ORCH_CONTEXT["current_phase"]}/g" "$dashboard_file" && rm -f "${dashboard_file}.bak" 2>/dev/null || log_warn "Failed to replace PHASE in dashboard"
-        sed -i.bak "s/DURATION/$(( $(date +%s) - ORCH_CONTEXT["start_time"] ))s/g" "$dashboard_file" && rm -f "${dashboard_file}.bak" 2>/dev/null || log_warn "Failed to replace DURATION in dashboard"
+        sed -i.bak "s/PHASE/${ORCH_CONTEXT[current_phase]}/g" "$dashboard_file" && rm -f "${dashboard_file}.bak" 2>/dev/null || log_warn "Failed to replace PHASE in dashboard"
+        sed -i.bak "s/DURATION/$(( $(date +%s) - ORCH_CONTEXT[start_time] ))s/g" "$dashboard_file" && rm -f "${dashboard_file}.bak" 2>/dev/null || log_warn "Failed to replace DURATION in dashboard"
         sed -i.bak "s/STATUS/$(get_deployment_state_enhanced "$instance_code" 2>/dev/null || echo "UNKNOWN")/g" "$dashboard_file" && rm -f "${dashboard_file}.bak" 2>/dev/null || log_warn "Failed to replace STATUS in dashboard"
         sed -i.bak "s/TOTAL/$(docker ps -q --filter "name=dive-spoke-${instance_code}" 2>/dev/null | wc -l | tr -d ' ')/g" "$dashboard_file" && rm -f "${dashboard_file}.bak" 2>/dev/null || log_warn "Failed to replace TOTAL in dashboard"
         sed -i.bak "s/HEALTHY/$(orch_count_healthy_containers "$instance_code")/g" "$dashboard_file" && rm -f "${dashboard_file}.bak" 2>/dev/null || log_warn "Failed to replace HEALTHY in dashboard"
         sed -i.bak "s/MEMORY/$(orch_get_instance_memory_usage "$instance_code") MB/g" "$dashboard_file" && rm -f "${dashboard_file}.bak" 2>/dev/null || log_warn "Failed to replace MEMORY in dashboard"
-        sed -i.bak "s/CRITICAL/${ORCH_CONTEXT["errors_critical"]}/g" "$dashboard_file" && rm -f "${dashboard_file}.bak" 2>/dev/null || log_warn "Failed to replace CRITICAL in dashboard"
-        sed -i.bak "s/HIGH/${ORCH_CONTEXT["errors_high"]}/g" "$dashboard_file" && rm -f "${dashboard_file}.bak" 2>/dev/null || log_warn "Failed to replace HIGH in dashboard"
-        sed -i.bak "s/RATE/$(( (ORCH_CONTEXT["errors_critical"] + ORCH_CONTEXT["errors_high"]) * 60 / ($(date +%s) - ORCH_CONTEXT["start_time"]) ))/g" "$dashboard_file" && rm -f "${dashboard_file}.bak" 2>/dev/null || log_warn "Failed to replace RATE in dashboard"
+        sed -i.bak "s/CRITICAL/${ORCH_CONTEXT[errors_critical]}/g" "$dashboard_file" && rm -f "${dashboard_file}.bak" 2>/dev/null || log_warn "Failed to replace CRITICAL in dashboard"
+        sed -i.bak "s/HIGH/${ORCH_CONTEXT[errors_high]}/g" "$dashboard_file" && rm -f "${dashboard_file}.bak" 2>/dev/null || log_warn "Failed to replace HIGH in dashboard"
+        sed -i.bak "s/RATE/$(( (ORCH_CONTEXT[errors_critical] + ORCH_CONTEXT[errors_high]) * 60 / ($(date +%s) - ORCH_CONTEXT[start_time]) ))/g" "$dashboard_file" && rm -f "${dashboard_file}.bak" 2>/dev/null || log_warn "Failed to replace RATE in dashboard"
         sed -i.bak "s/OPEN/$(orch_count_open_circuit_breakers)/g" "$dashboard_file" && rm -f "${dashboard_file}.bak" 2>/dev/null || log_warn "Failed to replace OPEN in dashboard"
         sed -i.bak "s/PROBABILITY/$(orch_calculate_failure_probability "$instance_code")/g" "$dashboard_file" && rm -f "${dashboard_file}.bak" 2>/dev/null || log_warn "Failed to replace PROBABILITY in dashboard"
     fi
@@ -2795,12 +2832,12 @@ orch_execute_phase() {
     local phase_name="$1"
     local phase_function="$2"
 
-    ORCH_CONTEXT["current_phase"]="$phase_name"
+    ORCH_CONTEXT[current_phase]="$phase_name"
 
     log_info "Starting phase: $phase_name"
 
     # Set deployment state
-    set_deployment_state_enhanced "${ORCH_CONTEXT["instance_code"]}" "$phase_name" 2>/dev/null || true
+    set_deployment_state_enhanced "${ORCH_CONTEXT[instance_code]}" "$phase_name" 2>/dev/null || true
 
     # Execute phase function
     if $phase_function; then
@@ -2888,7 +2925,7 @@ orch_execute_deployment() {
     fi
 
     # Final success
-    local total_time=$(($(date +%s) - ORCH_CONTEXT["start_time"]))
+    local total_time=$(($(date +%s) - ORCH_CONTEXT[start_time]))
     log_success "Orchestrated deployment completed successfully in ${total_time}s"
     set_deployment_state_enhanced "$instance_code" "COMPLETE"
 
