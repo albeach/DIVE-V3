@@ -448,12 +448,46 @@ EOF
                     fi
                 else
                     log_warn "Could not get OPAL token from Hub (will retry after container start)"
+                    # Set placeholder token to prevent OPAL client from failing during deployment
+                    # Real token will be provisioned in configuration phase after federation
+                    local env_file="$spoke_dir/.env"
+                    if [ -f "$env_file" ]; then
+                        if ! grep -q "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null || \
+                           grep "^SPOKE_OPAL_TOKEN=$" "$env_file" >/dev/null 2>&1; then
+                            sed -i.bak "s|^SPOKE_OPAL_TOKEN=.*|SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision|" "$env_file" 2>/dev/null || \
+                            echo "SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision" >> "$env_file"
+                            rm -f "$env_file.bak" 2>/dev/null
+                            log_verbose "✓ Set placeholder OPAL token (will be replaced in configuration phase)"
+                        fi
+                    fi
                 fi
             else
                 log_verbose "Hub master token not found - OPAL token will be provisioned later"
+                # Set placeholder token
+                local env_file="$spoke_dir/.env"
+                if [ -f "$env_file" ]; then
+                    if ! grep -q "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null || \
+                       grep "^SPOKE_OPAL_TOKEN=$" "$env_file" >/dev/null 2>&1; then
+                        sed -i.bak "s|^SPOKE_OPAL_TOKEN=.*|SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision|" "$env_file" 2>/dev/null || \
+                        echo "SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision" >> "$env_file"
+                        rm -f "$env_file.bak" 2>/dev/null
+                        log_verbose "✓ Set placeholder OPAL token (will be replaced in configuration phase)"
+                    fi
+                fi
             fi
         else
             log_verbose "Hub OPAL server not running - OPAL token will be provisioned later"
+            # Set placeholder token
+            local env_file="$spoke_dir/.env"
+            if [ -f "$env_file" ]; then
+                if ! grep -q "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null || \
+                   grep "^SPOKE_OPAL_TOKEN=$" "$env_file" >/dev/null 2>&1; then
+                    sed -i.bak "s|^SPOKE_OPAL_TOKEN=.*|SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision|" "$env_file" 2>/dev/null || \
+                    echo "SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision" >> "$env_file"
+                    rm -f "$env_file.bak" 2>/dev/null
+                    log_verbose "✓ Set placeholder OPAL token (will be replaced in configuration phase)"
+                fi
+            fi
         fi
 
         return 0

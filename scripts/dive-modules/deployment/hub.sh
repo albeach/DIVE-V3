@@ -406,12 +406,15 @@ hub_preflight() {
     local docker_cmd="${DOCKER_CMD:-docker}"
 
     # Check Docker daemon is running
-    if ! $docker_cmd info >/dev/null 2>&1; then
-        log_error "Docker daemon is not running or not accessible"
+    # Simple check: if docker ps works, Docker is ready
+    if ! $docker_cmd ps >/dev/null 2>&1; then
+        log_error "Docker daemon is not accessible"
         log_error "Docker command tried: $docker_cmd"
-        log_error "Start Docker Desktop or ensure Docker daemon is running"
+        log_error "Verify Docker Desktop is running and try again"
         return 1
     fi
+
+    log_verbose "Docker daemon is accessible"
 
     # Check Docker Compose
     if ! $docker_cmd compose version >/dev/null 2>&1; then
@@ -1257,6 +1260,16 @@ hub_init_orchestration_db() {
     else
         log_error "CRITICAL: Orchestration schema file not found"
         return 1
+    fi
+
+    # Initialize federation schema (database-driven federation state)
+    if [ -f "${DIVE_ROOT}/scripts/sql/002_federation_schema.sql" ]; then
+        log_verbose "Applying federation schema..."
+        if ${DOCKER_CMD:-docker} exec -i dive-hub-postgres psql -U postgres -d orchestration < "${DIVE_ROOT}/scripts/sql/002_federation_schema.sql" >/dev/null 2>&1; then
+            log_verbose "✓ Federation schema applied"
+        else
+            log_warn "Federation schema initialization had issues (may already exist)"
+        fi
     fi
 
     log_success "Orchestration database initialized"
