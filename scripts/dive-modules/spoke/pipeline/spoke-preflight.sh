@@ -248,23 +248,22 @@ preflight_check_secrets_available() {
 preflight_check_ports_available() {
     local instance_code="$1"
 
-    # Get port allocation for this spoke
-    local ports_json
-    if ! ports_json=$(get_instance_ports "$instance_code" 2>/dev/null); then
+    # Get port allocation for this spoke (outputs shell exports, not JSON)
+    eval "$(get_instance_ports "$instance_code" 2>/dev/null)" || {
         log_error "Failed to get port allocation for $instance_code"
         return 1
-    fi
+    }
 
-    # Extract ports from JSON
-    local frontend_port=$(echo "$ports_json" | jq -r '.frontend // empty')
-    local backend_port=$(echo "$ports_json" | jq -r '.backend // empty')
-    local keycloak_https=$(echo "$ports_json" | jq -r '.keycloak_https // empty')
-    local keycloak_http=$(echo "$ports_json" | jq -r '.keycloak_http // empty')
-    local postgres_port=$(echo "$ports_json" | jq -r '.postgres // empty')
-    local mongodb_port=$(echo "$ports_json" | jq -r '.mongodb // empty')
-    local redis_port=$(echo "$ports_json" | jq -r '.redis // empty')
-    local opa_port=$(echo "$ports_json" | jq -r '.opa // empty')
-    local kas_port=$(echo "$ports_json" | jq -r '.kas // empty')
+    # Use exported SPOKE_* variables
+    local frontend_port="${SPOKE_FRONTEND_PORT:-}"
+    local backend_port="${SPOKE_BACKEND_PORT:-}"
+    local keycloak_https="${SPOKE_KEYCLOAK_HTTPS_PORT:-}"
+    local keycloak_http="${SPOKE_KEYCLOAK_HTTP_PORT:-}"
+    local postgres_port="${SPOKE_POSTGRES_PORT:-}"
+    local mongodb_port="${SPOKE_MONGODB_PORT:-}"
+    local redis_port="${SPOKE_REDIS_PORT:-}"
+    local opa_port="${SPOKE_OPA_PORT:-}"
+    local kas_port="${SPOKE_KAS_PORT:-}"
 
     local ports=(
         "$frontend_port"
