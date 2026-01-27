@@ -101,8 +101,38 @@ orch_db_check_connection() {
         return 1
     fi
 
-    # Use docker exec for reliable connection (no need for exposed ports)
-    ${DOCKER_CMD:-docker} exec dive-hub-postgres psql -U postgres -d orchestration -c "SELECT 1" >/dev/null 2>&1
+    # First, check if container exists and is running
+    if ! docker ps --format '{{.Names}}' | grep -q "^dive-hub-postgres$"; then
+        log_verbose "Container dive-hub-postgres not running"
+        return 1
+    fi
+
+    # Check if PostgreSQL is ready (pg_isready)
+    if ! docker exec dive-hub-postgres pg_isready -U postgres >/dev/null 2>&1; then
+        log_verbose "PostgreSQL not ready in dive-hub-postgres"
+        return 1
+    fi
+
+    # Ensure orchestration database exists (create if not)
+    local db_exists
+    db_exists=$(docker exec dive-hub-postgres psql -U postgres -t -c \
+        "SELECT 1 FROM pg_database WHERE datname = 'orchestration';" 2>/dev/null | xargs)
+
+    if [ "$db_exists" != "1" ]; then
+        log_verbose "Creating orchestration database..."
+        if ! docker exec dive-hub-postgres psql -U postgres -c "CREATE DATABASE orchestration;" >/dev/null 2>&1; then
+            log_verbose "Failed to create orchestration database"
+            return 1
+        fi
+    fi
+
+    # Test actual connection with a query
+    if ! docker exec dive-hub-postgres psql -U postgres -d orchestration -c "SELECT 1" >/dev/null 2>&1; then
+        log_verbose "Failed to execute query on orchestration database"
+        return 1
+    fi
+
+    return 0
 }
 
 ##
@@ -126,7 +156,7 @@ orch_db_exec() {
     # CRITICAL: Don't suppress stderr - we need to see actual errors
     # Note: psql outputs "BEGIN" and "COMMIT" on stdout which is normal
     ${DOCKER_CMD:-docker} exec dive-hub-postgres psql -U postgres -d orchestration -t -c "$query" 2>&1
-    
+
     # Return psql exit code directly
     return $?
 }
