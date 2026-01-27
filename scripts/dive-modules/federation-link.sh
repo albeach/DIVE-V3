@@ -212,7 +212,17 @@ _federation_link_direct() {
     fi
 
     log_info "Using Keycloak password from GCP Secret Manager (SSOT)"
+    
+    # PHASE 2 FIX: Wait for Keycloak admin API readiness before authentication
+    # This ensures Keycloak is fully initialized, not just container-healthy
+    log_verbose "Ensuring $target_upper Keycloak admin API is ready..."
+    if ! wait_for_keycloak_admin_api_ready "$target_kc_container" 180 "$target_pass"; then
+        log_error "Keycloak admin API not ready: $target_kc_container"
+        log_error "Federation setup cannot proceed - Keycloak must be fully initialized"
+        return 1
+    fi
 
+    # Now safe to authenticate (Keycloak is ready)
     local token=$(docker exec "$target_kc_container" curl -sf --max-time 10 \
         -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
         -d "grant_type=password" -d "username=admin" -d "password=${target_pass}" \
@@ -220,7 +230,7 @@ _federation_link_direct() {
 
     if [ -z "$token" ]; then
         log_error "Failed to authenticate with $target_upper Keycloak"
-        log_error "Admin credentials invalid or Keycloak not ready"
+        log_error "This should not happen after readiness check passed - possible race condition"
         return 1
     fi
 
