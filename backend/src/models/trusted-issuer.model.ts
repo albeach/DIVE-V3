@@ -83,15 +83,39 @@ export class MongoOpalDataStore {
     if (this.initialized) return;
 
     try {
-      this.client = new MongoClient(MONGODB_URL);
+      // Add directConnection and readPreference for standalone MongoDB (fixes "not primary" error)
+      const mongoUrl = new URL(MONGODB_URL);
+      if (!mongoUrl.searchParams.has('directConnection')) {
+        mongoUrl.searchParams.set('directConnection', 'true');
+      }
+      if (!mongoUrl.searchParams.has('readPreference')) {
+        mongoUrl.searchParams.set('readPreference', 'primaryPreferred');
+      }
+
+      logger.info('Connecting to MongoDB OPAL Data Store', {
+        url: mongoUrl.toString().replace(/:([^:]+)@/, ':****@'), // Mask password
+        database: DB_NAME,
+      });
+
+      this.client = new MongoClient(mongoUrl.toString(), {
+        maxPoolSize: 10,
+        minPoolSize: 2,
+        serverSelectionTimeoutMS: 5000,
+        connectTimeoutMS: 10000,
+      });
+
       await this.client.connect();
+      logger.info('MongoDB client connected successfully');
+
       this.db = this.client.db(DB_NAME);
 
       this.issuersCollection = this.db.collection<ITrustedIssuer>(COLLECTION_ISSUERS);
       this.fedMatrixCollection = this.db.collection<IFederationMatrixEntry>(COLLECTION_FED_MATRIX);
       this.tenantConfigsCollection = this.db.collection<ITenantConfig>(COLLECTION_TENANT_CONFIGS);
 
-      // Create indexes for issuers
+      logger.info('Creating MongoDB indexes...');
+
+      // Create indexes for issuers (with ignoreExisting to avoid duplicate key errors)
       await this.issuersCollection.createIndex({ issuerUrl: 1 }, { unique: true });
       await this.issuersCollection.createIndex({ tenant: 1 });
       await this.issuersCollection.createIndex({ country: 1 });
@@ -105,7 +129,7 @@ export class MongoOpalDataStore {
       await this.tenantConfigsCollection.createIndex({ code: 1 }, { unique: true });
 
       this.initialized = true;
-      logger.info('MongoDB OPAL Data Store initialized', {
+      logger.info('MongoDB OPAL Data Store initialized successfully', {
         database: DB_NAME,
         collections: [COLLECTION_ISSUERS, COLLECTION_FED_MATRIX, COLLECTION_TENANT_CONFIGS],
       });
@@ -119,6 +143,8 @@ export class MongoOpalDataStore {
     } catch (error) {
       logger.error('Failed to initialize MongoDB OPAL Data Store', {
         error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        mongoUrl: MONGODB_URL.replace(/:([^:]+)@/, ':****@'),
       });
       throw error;
     }
