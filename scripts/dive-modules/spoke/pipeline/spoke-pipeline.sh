@@ -79,6 +79,7 @@ _spoke_pipeline_load_modules() {
         "spoke-federation.sh"
         "spoke-compose-generator.sh"
         "spoke-checkpoint.sh"
+        "spoke-preflight.sh"
         "phase-preflight.sh"
         "phase-initialization.sh"
         "phase-deployment.sh"
