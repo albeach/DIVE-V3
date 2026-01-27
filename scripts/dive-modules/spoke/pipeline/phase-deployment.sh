@@ -194,8 +194,9 @@ spoke_deployment_wait_for_core_services() {
 
     log_step "Waiting for core services..."
 
-    # Core services required before proceeding
-    local core_services=("postgres" "mongodb" "redis" "keycloak")
+    # Get core services dynamically from compose file labels
+    # Phase 1 Sprint 1.2: Replace hardcoded array with dynamic discovery
+    local core_services=($(compose_get_spoke_services_by_class "$instance_code" "core"))
 
     for service in "${core_services[@]}"; do
         local container="dive-spoke-${code_lower}-${service}"
