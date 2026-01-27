@@ -356,7 +356,7 @@ export function useUploadFormWithHistory(
     (value: string) => {
       setState((prev) => {
         const newState = { ...prev, classification: value };
-        history.pushState(newState);
+        history.pushState(newState, '');
         return newState;
       });
     },
@@ -367,7 +367,7 @@ export function useUploadFormWithHistory(
     (countries: string[]) => {
       setState((prev) => {
         const newState = { ...prev, releasabilityTo: countries };
-        history.pushState(newState);
+        history.pushState(newState, '');
         return newState;
       });
     },
@@ -381,7 +381,7 @@ export function useUploadFormWithHistory(
           ? prev.releasabilityTo.filter((c) => c !== country)
           : [...prev.releasabilityTo, country];
         const newState = { ...prev, releasabilityTo: newCountries };
-        history.pushState(newState);
+        history.pushState(newState, '');
         return newState;
       });
     },
@@ -392,7 +392,7 @@ export function useUploadFormWithHistory(
     (coi: string[]) => {
       setState((prev) => {
         const newState = { ...prev, COI: coi };
-        history.pushState(newState);
+        history.pushState(newState, '');
         return newState;
       });
     },
@@ -406,7 +406,7 @@ export function useUploadFormWithHistory(
           ? prev.COI.filter((c) => c !== coi)
           : [...prev.COI, coi];
         const newState = { ...prev, COI: newCOI };
-        history.pushState(newState);
+        history.pushState(newState, '');
         return newState;
       });
     },
@@ -417,7 +417,7 @@ export function useUploadFormWithHistory(
     (caveats: string[]) => {
       setState((prev) => {
         const newState = { ...prev, caveats };
-        history.pushState(newState);
+        history.pushState(newState, '');
         return newState;
       });
     },
@@ -431,7 +431,7 @@ export function useUploadFormWithHistory(
           ? prev.caveats.filter((c) => c !== caveat)
           : [...prev.caveats, caveat];
         const newState = { ...prev, caveats: newCaveats };
-        history.pushState(newState);
+        history.pushState(newState, '');
         return newState;
       });
     },

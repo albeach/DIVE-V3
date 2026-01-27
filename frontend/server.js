@@ -8,9 +8,10 @@
  */
 
 const https = require('https');
-const next = require('next');
 const fs = require('fs');
 const path = require('path');
+
+const next = require('next');
 
 /**
  * Parse URL using WHATWG URL API (best practice, no deprecation warnings)

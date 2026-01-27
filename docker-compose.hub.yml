@@ -292,10 +292,10 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "curl -ksf https://localhost:8443/realms/master >/dev/null"]
-      interval: 10s
-      timeout: 10s
-      retries: 10
-      start_period: 90s
+      interval: 5s         # Check every 5 seconds (was 10s)
+      timeout: 8s
+      retries: 10          # Allow 10 failures (was 10, unchanged)
+      start_period: 45s    # Start checking after 45s (was 90s)
 
   # ---------------------------------------------------------------------------
   # OPA - Policy Decision Point (Hub loads bundle directly - INDUSTRY STANDARD)
@@ -358,13 +358,13 @@ services:
       dive.service.description: "Express.js API with PEP for authorization enforcement"
     build:
       context: ./backend
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile.prod
     container_name: ${COMPOSE_PROJECT_NAME}-backend
     restart: unless-stopped
     env_file:
       - .env.hub
     environment:
-      NODE_ENV: development
+      NODE_ENV: production  # Changed from development for production deployment
       DEBUG: "*"
       PORT: "4000"
       INSTANCE_CODE: USA
@@ -586,19 +586,19 @@ services:
       dive.service.description: "Next.js React application with NextAuth.js"
     build:
       context: ./frontend
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile.prod
     container_name: ${COMPOSE_PROJECT_NAME}-frontend
     restart: unless-stopped
     env_file:
       - .env.hub
     healthcheck:
       test: ["CMD-SHELL", "curl -ksf https://localhost:3000/ >/dev/null || exit 1"]
-      interval: 10s
-      timeout: 10s
-      retries: 12
-      start_period: 90s
+      interval: 5s         # Check every 5 seconds (was 10s)
+      timeout: 8s
+      retries: 10          # Allow 10 failures (was 12)
+      start_period: 30s    # Start checking after 30s (was 90s)
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://localhost:4000}
       NEXT_PUBLIC_BACKEND_URL: ${NEXT_PUBLIC_BACKEND_URL:-https://localhost:4000}
       NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL:-https://localhost:3000}
@@ -637,10 +637,13 @@ services:
     extra_hosts:
       - "localhost:host-gateway"
     volumes:
-      - ./frontend:/app
+      # PRODUCTION: Do NOT mount source code - defeats Dockerfile optimizations
+      # Development mount (./frontend:/app) removed - source .ts files were being overlaid
+      # - ./frontend:/app  # REMOVED: Causes next.config.ts to appear, triggering TS install
       - ./instances/hub/certs:/opt/keycloak/certs:ro
       - ./frontend/certs:/opt/app/certs:ro
-      - ./certs/mkcert:/app/certs/ca:ro  # mkcert root CA for TLS trust
+      - ./certs/mkcert:/app/certs:ro  # mkcert certificates for HTTPS (certificate.pem, key.pem)
+      # Named volumes for persistence (not needed in production but kept for dev compat)
       - frontend_node_modules:/app/node_modules
       - frontend_next:/app/.next
 

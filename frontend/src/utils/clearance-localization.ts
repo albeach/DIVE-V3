@@ -8,7 +8,7 @@
  */
 
 // Import the NATO mappings (this will be bundled at build time)
-import natoMappings from '../../../keycloak/mapper-templates/nato-attribute-mappings.json';
+import natoMappings from '../data/nato-attribute-mappings.json';
 
 type ClearanceLevel = 'UNCLASSIFIED' | 'RESTRICTED' | 'CONFIDENTIAL' | 'SECRET' | 'TOP_SECRET';
 
