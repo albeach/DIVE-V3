@@ -311,7 +311,8 @@ multi_validate_instance() {
 
     # Check Keycloak health
     local kc_port
-    kc_port=$(_get_spoke_keycloak_port "$instance_code")
+    eval "$(get_instance_ports "$instance_code" 2>/dev/null)"
+    kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
 
     if ! curl -kfs --max-time 10 "https://localhost:${kc_port}/realms/dive-v3-broker-${instance_code}/protocol/openid-connect/certs" >/dev/null 2>&1; then
         log_warn "Instance $instance_code Keycloak not responding"
@@ -320,7 +321,8 @@ multi_validate_instance() {
 
     # Check backend health
     local backend_port
-    backend_port=$(get_instance_ports "$instance_code" | grep "SPOKE_BACKEND_PORT" | cut -d'=' -f2)
+    eval "$(get_instance_ports "$instance_code" 2>/dev/null)"
+    backend_port="${SPOKE_BACKEND_PORT:-4000}"
 
     if ! curl -kfs --max-time 10 "https://localhost:${backend_port}/health" >/dev/null 2>&1; then
         log_warn "Instance $instance_code backend not responding"

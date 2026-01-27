@@ -38,11 +38,8 @@ spoke_fix_mappers() {
 
     # Method 1: Use get_instance_ports from common.sh (SSOT)
     if type get_instance_ports &>/dev/null; then
-        local ports_output
-        ports_output=$(get_instance_ports "$code_upper" 2>/dev/null)
-        if [ -n "$ports_output" ]; then
-            read -r _ _ _ kc_port _ <<< "$ports_output"
-        fi
+        # get_instance_ports outputs shell exports, use eval
+        eval "$(get_instance_ports "$code_upper" 2>/dev/null)" && kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-}"
     fi
 
     # Method 2: Get from running Docker container
