@@ -117,8 +117,9 @@ spoke_verify_service_health() {
     local unhealthy_count=0
     local total_count=0
 
-    # Check each expected service
-    local services=("postgres" "mongodb" "redis" "keycloak" "backend" "frontend" "opa")
+    # Get services dynamically from compose file
+    # Phase 1 Sprint 1.2: Replace hardcoded array with dynamic discovery
+    local services=($(compose_get_spoke_services "$instance_code"))
 
     for service in "${services[@]}"; do
         local container="dive-spoke-${code_lower}-${service}"

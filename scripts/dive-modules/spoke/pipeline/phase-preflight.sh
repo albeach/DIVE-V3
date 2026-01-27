@@ -422,8 +422,9 @@ spoke_preflight_cleanup_stale_containers() {
     fi
 
     # Clean up containers stuck in "Created" state
-    local services="frontend backend redis keycloak postgres mongodb opa kas opal-client"
-    for service in $services; do
+    # Phase 1 Sprint 1.2: Use dynamic service discovery
+    local services=($(spoke_get_service_order "$instance_code" 2>/dev/null || echo "frontend backend redis keycloak postgres mongodb opa kas opal-client"))
+    for service in ${services[@]}; do
         local container="dive-spoke-${code_lower}-${service}"
         if docker ps -a --format '{{.Names}}' | grep -q "^${container}$"; then
             local status
