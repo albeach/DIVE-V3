@@ -7,13 +7,13 @@
 # =============================================================================
 
 # Prevent multiple sourcing
-if [ -n "$DEPLOYMENT_PROGRESS_LOADED" ]; then
+if [ -n "${DEPLOYMENT_PROGRESS_LOADED:-}" ]; then
     return 0
 fi
 export DEPLOYMENT_PROGRESS_LOADED=1
 
 # Ensure common functions are loaded
-if [ -z "$DIVE_COMMON_LOADED" ]; then
+if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
     export DIVE_COMMON_LOADED=1
 fi

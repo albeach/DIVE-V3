@@ -11,7 +11,7 @@
 # =============================================================================
 
 # Prevent multiple sourcing
-[ -n "$DIVE_CORE_LOGGING_LOADED" ] && return 0
+[ -n "${DIVE_CORE_LOGGING_LOADED:-}" ] && return 0
 export DIVE_CORE_LOGGING_LOADED=1
 
 # =============================================================================
@@ -22,7 +22,7 @@ CORE_DIR="$(dirname "${BASH_SOURCE[0]}")"
 MODULES_DIR="$(dirname "$CORE_DIR")"
 
 # Source original logging module to get base functions
-if [ -f "${MODULES_DIR}/logging.sh" ] && [ -z "$DIVE_LOGGING_LOADED" ]; then
+if [ -f "${MODULES_DIR}/logging.sh" ] && [ -z "${DIVE_LOGGING_LOADED:-}" ]; then
     source "${MODULES_DIR}/logging.sh"
     export DIVE_LOGGING_LOADED=1
 fi

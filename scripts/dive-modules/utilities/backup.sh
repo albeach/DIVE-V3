@@ -16,7 +16,7 @@
 # =============================================================================
 
 # Prevent multiple sourcing
-[ -n "$DIVE_UTILITIES_BACKUP_LOADED" ] && return 0
+[ -n "${DIVE_UTILITIES_BACKUP_LOADED:-}" ] && return 0
 export DIVE_UTILITIES_BACKUP_LOADED=1
 
 # =============================================================================
@@ -26,7 +26,7 @@ export DIVE_UTILITIES_BACKUP_LOADED=1
 UTILITIES_DIR="$(dirname "${BASH_SOURCE[0]}")"
 MODULES_DIR="$(dirname "$UTILITIES_DIR")"
 
-if [ -z "$DIVE_COMMON_LOADED" ]; then
+if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     source "${MODULES_DIR}/common.sh"
     export DIVE_COMMON_LOADED=1
 fi

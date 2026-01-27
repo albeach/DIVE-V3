@@ -10,7 +10,7 @@
 # =============================================================================
 
 # Prevent multiple sourcing
-if [ -n "$SPOKE_ERROR_CODES_LOADED" ]; then
+if [ -n "${SPOKE_ERROR_CODES_LOADED:-}" ]; then
     return 0
 fi
 export SPOKE_ERROR_CODES_LOADED=1

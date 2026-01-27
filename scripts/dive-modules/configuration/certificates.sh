@@ -14,7 +14,7 @@
 # =============================================================================
 
 # Prevent multiple sourcing
-[ -n "$DIVE_CONFIGURATION_CERTS_LOADED" ] && return 0
+[ -n "${DIVE_CONFIGURATION_CERTS_LOADED:-}" ] && return 0
 export DIVE_CONFIGURATION_CERTS_LOADED=1
 
 # =============================================================================
@@ -24,7 +24,7 @@ export DIVE_CONFIGURATION_CERTS_LOADED=1
 CONFIG_DIR="$(dirname "${BASH_SOURCE[0]}")"
 MODULES_DIR="$(dirname "$CONFIG_DIR")"
 
-if [ -z "$DIVE_COMMON_LOADED" ]; then
+if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     source "${MODULES_DIR}/common.sh"
     export DIVE_COMMON_LOADED=1
 fi

@@ -19,7 +19,7 @@
 # =============================================================================
 
 # Prevent multiple sourcing
-[ -n "$DIVE_DEPLOYMENT_SPOKE_LOADED" ] && return 0
+[ -n "${DIVE_DEPLOYMENT_SPOKE_LOADED:-}" ] && return 0
 export DIVE_DEPLOYMENT_SPOKE_LOADED=1
 
 # =============================================================================
@@ -31,7 +31,7 @@ MODULES_DIR="$(dirname "$DEPLOYMENT_DIR")"
 SPOKE_DIR="${MODULES_DIR}/spoke"
 
 # Load common first
-if [ -z "$DIVE_COMMON_LOADED" ]; then
+if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     source "${MODULES_DIR}/common.sh"
     export DIVE_COMMON_LOADED=1
 fi

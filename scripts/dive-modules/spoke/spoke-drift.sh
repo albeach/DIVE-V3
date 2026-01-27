@@ -13,7 +13,7 @@
 # =============================================================================
 
 # Load common functions
-if [ -z "$DIVE_COMMON_LOADED" ]; then
+if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     source "${SCRIPT_DIR}/common.sh"
 fi

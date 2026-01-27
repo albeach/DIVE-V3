@@ -16,7 +16,7 @@
 # =============================================================================
 
 # Prevent multiple sourcing (but allow reload if functions not available)
-if [ -n "$FEDERATION_STATE_DB_LOADED" ]; then
+if [ -n "${FEDERATION_STATE_DB_LOADED:-}" ]; then
     if type fed_db_upsert_link &>/dev/null; then
         return 0
     fi
@@ -29,13 +29,13 @@ export FEDERATION_STATE_DB_LOADED=1
 # =============================================================================
 
 # Ensure common functions are loaded
-if [ -z "$DIVE_COMMON_LOADED" ]; then
+if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
     export DIVE_COMMON_LOADED=1
 fi
 
 # Load orchestration state database module for orch_db_exec
-if [ -z "$ORCHESTRATION_STATE_DB_LOADED" ]; then
+if [ -z "${ORCHESTRATION_STATE_DB_LOADED:-}" ]; then
     if [ -f "$(dirname "${BASH_SOURCE[0]}")/orchestration-state-db.sh" ]; then
         source "$(dirname "${BASH_SOURCE[0]}")/orchestration-state-db.sh"
     fi
