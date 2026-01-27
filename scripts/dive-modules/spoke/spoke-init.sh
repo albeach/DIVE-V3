@@ -588,7 +588,7 @@ HUB_URL=$hub_url
 # CRITICAL FIX (2026-01-14): Use internal Docker network URL for Hub OPAL server
 # External domain (hub.dive25.com) not reachable from local containers
 # OPAL client needs WebSocket connection to Hub OPAL server on dive-shared network
-HUB_OPAL_URL=http://dive-hub-opal-server:7002
+HUB_OPAL_URL=https://dive-hub-opal-server:7002
 SPOKE_OPAL_TOKEN=
 OPAL_LOG_LEVEL=INFO
 
