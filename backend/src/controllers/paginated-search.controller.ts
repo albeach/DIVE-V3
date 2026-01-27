@@ -52,6 +52,7 @@ interface IPaginatedSearchRequest {
     instances?: string[];
     encrypted?: boolean;
     dateRange?: { start: string; end: string };
+    fileTypes?: string[];  // File type categories (documents, images, videos, audio, archives, code)
   };
   sort?: {
     field: 'title' | 'classification' | 'creationDate' | 'resourceId' | 'relevance';
@@ -89,6 +90,7 @@ interface IPaginatedSearchResponse {
     cois: IFacetItem[];
     instances: IFacetItem[];
     encryptionStatus: IFacetItem[];
+    fileTypes: IFacetItem[];  // File type facets
   };
   pagination: {
     nextCursor: string | null;
@@ -438,6 +440,64 @@ export const paginatedSearchHandler = async (
       }
     }
 
+    // File type filter
+    if (filters.fileTypes && filters.fileTypes.length > 0) {
+      const fileTypePatterns: Record<string, string[]> = {
+        documents: [
+          'application/pdf',
+          'application/msword',
+          'application/vnd.openxmlformats',
+          'text/plain',
+          'text/markdown',
+          'text/rtf'
+        ],
+        images: ['image/'],
+        videos: ['video/'],
+        audio: ['audio/'],
+        archives: [
+          'application/zip',
+          'application/x-tar',
+          'application/gzip',
+          'application/x-rar',
+          'application/x-7z'
+        ],
+        code: [
+          'text/javascript',
+          'application/javascript',
+          'application/json',
+          'text/html',
+          'text/css',
+          'application/xml'
+        ]
+      };
+
+      const contentTypeConditions: any[] = [];
+
+      for (const selectedType of filters.fileTypes) {
+        const patterns = fileTypePatterns[selectedType];
+        if (patterns) {
+          for (const pattern of patterns) {
+            if (pattern.endsWith('/')) {
+              // Wildcard pattern (e.g., "image/")
+              contentTypeConditions.push({
+                'ztdf.manifest.contentType': { $regex: `^${pattern}`, $options: 'i' }
+              });
+            } else {
+              // Exact or substring match
+              contentTypeConditions.push({
+                'ztdf.manifest.contentType': { $regex: pattern, $options: 'i' }
+              });
+            }
+          }
+        }
+      }
+
+      if (contentTypeConditions.length > 0) {
+        mongoFilter.$and = mongoFilter.$and || [];
+        mongoFilter.$and.push({ $or: contentTypeConditions });
+      }
+    }
+
     // ========================================
     // Build Sort Criteria
     // ========================================
@@ -651,6 +711,49 @@ export const paginatedSearchHandler = async (
               }},
               { $sort: { _id: 1 } }
             ],
+            fileTypes: [
+              // Categorize by content type from ZTDF manifest
+              { $project: {
+                contentType: '$ztdf.manifest.contentType',
+                category: {
+                  $switch: {
+                    branches: [
+                      { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: '^image/', options: 'i' } }, then: 'images' },
+                      { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: '^video/', options: 'i' } }, then: 'videos' },
+                      { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: '^audio/', options: 'i' } }, then: 'audio' },
+                      { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'pdf|msword|wordprocessing|spreadsheet|excel|presentation|powerpoint|text/plain|text/markdown', options: 'i' } }, then: 'documents' },
+                      { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'zip|tar|gzip|rar|7z', options: 'i' } }, then: 'archives' },
+                      { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'javascript|json|html|css|xml', options: 'i' } }, then: 'code' }
+                    ],
+                    default: 'other'
+                  }
+                }
+              }},
+              { $match: { category: { $ne: 'other' }, contentType: { $ne: null, $exists: true } } },
+              { $group: {
+                _id: '$category',
+                count: { $sum: 1 }
+              }},
+              { $sort: { count: -1 } },
+              // Map internal names to display names
+              { $project: {
+                value: '$_id',
+                label: {
+                  $switch: {
+                    branches: [
+                      { case: { $eq: ['$_id', 'documents'] }, then: 'Documents' },
+                      { case: { $eq: ['$_id', 'images'] }, then: 'Images' },
+                      { case: { $eq: ['$_id', 'videos'] }, then: 'Videos' },
+                      { case: { $eq: ['$_id', 'audio'] }, then: 'Audio' },
+                      { case: { $eq: ['$_id', 'archives'] }, then: 'Archives' },
+                      { case: { $eq: ['$_id', 'code'] }, then: 'Code Files' }
+                    ],
+                    default: '$_id'
+                  }
+                },
+                count: 1
+              }}
+            ],
             totalCount: [
               { $count: 'count' }
             ]
@@ -682,6 +785,11 @@ export const paginatedSearchHandler = async (
           })),
           encryptionStatus: (fr.encryptionStatus || []).map((f: any) => ({
             value: f._id,
+            count: f.count
+          })),
+          fileTypes: (fr.fileTypes || []).map((f: any) => ({
+            value: f.value,
+            label: f.label,
             count: f.count
           })),
         };
@@ -752,6 +860,8 @@ export const paginatedSearchHandler = async (
       originRealm: resource.originRealm,
       ztdfVersion: (resource.ztdf as any)?.manifest?.version,
       kaoCount: (resource.ztdf as any)?.payload?.keyAccessObjects?.length || 0,
+      // File type metadata from ZTDF manifest
+      contentType: (resource.ztdf as any)?.manifest?.contentType || 'application/octet-stream',
       // Phase 2: Include relevance score if using text search
       ...(useTextScore && (resource as any).score !== undefined && {
         relevanceScore: Math.round((resource as any).score * 100) / 100,
@@ -877,6 +987,48 @@ export const getFacetsHandler = async (
             }},
             { $sort: { _id: 1 } }
           ],
+          fileTypes: [
+            // Categorize by content type from ZTDF manifest
+            { $project: {
+              contentType: '$ztdf.manifest.contentType',
+              category: {
+                $switch: {
+                  branches: [
+                    { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: '^image/', options: 'i' } }, then: 'images' },
+                    { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: '^video/', options: 'i' } }, then: 'videos' },
+                    { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: '^audio/', options: 'i' } }, then: 'audio' },
+                    { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'pdf|msword|wordprocessing|spreadsheet|excel|presentation|powerpoint|text/plain|text/markdown', options: 'i' } }, then: 'documents' },
+                    { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'zip|tar|gzip|rar|7z', options: 'i' } }, then: 'archives' },
+                    { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'javascript|json|html|css|xml', options: 'i' } }, then: 'code' }
+                  ],
+                  default: 'other'
+                }
+              }
+            }},
+            { $match: { category: { $ne: 'other' }, contentType: { $ne: null, $exists: true } } },
+            { $group: {
+              _id: '$category',
+              count: { $sum: 1 }
+            }},
+            { $sort: { count: -1 } },
+            { $project: {
+              value: '$_id',
+              label: {
+                $switch: {
+                  branches: [
+                    { case: { $eq: ['$_id', 'documents'] }, then: 'Documents' },
+                    { case: { $eq: ['$_id', 'images'] }, then: 'Images' },
+                    { case: { $eq: ['$_id', 'videos'] }, then: 'Videos' },
+                    { case: { $eq: ['$_id', 'audio'] }, then: 'Audio' },
+                    { case: { $eq: ['$_id', 'archives'] }, then: 'Archives' },
+                    { case: { $eq: ['$_id', 'code'] }, then: 'Code Files' }
+                  ],
+                  default: '$_id'
+                }
+              },
+              count: 1
+            }}
+          ],
           totalCount: [
             { $count: 'count' }
           ]
@@ -911,6 +1063,11 @@ export const getFacetsHandler = async (
             value: f._id,
             count: f.count
           })),
+          fileTypes: (fr.fileTypes || []).map((f: any) => ({
+            value: f.value,
+            label: f.label,
+            count: f.count
+          })),
         },
         totalCount: fr.totalCount[0]?.count || 0,
         timing: { totalMs },
@@ -923,6 +1080,7 @@ export const getFacetsHandler = async (
           cois: [],
           instances: [],
           encryptionStatus: [],
+          fileTypes: [],
         },
         totalCount: 0,
         timing: { totalMs },

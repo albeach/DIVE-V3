@@ -551,6 +551,70 @@ hub_up() {
         fi
 
         log_success "Hub services started (parallel mode: 4 dependency levels)"
+
+        # CRITICAL: Initialize MongoDB replica set after MongoDB container is healthy
+        # This must be done for quick-start (hub up) mode as well
+        # Backend and OPAL require MongoDB replica set for change streams
+        log_step "Initializing MongoDB replica set..."
+
+        # Wait for MongoDB to be healthy first
+        local mongo_wait=0
+        local mongo_max_wait=30
+        while [ $mongo_wait -lt $mongo_max_wait ]; do
+            if docker ps --filter "name=dive-hub-mongodb" --filter "health=healthy" --format "{{.Names}}" | grep -q "dive-hub-mongodb"; then
+                log_verbose "MongoDB container is healthy"
+                break
+            fi
+            sleep 2
+            mongo_wait=$((mongo_wait + 2))
+        done
+
+        if [ $mongo_wait -ge $mongo_max_wait ]; then
+            log_error "MongoDB container not healthy after ${mongo_max_wait}s"
+            return 1
+        fi
+
+        # Check if replica set is already initialized
+        local is_initialized=false
+        if docker exec dive-hub-mongodb mongosh admin -u admin -p "$MONGO_PASSWORD" --quiet --eval 'rs.status().myState' 2>/dev/null | grep -q "^1$"; then
+            log_verbose "MongoDB replica set already initialized and PRIMARY"
+            is_initialized=true
+        fi
+
+        # Initialize if not already initialized
+        if [ "$is_initialized" = "false" ]; then
+            log_verbose "Initializing MongoDB replica set..."
+
+            if [ ! -f "${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh" ]; then
+                log_error "MongoDB initialization script not found"
+                return 1
+            fi
+
+            if ! bash "${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh" dive-hub-mongodb admin "$MONGO_PASSWORD"; then
+                log_error "MongoDB replica set initialization FAILED"
+                log_error "This will cause 'not primary' errors and backend startup failure"
+                return 1
+            fi
+
+            log_success "MongoDB replica set initialized and PRIMARY"
+
+            # CRITICAL: Restart backend so it reconnects with new PRIMARY state
+            log_verbose "Restarting backend to reconnect to PRIMARY MongoDB..."
+            if docker ps --filter "name=dive-hub-backend" --format "{{.Names}}" | grep -q "dive-hub-backend"; then
+                docker restart dive-hub-backend >/dev/null 2>&1
+
+                # Wait for backend to be healthy again
+                local backend_wait=0
+                while [ $backend_wait -lt 30 ]; do
+                    if docker ps --filter "name=dive-hub-backend" --filter "health=healthy" --format "{{.Names}}" | grep -q "dive-hub-backend"; then
+                        log_success "Backend reconnected to MongoDB PRIMARY"
+                        break
+                    fi
+                    sleep 2
+                    backend_wait=$((backend_wait + 2))
+                done
+            fi
+        fi
     else
         # Fallback: Traditional sequential startup
         log_verbose "Using traditional sequential startup (PARALLEL_STARTUP_ENABLED=false)"

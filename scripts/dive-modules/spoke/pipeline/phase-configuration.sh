@@ -72,6 +72,32 @@ spoke_phase_configuration() {
     export USE_TERRAFORM_SSOT=true
 
     # ==========================================================================
+    # CRITICAL: Load Hub environment FIRST (for FEDERATION_ADMIN_KEY)
+    # ==========================================================================
+    # FIX (2026-01-27): Hub .env.hub contains FEDERATION_ADMIN_KEY needed for
+    # spoke registration/approval API calls. Load it before any Hub API interactions.
+    if [ -f "${DIVE_ROOT}/.env.hub" ]; then
+        log_verbose "Loading Hub environment for federation credentials"
+        # Export FEDERATION_ADMIN_KEY for spoke registration API calls
+        FEDERATION_ADMIN_KEY=$(grep "^FEDERATION_ADMIN_KEY=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+        if [ -n "$FEDERATION_ADMIN_KEY" ]; then
+            export FEDERATION_ADMIN_KEY
+            log_verbose "✓ FEDERATION_ADMIN_KEY loaded from Hub environment"
+        else
+            log_warn "FEDERATION_ADMIN_KEY not found in .env.hub (will use default)"
+        fi
+
+        # Also export Hub Keycloak admin password for wait_for_keycloak_admin_api_ready()
+        # FIX (2026-01-27): The readiness check needs this to authenticate with Hub Keycloak
+        KEYCLOAK_ADMIN_PASSWORD=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+        if [ -n "$KEYCLOAK_ADMIN_PASSWORD" ]; then
+            export KEYCLOAK_ADMIN_PASSWORD
+            export KC_BOOTSTRAP_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD"  # Alias for wait function
+            log_verbose "✓ Hub Keycloak admin password loaded"
+        fi
+    fi
+
+    # ==========================================================================
     # CRITICAL: Load secrets BEFORE any operations that need them
     # ==========================================================================
     # Secrets must be loaded at start of configuration phase because:
@@ -174,7 +200,7 @@ spoke_phase_configuration() {
     if ! spoke_config_sync_secrets "$instance_code"; then
         log_error "Secret sync failed - spoke cannot operate without secrets"
         log_error "Impact: Containers will not have credentials for databases/services"
-        
+
         if is_production_mode; then
             log_error "Fix: Ensure GCP Secret Manager access is configured"
             log_error "     Run: gcloud auth application-default login"
@@ -183,7 +209,7 @@ spoke_phase_configuration() {
             log_error "Fix: Ensure .env file exists with required secrets"
             log_error "     Run: ./dive secrets sync $code_upper"
         fi
-        
+
         return 1
     else
         log_success "✓ Secrets validated"
@@ -310,16 +336,33 @@ spoke_config_register_in_hub_mongodb() {
     local code_lower=$(lower "$instance_code")
 
     log_verbose "Registering spoke in Hub MongoDB spoke registry..."
-    
+
     # PREFLIGHT: Verify Hub is reachable before attempting registration
     # This prevents wasting time if Hub is down
-    local hub_url="${HUB_URL:-https://localhost:4000}"
-    
+    # Try multiple URLs since scripts run on host but containers use Docker hostnames
+    local hub_url=""
+    local hub_urls=(
+        "https://localhost:4000"           # Host access
+        "https://host.docker.internal:4000" # Docker Desktop host access
+        "https://dive-hub-backend:4000"     # Docker network access (if running in container)
+    )
+
     if [ "${SKIP_FEDERATION:-false}" = "false" ]; then
         log_step "Verifying Hub accessibility..."
-        
-        if ! curl -sf --max-time 5 "$hub_url/health" >/dev/null 2>&1; then
-            log_error "Hub unreachable at $hub_url"
+
+        local hub_reachable=false
+        for url in "${hub_urls[@]}"; do
+            if curl -sf --max-time 3 "$url/health" >/dev/null 2>&1; then
+                hub_url="$url"
+                hub_reachable=true
+                log_verbose "✓ Hub accessible at $url"
+                break
+            fi
+        done
+
+        if [ "$hub_reachable" = "false" ]; then
+            log_error "Hub unreachable at any known URL"
+            log_error "Tried: ${hub_urls[*]}"
             log_error "Impact: Spoke registration requires Hub to be running"
             log_error "        Spoke will be non-functional without Hub registration"
             log_error "Fix: Start Hub first: ./dive hub up"
@@ -328,10 +371,12 @@ spoke_config_register_in_hub_mongodb() {
             log_error "Override: Use --skip-federation flag to deploy without federation"
             return 1
         fi
-        
-        log_success "✓ Hub accessible"
+
+        log_success "✓ Hub accessible at $hub_url"
     else
         log_verbose "Skipping Hub reachability check (--skip-federation flag)"
+        # Still set a default for scripts that might need it
+        hub_url="https://localhost:4000"
     fi
 
     # Get spoke configuration
@@ -871,9 +916,11 @@ spoke_config_apply_terraform() {
         return 1
     fi
 
-    # Use admin password for test users
-    export TF_VAR_test_user_password="${!keycloak_password_var}"
-    export TF_VAR_admin_user_password="${!keycloak_password_var}"
+    # Use test user passwords following Hub pattern:
+    # 1. Try TEST_USER_PASSWORD/ADMIN_PASSWORD env vars first
+    # 2. Fall back to Keycloak admin password (same as Hub approach)
+    export TF_VAR_test_user_password="${TEST_USER_PASSWORD:-${!keycloak_password_var}}"
+    export TF_VAR_admin_user_password="${ADMIN_PASSWORD:-${!keycloak_password_var}}"
 
     # Set Keycloak credentials for provider
     export KEYCLOAK_USER="admin"

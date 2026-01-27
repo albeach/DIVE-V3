@@ -17,7 +17,10 @@ rule_files:
 
 alerting:
   alertmanagers:
-    - static_configs:
+    - scheme: https
+      tls_config:
+        insecure_skip_verify: true
+      static_configs:
         - targets: ['alertmanager:9093']
 
 scrape_configs:
@@ -25,13 +28,16 @@ scrape_configs:
   # SELF-MONITORING
   # ===========================================================================
   - job_name: 'prometheus'
+    scheme: https
+    tls_config:
+      insecure_skip_verify: true
     static_configs:
       - targets: ['localhost:9090']
 
   # ===========================================================================
   # HUB SERVICES (via host.docker.internal - localhost ports)
   # ===========================================================================
-  
+
   - job_name: 'hub-backend'
     scheme: https
     tls_config:
@@ -96,26 +102,26 @@ scrape_configs:
   # ===========================================================================
   # REDIS EXPORTERS (within shared-network)
   # ===========================================================================
-  
-  - job_name: 'redis-hub'
+
+  - job_name: 'redis-hub-cache'
     static_configs:
-      - targets: ['hub-redis-exporter:9121']
+      - targets: ['exporter-hub-cache:9121']
         labels:
           instance: 'hub'
-          redis_type: 'main'
+          redis_type: 'cache'
 
-  - job_name: 'redis-blacklist'
+  - job_name: 'redis-token-store'
     static_configs:
-      - targets: ['blacklist-redis-exporter:9121']
+      - targets: ['exporter-token-store:9121']
         labels:
           instance: 'shared'
-          redis_type: 'blacklist'
+          redis_type: 'token-store'
 
   # ===========================================================================
   # SPOKE INSTANCES (if running on standard spoke ports)
   # Estonia (EST) - Ports: 3008/4008/8448/8188
   # ===========================================================================
-  
+
   - job_name: 'est-backend'
     scheme: https
     tls_config:

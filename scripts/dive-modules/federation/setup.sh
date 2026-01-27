@@ -103,8 +103,9 @@ get_spoke_admin_token() {
     local instance_code="$1"
     local code_lower=$(lower "$instance_code")
 
-    local ports=$(get_instance_ports "$instance_code" 2>/dev/null)
-    local kc_port=$(echo "$ports" | jq -r '.keycloak // 8443')
+    # Get port information using eval pattern
+    eval "$(get_instance_ports "$instance_code" 2>/dev/null)"
+    local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
     local spoke_url="https://localhost:${kc_port}"
 
     # Get admin password
@@ -176,8 +177,9 @@ federation_link() {
     # Step 2: Get spoke realm info
     log_info "Step 2: Getting Spoke realm information..."
 
-    local ports=$(get_instance_ports "$instance_code" 2>/dev/null)
-    local kc_port=$(echo "$ports" | jq -r '.keycloak // 8443')
+    # Get port information using eval pattern
+    eval "$(get_instance_ports "$instance_code" 2>/dev/null)"
+    local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
     local spoke_url="https://localhost:${kc_port}"
     local spoke_realm="dive-v3-broker-${code_lower}"
 
@@ -202,8 +204,8 @@ federation_link() {
     "tokenUrl": "${spoke_url}/realms/${spoke_realm}/protocol/openid-connect/token",
     "userInfoUrl": "${spoke_url}/realms/${spoke_realm}/protocol/openid-connect/userinfo",
     "logoutUrl": "${spoke_url}/realms/${spoke_realm}/protocol/openid-connect/logout",
-    "clientId": "dive-hub-federation",
-    "clientSecret": "federation-secret-${code_lower}",
+    "clientId": "dive-v3-broker-usa",
+    "clientSecret": "${HUB_REALM}",
     "defaultScope": "openid profile email",
     "syncMode": "FORCE",
     "validateSignature": "true",
@@ -227,51 +229,14 @@ EOF
         log_warn "IdP may already exist or failed: $response"
     fi
 
-    # Step 4: Create client on Spoke for Hub federation
-    log_info "Step 4: Creating federation client on Spoke..."
-
-    local client_config=$(cat << EOF
-{
-  "clientId": "dive-hub-federation",
-  "enabled": true,
-  "publicClient": false,
-  "directAccessGrantsEnabled": true,
-  "standardFlowEnabled": true,
-  "protocol": "openid-connect",
-  "redirectUris": [
-    "${HUB_KC_URL}/realms/${HUB_REALM}/broker/${idp_alias}/endpoint",
-    "${HUB_KC_URL}/realms/${HUB_REALM}/broker/${idp_alias}/endpoint/*"
-  ],
-  "webOrigins": ["${HUB_KC_URL}"],
-  "secret": "federation-secret-${code_lower}"
-}
-EOF
-)
-
-    response=$(curl -sf -X POST "${spoke_url}/admin/realms/${spoke_realm}/clients" \
-        -H "Authorization: Bearer $spoke_token" \
-        -H "Content-Type: application/json" \
-        -d "$client_config" \
-        --insecure 2>&1)
-
-    if [ $? -eq 0 ]; then
-        log_success "Federation client created on Spoke"
-    else
-        log_warn "Client may already exist or failed: $response"
-    fi
-
-    # Step 5: Create protocol mappers
-    log_info "Step 5: Configuring protocol mappers..."
-    federation_configure_mappers "$instance_code" "$spoke_token"
-
-    # Step 6: Register in database
-    log_info "Step 6: Recording federation in database..."
+    # Step 4: Register in database
+    log_info "Step 4: Recording federation in database..."
     if type orch_db_exec &>/dev/null; then
         orch_db_exec "
-            INSERT INTO federation_links (hub_realm, spoke_code, spoke_realm, status, created_at)
-            VALUES ('${HUB_REALM}', '${code_upper}', '${spoke_realm}', 'ACTIVE', NOW())
-            ON CONFLICT (hub_realm, spoke_code) DO UPDATE SET status='ACTIVE', updated_at=NOW()
-        " >/dev/null 2>&1 || true
+            INSERT INTO federation_links (source_code, target_code, direction, idp_alias, status, created_at)
+            VALUES ('${code_lower}', 'usa', 'SPOKE_TO_HUB', '${idp_alias}', 'ACTIVE', NOW())
+            ON CONFLICT (source_code, target_code, direction) DO UPDATE SET status='ACTIVE', updated_at=NOW()
+        " >/dev/null 2>&1 || log_warn "Database recording failed (orch_db_exec not available)"
     fi
 
     log_success "Federation link created for $code_upper"
@@ -281,7 +246,6 @@ EOF
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo "  Hub IdP Alias:   ${idp_alias}"
     echo "  Spoke Realm:     ${spoke_realm}"
-    echo "  Spoke Client:    dive-hub-federation"
     echo ""
     echo "Next: ./dive federation verify $code_upper"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
@@ -342,8 +306,9 @@ federation_configure_mappers() {
     local token="$2"
     local code_lower=$(lower "$instance_code")
 
-    local ports=$(get_instance_ports "$instance_code" 2>/dev/null)
-    local kc_port=$(echo "$ports" | jq -r '.keycloak // 8443')
+    # Get port information using eval pattern
+    eval "$(get_instance_ports "$instance_code" 2>/dev/null)"
+    local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
     local spoke_url="https://localhost:${kc_port}"
     local spoke_realm="dive-v3-broker-${code_lower}"
 

@@ -200,7 +200,17 @@ spoke_deployment_wait_for_core_services() {
 
     for service in "${core_services[@]}"; do
         local container="dive-spoke-${code_lower}-${service}"
-        local timeout="${SPOKE_SERVICE_TIMEOUTS[$service]:-60}"
+
+        # Extract base service name (remove instance suffix if present)
+        local base_service="${service%-*}"
+
+        # Get timeout safely - check if array is set first
+        local timeout=60
+        if [[ -v SPOKE_SERVICE_TIMEOUTS ]]; then
+            if [[ -v SPOKE_SERVICE_TIMEOUTS[$base_service] ]]; then
+                timeout="${SPOKE_SERVICE_TIMEOUTS[$base_service]}"
+            fi
+        fi
 
         if ! spoke_containers_wait_for_service "$container" "$timeout"; then
             log_error "Core service $service failed to start"
@@ -370,13 +380,13 @@ spoke_deployment_ensure_admin_user() {
     # This replaces the previous simple authentication check (60s timeout)
     # with comprehensive readiness verification (180s timeout)
     log_step "Waiting for Keycloak admin API readiness..."
-    
+
     if ! wait_for_keycloak_admin_api_ready "$kc_container" 180 "$kc_admin_pass"; then
         log_error "Keycloak admin API not ready after 180s"
         log_error "This blocks Terraform and federation setup - deployment cannot continue"
         return 1
     fi
-    
+
     log_success "Keycloak admin API ready - proceeding with configuration"
 }
 

@@ -212,7 +212,7 @@ _federation_link_direct() {
     fi
 
     log_info "Using Keycloak password from GCP Secret Manager (SSOT)"
-    
+
     # PHASE 2 FIX: Wait for Keycloak admin API readiness before authentication
     # This ensures Keycloak is fully initialized, not just container-healthy
     log_verbose "Ensuring $target_upper Keycloak admin API is ready..."
@@ -277,7 +277,7 @@ _federation_link_direct() {
         log_error "Failed to authenticate with source $source_upper Keycloak"
         log_error "This usually indicates Keycloak is not fully initialized yet"
         log_error "Proper fix: Call wait_for_keycloak_admin_api_ready() before federation setup"
-        
+
         # Log detailed error information
         if echo "$auth_response" | grep -q "error"; then
             local error_desc=$(echo "$auth_response" | grep -o '"error_description":"[^"]*' | cut -d'"' -f4)
@@ -285,7 +285,7 @@ _federation_link_direct() {
                 log_error "Keycloak error: $error_desc"
             fi
         fi
-        
+
         log_verbose "Container: $source_kc_container"
         log_verbose "Password source: GCP -> KC_BOOTSTRAP_ADMIN_PASSWORD -> KEYCLOAK_ADMIN_PASSWORD"
         return 1
@@ -644,7 +644,8 @@ _ensure_federation_client_mappers() {
     local localized_attrs=()
 
     # Detect realm locale from realm name (e.g., dive-v3-broker-fra -> fra)
-    # Localized attributes are based on nato-attribute-mappings.json (SSOT)
+    # Localized attributes are based on backend/src/services/clearance-mapper.service.ts (SSOT)
+    # The backend TypeScript file is the single source of truth, initialized into MongoDB
     local realm_code="${realm##*-}"
     case "$realm_code" in
         fra)

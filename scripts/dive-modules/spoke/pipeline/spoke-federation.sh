@@ -106,6 +106,50 @@ spoke_federation_setup() {
     log_step "Setting up federation for $code_upper"
 
     # ==========================================================================
+    # CRITICAL: Load Hub environment for Keycloak password (FIX 2026-01-27)
+    # ==========================================================================
+    # The wait_for_keycloak_admin_api_ready() function needs Hub admin password
+    # but it's only in .env.hub (loaded by Docker Compose, not by bash scripts)
+    if [ -f "${DIVE_ROOT}/.env.hub" ]; then
+        # Export Hub Keycloak admin password for readiness checks
+        KEYCLOAK_ADMIN_PASSWORD=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+        if [ -n "$KEYCLOAK_ADMIN_PASSWORD" ]; then
+            export KEYCLOAK_ADMIN_PASSWORD
+            export KC_BOOTSTRAP_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD"  # Alias
+            log_verbose "✓ Hub Keycloak admin password loaded for readiness checks"
+        fi
+    fi
+
+    # ==========================================================================
+    # CRITICAL: Wait for Keycloak Admin APIs to be ready (FIX 2026-01-27)
+    # ==========================================================================
+    # Keycloak containers may report healthy but admin API not fully initialized.
+    # Wait for both Hub and Spoke Keycloak before attempting federation setup.
+    # ==========================================================================
+    log_verbose "Verifying Keycloak admin APIs are ready..."
+
+    # Wait for Hub Keycloak admin API
+    if type wait_for_keycloak_admin_api_ready &>/dev/null; then
+        if ! wait_for_keycloak_admin_api_ready "dive-hub-keycloak" 120; then
+            log_error "Hub Keycloak admin API not ready - cannot proceed with federation"
+            return 1
+        fi
+        log_verbose "✓ Hub Keycloak admin API ready"
+    else
+        log_warn "wait_for_keycloak_admin_api_ready not available - skipping readiness check"
+    fi
+
+    # Wait for Spoke Keycloak admin API
+    local spoke_kc_container="dive-spoke-${code_lower}-keycloak"
+    if type wait_for_keycloak_admin_api_ready &>/dev/null; then
+        if ! wait_for_keycloak_admin_api_ready "$spoke_kc_container" 120; then
+            log_error "Spoke Keycloak admin API not ready - cannot proceed with federation"
+            return 1
+        fi
+        log_verbose "✓ Spoke Keycloak admin API ready"
+    fi
+
+    # ==========================================================================
     # DATABASE STATE: Create initial federation link records (2026-01-16)
     # ==========================================================================
     # Record both directions as PENDING before attempting creation
@@ -791,6 +835,18 @@ PYTHON_EOF
         fi
     fi
 
+    # ==========================================================================
+    # CRITICAL: Ensure Hub Keycloak admin API is ready before Terraform
+    # ==========================================================================
+    log_verbose "Verifying Hub Keycloak ready for Terraform operations..."
+    if type wait_for_keycloak_admin_api_ready &>/dev/null; then
+        if ! wait_for_keycloak_admin_api_ready "dive-hub-keycloak" 120; then
+            log_error "Hub Keycloak admin API not ready for Terraform"
+            return 1
+        fi
+        log_verbose "✓ Hub Keycloak admin API ready for Terraform"
+    fi
+
     # Apply Hub Terraform
     log_step "Applying Hub Terraform to create federation client..."
 
@@ -808,8 +864,9 @@ PYTHON_EOF
     # Export TF_VAR environment variables
     export TF_VAR_keycloak_admin_password="${KEYCLOAK_ADMIN_PASSWORD_USA:-$(gcloud secrets versions access latest --secret=dive-v3-keycloak-usa --project=dive25 2>/dev/null)}"
     export TF_VAR_client_secret="${KEYCLOAK_CLIENT_SECRET_USA:-$(gcloud secrets versions access latest --secret=dive-v3-keycloak-client-secret --project=dive25 2>/dev/null)}"
-    export TF_VAR_test_user_password="${TF_VAR_keycloak_admin_password}"
-    export TF_VAR_admin_user_password="${TF_VAR_keycloak_admin_password}"
+    # Use test user passwords following Hub pattern
+    export TF_VAR_test_user_password="${TEST_USER_PASSWORD:-${TF_VAR_keycloak_admin_password}}"
+    export TF_VAR_admin_user_password="${ADMIN_PASSWORD:-${TF_VAR_keycloak_admin_password}}"
     export KEYCLOAK_USER="admin"
     export KEYCLOAK_PASSWORD="${TF_VAR_keycloak_admin_password}"
 
