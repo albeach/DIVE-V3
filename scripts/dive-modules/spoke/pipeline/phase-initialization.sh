@@ -458,7 +458,7 @@ EOF
                         # Check if SPOKE_OPAL_TOKEN is empty or missing
                         local current_token
                         current_token=$(grep "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null | cut -d= -f2- | tr -d ' ' || echo "")
-                        
+
                         if [ -z "$current_token" ] || [ "$current_token" = "" ]; then
                             # Token is empty - set placeholder
                             if grep -q "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null; then
@@ -484,7 +484,7 @@ EOF
                 if [ -f "$env_file" ]; then
                     local current_token
                     current_token=$(grep "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null | cut -d= -f2- | tr -d ' ' || echo "")
-                    
+
                     if [ -z "$current_token" ] || [ "$current_token" = "" ]; then
                         if grep -q "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null; then
                             sed -i.bak "s|^SPOKE_OPAL_TOKEN=.*|SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision|" "$env_file"
@@ -503,7 +503,7 @@ EOF
             if [ -f "$env_file" ]; then
                 local current_token
                 current_token=$(grep "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null | cut -d= -f2- | tr -d ' ' || echo "")
-                
+
                 if [ -z "$current_token" ] || [ "$current_token" = "" ]; then
                     if grep -q "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null; then
                         sed -i.bak "s|^SPOKE_OPAL_TOKEN=.*|SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision|" "$env_file"
