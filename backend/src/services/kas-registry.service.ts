@@ -128,52 +128,26 @@ class KASRegistryService {
   }
 
   /**
-   * Load KAS registry from configuration file
+   * REMOVED: loadRegistry() from JSON file - NO JSON FILE LOADING
+   * 
+   * KAS registry must be loaded from MongoDB (SSOT) via MongoKasRegistryStore
+   * This service should use mongoKasRegistryStore.findAll() instead
+   * 
+   * Migration path:
+   * 1. Use mongoKasRegistryStore from models/kas-registry.model.ts
+   * 2. Query MongoDB kas_registry collection
+   * 3. For spokes, query Hub API /api/kas/registry
    */
   async loadRegistry(): Promise<void> {
-    const registryPath = path.join(process.cwd(), '..', 'config', 'kas-registry.json');
-    const altRegistryPath = path.join(process.cwd(), 'config', 'kas-registry.json');
-
-    let actualPath = registryPath;
-
-    try {
-      // Try primary path first, then alternative
-      if (!fs.existsSync(registryPath)) {
-        if (fs.existsSync(altRegistryPath)) {
-          actualPath = altRegistryPath;
-        } else {
-          logger.warn('KAS registry not found, cross-instance KAS disabled', {
-            primaryPath: registryPath,
-            altPath: altRegistryPath
-          });
-          return;
-        }
-      }
-
-      const registryContent = fs.readFileSync(actualPath, 'utf-8');
-      this.registry = JSON.parse(registryContent) as IKASRegistry;
-
-      logger.info('KAS registry loaded successfully', {
-        version: this.registry.version,
-        kasCount: this.registry.kasServers.length,
-        kasIds: this.registry.kasServers.map(k => k.kasId),
-        crossKASEnabled: this.registry.federationTrust.crossKASEnabled
-      });
-
-      // Initialize HTTP clients for each KAS
-      for (const kas of this.registry.kasServers) {
-        this.initializeKASClient(kas);
-      }
-
-      // Start health check monitoring
-      this.startHealthChecks();
-
-    } catch (error) {
-      logger.error('Failed to load KAS registry', {
-        error: error instanceof Error ? error.message : 'Unknown error',
-        path: actualPath
-      });
-    }
+    logger.warn('KASRegistryService.loadRegistry() is deprecated - use MongoKasRegistryStore instead');
+    logger.warn('NO JSON FILE LOADING - MongoDB is SSOT');
+    
+    // Return empty registry - must be populated via MongoDB
+    this.registry = {
+      kasServers: [],
+      version: '2.0',
+      federationTrust: { trustMatrix: {}, crossKASEnabled: false }
+    };
   }
 
   /**
