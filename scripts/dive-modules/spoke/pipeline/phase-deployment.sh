@@ -361,33 +361,23 @@ spoke_deployment_ensure_admin_user() {
     fi
 
     if [ -z "$kc_admin_pass" ]; then
-        log_warn "Cannot get Keycloak admin password - admin user creation skipped"
+        log_warn "Cannot get Keycloak admin password - admin verification skipped"
         return
     fi
 
-    # Wait for Keycloak API to be ready
-    local max_wait=60
-    local elapsed=0
-
-    while [ $elapsed -lt $max_wait ]; do
-        local response
-        response=$(docker exec "$kc_container" curl -sf \
-            -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
-            -d "grant_type=password" \
-            -d "username=admin" \
-            -d "password=${kc_admin_pass}" \
-            -d "client_id=admin-cli" 2>/dev/null)
-
-        if echo "$response" | grep -q "access_token"; then
-            log_success "Keycloak admin access verified"
-            return
-        fi
-
-        sleep 2
-        elapsed=$((elapsed + 2))
-    done
-
-    log_warn "Could not verify Keycloak admin access within ${max_wait}s"
+    # Wait for Keycloak Admin API to be fully ready
+    # Uses wait_for_keycloak_admin_api_ready() from common.sh (Phase 2 fix)
+    # This replaces the previous simple authentication check (60s timeout)
+    # with comprehensive readiness verification (180s timeout)
+    log_step "Waiting for Keycloak admin API readiness..."
+    
+    if ! wait_for_keycloak_admin_api_ready "$kc_container" 180 "$kc_admin_pass"; then
+        log_error "Keycloak admin API not ready after 180s"
+        log_error "This blocks Terraform and federation setup - deployment cannot continue"
+        return 1
+    fi
+    
+    log_success "Keycloak admin API ready - proceeding with configuration"
 }
 
 # =============================================================================
