@@ -148,14 +148,24 @@ services:
     networks:
       - dive-internal
     healthcheck:
-      # Check if MongoDB is accepting connections (not PRIMARY status)
-      # PRIMARY status comes after post-start initialization
+      # CRITICAL: Check if MongoDB is PRIMARY (not just accepting connections)
+      # Backend requires PRIMARY status to create indexes and use change streams
+      # Returns exit 0 only when replica set is initialized AND this node is PRIMARY
       test: >
-        mongosh admin -u admin -p ${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}} --quiet --eval "db.adminCommand('ping')" | grep -q "ok"
+        mongosh admin -u admin -p ${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}} --quiet --eval "
+        try {
+          const state = rs.status().myState;
+          if (state === 1) { print('PRIMARY'); quit(0); }
+          else { print('NOT_PRIMARY:' + state); quit(1); }
+        } catch(e) {
+          if (e.codeName === 'NotYetInitialized') { print('NOT_INITIALIZED'); quit(1); }
+          else { db.adminCommand('ping'); quit(0); }
+        }
+        " 2>&1 | grep -q "PRIMARY"
       interval: 5s
-      timeout: 3s
-      retries: 20
-      start_period: 30s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
     restart: unless-stopped
 
   redis-{{INSTANCE_CODE_LOWER}}:
