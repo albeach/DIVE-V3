@@ -471,6 +471,7 @@ compose_print_stats() {
 export -f compose_get_services
 export -f compose_get_dependencies
 export -f compose_get_label
+export -f compose_get_service_label
 export -f compose_get_services_by_label
 export -f compose_get_services_by_class
 export -f compose_build_dependency_graph

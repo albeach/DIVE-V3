@@ -115,59 +115,9 @@ _get_keycloak_port() {
 # =============================================================================
 # FEDERATION LINK - Auto-configure IdP Trust (Phase 3)
 # =============================================================================
-
-##
-# Helper function for retrying API calls with exponential backoff
-##
-_federation_link_with_retry() {
-    local url="$1"
-    local payload="$2"
-    local token="$3"
-    local description="$4"
-    local max_retries="${5:-3}"
-    local attempt=1
-    local delay=2
-    local response=""
-    local success=false
-
-    while [ $attempt -le $max_retries ]; do
-        if [ $attempt -gt 1 ]; then
-            echo -e "    ${YELLOW}Retry $attempt/$max_retries after ${delay}s...${NC}"
-            sleep $delay
-            delay=$((delay * 2))  # Exponential backoff
-        fi
-
-        response=$(curl -sk --max-time 30 -X POST "${url}" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${token}" \
-            -d "$payload" 2>&1)
-
-        local curl_exit=$?
-
-        if [ $curl_exit -eq 0 ]; then
-            if echo "$response" | grep -q '"success":true' || echo "$response" | grep -q 'already exists'; then
-                success=true
-                break
-            fi
-        fi
-
-        # Check for specific recoverable errors
-        if echo "$response" | grep -q -E '(Connection refused|timed out|ECONNREFUSED|ETIMEDOUT)'; then
-            log_warn "Network error on attempt $attempt: connection failed"
-        elif [ $curl_exit -ne 0 ]; then
-            log_warn "Curl error on attempt $attempt: exit code $curl_exit"
-        fi
-
-        ((attempt++))
-    done
-
-    echo "$response"
-    if [ "$success" = true ]; then
-        return 0
-    else
-        return 1
-    fi
-}
+# NOTE: Retry logic removed per Phase 1 cleanup - use proper readiness checks
+# instead of retry bandaids. See wait_for_keycloak_admin_api_ready() in common.sh
+# =============================================================================
 
 ##
 # Direct IdP creation using Keycloak Admin API (bypasses backend)
@@ -987,29 +937,19 @@ _create_idp_mapper() {
 
 federation_link() {
     local remote_instance="${1:-}"
-    local max_retries="${2:-3}"
-    local retry_mode=false
-
-    if [ "$remote_instance" = "--retry" ]; then
-        log_error "Usage: ./dive federation link <INSTANCE_CODE> [--retry]"
-        return 1
-    fi
 
     if [ -z "$remote_instance" ]; then
-        log_error "Usage: ./dive federation link <INSTANCE_CODE> [--retry]"
+        log_error "Usage: ./dive federation link <INSTANCE_CODE>"
         echo ""
         echo "Examples:"
         echo "  ./dive federation link GBR           # Link GBR spoke to this instance"
         echo "  ./dive federation link USA           # Link USA hub to this instance"
-        echo "  ./dive federation link EST --retry   # Retry with exponential backoff"
+        echo "  ./dive federation link EST           # Link EST spoke to this instance"
+        echo ""
+        echo "Note: Retry logic removed per Phase 1 cleanup. Ensure Keycloak is ready"
+        echo "      before calling this function (use wait_for_keycloak_admin_api_ready)."
         echo ""
         return 1
-    fi
-
-    # Handle --retry flag
-    if [ "${2:-}" = "--retry" ] || [ "${2:-}" = "-r" ]; then
-        retry_mode=true
-        max_retries=5
     fi
 
     local remote_code="${remote_instance^^}"
@@ -1033,9 +973,6 @@ federation_link() {
     fi
 
     log_step "Linking Identity Provider: ${remote_code} ↔ ${local_code}"
-    if [ "$retry_mode" = true ]; then
-        echo -e "  ${CYAN}Retry mode enabled (max ${max_retries} attempts with exponential backoff)${NC}"
-    fi
     echo ""
 
     if [ "$DRY_RUN" = true ]; then
@@ -1054,25 +991,17 @@ federation_link() {
 
     # Try backend API first
     local payload="{\"localInstance\": \"${local_code}\", \"remoteInstance\": \"${remote_code}\"}"
+    local admin_token
+    admin_token=$(get_instance_admin_token "$local_code" 2>/dev/null || echo '')
+
+    # PHASE 1 FIX: Removed retry logic - proper readiness checks should be done
+    # before calling this function. Retry logic was a bandaid that masked timing issues.
     local response
-
-    if [ "$retry_mode" = true ]; then
-        response=$(_federation_link_with_retry \
-            "${local_api_url}/api/federation/link-idp" \
-            "$payload" \
-            "$(get_instance_admin_token "$local_code" 2>/dev/null || echo '')" \
-            "Link ${remote_code}" \
-            "$max_retries")
-    else
-        local admin_token
-        admin_token=$(get_instance_admin_token "$local_code" 2>/dev/null || echo '')
-
-        response=$(curl -sk --max-time 30 -X POST "${local_api_url}/api/federation/link-idp" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer ${admin_token}" \
-            -H "X-CLI-Bypass: dive-cli-local-dev" \
-            -d "$payload" 2>&1)
-    fi
+    response=$(curl -sk --max-time 30 -X POST "${local_api_url}/api/federation/link-idp" \
+        -H "Content-Type: application/json" \
+        -H "Authorization: Bearer ${admin_token}" \
+        -H "X-CLI-Bypass: dive-cli-local-dev" \
+        -d "$payload" 2>&1)
 
     if echo "$response" | grep -q '"success":true'; then
         log_success "Created ${remote_lower}-idp in ${local_code} via backend API"
