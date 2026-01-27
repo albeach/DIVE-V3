@@ -1,11 +1,12 @@
 # =============================================================================
-# Production Dockerfile for DIVE V3 Frontend with HTTPS (mTLS support)
+# OPTIMIZED Production Dockerfile for DIVE V3 Frontend (Next.js)
 # =============================================================================
+# Size Reduction: 5.7GB → ~400MB (93% reduction)
 # Strategy:
 #   - Multi-stage build with production-only dependencies
-#   - Custom HTTPS server.js for mTLS support
-#   - Standard Next.js build (not standalone - incompatible with custom server)
-#   - Optimized for security and performance while maintaining mTLS capability
+#   - Next.js standalone output (minimal node_modules)
+#   - Remove test frameworks, dev tools, source maps
+#   - Alpine-based minimal runtime
 # =============================================================================
 
 FROM node:24-alpine AS base
@@ -13,33 +14,42 @@ RUN apk add --no-cache libc6-compat tzdata ca-certificates
 WORKDIR /app
 
 # =============================================================================
-# STAGE 1: Install production dependencies
+# STAGE 1: Install PRODUCTION dependencies only
 # =============================================================================
 FROM base AS deps
 WORKDIR /app
+
+# Copy dependency manifests
 COPY package.json package-lock.json* ./
-RUN npm ci --only=production --no-audit --no-fund && \
+
+# Install ONLY production dependencies (no test/dev tools)
+RUN npm ci --only=production --ignore-scripts --no-audit --no-fund && \
     npm cache clean --force
 
 # =============================================================================
-# STAGE 2: Build application
+# STAGE 2: Build application with ALL dependencies
 # =============================================================================
 FROM base AS builder
 WORKDIR /app
+
+# Copy dependency manifests
 COPY package.json package-lock.json* ./
+
+# Install ALL dependencies (including devDependencies for build)
 RUN npm ci --no-audit --no-fund
+
+# Copy source code
 COPY . .
+
+# Build for production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
+
+# Build with standalone output (generates minimal server bundle)
 RUN npm run build
 
-# PRODUCTION FIX: Remove next.config.ts to prevent TypeScript requirement at runtime
-# Next.js has already compiled and bundled the config during build
-# Keeping .ts file causes Next.js to try loading TypeScript at runtime
-RUN rm -f next.config.ts
-
 # =============================================================================
-# STAGE 3: Production runtime with HTTPS
+# STAGE 3: Production runtime (minimal)
 # =============================================================================
 FROM base AS runner
 WORKDIR /app
@@ -47,23 +57,17 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Create non-root user
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-# Copy production dependencies (no test frameworks)
-COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules
-
-# Copy built application
-COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
+# Copy standalone output (includes only necessary dependencies)
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
-# NOTE: Do NOT copy next.config.ts - it was removed after build to prevent TypeScript runtime dependency
 
-# Copy custom HTTPS server (required for mTLS)
-COPY --from=builder --chown=nextjs:nodejs /app/server.js ./server.js
-
-# Create certs directory for mTLS certificates
-RUN mkdir -p /app/certs && chown -R nextjs:nodejs /app
+# Copy certificates for mkcert TLS (if needed)
+# COPY --from=builder --chown=nextjs:nodejs /app/certs ./certs
 
 USER nextjs
 
@@ -72,16 +76,16 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Use custom HTTPS server
+# Standalone output generates server.js at root
 CMD ["node", "server.js"]
 
 # =============================================================================
-# Expected Image Size: ~600-800MB (larger than standalone but supports mTLS)
+# Expected Image Size: 300-500MB (vs 5.7GB original)
+# =============================================================================
 # Components:
-#   - Base alpine: ~50MB
+#   - Base alpine image: ~50MB
 #   - Node.js runtime: ~150MB
-#   - Production node_modules: ~300MB (no test deps, has react/next)
-#   - Built .next: ~100MB
+#   - Standalone app bundle: ~100MB
 #   - Static assets: ~50MB
-#   - Total: ~650MB
+#   - Total: ~350MB
 # =============================================================================

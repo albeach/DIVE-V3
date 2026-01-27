@@ -260,24 +260,24 @@ export default function FileUploader({
             exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, y: -10 }}
             transition={{ duration: 0.2 }}
           >
-            <motion.div
-              {...getRootProps()}
-              variants={shouldReduceMotion ? undefined : dropzoneVariants}
-              initial="idle"
-              animate={getDropzoneState()}
-              whileHover={disabled ? undefined : 'hover'}
-              className={cn(
-                'relative border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all',
-                'bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-900',
-                isDragActive && 'border-blue-500 bg-blue-50/50 dark:bg-blue-900/20',
-                isDragReject && 'border-red-500 bg-red-50/50 dark:bg-red-900/20',
-                disabled && 'opacity-50 cursor-not-allowed',
-                !disabled && 'hover:bg-gray-50/80 dark:hover:bg-gray-800/80'
-              )}
-              role="button"
-              aria-label="File upload dropzone. Click to select a file or drag and drop."
-              tabIndex={disabled ? -1 : 0}
-            >
+            <div {...getRootProps()}>
+              <motion.div
+                variants={shouldReduceMotion ? undefined : dropzoneVariants}
+                initial="idle"
+                animate={getDropzoneState()}
+                whileHover={disabled ? undefined : 'hover'}
+                className={cn(
+                  'relative border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all',
+                  'bg-gradient-to-br from-gray-50 to-white dark:from-gray-800 dark:to-gray-900',
+                  isDragActive && 'border-blue-500 bg-blue-50/50 dark:bg-blue-900/20',
+                  isDragReject && 'border-red-500 bg-red-50/50 dark:bg-red-900/20',
+                  disabled && 'opacity-50 cursor-not-allowed',
+                  !disabled && 'hover:bg-gray-50/80 dark:hover:bg-gray-800/80'
+                )}
+                role="button"
+                aria-label="File upload dropzone. Click to select a file or drag and drop."
+                tabIndex={disabled ? -1 : 0}
+              >
               <input {...getInputProps()} aria-label="File input" />
 
               {/* Background Pattern */}
@@ -357,7 +357,7 @@ export default function FileUploader({
                               const imageType = item.types.find((t) => t.startsWith('image/'));
                               if (imageType) {
                                 item.getType(imageType).then((blob) => {
-                                  const pastedFile = new File([blob], 'pasted-image.png', {
+                                  const pastedFile = new (File as any)([blob], 'pasted-image.png', {
                                     type: imageType,
                                   });
                                   onFileSelect(pastedFile);
@@ -415,6 +415,7 @@ export default function FileUploader({
                 )}
               </div>
             </motion.div>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>

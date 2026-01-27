@@ -1,6 +1,6 @@
 # ROOT CAUSE FIXES - FRA SPOKE DEPLOYMENT ERRORS
-**Date**: 2026-01-27  
-**Instance**: FRA (France)  
+**Date**: 2026-01-27
+**Instance**: FRA (France)
 **Objective**: Eliminate ALL errors/warnings on fresh deployment
 
 ---
@@ -32,7 +32,7 @@ local app_services="backend-${code_lower} kas-${code_lower} frontend-${code_lowe
 ---
 
 ## FIX #1: Auto-Generate Missing Environment Variables
-**File**: `scripts/dive-modules/spoke/pipeline/spoke-secrets.sh`  
+**File**: `scripts/dive-modules/spoke/pipeline/spoke-secrets.sh`
 **Function**: `spoke_secrets_sync_to_env()`
 
 ### Problem
@@ -57,7 +57,7 @@ if ! grep -q "^DATABASE_URL=" "$env_file" 2>/dev/null; then
     local postgres_pass="${!env_var_name}"
     local postgres_pass_var="POSTGRES_PASSWORD_${code_upper}"
     postgres_pass="${!postgres_pass_var}"
-    
+
     if [ -n "$postgres_pass" ]; then
         echo "" >> "$env_file"
         echo "# PostgreSQL Database URL for audit persistence (auto-generated)" >> "$env_file"
@@ -77,7 +77,7 @@ fi
 ---
 
 ## FIX #2: Robust MongoDB Healthcheck
-**File**: `templates/spoke/docker-compose.template.yml`  
+**File**: `templates/spoke/docker-compose.template.yml`
 **Service**: `mongodb-{{INSTANCE_CODE_LOWER}}`
 
 ### Problem
@@ -111,7 +111,7 @@ healthcheck:
 ---
 
 ## FIX #3: Backend MongoDB Retry Logic
-**File**: `backend/src/models/trusted-issuer.model.ts`  
+**File**: `backend/src/models/trusted-issuer.model.ts`
 **Function**: `initOPALDataStore()`
 
 ### Problem
@@ -164,8 +164,8 @@ if (!indexesCreated) {
 ---
 
 ## FIX #4: KAS Deployment Inclusion
-**Status**: ✅ VERIFIED - KAS is already in deployment script  
-**File**: `scripts/dive-modules/spoke/pipeline/spoke-containers.sh`  
+**Status**: ✅ VERIFIED - KAS is already in deployment script
+**File**: `scripts/dive-modules/spoke/pipeline/spoke-containers.sh`
 **Line**: 385
 
 ### Current State
@@ -211,10 +211,10 @@ Despite being in the script, KAS was not started during initial deployment. This
    save 900 1
    save 300 10
    save 60 10000
-   
+
    # Security
    requirepass ${REDIS_PASSWORD}
-   
+
    # Logging
    loglevel notice
    ```
@@ -310,6 +310,6 @@ All fixes maintain compliance with:
 
 ---
 
-**Status**: ✅ ALL ROOT CAUSE FIXES IMPLEMENTED  
-**Next Step**: Clean deployment test (`./dive nuke && deploy`)  
+**Status**: ✅ ALL ROOT CAUSE FIXES IMPLEMENTED
+**Next Step**: Clean deployment test (`./dive nuke && deploy`)
 **Commit Ready**: YES - All fixes in place, ready for Git commit

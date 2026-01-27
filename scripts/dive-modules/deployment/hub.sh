@@ -174,7 +174,7 @@ hub_deploy() {
         progress_set_phase 2.5 "MongoDB replica set"
     fi
     log_info "Phase 2.5: Starting MongoDB and initializing replica set"
-    
+
     # CRITICAL: Load secrets before MongoDB operations
     # Needed for MONGO_PASSWORD environment variable
     if ! load_secrets; then
@@ -182,7 +182,7 @@ hub_deploy() {
         kill $timeout_monitor_pid 2>/dev/null || true
         return 1
     fi
-    
+
     # Start MongoDB first (Level 0 service, but we need it early)
     log_verbose "Starting MongoDB container..."
     if ! ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" up -d mongodb >/dev/null 2>&1; then
@@ -190,7 +190,7 @@ hub_deploy() {
         kill $timeout_monitor_pid 2>/dev/null || true
         return 1
     fi
-    
+
     # Wait for MongoDB container to be healthy
     log_verbose "Waiting for MongoDB container to be healthy..."
     local mongo_wait=0
@@ -203,11 +203,11 @@ hub_deploy() {
         sleep 2
         mongo_wait=$((mongo_wait + 2))
     done
-    
+
     if [ $mongo_wait -ge $mongo_max_wait ]; then
         log_warn "MongoDB container not healthy after ${mongo_max_wait}s, attempting replica set init anyway..."
     fi
-    
+
     # Now initialize replica set
     if [ ! -f "${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh" ]; then
         log_error "CRITICAL: MongoDB initialization script not found"
@@ -463,7 +463,7 @@ hub_init() {
     mkdir -p "${DIVE_ROOT}/logs/hub"
     mkdir -p "${DIVE_ROOT}/instances/hub/certs"
 
-    # Note: dive-shared network is created in hub_preflight() 
+    # Note: dive-shared network is created in hub_preflight()
     # (must exist before docker-compose validates external networks)
 
     # Generate certificates if not exists
@@ -602,23 +602,23 @@ hub_down() {
 calculate_service_level() {
     local service="$1"
     local visited_path="${2:-}"  # For cycle detection
-    
+
     # Cycle detection
     if [[ " $visited_path " =~ " $service " ]]; then
         log_warn "Circular dependency detected: $visited_path -> $service"
         echo "0"
         return
     fi
-    
+
     # Get dependencies for this service
     local deps="${service_deps[$service]}"
-    
+
     # No dependencies = level 0
     if [ "$deps" = "none" ] || [ -z "$deps" ]; then
         echo "0"
         return
     fi
-    
+
     # Calculate max level of dependencies
     local max_dep_level=0
     for dep in $deps; do
@@ -626,13 +626,13 @@ calculate_service_level() {
         if [ -z "${service_deps[$dep]+x}" ]; then
             continue
         fi
-        
+
         local dep_level=$(calculate_service_level "$dep" "$visited_path $service")
         if [ $dep_level -gt $max_dep_level ]; then
             max_dep_level=$dep_level
         fi
     done
-    
+
     # This service's level = max dependency level + 1
     echo $((max_dep_level + 1))
 }
@@ -658,11 +658,11 @@ retry_with_backoff() {
     local max_attempts="${RETRY_MAX_ATTEMPTS:-3}"
     local service_name="$1"
     shift
-    
+
     local attempt=1
     local delay="${RETRY_BASE_DELAY:-2}"
     local max_delay="${RETRY_MAX_DELAY:-30}"
-    
+
     while [ $attempt -le $max_attempts ]; do
         # Execute command
         if "$@"; then
@@ -671,12 +671,12 @@ retry_with_backoff() {
             fi
             return 0
         fi
-        
+
         # Check if we should retry
         if [ $attempt -lt $max_attempts ]; then
             log_warn "$service_name: Attempt $attempt/$max_attempts failed, retrying in ${delay}s..."
             sleep "$delay"
-            
+
             # Exponential backoff: delay = delay * 2, capped at max_delay
             delay=$((delay * 2))
             if [ $delay -gt $max_delay ]; then
@@ -685,10 +685,10 @@ retry_with_backoff() {
         else
             log_error "$service_name: All $max_attempts attempts failed"
         fi
-        
+
         ((attempt++))
     done
-    
+
     return 1
 }
 
@@ -715,21 +715,21 @@ circuit_breaker_check() {
     local service="$1"
     local failure_type="$2"
     local key="${service}:${failure_type}"
-    
+
     local threshold="${CIRCUIT_BREAKER_THRESHOLD:-3}"
     local timeout="${CIRCUIT_BREAKER_TIMEOUT:-60}"
     local now=$(date +%s)
-    
+
     # Check if circuit was opened recently
     local last_failure="${CIRCUIT_BREAKER_LAST_FAILURE[$key]:-0}"
     local time_since_failure=$((now - last_failure))
-    
+
     # Reset circuit if timeout expired
     if [ "$time_since_failure" -gt "$timeout" ]; then
         CIRCUIT_BREAKER_FAILURES[$key]=0
         CIRCUIT_BREAKER_LAST_FAILURE[$key]=0
     fi
-    
+
     # Check failure count
     local failures="${CIRCUIT_BREAKER_FAILURES[$key]:-0}"
     if [ "$failures" -ge "$threshold" ]; then
@@ -737,7 +737,7 @@ circuit_breaker_check() {
         log_error "$service: Failing fast to prevent cascading failures"
         return 1
     fi
-    
+
     return 0
 }
 
@@ -745,7 +745,7 @@ circuit_breaker_record_failure() {
     local service="$1"
     local failure_type="$2"
     local key="${service}:${failure_type}"
-    
+
     local failures="${CIRCUIT_BREAKER_FAILURES[$key]:-0}"
     CIRCUIT_BREAKER_FAILURES[$key]=$((failures + 1))
     CIRCUIT_BREAKER_LAST_FAILURE[$key]=$(date +%s)
@@ -755,7 +755,7 @@ circuit_breaker_reset() {
     local service="$1"
     local failure_type="$2"
     local key="${service}:${failure_type}"
-    
+
     CIRCUIT_BREAKER_FAILURES[$key]=0
     CIRCUIT_BREAKER_LAST_FAILURE[$key]=0
 }
@@ -772,7 +772,7 @@ hub_parallel_startup() {
     # DYNAMIC SERVICE CLASSIFICATION (from docker-compose.hub.yml labels)
     # Uses yq to directly query service labels - more reliable than helper functions
     local all_services_raw=$(yq eval '.services | keys | .[]' "$HUB_COMPOSE_FILE" 2>/dev/null | xargs)
-    
+
     # Filter out profile-only services (e.g., authzforce with profiles: ["xacml"])
     local all_services=""
     for svc in $all_services_raw; do
@@ -784,12 +784,12 @@ hub_parallel_startup() {
         all_services="$all_services $svc"
     done
     all_services=$(echo $all_services | xargs)  # Trim whitespace
-    
+
     # Discover services by class label
     local CORE_SERVICES_RAW=""
     local OPTIONAL_SERVICES_RAW=""
     local STRETCH_SERVICES_RAW=""
-    
+
     for svc in $all_services; do
         local class=$(yq eval ".services.\"$svc\".labels.\"dive.service.class\" // \"\"" "$HUB_COMPOSE_FILE" 2>/dev/null | tr -d '"')
         case "$class" in
@@ -814,12 +814,12 @@ hub_parallel_startup() {
                 ;;
         esac
     done
-    
+
     # Convert to arrays and trim whitespace
     local -a CORE_SERVICES=($(echo $CORE_SERVICES_RAW | xargs))
     local -a OPTIONAL_SERVICES=($(echo $OPTIONAL_SERVICES_RAW | xargs))
     local -a STRETCH_SERVICES=($(echo $STRETCH_SERVICES_RAW | xargs))
-    
+
     log_verbose "Discovered services dynamically from $HUB_COMPOSE_FILE:"
     log_verbose "  CORE: ${CORE_SERVICES[*]} (${#CORE_SERVICES[@]} services)"
     log_verbose "  OPTIONAL: ${OPTIONAL_SERVICES[*]} (${#OPTIONAL_SERVICES[@]} services)"
@@ -828,7 +828,7 @@ hub_parallel_startup() {
     # DYNAMIC DEPENDENCY LEVEL CALCULATION
     # Parse depends_on from docker-compose.hub.yml and calculate levels automatically
     log_verbose "Calculating dependency levels dynamically..."
-    
+
     # Build dependency map from compose file
     # Handle both depends_on formats:
     #   Simple array: [opa, mongodb]
@@ -837,7 +837,7 @@ hub_parallel_startup() {
     for svc in $all_services; do
         # Try to get dependencies (handle both array and object formats)
         local deps_type=$(yq eval ".services.\"$svc\".depends_on | type" "$HUB_COMPOSE_FILE" 2>/dev/null)
-        
+
         if [ "$deps_type" = "!!seq" ]; then
             # Simple array format: [opa, mongodb]
             local deps=$(yq eval ".services.\"$svc\".depends_on.[]" "$HUB_COMPOSE_FILE" 2>/dev/null | xargs)
@@ -848,36 +848,36 @@ hub_parallel_startup() {
             # No dependencies or null
             local deps=""
         fi
-        
+
         if [ -z "$deps" ]; then
             service_deps["$svc"]="none"
         else
             service_deps["$svc"]="$deps"
         fi
     done
-    
+
     # Calculate dependency level for each service
     declare -A service_levels
     declare -A level_services  # Reverse map: level -> services
     local max_level=0
-    
+
     for svc in $all_services; do
         local level=$(calculate_service_level "$svc")
         service_levels["$svc"]=$level
-        
+
         # Add to level_services map
         if [ -z "${level_services[$level]}" ]; then
             level_services[$level]="$svc"
         else
             level_services[$level]="${level_services[$level]} $svc"
         fi
-        
+
         # Track max level
         if [ $level -gt $max_level ]; then
             max_level=$level
         fi
     done
-    
+
     log_verbose "Dependency levels calculated (max level: $max_level):"
     for ((lvl=0; lvl<=max_level; lvl++)); do
         local services_at_level="${level_services[$lvl]}"
@@ -898,15 +898,15 @@ hub_parallel_startup() {
     for ((level=0; level<=max_level; level++)); do
         # Get services at this level
         local level_services_str="${level_services[$level]}"
-        
+
         if [ -z "$level_services_str" ]; then
             log_verbose "Level $level: No services to start"
             continue
         fi
-        
+
         # Convert to array
         local -a current_level_services=($level_services_str)
-        
+
         log_info "Level $level: Starting ${current_level_services[*]}"
 
         # Start all services at this level in parallel
@@ -971,7 +971,7 @@ hub_parallel_startup() {
 
                     # Check health status
                     local health=$(${DOCKER_CMD:-docker} inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "none")
-                    
+
                     # Trim whitespace and handle empty/none cases
                     health=$(echo "$health" | tr -d '[:space:]')
 
@@ -1010,7 +1010,7 @@ hub_parallel_startup() {
 
             if wait $pid; then
                 ((total_started++))
-                
+
                 # Update progress with current healthy service count
                 if type progress_set_services &>/dev/null; then
                     progress_set_services "$total_started" 12
@@ -1018,12 +1018,12 @@ hub_parallel_startup() {
             else
                 ((total_failed++))
                 ((level_failed++))
-                
+
                 # Check if this is a CORE, OPTIONAL, or STRETCH service
                 local is_core=false
                 local is_optional=false
                 local is_stretch=false
-                
+
                 for core_svc in "${CORE_SERVICES[@]}"; do
                     if [ "$service" = "$core_svc" ]; then
                         is_core=true
@@ -1031,7 +1031,7 @@ hub_parallel_startup() {
                         break
                     fi
                 done
-                
+
                 if ! $is_core; then
                     for opt_svc in "${OPTIONAL_SERVICES[@]}"; do
                         if [ "$service" = "$opt_svc" ]; then
@@ -1040,7 +1040,7 @@ hub_parallel_startup() {
                         fi
                     done
                 fi
-                
+
                 if ! $is_core && ! $is_optional; then
                     for stretch_svc in "${STRETCH_SERVICES[@]}"; do
                         if [ "$service" = "$stretch_svc" ]; then
@@ -1049,7 +1049,7 @@ hub_parallel_startup() {
                         fi
                     done
                 fi
-                
+
                 # Log appropriate message based on service classification
                 if $is_core; then
                     log_error "Service $service failed to start at level $level (CORE - deployment will fail)"

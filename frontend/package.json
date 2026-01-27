@@ -12,7 +12,7 @@
     "scripts": {
         "dev": "node server.js",
         "dev:http": "next dev",
-        "build": "SKIP_ENV_VALIDATION=1 next build --webpack",
+        "build": "SKIP_ENV_VALIDATION=1 next build",
         "start": "next start",
         "lint": "next lint",
         "typecheck": "tsc --noEmit",
@@ -85,10 +85,10 @@
         "zod": "^4.1.12"
     },
     "devDependencies": {
-        "@playwright/test": "^1.56.1",
+        "@playwright/test": "^1.57.0",
         "@swc/jest": "^0.2.39",
         "@testing-library/jest-dom": "^6.9.1",
-        "@testing-library/react": "^16.3.0",
+        "@testing-library/react": "^16.3.1",
         "@testing-library/user-event": "^14.6.1",
         "@types/node": "^24.10.4",
         "@types/react": "^18.3.0",
@@ -104,6 +104,6 @@
         "jest-environment-jsdom": "^30.2.0",
         "postcss": "^8.4.32",
         "tailwindcss": "^3.4.0",
-        "typescript": "^5.9.3"
+        "typescript": "5.9.3"
     }
 }

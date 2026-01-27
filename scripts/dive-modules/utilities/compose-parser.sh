@@ -64,6 +64,47 @@ compose_get_services() {
 }
 
 ##
+# Get a specific label value from a service
+#
+# Arguments:
+#   $1 - Service name
+#   $2 - Label key (e.g., "dive.service.class")
+#   $3 - Path to docker-compose file
+#
+# Returns:
+#   Label value or empty string if not found
+##
+compose_get_service_label() {
+    local service="${1:?service name required}"
+    local label_key="${2:?label key required}"
+    local compose_file="${3:?compose file required}"
+
+    if [ ! -f "$compose_file" ]; then
+        log_error "Compose file not found: $compose_file"
+        return 1
+    fi
+
+    if command -v yq &>/dev/null; then
+        # Extract label value using yq
+        local label_value
+        label_value=$(yq eval ".services.[\"$service\"].labels.[\"$label_key\"]" "$compose_file" 2>/dev/null)
+        
+        # Return empty if null or "null" string
+        if [ "$label_value" = "null" ] || [ -z "$label_value" ]; then
+            echo ""
+        else
+            echo "$label_value"
+        fi
+    else
+        # Fallback: Parse docker compose config output
+        local config=$(${DOCKER_CMD:-docker} compose -f "$compose_file" config 2>/dev/null)
+        local label_value=$(echo "$config" | grep -A 50 "^  $service:" | grep -A 30 "labels:" | grep "$label_key:" | head -n1 | cut -d':' -f2- | xargs)
+        
+        echo "$label_value"
+    fi
+}
+
+##
 # Get dependencies for a specific service
 #
 # Arguments:

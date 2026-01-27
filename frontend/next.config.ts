@@ -136,20 +136,16 @@ const nextConfig: NextConfig = {
     },
     // Externalize native Node deps used by postgres driver to avoid client/edge bundling errors
     serverExternalPackages: ["postgres"],
-    webpack: (config) => {
-        // Avoid bundling postgres for client/edge; rely on Node resolution at runtime
-        config.externals = config.externals || [];
-        config.externals.push({ postgres: "commonjs postgres" });
-        return config;
-    },
+    // NOTE: Removed webpack config to avoid requiring webpack at runtime with custom server
+    // The serverExternalPackages above should handle postgres externalization
     // Linting is handled in CI; skip during image build to unblock deployments
     // Hide the Next.js dev indicator (the "N" circle in bottom-left)
     devIndicators: {
         position: 'bottom-right',
     },
-    // Docker deployment: Use standalone output for production builds
-    // This creates a minimal server that can run without node_modules
-    output: process.env.NODE_ENV === 'production' ? 'standalone' : undefined,
+    // Docker deployment: Don't use standalone when using custom HTTPS server
+    // Standalone is incompatible with custom server.js (required for mTLS)
+    // output: process.env.NODE_ENV === 'production' ? 'standalone' : undefined,
 
     // FIX: Next.js 15 AbortError - Reduce aggressive fetch caching
     // This prevents "Fetch is aborted" errors from NextAuth session refetches
