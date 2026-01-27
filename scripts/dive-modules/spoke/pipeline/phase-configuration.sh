@@ -1109,9 +1109,20 @@ spoke_config_nato_localization() {
     local realm_name="dive-v3-broker-${code_lower}"
 
     # Update realm display name with localized name
+    # Ensure NATO countries database is loaded
+    if [ -z "${NATO_COUNTRIES_LOADED:-}" ] || [ "${#NATO_COUNTRIES[@]}" -eq 0 ] 2>/dev/null; then
+        local nato_db_path="${DIVE_ROOT}/scripts/nato-countries.sh"
+        if [ -f "$nato_db_path" ]; then
+            source "$nato_db_path" 2>/dev/null || true
+        fi
+    fi
+
     local display_name
-    if [ -n "${NATO_COUNTRIES[$code_upper]}" ]; then
-        display_name="${NATO_COUNTRIES[$code_upper]} DIVE Portal"
+    # Use safe array access with set -u compatibility
+    if declare -A NATO_COUNTRIES 2>/dev/null && [ -n "${NATO_COUNTRIES[$code_upper]:-}" ]; then
+        # Extract country name (first field before |)
+        local country_name=$(echo "${NATO_COUNTRIES[$code_upper]}" | cut -d'|' -f1)
+        display_name="${country_name} DIVE Portal"
     else
         display_name="$code_upper DIVE Portal"
     fi
