@@ -89,30 +89,50 @@ try {
     }
   }
 
-  // Wait for PRIMARY status (up to 60 seconds - increased from 30s)
-  print("⏳ Waiting for PRIMARY status (up to 60s)...");
-  for (let i = 0; i < 60; i++) {
-    sleep(1000);
+  // Wait for PRIMARY status (optimized: 30s with faster polling)
+  print("⏳ Waiting for PRIMARY status (up to 30s)...");
+  
+  // Fast polling for first 10s (check every 0.5s)
+  for (let i = 0; i < 20; i++) {
+    sleep(500);
     try {
       const st = rs.status();
       const state = st.members[0].stateStr;
 
       if (state === "PRIMARY") {
-        print("✅ Node is PRIMARY - replica set ready for change streams");
+        const elapsed = ((i + 1) * 0.5).toFixed(1);
+        print("✅ Node is PRIMARY in " + elapsed + "s - replica set ready");
+        quit(0);
+      }
+    } catch (e) {
+      // Still initializing, continue
+    }
+  }
+  
+  // Slower polling for remaining time (check every 2s)
+  for (let i = 0; i < 10; i++) {
+    sleep(2000);
+    try {
+      const st = rs.status();
+      const state = st.members[0].stateStr;
+
+      if (state === "PRIMARY") {
+        const elapsed = 10 + ((i + 1) * 2);
+        print("✅ Node is PRIMARY in " + elapsed + "s - replica set ready");
         quit(0);
       }
 
-      if (i % 5 === 0 && i > 0) {
-        print("   " + i + "s: State=" + state);
+      if (i % 3 === 0) {
+        print("   " + (10 + (i * 2)) + "s: State=" + state);
       }
     } catch (e) {
       // Transitioning
-      if (i % 5 === 0 && i > 0) {
-        print("   " + i + "s: Transitioning...");
+      if (i % 3 === 0) {
+        print("   " + (10 + (i * 2)) + "s: Transitioning...");
       }
     }
   }
-  print("❌ PRIMARY state not reached in 60s - replica set may be unhealthy");
+  print("❌ PRIMARY state not reached in 30s - replica set may be unhealthy");
   print("   This could indicate:");
   print("   - KeyFile permissions issue");
   print("   - Network configuration problem");
