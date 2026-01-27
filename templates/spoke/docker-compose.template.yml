@@ -98,6 +98,9 @@ services:
   # ==========================================================================
 
   postgres-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "PostgreSQL database for Keycloak user/realm storage"
     image: postgres:18.1-alpine3.23
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-postgres
     environment:
@@ -116,6 +119,9 @@ services:
     restart: unless-stopped
 
   mongodb-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "MongoDB database for resource metadata and audit logs"
     image: mongo:8.0.17
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-mongodb
     # Use official docker-entrypoint with custom command for replica set + keyFile
@@ -153,6 +159,9 @@ services:
     restart: unless-stopped
 
   redis-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Redis cache for session state and policy decisions"
     image: redis:7-alpine
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-redis
     volumes:
@@ -171,6 +180,9 @@ services:
   # ==========================================================================
 
   keycloak-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Keycloak IdP for federation and local authentication"
     build:
       context: ../../keycloak
       dockerfile: Dockerfile
@@ -251,6 +263,9 @@ services:
   # ==========================================================================
 
   opa-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Open Policy Agent for ABAC authorization decisions"
     image: openpolicyagent/opa:1.12.3
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-opa
     platform: linux/amd64
@@ -275,6 +290,9 @@ services:
     restart: unless-stopped
 
   opal-client-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "optional"
+      dive.service.description: "OPAL client for real-time policy sync with hub (optional)"
     build:
       context: ../../docker
       dockerfile: opal-client.Dockerfile
@@ -341,6 +359,9 @@ services:
   # ==========================================================================
 
   backend-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Express.js API with PEP for authorization enforcement"
     build:
       context: ../../backend
       dockerfile: Dockerfile.dev
@@ -453,6 +474,9 @@ services:
   # ==========================================================================
 
   kas-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "stretch"
+      dive.service.description: "Key Access Service for TDF encrypted resources (stretch goal)"
     build:
       context: ../../kas
       dockerfile: Dockerfile
@@ -504,6 +528,9 @@ services:
   # ==========================================================================
 
   frontend-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Next.js React application with NextAuth.js"
     build:
       context: ../../frontend
       dockerfile: Dockerfile.dev
