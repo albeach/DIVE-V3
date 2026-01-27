@@ -49,7 +49,7 @@ spoke_phase_initialization() {
     # PERFORMANCE TRACKING: Phase timing metrics
     # =============================================================================
     local PHASE_START=$(date +%s)
-    
+
     log_info "Initialization phase for $code_upper"
 
     # Step 1: Check if already initialized (redeploy mode skips some steps)
@@ -170,7 +170,7 @@ spoke_init_setup_directories() {
     # This was missing from the pipeline, causing "cp: -r not specified" errors.
     # ==========================================================================
     local keyfile_path="$spoke_dir/mongo-keyfile"
-    
+
     # Generate keyfile if it doesn't exist
     if [ ! -f "$keyfile_path" ]; then
         log_verbose "Generating MongoDB replica set keyfile"
@@ -228,7 +228,7 @@ spoke_init_ensure_mongo_keyfile() {
     local code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local keyfile_path="$spoke_dir/mongo-keyfile"
-    
+
     # Generate keyfile if it doesn't exist
     if [ ! -f "$keyfile_path" ]; then
         log_verbose "Generating MongoDB replica set keyfile"
@@ -419,11 +419,11 @@ EOF
             log_verbose "Hub OPAL server detected - provisioning token"
             local hub_env_file="${DIVE_ROOT}/.env.hub"
             local master_token=""
-            
+
             if [ -f "$hub_env_file" ]; then
                 master_token=$(grep "^OPAL_AUTH_MASTER_TOKEN=" "$hub_env_file" 2>/dev/null | cut -d= -f2)
             fi
-            
+
             if [ -n "$master_token" ]; then
                 # Request JWT from OPAL server
                 local token_response
@@ -432,12 +432,12 @@ EOF
                     -H "Authorization: Bearer ${master_token}" \
                     -H "Content-Type: application/json" \
                     -d '{"type": "client"}' 2>/dev/null || echo "")
-                
+
                 local opal_token=""
                 if [ -n "$token_response" ]; then
                     opal_token=$(echo "$token_response" | jq -r '.token // empty' 2>/dev/null)
                 fi
-                
+
                 if [ -n "$opal_token" ] && [[ "$opal_token" =~ ^eyJ ]]; then
                     # Update .env file with the token
                     local env_file="$spoke_dir/.env"
@@ -682,7 +682,7 @@ spoke_init_prepare_certificates() {
         local required_san="dive-spoke-${code_lower}-keycloak"
         if openssl x509 -in "$spoke_dir/certs/certificate.pem" -text -noout 2>/dev/null | grep -q "$required_san"; then
             log_info "TLS certificates exist and have required SANs - skipping generation"
-            
+
             # CRITICAL FIX (2026-01-27): Ensure mkcert rootCA.pem is synced even when skipping cert generation
             # This fixes Keycloak crash: "Failed to initialize truststore, could not merge: /opt/keycloak/certs/ca/rootCA.pem"
             if command -v mkcert &>/dev/null; then
@@ -695,7 +695,7 @@ spoke_init_prepare_certificates() {
                     log_verbose "mkcert rootCA.pem synced"
                 fi
             fi
-            
+
             return 0
         else
             log_warn "Existing certificate missing required SAN: $required_san"
@@ -993,54 +993,54 @@ spoke_checkpoint_initialization() {
     local instance_code="$1"
     local code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
-    
+
     log_verbose "Validating initialization checkpoint for $instance_code"
-    
+
     # Check directory structure
     if [ ! -d "$spoke_dir" ]; then
         log_error "Checkpoint FAILED: Instance directory missing: $spoke_dir"
         return 1
     fi
-    
+
     if [ ! -d "$spoke_dir/certs" ]; then
         log_error "Checkpoint FAILED: Certs directory missing"
         return 1
     fi
-    
+
     # Check keyfile is file (not directory) - CRITICAL
     if [ ! -f "$spoke_dir/mongo-keyfile" ]; then
         log_error "Checkpoint FAILED: MongoDB keyfile missing"
         return 1
     fi
-    
+
     if [ -d "$spoke_dir/mongo-keyfile" ]; then
         log_error "Checkpoint FAILED: MongoDB keyfile is a directory (must be file)"
         return 1
     fi
-    
+
     # Check keyfile size
     local keyfile_size=$(wc -c < "$spoke_dir/mongo-keyfile" | tr -d ' ')
     if [ "$keyfile_size" -lt 6 ] || [ "$keyfile_size" -gt 1024 ]; then
         log_error "Checkpoint FAILED: MongoDB keyfile size invalid: ${keyfile_size} bytes"
         return 1
     fi
-    
+
     # Check config files exist
     if [ ! -f "$spoke_dir/config.json" ]; then
         log_error "Checkpoint FAILED: config.json missing"
         return 1
     fi
-    
+
     if [ ! -f "$spoke_dir/.env" ]; then
         log_error "Checkpoint FAILED: .env file missing"
         return 1
     fi
-    
+
     if [ ! -f "$spoke_dir/docker-compose.yml" ]; then
         log_error "Checkpoint FAILED: docker-compose.yml missing"
         return 1
     fi
-    
+
     log_verbose "✓ Initialization checkpoint passed"
     return 0
 }

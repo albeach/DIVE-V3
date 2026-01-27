@@ -104,7 +104,7 @@ export default function VideoPlayer({
   onPlaybackEvent,
 }: VideoPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const playerRef = useRef<ReactPlayer>(null);
+  const playerRef = useRef<any>(null); // ReactPlayer instance type
 
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -237,7 +237,7 @@ export default function VideoPlayer({
   }, [duration, onPlaybackEvent]);
 
   const handleProgress = useCallback(
-    (state: { playedSeconds: number }) => {
+    (state: { playedSeconds: number; played?: number; loaded?: number; loadedSeconds?: number }) => {
       if (!seeking) {
         setCurrentTime(state.playedSeconds);
       }

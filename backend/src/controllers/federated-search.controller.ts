@@ -60,13 +60,13 @@ async function loadFederationInstancesFromDB(): Promise<FederationInstance[]> {
 
     try {
         const discoveredInstances = await federationDiscovery.getInstances();
-        
+
         const instances: FederationInstance[] = discoveredInstances
             .filter(inst => inst.enabled)
             .map(inst => ({
                 code: inst.code,
-                apiUrl: inst.apiUrl || buildApiUrl(inst.code),
-                type: inst.type,
+                apiUrl: inst.endpoints?.api || buildApiUrl(inst.code),
+                type: inst.type === 'hub' ? 'local' : 'remote',
                 enabled: process.env[`${inst.code.toUpperCase()}_FEDERATION_ENABLED`] !== 'false'
             }));
 
@@ -84,13 +84,13 @@ async function loadFederationInstancesFromDB(): Promise<FederationInstance[]> {
         logger.error('Failed to load federation instances from MongoDB', {
             error: error instanceof Error ? error.message : 'Unknown error'
         });
-        
+
         // Return cached if available, otherwise return current instance only
         if (cachedInstances) {
             logger.warn('Using cached federation instances');
             return cachedInstances;
         }
-        
+
         // Fallback: return only current instance
         const currentCode = process.env.INSTANCE_CODE || 'USA';
         logger.warn('Returning only current instance as fallback', { code: currentCode });
@@ -110,17 +110,17 @@ function buildApiUrl(instanceCode: string): string {
     const code = instanceCode.toUpperCase();
     const envUrl = process.env[`${code}_API_URL`];
     if (envUrl) return envUrl;
-    
+
     // Development: Use environment variables or default to Hub URL
     // Hub (USA) uses HUB_URL env var, spokes use calculated ports from discovery
     const hubUrl = process.env.HUB_URL || process.env.USA_API_URL || process.env.BACKEND_URL;
     if (hubUrl) {
         return code === 'USA' ? hubUrl : hubUrl;
     }
-    
+
     // Fallback: return URL that will likely fail, triggering discovery refresh
     // This should rarely happen as HUB_URL is always set in deployment
-    
+
     // Production: Use hostname-based URLs
     return `https://${code.toLowerCase()}-api.dive25.com`;
 }
@@ -134,7 +134,7 @@ function loadFederationInstances(): FederationInstance[] {
     if (cachedInstances) {
         return cachedInstances;
     }
-    
+
     // Return current instance only - actual instances will be loaded async
     const currentCode = process.env.INSTANCE_CODE || 'USA';
     return [{

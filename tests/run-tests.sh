@@ -80,22 +80,22 @@ print_usage() {
 run_test_suite() {
     local suite_name="$1"
     local test_file="$2"
-    
+
     TOTAL_SUITES=$((TOTAL_SUITES + 1))
-    
+
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo -e "${CYAN}Running: $suite_name${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    
+
     if [ ! -f "$test_file" ]; then
         echo -e "${RED}✗ Test file not found: $test_file${NC}"
         FAILED_SUITES=$((FAILED_SUITES + 1))
         return 1
     fi
-    
+
     local start_time=$(date +%s)
-    
+
     if bats "$test_file"; then
         local end_time=$(date +%s)
         local duration=$((end_time - start_time))
@@ -120,7 +120,7 @@ print_summary() {
     echo -e "  Passed:        ${GREEN}$PASSED_SUITES${NC}"
     echo -e "  Failed:        ${RED}$FAILED_SUITES${NC}"
     echo ""
-    
+
     if [ $FAILED_SUITES -eq 0 ]; then
         echo -e "  ${GREEN}✅ ALL TEST SUITES PASSED${NC}"
         echo ""
@@ -139,22 +139,22 @@ print_summary() {
 run_shell_test_suite() {
     local suite_name="$1"
     local test_file="$2"
-    
+
     TOTAL_SUITES=$((TOTAL_SUITES + 1))
-    
+
     echo ""
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     echo -e "${CYAN}Running: $suite_name${NC}"
     echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    
+
     if [ ! -f "$test_file" ]; then
         echo -e "${RED}✗ Test file not found: $test_file${NC}"
         FAILED_SUITES=$((FAILED_SUITES + 1))
         return 1
     fi
-    
+
     local start_time=$(date +%s)
-    
+
     if bash "$test_file"; then
         local end_time=$(date +%s)
         local duration=$((end_time - start_time))
@@ -175,50 +175,50 @@ main() {
     if [ "$TEST_MODE" = "--help" ] || [ "$TEST_MODE" = "-h" ]; then
         print_usage
     fi
-    
+
     # Validate test mode
     if [ "$TEST_MODE" != "all" ] && [ "$TEST_MODE" != "hub" ] && [ "$TEST_MODE" != "spoke" ] && [ "$TEST_MODE" != "federation" ]; then
         echo -e "${RED}Error: Invalid test mode '$TEST_MODE'${NC}"
         echo ""
         print_usage
     fi
-    
+
     print_header
-    
+
     echo "Test Environment:"
     echo "  DIVE_ROOT: $DIVE_ROOT"
     echo "  bats version: $(bats --version 2>/dev/null || echo 'not installed')"
     echo "  yq version: $(yq --version 2>/dev/null || echo 'not installed')"
     echo "  docker version: $(docker --version 2>/dev/null || echo 'not installed')"
-    
+
     # Run hub tests
     if [ "$TEST_MODE" = "all" ] || [ "$TEST_MODE" = "hub" ]; then
         echo ""
         echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
         echo -e "${CYAN}   HUB TESTS${NC}"
         echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-        
+
         run_test_suite "Hub Unit Tests (Dynamic Orchestration)" \
             "${DIVE_ROOT}/tests/unit/test_dynamic_orchestration.bats"
-        
+
         run_test_suite "Hub Integration Tests (Deployment)" \
             "${DIVE_ROOT}/tests/integration/test_deployment.bats"
     fi
-    
+
     # Run spoke tests
     if [ "$TEST_MODE" = "all" ] || [ "$TEST_MODE" = "spoke" ]; then
         echo ""
         echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
         echo -e "${CYAN}   SPOKE TESTS (Instance: $SPOKE_TEST_INSTANCE)${NC}"
         echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-        
+
         run_test_suite "Spoke Unit Tests (Orchestration)" \
             "${DIVE_ROOT}/tests/unit/test-spoke-orchestration.bats"
-        
+
         run_test_suite "Spoke Integration Tests (Deployment)" \
             "${DIVE_ROOT}/tests/integration/test-spoke-deployment.bats"
     fi
-    
+
     # Run federation tests
     if [ "$TEST_MODE" = "all" ] || [ "$TEST_MODE" = "federation" ]; then
         echo ""
@@ -226,11 +226,11 @@ main() {
         echo -e "${CYAN}   FEDERATION SSO TESTS${NC}"
         echo -e "${CYAN}   Spokes: $TEST_SPOKE_1, $TEST_SPOKE_2, $TEST_SPOKE_3${NC}"
         echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
-        
+
         run_shell_test_suite "Comprehensive SSO Test Suite" \
             "${DIVE_ROOT}/tests/federation/test-sso-comprehensive.sh"
     fi
-    
+
     # Print summary
     print_summary
 }

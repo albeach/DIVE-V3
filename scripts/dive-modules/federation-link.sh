@@ -242,18 +242,42 @@ _federation_link_direct() {
 
     if [ -z "$source_pass" ]; then
         log_error "Cannot get source Keycloak password for $source_upper"
+        log_error "Checked: GCP secret, KC_BOOTSTRAP_ADMIN_PASSWORD, KEYCLOAK_ADMIN_PASSWORD"
         return 1
     fi
 
-    log_info "Using source Keycloak password from GCP Secret Manager (SSOT)"
+    log_verbose "Retrieved password for $source_upper Keycloak (${#source_pass} chars)"
 
-    local source_token=$(docker exec "$source_kc_container" curl -sf --max-time 10 \
+    # Authenticate with source Keycloak
+    # NOTE: Retry logic removed - proper readiness check implemented in Phase 2
+    # See: wait_for_keycloak_admin_api_ready() in common.sh
+    local auth_response
+    auth_response=$(docker exec "$source_kc_container" curl -s --max-time 10 \
         -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
-        -d "grant_type=password" -d "username=admin" -d "password=${source_pass}" \
-        -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+        -d "grant_type=password" \
+        -d "username=admin" \
+        -d "password=${source_pass}" \
+        -d "client_id=admin-cli" 2>&1)
+
+    # Extract token
+    local source_token
+    source_token=$(echo "$auth_response" | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
 
     if [ -z "$source_token" ]; then
         log_error "Failed to authenticate with source $source_upper Keycloak"
+        log_error "This usually indicates Keycloak is not fully initialized yet"
+        log_error "Proper fix: Call wait_for_keycloak_admin_api_ready() before federation setup"
+        
+        # Log detailed error information
+        if echo "$auth_response" | grep -q "error"; then
+            local error_desc=$(echo "$auth_response" | grep -o '"error_description":"[^"]*' | cut -d'"' -f4)
+            if [ -n "$error_desc" ]; then
+                log_error "Keycloak error: $error_desc"
+            fi
+        fi
+        
+        log_verbose "Container: $source_kc_container"
+        log_verbose "Password source: GCP -> KC_BOOTSTRAP_ADMIN_PASSWORD -> KEYCLOAK_ADMIN_PASSWORD"
         return 1
     fi
 
@@ -444,24 +468,24 @@ _federation_link_direct() {
     # ==========================================================================
     # IDEMPOTENT IdP CREATION: Check if exists, update if needed, create if not
     # ==========================================================================
-    
+
     # Check if IdP already exists
     local existing_idp
     existing_idp=$(docker exec "$target_kc_container" curl -sf \
         -H "Authorization: Bearer $token" \
         "http://localhost:8080/admin/realms/${target_realm}/identity-provider/instances/${idp_alias}" 2>/dev/null)
-    
+
     if [ -n "$existing_idp" ] && echo "$existing_idp" | grep -q '"alias"'; then
         # IdP exists - update it instead of creating
         log_info "IdP ${idp_alias} already exists in ${target_upper}, updating..."
-        
+
         local update_result
         update_result=$(docker exec "$target_kc_container" curl -sf -w "\nHTTP_CODE:%{http_code}" \
             -X PUT "http://localhost:8080/admin/realms/${target_realm}/identity-provider/instances/${idp_alias}" \
             -H "Authorization: Bearer $token" \
             -H "Content-Type: application/json" \
             -d "$idp_config" 2>&1)
-        
+
         local http_code=$(echo "$update_result" | grep -o "HTTP_CODE:[0-9]*" | cut -d: -f2)
         if [ "$http_code" = "204" ] || [ "$http_code" = "200" ] || [ -z "$http_code" ]; then
             log_success "Updated ${idp_alias} in ${target_upper}"
@@ -471,16 +495,16 @@ _federation_link_direct() {
     else
         # IdP doesn't exist - create it
         log_info "Creating ${idp_alias} in ${target_upper}..."
-        
+
         local create_result
         create_result=$(docker exec "$target_kc_container" curl -s -w "\nHTTP_CODE:%{http_code}" \
             -X POST "http://localhost:8080/admin/realms/${target_realm}/identity-provider/instances" \
             -H "Authorization: Bearer $token" \
             -H "Content-Type: application/json" \
             -d "$idp_config" 2>&1)
-        
+
         local http_code=$(echo "$create_result" | grep -o "HTTP_CODE:[0-9]*" | cut -d: -f2)
-        
+
         if [ "$http_code" = "201" ] || [ "$http_code" = "204" ]; then
             log_success "Created ${idp_alias} in ${target_upper}"
         elif [ "$http_code" = "409" ]; then
