@@ -444,17 +444,17 @@ spoke_secrets_sync_to_env() {
     # federation-wide token revocation. Load from Hub's .env or GCP.
     # ==========================================================================
     local blacklist_password=""
-    
+
     # Try to load from Hub's .env first (local development)
     if [ -f "${DIVE_ROOT}/.env.hub" ]; then
         blacklist_password=$(grep "^REDIS_PASSWORD_BLACKLIST=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d'=' -f2)
     fi
-    
+
     # Try GCP if not found locally
     if [ -z "$blacklist_password" ] && check_gcloud 2>/dev/null; then
         blacklist_password=$(gcloud secrets versions access latest --secret="dive-v3-redis-blacklist" --project="${GCP_PROJECT:-dive25}" 2>/dev/null || true)
     fi
-    
+
     # Sync blacklist password to spoke .env if available
     if [ -n "$blacklist_password" ]; then
         if [ -f "$env_file" ] && grep -q "^REDIS_PASSWORD_BLACKLIST=" "$env_file"; then
@@ -468,6 +468,41 @@ spoke_secrets_sync_to_env() {
         log_verbose "Synced shared blacklist Redis password"
     else
         log_warn "Could not load shared blacklist Redis password - cross-instance token revocation will be limited"
+    fi
+
+    # ==========================================================================
+    # OPAL_AUTH_MASTER_TOKEN (Required for OPAL client/server authentication)
+    # ==========================================================================
+    # Generate OPAL master token if not already present
+    # This token is used by OPAL clients to authenticate with OPAL server
+    # ==========================================================================
+    if ! grep -q "^OPAL_AUTH_MASTER_TOKEN=" "$env_file" 2>/dev/null; then
+        local opal_token=$(openssl rand -base64 32)
+        echo "" >> "$env_file"
+        echo "# OPAL Master Token for authentication (auto-generated)" >> "$env_file"
+        echo "OPAL_AUTH_MASTER_TOKEN=${opal_token}" >> "$env_file"
+        log_info "Generated OPAL_AUTH_MASTER_TOKEN (required for policy synchronization)"
+    fi
+
+    # ==========================================================================
+    # DATABASE_URL (Required for PostgreSQL audit persistence)
+    # ==========================================================================
+    # Construct DATABASE_URL from POSTGRES_PASSWORD if not already present
+    # Format: postgresql://username:password@host:port/database
+    # ==========================================================================
+    if ! grep -q "^DATABASE_URL=" "$env_file" 2>/dev/null; then
+        local postgres_pass="${!env_var_name}"
+        local postgres_pass_var="POSTGRES_PASSWORD_${code_upper}"
+        postgres_pass="${!postgres_pass_var}"
+
+        if [ -n "$postgres_pass" ]; then
+            echo "" >> "$env_file"
+            echo "# PostgreSQL Database URL for audit persistence (auto-generated)" >> "$env_file"
+            echo "DATABASE_URL=postgresql://postgres:${postgres_pass}@postgres-${code_lower}:5432/dive_v3" >> "$env_file"
+            log_info "Generated DATABASE_URL (required for audit log persistence)"
+        else
+            log_warn "Cannot generate DATABASE_URL - POSTGRES_PASSWORD not available"
+        fi
     fi
 
     log_verbose "Secrets synced to .env"

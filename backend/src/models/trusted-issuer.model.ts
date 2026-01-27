@@ -115,18 +115,47 @@ export class MongoOpalDataStore {
 
       logger.info('Creating MongoDB indexes...');
 
-      // Create indexes for issuers (with ignoreExisting to avoid duplicate key errors)
-      await this.issuersCollection.createIndex({ issuerUrl: 1 }, { unique: true });
-      await this.issuersCollection.createIndex({ tenant: 1 });
-      await this.issuersCollection.createIndex({ country: 1 });
-      await this.issuersCollection.createIndex({ trustLevel: 1 });
-      await this.issuersCollection.createIndex({ enabled: 1 });
+      // CRITICAL FIX (2026-01-27): Retry index creation if MongoDB is not PRIMARY yet
+      // Background: Healthcheck passes when MongoDB accepts connections, but may not be PRIMARY
+      // Solution: Retry with exponential backoff (2s, 4s, 8s, 16s, 32s = 62s total)
+      const maxRetries = 5;
+      let attempt = 0;
+      let indexesCreated = false;
 
-      // Create indexes for federation matrix
-      await this.fedMatrixCollection.createIndex({ sourceCountry: 1 }, { unique: true });
+      while (attempt < maxRetries && !indexesCreated) {
+        try {
+          // Create indexes for issuers (with ignoreExisting to avoid duplicate key errors)
+          await this.issuersCollection.createIndex({ issuerUrl: 1 }, { unique: true });
+          await this.issuersCollection.createIndex({ tenant: 1 });
+          await this.issuersCollection.createIndex({ country: 1 });
+          await this.issuersCollection.createIndex({ trustLevel: 1 });
+          await this.issuersCollection.createIndex({ enabled: 1 });
 
-      // Create indexes for tenant configs
-      await this.tenantConfigsCollection.createIndex({ code: 1 }, { unique: true });
+          // Create indexes for federation matrix
+          await this.fedMatrixCollection.createIndex({ sourceCountry: 1 }, { unique: true });
+
+          // Create indexes for tenant configs
+          await this.tenantConfigsCollection.createIndex({ code: 1 }, { unique: true });
+
+          indexesCreated = true;
+          logger.info('MongoDB indexes created successfully');
+        } catch (error: any) {
+          // Check if error is "not primary"
+          if (error.message && error.message.includes('not primary')) {
+            attempt++;
+            const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s, 16s, 32s
+            logger.warn(`MongoDB not PRIMARY yet (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms...`);
+            await new Promise(resolve => setTimeout(resolve, delay));
+          } else {
+            // Different error - throw immediately
+            throw error;
+          }
+        }
+      }
+
+      if (!indexesCreated) {
+        throw new Error('Failed to create MongoDB indexes: replica set not PRIMARY after retries');
+      }
 
       this.initialized = true;
       logger.info('MongoDB OPAL Data Store initialized successfully', {
