@@ -64,7 +64,7 @@ spoke_phase_configuration() {
     # PERFORMANCE TRACKING: Phase timing metrics
     # =============================================================================
     local PHASE_START=$(date +%s)
-    
+
     log_info "Configuration phase for $code_upper"
 
     # CRITICAL: Set USE_TERRAFORM_SSOT to skip manual protocol mapper creation
@@ -172,39 +172,34 @@ spoke_phase_configuration() {
     # Step 3: Synchronize secrets (VALIDATE - critical for database connections)
     log_step "Step 3/6: Validating secrets"
     if ! spoke_config_sync_secrets "$instance_code"; then
-        log_warn "Secret sync function failed"
-
-        # VALIDATION: Check if critical secrets actually exist
-        local critical_secrets_ok=true
-        local missing_secrets=()
-
-        for secret_var in "POSTGRES_PASSWORD_${code_upper}" "MONGO_PASSWORD_${code_upper}" "KEYCLOAK_ADMIN_PASSWORD_${code_upper}"; do
-            if [ -z "${!secret_var}" ]; then
-                missing_secrets+=("$secret_var")
-                critical_secrets_ok=false
-            fi
-        done
-
-        if [ "$critical_secrets_ok" = false ]; then
-            log_error "CRITICAL: Missing required secrets:"
-            for secret in "${missing_secrets[@]}"; do
-                log_error "  ✗ $secret"
-            done
-            log_error "Spoke cannot function without database credentials"
-            return 1
+        log_error "Secret sync failed - spoke cannot operate without secrets"
+        log_error "Impact: Containers will not have credentials for databases/services"
+        
+        if is_production_mode; then
+            log_error "Fix: Ensure GCP Secret Manager access is configured"
+            log_error "     Run: gcloud auth application-default login"
+            log_error "     Create secrets: ./dive secrets create $code_upper"
         else
-            log_verbose "Critical secrets present despite sync warning (continuing)"
+            log_error "Fix: Ensure .env file exists with required secrets"
+            log_error "     Run: ./dive secrets sync $code_upper"
         fi
+        
+        return 1
     else
         log_success "✓ Secrets validated"
     fi
 
-    # Step 4: OPAL token provisioning (warn if fails but continue)
+    # Step 4: OPAL token provisioning (CRITICAL - required for policy enforcement)
     log_step "Step 4/6: Provisioning OPAL token"
     if ! spoke_config_provision_opal "$instance_code"; then
-        log_warn "OPAL token provisioning failed - policy enforcement may not work"
-        log_warn "Fix later with: ./dive spoke opal provision $code_upper"
-        # Non-fatal - OPAL is for authorization policies, spoke can deploy without it
+        log_error "OPAL token provisioning failed - policy enforcement broken"
+        log_error "Impact: OPA cannot sync policies from OPAL Server"
+        log_error "        ABAC authorization will not work"
+        log_error "        Users will be unable to access resources"
+        log_error "Fix: Check OPAL_AUTH_MASTER_TOKEN generation"
+        log_error "     Verify OPAL Server is running in Hub"
+        log_error "     Check Hub logs: ./dive hub logs opal-server"
+        return 1
     else
         log_success "✓ OPAL token provisioned"
     fi
@@ -217,12 +212,16 @@ spoke_phase_configuration() {
         log_verbose "AMR sync skipped (optional feature)"
     fi
 
-    # Step 6: Configure Keycloak client redirect URIs (validate OAuth flow)
+    # Step 6: Configure Keycloak client redirect URIs (CRITICAL - required for OAuth flow)
     log_step "Step 5/6: Updating OAuth redirect URIs"
     if ! spoke_config_update_redirect_uris "$instance_code"; then
-        log_warn "Redirect URI update failed - OAuth login may not work correctly"
-        log_warn "Manually configure redirect URIs in Keycloak if needed"
-        # Non-fatal - can be configured manually in Keycloak admin console
+        log_error "Redirect URI update failed - OAuth login broken"
+        log_error "Impact: Users cannot authenticate via Keycloak"
+        log_error "        Frontend OAuth callback will fail with redirect_uri mismatch"
+        log_error "Fix: Check Keycloak API access and client configuration"
+        log_error "     Verify Keycloak is running: docker ps | grep keycloak"
+        log_error "     Check Keycloak logs: docker logs dive-spoke-${code_lower}-keycloak"
+        return 1
     else
         log_success "✓ Redirect URIs updated"
     fi
@@ -311,6 +310,29 @@ spoke_config_register_in_hub_mongodb() {
     local code_lower=$(lower "$instance_code")
 
     log_verbose "Registering spoke in Hub MongoDB spoke registry..."
+    
+    # PREFLIGHT: Verify Hub is reachable before attempting registration
+    # This prevents wasting time if Hub is down
+    local hub_url="${HUB_URL:-https://localhost:4000}"
+    
+    if [ "${SKIP_FEDERATION:-false}" = "false" ]; then
+        log_step "Verifying Hub accessibility..."
+        
+        if ! curl -sf --max-time 5 "$hub_url/health" >/dev/null 2>&1; then
+            log_error "Hub unreachable at $hub_url"
+            log_error "Impact: Spoke registration requires Hub to be running"
+            log_error "        Spoke will be non-functional without Hub registration"
+            log_error "Fix: Start Hub first: ./dive hub up"
+            log_error "     Verify Hub status: ./dive hub status"
+            log_error "     Check Hub logs: ./dive hub logs backend"
+            log_error "Override: Use --skip-federation flag to deploy without federation"
+            return 1
+        fi
+        
+        log_success "✓ Hub accessible"
+    else
+        log_verbose "Skipping Hub reachability check (--skip-federation flag)"
+    fi
 
     # Get spoke configuration
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
@@ -502,50 +524,43 @@ EOF
                 log_warn "Token not found in auto-approval response - may need manual approval"
             fi
         elif [ "$spoke_status" = "pending" ]; then
-            log_warn "Spoke status: pending (manual approval required)"
-            log_warn "Auto-approval disabled or bidirectional federation failed"
-        elif [ "$spoke_status" = "suspended" ]; then
-            log_warn "Spoke suspended during registration (federation verification failed)"
-            local error_msg=$(echo "$response" | jq -r '.spoke.message // empty' 2>/dev/null)
-            log_warn "Reason: $error_msg"
-
-            # Try to unsuspend and re-register after a delay
-            # Federation resources were just created - they may need time to propagate
-            if [ -n "$registered_spoke_id" ]; then
-                log_info "Attempting to unsuspend and retry registration..."
-                sleep 5  # Wait for Keycloak to propagate changes
-
-                # Call Hub backend to unsuspend
-                local unsuspend_response
-                unsuspend_response=$(curl -sk -X POST \
-                    "https://localhost:4000/api/federation/spokes/${registered_spoke_id}/unsuspend" \
-                    -H "Content-Type: application/json" \
-                    -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY:-admin-dev-key}" \
-                    -d '{"retryFederation": true}' 2>&1)
-
-                if echo "$unsuspend_response" | jq -e '.success' &>/dev/null; then
-                    log_success "Spoke unsuspended and federation retried"
-
-                    # Check new status
-                    local check_response
-                    check_response=$(curl -sk \
-                        "https://localhost:4000/api/federation/spokes/${registered_spoke_id}" \
-                        -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY:-admin-dev-key}" 2>/dev/null)
-
-                    local new_status=$(echo "$check_response" | jq -r '.spoke.status // empty' 2>/dev/null)
-                    if [ "$new_status" = "approved" ]; then
-                        log_success "Spoke now approved after unsuspend"
-                    else
-                        log_warn "Spoke status after unsuspend: $new_status"
-                    fi
-                else
-                    log_warn "Unsuspend failed - manual intervention may be required"
-                    log_warn "Run: ./dive hub spoke unsuspend ${registered_spoke_id}"
-                fi
+            # Spoke status is pending - either auto-approval disabled or federation failed
+            if [ "${SKIP_FEDERATION:-false}" = "true" ]; then
+                log_warn "Spoke status: pending (manual approval required)"
+                log_warn "Federation setup skipped (--skip-federation flag used)"
+                log_warn "Spoke will be non-functional until registered with Hub"
+                log_warn "Register manually: ./dive spoke register $code_upper"
+                return 0
+            else
+                log_error "Federation setup failed - spoke cannot communicate with Hub"
+                log_error "Impact: Spoke is non-functional without federation"
+                log_error "        Bidirectional trust not established"
+                log_error "Cause: Auto-approval disabled or federation verification failed"
+                log_error "Fix: Ensure Hub is accessible and federation certificates are valid"
+                log_error "     Check Hub logs: ./dive hub logs backend"
+                log_error "     Verify certificates: ls -la instances/${code_lower}/certs/"
+                log_error "Override: Use --skip-federation flag to deploy without federation"
+                return 1
             fi
-
-            # Don't fail - registration succeeded, suspension can be resolved later
-            log_warn "Continuing despite suspension - federation can be fixed later"
+        elif [ "$spoke_status" = "suspended" ]; then
+            # Spoke suspended - federation verification failed
+            if [ "${SKIP_FEDERATION:-false}" = "true" ]; then
+                log_warn "Spoke suspended during registration (federation verification failed)"
+                local error_msg=$(echo "$response" | jq -r '.spoke.message // empty' 2>/dev/null)
+                log_warn "Reason: $error_msg"
+                log_warn "Federation skipped - continuing deployment"
+                return 0
+            else
+                log_error "Spoke suspended during registration - federation verification failed"
+                local error_msg=$(echo "$response" | jq -r '.spoke.message // empty' 2>/dev/null)
+                log_error "Reason: $error_msg"
+                log_error "Impact: Spoke cannot perform federated operations"
+                log_error "Fix: Verify federation certificates and Hub connectivity"
+                log_error "     Check suspension reason in Hub admin console"
+                log_error "     Unsuspend: ./dive hub spoke unsuspend <SPOKE_ID>"
+                log_error "Override: Use --skip-federation flag to deploy without federation"
+                return 1
+            fi
         fi
 
         # Fallback: Try manual approval (legacy path - may fail due to auth)
@@ -554,7 +569,18 @@ EOF
                 log_success "✓ Manual approval succeeded"
                 return 0
             else
-                log_warn "Manual approval failed - authentication required"
+                # Manual approval failed - upgrade to hard failure
+                if [ "${SKIP_FEDERATION:-false}" = "false" ]; then
+                    log_error "Manual approval failed - Hub registration incomplete"
+                    log_error "Impact: Spoke cannot authenticate with Hub"
+                    log_error "Fix: Ensure Hub is accessible and user has approval permissions"
+                    log_error "     Check Hub status: ./dive hub status"
+                    log_error "     Verify Hub API: curl -sk https://localhost:4000/health"
+                    return 1
+                else
+                    log_warn "Manual approval failed (skipped due to --skip-federation)"
+                    return 0
+                fi
             fi
         fi
 
@@ -861,7 +887,12 @@ spoke_config_apply_terraform() {
         if type terraform_spoke &>/dev/null; then
             log_verbose "Initializing Terraform workspace"
             if ! terraform_spoke init "$code_upper"; then
-                log_warn "Terraform init failed"
+                log_error "Terraform initialization failed"
+                log_error "Impact: Keycloak realm cannot be created/configured"
+                log_error "        Spoke will be non-functional without Keycloak realm"
+                log_error "Fix: Check Terraform installation: terraform --version"
+                log_error "     Check Terraform module availability"
+                log_error "     Check Terraform logs for specific error"
                 return 1
             fi
 
@@ -912,8 +943,14 @@ spoke_config_apply_terraform() {
         return $?
     fi
 
-    log_warn "Terraform module not available - Keycloak configuration may be incomplete"
-    return 0
+    # Terraform module not available - this is a critical failure
+    log_error "Terraform module not available - Keycloak configuration incomplete"
+    log_error "Impact: Keycloak realm cannot be created"
+    log_error "        Spoke will be non-functional without Keycloak realm"
+    log_error "Fix: Ensure Terraform modules are properly installed"
+    log_error "     Check: ${DIVE_ROOT}/scripts/dive-modules/configuration/terraform.sh"
+    log_error "     Check: ${DIVE_ROOT}/terraform/spoke/ directory exists"
+    return 1
 }
 
 # =============================================================================
@@ -969,7 +1006,7 @@ spoke_config_verify_realm() {
     log_error "  1. Check realm exists: docker exec $kc_container curl -sf http://localhost:8080/realms/$realm | jq .realm"
     log_error "  2. Check Keycloak logs: docker logs $kc_container | tail -50"
     log_error "  3. Verify Terraform state: cd terraform/spoke && terraform show"
-    
+
     return 1
 }
 
@@ -1394,32 +1431,37 @@ spoke_config_update_redirect_uris() {
 spoke_checkpoint_configuration() {
     local instance_code="$1"
     local code_lower=$(lower "$instance_code")
-    
+
     log_verbose "Validating configuration checkpoint for $instance_code"
-    
-    # Get port assignment
+
+    # Get port assignment from SSOT (get_instance_ports)
     local spoke_keycloak_port
     if type get_instance_ports &>/dev/null; then
         eval "$(get_instance_ports "$instance_code")"
-        spoke_keycloak_port="${KEYCLOAK_HTTPS_PORT}"
+        if [ -z "${SPOKE_KEYCLOAK_HTTPS_PORT:-}" ]; then
+            log_error "get_instance_ports did not export SPOKE_KEYCLOAK_HTTPS_PORT"
+            return 1
+        fi
+        spoke_keycloak_port="${SPOKE_KEYCLOAK_HTTPS_PORT}"
     else
-        # Fallback: calculate port from instance position
-        spoke_keycloak_port=8453
+        log_error "get_instance_ports function not available - cannot determine Keycloak port"
+        log_error "Ensure common.sh is sourced properly"
+        return 1
     fi
-    
+
     # Verify realm exists
     local realm="dive-v3-broker-${code_lower}"
     local keycloak_url="https://localhost:${spoke_keycloak_port}"
-    
+
     realm_response=$(curl -sk --max-time 10 "${keycloak_url}/realms/${realm}" 2>/dev/null)
     realm_name=$(echo "$realm_response" | jq -r '.realm // empty' 2>/dev/null)
-    
+
     if [ "$realm_name" != "$realm" ]; then
         log_error "Checkpoint FAILED: Realm '$realm' not accessible"
         log_error "URL tested: ${keycloak_url}/realms/${realm}"
         return 1
     fi
-    
+
     log_verbose "✓ Configuration checkpoint passed"
     return 0
 }

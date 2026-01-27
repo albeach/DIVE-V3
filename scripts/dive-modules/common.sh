@@ -814,13 +814,13 @@ load_gcp_secrets() {
 load_local_defaults() {
     # SECURITY: Load from .env.hub if available (contains GCP-synced secrets)
     # No hardcoded defaults - secrets MUST be in .env file or GCP Secret Manager
-    
+
     local env_file="${DIVE_ROOT}/.env.hub"
-    
+
     if [ -f "$env_file" ] && [ -s "$env_file" ]; then
         log_warn "⚠️  USING LOCAL ENV FILE: $env_file"
         log_warn "This file should contain GCP-synced secrets (use ./dive secrets sync)"
-        
+
         # Export variables from .env.hub
         set -a
         source "$env_file" 2>/dev/null || {
@@ -828,11 +828,11 @@ load_local_defaults() {
             return 1
         }
         set +a
-        
+
         log_success "Secrets loaded from local env file"
         return 0
     fi
-    
+
     log_error "FATAL: No secrets available (no GCP access and no .env.hub file)"
     log_error ""
     log_error "To fix this issue:"
@@ -855,22 +855,22 @@ activate_gcp_service_account() {
     local instance="${1:-usa}"
     local inst_lc
     inst_lc=$(echo "$instance" | tr '[:upper:]' '[:lower:]')
-    
+
     # Check if already authenticated
     if gcloud auth application-default print-access-token &>/dev/null 2>&1; then
         log_verbose "GCP already authenticated (user or service account)"
         return 0
     fi
-    
+
     # Try to use service account key if available
     local sa_key_file="${DIVE_ROOT}/gcp/${inst_lc}-sa-key.json"
-    
+
     if [ -f "$sa_key_file" ]; then
         log_info "Activating GCP service account from $sa_key_file..."
-        
+
         # Set GOOGLE_APPLICATION_CREDENTIALS for automatic authentication
         export GOOGLE_APPLICATION_CREDENTIALS="$sa_key_file"
-        
+
         # Verify service account works
         if gcloud auth application-default print-access-token &>/dev/null 2>&1; then
             log_success "GCP service account activated successfully"
@@ -881,13 +881,13 @@ activate_gcp_service_account() {
             return 1
         fi
     fi
-    
+
     # Try usa key as fallback (hub can access all spokes)
     local usa_sa_key="${DIVE_ROOT}/gcp/usa-sa-key.json"
     if [ "$inst_lc" != "usa" ] && [ -f "$usa_sa_key" ]; then
         log_info "Using USA service account as fallback..."
         export GOOGLE_APPLICATION_CREDENTIALS="$usa_sa_key"
-        
+
         if gcloud auth application-default print-access-token &>/dev/null 2>&1; then
             log_success "GCP service account activated (usa fallback)"
             return 0
@@ -895,7 +895,7 @@ activate_gcp_service_account() {
             unset GOOGLE_APPLICATION_CREDENTIALS
         fi
     fi
-    
+
     log_verbose "No service account key found, user authentication required"
     return 1
 }
@@ -905,7 +905,7 @@ load_secrets() {
         local|dev)
             # ENHANCED: Automatically try service account before user auth
             local gcp_available=false
-            
+
             if command -v gcloud >/dev/null 2>&1; then
                 # First try to activate service account (silent)
                 if activate_gcp_service_account "$INSTANCE" 2>/dev/null; then
@@ -917,7 +917,7 @@ load_secrets() {
                     log_verbose "Using GCP user authentication for secrets"
                 fi
             fi
-            
+
             # Prefer GCP secrets if available (can be overridden)
             local want_gcp=false
             if [ "$ENVIRONMENT" = "dev" ]; then
@@ -1238,9 +1238,9 @@ wait_for_keycloak_admin_api_ready() {
     local container_name="${1:?container name required}"
     local max_wait="${2:-180}"  # 3 minutes default
     local admin_password="${3:-}"
-    
+
     log_verbose "Waiting for Keycloak admin API to be ready: $container_name (max ${max_wait}s)"
-    
+
     # Extract instance type and code from container name
     local instance_type="hub"
     local instance_code=""
@@ -1248,47 +1248,47 @@ wait_for_keycloak_admin_api_ready() {
         instance_type="spoke"
         instance_code="${BASH_REMATCH[1]}"
     fi
-    
+
     # Check 1: Container must be running
     if ! docker ps --format '{{.Names}}' | grep -q "^${container_name}$"; then
         log_error "Container not running: $container_name"
         return 1
     fi
-    
+
     # Check 2: Container must be healthy
     local start_time=$(date +%s)
     local elapsed=0
     local healthy=false
-    
+
     while [ $elapsed -lt $max_wait ]; do
         local health_status=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null || echo "unknown")
-        
+
         if [ "$health_status" = "healthy" ]; then
             healthy=true
             log_verbose "Container healthy after ${elapsed}s"
             break
         fi
-        
+
         sleep 2
         elapsed=$(( $(date +%s) - start_time ))
-        
+
         if [ $((elapsed % 10)) -eq 0 ]; then
             log_verbose "Waiting for container health... ${elapsed}s elapsed (status: $health_status)"
         fi
     done
-    
+
     if [ "$healthy" = "false" ]; then
         log_error "Container did not become healthy within ${max_wait}s"
         return 1
     fi
-    
+
     # Check 3: Admin user can authenticate
     # Get admin password if not provided
     if [ -z "$admin_password" ]; then
         if [ "$instance_type" = "hub" ]; then
             # Hub: Try KC_BOOTSTRAP_ADMIN_PASSWORD, then KEYCLOAK_ADMIN_PASSWORD
             admin_password="${KC_BOOTSTRAP_ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD:-}}"
-            
+
             # Try to get from GCP if still empty
             if [ -z "$admin_password" ] && command -v gcloud &>/dev/null; then
                 admin_password=$(gcloud secrets versions access latest --secret=dive-v3-keycloak-usa --project=dive25 2>/dev/null || echo "")
@@ -1298,24 +1298,24 @@ wait_for_keycloak_admin_api_ready() {
             local code_upper=$(echo "$instance_code" | tr '[:lower:]' '[:upper:]')
             local pass_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
             admin_password="${!pass_var:-}"
-            
+
             if [ -z "$admin_password" ] && command -v gcloud &>/dev/null; then
                 admin_password=$(gcloud secrets versions access latest --secret="dive-v3-keycloak-${instance_code}" --project=dive25 2>/dev/null || echo "")
             fi
         fi
     fi
-    
+
     if [ -z "$admin_password" ]; then
         log_error "Cannot verify admin API readiness: admin password not available"
         log_verbose "Checked: function argument, KC_BOOTSTRAP_ADMIN_PASSWORD, KEYCLOAK_ADMIN_PASSWORD, GCP secrets"
         return 1
     fi
-    
+
     # Check 4: Can authenticate and get token
     local authenticated=false
     start_time=$(date +%s)
     elapsed=0
-    
+
     while [ $elapsed -lt $max_wait ]; do
         # Try to get admin token
         local auth_response
@@ -1325,17 +1325,17 @@ wait_for_keycloak_admin_api_ready() {
             -d "username=admin" \
             -d "password=${admin_password}" \
             -d "client_id=admin-cli" 2>&1)
-        
+
         # Check if we got a token
         local access_token
         access_token=$(echo "$auth_response" | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
-        
+
         if [ -n "$access_token" ]; then
             authenticated=true
             log_verbose "Admin API authenticated successfully after ${elapsed}s"
             break
         fi
-        
+
         # Log errors for debugging (verbose only)
         if echo "$auth_response" | grep -q "error"; then
             local error_desc=$(echo "$auth_response" | grep -o '"error_description":"[^"]*' | cut -d'"' -f4)
@@ -1343,31 +1343,31 @@ wait_for_keycloak_admin_api_ready() {
                 log_verbose "Authentication error: $error_desc (will retry)"
             fi
         fi
-        
+
         sleep 2
         elapsed=$(( $(date +%s) - start_time ))
-        
+
         if [ $((elapsed % 15)) -eq 0 ]; then
             log_verbose "Waiting for admin API authentication... ${elapsed}s elapsed"
         fi
     done
-    
+
     if [ "$authenticated" = "false" ]; then
         log_error "Admin API did not become ready within ${max_wait}s"
         log_error "Container is healthy but authentication fails - Keycloak may still be initializing"
         return 1
     fi
-    
+
     # Check 5: Master realm is accessible
     local realm_check
     realm_check=$(docker exec "$container_name" curl -s --max-time 5 \
         "http://localhost:8080/realms/master" 2>&1)
-    
+
     if ! echo "$realm_check" | grep -q '"realm":"master"'; then
         log_warn "Master realm not fully accessible yet, but authentication works"
         # Don't fail - authentication working is sufficient
     fi
-    
+
     log_success "Keycloak admin API ready: $container_name (total wait: ${elapsed}s)"
     return 0
 }
@@ -1420,5 +1420,30 @@ if [ -z "$DOCKER_CMD" ]; then
         export DOCKER_CMD="docker"
     fi
 fi
+
+# =============================================================================
+# DEPLOYMENT MODE DETECTION
+# =============================================================================
+
+##
+# Detect if running in production mode
+# 
+# Production mode is detected when:
+#   - DIVE_ENV=production explicitly set
+#   - KUBERNETES_SERVICE_HOST is set (running in K8s cluster)
+#
+# Production mode enforces stricter security requirements:
+#   - All secrets must come from GCP Secret Manager
+#   - No .env file fallbacks allowed
+#   - All security warnings become hard failures
+#   - No optional services (all services required)
+#
+# Returns:
+#   0 - Production mode detected
+#   1 - Development/test mode
+##
+is_production_mode() {
+    [ "${DIVE_ENV:-}" = "production" ] || [ -n "${KUBERNETES_SERVICE_HOST:-}" ]
+}
 
 
