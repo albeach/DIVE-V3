@@ -446,6 +446,19 @@ _spoke_init_internal() {
 
     ensure_dive_root
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    
+    # ==========================================================================
+    # CRITICAL FIX (2026-01-27): Calculate port offsets FIRST
+    # ==========================================================================
+    # Port variables are needed for certificate generation and other functions
+    # Must be set before any operations that use them
+    # ==========================================================================
+    eval "$(get_instance_ports "$code_upper")"
+    
+    # Extract individual port variables for later use
+    local keycloak_https_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
+    local keycloak_http_port="${SPOKE_KEYCLOAK_HTTP_PORT:-8080}"
+    local kas_port="${SPOKE_KAS_PORT:-8085}"
 
     # Create directory structure
     log_step "Creating instance directory structure"
