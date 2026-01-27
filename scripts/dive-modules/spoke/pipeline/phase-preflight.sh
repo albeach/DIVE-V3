@@ -59,6 +59,18 @@ spoke_phase_preflight() {
             return 1
         fi
     fi
+    
+    # Step 0.5: Run comprehensive preflight validation
+    # This performs 6 critical checks: Hub reachability, secrets, ports, Docker resources, network, Terraform
+    if type spoke_preflight_validation &>/dev/null; then
+        log_step "Running comprehensive preflight validation..."
+        if ! spoke_preflight_validation "$instance_code"; then
+            log_error "Comprehensive preflight validation failed"
+            return 1
+        fi
+    else
+        log_verbose "spoke_preflight_validation not available, using legacy checks"
+    fi
 
     # Step 1: Check for deployment conflicts (TEMPORARILY DISABLED)
     # if ! spoke_preflight_check_conflicts "$instance_code"; then
