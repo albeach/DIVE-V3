@@ -251,12 +251,58 @@ spoke_containers_start() {
 
     log_verbose "Infrastructure services: $infra_services"
     log_verbose "Running: $compose_cmd $compose_args"
-    if ! timeout 60 $compose_cmd $compose_args; then
-        log_error "Failed to start core infrastructure containers (timeout or error)"
-        orch_record_error "$SPOKE_ERROR_COMPOSE_UP" "$ORCH_SEVERITY_CRITICAL" \
-            "Infrastructure startup failed" "containers" \
-            "$(spoke_error_get_remediation $SPOKE_ERROR_COMPOSE_UP $instance_code)"
-        return 1
+    
+    # Cross-platform timeout implementation (macOS doesn't have GNU timeout)
+    if command -v timeout &>/dev/null; then
+        # Linux: use GNU timeout
+        if ! timeout 60 $compose_cmd $compose_args; then
+            log_error "Failed to start core infrastructure containers (timeout or error)"
+            orch_record_error "$SPOKE_ERROR_COMPOSE_UP" "$ORCH_SEVERITY_CRITICAL" \
+                "Infrastructure startup failed" "containers" \
+                "$(spoke_error_get_remediation $SPOKE_ERROR_COMPOSE_UP $instance_code)"
+            return 1
+        fi
+    elif command -v gtimeout &>/dev/null; then
+        # macOS with GNU coreutils installed via Homebrew
+        if ! gtimeout 60 $compose_cmd $compose_args; then
+            log_error "Failed to start core infrastructure containers (timeout or error)"
+            orch_record_error "$SPOKE_ERROR_COMPOSE_UP" "$ORCH_SEVERITY_CRITICAL" \
+                "Infrastructure startup failed" "containers" \
+                "$(spoke_error_get_remediation $SPOKE_ERROR_COMPOSE_UP $instance_code)"
+            return 1
+        fi
+    else
+        # macOS without GNU coreutils: use background process with kill
+        $compose_cmd $compose_args &
+        local compose_pid=$!
+        local waited=0
+        while [ $waited -lt 60 ]; do
+            if ! kill -0 $compose_pid 2>/dev/null; then
+                # Process finished
+                wait $compose_pid
+                local exit_code=$?
+                if [ $exit_code -ne 0 ]; then
+                    log_error "Failed to start core infrastructure containers (exit code: $exit_code)"
+                    orch_record_error "$SPOKE_ERROR_COMPOSE_UP" "$ORCH_SEVERITY_CRITICAL" \
+                        "Infrastructure startup failed" "containers" \
+                        "$(spoke_error_get_remediation $SPOKE_ERROR_COMPOSE_UP $instance_code)"
+                    return 1
+                fi
+                break
+            fi
+            sleep 1
+            waited=$((waited + 1))
+        done
+        
+        # Check if still running (timeout)
+        if kill -0 $compose_pid 2>/dev/null; then
+            log_error "Container startup timed out after 60s"
+            kill $compose_pid 2>/dev/null || true
+            orch_record_error "$SPOKE_ERROR_COMPOSE_UP" "$ORCH_SEVERITY_CRITICAL" \
+                "Infrastructure startup timeout" "containers" \
+                "$(spoke_error_get_remediation $SPOKE_ERROR_COMPOSE_UP $instance_code)"
+            return 1
+        fi
     fi
 
     # Wait for core infrastructure to be healthy
