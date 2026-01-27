@@ -766,19 +766,10 @@ spoke_config_register_in_registries() {
             log_verbose "Waiting for backend to be healthy... (${waited}s/${max_wait}s)"
         done
 
-        # CRITICAL: Don't hide errors - capture output for proper debugging
-        # Retry KAS registration up to 3 times (backend may still be starting up)
+        # PHASE 2 FIX: Remove retry logic - backend health check above ensures readiness
+        # If backend is healthy, KAS registration should work. If it fails, it's a real error.
         local kas_output
-        local kas_retries=3
-
-        for ((retry=1; retry<=kas_retries; retry++)); do
-            kas_output=$(spoke_kas_register_mongodb "$code_upper" 2>&1) && kas_exit_code=0 && break
-
-            if [ $retry -lt $kas_retries ]; then
-                log_warn "KAS registration attempt $retry failed, retrying in 5s..."
-                sleep 5
-            fi
-        done
+        kas_output=$(spoke_kas_register_mongodb "$code_upper" 2>&1) && kas_exit_code=0
 
         if [ $kas_exit_code -eq 0 ]; then
             log_verbose "✓ KAS API call succeeded"
@@ -1046,40 +1037,38 @@ spoke_config_verify_realm() {
     local code_lower=$(lower "$instance_code")
     local realm="dive-v3-broker-${code_lower}"
     local kc_container="dive-spoke-${code_lower}-keycloak"
-    local max_retries=10
-    local retry_delay=3
 
     log_verbose "Verifying realm '$realm' exists and is accessible..."
 
-    # Give Keycloak a brief moment to load realm configuration after Terraform
-    # Keycloak caches realm configs, may need a moment to refresh
-    sleep 3
+    # PHASE 2 FIX: Remove retry logic - use proper readiness check instead
+    # If wait_for_keycloak_admin_api_ready() was called before this function,
+    # Keycloak is ready and realm should be accessible immediately after Terraform.
+    # If not ready, it's a real error, not a timing issue.
 
-    for i in $(seq 1 $max_retries); do
-        # Check if realm is accessible via internal endpoint
-        local realm_check
-        realm_check=$(docker exec "$kc_container" curl -sf \
-            "http://localhost:8080/realms/${realm}" 2>/dev/null | \
-            jq -r '.realm // empty' 2>/dev/null)
+    # Check if realm is accessible via internal endpoint
+    local realm_check
+    realm_check=$(docker exec "$kc_container" curl -sf --max-time 5 \
+        "http://localhost:8080/realms/${realm}" 2>/dev/null | \
+        jq -r '.realm // empty' 2>/dev/null)
 
-        if [ "$realm_check" = "$realm" ]; then
-            log_success "✓ Realm '$realm' verified and accessible"
-            return 0
-        fi
+    if [ "$realm_check" = "$realm" ]; then
+        log_success "✓ Realm '$realm' verified and accessible"
+        return 0
+    fi
 
-        if [ $i -lt $max_retries ]; then
-            log_verbose "Retry $i/$max_retries: Waiting ${retry_delay}s for realm to become accessible..."
-            sleep $retry_delay
-        fi
-    done
-
-    # If we get here, realm doesn't exist or isn't accessible
-    log_error "Realm '$realm' not accessible after $max_retries attempts"
+    # Realm not accessible - this is a real error, not a timing issue
+    log_error "Realm '$realm' not accessible"
+    log_error ""
+    log_error "This usually means:"
+    log_error "  1. Terraform did not create the realm (check Terraform state)"
+    log_error "  2. Keycloak is not fully initialized (should not happen if readiness check passed)"
+    log_error "  3. Realm name mismatch (check Terraform configuration)"
     log_error ""
     log_error "Debug steps:"
     log_error "  1. Check realm exists: docker exec $kc_container curl -sf http://localhost:8080/realms/$realm | jq .realm"
     log_error "  2. Check Keycloak logs: docker logs $kc_container | tail -50"
     log_error "  3. Verify Terraform state: cd terraform/spoke && terraform show"
+    log_error "  4. Verify Keycloak readiness: wait_for_keycloak_admin_api_ready() should be called before this"
 
     return 1
 }
