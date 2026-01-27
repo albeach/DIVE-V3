@@ -100,7 +100,7 @@ spoke_clean() {
 
 spoke_down() {
     ensure_dive_root
-    local instance_code="${INSTANCE:-usa}"
+    local instance_code="${1:-${INSTANCE:-usa}}"
     local code_lower=$(lower "$instance_code")
     local code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
