@@ -2362,7 +2362,11 @@ async function seedInstance(
         // Validate COI definitions exist
         const coiCollection = db.collection('coi_definitions');
         const coiCount = await coiCollection.countDocuments();
-        const expectedCoiCount = 22; // Updated from 19 to 22 (2026-01-24)
+        // CRITICAL FIX: initialize-coi-keys.ts creates 23 COI definitions (verified by grep count)
+        // Count verified: FVEY, NATO, NATO-COSMIC, US-ONLY, CAN-US, GBR-US, FRA-US, DEU-US,
+        // AUKUS, QUAD, EU-RESTRICTED, NORTHCOM, EUCOM, PACOM, CENTCOM, SOCOM,
+        // Alpha, Beta, Gamma, TEST-COI, NEW-COI, PACIFIC-ALLIANCE (23 total)
+        const expectedCoiCount = 23; // Updated from 22 to 23 (2026-01-27) - matches initialize-coi-keys.ts actual count
 
         if (coiCount < expectedCoiCount) {
             throw new Error(
@@ -2412,7 +2416,9 @@ async function seedInstance(
                 `Solution: Ensure KAS servers are enabled and active in MongoDB`
             );
         }
-        console.log(`   ✅ KAS Servers: ${approvedKasCount} active, ${kasServers.length} total\n`);
+        // NOTE: kasServers.length is instance-filtered (only KAS servers for this instance)
+        // approvedKasCount is from MongoDB (all active KAS servers across all instances)
+        console.log(`   ✅ KAS Servers: ${approvedKasCount} active in registry, ${kasServers.length} available for ${instanceCode}\n`);
 
         console.log('✅ Pre-flight validation passed - ZTDF encryption requirements met\n');
         console.log('🔐 ACP-240 Compliance: 100% ZTDF encryption enforced (no plaintext fallback)\n');
