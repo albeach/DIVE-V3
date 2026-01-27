@@ -1,9 +1,0 @@
-{
-  "phase": "PREFLIGHT",
-  "instance_code": "FRA",
-  "completed_at": "2026-01-27T05:38:02Z",
-  "hostname": "MacBook-Pro-3.local",
-  "user": "aubreybeach",
-  "duration_seconds": 6,
-  "metadata": {}
-}
