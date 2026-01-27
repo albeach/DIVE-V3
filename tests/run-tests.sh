@@ -19,11 +19,14 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# Test mode (all, hub, spoke)
+# Test mode (all, hub, spoke, federation)
 TEST_MODE="${1:-all}"
 
 # Spoke instance for testing (default: FRA)
 export SPOKE_TEST_INSTANCE="${SPOKE_TEST_INSTANCE:-FRA}"
+export TEST_SPOKE_1="${TEST_SPOKE_1:-FRA}"
+export TEST_SPOKE_2="${TEST_SPOKE_2:-GBR}"
+export TEST_SPOKE_3="${TEST_SPOKE_3:-DEU}"
 
 # Test results
 TOTAL_SUITES=0
@@ -51,19 +54,25 @@ print_usage() {
     echo "Usage: $0 [MODE]"
     echo ""
     echo "Modes:"
-    echo "  all         Run all tests (hub + spoke) [default]"
+    echo "  all         Run all tests (hub + spoke + federation) [default]"
     echo "  hub         Run hub tests only"
     echo "  spoke       Run spoke tests only"
+    echo "  federation  Run federation SSO tests only"
     echo "  --help      Show this help message"
     echo ""
     echo "Environment Variables:"
     echo "  SPOKE_TEST_INSTANCE    Spoke instance to test (default: FRA)"
+    echo "  TEST_SPOKE_1           Primary spoke for federation tests (default: FRA)"
+    echo "  TEST_SPOKE_2           Secondary spoke for multi-spoke tests (default: GBR)"
+    echo "  TEST_SPOKE_3           Tertiary spoke for multi-spoke tests (default: DEU)"
     echo ""
     echo "Examples:"
     echo "  $0                           # Run all tests"
     echo "  $0 hub                       # Run hub tests only"
     echo "  $0 spoke                     # Run spoke tests only"
+    echo "  $0 federation                # Run federation SSO tests"
     echo "  SPOKE_TEST_INSTANCE=GBR $0 spoke  # Test GBR spoke"
+    echo "  TEST_SPOKE_1=EST TEST_SPOKE_2=LVA $0 federation  # Test EST/LVA federation"
     echo ""
     exit 0
 }
@@ -127,6 +136,40 @@ print_summary() {
 # MAIN EXECUTION
 # =============================================================================
 
+run_shell_test_suite() {
+    local suite_name="$1"
+    local test_file="$2"
+    
+    TOTAL_SUITES=$((TOTAL_SUITES + 1))
+    
+    echo ""
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${CYAN}Running: $suite_name${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    
+    if [ ! -f "$test_file" ]; then
+        echo -e "${RED}✗ Test file not found: $test_file${NC}"
+        FAILED_SUITES=$((FAILED_SUITES + 1))
+        return 1
+    fi
+    
+    local start_time=$(date +%s)
+    
+    if bash "$test_file"; then
+        local end_time=$(date +%s)
+        local duration=$((end_time - start_time))
+        echo -e "${GREEN}✓ $suite_name passed (${duration}s)${NC}"
+        PASSED_SUITES=$((PASSED_SUITES + 1))
+        return 0
+    else
+        local end_time=$(date +%s)
+        local duration=$((end_time - start_time))
+        echo -e "${RED}✗ $suite_name failed (${duration}s)${NC}"
+        FAILED_SUITES=$((FAILED_SUITES + 1))
+        return 1
+    fi
+}
+
 main() {
     # Check for help flag
     if [ "$TEST_MODE" = "--help" ] || [ "$TEST_MODE" = "-h" ]; then
@@ -134,7 +177,7 @@ main() {
     fi
     
     # Validate test mode
-    if [ "$TEST_MODE" != "all" ] && [ "$TEST_MODE" != "hub" ] && [ "$TEST_MODE" != "spoke" ]; then
+    if [ "$TEST_MODE" != "all" ] && [ "$TEST_MODE" != "hub" ] && [ "$TEST_MODE" != "spoke" ] && [ "$TEST_MODE" != "federation" ]; then
         echo -e "${RED}Error: Invalid test mode '$TEST_MODE'${NC}"
         echo ""
         print_usage
@@ -174,6 +217,18 @@ main() {
         
         run_test_suite "Spoke Integration Tests (Deployment)" \
             "${DIVE_ROOT}/tests/integration/test-spoke-deployment.bats"
+    fi
+    
+    # Run federation tests
+    if [ "$TEST_MODE" = "all" ] || [ "$TEST_MODE" = "federation" ]; then
+        echo ""
+        echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+        echo -e "${CYAN}   FEDERATION SSO TESTS${NC}"
+        echo -e "${CYAN}   Spokes: $TEST_SPOKE_1, $TEST_SPOKE_2, $TEST_SPOKE_3${NC}"
+        echo -e "${CYAN}═══════════════════════════════════════════════════════════${NC}"
+        
+        run_shell_test_suite "Comprehensive SSO Test Suite" \
+            "${DIVE_ROOT}/tests/federation/test-sso-comprehensive.sh"
     fi
     
     # Print summary
