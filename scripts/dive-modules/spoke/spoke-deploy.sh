@@ -70,6 +70,9 @@ spoke_deploy() {
     local instance_code="${1:-}"
     local instance_name="${2:-}"
     local use_legacy=false
+    
+    # Export flags for use by pipeline phases
+    export SKIP_FEDERATION=false
 
     # Parse options
     for arg in "$@"; do
@@ -82,6 +85,10 @@ spoke_deploy() {
                 if [ -n "$instance_code" ]; then
                     spoke_containers_clean "$instance_code" "false" 2>/dev/null || true
                 fi
+                ;;
+            --skip-federation)
+                export SKIP_FEDERATION=true
+                log_warn "Federation setup will be skipped (--skip-federation flag)"
                 ;;
         esac
     done
@@ -98,8 +105,9 @@ spoke_deploy() {
         echo "  ./dive spoke deploy GBR \"United Kingdom\""
         echo ""
         echo "Options:"
-        echo "  --force     Clean and redeploy"
-        echo "  --legacy    Use legacy deployment (not recommended)"
+        echo "  --force             Clean and redeploy"
+        echo "  --skip-federation   Skip federation setup (spoke will be non-functional)"
+        echo "  --legacy            Use legacy deployment (not recommended)"
         echo ""
         return 1
     fi
