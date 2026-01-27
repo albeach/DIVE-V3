@@ -523,15 +523,35 @@ cmd_nuke() {
     esac
 
     # Discover containers
+    # CRITICAL FIX: Catch anonymous containers (no name or hash ID as name)
+    # Anonymous containers are created without --name flag or by compose in certain scenarios
     local dive_containers=""
     local container_count=0
     if [ -n "$container_patterns" ] || [ "$target_type" = "orphans" ]; then
         local all_containers=$(docker ps -aq 2>/dev/null)
         for c in $all_containers; do
             local name=$(docker inspect --format '{{.Name}}' "$c" 2>/dev/null | sed 's/^\///')
+            local image=$(docker inspect --format '{{.Config.Image}}' "$c" 2>/dev/null)
+            local project_label=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$c" 2>/dev/null)
+            
+            # Check if container is anonymous (no name or name equals ID)
+            local is_anonymous=false
+            if [ -z "$name" ] || [ "$name" = "$c" ] || [ "${#name}" -eq 64 ]; then
+                is_anonymous=true
+            fi
+            
             if [ "$target_type" = "orphans" ]; then
                 local status=$(docker inspect --format '{{.State.Status}}' "$c" 2>/dev/null)
                 if [ "$status" != "running" ]; then
+                    dive_containers="$dive_containers $c"
+                fi
+            elif [ "$is_anonymous" = true ]; then
+                # Anonymous container - check if it's DIVE-related by image or label
+                if echo "$image" | grep -qE "postgres|mongodb|redis|keycloak|opa|opal|dive|ghcr.io/opentdf"; then
+                    # DIVE-related anonymous container - include it
+                    dive_containers="$dive_containers $c"
+                elif echo "$project_label" | grep -qE "^dive-"; then
+                    # Has DIVE compose project label - include it
                     dive_containers="$dive_containers $c"
                 fi
             elif echo "$name" | grep -qE "$container_patterns"; then
@@ -762,7 +782,44 @@ cmd_nuke() {
         done
     done
     
-    log_verbose "  Removed $removed_containers containers"
+    # CRITICAL FIX: Remove anonymous containers (no name or hash ID as name)
+    # Anonymous containers are created without --name flag or by compose in certain scenarios
+    # They can be identified by: empty name, name equals ID, or 64-char hash name
+    log_verbose "  Removing anonymous DIVE-related containers..."
+    local anonymous_removed=0
+    for c in $(docker ps -aq 2>/dev/null); do
+        local name=$(docker inspect --format '{{.Name}}' "$c" 2>/dev/null | sed 's/^\///')
+        local image=$(docker inspect --format '{{.Config.Image}}' "$c" 2>/dev/null)
+        local project_label=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$c" 2>/dev/null)
+        
+        # Check if anonymous (no name, name equals ID, or 64-char hash)
+        local is_anonymous=false
+        if [ -z "$name" ] || [ "$name" = "$c" ] || [ "${#name}" -eq 64 ]; then
+            is_anonymous=true
+        fi
+        
+        if [ "$is_anonymous" = true ]; then
+            # Check if DIVE-related by image or compose project label
+            local is_dive_related=false
+            if echo "$image" | grep -qE "postgres|mongodb|redis|keycloak|opa|opal|dive|ghcr.io/opentdf|openpolicyagent|permitio"; then
+                is_dive_related=true
+            elif echo "$project_label" | grep -qE "^dive-"; then
+                is_dive_related=true
+            fi
+            
+            if [ "$is_dive_related" = true ]; then
+                log_verbose "    Removing anonymous DIVE container: $c (image: $image)"
+                ${DOCKER_CMD:-docker} rm -f "$c" 2>/dev/null && anonymous_removed=$((anonymous_removed + 1)) || true
+            fi
+        fi
+    done
+    
+    if [ $anonymous_removed -gt 0 ]; then
+        removed_containers=$((removed_containers + anonymous_removed))
+        log_verbose "    Removed $anonymous_removed anonymous containers"
+    fi
+    
+    log_verbose "  Removed $removed_containers containers total"
 
     # =========================================================================
     # PHASE 4: FORCE REMOVE ALL VOLUMES
