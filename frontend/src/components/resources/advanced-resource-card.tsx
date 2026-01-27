@@ -20,6 +20,7 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from '@/hooks/useTranslation';
+import { FileTypeBadge } from './file-type-badge';
 
 export interface IResourceCardData {
   resourceId: string;
@@ -43,6 +44,10 @@ export interface IResourceCardData {
   // Federation origin tracking
   originRealm?: string;    // Source instance code (USA, FRA, GBR, DEU)
   _federated?: boolean;    // True if from a remote instance
+  // File type metadata
+  contentType?: string;      // MIME type from backend
+  fileExtension?: string;    // Pre-calculated or derived extension
+  fileCategory?: 'document' | 'image' | 'video' | 'audio' | 'archive' | 'code' | 'other';
 }
 
 export type ViewMode = 'grid' | 'list' | 'compact';
@@ -180,13 +185,24 @@ export default function AdvancedResourceCard({
         data-resource-id={resource.resourceId}
       >
         <div className="bg-white border-2 border-gray-200 rounded-xl p-5 hover:shadow-2xl hover:border-blue-400 transition-all duration-300 hover:-translate-y-1 h-full flex flex-col">
-          {/* Row 1: Classification + Multi-KAS (if applicable) + Origin */}
-          <div className="flex items-center gap-2 mb-2">
+          {/* Row 1: Classification + File Type + Multi-KAS (if applicable) + Origin */}
+          <div className="flex items-center gap-2 mb-2 flex-wrap">
             {/* Classification Badge */}
             <div className={`flex-shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-bold border-2 ${classColors.bg} ${classColors.text} ${classColors.border}`}>
               <span className="mr-1">{classificationEmojis[resource.classification]}</span>
               {t(`classifications.${resource.classification.toLowerCase()}`)}
             </div>
+
+            {/* File Type Badge */}
+            {resource.contentType && (
+              <FileTypeBadge
+                contentType={resource.contentType}
+                fileExtension={resource.fileExtension}
+                size="sm"
+                showLabel={true}
+                animated={true}
+              />
+            )}
 
             {/* Multi-KAS Badge - Only show if more than 1 KAO */}
             {hasMultiKas && (
@@ -300,12 +316,23 @@ export default function AdvancedResourceCard({
           <div className="flex items-center justify-between gap-4">
             {/* Left: Badge Row + Title */}
             <div className="flex items-center gap-4 flex-1 min-w-0">
-              {/* Row 1: Classification + Multi-KAS + Origin */}
+              {/* Row 1: Classification + File Type + Multi-KAS + Origin */}
               <div className="flex items-center gap-1.5 flex-shrink-0">
                 {/* Classification */}
                 <div className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${classColors.bg} ${classColors.text} ${classColors.border}`}>
                   {classificationEmojis[resource.classification]} {t(`classifications.${resource.classification.toLowerCase()}`)}
                 </div>
+
+                {/* File Type Badge */}
+                {resource.contentType && (
+                  <FileTypeBadge
+                    contentType={resource.contentType}
+                    fileExtension={resource.fileExtension}
+                    size="sm"
+                    showLabel={true}
+                    animated={false}
+                  />
+                )}
 
                 {/* Multi-KAS Badge - Only if > 1 KAO */}
                 {hasMultiKas && (
@@ -412,9 +439,18 @@ export default function AdvancedResourceCard({
     <article className="block group cursor-pointer" data-resource-id={resource.resourceId}>
       <div className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-md hover:border-blue-400 transition-all duration-150">
         <div className="flex items-center justify-between gap-3">
-          {/* Left: Classification + Multi-KAS + Origin - icons only */}
+          {/* Left: Classification + File Type + Multi-KAS + Origin - icons only */}
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <span className="text-lg" title={resource.classification}>{classificationEmojis[resource.classification]}</span>
+            {resource.contentType && (
+              <FileTypeBadge
+                contentType={resource.contentType}
+                fileExtension={resource.fileExtension}
+                size="sm"
+                showLabel={false}
+                animated={false}
+              />
+            )}
             {hasMultiKasCompact && <span className="text-sm" title={`${resource.kaoCount} KAS`}>🔐</span>}
             {resource.originRealm && (
               <span className="text-sm" title={`Source: ${resource.originRealm}`}>

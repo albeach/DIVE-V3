@@ -66,8 +66,8 @@ federation_verify() {
     local total=0
 
     # Get spoke configuration
-    local ports=$(get_instance_ports "$instance_code" 2>/dev/null)
-    local kc_port=$(echo "$ports" | jq -r '.keycloak // 8443')
+    eval "$(get_instance_ports "$instance_code" 2>/dev/null)"
+    local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
     local spoke_url="https://localhost:${kc_port}"
     local spoke_realm="dive-v3-broker-${code_lower}"
     local idp_alias="${code_lower}-idp"
@@ -216,8 +216,8 @@ federation_health_check() {
     local code_upper=$(upper "$instance_code")
     local code_lower=$(lower "$instance_code")
 
-    local ports=$(get_instance_ports "$instance_code" 2>/dev/null)
-    local kc_port=$(echo "$ports" | jq -r '.keycloak // 8443')
+    eval "$(get_instance_ports "$instance_code" 2>/dev/null)"
+    local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
     local spoke_url="https://localhost:${kc_port}"
     local spoke_realm="dive-v3-broker-${code_lower}"
 
@@ -272,8 +272,8 @@ federation_test_sso_flow() {
 
     log_info "Testing SSO flow for $code_upper..."
 
-    local ports=$(get_instance_ports "$instance_code" 2>/dev/null)
-    local kc_port=$(echo "$ports" | jq -r '.keycloak // 8443')
+    eval "$(get_instance_ports "$instance_code" 2>/dev/null)"
+    local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
     local spoke_url="https://localhost:${kc_port}"
     local spoke_realm="dive-v3-broker-${code_lower}"
     local idp_alias="${code_lower}-idp"

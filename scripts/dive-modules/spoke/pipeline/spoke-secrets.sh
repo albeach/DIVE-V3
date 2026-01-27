@@ -163,19 +163,19 @@ _map_env_to_gcp_secret() {
 
     case "$env_var" in
         POSTGRES_PASSWORD)
-            echo "dive-v3-postgres-${instance_code}"
+            echo "dive-v3-postgres-password-${instance_code}"
             ;;
         MONGO_PASSWORD)
-            echo "dive-v3-mongodb-${instance_code}"
+            echo "dive-v3-mongo-password-${instance_code}"
             ;;
         REDIS_PASSWORD)
-            echo "dive-v3-redis-${instance_code}"
+            echo "dive-v3-redis-password-${instance_code}"
             ;;
         KEYCLOAK_ADMIN_PASSWORD)
-            echo "dive-v3-keycloak-${instance_code}"
+            echo "dive-v3-keycloak-admin-password-${instance_code}"
             ;;
         KEYCLOAK_CLIENT_SECRET)
-            echo "dive-v3-client-secret-${instance_code}"
+            echo "dive-v3-keycloak-client-secret-${instance_code}"
             ;;
         AUTH_SECRET)
             echo "dive-v3-auth-secret-${instance_code}"
@@ -260,8 +260,8 @@ spoke_secrets_load_from_gcp() {
     # Also set base variable names (without instance suffix) for compatibility
     for base_secret in "${SPOKE_REQUIRED_SECRETS[@]}"; do
         local env_var_name="${base_secret}_${code_upper}"
-        local value="${!env_var_name}"
-        if [ -n "$value" ]; then
+        if [ -n "${!env_var_name:-}" ]; then
+            local value="${!env_var_name}"
             export "${base_secret}=${value}"
         fi
     done

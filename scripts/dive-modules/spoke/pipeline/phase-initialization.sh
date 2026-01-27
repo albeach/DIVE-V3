@@ -881,9 +881,11 @@ spoke_init_apply_terraform() {
         return 1
     fi
 
-    # Use admin password for test users
-    export TF_VAR_test_user_password="${!keycloak_password_var}"
-    export TF_VAR_admin_user_password="${!keycloak_password_var}"
+    # Use test user passwords following Hub pattern:
+    # 1. Try TEST_USER_PASSWORD/ADMIN_PASSWORD env vars first
+    # 2. Fall back to Keycloak admin password (same as Hub approach)
+    export TF_VAR_test_user_password="${TEST_USER_PASSWORD:-${!keycloak_password_var}}"
+    export TF_VAR_admin_user_password="${ADMIN_PASSWORD:-${!keycloak_password_var}}"
 
     # Set Keycloak credentials for provider
     export KEYCLOAK_USER="admin"

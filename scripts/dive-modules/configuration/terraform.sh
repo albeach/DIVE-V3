@@ -70,7 +70,7 @@ terraform_init() {
     log_info "Initializing Terraform in $tf_dir..."
 
     cd "$tf_dir"
-    
+
     # ==========================================================================
     # CRITICAL FIX: Non-interactive Terraform init
     # ==========================================================================
@@ -80,7 +80,7 @@ terraform_init() {
     # ==========================================================================
     rm -rf ".terraform" 2>/dev/null || true
     rm -rf "terraform.tfstate.d" 2>/dev/null || true
-    
+
     terraform init \
         -reconfigure \
         -input=false \
@@ -153,65 +153,66 @@ terraform_apply() {
 
     # Execute with progress monitoring
     log_verbose "Command: $cmd $@"
-    
+
     # Create temp file for output
     local tmp_output=$(mktemp)
     local start_time=$(date +%s)
-    
+
     # ==========================================================================
     # CRITICAL FIX: Add timeout for Terraform apply (600s = 10 minutes)
     # ==========================================================================
     # Terraform can take 5-10 minutes for complex Keycloak configurations
     # Previous timeout was too aggressive, causing partial deployments
+    # macOS Note: Using bash-native timeout (timeout command not available)
     # ==========================================================================
     log_verbose "Starting Terraform apply with 600s timeout..."
     echo -n "Progress: "
-    
-    # Run Terraform with timeout in background
-    if timeout 600 $cmd "$@" > "$tmp_output" 2>&1 & then
-        local tf_pid=$!
-        
-        # Show progress dots while Terraform runs
-        while kill -0 $tf_pid 2>/dev/null; do
-            echo -n "."
-            sleep 2
-        done
-        
-        wait $tf_pid
-        local result=$?
-        echo ""  # New line after progress dots
-        
-        if [ $result -eq 0 ]; then
-            local end_time=$(date +%s)
-            local duration=$((end_time - start_time))
-            log_success "Terraform apply complete in ${duration}s"
-            
-            # Show summary of changes
-            if grep -q "Apply complete" "$tmp_output" 2>/dev/null; then
-                grep "Apply complete" "$tmp_output" | head -1
-            fi
-            
-            rm -f "$tmp_output"
-            cd - >/dev/null
-            return 0
-        elif [ $result -eq 124 ]; then
-            log_error "Terraform apply timed out after 600s"
-            log_error "This may indicate Keycloak is not responding or network issues"
-            log_error "Output saved to: $tmp_output"
-            cd - >/dev/null
-            return 1
-        else
-            log_error "Terraform apply failed"
-            log_error "Output saved to: $tmp_output"
-            log_verbose "Recent output:"
-            tail -20 "$tmp_output" 2>/dev/null || true
-            cd - >/dev/null
-            return $result
-        fi
-    else
-        log_error "Failed to start Terraform apply"
-        cd - >/dev/null
+
+    # Run Terraform in background with bash-native timeout
+    $cmd "$@" > "$tmp_output" 2>&1 &
+    local tf_pid=$!
+    local timeout_seconds=600
+    local elapsed=0
+
+    # Show progress dots while Terraform runs (with timeout)
+    while kill -0 $tf_pid 2>/dev/null && [ $elapsed -lt $timeout_seconds ]; do
+        echo -n "."
+        sleep 2
+        elapsed=$((elapsed + 2))
+    done
+    echo ""  # New line after progress dots
+
+    # Check if process is still running (timeout case)
+    if kill -0 $tf_pid 2>/dev/null; then
+        log_error "Terraform timed out after ${timeout_seconds}s"
+        kill -9 $tf_pid 2>/dev/null
+        rm -f "$tmp_output"
         return 1
+    fi
+
+    wait $tf_pid
+    local result=$?
+
+    if [ $result -eq 0 ]; then
+        local end_time=$(date +%s)
+        local duration=$((end_time - start_time))
+        log_success "Terraform apply complete in ${duration}s"
+
+        # Show summary of changes
+        if grep -q "Apply complete" "$tmp_output" 2>/dev/null; then
+            grep "Apply complete" "$tmp_output" | head -1
+        fi
+
+        rm -f "$tmp_output"
+        cd - >/dev/null
+        return 0
+    else
+        log_error "Terraform apply failed"
+        log_error "Output saved to: $tmp_output"
+        log_verbose "Recent output:"
+        tail -20 "$tmp_output" 2>/dev/null || true
+        cd - >/dev/null
+        return $result
     fi
 }
 
@@ -319,12 +320,12 @@ terraform_apply_spoke() {
     fi
 
     terraform_init "$TF_SPOKE_DIR" || return 1
-    
+
     # CRITICAL: Select or create workspace for this spoke instance
     # Each spoke must have its own workspace to maintain separate state
     (
         cd "$TF_SPOKE_DIR"
-        
+
         if terraform workspace list | grep -qw "$code_lower"; then
             log_verbose "Selecting existing workspace: $code_lower"
             terraform workspace select "$code_lower" >/dev/null 2>&1
@@ -332,7 +333,7 @@ terraform_apply_spoke() {
             log_verbose "Creating new workspace: $code_lower"
             terraform workspace new "$code_lower" >/dev/null 2>&1
         fi
-        
+
         # Verify we're on the correct workspace
         local current_workspace
         current_workspace=$(terraform workspace show)
@@ -341,20 +342,105 @@ terraform_apply_spoke() {
             log_error "Expected: $code_lower, Current: $current_workspace"
             return 1
         fi
-        
+
         log_verbose "Terraform workspace: $current_workspace"
+
+        # CRITICAL: Detect and handle Terraform state drift
+        # If Terraform state is empty but resources exist in Keycloak, we have orphaned resources
+        # This happens after deployment rollbacks that stop containers but leave Keycloak data
+        local state_count=$(terraform state list 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$state_count" = "0" ]; then
+            log_verbose "Terraform state is empty, checking for orphaned Keycloak realm..."
+
+            # Check if realm exists in Keycloak (requires Keycloak to be running)
+            local realm_name="dive-v3-broker-${code_lower}"
+            local keycloak_port
+
+            # Get Keycloak port from running container
+            keycloak_port=$(docker port "dive-spoke-${code_lower}-keycloak" 8443/tcp 2>/dev/null | cut -d: -f2)
+
+            if [ -n "$keycloak_port" ]; then
+                local realm_check
+                realm_check=$(curl -sk --max-time 5 "https://localhost:${keycloak_port}/realms/${realm_name}" 2>/dev/null | jq -r '.realm // "NOT_FOUND"' 2>/dev/null)
+
+                if [ "$realm_check" = "$realm_name" ]; then
+                    log_warn "Detected orphaned realm '$realm_name' in Keycloak without Terraform state"
+                    log_warn "This indicates previous deployment was rolled back before Terraform completed"
+                    log_warn "Cleaning up orphaned realm to allow fresh Terraform apply..."
+
+                    # Get Keycloak admin credentials (check multiple sources)
+                    local kc_admin_pass=""
+
+                    # Try instance-specific password first
+                    local pass_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
+                    if [ -n "${!pass_var:-}" ]; then
+                        kc_admin_pass="${!pass_var}"
+                        log_verbose "Using instance-specific password: ${pass_var}"
+                    elif [ -n "${KEYCLOAK_ADMIN_PASSWORD:-}" ]; then
+                        kc_admin_pass="$KEYCLOAK_ADMIN_PASSWORD"
+                        log_verbose "Using generic KEYCLOAK_ADMIN_PASSWORD"
+                    else
+                        # Last resort: try to load from .env file directly
+                        local env_file="${DIVE_ROOT}/instances/${code_lower}/.env"
+                        if [ -f "$env_file" ]; then
+                            kc_admin_pass=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" "$env_file" | cut -d'=' -f2- | tr -d '"' | tr -d "'" | head -1)
+                            if [ -n "$kc_admin_pass" ]; then
+                                log_verbose "Loaded password from .env file"
+                            fi
+                        fi
+                    fi
+
+                    if [ -z "$kc_admin_pass" ]; then
+                        log_error "Cannot clean orphaned realm: KEYCLOAK_ADMIN_PASSWORD not found"
+                        log_error "Tried: ${pass_var}, KEYCLOAK_ADMIN_PASSWORD, ${env_file}"
+                        log_error "Manual cleanup required: Delete realm '$realm_name' via Keycloak Admin Console"
+                        return 1
+                    fi
+
+                    log_verbose "Attempting Keycloak authentication..."
+                    # Get admin token
+                    local admin_token
+                    admin_token=$(curl -sk -X POST "https://localhost:${keycloak_port}/realms/master/protocol/openid-connect/token" \
+                        -d "client_id=admin-cli" \
+                        -d "username=admin" \
+                        -d "password=${kc_admin_pass}" \
+                        -d "grant_type=password" 2>/dev/null | jq -r '.access_token // empty')
+
+                    if [ -z "$admin_token" ]; then
+                        log_error "Failed to authenticate with Keycloak to clean orphaned realm"
+                        log_error "Keycloak may still be starting up or credentials may be incorrect"
+                        log_error "Manual cleanup required: Delete realm '$realm_name' via Keycloak Admin Console"
+                        return 1
+                    fi
+
+                    # Delete orphaned realm
+                    local delete_result
+                    delete_result=$(curl -sk -X DELETE "https://localhost:${keycloak_port}/admin/realms/${realm_name}" \
+                        -H "Authorization: Bearer ${admin_token}" \
+                        -w "%{http_code}" -o /dev/null 2>/dev/null)
+
+                    if [ "$delete_result" = "204" ]; then
+                        log_success "✓ Orphaned realm deleted successfully"
+                    else
+                        log_error "Failed to delete orphaned realm (HTTP $delete_result)"
+                        log_error "Manual cleanup required: Delete realm '$realm_name' via Keycloak Admin Console"
+                        return 1
+                    fi
+                fi
+            fi
+        fi
     ) || return 1
-    
+
     # Instance code must be uppercase per ISO 3166-1 alpha-3 validation
     # Spoke tfvars are in terraform/countries/<code>.tfvars (not terraform/spoke/spoke.tfvars)
     local tfvars_file="${DIVE_ROOT}/terraform/countries/${code_lower}.tfvars"
-    
+
     if [ ! -f "$tfvars_file" ]; then
         log_error "Country tfvars file not found: $tfvars_file"
         log_error "Spoke Terraform requires country-specific configuration"
         return 1
     fi
-    
+
     log_verbose "Using tfvars: $tfvars_file"
     terraform_apply "$TF_SPOKE_DIR" "$tfvars_file" -var="instance_code=${code_upper}"
 }
@@ -376,15 +462,15 @@ terraform_plan_spoke() {
     fi
 
     terraform_init "$TF_SPOKE_DIR" || return 1
-    
+
     # Spoke tfvars are in terraform/countries/<code>.tfvars
     local tfvars_file="${DIVE_ROOT}/terraform/countries/${code_lower}.tfvars"
-    
+
     if [ ! -f "$tfvars_file" ]; then
         log_error "Country tfvars file not found: $tfvars_file"
         return 1
     fi
-    
+
     # Instance code must be uppercase per ISO 3166-1 alpha-3 validation
     terraform_plan "$TF_SPOKE_DIR" "$tfvars_file" -var="instance_code=${code_upper}"
 }
