@@ -441,8 +441,39 @@ terraform_apply_spoke() {
         return 1
     fi
 
+    # ==========================================================================
+    # CRITICAL FIX: Override idp_url from config.json (SSOT for URLs)
+    # ==========================================================================
+    # The tfvars file may have outdated URLs. config.json is the SSOT for
+    # actual deployment URLs. Extract idpPublicUrl and override tfvars.
+    # ==========================================================================
+    local config_file="${DIVE_ROOT}/instances/${code_lower}/config.json"
+    local idp_public_url=""
+    local keycloak_url_override=""
+    
+    if [ -f "$config_file" ]; then
+        idp_public_url=$(jq -r '.endpoints.idpPublicUrl // empty' "$config_file" 2>/dev/null)
+        
+        if [ -n "$idp_public_url" ] && [ "$idp_public_url" != "null" ] && [ "$idp_public_url" != "" ]; then
+            keycloak_url_override="$idp_public_url"
+            log_verbose "Using Keycloak URL from config.json (SSOT): $keycloak_url_override"
+        fi
+    fi
+    
+    # Build terraform apply command with URL overrides
     log_verbose "Using tfvars: $tfvars_file"
-    terraform_apply "$TF_SPOKE_DIR" "$tfvars_file" -var="instance_code=${code_upper}"
+    
+    if [ -n "$keycloak_url_override" ]; then
+        # Override both idp_url and keycloak_url to ensure provider uses correct URL
+        log_verbose "Overriding Terraform variables with config.json URLs"
+        terraform_apply "$TF_SPOKE_DIR" "$tfvars_file" \
+            -var="instance_code=${code_upper}" \
+            -var="idp_url=${keycloak_url_override}" \
+            -var="keycloak_url=${keycloak_url_override}"
+    else
+        # No override - use tfvars as-is
+        terraform_apply "$TF_SPOKE_DIR" "$tfvars_file" -var="instance_code=${code_upper}"
+    fi
 }
 
 ##
