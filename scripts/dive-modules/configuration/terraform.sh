@@ -442,36 +442,59 @@ terraform_apply_spoke() {
     fi
 
     # ==========================================================================
-    # CRITICAL FIX: Override idp_url from config.json (SSOT for URLs)
+    # BEST PRACTICE: Query Docker for actual Keycloak URL (industry-standard)
     # ==========================================================================
-    # The tfvars file may have outdated URLs. config.json is the SSOT for
-    # actual deployment URLs. Extract idpPublicUrl and override tfvars.
+    # Instead of relying on config files (which can be out of sync), query
+    # the actual running container for the port mapping. This is:
+    # - More robust: Works even if config files are outdated
+    # - Industry-standard: Infrastructure discovery pattern
+    # - Self-healing: Always uses actual deployment state
     # ==========================================================================
-    local config_file="${DIVE_ROOT}/instances/${code_lower}/config.json"
-    local idp_public_url=""
-    local keycloak_url_override=""
+    local keycloak_container="dive-spoke-${code_lower}-keycloak"
+    local keycloak_url=""
     
-    if [ -f "$config_file" ]; then
-        idp_public_url=$(jq -r '.endpoints.idpPublicUrl // empty' "$config_file" 2>/dev/null)
+    # Query Docker for actual Keycloak HTTPS port mapping
+    if docker ps --format '{{.Names}}' | grep -q "^${keycloak_container}$"; then
+        local keycloak_port
+        keycloak_port=$(docker port "$keycloak_container" 8443/tcp 2>/dev/null | cut -d: -f2 | head -1)
         
-        if [ -n "$idp_public_url" ] && [ "$idp_public_url" != "null" ] && [ "$idp_public_url" != "" ]; then
-            keycloak_url_override="$idp_public_url"
-            log_verbose "Using Keycloak URL from config.json (SSOT): $keycloak_url_override"
+        if [ -n "$keycloak_port" ] && [ "$keycloak_port" != "" ]; then
+            keycloak_url="https://localhost:${keycloak_port}"
+            log_verbose "Discovered Keycloak URL from Docker: $keycloak_url (port: $keycloak_port)"
+        else
+            log_warn "Could not determine Keycloak port from Docker, falling back to config.json"
+        fi
+    else
+        log_warn "Keycloak container not running, falling back to config.json"
+    fi
+    
+    # Fallback to config.json if Docker query failed
+    if [ -z "$keycloak_url" ]; then
+        local config_file="${DIVE_ROOT}/instances/${code_lower}/config.json"
+        if [ -f "$config_file" ]; then
+            local idp_public_url
+            idp_public_url=$(jq -r '.endpoints.idpPublicUrl // empty' "$config_file" 2>/dev/null)
+            
+            if [ -n "$idp_public_url" ] && [ "$idp_public_url" != "null" ] && [ "$idp_public_url" != "" ]; then
+                keycloak_url="$idp_public_url"
+                log_verbose "Using Keycloak URL from config.json (fallback): $keycloak_url"
+            fi
         fi
     fi
     
-    # Build terraform apply command with URL overrides
+    # Apply Terraform with discovered/fallback URL
     log_verbose "Using tfvars: $tfvars_file"
     
-    if [ -n "$keycloak_url_override" ]; then
+    if [ -n "$keycloak_url" ]; then
         # Override both idp_url and keycloak_url to ensure provider uses correct URL
-        log_verbose "Overriding Terraform variables with config.json URLs"
+        log_verbose "Setting Terraform variables: keycloak_url=$keycloak_url, idp_url=$keycloak_url"
         terraform_apply "$TF_SPOKE_DIR" "$tfvars_file" \
             -var="instance_code=${code_upper}" \
-            -var="idp_url=${keycloak_url_override}" \
-            -var="keycloak_url=${keycloak_url_override}"
+            -var="idp_url=${keycloak_url}" \
+            -var="keycloak_url=${keycloak_url}"
     else
-        # No override - use tfvars as-is
+        log_warn "Could not determine Keycloak URL from Docker or config.json"
+        log_warn "Terraform will use tfvars file values (may fail if incorrect)"
         terraform_apply "$TF_SPOKE_DIR" "$tfvars_file" -var="instance_code=${code_upper}"
     fi
 }
