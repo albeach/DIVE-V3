@@ -247,10 +247,13 @@ progress_start_monitor() {
         local phase_elapsed=$((now - phase_start_time))
 
         # Calculate ETA (simple linear projection)
+        # FIX: Handle decimal phase numbers (e.g., "2.5") by converting to integer for arithmetic
         local eta="..."
-        if [ "$current_phase" -gt 0 ] && [ "$total_phases" -gt 0 ]; then
-            local avg_phase_time=$((total_elapsed / current_phase))
-            local remaining_phases=$((total_phases - current_phase))
+        # Convert current_phase to integer (strip decimal part if present)
+        local current_phase_int=$(echo "$current_phase" | cut -d'.' -f1)
+        if [ "$current_phase_int" -gt 0 ] && [ "$total_phases" -gt 0 ]; then
+            local avg_phase_time=$((total_elapsed / current_phase_int))
+            local remaining_phases=$((total_phases - current_phase_int))
             local eta_seconds=$((remaining_phases * avg_phase_time))
             eta="${eta_seconds}s"
         fi
