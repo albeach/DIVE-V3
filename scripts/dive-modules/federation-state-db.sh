@@ -316,7 +316,11 @@ DO UPDATE SET
         log_verbose "Federation link status updated: $source_code -> $target_code = $status"
         return 0
     else
-        log_error "Failed to update federation link status"
+        # PHASE 1 FIX: Federation status DB is optional (orchestration tracking only)
+        # Actual federation state is in MongoDB - this DB is just for deployment tracking
+        # Make errors verbose-only to avoid cluttering logs
+        log_verbose "Failed to update federation link status in orchestration DB (non-blocking)"
+        log_verbose "Federation will still work - MongoDB is the source of truth for runtime state"
         return 1
     fi
 }

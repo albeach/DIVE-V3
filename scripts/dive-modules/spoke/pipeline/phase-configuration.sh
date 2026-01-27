@@ -566,7 +566,20 @@ EOF
 
                 return 0
             else
-                log_warn "Token not found in auto-approval response - may need manual approval"
+                # PHASE 1 FIX: Convert soft-fail to hard failure
+                # Token missing means auto-approval failed - this is critical for federation
+                if [ "${SKIP_FEDERATION:-false}" = "true" ]; then
+                    log_warn "Token not found in auto-approval response - manual approval required"
+                    log_warn "Federation skipped - continuing deployment"
+                    return 0
+                else
+                    log_error "Auto-approval failed - token not found in response"
+                    log_error "Impact: Spoke cannot authenticate with Hub"
+                    log_error "Fix: Check Hub backend logs for approval errors"
+                    log_error "      Verify Hub is accessible: ./dive hub status"
+                    log_error "      Override: Use --skip-federation flag to deploy without federation"
+                    return 1
+                fi
             fi
         elif [ "$spoke_status" = "pending" ]; then
             # Spoke status is pending - either auto-approval disabled or federation failed
@@ -675,8 +688,22 @@ spoke_config_approve_and_get_token() {
         fi
     fi
 
-    log_warn "Auto-approval failed - manual approval required"
-    return 1
+    # PHASE 1 FIX: Convert soft-fail to hard failure
+    # Auto-approval failure is critical - spoke cannot function without Hub registration
+    if [ "${SKIP_FEDERATION:-false}" = "true" ]; then
+        log_warn "Auto-approval failed - manual approval required"
+        log_warn "Federation skipped - continuing deployment"
+        return 0
+    else
+        log_error "Auto-approval failed - spoke cannot register with Hub"
+        log_error "Impact: Spoke is non-functional without Hub registration"
+        log_error "Cause: Hub unreachable, auto-approval disabled, or registration failed"
+        log_error "Fix: Ensure Hub is running and accessible"
+        log_error "      Check Hub status: ./dive hub status"
+        log_error "      Verify Hub backend: ./dive hub logs backend"
+        log_error "      Override: Use --skip-federation flag to deploy without federation"
+        return 1
+    fi
 }
 
 ##

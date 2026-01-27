@@ -1261,7 +1261,19 @@ EOF
     if [ "$bidirectional" = "true" ]; then
         log_success "Bidirectional federation verified"
     else
-        log_warn "Federation incomplete: spoke→hub=$spoke_to_hub, hub→spoke=$hub_to_spoke"
+        # PHASE 1 FIX: Convert soft-fail to hard failure
+        # Incomplete federation means spoke cannot function properly
+        if [ "${SKIP_FEDERATION:-false}" = "true" ]; then
+            log_warn "Federation incomplete: spoke→hub=$spoke_to_hub, hub→spoke=$hub_to_spoke"
+            log_warn "Federation skipped - continuing deployment"
+        else
+            log_error "Federation incomplete: spoke→hub=$spoke_to_hub, hub→spoke=$hub_to_spoke"
+            log_error "Impact: Spoke cannot perform bidirectional federated operations"
+            log_error "Fix: Run './dive federation link $code_upper' to complete federation"
+            log_error "      Verify Keycloak IdPs: ./dive federation verify $code_upper"
+            log_error "      Override: Use --skip-federation flag to deploy without federation"
+            return 1
+        fi
     fi
 }
 
