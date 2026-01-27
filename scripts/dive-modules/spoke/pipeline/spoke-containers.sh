@@ -251,7 +251,7 @@ spoke_containers_start() {
 
     log_verbose "Infrastructure services: $infra_services"
     log_verbose "Running: $compose_cmd $compose_args"
-    
+
     # Cross-platform timeout implementation (macOS doesn't have GNU timeout)
     if command -v timeout &>/dev/null; then
         # Linux: use GNU timeout
@@ -293,7 +293,7 @@ spoke_containers_start() {
             sleep 1
             waited=$((waited + 1))
         done
-        
+
         # Check if still running (timeout)
         if kill -0 $compose_pid 2>/dev/null; then
             log_error "Container startup timed out after 60s"
@@ -305,26 +305,32 @@ spoke_containers_start() {
         fi
     fi
 
-    # Wait for core infrastructure to be healthy
-    log_info "Waiting for core infrastructure to be healthy..."
-    local max_wait=120
+    # Wait for core infrastructure to be running
+    # CRITICAL FIX (2026-01-27): Don't wait for 'healthy' status during start_period
+    # Docker healthchecks take time to initialize (start_period + intervals)
+    # Instead, wait for containers to be Up and running
+    log_info "Waiting for core infrastructure to be running..."
+    local max_wait=30  # Reduced from 120s - just need containers to start
     local waited=0
 
     while [ $waited -lt $max_wait ]; do
-        local healthy_count=$(docker ps --filter "name=dive-spoke-${code_lower}" --filter "health=healthy" --format '{{.Names}}' | grep -E "(postgres|redis|mongodb|opa)" | wc -l)
+        # Container names are: dive-spoke-fra-postgres, dive-spoke-fra-redis, etc.
+        local running_count=$(docker ps --filter "name=dive-spoke-${code_lower}" --format '{{.Names}}' | grep -E '\-(postgres|redis|mongodb|opa)$' | wc -l | tr -d ' ')
 
-        if [ "$healthy_count" -ge 4 ]; then
-            log_info "Core infrastructure healthy (${healthy_count}/4 services) after ${waited}s"
+        if [ "$running_count" -ge 4 ]; then
+            log_info "Core infrastructure running (${running_count}/4 services) after ${waited}s"
+            # Give containers 2 more seconds to stabilize before proceeding
+            sleep 2
             break
         fi
 
-        log_verbose "Infrastructure health: ${healthy_count}/4 services healthy, waiting..."
-        sleep 5
-        waited=$((waited + 5))
+        log_verbose "Infrastructure startup: ${running_count}/4 services running, waiting..."
+        sleep 2
+        waited=$((waited + 2))
     done
 
     if [ $waited -ge $max_wait ]; then
-        log_error "Core infrastructure failed to become healthy within ${max_wait}s"
+        log_error "Core infrastructure failed to start within ${max_wait}s"
         return 1
     fi
 

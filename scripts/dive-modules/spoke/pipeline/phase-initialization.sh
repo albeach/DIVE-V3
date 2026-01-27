@@ -86,7 +86,15 @@ spoke_phase_initialization() {
         fi
     fi
 
-    # Step 3: Certificate generation/validation
+    # Step 3: Ensure MongoDB keyfile exists (even on redeployment)
+    # CRITICAL FIX (2026-01-27): Keyfile must exist for replica set authentication
+    # Previously only generated during full init, causing failures on redeploy
+    if ! spoke_init_ensure_mongo_keyfile "$instance_code"; then
+        log_error "Failed to ensure MongoDB keyfile exists"
+        return 1
+    fi
+
+    # Step 4: Certificate generation/validation
     if ! spoke_init_prepare_certificates "$instance_code"; then
         log_warn "Certificate preparation had issues (continuing)"
     fi
@@ -198,6 +206,67 @@ spoke_init_setup_directories() {
     fi
 
     log_verbose "MongoDB keyfile validated: ${keyfile_size} bytes"
+    return 0
+}
+
+##
+# Ensure MongoDB keyfile exists (standalone function for redeploy scenarios)
+#
+# CRITICAL FIX (2026-01-27): Keyfile must exist even during redeployment
+# Previously only generated during full init (spoke_init_setup_directories),
+# causing checkpoint failures when deploying over existing instance.
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - Keyfile exists or was generated successfully
+#   1 - Failed to generate or validate keyfile
+##
+spoke_init_ensure_mongo_keyfile() {
+    local instance_code="$1"
+    local code_lower=$(lower "$instance_code")
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    local keyfile_path="$spoke_dir/mongo-keyfile"
+    
+    # Generate keyfile if it doesn't exist
+    if [ ! -f "$keyfile_path" ]; then
+        log_verbose "Generating MongoDB replica set keyfile"
+        if bash "${DIVE_ROOT}/scripts/generate-mongo-keyfile.sh" "$keyfile_path"; then
+            log_success "✓ MongoDB keyfile generated: $keyfile_path"
+        else
+            orch_record_error "${SPOKE_ERROR_KEYFILE_GENERATE:-1102}" "$ORCH_SEVERITY_CRITICAL" \
+                "Failed to generate MongoDB keyfile" "initialization" \
+                "Check permissions and ensure openssl is available"
+            return 1
+        fi
+    else
+        log_verbose "MongoDB keyfile already exists: $keyfile_path"
+    fi
+
+    # Validate keyfile exists and is a file (not directory)
+    if [ ! -f "$keyfile_path" ] || [ -d "$keyfile_path" ]; then
+        log_error "MongoDB keyfile missing or is a directory (must be file)"
+        orch_record_error "${SPOKE_ERROR_KEYFILE_INVALID:-1103}" "$ORCH_SEVERITY_CRITICAL" \
+            "MongoDB keyfile is not a valid file" "initialization" \
+            "Remove directory and regenerate: rm -rf $keyfile_path && ./dive spoke deploy $instance_code"
+        return 1
+    fi
+
+    # Validate keyfile size (MongoDB requires 6-1024 bytes)
+    local keyfile_size=$(wc -c < "$keyfile_path" | tr -d ' ')
+    if [ "$keyfile_size" -lt 6 ] || [ "$keyfile_size" -gt 1024 ]; then
+        log_error "MongoDB keyfile size invalid: $keyfile_size bytes (must be 6-1024)"
+        orch_record_error "${SPOKE_ERROR_KEYFILE_SIZE:-1104}" "$ORCH_SEVERITY_CRITICAL" \
+            "MongoDB keyfile size invalid" "initialization" \
+            "Regenerate keyfile: rm $keyfile_path && ./dive spoke deploy $instance_code"
+        return 1
+    fi
+
+    # Set correct permissions (MongoDB requires 400 or 600)
+    chmod 400 "$keyfile_path" 2>/dev/null || chmod 600 "$keyfile_path"
+    log_verbose "MongoDB keyfile validated: $keyfile_path ($keyfile_size bytes)"
+
     return 0
 }
 
@@ -600,6 +669,11 @@ spoke_init_prepare_certificates() {
 
     log_step "Preparing federation certificates"
 
+    # CRITICAL FIX (2026-01-27): Ensure certs/ca directory exists even if certs exist
+    # Keycloak requires rootCA.pem in certs/ca/ for truststore initialization
+    # Without this, Keycloak crashes on startup with "No such file or directory"
+    mkdir -p "$spoke_dir/certs/ca" "$spoke_dir/truststores"
+
     # Check if certificates already exist
     if [ -f "$spoke_dir/certs/certificate.pem" ] && [ -f "$spoke_dir/certs/key.pem" ]; then
         # CRITICAL: Validate certificate has required SANs for federation
@@ -608,6 +682,20 @@ spoke_init_prepare_certificates() {
         local required_san="dive-spoke-${code_lower}-keycloak"
         if openssl x509 -in "$spoke_dir/certs/certificate.pem" -text -noout 2>/dev/null | grep -q "$required_san"; then
             log_info "TLS certificates exist and have required SANs - skipping generation"
+            
+            # CRITICAL FIX (2026-01-27): Ensure mkcert rootCA.pem is synced even when skipping cert generation
+            # This fixes Keycloak crash: "Failed to initialize truststore, could not merge: /opt/keycloak/certs/ca/rootCA.pem"
+            if command -v mkcert &>/dev/null; then
+                local mkcert_ca="$(mkcert -CAROOT)/rootCA.pem"
+                if [ -f "$mkcert_ca" ]; then
+                    cp "$mkcert_ca" "$spoke_dir/certs/rootCA.pem" 2>/dev/null || true
+                    cp "$mkcert_ca" "$spoke_dir/certs/ca/rootCA.pem" 2>/dev/null || true
+                    cp "$mkcert_ca" "$spoke_dir/truststores/mkcert-rootCA.pem" 2>/dev/null || true
+                    chmod 644 "$spoke_dir/certs/rootCA.pem" "$spoke_dir/certs/ca/rootCA.pem" 2>/dev/null || true
+                    log_verbose "mkcert rootCA.pem synced"
+                fi
+            fi
+            
             return 0
         else
             log_warn "Existing certificate missing required SAN: $required_san"
