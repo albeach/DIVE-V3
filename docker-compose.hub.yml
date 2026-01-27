@@ -513,7 +513,8 @@ services:
     env_file:
       - .env.hub
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-check-certificate -q -O- https://localhost:8080/health || exit 1"]
+      # FIX: Use curl instead of wget (curl is installed in KAS Dockerfile, wget is not)
+      test: ["CMD-SHELL", "curl -kfs https://localhost:8080/health || exit 1"]
       interval: 5s
       timeout: 8s
       retries: 8

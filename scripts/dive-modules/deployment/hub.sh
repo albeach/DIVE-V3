@@ -1013,8 +1013,13 @@ hub_parallel_startup() {
 
                 # Start service using ${DOCKER_CMD:-docker} compose
                 log_verbose "Starting $service (timeout: ${timeout}s)"
-                if ! ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" up -d "$service" >/dev/null 2>&1; then
+                local start_output
+                if ! start_output=$(${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" up -d "$service" 2>&1); then
                     log_error "Failed to start $service container"
+                    # FIX: Provide detailed error information for debugging
+                    log_error "Docker compose output: $start_output"
+                    log_error "Check service definition in $HUB_COMPOSE_FILE"
+                    log_error "Verify dependencies are running: docker ps | grep -E '($(echo "${current_level_services[@]}" | tr ' ' '|'))'"
                     exit 1
                 fi
 
@@ -1137,12 +1142,25 @@ hub_parallel_startup() {
                 # Log appropriate message based on service classification
                 if $is_core; then
                     log_error "Service $service failed to start at level $level (CORE - deployment will fail)"
+                    log_error "Check logs: docker logs $container"
+                    log_error "Check container state: docker inspect $container | jq '.[0].State'"
                 elif $is_optional; then
                     log_warn "Service $service failed to start at level $level (OPTIONAL - deployment will continue)"
+                    log_verbose "Check logs: docker logs $container"
                 elif $is_stretch; then
                     log_warn "Service $service failed to start at level $level (STRETCH - deployment will continue)"
+                    log_verbose "Check logs: docker logs $container"
+                    # FIX: Provide helpful debugging info for KAS failures
+                    if [ "$service" = "kas" ]; then
+                        log_verbose "KAS troubleshooting:"
+                        log_verbose "  1. Check certificates: ls -la kas/certs/"
+                        log_verbose "  2. Check build: docker images | grep kas"
+                        log_verbose "  3. Check dependencies: docker ps | grep -E '(opa|mongodb)'"
+                        log_verbose "  4. Check logs: docker logs $container | tail -50"
+                    fi
                 else
                     log_error "Service $service failed to start at level $level (UNKNOWN classification - treating as CORE)"
+                    log_error "Check logs: docker logs $container"
                     ((level_core_failed++))
                 fi
 
