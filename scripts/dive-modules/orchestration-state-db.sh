@@ -19,9 +19,16 @@
 # See: docs/architecture/adr/ADR-001-state-management-consolidation.md
 # =============================================================================
 
-# ROOT FIX: Don't return early - let functions get defined
-# Multiple sourcing is harmless (functions just get redefined)
-# The early return was preventing functions from being available
+# Prevent multiple sourcing - but allow reload if data structures missing
+if [ -n "${ORCHESTRATION_STATE_DB_LOADED:-}" ]; then
+    # Check if critical data structures exist
+    if declare -p VALID_TRANSITIONS &>/dev/null; then
+        return 0
+    else
+        # Guard set but array missing - force reload
+        unset ORCHESTRATION_STATE_DB_LOADED
+    fi
+fi
 export ORCHESTRATION_STATE_DB_LOADED=1
 
 # Ensure common functions are loaded
@@ -157,7 +164,9 @@ orch_db_exec_json() {
 
 # Valid state transitions (from -> to)
 # Format: "FROM_STATE:TO_STATE1,TO_STATE2,..."
-declare -A VALID_TRANSITIONS=(
+# Force re-declaration to ensure correct syntax (no quoted keys)
+unset VALID_TRANSITIONS 2>/dev/null || true
+declare -gA VALID_TRANSITIONS=(
     [UNKNOWN]="INITIALIZING,FAILED"
     [INITIALIZING]="DEPLOYING,FAILED,CLEANUP"
     [DEPLOYING]="CONFIGURING,PARTIAL,FAILED,ROLLING_BACK"
