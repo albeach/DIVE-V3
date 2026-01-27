@@ -445,8 +445,8 @@ declare -A ORCH_CONTEXT=(
     ["errors_medium"]=0
     ["errors_low"]=0
     ["retry_count"]=0
-    ["checkpoint_enabled"]=true
-    ["lock_acquired"]=false
+    ["checkpoint_enabled"]="true"
+    ["lock_acquired"]="false"
     ["lock_fd"]=0
 )
 
@@ -491,7 +491,7 @@ orch_acquire_deployment_lock() {
     if [ "$code_upper" = "USA" ]; then
         if ! type -t orch_db_check_connection >/dev/null 2>&1 || ! orch_db_check_connection; then
             log_verbose "Hub deployment - database not yet available, skipping database lock"
-            ORCH_CONTEXT["lock_acquired"]=true
+            ORCH_CONTEXT["lock_acquired"]="true"
             ORCH_CONTEXT["lock_type"]="hub-bootstrap"
             log_success "Deployment lock acquired for $instance_code (hub-bootstrap mode)"
             return 0
@@ -501,7 +501,7 @@ orch_acquire_deployment_lock() {
     # PostgreSQL advisory locking (MANDATORY for non-Hub instances)
     if type -t orch_db_acquire_lock >/dev/null 2>&1; then
         if orch_db_acquire_lock "$instance_code" "$timeout"; then
-            ORCH_CONTEXT["lock_acquired"]=true
+            ORCH_CONTEXT["lock_acquired"]="true"
             ORCH_CONTEXT["lock_type"]="database"
             log_success "Deployment lock acquired for $instance_code (PostgreSQL advisory lock)"
             return 0
@@ -564,7 +564,7 @@ orch_release_deployment_lock() {
     # hub-bootstrap mode doesn't have a lock to release
 
     # Reset context
-    ORCH_CONTEXT["lock_acquired"]=false
+    ORCH_CONTEXT["lock_acquired"]="false"
     ORCH_CONTEXT["lock_type"]=""
 
     log_success "Deployment lock released for $instance_code"
@@ -635,7 +635,7 @@ orch_init_context() {
     ORCH_CONTEXT["errors_medium"]=0
     ORCH_CONTEXT["errors_low"]=0
     ORCH_CONTEXT["retry_count"]=0
-    ORCH_CONTEXT["checkpoint_enabled"]=true
+    ORCH_CONTEXT["checkpoint_enabled"]="true"
 
     ORCHESTRATION_ERRORS=()
 
@@ -2139,7 +2139,7 @@ declare -A PREDICTIVE_METRICS=()
 # Metrics configuration
 readonly METRICS_RETENTION_HOURS=24
 readonly METRICS_POLLING_INTERVAL=5
-readonly PREDICTIVE_ANALYSIS_ENABLED=true
+readonly PREDICTIVE_ANALYSIS_ENABLED="true"
 
 ##
 # Initialize metrics collection for deployment
@@ -2863,7 +2863,7 @@ orch_execute_deployment() {
         "$PHASE_COMPLETION:orch_phase_completion"
     )
 
-    local deployment_failed=false
+    local deployment_failed="false"
     for phase_spec in "${phases[@]}"; do
         IFS=':' read -r phase_name phase_function <<< "$phase_spec"
 
@@ -2873,7 +2873,7 @@ orch_execute_deployment() {
                 log_error "Orchestration stopped due to error threshold"
                 set_deployment_state_enhanced "$instance_code" "FAILED" "Orchestration failed in phase $phase_name"
                 orch_generate_error_summary "$instance_code"
-                deployment_failed=true
+                deployment_failed="true"
                 break
             fi
         fi
