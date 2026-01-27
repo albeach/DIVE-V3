@@ -229,18 +229,36 @@ function fetchFederationMatrix(): FederationMatrixEntry[] {
   }
 }
 
-function fetchStaticRegistry(): { instances: string[]; enabledInstances: string[] } {
-  const registryPath = path.join(__dirname, '..', '..', '..', '..', 'config', 'federation-registry.json');
+/**
+ * REMOVED: fetchStaticRegistry() from JSON file - NO JSON FILE LOADING
+ * 
+ * Federation registry must be loaded from MongoDB (SSOT)
+ * - Hub: MongoDB federation_spokes collection
+ * - Spoke: Hub API /api/federation/spokes
+ */
+async function fetchStaticRegistry(): Promise<{ instances: string[]; enabledInstances: string[] }> {
   try {
-    const content = fs.readFileSync(registryPath, 'utf-8');
-    const data = JSON.parse(content);
-    const instances = Object.keys(data.instances || {}).map(k => k.toUpperCase());
-    const enabledInstances = Object.entries(data.instances || {})
-      .filter(([_, v]: [string, any]) => v.enabled !== false)
-      .map(([k]) => k.toUpperCase());
+    // Query MongoDB federation_spokes collection (SSOT)
+    const { MongoClient } = await import('mongodb');
+    const mongoUrl = process.env.MONGODB_URL || 'mongodb://localhost:27017';
+    const dbName = process.env.MONGODB_DATABASE || 'dive-v3';
+    
+    const client = new MongoClient(mongoUrl);
+    await client.connect();
+    const db = client.db(dbName);
+    const collection = db.collection('federation_spokes');
+    
+    const spokes = await collection.find({}).toArray();
+    await client.close();
+    
+    const instances = spokes.map(s => s.instanceCode.toUpperCase());
+    const enabledInstances = spokes
+      .filter(s => s.enabled !== false)
+      .map(s => s.instanceCode.toUpperCase());
+    
     return { instances, enabledInstances };
   } catch (error) {
-    console.error('Failed to read federation registry:', error instanceof Error ? error.message : error);
+    console.error('Failed to read federation registry from MongoDB:', error instanceof Error ? error.message : error);
     return { instances: [], enabledInstances: [] };
   }
 }
@@ -324,7 +342,7 @@ async function runAudit(): Promise<AuditReport> {
   const federationMatrix = fetchFederationMatrix();
 
   console.log('Reading static federation registry...');
-  const staticRegistry = fetchStaticRegistry();
+  const staticRegistry = await fetchStaticRegistry();
 
   console.log();
 

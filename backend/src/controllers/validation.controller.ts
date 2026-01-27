@@ -105,17 +105,19 @@ async function validateSecretSync(): Promise<ValidationCheck> {
  */
 async function validateKASRegistry(): Promise<ValidationCheck> {
   try {
-    // Check static config file
-    const configPath = path.join(process.cwd(), 'config', 'kas-registry.json');
+    // REMOVED: JSON file loading - NO JSON FILES
+    // KAS registry must be loaded from MongoDB (SSOT)
     let staticCount = 0;
 
-    if (fs.existsSync(configPath)) {
-      const configData = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      staticCount = configData.kasServers?.length || 0;
+    // Check MongoDB (SSOT)
+    try {
+      const { mongoKasRegistryStore } = await import('../models/kas-registry.model');
+      await mongoKasRegistryStore.initialize();
+      const kasServers = await mongoKasRegistryStore.findAll();
+      staticCount = kasServers.filter(k => k.enabled && k.status === 'active').length;
+    } catch (error) {
+      // MongoDB not available or not initialized
     }
-
-    // Check MongoDB (would need to import the store)
-    // For now, just check if file exists
 
     return {
       name: 'kas_registry',
