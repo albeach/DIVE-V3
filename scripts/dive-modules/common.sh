@@ -817,14 +817,78 @@ load_local_defaults() {
     return 1
 }
 
+##
+# Activate GCP service account for secret access
+# Automatically uses service account key from gcp/ directory if available
+#
+# Returns:
+#   0 if GCP is authenticated (user or service account)
+#   1 if GCP is not available
+##
+activate_gcp_service_account() {
+    local instance="${1:-usa}"
+    local inst_lc
+    inst_lc=$(echo "$instance" | tr '[:upper:]' '[:lower:]')
+    
+    # Check if already authenticated
+    if gcloud auth application-default print-access-token &>/dev/null 2>&1; then
+        log_verbose "GCP already authenticated (user or service account)"
+        return 0
+    fi
+    
+    # Try to use service account key if available
+    local sa_key_file="${DIVE_ROOT}/gcp/${inst_lc}-sa-key.json"
+    
+    if [ -f "$sa_key_file" ]; then
+        log_info "Activating GCP service account from $sa_key_file..."
+        
+        # Set GOOGLE_APPLICATION_CREDENTIALS for automatic authentication
+        export GOOGLE_APPLICATION_CREDENTIALS="$sa_key_file"
+        
+        # Verify service account works
+        if gcloud auth application-default print-access-token &>/dev/null 2>&1; then
+            log_success "GCP service account activated successfully"
+            return 0
+        else
+            log_warn "Service account key found but authentication failed"
+            unset GOOGLE_APPLICATION_CREDENTIALS
+            return 1
+        fi
+    fi
+    
+    # Try usa key as fallback (hub can access all spokes)
+    local usa_sa_key="${DIVE_ROOT}/gcp/usa-sa-key.json"
+    if [ "$inst_lc" != "usa" ] && [ -f "$usa_sa_key" ]; then
+        log_info "Using USA service account as fallback..."
+        export GOOGLE_APPLICATION_CREDENTIALS="$usa_sa_key"
+        
+        if gcloud auth application-default print-access-token &>/dev/null 2>&1; then
+            log_success "GCP service account activated (usa fallback)"
+            return 0
+        else
+            unset GOOGLE_APPLICATION_CREDENTIALS
+        fi
+    fi
+    
+    log_verbose "No service account key found, user authentication required"
+    return 1
+}
+
 load_secrets() {
     case "$ENVIRONMENT" in
         local|dev)
-            # Auto-detect GCP authentication status
+            # ENHANCED: Automatically try service account before user auth
             local gcp_available=false
+            
             if command -v gcloud >/dev/null 2>&1; then
-                if gcloud auth application-default print-access-token &>/dev/null; then
+                # First try to activate service account (silent)
+                if activate_gcp_service_account "$INSTANCE" 2>/dev/null; then
                     gcp_available=true
+                    log_verbose "Using GCP service account for secrets"
+                # Then check if user is authenticated
+                elif gcloud auth application-default print-access-token &>/dev/null; then
+                    gcp_available=true
+                    log_verbose "Using GCP user authentication for secrets"
                 fi
             fi
             
@@ -848,9 +912,19 @@ load_secrets() {
 
             if [ "$want_gcp" = true ]; then
                 if [ "$gcp_available" = false ]; then
-                    log_error "GCP secrets requested but gcloud is not authenticated"
-                    log_error "Run: gcloud auth application-default login"
-                    return 1
+                    # Try one more time with explicit activation (with output)
+                    if activate_gcp_service_account "$INSTANCE"; then
+                        gcp_available=true
+                    else
+                        log_error "❌ GCP secrets requested but authentication failed"
+                        log_error ""
+                        log_error "Options:"
+                        log_error "  1. User authentication: gcloud auth application-default login"
+                        log_error "  2. Service account: Place key in gcp/${INSTANCE,,}-sa-key.json"
+                        log_error "  3. Local development: export ALLOW_INSECURE_LOCAL_DEVELOPMENT=true"
+                        log_error ""
+                        return 1
+                    fi
                 fi
                 ensure_gcp_secrets_exist "$INSTANCE" || return 1
                 load_gcp_secrets "$INSTANCE" || return 1
@@ -859,29 +933,37 @@ load_secrets() {
 
             # Local development without GCP - require explicit opt-in
             if [ "${ALLOW_INSECURE_LOCAL_DEVELOPMENT:-false}" = "true" ]; then
-                log_error "⚠️  USING INSECURE LOCAL DEVELOPMENT MODE ⚠️"
-                log_error "This should NEVER be used in shared or production environments"
+                log_warn "⚠️  USING INSECURE LOCAL DEVELOPMENT MODE ⚠️"
+                log_warn "This should NEVER be used in shared or production environments"
                 load_local_defaults
             else
-                log_error "No GCP Secret Manager access"
+                log_error "❌ No GCP Secret Manager access"
                 if [ "$gcp_available" = false ] && command -v gcloud >/dev/null 2>&1; then
                     log_error ""
-                    log_error "GCP CLI found but not authenticated. To authenticate:"
-                    log_error "  gcloud auth application-default login"
+                    log_error "Authentication Options:"
+                    log_error "  1. User auth:    gcloud auth application-default login"
+                    log_error "  2. Service acct: Place key in gcp/${INSTANCE,,}-sa-key.json"
+                    log_error "  3. Auto-detect:  export USE_GCP_SECRETS=auto (default)"
+                    log_error "  4. Local dev:    export ALLOW_INSECURE_LOCAL_DEVELOPMENT=true"
                     log_error ""
-                    log_error "Or set USE_GCP_SECRETS=auto to auto-detect (default)"
                 elif ! command -v gcloud >/dev/null 2>&1; then
                     log_error ""
                     log_error "GCP CLI not found. Install with:"
                     log_error "  https://cloud.google.com/sdk/docs/install"
                     log_error ""
+                    log_error "Or use local development mode:"
+                    log_error "  export ALLOW_INSECURE_LOCAL_DEVELOPMENT=true"
+                    log_error ""
                 fi
-                log_error "For local development without GCP:"
-                log_error "  export ALLOW_INSECURE_LOCAL_DEVELOPMENT=true"
                 return 1
             fi
             ;;
         gcp|pilot|prod|staging)
+            # Production: Activate service account, then load secrets
+            activate_gcp_service_account "$INSTANCE" || {
+                log_error "Failed to activate service account in $ENVIRONMENT environment"
+                return 1
+            }
             load_gcp_secrets "$INSTANCE" || return 1
             ;;
         *)
