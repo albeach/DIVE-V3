@@ -106,6 +106,16 @@ est = {
     client_secret         = ""  # Loaded from GCP: dive-v3-federation-est-usa
     disable_trust_manager = true
   }
+fra = {
+    instance_code         = "FRA"
+    instance_name         = "France Defence"
+    idp_url               = "https://localhost:8453"
+    idp_internal_url      = "https://dive-spoke-fra-keycloak:8443"
+    frontend_url          = "https://localhost:3010"
+    enabled               = true
+    client_secret         = ""  # Loaded from GCP: dive-v3-federation-fra-usa
+    disable_trust_manager = true
+  }
 }
 
 # =============================================================================
