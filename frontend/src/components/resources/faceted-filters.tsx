@@ -28,6 +28,7 @@ import {
   Server,
   Check,
   Minus,
+  File,
 } from 'lucide-react';
 import DateRangePicker from './date-range-picker';
 import type { DateRange } from './date-range-picker';
@@ -64,6 +65,7 @@ interface ISelectedFilters {
   instances: string[];
   encryptionStatus: string;
   dateRange?: { start: string; end: string };
+  fileTypes: string[];  // File type filter
 }
 
 interface FacetedFiltersProps {
@@ -73,6 +75,7 @@ interface FacetedFiltersProps {
     cois: FacetItem[];
     // instances removed - handled by horizontal selector
     encryptionStatus: FacetItem[];
+    fileTypes: FacetItem[];  // File type facets
   };
   hasApproximateCounts?: boolean;
   selectedFilters: ISelectedFilters;
@@ -504,6 +507,16 @@ export default function FacetedFilters({
       type: 'multi' as const,
       defaultExpanded: false,
     },
+    {
+      id: 'fileTypes',
+      label: t('filters.fileType'),
+      icon: <File className="w-4 h-4" />,
+      items: filterZeroCounts(facets.fileTypes),
+      type: 'multi' as const,
+      defaultExpanded: false,
+      showMore: false,
+      initialVisible: 6,
+    },
   ], [facets, filterZeroCounts, t]);
 
 
@@ -538,6 +551,7 @@ export default function FacetedFilters({
       instances: [], // Keep for compatibility with filtering logic
       encryptionStatus: '',
       dateRange: undefined,
+      fileTypes: [],
     });
   }, [onFilterChange]);
 
@@ -548,7 +562,8 @@ export default function FacetedFilters({
       selectedFilters.countries.length +
       selectedFilters.cois.length +
       (selectedFilters.encryptionStatus ? 1 : 0) +
-      (selectedFilters.dateRange ? 1 : 0)
+      (selectedFilters.dateRange ? 1 : 0) +
+      selectedFilters.fileTypes.length
     );
   }, [selectedFilters]);
 

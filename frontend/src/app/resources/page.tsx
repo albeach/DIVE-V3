@@ -60,6 +60,7 @@ interface ISelectedFilters {
   instances: string[];
   encryptionStatus: string;
   dateRange?: { start: string; end: string };
+  fileTypes: string[];  // File type filter selection
 }
 
 // ============================================
@@ -129,6 +130,7 @@ export default function ResourcesPage() {
     cois: [],
     instances: [CURRENT_INSTANCE],
     encryptionStatus: '',
+    fileTypes: [],
   });
 
   // Infinite Scroll - only enabled when session is authenticated
@@ -377,6 +379,7 @@ export default function ResourcesPage() {
       encrypted: newFilters.encryptionStatus === 'encrypted' ? true :
                  newFilters.encryptionStatus === 'unencrypted' ? false : undefined,
       dateRange: newFilters.dateRange,
+      fileTypes: newFilters.fileTypes.length > 0 ? newFilters.fileTypes : undefined,
     });
   }, [federatedMode, filters.query, setFilters]);
 
@@ -684,6 +687,14 @@ export default function ResourcesPage() {
                 })) || [
                   { value: 'encrypted', label: 'Encrypted (ZTDF)', count: 0 },
                   { value: 'unencrypted', label: 'Unencrypted', count: 0 },
+                ],
+                fileTypes: facets?.fileTypes?.map(f => ({ value: f.value, label: f.label, count: f.count })) || [
+                  { value: 'documents', label: 'Documents', count: 0 },
+                  { value: 'images', label: 'Images', count: 0 },
+                  { value: 'videos', label: 'Videos', count: 0 },
+                  { value: 'audio', label: 'Audio', count: 0 },
+                  { value: 'archives', label: 'Archives', count: 0 },
+                  { value: 'code', label: 'Code Files', count: 0 },
                 ],
               }}
               selectedFilters={selectedFilters}

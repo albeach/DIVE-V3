@@ -30,12 +30,12 @@ spoke_preflight_validation() {
     local instance_code="${1:?Instance code required}"
     local code_upper=$(upper "$instance_code")
     local code_lower=$(lower "$instance_code")
-    
+
     log_step "Running preflight validation for $code_upper spoke..."
-    
+
     local failed_checks=0
     local warning_checks=0
-    
+
     # Check 1: Hub Reachability
     log_verbose "Check 1/6: Hub reachability..."
     if ! preflight_check_hub_reachable; then
@@ -49,7 +49,7 @@ spoke_preflight_validation() {
     else
         log_success "✓ Hub accessible"
     fi
-    
+
     # Check 2: Required Secrets Available
     log_verbose "Check 2/6: Required secrets..."
     if ! preflight_check_secrets_available "$code_upper"; then
@@ -58,7 +58,7 @@ spoke_preflight_validation() {
     else
         log_success "✓ All required secrets available"
     fi
-    
+
     # Check 3: Ports Available
     log_verbose "Check 3/6: Port availability..."
     if ! preflight_check_ports_available "$code_upper"; then
@@ -67,7 +67,7 @@ spoke_preflight_validation() {
     else
         log_success "✓ All required ports available"
     fi
-    
+
     # Check 4: Docker Resources
     log_verbose "Check 4/6: Docker resources..."
     if ! preflight_check_docker_resources; then
@@ -76,7 +76,7 @@ spoke_preflight_validation() {
     else
         log_success "✓ Docker resources sufficient"
     fi
-    
+
     # Check 5: Network Connectivity
     log_verbose "Check 5/6: Network connectivity..."
     if ! preflight_check_network_connectivity; then
@@ -85,7 +85,7 @@ spoke_preflight_validation() {
     else
         log_success "✓ Network connectivity OK"
     fi
-    
+
     # Check 6: Terraform State Clean
     log_verbose "Check 6/6: Terraform state..."
     if ! preflight_check_terraform_clean "$code_upper"; then
@@ -95,14 +95,14 @@ spoke_preflight_validation() {
     else
         log_success "✓ Terraform state clean"
     fi
-    
+
     # Summary
     echo ""
     log_info "Preflight Summary:"
     log_info "  Failed checks:  $failed_checks"
     log_info "  Warning checks: $warning_checks"
     echo ""
-    
+
     if [ $failed_checks -eq 0 ]; then
         log_success "✓ Preflight validation passed - proceeding with deployment"
         return 0
@@ -126,12 +126,12 @@ spoke_preflight_validation() {
 ##
 preflight_check_hub_reachable() {
     local hub_url="${HUB_URL:-https://localhost:4000}"
-    
+
     # Try health endpoint with 5s timeout
     if curl -sf --max-time 5 "$hub_url/health" >/dev/null 2>&1; then
         return 0
     fi
-    
+
     log_error "Hub not accessible at $hub_url"
     log_error "Start Hub first: ./dive hub up"
     log_error "Check Hub status: ./dive hub status"
@@ -154,7 +154,7 @@ preflight_check_hub_reachable() {
 ##
 preflight_check_secrets_available() {
     local instance_code="$1"
-    
+
     # Required secrets for spoke
     local required_secrets=(
         "POSTGRES_PASSWORD"
@@ -164,45 +164,59 @@ preflight_check_secrets_available() {
         "KEYCLOAK_CLIENT_SECRET"
         "REDIS_PASSWORD"
     )
-    
+
     local missing_secrets=()
-    
+
+    log_verbose "Checking secret availability (GCP → Environment → .env)..."
+
     # Check each secret
     for secret_base in "${required_secrets[@]}"; do
         local has_secret=false
         local secret_var="${secret_base}_${instance_code}"
-        
-        # Check if secret is in environment
-        if [ -n "${!secret_var}" ]; then
-            has_secret=true
-        fi
-        
-        # If not in environment, check GCP (if production)
-        if [ "$has_secret" = "false" ] && is_production_mode; then
-            if command -v gcloud &>/dev/null; then
-                local gcp_secret_name="dive-v3-${secret_base,,}-${instance_code,,}"
-                if gcloud secrets describe "$gcp_secret_name" --project=dive25 &>/dev/null 2>&1; then
-                    has_secret=true
-                fi
+
+        # Check GCP Secret Manager first (primary source)
+        if command -v gcloud &>/dev/null; then
+            # Convert to lowercase and replace underscores with hyphens for GCP naming
+            local secret_lower="${secret_base,,}"
+            secret_lower="${secret_lower//_/-}"
+            local gcp_secret_name="dive-v3-${secret_lower}-${instance_code,,}"
+            log_verbose "  Checking GCP: $gcp_secret_name"
+
+            # Test the actual command
+            if gcloud secrets describe "$gcp_secret_name" --project=dive25 >/dev/null 2>&1; then
+                has_secret=true
+                log_verbose "    ✓ Found in GCP"
+            else
+                local exit_code=$?
+                log_verbose "    ✗ Not found in GCP (exit code: $exit_code)"
             fi
+        else
+            log_verbose "  gcloud command not available"
         fi
-        
-        # If not in environment, check .env file (dev mode)
-        if [ "$has_secret" = "false" ] && ! is_production_mode; then
+
+        # If not in GCP, check if already loaded in environment
+        if [ "$has_secret" = "false" ] && [ -n "${!secret_var:-}" ]; then
+            has_secret=true
+            log_verbose "  ✓ $secret_var loaded in environment"
+        fi
+
+        # If neither, check .env file (dev mode fallback)
+        if [ "$has_secret" = "false" ]; then
             local env_file="${DIVE_ROOT}/instances/${instance_code,,}/.env"
             if [ -f "$env_file" ] && grep -q "^${secret_var}=" "$env_file"; then
                 has_secret=true
+                log_verbose "  ✓ $secret_var available in .env"
             fi
         fi
-        
+
         if [ "$has_secret" = "false" ]; then
             missing_secrets+=("$secret_var")
         fi
     done
-    
+
     if [ ${#missing_secrets[@]} -gt 0 ]; then
         log_error "Missing required secrets: ${missing_secrets[*]}"
-        
+
         if is_production_mode; then
             log_error "Production mode requires GCP Secret Manager"
             log_error "Create secrets: ./dive secrets create $instance_code"
@@ -213,7 +227,7 @@ preflight_check_secrets_available() {
             return 1
         fi
     fi
-    
+
     return 0
 }
 
@@ -233,14 +247,14 @@ preflight_check_secrets_available() {
 ##
 preflight_check_ports_available() {
     local instance_code="$1"
-    
+
     # Get port allocation for this spoke
     local ports_json
     if ! ports_json=$(get_instance_ports "$instance_code" 2>/dev/null); then
         log_error "Failed to get port allocation for $instance_code"
         return 1
     fi
-    
+
     # Extract ports from JSON
     local frontend_port=$(echo "$ports_json" | jq -r '.frontend // empty')
     local backend_port=$(echo "$ports_json" | jq -r '.backend // empty')
@@ -251,7 +265,7 @@ preflight_check_ports_available() {
     local redis_port=$(echo "$ports_json" | jq -r '.redis // empty')
     local opa_port=$(echo "$ports_json" | jq -r '.opa // empty')
     local kas_port=$(echo "$ports_json" | jq -r '.kas // empty')
-    
+
     local ports=(
         "$frontend_port"
         "$backend_port"
@@ -263,9 +277,9 @@ preflight_check_ports_available() {
         "$opa_port"
         "$kas_port"
     )
-    
+
     local conflicts=()
-    
+
     for port in "${ports[@]}"; do
         if [ -n "$port" ] && [ "$port" != "null" ]; then
             if lsof -Pi ":$port" -sTCP:LISTEN -t >/dev/null 2>&1; then
@@ -273,7 +287,7 @@ preflight_check_ports_available() {
             fi
         fi
     done
-    
+
     if [ ${#conflicts[@]} -gt 0 ]; then
         log_error "Port conflicts detected: ${conflicts[*]}"
         log_error "Ports already in use - cannot start spoke services"
@@ -281,7 +295,7 @@ preflight_check_ports_available() {
         log_error "Stop conflicting services or choose different instance"
         return 1
     fi
-    
+
     return 0
 }
 
@@ -303,7 +317,7 @@ preflight_check_docker_resources() {
         log_error "Start Docker Desktop or Docker daemon"
         return 1
     fi
-    
+
     # Check disk space (need at least 10GB free)
     local disk_available
     if [ -d "/var/lib/docker" ]; then
@@ -312,7 +326,7 @@ preflight_check_docker_resources() {
         # macOS Docker Desktop uses different location
         disk_available=$(df -h / 2>/dev/null | awk 'NR==2 {print $4}' | sed 's/[^0-9.]//g')
     fi
-    
+
     if [ -n "$disk_available" ]; then
         # Convert to integer for comparison (remove decimal)
         local disk_gb=${disk_available%.*}
@@ -323,7 +337,7 @@ preflight_check_docker_resources() {
             return 1
         fi
     fi
-    
+
     # Check memory (need at least 4GB allocated to Docker)
     local memory_total=$(docker info 2>/dev/null | grep "Total Memory" | awk '{print $3}')
     if [ -n "$memory_total" ]; then
@@ -336,7 +350,7 @@ preflight_check_docker_resources() {
             # Don't fail - just warn
         fi
     fi
-    
+
     return 0
 }
 
@@ -359,14 +373,14 @@ preflight_check_network_connectivity() {
         log_error "Check internet connection and proxy settings"
         return 1
     fi
-    
+
     # Check DNS resolution
     if ! nslookup hub.docker.com >/dev/null 2>&1; then
         log_error "DNS resolution failed"
         log_error "Cannot resolve hub.docker.com"
         return 1
     fi
-    
+
     return 0
 }
 
@@ -387,34 +401,34 @@ preflight_check_network_connectivity() {
 preflight_check_terraform_clean() {
     local instance_code="$1"
     local code_lower="${instance_code,,}"
-    
+
     # Check if Terraform directory exists
     local tf_dir="${DIVE_ROOT}/terraform/spoke"
     if [ ! -d "$tf_dir" ]; then
         log_verbose "Terraform directory not found (OK - first deployment)"
         return 0
     fi
-    
+
     # Check if Terraform workspace exists
     cd "$tf_dir" || return 0
-    
+
     local workspace_exists=false
     if terraform workspace list 2>/dev/null | grep -q " ${code_lower}$"; then
         workspace_exists=true
     fi
-    
+
     if [ "$workspace_exists" = "true" ]; then
         terraform workspace select "$code_lower" >/dev/null 2>&1
-        
+
         local state_count=$(terraform state list 2>/dev/null | wc -l | tr -d ' ')
-        
+
         if [ "$state_count" != "0" ]; then
             log_verbose "Existing Terraform state found: $state_count resources"
             log_verbose "This is OK if redeploying existing spoke"
             # Not an error - might be redeploying
         fi
     fi
-    
+
     cd - >/dev/null || true
     return 0
 }

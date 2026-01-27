@@ -26,6 +26,7 @@ export interface ISearchFilters {
   instances?: string[];
   encrypted?: boolean;
   dateRange?: { start: string; end: string };
+  fileTypes?: string[];  // File type filter (documents, images, videos, audio, archives, code)
 }
 
 export interface ISortOptions {
@@ -45,6 +46,7 @@ export interface IFacets {
   cois: IFacetItem[];
   instances: IFacetItem[];
   encryptionStatus: IFacetItem[];
+  fileTypes: IFacetItem[];  // File type facets (documents, images, videos, audio, archives, code)
 }
 
 export interface IPaginatedSearchResponse<T> {

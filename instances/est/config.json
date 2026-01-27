@@ -1,0 +1,51 @@
+{
+  "identity": {
+    "instanceCode": "EST",
+    "name": "EST Instance",
+    "description": "DIVE V3 Spoke Instance for EST",
+    "country": "EST",
+    "organizationType": "government",
+    "contactEmail": "admin@est.dive25.com"
+  },
+  "endpoints": {
+    "hubUrl": "https://dive-hub-backend:4000",
+    "hubApiUrl": "https://dive-hub-backend:4000/api",
+    "hubOpalUrl": "https://dive-hub-opal-server:7002",
+    "baseUrl": "https://localhost:3008",
+    "apiUrl": "https://localhost:4008",
+    "idpUrl": "https://dive-spoke-est-keycloak:8443",
+    "idpPublicUrl": "https://localhost:8451",
+    "kasUrl": "https://localhost:10008"
+  },
+  "certificates": {
+    "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/est/certs/spoke.crt",
+    "privateKeyPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/est/certs/spoke.key",
+    "csrPath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/est/certs/spoke.csr",
+    "caBundlePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/est/certs/hub-ca.crt"
+  },
+  "authentication": {},
+  "federation": {
+    "status": "unregistered",
+    "requestedScopes": [
+      "policy:base",
+      "policy:est",
+      "data:federation_matrix",
+      "data:trusted_issuers"
+    ]
+  },
+  "operational": {
+    "heartbeatIntervalMs": 30000,
+    "tokenRefreshBufferMs": 300000,
+    "offlineGracePeriodMs": 3600000,
+    "policyCachePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/est/cache/policies",
+    "auditQueuePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/est/cache/audit",
+    "maxAuditQueueSize": 10000,
+    "auditFlushIntervalMs": 60000
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "createdAt": "2026-01-27T15:00:52Z",
+    "lastModified": "2026-01-27T15:00:52Z",
+    "configHash": ""
+  }
+}

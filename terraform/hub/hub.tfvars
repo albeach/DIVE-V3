@@ -96,6 +96,16 @@ federation_partners = {
   #
   # For initial Hub deployment (no spokes yet), this must be empty.
   # After spoke registration, Hub can re-apply Terraform with hub.auto.tfvars.
+est = {
+    instance_code         = "EST"
+    instance_name         = "EST Instance"
+    idp_url               = "https://localhost:8451"
+    idp_internal_url      = "https://dive-spoke-est-keycloak:8443"
+    frontend_url          = "https://localhost:3008"
+    enabled               = true
+    client_secret         = ""  # Loaded from GCP: dive-v3-federation-est-usa
+    disable_trust_manager = true
+  }
 }
 
 # =============================================================================

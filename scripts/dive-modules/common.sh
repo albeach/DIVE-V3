@@ -1427,7 +1427,7 @@ fi
 
 ##
 # Detect if running in production mode
-# 
+#
 # Production mode is detected when:
 #   - DIVE_ENV=production explicitly set
 #   - KUBERNETES_SERVICE_HOST is set (running in K8s cluster)

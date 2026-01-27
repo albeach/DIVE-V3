@@ -49,6 +49,13 @@ spoke_status() {
     local status=$(grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | head -1 | cut -d'"' -f4)
     local created=$(grep -o '"createdAt"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | head -1 | cut -d'"' -f4)
 
+    # Get Hub URL from .env file (FIX 2026-01-27: was unbound variable)
+    local hub_url="<not configured>"
+    if [ -f "$spoke_dir/.env" ]; then
+        hub_url=$(grep "^HUB_URL=" "$spoke_dir/.env" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+        hub_url="${hub_url:-<not configured>}"
+    fi
+
     # Status color
     local status_color="$YELLOW"
     case "$status" in
@@ -160,16 +167,16 @@ spoke_health() {
         local protocol="${protocol%%:*}"
         local endpoint="${svc#*:*:}"
         local url="${protocol}://localhost:${endpoint}"
-        
+
         # First check Docker health status (most reliable)
         local container_name="dive-spoke-${code_lower}-$(echo "$name" | tr '[:upper:]' '[:lower:]')"
         local docker_health=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null || echo "")
-        
+
         if [ "$docker_health" = "healthy" ]; then
             printf "  %-14s ${GREEN}✓ Healthy${NC}\n" "$name:"
             continue
         fi
-        
+
         # Fallback to HTTP health check
         local status_code=$(curl -k -s -o /dev/null -w '%{http_code}' "$url" --max-time 5 2>/dev/null || echo "000")
 

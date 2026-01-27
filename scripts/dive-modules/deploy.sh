@@ -18,6 +18,23 @@ fi
 
 cmd_deploy() {
     local target="${1:-local}"
+
+    # SAFEGUARD: Detect if user is trying to deploy a spoke with wrong syntax
+    # Correct: ./dive spoke deploy <INSTANCE>
+    # Wrong:   ./dive deploy spoke <INSTANCE>
+    if [ "$target" = "spoke" ]; then
+        local instance_code="${2:-}"
+        log_error "Incorrect syntax detected!"
+        echo ""
+        echo -e "${RED}❌ Wrong:${NC}  ./dive deploy spoke ${instance_code}"
+        echo -e "${GREEN}✅ Correct:${NC} ./dive spoke deploy ${instance_code}"
+        echo ""
+        echo "Spoke deployments use a different command structure."
+        echo "Run: ${CYAN}./dive spoke deploy ${instance_code}${NC}"
+        echo ""
+        return 1
+    fi
+
     # Align ENVIRONMENT with target unless explicitly set
     if [ -z "$ENVIRONMENT" ]; then
         ENVIRONMENT="$target"
@@ -852,7 +869,7 @@ cmd_nuke() {
     # ALWAYS clean Terraform state to ensure fresh deployments succeed
     # This prevents conflicts where Terraform thinks resources exist but they don't
     log_verbose "  Cleaning Terraform state (prevents resource conflicts)..."
-    
+
     # Hub Terraform state
     if [ -d "${DIVE_ROOT}/terraform/hub" ]; then
         rm -rf "${DIVE_ROOT}/terraform/hub/.terraform" 2>/dev/null || true
@@ -861,7 +878,7 @@ cmd_nuke() {
         rm -f "${DIVE_ROOT}/terraform/hub/hub.auto.tfvars" 2>/dev/null || true
         log_verbose "    ✓ Hub Terraform state cleaned"
     fi
-    
+
     # Spoke Terraform state
     if [ -d "${DIVE_ROOT}/terraform/spoke" ]; then
         rm -rf "${DIVE_ROOT}/terraform/spoke/.terraform" 2>/dev/null || true
@@ -870,7 +887,7 @@ cmd_nuke() {
         rm -f "${DIVE_ROOT}/terraform/spoke/spoke.auto.tfvars" 2>/dev/null || true
         log_verbose "    ✓ Spoke Terraform state cleaned"
     fi
-    
+
     # Pilot Terraform state (legacy)
     if [ -d "${DIVE_ROOT}/terraform/pilot" ]; then
         rm -rf "${DIVE_ROOT}/terraform/pilot/.terraform" 2>/dev/null || true
@@ -878,7 +895,7 @@ cmd_nuke() {
         rm -f "${DIVE_ROOT}/terraform/pilot/.terraform.lock.hcl" 2>/dev/null || true
         log_verbose "    ✓ Pilot Terraform state cleaned"
     fi
-    
+
     # Terraform backend state (if using local backend)
     if [ "$deep_clean" = true ]; then
         log_verbose "  Deep clean: removing all Terraform caches..."
