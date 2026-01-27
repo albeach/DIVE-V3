@@ -11,26 +11,15 @@ import fs from 'fs';
 import path from 'path';
 
 /**
- * Load KAS registry from JSON configuration file
+ * REMOVED: loadKASRegistryFromFile() - NO JSON FILE LOADING
+ * 
+ * KAS registry must be loaded from MongoDB (SSOT) or Hub API
+ * JSON files are NOT used - MongoDB is the Single Source of Truth
  */
 export function loadKASRegistryFromFile(configPath: string): void {
-    try {
-        const fullPath = path.resolve(configPath);
-        
-        if (!fs.existsSync(fullPath)) {
-            kasLogger.warn('KAS registry config file not found', { path: fullPath });
-            return;
-        }
-
-        const configContent = fs.readFileSync(fullPath, 'utf-8');
-        const config = JSON.parse(configContent);
-
-        if (!config.kasInstances || !Array.isArray(config.kasInstances)) {
-            kasLogger.error('Invalid KAS registry config: missing kasInstances array');
-            return;
-        }
-
-        for (const entry of config.kasInstances) {
+    kasLogger.warn('loadKASRegistryFromFile() is deprecated - use MongoDB/Hub API instead');
+    kasLogger.warn('NO JSON FILE LOADING - MongoDB is SSOT');
+    // Function removed - KAS registry must come from database) {
             try {
                 const kasEntry: IKASRegistryEntry = {
                     kasId: entry.kasId,
@@ -169,23 +158,22 @@ export function loadKASRegistryFromEnv(): void {
 }
 
 /**
- * Initialize KAS registry (load from file and/or environment)
+ * Initialize KAS registry (NO JSON FILE LOADING)
+ * 
+ * KAS registry must be loaded from:
+ * 1. MongoDB (SSOT) - via backend API
+ * 2. Environment variables (for development/testing)
+ * 
+ * JSON files are NOT used - MongoDB is the Single Source of Truth
  */
 export function initializeKASRegistry(): void {
-    // Try loading from config file first
-    const configPath = process.env.KAS_REGISTRY_CONFIG_PATH || 
-                       path.join(process.cwd(), 'config', 'kas-registry.json');
-    
-    if (fs.existsSync(configPath)) {
-        loadKASRegistryFromFile(configPath);
-    }
-
-    // Also load from environment variables (can override file config)
+    // REMOVED: JSON file loading - NO JSON FILES
+    // Load from environment variables only (for development/testing)
     loadKASRegistryFromEnv();
 
     const totalKAS = kasRegistry.listAll().length;
-    kasLogger.info('KAS registry initialized', {
+    kasLogger.info('KAS registry initialized (environment variables only)', {
         totalKAS,
-        configPath,
+        note: 'NO JSON files - MongoDB is SSOT'
     });
 }
