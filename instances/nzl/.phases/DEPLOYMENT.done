@@ -1,9 +1,9 @@
 {
   "phase": "DEPLOYMENT",
   "instance_code": "NZL",
-  "completed_at": "2026-01-27T18:49:20Z",
+  "completed_at": "2026-01-27T18:58:34Z",
   "hostname": "MacBook-Pro-3.local",
   "user": "aubreybeach",
-  "duration_seconds": 104,
+  "duration_seconds": 93,
   "metadata": {}
 }

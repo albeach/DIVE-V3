@@ -116,6 +116,16 @@ fra = {
     client_secret         = ""  # Loaded from GCP: dive-v3-federation-fra-usa
     disable_trust_manager = true
   }
+nzl = {
+    instance_code         = "NZL"
+    instance_name         = "NZL Instance"
+    idp_url               = "https://localhost:8476"
+    idp_internal_url      = "https://dive-spoke-nzl-keycloak:8443"
+    frontend_url          = "https://localhost:3033"
+    enabled               = true
+    client_secret         = ""  # Loaded from GCP: dive-v3-federation-nzl-usa
+    disable_trust_manager = true
+  }
 }
 
 # =============================================================================
