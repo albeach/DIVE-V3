@@ -387,11 +387,15 @@ _spoke_up_legacy() {
         return 0
     fi
 
-    # Load secrets from GCP and write them to .env file for docker-compose
+    # Load secrets with automatic GCP authentication fallback
+    # Phase 1 Enhancement: Uses $ENVIRONMENT variable (not DIVE_ENV)
+    # Fallback chain: service account → user auth → local .env (dev only)
     log_step "🔐 Loading secrets from GCP Secret Manager..."
     echo "[DEBUG] About to set DIVE_INSTANCE=$instance_code"
     export DIVE_INSTANCE="$instance_code"
-    export DIVE_ENV="gcp"
+    # Note: $ENVIRONMENT is set by common.sh (defaults to 'local')
+    # In production (gcp/pilot/prod/staging), service account is required
+    # In dev/local, service account or user auth can be used
     echo "[DEBUG] About to call load_secrets"
     load_secrets_result=$(load_secrets 2>&1; echo $?)
     if [ "$load_secrets_result" != "0" ]; then
