@@ -277,6 +277,165 @@ run_federation_auth_tests() {
     echo "   Auth tests: $tests_passed/$tests_total passed"
 }
 
+# =============================================================================
+# SSO UTILITY FUNCTIONS (ENHANCED FOR COMPREHENSIVE TESTING)
+# =============================================================================
+
+##
+# Get access token from Keycloak using password grant
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Username
+#   $3 - Password (optional, defaults to username)
+#
+# Returns:
+#   Access token on stdout
+##
+sso_get_token() {
+    local instance_code="$1"
+    local username="$2"
+    local password="${3:-$username}"
+    local code_lower=$(lower "$instance_code")
+    
+    # Get instance ports
+    eval "$(get_instance_ports "$instance_code")"
+    local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
+    
+    # Get token
+    curl -sk --max-time 10 -X POST \
+        "https://localhost:${kc_port}/realms/dive-v3-broker-${code_lower}/protocol/openid-connect/token" \
+        -H "Content-Type: application/x-www-form-urlencoded" \
+        -d "client_id=dive-v3-broker-${code_lower}&client_secret=dive-v3-broker-${code_lower}-secret&username=${username}&password=${password}&grant_type=password" \
+        2>/dev/null | jq -r '.access_token // empty'
+}
+
+##
+# Verify JWT token claims
+#
+# Arguments:
+#   $1 - Access token
+#   $@ - Claim names to verify (e.g., uniqueID clearance countryOfAffiliation)
+#
+# Returns:
+#   0 - All claims present
+#   1 - Missing claims
+##
+sso_verify_claims() {
+    local token="$1"
+    shift
+    local required_claims=("$@")
+    
+    if [ -z "$token" ] || [ "$token" = "null" ]; then
+        return 1
+    fi
+    
+    # Decode JWT payload (base64url decode)
+    local payload=$(echo "$token" | cut -d'.' -f2 | base64 -d 2>/dev/null || echo "{}")
+    
+    # Check each required claim
+    for claim in "${required_claims[@]}"; do
+        if ! echo "$payload" | jq -e ".$claim" >/dev/null 2>&1; then
+            return 1
+        fi
+    done
+    
+    return 0
+}
+
+##
+# Test backend API access with token
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Access token
+#   $3 - API endpoint (default: /api/auth/session)
+#
+# Returns:
+#   0 - Success
+#   1 - Failure
+##
+sso_test_backend_access() {
+    local instance_code="$1"
+    local token="$2"
+    local endpoint="${3:-/api/auth/session}"
+    
+    # Get instance ports
+    eval "$(get_instance_ports "$instance_code")"
+    local backend_port="${SPOKE_BACKEND_HTTPS_PORT:-4000}"
+    
+    # Test access
+    local response=$(curl -sk --max-time 10 \
+        -H "Authorization: Bearer $token" \
+        "https://localhost:${backend_port}${endpoint}" 2>/dev/null)
+    
+    if [ -n "$response" ] && echo "$response" | jq -e '.user' >/dev/null 2>&1; then
+        return 0
+    fi
+    
+    return 1
+}
+
+##
+# Check OPA authorization decision
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Access token
+#   $3 - Resource ID (optional)
+#
+# Returns:
+#   0 - Authorized
+#   1 - Denied
+##
+sso_check_authz_decision() {
+    local instance_code="$1"
+    local token="$2"
+    local resource_id="${3:-test-resource}"
+    
+    # Get instance ports
+    eval "$(get_instance_ports "$instance_code")"
+    local backend_port="${SPOKE_BACKEND_HTTPS_PORT:-4000}"
+    
+    # Call authorization endpoint
+    local decision=$(curl -sk --max-time 10 \
+        -H "Authorization: Bearer $token" \
+        "https://localhost:${backend_port}/api/resources/${resource_id}" 2>/dev/null | \
+        jq -r '.authorized // false')
+    
+    [ "$decision" = "true" ]
+}
+
+##
+# Record SSO test result in federation database
+#
+# Arguments:
+#   $1 - Source code
+#   $2 - Target code
+#   $3 - Direction (HUB_TO_SPOKE or SPOKE_TO_HUB)
+#   $4 - Test passed (true/false)
+#   $5 - Latency ms (optional)
+#   $6 - Error message (optional)
+##
+sso_record_test_result() {
+    local source_code="$1"
+    local target_code="$2"
+    local direction="$3"
+    local test_passed="$4"
+    local latency="${5:-}"
+    local error_msg="${6:-}"
+    
+    # Check if federation database module is loaded
+    if ! type fed_db_record_health &>/dev/null; then
+        return 0  # Non-blocking if database unavailable
+    fi
+    
+    # Record health check
+    fed_db_record_health "$source_code" "$target_code" "$direction" \
+        "true" "true" "true" "true" \
+        "$test_passed" "$latency" "$error_msg" >/dev/null 2>&1 || true
+}
+
 ##
 # Test bidirectional SSO authentication between spokes
 #
@@ -300,7 +459,7 @@ test_bidirectional_sso() {
     echo "=================================================="
 
     # Get spoke configurations
-    eval "$(_get_spoke_ports "$source_spoke")"
+    eval "$(get_instance_ports "$source_spoke")"
     local source_port="${SPOKE_BACKEND_HTTPS_PORT:-4000}"
     local source_kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
 
@@ -314,44 +473,46 @@ test_bidirectional_sso() {
 
     local tests_passed=0
     local tests_total=0
+    local start_time=$(date +%s%3N)
 
     # Test 1: Source user can authenticate locally
     ((tests_total++))
     echo -n "[$source_upper→$target_upper] Source user authentication: "
-    local source_token=$(curl -sk --max-time 5 -X POST \
-        "https://localhost:${source_kc_port}/realms/dive-v3-broker-${source_lower}/protocol/openid-connect/token" \
-        -H "Content-Type: application/x-www-form-urlencoded" \
-        -d "client_id=dive-v3-broker-${source_lower}&client_secret=dive-v3-broker-${source_lower}-secret&username=testuser-${source_lower}-1&password=testuser-${source_lower}-1&grant_type=password" 2>/dev/null | jq -r '.access_token // empty')
+    local source_token=$(sso_get_token "$source_spoke" "testuser-${source_lower}-1")
 
     if [ -n "$source_token" ] && [ "$source_token" != "null" ]; then
         echo -e "${GREEN}✓ PASS${NC} (Token obtained)"
         ((tests_passed++))
     else
         echo -e "${RED}✗ FAIL${NC} (Cannot authenticate $source_upper user)"
+        sso_record_test_result "$source_lower" "$target_lower" "SPOKE_TO_SPOKE" "false" "" "Authentication failed"
         return 1
     fi
 
-    # Test 2: Source user can access target protected resource
+    # Test 2: Verify token claims
+    ((tests_total++))
+    echo -n "[$source_upper→$target_upper] Token claims verification: "
+    if sso_verify_claims "$source_token" "sub" "iss" "exp"; then
+        echo -e "${GREEN}✓ PASS${NC} (Required claims present)"
+        ((tests_passed++))
+    else
+        echo -e "${RED}✗ FAIL${NC} (Missing required claims)"
+    fi
+
+    # Test 3: Source user can access target protected resource
     ((tests_total++))
     echo -n "[$source_upper→$target_upper] Cross-spoke resource access: "
-    local cross_access=$(curl -sk --max-time 5 \
-        -H "Authorization: Bearer $source_token" \
-        "https://localhost:${target_port}/api/auth/session" 2>/dev/null | jq -r '.user.name // empty')
-
-    if [ -n "$cross_access" ] && [ "$cross_access" != "null" ]; then
-        echo -e "${GREEN}✓ PASS${NC} (User: $cross_access)"
+    if sso_test_backend_access "$target_spoke" "$source_token"; then
+        echo -e "${GREEN}✓ PASS${NC} (Access granted)"
         ((tests_passed++))
     else
         echo -e "${RED}✗ FAIL${NC} ($source_upper user cannot access $target_upper resource)"
     fi
 
-    # Test 3: Target user can authenticate locally
+    # Test 4: Target user can authenticate locally
     ((tests_total++))
     echo -n "[$target_upper→$source_upper] Target user authentication: "
-    local target_token=$(curl -sk --max-time 5 -X POST \
-        "https://localhost:${target_kc_port}/realms/dive-v3-broker-${target_lower}/protocol/openid-connect/token" \
-        -H "Content-Type: application/x-www-form-urlencoded" \
-        -d "client_id=dive-v3-broker-${target_lower}&client_secret=dive-v3-broker-${target_lower}-secret&username=testuser-${target_lower}-1&password=testuser-${target_lower}-1&grant_type=password" 2>/dev/null | jq -r '.access_token // empty')
+    local target_token=$(sso_get_token "$target_spoke" "testuser-${target_lower}-1")
 
     if [ -n "$target_token" ] && [ "$target_token" != "null" ]; then
         echo -e "${GREEN}✓ PASS${NC} (Token obtained)"
@@ -360,21 +521,17 @@ test_bidirectional_sso() {
         echo -e "${RED}✗ FAIL${NC} (Cannot authenticate $target_upper user)"
     fi
 
-    # Test 4: Target user can access source protected resource
+    # Test 5: Target user can access source protected resource
     ((tests_total++))
     echo -n "[$target_upper→$source_upper] Cross-spoke resource access: "
-    local reverse_access=$(curl -sk --max-time 5 \
-        -H "Authorization: Bearer $target_token" \
-        "https://localhost:${source_port}/api/auth/session" 2>/dev/null | jq -r '.user.name // empty')
-
-    if [ -n "$reverse_access" ] && [ "$reverse_access" != "null" ]; then
-        echo -e "${GREEN}✓ PASS${NC} (User: $reverse_access)"
+    if sso_test_backend_access "$source_spoke" "$target_token"; then
+        echo -e "${GREEN}✓ PASS${NC} (Access granted)"
         ((tests_passed++))
     else
         echo -e "${RED}✗ FAIL${NC} ($target_upper user cannot access $source_upper resource)"
     fi
 
-    # Test 5: Check Hub IdP configuration
+    # Test 6: Check Hub IdP configuration
     ((tests_total++))
     echo -n "[$source_upper↔$target_upper] Hub federation configuration: "
     local hub_token=$(curl -sk --max-time 5 -X POST \
@@ -401,8 +558,17 @@ test_bidirectional_sso() {
         echo -e "${RED}✗ FAIL${NC} (Cannot access Hub admin)"
     fi
 
+    # Calculate total latency
+    local end_time=$(date +%s%3N)
+    local latency=$((end_time - start_time))
+
     echo ""
-    echo "Bidirectional SSO Test Results: $tests_passed/$tests_total passed"
+    echo "Bidirectional SSO Test Results: $tests_passed/$tests_total passed (${latency}ms)"
+
+    # Record test results
+    sso_record_test_result "$source_lower" "$target_lower" "SPOKE_TO_SPOKE" \
+        "$( [ $tests_passed -eq $tests_total ] && echo 'true' || echo 'false' )" \
+        "$latency"
 
     if [ $tests_passed -eq $tests_total ]; then
         echo -e "${GREEN}🎉 SUCCESS: $source_upper ↔ $target_upper bidirectional SSO is working!${NC}"
