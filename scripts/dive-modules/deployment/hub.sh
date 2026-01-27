@@ -1045,10 +1045,27 @@ hub_parallel_startup() {
                     if [ "$health" = "healthy" ]; then
                         log_success "$service is healthy (${elapsed}s)"
                         exit 0
-                    elif [ "$health" = "none" ] || [ -z "$health" ]; then
-                        # No health check defined, assume healthy if running
-                        log_verbose "$service is running (no health check)"
-                        exit 0
+                    elif [ "$health" = "none" ] || [ -z "$health" ] || [ "$health" = "" ]; then
+                        # During start_period, health status may be empty string
+                        # If container is running, wait a bit more for health check to initialize
+                        if [ "$state" = "running" ]; then
+                            # Health check might be in start_period - wait a bit more
+                            if [ $elapsed -lt 10 ]; then
+                                log_verbose "$service: Container running, waiting for health check to initialize ($elapsed/${timeout}s)"
+                                sleep $interval
+                                elapsed=$((elapsed + interval))
+                                continue
+                            else
+                                # After 10s, if still no health status and container is running, assume healthy
+                                log_verbose "$service is running (health check not yet initialized, assuming healthy)"
+                                exit 0
+                            fi
+                        else
+                            # Container not running - continue waiting
+                            sleep $interval
+                            elapsed=$((elapsed + interval))
+                            continue
+                        fi
                     fi
 
                     # Progress indicator
