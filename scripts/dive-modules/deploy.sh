@@ -692,10 +692,19 @@ cmd_nuke() {
         done
 
         # Instance-specific compose files (all spokes)
+        # CRITICAL FIX: Use explicit project name to ensure all containers are stopped
         for instance_dir in instances/*/; do
             if [ -f "${instance_dir}docker-compose.yml" ]; then
-                log_verbose "  Stopping spoke: $(basename "$instance_dir")"
-                (cd "$instance_dir" && ${DOCKER_CMD:-docker} compose down -v --remove-orphans --timeout 5 2>/dev/null) || true
+                local instance_code=$(basename "$instance_dir")
+                local instance_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
+                log_verbose "  Stopping spoke: ${instance_code^^} (project: dive-spoke-${instance_lower})"
+                # Use explicit project name to match container labels
+                (cd "$instance_dir" && ${DOCKER_CMD:-docker} compose -p "dive-spoke-${instance_lower}" down -v --remove-orphans --timeout 5 2>/dev/null) || true
+                # Force-stop any remaining containers for this instance
+                for c in $(docker ps -aq --filter "label=com.docker.compose.project=dive-spoke-${instance_lower}" 2>/dev/null); do
+                    ${DOCKER_CMD:-docker} stop "$c" 2>/dev/null || true
+                    ${DOCKER_CMD:-docker} rm -f "$c" 2>/dev/null || true
+                done
             fi
         done
     else
@@ -716,6 +725,7 @@ cmd_nuke() {
     done
 
     # Also catch any that weren't in our pattern (by compose project label)
+    # CRITICAL FIX: Include all spoke project labels (dive-spoke-*)
     for label in "com.docker.compose.project=dive-hub" "com.docker.compose.project=dive-v3"; do
         for c in $(docker ps -aq --filter "label=$label" 2>/dev/null); do
             if ${DOCKER_CMD:-docker} rm -f "$c" 2>/dev/null; then
@@ -723,6 +733,35 @@ cmd_nuke() {
             fi
         done
     done
+    
+    # CRITICAL FIX: Also catch all spoke containers by project label pattern
+    # Spoke containers use labels like "com.docker.compose.project=dive-spoke-nzl"
+    # This ensures ALL spoke instances are cleaned up, not just those matching name patterns
+    for c in $(docker ps -aq --filter "label=com.docker.compose.project" 2>/dev/null); do
+        local project_label=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$c" 2>/dev/null)
+        if echo "$project_label" | grep -qE "^dive-spoke-|^dive-hub$"; then
+            if ${DOCKER_CMD:-docker} rm -f "$c" 2>/dev/null; then
+                removed_containers=$((removed_containers + 1))
+            fi
+        fi
+    done
+    
+    # CRITICAL FIX: Force-stop containers using DIVE ports to prevent conflicts
+    # This handles containers that weren't stopped by compose down
+    log_verbose "  Stopping containers using DIVE ports..."
+    for port in 3033 4033 8476 3032 4032 8475 3034 4034 8477 8443 4000 3000; do
+        # Find containers using this port
+        for c in $(docker ps --format '{{.ID}}\t{{.Names}}\t{{.Ports}}' 2>/dev/null | grep -E ":$port->|:$port/" | awk '{print $1}'); do
+            local container_name=$(docker inspect --format '{{.Name}}' "$c" 2>/dev/null | sed 's/^\///')
+            if echo "$container_name" | grep -qE "dive|spoke|hub"; then
+                log_verbose "    Stopping container using port $port: $container_name"
+                ${DOCKER_CMD:-docker} stop "$c" 2>/dev/null || true
+                ${DOCKER_CMD:-docker} rm -f "$c" 2>/dev/null || true
+                removed_containers=$((removed_containers + 1))
+            fi
+        done
+    done
+    
     log_verbose "  Removed $removed_containers containers"
 
     # =========================================================================
@@ -781,6 +820,22 @@ cmd_nuke() {
             ${DOCKER_CMD:-docker} network rm "$n" 2>/dev/null && removed_networks=$((removed_networks + 1))
         done
     done
+    
+    # CRITICAL FIX: Remove all spoke networks by project label pattern
+    # Spoke networks use labels like "com.docker.compose.project=dive-spoke-nzl"
+    for n in $(docker network ls -q --filter "label=com.docker.compose.project" 2>/dev/null); do
+        local project_label=$(docker network inspect --format '{{index .Labels "com.docker.compose.project"}}' "$n" 2>/dev/null)
+        if echo "$project_label" | grep -qE "^dive-spoke-|^dive-hub$"; then
+            # Disconnect all containers first
+            for container in $(docker network inspect "$n" --format='{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null); do
+                ${DOCKER_CMD:-docker} network disconnect -f "$n" "$container" 2>/dev/null || true
+            done
+            if ${DOCKER_CMD:-docker} network rm "$n" 2>/dev/null; then
+                removed_networks=$((removed_networks + 1))
+            fi
+        fi
+    done
+    
     log_verbose "  Removed $removed_networks networks"
 
     # =========================================================================
