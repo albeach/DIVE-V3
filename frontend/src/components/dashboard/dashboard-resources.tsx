@@ -52,6 +52,7 @@ interface DashboardResourcesProps {
 // Classification colors
 const classificationColors: Record<string, { bg: string; text: string; border: string }> = {
   UNCLASSIFIED: { bg: 'bg-green-100', text: 'text-green-800', border: 'border-green-300' },
+  RESTRICTED: { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-300' },
   CONFIDENTIAL: { bg: 'bg-blue-100', text: 'text-blue-800', border: 'border-blue-300' },
   SECRET: { bg: 'bg-amber-100', text: 'text-amber-800', border: 'border-amber-300' },
   TOP_SECRET: { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-300' },
@@ -67,13 +68,13 @@ export function DashboardResources({
   // Default stats
   const resourceStats: ResourceStats = stats || {
     totalAccessible: 0,
-    byClassification: { UNCLASSIFIED: 0, CONFIDENTIAL: 0, SECRET: 0, TOP_SECRET: 0 },
+    byClassification: { UNCLASSIFIED: 0, RESTRICTED: 0, CONFIDENTIAL: 0, SECRET: 0, TOP_SECRET: 0 },
     recentlyAccessed: [],
     uploadedByUser: 0,
   };
 
   // Calculate what classifications user can access
-  const clearanceHierarchy = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
+  const clearanceHierarchy = ['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
   const userClearanceIndex = clearanceHierarchy.indexOf(userClearance);
   const accessibleClassifications = clearanceHierarchy.slice(0, userClearanceIndex + 1);
 

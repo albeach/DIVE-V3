@@ -38,6 +38,10 @@ name: dive-hub
 networks:
   hub-internal:
     driver: bridge
+    labels:
+      dive.network.type: "internal"
+      dive.network.scope: "hub"
+      dive.network.description: "Hub internal service communication"
   # Shared network for federation, monitoring, and cross-instance communication
   # Used by: Hub ↔ Spokes, Monitoring (Prometheus/Grafana), Shared Blacklist
   # In production, instances communicate via external domains
@@ -46,15 +50,51 @@ networks:
 
 volumes:
   postgres_data:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "postgres"
+      dive.resource.purpose: "database"
   mongodb_data:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "mongodb"
+      dive.resource.purpose: "database"
   mongodb_config:  # MongoDB replica set configuration
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "mongodb"
+      dive.resource.purpose: "config"
   redis_data:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "redis"
+      dive.resource.purpose: "cache"
   # redis_blacklist_data: MOVED to shared stack (shared-blacklist-redis-data)
   frontend_node_modules:  # Development hot reload
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "frontend"
+      dive.resource.purpose: "node_modules"
   frontend_next:  # Development hot reload
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "frontend"
+      dive.resource.purpose: "build_cache"
   authzforce_data:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "authzforce"
+      dive.resource.purpose: "data"
   authzforce_server:        # Prevent anonymous volume from base image
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "authzforce"
+      dive.resource.purpose: "server"
   authzforce_tomcat_conf:   # Prevent anonymous volume from base image
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "authzforce"
+      dive.resource.purpose: "config"
 
 services:
   # ---------------------------------------------------------------------------

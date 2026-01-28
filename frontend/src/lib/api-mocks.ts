@@ -1,6 +1,6 @@
 /**
  * API Mocking Utilities
- * 
+ *
  * Standardized mock data and fallback handlers for admin APIs.
  * Used when:
  * - Backend is unavailable
@@ -59,7 +59,7 @@ export const mockGenerators = {
    */
   users: (count: number = 10) => {
     const roles = ['user', 'admin', 'security_admin', 'auditor'];
-    const clearances = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
+    const clearances = ['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
     const countries = ['USA', 'GBR', 'FRA', 'DEU', 'CAN'];
 
     return Array.from({ length: count }, (_, i) => ({

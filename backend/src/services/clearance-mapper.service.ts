@@ -142,7 +142,7 @@ export const CLEARANCE_EQUIVALENCY_TABLE: IClearanceMapping[] = [
         nationalEquivalents: {
             // Existing (10)
             USA: ['RESTRICTED', 'FOUO', 'FOR OFFICIAL USE ONLY'],
-            FRA: ['DIFFUSION RESTREINTE'],
+            FRA: ['RESTREINT', 'DIFFUSION RESTREINTE'],  // Short form first (UI display), full form second (official)
             CAN: ['PROTECTED A', 'PROTECTED-A'],
             GBR: ['OFFICIAL-SENSITIVE', 'OFFICIAL SENSITIVE'],
             DEU: ['VS-NUR FÜR DEN DIENSTGEBRAUCH', 'VS-NUR FUR DEN DIENSTGEBRAUCH', 'VS-NFD'],
@@ -188,6 +188,7 @@ export const CLEARANCE_EQUIVALENCY_TABLE: IClearanceMapping[] = [
             // Existing (10)
             USA: ['CONFIDENTIAL', 'C'],
             FRA: [
+                'CONFIDENTIEL',  // Short form (UI display) - ADDED
                 'CONFIDENTIEL DÉFENSE',
                 'CONFIDENTIEL DEFENSE',
                 'CONFIDENTIEL-DÉFENSE',
@@ -239,11 +240,11 @@ export const CLEARANCE_EQUIVALENCY_TABLE: IClearanceMapping[] = [
             // Existing (10)
             USA: ['SECRET', 'S'],
             FRA: [
+                'SECRET',  // Short form (UI display) - ADDED
                 'SECRET DÉFENSE',
                 'SECRET DEFENSE',
                 'SECRET-DÉFENSE',
-                'SECRET-DEFENSE',
-                'SECRET'
+                'SECRET-DEFENSE'
             ],
             CAN: ['SECRET', 'PROTECTED C', 'PROTECTED-C'],
             GBR: ['SECRET'],
@@ -290,6 +291,7 @@ export const CLEARANCE_EQUIVALENCY_TABLE: IClearanceMapping[] = [
             // Existing (10)
             USA: ['TOP SECRET', 'TS', 'TOP_SECRET'],
             FRA: [
+                'TRÈS SECRET',  // Short form (UI display) - ADDED
                 'TRÈS SECRET DÉFENSE',
                 'TRES SECRET DEFENSE',
                 'TRÈS-SECRET-DÉFENSE',

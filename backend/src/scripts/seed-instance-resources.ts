@@ -1149,7 +1149,7 @@ EXAMPLES:
 
 /**
  * Load federation registry from MongoDB (SSOT) - NO JSON FILES
- * 
+ *
  * For Hub: Query local MongoDB federation_spokes collection
  * For Spokes: Query Hub API /api/federation/spokes
  */
@@ -1174,7 +1174,7 @@ async function loadFederationRegistry(): Promise<IFederationRegistry> {
             if (response.data?.spokes) {
                 const spokes = response.data.spokes;
                 console.log(`   ✅ Loaded ${spokes.length} spokes from Hub registry (federated mode)`);
-                
+
                 // Convert API response to legacy format
                 const instances: Record<string, IInstanceConfig> = {};
                 for (const spoke of spokes) {
@@ -1188,11 +1188,23 @@ async function loadFederationRegistry(): Promise<IFederationRegistry> {
                         }
                     };
                 }
-                
+
                 return { instances, version: '2.0' };
             }
         } catch (error) {
-            console.warn(`   ⚠️ Could not query Hub federation registry API: ${error instanceof Error ? error.message : 'Unknown'}`);
+            // IMPROVED (2026-01-28): Better error diagnostics for federation registry failures
+            const errorMsg = error instanceof Error ? error.message : 'Unknown';
+            const axiosError = error as any;
+
+            if (axiosError?.response?.status === 401) {
+                console.warn(`   ⚠️ Hub federation registry API returned 401 (Unauthorized)`);
+                console.warn(`   ℹ️  This is OK during initial deployment - falling back to local MongoDB`);
+            } else if (axiosError?.code === 'ECONNREFUSED') {
+                console.warn(`   ⚠️ Hub backend not reachable - falling back to local MongoDB`);
+            } else {
+                console.warn(`   ⚠️ Could not query Hub federation registry API: ${errorMsg}`);
+            }
+            console.warn(`   ℹ️  Will attempt to load federation data from local MongoDB instead`);
         }
     }
 
@@ -1201,18 +1213,18 @@ async function loadFederationRegistry(): Promise<IFederationRegistry> {
         const { MongoClient } = await import('mongodb');
         const mongoUrl = process.env.MONGODB_URL || 'mongodb://localhost:27017';
         const dbName = process.env.MONGODB_DATABASE || 'dive-v3';
-        
+
         const client = new MongoClient(mongoUrl);
         await client.connect();
         const db = client.db(dbName);
         const collection = db.collection('federation_spokes');
-        
+
         const spokes = await collection.find({}).toArray();
         await client.close();
-        
+
         if (spokes.length > 0) {
             console.log(`   ✅ Loaded ${spokes.length} spokes from MongoDB (SSOT)`);
-            
+
             const instances: Record<string, IInstanceConfig> = {};
             for (const spoke of spokes) {
                 instances[spoke.instanceCode.toLowerCase()] = {
@@ -1221,11 +1233,17 @@ async function loadFederationRegistry(): Promise<IFederationRegistry> {
                     services: {
                         frontend: { externalPort: spoke.frontendPort || 3000 },
                         backend: { externalPort: spoke.backendPort || 4000 },
-                        keycloak: { externalPort: spoke.keycloakPort || 8443 }
+                        keycloak: { externalPort: spoke.keycloakPort || 8443 },
+                        mongodb: {
+                            name: 'mongodb',
+                            containerName: `dive-${spoke.instanceCode.toLowerCase()}-mongodb`,
+                            internalPort: 27017,
+                            externalPort: spoke.mongodbPort || 27017
+                        }
                     }
                 };
             }
-            
+
             return { instances, version: '2.0' };
         }
     } catch (error) {
@@ -2259,7 +2277,7 @@ async function createZTDFDocument(
         title,
         // Top-level fields for search/filter compatibility
         classification,
-        releasableTo: releasabilityTo, // FIXED: Use correct field name (releasableTo not releasabilityTo)
+        releasabilityTo: releasabilityTo, // Correct field name per OPA policies
         COI,
         coiOperator,
         encrypted: true,
@@ -2280,7 +2298,7 @@ async function createZTDFDocument(
         // Legacy structure (kept for backwards compatibility)
         legacy: {
             classification,
-            releasableTo: releasabilityTo, // FIXED: Use correct field name
+            releasabilityTo: releasabilityTo, // Correct field name
             COI,
             coiOperator,
             encrypted: true,
@@ -2443,11 +2461,11 @@ async function seedInstance(
         // Validate COI definitions exist
         const coiCollection = db.collection('coi_definitions');
         const coiCount = await coiCollection.countDocuments();
-        // CRITICAL FIX: initialize-coi-keys.ts creates 23 COI definitions (verified by grep count)
-        // Count verified: FVEY, NATO, NATO-COSMIC, US-ONLY, CAN-US, GBR-US, FRA-US, DEU-US,
+        // CRITICAL: initialize-coi-keys.ts creates 22 COI definitions (verified by manual count)
+        // COIs: FVEY, NATO, NATO-COSMIC, US-ONLY, CAN-US, GBR-US, FRA-US, DEU-US,
         // AUKUS, QUAD, EU-RESTRICTED, NORTHCOM, EUCOM, PACOM, CENTCOM, SOCOM,
-        // Alpha, Beta, Gamma, TEST-COI, NEW-COI, PACIFIC-ALLIANCE (23 total)
-        const expectedCoiCount = 23; // Updated from 22 to 23 (2026-01-27) - matches initialize-coi-keys.ts actual count
+        // Alpha, Beta, Gamma, TEST-COI, NEW-COI, PACIFIC-ALLIANCE (22 total)
+        const expectedCoiCount = 22; // Fixed from 23 to 22 (2026-01-28) - matches initialize-coi-keys.ts actual count
 
         if (coiCount < expectedCoiCount) {
             throw new Error(

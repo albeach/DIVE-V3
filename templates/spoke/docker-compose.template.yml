@@ -71,21 +71,81 @@ name: dive-spoke-{{INSTANCE_CODE_LOWER}}
 networks:
   dive-internal:
     driver: bridge
+    labels:
+      dive.network.type: "internal"
+      dive.network.scope: "spoke"
+      dive.network.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.network.description: "Spoke {{INSTANCE_CODE_UPPER}} internal service communication"
   dive-shared:
     external: true
 
 volumes:
   postgres_data:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "postgres"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "database"
   mongodb_data:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "mongodb"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "database"
   mongodb_config:  # MongoDB config directory (prevent anonymous volume)
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "mongodb"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "config"
   redis_data:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "redis"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "cache"
   opal_cache:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "opal-client"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "cache"
   opal_backup:     # OPAL client backup directory (prevent anonymous volume from base image)
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "opal-client"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "backup"
   frontend_modules:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "frontend"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "node_modules"
   frontend_next:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "frontend"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "build_cache"
   backend_node_modules:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "backend"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "node_modules"
   backend_logs:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "backend"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "logs"
   kas_logs:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "kas"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "logs"
 
 services:
   # ==========================================================================

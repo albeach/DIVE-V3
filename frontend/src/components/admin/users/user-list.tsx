@@ -1,6 +1,6 @@
 /**
  * User List Component - Complete CRUD Implementation
- * 
+ *
  * Features:
  * - Search and filter users
  * - Create new users with DIVE attributes
@@ -16,11 +16,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useSession } from 'next-auth/react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  Search, 
-  UserPlus, 
-  Trash2, 
-  RefreshCw, 
+import {
+  Search,
+  UserPlus,
+  Trash2,
+  RefreshCw,
   Shield,
   Mail,
   CheckCircle,
@@ -75,7 +75,7 @@ interface UserFormData {
   roles: string[];
 }
 
-const CLEARANCE_LEVELS = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
+const CLEARANCE_LEVELS = ['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
 const COUNTRIES = ['USA', 'GBR', 'FRA', 'CAN', 'DEU', 'BEL', 'NLD', 'POL', 'NOR', 'DNK', 'ALB', 'ESP', 'ITA'];
 const AVAILABLE_ROLES = ['dive-user', 'dive-admin', 'super_admin'];
 
@@ -89,7 +89,7 @@ export default function UserList() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
-  
+
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -122,7 +122,7 @@ export default function UserList() {
     try {
       setLoading(true);
       setError(null);
-      
+
       // Use frontend API route to proxy to backend
       const queryParams = new URLSearchParams({
         limit: '100',
@@ -367,7 +367,7 @@ export default function UserList() {
             onChange={(e) => setSearch(e.target.value)}
           />
         </div>
-        
+
         <div className="flex gap-2">
           <button
             onClick={() => fetchUsers()}
@@ -466,8 +466,8 @@ export default function UserList() {
                 </tr>
               ) : (
                 users.map((user) => (
-                  <motion.tr 
-                    key={user.id} 
+                  <motion.tr
+                    key={user.id}
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     className="hover:bg-slate-50 transition-colors"
@@ -503,8 +503,8 @@ export default function UserList() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                        user.enabled 
-                          ? 'bg-green-100 text-green-800' 
+                        user.enabled
+                          ? 'bg-green-100 text-green-800'
                           : 'bg-red-100 text-red-800'
                       }`}>
                         {user.enabled ? <CheckCircle className="h-3 w-3 mr-1" /> : <XCircle className="h-3 w-3 mr-1" />}
@@ -527,21 +527,21 @@ export default function UserList() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end gap-2">
-                        <button 
+                        <button
                           onClick={() => openEditModal(user)}
                           className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
                           title="Edit User"
                         >
                           <Edit2 className="h-4 w-4" />
                         </button>
-                        <button 
+                        <button
                           onClick={() => { setSelectedUser(user); setShowPasswordModal(true); }}
                           className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
                           title="Reset Password"
                         >
                           <Key className="h-4 w-4" />
                         </button>
-                        <button 
+                        <button
                           onClick={() => { setSelectedUser(user); setShowDeleteConfirm(true); }}
                           className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
                           title="Delete User"
@@ -836,7 +836,7 @@ export default function UserList() {
 
               <div className="p-6">
                 <p className="text-gray-700">
-                  Are you sure you want to delete user <strong>{selectedUser.username}</strong>? 
+                  Are you sure you want to delete user <strong>{selectedUser.username}</strong>?
                   All associated data will be permanently removed.
                 </p>
               </div>
@@ -870,10 +870,10 @@ export default function UserList() {
 // ============================================
 
 function generateMockUsers(): IAdminUser[] {
-  const clearances = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
+  const clearances = ['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
   const countries = ['USA', 'GBR', 'FRA', 'CAN', 'DEU'];
   const roles = [['dive-user'], ['dive-user', 'dive-admin'], ['dive-user', 'dive-admin', 'super_admin']];
-  
+
   return [
     { id: '1', username: 'testuser-usa-1', firstName: 'Test', lastName: 'User 1', email: 'testuser1@usa.mil', enabled: true, emailVerified: true, createdAt: new Date(Date.now() - 86400000 * 30).toISOString(), clearance: 'UNCLASSIFIED', countryOfAffiliation: 'USA', uniqueID: 'testuser-usa-1-001', realmRoles: ['dive-user'] },
     { id: '2', username: 'testuser-usa-2', firstName: 'Test', lastName: 'User 2', email: 'testuser2@usa.mil', enabled: true, emailVerified: true, createdAt: new Date(Date.now() - 86400000 * 25).toISOString(), clearance: 'CONFIDENTIAL', countryOfAffiliation: 'USA', uniqueID: 'testuser-usa-2-001', realmRoles: ['dive-user'] },

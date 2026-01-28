@@ -39,7 +39,7 @@ import {
 } from './MarkingRenderer';
 import { generateMarkingText, getClassificationColor } from '@/lib/spif-markings';
 
-// Dynamic import for DOCX viewer - SSR disabled to avoid Node.js module issues
+// Dynamic imports for Office viewers - SSR disabled to avoid Node.js module issues
 const DocxViewer = dynamic(() => import('./DocxViewer'), {
   ssr: false,
   loading: () => (
@@ -49,6 +49,32 @@ const DocxViewer = dynamic(() => import('./DocxViewer'), {
       </div>
       <h3 className="text-xl font-bold text-gray-900 mb-3">Loading Document Viewer...</h3>
       <p className="text-gray-500 text-sm">Preparing Word document viewer.</p>
+    </div>
+  ),
+});
+
+const ExcelViewer = dynamic(() => import('./ExcelViewer'), {
+  ssr: false,
+  loading: () => (
+    <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-12 text-center border-2 border-green-200">
+      <div className="inline-flex items-center justify-center w-24 h-24 bg-green-100 rounded-full mb-6">
+        <div className="w-12 h-12 border-4 border-green-300 border-t-green-600 rounded-full animate-spin" />
+      </div>
+      <h3 className="text-xl font-bold text-gray-900 mb-3">Loading Spreadsheet Viewer...</h3>
+      <p className="text-gray-500 text-sm">Preparing Excel spreadsheet viewer.</p>
+    </div>
+  ),
+});
+
+const PowerPointViewer = dynamic(() => import('./PowerPointViewer'), {
+  ssr: false,
+  loading: () => (
+    <div className="bg-gradient-to-br from-orange-50 to-amber-50 rounded-xl p-12 text-center border-2 border-orange-200">
+      <div className="inline-flex items-center justify-center w-24 h-24 bg-orange-100 rounded-full mb-6">
+        <div className="w-12 h-12 border-4 border-orange-300 border-t-orange-600 rounded-full animate-spin" />
+      </div>
+      <h3 className="text-xl font-bold text-gray-900 mb-3">Loading Presentation Viewer...</h3>
+      <p className="text-gray-500 text-sm">Preparing PowerPoint presentation viewer.</p>
     </div>
   ),
 });
@@ -121,7 +147,13 @@ export default function ContentViewer({
     if (contentType.startsWith('video/')) return 'video';
     if (contentType === 'text/markdown') return 'markdown';
     if (contentType.startsWith('text/')) return 'text';
-    if (contentType.includes('openxmlformats') || contentType === 'application/msword') return 'docx';
+    // Check specific Office formats before generic openxmlformats check
+    if (contentType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' ||
+        contentType === 'application/msword') return 'docx';
+    if (contentType === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+        contentType === 'application/vnd.ms-excel') return 'xlsx';
+    if (contentType === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' ||
+        contentType === 'application/vnd.ms-powerpoint') return 'pptx';
     return 'document';
   };
 
@@ -441,6 +473,36 @@ export default function ContentViewer({
     );
   };
 
+  // Render Excel using ExcelViewer component (SSR-safe)
+  const renderExcel = () => {
+    return (
+      <ExcelViewer
+        content={content}
+        title={title}
+        classification={classification}
+        onDownload={handleDownload}
+        watermarkText={effectiveMarking.watermarkText}
+        watermarkOpacity={finalMarkingOptions.watermarkOpacity}
+        showWatermark={showMarkings && finalMarkingOptions.showWatermark}
+      />
+    );
+  };
+
+  // Render PowerPoint using PowerPointViewer component (SSR-safe)
+  const renderPowerPoint = () => {
+    return (
+      <PowerPointViewer
+        content={content}
+        title={title}
+        classification={classification}
+        onDownload={handleDownload}
+        watermarkText={effectiveMarking.watermarkText}
+        watermarkOpacity={finalMarkingOptions.watermarkOpacity}
+        showWatermark={showMarkings && finalMarkingOptions.showWatermark}
+      />
+    );
+  };
+
   // Render audio content with STANAG classification overlay
   const renderAudio = () => {
     return (
@@ -479,28 +541,51 @@ export default function ContentViewer({
     );
   };
 
-  // Render generic document
-  const renderDocument = () => (
-    <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-12 text-center border-2 border-blue-200">
-      <div className="inline-flex items-center justify-center w-24 h-24 bg-blue-100 rounded-full mb-6">
-        <File className="w-12 h-12 text-blue-600" />
+  // Render generic document (for XLSX, PPTX, and other Office formats)
+  const renderDocument = () => {
+    // Determine document type for user-friendly messaging
+    let docTypeName = 'Document';
+    let docTypeDesc = 'This document format requires an external application to view.';
+
+    if (category === 'xlsx') {
+      docTypeName = 'Excel Spreadsheet';
+      docTypeDesc = 'Excel files contain spreadsheet data that requires Microsoft Excel, LibreOffice Calc, or Google Sheets to view.';
+    } else if (category === 'pptx') {
+      docTypeName = 'PowerPoint Presentation';
+      docTypeDesc = 'PowerPoint files contain slides and multimedia that require Microsoft PowerPoint, LibreOffice Impress, or Google Slides to view.';
+    } else if (category === 'docx') {
+      docTypeName = 'Word Document';
+      docTypeDesc = 'Word documents require Microsoft Word, LibreOffice Writer, or Google Docs to view.';
+    }
+
+    return (
+      <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-12 text-center border-2 border-blue-200">
+        <div className="inline-flex items-center justify-center w-24 h-24 bg-blue-100 rounded-full mb-6">
+          <File className="w-12 h-12 text-blue-600" />
+        </div>
+        <h3 className="text-2xl font-bold text-gray-900 mb-3">{docTypeName} Ready</h3>
+        <p className="text-gray-600 mb-2">
+          Content type: <span className="font-mono text-sm bg-white px-3 py-1 rounded border">{contentType}</span>
+        </p>
+        <p className="text-gray-500 text-sm mb-6 max-w-md mx-auto">
+          {docTypeDesc}
+        </p>
+        <div className="space-y-3">
+          <button
+            onClick={handleDownload}
+            className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-all hover:shadow-lg"
+          >
+            <Download className="w-5 h-5" />
+            Download {docTypeName}
+          </button>
+          <p className="text-xs text-gray-500">
+            <Shield className="w-4 h-4 inline mr-1" />
+            For security, classified Office files are not rendered in the browser
+          </p>
+        </div>
       </div>
-      <h3 className="text-2xl font-bold text-gray-900 mb-3">Document Decrypted</h3>
-      <p className="text-gray-600 mb-2">
-        Content type: <span className="font-mono text-sm bg-white px-3 py-1 rounded border">{contentType}</span>
-      </p>
-      <p className="text-gray-500 text-sm mb-6">
-        This document format requires external viewer. Download to view contents.
-      </p>
-      <button
-        onClick={handleDownload}
-        className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white font-semibold rounded-lg hover:bg-blue-700 transition-all hover:shadow-lg"
-      >
-        <Download className="w-5 h-5" />
-        Download Document
-      </button>
-    </div>
-  );
+    );
+  };
 
   // Render content based on category
   const renderContent = () => {
@@ -519,6 +604,10 @@ export default function ContentViewer({
         return renderMarkdown();
       case 'docx':
         return renderDocx();
+      case 'xlsx':
+        return renderExcel();
+      case 'pptx':
+        return renderPowerPoint();
       default:
         return renderDocument();
     }
@@ -540,6 +629,12 @@ export default function ContentViewer({
         return <FileText className={`${iconClass} ${!isFullscreen && 'text-green-600'}`} />;
       case 'markdown':
         return <FileCode className={`${iconClass} ${!isFullscreen && 'text-purple-600'}`} />;
+      case 'docx':
+        return <FileText className={`${iconClass} ${!isFullscreen && 'text-blue-700'}`} />;
+      case 'xlsx':
+        return <FileText className={`${iconClass} ${!isFullscreen && 'text-green-700'}`} />;
+      case 'pptx':
+        return <FileText className={`${iconClass} ${!isFullscreen && 'text-orange-700'}`} />;
       default:
         return <File className={`${iconClass} ${!isFullscreen && 'text-gray-600'}`} />;
     }

@@ -1313,15 +1313,19 @@ wait_for_keycloak_admin_api_ready() {
             local pass_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
             admin_password="${!pass_var:-}"
 
+            # CRITICAL FIX (2026-01-28): Use correct GCP secret name with "admin-password"
             if [ -z "$admin_password" ] && command -v gcloud &>/dev/null; then
-                admin_password=$(gcloud secrets versions access latest --secret="dive-v3-keycloak-${instance_code}" --project=dive25 2>/dev/null || echo "")
+                admin_password=$(gcloud secrets versions access latest \
+                    --secret="dive-v3-keycloak-admin-password-${instance_code}" \
+                    --project=dive25 2>/dev/null || echo "")
             fi
         fi
     fi
 
     if [ -z "$admin_password" ]; then
         log_error "Cannot verify admin API readiness: admin password not available"
-        log_verbose "Checked: function argument, KC_BOOTSTRAP_ADMIN_PASSWORD, KEYCLOAK_ADMIN_PASSWORD, GCP secrets"
+        log_verbose "Checked: function argument, ${pass_var:-KEYCLOAK_ADMIN_PASSWORD}, GCP secret"
+        log_verbose "GCP secret name should be: dive-v3-keycloak-admin-password-${instance_code:-hub}"
         return 1
     fi
 

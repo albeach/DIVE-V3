@@ -193,7 +193,37 @@ app.use(errorHandler);
 // ============================================
 // Start Server (HTTP or HTTPS)
 // ============================================
-function startServer() {
+async function startServer() {
+  // ============================================
+  // PHASE 0: Pre-startup Bootstrap (CRITICAL)
+  // ============================================
+  // MUST run BEFORE server starts listening to ensure:
+  // - Hub instance is registered in MongoDB
+  // - Hub KAS is registered in MongoDB
+  // - Trusted issuers are registered
+  // This allows seeding to run immediately after health check passes
+
+  const isHub = process.env.SPOKE_MODE !== 'true';
+  if (isHub) {
+    try {
+      logger.info('Running Hub bootstrap before server startup');
+      await federationBootstrap.initialize();
+      const status = federationBootstrap.getStatus();
+      logger.info('Hub bootstrap completed successfully', {
+        ...status,
+        note: 'Bootstrap completed BEFORE server started listening'
+      });
+    } catch (error) {
+      logger.error('CRITICAL: Hub bootstrap failed', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        impact: 'Seeding will fail - Hub instance and KAS not registered'
+      });
+      // Fatal for Hub - can't proceed without instance registration
+      throw error;
+    }
+  }
+
   const serverCallback = async () => {
     console.log('🚀 SERVER CALLBACK STARTED - SPOKE_MODE:', process.env.SPOKE_MODE);
     logger.info('DIVE V3 Backend API started', {
@@ -242,34 +272,14 @@ function startServer() {
     logger.info('Periodic Keycloak configuration sync scheduled (every 5 minutes)');
 
     // ============================================
-    // PHASE 1 FIX: Federation Cascade Bootstrap
+    // PHASE 1 FIX: Federation Cascade Event Handlers
     // ============================================
-    // CRITICAL: This wires up the event-driven federation sync system
-    // When a spoke is approved/suspended/revoked, this ensures:
-    // - OPAL/OPA trusted issuers + federation matrix updated
-    // - MongoDB resources updated (releasabilityTo)
-    // - Redis authorization cache invalidated
-    // - Keycloak IdP created/disabled
-    const isHub = process.env.SPOKE_MODE !== 'true';
+    // Note: Hub bootstrap already ran before server started
+    // This section just logs status and sets up additional services
     if (isHub) {
-      try {
-        logger.info('Initializing federation cascade system (Hub mode)');
-        await federationBootstrap.initialize();
-        const status = federationBootstrap.getStatus();
-        logger.info('Federation cascade system initialized successfully', {
-          ...status,
-          cascadeEnabled: true
-        });
-      } catch (error) {
-        logger.error('CRITICAL: Failed to initialize federation cascade', {
-          error: error instanceof Error ? error.message : 'Unknown error',
-          stack: error instanceof Error ? error.stack : undefined,
-          impact: 'Spoke approvals will NOT cascade to OPAL/MongoDB/Keycloak'
-        });
-        // Log but don't crash - federation will work but without automatic cascade
-      }
+      logger.info('Hub bootstrap already completed - federation cascade active');
     } else {
-      logger.info('Skipping federation cascade initialization (Spoke mode)');
+      logger.info('Running in Spoke mode - no federation cascade needed');
     }
 
     // ============================================
@@ -402,9 +412,9 @@ function startServer() {
     // SPOKE_TOKEN (from registration) is the identity - Hub knows which spokeId it belongs to.
     // Flow: Start heartbeat with SPOKE_TOKEN → Hub validates → returns spokeId → cache locally
     console.log('🔄 Initializing spoke identity and heartbeat services...');
-    
+
     const isSpokeMode = process.env.SPOKE_MODE === 'true';
-    
+
     if (isSpokeMode) {
       const hubUrl = process.env.HUB_URL || 'https://dive-hub-backend:4000';
       const instanceCode = process.env.INSTANCE_CODE || '';
@@ -418,7 +428,7 @@ function startServer() {
         try {
           // Step 1: Initialize spoke identity service (loads cached identity, sets up listeners)
           const identity = await spokeIdentityService.initialize();
-          
+
           logger.info('Spoke identity service initialized', {
             spokeId: identity.spokeId,
             instanceCode: identity.instanceCode,
@@ -494,7 +504,13 @@ function startServer() {
 
 // Start the server if not being imported as a module
 if (require.main === module) {
-  startServer();
+  startServer().catch((error) => {
+    logger.error('Failed to start server', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined
+    });
+    process.exit(1);
+  });
 }
 
 export default app;

@@ -347,13 +347,13 @@ export async function getSessionTokens(): Promise<SessionTokens> {
 /**
  * Check if user has specific clearance level
  *
- * Clearance hierarchy: UNCLASSIFIED < CONFIDENTIAL < SECRET < TOP_SECRET
+ * Clearance hierarchy: UNCLASSIFIED < RESTRICTED < CONFIDENTIAL < SECRET < TOP_SECRET
  */
 export function hasClearance(
     userClearance: string | undefined,
     requiredClearance: string
 ): boolean {
-    const clearanceLevels = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
+    const clearanceLevels = ['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
 
     const userLevel = clearanceLevels.indexOf(userClearance || 'UNCLASSIFIED');
     const requiredLevel = clearanceLevels.indexOf(requiredClearance);

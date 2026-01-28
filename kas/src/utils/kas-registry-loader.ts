@@ -1,6 +1,6 @@
 /**
  * KAS Registry Loader
- * 
+ *
  * Loads KAS registry entries from configuration file or environment variables.
  * Supports JSON configuration files and environment-based configuration.
  */
@@ -12,61 +12,19 @@ import path from 'path';
 
 /**
  * REMOVED: loadKASRegistryFromFile() - NO JSON FILE LOADING
- * 
+ *
  * KAS registry must be loaded from MongoDB (SSOT) or Hub API
  * JSON files are NOT used - MongoDB is the Single Source of Truth
  */
 export function loadKASRegistryFromFile(configPath: string): void {
     kasLogger.warn('loadKASRegistryFromFile() is deprecated - use MongoDB/Hub API instead');
     kasLogger.warn('NO JSON FILE LOADING - MongoDB is SSOT');
-    // Function removed - KAS registry must come from database) {
-            try {
-                const kasEntry: IKASRegistryEntry = {
-                    kasId: entry.kasId,
-                    organization: entry.organization,
-                    kasUrl: entry.kasUrl,
-                    authMethod: entry.authMethod || 'apikey',
-                    authConfig: entry.authConfig || {},
-                    trustLevel: entry.trustLevel || 'medium',
-                    supportedCountries: entry.supportedCountries || [],
-                    supportedCOIs: entry.supportedCOIs || [],
-                    policyTranslation: entry.policyTranslation,
-                    metadata: {
-                        version: entry.metadata?.version || '1.0.0',
-                        capabilities: entry.metadata?.capabilities || [],
-                        contact: entry.metadata?.contact || '',
-                        lastVerified: entry.metadata?.lastVerified || new Date().toISOString(),
-                    },
-                };
-
-                kasRegistry.register(kasEntry);
-                kasLogger.info('KAS loaded from config', {
-                    kasId: kasEntry.kasId,
-                    organization: kasEntry.organization,
-                });
-            } catch (error) {
-                kasLogger.error('Failed to register KAS from config', {
-                    entry: entry.kasId,
-                    error: error instanceof Error ? error.message : 'Unknown error',
-                });
-            }
-        }
-
-        kasLogger.info('KAS registry loaded', {
-            totalKAS: config.kasInstances.length,
-            configPath: fullPath,
-        });
-    } catch (error) {
-        kasLogger.error('Failed to load KAS registry from file', {
-            path: configPath,
-            error: error instanceof Error ? error.message : 'Unknown error',
-        });
-    }
+    // Function removed - KAS registry must come from database
 }
 
 /**
  * Load KAS registry from environment variables
- * 
+ *
  * Format: KAS_REGISTRY_<ID>_<PROPERTY>=value
  * Example:
  *   KAS_REGISTRY_USA_KAS_ID=usa-kas
@@ -159,11 +117,11 @@ export function loadKASRegistryFromEnv(): void {
 
 /**
  * Initialize KAS registry (NO JSON FILE LOADING)
- * 
+ *
  * KAS registry must be loaded from:
  * 1. MongoDB (SSOT) - via backend API
  * 2. Environment variables (for development/testing)
- * 
+ *
  * JSON files are NOT used - MongoDB is the Single Source of Truth
  */
 export function initializeKASRegistry(): void {

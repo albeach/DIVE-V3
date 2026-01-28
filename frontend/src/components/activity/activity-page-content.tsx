@@ -59,7 +59,7 @@ interface ActivityItem {
 
 // Mock data generator for demo purposes
 function generateMockActivities(userId: string): ActivityItem[] {
-  const classifications = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
+  const classifications = ['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
   const types: ActivityType[] = ['view', 'download', 'upload', 'access_granted', 'access_denied', 'request_submitted'];
   const titles = [
     'NATO Exercise Plan Alpha',

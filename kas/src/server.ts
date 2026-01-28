@@ -200,7 +200,8 @@ app.post('/request-key', async (req: Request, res: Response) => {
         let orgUnit: string | undefined;
         let acpCOI: string[];
 
-        if (isServiceAccountToken && keyRequest.userIdentity) {
+        // PRIORITY: Always use userIdentity from request if provided (backend sends this with service account tokens)
+        if (keyRequest.userIdentity) {
             // Service account token: extract user identity from request body (Issue B fix)
             const userIdentity = keyRequest.userIdentity as any;
             uniqueID = userIdentity.uniqueID || 'service-account-user';
@@ -210,13 +211,14 @@ app.post('/request-key', async (req: Request, res: Response) => {
             dutyOrg = userIdentity.dutyOrg;
             orgUnit = userIdentity.orgUnit;
 
-            kasLogger.info('Using user identity from service account request', {
+            kasLogger.info('Using user identity from request body (service account flow)', {
                 requestId,
                 uniqueID,
                 clearance,
                 countryOfAffiliation,
                 acpCOI,
-                source: 'service-account'
+                source: 'request-userIdentity',
+                isServiceAccountToken
             });
         } else {
             // Regular user token: extract from JWT claims
@@ -246,7 +248,7 @@ app.post('/request-key', async (req: Request, res: Response) => {
                 clearance,
                 countryOfAffiliation,
                 acpCOI,
-                source: 'user-token'
+                source: 'jwt-claims'
             });
         }
 
