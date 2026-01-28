@@ -337,9 +337,14 @@ parse_amr(amr_input) := parsed if {
 } else := []
 
 is_authentication_strength_insufficient := msg if {
-	# Only check authentication strength for classifications that need AAL2+ (CONFIDENTIAL, SECRET, TOP_SECRET)
-	# UNCLASSIFIED and RESTRICTED are AAL1 (password only)
-	input.resource.classification in {"CONFIDENTIAL", "SECRET", "TOP_SECRET"}
+	input.resource.classification != "UNCLASSIFIED"
+	
+	# Get tenant-specific AAL requirement
+	required_aal := data.tenant[lower(input.subject.country)].classification.get_required_aal(input.resource.classification)
+	
+	# Only enforce if required_aal > 1
+	required_aal > 1
+	
 	input.context.acr
 	acr_str := sprintf("%v", [input.context.acr])
 	acr_lower := lower(acr_str)
@@ -353,18 +358,19 @@ is_authentication_strength_insufficient := msg if {
 	acr_str != "3"
 	# Fallback: Check AMR for 2+ factors
 	amr_factors := parse_amr(input.context.amr)
-	count(amr_factors) < 2
-	msg := sprintf("Classification %v requires AAL2, but ACR='%v' and only %v factor(s)", [
+	count(amr_factors) < required_aal
+	msg := sprintf("Classification %v requires AAL%v, but ACR='%v' and only %v factor(s)", [
 		input.resource.classification,
+		required_aal,
 		acr_str,
 		count(amr_factors),
 	])
 }
 
 is_mfa_not_verified := msg if {
-	# Only require MFA for classifications that need AAL2+ (CONFIDENTIAL, SECRET, TOP_SECRET)
-	# UNCLASSIFIED and RESTRICTED are AAL1 (no MFA required)
-	input.resource.classification in {"CONFIDENTIAL", "SECRET", "TOP_SECRET"}
+	# Only check MFA for classifications that require AAL2 (CONFIDENTIAL, SECRET, TOP_SECRET)
+	# RESTRICTED only requires AAL1 (single factor)
+	input.resource.classification in ["CONFIDENTIAL", "SECRET", "TOP_SECRET"]
 	input.context.amr
 	amr_factors := parse_amr(input.context.amr)
 	count(amr_factors) < 2
