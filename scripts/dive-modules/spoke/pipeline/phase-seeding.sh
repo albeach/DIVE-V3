@@ -256,6 +256,32 @@ spoke_seed_resources() {
         return $?
     fi
 
+    # ==========================================================================
+    # CRITICAL FIX (2026-01-28): Verify MongoDB connection before seeding
+    # ==========================================================================
+    # Root cause: Backend tries to connect to MongoDB but password may not be set
+    # or MongoDB may not be ready, causing seeding to fail silently
+    # ==========================================================================
+    local mongo_container="dive-spoke-${code_lower}-mongo"
+    local mongo_password_var="MONGO_PASSWORD_${code_upper}"
+    local mongo_password="${!mongo_password_var}"
+
+    if [ -z "$mongo_password" ]; then
+        log_error "MongoDB password not available (MONGO_PASSWORD_${code_upper} not set)"
+        log_error "Cannot seed resources - database connection will fail"
+        return 1
+    fi
+
+    # Verify MongoDB is accessible
+    if ! docker exec "$mongo_container" mongosh -u admin -p "$mongo_password" \
+        --authenticationDatabase admin --quiet --eval "db.adminCommand('ping')" &>/dev/null; then
+        log_error "MongoDB not accessible - cannot seed resources"
+        log_error "Check MongoDB container health: docker ps | grep $mongo_container"
+        return 1
+    fi
+
+    log_verbose "MongoDB connection verified - proceeding with ZTDF seeding"
+
     # BEST PRACTICE: Execute seeding script inside the backend container
     # This ensures proper network access to MongoDB and all dependencies are available
     log_verbose "Executing ZTDF seeding script in backend container"

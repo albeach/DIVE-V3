@@ -1019,7 +1019,9 @@ hub_parallel_startup() {
                     # FIX: Provide detailed error information for debugging
                     log_error "Docker compose output: $start_output"
                     log_error "Check service definition in $HUB_COMPOSE_FILE"
-                    log_error "Verify dependencies are running: docker ps | grep -E '($(echo "${current_level_services[@]}" | tr ' ' '|'))'"
+                    # FIXED (2026-01-28): Escape brackets in grep pattern to prevent "brackets not balanced" error
+                    local deps_pattern=$(echo "${current_level_services[@]}" | tr ' ' '|')
+                    log_error "Verify dependencies are running: docker ps | grep -E '($deps_pattern)'"
                     exit 1
                 fi
 

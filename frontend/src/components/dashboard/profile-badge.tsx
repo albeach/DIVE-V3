@@ -68,17 +68,17 @@ export function ProfileBadge({ user, isFederated = false }: ProfileBadgeProps) {
               </span>
             </span>
 
-            {/* Clearance Badge with Tooltip - Localized for instance */}
+            {/* Clearance Badge with Tooltip - Localized for USER'S country, not instance */}
             <span
               className="group/clearance relative inline-flex items-center px-3 py-1 rounded-lg bg-blue-50 border border-blue-200 cursor-help"
-              title={`Your security clearance level determines which classification levels you can access${usesLocalizedClearance() ? ` (${user.clearance})` : ''}`}
+              title={`Your security clearance level determines which classification levels you can access${usesLocalizedClearance(country) ? ` (${user.clearance})` : ''}`}
             >
               <span className="text-sm font-bold text-blue-900">
-                {getLocalizedClearance(user.clearance)}
+                {getLocalizedClearance(user.clearance, country)}
               </span>
               {/* Tooltip - shows normalized value if localized */}
               <span className="invisible group-hover/clearance:visible absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-gray-900 text-white text-xs rounded-lg shadow-lg whitespace-nowrap z-10">
-                {usesLocalizedClearance()
+                {usesLocalizedClearance(country)
                   ? `${user.clearance || 'Not Set'} (NATO Standard)`
                   : 'Security clearance level for classified access'
                 }

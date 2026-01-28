@@ -4,56 +4,113 @@
  * Converts normalized clearance values (UNCLASSIFIED, SECRET, etc.) to
  * localized display values based on the instance's country.
  *
- * Uses NATO attribute mappings as SSOT for all localization.
+ * Uses backend MongoDB clearance equivalency database as SSOT.
  */
-
-// Import the NATO mappings (this will be bundled at build time)
-import natoMappings from '../data/nato-attribute-mappings.json';
 
 type ClearanceLevel = 'UNCLASSIFIED' | 'RESTRICTED' | 'CONFIDENTIAL' | 'SECRET' | 'TOP_SECRET';
 
-interface CountryMappings {
-  name: string;
-  language: string;
-  attributes: Record<string, string>;
-  clearance_values: Record<string, string>;
-  latin_attributes?: Record<string, string>;
-}
-
-type NATOCountryCode = keyof typeof natoMappings.countries;
+// In-memory cache of clearance mappings fetched from backend
+let clearanceMappingsCache: Map<string, Record<ClearanceLevel, string>> | null = null;
+let fetchPromise: Promise<void> | null = null;
 
 /**
- * Build reverse clearance mappings (normalized → localized) for each country
+ * Fetch clearance mappings from backend API
+ * Cached after first fetch to avoid repeated API calls
  */
-function buildReverseClearanceMappings(): Map<string, Record<ClearanceLevel, string>> {
+async function fetchClearanceMappings(): Promise<Map<string, Record<ClearanceLevel, string>>> {
+  // Return cached mappings if available
+  if (clearanceMappingsCache) {
+    return clearanceMappingsCache;
+  }
+
+  // If fetch is already in progress, wait for it
+  if (fetchPromise) {
+    await fetchPromise;
+    return clearanceMappingsCache!;
+  }
+
+  // Start new fetch
+  fetchPromise = (async () => {
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+      const response = await fetch(`${backendUrl}/api/admin/clearance/mappings`);
+
+      if (!response.ok) {
+        console.warn('[Clearance Localization] Failed to fetch mappings, using fallback');
+        clearanceMappingsCache = getFallbackMappings();
+        return;
+      }
+
+      const data = await response.json();
+      clearanceMappingsCache = buildReverseMappingsFromAPI(data);
+    } catch (error) {
+      console.warn('[Clearance Localization] Error fetching mappings:', error);
+      clearanceMappingsCache = getFallbackMappings();
+    } finally {
+      fetchPromise = null;
+    }
+  })();
+
+  await fetchPromise;
+  return clearanceMappingsCache!;
+}
+
+/**
+ * Build reverse clearance mappings from API response
+ */
+function buildReverseMappingsFromAPI(apiData: any): Map<string, Record<ClearanceLevel, string>> {
   const reverseMappings = new Map<string, Record<ClearanceLevel, string>>();
 
-  const countries = natoMappings.countries as Record<string, CountryMappings>;
+  for (const mapping of apiData) {
+    const standardLevel = mapping.standardLevel as ClearanceLevel;
+    const nationalEquivalents = mapping.nationalEquivalents as Record<string, string[]>;
 
-  for (const [countryCode, countryData] of Object.entries(countries)) {
-    const reverseMap: Partial<Record<ClearanceLevel, string>> = {};
-
-    // Build reverse mapping: normalized → localized
-    for (const [localValue, normalizedValue] of Object.entries(countryData.clearance_values)) {
-      reverseMap[normalizedValue as ClearanceLevel] = localValue;
-    }
-
-    // Fill in any missing mappings with the normalized value as fallback
-    const defaultLevels: ClearanceLevel[] = ['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
-    for (const level of defaultLevels) {
-      if (!reverseMap[level]) {
-        reverseMap[level] = level;
+    // For each country, build reverse mapping (normalized → localized)
+    for (const [countryCode, localValues] of Object.entries(nationalEquivalents)) {
+      if (!reverseMappings.has(countryCode)) {
+        reverseMappings.set(countryCode, {} as Record<ClearanceLevel, string>);
       }
-    }
 
-    reverseMappings.set(countryCode, reverseMap as Record<ClearanceLevel, string>);
+      const countryMap = reverseMappings.get(countryCode)!;
+      // Use first value as display value (usually the official term)
+      countryMap[standardLevel] = localValues[0];
+    }
   }
 
   return reverseMappings;
 }
 
-// Pre-build the reverse mappings at module load time
-const reverseClearanceMappings = buildReverseClearanceMappings();
+/**
+ * Fallback mappings if API is unavailable
+ * Uses SHORT FORMS commonly displayed in UI (not full official names)
+ */
+function getFallbackMappings(): Map<string, Record<ClearanceLevel, string>> {
+  const fallback = new Map<string, Record<ClearanceLevel, string>>();
+
+  // FRA (France) - Short forms used in UI
+  fallback.set('FRA', {
+    UNCLASSIFIED: 'NON CLASSIFIÉ',
+    RESTRICTED: 'RESTREINT',           // Short form of "DIFFUSION RESTREINTE"
+    CONFIDENTIAL: 'CONFIDENTIEL',       // Short form of "CONFIDENTIEL DÉFENSE"
+    SECRET: 'SECRET',                   // Short form of "SECRET DÉFENSE"
+    TOP_SECRET: 'TRÈS SECRET'           // Short form of "TRÈS SECRET DÉFENSE"
+  });
+
+  // USA, GBR, CAN use English
+  const english: Record<ClearanceLevel, string> = {
+    UNCLASSIFIED: 'UNCLASSIFIED',
+    RESTRICTED: 'RESTRICTED',
+    CONFIDENTIAL: 'CONFIDENTIAL',
+    SECRET: 'SECRET',
+    TOP_SECRET: 'TOP SECRET'
+  };
+
+  fallback.set('USA', english);
+  fallback.set('GBR', english);
+  fallback.set('CAN', english);
+
+  return fallback;
+}
 
 /**
  * Get localized clearance display value
@@ -85,16 +142,27 @@ export function getLocalizedClearance(
   // Get instance code from environment if not provided
   const code = instanceCode?.toUpperCase() || process.env.NEXT_PUBLIC_INSTANCE || 'USA';
 
-  // Get the reverse mapping for this country
-  const countryMapping = reverseClearanceMappings.get(code);
-
-  if (!countryMapping) {
-    // Country not found - return normalized value
-    return normalizedValue;
+  // Try to use cached mappings synchronously (common case after first load)
+  if (clearanceMappingsCache) {
+    const countryMapping = clearanceMappingsCache.get(code);
+    if (countryMapping) {
+      return countryMapping[normalizedValue] || normalizedValue;
+    }
   }
 
-  // Return localized value or fall back to normalized
-  return countryMapping[normalizedValue] || normalizedValue;
+  // If no cache yet, use fallback (mappings will load in background for next time)
+  if (!clearanceMappingsCache) {
+    // Trigger async fetch for next time (non-blocking)
+    fetchClearanceMappings().catch(console.error);
+
+    // Use fallback for this render
+    const fallback = getFallbackMappings();
+    const countryMapping = fallback.get(code);
+    return countryMapping?.[normalizedValue] || normalizedValue;
+  }
+
+  // Country not found - return normalized value
+  return normalizedValue;
 }
 
 /**
@@ -128,14 +196,24 @@ export function usesLocalizedClearance(instanceCode?: string | null): boolean {
  * Get the country name for an instance code
  */
 export function getCountryName(instanceCode: string): string {
-  const countries = natoMappings.countries as Record<string, CountryMappings>;
-  return countries[instanceCode.toUpperCase()]?.name || instanceCode;
+  // Hardcoded country names (lightweight, no API needed)
+  const countryNames: Record<string, string> = {
+    USA: 'United States', FRA: 'France', GBR: 'United Kingdom',
+    DEU: 'Germany', CAN: 'Canada', ITA: 'Italy', ESP: 'Spain',
+    POL: 'Poland', NLD: 'Netherlands'
+  };
+  return countryNames[instanceCode.toUpperCase()] || instanceCode;
 }
 
 /**
  * Get the language for an instance code
  */
 export function getCountryLanguage(instanceCode: string): string {
-  const countries = natoMappings.countries as Record<string, CountryMappings>;
-  return countries[instanceCode.toUpperCase()]?.language || 'English';
+  // Hardcoded language mappings (lightweight, no API needed)
+  const languages: Record<string, string> = {
+    USA: 'English', GBR: 'English', CAN: 'English',
+    FRA: 'French', DEU: 'German', ITA: 'Italian',
+    ESP: 'Spanish', POL: 'Polish', NLD: 'Dutch'
+  };
+  return languages[instanceCode.toUpperCase()] || 'English';
 }

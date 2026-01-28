@@ -31,6 +31,7 @@ import { logger } from '../utils/logger';
 class FederationBootstrapService {
   private initialized = false;
   private eventHandlersRegistered = false;
+  private bootstrapComplete = false;  // Track if Hub self-registration is complete
 
   /**
    * Initialize the federation cascade system
@@ -67,6 +68,11 @@ class FederationBootstrapService {
     });
 
     try {
+      // SSOT ARCHITECTURE (2026-01-27): Auto-register Hub's own instance and KAS
+      // On a clean deployment, Hub must register itself before seeding can occur
+      await this.registerHubInstance(instanceCode);
+      await this.registerHubKAS(instanceCode);
+
       // SSOT ARCHITECTURE (2026-01-22): Register Hub's trusted issuer on startup
       // This is the ONLY issuer that should exist on a clean slate
       // Spoke issuers are added when spokes register via the federation API
@@ -76,38 +82,206 @@ class FederationBootstrapService {
       this.registerEventHandlers();
 
       this.initialized = true;
+      this.bootstrapComplete = true;  // Mark bootstrap as complete
 
       logger.info('Federation bootstrap service initialized successfully', {
         instanceCode,
         eventsWired: ['spoke:approved', 'spoke:suspended', 'spoke:revoked'],
-        cascadeEnabled: true
+        cascadeEnabled: true,
+        hubRegistered: true,
+        bootstrapComplete: true
       });
     } catch (error) {
       logger.error('Failed to initialize federation bootstrap service', {
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined
       });
+      this.bootstrapComplete = false;  // Mark as incomplete on error
       throw error;
     }
   }
 
   /**
+   * Register Hub's own instance in MongoDB
+   *
+   * SSOT ARCHITECTURE: On a clean deployment, Hub must register itself
+   * so that seeding scripts can find the instance configuration
+   */
+  private async registerHubInstance(instanceCode: string): Promise<void> {
+    try {
+      const { MongoClient } = await import('mongodb');
+      const mongoUrl = process.env.MONGODB_URL || 'mongodb://localhost:27017';
+      const dbName = process.env.MONGODB_DATABASE || 'dive-v3-hub';
+
+      const client = new MongoClient(mongoUrl);
+      await client.connect();
+      const db = client.db(dbName);
+      const collection = db.collection('federation_spokes');
+
+      // Check if Hub instance already registered
+      const existing = await collection.findOne({ instanceCode: instanceCode.toUpperCase() });
+      if (existing) {
+        logger.debug('Hub instance already registered', {
+          instanceCode,
+          spokeId: existing.spokeId
+        });
+        await client.close();
+        return;
+      }
+
+      // Register Hub instance
+      const frontendPort = parseInt(process.env.FRONTEND_PORT || '3000');
+      const backendPort = parseInt(process.env.BACKEND_PORT || '4000');
+      const keycloakPort = parseInt(process.env.KEYCLOAK_PORT || '8443');
+
+      await collection.insertOne({
+        spokeId: `hub-${instanceCode.toLowerCase()}`,
+        instanceCode: instanceCode.toUpperCase(),
+        name: `${instanceCode.toUpperCase()} Hub`,
+        status: 'approved',
+        frontendPort,
+        backendPort,
+        keycloakPort,
+        frontendUrl: process.env.NEXT_PUBLIC_BASE_URL || `https://localhost:${frontendPort}`,
+        backendUrl: process.env.BACKEND_URL || `https://localhost:${backendPort}`,
+        idpUrl: process.env.KEYCLOAK_BASE_URL || `https://localhost:${keycloakPort}`,
+        idpPublicUrl: process.env.KEYCLOAK_BASE_URL || `https://localhost:${keycloakPort}`,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+
+      await client.close();
+
+      logger.info('Registered Hub instance (SSOT)', {
+        instanceCode,
+        frontendPort,
+        backendPort,
+        keycloakPort
+      });
+    } catch (error) {
+      logger.error('Failed to register Hub instance', {
+        instanceCode,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      // CRITICAL: Throw error - seeding requires instance configuration
+      throw new Error(`Hub instance registration failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
+   * Register Hub's own KAS server in MongoDB
+   *
+   * SSOT ARCHITECTURE: On a clean deployment, Hub must register its KAS
+   * so that seeding scripts can encrypt resources with ZTDF
+   */
+  private async registerHubKAS(instanceCode: string): Promise<void> {
+    try {
+      logger.info('Starting Hub KAS registration', { instanceCode });
+
+      const { mongoKasRegistryStore } = await import('../models/kas-registry.model');
+      await mongoKasRegistryStore.initialize();
+
+      const kasId = `${instanceCode.toLowerCase()}-kas`;
+
+      // Check if KAS already registered
+      const existing = await mongoKasRegistryStore.findById(kasId);
+      if (existing) {
+        logger.debug('Hub KAS already registered', {
+          instanceCode,
+          kasId
+        });
+        return;
+      }
+
+      logger.info('Registering Hub KAS', { kasId });
+
+      // Register Hub KAS
+      const kasPort = parseInt(process.env.KAS_PORT || '8080');
+      const kasHost = process.env.KAS_HOST || 'localhost';
+
+      const kasUrl = process.env.NODE_ENV === 'production'
+        ? `https://${instanceCode.toLowerCase()}-kas.dive25.com`
+        : `https://${kasHost}:${kasPort}`;
+
+      const keycloakPort = parseInt(process.env.KEYCLOAK_PORT || '8443');
+      const keycloakHost = process.env.KEYCLOAK_HOST || 'localhost';
+      const realmName = `dive-v3-broker-${instanceCode.toLowerCase()}`;
+
+      const issuerUrl = process.env.NODE_ENV === 'production'
+        ? `https://${instanceCode.toLowerCase()}-idp.dive25.com/realms/${realmName}`
+        : `https://${keycloakHost}:${keycloakPort}/realms/${realmName}`;
+
+      logger.info('Calling mongoKasRegistryStore.register()', {
+        kasId,
+        organization: `${instanceCode.toUpperCase()} Hub`,
+        kasUrl
+      });
+
+      await mongoKasRegistryStore.register({
+        kasId,
+        organization: `${instanceCode.toUpperCase()} Hub`,
+        countryCode: instanceCode.toUpperCase(),
+        kasUrl,
+        internalKasUrl: process.env.KAS_INTERNAL_URL || kasUrl,
+        authMethod: 'jwt',
+        authConfig: {
+          jwtIssuer: issuerUrl,
+          jwtAudience: 'dive-v3-broker',
+          publicKeyUrl: `${issuerUrl}/protocol/openid-connect/certs`
+        },
+        trustLevel: 'high',
+        supportedCountries: [instanceCode.toUpperCase()],
+        supportedCOIs: ['NATO-COSMIC', 'FVEY', 'CAN-US', 'US-ONLY'],
+        enabled: true,
+        metadata: {
+          version: '1.0.0',
+          capabilities: ['encrypt', 'decrypt', 'rewrap'],
+          contact: process.env.ADMIN_EMAIL || 'admin@dive25.com',
+          lastVerified: new Date()
+        }
+      });
+
+      logger.info('KAS registered, calling approve()', { kasId });
+
+      // Auto-approve Hub's own KAS (no manual approval needed)
+      await mongoKasRegistryStore.approve(kasId);
+
+      logger.info('Registered and approved Hub KAS (SSOT)', {
+        instanceCode,
+        kasId,
+        kasUrl,
+        issuerUrl,
+        status: 'active'
+      });
+    } catch (error) {
+      logger.error('Failed to register Hub KAS', {
+        instanceCode,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+      });
+      // CRITICAL: Throw error - seeding requires KAS to encrypt resources
+      throw new Error(`Hub KAS registration failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+  }
+
+  /**
    * Register Hub's trusted issuer in MongoDB
-   * 
+   *
    * SSOT ARCHITECTURE: On a clean slate, ONLY the Hub's issuer should exist.
    * Spoke issuers are added when spokes register via the federation API.
    */
   private async registerHubTrustedIssuer(instanceCode: string): Promise<void> {
     try {
       const { mongoOpalDataStore } = await import('../models/trusted-issuer.model');
-      
+
       // Build the Hub's issuer URL
       // In development: https://localhost:8443/realms/dive-v3-broker-usa
       // In production: https://usa-idp.dive25.com/realms/dive-v3-broker-usa
       const keycloakPort = process.env.KEYCLOAK_PORT || '8443';
       const keycloakHost = process.env.KEYCLOAK_HOST || 'localhost';
       const realmName = `dive-v3-broker-${instanceCode.toLowerCase()}`;
-      
+
       const issuerUrl = process.env.NODE_ENV === 'production'
         ? `https://${instanceCode.toLowerCase()}-idp.dive25.com/realms/${realmName}`
         : `https://${keycloakHost}:${keycloakPort}/realms/${realmName}`;
@@ -153,14 +327,14 @@ class FederationBootstrapService {
 
   /**
    * Register a spoke's trusted issuer in MongoDB
-   * 
+   *
    * SSOT ARCHITECTURE: Called when a spoke is approved.
    * Adds the spoke's Keycloak realm as a trusted issuer.
    */
   private async registerSpokeTrustedIssuer(instanceCode: string): Promise<void> {
     try {
       const { mongoOpalDataStore } = await import('../models/trusted-issuer.model');
-      
+
       // Get spoke configuration from spoke registration
       // The spoke's Keycloak URL is in the registration data
       const spoke = await hubSpokeRegistry.getSpokeByInstanceCode(instanceCode);
@@ -173,14 +347,14 @@ class FederationBootstrapService {
       // CRITICAL: Use PUBLIC URL - this is what appears in JWT tokens
       // Spokes use dynamic ports: https://localhost:{port}/realms/dive-v3-broker-{code}
       const realmName = `dive-v3-broker-${instanceCode.toLowerCase()}`;
-      
+
       // Priority order for issuer URL:
       // 1. idpPublicUrl - the URL that tokens will contain (for browser access)
       // 2. Calculate from port offset (development fallback)
       // 3. Production domain format
       // NOTE: Do NOT use idpUrl (Docker internal URL) - tokens use public URLs
       let issuerUrl: string;
-      
+
       if (spoke.idpPublicUrl) {
         // Use the PUBLIC IdP URL - this matches what tokens will contain
         issuerUrl = spoke.idpPublicUrl.includes('/realms/')
@@ -241,7 +415,7 @@ class FederationBootstrapService {
         const internalIssuerUrl = spoke.idpUrl.includes('/realms/')
           ? spoke.idpUrl
           : `${spoke.idpUrl}/realms/${realmName}`;
-        
+
         const existingInternal = await mongoOpalDataStore.findIssuerByUrl(internalIssuerUrl);
         if (!existingInternal) {
           await mongoOpalDataStore.addIssuer({
@@ -283,10 +457,10 @@ class FederationBootstrapService {
   private async publishTrustedIssuersToOpal(reason: string): Promise<void> {
     try {
       const { mongoOpalDataStore } = await import('../models/trusted-issuer.model');
-      
+
       // Get all issuers in OPAL-compatible format
       const issuers = await mongoOpalDataStore.getAllIssuers();
-      
+
       // Convert to the format OPAL expects: { "url": { tenant, country, ... }, ... }
       const opalFormat: Record<string, unknown> = {};
       for (const issuer of issuers) {
@@ -339,7 +513,7 @@ class FederationBootstrapService {
    */
   private calculatePortOffset(instanceCode: string): number {
     const code = instanceCode.toUpperCase();
-    
+
     // Custom test codes
     const CUSTOM_TEST_CODES: Record<string, number> = {
       'TST': 200,
@@ -348,11 +522,11 @@ class FederationBootstrapService {
       'QA1': 203,
       'QA2': 204,
     };
-    
+
     if (CUSTOM_TEST_CODES[code] !== undefined) {
       return CUSTOM_TEST_CODES[code];
     }
-    
+
     // NATO member offsets (0-29)
     const NATO_OFFSETS: Record<string, number> = {
       'USA': 0, 'GBR': 2, 'FRA': 10, 'DEU': 8, 'CAN': 4, 'ITA': 14,
@@ -360,11 +534,11 @@ class FederationBootstrapService {
       'CZE': 26, 'PRT': 28,
       // Add more as needed
     };
-    
+
     if (NATO_OFFSETS[code] !== undefined) {
       return NATO_OFFSETS[code];
     }
-    
+
     // Partner/other - use hash-based offset
     // This is a simplified version; full logic is in common.sh
     let hash = 0;
@@ -405,7 +579,7 @@ class FederationBootstrapService {
       try {
         // Create persistent notification for Hub admins
         const { notificationService } = await import('./notification.service');
-        
+
         await notificationService.createAdminNotification({
           type: 'federation_event',
           title: 'Spoke Registration Pending',
@@ -467,7 +641,7 @@ class FederationBootstrapService {
       // CREATE ADMIN NOTIFICATION FOR SPOKE APPROVAL (Phase 2: Gap Closure)
       try {
         const { notificationService } = await import('./notification.service');
-        
+
         await notificationService.createAdminNotification({
           type: 'federation_event',
           title: 'Spoke Approved',
@@ -590,6 +764,13 @@ class FederationBootstrapService {
   }
 
   /**
+   * Check if bootstrap is complete (Hub self-registration done)
+   */
+  isBootstrapComplete(): boolean {
+    return this.bootstrapComplete;
+  }
+
+  /**
    * Check if the service is initialized
    */
   isInitialized(): boolean {
@@ -601,12 +782,14 @@ class FederationBootstrapService {
    */
   getStatus(): {
     initialized: boolean;
+    bootstrapComplete: boolean;
     eventHandlersRegistered: boolean;
     isHub: boolean;
     instanceCode: string;
   } {
     return {
       initialized: this.initialized,
+      bootstrapComplete: this.bootstrapComplete,
       eventHandlersRegistered: this.eventHandlersRegistered,
       isHub: process.env.SPOKE_MODE !== 'true',
       instanceCode: process.env.INSTANCE_CODE || 'USA'

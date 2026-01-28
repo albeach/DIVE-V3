@@ -31,7 +31,36 @@ export async function POST() {
 
         if (!session?.user?.id) {
             console.warn('[DIVE] No active session found during logout');
-            return NextResponse.json({ success: true, message: 'No session to logout' }, { status: 200 });
+
+            // Still clear cookies even if no session
+            const response = NextResponse.json({ success: true, message: 'No session to logout' }, { status: 200 });
+
+            // Clear all NextAuth cookies (httpOnly cookies MUST be cleared server-side)
+            const cookiesToClear = [
+                'authjs.session-token',
+                '__Secure-authjs.session-token',
+                'next-auth.session-token',
+                '__Secure-next-auth.session-token',
+                'authjs.callback-url',
+                '__Secure-authjs.callback-url',
+                'authjs.csrf-token',
+                '__Secure-authjs.csrf-token',
+            ];
+
+            cookiesToClear.forEach(cookieName => {
+                // Set cookie to empty with immediate expiration
+                response.cookies.set(cookieName, '', {
+                    httpOnly: true,
+                    secure: true,
+                    sameSite: 'lax',
+                    path: '/',
+                    expires: new Date(0), // Jan 1, 1970
+                    maxAge: 0
+                });
+            });
+
+            console.log('[DIVE] Cleared all NextAuth cookies (no session case)');
+            return response;
         }
 
         const userId = session.user.id;
@@ -51,11 +80,40 @@ export async function POST() {
         console.log('[DIVE] Cleared account tokens for user:', userId);
         console.log('[DIVE] Complete logout successful');
 
-        return NextResponse.json({
+        const response = NextResponse.json({
             success: true,
             message: 'User logged out successfully',
             userId
         }, { status: 200 });
+
+        // CRITICAL: Clear all NextAuth cookies (httpOnly cookies MUST be cleared server-side)
+        // Client-side JavaScript cannot delete httpOnly cookies, so this MUST be done here
+        const cookiesToClear = [
+            'authjs.session-token',
+            '__Secure-authjs.session-token',
+            'next-auth.session-token',
+            '__Secure-next-auth.session-token',
+            'authjs.callback-url',
+            '__Secure-authjs.callback-url',
+            'authjs.csrf-token',
+            '__Secure-authjs.csrf-token',
+        ];
+
+        cookiesToClear.forEach(cookieName => {
+            // Set cookie to empty with immediate expiration
+            response.cookies.set(cookieName, '', {
+                httpOnly: true,
+                secure: true,
+                sameSite: 'lax',
+                path: '/',
+                expires: new Date(0), // Jan 1, 1970
+                maxAge: 0
+            });
+        });
+
+        console.log('[DIVE] Cleared all NextAuth cookies');
+
+        return response;
 
     } catch (error) {
         console.error('[DIVE] Complete logout error:', error);

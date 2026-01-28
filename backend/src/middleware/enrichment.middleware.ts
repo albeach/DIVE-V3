@@ -186,7 +186,7 @@ const EMAIL_DOMAIN_COUNTRY_MAP: Record<string, string> = {
 /**
  * Valid clearance levels (from .cursorrules)
  */
-const VALID_CLEARANCE_LEVELS = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
+const VALID_CLEARANCE_LEVELS = ['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
 
 /**
  * Default COI memberships by country (from policy configurations)

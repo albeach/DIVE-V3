@@ -464,9 +464,18 @@ cmd_nuke() {
         log_error "NUKE requires explicit confirmation. Use --confirm or --yes"
         echo ""
         echo "  Safe usage:"
-        echo "    ./dive nuke hub --confirm           # Nuke Hub only"
-        echo "    ./dive nuke spoke ALB --confirm     # Nuke specific spoke"
-        echo "    ./dive nuke all --confirm           # Nuke everything"
+        echo "    ./dive nuke hub --confirm                    # Nuke Hub only"
+        echo "    ./dive nuke spoke ALB --confirm              # Nuke specific spoke"
+        echo "    ./dive nuke all --confirm                    # Nuke everything"
+        echo ""
+        echo "  Options:"
+        echo "    --keep-images                                # Keep Docker images (faster redeployment)"
+        echo "    --deep or --deep-clean                       # Remove ALL unused images (mongo, postgres, redis, opa, etc.)"
+        echo "    --reset-spokes                               # Clear spoke federation registrations"
+        echo ""
+        echo "  Examples:"
+        echo "    ./dive nuke all --confirm --deep            # Complete clean including base images"
+        echo "    ./dive nuke hub --confirm --keep-images     # Fast hub reset (keeps images)"
         echo ""
         return 1
     fi
@@ -533,13 +542,13 @@ cmd_nuke() {
             local name=$(docker inspect --format '{{.Name}}' "$c" 2>/dev/null | sed 's/^\///')
             local image=$(docker inspect --format '{{.Config.Image}}' "$c" 2>/dev/null)
             local project_label=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$c" 2>/dev/null)
-            
+
             # Check if container is anonymous (no name or name equals ID)
             local is_anonymous=false
             if [ -z "$name" ] || [ "$name" = "$c" ] || [ "${#name}" -eq 64 ]; then
                 is_anonymous=true
             fi
-            
+
             if [ "$target_type" = "orphans" ]; then
                 local status=$(docker inspect --format '{{.State.Status}}' "$c" 2>/dev/null)
                 if [ "$status" != "running" ]; then
@@ -753,7 +762,7 @@ cmd_nuke() {
             fi
         done
     done
-    
+
     # CRITICAL FIX: Also catch all spoke containers by project label pattern
     # Spoke containers use labels like "com.docker.compose.project=dive-spoke-nzl"
     # This ensures ALL spoke instances are cleaned up, not just those matching name patterns
@@ -765,7 +774,7 @@ cmd_nuke() {
             fi
         fi
     done
-    
+
     # CRITICAL FIX: Force-stop containers using DIVE ports to prevent conflicts
     # This handles containers that weren't stopped by compose down
     log_verbose "  Stopping containers using DIVE ports..."
@@ -781,7 +790,7 @@ cmd_nuke() {
             fi
         done
     done
-    
+
     # CRITICAL FIX: Remove anonymous containers (no name or hash ID as name)
     # Anonymous containers are created without --name flag or by compose in certain scenarios
     # They can be identified by: empty name, name equals ID, or 64-char hash name
@@ -791,13 +800,13 @@ cmd_nuke() {
         local name=$(docker inspect --format '{{.Name}}' "$c" 2>/dev/null | sed 's/^\///')
         local image=$(docker inspect --format '{{.Config.Image}}' "$c" 2>/dev/null)
         local project_label=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$c" 2>/dev/null)
-        
+
         # Check if anonymous (no name, name equals ID, or 64-char hash)
         local is_anonymous=false
         if [ -z "$name" ] || [ "$name" = "$c" ] || [ "${#name}" -eq 64 ]; then
             is_anonymous=true
         fi
-        
+
         if [ "$is_anonymous" = true ]; then
             # Check if DIVE-related by image or compose project label
             local is_dive_related=false
@@ -806,19 +815,19 @@ cmd_nuke() {
             elif echo "$project_label" | grep -qE "^dive-"; then
                 is_dive_related=true
             fi
-            
+
             if [ "$is_dive_related" = true ]; then
                 log_verbose "    Removing anonymous DIVE container: $c (image: $image)"
                 ${DOCKER_CMD:-docker} rm -f "$c" 2>/dev/null && anonymous_removed=$((anonymous_removed + 1)) || true
             fi
         fi
     done
-    
+
     if [ $anonymous_removed -gt 0 ]; then
         removed_containers=$((removed_containers + anonymous_removed))
         log_verbose "    Removed $anonymous_removed anonymous containers"
     fi
-    
+
     log_verbose "  Removed $removed_containers containers total"
 
     # =========================================================================
@@ -835,13 +844,31 @@ cmd_nuke() {
         fi
     done
 
-    # Also remove by label
+    # Also remove by compose project label
     for label in "com.docker.compose.project=dive-hub" "com.docker.compose.project=dive-v3"; do
         for v in $(docker volume ls -q --filter "label=$label" 2>/dev/null); do
             if ${DOCKER_CMD:-docker} volume rm -f "$v" 2>/dev/null; then
                 removed_volumes=$((removed_volumes + 1))
             fi
         done
+    done
+
+    # CRITICAL FIX: Remove all spoke volumes by project label pattern
+    # Spoke volumes use labels like "com.docker.compose.project=dive-spoke-nzl"
+    for v in $(docker volume ls -q --filter "label=com.docker.compose.project" 2>/dev/null); do
+        local project_label=$(docker volume inspect --format '{{index .Labels "com.docker.compose.project"}}' "$v" 2>/dev/null)
+        if echo "$project_label" | grep -qE "^dive-spoke-|^dive-hub$"; then
+            if ${DOCKER_CMD:-docker} volume rm -f "$v" 2>/dev/null; then
+                removed_volumes=$((removed_volumes + 1))
+            fi
+        fi
+    done
+
+    # NEW: Remove volumes by DIVE-specific labels (volumes with dive.resource.type label)
+    for v in $(docker volume ls -q --filter "label=dive.resource.type" 2>/dev/null); do
+        if ${DOCKER_CMD:-docker} volume rm -f "$v" 2>/dev/null; then
+            removed_volumes=$((removed_volumes + 1))
+        fi
     done
 
     # Remove dangling/anonymous volumes (deep clean mode or always for safety)
@@ -877,7 +904,7 @@ cmd_nuke() {
             ${DOCKER_CMD:-docker} network rm "$n" 2>/dev/null && removed_networks=$((removed_networks + 1))
         done
     done
-    
+
     # CRITICAL FIX: Remove all spoke networks by project label pattern
     # Spoke networks use labels like "com.docker.compose.project=dive-spoke-nzl"
     for n in $(docker network ls -q --filter "label=com.docker.compose.project" 2>/dev/null); do
@@ -892,7 +919,18 @@ cmd_nuke() {
             fi
         fi
     done
-    
+
+    # NEW: Remove networks by DIVE-specific labels (networks with dive.network.type label)
+    for n in $(docker network ls -q --filter "label=dive.network.type" 2>/dev/null); do
+        # Disconnect all containers first
+        for container in $(docker network inspect "$n" --format='{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null); do
+            ${DOCKER_CMD:-docker} network disconnect -f "$n" "$container" 2>/dev/null || true
+        done
+        if ${DOCKER_CMD:-docker} network rm "$n" 2>/dev/null; then
+            removed_networks=$((removed_networks + 1))
+        fi
+    done
+
     log_verbose "  Removed $removed_networks networks"
 
     # =========================================================================
@@ -944,7 +982,17 @@ cmd_nuke() {
     # PHASE 7: SYSTEM PRUNE
     # =========================================================================
     log_step "Phase 6/7: Final system prune..."
-    ${DOCKER_CMD:-docker} system prune -f --volumes 2>/dev/null || true
+
+    if [ "$deep_clean" = true ]; then
+        log_verbose "  Deep clean: Removing ALL unused images including base images..."
+        # Remove ALL unused images (including tagged base images like mongo, postgres, redis, opa, etc.)
+        ${DOCKER_CMD:-docker} system prune -af --volumes 2>/dev/null || true
+        log_verbose "  Deep clean complete (all unused images removed)"
+    else
+        # Standard prune: Remove only dangling images
+        ${DOCKER_CMD:-docker} system prune -f --volumes 2>/dev/null || true
+        log_verbose "  Standard prune complete (use --deep to remove base images like mongo, postgres, redis)"
+    fi
 
     # =========================================================================
     # PHASE 8: CLEANUP LOCAL STATE

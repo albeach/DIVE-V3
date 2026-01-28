@@ -71,7 +71,7 @@ export function DashboardAuthorization({
     : 100;
 
   // Clearance hierarchy for visualization
-  const clearanceLevels = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
+  const clearanceLevels = ['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
   const currentClearanceIndex = clearanceLevels.indexOf(userClearance);
 
   return (

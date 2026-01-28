@@ -40,7 +40,6 @@ import { DashboardAuthorization } from './dashboard-authorization';
 import { DashboardResources } from './dashboard-resources';
 import { DashboardActivity } from './dashboard-activity';
 import { GlossaryPopover } from './educational-tooltip';
-import { getNationalClearance } from '@/components/navigation/nav-config';
 import { CountUpNumber } from '@/components/ui/countup-number';
 import { CountryAvatar } from '@/components/ui/country-avatar';
 import { getTimeBasedGreeting } from '@/utils/greeting';
@@ -123,6 +122,13 @@ interface DashboardData {
 export function DashboardModern({ user, session }: DashboardModernProps) {
   const { t } = useTranslation('dashboard');
   const { locale } = useLocale();
+  const tResources = useTranslation('resources').t;
+
+  // Helper: Get localized clearance using i18n (respects user's country, not instance)
+  const getLocalizedClearance = (clearanceLevel: string): string => {
+    const key = clearanceLevel.toLowerCase().replace('_', '');
+    return tResources(`classifications.${key}`) || clearanceLevel;
+  };
 
   const [activeTab, setActiveTab] = useState<DashboardTab>('overview');
   const [data, setData] = useState<DashboardData>({
@@ -312,11 +318,17 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
                 <motion.div
                   className="group flex items-center gap-3 px-5 py-3 rounded-full bg-gradient-to-r from-amber-500/15 to-orange-500/15 backdrop-blur-md border-2 border-amber-500/30 hover:border-amber-500/50 transition-all cursor-default shadow-lg shadow-amber-500/20"
                   whileHover={{ scale: 1.03 }}
-                  transition={{ type: "spring", stiffness: 400, damping: 17 }}
                   animate={{
-                    borderColor: ['rgba(245, 158, 11, 0.3)', 'rgba(245, 158, 11, 0.5)', 'rgba(245, 158, 11, 0.3)'],
+                    borderColor: ['rgba(245, 158, 11, 0.3)', 'rgba(245, 158, 11, 0.5)'],
                   }}
-                  style={{ animationDuration: '3s', animationIterationCount: 'infinite' }}
+                  transition={{
+                    borderColor: {
+                      duration: 3,
+                      repeat: Infinity,
+                      repeatType: "reverse",
+                      ease: "easeInOut"
+                    }
+                  }}
                 >
                   <div className="flex items-center gap-2">
                     <span className="text-2xl drop-shadow-lg">{userHomeFlag}</span>
@@ -485,7 +497,7 @@ export function DashboardModern({ user, session }: DashboardModernProps) {
                   </div>
                   <div className="min-w-0">
                     <p className="text-[10px] text-slate-500 font-medium leading-none">{t('clearance')}</p>
-                    <p className="text-sm font-bold text-slate-900 truncate">{getNationalClearance(clearanceLevel, country)}</p>
+                    <p className="text-sm font-bold text-slate-900 truncate">{getLocalizedClearance(clearanceLevel)}</p>
                   </div>
                 </div>
 
