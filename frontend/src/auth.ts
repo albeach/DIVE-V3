@@ -316,19 +316,23 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                     });
                 }
 
-                // ENRICHMENT: Generate email if missing (remote IdPs may not provide)
-                let email = profile.email;
-                if (!email || email.trim() === '') {
-                    // Generate from uniqueID (if it looks like email) or username
-                    const uniqueID = profile.uniqueID || profile.preferred_username || profile.sub;
-                    if (uniqueID && uniqueID.includes('@')) {
-                        email = uniqueID;
-                    } else {
-                        // Generate synthetic email: username@dive-broker.internal
-                        email = `${uniqueID || profile.sub}@dive-broker.internal`;
-                    }
-                    console.log('[NextAuth profile()] Generated email:', email, 'from uniqueID:', uniqueID);
-                }
+                // CRITICAL SECURITY (2026-01-28): Generate unique synthetic email from uniqueID
+                // We NEVER use real email addresses from IdPs (PII minimization)
+                // We only exchange: uniqueID, clearance, countryOfAffiliation, acpCOI
+                //
+                // UNIQUE EMAIL GENERATION:
+                // - Use sub (Keycloak user ID) as unique identifier
+                // - Format: <keycloak-sub>@dive-broker.internal
+                // - This prevents email collisions when same user authenticates via different IdPs
+                // - NextAuth adapter requires email field, but it's just an internal reference
+                const uniqueID = profile.uniqueID || profile.preferred_username || profile.sub;
+                const email = `${profile.sub}@dive-broker.internal`;
+
+                console.log('[NextAuth profile()] Generated unique synthetic email from sub:', {
+                    sub: profile.sub,
+                    uniqueID: uniqueID,
+                    email: email
+                });
 
                 // Return profile with all DIVE attributes
                 // Get current instance - for direct access, ALWAYS use instance country
@@ -1031,71 +1035,15 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             // PROBLEM: When user authenticates via different federated IdPs, NextAuth throws
             // OAuthAccountNotLinked error if a user with same email already exists.
             //
-            // SCENARIO:
-            //   1. User logs in via fra-idp (creates user in DB)
-            //   2. Admin deletes Keycloak user but not DB user
-            //   3. User tries to log in again via fra-idp
-            //   4. NextAuth sees email exists but can't link (different providerAccountId)
-            //   5. Error: OAuthAccountNotLinked
+            // SOLUTION (2026-01-28): Generate unique synthetic email from Keycloak sub (user ID)
+            // - Each user gets: <keycloak-sub>@dive-broker.internal
+            // - No more email collisions across federated IdPs
+            // - Maintains PII minimization (no real emails stored)
             //
-            // BEST PRACTICE SOLUTION:
-            // For federated users (broker realm), automatically link accounts if:
-            //   - Same email address
-            //   - Same provider (keycloak)
-            //   - User authenticated successfully (we're in signIn callback)
+            // REMOVED: allowDangerousEmailAccountLinking + manual linking logic
+            // NO LONGER NEEDED: Unique emails prevent collision, no linking required
             //
-            // This is SAFE for federated scenarios because:
-            //   ✅ Keycloak broker handles authentication (verified identity)
-            //   ✅ User must have valid credentials at IdP
-            //   ✅ Email verified by broker realm
-            //   ✅ No account hijacking risk (user owns the email)
-            //
-            // FEDERATION-SPECIFIC: This enables users to authenticate via multiple
-            // federated IdPs (fra-idp, gbr-idp, deu-idp) with same email address
-            // without manual account linking.
-            //
-            // Security: Only enabled for provider='keycloak' (federated broker)
-            if (account?.provider === 'keycloak' && user?.email) {
-                try {
-                    // Check if user with same email already exists (using Drizzle select)
-                    const existingUsers = await db
-                        .select()
-                        .from(users)
-                        .where(eq(users.email, user.email))
-                        .limit(1);
-
-                    const existingUser = existingUsers[0];
-
-                    if (existingUser && existingUser.id !== user.id) {
-                        console.log('[DIVE] Federated account linking detected', {
-                            existingUserId: existingUser.id,
-                            newUserId: user.id,
-                            email: user.email,
-                            provider: account.provider,
-                            providerAccountId: account.providerAccountId,
-                        });
-
-                        // Delete the new duplicate user (created during this sign-in)
-                        await db.delete(users).where(eq(users.id, user.id));
-
-                        // Update account to link to existing user
-                        await db.update(accounts)
-                            .set({ userId: existingUser.id })
-                            .where(eq(accounts.providerAccountId, account.providerAccountId!));
-
-                        console.log('[DIVE] Account automatically linked to existing user (federation)', {
-                            linkedTo: existingUser.id,
-                            provider: account.provider,
-                        });
-
-                        // Update user reference for this session
-                        user.id = existingUser.id;
-                    }
-                } catch (error) {
-                    console.error('[DIVE] Account linking failed (non-fatal):', error);
-                    // Don't fail the login - worst case user gets duplicate account
-                }
-            }
+            // Security: We only exchange uniqueID, clearance, country, COI (no PII)
 
             // On fresh sign-in, manually update account tokens in database
             // DrizzleAdapter creates account on first login but doesn't always update on re-login

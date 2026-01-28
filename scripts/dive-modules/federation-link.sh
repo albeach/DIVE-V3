@@ -208,9 +208,22 @@ _federation_link_direct() {
 
     log_verbose "Retrieved password for $source_upper Keycloak (${#source_pass} chars)"
 
+    # ==========================================================================
+    # CRITICAL FIX (2026-01-28): Wait for SOURCE Keycloak readiness too!
+    # ==========================================================================
+    # Previously only waited for target Keycloak, but source must also be ready
+    # Root cause: FRA Keycloak may be "healthy" but admin API not initialized yet
+    # ==========================================================================
+    log_verbose "Ensuring $source_upper Keycloak admin API is ready..."
+    if ! wait_for_keycloak_admin_api_ready "$source_kc_container" 180 "$source_pass"; then
+        log_error "Source Keycloak admin API not ready: $source_kc_container"
+        log_error "Federation setup cannot proceed - source Keycloak must be fully initialized"
+        return 1
+    fi
+    log_verbose "✓ Source $source_upper Keycloak admin API ready"
+
     # Authenticate with source Keycloak
-    # NOTE: Retry logic removed - proper readiness check implemented in Phase 2
-    # See: wait_for_keycloak_admin_api_ready() in common.sh
+    # NOTE: Retry logic removed - proper readiness check implemented above
     local auth_response
     auth_response=$(docker exec "$source_kc_container" curl -s --max-time 10 \
         -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \

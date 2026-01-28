@@ -169,18 +169,18 @@ class HealthService {
     private startTime: Date;
     private mongoClient: MongoClient | null = null;
     private metricsIntervalId: NodeJS.Timeout | null = null;
-    
+
     // Metrics update interval (10 seconds)
     private readonly METRICS_UPDATE_INTERVAL_MS = 10000;
 
     constructor() {
         this.startTime = new Date();
         logger.info('Health service initialized');
-        
+
         // Start periodic metrics publishing (Phase 3.2)
         this.startMetricsPolling();
     }
-    
+
     /**
      * Start periodic polling to update Prometheus metrics (Phase 3.2)
      * Updates circuit breaker states every 10 seconds
@@ -189,15 +189,15 @@ class HealthService {
         this.metricsIntervalId = setInterval(() => {
             this.publishCircuitBreakerMetrics();
         }, this.METRICS_UPDATE_INTERVAL_MS);
-        
+
         // Publish initial metrics immediately
         this.publishCircuitBreakerMetrics();
-        
+
         logger.info('Started periodic circuit breaker metrics polling', {
             intervalMs: this.METRICS_UPDATE_INTERVAL_MS
         });
     }
-    
+
     /**
      * Publish circuit breaker states to Prometheus (Phase 3.2)
      * Called periodically by metricsPolling
@@ -205,17 +205,17 @@ class HealthService {
     private publishCircuitBreakerMetrics(): void {
         try {
             const cbStats = getAllCircuitBreakerStats();
-            
+
             for (const [service, stats] of Object.entries(cbStats)) {
                 // Update circuit breaker state gauge
                 prometheusMetrics.setCircuitBreakerState(
                     service,
                     stats.state as 'CLOSED' | 'HALF_OPEN' | 'OPEN'
                 );
-                
+
                 // Update failure count
                 prometheusMetrics.setCircuitBreakerFailures(service, stats.failures);
-                
+
                 // Log state changes for debugging
                 if (stats.state !== CircuitState.CLOSED) {
                     logger.debug('Circuit breaker metric published', {
@@ -232,7 +232,7 @@ class HealthService {
             });
         }
     }
-    
+
     /**
      * Stop metrics polling (for cleanup)
      */
@@ -345,7 +345,7 @@ class HealthService {
             kas: kasHealth,
             blacklistRedis: blacklistRedisHealth,
         });
-        
+
         return {
             status,
             timestamp: new Date().toISOString(),
@@ -365,7 +365,7 @@ class HealthService {
             circuitBreakers,
         };
     }
-    
+
     /**
      * Publish service health metrics to Prometheus (Phase 3.2)
      */
@@ -374,7 +374,7 @@ class HealthService {
             for (const [service, health] of Object.entries(services)) {
                 if (health) {
                     const isHealthy = health.status === 'up';
-                    
+
                     // Map service names to appropriate Prometheus method
                     switch (service) {
                         case 'opa':
@@ -440,7 +440,29 @@ class HealthService {
             checks.keycloak = false;
         }
 
-        const ready = checks.mongodb && checks.opa && checks.keycloak;
+        // CRITICAL: For Hub instances, also check if bootstrap is complete
+        // This ensures seeding doesn't start until Hub self-registration is done
+        const isHub = process.env.SPOKE_MODE !== 'true';
+        let bootstrapReady = true;  // Spokes don't need bootstrap check
+
+        if (isHub) {
+            try {
+                const { federationBootstrap } = await import('./federation-bootstrap.service');
+                bootstrapReady = federationBootstrap.isBootstrapComplete();
+
+                if (!bootstrapReady) {
+                    logger.debug('Readiness check waiting for Hub bootstrap to complete');
+                }
+            } catch (error) {
+                logger.warn('Could not check bootstrap status', {
+                    error: error instanceof Error ? error.message : 'Unknown error'
+                });
+                // If bootstrap service is not available, don't block readiness
+                bootstrapReady = true;
+            }
+        }
+
+        const ready = checks.mongodb && checks.opa && checks.keycloak && bootstrapReady;
 
         return {
             ready,
@@ -561,7 +583,7 @@ class HealthService {
 
     /**
      * Check Keycloak health
-     * 
+     *
      * Health check priority:
      * 1. /health/ready (Keycloak 17+ with health-enabled=true)
      * 2. /health (older Keycloak versions)
@@ -581,7 +603,7 @@ class HealthService {
 
         // Try health endpoints first
         const healthEndpoints = ['/health/ready', '/health'];
-        
+
         for (const endpoint of healthEndpoints) {
             try {
                 const response = await axios.get(`${keycloakUrl}${endpoint}`, { ...config, timeout: 2000 });
@@ -608,7 +630,7 @@ class HealthService {
             };
         } catch (error) {
             const responseTime = Date.now() - startTime;
-            
+
             logger.error('Keycloak health check failed', {
                 keycloakUrl,
                 error: error instanceof Error ? error.message : 'Unknown error',

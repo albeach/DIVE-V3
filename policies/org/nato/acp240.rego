@@ -337,7 +337,9 @@ parse_amr(amr_input) := parsed if {
 } else := []
 
 is_authentication_strength_insufficient := msg if {
-	input.resource.classification != "UNCLASSIFIED"
+	# Only check authentication strength for classifications that need AAL2+ (CONFIDENTIAL, SECRET, TOP_SECRET)
+	# UNCLASSIFIED and RESTRICTED are AAL1 (password only)
+	input.resource.classification in {"CONFIDENTIAL", "SECRET", "TOP_SECRET"}
 	input.context.acr
 	acr_str := sprintf("%v", [input.context.acr])
 	acr_lower := lower(acr_str)
@@ -360,7 +362,9 @@ is_authentication_strength_insufficient := msg if {
 }
 
 is_mfa_not_verified := msg if {
-	input.resource.classification != "UNCLASSIFIED"
+	# Only require MFA for classifications that need AAL2+ (CONFIDENTIAL, SECRET, TOP_SECRET)
+	# UNCLASSIFIED and RESTRICTED are AAL1 (no MFA required)
+	input.resource.classification in {"CONFIDENTIAL", "SECRET", "TOP_SECRET"}
 	input.context.amr
 	amr_factors := parse_amr(input.context.amr)
 	count(amr_factors) < 2

@@ -268,16 +268,52 @@ spoke_secrets_load_from_gcp() {
 
     if [ $secrets_loaded -ge ${#SPOKE_REQUIRED_SECRETS[@]} ]; then
         log_info "Loaded $secrets_loaded secrets from GCP"
+
+        # ==========================================================================
+        # FEDERATION SECRETS: Load USA client secret for spokes (NOT all USA secrets)
+        # ==========================================================================
+        # CRITICAL FIX (2026-01-28): Only load the client secret for federation
+        # We do NOT need USA's database passwords (postgres, mongo, redis)
+        # ==========================================================================
+        if [ "$code_upper" != "USA" ]; then
+            log_verbose "Loading USA client secret for federation..."
+
+            # Try the instance-suffixed name first (SSOT naming)
+            local usa_client_secret
+            usa_client_secret=$(gcloud secrets versions access latest \
+                --secret="dive-v3-keycloak-client-secret-usa" --project="$project" 2>/dev/null)
+
+            # Fallback to shared secret name
+            if [ -z "$usa_client_secret" ]; then
+                usa_client_secret=$(gcloud secrets versions access latest \
+                    --secret="dive-v3-keycloak-client-secret" --project="$project" 2>/dev/null)
+            fi
+
+            if [ -n "$usa_client_secret" ]; then
+                export "KEYCLOAK_CLIENT_SECRET_USA=${usa_client_secret}"
+                log_verbose "✓ Loaded KEYCLOAK_CLIENT_SECRET_USA for federation"
+            else
+                log_warn "Could not load USA client secret - spoke→hub federation may not work"
+                log_verbose "  Solution: Ensure Hub deployment generated this secret"
+            fi
+        fi
+
         return 0
     else
         log_warn "Only loaded $secrets_loaded/${#SPOKE_REQUIRED_SECRETS[@]} required secrets from GCP"
 
-        # Report which secrets failed to load
+        # IMPROVED (2026-01-28): Report which GCP secret names failed (not just base names)
+        # This makes it clear which instance-suffixed secrets need to be created
         if [ ${#failed_secrets[@]} -gt 0 ]; then
-            log_warn "Missing GCP secrets: ${failed_secrets[*]}"
-            log_verbose "To create missing secrets in GCP, run:"
+            local missing_gcp_names=()
             for secret in "${failed_secrets[@]}"; do
                 local gcp_name=$(_map_env_to_gcp_secret "$secret" "$code_lower")
+                missing_gcp_names+=("$gcp_name")
+            done
+
+            log_warn "Missing GCP secrets: ${missing_gcp_names[*]}"
+            log_verbose "To create missing secrets in GCP, run:"
+            for gcp_name in "${missing_gcp_names[@]}"; do
                 log_verbose "  gcloud secrets create $gcp_name --project=$project"
                 log_verbose "  echo -n 'YOUR_SECRET' | gcloud secrets versions add $gcp_name --data-file=- --project=$project"
             done
@@ -473,35 +509,52 @@ spoke_secrets_sync_to_env() {
     # ==========================================================================
     # OPAL_AUTH_MASTER_TOKEN (Required for OPAL client/server authentication)
     # ==========================================================================
-    # Generate OPAL master token if not already present
-    # This token is used by OPAL clients to authenticate with OPAL server
+    # CRITICAL FIX (2026-01-28): OPAL master token MUST come from Hub, NOT generated locally
+    # Root cause: Each spoke was generating its own token, causing authentication failures
+    # Solution: Source token from Hub's .env.hub (SINGLE SOURCE OF TRUTH)
     # ==========================================================================
     if ! grep -q "^OPAL_AUTH_MASTER_TOKEN=" "$env_file" 2>/dev/null; then
-        local opal_token=$(openssl rand -base64 32)
-        echo "" >> "$env_file"
-        echo "# OPAL Master Token for authentication (auto-generated)" >> "$env_file"
-        echo "OPAL_AUTH_MASTER_TOKEN=${opal_token}" >> "$env_file"
-        log_info "Generated OPAL_AUTH_MASTER_TOKEN (required for policy synchronization)"
+        local hub_env_file="${DIVE_ROOT}/.env.hub"
+        local opal_token=""
+
+        if [ -f "$hub_env_file" ]; then
+            opal_token=$(grep "^OPAL_AUTH_MASTER_TOKEN=" "$hub_env_file" 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'")
+
+            if [ -n "$opal_token" ]; then
+                echo "" >> "$env_file"
+                echo "# OPAL Master Token (sourced from Hub - SSOT)" >> "$env_file"
+                echo "OPAL_AUTH_MASTER_TOKEN=${opal_token}" >> "$env_file"
+                log_verbose "Sourced OPAL_AUTH_MASTER_TOKEN from Hub (SSOT)"
+            else
+                log_warn "Hub OPAL master token not found in $hub_env_file"
+                log_warn "Spokes will not be able to authenticate with Hub OPAL server"
+                log_warn "Deploy Hub first to generate the master token"
+            fi
+        else
+            log_warn "Hub .env file not found: $hub_env_file"
+            log_warn "Deploy Hub first to generate OPAL master token (SSOT)"
+        fi
     fi
 
     # ==========================================================================
-    # DATABASE_URL (Required for PostgreSQL audit persistence)
+    # DATABASE_URL (Required for Frontend PostgreSQL audit persistence)
     # ==========================================================================
-    # Construct DATABASE_URL from POSTGRES_PASSWORD if not already present
+    # CLARIFICATION (2026-01-28): This is the PostgreSQL database connection string
+    # Used by: Frontend's NextAuth for session management and audit logs
     # Format: postgresql://username:password@host:port/database
+    # Instance-specific: Uses POSTGRES_PASSWORD_{INSTANCE} from GCP secrets
     # ==========================================================================
     if ! grep -q "^DATABASE_URL=" "$env_file" 2>/dev/null; then
-        local postgres_pass="${!env_var_name}"
         local postgres_pass_var="POSTGRES_PASSWORD_${code_upper}"
-        postgres_pass="${!postgres_pass_var}"
+        local postgres_pass="${!postgres_pass_var}"
 
         if [ -n "$postgres_pass" ]; then
             echo "" >> "$env_file"
-            echo "# PostgreSQL Database URL for audit persistence (auto-generated)" >> "$env_file"
+            echo "# PostgreSQL Database URL for Frontend NextAuth (audit persistence)" >> "$env_file"
             echo "DATABASE_URL=postgresql://postgres:${postgres_pass}@postgres-${code_lower}:5432/dive_v3" >> "$env_file"
-            log_info "Generated DATABASE_URL (required for audit log persistence)"
+            log_verbose "Generated DATABASE_URL for Frontend NextAuth (PostgreSQL)"
         else
-            log_warn "Cannot generate DATABASE_URL - POSTGRES_PASSWORD not available"
+            log_warn "Cannot generate DATABASE_URL - POSTGRES_PASSWORD_${code_upper} not available"
         fi
     fi
 
