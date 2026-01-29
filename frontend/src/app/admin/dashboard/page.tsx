@@ -27,6 +27,7 @@ import RealTimeActivity from '@/components/admin/dashboard/realtime-activity';
 import ResourceAnalytics from '@/components/admin/dashboard/resource-analytics';
 import DemoScenarioManager from '@/components/admin/demo-scenario-manager';
 import FederationDashboard from '@/components/admin/federation-dashboard';
+import { CertificateExpiryWarnings } from '@/components/admin/smart-suggestions';
 
 type TabView = 'overview' | 'federation' | 'insights';
 
@@ -72,24 +73,24 @@ export default function AdminDashboard() {
     }
 
     const tabs = [
-        { 
-            id: 'overview', 
-            label: 'Overview', 
-            icon: '📊', 
+        {
+            id: 'overview',
+            label: 'Overview',
+            icon: '📊',
             description: 'System Health, Quick Actions, Recent Activity & Pending Approvals',
             tooltip: 'Consolidated view of all critical system metrics, health indicators, and actionable items'
         },
-        { 
-            id: 'federation', 
-            label: 'Federation', 
-            icon: '🌍', 
+        {
+            id: 'federation',
+            label: 'Federation',
+            icon: '🌍',
             description: 'Spoke Registry, Policy Sync, OPAL Status & Audit Queue',
             tooltip: 'Manage federation across all spoke instances with real-time synchronization monitoring'
         },
-        { 
-            id: 'insights', 
-            label: 'Insights', 
-            icon: '📈', 
+        {
+            id: 'insights',
+            label: 'Insights',
+            icon: '📈',
             description: 'Authorization Analytics, Security Posture, Performance & Compliance',
             tooltip: 'Advanced analytics combining authorization patterns, security metrics, and compliance tracking'
         }
@@ -212,7 +213,7 @@ export default function AdminDashboard() {
                                 dateRange={dateRange}
                                 refreshTrigger={lastRefresh}
                             />
-                            
+
                             {/* Recent Activity & Pending Approvals */}
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                 <div>
@@ -225,6 +226,31 @@ export default function AdminDashboard() {
                                     <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
                                         <span>⏰</span> Pending Actions
                                     </h3>
+                                    
+                                    {/* Certificate Expiry Warnings */}
+                                    <CertificateExpiryWarnings
+                                        certificates={[
+                                            {
+                                                id: 'hub-tls-cert',
+                                                name: 'Hub TLS Certificate',
+                                                type: 'hub',
+                                                expiresAt: new Date(Date.now() + 15 * 24 * 60 * 60 * 1000).toISOString(), // 15 days
+                                                autoRenewable: true,
+                                            },
+                                            {
+                                                id: 'saml-idp-cert',
+                                                name: 'France SAML IdP Certificate',
+                                                type: 'idp',
+                                                expiresAt: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString(), // 5 days
+                                                autoRenewable: false,
+                                            },
+                                        ]}
+                                        onRenew={(certId) => {
+                                            router.push(`/admin/certificates?renew=${certId}`);
+                                        }}
+                                        className="mb-4"
+                                    />
+
                                     <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
                                         <p className="text-slate-600 text-sm">
                                             Quick access to pending spoke approvals, certificate renewals, and policy reviews.
@@ -234,14 +260,14 @@ export default function AdminDashboard() {
                             </div>
                         </div>
                     )}
-                    
+
                     {activeTab === 'federation' && (
                         <div className="space-y-6">
                             {/* Spoke Registry, Policy Sync, OPAL Status & Audit Queue */}
                             <FederationDashboard />
                         </div>
                     )}
-                    
+
                     {activeTab === 'insights' && (
                         <div className="space-y-6">
                             {/* Authorization Analytics */}
@@ -254,7 +280,7 @@ export default function AdminDashboard() {
                                     refreshTrigger={lastRefresh}
                                 />
                             </div>
-                            
+
                             {/* Security Posture & Performance */}
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                 <div>
@@ -276,7 +302,7 @@ export default function AdminDashboard() {
                                     />
                                 </div>
                             </div>
-                            
+
                             {/* Compliance & Threat Intelligence */}
                             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                                 <div>
@@ -298,7 +324,7 @@ export default function AdminDashboard() {
                                     />
                                 </div>
                             </div>
-                            
+
                             {/* Resource Analytics */}
                             <div>
                                 <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
