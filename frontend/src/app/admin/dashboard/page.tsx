@@ -28,7 +28,7 @@ import ResourceAnalytics from '@/components/admin/dashboard/resource-analytics';
 import DemoScenarioManager from '@/components/admin/demo-scenario-manager';
 import FederationDashboard from '@/components/admin/federation-dashboard';
 
-type TabView = 'overview' | 'federation' | 'authz' | 'security' | 'threats' | 'performance' | 'compliance' | 'realtime' | 'resources';
+type TabView = 'overview' | 'federation' | 'insights';
 
 export default function AdminDashboard() {
     const router = useRouter();
@@ -72,15 +72,27 @@ export default function AdminDashboard() {
     }
 
     const tabs = [
-        { id: 'overview', label: '📊 Overview', icon: '📊', description: 'System-wide metrics' },
-        { id: 'federation', label: '🌍 Federation', icon: '🌍', description: 'Multi-instance status' },
-        { id: 'authz', label: '🔐 Authorization', icon: '🔐', description: 'Access decisions & patterns' },
-        { id: 'security', label: '🛡️ Security', icon: '🛡️', description: 'Security posture' },
-        { id: 'threats', label: '⚠️ Threats', icon: '⚠️', description: 'Threat intelligence' },
-        { id: 'performance', label: '⚡ Performance', icon: '⚡', description: 'System performance' },
-        { id: 'compliance', label: '✅ Compliance', icon: '✅', description: 'Standards & SLA' },
-        { id: 'realtime', label: '📡 Live Feed', icon: '📡', description: 'Real-time activity' },
-        { id: 'resources', label: '📁 Resources', icon: '📁', description: 'Resource analytics' }
+        { 
+            id: 'overview', 
+            label: 'Overview', 
+            icon: '📊', 
+            description: 'System Health, Quick Actions, Recent Activity & Pending Approvals',
+            tooltip: 'Consolidated view of all critical system metrics, health indicators, and actionable items'
+        },
+        { 
+            id: 'federation', 
+            label: 'Federation', 
+            icon: '🌍', 
+            description: 'Spoke Registry, Policy Sync, OPAL Status & Audit Queue',
+            tooltip: 'Manage federation across all spoke instances with real-time synchronization monitoring'
+        },
+        { 
+            id: 'insights', 
+            label: 'Insights', 
+            icon: '📈', 
+            description: 'Authorization Analytics, Security Posture, Performance & Compliance',
+            tooltip: 'Advanced analytics combining authorization patterns, security metrics, and compliance tracking'
+        }
     ];
 
     return (
@@ -147,32 +159,39 @@ export default function AdminDashboard() {
                     </div>
                 </div>
 
-                {/* Navigation Tabs */}
+                {/* Navigation Tabs - Simplified 3-Tab Design */}
                 <div className="mb-6 bg-white rounded-xl shadow-lg border border-slate-200 p-3">
                     <nav
-                        className="grid grid-cols-2 sm:grid-cols-3 lg:flex lg:flex-nowrap lg:space-x-2 gap-2"
+                        className="grid grid-cols-1 sm:grid-cols-3 gap-3"
                         aria-label="Tabs"
                     >
                         {tabs.map((tab) => (
                             <button
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id as TabView)}
+                                title={tab.tooltip}
                                 className={`
-                                    group relative px-3 sm:px-4 py-2.5 sm:py-3 text-xs sm:text-sm font-medium rounded-xl border
-                                    transition-all duration-200 ease-in-out w-full lg:w-44
+                                    group relative px-4 sm:px-6 py-4 sm:py-5 text-sm sm:text-base font-medium rounded-xl border-2
+                                    transition-all duration-200 ease-in-out
                                     ${activeTab === tab.id
-                                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-md scale-[1.01] border-transparent'
-                                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 border-slate-200'
+                                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white shadow-xl scale-[1.02] border-transparent'
+                                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 hover:border-slate-300 border-slate-200 bg-white'
                                     }
                                 `}
                             >
-                                <div className="flex flex-col items-center text-center">
-                                    <span className="text-lg sm:text-xl mb-0.5">{tab.icon}</span>
-                                    <span className="font-semibold leading-tight">{tab.label.replace(/[^\w\s]/g, '')}</span>
-                                    <span className="text-[11px] sm:text-xs opacity-75 mt-0.5 line-clamp-1">{tab.description}</span>
+                                <div className="flex flex-col items-start text-left">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-xl sm:text-2xl">{tab.icon}</span>
+                                        <span className="font-bold text-base sm:text-lg">{tab.label}</span>
+                                    </div>
+                                    <span className={`text-xs sm:text-sm line-clamp-2 ${
+                                        activeTab === tab.id ? 'opacity-90' : 'opacity-70'
+                                    }`}>
+                                        {tab.description}
+                                    </span>
                                 </div>
                                 {activeTab === tab.id && (
-                                    <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-1/2 h-1 bg-white rounded-t-full" />
+                                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-white rounded-b-xl" />
                                 )}
                             </button>
                         ))}
@@ -184,59 +203,113 @@ export default function AdminDashboard() {
                     <DemoScenarioManager />
                 </div>
 
-                {/* Content Area */}
+                {/* Content Area - Simplified 3-Tab Layout */}
                 <div className="pb-8">
                     {activeTab === 'overview' && (
-                        <>
+                        <div className="space-y-6">
+                            {/* System Health & Quick Actions */}
                             <SystemOverviewSection
                                 dateRange={dateRange}
                                 refreshTrigger={lastRefresh}
                             />
-                        </>
+                            
+                            {/* Recent Activity & Pending Approvals */}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                                        <span>📡</span> Recent Activity
+                                    </h3>
+                                    <RealTimeActivity refreshTrigger={lastRefresh} />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                                        <span>⏰</span> Pending Actions
+                                    </h3>
+                                    <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
+                                        <p className="text-slate-600 text-sm">
+                                            Quick access to pending spoke approvals, certificate renewals, and policy reviews.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     )}
+                    
                     {activeTab === 'federation' && (
-                        <FederationDashboard />
+                        <div className="space-y-6">
+                            {/* Spoke Registry, Policy Sync, OPAL Status & Audit Queue */}
+                            <FederationDashboard />
+                        </div>
                     )}
-                    {activeTab === 'authz' && (
-                        <AuthorizationAnalytics
-                            dateRange={dateRange}
-                            refreshTrigger={lastRefresh}
-                        />
-                    )}
-                    {activeTab === 'security' && (
-                        <SecurityPosture
-                            dateRange={dateRange}
-                            refreshTrigger={lastRefresh}
-                        />
-                    )}
-                    {activeTab === 'threats' && (
-                        <ThreatIntelligence
-                            dateRange={dateRange}
-                            refreshTrigger={lastRefresh}
-                        />
-                    )}
-                    {activeTab === 'performance' && (
-                        <PerformanceMetrics
-                            dateRange={dateRange}
-                            refreshTrigger={lastRefresh}
-                        />
-                    )}
-                    {activeTab === 'compliance' && (
-                        <ComplianceOverview
-                            dateRange={dateRange}
-                            refreshTrigger={lastRefresh}
-                        />
-                    )}
-                    {activeTab === 'realtime' && (
-                        <RealTimeActivity
-                            refreshTrigger={lastRefresh}
-                        />
-                    )}
-                    {activeTab === 'resources' && (
-                        <ResourceAnalytics
-                            dateRange={dateRange}
-                            refreshTrigger={lastRefresh}
-                        />
+                    
+                    {activeTab === 'insights' && (
+                        <div className="space-y-6">
+                            {/* Authorization Analytics */}
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                                    <span>🔐</span> Authorization Analytics
+                                </h3>
+                                <AuthorizationAnalytics
+                                    dateRange={dateRange}
+                                    refreshTrigger={lastRefresh}
+                                />
+                            </div>
+                            
+                            {/* Security Posture & Performance */}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                                        <span>🛡️</span> Security Posture
+                                    </h3>
+                                    <SecurityPosture
+                                        dateRange={dateRange}
+                                        refreshTrigger={lastRefresh}
+                                    />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                                        <span>⚡</span> Performance Metrics
+                                    </h3>
+                                    <PerformanceMetrics
+                                        dateRange={dateRange}
+                                        refreshTrigger={lastRefresh}
+                                    />
+                                </div>
+                            </div>
+                            
+                            {/* Compliance & Threat Intelligence */}
+                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                                        <span>✅</span> Compliance Overview
+                                    </h3>
+                                    <ComplianceOverview
+                                        dateRange={dateRange}
+                                        refreshTrigger={lastRefresh}
+                                    />
+                                </div>
+                                <div>
+                                    <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                                        <span>⚠️</span> Threat Intelligence
+                                    </h3>
+                                    <ThreatIntelligence
+                                        dateRange={dateRange}
+                                        refreshTrigger={lastRefresh}
+                                    />
+                                </div>
+                            </div>
+                            
+                            {/* Resource Analytics */}
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                                    <span>📁</span> Resource Analytics
+                                </h3>
+                                <ResourceAnalytics
+                                    dateRange={dateRange}
+                                    refreshTrigger={lastRefresh}
+                                />
+                            </div>
+                        </div>
                     )}
                 </div>
 
