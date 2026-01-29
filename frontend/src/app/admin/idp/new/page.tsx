@@ -28,6 +28,7 @@ import SLACountdown from '@/components/admin/sla-countdown';
 import { InlineHelp, QuickTipsCarousel } from '@/components/admin/educational/ContextualHelp';
 import { IdPHelpContent, AdminQuickTips } from '@/components/admin/educational/AdminHelpContent';
 import { IIdPFormData, IdPProtocol, IAdminAPIResponse, IIdentityProvider } from '@/types/admin.types';
+import { OIDCDiscoverySuggestion, ProtocolMapperSuggestions } from '@/components/admin/smart-suggestions';
 
 const WIZARD_STEPS = [
     { number: 1, title: 'Protocol', description: 'Select IdP protocol' },
@@ -907,13 +908,38 @@ export default function NewIdPWizard() {
 
                         {/* Step 3: Protocol Configuration */}
                         {currentStep === 3 && formData.providerId === 'oidc' && formData.oidcConfig && (
-                            <OIDCConfigForm
-                                config={formData.oidcConfig}
-                                onChange={(config) => setFormData({ ...formData, oidcConfig: config })}
-                                errors={errors}
-                                readonly={formData.useAuth0}
-                                accessToken={(session as any)?.accessToken}
-                            />
+                            <div className="space-y-6">
+                                {/* Smart Suggestions - OIDC Discovery */}
+                                {formData.displayName && (
+                                    <OIDCDiscoverySuggestion
+                                        domain={formData.displayName}
+                                        onAccept={(discoveryUrl) => {
+                                            // Discovery URL detected - manually configure endpoints
+                                            console.log('OIDC Discovery URL detected:', discoveryUrl);
+                                        }}
+                                        className="mb-6"
+                                    />
+                                )}
+
+                                {/* Protocol Mapper Suggestions */}
+                                <ProtocolMapperSuggestions
+                                    idpType="oidc"
+                                    providerHint={formData.displayName}
+                                    onApply={(mappers) => {
+                                        // Protocol mapper suggestions - manually configure in Keycloak
+                                        console.log('Protocol mapper suggestions:', mappers);
+                                    }}
+                                    className="mb-6"
+                                />
+
+                                <OIDCConfigForm
+                                    config={formData.oidcConfig}
+                                    onChange={(config) => setFormData({ ...formData, oidcConfig: config })}
+                                    errors={errors}
+                                    readonly={formData.useAuth0}
+                                    accessToken={(session as any)?.accessToken}
+                                />
+                            </div>
                         )}
 
                         {/* Step 3: SAML Configuration */}
