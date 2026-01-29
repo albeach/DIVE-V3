@@ -414,6 +414,7 @@ export default function ResourcesPage() {
       cois: [],
       instances: [CURRENT_INSTANCE],
       encryptionStatus: '',
+      fileTypes: [],
     });
   }, [handleFilterChange]);
 
@@ -612,10 +613,13 @@ export default function ResourcesPage() {
               disabled={!federatedMode}
               maxPrimaryChips={federationInstances.length <= 6 ? federationInstances.length : 4}
               showCounts={true}
-              instanceCounts={facets?.instances?.reduce((acc, instance) => ({
-                ...acc,
-                [instance.value]: instance.count
-              }), {}) || {}}
+              instanceCounts={(() => {
+                const counts: Record<string, number> = {};
+                facets?.instances?.forEach(instance => {
+                  counts[instance.value] = instance.count;
+                });
+                return counts;
+              })()}
               userCountry={session.user?.countryOfAffiliation}
             />
           )}
@@ -688,7 +692,7 @@ export default function ResourcesPage() {
                   { value: 'encrypted', label: 'Encrypted (ZTDF)', count: 0 },
                   { value: 'unencrypted', label: 'Unencrypted', count: 0 },
                 ],
-                fileTypes: facets?.fileTypes?.map(f => ({ value: f.value, label: f.label, count: f.count })) || [
+                fileTypes: (facets as any)?.fileTypes?.map((f: any) => ({ value: f.value, label: f.label, count: f.count })) || [
                   { value: 'documents', label: 'Documents', count: 0 },
                   { value: 'images', label: 'Images', count: 0 },
                   { value: 'videos', label: 'Videos', count: 0 },
