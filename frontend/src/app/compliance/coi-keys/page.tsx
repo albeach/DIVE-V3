@@ -86,16 +86,28 @@ export default function CoiKeysPage() {
       try {
         const response = await fetch(`${backendUrl}/api/compliance/coi-keys`, {
           cache: 'no-store',
+          credentials: 'include', // Include cookies for authentication
+          headers: {
+            'Content-Type': 'application/json',
+          },
         });
 
         if (!response.ok) {
-          throw new Error('Failed to fetch COI keys data');
+          const errorText = await response.text();
+          console.error('API error response:', errorText);
+          throw new Error(`Failed to fetch COI keys data: ${response.status} ${response.statusText}`);
         }
 
         const data = await response.json();
+        console.log('COI Keys data received:', { 
+          totalCOIs: data.cois?.length, 
+          hasBenefits: !!data.benefits,
+          hasAlgorithm: !!data.selectionAlgorithm 
+        });
         setCoiKeysData(data);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load COI keys data');
+        const errorMsg = err instanceof Error ? err.message : 'Failed to load COI keys data';
+        setError(errorMsg);
         console.error('Error fetching COI keys:', err);
       } finally {
         setLoading(false);
@@ -117,6 +129,34 @@ export default function CoiKeysPage() {
   }
 
   if (!session || !coiKeysData) {
+    if (!session) {
+      return null; // Will redirect to login
+    }
+    
+    // Show error state if we have an error but no data
+    if (error) {
+      return (
+        <PageLayout
+          user={session.user}
+          breadcrumbs={[
+            { label: 'Compliance', href: '/compliance' },
+            { label: 'COI Keys', href: null }
+          ]}
+        >
+          <div className="bg-red-50 border border-red-200 rounded-xl p-6">
+            <h2 className="text-xl font-bold text-red-800 mb-2">Error Loading COI Keys</h2>
+            <p className="text-red-700">{error}</p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-4 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700"
+            >
+              Retry
+            </button>
+          </div>
+        </PageLayout>
+      );
+    }
+    
     return null;
   }
 
