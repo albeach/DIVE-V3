@@ -8,6 +8,8 @@
 
 import React from 'react';
 import { IOIDCConfig } from '@/types/admin.types';
+import { InlineHelp } from '@/components/admin/educational/ContextualHelp';
+import { IdPHelpContent } from '@/components/admin/educational/AdminHelpContent';
 
 interface IOIDCConfigFormProps {
     config: IOIDCConfig;
@@ -220,8 +222,14 @@ export default function OIDCConfigForm({ config, onChange, errors = {}, readonly
 
             {/* Issuer URL */}
             <div>
-                <label htmlFor="issuer" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="issuer" className="block text-sm font-medium text-gray-700 flex items-center gap-2">
                     Issuer URL <span className="text-red-500">*</span>
+                    <InlineHelp
+                        variant="info"
+                        size="sm"
+                        position="right"
+                        content={IdPHelpContent.oidcDiscoveryUrl}
+                    />
                 </label>
                 <div className="relative">
                     <input
@@ -297,9 +305,17 @@ export default function OIDCConfigForm({ config, onChange, errors = {}, readonly
 
             {/* Client ID */}
             <div>
-                <label htmlFor="clientId" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="clientId" className="block text-sm font-medium text-gray-700 flex items-center gap-2">
                     Client ID <span className="text-red-500">*</span>
                     {readonly && <span className="ml-2 text-xs text-blue-600 font-normal">(Will be generated)</span>}
+                    {!readonly && (
+                        <InlineHelp
+                            variant="info"
+                            size="sm"
+                            position="right"
+                            content={IdPHelpContent.clientId}
+                        />
+                    )}
                 </label>
                 <input
                     type="text"
@@ -323,9 +339,17 @@ export default function OIDCConfigForm({ config, onChange, errors = {}, readonly
 
             {/* Client Secret */}
             <div>
-                <label htmlFor="clientSecret" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="clientSecret" className="block text-sm font-medium text-gray-700 flex items-center gap-2">
                     Client Secret <span className="text-red-500">*</span>
                     {readonly && <span className="ml-2 text-xs text-blue-600 font-normal">(Will be generated)</span>}
+                    {!readonly && (
+                        <InlineHelp
+                            variant="warning"
+                            size="sm"
+                            position="right"
+                            content={IdPHelpContent.clientSecret}
+                        />
+                    )}
                 </label>
                 <input
                     type={readonly ? 'text' : 'password'}

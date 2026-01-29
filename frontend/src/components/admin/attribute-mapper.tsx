@@ -8,6 +8,8 @@
 
 import React from 'react';
 import { IAttributeMapping } from '@/types/admin.types';
+import { InlineHelp } from '@/components/admin/educational/ContextualHelp';
+import { IdPHelpContent } from '@/components/admin/educational/AdminHelpContent';
 
 interface IAttributeMappings {
     uniqueID: IAttributeMapping;
@@ -43,9 +45,17 @@ export default function AttributeMapper({ mappings, onChange, protocol, errors =
     return (
         <div className="space-y-6">
             <div>
-                <h3 className="text-lg font-medium text-gray-900">DIVE Attribute Mapping</h3>
+                <h3 className="text-lg font-medium text-gray-900 flex items-center gap-2">
+                    DIVE Attribute Mapping
+                    <InlineHelp
+                        variant="info"
+                        size="md"
+                        position="bottom"
+                        content={IdPHelpContent.protocolMapper}
+                    />
+                </h3>
                 <p className="mt-1 text-sm text-gray-500">
-                    Map {protocol.toUpperCase()} {protocol === 'oidc' ? 'sources' : 'attributes'} to DIVE user attributes.
+                    Map {protocol.toUpperCase()} {protocol === 'oidc' ? 'claims' : 'attributes'} to DIVE user attributes.
                     These mappings ensure user identity attributes are correctly synchronized.
                 </p>
             </div>
@@ -104,9 +114,15 @@ export default function AttributeMapper({ mappings, onChange, protocol, errors =
 
                         {/* clearance */}
                         <tr>
-                            <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6">
+                            <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-gray-900 sm:pl-6 flex items-center gap-2">
                                 clearance
                                 <span className="ml-1 text-red-500">*</span>
+                                <InlineHelp
+                                    variant="info"
+                                    size="sm"
+                                    position="right"
+                                    content={IdPHelpContent.clearanceMapping}
+                                />
                             </td>
                             <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-500">
                                 <input

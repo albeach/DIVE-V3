@@ -32,6 +32,7 @@ import RecentIdPs from '@/components/admin/RecentIdPs';
 import IdPDetailPanel from '@/components/admin/IdPDetailPanel';
 import { useIdPManagement, IdPManagementProvider } from '@/contexts/IdPManagementContext';
 import { useIdPs, useTestIdP, useDeleteIdP } from '@/lib/api/idp-management';
+import { InlineHelp } from '@/components/admin/educational/ContextualHelp';
 import {
     MagnifyingGlassIcon,
     FunnelIcon,
@@ -223,8 +224,24 @@ function IdPManagementPageContent() {
                 {/* Header */}
                 <div className="flex items-center justify-between">
                     <div>
-                        <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
+                        <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
                             Identity Provider Management
+                            <InlineHelp
+                                variant="info"
+                                size="md"
+                                position="bottom"
+                                content={{
+                                    title: 'Identity Provider Management',
+                                    description: 'Centralized management of all external identity providers federated with DIVE V3. Monitor health, test connections, and manage protocol configurations.',
+                                    tips: [
+                                        'Use the search to quickly find IdPs by name or country',
+                                        'Filter by protocol type (OIDC vs SAML) or status',
+                                        'Test IdP connections before deploying to production'
+                                    ],
+                                    learnMoreUrl: '/integration/federation-vs-object',
+                                    learnMoreLabel: 'Integration Guide'
+                                }}
+                            />
                         </h1>
                         <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                             Manage and monitor your federated identity providers
@@ -257,8 +274,24 @@ function IdPManagementPageContent() {
                             value={filters.search || ''}
                             onChange={(e) => updateFilters({ search: e.target.value })}
                             placeholder="Search IdPs..."
-                            className="w-full pl-10 pr-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                            className="w-full pl-10 pr-10 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-purple-500 focus:border-transparent"
                         />
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                            <InlineHelp
+                                variant="help"
+                                size="sm"
+                                position="bottom"
+                                content={{
+                                    title: 'IdP Search',
+                                    description: 'Search across Identity Provider names, aliases, and countries. Search is case-insensitive and matches partial text.',
+                                    examples: [
+                                        'Try "germany" to find Germany IdP',
+                                        'Search "oidc" to find all OIDC providers',
+                                        'Type country codes like "USA" or "FRA"'
+                                    ]
+                                }}
+                            />
+                        </div>
                     </div>
 
                     {/* Filter Pills */}
@@ -272,29 +305,47 @@ function IdPManagementPageContent() {
                             </button>
                         )}
 
-                        <button
-                            onClick={() => updateFilters({ protocol: filters.protocol === 'oidc' ? 'all' : 'oidc' })}
-                            className={`
-                                px-3 py-1.5 rounded-full text-xs font-medium transition-colors
-                                ${filters.protocol === 'oidc'
-                                    ? 'bg-blue-600 text-white'
-                                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'}
-                            `}
-                        >
-                            OIDC
-                        </button>
+                        <div className="flex items-center gap-1">
+                            <button
+                                onClick={() => updateFilters({ protocol: filters.protocol === 'oidc' ? 'all' : 'oidc' })}
+                                className={`
+                                    px-3 py-1.5 rounded-full text-xs font-medium transition-colors
+                                    ${filters.protocol === 'oidc'
+                                        ? 'bg-blue-600 text-white'
+                                        : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'}
+                                `}
+                            >
+                                OIDC
+                            </button>
 
-                        <button
-                            onClick={() => updateFilters({ protocol: filters.protocol === 'saml' ? 'all' : 'saml' })}
-                            className={`
-                                px-3 py-1.5 rounded-full text-xs font-medium transition-colors
-                                ${filters.protocol === 'saml'
-                                    ? 'bg-green-600 text-white'
-                                    : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'}
-                            `}
-                        >
-                            SAML
-                        </button>
+                            <button
+                                onClick={() => updateFilters({ protocol: filters.protocol === 'saml' ? 'all' : 'saml' })}
+                                className={`
+                                    px-3 py-1.5 rounded-full text-xs font-medium transition-colors
+                                    ${filters.protocol === 'saml'
+                                        ? 'bg-green-600 text-white'
+                                        : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'}
+                                `}
+                            >
+                                SAML
+                            </button>
+                            
+                            <InlineHelp
+                                variant="info"
+                                size="sm"
+                                position="bottom"
+                                content={{
+                                    title: 'Protocol Filtering',
+                                    description: 'Filter IdPs by authentication protocol. OIDC is modern and JSON-based, while SAML is XML-based and used by legacy enterprise systems.',
+                                    tips: [
+                                        'OIDC: Recommended for new integrations',
+                                        'SAML: Required for older enterprise IdPs',
+                                        'Click to toggle filter on/off'
+                                    ],
+                                    learnMoreUrl: '/docs/idp/protocol-comparison'
+                                }}
+                            />
+                        </div>
                     </div>
 
                     {/* View Toggle */}

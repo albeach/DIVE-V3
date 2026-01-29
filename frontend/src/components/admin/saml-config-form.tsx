@@ -8,6 +8,8 @@
 
 import React from 'react';
 import { ISAMLConfig } from '@/types/admin.types';
+import { InlineHelp } from '@/components/admin/educational/ContextualHelp';
+import { IdPHelpContent } from '@/components/admin/educational/AdminHelpContent';
 
 interface ISAMLConfigFormProps {
     config: ISAMLConfig;
@@ -153,8 +155,14 @@ export default function SAMLConfigForm({ config, onChange, errors = {}, accessTo
 
             {/* SSO Service URL */}
             <div>
-                <label htmlFor="singleSignOnServiceUrl" className="block text-sm font-medium text-gray-700">
+                <label htmlFor="singleSignOnServiceUrl" className="block text-sm font-medium text-gray-700 flex items-center gap-2">
                     Single Sign-On Service URL <span className="text-red-500">*</span>
+                    <InlineHelp
+                        variant="info"
+                        size="sm"
+                        position="right"
+                        content={IdPHelpContent.samlMetadataUrl}
+                    />
                 </label>
                 <input
                     type="url"
