@@ -25,6 +25,8 @@ import RiskScoreBadge from '@/components/admin/risk-score-badge';
 import RiskBreakdown from '@/components/admin/risk-breakdown';
 import ComplianceStatusCard from '@/components/admin/compliance-status-card';
 import SLACountdown from '@/components/admin/sla-countdown';
+import { InlineHelp, QuickTipsCarousel } from '@/components/admin/educational/ContextualHelp';
+import { IdPHelpContent, AdminQuickTips } from '@/components/admin/educational/AdminHelpContent';
 import { IIdPFormData, IdPProtocol, IAdminAPIResponse, IIdentityProvider } from '@/types/admin.types';
 
 const WIZARD_STEPS = [
@@ -444,6 +446,19 @@ export default function NewIdPWizard() {
                 </div>
             </div>
 
+            {/* Quick Tips Carousel */}
+            <div className="mb-8">
+                <QuickTipsCarousel
+                    tips={AdminQuickTips.filter(tip => 
+                        tip.title.includes('IdP') || 
+                        tip.title.includes('Command Palette') ||
+                        tip.title.includes('Protocol')
+                    )}
+                    autoRotate={true}
+                    interval={8000}
+                />
+            </div>
+
             {/* Modern Progress Indicator */}
             <div className="mb-10">
                 <div className="relative">
@@ -506,7 +521,24 @@ export default function NewIdPWizard() {
                         {currentStep === 1 && (
                             <div className="space-y-8">
                                 <div className="text-center">
-                                    <h3 className="text-2xl font-bold text-gray-900">Choose Protocol</h3>
+                                    <h3 className="text-2xl font-bold text-gray-900 flex items-center justify-center gap-2">
+                                        Choose Protocol
+                                        <InlineHelp
+                                            variant="info"
+                                            size="md"
+                                            position="bottom"
+                                            content={{
+                                                title: 'Protocol Selection',
+                                                description: 'Choose the authentication protocol your Identity Provider supports. This determines how users will authenticate and which configuration fields are required.',
+                                                tips: [
+                                                    'OIDC: Modern, JSON-based, recommended for new systems',
+                                                    'SAML: XML-based, required for legacy enterprise IdPs',
+                                                    'Not sure? Check your IdP documentation or contact their support'
+                                                ],
+                                                learnMoreUrl: '/docs/idp/protocol-comparison'
+                                            }}
+                                        />
+                                    </h3>
                                     <p className="mt-2 text-gray-600">
                                         Select your identity provider's authentication protocol
                                     </p>
@@ -769,8 +801,27 @@ export default function NewIdPWizard() {
                                 </div>
 
                                 <div>
-                                    <label htmlFor="alias" className="block text-sm font-medium text-gray-700">
+                                    <label htmlFor="alias" className="block text-sm font-medium text-gray-700 flex items-center gap-2">
                                         Alias <span className="text-red-500">*</span>
+                                        <InlineHelp
+                                            variant="help"
+                                            size="sm"
+                                            position="right"
+                                            content={{
+                                                title: 'IdP Alias',
+                                                description: 'Unique internal identifier for this IdP. Used in URLs and configuration. Cannot be changed after creation.',
+                                                examples: [
+                                                    'germany-idp',
+                                                    'france-military',
+                                                    'nato-partner-uk'
+                                                ],
+                                                tips: [
+                                                    'Use lowercase letters, numbers, and hyphens only',
+                                                    'Make it descriptive and memorable',
+                                                    'Avoid special characters or spaces'
+                                                ]
+                                            }}
+                                        />
                                     </label>
                                     <input
                                         type="text"
@@ -795,8 +846,27 @@ export default function NewIdPWizard() {
                                 </div>
 
                                 <div>
-                                    <label htmlFor="displayName" className="block text-sm font-medium text-gray-700">
+                                    <label htmlFor="displayName" className="block text-sm font-medium text-gray-700 flex items-center gap-2">
                                         Display Name <span className="text-red-500">*</span>
+                                        <InlineHelp
+                                            variant="help"
+                                            size="sm"
+                                            position="right"
+                                            content={{
+                                                title: 'Display Name',
+                                                description: 'Human-readable name shown to users on the login page and in the admin interface.',
+                                                examples: [
+                                                    'Germany Military IdP',
+                                                    'French Armed Forces',
+                                                    'NATO Partner - UK'
+                                                ],
+                                                tips: [
+                                                    'Use clear, professional naming',
+                                                    'Include country/organization for clarity',
+                                                    'This name is visible to all users'
+                                                ]
+                                            }}
+                                        />
                                     </label>
                                     <input
                                         type="text"
