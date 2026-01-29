@@ -1,0 +1,214 @@
+{
+  "policyPack": "NATO_STANDARD",
+  "version": "1.0",
+  "description": "Standard NATO bilateral sharing constraints (SECRET cap, NATO COI)",
+  "author": "DIVE V3 Team",
+  "createdAt": "2026-01-28",
+  "tenantConfigs": {
+    "*": {
+      "mfa_required_above": "CONFIDENTIAL",
+      "max_session_hours": 8,
+      "allow_industry_access": false,
+      "industry_max_classification": "CONFIDENTIAL"
+    }
+  },
+  "federationConstraints": [
+    {
+      "ownerTenant": "USA",
+      "partnerTenant": "FRA",
+      "maxClassification": "SECRET",
+      "allowedCOIs": [
+        "NATO",
+        "USA-FRA"
+      ],
+      "deniedCOIs": [
+        "US-ONLY",
+        "COSMIC_TOP_SECRET"
+      ],
+      "relationshipType": "spoke_spoke",
+      "description": "NATO standard sharing: USA → France"
+    },
+    {
+      "ownerTenant": "USA",
+      "partnerTenant": "GBR",
+      "maxClassification": "SECRET",
+      "allowedCOIs": [
+        "NATO",
+        "FVEY",
+        "USA-GBR"
+      ],
+      "deniedCOIs": [
+        "US-ONLY"
+      ],
+      "relationshipType": "spoke_spoke",
+      "description": "NATO standard sharing: USA → United Kingdom"
+    },
+    {
+      "ownerTenant": "USA",
+      "partnerTenant": "DEU",
+      "maxClassification": "SECRET",
+      "allowedCOIs": [
+        "NATO",
+        "USA-DEU"
+      ],
+      "deniedCOIs": [
+        "US-ONLY",
+        "FVEY",
+        "COSMIC_TOP_SECRET"
+      ],
+      "relationshipType": "spoke_spoke",
+      "description": "NATO standard sharing: USA → Germany"
+    },
+    {
+      "ownerTenant": "FRA",
+      "partnerTenant": "USA",
+      "maxClassification": "SECRET",
+      "allowedCOIs": [
+        "NATO",
+        "USA-FRA"
+      ],
+      "deniedCOIs": [
+        "FR-ONLY",
+        "COSMIC_TOP_SECRET"
+      ],
+      "relationshipType": "spoke_spoke",
+      "description": "NATO standard sharing: France → USA"
+    },
+    {
+      "ownerTenant": "FRA",
+      "partnerTenant": "GBR",
+      "maxClassification": "SECRET",
+      "allowedCOIs": [
+        "NATO",
+        "FRA-GBR"
+      ],
+      "deniedCOIs": [
+        "FR-ONLY",
+        "FVEY"
+      ],
+      "relationshipType": "spoke_spoke",
+      "description": "NATO standard sharing: France → United Kingdom"
+    },
+    {
+      "ownerTenant": "FRA",
+      "partnerTenant": "DEU",
+      "maxClassification": "SECRET",
+      "allowedCOIs": [
+        "NATO",
+        "FRA-DEU"
+      ],
+      "deniedCOIs": [
+        "FR-ONLY",
+        "FVEY",
+        "COSMIC_TOP_SECRET"
+      ],
+      "relationshipType": "spoke_spoke",
+      "description": "NATO standard sharing: France → Germany"
+    },
+    {
+      "ownerTenant": "GBR",
+      "partnerTenant": "USA",
+      "maxClassification": "SECRET",
+      "allowedCOIs": [
+        "NATO",
+        "FVEY",
+        "USA-GBR"
+      ],
+      "deniedCOIs": [
+        "UK-ONLY"
+      ],
+      "relationshipType": "spoke_spoke",
+      "description": "NATO standard sharing: United Kingdom → USA"
+    },
+    {
+      "ownerTenant": "GBR",
+      "partnerTenant": "FRA",
+      "maxClassification": "SECRET",
+      "allowedCOIs": [
+        "NATO",
+        "FRA-GBR"
+      ],
+      "deniedCOIs": [
+        "UK-ONLY",
+        "FVEY"
+      ],
+      "relationshipType": "spoke_spoke",
+      "description": "NATO standard sharing: United Kingdom → France"
+    },
+    {
+      "ownerTenant": "GBR",
+      "partnerTenant": "DEU",
+      "maxClassification": "SECRET",
+      "allowedCOIs": [
+        "NATO",
+        "GBR-DEU"
+      ],
+      "deniedCOIs": [
+        "UK-ONLY",
+        "FVEY",
+        "COSMIC_TOP_SECRET"
+      ],
+      "relationshipType": "spoke_spoke",
+      "description": "NATO standard sharing: United Kingdom → Germany"
+    },
+    {
+      "ownerTenant": "DEU",
+      "partnerTenant": "USA",
+      "maxClassification": "SECRET",
+      "allowedCOIs": [
+        "NATO",
+        "USA-DEU"
+      ],
+      "deniedCOIs": [
+        "DE-ONLY",
+        "FVEY",
+        "COSMIC_TOP_SECRET"
+      ],
+      "relationshipType": "spoke_spoke",
+      "description": "NATO standard sharing: Germany → USA"
+    },
+    {
+      "ownerTenant": "DEU",
+      "partnerTenant": "FRA",
+      "maxClassification": "SECRET",
+      "allowedCOIs": [
+        "NATO",
+        "FRA-DEU"
+      ],
+      "deniedCOIs": [
+        "DE-ONLY",
+        "FVEY",
+        "COSMIC_TOP_SECRET"
+      ],
+      "relationshipType": "spoke_spoke",
+      "description": "NATO standard sharing: Germany → France"
+    },
+    {
+      "ownerTenant": "DEU",
+      "partnerTenant": "GBR",
+      "maxClassification": "SECRET",
+      "allowedCOIs": [
+        "NATO",
+        "GBR-DEU"
+      ],
+      "deniedCOIs": [
+        "DE-ONLY",
+        "FVEY",
+        "COSMIC_TOP_SECRET"
+      ],
+      "relationshipType": "spoke_spoke",
+      "description": "NATO standard sharing: Germany → United Kingdom"
+    }
+  ],
+  "metadata": {
+    "use_case": "Default NATO sharing pattern",
+    "target_tenants": [
+      "USA",
+      "FRA",
+      "GBR",
+      "DEU"
+    ],
+    "deployment_time": "< 10 seconds",
+    "reversible": true
+  }
+}

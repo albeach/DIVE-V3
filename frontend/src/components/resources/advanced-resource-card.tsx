@@ -72,14 +72,6 @@ const classificationColors: Record<string, { bg: string; text: string; border: s
   'TOP_SECRET': { bg: 'bg-red-100', text: 'text-red-800', border: 'border-red-300' },
 };
 
-const classificationEmojis: Record<string, string> = {
-  'UNCLASSIFIED': '🟢',
-  'RESTRICTED': '🔵',
-  'CONFIDENTIAL': '🟡',
-  'SECRET': '🟠',
-  'TOP_SECRET': '🔴',
-};
-
 // Instance flags for federated resources
 const instanceFlags: Record<string, string> = {
   'USA': '🇺🇸',
@@ -88,13 +80,6 @@ const instanceFlags: Record<string, string> = {
   'DEU': '🇩🇪',
   'CAN': '🇨🇦',
   'AUS': '🇦🇺',
-};
-
-const instanceColors: Record<string, string> = {
-  'USA': 'bg-blue-50 text-blue-700 border-blue-200',
-  'FRA': 'bg-indigo-50 text-indigo-700 border-indigo-200',
-  'GBR': 'bg-red-50 text-red-700 border-red-200',
-  'DEU': 'bg-amber-50 text-amber-700 border-amber-200',
 };
 
 function formatDate(dateString?: string): string {
@@ -157,7 +142,6 @@ export default function AdvancedResourceCard({
   resource,
   viewMode,
   userAttributes,
-  clickToNavigate = false,
 }: AdvancedResourceCardProps) {
   const router = useRouter();
   const { t } = useTranslation('resources');
@@ -184,121 +168,124 @@ export default function AdvancedResourceCard({
         className="block group h-full cursor-pointer"
         data-resource-id={resource.resourceId}
       >
-        <div className="bg-white border-2 border-gray-200 rounded-xl p-5 hover:shadow-2xl hover:border-blue-400 transition-all duration-300 hover:-translate-y-1 h-full flex flex-col">
-          {/* Row 1: Classification + File Type + Multi-KAS (if applicable) + Origin */}
-          <div className="flex items-center gap-2 mb-2 flex-wrap">
-            {/* Classification Badge */}
-            <div className={`flex-shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-bold border-2 ${classColors.bg} ${classColors.text} ${classColors.border}`}>
-              <span className="mr-1">{classificationEmojis[resource.classification]}</span>
+        <div className="bg-white border border-gray-200 rounded-xl p-6 hover:shadow-lg hover:border-blue-400 transition-all duration-200 h-full flex flex-col">
+          {/* Header Row: Classification + Access Status */}
+          <div className="flex items-start justify-between gap-3 mb-3">
+            {/* Classification Badge - Prominent without emoji clutter */}
+            <div className={`flex-shrink-0 px-3 py-1.5 rounded-md text-sm font-bold ${classColors.bg} ${classColors.text} border ${classColors.border}`}>
               {t(`classifications.${resource.classification.toLowerCase()}`)}
             </div>
 
-            {/* File Type Badge */}
-            {resource.contentType && (
-              <FileTypeBadge
-                contentType={resource.contentType}
-                fileExtension={resource.fileExtension}
-                size="sm"
-                showLabel={true}
-                animated={true}
-              />
-            )}
-
-            {/* Multi-KAS Badge - Only show if more than 1 KAO */}
-            {hasMultiKas && (
-              <div className="flex-shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-sm">
-                🔐 {resource.kaoCount} KAS
-              </div>
-            )}
-
-            {/* Origin/Instance Badge */}
-            {resource.originRealm && (
-              <div
-                className={`flex-shrink-0 px-2.5 py-1.5 rounded-lg text-xs font-bold border ${instanceColors[resource.originRealm] || 'bg-gray-50 text-gray-700 border-gray-200'}`}
-                title={`Source: ${resource.originRealm} instance`}
-              >
-                {instanceFlags[resource.originRealm] || '🌐'} {resource.originRealm}
-              </div>
-            )}
-          </div>
-
-          {/* Row 2: COI badges */}
-          {resource.COI && resource.COI.length > 0 && (
-            <div className="flex items-center gap-1.5 mb-2">
-              <span className="text-xs font-semibold text-gray-500">COI:</span>
-              <div className="flex flex-wrap gap-1">
-                {resource.COI.map((coi, idx) => (
-                  <span key={`${coi}-${idx}`} className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded-md text-xs font-semibold border border-purple-200">
-                    {coi}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Row 3: REL TO countries */}
-          <div className="flex items-center gap-1.5 mb-4">
-            <span className="text-xs font-semibold text-gray-500">REL TO:</span>
-            <div className="flex flex-wrap gap-1">
-              {resource.releasabilityTo.slice(0, 6).map((country, idx) => (
-                <span key={`${country}-${idx}`} className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded-md text-xs font-semibold border border-blue-200">
-                  {country}
-                </span>
-              ))}
-              {resource.releasabilityTo.length > 6 && (
-                <span className="px-2 py-0.5 bg-gray-100 text-gray-600 rounded-md text-xs font-semibold">
-                  +{resource.releasabilityTo.length - 6}
-                </span>
-              )}
+            {/* Access Indicator - Moved to top for immediate visibility */}
+            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-sm font-medium ${
+              accessIndicator.status === 'likely' ? 'bg-green-50 text-green-700 border border-green-200' :
+              accessIndicator.status === 'possible' ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' :
+              'bg-red-50 text-red-700 border border-red-200'
+            }`}>
+              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                accessIndicator.status === 'likely' ? 'bg-green-500' :
+                accessIndicator.status === 'possible' ? 'bg-yellow-500' :
+                'bg-red-500'
+              }`} />
+              <span className="text-xs font-semibold">{accessIndicator.message}</span>
             </div>
           </div>
 
-          {/* Title */}
-          <h3 className="text-lg font-bold text-gray-900 group-hover:text-blue-600 transition-colors mb-2 line-clamp-2">
+          {/* Title - Now prominent and first in scan order */}
+          <h3 className="text-xl font-bold text-gray-900 group-hover:text-blue-600 transition-colors mb-3 line-clamp-2 leading-tight">
             {resource.title}
           </h3>
 
-          {/* Resource ID + Date */}
-          <div className="flex items-center justify-between text-xs text-gray-500 mb-4 flex-1">
-            <div className="flex items-center gap-1.5">
-              <svg className="w-3.5 h-3.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-              </svg>
-              <span className="font-mono truncate text-[11px]" title={resource.resourceId}>
-                {resource.resourceId.length > 24 ? resource.resourceId.slice(0, 24) + '...' : resource.resourceId}
-              </span>
-            </div>
+          {/* Metadata Row: Compact icons for secondary info */}
+          <div className="flex items-center gap-3 mb-4 text-sm text-gray-600">
+            {/* File Type - Icon only with tooltip */}
+            {resource.contentType && (
+              <div className="flex items-center gap-1.5" title={`${resource.fileExtension || resource.contentType}`}>
+                <FileTypeBadge
+                  contentType={resource.contentType}
+                  fileExtension={resource.fileExtension}
+                  size="sm"
+                  showLabel={false}
+                  animated={false}
+                />
+              </div>
+            )}
+
+            {/* Multi-KAS - Simplified */}
+            {hasMultiKas && (
+              <div className="flex items-center gap-1.5 text-purple-700" title={`${resource.kaoCount} Key Access Objects`}>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+                </svg>
+                <span className="font-medium">{resource.kaoCount}</span>
+              </div>
+            )}
+
+            {/* Origin - Flag only with country code */}
+            {resource.originRealm && (
+              <div className="flex items-center gap-1.5" title={`Source: ${resource.originRealm} instance`}>
+                <span className="text-base">{instanceFlags[resource.originRealm] || '🌐'}</span>
+                <span className="text-xs font-medium text-gray-500">{resource.originRealm}</span>
+              </div>
+            )}
+
+            {/* Date */}
             {resource.creationDate && (
-              <span className="font-medium text-[11px]">{formatDate(resource.creationDate)}</span>
+              <div className="flex items-center gap-1.5 ml-auto">
+                <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                <span className="text-sm text-gray-500">{formatDate(resource.creationDate)}</span>
+              </div>
             )}
           </div>
 
-          {/* Footer: Access Indicator + Open Button */}
-          <div className="mt-auto pt-3 border-t border-gray-100">
-            <div className="flex items-center justify-between">
-              <div className={`flex items-center gap-1.5 text-xs font-semibold ${
-                accessIndicator.status === 'likely' ? 'text-green-700' :
-                accessIndicator.status === 'possible' ? 'text-yellow-700' :
-                'text-red-700'
-              }`}>
-                <div className={`w-2 h-2 rounded-full ${
-                  accessIndicator.status === 'likely' ? 'bg-green-500' :
-                  accessIndicator.status === 'possible' ? 'bg-yellow-500' :
-                  'bg-red-500'
-                }`} />
-                {accessIndicator.message}
+          {/* Policy Information - Minimal and scannable */}
+          <div className="space-y-2 mb-4">
+            {/* COI - Only if present */}
+            {resource.COI && resource.COI.length > 0 && (
+              <div className="flex items-center gap-2 text-sm">
+                <span className="text-gray-500 font-medium">COI:</span>
+                <div className="flex flex-wrap gap-1.5">
+                  {resource.COI.slice(0, 2).map((coi, idx) => (
+                    <span key={`${coi}-${idx}`} className="px-2 py-0.5 bg-purple-50 text-purple-700 rounded text-xs font-medium">
+                      {coi}
+                    </span>
+                  ))}
+                  {resource.COI.length > 2 && (
+                    <span className="text-xs text-gray-500 font-medium">
+                      +{resource.COI.length - 2} more
+                    </span>
+                  )}
+                </div>
               </div>
-              <button
-                onClick={handleOpenResource}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-blue-600 hover:text-white hover:bg-blue-600 rounded-lg border border-blue-200 hover:border-blue-600 transition-all"
-                title="Open document (Enter)"
-              >
-                Open
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                </svg>
-              </button>
+            )}
+
+            {/* REL TO - Highly condensed */}
+            <div className="flex items-center gap-2 text-sm">
+              <span className="text-gray-500 font-medium">Releasable to:</span>
+              <span className="text-gray-700 font-medium">
+                {resource.releasabilityTo.slice(0, 4).join(', ')}
+                {resource.releasabilityTo.length > 4 && (
+                  <span className="text-gray-500"> +{resource.releasabilityTo.length - 4} more</span>
+                )}
+              </span>
             </div>
+          </div>
+
+          {/* Footer: Open Button only */}
+          <div className="mt-auto pt-4 border-t border-gray-100">
+            <button
+              onClick={handleOpenResource}
+              className="w-full flex items-center justify-center gap-2 px-4 py-2.5 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+              title="Open document (Enter)"
+              aria-label="Open document"
+            >
+              Open Document
+              <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+              </svg>
+            </button>
           </div>
         </div>
       </article>
@@ -312,115 +299,90 @@ export default function AdvancedResourceCard({
 
     return (
       <article className="block group cursor-pointer" data-resource-id={resource.resourceId}>
-        <div className="bg-white border-2 border-gray-200 rounded-xl p-4 hover:shadow-xl hover:border-blue-400 transition-all duration-200 hover:-translate-y-0.5">
-          <div className="flex items-center justify-between gap-4">
-            {/* Left: Badge Row + Title */}
-            <div className="flex items-center gap-4 flex-1 min-w-0">
-              {/* Row 1: Classification + File Type + Multi-KAS + Origin */}
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                {/* Classification */}
-                <div className={`px-2.5 py-1 rounded-lg text-xs font-bold border ${classColors.bg} ${classColors.text} ${classColors.border}`}>
-                  {classificationEmojis[resource.classification]} {t(`classifications.${resource.classification.toLowerCase()}`)}
-                </div>
-
-                {/* File Type Badge */}
-                {resource.contentType && (
-                  <FileTypeBadge
-                    contentType={resource.contentType}
-                    fileExtension={resource.fileExtension}
-                    size="sm"
-                    showLabel={true}
-                    animated={false}
-                  />
-                )}
-
-                {/* Multi-KAS Badge - Only if > 1 KAO */}
-                {hasMultiKas && (
-                  <div className="px-2 py-1 rounded-lg text-xs font-bold bg-gradient-to-r from-purple-600 to-indigo-600 text-white">
-                    🔐 {resource.kaoCount} KAS
-                  </div>
-                )}
-
-                {/* Origin Instance */}
-                {resource.originRealm && (
-                  <div
-                    className={`px-2 py-1 rounded-lg text-xs font-bold border ${instanceColors[resource.originRealm] || 'bg-gray-50 text-gray-700 border-gray-200'}`}
-                    title={`Source: ${resource.originRealm}`}
-                  >
-                    {instanceFlags[resource.originRealm] || '🌐'} {resource.originRealm}
-                  </div>
-                )}
+        <div className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md hover:border-blue-400 transition-all duration-150">
+          <div className="flex items-center gap-4">
+            {/* Left: Classification + Access Status */}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {/* Classification */}
+              <div className={`px-3 py-1.5 rounded-md text-sm font-bold ${classColors.bg} ${classColors.text} border ${classColors.border}`}>
+                {t(`classifications.${resource.classification.toLowerCase()}`)}
               </div>
 
-              {/* Title + ID */}
-              <div className="flex-1 min-w-0">
-                <h3 className="text-sm font-bold text-gray-900 group-hover:text-blue-600 transition-colors truncate">
-                  {resource.title}
-                </h3>
-                <p className="text-[10px] text-gray-400 font-mono truncate" title={resource.resourceId}>
-                  {resource.resourceId.length > 32 ? resource.resourceId.slice(0, 32) + '...' : resource.resourceId}
-                </p>
+              {/* Access Indicator */}
+              <div className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+                accessIndicator.status === 'likely' ? 'bg-green-500' :
+                accessIndicator.status === 'possible' ? 'bg-yellow-500' :
+                'bg-red-500'
+              }`} title={accessIndicator.message} />
+            </div>
+
+            {/* Center: Title + Metadata */}
+            <div className="flex-1 min-w-0">
+              <h3 className="text-base font-bold text-gray-900 group-hover:text-blue-600 transition-colors truncate mb-1">
+                {resource.title}
+              </h3>
+              <div className="flex items-center gap-3 text-xs text-gray-500">
+                {/* File Type */}
+                {resource.contentType && (
+                  <div className="flex items-center gap-1" title={resource.fileExtension || resource.contentType}>
+                    <FileTypeBadge
+                      contentType={resource.contentType}
+                      fileExtension={resource.fileExtension}
+                      size="sm"
+                      showLabel={false}
+                      animated={false}
+                    />
+                  </div>
+                )}
+                {/* Multi-KAS */}
+                {hasMultiKas && (
+                  <span className="text-purple-700 font-medium" title={`${resource.kaoCount} Key Access Objects`}>
+                    {resource.kaoCount} KAS
+                  </span>
+                )}
+                {/* Origin */}
+                {resource.originRealm && (
+                  <span title={`Source: ${resource.originRealm}`}>
+                    {instanceFlags[resource.originRealm] || '🌐'} {resource.originRealm}
+                  </span>
+                )}
+                {/* Date */}
+                {resource.creationDate && (
+                  <span className="hidden md:inline">{formatDate(resource.creationDate)}</span>
+                )}
               </div>
             </div>
 
-            {/* Right: COI + REL TO + Date + Access + Open */}
+            {/* Right: COI + REL TO + Open */}
             <div className="flex items-center gap-3 flex-shrink-0">
-              {/* COI badges */}
+              {/* COI count */}
               {resource.COI && resource.COI.length > 0 && (
-                <div className="hidden lg:flex items-center gap-1">
-                  <span className="text-[10px] text-gray-500 font-semibold">COI:</span>
-                  {resource.COI.slice(0, 2).map((coi, idx) => (
-                    <span key={`${coi}-${idx}`} className="px-1.5 py-0.5 bg-purple-50 text-purple-700 rounded text-[10px] font-semibold border border-purple-200">
-                      {coi}
-                    </span>
-                  ))}
-                  {resource.COI.length > 2 && (
-                    <span className="text-[10px] text-gray-500">+{resource.COI.length - 2}</span>
-                  )}
+                <div className="hidden lg:flex items-center gap-1.5 text-xs">
+                  <span className="text-gray-500 font-medium">COI:</span>
+                  <span className="px-2 py-1 bg-purple-50 text-purple-700 rounded font-medium">
+                    {resource.COI.length}
+                  </span>
                 </div>
               )}
 
-              {/* REL TO countries */}
-              <div className="hidden md:flex items-center gap-1">
-                <span className="text-[10px] text-gray-500 font-semibold">REL:</span>
-                {resource.releasabilityTo.slice(0, 3).map((country, idx) => (
-                  <span key={`${country}-${idx}`} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-semibold border border-blue-200">
-                    {country}
-                  </span>
-                ))}
-                {resource.releasabilityTo.length > 3 && (
-                  <span className="text-[10px] text-gray-500">+{resource.releasabilityTo.length - 3}</span>
-                )}
-              </div>
-
-              {/* Date */}
-              {resource.creationDate && (
-                <span className="hidden xl:inline-block text-xs text-gray-500">
-                  {formatDate(resource.creationDate)}
+              {/* REL TO countries - condensed */}
+              <div className="hidden md:flex items-center gap-1.5 text-xs">
+                <span className="text-gray-500 font-medium">Rel:</span>
+                <span className="px-2 py-1 bg-blue-50 text-blue-700 rounded font-medium">
+                  {resource.releasabilityTo.slice(0, 3).join(', ')}
+                  {resource.releasabilityTo.length > 3 && ` +${resource.releasabilityTo.length - 3}`}
                 </span>
-              )}
-
-              {/* Access Indicator */}
-              <div className={`flex items-center gap-1.5 text-xs font-semibold ${
-                accessIndicator.status === 'likely' ? 'text-green-700' :
-                accessIndicator.status === 'possible' ? 'text-yellow-700' :
-                'text-red-700'
-              }`}>
-                <div className={`w-2 h-2 rounded-full ${
-                  accessIndicator.status === 'likely' ? 'bg-green-500' :
-                  accessIndicator.status === 'possible' ? 'bg-yellow-500' :
-                  'bg-red-500'
-                }`} />
               </div>
 
               {/* Open Button */}
               <button
                 onClick={handleOpenResource}
-                className="flex items-center gap-1 px-2.5 py-1.5 text-xs font-semibold text-blue-600 hover:text-white hover:bg-blue-600 rounded-lg border border-blue-200 hover:border-blue-600 transition-all"
+                className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
                 title="Open document"
+                aria-label="Open document"
               >
                 Open
-                <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                 </svg>
               </button>
@@ -437,26 +399,18 @@ export default function AdvancedResourceCard({
 
   return (
     <article className="block group cursor-pointer" data-resource-id={resource.resourceId}>
-      <div className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-md hover:border-blue-400 transition-all duration-150">
-        <div className="flex items-center justify-between gap-3">
-          {/* Left: Classification + File Type + Multi-KAS + Origin - icons only */}
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <span className="text-lg" title={resource.classification}>{classificationEmojis[resource.classification]}</span>
-            {resource.contentType && (
-              <FileTypeBadge
-                contentType={resource.contentType}
-                fileExtension={resource.fileExtension}
-                size="sm"
-                showLabel={false}
-                animated={false}
-              />
-            )}
-            {hasMultiKasCompact && <span className="text-sm" title={`${resource.kaoCount} KAS`}>🔐</span>}
-            {resource.originRealm && (
-              <span className="text-sm" title={`Source: ${resource.originRealm}`}>
-                {instanceFlags[resource.originRealm] || '🌐'}
-              </span>
-            )}
+      <div className="bg-white border border-gray-200 rounded-lg p-3 hover:shadow-sm hover:border-blue-400 transition-all duration-150">
+        <div className="flex items-center gap-3">
+          {/* Left: Classification + Access */}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <div className={`px-2.5 py-1 rounded-md text-xs font-bold ${classColors.bg} ${classColors.text} border ${classColors.border}`}>
+              {t(`classifications.${resource.classification.toLowerCase()}`)}
+            </div>
+            <div className={`w-2 h-2 rounded-full ${
+              accessIndicator.status === 'likely' ? 'bg-green-500' :
+              accessIndicator.status === 'possible' ? 'bg-yellow-500' :
+              'bg-red-500'
+            }`} title={accessIndicator.message} />
           </div>
 
           {/* Title */}
@@ -466,38 +420,48 @@ export default function AdvancedResourceCard({
             </h3>
           </div>
 
-          {/* Right: COI + REL + Access + Open Button */}
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {/* COI count */}
-            {resource.COI && resource.COI.length > 0 && (
-              <span className="hidden md:inline-block px-1.5 py-0.5 bg-purple-50 text-purple-700 rounded text-[10px] font-semibold">
-                COI:{resource.COI.length}
+          {/* Right: Metadata icons + Open */}
+          <div className="flex items-center gap-2.5 flex-shrink-0 text-xs text-gray-500">
+            {/* File Type */}
+            {resource.contentType && (
+              <FileTypeBadge
+                contentType={resource.contentType}
+                fileExtension={resource.fileExtension}
+                size="sm"
+                showLabel={false}
+                animated={false}
+              />
+            )}
+            {/* Multi-KAS */}
+            {hasMultiKasCompact && (
+              <span className="hidden sm:inline font-medium text-purple-700" title={`${resource.kaoCount} KAS`}>
+                {resource.kaoCount} KAS
+              </span>
+            )}
+            {/* Origin */}
+            {resource.originRealm && (
+              <span className="hidden md:inline" title={`Source: ${resource.originRealm}`}>
+                {instanceFlags[resource.originRealm] || '🌐'}
               </span>
             )}
 
-            {/* REL TO Countries */}
-            <div className="hidden sm:flex items-center gap-1">
-              {resource.releasabilityTo.slice(0, 3).map((country, idx) => (
-                <span key={`${country}-${idx}`} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px] font-semibold">
-                  {country}
-                </span>
-              ))}
-              {resource.releasabilityTo.length > 3 && (
-                <span className="text-[10px] text-gray-400">+{resource.releasabilityTo.length - 3}</span>
-              )}
-            </div>
+            {/* COI count */}
+            {resource.COI && resource.COI.length > 0 && (
+              <span className="hidden lg:inline text-purple-700 font-medium">
+                COI: {resource.COI.length}
+              </span>
+            )}
 
-            {/* Access dot */}
-            <div className={`w-2 h-2 rounded-full ${
-              accessIndicator.status === 'likely' ? 'bg-green-500' :
-              accessIndicator.status === 'possible' ? 'bg-yellow-500' :
-              'bg-red-500'
-            }`} />
+            {/* REL TO count */}
+            <span className="hidden lg:inline text-blue-700 font-medium">
+              Rel: {resource.releasabilityTo.length}
+            </span>
 
             <button
               onClick={handleOpenResource}
-              className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
+              className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
               title="Open document"
+              aria-label="Open document"
             >
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />

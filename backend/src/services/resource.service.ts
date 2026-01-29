@@ -127,39 +127,88 @@ function extractLegacyFields(ztdfResource: IZTDFResource): IResource {
 }
 
 /**
- * Get all resources
+ * Get all resources with pagination to prevent OOM
  * Returns ZTDF-enhanced resources with backward compatibility
+ *
+ * CRITICAL: This function is DEPRECATED and should not be used for large datasets.
+ * Use getResourcesPaginated() instead to prevent memory exhaustion.
+ *
+ * @deprecated Use getResourcesPaginated() for production workloads
  */
-export async function getAllResources(): Promise<IZTDFResource[]> {
+export async function getAllResources(limit: number = 100): Promise<IZTDFResource[]> {
     try {
         const collection = await getCollection();
-        const resources = await collection.find({}).toArray();
 
-        // Validate ZTDF integrity for all resources
-        for (const resource of resources) {
-            if (isZTDFResource(resource)) {
-                const validation = await validateZTDFIntegrity(resource.ztdf);
-                if (!validation.valid) {
-                    logger.error('ZTDF integrity validation failed', {
-                        resourceId: resource.resourceId,
-                        errors: validation.errors
-                    });
-                    // Fail-closed: Log but return resource with warning flag
-                    // In production, you might want to exclude this resource
-                }
+        // SAFETY: Limit to prevent OOM (default 100, max enforced)
+        const safeLimit = Math.min(limit, 1000);
 
-                if (validation.warnings.length > 0) {
-                    logger.warn('ZTDF validation warnings', {
-                        resourceId: resource.resourceId,
-                        warnings: validation.warnings
-                    });
-                }
-            }
-        }
+        logger.warn('getAllResources() called - this should be replaced with pagination', {
+            requestedLimit: limit,
+            appliedLimit: safeLimit
+        });
+
+        const resources = await collection
+            .find({})
+            .limit(safeLimit)
+            .project({
+                // Exclude large payload fields from list queries
+                'ztdf.payload.encryptedPayload': 0,
+                'encryptedContent': 0,
+                'content': 0
+            })
+            .toArray();
+
+        // Skip ZTDF validation for list operations (too expensive)
+        // Validation happens on individual resource access
 
         return resources;
     } catch (error) {
         logger.error('Failed to fetch resources', { error });
+        throw error;
+    }
+}
+
+/**
+ * Get resources with proper pagination
+ * Recommended for production use to prevent memory issues
+ */
+export async function getResourcesPaginated(
+    page: number = 1,
+    pageSize: number = 50,
+    filter: Record<string, any> = {}
+): Promise<{ resources: IZTDFResource[], total: number, page: number, pageSize: number }> {
+    try {
+        const collection = await getCollection();
+
+        // Safety limits
+        const safePage = Math.max(1, page);
+        const safePageSize = Math.min(Math.max(1, pageSize), 100);
+        const skip = (safePage - 1) * safePageSize;
+
+        // Count total (for pagination metadata)
+        const total = await collection.countDocuments(filter);
+
+        // Fetch page of resources WITHOUT large payload fields
+        const resources = await collection
+            .find(filter)
+            .skip(skip)
+            .limit(safePageSize)
+            .project({
+                // Exclude large fields to reduce memory
+                'ztdf.payload.encryptedPayload': 0,
+                'encryptedContent': 0,
+                'content': 0
+            })
+            .toArray();
+
+        return {
+            resources,
+            total,
+            page: safePage,
+            pageSize: safePageSize
+        };
+    } catch (error) {
+        logger.error('Failed to fetch paginated resources', { error });
         throw error;
     }
 }
@@ -362,7 +411,20 @@ export async function getResourceById(resourceId: string, authHeader?: string): 
 
         // Validate ZTDF integrity (fail-closed). Allow opt-out via SKIP_ZTDF_VALIDATION=true (used only in specific E2E fixtures).
         if (isZTDFResource(resource) && process.env.SKIP_ZTDF_VALIDATION !== 'true') {
-            const validation = await validateZTDFIntegrity(resource.ztdf);
+            // For GridFS chunks, fetch the encrypted data for validation
+            let encryptedDataOverride: string | undefined;
+            const firstChunk = resource.ztdf.payload.encryptedChunks[0];
+            if (firstChunk?.storageMode === 'gridfs' && firstChunk.gridfsFileId) {
+                const { downloadFromGridFS } = await import('./gridfs.service');
+                encryptedDataOverride = await downloadFromGridFS(firstChunk.gridfsFileId);
+                logger.debug('Fetched GridFS data for validation', {
+                    resourceId: resource.resourceId,
+                    gridfsFileId: firstChunk.gridfsFileId,
+                    dataLength: encryptedDataOverride.length
+                });
+            }
+
+            const validation = await validateZTDFIntegrity(resource.ztdf, encryptedDataOverride);
 
             if (!validation.valid) {
                 logger.error('ZTDF integrity validation failed', {
@@ -649,7 +711,20 @@ export async function createZTDFResource(resource: IZTDFResource): Promise<IZTDF
         const now = new Date();
 
         // Validate ZTDF integrity before storing
-        const validation = await validateZTDFIntegrity(resource.ztdf);
+        // For GridFS chunks, fetch the encrypted data for validation
+        let encryptedDataOverride: string | undefined;
+        const firstChunk = resource.ztdf.payload.encryptedChunks[0];
+        if (firstChunk?.storageMode === 'gridfs' && firstChunk.gridfsFileId) {
+            const { downloadFromGridFS } = await import('./gridfs.service');
+            encryptedDataOverride = await downloadFromGridFS(firstChunk.gridfsFileId);
+            logger.debug('Fetched GridFS data for validation', {
+                resourceId: resource.resourceId,
+                gridfsFileId: firstChunk.gridfsFileId,
+                dataLength: encryptedDataOverride.length
+            });
+        }
+
+        const validation = await validateZTDFIntegrity(resource.ztdf, encryptedDataOverride);
         if (!validation.valid) {
             throw new Error(`ZTDF integrity validation failed: ${validation.errors.join(', ')}`);
         }
@@ -659,6 +734,18 @@ export async function createZTDFResource(resource: IZTDFResource): Promise<IZTDF
             createdAt: now,
             updatedAt: now
         };
+
+        // Check document size before inserting (MongoDB 16MB BSON limit)
+        const docSizeEstimate = JSON.stringify(resourceWithTimestamps).length;
+        if (docSizeEstimate > 15 * 1024 * 1024) { // 15MB warning threshold
+            logger.warn('Large ZTDF document detected - may exceed MongoDB BSON limit', {
+                resourceId: resource.resourceId,
+                estimatedSizeBytes: docSizeEstimate,
+                estimatedSizeMB: (docSizeEstimate / (1024 * 1024)).toFixed(2),
+                hasGridFSChunks: resource.ztdf.payload.encryptedChunks.some(c => c.storageMode === 'gridfs'),
+                chunkCount: resource.ztdf.payload.encryptedChunks.length
+            });
+        }
 
         await collection.insertOne(resourceWithTimestamps as any);
         logger.info('ZTDF resource created', {

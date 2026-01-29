@@ -1086,8 +1086,22 @@ _get_keycloak_admin_password_ssot() {
 
     # Try GCP Secret Manager first (SSOT)
     if check_gcloud; then
-        local gcp_secret_name="dive-v3-keycloak-${instance_code}"
+        # CRITICAL FIX (2026-01-29): Use correct GCP secret naming convention
+        # Secret format: dive-v3-keycloak-admin-password-{instance}
+        # This aligns with wait_for_keycloak_admin_api_ready() in common.sh
+        local gcp_secret_name="dive-v3-keycloak-admin-password-${instance_code}"
         local gcp_password
+        gcp_password=$(gcloud secrets versions access latest \
+            --secret="$gcp_secret_name" \
+            --project="${GCP_PROJECT:-dive25}" 2>/dev/null | tr -d '\n\r')
+
+        if [ -n "$gcp_password" ]; then
+            echo "$gcp_password"
+            return 0
+        fi
+
+        # Fallback: Try legacy naming (dive-v3-keycloak-{instance}) for backwards compatibility
+        gcp_secret_name="dive-v3-keycloak-${instance_code}"
         gcp_password=$(gcloud secrets versions access latest \
             --secret="$gcp_secret_name" \
             --project="${GCP_PROJECT:-dive25}" 2>/dev/null | tr -d '\n\r')

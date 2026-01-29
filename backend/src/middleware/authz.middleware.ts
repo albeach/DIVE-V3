@@ -324,6 +324,12 @@ const extractTenant = (token: IKeycloakToken, req: Request): string | undefined 
 
     // Fallback: legacy realm regex
     if (issuer) {
+        // Match both "dive-v3-broker-XXX" and "dive-v3-XXX" patterns
+        const brokerMatch = issuer.match(/\/realms\/dive-v3-broker-([a-z]{3})/i);
+        if (brokerMatch) {
+            return brokerMatch[1].toUpperCase();
+        }
+
         const realmMatch = issuer.match(/\/realms\/dive-v3-([a-z]{3})/i);
         if (realmMatch) {
             const realm = realmMatch[1].toUpperCase();
@@ -776,8 +782,28 @@ export async function authenticateJWT(req: Request, res: Response, next: NextFun
 
         const token = authHeader.substring(7); // Remove 'Bearer ' prefix
 
+        // CRITICAL FIX: Load trusted issuers from MongoDB to validate federated tokens
+        let allowedIssuers: string[] | undefined;
+        try {
+            const { mongoOpalDataStore } = await import('../models/trusted-issuer.model');
+            const trustedIssuers = await mongoOpalDataStore.getAllIssuers(false); // Only enabled issuers (auto-initializes)
+            allowedIssuers = trustedIssuers.map(issuer => issuer.issuerUrl);
+
+            logger.info('Loaded trusted issuers for token validation', {
+                count: allowedIssuers.length,
+                issuers: allowedIssuers,
+            });
+        } catch (error) {
+            logger.error('Failed to load trusted issuers from MongoDB - token validation may fail', {
+                error: error instanceof Error ? error.message : 'Unknown error',
+                stack: error instanceof Error ? error.stack : undefined,
+            });
+            // Set allowedIssuers to undefined to allow any issuer (fallback mode)
+            allowedIssuers = undefined;
+        }
+
         // Use OAuth2 token introspection for validation
-        const introspectionResult = await tokenIntrospectionService.validateToken(token);
+        const introspectionResult = await tokenIntrospectionService.validateToken(token, allowedIssuers);
 
         if (!introspectionResult.active) {
             logger.warn('Token introspection failed', {

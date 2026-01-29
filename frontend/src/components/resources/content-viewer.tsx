@@ -524,9 +524,37 @@ export default function ContentViewer({
 
   // Render video content with STANAG classification overlays
   const renderVideo = () => {
+    // Debug log for video rendering
+    console.log('[ContentViewer] Rendering video:', {
+      hasDataUrl: !!dataUrl,
+      dataUrlPrefix: dataUrl?.substring(0, 50),
+      contentType,
+      contentLength: content?.length || 0,
+      contentPrefix: content?.substring(0, 50),
+      isBase64,
+      category,
+    });
+
+    if (!dataUrl) {
+      return (
+        <div className="bg-gradient-to-br from-red-50 to-pink-50 rounded-xl p-12 text-center border-2 border-red-200">
+          <div className="inline-flex items-center justify-center w-24 h-24 bg-red-100 rounded-full mb-6">
+            <Film className="w-12 h-12 text-red-600" />
+          </div>
+          <h3 className="text-2xl font-bold text-gray-900 mb-3">Video Unavailable</h3>
+          <p className="text-gray-600 mb-2">
+            Content type: <span className="font-mono text-sm bg-white px-3 py-1 rounded border">{contentType}</span>
+          </p>
+          <p className="text-gray-500 text-sm mb-6 max-w-md mx-auto">
+            Could not create video data URL. The content may be in an unsupported format.
+          </p>
+        </div>
+      );
+    }
+
     return (
       <VideoPlayer
-        src={dataUrl || ''}
+        src={dataUrl}
         classification={classification}
         displayMarking={effectiveMarking.displayMarking}
         releasabilityTo={releasabilityTo}

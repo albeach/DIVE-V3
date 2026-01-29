@@ -129,10 +129,10 @@ class KASRegistryService {
 
   /**
    * REMOVED: loadRegistry() from JSON file - NO JSON FILE LOADING
-   * 
+   *
    * KAS registry must be loaded from MongoDB (SSOT) via MongoKasRegistryStore
    * This service should use mongoKasRegistryStore.findAll() instead
-   * 
+   *
    * Migration path:
    * 1. Use mongoKasRegistryStore from models/kas-registry.model.ts
    * 2. Query MongoDB kas_registry collection
@@ -141,12 +141,36 @@ class KASRegistryService {
   async loadRegistry(): Promise<void> {
     logger.warn('KASRegistryService.loadRegistry() is deprecated - use MongoKasRegistryStore instead');
     logger.warn('NO JSON FILE LOADING - MongoDB is SSOT');
-    
+
     // Return empty registry - must be populated via MongoDB
     this.registry = {
       kasServers: [],
       version: '2.0',
-      federationTrust: { trustMatrix: {}, crossKASEnabled: false }
+      metadata: {
+        lastUpdated: new Date().toISOString(),
+        maintainer: 'DIVE V3',
+        description: 'Dynamic KAS Registry (MongoDB SSOT)',
+        compliance: ['ACP-240']
+      },
+      federationTrust: {
+        model: 'federated',
+        defaultTrustLevel: 'medium',
+        trustMatrix: {},
+        crossKASEnabled: false,
+        failClosedOnKASUnavailable: false,
+        maxCrossKASLatencyMs: 5000,
+        retryPolicy: {
+          maxRetries: 3,
+          backoffMs: 1000,
+          exponentialBackoff: true
+        }
+      },
+      monitoring: {
+        healthCheckIntervalSeconds: 60,
+        alertOnKASDown: true,
+        logCrossKASRequests: true,
+        auditRetentionDays: 90
+      }
     };
   }
 

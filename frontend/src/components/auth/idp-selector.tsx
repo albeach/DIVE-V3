@@ -126,7 +126,15 @@ export function IdpSelector() {
       clearTimeout(timeoutId);
 
       if (!response.ok) {
-        throw new Error(`Failed to fetch IdPs: ${response.status}`);
+        let detail = String(response.status);
+        try {
+          const errBody = await response.json();
+          const msg = (errBody as { message?: string; error?: string }).message ?? (errBody as { message?: string; error?: string }).error;
+          if (msg) detail = `${response.status}: ${msg}`;
+        } catch {
+          // ignore parse failure
+        }
+        throw new Error(`Failed to fetch IdPs: ${detail}`);
       }
 
       const data = await response.json();

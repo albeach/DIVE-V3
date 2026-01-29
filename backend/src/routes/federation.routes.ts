@@ -643,6 +643,44 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
         const freshSpoke = await hubSpokeRegistry.getSpokeByInstanceCode(spoke.instanceCode);
         const finalStatus = freshSpoke?.status || spoke.status;
 
+        // CRITICAL (2026-01-29): When spoke is approved but token is null (e.g. re-registration after
+        // nuking only the spoke — Hub still has the spoke as approved, approveSpoke throws "already approved"),
+        // generate/return a token so the client can configure SPOKE_TOKEN. Without this, deploy fails with
+        // "Auto-approval failed - token not found in response".
+        let finalToken = token;
+        if (finalStatus === 'approved' && !finalToken) {
+            try {
+                const existingToken = await hubSpokeRegistry.getActiveToken(spoke.spokeId);
+                if (existingToken) {
+                    finalToken = {
+                        token: existingToken.token,
+                        expiresAt: existingToken.expiresAt,
+                        scopes: existingToken.scopes,
+                    };
+                    logger.info('Returning existing token for already-approved spoke (re-registration)', {
+                        spokeId: spoke.spokeId,
+                        instanceCode: spoke.instanceCode,
+                    });
+                } else {
+                    const newToken = await hubSpokeRegistry.generateSpokeToken(spoke.spokeId);
+                    finalToken = {
+                        token: newToken.token,
+                        expiresAt: newToken.expiresAt,
+                        scopes: newToken.scopes,
+                    };
+                    logger.info('Generated new token for already-approved spoke (re-registration)', {
+                        spokeId: spoke.spokeId,
+                        instanceCode: spoke.instanceCode,
+                    });
+                }
+            } catch (tokenError) {
+                logger.error('Failed to get/generate token for approved spoke', {
+                    spokeId: spoke.spokeId,
+                    error: tokenError instanceof Error ? tokenError.message : String(tokenError),
+                });
+            }
+        }
+
         // Determine appropriate message based on actual status
         let statusMessage: string;
         if (finalStatus === 'approved') {
@@ -663,7 +701,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
                 federationIdPAlias: spoke.federationIdPAlias,
                 message: statusMessage,
             },
-            token,  // Include token if auto-approved
+            token: finalToken,  // Always include token when status is approved (new or re-registration)
         });
 
     } catch (error) {

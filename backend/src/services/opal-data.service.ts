@@ -68,6 +68,24 @@ export interface IOPALDataState {
   federation_matrix: Record<string, string[]>;
   coi_members: Record<string, string[]>;
   tenant_configs: Record<string, ITenantConfig>;
+  kas_registry: Record<string, IKasRegistryEntry>;
+}
+
+/**
+ * KAS Registry Entry for OPAL
+ * Simplified version of IKasInstance for policy decisions
+ */
+export interface IKasRegistryEntry {
+  kasId: string;
+  organization: string;
+  countryCode: string;
+  kasUrl: string;
+  internalKasUrl?: string;
+  authMethod: 'jwt' | 'mtls' | 'api_key';
+  trustLevel: 'high' | 'medium' | 'low';
+  supportedCountries: string[];
+  status: 'active' | 'pending' | 'suspended' | 'offline';
+  enabled: boolean;
 }
 
 export interface IDataSyncResult {
@@ -79,6 +97,7 @@ export interface IDataSyncResult {
     federation_matrix: 'file' | 'mongodb' | 'error';
     coi_members: 'file' | 'mongodb' | 'error';
     tenant_configs: 'file' | 'mongodb' | 'error';
+    kas_registry: 'file' | 'mongodb' | 'error';
   };
   opalResult?: IOPALPublishResult;
 }
@@ -237,7 +256,8 @@ class OPALDataService {
       trusted_issuers: trustedIssuersData?.trusted_issuers || {},
       federation_matrix: federationData?.federation_matrix || {},
       coi_members: coiData?.coi_members || {},
-      tenant_configs: tenantData?.tenant_configs || {}
+      tenant_configs: tenantData?.tenant_configs || {},
+      kas_registry: {} // Will be loaded from MongoDB
     };
 
     logger.info('OPAL data loaded', {
@@ -260,7 +280,8 @@ class OPALDataService {
       trusted_issuers: 'error',
       federation_matrix: 'error',
       coi_members: 'error',
-      tenant_configs: 'error'
+      tenant_configs: 'error',
+      kas_registry: 'error'
     };
 
     try {
@@ -304,6 +325,23 @@ class OPALDataService {
           data: data.tenant_configs
         });
         sources.tenant_configs = 'file';
+      }
+
+      // Add KAS registry (from MongoDB)
+      try {
+        const kasRegistry = await this.getKasRegistryForOpal();
+        if (Object.keys(kasRegistry).length > 0) {
+          entries.push({
+            dst_path: 'kas_registry',
+            data: kasRegistry
+          });
+          sources.kas_registry = 'mongodb';
+        }
+      } catch (kasError) {
+        logger.warn('Failed to load KAS registry for OPAL sync', {
+          error: kasError instanceof Error ? kasError.message : 'Unknown error'
+        });
+        sources.kas_registry = 'error';
       }
 
       // Publish to OPAL
@@ -680,6 +718,79 @@ class OPALDataService {
     }
 
     return false;
+  }
+
+  /**
+   * Get KAS registry for OPAL from MongoDB
+   * SSOT ARCHITECTURE: Uses MongoDB kas_registry collection as single source of truth
+   */
+  async getKasRegistryForOpal(): Promise<Record<string, IKasRegistryEntry>> {
+    try {
+      const { mongoKasRegistryStore } = await import('../models/kas-registry.model');
+      await mongoKasRegistryStore.initialize();
+
+      // Get all active KAS instances from MongoDB
+      const kasInstances = await mongoKasRegistryStore.findActive();
+
+      // Convert to OPAL format (simplified for policy decisions)
+      const kasRegistry: Record<string, IKasRegistryEntry> = {};
+
+      for (const kas of kasInstances) {
+        kasRegistry[kas.kasId] = {
+          kasId: kas.kasId,
+          organization: kas.organization,
+          countryCode: kas.countryCode,
+          kasUrl: kas.kasUrl,
+          internalKasUrl: kas.internalKasUrl,
+          authMethod: kas.authMethod,
+          trustLevel: kas.trustLevel,
+          supportedCountries: kas.supportedCountries,
+          status: kas.status,
+          enabled: kas.enabled,
+        };
+      }
+
+      logger.debug('Loaded KAS registry for OPAL', {
+        count: Object.keys(kasRegistry).length,
+        instances: Object.keys(kasRegistry),
+      });
+
+      return kasRegistry;
+    } catch (error) {
+      logger.error('Failed to load KAS registry from MongoDB', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+      return {};
+    }
+  }
+
+  /**
+   * Publish KAS registry to OPAL
+   * Called when KAS instances are registered, approved, suspended, or removed
+   */
+  async publishKasRegistry(): Promise<IOPALPublishResult> {
+    logger.info('Publishing KAS registry to OPAL');
+
+    try {
+      const kasRegistry = await this.getKasRegistryForOpal();
+
+      return opalClient.publishInlineData(
+        'kas_registry',
+        kasRegistry,
+        'KAS registry update from MongoDB'
+      );
+    } catch (error) {
+      logger.error('Failed to publish KAS registry to OPAL', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+
+      return {
+        success: false,
+        message: 'Failed to publish KAS registry',
+        error: error instanceof Error ? error.message : 'Unknown error',
+        timestamp: new Date().toISOString(),
+      };
+    }
   }
 
   /**

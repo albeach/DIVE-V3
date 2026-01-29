@@ -71,6 +71,17 @@ spoke_phase_verification() {
         fi
     fi
 
+    # Step 4.5: OPAL data sync verification (deploy mode) - CRITICAL
+    # Verify that Hub OPAL has synced federation data to OPA
+    # Without this, federation is configured but OPA doesn't know about it (403 errors)
+    if [ "$pipeline_mode" = "deploy" ]; then
+        if ! spoke_verify_opal_sync "$instance_code"; then
+            log_warn "OPAL sync verification failed - federation may not work until sync completes"
+            log_warn "Manual fix: curl -X POST https://localhost:4000/api/opal/cdc/force-sync"
+            # Non-blocking: OPAL CDC will eventually sync, so we don't fail deployment
+        fi
+    fi
+
     # Step 5: API health
     if ! spoke_verify_api_health "$instance_code"; then
         log_warn "API health check issues"
@@ -410,12 +421,17 @@ spoke_verify_federation() {
         if [ -n "$fed_status" ]; then
             # Parse and display status using jq if available
             if command -v jq &>/dev/null; then
-                local spoke_to_hub hub_to_spoke
-                spoke_to_hub=$(echo "$fed_status" | jq -r '.spoke_to_hub // false')
-                hub_to_spoke=$(echo "$fed_status" | jq -r '.hub_to_spoke // false')
+                # Validate JSON before parsing (prevent jq parse errors)
+                if echo "$fed_status" | jq -e . &>/dev/null; then
+                    local spoke_to_hub hub_to_spoke
+                    spoke_to_hub=$(echo "$fed_status" | jq -r '.spoke_to_hub // false' 2>/dev/null)
+                    hub_to_spoke=$(echo "$fed_status" | jq -r '.hub_to_spoke // false' 2>/dev/null)
 
-                echo "      $( [ "$spoke_to_hub" = "true" ] && echo "✅" || echo "❌" ) Spoke → Hub (usa-idp in spoke)"
-                echo "      $( [ "$hub_to_spoke" = "true" ] && echo "✅" || echo "❌" ) Hub → Spoke (${code_lower}-idp in Hub)"
+                    echo "      $( [ "$spoke_to_hub" = "true" ] && echo "✅" || echo "❌" ) Spoke → Hub (usa-idp in spoke)"
+                    echo "      $( [ "$hub_to_spoke" = "true" ] && echo "✅" || echo "❌" ) Hub → Spoke (${code_lower}-idp in Hub)"
+                else
+                    log_verbose "Federation status is not valid JSON - skipping detailed display"
+                fi
             fi
         fi
 
@@ -427,6 +443,94 @@ spoke_verify_federation() {
         _spoke_verify_federation_fallback "$instance_code"
 
         return 0  # Non-blocking - federation is often eventually consistent
+    fi
+}
+
+##
+# Verify OPAL data sync to Hub OPA after spoke approval
+#
+# This verification ensures that federation data (trusted_issuers, federation_matrix)
+# has been synced from MongoDB → OPAL → OPA. Without this sync, spoke approval
+# succeeds but OPA still has stale data, causing:
+# - 403 "issuer not trusted" errors when spoke users access Hub resources
+# - 403 "federation denied" errors for cross-instance resource access
+#
+# Retry pattern: 5s, 5s, 5s, 5s, 5s, 5s (6 attempts, ~30s total)
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - OPAL data synced and verified in OPA
+#   1 - OPAL sync incomplete (non-blocking - will eventually sync via CDC)
+##
+spoke_verify_opal_sync() {
+    local instance_code="$1"
+    local code_upper=$(upper "$instance_code")
+    local code_lower=$(lower "$instance_code")
+
+    log_step "Verifying OPAL data sync to Hub OPA..."
+
+    # Configuration
+    local max_retries=6
+    local retry_delay=5
+    local verification_passed=false
+    local hub_api="${HUB_URL:-https://localhost:4000}/api"
+    local hub_code="${INSTANCE_CODE:-USA}"
+    local spoke_issuer_pattern="${code_lower}"
+
+    for ((attempt=1; attempt<=max_retries; attempt++)); do
+        log_verbose "OPAL sync verification attempt $attempt/$max_retries..."
+
+        # Check 1: Verify spoke's issuer is in Hub OPA's trusted_issuers
+        local opa_issuers
+        # FIXED: Use /trusted-issuers not /data/trusted_issuers
+        opa_issuers=$(curl -sk "${hub_api}/opal/trusted-issuers" 2>/dev/null)
+
+        local issuer_found=false
+        if echo "$opa_issuers" | jq -e ".trusted_issuers | to_entries[] | select(.key | contains(\"$spoke_issuer_pattern\"))" &>/dev/null; then
+            issuer_found=true
+            log_verbose "✓ Spoke issuer found in Hub OPA trusted_issuers"
+        fi
+
+        # Check 2: Verify spoke is in Hub OPA's federation_matrix
+        local fed_matrix
+        # FIXED: Use /federation-matrix not /data/federation_matrix
+        fed_matrix=$(curl -sk "${hub_api}/opal/federation-matrix" 2>/dev/null)
+
+        local matrix_found=false
+        if echo "$fed_matrix" | jq -e ".federation_matrix.${hub_code}[] | select(. == \"${code_upper}\")" &>/dev/null; then
+            matrix_found=true
+            log_verbose "✓ Spoke found in Hub OPA federation_matrix"
+        fi
+
+        # Both checks must pass
+        if [ "$issuer_found" = "true" ] && [ "$matrix_found" = "true" ]; then
+            verification_passed=true
+            break
+        fi
+
+        # Wait before retry (except on last attempt)
+        if [ $attempt -lt $max_retries ]; then
+            log_verbose "Waiting ${retry_delay}s for OPAL sync (attempt $attempt)..."
+            sleep $retry_delay
+        fi
+    done
+
+    # Report results
+    if [ "$verification_passed" = "true" ]; then
+        echo "  ✅ OPAL data synced to Hub OPA (verified after $attempt attempts)"
+        echo "     • Spoke issuer in trusted_issuers ✓"
+        echo "     • Spoke in federation_matrix ✓"
+        return 0
+    else
+        echo "  ⚠️  OPAL sync verification incomplete after $max_retries attempts (~${max_retries}0s)"
+        echo "  ℹ️  This is non-fatal - OPAL CDC will sync when it detects MongoDB changes"
+        echo ""
+        echo "  Manual fix if SSO fails:"
+        echo "    curl -X POST ${hub_api}/opal/cdc/force-sync"
+        echo ""
+        return 1  # Non-blocking - OPAL CDC will eventually sync
     fi
 }
 

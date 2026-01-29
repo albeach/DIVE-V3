@@ -1025,40 +1025,45 @@ _get_spoke_ports() {
         export NATO_COUNTRIES_LOADED=1
     fi
 
-    # Calculate port offsets (same logic as nato-countries.sh)
+    # Calculate port offsets
+    # CRITICAL: MUST MATCH seed-hub-kas.ts and federation-bootstrap.service.ts
+    # These offsets determine SPOKE_KEYCLOAK_HTTPS_PORT = 8443 + offset
+    # which is used for trusted issuer URLs during spoke registration
     local offset=0
     case "$code_lc" in
-        gbr) offset=1 ;;
-        fra) offset=2 ;;
-        deu) offset=3 ;;
-        can) offset=4 ;;
-        dnk) offset=5 ;;
-        pol) offset=6 ;;
-        nor) offset=7 ;;
-        esp) offset=8 ;;
-        ita) offset=9 ;;
-        bel) offset=10 ;;
-        alb) offset=11 ;;
-        hrv) offset=12 ;;
-        est) offset=13 ;;
-        lva) offset=14 ;;
-        ltu) offset=15 ;;
-        lux) offset=16 ;;
-        nld) offset=17 ;;
-        svk) offset=18 ;;
-        svn) offset=19 ;;
-        swe) offset=20 ;;
-        tur) offset=21 ;;
-        hun) offset=22 ;;
-        bgr) offset=23 ;;
-        rou) offset=24 ;;
-        prt) offset=25 ;;
-        grc) offset=26 ;;
-        isl) offset=27 ;;
-        mne) offset=28 ;;
-        cze) offset=29 ;;
-        fin) offset=30 ;;
-        nzl) offset=32 ;;  # NZL is at offset 32
+        usa) offset=0 ;;   # Hub: 8443
+        gbr) offset=20 ;;  # Spoke: 8463
+        fra) offset=10 ;;  # Spoke: 8453
+        deu) offset=30 ;;  # Spoke: 8473
+        can) offset=40 ;;  # Spoke: 8483
+        aus) offset=50 ;;  # Spoke: 8493
+        nzl) offset=60 ;;  # Spoke: 8503
+        ita) offset=70 ;;  # Spoke: 8513
+        esp) offset=80 ;;  # Spoke: 8523
+        nld) offset=90 ;;  # Spoke: 8533
+        bel) offset=100 ;; # Spoke: 8543
+        pol) offset=110 ;; # Spoke: 8553
+        nor) offset=120 ;; # Spoke: 8563
+        dnk) offset=130 ;; # Spoke: 8573
+        swe) offset=140 ;; # Spoke: 8583
+        fin) offset=150 ;; # Spoke: 8593
+        prt) offset=160 ;; # Spoke: 8603
+        grc) offset=170 ;; # Spoke: 8613
+        tur) offset=180 ;; # Spoke: 8623
+        cze) offset=190 ;; # Spoke: 8633
+        hun) offset=200 ;; # Spoke: 8643
+        rou) offset=210 ;; # Spoke: 8653
+        bgr) offset=220 ;; # Spoke: 8663
+        hrv) offset=230 ;; # Spoke: 8673
+        svk) offset=240 ;; # Spoke: 8683
+        svn) offset=250 ;; # Spoke: 8693
+        est) offset=260 ;; # Spoke: 8703
+        lva) offset=270 ;; # Spoke: 8713
+        ltu) offset=280 ;; # Spoke: 8723
+        lux) offset=290 ;; # Spoke: 8733
+        alb) offset=300 ;; # Spoke: 8743
+        mne) offset=310 ;; # Spoke: 8753
+        isl) offset=320 ;; # Spoke: 8763
         *) offset=0 ;;      # USA and others at base ports
     esac
 

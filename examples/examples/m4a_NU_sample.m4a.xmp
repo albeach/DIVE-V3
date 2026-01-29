@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"
+         xmlns:mbxmp="urn:nato:stanag:4778:bindinginformation:1:0:xmp#">
+  <rdf:Description rdf:about="">
+    <mbxmp:bindingInformation>&lt;mb:BindingInformation xmlns:mb="urn:nato:stanag:4778:bindinginformation:1:0"
+                       xmlns:xmime="http://www.w3.org/2005/05/xmlmime"&gt;
+  &lt;mb:MetadataBindingContainer&gt;
+    &lt;mb:MetadataBinding&gt;
+      &lt;mb:Metadata&gt;
+        &lt;slab:originatorConfidentialityLabel xmlns:slab="urn:nato:stanag:4774:confidentialitymetadatalabel:1:0"&gt;
+          &lt;slab:ConfidentialityInformation&gt;
+            &lt;slab:PolicyIdentifier&gt;NATO&lt;/slab:PolicyIdentifier&gt;
+            &lt;slab:Classification&gt;UNCLASSIFIED&lt;/slab:Classification&gt;
+          &lt;/slab:ConfidentialityInformation&gt;
+          &lt;slab:CreationDateTime&gt;2026-01-22T12:12:14Z&lt;/slab:CreationDateTime&gt;
+        &lt;/slab:originatorConfidentialityLabel&gt;
+      &lt;/mb:Metadata&gt;
+      &lt;mb:DataReference URI="./m4a_NU_sample.m4a" xmime:contentType="audio/mp4" /&gt;
+    &lt;/mb:MetadataBinding&gt;
+  &lt;/mb:MetadataBindingContainer&gt;
+&lt;/mb:BindingInformation&gt;</mbxmp:bindingInformation>
+  </rdf:Description>
+</rdf:RDF>
