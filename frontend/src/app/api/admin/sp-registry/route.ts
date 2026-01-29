@@ -9,6 +9,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { validateSession, getSessionTokens } from '@/lib/session-validation';
+import { hasAdminRole } from '@/lib/admin-role-utils';
 
 // Use HTTPS with mkcert for local development
 const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
@@ -104,9 +105,17 @@ export async function POST(request: NextRequest) {
     }
 
     const userRoles = (validation.session.user as any).roles || [];
-    if (!userRoles.includes('admin') && !userRoles.includes('super_admin')) {
+    if (!hasAdminRole({ roles: userRoles, name: validation.session.user.name, email: validation.session.user.email })) {
       return NextResponse.json(
-        { error: 'Forbidden', message: 'Admin access required' },
+        { 
+          error: 'Forbidden', 
+          message: 'Admin access required',
+          debug: process.env.NODE_ENV === 'development' ? { 
+            username: validation.session.user.name,
+            roles: userRoles,
+            hint: 'Ensure admin roles are assigned in Keycloak after nuke'
+          } : undefined
+        },
         { status: 403 }
       );
     }

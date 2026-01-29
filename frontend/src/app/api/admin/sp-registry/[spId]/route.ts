@@ -10,6 +10,7 @@ export const dynamic = 'force-dynamic';
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
+import { hasAdminRole } from '@/lib/admin-role-utils';
 
 // Use HTTPS with mkcert for local development
 const BACKEND_API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
@@ -35,7 +36,7 @@ export async function GET(
 
     // Check admin role (admin or super_admin)
     const userRoles = (session.user as any).roles || [];
-    if (!userRoles.includes('admin') && !userRoles.includes('super_admin')) {
+    if (!hasAdminRole({ roles: userRoles, name: session.user.name, email: session.user.email })) {
       return NextResponse.json(
         { error: 'Forbidden', message: 'Admin access required' },
         { status: 403 }
@@ -94,7 +95,7 @@ export async function PUT(
 
     // Check admin role (admin or super_admin)
     const userRoles = (session.user as any).roles || [];
-    if (!userRoles.includes('admin') && !userRoles.includes('super_admin')) {
+    if (!hasAdminRole({ roles: userRoles, name: session.user.name, email: session.user.email })) {
       return NextResponse.json(
         { error: 'Forbidden', message: 'Admin access required' },
         { status: 403 }
@@ -157,7 +158,7 @@ export async function DELETE(
 
     // Check admin role (admin or super_admin)
     const userRoles = (session.user as any).roles || [];
-    if (!userRoles.includes('admin') && !userRoles.includes('super_admin')) {
+    if (!hasAdminRole({ roles: userRoles, name: session.user.name, email: session.user.email })) {
       return NextResponse.json(
         { error: 'Forbidden', message: 'Admin access required' },
         { status: 403 }
