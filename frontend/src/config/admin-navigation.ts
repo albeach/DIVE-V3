@@ -341,6 +341,31 @@ export const ADMIN_NAVIGATION: AdminNavItem[] = [
   },
 
   // ==========================================
+  // ANALYTICS & REPORTING
+  // ==========================================
+  {
+    id: 'analytics',
+    label: 'Analytics',
+    href: '/admin/analytics',
+    icon: BarChart3,
+    description: 'System analytics and reporting',
+    category: 'overview',
+    searchKeywords: ['analytics', 'reports', 'charts', 'metrics', 'insights'],
+    children: [
+      {
+        id: 'analytics-advanced',
+        label: 'Advanced Analytics',
+        href: '/admin/analytics/advanced',
+        icon: BarChart3,
+        description: 'Interactive drill-down analytics with custom reports',
+        category: 'overview',
+        searchKeywords: ['advanced analytics', 'drill down', 'custom reports', 'export', 'charts'],
+        quickAction: true,
+      },
+    ],
+  },
+
+  // ==========================================
   // AUDIT & LOGS
   // ==========================================
   {
