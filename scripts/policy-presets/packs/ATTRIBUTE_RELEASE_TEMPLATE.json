@@ -1,0 +1,78 @@
+{
+  "policyPack": "ATTRIBUTE_RELEASE_TEMPLATE",
+  "version": "1.0",
+  "description": "Control attribute release in federation assertions (PII protection)",
+  "author": "DIVE V3 Team",
+  "createdAt": "2026-01-28",
+  "federationAttributeRelease": {
+    "USA": {
+      "FRA": {
+        "releaseAttributes": [
+          "uniqueID",
+          "clearance",
+          "countryOfAffiliation",
+          "acpCOI",
+          "orgUnit"
+        ],
+        "denyAttributes": [
+          "email",
+          "phoneNumber",
+          "homeAddress",
+          "ssn"
+        ]
+      },
+      "GBR": {
+        "releaseAttributes": [
+          "uniqueID",
+          "clearance",
+          "countryOfAffiliation",
+          "acpCOI",
+          "orgUnit",
+          "dutyOrg",
+          "email"
+        ],
+        "denyAttributes": [
+          "phoneNumber",
+          "homeAddress",
+          "ssn"
+        ]
+      }
+    },
+    "FRA": {
+      "USA": {
+        "releaseAttributes": [
+          "uniqueID",
+          "clearance",
+          "countryOfAffiliation",
+          "acpCOI"
+        ],
+        "denyAttributes": [
+          "email",
+          "phoneNumber",
+          "homeAddress"
+        ]
+      },
+      "DEU": {
+        "releaseAttributes": [
+          "uniqueID",
+          "clearance",
+          "countryOfAffiliation",
+          "acpCOI",
+          "orgUnit"
+        ],
+        "denyAttributes": [
+          "email",
+          "phoneNumber",
+          "homeAddress"
+        ]
+      }
+    }
+  },
+  "metadata": {
+    "use_case": "PII protection in federated assertions - control which attributes are released to partners",
+    "target_tenants": "All",
+    "deployment_time": "< 5 seconds",
+    "reversible": true,
+    "note": "This affects IdP attribute release, not OPA policy directly"
+  }
+}

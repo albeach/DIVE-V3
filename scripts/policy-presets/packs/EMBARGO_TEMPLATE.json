@@ -1,0 +1,51 @@
+{
+  "policyPack": "EMBARGO_TEMPLATE",
+  "version": "1.0",
+  "description": "Time-based embargo enforcement for sensitive resources",
+  "author": "DIVE V3 Team",
+  "createdAt": "2026-01-28",
+  "tenantConfigs": {
+    "USA": {
+      "embargo_hours_by_classification": {
+        "SECRET": 48,
+        "TOP_SECRET": 72
+      },
+      "embargo_hours_by_coi": {
+        "OPERATIONAL": 24,
+        "INTELLIGENCE": 72,
+        "PLANNING": 48
+      }
+    },
+    "FRA": {
+      "embargo_hours_by_classification": {
+        "CONFIDENTIAL": 24,
+        "SECRET": 48,
+        "TOP_SECRET": 72
+      }
+    },
+    "GBR": {
+      "embargo_hours_by_classification": {
+        "SECRET": 48,
+        "TOP_SECRET": 96
+      }
+    },
+    "DEU": {
+      "embargo_hours_by_classification": {
+        "SECRET": 48,
+        "TOP_SECRET": 72
+      }
+    }
+  },
+  "metadata": {
+    "use_case": "Enforce time-based embargoes on newly created sensitive resources",
+    "target_tenants": [
+      "USA",
+      "FRA",
+      "GBR",
+      "DEU"
+    ],
+    "deployment_time": "< 5 seconds",
+    "reversible": true,
+    "note": "Embargo enforcement uses resource creationDate field and current time check"
+  }
+}

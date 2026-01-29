@@ -86,32 +86,48 @@ Never commit secrets to Git - use GCP Secret Manager for ALL environments.
 ALL secrets MUST be stored in Google Cloud Secret Manager:
 
 **Project:** `dive25`
-**Naming Convention:** `dive-v3-<type>-<instance>`
 
-**Required Secrets:**
+**Naming Conventions:**
+- **Hub (USA)**: `dive-v3-<type>-usa` (shortened format)
+- **Spokes**: `dive-v3-<type>-password-<instance>` (explicit format)
+
+**CRITICAL: Dual Format for USA**
+USA must have BOTH formats because:
+- Hub uses: `dive-v3-postgres-usa` (via `configuration/secrets.sh`)
+- Spokes use: `dive-v3-postgres-password-usa` (via `spoke/pipeline/spoke-secrets.sh`)
+- Federation link has fallback: tries `-admin-password-` first, then falls back to shortened
+
+**Required Secrets (Spoke Format):**
 | Secret Name | Description |
 |------------|-------------|
-| `dive-v3-mongodb-usa` | USA MongoDB root password |
-| `dive-v3-mongodb-fra` | FRA MongoDB root password |
-| `dive-v3-mongodb-gbr` | GBR MongoDB root password |
-| `dive-v3-mongodb-deu` | DEU MongoDB root password |
-| `dive-v3-keycloak-usa` | USA Keycloak admin password |
-| `dive-v3-keycloak-fra` | FRA Keycloak admin password |
-| `dive-v3-keycloak-gbr` | GBR Keycloak admin password |
-| `dive-v3-keycloak-deu` | DEU Keycloak admin password |
-| `dive-v3-postgres-usa` | USA PostgreSQL password |
-| `dive-v3-postgres-fra` | FRA PostgreSQL password |
-| `dive-v3-postgres-gbr` | GBR PostgreSQL password |
-| `dive-v3-postgres-deu` | DEU PostgreSQL password |
-| `dive-v3-redis-blacklist` | Shared blacklist Redis password |
-| `dive-v3-grafana` | Grafana admin password |
+| `dive-v3-postgres-password-usa` | USA PostgreSQL password |
+| `dive-v3-postgres-password-fra` | FRA PostgreSQL password |
+| `dive-v3-mongo-password-usa` | USA MongoDB root password (note: mongo not mongodb) |
+| `dive-v3-mongo-password-fra` | FRA MongoDB root password |
+| `dive-v3-redis-password-usa` | USA Redis password |
+| `dive-v3-redis-password-fra` | FRA Redis password |
+| `dive-v3-keycloak-admin-password-usa` | USA Keycloak admin password |
+| `dive-v3-keycloak-admin-password-fra` | FRA Keycloak admin password |
+| `dive-v3-keycloak-client-secret-usa` | USA Keycloak client secret |
+| `dive-v3-keycloak-client-secret-fra` | FRA Keycloak client secret |
 | `dive-v3-auth-secret-usa` | USA NextAuth secret |
 | `dive-v3-auth-secret-fra` | FRA NextAuth secret |
-| `dive-v3-auth-secret-gbr` | GBR NextAuth secret |
-| `dive-v3-auth-secret-deu` | DEU NextAuth secret |
-| `dive-v3-keycloak-client-secret` | Keycloak client secret |
+
+**Hub Shortened Format (USA only for backward compatibility):**
+| Secret Name | Description |
+|------------|-------------|
+| `dive-v3-postgres-usa` | USA PostgreSQL password (Hub format) |
+| `dive-v3-mongodb-usa` | USA MongoDB root password (Hub format - note: mongodb) |
+| `dive-v3-redis-usa` | USA Redis password (Hub format) |
+| `dive-v3-keycloak-usa` | USA Keycloak admin password (Hub format) |
+
+**Shared Secrets:**
+| Secret Name | Description |
+|------------|-------------|
+| `dive-v3-redis-blacklist` | Shared blacklist Redis password |
+| `dive-v3-grafana` | Grafana admin password |
 | `dive-v3-kas-signing-key` | KAS JWT signing key |
-| `dive-v3-federation-<src>-<tgt>` | Federation secrets (12 bidirectional) |
+| `dive-v3-federation-<src>-<tgt>` | Federation secrets (bidirectional) |
 
 ### How to Use GCP Secrets in Code
 ```typescript

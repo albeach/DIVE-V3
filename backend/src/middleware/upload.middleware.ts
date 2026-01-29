@@ -165,7 +165,7 @@ export const validateUploadMetadata = (
         const { classification, releasabilityTo, title } = req.body;
 
         // Validate classification
-        const validClassifications = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
+        const validClassifications = ['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
         if (!classification || !validClassifications.includes(classification)) {
             throw new ValidationError(`Invalid classification. Must be one of: ${validClassifications.join(', ')}`);
         }

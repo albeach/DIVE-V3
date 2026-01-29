@@ -76,7 +76,7 @@ fi
 # to avoid conflicts with common.sh which also defines HUB_REALM as readonly
 : "${HUB_KC_CONTAINER:=dive-hub-keycloak}"
 : "${HUB_REALM:=dive-v3-broker-usa}"
-: "${HUB_IDP_ALIAS_PREFIX:=spoke-idp-}"
+# NOTE: HUB_IDP_ALIAS_PREFIX removed - actual format is {code}-idp, not spoke-idp-{code}
 
 # Federation status states (safe to make readonly - not used in common.sh)
 readonly FED_STATUS_UNREGISTERED="unregistered"
@@ -1203,9 +1203,11 @@ spoke_federation_verify() {
 
         if [ -n "$hub_admin_token" ]; then
             local hub_idp_status
+            # FIXED: Use {code}-idp format, not spoke-idp-{code}
+            # Federation link creates fra-idp, not spoke-idp-fra
             hub_idp_status=$(docker exec "$HUB_KC_CONTAINER" curl -sf \
                 -H "Authorization: Bearer $hub_admin_token" \
-                "http://localhost:8080/admin/realms/${HUB_REALM}/identity-provider/instances/${HUB_IDP_ALIAS_PREFIX}${code_lower}" 2>/dev/null)
+                "http://localhost:8080/admin/realms/${HUB_REALM}/identity-provider/instances/${code_lower}-idp" 2>/dev/null)
 
             if echo "$hub_idp_status" | grep -q '"enabled":true'; then
                 hub_to_spoke="true"

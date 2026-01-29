@@ -243,8 +243,14 @@ export interface IEncryptedPayloadChunk {
     /** Chunk sequence number */
     chunkId: number;
 
-    /** Encrypted data (Base64-encoded) */
-    encryptedData: string;
+    /** Encrypted data (Base64-encoded) - ONLY for files <10MB */
+    encryptedData?: string;
+
+    /** GridFS file ID - ONLY for large files (>=10MB) stored in GridFS */
+    gridfsFileId?: string;
+
+    /** Storage mode: 'inline' for small files, 'gridfs' for large files */
+    storageMode: 'inline' | 'gridfs';
 
     /** Chunk size in bytes */
     size: number;

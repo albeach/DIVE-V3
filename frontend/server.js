@@ -69,6 +69,8 @@ app.prepare().then(() => {
 
       const parsedUrl = parseUrl(req.url, `https://${hostname}:${port}`);
 
+      // Note: CSP headers are set in next.config.ts headers() function
+      // Custom server still applies Next.js config headers
 
       // Node.js 24 HTTP/2 compatibility: Direct property patching
       // Add the missing methods that Next.js expects

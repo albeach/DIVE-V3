@@ -126,18 +126,6 @@
 
     <script type="module">
         // #region agent log
-        // Hypothesis A,B,C,D: Log form action URL and available context
-        const debugActionUrl = document.getElementById('debug_action_url')?.value || '';
-        const debugHasSessionCode = document.getElementById('debug_has_session_code')?.value === 'true';
-        const debugData = {
-            actionUrl: debugActionUrl,
-            hasSessionCode: debugHasSessionCode,
-            urlParams: new URLSearchParams(window.location.search).toString(),
-            referrer: document.referrer
-        };
-        fetch('http://127.0.0.1:7243/ingest/84b84b04-5661-4074-af82-a6f395f1c783',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'webauthn-register.ftl:119',message:'WebAuthn form loaded',data:debugData,timestamp:Date.now(),sessionId:'debug-session',runId:'initial',hypothesisId:'A,B,C,D'})}).catch(()=>{});
-        // #endregion
-
         // WebAuthn registration with modern error handling
         const challenge = "${challenge}";
         const userid = "${userid}";
@@ -294,15 +282,6 @@
                     document.getElementById('transports').value = transports;
 
                     // #region agent log
-                    // Hypothesis A,D,E: Log right before form submission
-                    const formData = {
-                        actionUrl: document.getElementById('webauth').action,
-                        hasSessionCode: document.getElementById('webauth').action.includes('session_code='),
-                        credentialRegistered: true
-                    };
-                    fetch('http://127.0.0.1:7243/ingest/84b84b04-5661-4074-af82-a6f395f1c783',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'webauthn-register.ftl:275',message:'About to submit WebAuthn form',data:formData,timestamp:Date.now(),sessionId:'debug-session',runId:'initial',hypothesisId:'A,D,E'})}).catch(()=>{});
-                    // #endregion
-
                     document.getElementById('webauth').submit();
                 })
                 .catch(error => {

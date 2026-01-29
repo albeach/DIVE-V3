@@ -473,6 +473,31 @@ EOF
             # Extract token from auto-approval response
             local spoke_token=$(echo "$response" | jq -r '.token.token // empty' 2>/dev/null)
 
+            # BEST PRACTICE FALLBACK: If token missing (e.g. re-registration after nuke — Hub returns
+            # existing approved spoke but token may not be in register response), fetch token from
+            # the public registration-status endpoint. Works without Hub code changes or restart.
+            if [ -z "$spoke_token" ] && [ -n "$registered_spoke_id" ]; then
+                log_info "Token not in register response; fetching from registration status endpoint..."
+                local status_url="https://localhost:4000/api/federation/registration/${registered_spoke_id}/status"
+                local status_resp
+                status_resp=$(curl -sk --max-time 10 "$status_url" 2>/dev/null)
+                spoke_token=$(echo "$status_resp" | jq -r '.token.token // empty' 2>/dev/null)
+                if [ -n "$spoke_token" ]; then
+                    log_success "✓ Token retrieved from registration status endpoint"
+                fi
+            fi
+            # Also try by instance code (route accepts spokeId or instanceCode)
+            if [ -z "$spoke_token" ] && [ -n "$code_upper" ]; then
+                log_verbose "Trying registration status by instance code..."
+                local status_url="https://localhost:4000/api/federation/registration/${code_upper}/status"
+                local status_resp
+                status_resp=$(curl -sk --max-time 10 "$status_url" 2>/dev/null)
+                spoke_token=$(echo "$status_resp" | jq -r '.token.token // empty' 2>/dev/null)
+                if [ -n "$spoke_token" ]; then
+                    log_success "✓ Token retrieved from registration status (by instance code)"
+                fi
+            fi
+
             if [ -n "$spoke_token" ]; then
                 log_success "✓ Token received from auto-approval"
 
@@ -538,7 +563,10 @@ EOF
                         recreate_output=$(docker compose -f "$compose_dir/docker-compose.yml" --env-file "$compose_dir/.env" up -d --force-recreate "backend-${code_lower}" 2>&1)
                         local recreate_exit=$?
 
-                        log_info "Docker compose exit: $recreate_exit"
+                        # Only log exit code if it's non-zero (error)
+                        if [ $recreate_exit -ne 0 ]; then
+                            log_warn "Docker compose exit code: $recreate_exit"
+                        fi
                         [ -n "$recreate_output" ] && log_verbose "Output: $recreate_output"
 
                         if [ $recreate_exit -eq 0 ]; then

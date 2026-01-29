@@ -24,6 +24,8 @@ import {
     Sparkles,
     Hammer,
     FolderOpen,
+    Users,
+    Layers,
     LucideIcon
 } from 'lucide-react';
 
@@ -168,10 +170,29 @@ export const navItems: NavItem[] = [
                     { name: 'nav.policyTools.reference', href: '/policies/sandbox?tab=reference', icon: BookOpen },
                 ]
             },
+        ]
+    },
+    {
+        name: 'nav.compliance.name',
+        shortName: 'nav.compliance.shortName',  // Shorter label for lg breakpoint
+        href: '/compliance',
+        icon: CheckCircle2,
+        description: 'nav.compliance.description',
+        hasMegaMenu: true,
+        megaMenuItems: [
             {
-                category: 'nav.policyTools.compliance',
+                category: 'nav.compliance.standards',
                 items: [
-                    { name: 'nav.policyTools.standardsCompliance', href: '/compliance', icon: CheckCircle2 },
+                    { name: 'nav.compliance.standardsCompliance', href: '/compliance', icon: CheckCircle2 },
+                ]
+            },
+            {
+                category: 'nav.compliance.security',
+                items: [
+                    { name: 'nav.compliance.kas', href: '/compliance/multi-kas', icon: Key },
+                    { name: 'nav.compliance.cois', href: '/compliance/coi-keys', icon: Users },
+                    { name: 'nav.compliance.pki', href: '/compliance/certificates', icon: FileCheck },
+                    { name: 'nav.compliance.classifications', href: '/compliance/classifications', icon: Layers },
                 ]
             },
         ]

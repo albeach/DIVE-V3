@@ -1,0 +1,160 @@
+{
+  "policyPack": "FVEY_EXPANDED",
+  "version": "1.0",
+  "description": "Enhanced Five Eyes sharing with TOP_SECRET access",
+  "author": "DIVE V3 Team",
+  "createdAt": "2026-01-28",
+  "tenantConfigs": {
+    "USA": {
+      "mfa_required_above": "SECRET",
+      "max_session_hours": 10,
+      "default_coi": [
+        "FVEY",
+        "NATO"
+      ]
+    },
+    "GBR": {
+      "mfa_required_above": "SECRET",
+      "max_session_hours": 10,
+      "default_coi": [
+        "FVEY",
+        "NATO"
+      ]
+    },
+    "CAN": {
+      "mfa_required_above": "SECRET",
+      "max_session_hours": 10,
+      "default_coi": [
+        "FVEY",
+        "NATO"
+      ]
+    },
+    "AUS": {
+      "mfa_required_above": "SECRET",
+      "max_session_hours": 10,
+      "default_coi": [
+        "FVEY",
+        "NATO"
+      ]
+    },
+    "NZL": {
+      "mfa_required_above": "SECRET",
+      "max_session_hours": 10,
+      "default_coi": [
+        "FVEY",
+        "NATO"
+      ]
+    }
+  },
+  "federationConstraints": [
+    {
+      "ownerTenant": "USA",
+      "partnerTenant": "GBR",
+      "maxClassification": "TOP_SECRET",
+      "allowedCOIs": [
+        "FVEY",
+        "NATO",
+        "AUKUS"
+      ],
+      "deniedCOIs": [],
+      "relationshipType": "spoke_spoke",
+      "description": "FVEY enhanced trust: USA → United Kingdom"
+    },
+    {
+      "ownerTenant": "USA",
+      "partnerTenant": "CAN",
+      "maxClassification": "TOP_SECRET",
+      "allowedCOIs": [
+        "FVEY",
+        "NATO",
+        "CAN-US"
+      ],
+      "deniedCOIs": [],
+      "relationshipType": "spoke_spoke",
+      "description": "FVEY enhanced trust: USA → Canada"
+    },
+    {
+      "ownerTenant": "USA",
+      "partnerTenant": "AUS",
+      "maxClassification": "TOP_SECRET",
+      "allowedCOIs": [
+        "FVEY",
+        "AUKUS"
+      ],
+      "deniedCOIs": [],
+      "relationshipType": "spoke_spoke",
+      "description": "FVEY enhanced trust: USA → Australia"
+    },
+    {
+      "ownerTenant": "USA",
+      "partnerTenant": "NZL",
+      "maxClassification": "TOP_SECRET",
+      "allowedCOIs": [
+        "FVEY"
+      ],
+      "deniedCOIs": [],
+      "relationshipType": "spoke_spoke",
+      "description": "FVEY enhanced trust: USA → New Zealand"
+    },
+    {
+      "ownerTenant": "GBR",
+      "partnerTenant": "USA",
+      "maxClassification": "TOP_SECRET",
+      "allowedCOIs": [
+        "FVEY",
+        "NATO",
+        "AUKUS"
+      ],
+      "deniedCOIs": [],
+      "relationshipType": "spoke_spoke",
+      "description": "FVEY enhanced trust: United Kingdom → USA"
+    },
+    {
+      "ownerTenant": "GBR",
+      "partnerTenant": "CAN",
+      "maxClassification": "TOP_SECRET",
+      "allowedCOIs": [
+        "FVEY",
+        "NATO"
+      ],
+      "deniedCOIs": [],
+      "relationshipType": "spoke_spoke",
+      "description": "FVEY enhanced trust: United Kingdom → Canada"
+    },
+    {
+      "ownerTenant": "GBR",
+      "partnerTenant": "AUS",
+      "maxClassification": "TOP_SECRET",
+      "allowedCOIs": [
+        "FVEY",
+        "AUKUS"
+      ],
+      "deniedCOIs": [],
+      "relationshipType": "spoke_spoke",
+      "description": "FVEY enhanced trust: United Kingdom → Australia"
+    },
+    {
+      "ownerTenant": "GBR",
+      "partnerTenant": "NZL",
+      "maxClassification": "TOP_SECRET",
+      "allowedCOIs": [
+        "FVEY"
+      ],
+      "deniedCOIs": [],
+      "relationshipType": "spoke_spoke",
+      "description": "FVEY enhanced trust: United Kingdom → New Zealand"
+    }
+  ],
+  "metadata": {
+    "use_case": "Five Eyes enhanced sharing with full TOP_SECRET access",
+    "target_tenants": [
+      "USA",
+      "GBR",
+      "CAN",
+      "AUS",
+      "NZL"
+    ],
+    "deployment_time": "< 10 seconds",
+    "reversible": true
+  }
+}

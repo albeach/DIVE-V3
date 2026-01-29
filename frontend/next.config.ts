@@ -51,6 +51,7 @@ const nextConfig: NextConfig = {
             `script-src ${scriptSrc.join(' ')}`,
             `style-src 'self' 'unsafe-inline'`, // Required for Tailwind and styled components
             "img-src 'self' data: blob: https://authjs.dev", // Allow inline images, data URIs, and AuthJS provider icons
+            "media-src 'self' data: blob:", // Allow audio/video from blob and data URIs
             `font-src 'self' data:`, // Self-hosted fonts only
             `connect-src ${connectSrc.join(' ')}`,
             `frame-src 'self' data: ${keycloakBaseUrl}`, // Allow Keycloak iframe for OIDC and data URIs for PDF viewing

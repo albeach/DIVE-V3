@@ -34,6 +34,8 @@ export interface IKasInstance {
   authMethod: 'jwt' | 'mtls' | 'api_key';
   authConfig: {
     jwtIssuer?: string;
+    jwtAudience?: string;
+    publicKeyUrl?: string;
     certificateFingerprint?: string;
     apiKeyHash?: string;
   };
@@ -123,12 +125,12 @@ export class MongoKasRegistryStore {
 
   /**
    * REMOVED: seedFromStaticFile() - NO JSON FILE LOADING
-   * 
+   *
    * KAS registry must be populated via:
    * 1. API calls (POST /api/kas/register)
    * 2. MongoDB seeding scripts
    * 3. Hub API queries (for spokes)
-   * 
+   *
    * JSON files are NOT used - MongoDB is the Single Source of Truth (SSOT)
    */
 

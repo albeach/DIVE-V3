@@ -417,6 +417,11 @@ app.post('/request-key', async (req: Request, res: Response) => {
             // Extract decision from OPA response
             opaDecision = opaResponse.data.result?.decision || opaResponse.data.result;
 
+            // Validate OPA response structure
+            if (!opaDecision || typeof opaDecision.allow === 'undefined') {
+                throw new Error(`Invalid OPA response structure: ${JSON.stringify(opaResponse.data)}`);
+            }
+
             // Record OPA evaluation time
             recordOPAEvaluation(Date.now() - opaStartTime);
 

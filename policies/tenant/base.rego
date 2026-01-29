@@ -26,6 +26,13 @@ import rego.v1
 # 2. input.subject.issuer (derived from token issuer)
 # 3. data.tenant_id (OPAL-provided)
 
+# Determine current tenant
+# Priority:
+# 1. input.context.tenant (explicit override from request)
+# 2. issuer → tenant mapping from trusted_issuers
+# 3. data.tenant_id (set during spoke initialization)
+# 4. First tenant code found in data.tenant_configs (single-tenant deployments)
+# 5. "USA" as absolute fallback
 current_tenant := tenant if {
 	tenant := input.context.tenant
 } else := tenant if {
@@ -33,6 +40,16 @@ current_tenant := tenant if {
 	tenant := issuer_to_tenant[issuer]
 } else := tenant if {
 	tenant := data.tenant_id
+} else := tenant if {
+	# For single-tenant deployments: use the only tenant in tenant_configs
+	configs := data.tenant_configs.tenant_configs
+	is_object(configs)
+	count(configs) == 1
+	some code, _ in configs
+	tenant := code
+} else := tenant if {
+	# Fallback to result wrapper if tenant_configs is wrapped
+	tenant := data.tenant_id.result
 } else := "USA" # Default fallback
 
 # ============================================
@@ -59,15 +76,19 @@ default_trusted_issuers := {
 # This is the PRIMARY source - default_trusted_issuers is only fallback
 # OPAL data comes from Hub backend API which wraps response in {success, trusted_issuers, count}
 # NOTE: Renamed to active_trusted_issuers to avoid recursion with data path
-active_trusted_issuers := data.trusted_issuers.trusted_issuers if {
-	data.trusted_issuers.trusted_issuers
-	count(data.trusted_issuers.trusted_issuers) > 0
-} else := data.trusted_issuers if {
+#
+# CRITICAL FIX: Use intermediate variable to avoid Rego evaluation issues with nested paths
+active_trusted_issuers := issuers if {
+	wrapper := data.trusted_issuers
+	wrapper.success == true
+	issuers := wrapper.trusted_issuers
+	count(issuers) > 0
+} else := issuers if {
 	# Fallback: Direct data without API wrapper
-	data.trusted_issuers
-	is_object(data.trusted_issuers)
-	not data.trusted_issuers.success  # Not an API response
-	count(data.trusted_issuers) > 0
+	issuers := data.trusted_issuers
+	is_object(issuers)
+	not issuers.success  # Not an API response
+	count(issuers) > 0
 } else := default_trusted_issuers
 
 # ============================================

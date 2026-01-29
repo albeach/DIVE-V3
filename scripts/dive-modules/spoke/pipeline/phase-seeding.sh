@@ -71,6 +71,36 @@ spoke_phase_seeding() {
     fi
     log_success "✓ 19 COI definitions initialized (SSOT matches Hub)"
 
+    # Step 0.5: Register Spoke Trusted Issuer (SSOT - CRITICAL for local authentication)
+    # Spoke must register its own Keycloak realm as a trusted issuer in spoke MongoDB
+    # This enables:
+    #   - /api/idps/public to return spoke's IdP
+    #   - Resources page to show spoke as trusted issuer
+    #   - Spoke users to authenticate via spoke's Keycloak
+    log_step "Step 0.5/3: Registering spoke trusted issuer"
+    log_info "Registering $code_upper Keycloak realm in local MongoDB..."
+
+    local issuer_seed_output
+    if issuer_seed_output=$(docker exec "$backend_container" npm run seed:spoke-issuer 2>&1); then
+        # Check if issuer was registered or already existed
+        if echo "$issuer_seed_output" | grep -q "already exists"; then
+            log_verbose "Spoke trusted issuer already registered (idempotent)"
+        else
+            log_success "✓ Spoke trusted issuer registered in local MongoDB"
+        fi
+
+        # Log issuer details for verification
+        if echo "$issuer_seed_output" | grep -q "Issuer URL:"; then
+            local issuer_url=$(echo "$issuer_seed_output" | grep "Issuer URL:" | head -1 | awk '{print $3}')
+            log_verbose "  Issuer URL: $issuer_url"
+        fi
+    else
+        log_warn "⚠ Spoke trusted issuer registration failed (non-blocking)"
+        log_warn "Impact: Spoke's IdP may not appear in resources page"
+        log_warn "Manual fix: docker exec $backend_container npm run seed:spoke-issuer"
+        # Non-blocking: Spoke can still use Hub issuer via OPAL sync
+    fi
+
     # Step 1: Seed test users (non-blocking - users created by Terraform)
     log_step "Step 1/3: Seeding test users"
     if ! spoke_seed_users "$instance_code"; then
@@ -262,7 +292,7 @@ spoke_seed_resources() {
     # Root cause: Backend tries to connect to MongoDB but password may not be set
     # or MongoDB may not be ready, causing seeding to fail silently
     # ==========================================================================
-    local mongo_container="dive-spoke-${code_lower}-mongo"
+    # Note: mongo_container is already defined above as dive-spoke-${code_lower}-mongodb
     local mongo_password_var="MONGO_PASSWORD_${code_upper}"
     local mongo_password="${!mongo_password_var}"
 

@@ -527,12 +527,16 @@ class FederationBootstrapService {
       return CUSTOM_TEST_CODES[code];
     }
 
-    // NATO member offsets (0-29)
+    // NATO member offsets - MUST MATCH common.sh and seed-spoke-trusted-issuer.ts
+    // Formula: Keycloak HTTPS Port = 8443 + offset
     const NATO_OFFSETS: Record<string, number> = {
-      'USA': 0, 'GBR': 2, 'FRA': 10, 'DEU': 8, 'CAN': 4, 'ITA': 14,
-      'ESP': 12, 'NLD': 16, 'POL': 18, 'BEL': 20, 'NOR': 22, 'DNK': 24,
-      'CZE': 26, 'PRT': 28,
-      // Add more as needed
+      'USA': 0, 'GBR': 20, 'FRA': 10, 'DEU': 30, 'CAN': 40, 'AUS': 50,
+      'NZL': 60, 'ITA': 70, 'ESP': 80, 'NLD': 90, 'BEL': 100,
+      'POL': 110, 'NOR': 120, 'DNK': 130, 'SWE': 140, 'FIN': 150,
+      'PRT': 160, 'GRC': 170, 'TUR': 180, 'CZE': 190, 'HUN': 200,
+      'ROU': 210, 'BGR': 220, 'HRV': 230, 'SVK': 240, 'SVN': 250,
+      'EST': 260, 'LVA': 270, 'LTU': 280, 'LUX': 290, 'ALB': 300,
+      'MNE': 310, 'ISL': 320,
     };
 
     if (NATO_OFFSETS[code] !== undefined) {

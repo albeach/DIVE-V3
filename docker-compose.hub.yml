@@ -380,6 +380,8 @@ services:
       NODE_ENV: development  # Development mode for better debugging
       DEBUG: "*"
       PORT: "4000"
+      # Heap limit only in NODE_OPTIONS (report flags must be in command - Node disallows them in NODE_OPTIONS)
+      NODE_OPTIONS: "--max-old-space-size=4096"
       INSTANCE_CODE: USA
       INSTANCE_NAME: "United States"
       INSTANCE_REALM: USA
@@ -416,6 +418,19 @@ services:
       # Enable polling for file watching in Docker (fixes hot-reload)
       CHOKIDAR_USEPOLLING: "true"
       CHOKIDAR_INTERVAL: "1000"
+    # Full stack/heap diagnostic on fatal errors (OOM) - report written to ./backend/logs
+    # On-demand report: docker kill -s SIGUSR2 dive-hub-backend
+    command:
+      - node
+      - --report-on-fatalerror
+      - --report-uncaught-exception
+      - --report-on-signal
+      - --report-signal=SIGUSR2
+      - --report-directory=/app/logs
+      - --report-filename=node-report.%e.%p.%h.%t.json
+      - node_modules/.bin/tsx
+      - watch
+      - src/https-server.ts
     ports:
       - "127.0.0.1:${BACKEND_PORT:-4000}:4000"
     volumes:
@@ -683,17 +698,19 @@ services:
     environment:
       # Use Redis as broadcast backend for pub/sub
       OPAL_BROADCAST_URI: redis://:${REDIS_PASSWORD_USA}@redis:6379
-      # Git-based policy distribution - policies from GitHub repo
-      OPAL_REPO_WATCHER_ENABLED: "true"
-      OPAL_POLICY_REPO_URL: https://github.com/albeach/dive-v3-policies.git
+      # Local policy distribution with filesystem watching (not Git)
+      # CRITICAL: Use master-branch tracking to match actual Git branch
+      OPAL_POLICY_REPO_URL: file:///policies
       OPAL_POLICY_REPO_MAIN_BRANCH: master
-      OPAL_POLICY_REPO_POLLING_INTERVAL: 30
-      # Policy paths to include (relative to repo root)
-      # CRITICAL FIX (2026-01-15): Include root (.) for admin policies and other root-level files
-      # Without root, files like admin_authorization_policy.rego are excluded
-      OPAL_POLICY_SOURCE_DIRS: .,base,org,tenant,entrypoints,compat
+      OPAL_REPO_WATCHER_ENABLED: "true"
+      OPAL_POLICY_REPO_POLLING_INTERVAL: 5
+      # Force policy reload on every poll (for development)
+      OPAL_POLICY_REPO_CLONE_PATH: /tmp/opal_repo
+      OPAL_POLICY_REPO_REUSE_CLONE_PATH: "false"
+      # Policy paths to include (all .rego files in /policies)
+      OPAL_POLICY_SOURCE_DIRS: .,base,org,tenant,entrypoints,compat,data
       # Multiple data topics for real-time policy data distribution (Phase 2-3)
-      OPAL_DATA_TOPICS_DEFAULT: policy_data,trusted_issuers,federation_matrix,tenant_configs,coi_definitions
+      OPAL_DATA_TOPICS_DEFAULT: policy_data,trusted_issuers,federation_matrix,tenant_configs,coi_definitions,federation_constraints
       OPAL_INLINE_OPA_CONFIG: "false"
       OPAL_LOG_LEVEL: DEBUG
       OPAL_LOG_FORMAT: text
@@ -743,6 +760,13 @@ services:
                 "topics": ["coi_definitions"],
                 "dst_path": "coi_definitions",
                 "config": {"headers": {"Accept": "application/json"}}
+              },
+              {
+                "url": "https://host.docker.internal:4000/api/opal/federation-constraints",
+                "topics": ["federation_constraints"],
+                "dst_path": "federation_constraints",
+                "config": {"headers": {"Accept": "application/json"}},
+                "description": "Phase 2: Tenant-controlled federation constraints (bilateral)"
               }
             ]
           }
@@ -755,8 +779,8 @@ services:
       - hub-internal
       - dive-shared  # Allow spoke OPAL clients to connect via federation network
     volumes:
-      # NOTE: ./policies volume mount removed to prevent duplication with Git-based distribution
-      # OPAL fetches policies from GitHub repo: https://github.com/albeach/dive-v3-policies.git
+      # Local policy bundle for distribution to spokes
+      - ./policies:/policies:ro
       - ./opal-data-source:/opal-data-source:ro
       - ./instances/hub/certs:/certs:ro
       - ./certs/opal:/opal-keys:ro

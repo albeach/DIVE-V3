@@ -314,13 +314,14 @@ export async function uploadFile(
             resourceId: uploadId,
             title: metadata.title,
             ztdf: ztdfObject,
+            // Minimal legacy field - only classification for backwards compat
             legacy: {
                 classification: effectiveClassification as any,
                 releasabilityTo: effectiveReleasability,
                 COI: metadata.COI || [],
                 coiOperator: metadata.coiOperator || 'ALL',
                 encrypted: true,
-                encryptedContent: ztdfObject.payload.encryptedChunks[0]?.encryptedData
+                encryptedContent: null  // NEVER store content inline - always use GridFS or ZTDF payload
             },
             stanag: stanagMetadata,
             // Add multimedia metadata if present
@@ -699,12 +700,55 @@ async function convertToZTDF(
     });
 
     // 6. Create Encrypted Payload Chunk
-    const chunk = {
-        chunkId: 0,
-        encryptedData: encryptionResult.encryptedData,
-        size: Buffer.from(encryptionResult.encryptedData, 'base64').length,
-        integrityHash: computeSHA384(encryptionResult.encryptedData)
-    };
+    // For large files (>10MB encrypted), store in GridFS to avoid BSON 16MB limit
+    const encryptedSize = Buffer.from(encryptionResult.encryptedData, 'base64').length;
+    const GRIDFS_THRESHOLD = 10 * 1024 * 1024; // 10MB threshold
+    const useGridFS = encryptedSize >= GRIDFS_THRESHOLD;
+
+    let chunk;
+
+    if (useGridFS) {
+        // Store large encrypted payload in GridFS
+        const { uploadToGridFS } = await import('./gridfs.service');
+        const gridfsFileId = await uploadToGridFS(
+            encryptionResult.encryptedData,
+            `${uploadId}.encrypted`,
+            {
+                resourceId: uploadId,
+                contentType: mimeType,
+                classification: metadata.classification,
+                size: encryptedSize
+            }
+        );
+
+        chunk = {
+            chunkId: 0,
+            gridfsFileId,
+            storageMode: 'gridfs' as const,
+            size: encryptedSize,
+            integrityHash: computeSHA384(encryptionResult.encryptedData)
+        };
+
+        logger.info('Encrypted payload stored in GridFS', {
+            uploadId,
+            gridfsFileId,
+            size: encryptedSize
+        });
+    } else {
+        // Store small encrypted payload inline (original behavior)
+        chunk = {
+            chunkId: 0,
+            encryptedData: encryptionResult.encryptedData,
+            storageMode: 'inline' as const,
+            size: encryptedSize,
+            integrityHash: computeSHA384(encryptionResult.encryptedData)
+        };
+
+        logger.debug('Encrypted payload stored inline', {
+            uploadId,
+            size: encryptedSize
+        });
+    }
 
     // 7. Create ZTDF Payload (with multiple KAOs)
     const payload = {
@@ -713,12 +757,10 @@ async function convertToZTDF(
         authTag: encryptionResult.authTag,
         keyAccessObjects: kaos, // Multiple KAOs for coalition scalability
         encryptedChunks: [chunk],
-        payloadHash: '' // Will be computed below
+        // CRITICAL: Compute payloadHash from actual encrypted data, not from chunk fields
+        // For GridFS chunks, chunk.encryptedData is undefined, so we must use the original
+        payloadHash: computeSHA384(encryptionResult.encryptedData)
     };
-
-    // Compute payload hash
-    const chunksData = payload.encryptedChunks.map(c => c.encryptedData).join('');
-    payload.payloadHash = computeSHA384(chunksData);
 
     // 8. Assemble ZTDF Object
     const ztdfObject: IZTDFObject = {

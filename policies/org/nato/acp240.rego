@@ -338,13 +338,14 @@ parse_amr(amr_input) := parsed if {
 
 is_authentication_strength_insufficient := msg if {
 	input.resource.classification != "UNCLASSIFIED"
-	
-	# Get tenant-specific AAL requirement
-	required_aal := data.tenant[lower(input.subject.country)].classification.get_required_aal(input.resource.classification)
-	
+
+	# Get required AAL for classification (static mapping)
+	# AAL1 = single-factor, AAL2 = 2+ factors, AAL3 = crypto + MFA
+	required_aal := get_required_aal_for_classification(input.resource.classification)
+
 	# Only enforce if required_aal > 1
 	required_aal > 1
-	
+
 	input.context.acr
 	acr_str := sprintf("%v", [input.context.acr])
 	acr_lower := lower(acr_str)
@@ -366,6 +367,18 @@ is_authentication_strength_insufficient := msg if {
 		count(amr_factors),
 	])
 }
+
+# Get required AAL for classification
+# AAL1 = single-factor (UNCLASSIFIED, RESTRICTED)
+# AAL2 = 2+ factors (CONFIDENTIAL, SECRET, CONFIDENTIEL DÉFENSE, etc.)
+# AAL3 = crypto + MFA (TOP SECRET, TRÈS SECRET DÉFENSE, etc.)
+get_required_aal_for_classification(classification) := 1 if {
+	classification in ["UNCLASSIFIED", "RESTRICTED", "FOUO", "NON CLASSIFIÉ", "DIFFUSION RESTREINTE", "OFFICIAL", "OFFEN", "VS-NFD"]
+} else := 2 if {
+	classification in ["CONFIDENTIAL", "SECRET", "CONFIDENTIEL DÉFENSE", "SECRET DÉFENSE", "VS-VERTRAULICH", "GEHEIM", "OFFICIAL-SENSITIVE"]
+} else := 3 if {
+	classification in ["TOP SECRET", "TS/SCI", "TRÈS SECRET DÉFENSE", "STRENG GEHEIM", "TOP SECRET"]
+} else := 1  # Default to AAL1 for unknown classifications
 
 is_mfa_not_verified := msg if {
 	# Only check MFA for classifications that require AAL2 (CONFIDENTIAL, SECRET, TOP_SECRET)

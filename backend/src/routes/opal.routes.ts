@@ -795,9 +795,36 @@ router.get('/tenant-configs', async (_req: Request, res: Response): Promise<void
 });
 
 /**
+ * GET /api/opal/federation-constraints
+ * Serve federation constraints for OPAL distribution
+ * Public endpoint (used by OPAL server with datasource token)
+ */
+router.get('/federation-constraints', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const { FederationConstraint } = await import('../models/federation-constraint.model');
+    const constraints = await FederationConstraint.getActiveConstraintsForOPAL();
+
+    res.json({
+      success: true,
+      federation_constraints: constraints,
+      count: Object.values(constraints).reduce((sum, partners) => sum + Object.keys(partners).length, 0),
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error('Failed to get federation constraints for OPAL', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve federation constraints',
+    });
+  }
+});
+
+/**
  * GET /api/opal/coi-definitions
  * Get all COI definitions from MongoDB (Phase 3: Gap Closure)
- * 
+ *
  * MongoDB SSOT for ALL COI types:
  * - Country-based COIs (NATO, FVEY, etc.)
  * - Program-based COIs (Alpha, Beta, etc.)
@@ -806,7 +833,7 @@ router.get('/tenant-configs', async (_req: Request, res: Response): Promise<void
 router.get('/coi-definitions', async (_req: Request, res: Response): Promise<void> => {
   try {
     const { mongoCoiDefinitionStore } = await import('../models/coi-definition.model');
-    
+
     await mongoCoiDefinitionStore.initialize();
     const coiMap = await mongoCoiDefinitionStore.getCoiMembershipMapForOpa();
 
@@ -859,7 +886,7 @@ router.put('/tenant-configs/:code', requireSuperAdmin, async (req: Request, res:
 /**
  * POST /api/opal/generate-coi-members-file
  * Generate OPAL coi_members.json file from MongoDB (SSOT)
- * 
+ *
  * This endpoint reads COI definitions from MongoDB and regenerates the static
  * OPAL file to ensure consistency. MongoDB is the Single Source of Truth.
  */
@@ -867,14 +894,14 @@ router.post('/generate-coi-members-file', authenticateJWT, requireSuperAdmin, as
   try {
     const { mongoCoiDefinitionStore } = await import('../models/coi-definition.model');
     await mongoCoiDefinitionStore.initialize();
-    
+
     // Get all COI definitions from MongoDB
     const cois = await mongoCoiDefinitionStore.findAll();
-    
+
     // Build coi_members structure
     const coiMembers: Record<string, string[]> = {};
     const coiDetails: Record<string, any> = {};
-    
+
     for (const coi of cois) {
       coiMembers[coi.coiId] = coi.members;
       coiDetails[coi.coiId] = {
@@ -884,7 +911,7 @@ router.post('/generate-coi-members-file', authenticateJWT, requireSuperAdmin, as
         membership_type: coi.type === 'program-based' ? 'program' : 'country'
       };
     }
-    
+
     // Build complete OPAL file structure
     const opalData = {
       $schema: './schemas/coi_members.schema.json',
@@ -899,16 +926,16 @@ router.post('/generate-coi-members-file', authenticateJWT, requireSuperAdmin, as
       coi_members: coiMembers,
       coi_details: coiDetails
     };
-    
+
     // Write to file
     const filePath = path.join(process.cwd(), 'data', 'opal', 'coi_members.json');
     fs.writeFileSync(filePath, JSON.stringify(opalData, null, 2));
-    
+
     logger.info('Generated OPAL coi_members.json from MongoDB', {
       coiCount: cois.length,
       filePath
     });
-    
+
     res.json({
       success: true,
       message: 'OPAL coi_members.json generated from MongoDB',

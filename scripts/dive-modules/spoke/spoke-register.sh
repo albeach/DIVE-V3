@@ -107,11 +107,11 @@ spoke_register() {
     echo ""
 
     # Parse config (handle both old and new format)
-    local spoke_id=$(grep -o '"spokeId"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
-    local instance_code_config=$(grep -o '"instanceCode"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
-    local name=$(grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | head -1 | cut -d'"' -f4)
-    local hub_url=$(grep -o '"hubUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
-    local contact_email=$(grep -o '"contactEmail"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | head -1 | cut -d'"' -f4 | tr -d '\n\r')
+    local spoke_id=$(grep -o '"spokeId"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
+    local instance_code_config=$(grep -o '"instanceCode"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
+    local name=$(grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | head -1 | cut -d'"' -f4)
+    local hub_url=$(grep -o '"hubUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
+    local contact_email=$(grep -o '"contactEmail"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | head -1 | cut -d'"' -f4 | tr -d '\n\r')
 
     # Override hub URL from environment
     hub_url="${HUB_API_URL:-$hub_url}"
@@ -194,10 +194,10 @@ spoke_register() {
     echo ""
 
     # Build registration request
-    local base_url=$(grep -o '"baseUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
-    local api_url=$(grep -o '"apiUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
-    local idp_url=$(grep -o '"idpUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
-    local idp_public_url=$(grep -o '"idpPublicUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
+    local base_url=$(grep -o '"baseUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
+    local api_url=$(grep -o '"apiUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
+    local idp_url=$(grep -o '"idpUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
+    local idp_public_url=$(grep -o '"idpPublicUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
 
     # IMPORTANT: Do NOT convert idpPublicUrl to host.docker.internal!
     # The idpPublicUrl is used for BROWSER redirects (authorizationUrl, issuer, logoutUrl)
@@ -398,6 +398,52 @@ EOF
 
             # CRITICAL: Update TRUSTED_ISSUERS across all instances for token exchange
             _update_all_trusted_issuers || log_warn "Failed to update TRUSTED_ISSUERS - token exchange may not work"
+
+            # ============================================
+            # OPAL DATA SYNC VERIFICATION (Gap Closure)
+            # ============================================
+            # Verify that Hub OPAL synced federation data to OPA after spoke approval
+            # Without this, spoke approval succeeds but OPA still has stale data, causing:
+            # - 403 "issuer not trusted" errors when spoke users try to access Hub resources
+            # - 403 "federation denied" errors for cross-instance resource access
+            log_step "Verifying OPAL data sync to Hub OPA..."
+
+            local max_wait=30
+            local waited=0
+            local sync_verified=false
+            local hub_api="${hub_url}/api"
+            local spoke_issuer_pattern="${code_lower}"
+
+            while [ $waited -lt $max_wait ]; do
+                # Check if Hub OPA has spoke's issuer in trusted_issuers
+                local opa_issuers=$(curl -sk "${hub_api}/opal/data/trusted_issuers" 2>/dev/null)
+
+                if echo "$opa_issuers" | jq -e "to_entries[] | select(.key | contains(\"$spoke_issuer_pattern\"))" &>/dev/null; then
+                    # Also verify federation matrix includes spoke
+                    local hub_code="${INSTANCE_CODE:-USA}"
+                    local fed_matrix=$(curl -sk "${hub_api}/opal/data/federation_matrix" 2>/dev/null)
+
+                    if echo "$fed_matrix" | jq -e ".${hub_code}[] | select(. == \"${code_upper}\")" &>/dev/null; then
+                        sync_verified=true
+                        log_success "✓ Spoke issuer and federation matrix verified in Hub OPA"
+                        break
+                    fi
+                fi
+
+                sleep 2
+                waited=$((waited + 2))
+                log_verbose "Waiting for OPAL sync... (${waited}s/${max_wait}s)"
+            done
+
+            if [ "$sync_verified" = false ]; then
+                log_warn "⚠️  OPAL sync verification timeout - federation may not be fully active"
+                log_warn "    This is non-fatal but may cause 403 errors until OPAL syncs"
+                log_warn "    Manual fix: curl -X POST ${hub_api}/opal/cdc/force-sync"
+                echo ""
+            else
+                echo -e "${GREEN}✅ Federation data synced to OPA - spoke fully operational${NC}"
+                echo ""
+            fi
 
             echo ""
             echo "   Next steps:"
@@ -726,13 +772,13 @@ spoke_token_refresh() {
     echo ""
 
     # Get current token info
-    local hub_url=$(grep -o '"hubUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
+    local hub_url=$(grep -o '"hubUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
     hub_url="${HUB_API_URL:-$hub_url}"
     hub_url="${hub_url:-https://hub.dive25.com}"
 
-    local spoke_id=$(grep -o '"registeredSpokeId"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
+    local spoke_id=$(grep -o '"registeredSpokeId"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
     if [ -z "$spoke_id" ]; then
-        spoke_id=$(grep -o '"spokeId"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | cut -d'"' -f4)
+        spoke_id=$(grep -o '"spokeId"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
     fi
 
     # Get current token from .env
