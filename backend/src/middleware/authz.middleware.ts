@@ -132,13 +132,10 @@ export function normalizeAMR(amr: string | string[] | undefined): string[] {
 // Supports backward compatibility via v1_shim.rego if using dive.authorization
 const OPA_URL = process.env.OPA_URL || 'https://localhost:8181';
 // In test mode, prefer the legacy endpoint unless explicitly overridden to keep unit tests aligned.
-const USE_UNIFIED_ENDPOINT =
-    process.env.NODE_ENV === 'test'
-        ? process.env.OPA_USE_UNIFIED_ENDPOINT === 'true'
-        : process.env.OPA_USE_UNIFIED_ENDPOINT !== 'false';
-const OPA_DECISION_ENDPOINT = USE_UNIFIED_ENDPOINT
-    ? `${OPA_URL}/v1/data/dive/authz/decision`
-    : `${OPA_URL}/v1/data/dive/authorization`;
+// OPA endpoint configuration
+// Use the package root endpoint (/v1/data/dive/authz) instead of /decision
+// because the decision rule can be undefined if evaluation_details fails
+const OPA_DECISION_ENDPOINT = `${OPA_URL}/v1/data/dive/authz`;
 
 // Local fallback evaluation (used in tests when OPA is unavailable)
 const CLEARANCE_LEVEL: Record<string, number> = {
@@ -405,6 +402,7 @@ interface IOPAInput {
             dutyOrg?: string;                      // Gap #4: Organization (e.g., US_ARMY, FR_DEFENSE_MINISTRY)
             orgUnit?: string;                      // Gap #4: Organizational Unit (e.g., CYBER_DEFENSE, INTELLIGENCE)
             issuer?: string;                       // Phase 5: Token issuer for federation trust
+            mfa_used?: boolean;                    // Hub guardrail: MFA verification (2+ factors)
         };
         action: {
             operation: string;
@@ -950,6 +948,15 @@ export async function authzMiddleware(req: Request, res: Response, next: NextFun
             auth_time: user.auth_time,
         });
 
+        // Parse AMR to determine if MFA was used (for hub guardrails)
+        const effectiveAmr = getEffectiveAmr(user);
+        const amrArray = Array.isArray(effectiveAmr)
+            ? effectiveAmr
+            : typeof effectiveAmr === 'string'
+                ? JSON.parse(effectiveAmr)
+                : [];
+        const mfa_used = amrArray.length >= 2; // MFA = 2+ authentication factors
+
         const opaInput: IOPAInput = {
             input: {
                 subject: {
@@ -959,6 +966,7 @@ export async function authzMiddleware(req: Request, res: Response, next: NextFun
                     countryOfAffiliation: user.countryOfAffiliation,
                     acpCOI: user.acpCOI || [],
                     issuer: user.iss,
+                    mfa_used, // Hub guardrail: MFA verification
                 },
                 action: {
                     operation: req.method.toLowerCase(),

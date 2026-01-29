@@ -21,13 +21,14 @@ import rego.v1
 # =============================================================================
 
 # Clearance hierarchy (cannot be modified)
-clearance_levels := ["UNCLASSIFIED", "CONFIDENTIAL", "SECRET", "TOP_SECRET"]
+clearance_levels := ["UNCLASSIFIED", "RESTRICTED", "CONFIDENTIAL", "SECRET", "TOP_SECRET"]
 
 clearance_rank := {
 	"UNCLASSIFIED": 0,
-	"CONFIDENTIAL": 1,
-	"SECRET": 2,
-	"TOP_SECRET": 3,
+	"RESTRICTED": 1,
+	"CONFIDENTIAL": 2,
+	"SECRET": 3,
+	"TOP_SECRET": 4,
 }
 
 # Classification that requires MFA (spokes can only make this stricter)

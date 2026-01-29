@@ -57,7 +57,7 @@ export function getSecureHttpsAgent(): https.Agent {
     } else {
         // Development fallback: warn and create default agent
         console.warn('[HTTPS] WARNING: mkcert root CA not found. HTTPS calls may fail.');
-        console.warn('[HTTPS] Expected locations:', caLocations);
+        console.warn('[HTTPS] Expected location:', CA_PATH);
         cachedAgent = new https.Agent({
             keepAlive: true,
             // Only as last resort in development

@@ -227,6 +227,7 @@ function generateFacetsFromResults(results: any[]): IFacets {
     cois: Object.entries(coiCounts).map(([value, count]) => ({ value, count })),
     instances: Object.entries(instanceCounts).map(([value, count]) => ({ value, count })),
     encryptionStatus: Object.entries(encryptionCounts).map(([value, count]) => ({ value, count })),
+    fileTypes: [], // Empty for now - file type facets not yet implemented
   };
 }
 

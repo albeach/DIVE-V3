@@ -2,7 +2,7 @@
 
 /**
  * COI Community Keys Explainer
- * 
+ *
  * Visual guide to Community of Interest (COI) based encryption
  * Shows how COI keys enable zero re-encryption coalition growth
  */
@@ -11,11 +11,11 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import PageLayout from '@/components/layout/page-layout';
-import { 
-  Users, 
-  Key, 
-  Zap, 
-  CheckCircle2, 
+import {
+  Users,
+  Key,
+  Zap,
+  CheckCircle2,
   TrendingUp,
   Globe,
   Shield,
@@ -60,7 +60,7 @@ interface CoiKeysData {
 export default function CoiKeysPage() {
   const { data: session, status } = useSession();
   const router = useRouter();
-  
+
   const [coiKeysData, setCoiKeysData] = useState<CoiKeysData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -75,14 +75,14 @@ export default function CoiKeysPage() {
 
   useEffect(() => {
     if (status === 'loading') return;
-    
+
     if (!session) {
       return;
     }
 
     async function fetchCoiKeysData() {
       const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
-      
+
       try {
         const response = await fetch(`${backendUrl}/api/compliance/coi-keys`, {
           cache: 'no-store',
@@ -99,10 +99,10 @@ export default function CoiKeysPage() {
         }
 
         const data = await response.json();
-        console.log('COI Keys data received:', { 
-          totalCOIs: data.cois?.length, 
+        console.log('COI Keys data received:', {
+          totalCOIs: data.cois?.length,
           hasBenefits: !!data.benefits,
-          hasAlgorithm: !!data.selectionAlgorithm 
+          hasAlgorithm: !!data.selectionAlgorithm
         });
         setCoiKeysData(data);
       } catch (err) {
@@ -132,7 +132,7 @@ export default function CoiKeysPage() {
     if (!session) {
       return null; // Will redirect to login
     }
-    
+
     // Show error state if we have an error but no data
     if (error) {
       return (
@@ -156,7 +156,7 @@ export default function CoiKeysPage() {
         </PageLayout>
       );
     }
-    
+
     return null;
   }
 
@@ -238,7 +238,7 @@ export default function CoiKeysPage() {
             >
               <div className="flex items-start justify-between mb-4">
                 <div className="flex items-center gap-3">
-                  <div 
+                  <div
                     className="p-3 rounded-xl text-white font-bold text-2xl"
                     style={{ backgroundColor: coi.color }}
                   >
@@ -301,7 +301,7 @@ export default function CoiKeysPage() {
             <Shield className="w-7 h-7 text-purple-600" />
             {selectedCoiData.name} Details
           </h2>
-          <div 
+          <div
             className="bg-gradient-to-br from-purple-50 to-indigo-50 rounded-xl p-6 border-2 shadow-lg"
             style={{ borderColor: selectedCoiData.color }}
           >

@@ -1,10 +1,10 @@
 /**
  * useTranslation Hook
- * 
+ *
  * Simple translation hook without external dependencies
  * Loads JSON locale files dynamically
  * Uses global LocaleContext for real-time language switching
- * 
+ *
  * Phase 4.8: Translation Helper Hook
  */
 
@@ -14,8 +14,13 @@ import { useState, useEffect, useCallback } from 'react';
 import { Locale, defaultLocale } from '../i18n/config';
 import { useLocale } from '../contexts/LocaleContext';
 
-// Translation cache
+// Translation cache - with cache busting for development
 const translationCache: Map<string, any> = new Map();
+
+// Clear cache in development to prevent stale translations
+if (typeof window !== 'undefined' && process.env.NODE_ENV === 'development') {
+    translationCache.clear();
+}
 
 /**
  * Load translation file
@@ -23,7 +28,8 @@ const translationCache: Map<string, any> = new Map();
 async function loadTranslation(locale: Locale, namespace: string): Promise<any> {
     const cacheKey = `${locale}-${namespace}`;
 
-    if (translationCache.has(cacheKey)) {
+    // In development, skip cache to always get fresh translations
+    if (process.env.NODE_ENV !== 'development' && translationCache.has(cacheKey)) {
         return translationCache.get(cacheKey);
     }
 
