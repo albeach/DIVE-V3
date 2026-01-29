@@ -5,155 +5,37 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import {
-  LayoutDashboard,
-  Globe2,
-  Server,
-  Users,
-  ShieldCheck,
-  FileText,
-  Settings,
-  LogOut,
-  Network,
   ChevronDown,
   ChevronRight,
-  Activity,
-  Wrench,
-  Zap,
-  FileText as Audit,
-  Shield,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { SecureLogoutButton } from '@/components/auth/secure-logout-button';
 import { HUB_ADMIN_ROLES, SPOKE_ADMIN_ROLES, hasHubAdminRole, hasSpokeAdminRole } from '@/types/admin.types';
+import { getAdminNavigation, type AdminNavItem } from '@/config/admin-navigation';
 
+// Legacy NavItem interface for backwards compatibility
 interface NavItem {
   title: string;
   href: string;
   icon: React.ComponentType<{ className?: string }>;
-  badge?: number;
+  badge?: number | string;
   children?: NavItem[];
   spokeOnly?: boolean;
   hubOnly?: boolean;
 }
 
-// Hub Admin Navigation
-const hubNavItems: NavItem[] = [
-  {
-    title: 'Dashboard',
-    href: '/admin/dashboard',
-    icon: LayoutDashboard
-  },
-  {
-    title: 'Federation',
-    href: '/admin/federation',
-    icon: Network,
-    hubOnly: true,
-    children: [
-      {
-        title: 'Spokes',
-        href: '/admin/federation/spokes',
-        icon: Server,
-      },
-      {
-        title: 'Policies',
-        href: '/admin/federation/policies',
-        icon: ShieldCheck,
-      },
-      {
-        title: 'OPAL Status',
-        href: '/admin/federation/opal',
-        icon: Activity,
-      },
-    ]
-  },
-  {
-    title: 'Identity Providers',
-    href: '/admin/idp',
-    icon: Globe2
-  },
-  {
-    title: 'Service Providers',
-    href: '/admin/sp-registry',
-    icon: Server
-  },
-  {
-    title: 'Users',
-    href: '/admin/users',
-    icon: Users
-  },
-  {
-    title: 'Policies',
-    href: '/admin/opa-policy',
-    icon: ShieldCheck
-  },
-  {
-    title: 'Logs',
-    href: '/admin/logs',
-    icon: FileText
-  }
-];
-
-// Spoke Admin Navigation
-const spokeNavItems: NavItem[] = [
-  {
-    title: 'Dashboard',
-    href: '/admin/dashboard',
-    icon: LayoutDashboard
-  },
-  {
-    title: 'Spoke Admin',
-    href: '/admin/spoke',
-    icon: Server,
-    spokeOnly: true,
-    children: [
-      {
-        title: 'Status',
-        href: '/admin/spoke',
-        icon: Activity,
-      },
-      {
-        title: 'Failover',
-        href: '/admin/spoke/failover',
-        icon: Zap,
-      },
-      {
-        title: 'Maintenance',
-        href: '/admin/spoke/maintenance',
-        icon: Wrench,
-      },
-      {
-        title: 'Policies',
-        href: '/admin/spoke/policies',
-        icon: Shield,
-      },
-      {
-        title: 'Audit Queue',
-        href: '/admin/spoke/audit',
-        icon: Audit,
-      },
-    ]
-  },
-  {
-    title: 'Identity Providers',
-    href: '/admin/idp',
-    icon: Globe2
-  },
-  {
-    title: 'Users',
-    href: '/admin/users',
-    icon: Users
-  },
-  {
-    title: 'Policies',
-    href: '/admin/opa-policy',
-    icon: ShieldCheck
-  },
-  {
-    title: 'Logs',
-    href: '/admin/logs',
-    icon: FileText
-  }
-];
+// Helper to convert AdminNavItem to legacy NavItem format
+function convertToLegacyFormat(items: AdminNavItem[]): NavItem[] {
+  return items.map(item => ({
+    title: item.label,
+    href: item.href,
+    icon: item.icon,
+    badge: item.badge,
+    children: item.children ? convertToLegacyFormat(item.children) : undefined,
+    spokeOnly: item.spokeOnly,
+    hubOnly: item.hubOnly,
+  }));
+}
 
 /**
  * Check if user has hub admin roles (can modify federation)
@@ -201,6 +83,7 @@ export function AdminSidebar() {
   const { data: session } = useSession();
   const [pendingCount, setPendingCount] = useState(0);
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
+  const [navItems, setNavItems] = useState<NavItem[]>([]);
 
   // Extract roles from session
   // JWT claims: roles (realm roles), admin_role (explicit admin roles)
@@ -208,6 +91,8 @@ export function AdminSidebar() {
     roles?: string[];
     admin_role?: string[];
     instanceType?: string;
+    clearance?: string;
+    countryOfAffiliation?: string;
   } | undefined;
 
   const userRoles = user?.roles || [];
@@ -223,7 +108,20 @@ export function AdminSidebar() {
   // 2. If user has spoke_admin role OR is on spoke instance, show spoke nav
   // 3. Default to hub nav for backwards compatibility
   const useSpokenNav = (isSpoke && !isHub) || (onSpokeInstance && !isHub);
-  const navItems = useSpokenNav ? spokeNavItems : hubNavItems;
+  const instanceType = useSpokenNav ? 'spoke' : 'hub';
+
+  // Load navigation from unified config
+  useEffect(() => {
+    const adminNav = getAdminNavigation({
+      roles: [...userRoles, ...adminRoles],
+      clearance: user?.clearance,
+      countryOfAffiliation: user?.countryOfAffiliation,
+      instanceType,
+    });
+
+    // Convert to legacy format for existing component structure
+    setNavItems(convertToLegacyFormat(adminNav));
+  }, [instanceType, userRoles.join(','), adminRoles.join(','), user?.clearance, user?.countryOfAffiliation]);
 
   // Fetch pending spoke count (only for hub admins)
   useEffect(() => {
@@ -304,6 +202,11 @@ export function AdminSidebar() {
                   {pendingCount}
                 </span>
               )}
+              {item.badge && typeof item.badge === 'string' && (
+                <span className="flex items-center justify-center px-2 py-0.5 bg-blue-500 text-white text-xs font-semibold rounded-full">
+                  {item.badge}
+                </span>
+              )}
             </div>
             {isExpanded ? (
               <ChevronDown className="h-4 w-4" />
@@ -336,6 +239,11 @@ export function AdminSidebar() {
                         {pendingCount}
                       </span>
                     )}
+                    {child.badge && typeof child.badge === 'string' && (
+                      <span className="flex items-center justify-center px-2 py-0.5 bg-blue-500 text-white text-xs font-semibold rounded-full">
+                        {child.badge}
+                      </span>
+                    )}
                   </Link>
                 );
               })}
@@ -361,6 +269,11 @@ export function AdminSidebar() {
         {showBadge && (
           <span className="flex items-center justify-center min-w-[20px] h-5 px-1.5 bg-amber-500 text-white text-xs font-bold rounded-full">
             {pendingCount}
+          </span>
+        )}
+        {item.badge && typeof item.badge === 'string' && (
+          <span className="flex items-center justify-center px-2 py-0.5 bg-blue-500 text-white text-xs font-semibold rounded-full">
+            {item.badge}
           </span>
         )}
       </Link>

@@ -7,6 +7,7 @@ import { LocaleProvider } from "@/contexts/LocaleContext";
 import { StandardsLensProvider } from "@/contexts/StandardsLensContext";
 import { IdentityDrawerProvider } from "@/contexts/IdentityDrawerContext";
 import { PolicyProvider } from "@/contexts/PolicyContext";
+import { CommandPaletteProvider } from "@/contexts/CommandPaletteContext";
 import { InstanceThemeProvider } from "@/components/ui/theme-provider";
 // TEMPORARY: ThemeProvider disabled until container rebuild picks up next-themes
 // import { ThemeProvider } from "@/components/providers/ThemeProvider";
@@ -38,11 +39,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
               >
                 <PolicyProvider>
                   <IdentityDrawerProvider>
-                    {children}
-                  <Toaster position="top-right" richColors />
-                </IdentityDrawerProvider>
-              </PolicyProvider>
-            </SessionProvider>
+                    <CommandPaletteProvider>
+                      {children}
+                      <Toaster position="top-right" richColors />
+                    </CommandPaletteProvider>
+                  </IdentityDrawerProvider>
+                </PolicyProvider>
+              </SessionProvider>
           </QueryClientProvider>
         </LocaleProvider>
       </StandardsLensProvider>

@@ -1,4 +1,5 @@
 {
+    "_updated": "2026-01-29T20:00:00Z",
     "app": {
         "name": "DIVE V3",
         "tagline": "Pilote ICAM Adapté aux Coalitions"
@@ -33,7 +34,7 @@
             "description": "Téléchargement sécurisé de documents"
         },
         "policyTools": {
-            "name": "Outils de politique",
+            "name": "Politiques",
             "shortName": "Politiques",
             "description": "Politiques d'autorisation et conformité",
             "explore": "Explorer",
@@ -46,6 +47,18 @@
             "reference": "Référence",
             "compliance": "Conformité",
             "standardsCompliance": "Normes et conformité"
+        },
+        "compliance": {
+            "name": "Conformité",
+            "shortName": "Conformité",
+            "description": "Normes et conformité",
+            "standards": "Normes",
+            "standardsCompliance": "Conformité aux normes",
+            "security": "Sécurité",
+            "kas": "KAS",
+            "cois": "COIs",
+            "pki": "PKI",
+            "classifications": "Classifications"
         },
         "admin": {
             "dashboard": "Tableau de bord",
@@ -79,6 +92,7 @@
         "view": "Voir",
         "test": "Tester",
         "refresh": "Actualiser",
+        "retry": "Réessayer",
         "export": "Exporter",
         "import": "Importer",
         "search": "Rechercher",

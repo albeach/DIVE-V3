@@ -333,6 +333,14 @@ app.post('/request-key', async (req: Request, res: Response) => {
         const userCOI = Array.isArray(acpCOI) ? acpCOI : [];
         const resourceCOI = Array.isArray(resource.COI) ? resource.COI : [];
 
+        // Parse AMR to determine if MFA was used
+        const amrArray = Array.isArray(decodedToken.amr)
+            ? decodedToken.amr
+            : typeof decodedToken.amr === 'string'
+                ? JSON.parse(decodedToken.amr)
+                : [];
+        const mfa_used = amrArray.length >= 2; // MFA = 2+ authentication factors
+
         const opaInput = {
             input: {
                 subject: {
@@ -342,7 +350,8 @@ app.post('/request-key', async (req: Request, res: Response) => {
                     countryOfAffiliation,
                     acpCOI: userCOI,  // ✅ Guaranteed array
                     dutyOrg,          // Gap #4: Organization attribute
-                    orgUnit           // Gap #4: Organizational unit
+                    orgUnit,          // Gap #4: Organizational unit
+                    mfa_used          // Hub guardrail: MFA verification
                 },
                 action: {
                     operation: 'decrypt' // KAS-specific action
@@ -405,7 +414,7 @@ app.post('/request-key', async (req: Request, res: Response) => {
             });
 
             const opaResponse = await axios.post(
-                `${OPA_URL}/v1/data/dive/authz/decision`,
+                `${OPA_URL}/v1/data/dive/authz`,
                 opaInput,
                 {
                     headers: { 'Content-Type': 'application/json' },
@@ -415,10 +424,19 @@ app.post('/request-key', async (req: Request, res: Response) => {
             );
 
             // Extract decision from OPA response
-            opaDecision = opaResponse.data.result?.decision || opaResponse.data.result;
+            // Query /v1/data/dive/authz (not /decision) to get individual fields
+            // OPA returns: { result: { allow, reason, obligations, ... } }
+            opaDecision = opaResponse.data.result;
 
             // Validate OPA response structure
             if (!opaDecision || typeof opaDecision.allow === 'undefined') {
+                kasLogger.error('Invalid OPA response structure - missing allow field', {
+                    requestId,
+                    fullResponse: JSON.stringify(opaResponse.data),
+                    resultKeys: opaDecision ? Object.keys(opaDecision) : [],
+                    allowValue: opaDecision?.allow,
+                    allowType: typeof opaDecision?.allow
+                });
                 throw new Error(`Invalid OPA response structure: ${JSON.stringify(opaResponse.data)}`);
             }
 

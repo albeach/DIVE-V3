@@ -112,9 +112,15 @@ export interface IOPAInput {
         subject: {
             authenticated: boolean;
             uniqueID: string;
-            clearance: string;
-            countryOfAffiliation: string;
+            clearance?: string;
+            clearanceOriginal?: string;
+            clearanceCountry?: string;
+            countryOfAffiliation?: string;
             acpCOI?: string[];
+            dutyOrg?: string;
+            orgUnit?: string;
+            issuer?: string;
+            mfa_used?: boolean; // Hub guardrail: MFA verification
         };
         action: {
             operation: string;
@@ -126,6 +132,7 @@ export interface IOPAInput {
             COI?: string[];
             creationDate?: string;
             encrypted: boolean;
+            ownerTenant?: string;
             ztdf?: {
                 integrityValidated?: boolean;
                 policyHash?: string;
@@ -137,6 +144,10 @@ export interface IOPAInput {
             sourceIP: string;
             deviceCompliant: boolean;
             requestId: string;
+            acr?: string;
+            amr?: string[] | string;
+            auth_time?: number;
+            tenant?: string;
         };
     };
 }
