@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import Link from 'next/link';
 import {
@@ -20,6 +20,7 @@ import PolicyHierarchyTree from '@/components/policies/PolicyHierarchyTree';
 import PolicyDependencyGraph from '@/components/policies/PolicyDependencyGraph';
 import PolicyLayerCard from '@/components/policies/PolicyLayerCard';
 import { PolicyComparison } from '@/components/policies/PolicyComparison';
+import { usePolicyUpdates } from '@/hooks/usePolicyUpdates';
 
 interface PoliciesPageClientProps {
   hierarchy: IPolicyHierarchy | null;
@@ -27,10 +28,33 @@ interface PoliciesPageClientProps {
 
 type ViewMode = 'layers' | 'tree' | 'graph';
 
-export default function PoliciesPageClient({ hierarchy }: PoliciesPageClientProps) {
+export default function PoliciesPageClient({ hierarchy: initialHierarchy }: PoliciesPageClientProps) {
   const { t } = useTranslation('policies');
   const [viewMode, setViewMode] = useState<ViewMode>('layers');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [hierarchy, setHierarchy] = useState<IPolicyHierarchy | null>(initialHierarchy);
+
+  // Real-time policy updates via Server-Sent Events
+  const handlePolicyUpdate = useCallback(async (event: any) => {
+    console.log('[Policies] Policy update received, refetching hierarchy...', event.type);
+
+    try {
+      const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
+      const response = await fetch(`${backendUrl}/api/policies/hierarchy`, {
+        cache: 'no-store',
+      });
+
+      if (response.ok) {
+        const updatedHierarchy = await response.json();
+        setHierarchy(updatedHierarchy);
+        console.log('[Policies] Hierarchy refreshed successfully');
+      }
+    } catch (error) {
+      console.error('[Policies] Failed to refresh hierarchy:', error);
+    }
+  }, []);
+
+  const sseStatus = usePolicyUpdates(handlePolicyUpdate);
 
   // Error state when hierarchy fetch failed
   if (!hierarchy) {
@@ -108,7 +132,7 @@ export default function PoliciesPageClient({ hierarchy }: PoliciesPageClientProp
           </div>
 
           {/* Bundle Header */}
-          <PolicyBundleHeader hierarchy={hierarchy} />
+          <PolicyBundleHeader hierarchy={hierarchy} sseStatus={sseStatus} />
         </motion.div>
 
         {/* View Mode Tabs */}

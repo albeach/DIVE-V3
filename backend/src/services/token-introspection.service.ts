@@ -581,12 +581,23 @@ export class TokenIntrospectionService {
 
       // Check if issuer is in allowed list (if provided)
       if (allowedIssuers && !allowedIssuers.includes(tokenIssuer)) {
+        logger.warn('Token issuer not in allowed list', {
+          tokenIssuer,
+          allowedIssuers,
+          issuersCount: allowedIssuers.length,
+        });
         return {
           active: false,
           error: 'issuer_not_trusted',
           error_description: `Issuer ${tokenIssuer} is not in the list of trusted issuers`,
         };
       }
+
+      logger.info('Token issuer validated', {
+        tokenIssuer,
+        allowedIssuersProvided: !!allowedIssuers,
+        allowedIssuersCount: allowedIssuers?.length,
+      });
 
       // If no client credentials provided, try to load from environment
       // This allows backends to automatically use their own credentials for introspection

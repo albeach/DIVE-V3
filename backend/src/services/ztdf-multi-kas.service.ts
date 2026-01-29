@@ -1,16 +1,16 @@
 /**
  * ZTDF Multi-KAS Decryption Service
- * 
+ *
  * Implements multi-KAO (Key Access Object) support for ZTDF decryption.
  * Provides resilient decryption through KAO fallback chains.
- * 
+ *
  * Features:
  * - Multi-KAO selection based on user attributes and COI
  * - KAO fallback chain for resilience
  * - Circuit breaker integration
  * - Cross-instance KAS federation support
  * - Prometheus metrics collection
- * 
+ *
  * Reference: ACP-240 Section 5.2 (Multi-KAS Architecture)
  */
 
@@ -18,7 +18,7 @@ import axios, { AxiosInstance } from 'axios';
 import https from 'https';
 import crypto from 'crypto';
 import { logger } from '../utils/logger';
-import { IZTDFObject, IKeyAccessObject as IZtdfKeyAccessObject } from '../types/ztdf.types';
+import { IZTDFObject, IZTDFPayload, IKeyAccessObject as IZtdfKeyAccessObject } from '../types/ztdf.types';
 
 // ============================================
 // Types
@@ -120,7 +120,7 @@ function recordKASFailure(kasId: string): void {
     const state = getCircuitState(kasId);
     state.failures++;
     state.lastFailure = new Date();
-    
+
     if (state.failures >= CIRCUIT_BREAKER_CONFIG.failureThreshold) {
         state.state = 'OPEN';
         logger.warn('Circuit breaker opened for KAS', { kasId, failures: state.failures });
@@ -129,11 +129,11 @@ function recordKASFailure(kasId: string): void {
 
 function isKASAvailable(kasId: string): boolean {
     const state = getCircuitState(kasId);
-    
+
     if (state.state === 'CLOSED') {
         return true;
     }
-    
+
     if (state.state === 'OPEN' && state.lastFailure) {
         const timeSinceFailure = Date.now() - state.lastFailure.getTime();
         if (timeSinceFailure >= CIRCUIT_BREAKER_CONFIG.recoveryTimeoutMs) {
@@ -143,7 +143,7 @@ function isKASAvailable(kasId: string): boolean {
         }
         return false;
     }
-    
+
     // HALF_OPEN - allow limited attempts
     return state.state === 'HALF_OPEN';
 }
@@ -171,11 +171,11 @@ function getClassificationLevel(classification: string): number {
 export class ZTDFMultiKASService {
     private kasClients: Map<string, AxiosInstance> = new Map();
     private readonly localKasUrl: string;
-    
+
     constructor() {
         this.localKasUrl = process.env.KAS_URL || 'https://kas:8080';
     }
-    
+
     /**
      * Select KAOs for decryption based on user attributes
      * Returns KAOs in priority order (best match first)
@@ -200,10 +200,10 @@ export class ZTDFMultiKASService {
                 return userLevel >= getClassificationLevel(required);
             });
             const scored = accessible.map(kao => {
-            const coiRequired = kao.policyBinding?.coiRequired || [];
-            const coiMatches = coiRequired.filter(c => userAttributes.acpCOI.includes(c)).length;
-            const countryMatch = (kao.policyBinding?.countriesAllowed || []).includes(userAttributes.countryOfAffiliation);
-            return { kao, coiMatches, countryMatch };
+                const coiRequired = kao.policyBinding?.coiRequired || [];
+                const coiMatches = coiRequired.filter(c => userAttributes.acpCOI.includes(c)).length;
+                const countryMatch = (kao.policyBinding?.countriesAllowed || []).includes(userAttributes.countryOfAffiliation);
+                return { kao, coiMatches, countryMatch };
             });
             scored.sort((a, b) => {
                 if (b.coiMatches !== a.coiMatches) return b.coiMatches - a.coiMatches;
@@ -212,7 +212,7 @@ export class ZTDFMultiKASService {
             });
             const selectionStrategy: 'coi-match' | 'country-match' | 'fallback' =
                 scored[0]?.coiMatches ? 'coi-match' :
-                scored[0]?.countryMatch ? 'country-match' : 'fallback';
+                    scored[0]?.countryMatch ? 'country-match' : 'fallback';
             const result = {
                 selectedKAOs: scored.map(s => s.kao),
                 selectionStrategy,
@@ -223,14 +223,14 @@ export class ZTDFMultiKASService {
             }
             return result;
         }
-        
+
         // Filter KAOs that user can potentially access
         const accessibleKAOs = kaos.filter(kao => {
             const required = kao.policyBinding?.clearanceRequired || 'UNCLASSIFIED';
             const requiredLevel = getClassificationLevel(required);
             return userLevel >= requiredLevel;
         });
-        
+
         if (accessibleKAOs.length === 0) {
             return {
                 selectedKAOs: [],
@@ -238,7 +238,7 @@ export class ZTDFMultiKASService {
                 fullEvaluation: true,
             };
         }
-        
+
         // Deterministic ordering: COI match > country match > local preference
         const scoredKAOs = accessibleKAOs.map(kao => {
             const coiRequired = kao.policyBinding?.coiRequired || [];
@@ -284,7 +284,7 @@ export class ZTDFMultiKASService {
         } else if (scoredKAOs[0]?.countryMatch) {
             selectionStrategy = 'country-match';
         }
-        
+
         logger.debug('KAO selection completed', {
             totalKAOs: kaos.length,
             accessibleKAOs: accessibleKAOs.length,
@@ -295,21 +295,21 @@ export class ZTDFMultiKASService {
                 score: s.score,
             })),
         });
-        
+
         return {
             selectedKAOs,
             selectionStrategy,
             fullEvaluation: true,
         };
     }
-    
+
     /**
      * Decrypt ZTDF content using multi-KAO fallback chain
      */
     async decryptWithFallback(request: IDecryptionRequest): Promise<IDecryptionResult> {
         const startTime = Date.now();
         const kaos = request.ztdf.payload?.keyAccessObjects || [];
-        
+
         if (kaos.length === 0) {
             return {
                 success: false,
@@ -322,10 +322,10 @@ export class ZTDFMultiKASService {
                 },
             };
         }
-        
+
         // Select and order KAOs for this user
         const selection = this.selectKAOsForUser(kaos, request.userAttributes);
-        
+
         if (selection.selectedKAOs.length === 0) {
             return {
                 success: false,
@@ -338,7 +338,7 @@ export class ZTDFMultiKASService {
                 },
             };
         }
-        
+
         logger.info('Starting multi-KAO decryption', {
             requestId: request.requestId,
             totalKAOs: kaos.length,
@@ -346,19 +346,19 @@ export class ZTDFMultiKASService {
             strategy: selection.selectionStrategy,
             userCountry: request.userAttributes.countryOfAffiliation,
         });
-        
+
         const attemptedKAOs: string[] = [];
         const failedKAOs: Array<{ kaoId: string; error: string }> = [];
         const perKaoLatency: Array<{ kaoId: string; latencyMs: number; success: boolean }> = [];
-        
+
         // Try each KAO in order
         for (let i = 0; i < selection.selectedKAOs.length; i++) {
             const kao = selection.selectedKAOs[i];
             const kaoStartTime = Date.now();
             attemptedKAOs.push(kao.kaoId);
-            
+
             const kasId = kao.kasId || this.extractKasId(kao.kasUrl);
-            
+
             // Skip if circuit breaker is open
             if (!isKASAvailable(kasId)) {
                 logger.warn('Skipping KAO due to circuit breaker', {
@@ -377,7 +377,7 @@ export class ZTDFMultiKASService {
                 });
                 continue;
             }
-            
+
             try {
                 logger.debug('Attempting KAO', {
                     requestId: request.requestId,
@@ -385,7 +385,7 @@ export class ZTDFMultiKASService {
                     kasUrl: kao.kasUrl,
                     attempt: i + 1,
                 });
-                
+
                 // Request DEK from KAS
                 const dekResult = await this.requestDEKFromKAS(
                     kao,
@@ -393,17 +393,17 @@ export class ZTDFMultiKASService {
                     request.requestId,
                     request.ztdf.manifest?.objectId || 'unknown'
                 );
-                
+
                 if (!dekResult.success || !dekResult.dek) {
                     throw new Error(dekResult.error || 'DEK retrieval failed');
                 }
-                
+
                 // Decrypt content with DEK
                 const decryptedContent = this.decryptContent(
                     request.ztdf.payload,
                     dekResult.dek
                 );
-                
+
                 // Record success
                 recordKASSuccess(kasId);
                 perKaoLatency.push({
@@ -411,7 +411,7 @@ export class ZTDFMultiKASService {
                     latencyMs: Date.now() - kaoStartTime,
                     success: true,
                 });
-                
+
                 logger.info('Multi-KAO decryption successful', {
                     requestId: request.requestId,
                     usedKaoId: kao.kaoId,
@@ -420,7 +420,7 @@ export class ZTDFMultiKASService {
                     totalAttempts: attemptedKAOs.length,
                     totalLatencyMs: Date.now() - startTime,
                 });
-                
+
                 return {
                     success: true,
                     decryptedContent,
@@ -438,11 +438,11 @@ export class ZTDFMultiKASService {
                         perKaoLatency,
                     },
                 };
-                
+
             } catch (error: any) {
                 // Record failure
                 recordKASFailure(kasId);
-                
+
                 const errorMessage = error.message || 'Unknown error';
                 failedKAOs.push({ kaoId: kao.kaoId, error: errorMessage });
                 perKaoLatency.push({
@@ -450,7 +450,7 @@ export class ZTDFMultiKASService {
                     latencyMs: Date.now() - kaoStartTime,
                     success: false,
                 });
-                
+
                 logger.warn('KAO attempt failed, trying next', {
                     requestId: request.requestId,
                     kaoId: kao.kaoId,
@@ -461,7 +461,7 @@ export class ZTDFMultiKASService {
                 });
             }
         }
-        
+
         // All KAOs failed
         logger.error('All KAOs exhausted, decryption failed', {
             requestId: request.requestId,
@@ -469,7 +469,7 @@ export class ZTDFMultiKASService {
             failedKAOs,
             totalLatencyMs: Date.now() - startTime,
         });
-        
+
         return {
             success: false,
             error: 'All Key Access Objects failed',
@@ -486,7 +486,7 @@ export class ZTDFMultiKASService {
             },
         };
     }
-    
+
     /**
      * Request DEK from a specific KAS
      */
@@ -497,7 +497,7 @@ export class ZTDFMultiKASService {
         resourceId: string
     ): Promise<{ success: boolean; dek?: string; error?: string }> {
         const client = this.getKASClient(kao.kasUrl);
-        
+
         try {
             const response = await client.post('/request-key', {
                 resourceId,
@@ -509,42 +509,37 @@ export class ZTDFMultiKASService {
             }, {
                 timeout: 10000,
             });
-            
+
             if (response.data.success) {
                 return {
                     success: true,
                     dek: response.data.dek,
                 };
             }
-            
+
             return {
                 success: false,
                 error: response.data.denialReason || response.data.error || 'KAS denied request',
             };
-            
+
         } catch (error: any) {
             const errorMessage = error.response?.data?.denialReason ||
                 error.response?.data?.error ||
                 error.message ||
                 'KAS request failed';
-                
+
             return {
                 success: false,
                 error: errorMessage,
             };
         }
     }
-    
+
     /**
      * Decrypt encrypted content using DEK
      */
     private decryptContent(
-        payload: {
-            encryptedChunks?: Array<{ encryptedData: string }>;
-            iv: string;
-            authTag: string;
-            encryptionAlgorithm?: string;
-        },
+        payload: IZTDFPayload,
         dekBase64: string
     ): string {
         // Get encrypted data
@@ -552,35 +547,35 @@ export class ZTDFMultiKASService {
         if (!encryptedData) {
             throw new Error('No encrypted data in payload');
         }
-        
+
         // Decode Base64
         const dek = Buffer.from(dekBase64, 'base64');
         const iv = Buffer.from(payload.iv, 'base64');
         const authTag = Buffer.from(payload.authTag, 'base64');
         const ciphertext = Buffer.from(encryptedData, 'base64');
-        
+
         // Decrypt using AES-256-GCM
         const decipher = crypto.createDecipheriv('aes-256-gcm', dek, iv);
         decipher.setAuthTag(authTag);
-        
+
         const decrypted = Buffer.concat([
             decipher.update(ciphertext),
             decipher.final(),
         ]);
-        
+
         return decrypted.toString('base64');
     }
-    
+
     /**
      * Get or create HTTP client for KAS
      */
     private getKASClient(kasUrl: string): AxiosInstance {
         const baseUrl = kasUrl.replace('/request-key', '');
-        
+
         if (this.kasClients.has(baseUrl)) {
             return this.kasClients.get(baseUrl)!;
         }
-        
+
         const config: any = {
             baseURL: baseUrl,
             timeout: 10000,
@@ -589,20 +584,20 @@ export class ZTDFMultiKASService {
                 'User-Agent': 'DIVE-V3-MultiKAS/1.0',
             },
         };
-        
+
         // Configure TLS (skip verification in development)
         if (baseUrl.startsWith('https://')) {
             config.httpsAgent = new https.Agent({
                 rejectUnauthorized: process.env.NODE_ENV === 'production',
             });
         }
-        
+
         const client = axios.create(config);
         this.kasClients.set(baseUrl, client);
-        
+
         return client;
     }
-    
+
     /**
      * Check if KAS URL is local
      */
@@ -610,14 +605,14 @@ export class ZTDFMultiKASService {
         try {
             const urlHost = new URL(kasUrl).hostname;
             const localHost = new URL(this.localKasUrl).hostname;
-            return urlHost === localHost || 
-                   urlHost === 'localhost' || 
-                   urlHost === 'kas';
+            return urlHost === localHost ||
+                urlHost === 'localhost' ||
+                urlHost === 'kas';
         } catch {
             return false;
         }
     }
-    
+
     /**
      * Extract KAS ID from URL
      */
@@ -635,7 +630,7 @@ export class ZTDFMultiKASService {
             return 'kas-unknown';
         }
     }
-    
+
     /**
      * Get circuit breaker status for all known KAS instances
      */
@@ -653,7 +648,7 @@ export class ZTDFMultiKASService {
             lastFailure: string | null;
             lastSuccess: string | null;
         }> = [];
-        
+
         kasCircuitBreakers.forEach((state, kasId) => {
             status.push({
                 kasId,
@@ -663,10 +658,10 @@ export class ZTDFMultiKASService {
                 lastSuccess: state.lastSuccess?.toISOString() || null,
             });
         });
-        
+
         return status;
     }
-    
+
     /**
      * Reset circuit breaker for a KAS (manual recovery)
      */

@@ -1,12 +1,12 @@
 /**
  * ZTDF Utility Functions
- * 
+ *
  * Implements:
  * - ZTDF integrity validation (STANAG 4778 cryptographic binding)
  * - SHA-384 hashing
  * - ZTDF object creation
  * - Migration from legacy resources
- * 
+ *
  * Reference: ACP-240 sections 5.4 (Cryptographic Binding & Integrity)
  */
 
@@ -70,10 +70,13 @@ export interface IZTDFValidationResult {
  * - Verify payload hash
  * - Verify chunk hashes
  * - Verify signatures (if present)
- * 
+ *
  * Returns: Validation result (deny access if !valid)
  */
-export async function validateZTDFIntegrity(ztdf: IZTDFObject): Promise<IZTDFValidationResult> {
+export async function validateZTDFIntegrity(
+    ztdf: IZTDFObject,
+    encryptedDataOverride?: string
+): Promise<IZTDFValidationResult> {
     const errors: string[] = [];
     const warnings: string[] = [];
     const issues: string[] = [];
@@ -130,9 +133,12 @@ export async function validateZTDFIntegrity(ztdf: IZTDFObject): Promise<IZTDFVal
     if (ztdf.payload.payloadHash) {
         // Compute hash of all chunks (handle both chunked and non-chunked)
         const encryptedChunks = ztdf.payload.encryptedChunks || [];
-        const chunksData = encryptedChunks
+
+        // For GridFS storage, use provided encryptedDataOverride, otherwise use inline data
+        const chunksData = encryptedDataOverride || encryptedChunks
             .map((chunk: any) => chunk.encryptedData)
             .join('');
+
         const computedHash = computeSHA384(chunksData);
 
         if (computedHash !== ztdf.payload.payloadHash) {
@@ -157,7 +163,18 @@ export async function validateZTDFIntegrity(ztdf: IZTDFObject): Promise<IZTDFVal
     const encryptedChunks = ztdf.payload.encryptedChunks || [];
     encryptedChunks.forEach((chunk: any, index: number) => {
         if (chunk.integrityHash) {
-            const computedHash = computeSHA384(chunk.encryptedData);
+            // For GridFS storage, use provided encryptedDataOverride for first chunk
+            const chunkData = (encryptedDataOverride && index === 0)
+                ? encryptedDataOverride
+                : chunk.encryptedData;
+
+            if (!chunkData) {
+                warnings.push(`Chunk ${index} has no encrypted data (may be in GridFS)`);
+                chunkHashesValid.push(false);
+                return;
+            }
+
+            const computedHash = computeSHA384(chunkData);
             if (computedHash !== chunk.integrityHash) {
                 errors.push(
                     `Chunk ${index} hash mismatch: expected ${chunk.integrityHash}, got ${computedHash}`
@@ -276,7 +293,7 @@ export function createZTDFManifest(params: {
 
 /**
  * Create STANAG 4774 security label
- * 
+ *
  * ACP-240 Section 4.3 Enhancement:
  * Now accepts originalClassification and originalCountry to preserve
  * classification provenance and enable recipient-specific enforcement
@@ -371,6 +388,7 @@ export function createEncryptedChunk(params: {
     const chunk: IEncryptedPayloadChunk = {
         chunkId: params.chunkId,
         encryptedData: params.encryptedData,
+        storageMode: 'inline', // Default to inline for small files
         size: Buffer.from(params.encryptedData, 'base64').length,
         integrityHash: computeSHA384(params.encryptedData)
     };
@@ -430,14 +448,14 @@ export interface IEncryptionResult {
 
 /**
  * Encrypt plaintext with AES-256-GCM
- * 
+ *
  * ACP-240 Section 5.3: COI-Based Community Keys
- * 
+ *
  * Key Selection Priority:
  * 1. COI-based key (preferred): Shared key per Community of Interest
  * 2. Deterministic DEK (legacy): For backwards compatibility
  * 3. Random DEK (fallback): For resources without COI
- * 
+ *
  * Returns: Encrypted data + IV + auth tag + DEK
  */
 export function encryptContent(
@@ -525,7 +543,7 @@ export function decryptContent(params: {
 
 /**
  * Migrate legacy IResource to ZTDF format
- * 
+ *
  * For unencrypted resources: Creates mock encryption
  * For encrypted resources: Uses existing encryptedContent
  */

@@ -117,6 +117,8 @@ export default function VideoPlayer({
   const [showControls, setShowControls] = useState(true);
   const [seeking, setSeeking] = useState(false);
   const [videoUrl, setVideoUrl] = useState<string>('');
+  const [actualMimeType, setActualMimeType] = useState<string>('');
+  const [usingDataUrl, setUsingDataUrl] = useState(false);
 
   // Get classification colors
   const normalizedClassification = classification.toUpperCase().replace('_', ' ');
@@ -137,62 +139,295 @@ export default function VideoPlayer({
       return;
     }
 
+    // Extract MIME type from data URL for validation
+    const dataUrlMatch = src.match(/^data:([^;]+);base64,(.+)$/);
+    if (!dataUrlMatch) {
+      setError('Invalid data URL format');
+      setIsLoading(false);
+      return;
+    }
+
+    const [, declaredMimeType, base64Data] = dataUrlMatch;
+
+    // Validate MIME type is a video format
+    if (!declaredMimeType.startsWith('video/')) {
+      console.warn('[VideoPlayer] MIME type is not video:', declaredMimeType);
+      setError(`Invalid video format: ${declaredMimeType}`);
+      setIsLoading(false);
+      return;
+    }
+
+    const dataUrlSize = src.length;
+    const estimatedVideoSize = Math.round((base64Data.length * 3) / 4);
+
+    console.log('[VideoPlayer] Starting video processing:', {
+      declaredMimeType,
+      base64Length: base64Data.length,
+      dataUrlLength: dataUrlSize,
+      estimatedVideoSize: `${Math.round(estimatedVideoSize / 1024 / 1024)} MB`,
+      dataUrlSize: `${Math.round(dataUrlSize / 1024 / 1024)} MB`,
+    });
+
+    // CRITICAL TEST: Validate the data URL is actually valid
+    const hasNewlines = base64Data.includes('\n') || base64Data.includes('\r');
+    const hasSpaces = base64Data.includes(' ');
+    const hasInvalidChars = !/^[A-Za-z0-9+/=]+$/.test(base64Data);
+
+    console.log('[VideoPlayer] Data URL validation:', {
+      startsWithDataVideo: src.startsWith('data:video/'),
+      hasBase64Marker: src.includes(';base64,'),
+      dataAfterMarker: src.indexOf(';base64,') > -1 ? base64Data.length : 0,
+      first100CharsOfBase64: base64Data.substring(0, 100),
+      last100CharsOfBase64: base64Data.substring(base64Data.length - 100),
+      hasNewlines,
+      hasSpaces,
+      hasInvalidChars,
+    });
+
+    // If base64 has invalid characters, clean it
+    if (hasNewlines || hasSpaces || hasInvalidChars) {
+      console.warn('[VideoPlayer] Base64 data contains invalid characters, cleaning...');
+      const cleanedBase64 = base64Data.replace(/[\r\n\s]/g, '');
+      const cleanedSrc = `data:${declaredMimeType};base64,${cleanedBase64}`;
+      console.log('[VideoPlayer] Cleaned base64, retrying with cleaned data URL');
+      setVideoUrl(cleanedSrc);
+      setActualMimeType(declaredMimeType);
+      setUsingDataUrl(true);
+      return;
+    }
+
+    // Check for data URL size limits (some browsers have limits)
+    const MAX_DATA_URL_SIZE = 100 * 1024 * 1024; // 100MB limit for data URLs
+    if (dataUrlSize > MAX_DATA_URL_SIZE) {
+      console.warn('[VideoPlayer] Data URL exceeds 100MB, must convert to blob URL');
+      // Don't return early - force blob conversion below
+    } else if (dataUrlSize > 50 * 1024 * 1024) {
+      console.warn('[VideoPlayer] Data URL is large (>50MB), may have issues in some browsers');
+    }
+
+    // Try blob URL if data URL is large, even for MP4
+    const shouldUseBlob = dataUrlSize > MAX_DATA_URL_SIZE;
+
+    // For videos, ALWAYS use blob URL to avoid sessionStorage quota issues
+    // (sessionStorage was trying to cache 50MB+ videos and failing)
+    console.log('[VideoPlayer] Using blob URL for video (avoids browser memory limits)');
+
+    if (false) { // Disabled data URL path for videos
+      // Data URLs work but can cause memory issues with large videos
+      if (declaredMimeType === 'video/mp4' || declaredMimeType === 'video/webm') {
+        console.log('[VideoPlayer] Using data URL directly for standard video format');
+
+        // Verify the base64 data is valid before using
+        try {
+          const testDecode = atob(base64Data.substring(0, 100)); // Test first 100 chars
+          console.log('[VideoPlayer] Base64 validation passed');
+
+          // DIAGNOSTIC: Test if browser can play a minimal MP4 data URL
+          // This will tell us if the issue is with the data or with the browser
+          const testVideo = document.createElement('video');
+          testVideo.src = src; // Use the actual data URL
+
+          console.log('[VideoPlayer] Testing video element canPlayType:', {
+            'video/mp4': testVideo.canPlayType('video/mp4'),
+            'video/mp4; codecs="avc1.42E01E"': testVideo.canPlayType('video/mp4; codecs="avc1.42E01E"'),
+            'video/mp4; codecs="avc1.4d401f"': testVideo.canPlayType('video/mp4; codecs="avc1.4d401f"'),
+          });
+
+          // Try to load metadata to see if the data URL is valid
+          testVideo.addEventListener('loadedmetadata', () => {
+            console.log('[VideoPlayer] TEST VIDEO: Metadata loaded successfully!', {
+              duration: testVideo.duration,
+              videoWidth: testVideo.videoWidth,
+              videoHeight: testVideo.videoHeight,
+            });
+          });
+
+          testVideo.addEventListener('error', (e) => {
+            console.error('[VideoPlayer] TEST VIDEO: Failed to load!', {
+              error: testVideo.error,
+              code: testVideo.error?.code,
+              message: testVideo.error?.message,
+            });
+          });
+
+          testVideo.load(); // Trigger the test load
+
+        } catch (err) {
+          console.error('[VideoPlayer] Base64 validation failed:', err);
+          setError('Invalid base64 encoding in video data');
+          setIsLoading(false);
+          return;
+        }
+
+        setVideoUrl(src);
+        setActualMimeType(declaredMimeType);
+        setUsingDataUrl(true);
+        return;
+      }
+    }
+
+    // For other formats or if we need blob URL, proceed with conversion
     try {
-      // Extract MIME type and base64 data from data URL
-      const match = src.match(/^data:([^;]+);base64,(.+)$/);
-      if (!match) {
-        setError('Invalid data URL format');
-        setIsLoading(false);
+      const estimatedSize = Math.round((base64Data.length * 3) / 4);
+      console.log('[VideoPlayer] Converting to blob URL:', {
+        mimeType: declaredMimeType,
+        base64Length: base64Data.length,
+        estimatedSize: `${Math.round(estimatedSize / 1024 / 1024)} MB`,
+        first50Chars: base64Data.substring(0, 50),
+      });
+
+      // Convert base64 to binary using more efficient method for large files
+      let byteArray: Uint8Array;
+      try {
+        const byteCharacters = atob(base64Data);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        byteArray = new Uint8Array(byteNumbers);
+
+        console.log('[VideoPlayer] Binary conversion successful:', {
+          byteArrayLength: byteArray.length,
+          first20Bytes: Array.from(byteArray.slice(0, 20)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '),
+        });
+
+        // Try to detect video codec from MP4 container
+        if (declaredMimeType === 'video/mp4') {
+          const videoData = Array.from(byteArray.slice(0, 2000)); // Check first 2KB
+          const videoString = String.fromCharCode(...videoData);
+
+          // Log the actual bytes we're searching through
+          console.log('[VideoPlayer] MP4 header analysis:', {
+            first100Chars: videoString.substring(0, 100),
+            containsAvc1: videoString.includes('avc1'),
+            containsHvc1: videoString.includes('hvc1'),
+            containsHev1: videoString.includes('hev1'),
+            containsVp09: videoString.includes('vp09'),
+            containsAv01: videoString.includes('av01'),
+            hexDump: Array.from(byteArray.slice(0, 100))
+              .map(b => b.toString(16).padStart(2, '0'))
+              .join(' '),
+          });
+
+          // Check for common codec identifiers in ftyp/moov boxes
+          const codecs = {
+            'avc1': 'H.264 (widely supported)',
+            'hvc1': 'H.265/HEVC (limited browser support)',
+            'hev1': 'H.265/HEVC (limited browser support)',
+            'vp09': 'VP9 (good browser support)',
+            'av01': 'AV1 (modern browsers only)',
+          };
+
+          let detectedCodec = 'unknown';
+          for (const [codecId, codecName] of Object.entries(codecs)) {
+            if (videoString.includes(codecId)) {
+              detectedCodec = codecName;
+              console.log(`[VideoPlayer] *** DETECTED CODEC: ${codecName} (found '${codecId}' in binary) ***`);
+              break;
+            }
+          }
+
+          if (detectedCodec === 'unknown') {
+            console.warn('[VideoPlayer] Could not detect codec from MP4 header - assuming H.264');
+            detectedCodec = 'H.264 (assumed)';
+          }
+
+          if (detectedCodec.includes('H.265') || detectedCodec.includes('HEVC')) {
+            console.warn('[VideoPlayer] ⚠️ WARNING: H.265/HEVC video detected - not widely supported in browsers!');
+            console.warn('[VideoPlayer] Consider re-encoding to H.264 for maximum compatibility');
+          } else if (detectedCodec.includes('H.264')) {
+            console.log('[VideoPlayer] ✅ H.264 detected - should work in all browsers');
+          }
+        }
+      } catch (decodeErr) {
+        console.error('[VideoPlayer] Base64 decode error:', decodeErr);
+        console.log('[VideoPlayer] Falling back to data URL');
+        setVideoUrl(src);
+        setActualMimeType(declaredMimeType);
+        setUsingDataUrl(true);
         return;
       }
 
-      const [, mimeType, base64Data] = match;
+      // Create blob with explicit video MIME type
+      const blob = new Blob([byteArray], { type: declaredMimeType });
 
-      // Convert base64 to binary
-      const binaryString = atob(base64Data);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
+      // Verify blob was created successfully
+      if (blob.size === 0) {
+        console.error('[VideoPlayer] Blob is empty, falling back to data URL');
+        setVideoUrl(src);
+        setActualMimeType(declaredMimeType);
+        setUsingDataUrl(true);
+        return;
       }
 
-      // Create blob and object URL (better for large videos)
-      const blob = new Blob([bytes], { type: mimeType });
-      const blobUrl = URL.createObjectURL(blob);
+      // Check file signature to verify format matches MIME type
+      const signature = Array.from(byteArray.slice(0, 12))
+        .map(b => '0x' + b.toString(16).padStart(2, '0'))
+        .join(' ');
+
+      console.log('[VideoPlayer] File signature:', signature);
+
+      // Common video signatures for validation
+      const videoSignatures: Record<string, string[]> = {
+        'video/mp4': ['0x00 0x00 0x00', 'ftyp'], // MP4 starts with ftyp box
+        'video/webm': ['0x1a 0x45 0xdf 0xa3'], // WebM/Matroska EBML header
+        'video/ogg': ['0x4f 0x67 0x67 0x53'], // OGG "OggS"
+      };
+
+      // Verify signature (non-blocking, just warning)
+      const expectedSigs = videoSignatures[declaredMimeType];
+      let detectedMimeType = declaredMimeType;
+
+      if (expectedSigs && !expectedSigs.some(sig => signature.includes(sig))) {
+        console.warn(`[VideoPlayer] File signature doesn't match expected format for ${declaredMimeType}`, {
+          signature,
+          expectedSignatures: expectedSigs,
+        });
+
+        // Try to detect actual format from signature
+        if (signature.includes('ftyp')) {
+          console.log('[VideoPlayer] Detected MP4 signature, overriding MIME type');
+          detectedMimeType = 'video/mp4';
+        } else if (signature.includes('0x1a 0x45 0xdf 0xa3')) {
+          console.log('[VideoPlayer] Detected WebM signature, overriding MIME type');
+          detectedMimeType = 'video/webm';
+        } else if (signature.includes('0x4f 0x67 0x67 0x53')) {
+          console.log('[VideoPlayer] Detected OGG signature, overriding MIME type');
+          detectedMimeType = 'video/ogg';
+        }
+      }
+
+      setActualMimeType(detectedMimeType);
+
+      // Create blob with detected/corrected MIME type
+      const blobWithCorrectType = detectedMimeType !== declaredMimeType
+        ? new Blob([byteArray], { type: detectedMimeType })
+        : blob;
+
+      // Create object URL
+      const blobUrl = URL.createObjectURL(blobWithCorrectType);
       setVideoUrl(blobUrl);
+      setUsingDataUrl(false);
 
-      console.log('[VideoPlayer] Created blob URL:', {
-        mimeType,
-        blobSize: blob.size,
-        blobUrl: blobUrl.substring(0, 50),
-        originalSrcLength: src.length,
-      });
-
-      // Test if the video is actually playable
-      const testVideo = document.createElement('video');
-      testVideo.src = blobUrl;
-      testVideo.addEventListener('loadedmetadata', () => {
-        console.log('[VideoPlayer] Video metadata loaded successfully:', {
-          duration: testVideo.duration,
-          videoWidth: testVideo.videoWidth,
-          videoHeight: testVideo.videoHeight,
-        });
-      });
-      testVideo.addEventListener('error', (e) => {
-        console.error('[VideoPlayer] Video element error:', {
-          error: testVideo.error,
-          code: testVideo.error?.code,
-          message: testVideo.error?.message,
-        });
+      console.log('[VideoPlayer] Created blob URL successfully:', {
+        originalMimeType: declaredMimeType,
+        detectedMimeType: detectedMimeType,
+        blobSize: `${Math.round(blobWithCorrectType.size / 1024 / 1024)} MB`,
+        blobUrl: blobUrl.substring(0, 50) + '...',
       });
 
       // Cleanup on unmount
       return () => {
+        console.log('[VideoPlayer] Revoking blob URL');
         URL.revokeObjectURL(blobUrl);
       };
     } catch (err) {
       console.error('[VideoPlayer] Error converting data URL to blob:', err);
-      setError(`Failed to load video: ${err instanceof Error ? err.message : 'Unknown error'}`);
-      setIsLoading(false);
+      console.log('[VideoPlayer] Falling back to data URL');
+      // Fallback: use data URL directly
+      setVideoUrl(src);
+      setActualMimeType(declaredMimeType);
+      setUsingDataUrl(true);
     }
   }, [src]);
 
@@ -247,10 +482,98 @@ export default function VideoPlayer({
 
   const handleError = useCallback((err: any) => {
     console.error('[VideoPlayer] Error:', err);
-    const errorMessage = err?.message || err?.toString() || 'Unknown error';
+    console.error('[VideoPlayer] Error context:', {
+      src: src?.substring(0, 100) + '...',
+      videoUrl: videoUrl?.substring(0, 100) + '...',
+      actualMimeType,
+      usingDataUrl,
+      errorType: err?.constructor?.name,
+      errorCode: err?.code,
+      errorMessage: err?.message,
+    });
+
+    // Map MediaError codes to user-friendly messages
+    let errorMessage = 'Unknown error';
+    if (err && typeof err === 'object' && 'code' in err) {
+      const mediaError = err as MediaError;
+      console.error('[VideoPlayer] MediaError details:', {
+        code: mediaError.code,
+        message: mediaError.message,
+        MEDIA_ERR_ABORTED: MediaError.MEDIA_ERR_ABORTED,
+        MEDIA_ERR_NETWORK: MediaError.MEDIA_ERR_NETWORK,
+        MEDIA_ERR_DECODE: MediaError.MEDIA_ERR_DECODE,
+        MEDIA_ERR_SRC_NOT_SUPPORTED: MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED,
+      });
+
+      switch (mediaError.code) {
+        case MediaError.MEDIA_ERR_ABORTED:
+          errorMessage = 'Video playback aborted';
+          break;
+        case MediaError.MEDIA_ERR_NETWORK:
+          errorMessage = 'Network error while loading video';
+          break;
+        case MediaError.MEDIA_ERR_DECODE:
+          errorMessage = 'Video decoding error - format may be unsupported';
+          break;
+        case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+          errorMessage = 'Video format not supported by browser';
+          // Add detailed codec support information
+          const videoElement = document.createElement('video');
+          const codecs = [
+            'video/mp4; codecs="avc1.42E01E, mp4a.40.2"', // H.264 Baseline + AAC
+            'video/mp4; codecs="avc1.4d401f"', // H.264 Main Profile
+            'video/mp4; codecs="avc1.640028"', // H.264 High Profile
+            'video/mp4; codecs="hvc1"', // H.265/HEVC
+            'video/mp4; codecs="hev1"', // H.265/HEVC alternate
+            'video/webm; codecs="vp8, vorbis"', // VP8 + Vorbis
+            'video/webm; codecs="vp9"', // VP9
+            'video/ogg; codecs="theora"', // Theora
+          ];
+          const supported = codecs.filter(c => videoElement.canPlayType(c) !== '');
+          console.error('[VideoPlayer] Browser codec support:', {
+            supportedCodecs: supported,
+            actualMimeType: actualMimeType || 'unknown',
+            allCodecTests: codecs.map(c => ({
+              codec: c,
+              canPlay: videoElement.canPlayType(c),
+            })),
+          });
+
+          // Check if H.265 is NOT supported (common issue)
+          const supportsH265 = videoElement.canPlayType('video/mp4; codecs="hvc1"') !== '';
+          const supportsH264Baseline = videoElement.canPlayType('video/mp4; codecs="avc1.42E01E"') !== '';
+          const supportsH264Main = videoElement.canPlayType('video/mp4; codecs="avc1.4d401f"') !== '';
+          const supportsH264High = videoElement.canPlayType('video/mp4; codecs="avc1.640028"') !== '';
+
+          console.error('[VideoPlayer] *** BROWSER CODEC SUPPORT DETAILED ***', {
+            'H.265/HEVC': supportsH265 ? '✅ SUPPORTED' : '❌ NOT SUPPORTED',
+            'H.264 Baseline': supportsH264Baseline ? '✅ SUPPORTED' : '❌ NOT SUPPORTED',
+            'H.264 Main': supportsH264Main ? '✅ SUPPORTED' : '❌ NOT SUPPORTED',
+            'H.264 High': supportsH264High ? '✅ SUPPORTED' : '❌ NOT SUPPORTED',
+          });
+
+          if (!supportsH265) {
+            console.warn('[VideoPlayer] Browser does NOT support H.265/HEVC codec');
+            console.warn('[VideoPlayer] If this is an H.265 video, it needs to be re-encoded to H.264');
+            errorMessage += ' (H.265/HEVC codec not supported - re-encode to H.264)';
+          } else if (supported.length === 0) {
+            errorMessage += ' (Browser does not support any common video codecs)';
+          } else {
+            errorMessage += ` (Browser supports: ${supported.map(c => c.split(';')[0]).join(', ')})`;
+          }
+          break;
+        default:
+          errorMessage = mediaError.message || 'Media element error';
+      }
+    } else if (err?.message) {
+      errorMessage = err.message;
+    } else if (typeof err === 'string') {
+      errorMessage = err;
+    }
+
     setError(`Video loading failed: ${errorMessage}`);
     setIsLoading(false);
-  }, []);
+  }, [actualMimeType]);
 
   const handleReady = useCallback(() => {
     console.log('[VideoPlayer] Player ready');
@@ -435,6 +758,8 @@ export default function VideoPlayer({
           disablePictureInPicture
           controlsList="nodownload"
           poster={poster}
+          preload="metadata"
+          crossOrigin="anonymous"
           onPlay={handlePlay}
           onPause={handlePause}
           onEnded={handleEnded}
@@ -451,15 +776,45 @@ export default function VideoPlayer({
             const video = e.currentTarget;
             setDuration(video.duration);
             setIsLoading(false);
-            console.log('[VideoPlayer] Video loaded:', {
+            console.log('[VideoPlayer] Video loaded successfully:', {
               duration: video.duration,
               width: video.videoWidth,
               height: video.videoHeight,
+              readyState: video.readyState,
+              networkState: video.networkState,
             });
+          }}
+          onLoadStart={() => {
+            console.log('[VideoPlayer] Video load started');
+          }}
+          onLoadedData={() => {
+            console.log('[VideoPlayer] Video data loaded');
           }}
           onError={(e) => {
             const video = e.currentTarget;
+            console.error('[VideoPlayer] Video error event:', {
+              error: video.error,
+              readyState: video.readyState,
+              networkState: video.networkState,
+              currentSrc: video.currentSrc?.substring(0, 100),
+            });
             handleError(video.error || new Error('Video playback error'));
+          }}
+          onCanPlay={() => {
+            console.log('[VideoPlayer] Video CAN PLAY - ready for playback');
+            setIsLoading(false);
+          }}
+          onCanPlayThrough={() => {
+            console.log('[VideoPlayer] Video CAN PLAY THROUGH - fully buffered');
+          }}
+          onWaiting={() => {
+            console.log('[VideoPlayer] Video WAITING - buffering');
+          }}
+          onStalled={() => {
+            console.error('[VideoPlayer] Video STALLED - network issue');
+          }}
+          onSuspend={() => {
+            console.log('[VideoPlayer] Video SUSPEND - loading paused');
           }}
         />
         ) : null}
@@ -486,7 +841,9 @@ export default function VideoPlayer({
           <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-20">
             <div className="flex flex-col items-center gap-3">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-white" />
-              <p className="text-white text-sm">Loading video...</p>
+              <p className="text-white text-sm">
+                {usingDataUrl ? 'Loading video (data URL)...' : 'Loading video (blob URL)...'}
+              </p>
             </div>
           </div>
         )}
@@ -494,9 +851,40 @@ export default function VideoPlayer({
         {/* Error State */}
         {error && (
           <div className="absolute inset-0 flex items-center justify-center bg-black/80 z-20">
-            <div className="text-center text-white p-4">
-              <Film className="w-12 h-12 mx-auto mb-2 opacity-50" />
-              <p className="text-red-400">{error}</p>
+            <div className="text-center text-white p-6 max-w-lg">
+              <Film className="w-16 h-16 mx-auto mb-4 opacity-50" />
+              <p className="text-red-400 text-lg mb-4">{error}</p>
+              <div className="text-sm text-gray-400 mb-4 space-y-1">
+                {actualMimeType && (
+                  <p>Format: <span className="font-mono">{actualMimeType}</span></p>
+                )}
+                <p>Method: <span className="font-mono">{usingDataUrl ? 'Data URL' : 'Blob URL'}</span></p>
+              </div>
+              {onDownload && (
+                <div className="mt-4">
+                  <p className="text-sm text-gray-400 mb-3">
+                    {usingDataUrl
+                      ? 'The browser cannot decode this video. This is likely an H.265/HEVC video, which most browsers do not support. Download and use VLC or re-encode to H.264.'
+                      : 'Your browser may not support this video codec. Try downloading the file to play it with VLC or another media player.'}
+                  </p>
+                  <div className="space-y-3">
+                    <button
+                      onClick={onDownload}
+                      className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors w-full justify-center"
+                    >
+                      <Download className="w-5 h-5" />
+                      Download Video
+                    </button>
+                    <div className="text-xs text-gray-500 text-left bg-gray-900/50 p-3 rounded">
+                      <p className="font-semibold mb-1">💡 If this is an H.265/HEVC video:</p>
+                      <p className="font-mono text-[10px] mb-1">
+                        ffmpeg -i input.mp4 -c:v libx264 -crf 23 output_h264.mp4
+                      </p>
+                      <p className="text-[10px]">Then re-upload the H.264 version for browser playback</p>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

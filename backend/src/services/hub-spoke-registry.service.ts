@@ -887,6 +887,53 @@ class HubSpokeRegistryService extends EventEmitter {
       // Don't fail spoke approval
     }
 
+    // FORCE OPAL DATA SYNC TO ALL OPA INSTANCES (Phase 4: Gap Closure)
+    // CRITICAL: After updating MongoDB (trusted_issuers, federation_matrix, COI memberships),
+    // force OPAL to immediately publish changes to all connected OPA instances.
+    // Without this, spoke approval succeeds but OPA still has stale data, causing:
+    // - 403 "issuer not trusted" errors when spoke users try to access Hub resources
+    // - 403 "federation denied" errors for cross-instance resource access
+    // - Broken SSO until OPAL CDC detects change (may take minutes or fail silently)
+    //
+    // Industry Pattern: Write-through cache invalidation
+    // Example: Redis pub/sub for distributed cache invalidation after database writes
+    try {
+      logger.info('Triggering OPAL data sync to all OPA instances after spoke approval', {
+        spokeId,
+        instanceCode: spoke.instanceCode
+      });
+
+      const { opalCdcService } = await import('./opal-cdc.service');
+      const syncResult = await opalCdcService.forcePublishAll();
+
+      if (syncResult.success) {
+        logger.info('OPAL data successfully synced to all OPA instances', {
+          spokeId,
+          instanceCode: spoke.instanceCode,
+          publishedDataTypes: Object.keys(syncResult.results || {}),
+          message: 'Federation is now active - spoke tokens will be accepted'
+        });
+      } else {
+        logger.error('OPAL sync failed after spoke approval - OPA may have stale data', {
+          spokeId,
+          instanceCode: spoke.instanceCode,
+          syncResults: syncResult.results,
+          impact: 'Spoke SSO may not work until manual sync: curl -X POST /api/opal/sync/force'
+        });
+        // Don't fail spoke approval - emit event for monitoring/alerting
+        this.emit('spoke:opal-sync-failed', { spoke, syncResult });
+      }
+    } catch (error) {
+      logger.error('Failed to trigger OPAL sync after spoke approval', {
+        spokeId,
+        instanceCode: spoke.instanceCode,
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        impact: 'Spoke approved but OPA data not synced - tokens may be rejected until manual sync'
+      });
+      // Don't fail spoke approval - system should still work once OPAL CDC detects change
+    }
+
     return spoke;
   }
 
@@ -1312,6 +1359,42 @@ federation_partners = {
       federationTrust: `${hubKasId} ↔ ${kasId}`,
       autoApproved: true
     });
+
+    // PUBLISH KAS REGISTRY TO OPAL (Phase 5: Gap Closure)
+    // CRITICAL: After registering spoke KAS in MongoDB, publish to OPAL so all
+    // connected instances (Hub + all Spokes) receive the updated KAS registry.
+    // Without this, spokes won't know about each other's KAS instances and
+    // cross-instance encrypted document access will fail with "No KAS registered" errors.
+    //
+    // Industry Pattern: Event-driven architecture with pub/sub
+    // Example: Kafka, RabbitMQ, Redis pub/sub for distributed state synchronization
+    try {
+      const { opalDataService } = await import('./opal-data.service');
+      const publishResult = await opalDataService.publishKasRegistry();
+
+      if (publishResult.success) {
+        logger.info('KAS registry published to OPAL - all instances updated', {
+          kasId,
+          instanceCode,
+          transactionId: publishResult.transactionId,
+        });
+      } else {
+        logger.warn('Failed to publish KAS registry to OPAL', {
+          kasId,
+          instanceCode,
+          error: publishResult.error,
+          impact: 'Spokes may not discover this KAS until next OPAL sync'
+        });
+      }
+    } catch (opalError) {
+      logger.warn('Failed to publish KAS registry to OPAL (non-blocking)', {
+        kasId,
+        instanceCode,
+        error: opalError instanceof Error ? opalError.message : 'Unknown error',
+        impact: 'KAS registered in Hub MongoDB but not yet distributed to spokes'
+      });
+      // Don't fail KAS registration - OPAL CDC will eventually pick up the change
+    }
   }
   
   /**

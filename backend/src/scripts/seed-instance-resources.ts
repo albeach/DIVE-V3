@@ -1375,7 +1375,44 @@ async function loadKASRegistry(): Promise<IKASRegistry> {
 function getInstanceConfig(registry: IFederationRegistry, instanceCode: string): IInstanceConfig {
     const key = instanceCode.toLowerCase();
     const config = registry.instances[key];
+
+    // If config not in registry, check if we're seeding the local instance
+    // For local instance seeding, we can use environment variables (SSOT)
     if (!config) {
+        const localInstanceCode = (process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA').toUpperCase();
+        if (instanceCode.toUpperCase() === localInstanceCode) {
+            // Seeding local instance - create minimal config from environment variables
+            const instanceName = process.env.INSTANCE_NAME || instanceCode;
+            const mongoDatabase = process.env.MONGODB_DATABASE || `dive-v3-${key}`;
+
+            console.warn(`   ⚠️  Instance ${instanceCode} not in federation registry`);
+            console.warn(`   ℹ️  Using environment variables for local instance seeding (SSOT)`);
+
+            return {
+                code: instanceCode.toUpperCase(),
+                name: instanceName,
+                type: 'local' as const,
+                enabled: true,
+                deployment: {
+                    host: 'localhost',
+                    domain: 'dive25.com'
+                },
+                services: {
+                    mongodb: {
+                        name: 'mongodb',
+                        containerName: `dive-spoke-${key}-mongodb`,
+                        internalPort: 27017,
+                        externalPort: parseInt(process.env.MONGO_PORT || '27017', 10)
+                    }
+                },
+                mongodb: {
+                    database: mongoDatabase,
+                    user: process.env.MONGODB_USER || 'admin'
+                }
+            };
+        }
+
+        // Not local instance and not in registry - fail
         throw new Error(`Unknown instance: ${instanceCode}. Valid instances: ${Object.keys(registry.instances).join(', ')}`);
     }
 
@@ -2256,7 +2293,8 @@ async function createZTDFDocument(
         chunkId: 0,
         encryptedData: encryptionResult.encryptedData,
         integrityHash: computeSHA384(encryptionResult.encryptedData),
-        size: Buffer.from(encryptionResult.encryptedData, 'base64').length
+        size: Buffer.from(encryptionResult.encryptedData, 'base64').length,
+        storageMode: 'inline' // CRITICAL: Required for backend decryption logic
     };
 
     // Create payload

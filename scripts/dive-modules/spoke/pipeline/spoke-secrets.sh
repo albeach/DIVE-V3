@@ -156,6 +156,7 @@ spoke_secrets_load() {
 ##
 # Map environment variable name to GCP secret name (SSOT naming convention)
 # Per .cursorrules: dive-v3-<type>-<instance>
+# NOTE: Spokes use -password suffix, Hub uses shortened names
 ##
 _map_env_to_gcp_secret() {
     local env_var="$1"

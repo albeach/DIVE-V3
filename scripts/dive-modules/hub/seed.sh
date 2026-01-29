@@ -192,7 +192,8 @@ _hub_register_kas() {
     log_step "Registering Hub KAS in federation registry..."
 
     local hub_backend_container="${BACKEND_CONTAINER:-dive-hub-backend}"
-    local kas_id="hub-kas-usa"
+    local instance_code="${INSTANCE_CODE:-USA}"
+    local kas_id="${instance_code,,}-kas"  # usa-kas, fra-kas, etc.
     local kas_url="https://dive-hub-kas:8080"
 
     # Dry run check
@@ -259,23 +260,34 @@ _hub_register_kas() {
     # Register Hub KAS via API
     log_info "Registering Hub KAS: ${kas_id}..."
 
+    # Get organization name from instance code
+    local org_name
+    case "${instance_code}" in
+        USA) org_name="United States" ;;
+        GBR) org_name="United Kingdom" ;;
+        FRA) org_name="France" ;;
+        DEU) org_name="Germany" ;;
+        CAN) org_name="Canada" ;;
+        *) org_name="${instance_code}" ;;
+    esac
+
     local response
     response=$(${DOCKER_CMD:-docker} exec "$hub_backend_container" curl -sk -w "\n%{http_code}" -X POST \
         http://localhost:4000/api/kas/register \
         -H "Content-Type: application/json" \
         -d "{
             \"kasId\": \"${kas_id}\",
-            \"organization\": \"DIVE Hub (USA)\",
-            \"countryCode\": \"USA\",
+            \"organization\": \"${org_name}\",
+            \"countryCode\": \"${instance_code}\",
             \"kasUrl\": \"https://localhost:10000\",
             \"internalKasUrl\": \"${kas_url}\",
             \"authMethod\": \"jwt\",
             \"authConfig\": {
-                \"jwtIssuer\": \"https://localhost:8443/realms/dive-v3-broker-usa\"
+                \"jwtIssuer\": \"https://localhost:8443/realms/dive-v3-broker-${instance_code,,}\"
             },
             \"trustLevel\": \"high\",
-            \"supportedCountries\": [\"USA\"],
-            \"supportedCOIs\": [\"NATO\", \"FVEY\", \"US-ONLY\"],
+            \"supportedCountries\": [\"${instance_code}\"],
+            \"supportedCOIs\": [\"NATO\", \"FVEY\"],
             \"metadata\": {
                 \"version\": \"1.0.0\",
                 \"capabilities\": [\"ztdf-encryption\", \"policy-enforcement\"],
@@ -316,8 +328,8 @@ _hub_register_kas() {
             echo ""
             echo "  KAS Details:"
             echo "    - kasId:       ${kas_id}"
-            echo "    - Organization: DIVE Hub (USA)"
-            echo "    - Country:     USA"
+            echo "    - Organization: ${org_name}"
+            echo "    - Country:     ${instance_code}"
             echo "    - Status:      active"
             echo ""
             return 0

@@ -39,6 +39,8 @@
         "seed:fra": "tsx src/scripts/seed-instance-resources.ts -- --instance=FRA --count=5000",
         "seed:gbr": "tsx src/scripts/seed-instance-resources.ts -- --instance=GBR --count=5000",
         "seed:deu": "tsx src/scripts/seed-instance-resources.ts -- --instance=DEU --count=5000",
+        "seed:hub-kas": "tsx src/scripts/seed-hub-kas.ts",
+        "seed:spoke-issuer": "tsx src/scripts/seed-spoke-trusted-issuer.ts",
         "migrate-logs": "tsx src/scripts/migrate-logs-to-mongodb.ts",
         "migrate:classification-equivalency": "tsx src/scripts/migrate-classification-equivalency.ts",
         "migrate:classification-equivalency:execute": "tsx src/scripts/migrate-classification-equivalency.ts -- --execute",

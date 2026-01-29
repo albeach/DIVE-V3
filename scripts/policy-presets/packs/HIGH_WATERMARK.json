@@ -1,0 +1,78 @@
+{
+  "policyPack": "HIGH_WATERMARK",
+  "version": "1.0",
+  "description": "Global TOP_SECRET cap with per-partner lower restrictions (differentiated trust)",
+  "author": "DIVE V3 Team",
+  "createdAt": "2026-01-28",
+  "federationConstraints": [
+    {
+      "ownerTenant": "USA",
+      "partnerTenant": "GBR",
+      "maxClassification": "TOP_SECRET",
+      "allowedCOIs": [
+        "NATO",
+        "FVEY",
+        "AUKUS"
+      ],
+      "deniedCOIs": [
+        "US-ONLY"
+      ],
+      "relationshipType": "spoke_spoke",
+      "description": "USA → UK: Full trust (TOP_SECRET)"
+    },
+    {
+      "ownerTenant": "USA",
+      "partnerTenant": "CAN",
+      "maxClassification": "TOP_SECRET",
+      "allowedCOIs": [
+        "NATO",
+        "FVEY",
+        "CAN-US"
+      ],
+      "deniedCOIs": [
+        "US-ONLY"
+      ],
+      "relationshipType": "spoke_spoke",
+      "description": "USA → Canada: Full trust (TOP_SECRET)"
+    },
+    {
+      "ownerTenant": "USA",
+      "partnerTenant": "FRA",
+      "maxClassification": "SECRET",
+      "allowedCOIs": [
+        "NATO"
+      ],
+      "deniedCOIs": [
+        "US-ONLY",
+        "FVEY",
+        "COSMIC_TOP_SECRET"
+      ],
+      "relationshipType": "spoke_spoke",
+      "description": "USA → France: Moderate trust (SECRET)"
+    },
+    {
+      "ownerTenant": "USA",
+      "partnerTenant": "DEU",
+      "maxClassification": "SECRET",
+      "allowedCOIs": [
+        "NATO"
+      ],
+      "deniedCOIs": [
+        "US-ONLY",
+        "FVEY",
+        "COSMIC_TOP_SECRET"
+      ],
+      "relationshipType": "spoke_spoke",
+      "description": "USA → Germany: Moderate trust (SECRET)"
+    }
+  ],
+  "metadata": {
+    "use_case": "Differentiated trust levels - full trust for FVEY, moderate for NATO",
+    "target_tenants": [
+      "USA"
+    ],
+    "deployment_time": "< 10 seconds",
+    "reversible": true,
+    "note": "Combine with NATO_STANDARD for comprehensive coverage"
+  }
+}

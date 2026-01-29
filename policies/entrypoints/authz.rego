@@ -38,6 +38,7 @@ import data.dive.base.clearance as base_clearance
 import data.dive.base.coi as base_coi
 import data.dive.base.country as base_country
 import data.dive.base.time as base_time
+import data.dive.base.guardrails as base_guardrails  # Phase 2: Hub guardrails
 
 # Import organization layer
 import data.dive.org.nato.acp240
@@ -45,6 +46,7 @@ import data.dive.org.nato.classification as nato_classification
 
 # Import tenant layer
 import data.dive.tenant.base as tenant_base
+import data.dive.tenant.federation_constraints  # Phase 2: Federation constraints
 
 # ============================================
 # Main Authorization Decision
@@ -54,6 +56,10 @@ import data.dive.tenant.base as tenant_base
 default allow := false
 
 allow if {
+	# CRITICAL: Hub guardrails MUST pass (highest priority for security violations)
+	# Phase 2: Prevents hub↔spoke tampering and other critical violations
+	base_guardrails.guardrails_pass
+
 	# All ACP-240 checks must pass
 	acp240.check_authenticated
 	acp240.check_required_attributes
@@ -67,12 +73,15 @@ allow if {
 	acp240.check_mfa_verified
 	acp240.check_industry_access_allowed
 	acp240.check_industry_clearance_cap_ok  # Phase 3: Industry clearance cap enforcement
-	
+
 	# COI coherence (set rule - must be empty)
 	count(acp240.is_coi_coherence_violation) == 0
-	
+
 	# Tenant federation check (if issuer present)
 	check_federation
+
+	# Phase 2: Federation constraints check (if federated access)
+	check_federation_constraints
 }
 
 # ============================================
@@ -91,6 +100,32 @@ check_federation if {
 	input.subject.issuer
 	tenant_base.is_from_trusted_origin
 	tenant_base.subject_can_access_tenant
+}
+
+# ============================================
+# Federation Constraints Check (Phase 2)
+# ============================================
+# Validates bilateral constraints (classification cap, COI allowlists)
+
+check_federation_constraints if {
+	# No issuer = local auth, no constraints
+	not input.subject.issuer
+}
+
+check_federation_constraints if {
+	# Issuer present - check bilateral constraints
+	input.subject.issuer
+
+	# Extract tenants
+	owner_tenant := object.get(input.resource, "ownerTenant", "")
+	partner_tenant := object.get(input.subject, "countryOfAffiliation", "")
+
+	# Check classification cap (bilateral effective-min)
+	federation_constraints.check_classification_cap(owner_tenant, partner_tenant, input.resource.classification)
+
+	# Check COI constraints (deny wins + allowlist intersection)
+	resource_cois := object.get(input.resource, "COI", [])
+	federation_constraints.check_coi_allowed(owner_tenant, partner_tenant, resource_cois)
 }
 
 # ============================================
@@ -113,6 +148,25 @@ decision := {
 
 reason := "Access granted - all conditions satisfied" if {
 	allow
+} else := msg if {
+	# CRITICAL: Check guardrail violations first (highest priority)
+	# Phase 2: Hub↔spoke tampering and other critical security violations
+	not base_guardrails.guardrails_pass
+	violations := base_guardrails.guardrail_violations
+
+	# Filter for critical violations
+	critical := [v | some v in violations; v.severity == "critical"]
+	count(critical) > 0
+
+	# Format critical violations
+	violation_messages := [v.message | some v in critical]
+	msg := sprintf("CRITICAL SECURITY VIOLATION: %s", [concat("; ", violation_messages)])
+} else := msg if {
+	# Phase 2: Federation constraint violations (classification cap)
+	msg := federation_constraints.is_classification_cap_exceeded
+} else := msg if {
+	# Phase 2: Federation constraint violations (COI)
+	msg := federation_constraints.is_coi_not_allowed
 } else := msg if {
 	msg := acp240.is_not_authenticated
 } else := msg if {
@@ -176,6 +230,10 @@ obligations := obs if {
 
 evaluation_details := {
 	"checks": {
+		"guardrails_pass": base_guardrails.guardrails_pass,  # Phase 2: Hub guardrails
+		"guardrail_violations": count(base_guardrails.guardrail_violations),  # Phase 2
+		"federation_constraints_classification": check_federation_constraints_classification,  # Phase 2
+		"federation_constraints_coi": check_federation_constraints_coi,  # Phase 2
 		"authenticated": acp240.check_authenticated,
 		"required_attributes": acp240.check_required_attributes,
 		"clearance_sufficient": acp240.check_clearance_sufficient,
@@ -242,6 +300,35 @@ federation_trusted if {
 }
 
 default federation_trusted := false
+
+# Helper for federation constraints classification check
+check_federation_constraints_classification if {
+	not input.subject.issuer
+}
+
+check_federation_constraints_classification if {
+	input.subject.issuer
+	owner_tenant := object.get(input.resource, "ownerTenant", "")
+	partner_tenant := object.get(input.subject, "countryOfAffiliation", "")
+	federation_constraints.check_classification_cap(owner_tenant, partner_tenant, input.resource.classification)
+}
+
+default check_federation_constraints_classification := false
+
+# Helper for federation constraints COI check
+check_federation_constraints_coi if {
+	not input.subject.issuer
+}
+
+check_federation_constraints_coi if {
+	input.subject.issuer
+	owner_tenant := object.get(input.resource, "ownerTenant", "")
+	partner_tenant := object.get(input.subject, "countryOfAffiliation", "")
+	resource_cois := object.get(input.resource, "COI", [])
+	federation_constraints.check_coi_allowed(owner_tenant, partner_tenant, resource_cois)
+}
+
+default check_federation_constraints_coi := false
 
 # ============================================
 # Backward Compatibility Aliases

@@ -2,23 +2,6 @@
 <@layout.registrationLayout displayMessage=false; section>
     <#if section = "header">
     <#elseif section = "form">
-        <#-- #region agent log -->
-        <#-- Hypothesis C,E: Log error page context to see what state was lost -->
-        <script>
-        (function() {
-            const errorData = {
-                message: '${message.summary?js_string}',
-                url: window.location.href,
-                hasState: window.location.href.includes('state='),
-                hasCode: window.location.href.includes('code='),
-                hasSessionState: window.location.href.includes('session_state='),
-                realm: '${realm.name?js_string}',
-                client: '${client.clientId?js_string}'
-            };
-            fetch('http://127.0.0.1:7243/ingest/84b84b04-5661-4074-af82-a6f395f1c783',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'error.ftl:10',message:'OAuth error page loaded',data:errorData,timestamp:Date.now(),sessionId:'debug-session',runId:'initial',hypothesisId:'C,E'})}).catch(()=>{});
-        })();
-        </script>
-        <#-- #endregion -->
         <div class="dive-error-page">
             <!-- Status Indicator -->
             <div class="dive-error-status">
@@ -198,8 +181,22 @@
             </#if>
 
             <!-- Actions -->
+            <#-- For session-expired/timeout errors, use loginUrl so the user gets the login form.
+                 loginRestartFlowUrl relies on KC_RESTART cookie; when session is expired that cookie
+                 is gone, so restart endpoint shows no form. Prefer loginUrl for these errors. -->
+            <#assign isSessionExpiredError = false>
+            <#if message?has_content && message.summary?has_content>
+                <#assign _err = message.summary?lower_case>
+                <#if _err?contains("expired") || _err?contains("timeout") || _err?contains("login again") || _err?contains("please login") || _err?contains("timed out")>
+                    <#assign isSessionExpiredError = true>
+                </#if>
+            </#if>
             <div class="dive-error-actions">
-                <#if url.loginRestartFlowUrl?has_content>
+                <#if isSessionExpiredError && url.loginUrl?has_content>
+                    <a href="${url.loginUrl}" class="dive-button-primary">
+                        ${msg("errorTryAgain")}
+                    </a>
+                <#elseif url.loginRestartFlowUrl?has_content>
                     <a href="${url.loginRestartFlowUrl}" class="dive-button-primary">
                         ${msg("errorTryAgain")}
                     </a>

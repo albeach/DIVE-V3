@@ -379,7 +379,7 @@ services:
       OPAL_SUBSCRIPTION_ID: spoke-{{INSTANCE_CODE_LOWER}}
       # Data topics to subscribe to (must match Hub topics)
       # CRITICAL: Subscribe to ALL data topics for dynamic trusted issuers, federation matrix, etc.
-      OPAL_DATA_TOPICS: policy_data,trusted_issuers,federation_matrix,tenant_configs
+      OPAL_DATA_TOPICS: policy_data,trusted_issuers,federation_matrix,tenant_configs,federation_constraints
       OPAL_LOG_LEVEL: INFO
       # Enable data updater to receive dynamic data from Hub
       OPAL_DATA_UPDATER_ENABLED: "true"

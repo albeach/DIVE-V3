@@ -59,65 +59,66 @@ export function LocaleSelector() {
 
   return (
     <div className="relative" ref={dropdownRef}>
-      {/* Trigger Button */}
+      {/* Trigger Button - Compact with just flag */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         onKeyDown={handleKeyDown}
         className="
-          flex items-center gap-2 px-3 py-2 rounded-lg
+          flex items-center gap-1.5 px-2 py-1.5 rounded-lg
           bg-white border border-gray-300
           hover:bg-gray-50 hover:border-gray-400
           focus:outline-none focus:ring-2 focus:ring-blue-500
           transition-colors duration-200
-          text-sm font-medium text-gray-700
         "
         aria-label="Select Language"
         aria-expanded={isOpen}
         aria-haspopup="listbox"
+        title={localeNames[locale]}
       >
-        <Globe className="w-4 h-4 text-gray-600" />
-        <span className="text-lg" role="img" aria-label={localeNames[locale]}>
+        <span className="text-base" role="img" aria-label={localeNames[locale]}>
           {localeFlags[locale]}
         </span>
-        <ChevronDown className={`w-4 h-4 text-gray-600 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        <ChevronDown className={`w-3 h-3 text-gray-600 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
       </button>
 
-      {/* Dropdown Menu */}
+      {/* Dropdown Menu - Compact grid of flags */}
       {isOpen && (
         <div
           className="
-            absolute right-0 mt-2 w-56
+            absolute right-0 mt-2 w-[280px]
             bg-white border border-gray-300 rounded-lg shadow-lg
             z-50
+            p-2
             max-h-96 overflow-y-auto
           "
           role="listbox"
           aria-label="Language options"
         >
-          {locales.map((loc) => (
-            <button
-              key={loc}
-              onClick={() => handleLocaleChange(loc)}
-              className={`
-                w-full flex items-center gap-3 px-4 py-3
-                hover:bg-blue-50 transition-colors
-                text-left
-                ${locale === loc ? 'bg-blue-50' : ''}
-              `}
-              role="option"
-              aria-selected={locale === loc}
-            >
-              <span className="text-2xl" role="img" aria-label={localeNames[loc]}>
-                {localeFlags[loc]}
-              </span>
-              <span className="flex-1 font-medium text-gray-900">
-                {localeNames[loc]}
-              </span>
-              {locale === loc && (
-                <Check className="w-5 h-5 text-blue-600" aria-hidden="true" />
-              )}
-            </button>
-          ))}
+          <div className="grid grid-cols-7 gap-1">
+            {locales.map((loc) => (
+              <button
+                key={loc}
+                onClick={() => handleLocaleChange(loc)}
+                className={`
+                  relative p-2 rounded-md
+                  hover:bg-blue-50 transition-colors
+                  ${locale === loc ? 'bg-blue-100 ring-2 ring-blue-500' : ''}
+                `}
+                role="option"
+                aria-selected={locale === loc}
+                title={localeNames[loc]}
+              >
+                <span className="text-2xl" role="img" aria-label={localeNames[loc]}>
+                  {localeFlags[loc]}
+                </span>
+                {locale === loc && (
+                  <div className="absolute -top-0.5 -right-0.5 w-3 h-3 bg-blue-600 rounded-full flex items-center justify-center">
+                    <Check className="w-2 h-2 text-white" aria-hidden="true" strokeWidth={3} />
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       )}
     </div>

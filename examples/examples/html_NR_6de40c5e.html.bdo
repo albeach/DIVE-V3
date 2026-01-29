@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mb:BindingInformation xmlns:mb="urn:nato:stanag:4778:bindinginformation:1:0"
+                       xmlns:xmime="http://www.w3.org/2005/05/xmlmime">
+  <mb:MetadataBindingContainer>
+    <mb:MetadataBinding>
+      <mb:Metadata>
+        <slab:originatorConfidentialityLabel xmlns:slab="urn:nato:stanag:4774:confidentialitymetadatalabel:1:0">
+          <slab:ConfidentialityInformation>
+            <slab:PolicyIdentifier>NATO</slab:PolicyIdentifier>
+            <slab:Classification>RESTRICTED</slab:Classification>
+          </slab:ConfidentialityInformation>
+          <slab:CreationDateTime>2026-01-22T12:12:14Z</slab:CreationDateTime>
+        </slab:originatorConfidentialityLabel>
+      </mb:Metadata>
+      <mb:DataReference URI="./html_NR_6de40c5e.html" xmime:contentType="text/html" />
+    </mb:MetadataBinding>
+  </mb:MetadataBindingContainer>
+</mb:BindingInformation>

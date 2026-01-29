@@ -1,0 +1,3 @@
+NATO UNCLASSIFIED
+Document ID: cc4a1101-b579-424b-aee3-54ffb308691c
+This is a dummy plain-text payload for database ingestion tests.

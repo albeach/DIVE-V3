@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
-import { getResourceById, getAllResources } from '../services/resource.service';
+import { getResourceById, getAllResources, getResourcesPaginated } from '../services/resource.service';
 import { NotFoundError } from '../middleware/error.middleware';
 import { IZTDFResource } from '../types/ztdf.types';
 import { validateZTDFIntegrity, decryptContent } from '../utils/ztdf.utils';
@@ -61,7 +61,12 @@ export const listResourcesHandler = async (
     try {
         logger.info('Listing resources', { requestId });
 
-        const resources = await getAllResources();
+        // Extract pagination params from query string
+        const page = parseInt(req.query.page as string) || 1;
+        const pageSize = parseInt(req.query.pageSize as string) || 50;
+
+        // Use paginated fetch to prevent OOM
+        const { resources, total } = await getResourcesPaginated(page, pageSize);
 
         // Get user's clearance from JWT token (set by authenticateJWT middleware)
         const token = (req as any).user;
@@ -151,6 +156,9 @@ export const listResourcesHandler = async (
         res.json({
             resources: resourceList,
             count: resourceList.length,
+            total, // Total count before filtering
+            page,
+            pageSize,
             timestamp: new Date().toISOString()
         });
 
@@ -982,18 +990,24 @@ export const requestKeyHandler = async (
             });
 
             try {
+                // Extract resource metadata from ZTDF format (from securityLabel, not top-level)
+                const securityLabel = isZTDFResource(resource)
+                    ? resource.ztdf.policy.securityLabel
+                    : null;
+
                 const resourceMetadata = {
-                    classification: (resource as any).classification || 'UNCLASSIFIED',
-                    releasabilityTo: (resource as any).releasabilityTo || ['USA'],
-                    COI: (resource as any).COI || [],
-                    creationDate: (resource as any).creationDate
+                    classification: securityLabel?.classification || (resource as any).classification || 'UNCLASSIFIED',
+                    releasabilityTo: securityLabel?.releasabilityTo || (resource as any).releasabilityTo || [],
+                    COI: securityLabel?.COI || (resource as any).COI || [],
+                    creationDate: securityLabel?.creationDate || (resource as any).creationDate
                 };
 
                 logger.info('Sending resourceMetadata to KAS', {
                     requestId,
                     resourceId,
-                    hasClassification: !!resourceMetadata.classification,
-                    hasReleasabilityTo: !!resourceMetadata.releasabilityTo,
+                    isZTDF: !!securityLabel,
+                    classification: resourceMetadata.classification,
+                    releasabilityTo: resourceMetadata.releasabilityTo,
                     coiCount: resourceMetadata.COI?.length || 0
                 });
 
@@ -1062,13 +1076,53 @@ export const requestKeyHandler = async (
                 return;
             }
 
+            // Retrieve encrypted data (from GridFS if needed)
+            let encryptedData: string;
+
+            if (encryptedChunk.storageMode === 'gridfs' && encryptedChunk.gridfsFileId) {
+                // Large file stored in GridFS - retrieve it
+                logger.info('Retrieving encrypted payload from GridFS', {
+                    requestId,
+                    resourceId,
+                    gridfsFileId: encryptedChunk.gridfsFileId
+                });
+
+                const { downloadFromGridFS } = await import('../services/gridfs.service');
+                encryptedData = await downloadFromGridFS(encryptedChunk.gridfsFileId);
+
+                logger.info('Retrieved encrypted payload from GridFS', {
+                    requestId,
+                    resourceId,
+                    size: Buffer.from(encryptedData, 'base64').length
+                });
+            } else if (encryptedChunk.storageMode === 'inline' && encryptedChunk.encryptedData) {
+                // Small file stored inline
+                encryptedData = encryptedChunk.encryptedData;
+            } else {
+                // Invalid storage configuration
+                logger.error('Invalid encrypted chunk storage configuration', {
+                    requestId,
+                    resourceId,
+                    storageMode: encryptedChunk.storageMode,
+                    hasEncryptedData: !!encryptedChunk.encryptedData,
+                    hasGridfsFileId: !!encryptedChunk.gridfsFileId
+                });
+
+                res.status(500).json({
+                    success: false,
+                    error: 'Internal Server Error',
+                    message: 'Invalid resource storage configuration'
+                });
+                return;
+            }
+
             try {
                 // ============================================
                 // CRITICAL: Validate ZTDF Integrity Before Decryption
                 // ACP-240 Requirement: STANAG 4778 Cryptographic Binding
                 // ============================================
                 const { validateZTDFIntegrity } = await import('../utils/ztdf.utils');
-                const integrityResult = await validateZTDFIntegrity(resource.ztdf);
+                const integrityResult = await validateZTDFIntegrity(resource.ztdf, encryptedData);
 
                 if (!integrityResult.valid) {
                     // FAIL-CLOSED: Deny access on integrity violation
@@ -1120,7 +1174,7 @@ export const requestKeyHandler = async (
 
                 // Integrity validated - safe to decrypt
                 const decryptedContent = decryptContent({
-                    encryptedData: encryptedChunk.encryptedData,
+                    encryptedData,
                     iv: resource.ztdf.payload.iv,
                     authTag: resource.ztdf.payload.authTag,
                     dek: kasResponse.data.dek

@@ -312,6 +312,29 @@ hub_deploy() {
     phase_times+=("Phase 6.5 (Realm Verify): ${phase6_5_duration}s")
     log_verbose "Phase 6.5 completed in ${phase6_5_duration}s"
 
+    # Phase 6.75: Register Hub KAS in federation registry
+    phase_start=$(date +%s)
+    log_info "Phase 6.75: Registering Hub KAS"
+
+    # Load hub seed module for KAS registration function
+    if [ -f "${MODULES_DIR}/hub/seed.sh" ]; then
+        source "${MODULES_DIR}/hub/seed.sh"
+
+        # Call KAS registration (non-fatal if it fails)
+        if ! _hub_register_kas; then
+            log_warn "Hub KAS registration failed - KAS decryption may not work"
+            log_warn "Manually register: docker exec dive-hub-backend npm run seed:hub-kas"
+        fi
+    else
+        log_warn "Hub seed module not found - skipping KAS registration"
+        log_warn "KAS decryption may not work until registered manually"
+    fi
+
+    phase_end=$(date +%s)
+    local phase6_75_duration=$((phase_end - phase_start))
+    phase_times+=("Phase 6.75 (KAS Register): ${phase6_75_duration}s")
+    log_verbose "Phase 6.75 completed in ${phase6_75_duration}s"
+
     # Phase 7: Seed database with test users and resources
     phase_start=$(date +%s)
     if type progress_set_phase &>/dev/null; then

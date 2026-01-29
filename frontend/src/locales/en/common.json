@@ -34,7 +34,7 @@
         "policyTools": {
             "name": "Policy Tools",
             "shortName": "Policies",
-            "description": "Authorization policies and compliance",
+            "description": "Authorization policies and tools",
             "explore": "Explore",
             "policyLibrary": "Policy Library",
             "policySandbox": "Policy Sandbox",
@@ -42,9 +42,19 @@
             "builder": "Builder",
             "myPolicies": "My Policies",
             "test": "Test",
-            "reference": "Reference",
-            "compliance": "Compliance",
-            "standardsCompliance": "Standards Compliance"
+            "reference": "Reference"
+        },
+        "compliance": {
+            "name": "Compliance",
+            "shortName": "Compliance",
+            "description": "Standards compliance and auditing",
+            "standards": "Standards",
+            "standardsCompliance": "Standards Compliance",
+            "security": "Security",
+            "kas": "KAS",
+            "cois": "COIs",
+            "pki": "PKI",
+            "classifications": "Classifications"
         },
         "admin": {
             "dashboard": "Admin Dashboard",

@@ -8,9 +8,10 @@
  *   - trusted_issuers → OPAL topic: trusted_issuers
  *   - federation_matrix → OPAL topic: federation_matrix
  *   - tenant_configs → OPAL topic: tenant_configs
+ *   - federation_constraints → OPAL topic: federation_constraints (Phase 2)
  *
- * @version 1.0.0
- * @date 2025-01-03
+ * @version 1.1.0
+ * @date 2026-01-28
  */
 
 import { mongoOpalDataStore } from '../models/trusted-issuer.model';
@@ -79,6 +80,8 @@ class OpalCdcService {
       trusted_issuers: 'trusted_issuers',
       federation_matrix: 'federation_matrix',
       tenant_configs: 'tenant_configs',
+      kas_registry: 'kas_registry',
+      federation_constraints: 'federation_constraints',  // Phase 2: Tenant-controlled federation constraints
     };
 
     const topic = topicMap[collection];
@@ -129,6 +132,22 @@ class OpalCdcService {
         case 'tenant_configs':
           data = await mongoOpalDataStore.getAllTenantConfigs();
           break;
+        case 'kas_registry':
+          // Load KAS registry from MongoDB
+          const { opalDataService } = await import('./opal-data.service');
+          data = await opalDataService.getKasRegistryForOpal();
+          break;
+        case 'federation_constraints':
+          // Phase 2: Load federation constraints from MongoDB
+          const { FederationConstraint } = await import('../models/federation-constraint.model');
+          const constraints = await FederationConstraint.getActiveConstraintsForOPAL();
+          data = {
+            success: true,
+            federation_constraints: constraints,
+            count: Object.values(constraints).reduce((sum, partners) => sum + Object.keys(partners).length, 0),
+            timestamp: new Date().toISOString(),
+          };
+          break;
         default:
           logger.warn('CDC: Unknown topic', { topic });
           return;
@@ -143,6 +162,15 @@ class OpalCdcService {
           operations: Array.from(operations || []),
           transactionId: result.transactionId,
         });
+
+        // Phase 5: Notify SSE clients of policy data update
+        try {
+          const { policyUpdateStream } = await import('./policy-update-stream.service');
+          policyUpdateStream.notifyDataUpdate(topic);
+        } catch (error) {
+          // Non-fatal: SSE may not be initialized yet
+          logger.debug('Could not notify SSE clients (service may not be initialized)', { topic });
+        }
       } else {
         logger.error('CDC: Failed to publish to OPAL', {
           topic,
@@ -178,6 +206,25 @@ class OpalCdcService {
       const configs = await mongoOpalDataStore.getAllTenantConfigs();
       const configsResult = await opalClient.publishInlineData('tenant_configs', configs, 'Force sync: tenant_configs');
       results['tenant_configs'] = configsResult.success;
+
+      // Phase 2: Publish federation constraints
+      try {
+        const { FederationConstraint } = await import('../models/federation-constraint.model');
+        const constraints = await FederationConstraint.getActiveConstraintsForOPAL();
+        const constraintsData = {
+          success: true,
+          federation_constraints: constraints,
+          count: Object.values(constraints).reduce((sum, partners) => sum + Object.keys(partners).length, 0),
+          timestamp: new Date().toISOString(),
+        };
+        const constraintsResult = await opalClient.publishInlineData('federation_constraints', constraintsData, 'Force sync: federation_constraints');
+        results['federation_constraints'] = constraintsResult.success;
+      } catch (error) {
+        logger.warn('CDC: Could not publish federation_constraints (model may not exist yet)', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        results['federation_constraints'] = false;
+      }
 
       const success = Object.values(results).every((r) => r);
 

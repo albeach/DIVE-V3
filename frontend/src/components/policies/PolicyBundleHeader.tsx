@@ -16,9 +16,15 @@ import { COMPLIANCE_CONFIGS } from '@/types/policy.types';
 
 interface PolicyBundleHeaderProps {
   hierarchy: IPolicyHierarchy;
+  sseStatus?: {
+    connected: boolean;
+    lastUpdate: Date | null;
+    updateCount: number;
+    error: string | null;
+  };
 }
 
-export default function PolicyBundleHeader({ hierarchy }: PolicyBundleHeaderProps) {
+export default function PolicyBundleHeader({ hierarchy, sseStatus }: PolicyBundleHeaderProps) {
   const { version, stats } = hierarchy;
   const lastUpdated = new Date(version.timestamp);
   const isRecent = (Date.now() - lastUpdated.getTime()) < 24 * 60 * 60 * 1000; // Within 24h
@@ -77,19 +83,43 @@ export default function PolicyBundleHeader({ hierarchy }: PolicyBundleHeaderProp
             </div>
           </div>
 
-          {/* Status Badge */}
+          {/* Status Badge - Live SSE Connection */}
           <div className={`
-            flex items-center gap-2 px-3 py-1.5 rounded-full
-            ${isRecent ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-amber-500/10 border border-amber-500/20'}
+            flex items-center gap-2 px-3 py-1.5 rounded-full transition-colors
+            ${sseStatus?.connected
+              ? 'bg-emerald-500/10 border border-emerald-500/20'
+              : sseStatus?.error
+              ? 'bg-amber-500/10 border border-amber-500/20'
+              : 'bg-slate-500/10 border border-slate-500/20'}
           `}>
-            {isRecent ? (
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+            {sseStatus?.connected ? (
+              <>
+                <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                <span className="text-sm font-medium text-emerald-300">
+                  Live
+                </span>
+                {sseStatus.updateCount > 0 && (
+                  <span className="text-xs text-emerald-400/60 ml-1">
+                    ({sseStatus.updateCount})
+                  </span>
+                )}
+              </>
+            ) : sseStatus?.error ? (
+              <>
+                <AlertCircle className="w-4 h-4 text-amber-400" />
+                <span className="text-sm font-medium text-amber-300">
+                  Reconnecting...
+                </span>
+              </>
             ) : (
-              <AlertCircle className="w-4 h-4 text-amber-400" />
+              <>
+                <div className="w-2 h-2 rounded-full bg-slate-400" />
+                <span className="text-sm font-medium text-slate-400">
+                  Connecting...
+                </span>
+              </>
             )}
-            <span className={`text-sm font-medium ${isRecent ? 'text-emerald-300' : 'text-amber-300'}`}>
-              {isRecent ? 'Synced' : 'Check Sync'}
-            </span>
           </div>
         </div>
 
@@ -129,7 +159,7 @@ export default function PolicyBundleHeader({ hierarchy }: PolicyBundleHeaderProp
         {/* Bottom Row: Version Info and Compliance */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 pt-4 border-t border-slate-700/50">
           {/* Version */}
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 flex-wrap">
             <div className="flex items-center gap-2">
               <span className="text-xs text-gray-500 uppercase tracking-wide">Version</span>
               <span className="px-2 py-0.5 rounded-md bg-slate-700/50 text-sm font-mono text-teal-300">
@@ -142,6 +172,21 @@ export default function PolicyBundleHeader({ hierarchy }: PolicyBundleHeaderProp
                 <GitCommit className="w-4 h-4 text-gray-600" />
                 <span className="text-sm font-mono text-gray-500">
                   {version.gitCommit.slice(0, 7)}
+                </span>
+              </div>
+            )}
+
+            {/* Real-Time Sync Status */}
+            {sseStatus && (
+              <div
+                className="flex items-center gap-2 px-2 py-1 rounded-md bg-slate-800/50 border border-slate-700/50"
+                title={sseStatus.connected
+                  ? `Real-time updates active${sseStatus.lastUpdate ? ` • Last sync: ${new Date(sseStatus.lastUpdate).toLocaleTimeString()}` : ''}`
+                  : sseStatus.error || 'Connecting to real-time updates...'}
+              >
+                <div className={`w-1.5 h-1.5 rounded-full ${sseStatus.connected ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500'}`} />
+                <span className="text-xs text-gray-500">
+                  {sseStatus.connected ? 'Real-time' : 'Offline'}
                 </span>
               </div>
             )}

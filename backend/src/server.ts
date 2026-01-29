@@ -25,6 +25,8 @@ import oauthRoutes from './routes/oauth.routes';  // OAuth 2.0 for SP federation
 import scimRoutes from './routes/scim.routes';  // SCIM 2.0 user provisioning
 import federationRoutes from './routes/federation.routes';  // Federation endpoints
 import federationSyncRoutes from './routes/federation-sync.routes';  // Phase 5: Federation state sync
+import federationConstraintRoutes from './routes/federation-constraint.routes';  // Phase 2: Federation constraints (bilateral)
+import policyUpdatesStreamRoutes from './routes/policy-updates-stream.routes';  // Phase 5: Real-time policy updates (SSE)
 import spManagementRoutes from './routes/sp-management.routes';  // SP Registry management
 import blacklistRoutes from './routes/blacklist.routes';  // Phase 2 GAP-007: Token blacklist
 import dashboardRoutes from './routes/dashboard.routes';  // Dashboard statistics
@@ -137,6 +139,7 @@ app.use('/metrics', metricsRoutes);
 app.use('/health', healthRoutes);
 app.use('/api', publicRoutes);  // Public routes (no auth required)
 app.use('/api/resources', resourceRoutes);
+app.use('/api/policies', policyUpdatesStreamRoutes);  // SSE stream MUST be before policyRoutes to avoid /:id catching /stream
 app.use('/api/policies', policyRoutes);
 app.use('/api/policies-lab', policiesLabRoutes);  // Policies Lab (distinct from /api/policies)
 app.use('/api/upload', uploadRoutes);
@@ -166,6 +169,7 @@ app.use('/api-docs', swaggerRoutes);  // API Documentation (OpenAPI/Swagger UI)
 app.use('/oauth', oauthRoutes);  // OAuth 2.0 Authorization Server
 app.use('/scim/v2', scimRoutes);  // SCIM 2.0 User Provisioning
 app.use('/api/federation', federationRoutes);  // Hub-Spoke federation management (Phase 3-5)
+app.use('/api/federation-constraints', federationConstraintRoutes);  // Phase 2: Bilateral federation constraints (tenant-controlled)
 app.use('/api/drift', federationSyncRoutes);  // Phase 5: Federation state drift detection (no auth required)
 app.use('/api/sp-management', spManagementRoutes);  // SP Registry management (admin-only)
 
@@ -338,6 +342,65 @@ async function startServer() {
       // Non-fatal: cross-instance access will fail gracefully
     }
 
+    // ============================================
+    // PHASE 4: OPAL Data Sync on Startup (Container Restart Persistence)
+    // ============================================
+    // CRITICAL: Force OPAL to sync MongoDB data to all OPA instances on backend startup
+    // Ensures federation data (trusted_issuers, federation_matrix) is loaded into OPA
+    // even after container restarts or OPAL service failures.
+    //
+    // Without this, container restart causes:
+    // - OPA loses all federation data (not persisted in OPA volumes)
+    // - 403 "issuer not trusted" errors until OPAL CDC detects change (may never happen)
+    // - Broken SSO and cross-instance access until manual sync
+    //
+    // Industry Pattern: Cache warming on application startup
+    // Examples: Redis cache preload, CDN edge cache warming
+    if (isHub) {
+      try {
+        logger.info('Initializing OPAL data sync on backend startup');
+        const { opalCdcService } = await import('./services/opal-cdc.service');
+
+        // Initialize OPAL CDC service (sets up MongoDB change streams)
+        await opalCdcService.initialize();
+        logger.info('OPAL CDC service initialized (MongoDB change streams active)');
+
+        // Phase 2: Initialize federation constraints indexes
+        try {
+          const { FederationConstraint } = await import('./models/federation-constraint.model');
+          await FederationConstraint.initializeIndexes();
+          logger.info('Federation constraints indexes initialized');
+        } catch (error) {
+          logger.warn('Failed to initialize federation constraints indexes', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+
+        // Force initial sync to push all MongoDB data to OPA
+        const syncResult = await opalCdcService.forcePublishAll();
+
+        if (syncResult.success) {
+          const dataTypes = Object.keys(syncResult.results || {});
+          logger.info('OPAL data successfully synced to OPA on startup', {
+            dataTypes,
+            publishedCount: dataTypes.length,
+            message: 'Federation data loaded - SSO and cross-instance access ready'
+          });
+        } else {
+          logger.error('OPAL sync failed on startup - OPA may have stale/empty data', {
+            syncResults: syncResult.results,
+            impact: 'SSO may not work until manual sync: curl -X POST /api/opal/cdc/force-sync'
+          });
+        }
+      } catch (error) {
+        logger.warn('Failed to initialize OPAL data sync (falling back to MongoDB change streams)', {
+          error: error instanceof Error ? error.message : 'Unknown error',
+          impact: 'OPA data will sync when MongoDB changes are detected (may take time)'
+        });
+        // Non-fatal: OPAL CDC will still watch for MongoDB changes
+      }
+    }
+
     // Phase 4: Start policy version monitoring for drift detection
     try {
       const policyCheckInterval = parseInt(process.env.POLICY_CHECK_INTERVAL_MS || '300000'); // 5 min default
@@ -456,6 +519,39 @@ async function startServer() {
             hubUrl,
             intervalMs: 30000,
           });
+
+          // Step 2.5: Publish tenant_id to OPA data store
+          // This allows OPA policies to determine current tenant without relying on issuer mapping
+          try {
+            const OPA_URL = process.env.OPA_URL || 'https://opa-fra:8181';
+            const axios = require('axios');
+            const https = require('https');
+
+            const httpsAgent = new https.Agent({
+              rejectUnauthorized: false, // Accept self-signed certs
+            });
+
+            await axios.put(
+              `${OPA_URL}/v1/data/tenant_id`,
+              { result: instanceCode },
+              {
+                headers: { 'Content-Type': 'application/json' },
+                httpsAgent,
+                timeout: 5000,
+              }
+            );
+
+            logger.info('Published tenant_id to OPA data store', {
+              instanceCode,
+              opaUrl: OPA_URL,
+            });
+          } catch (opaError) {
+            logger.warn('Failed to publish tenant_id to OPA - tenant resolution may fallback to defaults', {
+              error: opaError instanceof Error ? opaError.message : 'Unknown error',
+              instanceCode,
+            });
+            // Non-fatal: OPA can fall back to issuer-based tenant detection
+          }
 
           // Step 3: Wait for Hub to verify identity (optional - can proceed with cached)
           // This happens asynchronously via heartbeat's identityVerified event

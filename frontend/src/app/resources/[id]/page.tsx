@@ -296,9 +296,17 @@ export default function ResourceDetailPage() {
   // Check sessionStorage for decrypted content on mount
   useEffect(() => {
     if (resourceId) {
-      const cached = sessionStorage.getItem(`decrypted-${resourceId}`);
-      if (cached) {
-        setDecryptedContent(cached);
+      try {
+        const cached = sessionStorage.getItem(`decrypted-${resourceId}`);
+        if (cached) {
+          console.log('[ResourceDetail] Restored decrypted content from sessionStorage cache');
+          setDecryptedContent(cached);
+        } else {
+          console.log('[ResourceDetail] No cached content in sessionStorage (may have been too large to cache)');
+        }
+      } catch (err) {
+        console.warn('[ResourceDetail] Failed to read from sessionStorage:', err);
+        // Continue without cache
       }
     }
   }, [resourceId]);
@@ -312,7 +320,7 @@ export default function ResourceDetailPage() {
 
   useEffect(() => {
     if (status === 'loading') return;
-    
+
     if (!session) {
       return;
     }
@@ -364,7 +372,7 @@ export default function ResourceDetailPage() {
           fetchSuggestedResources();
         } else {
           const data = await response.json();
-          
+
           // Transform ZTDF data from nested structure to flattened format for UI
           if (data.ztdf && typeof data.ztdf === 'object') {
             data.ztdf = {
@@ -376,7 +384,7 @@ export default function ResourceDetailPage() {
               kaoCount: data.ztdf.payload?.keyAccessObjects?.length || 0,
             };
           }
-          
+
           setResource(data);
           setError(null);
 
@@ -525,12 +533,12 @@ export default function ResourceDetailPage() {
         if (response.ok) {
           const data = await response.json();
           const allResources = data.resources || [];
-          
+
           // Simple filtering: resources releasable to user's country
           const userCountry = session?.user?.countryOfAffiliation;
           const userClearance = session?.user?.clearance;
           const userCOI = session?.user?.acpCOI || [];
-          
+
           // CRITICAL: RESTRICTED is now a separate level above UNCLASSIFIED
           const clearanceOrder: Record<string, number> = {
             'UNCLASSIFIED': 0,
@@ -546,20 +554,20 @@ export default function ResourceDetailPage() {
               const userLevel = (userClearance ? clearanceOrder[userClearance] : null) || 0;
               const resourceLevel = clearanceOrder[r.classification] || 0;
               const clearanceOk = userLevel >= resourceLevel;
-              
+
               // Check country
               const countryOk = userCountry && r.releasabilityTo.includes(userCountry);
-              
+
               // Check COI (optional)
               const coiOk = r.COI.length === 0 || r.COI.some(coi => userCOI.includes(coi));
-              
+
               // Different from current resource
               const notCurrent = r.resourceId !== resourceId;
-              
+
               return clearanceOk && countryOk && coiOk && notCurrent;
             })
             .slice(0, 5); // Top 5 suggestions
-          
+
           setSuggestedResources(suggested);
         }
       } catch (err) {
@@ -844,7 +852,7 @@ export default function ResourceDetailPage() {
 
                 <div className="px-6 py-6">
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Document Content</h3>
-                  
+
                   {/* Show decrypted content if available */}
                   {decryptedContent ? (
                     <div className="space-y-4">
@@ -876,7 +884,7 @@ export default function ResourceDetailPage() {
                           </button>
                         </div>
                       </div>
-                      
+
                       {/* Modern Content Viewer */}
                       <ContentViewer
                         content={decryptedContent}
@@ -900,7 +908,7 @@ export default function ResourceDetailPage() {
                                   method: 'GET',
                                   cache: 'no-store',
                                 });
-                                
+
                                 if (ztdfResponse.ok) {
                                   const ztdfData = await ztdfResponse.json();
                                   const fetchedKaos = ztdfData.ztdfDetails?.payload?.keyAccessObjects || [];
@@ -927,7 +935,7 @@ export default function ResourceDetailPage() {
                           </p>
                         </div>
                       )}
-                      
+
                       {/* KAO Selector */}
                       {kaos.length > 0 && (
                         <>
@@ -939,7 +947,7 @@ export default function ResourceDetailPage() {
                             userCOI={(session?.user as any)?.acpCOI || []}
                             userClearance={session?.user?.clearance || 'UNCLASSIFIED'}
                           />
-                          
+
                           {/* KAS Error Display */}
                           {kasError && (
                             <div className="p-5 bg-red-50 border-2 border-red-300 rounded-xl shadow-lg">
@@ -956,7 +964,7 @@ export default function ResourceDetailPage() {
                               </div>
                             </div>
                           )}
-                          
+
                           {/* Request Key Button */}
                           <div className="text-center">
                             <button
