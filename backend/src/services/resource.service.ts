@@ -156,7 +156,7 @@ export async function getAllResources(limit: number = 100): Promise<IZTDFResourc
                 'encryptedContent': 0,
                 'content': 0
             })
-            .toArray();
+            .toArray() as IZTDFResource[];
 
         // Skip ZTDF validation for list operations (too expensive)
         // Validation happens on individual resource access
@@ -199,7 +199,7 @@ export async function getResourcesPaginated(
                 'encryptedContent': 0,
                 'content': 0
             })
-            .toArray();
+            .toArray() as IZTDFResource[];
 
         return {
             resources,

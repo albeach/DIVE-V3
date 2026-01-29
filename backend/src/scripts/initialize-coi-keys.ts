@@ -295,7 +295,17 @@ async function main() {
             name: def.name,
             type: 'coalition' as const, // Most COIs are coalitions
             members: def.memberCountries,
+            memberCountries: def.memberCountries, // Alias for service compatibility
             description: def.description,
+            status: def.status || 'active', // Map to status field
+            color: def.color || '#6B7280', // Include color
+            icon: def.icon || '🔑', // Include icon
+            resourceCount: 0, // Will be computed dynamically
+            algorithm: 'AES-256-GCM',
+            keyVersion: 1,
+            mutuallyExclusiveWith: def.mutuallyExclusiveWith,
+            subsetOf: def.subsetOf,
+            supersetOf: def.supersetOf,
             mutable: true, // Allow updates via API
             autoUpdate: false, // Manual management
             priority: def.mutuallyExclusiveWith?.includes('US-ONLY') ? 90 : 70, // Higher priority for exclusive COIs
@@ -304,7 +314,9 @@ async function main() {
                 updatedAt: now,
                 source: 'migration' as const
             },
-            enabled: true
+            enabled: true,
+            createdAt: now,
+            updatedAt: now
         }));
 
         const result = await collection.insertMany(documents);
