@@ -148,7 +148,7 @@ export const navItems: NavItem[] = [
     },
     {
         name: 'nav.policyTools.name',
-        shortName: 'nav.policyTools.shortName',  // Shorter label for lg breakpoint
+        shortName: 'nav.policyTools.shortName',  // Shorter label "Policy" for lg breakpoint
         href: '/policies',
         icon: Settings,
         description: 'nav.policyTools.description',
@@ -199,69 +199,20 @@ export const navItems: NavItem[] = [
     },
 ];
 
-// Admin menu items
-export const adminItems = [
-    {
-        name: 'nav.admin.dashboard',
-        href: '/admin/dashboard',
-        icon: BarChart3,
-        badge: null,
-        description: 'nav.admin.dashboard.description'
-    },
-    {
-        name: 'nav.admin.spRegistry',
-        href: '/admin/sp-registry',
-        icon: Building2,
-        badge: null,
-        description: 'nav.admin.spRegistry.description'
-    },
-    {
-        name: 'nav.admin.certificates',
-        href: '/admin/certificates',
-        icon: FileCheck,
-        badge: null,
-        description: 'nav.admin.certificates.description'
-    },
-    {
-        name: 'nav.admin.idpGovernance',
-        href: '/admin/analytics',
-        icon: Settings,
-        badge: null,
-        description: 'nav.admin.idpGovernance.description'
-    },
-    {
-        name: 'nav.admin.idpManagement',
-        href: '/admin/idp',
-        icon: Key,
-        badge: null,
-        description: 'nav.admin.idpManagement.description'
-    },
-    {
-        name: 'nav.admin.approvals',
-        href: '/admin/approvals',
-        icon: CheckSquare,
-        badge: '3',
-        description: 'nav.admin.approvals.description'
-    },
-    {
-        name: 'nav.admin.auditLogs',
-        href: '/admin/logs',
-        icon: ScrollText,
-        badge: null,
-        description: 'nav.admin.auditLogs.description'
-    },
-    {
-        name: 'nav.admin.opaPolicy',
-        href: '/admin/opa-policy',
-        icon: Settings,
-        badge: 'DEMO',
-        description: 'nav.admin.opaPolicy.description'
-    },
-    {
-        name: 'nav.admin.integrationGuide',
-        href: '/integration/federation-vs-object',
-        icon: BookOpen,
-        badge: 'NEW',
-        description: 'nav.admin.integrationGuide.description'
-    },
-];
+// Admin menu items - Re-export from unified admin navigation
+// IMPORTANT: This is now a compatibility layer. New code should import from @/config/admin-navigation.ts
+export { ADMIN_NAVIGATION, getAdminNavigation, type AdminNavItem } from '@/config/admin-navigation';
+
+// Legacy adminItems format for backwards compatibility
+// TODO: Migrate consuming components to use ADMIN_NAVIGATION directly
+import { ADMIN_NAVIGATION } from '@/config/admin-navigation';
+
+export const adminItems = ADMIN_NAVIGATION
+    .filter(item => !item.children) // Top-level items only for legacy compat
+    .map(item => ({
+        name: item.label,
+        href: item.href,
+        icon: item.icon,
+        badge: item.badge || null,
+        description: item.description
+    }));

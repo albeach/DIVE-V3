@@ -178,7 +178,7 @@ export async function getMultiKasInfo(
     try {
         // Import the KAS metrics service (uses MongoDB as SSOT)
         const { kasMetricsService } = await import('../services/kas-metrics.service');
-        
+
         // Get live Multi-KAS info from MongoDB
         const multiKasInfo = await kasMetricsService.getMultiKASInfo();
 
@@ -235,7 +235,7 @@ export async function getMultiKasInfo(
         res.json(response);
     } catch (error) {
         logger.error("Error fetching Multi-KAS info from MongoDB", { error });
-        res.status(500).json({ 
+        res.status(500).json({
             error: "Failed to fetch Multi-KAS info",
             message: "MongoDB KAS registry unavailable",
             timestamp: new Date().toISOString()
@@ -253,14 +253,18 @@ export async function getCoiKeysInfo(
     res: Response,
 ): Promise<void> {
     try {
+        console.log('[COI Keys API] Request received');
+
         // Import the COI Keys service
         const { getAllCOIKeys, getCOIKeyStatistics } = await import('../services/coi-key.service');
 
         // Get live statistics from database
         const stats = await getCOIKeyStatistics();
+        console.log('[COI Keys API] Stats:', stats);
 
         // Get all active COI Keys from database
         const { cois } = await getAllCOIKeys('active');
+        console.log('[COI Keys API] COIs retrieved:', cois.length);
 
         // Transform to compliance page format
         const coiList = cois.map(coi => ({
@@ -273,6 +277,8 @@ export async function getCoiKeysInfo(
             status: coi.status,
             resourceCount: coi.resourceCount,
         }));
+
+        console.log('[COI Keys API] Returning', coiList.length, 'COIs to client');
 
         const coiKeysInfo = {
             title: "Community of Interest (COI) Keys",
@@ -730,9 +736,9 @@ export async function getCertificateStatus(
 
         // Determine overall PKI health
         const allHealthy = pkiInitialized &&
-                          rootHealth.status === 'valid' &&
-                          intermediateHealth.status === 'valid' &&
-                          signingHealth.status === 'valid';
+            rootHealth.status === 'valid' &&
+            intermediateHealth.status === 'valid' &&
+            signingHealth.status === 'valid';
         const componentsHealthy = pkiInitialized ? [rootHealth, intermediateHealth, signingHealth]
             .filter(h => h.status === 'valid').length : 0;
 

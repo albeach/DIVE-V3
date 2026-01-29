@@ -1,4 +1,5 @@
 {
+  "_updated": "2026-01-29T20:30:00Z",
   "title": "Resources",
   "subtitle": "Manage and access coalition information resources",
   "list": {
@@ -195,5 +196,20 @@
     "placeholder": "Filter by date range",
     "clickToStart": "Click a date to start selection",
     "clickToComplete": "Click another date to complete range"
-  }
+  },
+  "accessibleDocuments": "Accessible Documents",
+  "yourUploads": "Your Uploads",
+  "recentlyViewed": "Recently Viewed",
+  "resourcesByClassification": "Resources by Classification",
+  "resourceStats": "View resource statistics by",
+  "browseAll": "Browse All Resources",
+  "yourAccessContext": "Your Access Context",
+  "basedOnYourClearance": "Based on your",
+  "andCountryAffiliation": " and country affiliation",
+  "youCanAccess": "you can access",
+  "documentsAcross": "documents across",
+  "thatAreReleasableTo": "classification that are releasable to",
+  "maxClassification": "Max Classification",
+  "releasability": "Releasability",
+  "mustInclude": "Must include"
 }

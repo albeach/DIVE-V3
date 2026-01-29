@@ -1,4 +1,5 @@
 {
+    "_updated": "2026-01-29T20:00:00Z",
     "app": {
         "name": "DIVE V3",
         "tagline": "Coalition-Friendly ICAM Pilot"
@@ -14,6 +15,7 @@
         "resources": "Resources",
         "admin": "Admin",
         "signOut": "Sign Out",
+        "policyTools": "Policy",
         "documents": {
             "name": "Documents",
             "shortName": "Docs",
@@ -32,8 +34,8 @@
             "description": "Secure document upload"
         },
         "policyTools": {
-            "name": "Policy Tools",
-            "shortName": "Policies",
+            "name": "Policy",
+            "shortName": "Policy",
             "description": "Authorization policies and tools",
             "explore": "Explore",
             "policyLibrary": "Policy Library",
@@ -88,6 +90,7 @@
         "view": "View",
         "test": "Test",
         "refresh": "Refresh",
+        "retry": "Retry",
         "export": "Export",
         "import": "Import",
         "search": "Search",

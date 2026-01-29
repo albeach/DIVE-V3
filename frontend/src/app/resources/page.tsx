@@ -850,6 +850,7 @@ export default function ResourcesPage() {
             { value: 'encrypted', label: 'Encrypted', count: 0 },
             { value: 'unencrypted', label: 'Unencrypted', count: 0 },
           ],
+          fileTypes: (facets as any)?.fileTypes?.map((f: any) => ({ value: f.value, label: f.label, count: f.count })) || [],
         }}
         selectedFilters={selectedFilters}
         onFilterChange={handleFilterChange}

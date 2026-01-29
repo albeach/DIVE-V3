@@ -209,50 +209,52 @@ export function GlossaryPopover({ isOpen, onClose, filter = '' }: GlossaryPopove
           />
 
           {/* Popover */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, y: 10 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.95, y: 10 }}
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg max-h-[80vh] bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden"
-          >
-            <div className="p-4 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <BookOpen className="w-5 h-5 text-blue-600" />
-                  <h2 className="text-lg font-bold text-slate-900">DIVE V3 Glossary</h2>
+          <div className="fixed inset-0 z-50 flex items-center justify-center pointer-events-none">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="w-full max-w-lg max-h-[80vh] bg-white rounded-2xl shadow-2xl border border-slate-200 overflow-hidden pointer-events-auto"
+            >
+              <div className="p-4 border-b border-slate-200 bg-gradient-to-r from-blue-50 to-indigo-50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="w-5 h-5 text-blue-600" />
+                    <h2 className="text-lg font-bold text-slate-900">DIVE V3 Glossary</h2>
+                  </div>
+                  <button
+                    onClick={onClose}
+                    className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500"
+                  >
+                    &times;
+                  </button>
                 </div>
-                <button
-                  onClick={onClose}
-                  className="w-8 h-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500"
-                >
-                  &times;
-                </button>
+                <p className="text-xs text-slate-600 mt-1">
+                  Key terms and concepts used throughout the platform
+                </p>
               </div>
-              <p className="text-xs text-slate-600 mt-1">
-                Key terms and concepts used throughout the platform
-              </p>
-            </div>
 
-            <div className="overflow-y-auto max-h-[60vh] p-4 space-y-3">
-              {filteredTerms.map(([key, value]) => (
-                <div
-                  key={key}
-                  className="p-3 rounded-lg bg-slate-50 border border-slate-100 hover:border-blue-200 transition-colors"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0 text-xs font-bold text-blue-600">
-                      {key.slice(0, 2)}
-                    </div>
-                    <div>
-                      <h4 className="text-sm font-bold text-slate-900">{key}</h4>
-                      <p className="text-xs text-slate-600">{value.term}</p>
-                      <p className="text-xs text-slate-500 mt-1">{value.definition}</p>
+              <div className="overflow-y-auto max-h-[60vh] p-4 space-y-3">
+                {filteredTerms.map(([key, value]) => (
+                  <div
+                    key={key}
+                    className="p-3 rounded-lg bg-slate-50 border border-slate-100 hover:border-blue-200 transition-colors"
+                  >
+                    <div className="flex items-start gap-3">
+                      <div className="w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center flex-shrink-0 text-xs font-bold text-blue-600">
+                        {key.slice(0, 2)}
+                      </div>
+                      <div>
+                        <h4 className="text-sm font-bold text-slate-900">{key}</h4>
+                        <p className="text-xs text-slate-600">{value.term}</p>
+                        <p className="text-xs text-slate-500 mt-1">{value.definition}</p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          </motion.div>
+                ))}
+              </div>
+            </motion.div>
+          </div>
         </>
       )}
     </AnimatePresence>

@@ -349,7 +349,7 @@ export default function VideoPlayer({
       }
 
       // Create blob with explicit video MIME type
-      const blob = new Blob([byteArray], { type: declaredMimeType });
+      const blob = new Blob([byteArray as BlobPart], { type: declaredMimeType });
 
       // Verify blob was created successfully
       if (blob.size === 0) {
@@ -401,7 +401,7 @@ export default function VideoPlayer({
 
       // Create blob with detected/corrected MIME type
       const blobWithCorrectType = detectedMimeType !== declaredMimeType
-        ? new Blob([byteArray], { type: detectedMimeType })
+        ? new Blob([byteArray as BlobPart], { type: detectedMimeType })
         : blob;
 
       // Create object URL

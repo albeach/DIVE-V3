@@ -1,13 +1,14 @@
 import React from 'react';
 import { redirect } from 'next/navigation';
 import { auth } from '@/auth';
+import { AdminCommandPaletteWrapper } from '@/components/admin/AdminCommandPaletteWrapper';
 
 /**
  * Admin Layout with Role-Based Access Control
- * 
+ *
  * This layout ONLY handles authorization - it checks for admin role.
  * Admin pages use the standard PageLayout for consistent navigation.
- * 
+ *
  * Requires 'dive-admin', 'admin', or 'super_admin' role to access admin pages.
  * Regular users are redirected to dashboard.
  * Unauthenticated users are redirected to login.
@@ -27,7 +28,7 @@ export default async function AdminLayout({
 
   // Check for admin role
   const userRoles = session.user.roles || [];
-  const isAdmin = userRoles.includes('dive-admin') || 
+  const isAdmin = userRoles.includes('dive-admin') ||
                   userRoles.includes('admin') ||
                   userRoles.includes('super_admin');
 
@@ -36,6 +37,11 @@ export default async function AdminLayout({
     redirect('/dashboard?error=unauthorized');
   }
 
-  // Just render children - admin pages use PageLayout for consistent navigation
-  return <>{children}</>;
+  // Render children with global command palette
+  return (
+    <>
+      {children}
+      <AdminCommandPaletteWrapper />
+    </>
+  );
 }
