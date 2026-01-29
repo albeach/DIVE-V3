@@ -17,7 +17,7 @@ import { logger } from '../utils/logger';
 import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
 import { ICOIKey, ICreateCOIKeyRequest, IUpdateCOIKeyRequest, ICOIKeyListResponse } from '../types/coi-key.types';
 
-const COLLECTION_NAME = 'coi_keys';
+const COLLECTION_NAME = 'coi_definitions';
 
 let cachedClient: MongoClient | null = null;
 let cachedDb: Db | null = null;
