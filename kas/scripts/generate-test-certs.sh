@@ -41,6 +41,8 @@ fi
 # ============================================
 for country in usa fra gbr; do
     COUNTRY_UPPER=$(echo "$country" | tr '[:lower:]' '[:upper:]')
+    # Use 2-letter ISO country codes for certificate compatibility
+    COUNTRY_CODE=$(echo "$country" | cut -c1-2 | tr '[:lower:]' '[:upper:]')
     echo ""
     echo "[2/4] Generating certificates for KAS-${COUNTRY_UPPER}..."
     
@@ -58,7 +60,7 @@ for country in usa fra gbr; do
     else
         openssl req -new -key "$CERT_DIR/$country/client.key" \
             -out "$CERT_DIR/$country/client.csr" \
-            -subj "/C=${COUNTRY_UPPER}/ST=Test/L=Test/O=DIVE V3/OU=KAS/CN=kas-$country" \
+            -subj "/C=${COUNTRY_CODE}/ST=Test/L=Test/O=DIVE V3/OU=KAS/CN=kas-$country" \
             -addext "subjectAltName=DNS:kas-$country,DNS:kas-$country.dive25.com,DNS:localhost"
         echo "   ✅ CSR generated"
     fi
@@ -86,11 +88,12 @@ for country in usa fra gbr; do
         # Generate server private key
         openssl genrsa -out "$CERT_DIR/$country/server.key" 4096
         
-        # Generate self-signed server certificate
+        # Generate self-signed server certificate (use 2-letter country code)
+        COUNTRY_CODE=$(echo "$country" | cut -c1-2 | tr '[:lower:]' '[:upper:]')
         openssl req -new -x509 -key "$CERT_DIR/$country/server.key" \
             -out "$CERT_DIR/$country/server.crt" \
             -days 365 \
-            -subj "/C=${COUNTRY_UPPER}/ST=Test/L=Test/O=DIVE V3/OU=KAS/CN=kas-$country" \
+            -subj "/C=${COUNTRY_CODE}/ST=Test/L=Test/O=DIVE V3/OU=KAS/CN=kas-$country" \
             -addext "subjectAltName=DNS:kas-$country,DNS:kas-$country.dive25.com,DNS:localhost,IP:127.0.0.1"
         
         echo "   ✅ Server certificate generated"
@@ -118,8 +121,9 @@ for country in usa fra gbr; do
         exit 1
     fi
     
-    # Verify server certificate is self-signed
-    if openssl x509 -in "$CERT_DIR/$country/server.crt" -noout -text | grep -q "Subject: C=${COUNTRY_UPPER}"; then
+    # Verify server certificate is self-signed (use 2-letter country code)
+    COUNTRY_CODE=$(echo "$country" | cut -c1-2 | tr '[:lower:]' '[:upper:]')
+    if openssl x509 -in "$CERT_DIR/$country/server.crt" -noout -text | grep -q "C=${COUNTRY_CODE}"; then
         echo "   ✅ KAS-${COUNTRY_UPPER} server certificate valid"
     else
         echo "   ❌ KAS-${COUNTRY_UPPER} server certificate INVALID"

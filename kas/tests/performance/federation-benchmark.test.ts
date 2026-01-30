@@ -22,6 +22,7 @@ import axios from 'axios';
 import https from 'https';
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { generateKeyPair, generateTestJWT, wrapKey, computePolicyBinding } from '../integration/federation.test';
 
 interface IPerformanceMetrics {
