@@ -1,0 +1,1966 @@
+{
+  "meta": {
+    "analysis_scope": "KAS Rewrap Protocol v1.0 gap analysis per ACP-240 SUPP-5(A) AMDT 1",
+    "analysis_date": "2026-01-30",
+    "analyst": "Cursor AI Agent",
+    "baseline_version": "ACP-240 SUPP-5(A) AMDT 1 dated 08 MAY 2025",
+    "implementation_version": "DIVE V3 KAS v1.0.0-acp240",
+    "inputs_seen": {
+      "baseline_requirements_present": true,
+      "evidence_pack_present": true,
+      "requirements_count": 50,
+      "evidence_files_count": 13
+    }
+  },
+  "summary": {
+    "counts_by_status": {
+      "IMPLEMENTED": 11,
+      "PARTIAL": 15,
+      "NOT_IMPLEMENTED": 23,
+      "UNKNOWN": 0,
+      "NOT_APPLICABLE": 1
+    },
+    "compliance_percentage": {
+      "fully_compliant": 22,
+      "partially_compliant": 30,
+      "non_compliant": 46,
+      "not_applicable": 2
+    },
+    "critical_finding": "The current implementation uses a custom '/request-key' API that does NOT conform to the ACP-240 rewrap protocol v1.0 specification. Zero interoperability with spec-compliant clients.",
+    "top_gaps": [
+      {
+        "requirement_ids": [
+          "KAS-REQ-020",
+          "KAS-REQ-023",
+          "KAS-REQ-090",
+          "KAS-REQ-091"
+        ],
+        "severity": "CRITICAL",
+        "title": "Missing Core Protocol Endpoint",
+        "impact": "Breaks interoperability with all ACP-240 compliant clients. Current implementation uses /request-key instead of /rewrap endpoint with spec-compliant request/response structures.",
+        "evidence": [
+          "server.ts:110",
+          "No /rewrap endpoint found in codebase",
+          "kas.types.ts:66-121 custom response structure"
+        ]
+      },
+      {
+        "requirement_ids": [
+          "KAS-REQ-031",
+          "KAS-REQ-032",
+          "KAS-REQ-033",
+          "KAS-REQ-111"
+        ],
+        "severity": "CRITICAL",
+        "title": "No DPoP Verification",
+        "impact": "Exposes KAS to token theft and replay attacks. Fails RFC 9449 compliance. No proof-of-possession binding between access token and client.",
+        "evidence": [
+          "jwt-validator.ts has no DPoP verification",
+          "replay-protection.ts exists but not DPoP-compliant",
+          "Grep for DPoP found only requirements doc"
+        ]
+      },
+      {
+        "requirement_ids": [
+          "KAS-REQ-042",
+          "KAS-REQ-043",
+          "KAS-REQ-112"
+        ],
+        "severity": "CRITICAL",
+        "title": "Missing PolicyBinding Verification",
+        "impact": "Cannot detect policy tampering. Attacker can swap policy on valid keyAccessObject without detection. Violates core ACP-240 integrity requirement.",
+        "evidence": [
+          "server.ts has no HMAC verification",
+          "kas.types.ts has no policyBinding field",
+          "No policy canonicalization logic found"
+        ]
+      },
+      {
+        "requirement_ids": [
+          "KAS-REQ-040",
+          "KAS-REQ-041"
+        ],
+        "severity": "CRITICAL",
+        "title": "No Per-KAO Signature Verification",
+        "impact": "Cannot verify keyAccessObject integrity. Allows forged KAOs. Vulnerable to MITM attacks during forwarding where intermediary can modify wrappedKey, url, or kid fields.",
+        "evidence": [
+          "No signature verification in server.ts",
+          "kas.types.ts has no signature field in keyAccessObject structure"
+        ]
+      },
+      {
+        "requirement_ids": [
+          "KAS-REQ-080",
+          "KAS-REQ-081",
+          "KAS-REQ-082",
+          "KAS-REQ-083",
+          "KAS-REQ-084",
+          "KAS-REQ-085"
+        ],
+        "severity": "CRITICAL",
+        "title": "Brokering/Forwarding Not Spec-Compliant",
+        "impact": "Cannot federate with other ACP-240 KAS instances. Response aggregation broken. Federation only works within DIVE V3 ecosystem using custom protocol.",
+        "evidence": [
+          "kas-federation.service.ts:317-537 uses custom API",
+          "server.ts:717-812 /federated/request-key endpoint",
+          "No policy-KAO association preservation",
+          "No per-result signing"
+        ]
+      }
+    ],
+    "quick_wins": [
+      {
+        "requirement_ids": [
+          "KAS-REQ-021"
+        ],
+        "title": "Enforce HTTPS",
+        "rationale": "TLS already configured in server.ts:876-916, just needs enforcement flag",
+        "complexity": "S"
+      },
+      {
+        "requirement_ids": [
+          "KAS-REQ-022"
+        ],
+        "title": "Implement Content-Type Validation",
+        "rationale": "Simple middleware to validate application/json header",
+        "complexity": "S"
+      },
+      {
+        "requirement_ids": [
+          "KAS-REQ-093"
+        ],
+        "title": "Add sid Field to Response",
+        "rationale": "Track sid from keyAccessObject input to result output for session correlation",
+        "complexity": "S"
+      },
+      {
+        "requirement_ids": [
+          "KAS-REQ-100",
+          "KAS-REQ-101",
+          "KAS-REQ-102",
+          "KAS-REQ-103",
+          "KAS-REQ-104"
+        ],
+        "title": "Standardize Error Codes",
+        "rationale": "Error codes mostly correct, just need mapping for signature failures",
+        "complexity": "S"
+      },
+      {
+        "requirement_ids": [
+          "KAS-REQ-113"
+        ],
+        "title": "Document Crypto Algorithms",
+        "rationale": "Code already uses RS256 and AES-256-GCM, just needs documentation",
+        "complexity": "S"
+      }
+    ]
+  },
+  "requirements": [
+    {
+      "id": "KAS-REQ-001",
+      "level": "MUST",
+      "category": "Scope",
+      "status": "PARTIAL",
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "evidence": [
+        "server.ts:1-11 comments describe ACP-240 KAS",
+        "server.ts:330-480 OPA policy re-evaluation",
+        "server.ts:562-610 DEK unwrap logic"
+      ],
+      "rationale": "Implementation provides core KAS functionality (policy evaluation, key release) but uses custom API instead of ACP-240 rewrap protocol",
+      "gap": "Uses /request-key API instead of /rewrap. Will not interoperate with spec-compliant clients despite having correct authorization logic",
+      "remediation": [
+        {
+          "change": "Implement /rewrap POST endpoint alongside /request-key",
+          "location_hint": "kas/src/server.ts around line 715",
+          "notes": "Keep /request-key for backward compatibility. Maintain existing OPA integration."
+        },
+        {
+          "change": "Add request body validation for policy-grouped keyAccessObject arrays",
+          "location_hint": "kas/src/middleware/rewrap-validator.middleware.ts (new file)",
+          "notes": "Validate against ACP-240 schema"
+        }
+      ],
+      "verification": [
+        {
+          "test": "POST /rewrap with spec-compliant request body",
+          "expected": "200 OK with responses array keyed by policyId"
+        },
+        {
+          "test": "POST /rewrap with missing policy field",
+          "expected": "400 Bad Request"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-002",
+      "level": "MUST",
+      "category": "Scope",
+      "status": "PARTIAL",
+      "severity": "HIGH",
+      "confidence": "HIGH",
+      "evidence": [
+        "server.ts:573-592 unwraps wrappedKey as plaintext DEK",
+        "No rewrap to clientPublicKey found"
+      ],
+      "rationale": "Takes wrappedKey from request but returns DEK directly instead of re-encrypting to clientPublicKey",
+      "gap": "Missing asymmetric rewrap operation. Current: wrappedKey→DEK→response. Required: wrappedKey→(decrypt with KAS key)→DEK→(encrypt to clientPublicKey)→kasWrappedKey",
+      "remediation": [
+        {
+          "change": "Implement asymmetric unwrap using KAS private key (RSA-OAEP or ECDH-ES+A256KW)",
+          "location_hint": "kas/src/utils/hsm-provider.ts unwrapKey method",
+          "notes": "Replace deterministic DEK generation with actual asymmetric decryption"
+        },
+        {
+          "change": "Implement asymmetric rewrap to clientPublicKey",
+          "location_hint": "kas/src/utils/crypto/rewrap.ts (new file)",
+          "notes": "Use clientPublicKey from request to encrypt decrypted key material"
+        },
+        {
+          "change": "Return kasWrappedKey field instead of dek",
+          "location_hint": "kas/src/types/kas.types.ts IRewrapResponse",
+          "notes": "Client unwraps kasWrappedKey with ephemeral private key"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Provide wrappedKey encrypted with KAS public key, request rewrap to client ephemeral key",
+          "expected": "Receive kasWrappedKey decryptable only by client's ephemeral private key"
+        },
+        {
+          "test": "Attempt to decrypt kasWrappedKey with wrong private key",
+          "expected": "Decryption fails"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-003",
+      "level": "MUST",
+      "category": "Interoperability",
+      "status": "PARTIAL",
+      "severity": "MEDIUM",
+      "confidence": "MEDIUM",
+      "evidence": [
+        "kas.types.ts supports key material concept",
+        "No multi-KAO recombination logic found"
+      ],
+      "rationale": "Types acknowledge key splits but no implementation for combining multiple splits from All-Of mode",
+      "gap": "Cannot handle scenarios where multiple keyAccessObjects represent key splits that must be recombined",
+      "remediation": [
+        {
+          "change": "Implement key split recombination for All-Of mode",
+          "location_hint": "kas/src/utils/crypto/key-split.ts (new file)",
+          "notes": "Support XOR, AES-KW, or polynomial secret sharing per ZTDF spec"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Rewrap request with 2 keyAccessObjects representing key splits",
+          "expected": "Both splits unwrapped and recombined to produce full DEK"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-010",
+      "level": "MUST",
+      "category": "Data Model",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "CRITICAL",
+      "confidence": "HIGH",
+      "evidence": [
+        "kas.types.ts:24-60 IKASKeyRequest has flat structure",
+        "No policy grouping in request types"
+      ],
+      "rationale": "Request structure does not support policy-grouped keyAccessObject arrays per spec",
+      "gap": "Cannot accept rewrap requests with multiple policies each governing multiple keyAccessObjects",
+      "remediation": [
+        {
+          "change": "Create IRewrapRequest type with requests array containing policy and keyAccessObjects",
+          "location_hint": "kas/src/types/rewrap.types.ts (new file)",
+          "notes": "Structure: { clientPublicKey, requests: [{ policy, keyAccessObjects: [...] }] }"
+        }
+      ],
+      "verification": [
+        {
+          "test": "POST /rewrap with 2 policy groups containing 3 and 2 KAOs respectively",
+          "expected": "All 5 KAOs processed and grouped by policy in response"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-011",
+      "level": "MUST",
+      "category": "Data Model",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "CRITICAL",
+      "confidence": "HIGH",
+      "evidence": [
+        "kas.types.ts has kaoId field but not keyAccessObjectId",
+        "No uniqueness validation found"
+      ],
+      "rationale": "Does not track client-provided unique keyAccessObjectId across request and response",
+      "gap": "Cannot correlate per-keyAccessObject results back to request KAOs",
+      "remediation": [
+        {
+          "change": "Add keyAccessObjectId to keyAccessObject type and validate uniqueness",
+          "location_hint": "kas/src/types/rewrap.types.ts IKeyAccessObject",
+          "notes": "Must be unique across entire rewrap request"
+        },
+        {
+          "change": "Preserve keyAccessObjectId in response results",
+          "location_hint": "rewrap handler response building",
+          "notes": "Each result must include keyAccessObjectId from corresponding KAO"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Rewrap with duplicate keyAccessObjectId",
+          "expected": "400 Bad Request - keyAccessObjectId must be unique"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-012",
+      "level": "MUST",
+      "category": "Data Model",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "CRITICAL",
+      "confidence": "HIGH",
+      "evidence": [
+        "kas.types.ts IKASKeyRequest missing wrappedKey, url, kid, policyBinding, sid fields"
+      ],
+      "rationale": "KeyAccessObject type does not include required ACP-240 fields",
+      "gap": "Cannot process spec-compliant keyAccessObject structures",
+      "remediation": [
+        {
+          "change": "Define complete IKeyAccessObject interface with all required fields",
+          "location_hint": "kas/src/types/rewrap.types.ts",
+          "notes": "Include: keyAccessObjectId, wrappedKey, url, kid, policyBinding, sid, encryptedMetadata, signature"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Rewrap with keyAccessObject containing all required fields",
+          "expected": "Fields properly extracted and processed"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-013",
+      "level": "SHOULD",
+      "category": "Data Model",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "LOW",
+      "confidence": "HIGH",
+      "evidence": [
+        "No type or protocol field handling found"
+      ],
+      "rationale": "Does not accept or validate type='wrapped' and protocol='kas' fields",
+      "gap": "May reject ZTDF-compliant keyAccessObjects with these metadata fields",
+      "remediation": [
+        {
+          "change": "Accept and optionally validate type and protocol fields",
+          "location_hint": "rewrap request validator",
+          "notes": "Accept any value for type/protocol for interoperability"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Rewrap with keyAccessObject including type='wrapped' and protocol='kas'",
+          "expected": "Fields accepted, request processed normally"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-020",
+      "level": "MUST",
+      "category": "API",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "CRITICAL",
+      "confidence": "HIGH",
+      "evidence": [
+        "server.ts:110 implements POST /request-key",
+        "Grep for /rewrap found only requirements doc"
+      ],
+      "rationale": "Complete absence of /rewrap endpoint - primary interoperability blocker",
+      "gap": "No /rewrap endpoint exists. This prevents all ACP-240 client interoperability",
+      "remediation": [
+        {
+          "change": "Create POST /rewrap endpoint with full protocol implementation",
+          "location_hint": "kas/src/server.ts around line 715",
+          "notes": "Implement: request validation, per-KAO signature verification, policyBinding verification, unwrap, policy evaluation, rewrap, response signing, aggregation"
+        },
+        {
+          "change": "Add feature flag ENABLE_REWRAP_PROTOCOL for gradual rollout",
+          "location_hint": "environment configuration",
+          "notes": "Allow testing /rewrap without breaking existing /request-key clients"
+        }
+      ],
+      "verification": [
+        {
+          "test": "curl -X POST https://kas:8080/rewrap -H 'Authorization: Bearer ...' -H 'DPoP: ...' -d @rewrap-request.json",
+          "expected": "200 OK with { responses: [{ policyId, results: [...] }] }"
+        },
+        {
+          "test": "POST /rewrap without DPoP header",
+          "expected": "401 Unauthorized"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-021",
+      "level": "MUST",
+      "category": "API",
+      "status": "PARTIAL",
+      "severity": "LOW",
+      "confidence": "HIGH",
+      "evidence": [
+        "server.ts:876-916 HTTPS configured with certificates",
+        "HTTPS_ENABLED flag exists but defaults to false"
+      ],
+      "rationale": "TLS support implemented but not enforced",
+      "gap": "HTTPS optional via environment variable instead of mandatory",
+      "remediation": [
+        {
+          "change": "Set HTTPS_ENABLED=true by default and reject HTTP requests",
+          "location_hint": "kas/src/server.ts line 46",
+          "notes": "Remove HTTP fallback in production deployments"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Attempt HTTP request to KAS",
+          "expected": "Connection rejected or 301 redirect to HTTPS"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-022",
+      "level": "MUST",
+      "category": "API",
+      "status": "PARTIAL",
+      "severity": "LOW",
+      "confidence": "HIGH",
+      "evidence": [
+        "server.ts:57 express.json() middleware accepts JSON",
+        "No Content-Type validation middleware"
+      ],
+      "rationale": "Accepts JSON but does not validate Content-Type header",
+      "gap": "Missing explicit Content-Type: application/json requirement",
+      "remediation": [
+        {
+          "change": "Add middleware to validate Content-Type header",
+          "location_hint": "kas/src/middleware/content-type-validator.ts (new file)",
+          "notes": "Return 400 if Content-Type is not application/json"
+        }
+      ],
+      "verification": [
+        {
+          "test": "POST /rewrap with Content-Type: text/plain",
+          "expected": "400 Bad Request - Content-Type must be application/json"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-023",
+      "level": "MUST",
+      "category": "API",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "CRITICAL",
+      "confidence": "HIGH",
+      "evidence": [
+        "kas.types.ts:24-60 IKASKeyRequest has custom structure",
+        "No clientPublicKey or requests array"
+      ],
+      "rationale": "Request body does not match spec structure",
+      "gap": "Custom request format incompatible with spec: { clientPublicKey, requests: [{ policy, keyAccessObjects }] }",
+      "remediation": [
+        {
+          "change": "Implement spec-compliant request body parsing",
+          "location_hint": "/rewrap handler",
+          "notes": "Extract clientPublicKey at top level, iterate over requests array"
+        }
+      ],
+      "verification": [
+        {
+          "test": "POST /rewrap with spec request structure",
+          "expected": "Request parsed correctly, all fields extracted"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-024",
+      "level": "SHOULD",
+      "category": "API",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "evidence": [
+        "No signedRequestToken handling found"
+      ],
+      "rationale": "Does not support optional signedRequestToken wrapper pattern",
+      "gap": "May not interoperate with clients using signed request token wrapper",
+      "remediation": [
+        {
+          "change": "Add signedRequestToken unwrapping logic",
+          "location_hint": "/rewrap handler input validation",
+          "notes": "If request has signedRequestToken field, verify signature and extract inner request body. Still enforce DPoP."
+        }
+      ],
+      "verification": [
+        {
+          "test": "POST /rewrap with signedRequestToken wrapper",
+          "expected": "Token verified, inner request extracted and processed"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-030",
+      "level": "MUST",
+      "category": "AuthN",
+      "status": "IMPLEMENTED",
+      "severity": null,
+      "confidence": "HIGH",
+      "evidence": [
+        "jwt-validator.ts:275-404 verifyToken function with JWKS",
+        "server.ts:142-193 JWT verification in /request-key handler"
+      ],
+      "rationale": "JWT Bearer token authentication implemented correctly with signature verification",
+      "gap": null,
+      "remediation": [],
+      "verification": [
+        {
+          "test": "Request with valid Bearer token",
+          "expected": "Token verified, request processed"
+        },
+        {
+          "test": "Request with invalid signature",
+          "expected": "401 Unauthorized"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-031",
+      "level": "MUST",
+      "category": "AuthN",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "CRITICAL",
+      "confidence": "HIGH",
+      "evidence": [
+        "jwt-validator.ts has no DPoP verification",
+        "replay-protection.ts exists but not DPoP-compliant",
+        "Grep for DPoP found only requirements doc"
+      ],
+      "rationale": "Complete absence of RFC 9449 DPoP verification - critical security vulnerability",
+      "gap": "No DPoP proof requirement or verification. Allows token theft and replay attacks",
+      "remediation": [
+        {
+          "change": "Install DPoP library: npm install @auth0/node-dpop or implement RFC 9449 manually",
+          "location_hint": "package.json dependencies",
+          "notes": "Manual implementation preferred for control and auditability"
+        },
+        {
+          "change": "Create DPoP verification middleware",
+          "location_hint": "kas/src/middleware/dpop.middleware.ts (new file)",
+          "notes": "Verify: DPoP JWT signature, htm, htu, ath (SHA256 of token), jti uniqueness, iat within ±60s"
+        },
+        {
+          "change": "Apply verifyDPoP middleware to /rewrap endpoint",
+          "location_hint": "server.ts /rewrap handler",
+          "notes": "app.post('/rewrap', verifyDPoP, ...)"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Valid DPoP proof with correct htm, htu, ath",
+          "expected": "200 OK"
+        },
+        {
+          "test": "Replay same DPoP proof (same jti)",
+          "expected": "401 Unauthorized - DPoP proof replay detected"
+        },
+        {
+          "test": "DPoP proof with wrong ath",
+          "expected": "401 Unauthorized - token binding verification failed"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-032",
+      "level": "MUST",
+      "category": "AuthN",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "CRITICAL",
+      "confidence": "HIGH",
+      "evidence": [
+        "No DPoP htm/htu/ath binding verification found"
+      ],
+      "rationale": "Cannot verify DPoP proof parameters required by RFC 9449",
+      "gap": "Missing verification of HTTP method, target URI, and access token hash binding",
+      "remediation": [
+        {
+          "change": "Implement DPoP parameter verification in middleware",
+          "location_hint": "kas/src/middleware/dpop.middleware.ts",
+          "notes": "Check htm==='POST', htu matches /rewrap URL, ath===SHA256(Bearer token)"
+        }
+      ],
+      "verification": [
+        {
+          "test": "DPoP proof with htm='GET' instead of 'POST'",
+          "expected": "401 Unauthorized"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-033",
+      "level": "SHOULD",
+      "category": "AuthN",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "HIGH",
+      "confidence": "MEDIUM",
+      "evidence": [
+        "No trusted DPoP key distribution mechanism found"
+      ],
+      "rationale": "No mechanism to obtain and validate client's public DPoP key",
+      "gap": "Cannot establish trust in client's DPoP public key used for proof verification",
+      "remediation": [
+        {
+          "change": "Implement client DPoP key registration during client onboarding",
+          "location_hint": "Keycloak client configuration or separate key registry",
+          "notes": "Store trusted DPoP public keys indexed by client ID"
+        },
+        {
+          "change": "Verify DPoP proof signature using registered public key",
+          "location_hint": "dpop.middleware.ts",
+          "notes": "Fetch trusted key from registry before verification"
+        }
+      ],
+      "verification": [
+        {
+          "test": "DPoP proof signed with unregistered key",
+          "expected": "401 Unauthorized - untrusted DPoP key"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-040",
+      "level": "MUST",
+      "category": "Integrity",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "CRITICAL",
+      "confidence": "HIGH",
+      "evidence": [
+        "No signature verification logic in server.ts",
+        "kas.types.ts has no signature field"
+      ],
+      "rationale": "No integrity protection for keyAccessObject - allows tampering",
+      "gap": "Cannot verify client-provided signature over keyAccessObject. Vulnerable to MITM attacks during forwarding",
+      "remediation": [
+        {
+          "change": "Add signature field to IKeyAccessObject type",
+          "location_hint": "kas/src/types/rewrap.types.ts",
+          "notes": "Structure: { alg: string, sig: string }"
+        },
+        {
+          "change": "Implement verifyKAOSignature function",
+          "location_hint": "kas/src/utils/crypto/kao-signature.ts (new file)",
+          "notes": "Canonicalize KAO (excluding signature), verify with trusted public key"
+        },
+        {
+          "change": "Call verification for each keyAccessObject before processing",
+          "location_hint": "/rewrap handler",
+          "notes": "Return 400 if any signature is invalid"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Valid keyAccessObject with correct signature",
+          "expected": "Processing continues"
+        },
+        {
+          "test": "Modified wrappedKey with stale signature",
+          "expected": "400 Bad Request - signature verification failed"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-041",
+      "level": "MUST",
+      "category": "Integrity",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "CRITICAL",
+      "confidence": "HIGH",
+      "evidence": [
+        "No 400 error for signature failures"
+      ],
+      "rationale": "Does not return appropriate error when keyAccessObject signature is invalid",
+      "gap": "Missing error handling for signature verification failures",
+      "remediation": [
+        {
+          "change": "Return 400 Bad Request on signature verification failure",
+          "location_hint": "/rewrap handler signature verification block",
+          "notes": "Include error message identifying which keyAccessObjectId failed verification"
+        }
+      ],
+      "verification": [
+        {
+          "test": "keyAccessObject with invalid signature",
+          "expected": "400 Bad Request with error: 'keyAccessObject signature verification failed for kao-123'"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-042",
+      "level": "MUST",
+      "category": "Integrity",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "CRITICAL",
+      "confidence": "HIGH",
+      "evidence": [
+        "server.ts has no HMAC verification",
+        "No policyBinding field in request types",
+        "No policy canonicalization logic"
+      ],
+      "rationale": "No tamper detection for policy modification - critical security gap",
+      "gap": "Cannot detect if policy has been swapped on valid keyAccessObject. Attacker could change SECRET policy to UNCLASSIFIED while keeping valid wrappedKey",
+      "remediation": [
+        {
+          "change": "Add policyBinding field to IKeyAccessObject",
+          "location_hint": "kas/src/types/rewrap.types.ts",
+          "notes": "Base64-encoded HMAC-SHA256 of canonicalized policy using unwrapped key material"
+        },
+        {
+          "change": "Implement policy canonicalization function",
+          "location_hint": "kas/src/utils/crypto/policy-binding.ts (new file)",
+          "notes": "Deterministic JSON serialization with sorted keys"
+        },
+        {
+          "change": "Verify policyBinding after unwrapping key material",
+          "location_hint": "/rewrap handler after unwrap step",
+          "notes": "Compare computed HMAC with provided policyBinding"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Valid policyBinding",
+          "expected": "Key released"
+        },
+        {
+          "test": "Modified policy with stale policyBinding",
+          "expected": "400 Bad Request - policy binding verification failed"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-043",
+      "level": "MUST",
+      "category": "Integrity",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "CRITICAL",
+      "confidence": "HIGH",
+      "evidence": [
+        "No policyBinding verification means no 400 error for binding failures"
+      ],
+      "rationale": "Missing error response for policyBinding verification failures",
+      "gap": "Cannot signal policy tampering to client",
+      "remediation": [
+        {
+          "change": "Return 400 Bad Request when policyBinding verification fails",
+          "location_hint": "/rewrap handler policyBinding verification block",
+          "notes": "Include error message indicating potential policy tampering"
+        }
+      ],
+      "verification": [
+        {
+          "test": "keyAccessObject with mismatched policyBinding",
+          "expected": "400 Bad Request with error: 'Policy binding verification failed: possible policy tampering'"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-050",
+      "level": "MUST",
+      "category": "Cryptography",
+      "status": "PARTIAL",
+      "severity": "HIGH",
+      "confidence": "HIGH",
+      "evidence": [
+        "server.ts:573-592 unwraps wrappedKey but treats as plaintext DEK"
+      ],
+      "rationale": "Does not decrypt wrappedKey using KAS private key - treats as plaintext in pilot mode",
+      "gap": "Missing actual asymmetric decryption with KAS private key. Current: wrappedKey used directly as DEK",
+      "remediation": [
+        {
+          "change": "Implement RSA-OAEP or ECDH-ES+A256KW decryption",
+          "location_hint": "kas/src/utils/hsm-provider.ts unwrapKey",
+          "notes": "Use KAS private key to decrypt wrappedKey ciphertext"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Provide wrappedKey encrypted with KAS public key using RSA-OAEP",
+          "expected": "DEK successfully decrypted"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-051",
+      "level": "MUST",
+      "category": "Cryptography",
+      "status": "PARTIAL",
+      "severity": "MEDIUM",
+      "confidence": "MEDIUM",
+      "evidence": [
+        "server.ts:565 uses fixed kekId 'mock-kek-001'",
+        "No kid-based key selection logic"
+      ],
+      "rationale": "Does not route unwrap operations based on keyAccessObject.kid",
+      "gap": "Cannot support multiple KAS keys or key rotation using kid identifier",
+      "remediation": [
+        {
+          "change": "Implement kid-to-key-pair routing",
+          "location_hint": "kas/src/utils/crypto/key-router.ts (new file)",
+          "notes": "Map kid values to corresponding KAS private keys"
+        },
+        {
+          "change": "Select private key based on kao.kid before unwrap",
+          "location_hint": "/rewrap handler unwrap step",
+          "notes": "Fetch private key: const privateKey = keyRouter.getKeyByKid(kao.kid)"
+        }
+      ],
+      "verification": [
+        {
+          "test": "keyAccessObject with kid='kas-usa-key-2024-01'",
+          "expected": "Correct KAS private key selected for unwrap"
+        },
+        {
+          "test": "keyAccessObject with unknown kid",
+          "expected": "400 Bad Request - unknown key identifier"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-052",
+      "level": "MUST",
+      "category": "Cryptography",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "CRITICAL",
+      "confidence": "HIGH",
+      "evidence": [
+        "server.ts:656-689 returns dek field directly",
+        "No rewrap to clientPublicKey found"
+      ],
+      "rationale": "Does not re-encrypt decrypted key material to client's public key",
+      "gap": "Returns plaintext DEK instead of kasWrappedKey encrypted for client",
+      "remediation": [
+        {
+          "change": "Implement asymmetric encryption to clientPublicKey",
+          "location_hint": "kas/src/utils/crypto/rewrap.ts (new file)",
+          "notes": "Use RSA-OAEP or ECDH-ES+A256KW with client's ephemeral public key"
+        },
+        {
+          "change": "Return kasWrappedKey field instead of dek",
+          "location_hint": "/rewrap handler response building",
+          "notes": "Replace dek with kasWrappedKey containing re-encrypted key material"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Provide clientPublicKey, request rewrap",
+          "expected": "Receive kasWrappedKey encrypted to clientPublicKey"
+        },
+        {
+          "test": "Attempt to decrypt kasWrappedKey with wrong private key",
+          "expected": "Decryption fails"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-053",
+      "level": "SHOULD",
+      "category": "Cryptography",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "HIGH",
+      "confidence": "HIGH",
+      "evidence": [
+        "No ephemeral key handling in current implementation"
+      ],
+      "rationale": "Does not treat clientPublicKey as ephemeral for single-use key wrapping",
+      "gap": "Missing ephemeral key wrapping pattern for forward secrecy",
+      "remediation": [
+        {
+          "change": "Validate clientPublicKey as ephemeral (ECDH or RSA ephemeral)",
+          "location_hint": "rewrap crypto module",
+          "notes": "Expect ephemeral keys to be short-lived and not reused"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Provide ephemeral ECDH public key",
+          "expected": "Key material wrapped for single use"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-060",
+      "level": "MUST",
+      "category": "Authorization",
+      "status": "IMPLEMENTED",
+      "severity": null,
+      "confidence": "HIGH",
+      "evidence": [
+        "server.ts:330-480 OPA policy evaluation with full attribute set"
+      ],
+      "rationale": "Policy evaluation implemented correctly against OPA",
+      "gap": null,
+      "remediation": [],
+      "verification": [
+        {
+          "test": "Request with attributes matching policy",
+          "expected": "Policy allows, key released"
+        },
+        {
+          "test": "Request with insufficient clearance",
+          "expected": "Policy denies, 403 Forbidden"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-061",
+      "level": "MUST",
+      "category": "Authorization",
+      "status": "IMPLEMENTED",
+      "severity": null,
+      "confidence": "HIGH",
+      "evidence": [
+        "server.ts:196-254 extracts uniqueID, clearance, countryOfAffiliation, acpCOI from JWT"
+      ],
+      "rationale": "Client attributes correctly extracted from access token for policy evaluation",
+      "gap": null,
+      "remediation": [],
+      "verification": [
+        {
+          "test": "JWT with clearance claim",
+          "expected": "Clearance extracted and used in policy evaluation"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-062",
+      "level": "MUST",
+      "category": "Authorization",
+      "status": "IMPLEMENTED",
+      "severity": null,
+      "confidence": "HIGH",
+      "evidence": [
+        "server.ts:485-559 denies request when OPA returns allow=false"
+      ],
+      "rationale": "Correctly enforces policy denial by not returning key material",
+      "gap": null,
+      "remediation": [],
+      "verification": [
+        {
+          "test": "Policy evaluation returns deny",
+          "expected": "No key material in response"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-063",
+      "level": "MUST",
+      "category": "Authorization",
+      "status": "PARTIAL",
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "evidence": [
+        "server.ts:527-558 returns 403 on policy deny",
+        "No per-keyAccessObject error structure"
+      ],
+      "rationale": "Returns 403 for whole request but cannot return mixed results (some KAOs succeed, some fail)",
+      "gap": "Missing per-keyAccessObject error result structure for mixed outcomes",
+      "remediation": [
+        {
+          "change": "Support per-keyAccessObject policy evaluation",
+          "location_hint": "/rewrap handler",
+          "notes": "Evaluate policy for each KAO individually, return mixed success/error results"
+        },
+        {
+          "change": "Build response with both successful and denied results",
+          "location_hint": "response aggregation logic",
+          "notes": "Successful results include kasWrappedKey, denied results include error message"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Rewrap with 2 KAOs: 1 authorized, 1 denied by policy",
+          "expected": "200 OK with mixed results: one success with kasWrappedKey, one error with denial reason"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-070",
+      "level": "MAY",
+      "category": "Metadata",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "LOW",
+      "confidence": "HIGH",
+      "evidence": [
+        "No encryptedMetadata decryption found in codebase"
+      ],
+      "rationale": "Optional feature not implemented",
+      "gap": "Cannot decrypt and return encryptedMetadata when present in keyAccessObject",
+      "remediation": [
+        {
+          "change": "Implement encryptedMetadata decryption",
+          "location_hint": "kas/src/utils/crypto/metadata.ts (new file)",
+          "notes": "Decrypt using unwrapped key material (likely AES-256-GCM)"
+        },
+        {
+          "change": "Return decrypted content in metadata response field",
+          "location_hint": "result building",
+          "notes": "Add metadata field to result when encryptedMetadata present"
+        }
+      ],
+      "verification": [
+        {
+          "test": "keyAccessObject with encryptedMetadata",
+          "expected": "metadata field in result contains decrypted content"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-071",
+      "level": "MUST",
+      "category": "Metadata",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "evidence": [
+        "No encryptedMetadata error handling"
+      ],
+      "rationale": "Cannot handle encryptedMetadata decryption failures",
+      "gap": "No error handling if encryptedMetadata is corrupted or undecryptable",
+      "remediation": [
+        {
+          "change": "Add try-catch around encryptedMetadata decryption",
+          "location_hint": "metadata decryption logic",
+          "notes": "Return error result if decryption fails"
+        }
+      ],
+      "verification": [
+        {
+          "test": "keyAccessObject with corrupted encryptedMetadata",
+          "expected": "Error result: 'Failed to decrypt metadata'"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-080",
+      "level": "MUST",
+      "category": "Federation",
+      "status": "PARTIAL",
+      "severity": "CRITICAL",
+      "confidence": "HIGH",
+      "evidence": [
+        "kas-federation.service.ts:317-537 implements federation",
+        "Uses custom API not spec"
+      ],
+      "rationale": "Federation exists but uses custom protocol instead of spec-compliant forwarding",
+      "gap": "Cannot forward keyAccessObjects to other KAS instances using /rewrap protocol",
+      "remediation": [
+        {
+          "change": "Refactor federation to use /rewrap protocol",
+          "location_hint": "kas-federation.service.ts",
+          "notes": "Forward keyAccessObjects by url field, preserve policy grouping"
+        },
+        {
+          "change": "Detect foreign KAOs by url field in /rewrap handler",
+          "location_hint": "/rewrap handler",
+          "notes": "Group KAOs by target KAS URL, forward batches"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Rewrap with keyAccessObject having url=https://fra-kas.dive25.com/rewrap",
+          "expected": "KAO forwarded to French KAS, result aggregated in response"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-081",
+      "level": "MUST",
+      "category": "Federation",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "CRITICAL",
+      "confidence": "HIGH",
+      "evidence": [
+        "No policy-KAO association preservation in federation code"
+      ],
+      "rationale": "Does not maintain policy grouping when forwarding keyAccessObjects",
+      "gap": "Forwarded keyAccessObjects lose their policy association",
+      "remediation": [
+        {
+          "change": "Forward keyAccessObjects with their governing policy",
+          "location_hint": "federation forwarding logic",
+          "notes": "Maintain request structure: { policy, keyAccessObjects: [...] }"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Forward 3 KAOs (2 for policy A, 1 for policy B)",
+          "expected": "Downstream KAS receives 2 request groups maintaining policy associations"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-082",
+      "level": "MUST",
+      "category": "Federation",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "CRITICAL",
+      "confidence": "HIGH",
+      "evidence": [
+        "No response aggregation per spec structure"
+      ],
+      "rationale": "Cannot aggregate responses from multiple downstream KAS instances",
+      "gap": "Missing logic to merge downstream responses into single aggregated response",
+      "remediation": [
+        {
+          "change": "Implement response aggregation by policyId",
+          "location_hint": "/rewrap handler response building",
+          "notes": "Merge local and remote results, maintain per-policy grouping"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Rewrap with KAOs targeting 2 different KAS instances",
+          "expected": "Single response with results from both KAS instances grouped by policy"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-083",
+      "level": "MUST",
+      "category": "Federation",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "CRITICAL",
+      "confidence": "HIGH",
+      "evidence": [
+        "No per-result signing logic"
+      ],
+      "rationale": "Does not sign individual keyAccessObject results",
+      "gap": "Cannot provide per-result integrity protection for federated responses",
+      "remediation": [
+        {
+          "change": "Sign each result with KAS private key",
+          "location_hint": "result building for each KAO",
+          "notes": "Sign {keyAccessObjectId, status, kasWrappedKey} and include signature in result"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Rewrap returns result with signature field",
+          "expected": "Client can verify signature using KAS public key"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-084",
+      "level": "MUST",
+      "category": "Federation",
+      "status": "PARTIAL",
+      "severity": "HIGH",
+      "confidence": "MEDIUM",
+      "evidence": [
+        "kas-registry.json defines trust relationships",
+        "No PKI-based trust implementation"
+      ],
+      "rationale": "Trust configuration exists but secure inter-KAS mechanism not fully implemented",
+      "gap": "Missing mTLS or signed forwarding tokens for secure inter-KAS communication",
+      "remediation": [
+        {
+          "change": "Implement mTLS for inter-KAS forwarding",
+          "location_hint": "kas-federation.service.ts getHttpClient",
+          "notes": "Use client certificates from kas-registry.json authConfig"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Forward to downstream KAS without client cert",
+          "expected": "Connection rejected by downstream KAS"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-085",
+      "level": "MUST",
+      "category": "Federation",
+      "status": "PARTIAL",
+      "severity": "HIGH",
+      "confidence": "HIGH",
+      "evidence": [
+        "Downstream validates JWT (jwt-validator.ts)",
+        "Does not verify keyAccessObject signature"
+      ],
+      "rationale": "Downstream KAS validates access token but not keyAccessObject integrity",
+      "gap": "Cannot detect tampering by intermediary KAS during forwarding",
+      "remediation": [
+        {
+          "change": "Verify keyAccessObject signature in downstream KAS",
+          "location_hint": "/rewrap handler at receiving KAS",
+          "notes": "Verify signature before any processing to prevent tampering by forwarder"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Forward keyAccessObject with modified wrappedKey",
+          "expected": "Downstream KAS rejects with 400 - signature verification failed"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-090",
+      "level": "MUST",
+      "category": "Response",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "CRITICAL",
+      "confidence": "HIGH",
+      "evidence": [
+        "kas.types.ts:66-121 custom response structure",
+        "server.ts:656-689 returns custom format"
+      ],
+      "rationale": "Response structure does not match spec",
+      "gap": "Returns { success, dek, kaoId } instead of { responses: [{ policyId, results: [...] }] }",
+      "remediation": [
+        {
+          "change": "Implement spec-compliant IRewrapResponse type",
+          "location_hint": "kas/src/types/rewrap.types.ts",
+          "notes": "Structure: { responses: Array<{ policyId: string, results: Array<{keyAccessObjectId, status, kasWrappedKey?, error?, signature, sid?}> }> }"
+        },
+        {
+          "change": "Build spec response structure in /rewrap handler",
+          "location_hint": "/rewrap handler response building",
+          "notes": "Group results by policyId"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Rewrap request",
+          "expected": "Response has responses array with policyId and results"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-091",
+      "level": "MUST",
+      "category": "Response",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "CRITICAL",
+      "confidence": "HIGH",
+      "evidence": [
+        "Custom response type missing required per-KAO result fields"
+      ],
+      "rationale": "Per-keyAccessObject results do not include all required fields",
+      "gap": "Missing: keyAccessObjectId, status, signature, sid in result structure",
+      "remediation": [
+        {
+          "change": "Define complete result interface",
+          "location_hint": "kas/src/types/rewrap.types.ts IKeyAccessObjectResult",
+          "notes": "Required fields: keyAccessObjectId, status, signature, sid. Conditional: kasWrappedKey (success), error (error)"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Rewrap result for successful KAO",
+          "expected": "Result includes keyAccessObjectId, status='success', kasWrappedKey, signature, sid"
+        },
+        {
+          "test": "Rewrap result for denied KAO",
+          "expected": "Result includes keyAccessObjectId, status='error', error, signature, sid, no kasWrappedKey"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-092",
+      "level": "SHOULD",
+      "category": "Response",
+      "status": "PARTIAL",
+      "severity": "LOW",
+      "confidence": "HIGH",
+      "evidence": [
+        "server.ts:527-558 includes error and denialReason",
+        "Not per spec field naming"
+      ],
+      "rationale": "Has error messages but not structured per spec",
+      "gap": "Uses denialReason instead of error field in result",
+      "remediation": [
+        {
+          "change": "Use error field name per spec",
+          "location_hint": "error result building",
+          "notes": "Map denialReason to error field"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Error result",
+          "expected": "Contains error field with human-readable description"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-093",
+      "level": "MUST",
+      "category": "Response",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "evidence": [
+        "kas.types.ts shows sid in request but no response field mapping"
+      ],
+      "rationale": "Does not preserve sid from keyAccessObject to result",
+      "gap": "Cannot correlate results to client sessions using sid",
+      "remediation": [
+        {
+          "change": "Preserve kao.sid in result",
+          "location_hint": "result building for each KAO",
+          "notes": "Copy sid from keyAccessObject input to result output"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Rewrap with keyAccessObject.sid='session-abc-123'",
+          "expected": "Result includes sid='session-abc-123'"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-100",
+      "level": "MUST",
+      "category": "ErrorHandling",
+      "status": "PARTIAL",
+      "severity": "MEDIUM",
+      "confidence": "HIGH",
+      "evidence": [
+        "server.ts uses 400 for some errors",
+        "Not for spec reasons (signature, policyBinding)"
+      ],
+      "rationale": "Returns 400 but not for spec-required signature/policyBinding failures",
+      "gap": "Missing 400 for invalid keyAccessObject signature and policyBinding verification failures",
+      "remediation": [
+        {
+          "change": "Return 400 for signature verification failures",
+          "location_hint": "signature verification error handling",
+          "notes": "Per spec: invalid signature → 400 Bad Request"
+        },
+        {
+          "change": "Return 400 for policyBinding verification failures",
+          "location_hint": "policyBinding verification error handling",
+          "notes": "Per spec: invalid policyBinding → 400 Bad Request"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Invalid keyAccessObject signature",
+          "expected": "400 Bad Request"
+        },
+        {
+          "test": "Invalid policyBinding",
+          "expected": "400 Bad Request"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-101",
+      "level": "MUST",
+      "category": "ErrorHandling",
+      "status": "IMPLEMENTED",
+      "severity": null,
+      "confidence": "HIGH",
+      "evidence": [
+        "server.ts:181-193 returns 401 on JWT verification failure"
+      ],
+      "rationale": "Correctly returns 401 for authentication failures",
+      "gap": null,
+      "remediation": [],
+      "verification": [
+        {
+          "test": "Request with invalid JWT",
+          "expected": "401 Unauthorized"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-102",
+      "level": "MUST",
+      "category": "ErrorHandling",
+      "status": "IMPLEMENTED",
+      "severity": null,
+      "confidence": "HIGH",
+      "evidence": [
+        "server.ts:527-558 returns 403 on policy denial"
+      ],
+      "rationale": "Correctly returns 403 when policy evaluation denies access",
+      "gap": null,
+      "remediation": [],
+      "verification": [
+        {
+          "test": "Request denied by policy",
+          "expected": "403 Forbidden"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-103",
+      "level": "MUST",
+      "category": "ErrorHandling",
+      "status": "IMPLEMENTED",
+      "severity": null,
+      "confidence": "HIGH",
+      "evidence": [
+        "server.ts:705-710 returns 500 on unexpected errors"
+      ],
+      "rationale": "Correctly returns 500 for internal errors",
+      "gap": null,
+      "remediation": [],
+      "verification": [
+        {
+          "test": "Trigger internal error",
+          "expected": "500 Internal Server Error"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-104",
+      "level": "SHOULD",
+      "category": "ErrorHandling",
+      "status": "PARTIAL",
+      "severity": "LOW",
+      "confidence": "HIGH",
+      "evidence": [
+        "server.ts:319-325 returns 503 when backend unavailable"
+      ],
+      "rationale": "Returns 503 for some unavailability but not comprehensive",
+      "gap": "503 used for backend unavailability but not for KAS service degradation",
+      "remediation": [
+        {
+          "change": "Add /health endpoint monitoring",
+          "location_hint": "server.ts health check",
+          "notes": "Return 503 from /rewrap when health check fails"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Request when KAS is degraded",
+          "expected": "503 Service Unavailable"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-110",
+      "level": "MUST",
+      "category": "Security",
+      "status": "PARTIAL",
+      "severity": "HIGH",
+      "confidence": "HIGH",
+      "evidence": [
+        "hsm-provider.ts:45-127 MockHSMProvider only",
+        "Production HSM providers not implemented"
+      ],
+      "rationale": "Uses in-memory key storage - not production-ready",
+      "gap": "KAS private keys stored in memory, no HSM integration. Cannot meet FIPS 140-2 requirements",
+      "remediation": [
+        {
+          "change": "Implement AWS KMS provider",
+          "location_hint": "hsm-provider.ts:135-181",
+          "notes": "Complete AWSKMSProvider implementation using @aws-sdk/client-kms"
+        },
+        {
+          "change": "Implement Azure Key Vault HSM provider",
+          "location_hint": "hsm-provider.ts",
+          "notes": "Add AzureHSMProvider class"
+        },
+        {
+          "change": "Set KAS_HSM_PROVIDER=aws-kms in production",
+          "location_hint": "production environment configuration",
+          "notes": "Never use MockHSMProvider in production"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Deploy with KAS_HSM_PROVIDER=mock",
+          "expected": "Warning logged, deployment blocked in production"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-111",
+      "level": "MUST",
+      "category": "Security",
+      "status": "PARTIAL",
+      "severity": "CRITICAL",
+      "confidence": "HIGH",
+      "evidence": [
+        "jwt-validator.ts implements JWT verification",
+        "No DPoP verification"
+      ],
+      "rationale": "Relies on JWT signature but missing DPoP proof-of-possession",
+      "gap": "Incomplete token security - vulnerable to token theft without DPoP",
+      "remediation": [
+        {
+          "change": "Implement DPoP verification (see KAS-REQ-031)",
+          "location_hint": "kas/src/middleware/dpop.middleware.ts",
+          "notes": "Add proof-of-possession to token authentication"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Stolen token without DPoP proof",
+          "expected": "401 Unauthorized - DPoP proof required"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-112",
+      "level": "MUST",
+      "category": "Security",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "CRITICAL",
+      "confidence": "HIGH",
+      "evidence": [
+        "No policyBinding verification implementation"
+      ],
+      "rationale": "Cannot enforce policy integrity - critical security requirement",
+      "gap": "Missing policyBinding HMAC verification allows policy tampering",
+      "remediation": [
+        {
+          "change": "Implement policyBinding verification (see KAS-REQ-042)",
+          "location_hint": "kas/src/utils/crypto/policy-binding.ts",
+          "notes": "HMAC-SHA256 verification using unwrapped key material"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Tampered policy with valid keyAccessObject",
+          "expected": "400 Bad Request - policy binding verification failed"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-113",
+      "level": "SHOULD",
+      "category": "Cryptography",
+      "status": "PARTIAL",
+      "severity": "LOW",
+      "confidence": "HIGH",
+      "evidence": [
+        "jwt-validator.ts uses RS256",
+        "hsm-provider.ts uses AES-256-GCM",
+        "No documentation"
+      ],
+      "rationale": "Uses industry-standard algorithms but lacks documentation",
+      "gap": "No documented crypto algorithm support matrix",
+      "remediation": [
+        {
+          "change": "Document supported algorithms",
+          "location_hint": "kas/docs/cryptography.md (new file)",
+          "notes": "List: RS256, RS512, ES256, ES384 for signatures; RSA-OAEP, ECDH-ES+A256KW for wrapping; AES-256-GCM for symmetric"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Review documentation",
+          "expected": "Complete algorithm support matrix documented"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-114",
+      "level": "SHOULD",
+      "category": "CryptoRoadmap",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "LOW",
+      "confidence": "LOW",
+      "evidence": [
+        "No quantum-resistant algorithm planning found"
+      ],
+      "rationale": "No roadmap for post-quantum cryptography",
+      "gap": "No migration plan toward quantum-resistant algorithms",
+      "remediation": [
+        {
+          "change": "Create quantum-resistant crypto roadmap",
+          "location_hint": "kas/docs/quantum-roadmap.md (new file)",
+          "notes": "Plan migration to ML-KEM (key encapsulation) and ML-DSA (signatures) per NIST PQC standards"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Review roadmap document",
+          "expected": "Timeline and milestones for PQC adoption"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-120",
+      "level": "MUST",
+      "category": "Interoperability",
+      "status": "NOT_IMPLEMENTED",
+      "severity": "HIGH",
+      "confidence": "MEDIUM",
+      "evidence": [
+        "No Any-Of or All-Of mode handling in codebase"
+      ],
+      "rationale": "Cannot handle multi-KAS encryption scenarios",
+      "gap": "Missing support for Any-Of (alternative KAS) and All-Of (key split recombination) modes",
+      "remediation": [
+        {
+          "change": "Implement key split recombination for All-Of mode",
+          "location_hint": "kas/src/utils/crypto/key-split.ts (new file)",
+          "notes": "Combine multiple unwrapped key splits to reconstruct full DEK"
+        },
+        {
+          "change": "Handle Any-Of by accepting first successful unwrap",
+          "location_hint": "/rewrap handler",
+          "notes": "Multiple KAOs with same keyAccessObjectId but different url - use any valid one"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Rewrap with 2 keyAccessObjects representing All-Of key splits",
+          "expected": "Both splits unwrapped and recombined to produce full DEK"
+        }
+      ]
+    },
+    {
+      "id": "KAS-REQ-121",
+      "level": "SHOULD",
+      "category": "Interoperability",
+      "status": "PARTIAL",
+      "severity": "MEDIUM",
+      "confidence": "MEDIUM",
+      "evidence": [
+        "kas-registry.json defines multiple KAS instances",
+        "No alternate KAS routing"
+      ],
+      "rationale": "Registry supports multiple KAS but no alternate path logic",
+      "gap": "Cannot route to alternate KAS for tactical edge or break-glass scenarios",
+      "remediation": [
+        {
+          "change": "Implement alternate KAS routing for Any-Of scenarios",
+          "location_hint": "federation logic",
+          "notes": "Try primary KAS, fall back to alternates if unavailable"
+        }
+      ],
+      "verification": [
+        {
+          "test": "Primary KAS unavailable, alternate KAS configured",
+          "expected": "Request automatically routed to alternate KAS"
+        }
+      ]
+    }
+  ],
+  "remediation_backlog": [
+    {
+      "priority": "P0",
+      "requirement_ids": [
+        "KAS-REQ-020",
+        "KAS-REQ-023",
+        "KAS-REQ-090",
+        "KAS-REQ-091"
+      ],
+      "title": "Implement /rewrap Endpoint",
+      "rationale": "Enables ACP-240 interoperability. Without this, KAS cannot work with spec-compliant clients. This is the foundational requirement for all other protocol features.",
+      "complexity": "L",
+      "owner_skillset": [
+        "backend",
+        "crypto"
+      ]
+    },
+    {
+      "priority": "P0",
+      "requirement_ids": [
+        "KAS-REQ-031",
+        "KAS-REQ-032",
+        "KAS-REQ-033",
+        "KAS-REQ-111"
+      ],
+      "title": "Implement DPoP Verification",
+      "rationale": "Critical security gap. Prevents token theft and replay attacks. Required for RFC 9449 compliance and proof-of-possession token binding.",
+      "complexity": "M",
+      "owner_skillset": [
+        "iam",
+        "backend"
+      ]
+    },
+    {
+      "priority": "P0",
+      "requirement_ids": [
+        "KAS-REQ-042",
+        "KAS-REQ-043",
+        "KAS-REQ-112"
+      ],
+      "title": "Implement PolicyBinding Verification",
+      "rationale": "Prevents policy tampering. Core ACP-240 integrity requirement. Without this, attackers can swap policies on valid keyAccessObjects.",
+      "complexity": "M",
+      "owner_skillset": [
+        "crypto",
+        "backend"
+      ]
+    },
+    {
+      "priority": "P0",
+      "requirement_ids": [
+        "KAS-REQ-040",
+        "KAS-REQ-041"
+      ],
+      "title": "Implement Per-KAO Signature Verification",
+      "rationale": "Prevents keyAccessObject tampering during forwarding. Protects against MITM attacks where intermediary modifies wrappedKey or other fields.",
+      "complexity": "M",
+      "owner_skillset": [
+        "crypto"
+      ]
+    },
+    {
+      "priority": "P0",
+      "requirement_ids": [
+        "KAS-REQ-002",
+        "KAS-REQ-052",
+        "KAS-REQ-053"
+      ],
+      "title": "Implement Rewrap to clientPublicKey",
+      "rationale": "Core rewrap operation currently missing. Must re-encrypt decrypted key material to client's ephemeral public key instead of returning plaintext DEK.",
+      "complexity": "M",
+      "owner_skillset": [
+        "crypto"
+      ]
+    },
+    {
+      "priority": "P1",
+      "requirement_ids": [
+        "KAS-REQ-010",
+        "KAS-REQ-011",
+        "KAS-REQ-012",
+        "KAS-REQ-013"
+      ],
+      "title": "Implement Policy-Grouped Request Structure",
+      "rationale": "Spec-compliant request format. Enables multi-policy requests where each policy governs multiple keyAccessObjects.",
+      "complexity": "M",
+      "owner_skillset": [
+        "backend"
+      ]
+    },
+    {
+      "priority": "P1",
+      "requirement_ids": [
+        "KAS-REQ-051"
+      ],
+      "title": "Implement Kid-Based Key Selection",
+      "rationale": "Support multiple KAS keys and enable key rotation. Route unwrap operations to correct private key based on keyAccessObject.kid.",
+      "complexity": "S",
+      "owner_skillset": [
+        "crypto"
+      ]
+    },
+    {
+      "priority": "P1",
+      "requirement_ids": [
+        "KAS-REQ-080",
+        "KAS-REQ-081",
+        "KAS-REQ-082",
+        "KAS-REQ-083",
+        "KAS-REQ-084",
+        "KAS-REQ-085"
+      ],
+      "title": "Refactor Federation for Spec Compliance",
+      "rationale": "Enable federation with other ACP-240 KAS instances. Current custom protocol only works within DIVE V3 ecosystem.",
+      "complexity": "L",
+      "owner_skillset": [
+        "backend",
+        "platform"
+      ]
+    },
+    {
+      "priority": "P1",
+      "requirement_ids": [
+        "KAS-REQ-070",
+        "KAS-REQ-071"
+      ],
+      "title": "Implement encryptedMetadata Decryption",
+      "rationale": "Support ZTDF metadata encryption. Optional but useful feature for carrying policy-protected metadata alongside key material.",
+      "complexity": "S",
+      "owner_skillset": [
+        "crypto"
+      ]
+    },
+    {
+      "priority": "P1",
+      "requirement_ids": [
+        "KAS-REQ-093"
+      ],
+      "title": "Add sid Preservation",
+      "rationale": "Enable session correlation. Required for tracking keyAccessObject results back to client sessions.",
+      "complexity": "S",
+      "owner_skillset": [
+        "backend"
+      ]
+    },
+    {
+      "priority": "P2",
+      "requirement_ids": [
+        "KAS-REQ-110"
+      ],
+      "title": "Integrate Production HSM",
+      "rationale": "Protect key material in production. MockHSM exposes DEKs in memory. Need AWS KMS or Azure HSM for FIPS 140-2 compliance.",
+      "complexity": "L",
+      "owner_skillset": [
+        "platform",
+        "crypto"
+      ]
+    },
+    {
+      "priority": "P2",
+      "requirement_ids": [
+        "KAS-REQ-024"
+      ],
+      "title": "Implement signedRequestToken Wrapper",
+      "rationale": "Support alternative request format per spec. Enables signed request token pattern for additional integrity.",
+      "complexity": "S",
+      "owner_skillset": [
+        "backend"
+      ]
+    },
+    {
+      "priority": "P2",
+      "requirement_ids": [
+        "KAS-REQ-120",
+        "KAS-REQ-121"
+      ],
+      "title": "Add Any-Of/All-Of KAO Handling",
+      "rationale": "Support multi-KAS encryption modes per ZTDF. Enables key split recombination (All-Of) and alternate KAS routing (Any-Of).",
+      "complexity": "M",
+      "owner_skillset": [
+        "crypto"
+      ]
+    },
+    {
+      "priority": "P2",
+      "requirement_ids": [
+        "KAS-REQ-113",
+        "KAS-REQ-114"
+      ],
+      "title": "Document Crypto Algorithms",
+      "rationale": "Spec compliance and crypto agility. Document supported algorithms and roadmap for quantum-resistant algorithms.",
+      "complexity": "S",
+      "owner_skillset": [
+        "crypto"
+      ]
+    },
+    {
+      "priority": "P2",
+      "requirement_ids": [
+        "KAS-REQ-021"
+      ],
+      "title": "Enforce HTTPS",
+      "rationale": "Transport security. TLS already implemented, just need to enforce it and remove HTTP fallback.",
+      "complexity": "S",
+      "owner_skillset": [
+        "platform"
+      ]
+    }
+  ],
+  "open_questions": [
+    {
+      "requirement_id": "KAS-REQ-013",
+      "question": "Does the ZTDF manifest include type='wrapped' and protocol='kas' fields in keyAccessObject?",
+      "needed_evidence": [
+        "Sample ZTDF manifest with full keyAccessObject structure"
+      ],
+      "why_it_matters": "Need to confirm whether to validate or ignore these fields for interoperability"
+    },
+    {
+      "requirement_id": "KAS-REQ-024",
+      "question": "Is signed request token format used by any DIVE V3 clients?",
+      "needed_evidence": [
+        "Client code or API examples showing signedRequestToken pattern"
+      ],
+      "why_it_matters": "Determines if SHOULD requirement needs implementation or can be deferred"
+    },
+    {
+      "requirement_id": "KAS-REQ-033",
+      "question": "How are client DPoP public keys registered and distributed?",
+      "needed_evidence": [
+        "Client registration flow",
+        "Key distribution mechanism",
+        "Trust establishment protocol"
+      ],
+      "why_it_matters": "DPoP verification requires trusting client public keys used for proof verification"
+    },
+    {
+      "requirement_id": "KAS-REQ-051",
+      "question": "How many KAS key pairs exist per instance? What is the kid naming scheme?",
+      "needed_evidence": [
+        "KAS key generation scripts",
+        "Key inventory",
+        "kid assignment logic"
+      ],
+      "why_it_matters": "Need to implement kid-based key selection logic and routing table"
+    },
+    {
+      "requirement_id": "KAS-REQ-070",
+      "question": "What is the structure and format of encryptedMetadata (algorithm, IV encoding, etc.)?",
+      "needed_evidence": [
+        "ZTDF encryption specification",
+        "Sample encrypted metadata with parameters"
+      ],
+      "why_it_matters": "Need to know decryption parameters: AES-256-GCM? AES-CBC? IV location?"
+    },
+    {
+      "requirement_id": "KAS-REQ-083",
+      "question": "Does each KAS use the same signing key as its KEK, or separate signing keys?",
+      "needed_evidence": [
+        "Key management architecture documentation",
+        "Certificate hierarchy",
+        "PKI design"
+      ],
+      "why_it_matters": "Determine if need separate signing key infrastructure or reuse KEK for signing"
+    },
+    {
+      "requirement_id": "KAS-REQ-113",
+      "question": "Are algorithm identifiers in keyAccessObject.signature.alg validated against a whitelist?",
+      "needed_evidence": [
+        "Supported algorithm list",
+        "Algorithm negotiation/validation logic"
+      ],
+      "why_it_matters": "Prevent downgrade attacks via weak or deprecated algorithms"
+    },
+    {
+      "requirement_id": "KAS-REQ-114",
+      "question": "Is there a timeline for NIST quantum-resistant algorithm adoption (ML-KEM, ML-DSA)?",
+      "needed_evidence": [
+        "Crypto modernization plan",
+        "NIST PQC compliance roadmap",
+        "Migration timeline"
+      ],
+      "why_it_matters": "Strategic planning for post-quantum cryptography transition"
+    },
+    {
+      "requirement_id": "KAS-REQ-120",
+      "question": "What is the key split recombination algorithm (XOR, AES-KW, polynomial secret sharing)?",
+      "needed_evidence": [
+        "ZTDF All-Of mode specification",
+        "Key split format and recombination method"
+      ],
+      "why_it_matters": "Need to implement correct recombination if KAS receives multiple key splits"
+    },
+    {
+      "requirement_id": "PERFORMANCE",
+      "question": "What are the latency and throughput requirements for rewrap operations?",
+      "needed_evidence": [
+        "Performance benchmarks",
+        "SLA targets",
+        "Load testing results"
+      ],
+      "why_it_matters": "Determine if caching, batching, or optimization strategies needed"
+    }
+  ]
+}
