@@ -1,0 +1,53 @@
+{
+  "dive": {
+    "authorization": {
+      "trusted_issuers": {
+        "https://keycloak:8080/realms/dive-v3-broker": {
+          "tenant": "USA",
+          "enabled": true,
+          "description": "DIVE V3 Hub Keycloak"
+        },
+        "https://keycloak-fra:8080/realms/dive-v3-broker-fra": {
+          "tenant": "FRA",
+          "enabled": true
+        },
+        "https://keycloak-gbr:8080/realms/dive-v3-broker-gbr": {
+          "tenant": "GBR",
+          "enabled": true
+        },
+        "https://keycloak-deu:8080/realms/dive-v3-broker-deu": {
+          "tenant": "DEU",
+          "enabled": true
+        }
+      },
+      "federation_matrix": {
+        "USA": ["FRA", "GBR", "CAN", "DEU"],
+        "FRA": ["USA", "GBR", "DEU"],
+        "GBR": ["USA", "FRA", "CAN"],
+        "DEU": ["USA", "FRA"]
+      }
+    },
+    "federation": {
+      "trusted_issuers": {
+        "https://keycloak:8080/realms/dive-v3-broker": {
+          "tenant": "USA",
+          "enabled": true
+        },
+        "https://keycloak-fra:8080/realms/dive-v3-broker-fra": {
+          "tenant": "FRA",
+          "enabled": true
+        },
+        "https://keycloak-gbr:8080/realms/dive-v3-broker-gbr": {
+          "tenant": "GBR",
+          "enabled": true
+        }
+      },
+      "federation_matrix": {
+        "USA": ["FRA", "GBR", "CAN", "DEU"],
+        "FRA": ["USA", "GBR", "DEU"],
+        "GBR": ["USA", "FRA", "CAN"],
+        "DEU": ["USA", "FRA"]
+      }
+    }
+  }
+}
