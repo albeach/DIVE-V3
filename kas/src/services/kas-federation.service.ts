@@ -21,6 +21,14 @@ import { kasLogger, logKASAuditEvent } from '../utils/kas-logger';
 import { IKASKeyRequest, IKASKeyResponse, IKASAuditEvent } from '../types/kas.types';
 import { kasRegistry, policyTranslator, IKASRegistryEntry } from '../utils/kas-federation';
 import { CircuitBreaker } from '../utils/circuit-breaker';
+import {
+    IFederationForwardContext,
+    IFederatedRewrapRequest,
+    IFederatedRewrapResponse,
+    IFederationResult,
+    IFederationError,
+} from '../types/federation.types';
+import { IRewrapRequest, IPolicy, IKeyAccessObject } from '../types/rewrap.types';
 
 // Circuit state type
 export type CircuitState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
@@ -532,6 +540,208 @@ export class KASFederationService {
                     federationLatencyMs,
                 },
                 responseTimestamp: new Date().toISOString(),
+            };
+        }
+    }
+    
+    /**
+     * Forward /rewrap request to federated KAS instance (ACP-240 compliant)
+     * 
+     * Implements Phase 3.2: Spec-Compliant Forwarding
+     * Reference: kas/IMPLEMENTATION-HANDOFF.md Phase 3.2
+     */
+    async forwardRewrapRequest(
+        context: IFederationForwardContext
+    ): Promise<IFederationResult> {
+        const startTime = Date.now();
+        const { targetKasId, targetKasUrl, policy, kaosToForward, clientPublicKey, authHeader, dpopHeader, requestId, federationMetadata } = context;
+        
+        kasLogger.info('Forwarding /rewrap request to federated KAS', {
+            requestId,
+            federationRequestId: federationMetadata.federationRequestId,
+            targetKasId,
+            kaoCount: kaosToForward.length,
+            policyId: policy.policyId,
+        });
+        
+        // Get target KAS entry
+        const targetKAS = kasRegistry.get(targetKasId);
+        if (!targetKAS) {
+            const error: IFederationError = {
+                kasId: targetKasId,
+                errorType: 'unknown',
+                message: `Target KAS ${targetKasId} not found in registry`,
+                affectedKAOIds: kaosToForward.map(kao => kao.keyAccessObjectId),
+                timestamp: new Date().toISOString(),
+            };
+            
+            return {
+                success: false,
+                kasId: targetKasId,
+                error,
+                latencyMs: Date.now() - startTime,
+            };
+        }
+        
+        // Check circuit breaker
+        const circuitState = circuitBreaker.getState(targetKasId);
+        if (circuitState === 'OPEN') {
+            kasLogger.warn('Circuit breaker open for target KAS', {
+                requestId,
+                targetKasId,
+            });
+            
+            const error: IFederationError = {
+                kasId: targetKasId,
+                errorType: 'circuit_open',
+                message: `Circuit breaker open for ${targetKasId}`,
+                affectedKAOIds: kaosToForward.map(kao => kao.keyAccessObjectId),
+                timestamp: new Date().toISOString(),
+            };
+            
+            return {
+                success: false,
+                kasId: targetKasId,
+                error,
+                latencyMs: Date.now() - startTime,
+            };
+        }
+        
+        // Build federated rewrap request
+        const federatedRequest: IFederatedRewrapRequest = {
+            clientPublicKey,
+            requests: [
+                {
+                    policy,
+                    keyAccessObjects: kaosToForward,
+                }
+            ],
+            federationMetadata: {
+                ...federationMetadata,
+                routedVia: [...federationMetadata.routedVia, process.env.KAS_ID || 'kas-local'],
+            },
+        };
+        
+        // Get HTTP client
+        const client = this.getHttpClient(targetKAS);
+        
+        try {
+            // Prepare headers
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+                'X-Request-ID': requestId,
+                'X-Federation-Request-ID': federationMetadata.federationRequestId,
+                'X-Forwarded-By': process.env.KAS_ID || 'kas-local',
+            };
+            
+            // Forward Authorization header (JWT)
+            if (authHeader) {
+                headers['Authorization'] = authHeader;
+            }
+            
+            // Forward DPoP header (if present)
+            if (dpopHeader && process.env.FORWARD_DPOP_HEADER !== 'false') {
+                headers['DPoP'] = dpopHeader;
+            }
+            
+            kasLogger.debug('Sending /rewrap to downstream KAS', {
+                requestId,
+                targetUrl: targetKasUrl.replace('/request-key', '/rewrap'),
+                kaoCount: kaosToForward.length,
+                headerKeys: Object.keys(headers),
+            });
+            
+            // Make request to target KAS /rewrap endpoint
+            const baseUrl = targetKasUrl.replace('/request-key', '');
+            const response = await client.post('/rewrap', federatedRequest, {
+                baseURL: baseUrl,
+                timeout: Number(process.env.FEDERATION_TIMEOUT_MS) || 10000,
+                headers,
+            });
+            
+            // Record success in circuit breaker
+            circuitBreaker.recordSuccess(targetKasId);
+            
+            const latencyMs = Date.now() - startTime;
+            
+            kasLogger.info('Federated /rewrap request successful', {
+                requestId,
+                targetKasId,
+                latencyMs,
+                responseGroups: response.data?.responses?.length || 0,
+            });
+            
+            // Audit event for successful federation
+            const auditEvent: IKASAuditEvent = {
+                eventType: 'FEDERATION_SUCCESS',
+                timestamp: new Date().toISOString(),
+                requestId: federationMetadata.federationRequestId,
+                subject: 'federated-request',
+                resourceId: `federation-${targetKasId}`,
+                outcome: 'ALLOW',
+                reason: `Successful /rewrap forwarding to ${targetKasId}`,
+                latencyMs,
+            };
+            logKASAuditEvent(auditEvent);
+            
+            return {
+                success: true,
+                kasId: targetKasId,
+                response: response.data as IFederatedRewrapResponse,
+                latencyMs,
+            };
+            
+        } catch (error: any) {
+            // Record failure in circuit breaker
+            circuitBreaker.recordFailure(targetKasId);
+            
+            const latencyMs = Date.now() - startTime;
+            
+            // Determine error type
+            let errorType: IFederationError['errorType'] = 'unknown';
+            if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+                errorType = 'timeout';
+            } else if (error.response?.status === 401 || error.response?.status === 403) {
+                errorType = 'auth_failure';
+            } else if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+                errorType = 'network_error';
+            }
+            
+            kasLogger.error('Federated /rewrap request failed', {
+                requestId,
+                targetKasId,
+                errorType,
+                error: error.message,
+                status: error.response?.status,
+                latencyMs,
+            });
+            
+            // Audit event for federation failure
+            const auditEvent: IKASAuditEvent = {
+                eventType: 'FEDERATION_FAILURE',
+                timestamp: new Date().toISOString(),
+                requestId: federationMetadata.federationRequestId,
+                subject: 'federated-request',
+                resourceId: `federation-${targetKasId}`,
+                outcome: 'DENY',
+                reason: `Failed /rewrap forwarding to ${targetKasId}: ${error.message}`,
+                latencyMs,
+            };
+            logKASAuditEvent(auditEvent);
+            
+            const federationError: IFederationError = {
+                kasId: targetKasId,
+                errorType,
+                message: error.response?.data?.message || error.message,
+                affectedKAOIds: kaosToForward.map(kao => kao.keyAccessObjectId),
+                timestamp: new Date().toISOString(),
+            };
+            
+            return {
+                success: false,
+                kasId: targetKasId,
+                error: federationError,
+                latencyMs,
             };
         }
     }
