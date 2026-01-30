@@ -7,7 +7,12 @@
         "dev": "tsx watch src/server.ts",
         "build": "tsc",
         "start": "node dist/server.js",
-        "test": "jest"
+        "test": "jest",
+        "test:integration": "jest --testPathPattern=tests/integration",
+        "test:performance": "jest --testPathPattern=tests/performance --runInBand",
+        "test:e2e": "jest --testPathPattern=tests/integration/e2e-scenarios",
+        "test:audit": "jest --testPathPattern=tests/integration/audit-trail",
+        "test:all": "jest --coverage"
     },
     "keywords": [
         "kas",
