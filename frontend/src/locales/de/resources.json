@@ -17,9 +17,20 @@
     "releasability": "Freigabefähigkeit",
     "coi": "Interessengemeinschaft",
     "dateRange": "Datumsbereich",
+    "fileType": "Dateityp",
     "encrypted": "Nur verschlüsselte Ressourcen",
     "apply": "Filter anwenden",
     "reset": "Zurücksetzen"
+  },
+  "fileTypes": {
+    "documents": "Dokumente",
+    "images": "Bilder",
+    "videos": "Videos",
+    "audio": "Audio",
+    "structured": "Strukturiert",
+    "archives": "Archive",
+    "text": "Text",
+    "code": "Code"
   },
   "table": {
     "title": "Titel",

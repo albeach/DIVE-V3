@@ -72,7 +72,7 @@ services:
       POSTGRES_USER: keycloak
       POSTGRES_PASSWORD: ${USA_DB_PASSWORD:-password}
     volumes:
-      - usa_postgres_data:/var/lib/postgresql/data
+      - usa_postgres_data:/var/lib/postgresql  # Mount parent dir to prevent anonymous volume
     networks:
       - dive-external-idps
     healthcheck:

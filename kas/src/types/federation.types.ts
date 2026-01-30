@@ -1,14 +1,14 @@
 /**
  * Federation Types for ACP-240 /rewrap Protocol
- * 
+ *
  * Implements Phase 3.2: Spec-Compliant Forwarding
- * 
+ *
  * Reference: kas/IMPLEMENTATION-HANDOFF.md Phase 3.2
  */
 
-import { 
-    IRewrapRequest, 
-    IRewrapResponse, 
+import {
+    IRewrapRequest,
+    IRewrapResponse,
     IPolicy,
     IKeyAccessObject,
     IPolicyGroupResponse,
@@ -34,19 +34,19 @@ export interface IFederatedRewrapRequest extends IRewrapRequest {
 export interface IFederationMetadata {
     /** Origin KAS that initiated federation */
     originKasId: string;
-    
+
     /** Origin country */
     originCountry: string;
-    
+
     /** Federation request ID (for correlation) */
     federationRequestId: string;
-    
+
     /** Routing trail (list of KAS IDs that forwarded this request) */
     routedVia: string[];
-    
+
     /** Policy translation applied? */
     translationApplied: boolean;
-    
+
     /** Timestamp of original request */
     originTimestamp: string;
 }
@@ -75,28 +75,28 @@ export interface IFederatedRewrapResponse extends IRewrapResponse {
 export interface IFederationForwardContext {
     /** Target KAS ID */
     targetKasId: string;
-    
+
     /** Target KAS URL */
     targetKasUrl: string;
-    
+
     /** Policy for this group */
     policy: IPolicy;
-    
+
     /** KAOs to forward to this KAS */
     kaosToForward: IKeyAccessObject[];
-    
+
     /** Client public key (from original request) */
     clientPublicKey: string | any;
-    
+
     /** Authorization header (JWT) */
     authHeader: string;
-    
+
     /** DPoP header (if present) */
     dpopHeader?: string;
-    
+
     /** Request ID */
     requestId: string;
-    
+
     /** Federation metadata */
     federationMetadata: IFederationMetadata;
 }
@@ -112,24 +112,24 @@ export interface IFederationForwardContext {
 export interface IAggregatedResponse {
     /** Policy ID */
     policyId: string;
-    
+
     /** All results (local + federated) */
     results: any[];
-    
+
     /** Aggregation metadata */
     aggregationMetadata: {
         /** Number of local results */
         localCount: number;
-        
+
         /** Number of federated results */
         federatedCount: number;
-        
+
         /** Number of downstream KAS contacted */
         downstreamKASCount: number;
-        
+
         /** Total aggregation time (ms) */
         aggregationTimeMs: number;
-        
+
         /** Any aggregation errors */
         errors?: string[];
     };
@@ -145,10 +145,10 @@ export interface IAggregatedResponse {
 export interface IFederationRequestBuildResult {
     /** Requests to forward to each downstream KAS */
     forwardRequests: Map<string, IFederationForwardContext>;
-    
+
     /** Local KAOs to process */
     localKAOs: IKeyAccessObject[];
-    
+
     /** Statistics */
     stats: {
         totalKAOs: number;
@@ -168,16 +168,16 @@ export interface IFederationRequestBuildResult {
 export interface IFederationError {
     /** Target KAS ID */
     kasId: string;
-    
+
     /** Error type */
     errorType: 'timeout' | 'circuit_open' | 'auth_failure' | 'network_error' | 'policy_violation' | 'unknown';
-    
+
     /** Error message */
     message: string;
-    
+
     /** Affected KAO IDs */
     affectedKAOIds: string[];
-    
+
     /** Timestamp */
     timestamp: string;
 }
@@ -189,16 +189,16 @@ export interface IFederationError {
 export interface IFederationResult {
     /** Success flag */
     success: boolean;
-    
+
     /** Target KAS ID */
     kasId: string;
-    
+
     /** Response (if successful) */
     response?: IFederatedRewrapResponse;
-    
+
     /** Error (if failed) */
     error?: IFederationError;
-    
+
     /** Latency (ms) */
     latencyMs: number;
 }
@@ -213,31 +213,31 @@ export interface IFederationResult {
 export interface IFederationConfig {
     /** Enable federation */
     enabled: boolean;
-    
+
     /** Timeout for downstream requests (ms) */
     timeoutMs: number;
-    
+
     /** Max retries for transient failures */
     maxRetries: number;
-    
+
     /** Circuit breaker threshold */
     circuitBreakerThreshold: number;
-    
+
     /** Circuit breaker timeout (ms) */
     circuitBreakerTimeoutMs: number;
-    
+
     /** Enable mTLS for inter-KAS */
     mtlsEnabled: boolean;
-    
+
     /** Forward Authorization header */
     forwardAuthHeader: boolean;
-    
+
     /** Forward DPoP header */
     forwardDPoPHeader: boolean;
-    
+
     /** Add X-Forwarded-By header */
     addForwardedByHeader: boolean;
-    
+
     /** Max federation depth (prevent loops) */
     maxFederationDepth: number;
 }

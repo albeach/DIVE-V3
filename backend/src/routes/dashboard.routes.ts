@@ -34,9 +34,31 @@ async function getAuditLogsCollection() {
 }
 
 /**
- * GET /api/dashboard/stats
- * Get dashboard statistics for authenticated user
- * Includes both local and federated accessible document counts
+ * @openapi
+ * /api/dashboard/stats:
+ *   get:
+ *     summary: Get dashboard statistics
+ *     description: |
+ *       Returns comprehensive dashboard metrics for authenticated user including:
+ *       - Total accessible documents (local + federated)
+ *       - Authorization success rate (last 24 hours)
+ *       - Average response time
+ *       - Recent decisions and audit events
+ *       - Compliance metrics
+ *       - Classification breakdown
+ *       - Recently accessed resources
+ *     tags: [Dashboard]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Dashboard statistics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: '#/components/schemas/DashboardStats'
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
  */
 router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promise<void> => {
     const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
@@ -533,9 +555,66 @@ router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promi
 });
 
 /**
- * GET /api/dashboard/spokes
- * Get spoke status for Hub dashboard (DIVE-022)
- * Provides real-time status of all federated spoke instances
+ * @openapi
+ * /api/dashboard/spokes:
+ *   get:
+ *     summary: Get spoke instance status
+ *     description: |
+ *       Returns real-time status of all federated spoke instances for Hub dashboard.
+ *       Provides health metrics, policy sync status, and instance details.
+ *       **Requires admin role.**
+ *     tags: [Dashboard, Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Spoke status dashboard
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 summary:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       value:
+ *                         type: string
+ *                         example: '4'
+ *                       label:
+ *                         type: string
+ *                         example: Active Spokes
+ *                       sublabel:
+ *                         type: string
+ *                       trend:
+ *                         type: string
+ *                         enum: [up, down, neutral]
+ *                       color:
+ *                         type: string
+ *                         enum: [green, yellow, red, blue, gray]
+ *                 spokes:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/SpokeStatus'
+ *                 statistics:
+ *                   type: object
+ *                   properties:
+ *                     totalSpokes:
+ *                       type: integer
+ *                     activeSpokes:
+ *                       type: integer
+ *                     pendingApprovals:
+ *                       type: integer
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Admin access required
  */
 router.get('/spokes', authenticateJWT, async (req: Request, res: Response): Promise<void> => {
     const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
@@ -693,9 +772,64 @@ router.get('/spokes', authenticateJWT, async (req: Request, res: Response): Prom
 });
 
 /**
- * GET /api/dashboard/federated-stats
- * Get federated document statistics for spoke instances
- * Called by spokes to get total federated document counts
+ * @openapi
+ * /api/dashboard/federated-stats:
+ *   get:
+ *     summary: Get federated document statistics
+ *     description: |
+ *       Returns aggregated document counts from all federated instances.
+ *       **Internal endpoint** - called by spoke instances to retrieve total federated document counts.
+ *       Requires trusted federation partner authentication via query parameters.
+ *     tags: [Dashboard, Federation]
+ *     security: []
+ *     parameters:
+ *       - in: query
+ *         name: releasableTo
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ISO 3166-1 alpha-3 country code for releasability filter
+ *         example: FRA
+ *       - in: query
+ *         name: from
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Requesting instance code (must be trusted federation partner)
+ *         example: FRA
+ *     responses:
+ *       200:
+ *         description: Federated document statistics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 totalFederatedDocuments:
+ *                   type: integer
+ *                   example: 1247
+ *                   description: Total documents accessible across all federated instances
+ *                 federatedInstances:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                   example: ['USA', 'GBR', 'DEU']
+ *                 details:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       instance:
+ *                         type: string
+ *                       count:
+ *                         type: integer
+ *                 mockData:
+ *                   type: boolean
+ *                   description: Indicates if mock data was used due to unavailable instances
+ *       403:
+ *         description: Federated access required - not a trusted federation partner
  */
 router.get('/federated-stats', async (req, res) => {
     const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
@@ -841,8 +975,43 @@ router.get('/federated-stats', async (req, res) => {
 });
 
 /**
- * GET /api/dashboard/stats/public
- * Get public dashboard statistics (no authentication required)
+ * @openapi
+ * /api/dashboard/stats/public:
+ *   get:
+ *     summary: Get public dashboard statistics
+ *     description: |
+ *       Returns basic dashboard statistics without authentication.
+ *       Useful for public-facing dashboards or status pages.
+ *       Returns simplified metrics without user-specific data.
+ *     tags: [Dashboard, Public]
+ *     security: []
+ *     responses:
+ *       200:
+ *         description: Public dashboard statistics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 stats:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       value:
+ *                         type: string
+ *                         example: '1247'
+ *                       label:
+ *                         type: string
+ *                         example: Documents Accessible
+ *                       change:
+ *                         type: string
+ *                         example: +3 this week
+ *                       trend:
+ *                         type: string
+ *                         enum: [up, down, neutral]
  */
 router.get('/stats/public', async (req: Request, res: Response): Promise<void> => {
     const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;

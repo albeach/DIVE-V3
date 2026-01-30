@@ -217,6 +217,43 @@ When adding a new service that needs secrets:
 - **Input validation**: Validate all inputs against schemas (Joi/Zod)
 - **Output sanitization**: Filter sensitive fields based on clearance
 
+### Session Management Configuration
+
+**Critical Settings**:
+- **Access Token**: 15 minutes (short-lived for security)
+- **Refresh Token**: Single-use (rotation enabled via `refresh_token_max_reuse = 1`)
+- **Session Max**: 8 hours (Keycloak + NextAuth aligned)
+- **Session Idle**: 15 minutes (activity resets timer)
+- **Remember Me**: Disabled (consistent 8-hour sessions for all users)
+
+**Token Lifecycle**:
+1. **Login** → Access Token (15m) + Refresh Token (v1)
+2. **At 7-8 min remaining** → Auto-refresh → New Access Token (15m) + Refresh Token (v2, v1 revoked)
+3. **Repeat** until 8-hour max lifespan
+4. **At 3 min remaining** → Warning modal displayed to user
+5. **At 0 min** → Expired modal, force logout
+
+**Security Features**:
+- All tokens checked against Redis blacklist (logout revocation)
+- Refresh tokens are single-use (rotation prevents replay attacks)
+- Logout revokes all user tokens immediately
+- Token blacklist integrated into `authenticateJWT()` middleware
+- Fail-open pattern for blacklist checks (availability prioritized)
+
+**Frontend Session Monitoring**:
+- Heartbeat interval: 2 minutes (normal), 30 seconds (critical < 5 min)
+- Auto-refresh threshold: 7 minutes remaining
+- Warning threshold: 3 minutes remaining
+- Cross-tab synchronization via Broadcast Channel API
+
+**Configuration Files**:
+- Keycloak: `terraform/modules/federated-instance/main.tf`
+- NextAuth: `frontend/src/auth.ts`
+- Session API: `frontend/src/app/api/session/refresh/route.ts`
+- Backend Auth: `backend/src/middleware/authz.middleware.ts`
+
+**Documentation**: See `docs/session-management.md` for complete architecture details, troubleshooting, and testing procedures.
+
 ### OPA Policy Conventions
 
 #### Fail-Secure Pattern

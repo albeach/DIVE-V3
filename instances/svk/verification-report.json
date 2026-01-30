@@ -1,7 +1,7 @@
 {
-    "instance": "FRA",
+    "instance": "SVK",
     "status": "success",
-    "timestamp": "2026-01-29T06:29:41Z",
+    "timestamp": "2026-01-29T22:09:46Z",
     "containers": {"running":9,"unhealthy":0,"stopped":0,"total":9},
     "checks": {
         "services": true,
@@ -11,8 +11,8 @@
         "api": true
     },
     "endpoints": {
-        "frontend": "https://localhost:3010",
-        "backend": "https://localhost:4010",
-        "keycloak": "https://localhost:8453"
+        "frontend": "https://localhost:3026",
+        "backend": "https://localhost:4026",
+        "keycloak": "https://localhost:8469"
     }
 }

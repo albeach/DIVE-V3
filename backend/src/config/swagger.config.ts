@@ -9,6 +9,7 @@
  */
 
 import swaggerJsdoc from 'swagger-jsdoc';
+import path from 'path';
 
 const serverUrl = process.env.API_URL || 'https://localhost:4000';
 
@@ -95,6 +96,70 @@ Authorization: Bearer <your-jwt-token>
       {
         name: 'Health',
         description: 'System health and status endpoints',
+      },
+      {
+        name: 'Dashboard',
+        description: 'Dashboard statistics and metrics',
+      },
+      {
+        name: 'Spoke Management',
+        description: 'Spoke instance operations and failover control',
+      },
+      {
+        name: 'OPAL',
+        description: 'Open Policy Administration Layer - policy distribution',
+      },
+      {
+        name: 'COI',
+        description: 'Community of Interest management',
+      },
+      {
+        name: 'Clearance',
+        description: 'Security clearance level mappings',
+      },
+      {
+        name: 'SPIF',
+        description: 'Security Policy Information File - classification markings',
+      },
+      {
+        name: 'Service Providers',
+        description: 'Service Provider registration and management',
+      },
+      {
+        name: 'Notifications',
+        description: 'User notification system',
+      },
+      {
+        name: 'Analytics',
+        description: 'Search analytics and usage tracking',
+      },
+      {
+        name: 'Upload',
+        description: 'Document upload with ZTDF encryption',
+      },
+      {
+        name: 'OTP',
+        description: 'One-Time Password configuration',
+      },
+      {
+        name: 'Certificates',
+        description: 'X.509 certificate management and rotation',
+      },
+      {
+        name: 'Drift Detection',
+        description: 'Policy drift detection and reconciliation',
+      },
+      {
+        name: 'Document Conversion',
+        description: 'Office document format conversion',
+      },
+      {
+        name: 'Public',
+        description: 'Public endpoints (no authentication required)',
+      },
+      {
+        name: 'Metrics',
+        description: 'Prometheus metrics and observability',
       },
     ],
     components: {
@@ -262,6 +327,224 @@ Authorization: Bearer <your-jwt-token>
             },
           },
         },
+        IdP: {
+          type: 'object',
+          properties: {
+            alias: {
+              type: 'string',
+              description: 'Unique IdP identifier',
+              example: 'fra-keycloak',
+            },
+            displayName: {
+              type: 'string',
+              description: 'Human-readable name',
+              example: 'France Keycloak',
+            },
+            enabled: {
+              type: 'boolean',
+              description: 'Whether IdP is active',
+              example: true,
+            },
+            providerId: {
+              type: 'string',
+              enum: ['oidc', 'saml'],
+              description: 'Identity provider protocol',
+            },
+            config: {
+              type: 'object',
+              description: 'Protocol-specific configuration',
+            },
+          },
+          required: ['alias', 'displayName', 'providerId'],
+        },
+        DashboardStats: {
+          type: 'object',
+          properties: {
+            stats: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  value: { type: 'string', example: '1247' },
+                  label: { type: 'string', example: 'Documents Accessible' },
+                  change: { type: 'string', example: '+3 this week' },
+                  trend: { type: 'string', enum: ['up', 'down', 'neutral'] },
+                },
+              },
+            },
+            details: {
+              type: 'object',
+              properties: {
+                totalDocuments: { type: 'integer', example: 1247 },
+                localDocuments: { type: 'integer', example: 547 },
+                federatedDocuments: { type: 'integer', example: 700 },
+                totalDecisions: { type: 'integer', example: 1543 },
+                allowCount: { type: 'integer', example: 1498 },
+                denyCount: { type: 'integer', example: 45 },
+                authorizationRate: { type: 'number', example: 97.08 },
+                avgResponseTime: { type: 'number', example: 145 },
+              },
+            },
+          },
+        },
+        SpokeStatus: {
+          type: 'object',
+          properties: {
+            spokeId: {
+              type: 'string',
+              example: 'fra-spoke-001',
+            },
+            instanceCode: {
+              type: 'string',
+              example: 'FRA',
+            },
+            name: {
+              type: 'string',
+              example: 'France Instance',
+            },
+            status: {
+              type: 'string',
+              enum: ['active', 'pending', 'suspended', 'revoked'],
+            },
+            isHealthy: {
+              type: 'boolean',
+              example: true,
+            },
+            lastHeartbeat: {
+              type: 'string',
+              format: 'date-time',
+            },
+            policyVersion: {
+              type: 'string',
+              example: 'v1.2.3',
+            },
+          },
+        },
+        PolicyBundle: {
+          type: 'object',
+          properties: {
+            version: {
+              type: 'string',
+              example: 'v1.2.3',
+            },
+            hash: {
+              type: 'string',
+              description: 'SHA-256 hash of bundle',
+            },
+            scopes: {
+              type: 'array',
+              items: { type: 'string' },
+              example: ['hub', 'spoke'],
+            },
+            createdAt: {
+              type: 'string',
+              format: 'date-time',
+            },
+          },
+        },
+        COIKey: {
+          type: 'object',
+          properties: {
+            coiId: {
+              type: 'string',
+              example: 'NATO-SECRET',
+            },
+            countries: {
+              type: 'array',
+              items: { type: 'string' },
+              description: 'ISO 3166-1 alpha-3 country codes',
+              example: ['USA', 'GBR', 'FRA', 'DEU'],
+            },
+            classification: {
+              type: 'string',
+              enum: ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'],
+            },
+            deprecated: {
+              type: 'boolean',
+              example: false,
+            },
+          },
+        },
+        Notification: {
+          type: 'object',
+          properties: {
+            id: {
+              type: 'string',
+              example: 'notif-123',
+            },
+            userId: {
+              type: 'string',
+            },
+            type: {
+              type: 'string',
+              enum: ['info', 'warning', 'error', 'success'],
+            },
+            title: {
+              type: 'string',
+              example: 'New document available',
+            },
+            message: {
+              type: 'string',
+            },
+            read: {
+              type: 'boolean',
+              example: false,
+            },
+            createdAt: {
+              type: 'string',
+              format: 'date-time',
+            },
+          },
+        },
+        ClearanceMapping: {
+          type: 'object',
+          properties: {
+            country: {
+              type: 'string',
+              description: 'ISO 3166-1 alpha-3 country code',
+              example: 'GBR',
+            },
+            mappings: {
+              type: 'object',
+              additionalProperties: {
+                type: 'string',
+              },
+              example: {
+                'DV': 'CONFIDENTIAL',
+                'SC': 'SECRET',
+                'DV-SC': 'TOP_SECRET',
+              },
+            },
+          },
+        },
+        ComplianceReport: {
+          type: 'object',
+          properties: {
+            standard: {
+              type: 'string',
+              enum: ['NIST SP 800-63-3', 'NATO ACP-240'],
+            },
+            overallCompliance: {
+              type: 'string',
+              enum: ['compliant', 'partial', 'non-compliant'],
+            },
+            generatedAt: {
+              type: 'string',
+              format: 'date-time',
+            },
+            sections: {
+              type: 'array',
+              items: {
+                type: 'object',
+                properties: {
+                  section: { type: 'string' },
+                  status: { type: 'string', enum: ['pass', 'fail', 'partial'] },
+                  findings: { type: 'array', items: { type: 'string' } },
+                },
+              },
+            },
+          },
+        },
       },
       responses: {
         Unauthorized: {
@@ -319,8 +602,11 @@ Authorization: Bearer <your-jwt-token>
     ],
   },
   apis: [
-    './src/routes/*.ts',
-    './src/controllers/*.ts',
+    // Use absolute paths to ensure swagger-jsdoc can find the files
+    // In development: resolves to /project/backend/src/routes/*.ts
+    // In production (dist): resolves to /project/backend/dist/routes/*.js
+    path.resolve(__dirname, '../routes/*.{ts,js}'),
+    path.resolve(__dirname, '../controllers/*.{ts,js}'),
   ],
 };
 

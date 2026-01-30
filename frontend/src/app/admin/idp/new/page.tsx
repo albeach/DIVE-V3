@@ -450,8 +450,8 @@ export default function NewIdPWizard() {
             {/* Quick Tips Carousel */}
             <div className="mb-8">
                 <QuickTipsCarousel
-                    tips={AdminQuickTips.filter(tip => 
-                        tip.title.includes('IdP') || 
+                    tips={AdminQuickTips.filter(tip =>
+                        tip.title.includes('IdP') ||
                         tip.title.includes('Command Palette') ||
                         tip.title.includes('Protocol')
                     )}

@@ -3,6 +3,11 @@
  *
  * API endpoints for STANAG 4774 Security Policy Information File data.
  * Provides marking rules and classification information to the frontend.
+ *
+ * @swagger
+ * tags:
+ *   - name: SPIF
+ *     description: STANAG 4774 Security Policy Information File management
  */
 
 import { Router, Request, Response, NextFunction } from 'express';
@@ -22,8 +27,45 @@ import { CLASSIFICATION_COLORS, PORTION_MARKING_MAP } from '../types/stanag.type
 const router = Router();
 
 /**
- * GET /api/spif/marking-rules
- * Returns cached SPIF marking rules for frontend use
+ * @swagger
+ * /api/spif/marking-rules:
+ *   get:
+ *     summary: Get SPIF marking rules
+ *     description: Returns complete SPIF marking rules including classifications, countries, releasability qualifiers, special categories, and color codes
+ *     tags: [SPIF]
+ *     responses:
+ *       200:
+ *         description: Complete marking rules
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     classifications:
+ *                       type: object
+ *                       description: Classification levels and their properties
+ *                     countries:
+ *                       type: object
+ *                       description: Country codes and names
+ *                     releasableToQualifier:
+ *                       type: string
+ *                     specialCategories:
+ *                       type: object
+ *                     memberships:
+ *                       type: object
+ *                       description: Coalition memberships
+ *                     colors:
+ *                       type: object
+ *                       description: Classification color codes
+ *                     portionMarkings:
+ *                       type: object
+ *       500:
+ *         description: Server error
  */
 router.get('/marking-rules', async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -53,8 +95,64 @@ router.get('/marking-rules', async (req: Request, res: Response, next: NextFunct
 });
 
 /**
- * POST /api/spif/generate-marking
- * Generate marking text from resource attributes
+ * @swagger
+ * /api/spif/generate-marking:
+ *   post:
+ *     summary: Generate classification marking
+ *     description: Generates STANAG 4774 compliant classification marking text from resource attributes
+ *     tags: [SPIF]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - classification
+ *             properties:
+ *               classification:
+ *                 type: string
+ *                 description: Classification level
+ *                 example: SECRET
+ *               releasabilityTo:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Countries resource is releasable to
+ *                 example: ["USA", "GBR", "CAN"]
+ *               COI:
+ *                 type: string
+ *                 description: Community of Interest
+ *               caveats:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Additional handling caveats
+ *               language:
+ *                 type: string
+ *                 enum: [en, fr]
+ *                 description: Marking language
+ *     responses:
+ *       200:
+ *         description: Generated marking text
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     pageTopBottom:
+ *                       type: string
+ *                     portionMarking:
+ *                       type: string
+ *       400:
+ *         description: Missing required classification field
+ *       500:
+ *         description: Server error
  */
 router.post('/generate-marking', async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -87,8 +185,47 @@ router.post('/generate-marking', async (req: Request, res: Response, next: NextF
 });
 
 /**
- * GET /api/spif/classifications
- * Returns list of valid classifications with their properties
+ * @swagger
+ * /api/spif/classifications:
+ *   get:
+ *     summary: Get valid classifications
+ *     description: Returns list of all valid classification levels with display names, portion markings, hierarchy, and colors
+ *     tags: [SPIF]
+ *     parameters:
+ *       - in: query
+ *         name: language
+ *         schema:
+ *           type: string
+ *           enum: [en, fr]
+ *           default: en
+ *         description: Language for display names
+ *     responses:
+ *       200:
+ *         description: List of classifications sorted by hierarchy
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       name:
+ *                         type: string
+ *                       displayName:
+ *                         type: string
+ *                       portionMarking:
+ *                         type: string
+ *                       hierarchy:
+ *                         type: integer
+ *                       color:
+ *                         type: string
+ *       500:
+ *         description: Server error
  */
 router.get('/classifications', async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -119,8 +256,47 @@ router.get('/classifications', async (req: Request, res: Response, next: NextFun
 });
 
 /**
- * GET /api/spif/countries
- * Returns list of valid country codes with names
+ * @swagger
+ * /api/spif/countries:
+ *   get:
+ *     summary: Get valid countries
+ *     description: Returns list of all valid ISO 3166-1 alpha-3 country codes with names in English and French
+ *     tags: [SPIF]
+ *     parameters:
+ *       - in: query
+ *         name: language
+ *         schema:
+ *           type: string
+ *           enum: [en, fr]
+ *           default: en
+ *         description: Preferred language for sorting
+ *     responses:
+ *       200:
+ *         description: List of countries sorted alphabetically
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       code:
+ *                         type: string
+ *                         description: ISO 3166-1 alpha-3 code
+ *                       name:
+ *                         type: string
+ *                         description: Name in requested language
+ *                       nameEn:
+ *                         type: string
+ *                       nameFr:
+ *                         type: string
+ *       500:
+ *         description: Server error
  */
 router.get('/countries', async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -150,8 +326,39 @@ router.get('/countries', async (req: Request, res: Response, next: NextFunction)
 });
 
 /**
- * GET /api/spif/memberships
- * Returns coalition/partnership memberships
+ * @swagger
+ * /api/spif/memberships:
+ *   get:
+ *     summary: Get coalition memberships
+ *     description: Returns all defined coalition and partnership memberships with their member country lists
+ *     tags: [SPIF]
+ *     responses:
+ *       200:
+ *         description: List of coalition memberships
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       name:
+ *                         type: string
+ *                         description: Coalition name (e.g., FVEY, NATO)
+ *                       memberCount:
+ *                         type: integer
+ *                       members:
+ *                         type: array
+ *                         items:
+ *                           type: string
+ *                         description: Array of ISO 3166-1 alpha-3 country codes
+ *       500:
+ *         description: Server error
  */
 router.get('/memberships', async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -176,8 +383,42 @@ router.get('/memberships', async (req: Request, res: Response, next: NextFunctio
 });
 
 /**
- * GET /api/spif/membership/:name/expand
- * Expand a membership to its member country codes
+ * @swagger
+ * /api/spif/membership/{name}/expand:
+ *   get:
+ *     summary: Expand coalition membership
+ *     description: Returns the list of member country codes for a specific coalition or partnership
+ *     tags: [SPIF]
+ *     parameters:
+ *       - in: path
+ *         name: name
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Coalition name (e.g., FVEY, NATO)
+ *     responses:
+ *       200:
+ *         description: Member country codes
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     membership:
+ *                       type: string
+ *                     members:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *       404:
+ *         description: Membership not found
+ *       500:
+ *         description: Server error
  */
 router.get('/membership/:name/expand', async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -209,8 +450,43 @@ router.get('/membership/:name/expand', async (req: Request, res: Response, next:
 });
 
 /**
- * GET /api/spif/validate/classification/:classification
- * Validate if a classification is valid
+ * @swagger
+ * /api/spif/validate/classification/{classification}:
+ *   get:
+ *     summary: Validate classification
+ *     description: Validates whether a classification level is valid according to STANAG 4774 rules
+ *     tags: [SPIF]
+ *     parameters:
+ *       - in: path
+ *         name: classification
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Classification level to validate
+ *         example: SECRET
+ *     responses:
+ *       200:
+ *         description: Validation result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     classification:
+ *                       type: string
+ *                     valid:
+ *                       type: boolean
+ *                     level:
+ *                       type: integer
+ *                       nullable: true
+ *                       description: Hierarchy level if valid
+ *       500:
+ *         description: Server error
  */
 router.get('/validate/classification/:classification', async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -232,8 +508,48 @@ router.get('/validate/classification/:classification', async (req: Request, res:
 });
 
 /**
- * GET /api/spif/country/:code
- * Get country name from ISO code
+ * @swagger
+ * /api/spif/country/{code}:
+ *   get:
+ *     summary: Get country name
+ *     description: Returns the country name for a given ISO 3166-1 alpha-3 country code
+ *     tags: [SPIF]
+ *     parameters:
+ *       - in: path
+ *         name: code
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ISO 3166-1 alpha-3 country code
+ *         example: USA
+ *       - in: query
+ *         name: language
+ *         schema:
+ *           type: string
+ *           enum: [en, fr]
+ *           default: en
+ *         description: Language for country name
+ *     responses:
+ *       200:
+ *         description: Country name
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     code:
+ *                       type: string
+ *                     name:
+ *                       type: string
+ *                     language:
+ *                       type: string
+ *       500:
+ *         description: Server error
  */
 router.get('/country/:code', async (req: Request, res: Response, next: NextFunction) => {
     try {
@@ -256,8 +572,45 @@ router.get('/country/:code', async (req: Request, res: Response, next: NextFunct
 });
 
 /**
- * GET /api/spif/raw (admin only)
- * Returns raw SPIF data for debugging
+ * @swagger
+ * /api/spif/raw:
+ *   get:
+ *     summary: Get raw SPIF data (admin only)
+ *     description: Returns the complete raw SPIF data structure for debugging and administrative purposes
+ *     tags: [SPIF]
+ *     responses:
+ *       200:
+ *         description: Raw SPIF data
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     policyName:
+ *                       type: string
+ *                     policyId:
+ *                       type: string
+ *                     version:
+ *                       type: string
+ *                     creationDate:
+ *                       type: string
+ *                       format: date-time
+ *                     classifications:
+ *                       type: object
+ *                       description: Complete classification definitions
+ *                     categorySets:
+ *                       type: object
+ *                       description: Category sets with tags
+ *                     memberships:
+ *                       type: object
+ *                       description: Coalition membership definitions
+ *       500:
+ *         description: Server error
  */
 router.get('/raw', async (req: Request, res: Response, next: NextFunction) => {
     try {

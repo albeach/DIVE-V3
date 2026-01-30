@@ -150,7 +150,7 @@ services:
     ports:
       - "127.0.0.1:5432:5432"  # Bind to localhost only in production
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql  # Mount parent dir to prevent anonymous volume
       - ./scripts/setup/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
     networks:
       - dive-network

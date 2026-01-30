@@ -47,18 +47,19 @@ resource "keycloak_realm" "broker" {
   login_theme              = var.login_theme
   registration_allowed     = false
   reset_password_allowed   = true
-  remember_me              = true
+  remember_me              = false  # Disabled for consistent 8-hour sessions
   verify_email             = false
   login_with_email_allowed = true
   duplicate_emails_allowed = false
   edit_username_allowed    = false
 
   # Token settings
-  access_token_lifespan        = "15m"
-  refresh_token_max_reuse      = 0
-  sso_session_idle_timeout     = "30m"
-  sso_session_max_lifespan     = "10h"
-  offline_session_idle_timeout = "720h"
+  access_token_lifespan        = "15m"   # 15 minutes (unchanged)
+  refresh_token_max_reuse      = 1       # Enable rotation (single-use refresh tokens)
+  sso_session_idle_timeout     = "15m"   # Align with access token lifespan
+  sso_session_max_lifespan     = "8h"    # Align with NextAuth maxAge
+  offline_session_idle_timeout = "720h"  # 30 days for offline sessions
+  revoke_refresh_token         = true    # Revoke refresh token after use (Keycloak v26.5+)
 
   # NIST 800-63B Compliant Password Policy (Phase 1 - Nov 27, 2025)
   # - Minimum 16 characters (exceeds NIST 12-char minimum)
@@ -216,19 +217,19 @@ resource "keycloak_openid_client" "broker_client" {
   frontchannel_logout_url     = "${var.app_url}/api/auth/logout-callback"
   # CRITICAL FIX (2026-01-24): Add trailing slash variants for post-logout redirects
   # Keycloak requires EXACT match of redirect_uri parameter, including trailing slashes
-  # 
+  #
   # Issue: NextAuth may send https://localhost:3000/ (with slash) but we only configured
   # https://localhost:3000 (without slash), causing LOGOUT_ERROR: invalid_redirect_uri
-  # 
+  #
   # BEST PRACTICE SOLUTION:
   # Use variables (var.app_url, var.api_url, var.idp_url) with pattern matching
   # This works for ANY deployment (localhost, Cloudflare, production domains)
-  # 
+  #
   # Patterns included:
   # - Base URL without slash: ${var.app_url}
   # - Base URL with slash: ${var.app_url}/
   # - Wildcard paths: ${var.app_url}/*
-  # 
+  #
   # NO hardcoded URLs - fully flexible for all environments
   valid_post_logout_redirect_uris = concat(
     [
@@ -236,11 +237,11 @@ resource "keycloak_openid_client" "broker_client" {
       var.app_url,
       "${var.app_url}/",
       "${var.app_url}/*",
-      
+
       # Backend URLs (api_url) - for API-based logout
       var.api_url,
       "${var.api_url}/",
-      
+
       # IdP URLs (idp_url) - for Keycloak logout redirects
       var.idp_url,
       "${var.idp_url}/",

@@ -222,6 +222,12 @@ hub_deploy() {
         return 1
     fi
     log_success "MongoDB replica set initialized and PRIMARY"
+
+    # CRITICAL: Add stability buffer to allow replica set discovery to propagate
+    # MongoDB drivers cache replica set topology - need time for connection pools to refresh
+    log_verbose "Waiting 3s for MongoDB replica set discovery to stabilize..."
+    sleep 3
+
     phase_end=$(date +%s)
     local phase2_5_duration=$((phase_end - phase_start))
     phase_times+=("Phase 2.5 (MongoDB Replica Set): ${phase2_5_duration}s")

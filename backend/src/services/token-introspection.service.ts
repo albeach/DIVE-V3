@@ -47,6 +47,9 @@ export interface TokenIntrospectionResponse {
   clearance?: string;
   countryOfAffiliation?: string;
   acpCOI?: string[];
+  roles?: string[]; // User roles from realm_access or resource_access
+  realm_access?: { roles?: string[] }; // Keycloak realm roles
+  resource_access?: { [key: string]: { roles?: string[] } }; // Keycloak client roles
   // Authentication context
   acr?: string;
   amr?: string[];

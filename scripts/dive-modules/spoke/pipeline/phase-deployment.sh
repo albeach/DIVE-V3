@@ -272,6 +272,12 @@ spoke_deployment_init_mongodb_replica_set() {
     fi
 
     log_success "MongoDB replica set initialized for $code_upper"
+
+    # CRITICAL: Add stability buffer to allow replica set discovery to propagate
+    # MongoDB drivers cache replica set topology - need time for connection pools to refresh
+    log_verbose "Waiting 3s for MongoDB replica set discovery to stabilize..."
+    sleep 3
+
     return 0
 }
 
@@ -840,7 +846,7 @@ spoke_checkpoint_deployment() {
     for service in "${core_services[@]}"; do
         local container="dive-spoke-${code_lower}-${service}"
         local health_status=$(docker inspect "$container" --format '{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
-        
+
         if [ "$health_status" != "healthy" ]; then
             ((unhealthy_core++))
             log_verbose "CORE service $service is not healthy: $health_status"
@@ -852,7 +858,7 @@ spoke_checkpoint_deployment() {
     for service in "${optional_services[@]}"; do
         local container="dive-spoke-${code_lower}-${service}"
         local health_status=$(docker inspect "$container" --format '{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
-        
+
         if [ "$health_status" != "healthy" ]; then
             ((unhealthy_optional++))
             log_verbose "OPTIONAL service $service is not healthy: $health_status (non-blocking)"

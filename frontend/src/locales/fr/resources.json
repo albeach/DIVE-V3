@@ -18,9 +18,20 @@
     "releasability": "Diffusabilité",
     "coi": "Communauté d'intérêt",
     "dateRange": "Plage de dates",
+    "fileType": "Type de Fichier",
     "encrypted": "Ressources chiffrées uniquement",
     "apply": "Appliquer les filtres",
     "reset": "Réinitialiser"
+  },
+  "fileTypes": {
+    "documents": "Documents",
+    "images": "Images",
+    "videos": "Vidéos",
+    "audio": "Audio",
+    "structured": "Structurées",
+    "archives": "Archives",
+    "text": "Texte",
+    "code": "Code"
   },
   "table": {
     "title": "Titre",

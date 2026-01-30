@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 /**
  * Extract Encrypted ZTDF Documents - USA with Alpha, Beta, Gamma COI
- * 
+ *
  * Extracts encrypted ZTDF documents from MongoDB that match:
  * - releasabilityTo includes USA
  * - COI includes only Alpha, Beta, or Gamma
  * - All clearance levels (UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET)
- * 
+ *
  * Includes encryption details and decryption instructions
  */
 
@@ -20,93 +20,94 @@ const DB_NAME = 'dive-v3';
 const COLLECTION_NAME = 'resources';
 
 interface IExtractedDocument {
-    resourceId: string;
-    title: string;
-    classification: string;
-    releasabilityTo: string[];
-    COI: string[];
-    coiOperator: string;
-    encryptionDetails: {
-        algorithm: string;
-        keyDerivation: string;
-        ivBase64: string;
-        authTagBase64: string;
-        encryptedContentBase64: string;
-        encryptedContentSize: number;
-        coi: string;
-    };
-    decryptionInstructions: string;
-    ztdfMetadata: {
-        version: string;
-        objectId: string;
-        owner: string;
-        createdAt: string;
-        displayMarking: string;
-    };
+  resourceId: string;
+  title: string;
+  classification: string;
+  releasabilityTo: string[];
+  COI: string[];
+  coiOperator: string;
+  encryptionDetails: {
+    algorithm: string;
+    keyDerivation: string;
+    ivBase64: string;
+    authTagBase64: string;
+    encryptedContentBase64: string;
+    encryptedContentSize: number;
+    coi: string;
+  };
+  decryptionInstructions: string;
+  ztdfMetadata: {
+    version: string;
+    objectId: string;
+    owner: string;
+    createdAt: string;
+    displayMarking: string;
+  };
 }
 
 /**
  * Check if COI array contains only Alpha, Beta, or Gamma
  */
 function hasOnlyAlphaBetaGamma(coi: string[]): boolean {
-    if (coi.length === 0) return false;
-    
-    const allowedCOIs = ['Alpha', 'Beta', 'Gamma'];
-    return coi.every(c => allowedCOIs.includes(c));
+  if (coi.length === 0) return false;
+
+  const allowedCOIs = ['Alpha', 'Beta', 'Gamma'];
+  return coi.every(c => allowedCOIs.includes(c));
 }
 
 /**
  * Check if releasability includes USA
  */
 function isReleasableToUSA(releasabilityTo: string[]): boolean {
-    return releasabilityTo.includes('USA');
+  return releasabilityTo.includes('USA');
 }
 
 /**
  * Extract encryption details from ZTDF document
  */
 function extractEncryptionDetails(ztdfDoc: any): IExtractedDocument {
-    const ztdf = ztdfDoc.ztdf;
-    const legacy = ztdfDoc.legacy;
-    
-    // Get encrypted chunk (first chunk)
-    const encryptedChunk = ztdf.payload.encryptedChunks[0];
-    
-    // Determine which COI was used for encryption
-    const selectedCOI = legacy.COI.length > 0 ? legacy.COI[0] : 'DEFAULT';
-    
-    return {
-        resourceId: ztdfDoc.resourceId,
-        title: ztdfDoc.title,
-        classification: legacy.classification,
-        releasabilityTo: legacy.releasabilityTo,
-        COI: legacy.COI,
-        coiOperator: legacy.coiOperator || 'ALL',
-        encryptionDetails: {
-            algorithm: ztdf.payload.encryptionAlgorithm,
-            keyDerivation: 'COI-based community key',
-            ivBase64: ztdf.payload.iv,
-            authTagBase64: ztdf.payload.authTag,
-            encryptedContentBase64: encryptedChunk.encryptedData,
-            encryptedContentSize: Buffer.from(encryptedChunk.encryptedData, 'base64').length,
-            coi: selectedCOI
-        },
-        decryptionInstructions: generateDecryptionInstructions(selectedCOI, ztdf.payload.iv, ztdf.payload.authTag),
-        ztdfMetadata: {
-            version: ztdf.manifest.version,
-            objectId: ztdf.manifest.objectId,
-            owner: ztdf.manifest.owner,
-            createdAt: ztdf.manifest.createdAt,
-            displayMarking: ztdf.policy.securityLabel.displayMarking
-        }
-    };
+  const ztdf = ztdfDoc.ztdf;
+  const legacy = ztdfDoc.legacy;
+
+  // Get encrypted chunk (first chunk)
+  const encryptedChunk = ztdf.payload.encryptedChunks[0];
+
+  // Determine which COI was used for encryption
+  const coiArray = ztdf.policy.securityLabel.COI || [];
+  const selectedCOI = coiArray.length > 0 ? coiArray[0] : 'DEFAULT';
+
+  return {
+    resourceId: ztdfDoc.resourceId,
+    title: ztdfDoc.title,
+    classification: ztdf.policy.securityLabel.classification,
+    releasabilityTo: ztdf.policy.securityLabel.releasabilityTo,
+    COI: ztdf.policy.securityLabel.COI,
+    coiOperator: ztdf.policy.securityLabel.coiOperator || 'ALL',
+    encryptionDetails: {
+      algorithm: ztdf.payload.encryptionAlgorithm,
+      keyDerivation: 'COI-based community key',
+      ivBase64: ztdf.payload.iv,
+      authTagBase64: ztdf.payload.authTag,
+      encryptedContentBase64: encryptedChunk.encryptedData,
+      encryptedContentSize: Buffer.from(encryptedChunk.encryptedData, 'base64').length,
+      coi: selectedCOI
+    },
+    decryptionInstructions: generateDecryptionInstructions(selectedCOI, ztdf.payload.iv, ztdf.payload.authTag),
+    ztdfMetadata: {
+      version: ztdf.manifest.version,
+      objectId: ztdf.manifest.objectId,
+      owner: ztdf.manifest.owner,
+      createdAt: ztdf.manifest.createdAt,
+      displayMarking: ztdf.policy.securityLabel.displayMarking
+    }
+  };
 }
 
 /**
  * Generate decryption instructions
  */
 function generateDecryptionInstructions(coi: string, iv: string, authTag: string): string {
-    return `
+  return `
 DECRYPTION INSTRUCTIONS
 =======================
 
@@ -144,7 +145,7 @@ Pseudocode:
   iv = base64Decode(IV)
   authTag = base64Decode(AuthTag)
   encryptedData = base64Decode(EncryptedContent)
-  
+
   decipher = AES_256_GCM_Decrypt(dek, iv)
   decipher.setAuthTag(authTag)
   plaintext = decipher.update(encryptedData) + decipher.final()
@@ -152,12 +153,12 @@ Pseudocode:
 Node.js Code:
   const crypto = require('crypto');
   const { getCOIKey } = require('./services/coi-key-registry');
-  
+
   const dek = getCOIKey('${coi}');
   const iv = Buffer.from('${iv}', 'base64');
   const authTag = Buffer.from('${authTag}', 'base64');
   const encryptedData = '...'; // From encryptedContentBase64
-  
+
   const decipher = crypto.createDecipheriv('aes-256-gcm', dek, iv);
   decipher.setAuthTag(authTag);
   let plaintext = decipher.update(encryptedData, 'base64', 'utf8');
@@ -167,12 +168,12 @@ Node.js Code:
 Python Code:
   from cryptography.hazmat.primitives.ciphers.aead import AESGCM
   import base64
-  
+
   dek = get_coi_key('${coi}')  # 32 bytes
   iv = base64.b64decode('${iv}')
   auth_tag = base64.b64decode('${authTag}')
   encrypted_data = base64.b64decode(encrypted_content_base64)
-  
+
   aesgcm = AESGCM(dek)
   plaintext = aesgcm.decrypt(iv, encrypted_data + auth_tag, None)
   print(plaintext.decode('utf-8'))
@@ -194,137 +195,137 @@ Security Notes:
  * Main extraction function
  */
 async function extractDocuments(): Promise<void> {
-    console.log('🔍 Extracting Encrypted ZTDF Documents');
-    console.log('=' .repeat(60));
-    console.log('Criteria:');
-    console.log('  - Releasability: USA');
-    console.log('  - COI: Only Alpha, Beta, or Gamma');
-    console.log('  - Clearance: All levels');
-    console.log('=' .repeat(60));
+  console.log('🔍 Extracting Encrypted ZTDF Documents');
+  console.log('='.repeat(60));
+  console.log('Criteria:');
+  console.log('  - Releasability: USA');
+  console.log('  - COI: Only Alpha, Beta, or Gamma');
+  console.log('  - Clearance: All levels');
+  console.log('='.repeat(60));
+  console.log();
+
+  const client = new MongoClient(MONGO_URI);
+
+  try {
+    await client.connect();
+    console.log('✅ Connected to MongoDB');
+
+    const db = client.db(DB_NAME);
+    const collection = db.collection(COLLECTION_NAME);
+
+    // Query for documents matching criteria
+    const query = {
+      'ztdf.policy.securityLabel.releasabilityTo': 'USA',
+      'ztdf.policy.securityLabel.COI': {
+        $exists: true,
+        $not: { $size: 0 }
+      }
+    };
+
+    const documents = await collection.find(query).toArray();
+
+    console.log(`📄 Found ${documents.length} documents matching base criteria`);
     console.log();
 
-    const client = new MongoClient(MONGO_URI);
+    // Filter to only Alpha/Beta/Gamma (no other COIs)
+    const filtered = documents.filter(doc => {
+      const coi = doc.legacy?.COI || [];
+      return hasOnlyAlphaBetaGamma(coi) && isReleasableToUSA(doc.legacy?.releasabilityTo || []);
+    });
 
-    try {
-        await client.connect();
-        console.log('✅ Connected to MongoDB');
+    console.log(`✅ Filtered to ${filtered.length} documents with only Alpha/Beta/Gamma`);
+    console.log();
 
-        const db = client.db(DB_NAME);
-        const collection = db.collection(COLLECTION_NAME);
+    // Group by classification and COI
+    const byClassification: Record<string, IExtractedDocument[]> = {};
+    const byCOI: Record<string, IExtractedDocument[]> = {};
 
-        // Query for documents matching criteria
-        const query = {
-            'legacy.releasabilityTo': 'USA',
-            'legacy.COI': {
-                $exists: true,
-                $not: { $size: 0 }
-            }
-        };
+    const extracted: IExtractedDocument[] = [];
 
-        const documents = await collection.find(query).toArray();
+    for (const doc of filtered) {
+      try {
+        const extractedDoc = extractEncryptionDetails(doc);
+        extracted.push(extractedDoc);
 
-        console.log(`📄 Found ${documents.length} documents matching base criteria`);
-        console.log();
-
-        // Filter to only Alpha/Beta/Gamma (no other COIs)
-        const filtered = documents.filter(doc => {
-            const coi = doc.legacy?.COI || [];
-            return hasOnlyAlphaBetaGamma(coi) && isReleasableToUSA(doc.legacy?.releasabilityTo || []);
-        });
-
-        console.log(`✅ Filtered to ${filtered.length} documents with only Alpha/Beta/Gamma`);
-        console.log();
-
-        // Group by classification and COI
-        const byClassification: Record<string, IExtractedDocument[]> = {};
-        const byCOI: Record<string, IExtractedDocument[]> = {};
-
-        const extracted: IExtractedDocument[] = [];
-
-        for (const doc of filtered) {
-            try {
-                const extractedDoc = extractEncryptionDetails(doc);
-                extracted.push(extractedDoc);
-
-                // Group by classification
-                if (!byClassification[extractedDoc.classification]) {
-                    byClassification[extractedDoc.classification] = [];
-                }
-                byClassification[extractedDoc.classification].push(extractedDoc);
-
-                // Group by COI
-                const coiKey = extractedDoc.COI.sort().join('+');
-                if (!byCOI[coiKey]) {
-                    byCOI[coiKey] = [];
-                }
-                byCOI[coiKey].push(extractedDoc);
-            } catch (error) {
-                console.error(`❌ Error extracting ${doc.resourceId}:`, error);
-            }
+        // Group by classification
+        if (!byClassification[extractedDoc.classification]) {
+          byClassification[extractedDoc.classification] = [];
         }
+        byClassification[extractedDoc.classification].push(extractedDoc);
 
-        // Print summary
-        console.log('📊 SUMMARY');
-        console.log('=' .repeat(60));
-        console.log(`Total Documents Extracted: ${extracted.length}`);
-        console.log();
-
-        console.log('By Classification:');
-        for (const [classification, docs] of Object.entries(byClassification)) {
-            console.log(`  ${classification}: ${docs.length} documents`);
+        // Group by COI
+        const coiKey = extractedDoc.COI.sort().join('+');
+        if (!byCOI[coiKey]) {
+          byCOI[coiKey] = [];
         }
-        console.log();
-
-        console.log('By COI:');
-        for (const [coi, docs] of Object.entries(byCOI)) {
-            console.log(`  ${coi}: ${docs.length} documents`);
-        }
-        console.log();
-
-        // Save to output directory
-        const outputDir = path.join(__dirname, '../../output/extracted-ztdf-documents');
-        fs.mkdirSync(outputDir, { recursive: true });
-
-        // Save full JSON
-        const fullOutputPath = path.join(outputDir, 'usa-alpha-beta-gamma-full.json');
-        fs.writeFileSync(fullOutputPath, JSON.stringify(extracted, null, 2));
-        console.log(`✅ Saved full dataset to: ${fullOutputPath}`);
-
-        // Save samples by classification
-        for (const [classification, docs] of Object.entries(byClassification)) {
-            const sample = docs.slice(0, 5); // First 5 of each
-            const samplePath = path.join(outputDir, `sample-${classification.toLowerCase()}.json`);
-            fs.writeFileSync(samplePath, JSON.stringify(sample, null, 2));
-            console.log(`✅ Saved ${classification} sample to: ${samplePath}`);
-        }
-
-        // Save encryption/decryption guide
-        const guidePath = path.join(outputDir, 'ENCRYPTION-DECRYPTION-GUIDE.md');
-        const guide = generateFullGuide(extracted);
-        fs.writeFileSync(guidePath, guide);
-        console.log(`✅ Saved encryption guide to: ${guidePath}`);
-
-        console.log();
-        console.log('=' .repeat(60));
-        console.log('✅ EXTRACTION COMPLETE');
-        console.log('=' .repeat(60));
-
-    } catch (error) {
-        console.error('❌ Extraction failed:', error);
-        throw error;
-    } finally {
-        await client.close();
-        console.log('✅ MongoDB connection closed');
+        byCOI[coiKey].push(extractedDoc);
+      } catch (error) {
+        console.error(`❌ Error extracting ${doc.resourceId}:`, error);
+      }
     }
+
+    // Print summary
+    console.log('📊 SUMMARY');
+    console.log('='.repeat(60));
+    console.log(`Total Documents Extracted: ${extracted.length}`);
+    console.log();
+
+    console.log('By Classification:');
+    for (const [classification, docs] of Object.entries(byClassification)) {
+      console.log(`  ${classification}: ${docs.length} documents`);
+    }
+    console.log();
+
+    console.log('By COI:');
+    for (const [coi, docs] of Object.entries(byCOI)) {
+      console.log(`  ${coi}: ${docs.length} documents`);
+    }
+    console.log();
+
+    // Save to output directory
+    const outputDir = path.join(__dirname, '../../output/extracted-ztdf-documents');
+    fs.mkdirSync(outputDir, { recursive: true });
+
+    // Save full JSON
+    const fullOutputPath = path.join(outputDir, 'usa-alpha-beta-gamma-full.json');
+    fs.writeFileSync(fullOutputPath, JSON.stringify(extracted, null, 2));
+    console.log(`✅ Saved full dataset to: ${fullOutputPath}`);
+
+    // Save samples by classification
+    for (const [classification, docs] of Object.entries(byClassification)) {
+      const sample = docs.slice(0, 5); // First 5 of each
+      const samplePath = path.join(outputDir, `sample-${classification.toLowerCase()}.json`);
+      fs.writeFileSync(samplePath, JSON.stringify(sample, null, 2));
+      console.log(`✅ Saved ${classification} sample to: ${samplePath}`);
+    }
+
+    // Save encryption/decryption guide
+    const guidePath = path.join(outputDir, 'ENCRYPTION-DECRYPTION-GUIDE.md');
+    const guide = generateFullGuide(extracted);
+    fs.writeFileSync(guidePath, guide);
+    console.log(`✅ Saved encryption guide to: ${guidePath}`);
+
+    console.log();
+    console.log('='.repeat(60));
+    console.log('✅ EXTRACTION COMPLETE');
+    console.log('='.repeat(60));
+
+  } catch (error) {
+    console.error('❌ Extraction failed:', error);
+    throw error;
+  } finally {
+    await client.close();
+    console.log('✅ MongoDB connection closed');
+  }
 }
 
 /**
  * Generate full encryption/decryption guide
  */
 function generateFullGuide(documents: IExtractedDocument[]): string {
-    const sample = documents[0];
-    
-    return `# ZTDF Encryption/Decryption Guide
+  const sample = documents[0];
+
+  return `# ZTDF Encryption/Decryption Guide
 
 ## Overview
 
@@ -355,7 +356,7 @@ Documents are encrypted using **Community of Interest (COI) keys**:
 
 **Available COI Keys:**
 - Alpha: Shared key for Alpha community
-- Beta: Shared key for Beta community  
+- Beta: Shared key for Beta community
 - Gamma: Shared key for Gamma community
 
 ### Encryption Process
@@ -450,23 +451,23 @@ const crypto = require('crypto');
 function decryptZTDF(ztdf) {
   const payload = ztdf.payload;
   const coi = ztdf.policy.securityLabel.COI[0];
-  
+
   // Get COI key
   const { getCOIKey } = require('./services/coi-key-registry');
   const dek = getCOIKey(coi);
-  
+
   // Extract components
   const iv = Buffer.from(payload.iv, 'base64');
   const authTag = Buffer.from(payload.authTag, 'base64');
   const encryptedData = payload.encryptedChunks[0].encryptedData;
-  
+
   // Decrypt
   const decipher = crypto.createDecipheriv('aes-256-gcm', dek, iv);
   decipher.setAuthTag(authTag);
-  
+
   let plaintext = decipher.update(encryptedData, 'base64', 'utf8');
   plaintext += decipher.final('utf8');
-  
+
   return plaintext;
 }
 \`\`\`
@@ -482,28 +483,28 @@ def decrypt_ztdf(ztdf_path, coi_keys):
     # Load ZTDF
     with open(ztdf_path, 'r') as f:
         ztdf = json.load(f)
-    
+
     payload = ztdf['payload']
     coi = ztdf['policy']['securityLabel']['COI'][0]
-    
+
     # Get COI key
     dek = coi_keys[coi]  # 32 bytes
-    
+
     # Extract components
     iv = base64.b64decode(payload['iv'])
     auth_tag = base64.b64decode(payload['authTag'])
     encrypted_data = base64.b64decode(
         payload['encryptedChunks'][0]['encryptedData']
     )
-    
+
     # Decrypt with AESGCM
     aesgcm = AESGCM(dek)
     plaintext = aesgcm.decrypt(
-        iv, 
+        iv,
         encrypted_data + auth_tag,
         None  # No additional authenticated data
     )
-    
+
     return plaintext.decode('utf-8')
 \`\`\`
 
@@ -573,16 +574,16 @@ const encryptedData = payload.encryptedChunks[0].encryptedData;
 try {
   const decipher = crypto.createDecipheriv('aes-256-gcm', dek, iv);
   decipher.setAuthTag(authTag);
-  
+
   let plaintext = decipher.update(encryptedData, 'base64', 'utf8');
   plaintext += decipher.final('utf8');
-  
+
   console.log('\\n✅ Decryption successful!');
   console.log('\\nContent:');
   console.log('=' .repeat(60));
   console.log(plaintext);
   console.log('=' .repeat(60));
-  
+
 } catch (error) {
   console.error('❌ Decryption failed:', error.message);
   console.error('Possible reasons:');
@@ -620,11 +621,11 @@ For questions or issues:
 
 // Run extraction
 extractDocuments()
-    .then(() => {
-        console.log('✅ Script completed successfully');
-        process.exit(0);
-    })
-    .catch((error) => {
-        console.error('❌ Script failed:', error);
-        process.exit(1);
-    });
+  .then(() => {
+    console.log('✅ Script completed successfully');
+    process.exit(0);
+  })
+  .catch((error) => {
+    console.error('❌ Script failed:', error);
+    process.exit(1);
+  });

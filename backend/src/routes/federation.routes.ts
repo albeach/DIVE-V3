@@ -340,8 +340,64 @@ function legacyRequireAdmin(req: Request, res: Response, next: NextFunction): vo
 // ============================================
 
 /**
- * GET /federation/metadata
- * Public federation metadata (no auth)
+ * @openapi
+ * /api/federation/metadata:
+ *   get:
+ *     summary: Get federation metadata
+ *     description: Returns public federation metadata including hub capabilities, supported classifications, countries, COIs, protocols, and endpoints. No authentication required.
+ *     tags: [Federation]
+ *     responses:
+ *       200:
+ *         description: Federation metadata
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 entity:
+ *                   type: object
+ *                   properties:
+ *                     id:
+ *                       type: string
+ *                     type:
+ *                       type: string
+ *                     country:
+ *                       type: string
+ *                     name:
+ *                       type: string
+ *                     version:
+ *                       type: string
+ *                     contact:
+ *                       type: string
+ *                 capabilities:
+ *                   type: object
+ *                   properties:
+ *                     classifications:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                     countries:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                     coi:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                     maxClassification:
+ *                       type: string
+ *                     protocols:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                     trustLevels:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                 endpoints:
+ *                   type: object
+ *                 security:
+ *                   type: object
  */
 router.get('/metadata', async (_req: Request, res: Response): Promise<void> => {
     res.json({
@@ -375,9 +431,51 @@ router.get('/metadata', async (_req: Request, res: Response): Promise<void> => {
 });
 
 /**
- * GET /api/federation/status
- * Get overall federation status (instances + health summary)
- * Public endpoint (no auth) - used by CLI federation status command
+ * @openapi
+ * /api/federation/status:
+ *   get:
+ *     summary: Get federation status
+ *     description: Returns overall federation status including all instances, health summary, and statistics. Public endpoint (no auth) used by CLI federation status command.
+ *     tags: [Federation]
+ *     responses:
+ *       200:
+ *         description: Federation status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 instances:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       code:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *                       frontendUrl:
+ *                         type: string
+ *                       apiUrl:
+ *                         type: string
+ *                       idpUrl:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                       healthStatus:
+ *                         type: string
+ *                         enum: [healthy, unhealthy]
+ *                       policySyncStatus:
+ *                         type: string
+ *                 statistics:
+ *                   type: object
+ *                 unhealthyCount:
+ *                   type: integer
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       500:
+ *         description: Server error
  */
 router.get('/status', async (_req: Request, res: Response): Promise<void> => {
     try {
@@ -420,11 +518,34 @@ router.get('/status', async (_req: Request, res: Response): Promise<void> => {
 });
 
 /**
- * GET /api/federation/discovery
- * MongoDB-based federation discovery (replaces static federation-registry.json)
- *
- * SSOT: MongoDB federation_spokes collection
- * Used by spokes to discover federation partners
+ * @openapi
+ * /api/federation/discovery:
+ *   get:
+ *     summary: Federation discovery
+ *     description: MongoDB-based federation discovery endpoint. Returns list of federation partners from MongoDB federation_spokes collection (SSOT). Used by spokes to discover federation partners. Replaces static federation-registry.json.
+ *     tags: [Federation]
+ *     responses:
+ *       200:
+ *         description: Federation instances
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 source:
+ *                   type: string
+ *                   enum: [mongodb]
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *                 instances:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       500:
+ *         description: Discovery failed
  */
 router.get('/discovery', async (_req: Request, res: Response): Promise<void> => {
     try {
@@ -449,9 +570,55 @@ router.get('/discovery', async (_req: Request, res: Response): Promise<void> => 
 });
 
 /**
- * GET /api/federation/instances
- * Legacy endpoint for frontend - now uses MongoDB instead of static file
- * Public endpoint (no auth) - used by frontend for federated search UI
+ * @openapi
+ * /api/federation/instances:
+ *   get:
+ *     summary: List federation instances
+ *     description: Returns federation instances in frontend-friendly format. Public endpoint (no auth) used by frontend for federated search UI. Now uses MongoDB instead of static file.
+ *     tags: [Federation]
+ *     responses:
+ *       200:
+ *         description: Federation instances
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 instances:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       code:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *                       type:
+ *                         type: string
+ *                       country:
+ *                         type: string
+ *                       flag:
+ *                         type: string
+ *                       locale:
+ *                         type: string
+ *                       endpoints:
+ *                         type: object
+ *                         properties:
+ *                           app:
+ *                             type: string
+ *                           api:
+ *                             type: string
+ *                           idp:
+ *                             type: string
+ *                       federationStatus:
+ *                         type: string
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *                 source:
+ *                   type: string
+ *       500:
+ *         description: Server error
  */
 router.get('/instances', async (_req: Request, res: Response): Promise<void> => {
     try {
@@ -717,9 +884,60 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
 });
 
 /**
- * GET /api/federation/registration/:spokeId/status
- * Check spoke registration status (public - for polling)
- * Spokes can poll this endpoint to check if they've been approved
+ * @openapi
+ * /api/federation/registration/{spokeId}/status:
+ *   get:
+ *     summary: Check spoke registration status
+ *     description: Public endpoint for spokes to poll registration status. Returns approval status, token when approved, and status-specific messages. Accepts either spokeId or instanceCode.
+ *     tags: [Federation]
+ *     parameters:
+ *       - in: path
+ *         name: spokeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Spoke ID or instance code
+ *     responses:
+ *       200:
+ *         description: Registration status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 spokeId:
+ *                   type: string
+ *                 instanceCode:
+ *                   type: string
+ *                 status:
+ *                   type: string
+ *                   enum: [pending, approved, suspended, revoked]
+ *                 registeredAt:
+ *                   type: string
+ *                   format: date-time
+ *                 approvedAt:
+ *                   type: string
+ *                   format: date-time
+ *                 token:
+ *                   type: object
+ *                   properties:
+ *                     token:
+ *                       type: string
+ *                     expiresAt:
+ *                       type: string
+ *                       format: date-time
+ *                     scopes:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                 message:
+ *                   type: string
+ *       404:
+ *         description: Registration not found
+ *       500:
+ *         description: Server error
  */
 router.get('/registration/:spokeId/status', async (req: Request, res: Response): Promise<void> => {
     try {
@@ -823,8 +1041,89 @@ router.get('/registration/:spokeId/status', async (req: Request, res: Response):
 });
 
 /**
- * GET /federation/search
- * Federated search (SP → Hub)
+ * @openapi
+ * /api/federation/search:
+ *   get:
+ *     summary: Federated search
+ *     description: Search federated resources with classification and agreement enforcement. Service Provider (SP) must have active federation agreement covering requested classification and country.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: classification
+ *         schema:
+ *           type: string
+ *         description: Filter by classification level
+ *       - in: query
+ *         name: releasabilityTo
+ *         schema:
+ *           type: array
+ *           items:
+ *             type: string
+ *         description: Filter by releasability countries
+ *       - in: query
+ *         name: COI
+ *         schema:
+ *           type: array
+ *           items:
+ *             type: string
+ *         description: Filter by Communities of Interest
+ *       - in: query
+ *         name: keywords
+ *         schema:
+ *           type: array
+ *           items:
+ *             type: string
+ *         description: Full-text search keywords
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 100
+ *           maximum: 1000
+ *         description: Maximum results to return
+ *       - in: query
+ *         name: offset
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *         description: Pagination offset
+ *     responses:
+ *       200:
+ *         description: Search results
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 totalResults:
+ *                   type: integer
+ *                 resources:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       resourceId:
+ *                         type: string
+ *                       title:
+ *                         type: string
+ *                       classification:
+ *                         type: string
+ *                       releasabilityTo:
+ *                         type: array
+ *                         items:
+ *                           type: string
+ *                       COI:
+ *                         type: array
+ *                         items:
+ *                           type: string
+ *                 searchContext:
+ *                   type: object
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: No active federation agreement or classification not allowed
  */
 router.get(
     '/search',
@@ -924,8 +1223,72 @@ router.get(
 );
 
 /**
- * POST /federation/resources/request
- * Request access to a federated resource
+ * @openapi
+ * /api/federation/resources/request:
+ *   post:
+ *     summary: Request federated resource access
+ *     description: Request access to a specific federated resource. Validates SP has active federation agreement covering the resource's classification and country. Returns access grant if authorized.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - resourceId
+ *             properties:
+ *               resourceId:
+ *                 type: string
+ *                 description: Resource identifier
+ *               justification:
+ *                 type: string
+ *                 description: Optional justification for access request
+ *     responses:
+ *       200:
+ *         description: Access granted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 accessGrant:
+ *                   type: object
+ *                   properties:
+ *                     grantId:
+ *                       type: string
+ *                     resourceId:
+ *                       type: string
+ *                     grantedAt:
+ *                       type: string
+ *                       format: date-time
+ *                     justification:
+ *                       type: string
+ *                 resource:
+ *                   type: object
+ *                   properties:
+ *                     resourceId:
+ *                       type: string
+ *                     classification:
+ *                       type: string
+ *                     releasabilityTo:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                     COI:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *       400:
+ *         description: Invalid request - resourceId required
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: No active federation agreement or classification not allowed
+ *       404:
+ *         description: Resource not found
  */
 router.post(
     '/resources/request',
@@ -1010,9 +1373,127 @@ router.post(
 // ============================================
 
 /**
- * POST /api/federation/sp/register
- * Register a new SP Client (OAuth/OIDC client)
- * This is for partners who want to integrate with DIVE without deploying a full spoke
+ * @openapi
+ * /api/federation/sp/register:
+ *   post:
+ *     summary: Register SP client
+ *     description: Register a new Service Provider (SP) client for OAuth/OIDC integration. For partners who want to integrate with DIVE without deploying a full spoke. Returns client credentials and OIDC endpoints.
+ *     tags: [Federation]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - name
+ *               - organizationType
+ *               - country
+ *               - technicalContact
+ *               - redirectUris
+ *               - allowedScopes
+ *             properties:
+ *               name:
+ *                 type: string
+ *               description:
+ *                 type: string
+ *               organizationType:
+ *                 type: string
+ *                 enum: [government, military, defense_contractor, research, other]
+ *               country:
+ *                 type: string
+ *                 description: ISO 3166-1 alpha-3 country code
+ *               technicalContact:
+ *                 type: object
+ *                 properties:
+ *                   name:
+ *                     type: string
+ *                   email:
+ *                     type: string
+ *                     format: email
+ *               clientType:
+ *                 type: string
+ *                 enum: [confidential, public]
+ *                 default: confidential
+ *               redirectUris:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: uri
+ *               postLogoutRedirectUris:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   format: uri
+ *               jwksUri:
+ *                 type: string
+ *                 format: uri
+ *               tokenEndpointAuthMethod:
+ *                 type: string
+ *                 enum: [client_secret_basic, client_secret_post, private_key_jwt, none]
+ *                 default: client_secret_basic
+ *               requirePKCE:
+ *                 type: boolean
+ *                 default: true
+ *               allowedScopes:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               allowedGrantTypes:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                   enum: [authorization_code, refresh_token, client_credentials]
+ *                 default: [authorization_code, refresh_token]
+ *               maxClassification:
+ *                 type: string
+ *                 enum: [UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET]
+ *                 default: UNCLASSIFIED
+ *     responses:
+ *       201:
+ *         description: SP client registered
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 sp:
+ *                   type: object
+ *                   properties:
+ *                     spId:
+ *                       type: string
+ *                     clientId:
+ *                       type: string
+ *                     clientSecret:
+ *                       type: string
+ *                       description: Only returned on initial registration
+ *                     name:
+ *                       type: string
+ *                     country:
+ *                       type: string
+ *                     status:
+ *                       type: string
+ *                     message:
+ *                       type: string
+ *                 endpoints:
+ *                   type: object
+ *                   properties:
+ *                     issuer:
+ *                       type: string
+ *                     authorization:
+ *                       type: string
+ *                     token:
+ *                       type: string
+ *                     userinfo:
+ *                       type: string
+ *                     jwks:
+ *                       type: string
+ *       400:
+ *         description: Validation failed
+ *       500:
+ *         description: Registration failed
  */
 router.post('/sp/register', async (req: Request, res: Response): Promise<void> => {
     try {
@@ -1118,8 +1599,33 @@ router.post('/sp/register', async (req: Request, res: Response): Promise<void> =
 });
 
 /**
- * GET /api/federation/sp/:spId
- * Get SP Client details
+ * @openapi
+ * /api/federation/sp/{spId}:
+ *   get:
+ *     summary: Get SP client details
+ *     description: Retrieves Service Provider client details by ID. Client secret is never included in response.
+ *     tags: [Federation]
+ *     parameters:
+ *       - in: path
+ *         name: spId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: SP identifier
+ *     responses:
+ *       200:
+ *         description: SP client details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 sp:
+ *                   type: object
+ *       404:
+ *         description: SP not found
+ *       500:
+ *         description: Server error
  */
 router.get('/sp/:spId', async (req: Request, res: Response): Promise<void> => {
     try {
@@ -1143,8 +1649,54 @@ router.get('/sp/:spId', async (req: Request, res: Response): Promise<void> => {
 });
 
 /**
- * GET /api/federation/sp
- * List SP Clients (admin)
+ * @openapi
+ * /api/federation/sp:
+ *   get:
+ *     summary: List SP clients
+ *     description: Returns paginated list of Service Provider clients with optional filtering. Admin access required.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *         description: Filter by status
+ *       - in: query
+ *         name: country
+ *         schema:
+ *           type: string
+ *         description: Filter by country code
+ *       - in: query
+ *         name: organizationType
+ *         schema:
+ *           type: string
+ *         description: Filter by organization type
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *         description: Search by name or client ID
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *         description: Page number
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *         description: Results per page
+ *     responses:
+ *       200:
+ *         description: SP clients list
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
  */
 router.get('/sp', requireAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -1165,8 +1717,50 @@ router.get('/sp', requireAdmin, async (req: Request, res: Response): Promise<voi
 });
 
 /**
- * POST /api/federation/sp/:spId/approve
- * Approve a pending SP Client (super_admin only)
+ * @openapi
+ * /api/federation/sp/{spId}/approve:
+ *   post:
+ *     summary: Approve SP client
+ *     description: Approves a pending Service Provider client. Super admin access required.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: spId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: SP identifier
+ *     responses:
+ *       200:
+ *         description: SP approved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 sp:
+ *                   type: object
+ *                   properties:
+ *                     spId:
+ *                       type: string
+ *                     clientId:
+ *                       type: string
+ *                     name:
+ *                       type: string
+ *                     status:
+ *                       type: string
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Insufficient permissions (super_admin required)
+ *       404:
+ *         description: SP not found
+ *       500:
+ *         description: Approval failed
  */
 router.post('/sp/:spId/approve', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -1203,8 +1797,53 @@ router.post('/sp/:spId/approve', requireSuperAdmin, async (req: Request, res: Re
 });
 
 /**
- * POST /api/federation/sp/:spId/suspend
- * Suspend an SP Client (super_admin only)
+ * @openapi
+ * /api/federation/sp/{spId}/suspend:
+ *   post:
+ *     summary: Suspend SP client
+ *     description: Suspends an active Service Provider client and disables OAuth client in Keycloak. Super admin access required.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: spId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: SP identifier
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               reason:
+ *                 type: string
+ *                 description: Reason for suspension
+ *     responses:
+ *       200:
+ *         description: SP suspended
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 sp:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Insufficient permissions (super_admin required)
+ *       404:
+ *         description: SP not found
+ *       500:
+ *         description: Suspension failed
  */
 router.post('/sp/:spId/suspend', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -1245,8 +1884,44 @@ router.post('/sp/:spId/suspend', requireSuperAdmin, async (req: Request, res: Re
 });
 
 /**
- * POST /api/federation/sp/:spId/regenerate-secret
- * Regenerate client secret for an SP (super_admin only)
+ * @openapi
+ * /api/federation/sp/{spId}/regenerate-secret:
+ *   post:
+ *     summary: Regenerate SP client secret
+ *     description: Regenerates the client secret for a confidential SP client. Previous secret is immediately invalidated. Super admin access required.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: spId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: SP identifier
+ *     responses:
+ *       200:
+ *         description: Client secret regenerated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 clientSecret:
+ *                   type: string
+ *                   description: New client secret (only shown once)
+ *                 message:
+ *                   type: string
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Insufficient permissions (super_admin required)
+ *       404:
+ *         description: SP not found or is public client
+ *       500:
+ *         description: Secret regeneration failed
  */
 router.post('/sp/:spId/regenerate-secret', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -1334,8 +2009,31 @@ router.post('/heartbeat', requireSpokeToken, async (req: Request, res: Response)
 });
 
 /**
- * GET /api/federation/policy/version
- * Get current policy version
+ * @openapi
+ * /api/federation/policy/version:
+ *   get:
+ *     summary: Get current policy version
+ *     description: Returns the current policy version, timestamp, hash, and layers. Public endpoint (no auth).
+ *     tags: [Federation]
+ *     responses:
+ *       200:
+ *         description: Current policy version
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 version:
+ *                   type: string
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *                 hash:
+ *                   type: string
+ *                 layers:
+ *                   type: array
+ *                   items:
+ *                     type: string
  */
 router.get('/policy/version', async (_req: Request, res: Response): Promise<void> => {
     const version = policySyncService.getCurrentVersion();
@@ -1349,8 +2047,47 @@ router.get('/policy/version', async (_req: Request, res: Response): Promise<void
 });
 
 /**
- * GET /api/federation/policy/bundle
- * Download policy bundle (scope-filtered by spoke token)
+ * @openapi
+ * /api/federation/policy/bundle:
+ *   get:
+ *     summary: Download policy bundle
+ *     description: Downloads policy bundle with delta updates filtered by spoke's allowed policy scopes. Requires valid spoke token.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: from
+ *         schema:
+ *           type: string
+ *         description: Previous policy version for delta update
+ *     responses:
+ *       200:
+ *         description: Policy bundle
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 spokeId:
+ *                   type: string
+ *                 scopes:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                 currentVersion:
+ *                   type: string
+ *                 updates:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       500:
+ *         description: Failed to get policy bundle
  */
 router.get('/policy/bundle', requireSpokeToken, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -1401,8 +2138,32 @@ router.get('/spokes', requireAdmin, async (_req: Request, res: Response): Promis
 });
 
 /**
- * GET /api/federation/spokes/pending
- * List spokes pending approval
+ * @openapi
+ * /api/federation/spokes/pending:
+ *   get:
+ *     summary: List pending spokes
+ *     description: Returns list of spokes pending approval. Admin access required.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Pending spokes
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 pending:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
  */
 router.get('/spokes/pending', requireAdmin, async (_req: Request, res: Response): Promise<void> => {
     try {
@@ -1416,8 +2177,43 @@ router.get('/spokes/pending', requireAdmin, async (_req: Request, res: Response)
 });
 
 /**
- * GET /api/federation/spokes/:spokeId
- * Get spoke details
+ * @openapi
+ * /api/federation/spokes/{spokeId}:
+ *   get:
+ *     summary: Get spoke details
+ *     description: Returns detailed spoke information including health status, sync status, and policy compliance. Admin access required.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: spokeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Spoke identifier
+ *     responses:
+ *       200:
+ *         description: Spoke details
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 spoke:
+ *                   type: object
+ *                 health:
+ *                   type: object
+ *                 syncStatus:
+ *                   type: object
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Insufficient permissions
+ *       404:
+ *         description: Spoke not found
+ *       500:
+ *         description: Server error
  */
 router.get('/spokes/:spokeId', requireAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -1446,8 +2242,56 @@ router.get('/spokes/:spokeId', requireAdmin, async (req: Request, res: Response)
 });
 
 /**
- * PATCH /api/federation/spokes/:spokeId/keycloak-password
- * Update spoke's Keycloak admin password (super_admin only)
+ * @openapi
+ * /api/federation/spokes/{spokeId}/keycloak-password:
+ *   patch:
+ *     summary: Update spoke Keycloak password
+ *     description: Updates a spoke's Keycloak admin password. Password must be at least 10 characters. Super admin access required.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: spokeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Spoke identifier
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - keycloakAdminPassword
+ *             properties:
+ *               keycloakAdminPassword:
+ *                 type: string
+ *                 minLength: 10
+ *                 description: New Keycloak admin password
+ *     responses:
+ *       200:
+ *         description: Password updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Invalid password
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Insufficient permissions (super_admin required)
+ *       404:
+ *         description: Spoke not found
+ *       500:
+ *         description: Update failed
  */
 router.patch('/spokes/:spokeId/keycloak-password', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -1494,8 +2338,81 @@ router.patch('/spokes/:spokeId/keycloak-password', requireSuperAdmin, async (req
 });
 
 /**
- * POST /api/federation/spokes/:spokeId/approve
- * Approve a pending spoke (super_admin only)
+ * @openapi
+ * /api/federation/spokes/{spokeId}/approve:
+ *   post:
+ *     summary: Approve pending spoke
+ *     description: Approves a pending spoke registration and generates Hub API token and OPAL client token. Creates bidirectional IdP federation if enabled. Super admin access required.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: spokeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Spoke identifier
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - allowedScopes
+ *               - trustLevel
+ *               - maxClassification
+ *               - dataIsolationLevel
+ *             properties:
+ *               allowedScopes:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Scopes to grant to spoke
+ *               trustLevel:
+ *                 type: string
+ *                 enum: [development, partner, bilateral, national]
+ *               maxClassification:
+ *                 type: string
+ *                 enum: [UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET]
+ *               dataIsolationLevel:
+ *                 type: string
+ *                 enum: [full, filtered, minimal]
+ *     responses:
+ *       200:
+ *         description: Spoke approved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 spoke:
+ *                   type: object
+ *                 hubApiToken:
+ *                   type: object
+ *                   properties:
+ *                     token:
+ *                       type: string
+ *                     expiresAt:
+ *                       type: string
+ *                       format: date-time
+ *                     scopes:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                 opalClientToken:
+ *                   type: object
+ *       400:
+ *         description: Invalid approval data
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Insufficient permissions (super_admin required)
+ *       500:
+ *         description: Approval failed
  */
 router.post('/spokes/:spokeId/approve', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -1577,8 +2494,55 @@ router.post('/spokes/:spokeId/approve', requireSuperAdmin, async (req: Request, 
 });
 
 /**
- * POST /api/federation/spokes/:spokeId/suspend
- * Suspend an approved spoke (super_admin only)
+ * @openapi
+ * /api/federation/spokes/{spokeId}/suspend:
+ *   post:
+ *     summary: Suspend spoke
+ *     description: Suspends an approved spoke and revokes all tokens. Super admin access required.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: spokeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Spoke identifier
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - reason
+ *             properties:
+ *               reason:
+ *                 type: string
+ *                 description: Reason for suspension
+ *     responses:
+ *       200:
+ *         description: Spoke suspended
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 spoke:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Reason is required
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Insufficient permissions (super_admin required)
+ *       500:
+ *         description: Suspension failed
  */
 router.post('/spokes/:spokeId/suspend', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -1612,12 +2576,52 @@ router.post('/spokes/:spokeId/suspend', requireSuperAdmin, async (req: Request, 
 });
 
 /**
- * POST /api/federation/spokes/:spokeId/unsuspend
- * Unsuspend a suspended spoke (super_admin only)
- * ADDED (Dec 2025): Provides API to reactivate suspended spokes
- *
- * Body:
- *   - retryFederation: boolean (optional) - Whether to retry bidirectional federation setup
+ * @openapi
+ * /api/federation/spokes/{spokeId}/unsuspend:
+ *   post:
+ *     summary: Unsuspend spoke
+ *     description: Reactivates a suspended spoke. Optionally retries bidirectional federation setup. Super admin access required.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: spokeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Spoke identifier
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               retryFederation:
+ *                 type: boolean
+ *                 description: Whether to retry bidirectional federation setup
+ *     responses:
+ *       200:
+ *         description: Spoke unsuspended
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 spoke:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Spoke is not suspended
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Insufficient permissions (super_admin required)
+ *       500:
+ *         description: Unsuspension failed
  */
 router.post('/spokes/:spokeId/unsuspend', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -1655,8 +2659,55 @@ router.post('/spokes/:spokeId/unsuspend', requireSuperAdmin, async (req: Request
 });
 
 /**
- * POST /api/federation/spokes/:spokeId/revoke
- * Permanently revoke a spoke (super_admin only)
+ * @openapi
+ * /api/federation/spokes/{spokeId}/revoke:
+ *   post:
+ *     summary: Revoke spoke
+ *     description: Permanently revokes a spoke. All tokens are invalidated and federation is terminated. Super admin access required.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: spokeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Spoke identifier
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - reason
+ *             properties:
+ *               reason:
+ *                 type: string
+ *                 description: Reason for revocation
+ *     responses:
+ *       200:
+ *         description: Spoke revoked
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 spoke:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Reason is required
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Insufficient permissions (super_admin required)
+ *       500:
+ *         description: Revocation failed
  */
 router.post('/spokes/:spokeId/revoke', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -1688,8 +2739,49 @@ router.post('/spokes/:spokeId/revoke', requireSuperAdmin, async (req: Request, r
 });
 
 /**
- * POST /api/federation/spokes/:spokeId/token
- * Generate new token for spoke (super_admin only)
+ * @openapi
+ * /api/federation/spokes/{spokeId}/token:
+ *   post:
+ *     summary: Generate spoke token
+ *     description: Generates a new Hub API token for a spoke. Super admin access required.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: spokeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Spoke identifier
+ *     responses:
+ *       200:
+ *         description: Token generated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 token:
+ *                   type: object
+ *                   properties:
+ *                     token:
+ *                       type: string
+ *                     expiresAt:
+ *                       type: string
+ *                       format: date-time
+ *                     scopes:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Insufficient permissions (super_admin required)
+ *       500:
+ *         description: Token generation failed
  */
 router.post('/spokes/:spokeId/token', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -1713,8 +2805,60 @@ router.post('/spokes/:spokeId/token', requireSuperAdmin, async (req: Request, re
 });
 
 /**
- * POST /api/federation/policy/push
- * Push policy update to all or specific spoke (super_admin only)
+ * @openapi
+ * /api/federation/policy/push:
+ *   post:
+ *     summary: Push policy update
+ *     description: Pushes policy update to all spokes. Updates specified policy layers with optional priority and description. Super admin access required.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - layers
+ *             properties:
+ *               layers:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Policy layers to update
+ *               priority:
+ *                 type: string
+ *                 default: normal
+ *                 description: Update priority
+ *               description:
+ *                 type: string
+ *                 description: Update description
+ *     responses:
+ *       200:
+ *         description: Policy update pushed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 update:
+ *                   type: object
+ *                   properties:
+ *                     updateId:
+ *                       type: string
+ *                     version:
+ *                       type: string
+ *       400:
+ *         description: Layers array is required
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Insufficient permissions (super_admin required)
+ *       500:
+ *         description: Policy push failed
  */
 router.post('/policy/push', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -1752,8 +2896,57 @@ router.post('/policy/push', requireSuperAdmin, async (req: Request, res: Respons
 });
 
 /**
- * GET /api/federation/sync/status
- * Get sync status for all spokes
+ * @openapi
+ * /api/federation/sync/status:
+ *   get:
+ *     summary: Get policy sync status
+ *     description: Returns policy sync status for all spokes including current version, out-of-sync spokes, and detailed status breakdown. Admin access required.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Policy sync status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 currentVersion:
+ *                   type: object
+ *                   properties:
+ *                     version:
+ *                       type: string
+ *                     timestamp:
+ *                       type: string
+ *                       format: date-time
+ *                     hash:
+ *                       type: string
+ *                 spokes:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 outOfSync:
+ *                   type: integer
+ *                 summary:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                     current:
+ *                       type: integer
+ *                     behind:
+ *                       type: integer
+ *                     stale:
+ *                       type: integer
+ *                     offline:
+ *                       type: integer
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
  */
 router.get('/sync/status', requireAdmin, async (_req: Request, res: Response): Promise<void> => {
     try {
@@ -1780,8 +2973,43 @@ router.get('/sync/status', requireAdmin, async (_req: Request, res: Response): P
 });
 
 /**
- * GET /api/federation/health
- * Get overall federation health
+ * @openapi
+ * /api/federation/health:
+ *   get:
+ *     summary: Get federation health
+ *     description: Returns overall federation health including statistics, unhealthy spokes, and current policy version. Public endpoint (no auth).
+ *     tags: [Federation]
+ *     responses:
+ *       200:
+ *         description: Federation health status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 healthy:
+ *                   type: boolean
+ *                 statistics:
+ *                   type: object
+ *                 unhealthySpokes:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       spokeId:
+ *                         type: string
+ *                       instanceCode:
+ *                         type: string
+ *                       lastHeartbeat:
+ *                         type: string
+ *                         format: date-time
+ *                 policyVersion:
+ *                   type: string
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       500:
+ *         description: Health check failed
  */
 router.get('/health', async (_req: Request, res: Response): Promise<void> => {
     try {
@@ -1807,9 +3035,102 @@ router.get('/health', async (_req: Request, res: Response): Promise<void> => {
 });
 
 /**
- * GET /api/federation/health/spokes
- * Enhanced spoke health aggregation for dashboard (DIVE-018)
- * Returns detailed health status for all spokes with metrics
+ * @openapi
+ * /api/federation/health/spokes:
+ *   get:
+ *     summary: Get detailed spoke health
+ *     description: Returns detailed health status for all spokes including health metrics, policy sync status, and aggregated summary. Admin access required.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Detailed spoke health
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *                 summary:
+ *                   type: object
+ *                   properties:
+ *                     totalSpokes:
+ *                       type: integer
+ *                     healthySpokeCount:
+ *                       type: integer
+ *                     unhealthySpokeCount:
+ *                       type: integer
+ *                     totalActiveSpokes:
+ *                       type: integer
+ *                     averageLatency:
+ *                       type: number
+ *                 policySyncSummary:
+ *                   type: object
+ *                   properties:
+ *                     current:
+ *                       type: integer
+ *                     behind:
+ *                       type: integer
+ *                     stale:
+ *                       type: integer
+ *                     offline:
+ *                       type: integer
+ *                 statusBreakdown:
+ *                   type: object
+ *                   properties:
+ *                     approved:
+ *                       type: integer
+ *                     pending:
+ *                       type: integer
+ *                     suspended:
+ *                       type: integer
+ *                     revoked:
+ *                       type: integer
+ *                 spokes:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       spokeId:
+ *                         type: string
+ *                       instanceCode:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                       isHealthy:
+ *                         type: boolean
+ *                       lastHeartbeat:
+ *                         type: string
+ *                         format: date-time
+ *                       lastHeartbeatAgo:
+ *                         type: integer
+ *                         description: Seconds since last heartbeat
+ *                       trustLevel:
+ *                         type: string
+ *                       policySync:
+ *                         type: object
+ *                       health:
+ *                         type: object
+ *                         properties:
+ *                           opaHealthy:
+ *                             type: boolean
+ *                           opalConnected:
+ *                             type: boolean
+ *                           latencyMs:
+ *                             type: number
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
  */
 router.get('/health/spokes', requireAdmin, async (_req: Request, res: Response): Promise<void> => {
     const requestId = `health-${Date.now()}`;
@@ -1953,11 +3274,61 @@ const auditIngestionStats = {
 };
 
 /**
- * POST /api/federation/audit/ingest
- * Receive audit logs from spokes (DIVE-020)
- *
- * Spokes batch-send their audit logs to the Hub for centralized aggregation.
- * Authentication via spoke token.
+ * @openapi
+ * /api/federation/audit/ingest:
+ *   post:
+ *     summary: Ingest spoke audit logs
+ *     description: Receives batch audit logs from spokes for centralized aggregation. Requires valid spoke token.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - logs
+ *             properties:
+ *               logs:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     timestamp:
+ *                       type: string
+ *                       format: date-time
+ *                     action:
+ *                       type: string
+ *                     actor:
+ *                       type: string
+ *                     resourceId:
+ *                       type: string
+ *                     outcome:
+ *                       type: string
+ *                     details:
+ *                       type: object
+ *     responses:
+ *       200:
+ *         description: Audit logs accepted
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 accepted:
+ *                   type: integer
+ *                 spokeId:
+ *                   type: string
+ *       400:
+ *         description: Invalid request
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       500:
+ *         description: Ingestion failed
  */
 router.post('/audit/ingest', requireSpokeToken, async (req: Request, res: Response): Promise<void> => {
     const requestId = `audit-ingest-${Date.now()}`;
@@ -2064,8 +3435,77 @@ router.post('/audit/ingest', requireSpokeToken, async (req: Request, res: Respon
 });
 
 /**
- * GET /api/federation/audit/aggregated
- * Query aggregated audit logs from all spokes (DIVE-020)
+ * @openapi
+ * /api/federation/audit/aggregated:
+ *   get:
+ *     summary: Query aggregated audit logs
+ *     description: Queries aggregated audit logs from all spokes with optional filtering by spoke, action, actor, outcome, and time range. Admin access required.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: spokeId
+ *         schema:
+ *           type: string
+ *         description: Filter by spoke ID
+ *       - in: query
+ *         name: action
+ *         schema:
+ *           type: string
+ *         description: Filter by action type
+ *       - in: query
+ *         name: actor
+ *         schema:
+ *           type: string
+ *         description: Filter by actor
+ *       - in: query
+ *         name: outcome
+ *         schema:
+ *           type: string
+ *           enum: [success, failure]
+ *         description: Filter by outcome
+ *       - in: query
+ *         name: startTime
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: Start of time range
+ *       - in: query
+ *         name: endTime
+ *         schema:
+ *           type: string
+ *           format: date-time
+ *         description: End of time range
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 100
+ *           maximum: 1000
+ *         description: Maximum results
+ *     responses:
+ *       200:
+ *         description: Aggregated audit logs
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 logs:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 total:
+ *                   type: integer
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Query failed
  */
 router.get('/audit/aggregated', requireAdmin, async (req: Request, res: Response): Promise<void> => {
     const requestId = `audit-query-${Date.now()}`;
@@ -2162,8 +3602,49 @@ router.get('/audit/aggregated', requireAdmin, async (req: Request, res: Response
 });
 
 /**
- * GET /api/federation/audit/statistics
- * Get audit aggregation statistics (DIVE-020)
+ * @openapi
+ * /api/federation/audit/statistics:
+ *   get:
+ *     summary: Get audit statistics
+ *     description: Returns audit aggregation statistics including time-based metrics, spoke contributions, action type distribution, and buffer health. Admin access required.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Audit statistics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 statistics:
+ *                   type: object
+ *                   properties:
+ *                     totalLogs:
+ *                       type: integer
+ *                     logsLast24h:
+ *                       type: integer
+ *                     logsLastHour:
+ *                       type: integer
+ *                     spokeContributions:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                     actionTypeDistribution:
+ *                       type: object
+ *                     timeRange:
+ *                       type: object
+ *                     bufferHealth:
+ *                       type: object
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
  */
 router.get('/audit/statistics', requireAdmin, async (_req: Request, res: Response): Promise<void> => {
     try {
@@ -2256,9 +3737,51 @@ async function getCrossInstanceService() {
 }
 
 /**
- * POST /api/federation/evaluate-policy
- * Evaluate policy for cross-instance resource access
- * Called by remote instances to evaluate local policy
+ * @openapi
+ * /api/federation/evaluate-policy:
+ *   post:
+ *     summary: Evaluate cross-instance policy
+ *     description: Evaluates policy for cross-instance resource access. Called by remote instances to evaluate local policy.
+ *     tags: [Federation]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - subject
+ *               - resource
+ *               - action
+ *             properties:
+ *               subject:
+ *                 type: object
+ *                 description: Subject attributes
+ *               resource:
+ *                 type: object
+ *                 description: Resource attributes
+ *               action:
+ *                 type: string
+ *                 description: Requested action
+ *               requestId:
+ *                 type: string
+ *                 description: Request identifier for tracing
+ *     responses:
+ *       200:
+ *         description: Policy evaluation result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 allowed:
+ *                   type: boolean
+ *                 decision:
+ *                   type: string
+ *                 reason:
+ *                   type: string
+ *       500:
+ *         description: Evaluation failed
  */
 router.post('/evaluate-policy', async (req: Request, res: Response): Promise<void> => {
     try {
@@ -2313,9 +3836,43 @@ router.post('/evaluate-policy', async (req: Request, res: Response): Promise<voi
 });
 
 /**
- * POST /api/federation/query-resources
- * Query resources for federated access
- * Called by remote instances to discover resources
+ * @openapi
+ * /api/federation/query-resources:
+ *   post:
+ *     summary: Query federated resources
+ *     description: Queries resources for federated access. Called by remote instances to discover resources.
+ *     tags: [Federation]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - query
+ *             properties:
+ *               query:
+ *                 type: object
+ *                 description: Resource query parameters
+ *               requestId:
+ *                 type: string
+ *                 description: Request identifier
+ *     responses:
+ *       200:
+ *         description: Query results
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 resources:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                 total:
+ *                   type: integer
+ *       500:
+ *         description: Query failed
  */
 router.post('/query-resources', async (req: Request, res: Response): Promise<void> => {
     try {
@@ -2392,9 +3949,47 @@ router.post('/query-resources', async (req: Request, res: Response): Promise<voi
 });
 
 /**
- * POST /api/federation/cross-instance/authorize
- * Full cross-instance authorization flow
- * Evaluates both local and remote policies
+ * @openapi
+ * /api/federation/cross-instance/authorize:
+ *   post:
+ *     summary: Cross-instance authorization
+ *     description: Full cross-instance authorization flow that evaluates both local and remote policies for federated resource access.
+ *     tags: [Federation]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - subject
+ *               - resource
+ *               - action
+ *             properties:
+ *               subject:
+ *                 type: object
+ *               resource:
+ *                 type: object
+ *               action:
+ *                 type: string
+ *               requestId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Authorization result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 allowed:
+ *                   type: boolean
+ *                 localDecision:
+ *                   type: object
+ *                 remoteDecision:
+ *                   type: object
+ *       500:
+ *         description: Authorization failed
  */
 router.post('/cross-instance/authorize', async (req: Request, res: Response): Promise<void> => {
     try {
@@ -2442,8 +4037,46 @@ router.post('/cross-instance/authorize', async (req: Request, res: Response): Pr
 });
 
 /**
- * POST /api/federation/cross-instance/query
- * Query resources across all federated instances
+ * @openapi
+ * /api/federation/cross-instance/query:
+ *   post:
+ *     summary: Query across federated instances
+ *     description: Queries resources across all federated instances with optional targeting of specific instances.
+ *     tags: [Federation]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - query
+ *               - subject
+ *             properties:
+ *               query:
+ *                 type: object
+ *               subject:
+ *                 type: object
+ *               targetInstances:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *               requestId:
+ *                 type: string
+ *     responses:
+ *       200:
+ *         description: Federated query results
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 results:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *       500:
+ *         description: Query failed
  */
 router.post('/cross-instance/query', async (req: Request, res: Response): Promise<void> => {
     try {
@@ -2491,8 +4124,30 @@ router.post('/cross-instance/query', async (req: Request, res: Response): Promis
 });
 
 /**
- * GET /api/federation/cross-instance/cache-stats
- * Get authorization cache statistics
+ * @openapi
+ * /api/federation/cross-instance/cache-stats:
+ *   get:
+ *     summary: Get cache statistics
+ *     description: Returns authorization cache statistics including hits, misses, and cache health. Admin access required.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Cache statistics
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 stats:
+ *                   type: object
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Insufficient permissions
+ *       500:
+ *         description: Server error
  */
 router.get('/cross-instance/cache-stats', requireAdmin, async (_req: Request, res: Response): Promise<void> => {
     try {
@@ -2510,8 +4165,32 @@ router.get('/cross-instance/cache-stats', requireAdmin, async (_req: Request, re
 });
 
 /**
- * POST /api/federation/cross-instance/cache-clear
- * Clear authorization cache (super_admin only)
+ * @openapi
+ * /api/federation/cross-instance/cache-clear:
+ *   post:
+ *     summary: Clear authorization cache
+ *     description: Clears the authorization cache. Super admin access required.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Cache cleared
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Insufficient permissions (super_admin required)
+ *       500:
+ *         description: Server error
  */
 router.post('/cross-instance/cache-clear', requireSuperAdmin, async (_req: Request, res: Response): Promise<void> => {
     try {
@@ -2546,9 +4225,64 @@ const csrSigningSchema = z.object({
 });
 
 /**
- * POST /api/federation/spokes/:spokeId/sign-csr
- * Sign a Certificate Signing Request (CSR) submitted by a spoke
- * Requires super_admin access
+ * @openapi
+ * /api/federation/spokes/{spokeId}/sign-csr:
+ *   post:
+ *     summary: Sign spoke CSR
+ *     description: Signs a Certificate Signing Request (CSR) submitted by a spoke using Hub CA or generates self-signed certificate for development. Super admin access required.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: spokeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Spoke identifier
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - csrPEM
+ *             properties:
+ *               csrPEM:
+ *                 type: string
+ *                 description: Base64-encoded Certificate Signing Request
+ *               validityDays:
+ *                 type: integer
+ *                 default: 365
+ *                 description: Certificate validity period in days
+ *     responses:
+ *       200:
+ *         description: Certificate signed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 certificatePEM:
+ *                   type: string
+ *                 fingerprint:
+ *                   type: string
+ *                 expiresAt:
+ *                   type: string
+ *                   format: date-time
+ *       400:
+ *         description: Invalid CSR
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Insufficient permissions (super_admin required)
+ *       404:
+ *         description: Spoke not found
+ *       500:
+ *         description: Signing failed
  */
 router.post('/spokes/:spokeId/sign-csr', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -2684,8 +4418,57 @@ Warning: Not signed by Hub CA - for development only
 });
 
 /**
- * GET /api/federation/spokes/:spokeId/certificate
- * Get the current certificate for a spoke
+ * @openapi
+ * /api/federation/spokes/{spokeId}/certificate:
+ *   get:
+ *     summary: Get spoke certificate
+ *     description: Returns the current certificate for a spoke including PEM, fingerprint, subject, issuer, and validity period. Admin access required.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: spokeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Spoke identifier
+ *     responses:
+ *       200:
+ *         description: Spoke certificate
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 spokeId:
+ *                   type: string
+ *                 instanceCode:
+ *                   type: string
+ *                 certificatePEM:
+ *                   type: string
+ *                 fingerprint:
+ *                   type: string
+ *                 subject:
+ *                   type: string
+ *                 issuer:
+ *                   type: string
+ *                 validFrom:
+ *                   type: string
+ *                   format: date-time
+ *                 validTo:
+ *                   type: string
+ *                   format: date-time
+ *                 validationResult:
+ *                   type: object
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Insufficient permissions
+ *       404:
+ *         description: Spoke not found or no certificate on file
+ *       500:
+ *         description: Server error
  */
 router.get('/spokes/:spokeId/certificate', requireAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -2719,8 +4502,59 @@ router.get('/spokes/:spokeId/certificate', requireAdmin, async (req: Request, re
 });
 
 /**
- * POST /api/federation/spokes/:spokeId/validate-certificate
- * Validate a certificate against the spoke's registered info (super_admin only)
+ * @openapi
+ * /api/federation/spokes/{spokeId}/validate-certificate:
+ *   post:
+ *     summary: Validate spoke certificate
+ *     description: Validates a certificate against the spoke's registered information and checks fingerprint match. Super admin access required.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: spokeId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Spoke identifier
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - certificatePEM
+ *             properties:
+ *               certificatePEM:
+ *                 type: string
+ *                 description: Certificate to validate
+ *     responses:
+ *       200:
+ *         description: Validation result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 validation:
+ *                   type: object
+ *                 fingerprintMatch:
+ *                   type: boolean
+ *                 registeredFingerprint:
+ *                   type: string
+ *       400:
+ *         description: certificatePEM is required
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Insufficient permissions (super_admin required)
+ *       404:
+ *         description: Spoke not found
+ *       500:
+ *         description: Validation failed
  */
 router.post('/spokes/:spokeId/validate-certificate', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     try {
@@ -2763,12 +4597,64 @@ router.post('/spokes/:spokeId/validate-certificate', requireSuperAdmin, async (r
 // ============================================
 
 /**
- * POST /api/federation/link-idp
- *
- * Create Identity Provider configuration for cross-border SSO
- * This is called by `dive federation link <CODE>` CLI command
- *
- * Automatically configures Keycloak IdP trust relationship (super_admin only)
+ * @openapi
+ * /api/federation/link-idp:
+ *   post:
+ *     summary: Link Identity Provider
+ *     description: Creates Identity Provider configuration for cross-border SSO. Called by CLI command `dive federation link <CODE>`. Automatically configures Keycloak IdP trust relationship. Super admin access required.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - localInstanceCode
+ *               - remoteInstanceCode
+ *             properties:
+ *               localInstanceCode:
+ *                 type: string
+ *                 description: Local instance ISO 3166-1 alpha-3 code
+ *               remoteInstanceCode:
+ *                 type: string
+ *                 description: Remote instance ISO 3166-1 alpha-3 code
+ *               autoMappers:
+ *                 type: boolean
+ *                 default: true
+ *                 description: Automatically configure attribute mappers
+ *               trustLevel:
+ *                 type: string
+ *                 enum: [development, partner, bilateral, national]
+ *                 default: partner
+ *     responses:
+ *       200:
+ *         description: IdP linked successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 alias:
+ *                   type: string
+ *                 displayName:
+ *                   type: string
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Invalid request or missing required fields
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Insufficient permissions (super_admin required)
+ *       404:
+ *         description: Remote instance not found
+ *       500:
+ *         description: IdP linking failed
  */
 router.post('/link-idp', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
@@ -2998,9 +4884,41 @@ async function getRemoteKeycloakPassword(instanceCode: string): Promise<string> 
 }
 
 /**
- * DELETE /api/federation/unlink-idp/:alias
- *
- * Remove Identity Provider configuration (super_admin only)
+ * @openapi
+ * /api/federation/unlink-idp/{alias}:
+ *   delete:
+ *     summary: Unlink Identity Provider
+ *     description: Removes Identity Provider configuration and terminates cross-border SSO trust relationship. Super admin access required.
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: alias
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: IdP alias to remove (typically instance code like 'fra', 'deu')
+ *     responses:
+ *       200:
+ *         description: IdP unlinked successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       403:
+ *         description: Insufficient permissions (super_admin required)
+ *       404:
+ *         description: IdP not found
+ *       500:
+ *         description: Unlinking failed
  */
 router.delete('/unlink-idp/:alias', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
     const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
