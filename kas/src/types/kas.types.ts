@@ -130,7 +130,11 @@ export type KASAuditEventType =
     | 'KEY_DENIED'         // Key release denied (ACCESS_DENIED event)
     | 'KEY_WRAPPED'        // New key wrapped (ENCRYPT event)
     | 'INTEGRITY_FAILURE'  // ZTDF integrity check failed
-    | 'POLICY_MISMATCH';   // KAS denied but PDP allowed (security event)
+    | 'POLICY_MISMATCH'    // KAS denied but PDP allowed (security event)
+    | 'FEDERATION_ALLOWED' // Federation request allowed (Phase 3.4)
+    | 'FEDERATION_DENIED'  // Federation request denied (Phase 3.4)
+    | 'FEDERATION_SUCCESS' // Federation request successful (Phase 3.4)
+    | 'FEDERATION_FAILURE'; // Federation request failed (Phase 3.4)
 
 /**
  * KAS Audit Event
