@@ -745,11 +745,16 @@ app.post('/rewrap', async (req: Request, res: Response) => {
         const { verifyPolicyBinding } = await import('./utils/crypto/policy-binding');
         const { verifyKAOSignature } = await import('./utils/crypto/kao-signature');
         const { signResult } = await import('./utils/crypto/result-signing');
+        const { kaoRouter } = await import('./utils/kao-router');
+        const { kasFederationService } = await import('./services/kas-federation.service');
+        const { responseAggregator } = await import('./utils/response-aggregator');
         
         type IRewrapRequest = import('./types/rewrap.types').IRewrapRequest;
         type IRewrapResponse = import('./types/rewrap.types').IRewrapResponse;
         type IPolicyGroupResponse = import('./types/rewrap.types').IPolicyGroupResponse;
         type IKeyAccessObjectResult = import('./types/rewrap.types').IKeyAccessObjectResult;
+        type IFederationForwardContext = import('./types/federation.types').IFederationForwardContext;
+        type IFederationMetadata = import('./types/federation.types').IFederationMetadata;
 
         // Apply middleware manually
         await new Promise<void>((resolve, reject) => {
@@ -802,6 +807,9 @@ app.post('/rewrap', async (req: Request, res: Response) => {
 
         const requestBody = req.body as IRewrapRequest;
         const responseGroups: IPolicyGroupResponse[] = [];
+        
+        // Federation enabled check
+        const federationEnabled = process.env.ENABLE_FEDERATION !== 'false';
 
         // Process each request group
         for (const requestGroup of requestBody.requests) {
@@ -811,26 +819,119 @@ app.post('/rewrap', async (req: Request, res: Response) => {
                 .digest('hex')
                 .substring(0, 16);
 
-            const results: IKeyAccessObjectResult[] = [];
+            const localResults: IKeyAccessObjectResult[] = [];
+            
+            // ============================================
+            // Phase 3.1: Separate Local and Foreign KAOs
+            // ============================================
+            
+            const { local: localKAOs, foreign: foreignKAOGroups } = kaoRouter.separateLocalAndForeign(requestGroup.keyAccessObjects);
+            
+            kasLogger.info('KAO routing completed', {
+                requestId,
+                policyId,
+                totalKAOs: requestGroup.keyAccessObjects.length,
+                localKAOs: localKAOs.length,
+                foreignKAOGroups: foreignKAOGroups.size,
+                foreignTargets: Array.from(foreignKAOGroups.keys()),
+            });
 
-            // Process each keyAccessObject
-            for (const kao of requestGroup.keyAccessObjects) {
-                try {
-                    // 1. Check if this KAO is for this KAS (by URL)
-                    const isLocal = isLocalKAS(kao.url);
-                    if (!isLocal) {
-                        // TODO: Forward to remote KAS (federation)
-                        results.push({
+            // ============================================
+            // Phase 3.2: Forward Foreign KAOs to Federated KAS
+            // ============================================
+            
+            const federationResults: any[] = [];
+            
+            if (federationEnabled && foreignKAOGroups.size > 0) {
+                kasLogger.info('Forwarding foreign KAOs to federated KAS instances', {
+                    requestId,
+                    targetCount: foreignKAOGroups.size,
+                });
+                
+                // Build federation metadata
+                const federationMetadata: IFederationMetadata = {
+                    originKasId: process.env.KAS_ID || 'kas-local',
+                    originCountry: tokenPayload.countryOfAffiliation || 'USA',
+                    federationRequestId: `fed-${requestId}`,
+                    routedVia: [],
+                    translationApplied: false,
+                    originTimestamp: new Date().toISOString(),
+                };
+                
+                // Forward to each target KAS in parallel
+                const forwardPromises = Array.from(foreignKAOGroups.entries()).map(async ([targetKasId, group]) => {
+                    if (targetKasId === 'unknown') {
+                        // Skip unknown KAS targets
+                        kasLogger.warn('Skipping unknown KAS target', {
+                            requestId,
+                            kaoCount: group.kaos.length,
+                        });
+                        return null;
+                    }
+                    
+                    const forwardContext: IFederationForwardContext = {
+                        targetKasId,
+                        targetKasUrl: group.kasUrl || '',
+                        policy,
+                        kaosToForward: group.kaos,
+                        clientPublicKey: requestBody.clientPublicKey,
+                        authHeader: authHeader,
+                        dpopHeader: req.headers['dpop'] as string,
+                        requestId,
+                        federationMetadata,
+                    };
+                    
+                    return kasFederationService.forwardRewrapRequest(forwardContext);
+                });
+                
+                const forwardResults = await Promise.allSettled(forwardPromises);
+                
+                // Collect successful and failed federation results
+                for (const result of forwardResults) {
+                    if (result.status === 'fulfilled' && result.value) {
+                        federationResults.push(result.value);
+                    } else if (result.status === 'rejected') {
+                        kasLogger.error('Federation forward promise rejected', {
+                            requestId,
+                            error: result.reason,
+                        });
+                    }
+                }
+                
+                kasLogger.info('Federation forwarding completed', {
+                    requestId,
+                    totalForwards: forwardPromises.length,
+                    successfulForwards: federationResults.filter(r => r.success).length,
+                    failedForwards: federationResults.filter(r => !r.success).length,
+                });
+            } else if (foreignKAOGroups.size > 0) {
+                kasLogger.warn('Federation disabled, cannot process foreign KAOs', {
+                    requestId,
+                    foreignKAOCount: Array.from(foreignKAOGroups.values()).reduce((sum, g) => sum + g.kaos.length, 0),
+                });
+                
+                // Create error results for all foreign KAOs
+                for (const group of foreignKAOGroups.values()) {
+                    for (const kao of group.kaos) {
+                        localResults.push({
                             keyAccessObjectId: kao.keyAccessObjectId,
                             status: 'error' as const,
-                            error: 'Federation not yet implemented for /rewrap',
-                            signature: { alg: 'RS256', sig: '' }, // Placeholder
+                            error: 'Federation is disabled (ENABLE_FEDERATION=false)',
+                            signature: { alg: 'RS256', sig: '' },
                             sid: kao.sid,
                         });
-                        continue;
                     }
+                }
+            }
 
-                    // 2. Verify keyAccessObject signature (if enabled)
+            // ============================================
+            // Process Local KAOs
+            // ============================================
+
+            // Process each local keyAccessObject
+            for (const kao of localKAOs) {
+                try {
+                    // 1. Verify keyAccessObject signature (if enabled)
                     if (process.env.ENABLE_SIGNATURE_VERIFICATION !== 'false') {
                         // TODO: Load trusted public key for signature verification
                         // For now, skip signature verification
@@ -840,10 +941,10 @@ app.post('/rewrap', async (req: Request, res: Response) => {
                         });
                     }
 
-                    // 3. Route to correct KAS private key by kid
+                    // 2. Route to correct KAS private key by kid
                     const kasPrivateKey = keyRouter.getPrivateKeyByKid(kao.kid);
                     if (!kasPrivateKey) {
-                        results.push({
+                        localResults.push({
                             keyAccessObjectId: kao.keyAccessObjectId,
                             status: 'error' as const,
                             error: `Unknown key identifier: ${kao.kid}`,
@@ -853,7 +954,7 @@ app.post('/rewrap', async (req: Request, res: Response) => {
                         continue;
                     }
 
-                    // 4. Unwrap key material
+                    // 3. Unwrap key material
                     const algorithm = process.env.KAS_WRAP_ALGORITHM || 'RSA-OAEP-256';
                     const unwrapped = await unwrapWithKASKey(
                         kao.wrappedKey,
@@ -862,7 +963,7 @@ app.post('/rewrap', async (req: Request, res: Response) => {
                         kao.kid
                     );
 
-                    // 5. Verify policyBinding (if enabled)
+                    // 4. Verify policyBinding (if enabled)
                     if (process.env.ENABLE_POLICY_BINDING !== 'false') {
                         const bindingResult = verifyPolicyBinding(
                             policy,
@@ -871,7 +972,7 @@ app.post('/rewrap', async (req: Request, res: Response) => {
                         );
 
                         if (!bindingResult.valid) {
-                            results.push({
+                            localResults.push({
                                 keyAccessObjectId: kao.keyAccessObjectId,
                                 status: 'error' as const,
                                 error: bindingResult.reason || 'Policy binding verification failed',
@@ -882,7 +983,7 @@ app.post('/rewrap', async (req: Request, res: Response) => {
                         }
                     }
 
-                    // 6. Re-evaluate policy via OPA
+                    // 5. Re-evaluate policy via OPA
                     const subject = {
                         uniqueID: tokenPayload.uniqueID || tokenPayload.sub,
                         clearance: tokenPayload.clearance,
@@ -912,7 +1013,7 @@ app.post('/rewrap', async (req: Request, res: Response) => {
 
                     const authzDecision = opaResponse.data?.result;
                     if (!authzDecision?.allow) {
-                        results.push({
+                        localResults.push({
                             keyAccessObjectId: kao.keyAccessObjectId,
                             status: 'error' as const,
                             error: authzDecision?.reason || 'Policy evaluation denied access',
@@ -922,14 +1023,14 @@ app.post('/rewrap', async (req: Request, res: Response) => {
                         continue;
                     }
 
-                    // 7. Rewrap to clientPublicKey
+                    // 6. Rewrap to clientPublicKey
                     const kasWrappedKey = await rewrapToClientKey(
                         unwrapped.keySplit,
                         requestBody.clientPublicKey,
                         algorithm
                     );
 
-                    // 8. Decrypt metadata (if present)
+                    // 7. Decrypt metadata (if present)
                     let metadata: Record<string, unknown> | undefined;
                     if (kao.encryptedMetadata) {
                         try {
@@ -943,7 +1044,7 @@ app.post('/rewrap', async (req: Request, res: Response) => {
                         }
                     }
 
-                    // 9. Build success result
+                    // 8. Build success result
                     const successResult: IKeyAccessObjectResult = {
                         keyAccessObjectId: kao.keyAccessObjectId,
                         status: 'success' as const,
@@ -953,7 +1054,7 @@ app.post('/rewrap', async (req: Request, res: Response) => {
                         signature: { alg: 'RS256', sig: '' }, // Placeholder
                     };
 
-                    // 10. Sign result
+                    // 9. Sign result
                     const signingKey = keyRouter.getPrivateKeyByKid(kao.kid);
                     if (signingKey) {
                         const resultWithoutSig = { ...successResult };
@@ -962,7 +1063,7 @@ app.post('/rewrap', async (req: Request, res: Response) => {
                         successResult.signature = signature;
                     }
 
-                    results.push(successResult);
+                    localResults.push(successResult);
 
                     kasLogger.info('Key rewrapped successfully', {
                         requestId,
@@ -977,7 +1078,7 @@ app.post('/rewrap', async (req: Request, res: Response) => {
                         error: error instanceof Error ? error.message : 'Unknown error',
                     });
 
-                    results.push({
+                    localResults.push({
                         keyAccessObjectId: kao.keyAccessObjectId,
                         status: 'error' as const,
                         error: error instanceof Error ? error.message : 'Internal processing error',
@@ -986,12 +1087,39 @@ app.post('/rewrap', async (req: Request, res: Response) => {
                     });
                 }
             }
-
-            // Add policy group response
-            responseGroups.push({
-                policyId,
-                results,
-            });
+            
+            // ============================================
+            // Phase 3.3: Aggregate Local and Federated Results
+            // ============================================
+            
+            if (federationEnabled && federationResults.length > 0) {
+                const aggregated = responseAggregator.aggregateForPolicy(
+                    policyId,
+                    localResults,
+                    federationResults,
+                    requestId
+                );
+                
+                responseGroups.push({
+                    policyId: aggregated.policyId,
+                    results: aggregated.results,
+                });
+                
+                kasLogger.info('Aggregated local and federated results', {
+                    requestId,
+                    policyId,
+                    totalResults: aggregated.results.length,
+                    localCount: aggregated.aggregationMetadata.localCount,
+                    federatedCount: aggregated.aggregationMetadata.federatedCount,
+                    downstreamKASCount: aggregated.aggregationMetadata.downstreamKASCount,
+                });
+            } else {
+                // No federation - use only local results
+                responseGroups.push({
+                    policyId,
+                    results: localResults,
+                });
+            }
         }
 
         // Build final response
@@ -1204,6 +1332,41 @@ app.get('/federation/registry', async (req: Request, res: Response) => {
 });
 
 // ============================================
+// Startup Initialization
+// ============================================
+async function initializeKASService(): Promise<void> {
+    kasLogger.info('Initializing KAS Service');
+    
+    try {
+        // Initialize MongoDB-backed KAS registry (SSOT)
+        if (process.env.ENABLE_FEDERATION !== 'false') {
+            kasLogger.info('Loading KAS registry from MongoDB');
+            const { initializeKASRegistryFromMongoDB } = await import('./utils/mongo-kas-registry-loader');
+            const loadedCount = await initializeKASRegistryFromMongoDB();
+            kasLogger.info('KAS registry loaded', {
+                loadedCount,
+                source: 'MongoDB federation_spokes',
+            });
+        } else {
+            kasLogger.info('Federation disabled, skipping KAS registry initialization');
+        }
+        
+        kasLogger.info('KAS Service initialization complete');
+    } catch (error) {
+        kasLogger.error('KAS Service initialization failed', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        
+        // Don't crash in development mode
+        if (process.env.NODE_ENV === 'production') {
+            throw error;
+        } else {
+            kasLogger.warn('Development mode: Continuing without KAS registry');
+        }
+    }
+}
+
+// ============================================
 // Start Server (HTTP or HTTPS)
 // ============================================
 if (HTTPS_ENABLED) {
@@ -1214,7 +1377,8 @@ if (HTTPS_ENABLED) {
             cert: fs.readFileSync(path.join(certPath, process.env.CERT_FILE || 'certificate.pem')),
         };
 
-        https.createServer(httpsOptions, app).listen(PORT, () => {
+        https.createServer(httpsOptions, app).listen(PORT, async () => {
+            await initializeKASService();
             kasLogger.info(`🔑 KAS Service started with HTTPS`, {
                 port: PORT,
                 version: '1.0.0-acp240',
@@ -1226,6 +1390,7 @@ if (HTTPS_ENABLED) {
                 hsm: 'mock (dev)',
                 environment: process.env.NODE_ENV || 'development',
                 compliance: 'ACP-240 section 5.2',
+                federationEnabled: process.env.ENABLE_FEDERATION !== 'false',
             });
         });
     } catch (error) {
@@ -1233,7 +1398,8 @@ if (HTTPS_ENABLED) {
             error: error instanceof Error ? error.message : 'Unknown error'
         });
         // Fallback to HTTP if certificates are missing
-        app.listen(PORT, () => {
+        app.listen(PORT, async () => {
+            await initializeKASService();
             kasLogger.warn(`⚠️  KAS Service started with HTTP (HTTPS failed)`, {
                 port: PORT,
                 version: '1.0.0-acp240',
@@ -1244,11 +1410,13 @@ if (HTTPS_ENABLED) {
                 hsm: 'mock (dev)',
                 environment: process.env.NODE_ENV || 'development',
                 compliance: 'ACP-240 section 5.2',
+                federationEnabled: process.env.ENABLE_FEDERATION !== 'false',
             });
         });
     }
 } else {
-    app.listen(PORT, () => {
+    app.listen(PORT, async () => {
+        await initializeKASService();
         kasLogger.info(`🔑 KAS Service started with HTTP`, {
             port: PORT,
             version: '1.0.0-acp240',
@@ -1259,6 +1427,7 @@ if (HTTPS_ENABLED) {
             hsm: 'mock (dev)',
             environment: process.env.NODE_ENV || 'development',
             compliance: 'ACP-240 section 5.2',
+            federationEnabled: process.env.ENABLE_FEDERATION !== 'false',
         });
     });
 }
