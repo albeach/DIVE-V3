@@ -1,9 +1,9 @@
 /**
  * Response Aggregation Utility
- * 
+ *
  * Aggregates responses from multiple KAS instances (local + federated)
  * Implements Phase 3.3: Response Aggregation
- * 
+ *
  * Reference: kas/IMPLEMENTATION-HANDOFF.md Phase 3.3
  * Trace: KAS-REQ-102 (Response Aggregation), KAS-REQ-103 (Signature Preservation)
  */
@@ -26,7 +26,7 @@ import {
 export class ResponseAggregator {
     /**
      * Aggregate local and federated results for a single policy
-     * 
+     *
      * CRITICAL: Preserves per-result signatures from downstream KAS (does NOT re-sign)
      */
     aggregateForPolicy(
@@ -36,19 +36,19 @@ export class ResponseAggregator {
         requestId: string
     ): IAggregatedResponse {
         const startTime = Date.now();
-        
+
         kasLogger.debug('Aggregating responses for policy', {
             requestId,
             policyId,
             localResultCount: localResults.length,
             federationResultCount: federationResults.length,
         });
-        
+
         // Collect all results
         const allResults: IKeyAccessObjectResult[] = [...localResults];
         const errors: string[] = [];
         let federatedCount = 0;
-        
+
         // Extract results from each federation response
         for (const fedResult of federationResults) {
             if (fedResult.success && fedResult.response) {
@@ -58,18 +58,18 @@ export class ResponseAggregator {
                     policyId,
                     requestId
                 );
-                
+
                 // CRITICAL: Preserve signatures from downstream KAS (do NOT re-sign)
                 allResults.push(...federatedResults);
                 federatedCount += federatedResults.length;
-                
+
                 kasLogger.debug('Extracted results from federated KAS', {
                     requestId,
                     kasId: fedResult.kasId,
                     resultCount: federatedResults.length,
                     successCount: federatedResults.filter(r => r.status === 'success').length,
                 });
-                
+
             } else if (fedResult.error) {
                 // Federation failed - create error results for affected KAOs
                 const errorResults = this.createErrorResultsForFailedKAS(
@@ -77,10 +77,10 @@ export class ResponseAggregator {
                     fedResult.error.message,
                     fedResult.kasId
                 );
-                
+
                 allResults.push(...errorResults);
                 errors.push(`KAS ${fedResult.kasId}: ${fedResult.error.message}`);
-                
+
                 kasLogger.warn('Federation failure, created error results', {
                     requestId,
                     kasId: fedResult.kasId,
@@ -88,9 +88,9 @@ export class ResponseAggregator {
                 });
             }
         }
-        
+
         const aggregationTimeMs = Date.now() - startTime;
-        
+
         kasLogger.info('Response aggregation complete', {
             requestId,
             policyId,
@@ -101,7 +101,7 @@ export class ResponseAggregator {
             errorCount: allResults.filter(r => r.status === 'error').length,
             aggregationTimeMs,
         });
-        
+
         return {
             policyId,
             results: allResults,
@@ -114,7 +114,7 @@ export class ResponseAggregator {
             },
         };
     }
-    
+
     /**
      * Extract results from federated response for a specific policy
      * Preserves signatures from downstream KAS
@@ -125,7 +125,7 @@ export class ResponseAggregator {
         requestId: string
     ): IKeyAccessObjectResult[] {
         const results: IKeyAccessObjectResult[] = [];
-        
+
         // Find matching policy group in response
         for (const responseGroup of response.responses) {
             // Match by policyId (exact match or hash match)
@@ -141,7 +141,7 @@ export class ResponseAggregator {
                 }
             }
         }
-        
+
         if (results.length === 0) {
             kasLogger.warn('No matching policy group found in federated response', {
                 requestId,
@@ -149,10 +149,10 @@ export class ResponseAggregator {
                 availablePolicyIds: response.responses.map(r => r.policyId),
             });
         }
-        
+
         return results;
     }
-    
+
     /**
      * Check if two policy IDs represent the same policy
      * Handles cases where policy IDs might be hashes or canonical identifiers
@@ -162,16 +162,16 @@ export class ResponseAggregator {
         if (policyId1 === policyId2) {
             return true;
         }
-        
+
         // Both are hashes of same length (likely same policy)
         if (policyId1.length === policyId2.length && policyId1.length >= 16) {
             // Consider this a mismatch - require exact hash match
             return false;
         }
-        
+
         return false;
     }
-    
+
     /**
      * Create error results for KAOs that couldn't be processed due to federation failure
      */
@@ -190,7 +190,7 @@ export class ResponseAggregator {
             },
         }));
     }
-    
+
     /**
      * Aggregate multiple policy groups
      */
@@ -202,7 +202,7 @@ export class ResponseAggregator {
             results: agg.results,
         }));
     }
-    
+
     /**
      * Validate aggregated response
      * Ensures no duplicate keyAccessObjectIds and all results have signatures
@@ -213,7 +213,7 @@ export class ResponseAggregator {
     ): { valid: boolean; errors: string[] } {
         const errors: string[] = [];
         const seenKaoIds = new Set<string>();
-        
+
         for (const group of response) {
             for (const result of group.results) {
                 // Check for duplicate keyAccessObjectId
@@ -221,19 +221,19 @@ export class ResponseAggregator {
                     errors.push(`Duplicate keyAccessObjectId: ${result.keyAccessObjectId}`);
                 }
                 seenKaoIds.add(result.keyAccessObjectId);
-                
+
                 // Check for missing signature
                 if (!result.signature || !result.signature.alg) {
                     errors.push(`Missing signature for keyAccessObjectId: ${result.keyAccessObjectId}`);
                 }
-                
+
                 // Check for missing required fields
                 if (!result.status) {
                     errors.push(`Missing status for keyAccessObjectId: ${result.keyAccessObjectId}`);
                 }
             }
         }
-        
+
         if (errors.length > 0) {
             kasLogger.warn('Aggregated response validation failed', {
                 requestId,
@@ -241,13 +241,13 @@ export class ResponseAggregator {
                 errors,
             });
         }
-        
+
         return {
             valid: errors.length === 0,
             errors,
         };
     }
-    
+
     /**
      * Get statistics from aggregated response
      */
@@ -278,7 +278,7 @@ export class ResponseAggregator {
             (sum, agg) => sum + agg.aggregationMetadata.aggregationTimeMs,
             0
         );
-        
+
         return {
             totalResults,
             successResults,

@@ -160,6 +160,7 @@ async function defaultFetchFn<T>(params: {
         instances: params.filters.instances, // This triggers federated search in Next.js proxy
         encrypted: params.filters.encrypted,
         dateRange: params.filters.dateRange,
+        fileTypes: params.filters.fileTypes, // Add fileTypes filter
       },
       sort: params.sort,
       pagination: {
@@ -191,6 +192,7 @@ function generateFacetsFromResults(results: any[]): IFacets {
   const coiCounts: Record<string, number> = {};
   const instanceCounts: Record<string, number> = {};
   const encryptionCounts: Record<string, number> = { encrypted: 0, unencrypted: 0 };
+  const fileTypeCounts: Record<string, number> = {};
 
   for (const resource of results) {
     // Classification
@@ -219,6 +221,10 @@ function generateFacetsFromResults(results: any[]): IFacets {
     } else {
       encryptionCounts.unencrypted++;
     }
+
+    // File Type
+    const fileCategory = resource.fileCategory || resource.ztdf?.manifest?.objectType || 'text';
+    fileTypeCounts[fileCategory] = (fileTypeCounts[fileCategory] || 0) + 1;
   }
 
   return {
@@ -227,7 +233,7 @@ function generateFacetsFromResults(results: any[]): IFacets {
     cois: Object.entries(coiCounts).map(([value, count]) => ({ value, count })),
     instances: Object.entries(instanceCounts).map(([value, count]) => ({ value, count })),
     encryptionStatus: Object.entries(encryptionCounts).map(([value, count]) => ({ value, count })),
-    fileTypes: [], // Empty for now - file type facets not yet implemented
+    fileTypes: Object.entries(fileTypeCounts).map(([value, count]) => ({ value, count })),
   };
 }
 

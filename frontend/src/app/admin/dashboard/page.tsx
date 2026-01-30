@@ -226,7 +226,7 @@ export default function AdminDashboard() {
                                     <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
                                         <span>⏰</span> Pending Actions
                                     </h3>
-                                    
+
                                     {/* Certificate Expiry Warnings */}
                                     <CertificateExpiryWarnings
                                         certificates={[

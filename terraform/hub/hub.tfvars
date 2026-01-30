@@ -126,6 +126,16 @@ nzl = {
     client_secret         = ""  # Loaded from GCP: dive-v3-federation-nzl-usa
     disable_trust_manager = true
   }
+svk = {
+    instance_code         = "SVK"
+    instance_name         = "SVK Instance"
+    idp_url               = "https://localhost:8469"
+    idp_internal_url      = "https://dive-spoke-svk-keycloak:8443"
+    frontend_url          = "https://localhost:3026"
+    enabled               = true
+    client_secret         = ""  # Loaded from GCP: dive-v3-federation-svk-usa
+    disable_trust_manager = true
+  }
 }
 
 # =============================================================================

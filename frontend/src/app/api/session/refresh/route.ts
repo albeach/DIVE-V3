@@ -104,17 +104,30 @@ export async function POST(request: NextRequest) {
                 );
             }
 
-            // Update account with new tokens
+            // Validate refresh token rotation - Keycloak must return new refresh token
+            if (!tokens.refresh_token) {
+                console.error('[SessionRefresh] No new refresh token received from Keycloak');
+                return NextResponse.json(
+                    {
+                        success: false,
+                        error: 'MissingRefreshToken',
+                        message: 'Token rotation failed - no refresh token received'
+                    },
+                    { status: 500 }
+                );
+            }
+
+            // Update account with new tokens (refresh token rotation enforced)
             await updateAccountTokensByUserId(session.user.id, {
                 access_token: tokens.access_token,
                 id_token: tokens.id_token,
                 expires_at: Math.floor(Date.now() / 1000) + tokens.expires_in,
-                refresh_token: tokens.refresh_token || account.refresh_token,
+                refresh_token: tokens.refresh_token,  // Always use new token from rotation
             });
 
-            // FIX #2: Update database session expiry to match token refresh
-            // Extend session by 60 minutes from now
-            const newSessionExpiry = new Date(Date.now() + 60 * 60 * 1000);
+            // Extend database session by 8 hours to align with NextAuth maxAge
+            // This prevents premature NextAuth session expiration
+            const newSessionExpiry = new Date(Date.now() + 8 * 60 * 60 * 1000);  // +8 hours
             await db.update(sessions)
                 .set({ expires: newSessionExpiry })
                 .where(eq(sessions.userId, session.user.id));

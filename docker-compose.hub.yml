@@ -114,7 +114,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: keycloak_db
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql  # Mount parent dir to prevent anonymous volume
       - ./scripts/setup/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
       - ./scripts/postgres-init:/scripts/postgres-init:ro
     networks:
@@ -378,7 +378,7 @@ services:
       - .env.hub
     environment:
       NODE_ENV: development  # Development mode for better debugging
-      DEBUG: "*"
+      LOG_LEVEL: warn  # Reduce log verbosity (info/warn/error)
       PORT: "4000"
       # Heap limit only in NODE_OPTIONS (report flags must be in command - Node disallows them in NODE_OPTIONS)
       NODE_OPTIONS: "--max-old-space-size=4096"
@@ -399,7 +399,9 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD_USA}
       REDIS_URL: redis://:${REDIS_PASSWORD_USA}@redis:6379
       # Shared blacklist Redis
-      BLACKLIST_REDIS_URL: redis://:${REDIS_PASSWORD_BLACKLIST}@shared-token-store:6379
+      # Phase 2: Token Blacklist (local development uses dive-hub-redis)
+      # For production, use shared-token-store for cross-instance revocation
+      BLACKLIST_REDIS_URL: redis://:${REDIS_PASSWORD_BLACKLIST}@dive-hub-redis:6379
       # NOTE: Spoke Keycloak admin passwords come from spoke registration, NOT environment
       # The spoke provides its password during registration, stored in MongoDB
       NEXT_PUBLIC_BASE_URL: https://localhost:3000

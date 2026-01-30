@@ -1519,10 +1519,264 @@ function getKASServersForInstance(kasRegistry: IKASRegistry, instanceCode: strin
 }
 
 // ============================================
-// COI TEMPLATES (28+ VALIDATED TEMPLATES)
+// DYNAMIC COI TEMPLATE BUILDER (MongoDB SSOT)
 // ============================================
 
-const COI_TEMPLATES: ICOITemplate[] = [
+/**
+ * Build COI templates dynamically from MongoDB coi_definitions collection
+ * This eliminates hardcoded country arrays and ensures SSOT consistency
+ *
+ * @param db MongoDB database connection
+ * @returns Array of COI templates with weights and instance affinity
+ */
+async function buildCoiTemplatesFromDatabase(db: any): Promise<ICOITemplate[]> {
+    const coiCollection = db.collection('coi_definitions');
+    const coiDefs = await coiCollection.find({ enabled: true }).toArray();
+
+    console.log(`📚 Building COI templates from MongoDB (${coiDefs.length} definitions)`);
+
+    const templates: ICOITemplate[] = [];
+
+    // Helper to get COI members
+    const getMembers = (coiId: string): string[] => {
+        const coi = coiDefs.find((c: any) => c.coiId === coiId);
+        return coi?.memberCountries || coi?.members || [];
+    };
+
+    // ============================================
+    // US-ONLY templates (7%)
+    // ============================================
+    const usOnlyMembers = getMembers('US-ONLY');
+    if (usOnlyMembers.length > 0) {
+        templates.push(
+            {
+                coi: ['US-ONLY'],
+                coiOperator: 'ALL',
+                releasabilityTo: usOnlyMembers,
+                caveats: ['NOFORN'],
+                description: 'US-ONLY with NOFORN caveat',
+                weight: 3.5,
+                industryAllowed: false,
+                instanceAffinity: ['USA']
+            },
+            {
+                coi: ['US-ONLY'],
+                coiOperator: 'ALL',
+                releasabilityTo: usOnlyMembers,
+                caveats: [],
+                description: 'US-only (no foreign release)',
+                weight: 3.5,
+                industryAllowed: true,
+                instanceAffinity: ['USA']
+            }
+        );
+    }
+
+    // ============================================
+    // Bilateral COIs (11%)
+    // ============================================
+    const bilaterals = [
+        { id: 'CAN-US', weight: 3.7, affinity: ['USA'] },
+        { id: 'GBR-US', weight: 3.7, affinity: ['USA', 'GBR'] },
+        { id: 'FRA-US', weight: 3.6, affinity: ['USA', 'FRA'] },
+        { id: 'DEU-US', weight: 3.6, affinity: ['USA', 'DEU'] }
+    ];
+
+    for (const bil of bilaterals) {
+        const members = getMembers(bil.id);
+        if (members.length > 0) {
+            templates.push({
+                coi: [bil.id],
+                coiOperator: 'ALL',
+                releasabilityTo: members,
+                caveats: [],
+                description: `${bil.id} bilateral`,
+                weight: bil.weight,
+                industryAllowed: true,
+                instanceAffinity: bil.affinity
+            });
+        }
+    }
+
+    // ============================================
+    // Multilateral COIs
+    // ============================================
+    const multilaterals = [
+        { id: 'FVEY', weight: 7, industry: false, affinity: ['USA', 'GBR'] },
+        { id: 'AUKUS', weight: 4, industry: false, affinity: ['GBR', 'USA', 'AUS'] },
+        { id: 'NATO', weight: 8, industry: false, affinityFromMembers: true },
+        { id: 'NATO-COSMIC', weight: 3, industry: false, affinity: ['USA', 'GBR', 'FRA', 'DEU'] },
+        { id: 'EU-RESTRICTED', weight: 5, industry: false, affinityFromMembers: true },
+        { id: 'QUAD', weight: 4, industry: false, affinity: ['USA', 'AUS', 'IND', 'JPN'] }
+    ];
+
+    for (const multi of multilaterals) {
+        const members = getMembers(multi.id);
+        if (members.length > 0) {
+            templates.push({
+                coi: [multi.id],
+                coiOperator: 'ALL',
+                releasabilityTo: members,
+                caveats: [],
+                description: `${multi.id} membership`,
+                weight: multi.weight,
+                industryAllowed: multi.industry,
+                instanceAffinity: multi.affinityFromMembers ? members : multi.affinity
+            });
+        }
+    }
+
+    // ============================================
+    // Combatant Commands (16%)
+    // ============================================
+    const cocoms = [
+        { id: 'NORTHCOM', weight: 3.2, industry: true },
+        { id: 'EUCOM', weight: 3.4, industry: false },
+        { id: 'PACOM', weight: 3.3, industry: false },
+        { id: 'CENTCOM', weight: 3.1, industry: false },
+        { id: 'SOCOM', weight: 3.0, industry: false }
+    ];
+
+    for (const cocom of cocoms) {
+        const members = getMembers(cocom.id);
+        if (members.length > 0) {
+            templates.push({
+                coi: [cocom.id],
+                coiOperator: 'ALL',
+                releasabilityTo: members,
+                caveats: [],
+                description: `${cocom.id} theater`,
+                weight: cocom.weight,
+                industryAllowed: cocom.industry,
+                instanceAffinity: ['USA']
+            });
+        }
+    }
+
+    // ============================================
+    // Program COIs (18%)
+    // ============================================
+    const programs = [
+        { id: 'Alpha', relTo: ['USA', 'GBR', 'FRA'], weight: 6 },
+        { id: 'Beta', relTo: ['USA', 'DEU'], weight: 6 },
+        { id: 'Gamma', relTo: ['USA', 'CAN'], weight: 6 }
+    ];
+
+    for (const prog of programs) {
+        if (coiDefs.find((c: any) => c.coiId === prog.id)) {
+            templates.push({
+                coi: [prog.id],
+                coiOperator: 'ALL',
+                releasabilityTo: prog.relTo,
+                caveats: [],
+                description: `${prog.id} classified program`,
+                weight: prog.weight,
+                industryAllowed: false,
+                instanceAffinity: prog.relTo
+            });
+        }
+    }
+
+    // ============================================
+    // Multi-COI templates (ANY operator) - 10%
+    // ============================================
+    const multiCOIs = [
+        { cois: ['NATO', 'QUAD'], weight: 2.5 },
+        { cois: ['EUCOM', 'PACOM'], weight: 2.5 },
+        { cois: ['NORTHCOM', 'EUCOM'], weight: 2.5 },
+        { cois: ['Alpha', 'FVEY'], weight: 2.5 }
+    ];
+
+    for (const config of multiCOIs) {
+        const allMembers = new Set<string>();
+        let hasAll = true;
+
+        for (const coiId of config.cois) {
+            const members = getMembers(coiId);
+            if (members.length === 0) {
+                hasAll = false;
+                break;
+            }
+            members.forEach(m => allMembers.add(m));
+        }
+
+        if (hasAll) {
+            templates.push({
+                coi: config.cois,
+                coiOperator: 'ANY',
+                releasabilityTo: Array.from(allMembers),
+                caveats: [],
+                description: `${config.cois.join(' or ')} membership`,
+                weight: config.weight,
+                industryAllowed: false
+            });
+        }
+    }
+
+    // ============================================
+    // No-COI templates (20%)
+    // ============================================
+    templates.push(
+        {
+            coi: [],
+            coiOperator: 'ALL',
+            releasabilityTo: ['USA', 'FRA', 'DEU', 'GBR', 'CAN'],
+            caveats: [],
+            description: 'No COI - industry releasability',
+            weight: 7,
+            industryAllowed: true,
+            instanceAffinity: ['USA', 'FRA', 'GBR', 'DEU']
+        },
+        {
+            coi: [],
+            coiOperator: 'ALL',
+            releasabilityTo: ['USA', 'GBR', 'CAN', 'AUS'],
+            caveats: [],
+            description: 'No COI - Five Eyes subset',
+            weight: 7,
+            industryAllowed: true,
+            instanceAffinity: ['USA', 'GBR']
+        }
+    );
+
+    const fveyMembers = getMembers('FVEY');
+    if (fveyMembers.length > 0) {
+        templates.push({
+            coi: [],
+            coiOperator: 'ALL',
+            releasabilityTo: fveyMembers,
+            caveats: [],
+            description: 'No COI - FVEY releasability',
+            weight: 3,
+            industryAllowed: true
+        });
+    }
+
+    const natoMembers = getMembers('NATO');
+    if (natoMembers.length > 0) {
+        templates.push({
+            coi: [],
+            coiOperator: 'ALL',
+            releasabilityTo: ['USA', 'GBR', 'FRA', 'DEU', 'CAN', 'HUN', 'POL', 'ROU'],
+            caveats: [],
+            description: 'No COI - NATO subset',
+            weight: 3.4,
+            industryAllowed: true,
+            instanceAffinity: ['USA', 'FRA', 'GBR', 'DEU']
+        });
+    }
+
+    console.log(`✅ Built ${templates.length} COI templates from MongoDB SSOT`);
+    return templates;
+}
+
+// ============================================
+// COI TEMPLATES (DYNAMICALLY LOADED FROM MONGODB)
+// ============================================
+
+// Templates are built from MongoDB coi_definitions at runtime
+// See buildCoiTemplatesFromDatabase() function above
+let COI_TEMPLATES: ICOITemplate[] = [
     // ============================================
     // US-ONLY templates (7%) - USA instance affinity
     // ============================================
@@ -2823,6 +3077,19 @@ async function main() {
     const kasRegistry = await loadKASRegistry();
     console.log(`   Found ${Object.keys(federationRegistry.instances).length} instances`);
     console.log(`   Found ${kasRegistry.kasServers?.length || 0} KAS servers\n`);
+
+    // Build COI templates from MongoDB (SSOT)
+    console.log('🔧 Building COI templates from MongoDB...');
+
+    // Use Hub MongoDB URL from environment
+    const mongoUrl = process.env.MONGODB_URL || `mongodb://admin:${await getMongoDBPassword('USA')}@localhost:27017/dive-v3-hub?authSource=admin`;
+    const dbName = process.env.MONGODB_DATABASE || 'dive-v3-hub';
+
+    const client = new MongoClient(mongoUrl);
+    await client.connect();
+    const db = client.db(dbName);
+    COI_TEMPLATES = await buildCoiTemplatesFromDatabase(db);
+    await client.close();  // Close after loading templates
 
     // Validate COI templates
     console.log('✅ Validating COI templates...');

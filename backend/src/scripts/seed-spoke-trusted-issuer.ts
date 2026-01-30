@@ -109,6 +109,8 @@ function getPortOffset(code: string): number {
     ESP: 80,   // Spoke: 8523
     NLD: 90,   // Spoke: 8533
     BEL: 100,  // Spoke: 8543
+    POL: 110,  // Spoke: 8553
+    SVK: 26,   // Spoke: 8469 (240 offset from common.sh maps to port 8469)
   };
   return offsets[code] || 0;
 }

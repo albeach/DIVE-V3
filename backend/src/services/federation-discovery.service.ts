@@ -123,6 +123,15 @@ class FederationDiscoveryService {
             const approvedSpokes = await hubSpokeRegistry.listActiveSpokes();
 
             for (const spoke of approvedSpokes) {
+                // Validate required fields
+                if (!spoke.apiUrl || !spoke.instanceCode) {
+                    logger.warn('Skipping spoke with missing required fields', {
+                        instanceCode: spoke.instanceCode,
+                        hasApiUrl: !!spoke.apiUrl
+                    });
+                    continue;
+                }
+
                 // Construct frontend URL from API URL (typically API port - 1000)
                 const frontendUrl = spoke.apiUrl.replace(/:\d+$/, (match) => {
                     const apiPort = parseInt(match.substring(1));
@@ -131,14 +140,14 @@ class FederationDiscoveryService {
 
                 instances.push({
                     code: spoke.instanceCode,
-                    name: spoke.name,
+                    name: spoke.name || spoke.instanceCode,
                     type: 'spoke',
                     enabled: spoke.status === 'approved',
                     endpoints: {
                         api: spoke.apiUrl,
-                        apiInternal: (spoke as any).internalApiUrl,
+                        apiInternal: (spoke as any).internalApiUrl || spoke.apiUrl,
                         frontend: frontendUrl,
-                        keycloak: spoke.idpPublicUrl
+                        keycloak: spoke.idpPublicUrl || ''
                     },
                     services: {
                         backend: {

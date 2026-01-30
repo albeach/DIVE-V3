@@ -12,6 +12,15 @@ if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     export DIVE_COMMON_LOADED=1
 fi
 
+# Load secret management functions (needed for GCP secret loading)
+if [ -z "${SPOKE_SECRETS_LOADED:-}" ]; then
+    if source "$(dirname "${BASH_SOURCE[0]}")/spoke-secrets.sh" 2>/dev/null; then
+        log_verbose "spoke-secrets.sh loaded successfully" >/dev/null
+    else
+        log_verbose "spoke-secrets.sh not available (secret functions may not work)" >/dev/null
+    fi
+fi
+
 # =============================================================================
 # MAIN PREFLIGHT VALIDATION
 # =============================================================================
@@ -143,14 +152,14 @@ preflight_check_hub_reachable() {
 # =============================================================================
 
 ##
-# Check if all required secrets are available
+# Check if all required secrets are available (and attempt to load them)
 #
 # Arguments:
 #   $1 - Instance code (uppercase)
 #
 # Returns:
-#   0 - All secrets available
-#   1 - Missing secrets
+#   0 - All secrets available (or successfully loaded)
+#   1 - Missing secrets (and cannot be loaded)
 ##
 preflight_check_secrets_available() {
     local instance_code="$1"
@@ -169,43 +178,39 @@ preflight_check_secrets_available() {
 
     log_verbose "Checking secret availability (GCP → Environment → .env)..."
 
+    # First, try to load secrets from GCP if gcloud is available
+    if command -v gcloud &>/dev/null && type spoke_secrets_load_from_gcp &>/dev/null; then
+        log_verbose "Attempting to load secrets from GCP..."
+        if spoke_secrets_load_from_gcp "$instance_code" 2>/dev/null; then
+            log_verbose "Successfully loaded secrets from GCP"
+            # Secrets are now in environment, continue to validation below
+        else
+            log_verbose "GCP secret loading failed, will check other sources"
+        fi
+    fi
+
     # Check each secret
     for secret_base in "${required_secrets[@]}"; do
         local has_secret=false
         local secret_var="${secret_base}_${instance_code}"
 
-        # Check GCP Secret Manager first (primary source)
-        if command -v gcloud &>/dev/null; then
-            # Convert to lowercase and replace underscores with hyphens for GCP naming
-            local secret_lower="${secret_base,,}"
-            secret_lower="${secret_lower//_/-}"
-            local gcp_secret_name="dive-v3-${secret_lower}-${instance_code,,}"
-            log_verbose "  Checking GCP: $gcp_secret_name"
-
-            # Test the actual command
-            if gcloud secrets describe "$gcp_secret_name" --project=dive25 >/dev/null 2>&1; then
-                has_secret=true
-                log_verbose "    ✓ Found in GCP"
-            else
-                local exit_code=$?
-                log_verbose "    ✗ Not found in GCP (exit code: $exit_code)"
-            fi
-        else
-            log_verbose "  gcloud command not available"
-        fi
-
-        # If not in GCP, check if already loaded in environment
-        if [ "$has_secret" = "false" ] && [ -n "${!secret_var:-}" ]; then
+        # Check if already loaded in environment (from GCP or elsewhere)
+        if [ -n "${!secret_var:-}" ]; then
             has_secret=true
             log_verbose "  ✓ $secret_var loaded in environment"
         fi
 
-        # If neither, check .env file (dev mode fallback)
+        # If not in environment, check .env file (dev mode fallback)
         if [ "$has_secret" = "false" ]; then
             local env_file="${DIVE_ROOT}/instances/${instance_code,,}/.env"
             if [ -f "$env_file" ] && grep -q "^${secret_var}=" "$env_file"; then
-                has_secret=true
-                log_verbose "  ✓ $secret_var available in .env"
+                # Load from .env
+                local value=$(grep "^${secret_var}=" "$env_file" | cut -d'=' -f2-)
+                if [ -n "$value" ]; then
+                    export "${secret_var}=${value}"
+                    has_secret=true
+                    log_verbose "  ✓ $secret_var loaded from .env"
+                fi
             fi
         fi
 
@@ -217,12 +222,34 @@ preflight_check_secrets_available() {
     if [ ${#missing_secrets[@]} -gt 0 ]; then
         log_error "Missing required secrets: ${missing_secrets[*]}"
 
+        # Try to generate new secrets as a last resort
+        if type spoke_secrets_generate &>/dev/null; then
+            log_info "Attempting to generate missing secrets..."
+            if spoke_secrets_generate "$instance_code" 2>/dev/null; then
+                log_success "Generated missing secrets"
+
+                # Upload to GCP if available
+                if command -v gcloud &>/dev/null && type spoke_secrets_upload_to_gcp &>/dev/null; then
+                    spoke_secrets_upload_to_gcp "$instance_code" 2>/dev/null || log_verbose "Could not upload to GCP"
+                fi
+
+                # Save to .env
+                if type spoke_secrets_sync_to_env &>/dev/null; then
+                    spoke_secrets_sync_to_env "$instance_code" 2>/dev/null || log_verbose "Could not sync to .env"
+                fi
+
+                return 0
+            else
+                log_error "Failed to generate secrets"
+            fi
+        fi
+
         if is_production_mode; then
             log_error "Production mode requires GCP Secret Manager"
             log_error "Create secrets: ./dive secrets create $instance_code"
             return 1
         else
-            log_error "Development mode requires .env file with secrets"
+            log_error "Could not load or generate secrets"
             log_error "Sync secrets: ./dive secrets sync $instance_code"
             return 1
         fi

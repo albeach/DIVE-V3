@@ -18,9 +18,20 @@
     "releasability": "Releasability",
     "coi": "Community of Interest",
     "dateRange": "Date Range",
+    "fileType": "File Type",
     "encrypted": "Encrypted Resources Only",
     "apply": "Apply Filters",
     "reset": "Reset"
+  },
+  "fileTypes": {
+    "documents": "Documents",
+    "images": "Images",
+    "videos": "Videos",
+    "audio": "Audio",
+    "structured": "Structured",
+    "archives": "Archives",
+    "text": "Text",
+    "code": "Code"
   },
   "table": {
     "title": "Title",

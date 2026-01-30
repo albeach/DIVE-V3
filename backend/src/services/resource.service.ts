@@ -87,28 +87,10 @@ function isZTDFResource(resource: any): resource is IZTDFResource {
 }
 
 /**
- * Extract legacy fields from ZTDF resource for backward compatibility
+ * Extract fields from ZTDF resource
  */
 function extractLegacyFields(ztdfResource: IZTDFResource): IResource {
-    // If legacy fields are stored, use them
-    if (ztdfResource.legacy) {
-        return {
-            resourceId: ztdfResource.resourceId,
-            title: ztdfResource.title,
-            classification: ztdfResource.legacy.classification,
-            releasabilityTo: ztdfResource.legacy.releasabilityTo,
-            COI: ztdfResource.legacy.COI,
-            creationDate: ztdfResource.legacy.creationDate,
-            encrypted: ztdfResource.legacy.encrypted,
-            content: ztdfResource.legacy.content,
-            encryptedContent: ztdfResource.legacy.encryptedContent,
-            createdAt: ztdfResource.createdAt,
-            updatedAt: ztdfResource.updatedAt,
-            releasableToIndustry: ztdfResource.legacy.releasableToIndustry // Industry access control
-        };
-    }
-
-    // Otherwise, extract from ZTDF structure
+    // Extract from ZTDF structure (single source of truth)
     const { ztdf } = ztdfResource;
     return {
         resourceId: ztdfResource.resourceId,
@@ -312,11 +294,7 @@ export async function searchResources(options: ISearchOptions): Promise<IZTDFRes
 
         // COI filter (resource must include this COI)
         if (options.coi) {
-            filter.$or = filter.$or || [];
-            filter.$or.push(
-                { 'ztdf.policy.securityLabel.COI': options.coi },
-                { COI: options.coi }
-            );
+            filter['ztdf.policy.securityLabel.COI'] = options.coi;
         }
 
         // Origin realm filter

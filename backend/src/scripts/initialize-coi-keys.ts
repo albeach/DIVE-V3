@@ -1,12 +1,12 @@
 /**
  * Initialize COI Keys Database
- * 
+ *
  * Migration script to populate MongoDB with COI Keys from existing
  * COI_MEMBERSHIP definitions in coi-validation.service.ts
- * 
+ *
  * This creates the centralized COI registry and establishes the
  * single source of truth for COI metadata.
- * 
+ *
  * Date: October 21, 2025
  */
 
@@ -22,6 +22,15 @@ const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
  * Migrated from COI_MEMBERSHIP + compliance.controller.ts + seed data
  */
 const COI_DEFINITIONS: ICreateCOIKeyRequest[] = [
+    {
+        coiId: 'DEFAULT',
+        name: 'Default/Unspecified',
+        description: 'Default COI for resources without specific community restrictions. Used as fallback when no COI is specified.',
+        memberCountries: [], // Open to all countries (no restrictions)
+        status: 'active',
+        color: '#9CA3AF', // Gray
+        icon: '📄'
+    },
     {
         coiId: 'FVEY',
         name: 'Five Eyes',
@@ -268,7 +277,7 @@ async function main() {
         console.log('✅ Connected to MongoDB\n');
 
         const db = client.db(DB_NAME);
-        
+
         // SSOT: Use coi_definitions collection (matches coi-definition.model.ts)
         // The coi_keys collection is legacy and no longer used
         const collection = db.collection('coi_definitions');

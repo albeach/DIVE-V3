@@ -1,17 +1,17 @@
 /**
  * Migrate COI Capitalization
- * 
+ *
  * Updates all MongoDB documents to reflect the new COI capitalization:
  * - ALPHA → Alpha
  * - BETA → Beta
  * - GAMMA → Gamma
- * 
+ *
  * This migration affects:
  * 1. resources collection (document COI arrays)
  * 2. coi_keys collection (coiId and name fields)
  * 3. authorization_logs collection (COI references in decision logs)
  * 4. kas_keys collection (COI references)
- * 
+ *
  * Date: November 6, 2025
  */
 
@@ -59,13 +59,9 @@ async function migrateCOICapitalization(): Promise<MigrationStats> {
         console.log('📄 Migrating resources collection...');
         const resourcesCollection = db.collection('resources');
 
-        // Find all documents with old COI capitalization (both ZTDF and legacy paths)
+        // Find all documents with old COI capitalization (ZTDF path only)
         const resourcesWithOldCOI = await resourcesCollection.find({
-            $or: [
-                { 'ztdf.policy.securityLabel.COI': { $in: ['ALPHA', 'BETA', 'GAMMA'] } },
-                { 'legacy.COI': { $in: ['ALPHA', 'BETA', 'GAMMA'] } },
-                { 'securityLabel.COI': { $in: ['ALPHA', 'BETA', 'GAMMA'] } }
-            ]
+            'ztdf.policy.securityLabel.COI': { $in: ['ALPHA', 'BETA', 'GAMMA'] }
         }).toArray();
 
         console.log(`   Found ${resourcesWithOldCOI.length} documents with old COI capitalization`);
@@ -74,13 +70,13 @@ async function migrateCOICapitalization(): Promise<MigrationStats> {
             try {
                 const updateFields: any = { updatedAt: new Date() };
 
-                // Update ZTDF path if it exists
+                // Update ZTDF path
                 if (doc.ztdf?.policy?.securityLabel?.COI) {
-                    const updatedZtdfCOI = doc.ztdf.policy.securityLabel.COI.map((coi: string) => 
+                    const updatedZtdfCOI = doc.ztdf.policy.securityLabel.COI.map((coi: string) =>
                         COI_MAPPING[coi] || coi
                     );
                     updateFields['ztdf.policy.securityLabel.COI'] = updatedZtdfCOI;
-                    
+
                     // Update display marking
                     if (doc.ztdf.policy.securityLabel.displayMarking) {
                         let displayMarking = doc.ztdf.policy.securityLabel.displayMarking;
@@ -91,29 +87,13 @@ async function migrateCOICapitalization(): Promise<MigrationStats> {
                     }
                 }
 
-                // Update legacy path if it exists
-                if (doc.legacy?.COI) {
-                    const updatedLegacyCOI = doc.legacy.COI.map((coi: string) => 
-                        COI_MAPPING[coi] || coi
-                    );
-                    updateFields['legacy.COI'] = updatedLegacyCOI;
-                }
-
-                // Update old securityLabel path if it exists
-                if (doc.securityLabel?.COI) {
-                    const updatedSecurityCOI = doc.securityLabel.COI.map((coi: string) => 
-                        COI_MAPPING[coi] || coi
-                    );
-                    updateFields['securityLabel.COI'] = updatedSecurityCOI;
-                }
-
                 await resourcesCollection.updateOne(
                     { _id: doc._id },
                     { $set: updateFields }
                 );
 
                 stats.resources++;
-                
+
                 if (stats.resources % 100 === 0) {
                     console.log(`   Updated ${stats.resources} documents...`);
                 }
@@ -136,12 +116,12 @@ async function migrateCOICapitalization(): Promise<MigrationStats> {
             try {
                 const result = await coiKeysCollection.updateOne(
                     { coiId: oldCOI },
-                    { 
-                        $set: { 
+                    {
+                        $set: {
                             coiId: newCOI,
                             name: newCOI,
                             updatedAt: new Date()
-                        } 
+                        }
                     }
                 );
 
@@ -177,21 +157,21 @@ async function migrateCOICapitalization(): Promise<MigrationStats> {
 
         for (const log of logsWithOldCOI) {
             try {
-                const updatedCOI = log.input.resource.COI.map((coi: string) => 
+                const updatedCOI = log.input.resource.COI.map((coi: string) =>
                     COI_MAPPING[coi] || coi
                 );
 
                 await authLogsCollection.updateOne(
                     { _id: log._id },
-                    { 
-                        $set: { 
+                    {
+                        $set: {
                             'input.resource.COI': updatedCOI
-                        } 
+                        }
                     }
                 );
 
                 stats.authLogs++;
-                
+
                 if (stats.authLogs % 100 === 0) {
                     console.log(`   Updated ${stats.authLogs} logs...`);
                 }
@@ -225,11 +205,11 @@ async function migrateCOICapitalization(): Promise<MigrationStats> {
 
                 await kasKeysCollection.updateOne(
                     { _id: kasKey._id },
-                    { 
-                        $set: { 
+                    {
+                        $set: {
                             coiId: newCOI,
                             updatedAt: new Date()
-                        } 
+                        }
                     }
                 );
 
@@ -264,7 +244,7 @@ async function main() {
     console.log('  GAMMA → Gamma\n');
 
     const DRY_RUN = process.argv.includes('--dry-run');
-    
+
     if (DRY_RUN) {
         console.log('⚠️  DRY RUN MODE - No changes will be made\n');
         console.log('Migration would update the following collections:');
@@ -285,7 +265,7 @@ async function main() {
         console.log(`✅ COI keys updated: ${stats.coiKeys}`);
         console.log(`✅ Auth logs updated: ${stats.authLogs}`);
         console.log(`✅ KAS keys updated: ${stats.kasKeys}`);
-        
+
         if (stats.errors.length > 0) {
             console.log(`\n⚠️  Errors encountered: ${stats.errors.length}`);
             stats.errors.forEach((err, idx) => {

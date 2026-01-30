@@ -154,8 +154,8 @@ function decodeCursor(cursor: string): { id: string; sortValue: any } | null {
  */
 function getClassification(resource: any): string {
   return resource.ztdf?.policy?.securityLabel?.classification ||
-         resource.classification ||
-         'UNCLASSIFIED';
+    resource.classification ||
+    'UNCLASSIFIED';
 }
 
 /**
@@ -163,8 +163,8 @@ function getClassification(resource: any): string {
  */
 function getReleasability(resource: any): string[] {
   return resource.ztdf?.policy?.securityLabel?.releasabilityTo ||
-         resource.releasabilityTo ||
-         [];
+    resource.releasabilityTo ||
+    [];
 }
 
 /**
@@ -172,8 +172,8 @@ function getReleasability(resource: any): string[] {
  */
 function getCOI(resource: any): string[] {
   return resource.ztdf?.policy?.securityLabel?.COI ||
-         resource.COI ||
-         [];
+    resource.COI ||
+    [];
 }
 
 // ============================================
@@ -454,6 +454,12 @@ export const paginatedSearchHandler = async (
         images: ['image/'],
         videos: ['video/'],
         audio: ['audio/'],
+        structured: [
+          'application/json',
+          'text/csv',
+          'application/xml',
+          'application/vnd.openxmlformats-officedocument.spreadsheetml'
+        ],
         archives: [
           'application/zip',
           'application/x-tar',
@@ -464,10 +470,13 @@ export const paginatedSearchHandler = async (
         code: [
           'text/javascript',
           'application/javascript',
-          'application/json',
           'text/html',
-          'text/css',
-          'application/xml'
+          'text/css'
+        ],
+        text: [
+          'text/plain',
+          'text/markdown',
+          'text/html'
         ]
       };
 
@@ -503,9 +512,9 @@ export const paginatedSearchHandler = async (
     // ========================================
     // Define sortField and sortOrder outside conditionals for use in cursor pagination
     const sortField = sort.field === 'creationDate' ? 'creationDate' :
-                      sort.field === 'classification' ? 'classification' :
-                      sort.field === 'resourceId' ? 'resourceId' :
-                      sort.field === 'relevance' ? 'title' : 'title';
+      sort.field === 'classification' ? 'classification' :
+        sort.field === 'resourceId' ? 'resourceId' :
+          sort.field === 'relevance' ? 'title' : 'title';
     const sortOrder = sort.order === 'desc' ? -1 : 1;
 
     let sortCriteria: any;
@@ -588,8 +597,8 @@ export const paginatedSearchHandler = async (
       if (userCountry) {
         const releasability = getReleasability(resource);
         const isReleasable = releasability.includes(userCountry) ||
-                            releasability.includes('NATO') ||
-                            releasability.includes('FVEY');
+          releasability.includes('NATO') ||
+          releasability.includes('FVEY');
         if (!isReleasable) {
           logger.warn('ABAC safety filter caught non-releasable document', {
             requestId,
@@ -661,28 +670,32 @@ export const paginatedSearchHandler = async (
         // Match ABAC-constrained documents (user can access)
         { $match: abacFilter.$and.length > 0 ? abacFilter : {} },
         // Add computed fields for ZTDF compatibility
-        { $addFields: {
-          _computedReleasabilityTo: {
-            $ifNull: [
-              '$ztdf.policy.securityLabel.releasabilityTo',
-              '$releasabilityTo'
-            ]
-          },
-          _computedCOI: {
-            $ifNull: [
-              '$ztdf.policy.securityLabel.COI',
-              '$COI'
-            ]
+        {
+          $addFields: {
+            _computedReleasabilityTo: {
+              $ifNull: [
+                '$ztdf.policy.securityLabel.releasabilityTo',
+                '$releasabilityTo'
+              ]
+            },
+            _computedCOI: {
+              $ifNull: [
+                '$ztdf.policy.securityLabel.COI',
+                '$COI'
+              ]
+            }
           }
-        }},
+        },
         // Facet stage
         {
           $facet: {
             classifications: [
-              { $group: {
-                _id: { $ifNull: ['$ztdf.policy.securityLabel.classification', '$classification'] },
-                count: { $sum: 1 }
-              }},
+              {
+                $group: {
+                  _id: { $ifNull: ['$ztdf.policy.securityLabel.classification', '$classification'] },
+                  count: { $sum: 1 }
+                }
+              },
               { $match: { _id: { $ne: null } } },
               { $sort: { count: -1 } }
             ],
@@ -705,54 +718,64 @@ export const paginatedSearchHandler = async (
               { $sort: { count: -1 } }
             ],
             encryptionStatus: [
-              { $group: {
-                _id: { $cond: [{ $eq: ['$encrypted', true] }, 'encrypted', 'unencrypted'] },
-                count: { $sum: 1 }
-              }},
+              {
+                $group: {
+                  _id: { $cond: [{ $eq: ['$encrypted', true] }, 'encrypted', 'unencrypted'] },
+                  count: { $sum: 1 }
+                }
+              },
               { $sort: { _id: 1 } }
             ],
             fileTypes: [
               // Categorize by content type from ZTDF manifest
-              { $project: {
-                contentType: '$ztdf.manifest.contentType',
-                category: {
-                  $switch: {
-                    branches: [
-                      { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: '^image/', options: 'i' } }, then: 'images' },
-                      { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: '^video/', options: 'i' } }, then: 'videos' },
-                      { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: '^audio/', options: 'i' } }, then: 'audio' },
-                      { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'pdf|msword|wordprocessing|spreadsheet|excel|presentation|powerpoint|text/plain|text/markdown', options: 'i' } }, then: 'documents' },
-                      { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'zip|tar|gzip|rar|7z', options: 'i' } }, then: 'archives' },
-                      { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'javascript|json|html|css|xml', options: 'i' } }, then: 'code' }
-                    ],
-                    default: 'other'
+              {
+                $project: {
+                  contentType: '$ztdf.manifest.contentType',
+                  category: {
+                    $switch: {
+                      branches: [
+                        { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: '^image/', options: 'i' } }, then: 'images' },
+                        { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: '^video/', options: 'i' } }, then: 'videos' },
+                        { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: '^audio/', options: 'i' } }, then: 'audio' },
+                        { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'application/json|text/csv|application/xml|spreadsheet', options: 'i' } }, then: 'structured' },
+                        { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'pdf|msword|wordprocessing|presentation|powerpoint', options: 'i' } }, then: 'documents' },
+                        { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'zip|tar|gzip|rar|7z', options: 'i' } }, then: 'archives' },
+                        { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'javascript|text/html|text/css', options: 'i' } }, then: 'code' },
+                        { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'text/plain|text/markdown', options: 'i' } }, then: 'text' }
+                      ],
+                      default: 'other'
+                    }
                   }
                 }
-              }},
+              },
               { $match: { category: { $ne: 'other' }, contentType: { $ne: null, $exists: true } } },
-              { $group: {
-                _id: '$category',
-                count: { $sum: 1 }
-              }},
+              {
+                $group: {
+                  _id: '$category',
+                  count: { $sum: 1 }
+                }
+              },
               { $sort: { count: -1 } },
               // Map internal names to display names
-              { $project: {
-                value: '$_id',
-                label: {
-                  $switch: {
-                    branches: [
-                      { case: { $eq: ['$_id', 'documents'] }, then: 'Documents' },
-                      { case: { $eq: ['$_id', 'images'] }, then: 'Images' },
-                      { case: { $eq: ['$_id', 'videos'] }, then: 'Videos' },
-                      { case: { $eq: ['$_id', 'audio'] }, then: 'Audio' },
-                      { case: { $eq: ['$_id', 'archives'] }, then: 'Archives' },
-                      { case: { $eq: ['$_id', 'code'] }, then: 'Code Files' }
-                    ],
-                    default: '$_id'
-                  }
-                },
-                count: 1
-              }}
+              {
+                $project: {
+                  value: '$_id',
+                  label: {
+                    $switch: {
+                      branches: [
+                        { case: { $eq: ['$_id', 'documents'] }, then: 'Documents' },
+                        { case: { $eq: ['$_id', 'images'] }, then: 'Images' },
+                        { case: { $eq: ['$_id', 'videos'] }, then: 'Videos' },
+                        { case: { $eq: ['$_id', 'audio'] }, then: 'Audio' },
+                        { case: { $eq: ['$_id', 'archives'] }, then: 'Archives' },
+                        { case: { $eq: ['$_id', 'code'] }, then: 'Code Files' }
+                      ],
+                      default: '$_id'
+                    }
+                  },
+                  count: 1
+                }
+              }
             ],
             totalCount: [
               { $count: 'count' }
@@ -938,27 +961,31 @@ export const getFacetsHandler = async (
 
     const facetPipeline = [
       // Add computed fields for ZTDF compatibility
-      { $addFields: {
-        _computedReleasabilityTo: {
-          $ifNull: [
-            '$ztdf.policy.securityLabel.releasabilityTo',
-            '$releasabilityTo'
-          ]
-        },
-        _computedCOI: {
-          $ifNull: [
-            '$ztdf.policy.securityLabel.COI',
-            '$COI'
-          ]
+      {
+        $addFields: {
+          _computedReleasabilityTo: {
+            $ifNull: [
+              '$ztdf.policy.securityLabel.releasabilityTo',
+              '$releasabilityTo'
+            ]
+          },
+          _computedCOI: {
+            $ifNull: [
+              '$ztdf.policy.securityLabel.COI',
+              '$COI'
+            ]
+          }
         }
-      }},
+      },
       {
         $facet: {
           classifications: [
-            { $group: {
-              _id: { $ifNull: ['$ztdf.policy.securityLabel.classification', '$classification'] },
-              count: { $sum: 1 }
-            }},
+            {
+              $group: {
+                _id: { $ifNull: ['$ztdf.policy.securityLabel.classification', '$classification'] },
+                count: { $sum: 1 }
+              }
+            },
             { $match: { _id: { $ne: null } } },
             { $sort: { count: -1 } }
           ],
@@ -981,53 +1008,63 @@ export const getFacetsHandler = async (
             { $sort: { count: -1 } }
           ],
           encryptionStatus: [
-            { $group: {
-              _id: { $cond: [{ $eq: ['$encrypted', true] }, 'encrypted', 'unencrypted'] },
-              count: { $sum: 1 }
-            }},
+            {
+              $group: {
+                _id: { $cond: [{ $eq: ['$encrypted', true] }, 'encrypted', 'unencrypted'] },
+                count: { $sum: 1 }
+              }
+            },
             { $sort: { _id: 1 } }
           ],
           fileTypes: [
             // Categorize by content type from ZTDF manifest
-            { $project: {
-              contentType: '$ztdf.manifest.contentType',
-              category: {
-                $switch: {
-                  branches: [
-                    { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: '^image/', options: 'i' } }, then: 'images' },
-                    { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: '^video/', options: 'i' } }, then: 'videos' },
-                    { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: '^audio/', options: 'i' } }, then: 'audio' },
-                    { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'pdf|msword|wordprocessing|spreadsheet|excel|presentation|powerpoint|text/plain|text/markdown', options: 'i' } }, then: 'documents' },
-                    { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'zip|tar|gzip|rar|7z', options: 'i' } }, then: 'archives' },
-                    { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'javascript|json|html|css|xml', options: 'i' } }, then: 'code' }
-                  ],
-                  default: 'other'
+            {
+              $project: {
+                contentType: '$ztdf.manifest.contentType',
+                category: {
+                  $switch: {
+                    branches: [
+                      { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: '^image/', options: 'i' } }, then: 'images' },
+                      { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: '^video/', options: 'i' } }, then: 'videos' },
+                      { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: '^audio/', options: 'i' } }, then: 'audio' },
+                      { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'application/json|text/csv|application/xml|spreadsheet', options: 'i' } }, then: 'structured' },
+                      { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'pdf|msword|wordprocessing|presentation|powerpoint', options: 'i' } }, then: 'documents' },
+                      { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'zip|tar|gzip|rar|7z', options: 'i' } }, then: 'archives' },
+                      { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'javascript|text/html|text/css', options: 'i' } }, then: 'code' },
+                      { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'text/plain|text/markdown', options: 'i' } }, then: 'text' }
+                    ],
+                    default: 'other'
+                  }
                 }
               }
-            }},
+            },
             { $match: { category: { $ne: 'other' }, contentType: { $ne: null, $exists: true } } },
-            { $group: {
-              _id: '$category',
-              count: { $sum: 1 }
-            }},
+            {
+              $group: {
+                _id: '$category',
+                count: { $sum: 1 }
+              }
+            },
             { $sort: { count: -1 } },
-            { $project: {
-              value: '$_id',
-              label: {
-                $switch: {
-                  branches: [
-                    { case: { $eq: ['$_id', 'documents'] }, then: 'Documents' },
-                    { case: { $eq: ['$_id', 'images'] }, then: 'Images' },
-                    { case: { $eq: ['$_id', 'videos'] }, then: 'Videos' },
-                    { case: { $eq: ['$_id', 'audio'] }, then: 'Audio' },
-                    { case: { $eq: ['$_id', 'archives'] }, then: 'Archives' },
-                    { case: { $eq: ['$_id', 'code'] }, then: 'Code Files' }
-                  ],
-                  default: '$_id'
-                }
-              },
-              count: 1
-            }}
+            {
+              $project: {
+                value: '$_id',
+                label: {
+                  $switch: {
+                    branches: [
+                      { case: { $eq: ['$_id', 'documents'] }, then: 'Documents' },
+                      { case: { $eq: ['$_id', 'images'] }, then: 'Images' },
+                      { case: { $eq: ['$_id', 'videos'] }, then: 'Videos' },
+                      { case: { $eq: ['$_id', 'audio'] }, then: 'Audio' },
+                      { case: { $eq: ['$_id', 'archives'] }, then: 'Archives' },
+                      { case: { $eq: ['$_id', 'code'] }, then: 'Code Files' }
+                    ],
+                    default: '$_id'
+                  }
+                },
+                count: 1
+              }
+            }
           ],
           totalCount: [
             { $count: 'count' }
