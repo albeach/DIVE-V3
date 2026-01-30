@@ -1,9 +1,9 @@
 /**
  * COI Logic Lint Migration Script
- * 
+ *
  * Audits existing documents for COI coherence violations
  * Identifies and reports invalid COI/releasability combinations
- * 
+ *
  * Date: October 21, 2025
  */
 
@@ -80,16 +80,8 @@ async function main() {
                     coiOperator: resource.ztdf.policy.securityLabel.coiOperator || 'ALL',
                     caveats: resource.ztdf.policy.securityLabel.caveats || []
                 };
-            } else if (resource.legacy) {
-                securityLabel = {
-                    classification: resource.legacy.classification,
-                    releasabilityTo: resource.legacy.releasabilityTo,
-                    COI: resource.legacy.COI || [],
-                    coiOperator: resource.legacy.coiOperator || 'ALL',
-                    caveats: resource.legacy.caveats || []
-                };
             } else {
-                console.log(`⚠️  Skipping ${resourceId}: No security label found`);
+                console.log(`⚠️  Skipping ${resourceId}: No ZTDF security label found`);
                 continue;
             }
 
@@ -193,14 +185,14 @@ async function main() {
 
     } catch (error: any) {
         // Graceful failure if MongoDB not available (CI environment)
-        if (error.message?.includes('ECONNREFUSED') || 
+        if (error.message?.includes('ECONNREFUSED') ||
             error.message?.includes('EAI_AGAIN') ||
             error.message?.includes('getaddrinfo')) {
             console.warn('⚠️  MongoDB not available - skipping COI lint (likely CI environment)');
             console.log('This is expected in CI without external MongoDB');
             process.exit(0); // Success exit
         }
-        
+
         console.error('❌ Error auditing documents:', error);
         throw error;
     } finally {

@@ -114,24 +114,132 @@ router.get('/', authenticateJWT, listResourcesHandler);
 router.get('/:id/ztdf', authenticateJWT, getZTDFDetailsHandler);
 
 /**
- * GET /api/resources/:id/download
- * Download ZTDF file in OpenTDF-compliant format (Week 4)
- * Returns ZIP archive (.ztdf) compatible with OpenTDF CLI/SDK tools
- * Authentication only (no authorization) - download requires valid JWT
+ * @openapi
+ * /api/resources/{id}/download:
+ *   get:
+ *     summary: Download ZTDF file
+ *     description: |
+ *       Downloads the resource as an OpenTDF-compliant ZIP archive (.ztdf).
+ *       Compatible with OpenTDF CLI/SDK tools. Requires authentication only.
+ *     tags: [Resources, KAS]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Resource ID to download
+ *         example: doc-usa-001
+ *     responses:
+ *       200:
+ *         description: ZTDF file download
+ *         content:
+ *           application/zip:
+ *             schema:
+ *               type: string
+ *               format: binary
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
  */
 router.get('/:id/download', authenticateJWT, downloadZTDFHandler);
 
 /**
- * GET /api/resources/:id/kas-flow
- * Get KAS flow status for a resource (Week 3.4.3 KAS Flow Visualizer)
- * Returns 6-step KAS access flow with current status
+ * @openapi
+ * /api/resources/{id}/kas-flow:
+ *   get:
+ *     summary: Get KAS flow visualization
+ *     description: |
+ *       Returns the 6-step KAS access flow with current status for visualization.
+ *       Includes authentication, authorization, key request, policy binding, decryption, and access logging steps.
+ *     tags: [Resources, KAS]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Resource ID
+ *         example: doc-usa-001
+ *     responses:
+ *       200:
+ *         description: KAS flow status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 resourceId:
+ *                   type: string
+ *                 steps:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       step:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                         enum: [pending, complete, failed]
+ *                       timestamp:
+ *                         type: string
+ *                         format: date-time
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       404:
+ *         $ref: '#/components/responses/NotFound'
  */
 router.get('/:id/kas-flow', authenticateJWT, getKASFlowHandler);
 
 /**
- * GET /api/resources/count
- * Get count of accessible documents (for federated dashboard stats)
- * Used by Hub to aggregate document counts across federation
+ * @openapi
+ * /api/resources/count:
+ *   get:
+ *     summary: Get document count
+ *     description: |
+ *       Returns count of accessible documents for federated dashboard statistics.
+ *       Used by Hub to aggregate document counts across federation.
+ *       Requires trusted federation partner header.
+ *     tags: [Resources, Federation]
+ *     parameters:
+ *       - in: query
+ *         name: releasableTo
+ *         schema:
+ *           type: string
+ *         description: Filter by releasability country (ISO 3166-1 alpha-3)
+ *       - in: header
+ *         name: x-federated-from
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Source federation instance code
+ *     responses:
+ *       200:
+ *         description: Document count
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 count:
+ *                   type: integer
+ *                 accessibleCount:
+ *                   type: integer
+ *                 releasableTo:
+ *                   type: string
+ *                 instance:
+ *                   type: string
+ *       403:
+ *         description: Federated access required from trusted instance
+ *       500:
+ *         description: Server error
  */
 router.get('/count', async (req, res) => {
     try {
@@ -186,15 +294,110 @@ router.get('/count', async (req, res) => {
  */
 
 /**
- * POST /api/resources/search
- * Paginated search with cursor-based pagination and facets
- * Supports complex filters in request body
+ * @openapi
+ * /api/resources/search:
+ *   post:
+ *     summary: Paginated resource search
+ *     description: |
+ *       Cursor-based paginated search optimized for 28K+ documents.
+ *       Supports complex filters, full-text search, and faceted navigation.
+ *     tags: [Resources]
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               query:
+ *                 type: string
+ *                 description: Full-text search query
+ *               filters:
+ *                 type: object
+ *                 properties:
+ *                   classification:
+ *                     type: array
+ *                     items:
+ *                       type: string
+ *                   countries:
+ *                     type: array
+ *                     items:
+ *                       type: string
+ *                   coi:
+ *                     type: array
+ *                     items:
+ *                       type: string
+ *               cursor:
+ *                 type: string
+ *                 description: Pagination cursor from previous response
+ *               limit:
+ *                 type: integer
+ *                 default: 20
+ *                 maximum: 100
+ *     responses:
+ *       200:
+ *         description: Search results with pagination
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 results:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Resource'
+ *                 nextCursor:
+ *                   type: string
+ *                   nullable: true
+ *                 total:
+ *                   type: integer
+ *                 facets:
+ *                   type: object
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
  */
 router.post('/search', authenticateJWT, paginatedSearchHandler);
 
 /**
- * GET /api/resources/search/facets
- * Get facet counts without results (for filter UI)
+ * @openapi
+ * /api/resources/search/facets:
+ *   get:
+ *     summary: Get search facets
+ *     description: |
+ *       Returns facet counts for filter UI without fetching full results.
+ *       Includes counts for classification levels, countries, COIs, and other filterable fields.
+ *     tags: [Resources]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Facet counts
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 classification:
+ *                   type: object
+ *                   additionalProperties:
+ *                     type: integer
+ *                   example:
+ *                     UNCLASSIFIED: 5000
+ *                     CONFIDENTIAL: 1200
+ *                     SECRET: 800
+ *                     TOP_SECRET: 50
+ *                 countries:
+ *                   type: object
+ *                   additionalProperties:
+ *                     type: integer
+ *                 coi:
+ *                   type: object
+ *                   additionalProperties:
+ *                     type: integer
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
  */
 router.get('/search/facets', authenticateJWT, getFacetsHandler);
 
@@ -204,9 +407,51 @@ router.get('/search/facets', authenticateJWT, getFacetsHandler);
  */
 
 /**
- * GET /api/resources/federated-search
- * Phase 4, Task 3.2: Search across all federated instances
- * Returns aggregated results from USA, FRA, GBR, DEU
+ * @openapi
+ * /api/resources/federated-search:
+ *   get:
+ *     summary: Federated search (GET)
+ *     description: |
+ *       Search across all federated coalition instances using query parameters.
+ *       Returns aggregated results from USA, FRA, GBR, DEU with source attribution.
+ *     tags: [Resources, Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: query
+ *         schema:
+ *           type: string
+ *         description: Full-text search query
+ *       - in: query
+ *         name: classification
+ *         schema:
+ *           type: string
+ *           enum: [UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET]
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *     responses:
+ *       200:
+ *         description: Federated search results
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 results:
+ *                   type: array
+ *                   items:
+ *                     $ref: '#/components/schemas/Resource'
+ *                 sources:
+ *                   type: object
+ *                   description: Results count per instance
+ *                 totalResults:
+ *                   type: integer
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
  */
 router.get('/federated-search', authenticateJWT, federatedSearchGetHandler);
 
@@ -266,9 +511,48 @@ router.get('/federated-search', authenticateJWT, federatedSearchGetHandler);
 router.post('/federated-search', authenticateJWT, federatedSearchHandler);
 
 /**
- * GET /api/resources/federated-status
- * Phase 4, Task 3.2: Get federation instance availability
- * Returns which instances are currently reachable
+ * @openapi
+ * /api/resources/federated-status:
+ *   get:
+ *     summary: Get federation instance status
+ *     description: |
+ *       Returns availability status of all federated coalition instances.
+ *       Indicates which instances are currently reachable for federated search.
+ *     tags: [Resources, Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Federation instance status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 instances:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       code:
+ *                         type: string
+ *                         description: Instance code (USA, FRA, GBR, DEU)
+ *                       name:
+ *                         type: string
+ *                       available:
+ *                         type: boolean
+ *                       lastCheck:
+ *                         type: string
+ *                         format: date-time
+ *                       responseTime:
+ *                         type: integer
+ *                         description: Response time in milliseconds
+ *                 totalInstances:
+ *                   type: integer
+ *                 availableInstances:
+ *                   type: integer
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
  */
 router.get('/federated-status', authenticateJWT, federatedStatusHandler);
 

@@ -261,11 +261,10 @@ export class MongoSpokeStore {
   async findToken(tokenString: string): Promise<ISpokeToken | null> {
     await this.ensureInitialized();
 
-    logger.error('FINDTOKEN CALLED', {
+    logger.debug('Federation token lookup initiated', {
       tokenPrefix: tokenString.substring(0, 20),
       collection: this.tokensCollection?.collectionName,
-      database: this.tokensCollection?.dbName,
-      initialized: this.initialized
+      database: this.tokensCollection?.dbName
     });
 
     const result = await this.tokensCollection!.findOne({
@@ -273,11 +272,16 @@ export class MongoSpokeStore {
       expiresAt: { $gt: new Date() }
     });
 
-    logger.error('FINDTOKEN RESULT', {
-      found: !!result,
-      spokeId: result?.spokeId,
-      tokenMatches: result?.token === tokenString
-    });
+    if (result) {
+      logger.debug('Federation token found', {
+        spokeId: result.spokeId,
+        expiresAt: result.expiresAt
+      });
+    } else {
+      logger.debug('Federation token not found or expired', {
+        tokenPrefix: tokenString.substring(0, 20)
+      });
+    }
 
     return result;
   }

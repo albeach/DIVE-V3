@@ -1,9 +1,9 @@
 /**
  * Purge Invalid COI Documents
- * 
+ *
  * Safely removes documents with COI coherence violations
  * Creates backup before deletion
- * 
+ *
  * Date: October 21, 2025
  */
 
@@ -55,16 +55,8 @@ async function main() {
                     coiOperator: resource.ztdf.policy.securityLabel.coiOperator || 'ALL',
                     caveats: resource.ztdf.policy.securityLabel.caveats || []
                 };
-            } else if (resource.legacy) {
-                securityLabel = {
-                    classification: resource.legacy.classification,
-                    releasabilityTo: resource.legacy.releasabilityTo,
-                    COI: resource.legacy.COI || [],
-                    coiOperator: resource.legacy.coiOperator || 'ALL',
-                    caveats: resource.legacy.caveats || []
-                };
             } else {
-                console.log(`⚠️  Skipping ${resourceId}: No security label found`);
+                console.log(`⚠️  Skipping ${resourceId}: No ZTDF security label found`);
                 invalidIds.push(resourceId);
                 continue;
             }

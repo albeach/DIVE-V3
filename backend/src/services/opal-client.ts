@@ -1,32 +1,33 @@
 /**
  * DIVE V3 - OPAL Client
- * 
+ *
  * Client wrapper for OPAL (Open Policy Administration Layer) Server API.
  * Provides methods to:
  * - Publish data updates to OPAL Server
  * - Trigger policy refreshes
  * - Check OPAL health status
  * - Manage data topics
- * 
+ *
  * AUTHENTICATION:
  * This client uses JWT-based authentication. The raw OPAL_AUTH_MASTER_TOKEN
  * is NOT sent directly to OPAL endpoints. Instead, we use opalTokenService
  * to obtain a proper JWT from the OPAL server's /token endpoint.
- * 
+ *
  * Token Flow:
  * 1. On startup, initializeJwt() requests a JWT from OPAL server /token endpoint
  * 2. opalTokenService.generateClientToken() uses OPAL_AUTH_MASTER_TOKEN internally
  * 3. The returned JWT (eyJ...) is cached and used for all subsequent API calls
  * 4. JWT is auto-refreshed before expiry (5 minute buffer)
- * 
+ *
  * OPAL Documentation: https://docs.opal.ac/
- * 
+ *
  * @version 2.0.0
  * @date 2026-01-22
  */
 
 import { logger } from '../utils/logger';
 import { opalTokenService } from './opal-token.service';
+import { opalMetricsService } from './opal-metrics.service';
 
 // ============================================
 // TYPES
@@ -102,7 +103,7 @@ const DEFAULT_CONFIG: IOPALClientConfig = {
 // Map dst_path to the corresponding backend API endpoint
 // The backend exposes /api/opal/* endpoints that serve data from MongoDB (SSOT)
 
-const BACKEND_BASE_URL = process.env.OPAL_DATA_BACKEND_URL || 
+const BACKEND_BASE_URL = process.env.OPAL_DATA_BACKEND_URL ||
   'https://host.docker.internal:4000';
 
 const DATA_PATH_TO_URL: Record<string, { url: string; topics: string[] }> = {
@@ -133,7 +134,7 @@ const DATA_PATH_TO_URL: Record<string, { url: string; topics: string[] }> = {
 class OPALClient {
   private config: IOPALClientConfig;
   private isEnabled: boolean;
-  
+
   // JWT Management: Store cached JWT and expiry for OPAL server authentication
   // The JWT is obtained from OPAL server's /token endpoint via opalTokenService
   private jwt: string | null = null;
@@ -143,71 +144,65 @@ class OPALClient {
   constructor(config: Partial<IOPALClientConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
     // OPAL is enabled if OPAL_SERVER_URL is set
-    this.isEnabled = process.env.OPAL_ENABLED !== 'false' && 
-                     !!process.env.OPAL_SERVER_URL;
-    
+    this.isEnabled = process.env.OPAL_ENABLED !== 'false' &&
+      !!process.env.OPAL_SERVER_URL;
+
     if (this.isEnabled) {
-      logger.info('OPAL client initialized', {
+      logger.info('OPAL client initialized (JWT will be fetched on first use)', {
         serverUrl: this.config.serverUrl,
         topics: this.config.dataTopics,
         timeoutMs: this.config.timeoutMs
       });
-      
-      // Initialize JWT asynchronously - OPAL server may not be ready immediately
-      this.initializeJwt();
+
+      // DO NOT eagerly initialize JWT here - it causes startup race conditions
+      // JWT will be lazily initialized on first actual use (ensureAuthenticated)
     } else {
       logger.info('OPAL client disabled - using static policy data');
     }
   }
 
   /**
-   * Initialize JWT with retry logic for startup timing.
-   * OPAL server may not be ready immediately when backend starts.
-   * This method is called once on construction and handles retries.
+   * Ensure JWT is initialized before making OPAL requests.
+   * Lazy initialization avoids startup timing issues with OPAL server.
+   * @private
+   */
+  private async ensureAuthenticated(): Promise<void> {
+    if (this.jwt && this.jwtExpiry && new Date() < this.jwtExpiry) {
+      // JWT still valid
+      return;
+    }
+
+    // Initialize or refresh JWT
+    if (!this.jwtInitPromise) {
+      this.jwtInitPromise = this.refreshJwt().finally(() => {
+        this.jwtInitPromise = null; // Allow retry on next call
+      });
+    }
+
+    await this.jwtInitPromise;
+
+    if (!this.jwt) {
+      throw new Error('Failed to authenticate with OPAL server');
+    }
+  }
+
+  /**
+   * Initialize JWT with retry logic (DEPRECATED - now handled by ensureAuthenticated).
+   * Kept for backward compatibility but no longer called from constructor.
+   * @deprecated Use ensureAuthenticated() instead
    */
   private async initializeJwt(): Promise<void> {
-    if (this.jwtInitPromise) return this.jwtInitPromise;
-    
-    this.jwtInitPromise = (async () => {
-      const maxAttempts = 5;
-      const retryDelayMs = 5000;
-      
-      for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-        try {
-          await this.refreshJwt();
-          if (this.jwt) {
-            logger.info('OPAL datasource JWT initialized successfully', {
-              attempt,
-              expiresAt: this.jwtExpiry?.toISOString(),
-              tokenPrefix: this.jwt.substring(0, 20) + '...',
-              peerType: 'datasource'
-            });
-            return;
-          }
-        } catch (error) {
-          logger.warn(`OPAL datasource JWT initialization attempt ${attempt}/${maxAttempts} failed`, {
-            error: error instanceof Error ? error.message : 'Unknown error'
-          });
-          
-          if (attempt < maxAttempts) {
-            await new Promise(resolve => setTimeout(resolve, retryDelayMs));
-          }
-        }
-      }
-      
-      logger.error('Failed to initialize OPAL datasource JWT after all attempts - push notifications will fail');
-    })();
-    
-    return this.jwtInitPromise;
+    // This method is no longer used but kept for backward compatibility
+    logger.warn('initializeJwt() is deprecated - JWT is now lazily initialized');
   }
 
   /**
    * Refresh JWT from OPAL server using opalTokenService.
-   * 
+   *
    * IMPORTANT: For data publishing, we need a DATASOURCE type token, not CLIENT.
    * - CLIENT tokens: For OPAL clients to subscribe to updates
    * - DATASOURCE tokens: For services to publish data updates
-   * 
+   *
    * This method calls opalTokenService.generateDatasourceToken() which:
    * 1. Uses OPAL_AUTH_MASTER_TOKEN to authenticate with OPAL /token endpoint
    * 2. Requests type: 'datasource' token
@@ -218,10 +213,10 @@ class OPALClient {
       const tokenData = await opalTokenService.generateDatasourceToken(
         'hub-backend-publisher'
       );
-      
+
       this.jwt = tokenData.token;
       this.jwtExpiry = tokenData.expiresAt;
-      
+
       logger.debug('OPAL datasource JWT refreshed', {
         clientId: tokenData.clientId,
         expiresAt: this.jwtExpiry.toISOString()
@@ -237,7 +232,7 @@ class OPALClient {
   /**
    * Ensure we have a valid JWT, refreshing if necessary.
    * Returns null if JWT cannot be obtained (graceful degradation).
-   * 
+   *
    * This method handles:
    * - Waiting for initial JWT acquisition (constructor race condition)
    * - Checking JWT expiry with 5-minute buffer
@@ -248,20 +243,20 @@ class OPALClient {
     if (this.jwtInitPromise) {
       await this.jwtInitPromise;
     }
-    
+
     // Check if JWT exists and is not expired (with 5 minute buffer)
     if (this.jwt && this.jwtExpiry) {
       const bufferMs = 5 * 60 * 1000; // 5 minutes
       const now = new Date();
       const expiryWithBuffer = new Date(this.jwtExpiry.getTime() - bufferMs);
-      
+
       if (now < expiryWithBuffer) {
         return this.jwt;
       }
-      
+
       logger.info('OPAL JWT expiring soon, refreshing');
     }
-    
+
     // Try to refresh JWT
     try {
       await this.refreshJwt();
@@ -284,7 +279,7 @@ class OPALClient {
   /**
    * Make HTTP request with retry logic.
    * ENHANCED: Uses JWT from ensureJwt() instead of raw master token.
-   * 
+   *
    * The JWT is obtained from OPAL server's /token endpoint and cached.
    * This fixes the 401 error that occurred when sending raw master token
    * directly to OPAL API endpoints.
@@ -296,8 +291,14 @@ class OPALClient {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.config.timeoutMs);
 
-    // Get JWT (may return null if unavailable - graceful degradation)
-    const jwt = await this.ensureJwt();
+    // Ensure JWT is available (lazy initialization on first use)
+    try {
+      await this.ensureAuthenticated();
+    } catch (error) {
+      logger.warn('Could not authenticate with OPAL server, request may fail', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
 
     const fetchOptions: RequestInit = {
       ...options,
@@ -305,9 +306,8 @@ class OPALClient {
       headers: {
         'Content-Type': 'application/json',
         ...options.headers,
-        // FIXED: Use JWT instead of raw master token
-        // The JWT is obtained from OPAL server's /token endpoint
-        ...(jwt && { 'Authorization': `Bearer ${jwt}` })
+        // Use JWT if available
+        ...(this.jwt && { 'Authorization': `Bearer ${this.jwt}` })
       }
     };
 
@@ -320,7 +320,7 @@ class OPALClient {
         return response;
       } catch (error) {
         lastError = error instanceof Error ? error : new Error(String(error));
-        
+
         if (attempt < this.config.retryAttempts) {
           logger.warn('OPAL request failed, retrying', {
             url,
@@ -364,7 +364,7 @@ class OPALClient {
       }
 
       const data = await response.json() as Record<string, unknown>;
-      
+
       return {
         healthy: true,
         opaConnected: (data.opa_connected as boolean) ?? true,
@@ -388,7 +388,7 @@ class OPALClient {
   /**
    * Publish data update to OPAL Server
    * This triggers all connected OPAL clients to fetch the new data
-   * 
+   *
    * OPAL DATA/CONFIG API:
    * The OPAL /data/config endpoint expects URL-based entries, not inline data.
    * Each entry must have a `url` field pointing to where OPAL should fetch the data from.
@@ -396,6 +396,7 @@ class OPALClient {
    */
   async publishDataUpdate(update: IOPALDataUpdate): Promise<IOPALPublishResult> {
     const timestamp = new Date().toISOString();
+    const startTime = Date.now();
 
     if (!this.isEnabled) {
       logger.debug('OPAL disabled - skipping data publish', {
@@ -421,7 +422,7 @@ class OPALClient {
             topics: update.topics || this.config.dataTopics
           };
         }
-        
+
         // Look up URL mapping for this dst_path
         const mapping = DATA_PATH_TO_URL[entry.dst_path];
         if (mapping) {
@@ -432,7 +433,7 @@ class OPALClient {
             topics: mapping.topics
           };
         }
-        
+
         // No URL available - log warning and skip this entry
         logger.warn('No URL mapping for OPAL data path - entry will be skipped', {
           dst_path: entry.dst_path,
@@ -443,13 +444,26 @@ class OPALClient {
 
       if (urlBasedEntries.length === 0) {
         logger.warn('No valid entries to publish - all entries lacked URL mappings');
+
+        // Record failed transaction
+        await opalMetricsService.recordTransaction(
+          'data_update',
+          'failed',
+          'system',
+          {
+            dataPath: update.entries.map(e => e.dst_path).join(', '),
+            error: 'No valid entries - missing URL mappings',
+          },
+          Date.now() - startTime
+        ).catch(err => logger.error('Failed to record transaction', { error: err.message }));
+
         return {
           success: false,
           message: 'No valid entries to publish - missing URL mappings',
           timestamp
         };
       }
-      
+
       logger.info('Publishing URL-based data update to OPAL', {
         entriesCount: urlBasedEntries.length,
         paths: urlBasedEntries.map(e => e.dst_path),
@@ -477,11 +491,25 @@ class OPALClient {
       }
 
       const result = await response.json() as { transaction_id?: string };
+      const duration = Date.now() - startTime;
 
       logger.info('OPAL data update published successfully', {
         transactionId: result.transaction_id,
-        entriesCount: urlBasedEntries.length
+        entriesCount: urlBasedEntries.length,
+        duration
       });
+
+      // Record successful transaction
+      await opalMetricsService.recordTransaction(
+        'data_update',
+        'success',
+        'system',
+        {
+          topics: Array.from(new Set(urlBasedEntries.flatMap(e => e.topics || []))),
+          dataPath: urlBasedEntries.map(e => e.dst_path).join(', '),
+        },
+        duration
+      ).catch(err => logger.error('Failed to record transaction', { error: err.message }));
 
       return {
         success: true,
@@ -491,11 +519,24 @@ class OPALClient {
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      
+      const duration = Date.now() - startTime;
+
       logger.error('Failed to publish OPAL data update', {
         error: errorMessage,
         entriesCount: update.entries.length
       });
+
+      // Record failed transaction
+      await opalMetricsService.recordTransaction(
+        'data_update',
+        'failed',
+        'system',
+        {
+          dataPath: update.entries.map(e => e.dst_path).join(', '),
+          error: errorMessage,
+        },
+        duration
+      ).catch(err => logger.error('Failed to record transaction', { error: err.message }));
 
       return {
         success: false,
@@ -547,7 +588,7 @@ class OPALClient {
       };
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      
+
       logger.error('Failed to trigger OPAL policy refresh', { error: errorMessage });
 
       return {
@@ -561,21 +602,21 @@ class OPALClient {
 
   /**
    * Trigger OPAL to re-fetch data for a specific path.
-   * 
+   *
    * IMPORTANT: This does NOT send inline data to OPAL.
    * Instead, it tells OPAL to fetch fresh data from the mapped URL.
-   * 
+   *
    * Prerequisites:
    * 1. The data must already be stored in MongoDB (SSOT)
    * 2. The backend /api/opal/* endpoint must serve this data
    * 3. The path must have a URL mapping in DATA_PATH_TO_URL
-   * 
+   *
    * Flow:
    * 1. Caller updates data in MongoDB
    * 2. Caller calls publishInlineData('trusted_issuers', data, reason)
    * 3. This method tells OPAL to fetch from /api/opal/trusted-issuers
    * 4. OPAL fetches fresh data and pushes to connected OPA clients
-   * 
+   *
    * @param path - The OPA data path (e.g., 'trusted_issuers', 'federation_matrix')
    * @param _data - DEPRECATED: Data is ignored (fetched from URL instead)
    * @param reason - Audit reason for the update

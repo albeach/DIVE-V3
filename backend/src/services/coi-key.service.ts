@@ -1,14 +1,14 @@
 /**
  * COI Key Management Service
- * 
+ *
  * Centralized service for managing Community of Interest (COI) Keys
  * with MongoDB persistence. Serves as single source of truth for:
  * - COI metadata (name, description, member countries)
  * - COI validation rules (mutual exclusivity, subset/superset relationships)
  * - COI encryption keys (via coi-key-registry)
- * 
+ *
  * Replaces hardcoded COI lists across frontend and backend.
- * 
+ *
  * Date: October 21, 2025
  */
 
@@ -130,13 +130,18 @@ export async function getAllCOIKeys(status?: 'active' | 'deprecated' | 'pending'
         const filter = status ? { status } : {};
         const cois = await collection.find(filter).sort({ coiId: 1 }).toArray();
 
-        // TODO: Implement proper resource counting based on COI tags in resources
-        // For now, set all counts to 0 until resource schema is updated
+        // Count resources for each COI
+        const { db } = await getMongoClient();
+        const resourcesCollection = db.collection('resources');
+
         for (const coi of cois) {
-            coi.resourceCount = 0;
+            const count = await resourcesCollection.countDocuments({
+                'ztdf.policy.securityLabel.COI': coi.coiId
+            });
+            coi.resourceCount = count;
         }
 
-        logger.debug('Retrieved COI Keys', { count: cois.length, status });
+        logger.debug('Retrieved COI Keys with resource counts', { count: cois.length, status });
 
         return {
             cois: cois as ICOIKey[],
@@ -161,10 +166,7 @@ export async function getCOIKeyById(coiId: string): Promise<ICOIKey | null> {
             const { db } = await getMongoClient();
             const resourcesCollection = db.collection('resources');
             const count = await resourcesCollection.countDocuments({
-                $or: [
-                    { 'ztdf.policy.securityLabel.COI': coiId },
-                    { 'legacy.COI': coiId }
-                ]
+                'ztdf.policy.securityLabel.COI': coiId
             });
             coiKey.resourceCount = count;
         }
@@ -227,10 +229,7 @@ export async function deprecateCOIKey(coiId: string): Promise<void> {
         const { db } = await getMongoClient();
         const resourcesCollection = db.collection('resources');
         const resourceCount = await resourcesCollection.countDocuments({
-            $or: [
-                { 'ztdf.policy.securityLabel.COI': coiId },
-                { 'legacy.COI': coiId }
-            ]
+            'ztdf.policy.securityLabel.COI': coiId
         });
 
         if (resourceCount > 0) {

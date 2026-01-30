@@ -1,9 +1,9 @@
 {
   "phase": "VERIFICATION",
-  "instance_code": "FRA",
-  "completed_at": "2026-01-29T06:29:42Z",
+  "instance_code": "SVK",
+  "completed_at": "2026-01-29T22:09:46Z",
   "hostname": "MacBook-Pro-3.local",
   "user": "aubreybeach",
-  "duration_seconds": 55,
+  "duration_seconds": 54,
   "metadata": {}
 }

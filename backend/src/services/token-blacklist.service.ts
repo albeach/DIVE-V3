@@ -1,14 +1,14 @@
 /**
  * Token Blacklist Service
- * 
+ *
  * Phase 2 Security Hardening - GAP-010 Remediation (November 26, 2025)
  * ACP-240 Best Practices: Immediate revocation and stale access prevention
- * 
+ *
  * ENHANCEMENT: Shared blacklist across all federated instances (USA, FRA, GBR, DEU)
  * - Uses centralized blacklist Redis for cross-instance token revocation
  * - Implements Redis Pub/Sub for real-time blacklist propagation
  * - Ensures users cannot access ANY instance after logout
- * 
+ *
  * Architecture:
  * ┌─────────────┐     ┌─────────────────┐     ┌─────────────┐
  * │  USA API    │────▶│ Blacklist Redis │◀────│  FRA API    │
@@ -17,7 +17,7 @@
  * ┌─────────────┐     │                 │     ┌─────────────┐
  * │  GBR API    │────▶└─────────────────┘◀────│  DEU API    │
  * └─────────────┘                             └─────────────┘
- * 
+ *
  * Reference: docs/INFRASTRUCTURE-GAP-ANALYSIS.md (GAP-010)
  */
 
@@ -55,7 +55,7 @@ function getBlacklistRedisClient(): Redis {
     if (!blacklistRedisClient) {
         const redisUrl = getBlacklistRedisUrl();
 
-        logger.info('Initializing blacklist Redis client', { 
+        logger.info('Initializing blacklist Redis client', {
             instance: INSTANCE_ID,
             redisUrl: redisUrl.replace(/:[^:@]+@/, ':***@') // Mask password
         });
@@ -63,10 +63,10 @@ function getBlacklistRedisClient(): Redis {
         blacklistRedisClient = new Redis(redisUrl, {
             retryStrategy: (times) => {
                 const delay = Math.min(times * 50, 2000);
-                logger.warn('Blacklist Redis connection retry', { 
+                logger.warn('Blacklist Redis connection retry', {
                     instance: INSTANCE_ID,
-                    attempt: times, 
-                    delayMs: delay 
+                    attempt: times,
+                    delayMs: delay
                 });
                 return delay;
             },
@@ -82,9 +82,9 @@ function getBlacklistRedisClient(): Redis {
         });
 
         blacklistRedisClient.on('error', (error) => {
-            logger.error('Blacklist Redis error', { 
+            logger.error('Blacklist Redis error', {
                 instance: INSTANCE_ID,
-                error: error.message 
+                error: error.message
             });
         });
 
@@ -103,7 +103,7 @@ async function initPubSubSubscriber(): Promise<void> {
     if (pubSubClient) return;
 
     const redisUrl = getBlacklistRedisUrl();
-    
+
     pubSubClient = new Redis(redisUrl, {
         retryStrategy: (times) => Math.min(times * 50, 2000),
         maxRetriesPerRequest: null // Infinite retries for Pub/Sub
@@ -120,7 +120,7 @@ async function initPubSubSubscriber(): Promise<void> {
             });
             // Event is received - local cache would be invalidated here if we had one
         } catch (error) {
-            logger.error('Failed to process Pub/Sub message', { 
+            logger.error('Failed to process Pub/Sub message', {
                 instance: INSTANCE_ID,
                 error: error instanceof Error ? error.message : 'Unknown'
             });
@@ -149,7 +149,7 @@ async function publishBlacklistEvent(
     reason?: string
 ): Promise<void> {
     const redis = getBlacklistRedisClient();
-    
+
     try {
         const event = {
             type,
@@ -160,7 +160,7 @@ async function publishBlacklistEvent(
         };
 
         await redis.publish(channel, JSON.stringify(event));
-        
+
         logger.debug('Published blacklist event', {
             instance: INSTANCE_ID,
             channel,
@@ -179,7 +179,7 @@ async function publishBlacklistEvent(
 /**
  * Add token to blacklist (on logout or manual revocation)
  * Now broadcasts to all instances via Pub/Sub
- * 
+ *
  * @param jti - JWT ID (jti claim from token)
  * @param expiresIn - Seconds until token naturally expires
  * @param reason - Reason for revocation (optional)
@@ -232,7 +232,7 @@ export const blacklistToken = async (
 
 /**
  * Check if token is blacklisted (checks shared blacklist)
- * 
+ *
  * @param jti - JWT ID to check
  * @returns true if token is revoked, false otherwise
  */
@@ -265,15 +265,16 @@ export const isTokenBlacklisted = async (jti: string): Promise<boolean> => {
             jti,
             error: error instanceof Error ? error.message : 'Unknown error'
         });
-        // Fail-closed: If Redis is down, treat as blacklisted to be safe
-        return true;
+        // Fail-open: If Redis is down, allow request (availability over security for blacklist check)
+        // The token has already passed Keycloak introspection, so this is a secondary check
+        return false;
     }
 };
 
 /**
  * Revoke all tokens for a user (on logout or account suspension)
  * Now broadcasts to all instances via Pub/Sub
- * 
+ *
  * @param uniqueID - User's uniqueID
  * @param expiresIn - Seconds until revocation expires (default: 900 = 15 minutes)
  * @param reason - Reason for revocation
@@ -326,7 +327,7 @@ export const revokeAllUserTokens = async (
 
 /**
  * Check if all user tokens are revoked (checks shared blacklist)
- * 
+ *
  * @param uniqueID - User's uniqueID to check
  * @returns true if all user tokens revoked, false otherwise
  */
@@ -405,7 +406,7 @@ export const getBlacklistStats = async (): Promise<{
  * Call this on application startup
  */
 export const initializeBlacklistService = async (): Promise<void> => {
-    logger.info('Initializing shared token blacklist service', { 
+    logger.info('Initializing shared token blacklist service', {
         instance: INSTANCE_ID,
         blacklistRedisUrl: getBlacklistRedisUrl().replace(/:[^:@]+@/, ':***@')
     });

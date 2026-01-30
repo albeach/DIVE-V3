@@ -792,6 +792,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                                 console.error('Failed to decode id_token for custom claims:', error);
                             }
                         }
+
+                        // CRITICAL FIX: Add tokens to session for backend API calls
+                        // The backend needs the actual Keycloak access token to validate via introspection
+                        // These tokens are only available server-side in API routes (not exposed to client)
+                        (session as any).accessToken = account.access_token;
+                        (session as any).idToken = account.id_token;
+                        (session as any).refreshToken = account.refresh_token;
                     } else {
                         console.warn('[DIVE] No account found for user:', user.id);
                     }

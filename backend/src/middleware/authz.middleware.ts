@@ -817,16 +817,86 @@ export async function authenticateJWT(req: Request, res: Response, next: NextFun
             return;
         }
 
+        // Check if token is blacklisted (revoked via logout or admin action)
+        // Use circuit breaker to fail open if Redis is unavailable
+        const decodedToken = jwtService.decode(token, { complete: false }) as any;
+        const jti = introspectionResult.jti || decodedToken?.jti;
+
+        if (jti) {
+            try {
+                const isBlacklisted = await isTokenBlacklisted(jti);
+                if (isBlacklisted) {
+                    logger.warn('[AuthzMiddleware] Token is blacklisted', {
+                        jti,
+                        sub: introspectionResult.sub,
+                        aud: introspectionResult.aud,
+                    });
+                    res.status(401).json({
+                        error: 'Unauthorized',
+                        message: 'Token has been revoked',
+                    });
+                    return;
+                }
+            } catch (error) {
+                // Fail open: If Redis/blacklist check fails, log error but allow request
+                logger.error('[AuthzMiddleware] Blacklist check failed, allowing request', {
+                    jti,
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                });
+            }
+        }
+
+        // Also check if all user tokens are revoked
+        const uniqueID = introspectionResult.uniqueID || introspectionResult.preferred_username || introspectionResult.sub;
+        if (uniqueID) {
+            try {
+                const allRevoked = await areUserTokensRevoked(uniqueID);
+                if (allRevoked) {
+                    logger.warn('[AuthzMiddleware] All user tokens revoked', { uniqueID });
+                    res.status(401).json({
+                        error: 'Unauthorized',
+                        message: 'User session has been terminated',
+                    });
+                    return;
+                }
+            } catch (error) {
+                // Fail open: If Redis/blacklist check fails, log error but allow request
+                logger.error('[AuthzMiddleware] User revocation check failed, allowing request', {
+                    uniqueID,
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                });
+            }
+        }
+
+        // Extract roles from introspection result
+        // Keycloak includes roles in realm_access.roles or resource_access.{client}.roles
+        let roles: string[] = [];
+        if (introspectionResult.roles && Array.isArray(introspectionResult.roles)) {
+            roles = introspectionResult.roles;
+        } else if (introspectionResult.realm_access?.roles) {
+            roles = introspectionResult.realm_access.roles;
+        } else if (introspectionResult.resource_access) {
+            // Try to find roles in resource_access for any client
+            for (const clientRoles of Object.values(introspectionResult.resource_access)) {
+                if (clientRoles.roles) {
+                    roles = [...roles, ...clientRoles.roles];
+                }
+            }
+        }
+
         // Attach user information to request
         // CRITICAL FIX (2026-01-20): Include ACR/AMR/auth_time for MFA enforcement!
+        // CRITICAL FIX (2026-01-29): Include roles for admin authorization!
         (req as any).user = {
             uniqueID: introspectionResult.uniqueID,
             clearance: introspectionResult.clearance,
             countryOfAffiliation: introspectionResult.countryOfAffiliation,
             acpCOI: introspectionResult.acpCOI,
+            roles: roles, // CRITICAL: Add roles for admin middleware
             sub: introspectionResult.sub,
             iss: introspectionResult.iss,
             client_id: introspectionResult.client_id,
+            email: introspectionResult.username, // Keycloak uses username for email
             // MFA enforcement attributes (critical for AAL2/AAL3)
             // Session-based ACR/AMR from actual authentication
             acr: introspectionResult.acr,
@@ -842,6 +912,7 @@ export async function authenticateJWT(req: Request, res: Response, next: NextFun
             subject: introspectionResult.sub,
             issuer: introspectionResult.iss,
             uniqueID: introspectionResult.uniqueID,
+            roles: roles,
             acr: introspectionResult.acr,
             amr: introspectionResult.amr,
         });

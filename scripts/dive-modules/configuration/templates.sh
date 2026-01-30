@@ -83,7 +83,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: \${POSTGRES_PASSWORD}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql  # Mount parent dir to prevent anonymous volume
     ports:
       - "${pg_port}:5432"
     networks:

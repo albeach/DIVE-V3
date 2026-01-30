@@ -87,7 +87,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - hub_postgres_data:/var/lib/postgresql/data
+      - hub_postgres_data:/var/lib/postgresql  # Mount parent dir to prevent anonymous volume
       - ./scripts/setup/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
     networks:
       - hub-internal
@@ -387,7 +387,7 @@ services:
     ports:
       - "${SPOKE_POSTGRES_PORT:-5463}:5432"
     volumes:
-      - spoke_postgres_data:/var/lib/postgresql/data
+      - spoke_postgres_data:/var/lib/postgresql  # Mount parent dir to prevent anonymous volume
     networks:
       - spoke-internal
 

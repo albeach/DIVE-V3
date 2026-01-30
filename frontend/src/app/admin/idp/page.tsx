@@ -1,6 +1,6 @@
 /**
  * IdP Management Page - 2025 Revamp
- * 
+ *
  * Modern redesign with:
  * - IdPCard2025 glassmorphism cards
  * - IdPStatsBar with animated counters
@@ -12,7 +12,7 @@
  * - Responsive masonry grid layout
  * - Beautiful empty states
  * - Slide-out detail panel with tabs
- * 
+ *
  * Phase 3.1: Page Integration
  */
 
@@ -62,7 +62,7 @@ export default function IdPManagementPage() {
 function IdPManagementPageContent() {
     const router = useRouter();
     const { data: session } = useSession();
-    
+
     const {
         selectedIdPAlias,
         selectIdP,
@@ -329,7 +329,7 @@ function IdPManagementPageContent() {
                             >
                                 SAML
                             </button>
-                            
+
                             <InlineHelp
                                 variant="info"
                                 size="sm"
@@ -391,8 +391,8 @@ function IdPManagementPageContent() {
                             />
                         ) : (
                             <div className={`
-                                ${viewMode === 'grid' 
-                                    ? 'grid grid-cols-1 md:grid-cols-2 gap-6' 
+                                ${viewMode === 'grid'
+                                    ? 'grid grid-cols-1 md:grid-cols-2 gap-6'
                                     : 'space-y-4'}
                             `}>
                                 <AnimatePresence>
@@ -417,7 +417,7 @@ function IdPManagementPageContent() {
                     {/* Sidebar */}
                     <div className="lg:col-span-1 space-y-6">
                         <RecentIdPs />
-                        
+
                         {/* Quick Links */}
                         <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
                             <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">
@@ -536,13 +536,13 @@ function EmptyState({ hasSearch, onClearFilters, onAddNew }: EmptyStateProps) {
                 <div className="w-16 h-16 mx-auto mb-4 bg-purple-100 dark:bg-purple-900/30 rounded-full flex items-center justify-center">
                     <FunnelIcon className="h-8 w-8 text-purple-600 dark:text-purple-400" />
                 </div>
-                
+
                 <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
                     {hasSearch ? 'No matching IdPs found' : 'No Identity Providers yet'}
                 </h3>
-                
+
                 <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-                    {hasSearch 
+                    {hasSearch
                         ? 'Try adjusting your search or filters'
                         : 'Get started by adding your first Identity Provider'}
                 </p>

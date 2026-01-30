@@ -26,6 +26,20 @@ if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../orchestration-dependencies.sh" ]; 
     source "$(dirname "${BASH_SOURCE[0]}")/../../orchestration-dependencies.sh"
 fi
 
+# Load secret management functions (needed for secret loading in preflight)
+if [ -z "${SPOKE_SECRETS_LOADED:-}" ]; then
+    if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-secrets.sh" ]; then
+        source "$(dirname "${BASH_SOURCE[0]}")/spoke-secrets.sh"
+    fi
+fi
+
+# Load spoke-preflight module (contains preflight_check_secrets_available)
+if [ -z "${DIVE_SPOKE_PREFLIGHT_LOADED:-}" ]; then
+    if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-preflight.sh" ]; then
+        source "$(dirname "${BASH_SOURCE[0]}")/spoke-preflight.sh"
+    fi
+fi
+
 # =============================================================================
 # MAIN PREFLIGHT PHASE FUNCTION
 # =============================================================================
@@ -59,7 +73,7 @@ spoke_phase_preflight() {
             return 1
         fi
     fi
-    
+
     # Step 0.5: Run comprehensive preflight validation
     # This performs 6 critical checks: Hub reachability, secrets, ports, Docker resources, network, Terraform
     if type spoke_preflight_validation &>/dev/null; then

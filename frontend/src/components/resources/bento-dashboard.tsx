@@ -139,6 +139,32 @@ const instanceFlags: Record<string, string> = {
   GBR: '🇬🇧',
   DEU: '🇩🇪',
   CAN: '🇨🇦',
+  ESP: '🇪🇸',
+  ITA: '🇮🇹',
+  POL: '🇵🇱',
+  NLD: '🇳🇱',
+  BEL: '🇧🇪',
+  NOR: '🇳🇴',
+  DNK: '🇩🇰',
+  PRT: '🇵🇹',
+  TUR: '🇹🇷',
+  GRC: '🇬🇷',
+  CZE: '🇨🇿',
+  HUN: '🇭🇺',
+  SVK: '🇸🇰',
+  SVN: '🇸🇮',
+  HRV: '🇭🇷',
+  ROU: '🇷🇴',
+  BGR: '🇧🇬',
+  EST: '🇪🇪',
+  LVA: '🇱🇻',
+  LTU: '🇱🇹',
+  LUX: '🇱🇺',
+  ISL: '🇮🇸',
+  AUS: '🇦🇺',
+  NZL: '🇳🇿',
+  JPN: '🇯🇵',
+  KOR: '🇰🇷',
 };
 
 // ============================================
@@ -246,17 +272,13 @@ export default function BentoDashboard({
               {activeInstances.length} active
             </span>
           </div>
-          <div className="flex gap-1">
-            {['USA', 'FRA', 'GBR', 'DEU'].map((inst) => (
+          <div className="flex gap-1 flex-wrap">
+            {activeInstances.map((inst) => (
               <span
                 key={inst}
-                className={`text-xs px-1.5 py-0.5 rounded font-medium transition-all ${
-                  activeInstances.includes(inst)
-                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                    : 'bg-gray-50 dark:bg-gray-700/50 text-gray-400 dark:text-gray-500'
-                }`}
+                className="text-xs px-1.5 py-0.5 rounded font-medium transition-all bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
               >
-                {instanceFlags[inst]} {inst}
+                {instanceFlags[inst] || '🌐'} {inst}
               </span>
             ))}
           </div>

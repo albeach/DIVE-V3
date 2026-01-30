@@ -26,8 +26,8 @@ import { SessionExpiryModal, type SessionExpiryReason } from './session-expiry-m
 import { getSessionSyncManager } from '@/lib/session-sync-manager';
 import { useSessionHeartbeat } from '@/hooks/use-session-heartbeat';
 
-const WARNING_THRESHOLD = 120; // 2 minutes in seconds
-const REFRESH_THRESHOLD = 300; // 5 minutes - attempt refresh when less than this remains
+const WARNING_THRESHOLD = 180; // 3 minutes in seconds (increased for clearer warnings)
+const REFRESH_THRESHOLD = 420; // 7 minutes - attempt refresh when less than this remains (aligned with 8-min server threshold)
 const AUTO_REFRESH_COOLDOWN = 60000; // 1 minute cooldown between auto-refreshes
 
 export function TokenExpiryChecker() {

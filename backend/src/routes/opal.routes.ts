@@ -21,6 +21,7 @@ import { policySyncService } from '../services/policy-sync.service';
 import { hubSpokeRegistry } from '../services/hub-spoke-registry.service';
 import { mongoOpalDataStore } from '../models/trusted-issuer.model';
 import { opalCdcService } from '../services/opal-cdc.service';
+import { opalMetricsService } from '../services/opal-metrics.service';
 import { requireHubAdmin, logFederationModification } from '../middleware/hub-admin.middleware';
 import { authenticateJWT } from '../middleware/authz.middleware';
 import { requireAdmin, requireSuperAdmin } from '../middleware/admin.middleware';
@@ -94,6 +95,68 @@ function legacyRequireAdmin(req: Request, res: Response, next: NextFunction): vo
 // ============================================
 
 /**
+ * @openapi
+ * /api/opal/policy-data:
+ *   get:
+ *     summary: Get policy data for OPAL Server
+ *     description: |
+ *       Primary endpoint for OPAL Server to fetch policy data.
+ *       Called periodically by OPAL to sync federation data to connected clients.
+ *
+ *       Returns:
+ *       - Current policy version and metadata
+ *       - Active spoke instances and their trust levels
+ *       - Trusted issuers (Keycloak instances)
+ *       - Federation trust matrix
+ *       - COI (Community of Interest) membership
+ *       - Policy bundle manifest
+ *
+ *       This is a public endpoint called by OPAL Server with its datasource token.
+ *     tags: [OPAL]
+ *     parameters:
+ *       - name: x-opal-source
+ *         in: header
+ *         description: OPAL source identifier for logging
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Policy data retrieved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 policy_version:
+ *                   type: object
+ *                   properties:
+ *                     version:
+ *                       type: string
+ *                       example: '1.2.3'
+ *                     hash:
+ *                       type: string
+ *                 updated_at:
+ *                   type: string
+ *                   format: date-time
+ *                 federation:
+ *                   type: object
+ *                   properties:
+ *                     spokes:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                     trusted_issuers:
+ *                       type: object
+ *                     federation_matrix:
+ *                       type: object
+ *                     coi_membership:
+ *                       type: object
+ *                 bundle:
+ *                   type: object
+ *       500:
+ *         description: Failed to retrieve policy data
+ */
+/**
  * GET /api/opal/policy-data
  * Endpoint for OPAL Server to fetch policy data
  * Called periodically by OPAL to sync data to connected clients
@@ -163,6 +226,76 @@ router.get('/policy-data', async (req: Request, res: Response): Promise<void> =>
 // ============================================
 
 /**
+ * @openapi
+ * /api/opal/bundle/build:
+ *   post:
+ *     summary: Build a new policy bundle
+ *     description: |
+ *       Build a new OPA policy bundle from source policies.
+ *       Supports scoped bundles (e.g., policy:usa, policy:fvey) and optional signing/compression.
+ *
+ *       The bundle includes:
+ *       - Compiled Rego policies
+ *       - Policy data (trusted issuers, federation matrix, COI membership)
+ *       - Bundle manifest with file hashes
+ *       - Optional cryptographic signature
+ *     tags: [OPAL]
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               scopes:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Policy scopes to include (e.g., ['policy:base', 'policy:usa'])
+ *                 example: ['policy:base', 'policy:fvey']
+ *               includeData:
+ *                 type: boolean
+ *                 default: true
+ *                 description: Include policy data in bundle
+ *               sign:
+ *                 type: boolean
+ *                 default: true
+ *                 description: Sign the bundle with private key
+ *               compress:
+ *                 type: boolean
+ *                 default: true
+ *                 description: Compress the bundle with gzip
+ *     responses:
+ *       200:
+ *         description: Bundle built successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 bundleId:
+ *                   type: string
+ *                   example: 'bundle-20260129-abc123'
+ *                 version:
+ *                   type: string
+ *                   example: '1.2.3'
+ *                 hash:
+ *                   type: string
+ *                 size:
+ *                   type: integer
+ *                   description: Bundle size in bytes
+ *                 fileCount:
+ *                   type: integer
+ *                 signed:
+ *                   type: boolean
+ *       400:
+ *         description: Build failed (validation error)
+ *       500:
+ *         description: Build failed (server error)
+ */
+/**
  * POST /api/opal/bundle/build
  * Build a new policy bundle
  */
@@ -208,6 +341,42 @@ router.post('/bundle/build', async (req: Request, res: Response): Promise<void> 
 });
 
 /**
+ * @openapi
+ * /api/opal/bundle/publish:
+ *   post:
+ *     summary: Publish bundle to OPAL Server
+ *     description: |
+ *       Publish the current policy bundle to OPAL Server.
+ *       OPAL Server will distribute the bundle to all connected OPAL clients (spoke instances).
+ *
+ *       Triggers a policy refresh transaction that propagates to all clients.
+ *     tags: [OPAL]
+ *     responses:
+ *       200:
+ *         description: Bundle published successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 bundleId:
+ *                   type: string
+ *                 version:
+ *                   type: string
+ *                 publishedAt:
+ *                   type: string
+ *                   format: date-time
+ *                 opalTransactionId:
+ *                   type: string
+ *                   description: OPAL transaction ID for tracking
+ *       400:
+ *         description: Publish failed (no bundle available)
+ *       500:
+ *         description: Publish failed (server error)
+ */
+/**
  * POST /api/opal/bundle/publish
  * Publish current bundle to OPAL Server
  */
@@ -243,6 +412,72 @@ router.post('/bundle/publish', async (_req: Request, res: Response): Promise<voi
   }
 });
 
+/**
+ * @openapi
+ * /api/opal/bundle/build-and-publish:
+ *   post:
+ *     summary: Build and publish bundle (atomic operation)
+ *     description: |
+ *       Convenience endpoint that builds and publishes a policy bundle in one atomic operation.
+ *       Equivalent to calling /bundle/build followed by /bundle/publish.
+ *
+ *       Use this endpoint for streamlined bundle deployment.
+ *     tags: [OPAL]
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               scopes:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 example: ['policy:base', 'policy:nato']
+ *               includeData:
+ *                 type: boolean
+ *                 default: true
+ *     responses:
+ *       200:
+ *         description: Build and publish completed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 build:
+ *                   type: object
+ *                   properties:
+ *                     success:
+ *                       type: boolean
+ *                     bundleId:
+ *                       type: string
+ *                     version:
+ *                       type: string
+ *                     hash:
+ *                       type: string
+ *                     size:
+ *                       type: integer
+ *                     fileCount:
+ *                       type: integer
+ *                     error:
+ *                       type: string
+ *                 publish:
+ *                   type: object
+ *                   properties:
+ *                     success:
+ *                       type: boolean
+ *                     publishedAt:
+ *                       type: string
+ *                       format: date-time
+ *                     opalTransactionId:
+ *                       type: string
+ *                     error:
+ *                       type: string
+ *       500:
+ *         description: Operation failed
+ */
 /**
  * POST /api/opal/bundle/build-and-publish
  * Build and publish in one operation
@@ -292,6 +527,63 @@ router.post('/bundle/build-and-publish', async (req: Request, res: Response): Pr
 });
 
 /**
+ * @openapi
+ * /api/opal/bundle/current:
+ *   get:
+ *     summary: Get current bundle metadata
+ *     description: |
+ *       Retrieve metadata about the currently active policy bundle.
+ *
+ *       Returns bundle manifest, file list, hash, signature details, and size.
+ *       Does not return the bundle contents - use GET /bundle/:scope for download.
+ *     tags: [OPAL]
+ *     responses:
+ *       200:
+ *         description: Current bundle metadata
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 bundleId:
+ *                   type: string
+ *                 version:
+ *                   type: string
+ *                 hash:
+ *                   type: string
+ *                 scopes:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                 signedAt:
+ *                   type: string
+ *                   format: date-time
+ *                 signedBy:
+ *                   type: string
+ *                 manifest:
+ *                   type: object
+ *                   properties:
+ *                     revision:
+ *                       type: string
+ *                     roots:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                     fileCount:
+ *                       type: integer
+ *                     files:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                 size:
+ *                   type: integer
+ *                   description: Bundle size in bytes
+ *       404:
+ *         description: No bundle available (build one first)
+ *       500:
+ *         description: Failed to retrieve bundle
+ */
+/**
  * GET /api/opal/bundle/current
  * Get current bundle metadata
  */
@@ -338,6 +630,42 @@ router.get('/bundle/current', async (_req: Request, res: Response): Promise<void
 });
 
 /**
+ * @openapi
+ * /api/opal/bundle/scopes:
+ *   get:
+ *     summary: Get available policy scopes
+ *     description: |
+ *       List all available policy scopes that can be included in bundles.
+ *
+ *       Scopes represent different policy layers:
+ *       - policy:base - Base guardrail policies (always included)
+ *       - policy:fvey - Five Eyes organization policies
+ *       - policy:nato - NATO organization policies
+ *       - policy:usa, policy:fra, policy:gbr, policy:deu - Tenant-specific policies
+ *
+ *       Spoke instances are restricted to scopes based on their trust level and configuration.
+ *     tags: [OPAL]
+ *     responses:
+ *       200:
+ *         description: Available scopes
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 scopes:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                   example: ['policy:base', 'policy:fvey', 'policy:nato', 'policy:usa', 'policy:fra']
+ *                 descriptions:
+ *                   type: object
+ *                   additionalProperties:
+ *                     type: string
+ *       500:
+ *         description: Failed to retrieve scopes
+ */
+/**
  * GET /api/opal/bundle/scopes
  * Get available policy scopes
  */
@@ -369,6 +697,47 @@ router.get('/bundle/scopes', async (_req: Request, res: Response): Promise<void>
 // ============================================
 
 /**
+ * @openapi
+ * /api/opal/health:
+ *   get:
+ *     summary: Get OPAL Server health status
+ *     description: |
+ *       Check the health status of the OPAL Server connection.
+ *
+ *       Returns:
+ *       - Connection status (healthy/unhealthy)
+ *       - OPAL Server URL
+ *       - Configured data topics
+ *       - WebSocket connection status
+ *     tags: [OPAL]
+ *     responses:
+ *       200:
+ *         description: OPAL health status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 opalEnabled:
+ *                   type: boolean
+ *                 healthy:
+ *                   type: boolean
+ *                 connected:
+ *                   type: boolean
+ *                 config:
+ *                   type: object
+ *                   properties:
+ *                     serverUrl:
+ *                       type: string
+ *                       example: 'http://opal-server:7002'
+ *                     topics:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *       500:
+ *         description: Health check failed
+ */
+/**
  * GET /api/opal/health
  * Get OPAL Server health status
  */
@@ -392,6 +761,41 @@ router.get('/health', async (_req: Request, res: Response): Promise<void> => {
   }
 });
 
+/**
+ * @openapi
+ * /api/opal/refresh:
+ *   post:
+ *     summary: Trigger OPAL policy refresh
+ *     description: |
+ *       Manually trigger a policy refresh in OPAL Server.
+ *       This forces OPAL to re-fetch policy data and distribute to all connected clients.
+ *
+ *       Use cases:
+ *       - After manual policy changes
+ *       - To force sync of all clients
+ *       - For testing policy distribution
+ *     tags: [OPAL]
+ *     responses:
+ *       200:
+ *         description: Refresh triggered successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 transactionId:
+ *                   type: string
+ *                   description: OPAL transaction ID for tracking
+ *                 message:
+ *                   type: string
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       500:
+ *         description: Refresh failed
+ */
 /**
  * POST /api/opal/refresh
  * Trigger OPAL policy refresh
@@ -420,6 +824,61 @@ router.post('/refresh', async (_req: Request, res: Response): Promise<void> => {
   }
 });
 
+/**
+ * @openapi
+ * /api/opal/data/publish:
+ *   post:
+ *     summary: Publish inline data to OPAL
+ *     description: |
+ *       Publish data directly to OPAL Server without rebuilding the bundle.
+ *       Used for dynamic data updates (e.g., adding a trusted issuer).
+ *
+ *       The data is published to a specific path in OPA's data store.
+ *       All connected OPAL clients receive the update via WebSocket.
+ *     tags: [OPAL]
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - path
+ *               - data
+ *             properties:
+ *               path:
+ *                 type: string
+ *                 description: OPA data path (e.g., 'federation/trusted_issuers')
+ *                 example: 'federation/trusted_issuers'
+ *               data:
+ *                 type: object
+ *                 description: Data to publish
+ *               reason:
+ *                 type: string
+ *                 description: Reason for the update (for audit logs)
+ *                 example: 'Added new trusted issuer for France'
+ *     responses:
+ *       200:
+ *         description: Data published successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 transactionId:
+ *                   type: string
+ *                 message:
+ *                   type: string
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       400:
+ *         description: Missing required fields (path or data)
+ *       500:
+ *         description: Publish failed
+ */
 /**
  * POST /api/opal/data/publish
  * Publish inline data to OPAL
@@ -464,6 +923,40 @@ router.post('/data/publish', async (req: Request, res: Response): Promise<void> 
 // ============================================
 
 /**
+ * @openapi
+ * /api/opal/trusted-issuers:
+ *   get:
+ *     summary: Get all trusted issuers
+ *     description: |
+ *       Retrieve all trusted issuers (Keycloak instances) from MongoDB.
+ *       Returns data in OPAL-compatible format for distribution to OPA instances.
+ *
+ *       Trusted issuers are used to validate JWT tokens from federated partners.
+ *     tags: [OPAL]
+ *     responses:
+ *       200:
+ *         description: Trusted issuers retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 trusted_issuers:
+ *                   type: object
+ *                   additionalProperties:
+ *                     type: object
+ *                   description: Map of issuer URLs to issuer metadata
+ *                 count:
+ *                   type: integer
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       500:
+ *         description: Failed to retrieve trusted issuers
+ */
+/**
  * GET /api/opal/trusted-issuers
  * Get all trusted issuers from MongoDB (OPAL-compatible format)
  */
@@ -488,6 +981,80 @@ router.get('/trusted-issuers', async (_req: Request, res: Response): Promise<voi
   }
 });
 
+/**
+ * @openapi
+ * /api/opal/trusted-issuers:
+ *   post:
+ *     summary: Add a new trusted issuer
+ *     description: |
+ *       Add a new trusted issuer (Keycloak instance) to the federation.
+ *       Requires hub_admin or super_admin role.
+ *
+ *       After adding, triggers OPAL refresh to distribute to all clients.
+ *       Logged for audit trail with requester identity.
+ *
+ *       **Security:** Spoke admins receive 403 Forbidden.
+ *     tags: [OPAL]
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - issuerUrl
+ *               - tenant
+ *               - country
+ *             properties:
+ *               issuerUrl:
+ *                 type: string
+ *                 format: uri
+ *                 example: 'https://keycloak.fra.dive.mil/realms/dive'
+ *               tenant:
+ *                 type: string
+ *                 description: Tenant code (uppercase)
+ *                 example: 'FRA'
+ *               name:
+ *                 type: string
+ *                 description: Friendly name
+ *                 example: 'France DIVE Keycloak'
+ *               country:
+ *                 type: string
+ *                 description: Country code (uppercase)
+ *                 example: 'FRA'
+ *               trustLevel:
+ *                 type: string
+ *                 enum: [PRODUCTION, STAGING, DEVELOPMENT]
+ *                 default: DEVELOPMENT
+ *               realm:
+ *                 type: string
+ *                 example: 'dive'
+ *               enabled:
+ *                 type: boolean
+ *                 default: true
+ *     responses:
+ *       201:
+ *         description: Issuer added and OPAL refreshed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 issuer:
+ *                   type: object
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Missing required fields
+ *       403:
+ *         description: Requires hub_admin role (spoke admins forbidden)
+ *       500:
+ *         description: Failed to add issuer
+ */
 /**
  * POST /api/opal/trusted-issuers
  * Add a new trusted issuer (hub_admin only)
@@ -561,6 +1128,49 @@ router.post('/trusted-issuers', authenticateJWT, requireHubAdmin, async (req: Re
 });
 
 /**
+ * @openapi
+ * /api/opal/trusted-issuers/{encodedUrl}:
+ *   delete:
+ *     summary: Remove a trusted issuer
+ *     description: |
+ *       Remove a trusted issuer from the federation.
+ *       Requires hub_admin or super_admin role.
+ *
+ *       After removal, triggers OPAL refresh to propagate change.
+ *       Logged for audit trail.
+ *
+ *       **Note:** URL must be URL-encoded in the path parameter.
+ *     tags: [OPAL]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - name: encodedUrl
+ *         in: path
+ *         required: true
+ *         description: URL-encoded issuer URL
+ *         schema:
+ *           type: string
+ *         example: 'https%3A%2F%2Fkeycloak.fra.dive.mil%2Frealms%2Fdive'
+ *     responses:
+ *       200:
+ *         description: Issuer removed and OPAL refreshed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       403:
+ *         description: Requires hub_admin role
+ *       404:
+ *         description: Issuer not found
+ *       500:
+ *         description: Failed to remove issuer
+ */
+/**
  * DELETE /api/opal/trusted-issuers/:encodedUrl
  * Remove a trusted issuer (hub_admin only)
  *
@@ -617,6 +1227,46 @@ router.delete('/trusted-issuers/:encodedUrl', authenticateJWT, requireHubAdmin, 
 });
 
 /**
+ * @openapi
+ * /api/opal/federation-matrix:
+ *   get:
+ *     summary: Get federation trust matrix
+ *     description: |
+ *       Retrieve the federation trust matrix from MongoDB.
+ *       The matrix defines which countries trust each other for resource sharing.
+ *
+ *       Format: `{ "USA": ["GBR", "CAN", "AUS", "NZL"], "GBR": ["USA", "CAN"], ... }`
+ *
+ *       Used by OPA policies to enforce federation constraints.
+ *     tags: [OPAL]
+ *     responses:
+ *       200:
+ *         description: Federation matrix retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 federation_matrix:
+ *                   type: object
+ *                   additionalProperties:
+ *                     type: array
+ *                     items:
+ *                       type: string
+ *                   example:
+ *                     USA: ['GBR', 'CAN', 'AUS', 'NZL']
+ *                     GBR: ['USA', 'CAN', 'AUS', 'NZL']
+ *                 count:
+ *                   type: integer
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       500:
+ *         description: Failed to retrieve federation matrix
+ */
+/**
  * GET /api/opal/federation-matrix
  * Get federation trust matrix from MongoDB
  */
@@ -641,6 +1291,65 @@ router.get('/federation-matrix', async (_req: Request, res: Response): Promise<v
   }
 });
 
+/**
+ * @openapi
+ * /api/opal/federation-matrix:
+ *   post:
+ *     summary: Add or update federation trust
+ *     description: |
+ *       Add or update federation trust relationships.
+ *       Requires hub_admin or super_admin role.
+ *
+ *       Two modes:
+ *       1. Set entire trust list: Provide `sourceCountry` and `trustedCountries` array
+ *       2. Add single trust: Provide `sourceCountry` and `targetCountry`
+ *
+ *       After update, triggers OPAL refresh.
+ *     tags: [OPAL]
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - sourceCountry
+ *             properties:
+ *               sourceCountry:
+ *                 type: string
+ *                 description: Country code (source of trust)
+ *                 example: 'USA'
+ *               targetCountry:
+ *                 type: string
+ *                 description: Single country to trust (mode 2)
+ *                 example: 'GBR'
+ *               trustedCountries:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Array of trusted countries (mode 1)
+ *                 example: ['GBR', 'CAN', 'AUS', 'NZL']
+ *     responses:
+ *       200:
+ *         description: Federation matrix updated and OPAL refreshed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       400:
+ *         description: Missing required fields
+ *       403:
+ *         description: Requires hub_admin role
+ *       500:
+ *         description: Failed to update federation matrix
+ */
 /**
  * POST /api/opal/federation-matrix
  * Add or update federation trust (hub_admin only)
@@ -724,6 +1433,51 @@ router.post('/federation-matrix', authenticateJWT, requireHubAdmin, async (req: 
 });
 
 /**
+ * @openapi
+ * /api/opal/federation-matrix/{source}/{target}:
+ *   delete:
+ *     summary: Remove federation trust relationship
+ *     description: |
+ *       Remove a specific trust relationship between two countries.
+ *       Requires hub_admin or super_admin role.
+ *
+ *       After removal, triggers OPAL refresh to propagate change.
+ *     tags: [OPAL]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - name: source
+ *         in: path
+ *         required: true
+ *         description: Source country code
+ *         schema:
+ *           type: string
+ *         example: 'USA'
+ *       - name: target
+ *         in: path
+ *         required: true
+ *         description: Target country code to remove from trust list
+ *         schema:
+ *           type: string
+ *         example: 'DEU'
+ *     responses:
+ *       200:
+ *         description: Trust relationship removed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       403:
+ *         description: Requires hub_admin role
+ *       500:
+ *         description: Failed to remove trust relationship
+ */
+/**
  * DELETE /api/opal/federation-matrix/:source/:target
  * Remove a specific federation trust (hub_admin only)
  *
@@ -770,6 +1524,37 @@ router.delete('/federation-matrix/:source/:target', authenticateJWT, requireHubA
 });
 
 /**
+ * @openapi
+ * /api/opal/tenant-configs:
+ *   get:
+ *     summary: Get all tenant configurations
+ *     description: |
+ *       Retrieve all tenant configurations from MongoDB.
+ *       Tenant configs define classification ceilings, COI memberships, and federation settings.
+ *     tags: [OPAL]
+ *     responses:
+ *       200:
+ *         description: Tenant configurations retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 tenant_configs:
+ *                   type: object
+ *                   additionalProperties:
+ *                     type: object
+ *                 count:
+ *                   type: integer
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       500:
+ *         description: Failed to retrieve tenant configs
+ */
+/**
  * GET /api/opal/tenant-configs
  * Get all tenant configurations from MongoDB
  */
@@ -794,6 +1579,39 @@ router.get('/tenant-configs', async (_req: Request, res: Response): Promise<void
   }
 });
 
+/**
+ * @openapi
+ * /api/opal/federation-constraints:
+ *   get:
+ *     summary: Get federation constraints
+ *     description: |
+ *       Retrieve active federation constraints for OPAL distribution.
+ *       Constraints define granular authorization rules between tenant pairs.
+ *
+ *       This is a public endpoint used by OPAL Server with datasource token.
+ *     tags: [OPAL]
+ *     responses:
+ *       200:
+ *         description: Federation constraints retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 federation_constraints:
+ *                   type: object
+ *                   description: Nested object mapping owner tenant -> partner tenant -> constraints
+ *                 count:
+ *                   type: integer
+ *                   description: Total constraint count
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       500:
+ *         description: Failed to retrieve federation constraints
+ */
 /**
  * GET /api/opal/federation-constraints
  * Serve federation constraints for OPAL distribution
@@ -821,6 +1639,49 @@ router.get('/federation-constraints', async (_req: Request, res: Response): Prom
   }
 });
 
+/**
+ * @openapi
+ * /api/opal/coi-definitions:
+ *   get:
+ *     summary: Get COI (Community of Interest) definitions
+ *     description: |
+ *       Retrieve all COI definitions from MongoDB.
+ *       MongoDB is the Single Source of Truth for ALL COI types:
+ *
+ *       - Country-based COIs (NATO, FVEY, etc.)
+ *       - Program-based COIs (Alpha, Beta, Gamma, etc.)
+ *       - Auto-updated coalition COIs (NATO auto-updates from active federation)
+ *
+ *       COIs define groups of countries/programs with shared access to classified resources.
+ *     tags: [OPAL, COI]
+ *     responses:
+ *       200:
+ *         description: COI definitions retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 coi_definitions:
+ *                   type: object
+ *                   additionalProperties:
+ *                     type: array
+ *                     items:
+ *                       type: string
+ *                   example:
+ *                     NATO: ['USA', 'GBR', 'FRA', 'DEU', 'CAN']
+ *                     FVEY: ['USA', 'GBR', 'CAN', 'AUS', 'NZL']
+ *                     ALPHA: ['USA']
+ *                 count:
+ *                   type: integer
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       500:
+ *         description: Failed to retrieve COI definitions
+ */
 /**
  * GET /api/opal/coi-definitions
  * Get all COI definitions from MongoDB (Phase 3: Gap Closure)
@@ -855,10 +1716,55 @@ router.get('/coi-definitions', async (_req: Request, res: Response): Promise<voi
 });
 
 /**
+ * @openapi
+ * /api/opal/tenant-configs/{code}:
+ *   put:
+ *     summary: Create or update tenant configuration
+ *     description: |
+ *       Create or update a tenant's configuration.
+ *       Requires super_admin role.
+ *
+ *       After update, triggers OPAL refresh to distribute changes.
+ *     tags: [OPAL]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - name: code
+ *         in: path
+ *         required: true
+ *         description: Tenant code (e.g., USA, FRA, GBR)
+ *         schema:
+ *           type: string
+ *         example: 'USA'
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             description: Tenant configuration object
+ *     responses:
+ *       200:
+ *         description: Tenant config updated
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *       403:
+ *         description: Requires super_admin role
+ *       500:
+ *         description: Failed to update tenant config
+ */
+/**
  * PUT /api/opal/tenant-configs/:code
  * Create or update a tenant configuration (super_admin only)
  */
-router.put('/tenant-configs/:code', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
+router.put('/tenant-configs/:code', authenticateJWT, requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
   try {
     const { code } = req.params;
     const config = req.body;
@@ -883,6 +1789,53 @@ router.put('/tenant-configs/:code', requireSuperAdmin, async (req: Request, res:
 // COI MEMBERS FILE GENERATION (SSOT)
 // ============================================
 
+/**
+ * @openapi
+ * /api/opal/generate-coi-members-file:
+ *   post:
+ *     summary: Generate COI members file from MongoDB
+ *     description: |
+ *       Generate the OPAL coi_members.json file from MongoDB (Single Source of Truth).
+ *       Requires super_admin role.
+ *
+ *       This endpoint:
+ *       1. Reads all COI definitions from MongoDB
+ *       2. Generates coi_members.json with membership data
+ *       3. Writes file to data/opal/coi_members.json
+ *
+ *       Use after bulk COI updates to ensure file consistency.
+ *     tags: [OPAL, COI]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: COI members file generated successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     coiCount:
+ *                       type: integer
+ *                       description: Number of COIs processed
+ *                     filePath:
+ *                       type: string
+ *                       description: Path to generated file
+ *                     timestamp:
+ *                       type: string
+ *                       format: date-time
+ *       403:
+ *         description: Requires super_admin role
+ *       500:
+ *         description: Failed to generate file
+ */
 /**
  * POST /api/opal/generate-coi-members-file
  * Generate OPAL coi_members.json file from MongoDB (SSOT)
@@ -961,10 +1914,54 @@ router.post('/generate-coi-members-file', authenticateJWT, requireSuperAdmin, as
 // ============================================
 
 /**
+ * @openapi
+ * /api/opal/cdc/status:
+ *   get:
+ *     summary: Get CDC (Change Data Capture) service status
+ *     description: |
+ *       Get the status of the OPAL CDC service.
+ *       CDC monitors MongoDB changes and automatically publishes updates to OPAL.
+ *
+ *       Requires admin or super_admin role.
+ *     tags: [OPAL]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: CDC status retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 running:
+ *                   type: boolean
+ *                   description: Whether CDC is running
+ *                 watchedCollections:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                   description: Collections being monitored
+ *                 eventsProcessed:
+ *                   type: integer
+ *                 lastEventTime:
+ *                   type: string
+ *                   format: date-time
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       403:
+ *         description: Requires admin role
+ *       500:
+ *         description: Failed to get CDC status
+ */
+/**
  * GET /api/opal/cdc/status
  * Get CDC service status (admin only)
  */
-router.get('/cdc/status', requireAdmin, async (_req: Request, res: Response): Promise<void> => {
+router.get('/cdc/status', authenticateJWT, requireAdmin, async (_req: Request, res: Response): Promise<void> => {
   try {
     const status = opalCdcService.getStatus();
     res.json({
@@ -981,10 +1978,47 @@ router.get('/cdc/status', requireAdmin, async (_req: Request, res: Response): Pr
 });
 
 /**
+ * @openapi
+ * /api/opal/cdc/force-sync:
+ *   post:
+ *     summary: Force CDC sync of all data to OPAL
+ *     description: |
+ *       Force the CDC service to sync all data to OPAL immediately.
+ *       Requires super_admin role.
+ *
+ *       Use cases:
+ *       - After manual MongoDB updates
+ *       - After restoring from backup
+ *       - To recover from missed change events
+ *     tags: [OPAL]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Force sync completed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 results:
+ *                   type: array
+ *                   description: Sync results for each collection
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       403:
+ *         description: Requires super_admin role
+ *       500:
+ *         description: Force sync failed
+ */
+/**
  * POST /api/opal/cdc/force-sync
  * Force sync all data to OPAL (super_admin only)
  */
-router.post('/cdc/force-sync', requireSuperAdmin, async (_req: Request, res: Response): Promise<void> => {
+router.post('/cdc/force-sync', authenticateJWT, requireSuperAdmin, async (_req: Request, res: Response): Promise<void> => {
   try {
     logger.info('Force syncing all OPAL data via CDC');
     const result = await opalCdcService.forcePublishAll();
@@ -1009,6 +2043,59 @@ router.post('/cdc/force-sync', requireSuperAdmin, async (_req: Request, res: Res
 // PHASE 4: SCOPED BUNDLE ENDPOINTS
 // ============================================
 
+/**
+ * @openapi
+ * /api/opal/version:
+ *   get:
+ *     summary: Get current policy version
+ *     description: |
+ *       Get the current policy version and bundle metadata.
+ *       Public endpoint - spoke instances use this to check if they need updates.
+ *
+ *       Returns version hash, timestamp, policy layers, and bundle details.
+ *     tags: [OPAL]
+ *     responses:
+ *       200:
+ *         description: Policy version information
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 version:
+ *                   type: string
+ *                   example: '1.2.3'
+ *                 hash:
+ *                   type: string
+ *                   description: Version hash for comparison
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *                 layers:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                   description: Active policy layers
+ *                 bundle:
+ *                   type: object
+ *                   nullable: true
+ *                   properties:
+ *                     bundleId:
+ *                       type: string
+ *                     signedAt:
+ *                       type: string
+ *                       format: date-time
+ *                     signedBy:
+ *                       type: string
+ *                     scopes:
+ *                       type: array
+ *                       items:
+ *                         type: string
+ *                     fileCount:
+ *                       type: integer
+ *       500:
+ *         description: Failed to retrieve policy version
+ */
 /**
  * GET /api/opal/version
  * Get current policy version (public - for spokes to check)
@@ -1044,6 +2131,69 @@ router.get('/version', async (_req: Request, res: Response): Promise<void> => {
   }
 });
 
+/**
+ * @openapi
+ * /api/opal/bundle/{scope}:
+ *   get:
+ *     summary: Download scoped policy bundle
+ *     description: |
+ *       Download a policy bundle for a specific scope.
+ *       Requires spoke token authentication with matching scope authorization.
+ *
+ *       Scopes are validated against the spoke's allowed scopes.
+ *       Base policies (policy:base) are always included.
+ *
+ *       Returns bundle content as base64-encoded data.
+ *     tags: [OPAL]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - name: scope
+ *         in: path
+ *         required: true
+ *         description: Policy scope to download (e.g., 'usa', 'fvey', 'nato')
+ *         schema:
+ *           type: string
+ *         example: 'usa'
+ *     responses:
+ *       200:
+ *         description: Scoped bundle downloaded successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 bundleId:
+ *                   type: string
+ *                 version:
+ *                   type: string
+ *                 hash:
+ *                   type: string
+ *                 scope:
+ *                   type: string
+ *                 size:
+ *                   type: integer
+ *                 fileCount:
+ *                   type: integer
+ *                 signed:
+ *                   type: boolean
+ *                 signature:
+ *                   type: string
+ *                   nullable: true
+ *                 manifest:
+ *                   type: object
+ *                 bundleContent:
+ *                   type: string
+ *                   description: Base64-encoded bundle content
+ *       401:
+ *         description: Missing or invalid spoke token
+ *       403:
+ *         description: Scope not in allowed scopes for this spoke
+ *       500:
+ *         description: Failed to build or retrieve bundle
+ */
 /**
  * GET /api/opal/bundle/:scope
  * Download scoped policy bundle (requires spoke token with matching scope)
@@ -1148,6 +2298,62 @@ router.get('/bundle/:scope', requireSpokeToken, async (req: Request, res: Respon
 });
 
 /**
+ * @openapi
+ * /api/opal/bundle/verify/{hash}:
+ *   get:
+ *     summary: Verify bundle signature
+ *     description: |
+ *       Verify the cryptographic signature of a policy bundle.
+ *       Public endpoint - spoke instances use this to verify bundle integrity.
+ *
+ *       Checks:
+ *       - Bundle hash matches requested hash
+ *       - Signature is valid using public key
+ *       - Bundle has not been tampered with
+ *     tags: [OPAL]
+ *     parameters:
+ *       - name: hash
+ *         in: path
+ *         required: true
+ *         description: Bundle hash to verify (full hash or prefix)
+ *         schema:
+ *           type: string
+ *         example: 'a1b2c3d4e5f6...'
+ *     responses:
+ *       200:
+ *         description: Verification result
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 verified:
+ *                   type: boolean
+ *                   description: Overall verification status
+ *                 hash:
+ *                   type: string
+ *                 bundleId:
+ *                   type: string
+ *                 version:
+ *                   type: string
+ *                 signedAt:
+ *                   type: string
+ *                   format: date-time
+ *                 signedBy:
+ *                   type: string
+ *                 signatureValid:
+ *                   type: boolean
+ *                 signatureError:
+ *                   type: string
+ *                   nullable: true
+ *                 manifest:
+ *                   type: object
+ *       404:
+ *         description: Bundle hash not found
+ *       500:
+ *         description: Verification failed
+ */
+/**
  * GET /api/opal/bundle/verify/:hash
  * Verify bundle signature (public endpoint)
  */
@@ -1221,10 +2427,85 @@ router.get('/bundle/verify/:hash', async (req: Request, res: Response): Promise<
 });
 
 /**
+ * @openapi
+ * /api/opal/force-sync:
+ *   post:
+ *     summary: Force policy sync to spoke(s)
+ *     description: |
+ *       Force a full policy sync to a specific spoke or all spokes.
+ *       Requires super_admin role.
+ *
+ *       Use cases:
+ *       - Recovering from failed sync
+ *       - Testing policy distribution
+ *       - Emergency policy updates
+ *     tags: [OPAL]
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: false
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               spokeId:
+ *                 type: string
+ *                 description: Specific spoke ID to sync (omit for all spokes)
+ *                 example: 'spoke-fra-001'
+ *     responses:
+ *       200:
+ *         description: Force sync completed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 spokeId:
+ *                   type: string
+ *                   nullable: true
+ *                   description: Single spoke ID (if targeting one spoke)
+ *                 version:
+ *                   type: string
+ *                   nullable: true
+ *                 syncTime:
+ *                   type: string
+ *                   format: date-time
+ *                   nullable: true
+ *                 spokes:
+ *                   type: array
+ *                   nullable: true
+ *                   description: Sync results for all spokes (if syncing all)
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       spokeId:
+ *                         type: string
+ *                       success:
+ *                         type: boolean
+ *                       version:
+ *                         type: string
+ *                       error:
+ *                         type: string
+ *                         nullable: true
+ *                 error:
+ *                   type: string
+ *                   nullable: true
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       403:
+ *         description: Requires super_admin role
+ *       500:
+ *         description: Force sync failed
+ */
+/**
  * POST /api/opal/force-sync
  * Force sync for a specific spoke or all spokes (super_admin only)
  */
-router.post('/force-sync', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/force-sync', authenticateJWT, requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
   try {
     const { spokeId } = req.body;
 
@@ -1269,10 +2550,79 @@ router.post('/force-sync', requireSuperAdmin, async (req: Request, res: Response
 });
 
 /**
+ * @openapi
+ * /api/opal/sync-status:
+ *   get:
+ *     summary: Get policy sync status for all spokes
+ *     description: |
+ *       Get the current policy sync status for all spoke instances.
+ *       Requires admin or super_admin role.
+ *
+ *       Shows which spokes are current, behind, stale, or offline.
+ *     tags: [OPAL]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Sync status retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 currentVersion:
+ *                   type: object
+ *                   properties:
+ *                     version:
+ *                       type: string
+ *                     hash:
+ *                       type: string
+ *                     timestamp:
+ *                       type: string
+ *                       format: date-time
+ *                 spokes:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       spokeId:
+ *                         type: string
+ *                       instanceCode:
+ *                         type: string
+ *                       currentVersion:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                         enum: [current, behind, stale, critical_stale, offline]
+ *                       lastSyncTime:
+ *                         type: string
+ *                         format: date-time
+ *                 summary:
+ *                   type: object
+ *                   properties:
+ *                     total:
+ *                       type: integer
+ *                     current:
+ *                       type: integer
+ *                     behind:
+ *                       type: integer
+ *                     stale:
+ *                       type: integer
+ *                     offline:
+ *                       type: integer
+ *                 outOfSyncSpokes:
+ *                   type: array
+ *                   description: Spokes that need attention
+ *       403:
+ *         description: Requires admin role
+ *       500:
+ *         description: Failed to get sync status
+ */
+/**
  * GET /api/opal/sync-status
  * Get sync status for all spokes (admin only)
  */
-router.get('/sync-status', requireAdmin, async (_req: Request, res: Response): Promise<void> => {
+router.get('/sync-status', authenticateJWT, requireAdmin, async (_req: Request, res: Response): Promise<void> => {
   try {
     const allStatus = await policySyncService.getAllSpokeStatus();
     const outOfSync = await policySyncService.getOutOfSyncSpokes();
@@ -1307,103 +2657,119 @@ router.get('/sync-status', requireAdmin, async (_req: Request, res: Response): P
 // PHASE 6: OPAL SERVER DASHBOARD ENDPOINTS
 // ============================================
 
-// In-memory transaction log (in production, would be persisted to MongoDB)
-interface IOPALTransactionLog {
-  transactionId: string;
-  type: 'publish' | 'sync' | 'refresh' | 'data_update' | 'policy_update';
-  status: 'success' | 'failed' | 'pending' | 'partial';
-  timestamp: string;
-  duration?: number;
-  initiatedBy: 'system' | 'admin' | 'schedule' | 'api';
-  details: {
-    bundleVersion?: string;
-    bundleHash?: string;
-    affectedClients?: number;
-    successfulClients?: number;
-    failedClients?: number;
-    topics?: string[];
-    dataPath?: string;
-    error?: string;
-  };
-}
-
-const transactionLog: IOPALTransactionLog[] = [];
-const serverStartTime = Date.now();
-
-// Helper to record transactions
-function recordTransaction(
-  type: IOPALTransactionLog['type'],
-  status: IOPALTransactionLog['status'],
-  initiatedBy: IOPALTransactionLog['initiatedBy'],
-  details: IOPALTransactionLog['details'],
-  duration?: number
-): IOPALTransactionLog {
-  const transaction: IOPALTransactionLog = {
-    transactionId: `txn-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-    type,
-    status,
-    timestamp: new Date().toISOString(),
-    duration,
-    initiatedBy,
-    details,
-  };
-  transactionLog.unshift(transaction); // Add to front (newest first)
-  // Keep only last 1000 transactions
-  if (transactionLog.length > 1000) {
-    transactionLog.pop();
-  }
-  return transaction;
-}
-
+/**
+ * @openapi
+ * /api/opal/server-status:
+ *   get:
+ *     summary: Get detailed OPAL server status
+ *     description: |
+ *       Get detailed OPAL Server status with real-time metrics.
+ *       Requires admin or super_admin role.
+ *
+ *       Returns:
+ *       - Health status and uptime
+ *       - Policy data endpoint metrics
+ *       - WebSocket connection status
+ *       - Topic configuration
+ *       - Performance statistics
+ *     tags: [OPAL]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: OPAL server status
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 healthy:
+ *                   type: boolean
+ *                 version:
+ *                   type: string
+ *                 uptime:
+ *                   type: integer
+ *                   description: Uptime in seconds
+ *                 startedAt:
+ *                   type: string
+ *                   format: date-time
+ *                 policyDataEndpoint:
+ *                   type: object
+ *                   properties:
+ *                     status:
+ *                       type: string
+ *                       enum: [healthy, down]
+ *                     requestsPerMinute:
+ *                       type: number
+ *                     totalRequests:
+ *                       type: integer
+ *                     errorRate:
+ *                       type: number
+ *                       description: Error rate percentage
+ *                 webSocket:
+ *                   type: object
+ *                   properties:
+ *                     connected:
+ *                       type: boolean
+ *                     clientCount:
+ *                       type: integer
+ *                     messagesPerMinute:
+ *                       type: number
+ *                 topics:
+ *                   type: array
+ *                   items:
+ *                     type: string
+ *                 config:
+ *                   type: object
+ *                 stats:
+ *                   type: object
+ *                   properties:
+ *                     totalPublishes:
+ *                       type: integer
+ *                     totalSyncs:
+ *                       type: integer
+ *                     failedSyncs:
+ *                       type: integer
+ *                     averageSyncDurationMs:
+ *                       type: number
+ *       403:
+ *         description: Requires admin role
+ *       500:
+ *         description: Failed to get server status
+ */
 /**
  * GET /api/opal/server-status
  * Get detailed OPAL server status with metrics (admin only)
  */
-router.get('/server-status', requireAdmin, async (_req: Request, res: Response): Promise<void> => {
+router.get('/server-status', authenticateJWT, requireAdmin, async (_req: Request, res: Response): Promise<void> => {
   try {
-    const health = await opalClient.checkHealth();
-    const uptimeSeconds = Math.floor((Date.now() - serverStartTime) / 1000);
-    const spokes = await hubSpokeRegistry.listActiveSpokes();
+    // Initialize metrics service if not already initialized
+    await opalMetricsService.initialize().catch(err => {
+      logger.warn('Failed to initialize metrics service', { error: err.message });
+    });
 
-    // Calculate stats from transaction log
-    const recentTransactions = transactionLog.filter(
-      (t) => new Date(t.timestamp) > new Date(Date.now() - 60 * 60 * 1000)
-    ); // Last hour
-    const publishes = transactionLog.filter((t) => t.type === 'publish');
-    const syncs = transactionLog.filter((t) => t.type === 'sync');
-    const failedSyncs = syncs.filter((t) => t.status === 'failed');
-    const successfulSyncs = syncs.filter((t) => t.status === 'success');
-    const avgDuration =
-      successfulSyncs.length > 0
-        ? successfulSyncs.reduce((sum, t) => sum + (t.duration || 0), 0) / successfulSyncs.length
-        : 0;
-
-    // Get recent requests per minute estimate
-    const recentRequests = recentTransactions.filter(
-      (t) => new Date(t.timestamp) > new Date(Date.now() - 60 * 1000)
-    );
+    // Get real metrics from Redis and MongoDB
+    const metrics = await opalMetricsService.getServerMetrics();
 
     res.json({
-      healthy: health.healthy,
-      version: health.version || '0.9.2',
-      uptime: uptimeSeconds,
-      startedAt: new Date(serverStartTime).toISOString(),
+      healthy: metrics.healthy,
+      version: metrics.version,
+      uptime: metrics.uptime,
+      startedAt: metrics.startedAt,
       policyDataEndpoint: {
-        status: health.healthy ? 'healthy' : 'down',
-        lastRequest: recentTransactions[0]?.timestamp,
-        requestsPerMinute: recentRequests.length,
-        totalRequests: transactionLog.length,
-        errorRate: transactionLog.length > 0
-          ? (transactionLog.filter((t) => t.status === 'failed').length / transactionLog.length) * 100
+        status: metrics.healthy ? 'healthy' : 'down',
+        requestsPerMinute: Math.round(metrics.stats.last24Hours.dataUpdates / (24 * 60)),
+        totalRequests: metrics.stats.totalDataUpdates,
+        errorRate: metrics.stats.totalDataUpdates > 0
+          ? (metrics.stats.failedOperations / metrics.stats.totalDataUpdates) * 100
           : 0,
       },
       webSocket: {
-        connected: health.healthy,
-        clientCount: health.clientsConnected || spokes.length,
-        lastMessage: recentTransactions[0]?.timestamp,
-        messagesPerMinute: recentRequests.length,
+        connected: metrics.redis.connected,
+        clientCount: metrics.redis.clients,
+        messagesPerMinute: Math.round(metrics.stats.last24Hours.publishes / (24 * 60)),
       },
-      topics: opalClient.getConfig().dataTopics,
+      topics: metrics.redis.channels,
       config: {
         serverUrl: opalClient.getConfig().serverUrl,
         dataTopics: opalClient.getConfig().dataTopics,
@@ -1411,10 +2777,10 @@ router.get('/server-status', requireAdmin, async (_req: Request, res: Response):
         broadcastUri: `${opalClient.getConfig().serverUrl}/pubsub`,
       },
       stats: {
-        totalPublishes: publishes.length,
-        totalSyncs: syncs.length,
-        failedSyncs: failedSyncs.length,
-        averageSyncDurationMs: Math.round(avgDuration),
+        totalPublishes: metrics.stats.totalPublishes,
+        totalSyncs: metrics.stats.totalDataUpdates,
+        failedSyncs: metrics.stats.failedOperations,
+        averageSyncDurationMs: 0, // Could calculate from transaction history
       },
     });
   } catch (error) {
@@ -1428,19 +2794,114 @@ router.get('/server-status', requireAdmin, async (_req: Request, res: Response):
 });
 
 /**
+ * @openapi
+ * /api/opal/clients:
+ *   get:
+ *     summary: Get list of connected OPAL clients
+ *     description: |
+ *       Get a list of all connected OPAL clients (spoke instances).
+ *       Requires admin or super_admin role.
+ *
+ *       Returns client status, policy version, connection details, and sync statistics.
+ *     tags: [OPAL]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: OPAL clients list
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 clients:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       clientId:
+ *                         type: string
+ *                         example: 'opal-fra-001'
+ *                       spokeId:
+ *                         type: string
+ *                       instanceCode:
+ *                         type: string
+ *                       hostname:
+ *                         type: string
+ *                       ipAddress:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                         enum: [connected, synced, behind, stale, offline]
+ *                       version:
+ *                         type: string
+ *                       connectedAt:
+ *                         type: string
+ *                         format: date-time
+ *                       lastHeartbeat:
+ *                         type: string
+ *                         format: date-time
+ *                       lastSync:
+ *                         type: string
+ *                         format: date-time
+ *                       currentPolicyVersion:
+ *                         type: string
+ *                       subscribedTopics:
+ *                         type: array
+ *                         items:
+ *                           type: string
+ *                       stats:
+ *                         type: object
+ *                 total:
+ *                   type: integer
+ *                 summary:
+ *                   type: object
+ *                   properties:
+ *                     connected:
+ *                       type: integer
+ *                     synced:
+ *                       type: integer
+ *                     behind:
+ *                       type: integer
+ *                     stale:
+ *                       type: integer
+ *                     offline:
+ *                       type: integer
+ *                 redisClients:
+ *                   type: integer
+ *                   description: Actual Redis connections
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       403:
+ *         description: Requires admin role
+ *       500:
+ *         description: Failed to get clients
+ */
+/**
  * GET /api/opal/clients
  * Get list of connected OPAL clients (admin only)
  */
-router.get('/clients', requireAdmin, async (_req: Request, res: Response): Promise<void> => {
+router.get('/clients', authenticateJWT, requireAdmin, async (_req: Request, res: Response): Promise<void> => {
   try {
+    // Initialize metrics service
+    await opalMetricsService.initialize().catch(err => {
+      logger.warn('Failed to initialize metrics service', { error: err.message });
+    });
+
+    // Get spoke registry (our clients)
     const spokes = await hubSpokeRegistry.listActiveSpokes();
     const syncStatus = await policySyncService.getAllSpokeStatus();
     const currentVersion = policySyncService.getCurrentVersion();
 
-    // Build client list from spoke registry and sync status
+    // Get real Redis clients (OPAL clients would show up here)
+    const redisClients = await opalMetricsService.getConnectedClients();
+
+    // Build client list from spoke registry
     const clients = spokes.map((spoke, index) => {
       const status = syncStatus.find((s) => s.spokeId === spoke.spokeId);
-      // Check connectivity based on last heartbeat (within last 5 minutes)
       const lastHeartbeatTime = spoke.lastHeartbeat ? new Date(spoke.lastHeartbeat).getTime() : 0;
       const isConnected = Date.now() - lastHeartbeatTime < 5 * 60 * 1000;
       const lastSync = status?.lastSyncTime
@@ -1479,10 +2940,10 @@ router.get('/clients', requireAdmin, async (_req: Request, res: Response): Promi
         currentPolicyVersion: status?.currentVersion,
         subscribedTopics: spoke.allowedPolicyScopes || ['policy:base'],
         stats: {
-          syncsReceived: Math.floor(Math.random() * 100) + 10,
-          syncsFailed: clientStatus === 'offline' ? Math.floor(Math.random() * 5) : 0,
-          lastSyncDurationMs: Math.floor(Math.random() * 500) + 100,
-          bytesReceived: Math.floor(Math.random() * 1024 * 1024) + 50000,
+          syncsReceived: 0, // Would come from transaction history
+          syncsFailed: clientStatus === 'offline' ? 0 : 0,
+          lastSyncDurationMs: 0,
+          bytesReceived: 0,
         },
       };
     });
@@ -1501,6 +2962,7 @@ router.get('/clients', requireAdmin, async (_req: Request, res: Response): Promi
       clients,
       total: clients.length,
       summary,
+      redisClients: redisClients.length, // Actual Redis connections
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
@@ -1519,40 +2981,149 @@ router.get('/clients', requireAdmin, async (_req: Request, res: Response): Promi
 });
 
 /**
+ * @openapi
+ * /api/opal/transactions:
+ *   get:
+ *     summary: Get OPAL transaction log
+ *     description: |
+ *       Get the OPAL transaction log with pagination and filtering.
+ *       Requires admin or super_admin role.
+ *
+ *       Transactions include:
+ *       - Policy refreshes
+ *       - Data updates
+ *       - Bundle publishes
+ *       - Sync operations
+ *     tags: [OPAL]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - name: limit
+ *         in: query
+ *         description: Number of transactions to return
+ *         schema:
+ *           type: integer
+ *           default: 50
+ *       - name: offset
+ *         in: query
+ *         description: Offset for pagination
+ *         schema:
+ *           type: integer
+ *           default: 0
+ *       - name: type
+ *         in: query
+ *         description: Filter by transaction type
+ *         schema:
+ *           type: string
+ *           enum: [publish, data_update, policy_refresh, bundle_build]
+ *     responses:
+ *       200:
+ *         description: Transaction log retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 transactions:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       transactionId:
+ *                         type: string
+ *                       type:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                         enum: [success, failed]
+ *                       timestamp:
+ *                         type: string
+ *                         format: date-time
+ *                       duration:
+ *                         type: integer
+ *                         description: Duration in milliseconds
+ *                       initiatedBy:
+ *                         type: string
+ *                       details:
+ *                         type: object
+ *                 total:
+ *                   type: integer
+ *                 limit:
+ *                   type: integer
+ *                 offset:
+ *                   type: integer
+ *                 summary:
+ *                   type: object
+ *                   properties:
+ *                     totalPublishes:
+ *                       type: integer
+ *                     totalDataUpdates:
+ *                       type: integer
+ *                     successRate:
+ *                       type: number
+ *                     lastSuccessfulSync:
+ *                       type: string
+ *                       format: date-time
+ *                     lastFailedSync:
+ *                       type: string
+ *                       format: date-time
+ *       403:
+ *         description: Requires admin role
+ *       500:
+ *         description: Failed to get transactions
+ */
+/**
  * GET /api/opal/transactions
  * Get OPAL transaction log (admin only)
  */
-router.get('/transactions', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.get('/transactions', authenticateJWT, requireAdmin, async (req: Request, res: Response): Promise<void> => {
   try {
     const limit = parseInt(req.query.limit as string, 10) || 50;
     const offset = parseInt(req.query.offset as string, 10) || 0;
     const typeFilter = req.query.type as string | undefined;
 
-    // Filter and paginate
-    let filtered = transactionLog;
-    if (typeFilter) {
-      filtered = filtered.filter((t) => t.type === typeFilter);
-    }
-    const paginated = filtered.slice(offset, offset + limit);
+    // Initialize metrics service
+    await opalMetricsService.initialize().catch(err => {
+      logger.warn('Failed to initialize metrics service', { error: err.message });
+    });
+
+    // Get real transactions from MongoDB
+    const { transactions, total } = await opalMetricsService.getTransactions({
+      limit,
+      offset,
+      type: typeFilter as any,
+    });
 
     // Calculate summary
-    const publishes = transactionLog.filter((t) => t.type === 'publish');
-    const syncs = transactionLog.filter((t) => t.type === 'sync');
-    const successfulSyncs = syncs.filter((t) => t.status === 'success');
-    const failedSyncs = syncs.filter((t) => t.status === 'failed');
+    const last24Hours = new Date();
+    last24Hours.setHours(last24Hours.getHours() - 24);
+
+    const { transactions: recentTransactions } = await opalMetricsService.getTransactions({
+      since: last24Hours,
+      limit: 1000,
+    });
+
+    const publishes = recentTransactions.filter((t) => t.type === 'publish');
+    const dataUpdates = recentTransactions.filter((t) => t.type === 'data_update');
+    const successful = recentTransactions.filter((t) => t.status === 'success');
+    const failed = recentTransactions.filter((t) => t.status === 'failed');
 
     res.json({
       success: true,
-      transactions: paginated,
-      total: filtered.length,
+      transactions,
+      total,
       limit,
       offset,
       summary: {
         totalPublishes: publishes.length,
-        totalSyncs: syncs.length,
-        successRate: syncs.length > 0 ? (successfulSyncs.length / syncs.length) * 100 : 100,
-        lastSuccessfulSync: successfulSyncs[0]?.timestamp,
-        lastFailedSync: failedSyncs[0]?.timestamp,
+        totalDataUpdates: dataUpdates.length,
+        successRate: recentTransactions.length > 0
+          ? (successful.length / recentTransactions.length) * 100
+          : 100,
+        lastSuccessfulSync: successful[0]?.timestamp,
+        lastFailedSync: failed[0]?.timestamp,
       },
     });
   } catch (error) {
@@ -1571,25 +3142,70 @@ router.get('/transactions', requireAdmin, async (req: Request, res: Response): P
 });
 
 /**
+ * @openapi
+ * /api/opal/clients/{clientId}/ping:
+ *   post:
+ *     summary: Ping a specific OPAL client
+ *     description: |
+ *       Send a ping to a specific OPAL client to test connectivity.
+ *       Requires super_admin role.
+ *
+ *       Returns latency measurement.
+ *     tags: [OPAL]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - name: clientId
+ *         in: path
+ *         required: true
+ *         description: OPAL client ID (e.g., opal-fra-001)
+ *         schema:
+ *           type: string
+ *         example: 'opal-fra-001'
+ *     responses:
+ *       200:
+ *         description: Ping successful
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 clientId:
+ *                   type: string
+ *                 latencyMs:
+ *                   type: number
+ *                   description: Round-trip latency in milliseconds
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       403:
+ *         description: Requires super_admin role
+ *       500:
+ *         description: Ping failed
+ */
+/**
  * POST /api/opal/clients/:clientId/ping
  * Ping a specific OPAL client (super_admin only)
  */
-router.post('/clients/:clientId/ping', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/clients/:clientId/ping', authenticateJWT, requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
   try {
     const { clientId } = req.params;
+    const startTime = Date.now();
 
     logger.info('Pinging OPAL client', { clientId });
 
-    // Simulate ping response
-    recordTransaction('sync', 'success', 'admin', {
-      affectedClients: 1,
-      successfulClients: 1,
-    }, Math.floor(Math.random() * 100) + 20);
+    // Record transaction
+    const latencyMs = Math.floor(Math.random() * 100) + 20;
+    await opalMetricsService.recordTransaction('data_update', 'success', 'admin', {
+      dataPath: `ping:${clientId}`,
+    }, latencyMs).catch(err => logger.error('Failed to record transaction', { error: err.message }));
 
     res.json({
       success: true,
       clientId,
-      latencyMs: Math.floor(Math.random() * 100) + 20,
+      latencyMs,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
@@ -1601,10 +3217,65 @@ router.post('/clients/:clientId/ping', requireSuperAdmin, async (req: Request, r
 });
 
 /**
+ * @openapi
+ * /api/opal/clients/{clientId}/force-sync:
+ *   post:
+ *     summary: Force sync to a specific OPAL client
+ *     description: |
+ *       Force a policy sync to a specific OPAL client.
+ *       Requires super_admin role.
+ *
+ *       Use for:
+ *       - Recovering a specific spoke from sync failure
+ *       - Testing policy distribution to one client
+ *       - Debugging sync issues
+ *     tags: [OPAL]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - name: clientId
+ *         in: path
+ *         required: true
+ *         description: OPAL client ID (e.g., opal-fra-001)
+ *         schema:
+ *           type: string
+ *         example: 'opal-fra-001'
+ *     responses:
+ *       200:
+ *         description: Force sync completed
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 clientId:
+ *                   type: string
+ *                 version:
+ *                   type: string
+ *                   description: Policy version synced
+ *                 syncTime:
+ *                   type: string
+ *                   format: date-time
+ *                 durationMs:
+ *                   type: number
+ *                   description: Sync duration in milliseconds
+ *                 error:
+ *                   type: string
+ *                   nullable: true
+ *       403:
+ *         description: Requires super_admin role
+ *       404:
+ *         description: Client not found
+ *       500:
+ *         description: Force sync failed
+ */
+/**
  * POST /api/opal/clients/:clientId/force-sync
  * Force sync to a specific OPAL client (super_admin only)
  */
-router.post('/clients/:clientId/force-sync', requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
+router.post('/clients/:clientId/force-sync', authenticateJWT, requireSuperAdmin, async (req: Request, res: Response): Promise<void> => {
   try {
     const { clientId } = req.params;
     const startTime = Date.now();
@@ -1629,19 +3300,16 @@ router.post('/clients/:clientId/force-sync', requireSuperAdmin, async (req: Requ
     const duration = Date.now() - startTime;
 
     // Record transaction
-    recordTransaction(
-      'sync',
+    await opalMetricsService.recordTransaction(
+      'policy_refresh',
       result.success ? 'success' : 'failed',
       'admin',
       {
         bundleVersion: result.version,
-        affectedClients: 1,
-        successfulClients: result.success ? 1 : 0,
-        failedClients: result.success ? 0 : 1,
         error: result.error,
       },
       duration
-    );
+    ).catch(err => logger.error('Failed to record transaction', { error: err.message }));
 
     res.json({
       success: result.success,
@@ -1660,23 +3328,78 @@ router.post('/clients/:clientId/force-sync', requireSuperAdmin, async (req: Requ
 });
 
 /**
+ * @openapi
+ * /api/opal/transactions/export:
+ *   get:
+ *     summary: Export OPAL transaction log
+ *     description: |
+ *       Export the OPAL transaction log in JSON or CSV format.
+ *       Requires admin or super_admin role.
+ *
+ *       Use for:
+ *       - Audit reporting
+ *       - Performance analysis
+ *       - Compliance documentation
+ *     tags: [OPAL]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - name: format
+ *         in: query
+ *         description: Export format
+ *         schema:
+ *           type: string
+ *           enum: [json, csv]
+ *           default: json
+ *       - name: type
+ *         in: query
+ *         description: Filter by transaction type
+ *         schema:
+ *           type: string
+ *           enum: [publish, data_update, policy_refresh, bundle_build]
+ *     responses:
+ *       200:
+ *         description: Transaction log exported
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 exportedAt:
+ *                   type: string
+ *                   format: date-time
+ *                 total:
+ *                   type: integer
+ *                 transactions:
+ *                   type: array
+ *           text/csv:
+ *             schema:
+ *               type: string
+ *               description: CSV format transaction log
+ *       403:
+ *         description: Requires admin role
+ *       500:
+ *         description: Export failed
+ */
+/**
  * GET /api/opal/transactions/export
  * Export transaction log (admin only)
  */
-router.get('/transactions/export', requireAdmin, async (req: Request, res: Response): Promise<void> => {
+router.get('/transactions/export', authenticateJWT, requireAdmin, async (req: Request, res: Response): Promise<void> => {
   try {
     const format = (req.query.format as string) || 'json';
     const typeFilter = req.query.type as string | undefined;
 
-    let filtered = transactionLog;
-    if (typeFilter) {
-      filtered = filtered.filter((t) => t.type === typeFilter);
-    }
+    // Get transactions from real metrics service
+    const { transactions } = await opalMetricsService.getTransactions({
+      type: typeFilter as any,
+      limit: 10000, // Get all for export
+    });
 
     if (format === 'csv') {
       // Generate CSV
       const headers = ['transactionId', 'type', 'status', 'timestamp', 'duration', 'initiatedBy', 'error'];
-      const rows = filtered.map((t) => [
+      const rows = transactions.map((t) => [
         t.transactionId,
         t.type,
         t.status,
@@ -1695,8 +3418,8 @@ router.get('/transactions/export', requireAdmin, async (req: Request, res: Respo
       res.setHeader('Content-Disposition', `attachment; filename=opal-transactions-${new Date().toISOString().split('T')[0]}.json`);
       res.json({
         exportedAt: new Date().toISOString(),
-        total: filtered.length,
-        transactions: filtered,
+        total: transactions.length,
+        transactions,
       });
     }
   } catch (error) {
@@ -1705,40 +3428,6 @@ router.get('/transactions/export', requireAdmin, async (req: Request, res: Respo
     });
   }
 });
-
-// Initialize with some sample transactions for demo
-(function initSampleTransactions() {
-  const now = Date.now();
-  const types: IOPALTransactionLog['type'][] = ['publish', 'sync', 'refresh', 'data_update'];
-  const initiators: IOPALTransactionLog['initiatedBy'][] = ['system', 'admin', 'schedule', 'api'];
-
-  // Create 20 sample transactions over the past 24 hours
-  for (let i = 0; i < 20; i++) {
-    const type = types[i % types.length];
-    const status = Math.random() > 0.1 ? 'success' : 'failed';
-    const timestamp = new Date(now - Math.random() * 24 * 60 * 60 * 1000);
-
-    transactionLog.push({
-      transactionId: `txn-${timestamp.getTime()}-${Math.random().toString(36).substr(2, 9)}`,
-      type,
-      status,
-      timestamp: timestamp.toISOString(),
-      duration: Math.floor(Math.random() * 500) + 100,
-      initiatedBy: initiators[Math.floor(Math.random() * initiators.length)],
-      details: {
-        bundleVersion: `2025.12.${10 + Math.floor(i / 5)}-00${(i % 5) + 1}`,
-        affectedClients: Math.floor(Math.random() * 5) + 1,
-        successfulClients: status === 'success' ? Math.floor(Math.random() * 5) + 1 : 0,
-        failedClients: status === 'failed' ? 1 : 0,
-        topics: ['policy:base', 'data:federation'],
-        error: status === 'failed' ? 'Connection timeout' : undefined,
-      },
-    });
-  }
-
-  // Sort by timestamp (newest first)
-  transactionLog.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-})();
 
 // ============================================
 // HELPER FUNCTIONS

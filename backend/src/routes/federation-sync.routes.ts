@@ -15,6 +15,11 @@
  * Note: Mounted at /api/drift to avoid conflicts with /api/federation routes
  * These are monitoring endpoints and do NOT require authentication
  *
+ * @swagger
+ * tags:
+ *   - name: Federation Sync
+ *     description: Federation state drift detection and reconciliation
+ *
  * @version 1.0.1
  * @date 2026-01-18
  */
@@ -26,9 +31,37 @@ import { logger } from '../utils/logger';
 const router = Router();
 
 /**
- * GET /api/drift/status
- * Get drift detection health summary
- * No authentication required - monitoring endpoint
+ * @swagger
+ * /api/drift/status:
+ *   get:
+ *     summary: Get drift detection health summary
+ *     description: Returns overall health status of federation drift detection system including sync state and unresolved events
+ *     tags: [Federation Sync]
+ *     responses:
+ *       200:
+ *         description: Health summary
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     healthy:
+ *                       type: boolean
+ *                     unresolvedDriftCount:
+ *                       type: integer
+ *                     lastCheckTimestamp:
+ *                       type: string
+ *                       format: date-time
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       500:
+ *         description: Server error
  */
 router.get('/status', async (req: Request, res: Response): Promise<void> => {
   const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
@@ -58,9 +91,45 @@ router.get('/status', async (req: Request, res: Response): Promise<void> => {
 });
 
 /**
- * GET /api/drift/report
- * Get current drift report
- * No authentication required - monitoring endpoint
+ * @swagger
+ * /api/drift/report:
+ *   get:
+ *     summary: Get current drift report
+ *     description: Performs drift detection across all federation instances and returns detailed report with recommended actions
+ *     tags: [Federation Sync]
+ *     responses:
+ *       200:
+ *         description: Drift detection report
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     states:
+ *                       type: array
+ *                       description: State of each instance across layers
+ *                     actions:
+ *                       type: array
+ *                       description: Recommended reconciliation actions
+ *                     summary:
+ *                       type: object
+ *                       properties:
+ *                         total:
+ *                           type: integer
+ *                         synchronized:
+ *                           type: integer
+ *                         drifted:
+ *                           type: integer
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       500:
+ *         description: Server error
  */
 router.get('/report', async (req: Request, res: Response): Promise<void> => {
   const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
@@ -90,9 +159,56 @@ router.get('/report', async (req: Request, res: Response): Promise<void> => {
 });
 
 /**
- * GET /api/drift/events
- * Get drift event history
- * No authentication required - monitoring endpoint
+ * @swagger
+ * /api/drift/events:
+ *   get:
+ *     summary: Get drift event history
+ *     description: Returns history of all drift events with optional filtering for unresolved events only
+ *     tags: [Federation Sync]
+ *     parameters:
+ *       - in: query
+ *         name: unresolved
+ *         schema:
+ *           type: boolean
+ *         description: If true, return only unresolved events
+ *     responses:
+ *       200:
+ *         description: Drift event history
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     events:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id:
+ *                             type: string
+ *                           instanceCode:
+ *                             type: string
+ *                           driftType:
+ *                             type: string
+ *                           timestamp:
+ *                             type: string
+ *                             format: date-time
+ *                           resolved:
+ *                             type: boolean
+ *                     count:
+ *                       type: integer
+ *                     unresolvedCount:
+ *                       type: integer
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       500:
+ *         description: Server error
  */
 router.get('/events', async (req: Request, res: Response): Promise<void> => {
   const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
@@ -129,9 +245,56 @@ router.get('/events', async (req: Request, res: Response): Promise<void> => {
 });
 
 /**
- * POST /api/drift/reconcile
- * Execute reconciliation actions
- * Note: Should add admin auth in production, but public for testing
+ * @swagger
+ * /api/drift/reconcile:
+ *   post:
+ *     summary: Execute reconciliation actions
+ *     description: Executes drift reconciliation actions to synchronize federation state across layers. Supports dry-run mode and instance filtering.
+ *     tags: [Federation Sync]
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               dryRun:
+ *                 type: boolean
+ *                 default: true
+ *                 description: If true, simulates actions without executing them
+ *               instanceCodes:
+ *                 type: array
+ *                 items:
+ *                   type: string
+ *                 description: Optional array of instance codes to reconcile
+ *     responses:
+ *       200:
+ *         description: Reconciliation results
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     dryRun:
+ *                       type: boolean
+ *                     actions:
+ *                       type: array
+ *                       description: Actions executed
+ *                     totalActions:
+ *                       type: integer
+ *                     successfulActions:
+ *                       type: integer
+ *                     failedActions:
+ *                       type: integer
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       500:
+ *         description: Server error
  */
 router.post('/reconcile', async (req: Request, res: Response): Promise<void> => {
   const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
@@ -194,8 +357,52 @@ router.post('/reconcile', async (req: Request, res: Response): Promise<void> => 
 });
 
 /**
- * POST /api/drift/events/:eventId/resolve
- * Mark a drift event as resolved
+ * @swagger
+ * /api/drift/events/{eventId}/resolve:
+ *   post:
+ *     summary: Mark drift event as resolved
+ *     description: Manually marks a drift event as resolved with optional resolution details
+ *     tags: [Federation Sync]
+ *     parameters:
+ *       - in: path
+ *         name: eventId
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: Drift event ID to resolve
+ *     requestBody:
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               resolvedBy:
+ *                 type: string
+ *                 description: User who resolved the event
+ *                 default: admin
+ *               resolutionAction:
+ *                 type: string
+ *                 description: Description of resolution action taken
+ *                 default: Manually resolved
+ *     responses:
+ *       200:
+ *         description: Event resolved successfully
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 message:
+ *                   type: string
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       404:
+ *         description: Drift event not found
+ *       500:
+ *         description: Server error
  */
 router.post('/events/:eventId/resolve', async (req: Request, res: Response): Promise<void> => {
   const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
@@ -244,9 +451,80 @@ router.post('/events/:eventId/resolve', async (req: Request, res: Response): Pro
 });
 
 /**
- * GET /api/drift/states
- * Get detailed state of all instances across all layers
- * No authentication required - monitoring endpoint
+ * @swagger
+ * /api/drift/states:
+ *   get:
+ *     summary: Get detailed instance states
+ *     description: Returns detailed state information for all federation instances across Keycloak, MongoDB, and Docker layers
+ *     tags: [Federation Sync]
+ *     responses:
+ *       200:
+ *         description: Detailed instance states
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     states:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           instanceCode:
+ *                             type: string
+ *                           layers:
+ *                             type: object
+ *                             properties:
+ *                               keycloak:
+ *                                 type: object
+ *                                 properties:
+ *                                   exists:
+ *                                     type: boolean
+ *                                   enabled:
+ *                                     type: boolean
+ *                                   status:
+ *                                     type: string
+ *                               mongodb:
+ *                                 type: object
+ *                                 properties:
+ *                                   exists:
+ *                                     type: boolean
+ *                                   status:
+ *                                     type: string
+ *                               docker:
+ *                                 type: object
+ *                                 properties:
+ *                                   running:
+ *                                     type: boolean
+ *                                   healthy:
+ *                                     type: boolean
+ *                                   status:
+ *                                     type: string
+ *                           synchronized:
+ *                             type: boolean
+ *                           driftType:
+ *                             type: string
+ *                           recommendedAction:
+ *                             type: string
+ *                     summary:
+ *                       type: object
+ *                       properties:
+ *                         total:
+ *                           type: integer
+ *                         synchronized:
+ *                           type: integer
+ *                         drifted:
+ *                           type: integer
+ *                 timestamp:
+ *                   type: string
+ *                   format: date-time
+ *       500:
+ *         description: Server error
  */
 router.get('/states', async (req: Request, res: Response): Promise<void> => {
   const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;

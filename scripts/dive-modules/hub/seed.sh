@@ -110,21 +110,21 @@ hub_seed() {
 
     # Step 2: Seed test users (SSOT: scripts/hub-init/seed-hub-users.sh)
     log_step "Step 2/4: Seeding test users..."
-    
+
     local seed_users_script="${DIVE_ROOT}/scripts/hub-init/seed-hub-users.sh"
-    
+
     if [ ! -f "$seed_users_script" ]; then
         log_error "User seeding script not found: $seed_users_script"
         return 1
     fi
-    
+
     # Run user seeding script
     if ! bash "$seed_users_script" 2>&1 | tail -20; then
         log_error "User seeding failed"
         log_error "Cannot proceed without test users"
         return 1
     fi
-    
+
     log_success "Test users created: testuser-usa-1 through testuser-usa-5, admin-usa"
 
     # Step 3: Seed ZTDF encrypted resources using TypeScript seeder
@@ -206,16 +206,31 @@ _hub_register_kas() {
     log_info "Waiting for backend API to be ready..."
     local max_wait=60
     local waited=0
-    while ! ${DOCKER_CMD:-docker} exec "$hub_backend_container" curl -sf http://localhost:4000/health > /dev/null 2>&1; do
+    local retry_count=0
+
+    while [ $waited -lt $max_wait ]; do
+        # Try both HTTP and HTTPS (backend may use either depending on HTTPS_ENABLED)
+        if ${DOCKER_CMD:-docker} exec "$hub_backend_container" curl -sf http://localhost:4000/health > /dev/null 2>&1 || \
+           ${DOCKER_CMD:-docker} exec "$hub_backend_container" curl -skf https://localhost:4000/health > /dev/null 2>&1; then
+            log_success "Backend API is ready"
+            return 0
+        fi
+
+        retry_count=$((retry_count + 1))
+        if [ $((retry_count % 5)) -eq 0 ]; then
+            log_verbose "Waiting for backend... (${waited}s/${max_wait}s)"
+        fi
+
         sleep 2
         waited=$((waited + 2))
-        if [ $waited -ge $max_wait ]; then
-            log_error "Backend API not ready after ${max_wait}s"
-            return 1
-        fi
-        log_verbose "Waiting for backend... (${waited}s/${max_wait}s)"
     done
-    log_success "Backend API is ready"
+
+    log_error "Backend API not ready after ${max_wait}s"
+    log_error "Backend container status:"
+    ${DOCKER_CMD:-docker} ps --filter "name=${hub_backend_container}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+    log_error "Backend health check failed - check logs:"
+    log_error "  docker logs ${hub_backend_container} --tail 50"
+    return 1
 
     # Check if already registered
     local already_registered=$(${DOCKER_CMD:-docker} exec "$hub_backend_container" curl -sk \
