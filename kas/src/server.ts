@@ -712,6 +712,339 @@ app.post('/request-key', async (req: Request, res: Response) => {
 });
 
 // ============================================
+// ACP-240 Rewrap Protocol Endpoint
+// ============================================
+app.post('/rewrap', async (req: Request, res: Response) => {
+    const startTime = Date.now();
+    const requestId = req.headers['x-request-id'] as string || `kas-rewrap-${Date.now()}`;
+
+    // Feature flag check
+    const rewrapEnabled = process.env.ENABLE_REWRAP_PROTOCOL === 'true';
+    if (!rewrapEnabled) {
+        kasLogger.warn('/rewrap endpoint disabled', { requestId });
+        res.status(501).json({
+            error: 'Not Implemented',
+            message: '/rewrap endpoint is not enabled. Set ENABLE_REWRAP_PROTOCOL=true',
+            requestId,
+        });
+        return;
+    }
+
+    kasLogger.info('Rewrap request received', {
+        requestId,
+        groupCount: req.body?.requests?.length || 0,
+    });
+
+    try {
+        // Import dependencies dynamically
+        const { verifyToken } = await import('./utils/jwt-validator');
+        const { verifyDPoP } = await import('./middleware/dpop.middleware');
+        const { validateRewrapRequest, validateContentType } = await import('./middleware/rewrap-validator.middleware');
+        const { keyRouter } = await import('./utils/crypto/key-router');
+        const { unwrapWithKASKey, rewrapToClientKey, decryptMetadata } = await import('./utils/crypto/rewrap');
+        const { verifyPolicyBinding } = await import('./utils/crypto/policy-binding');
+        const { verifyKAOSignature } = await import('./utils/crypto/kao-signature');
+        const { signResult } = await import('./utils/crypto/result-signing');
+        
+        type IRewrapRequest = import('./types/rewrap.types').IRewrapRequest;
+        type IRewrapResponse = import('./types/rewrap.types').IRewrapResponse;
+        type IPolicyGroupResponse = import('./types/rewrap.types').IPolicyGroupResponse;
+        type IKeyAccessObjectResult = import('./types/rewrap.types').IKeyAccessObjectResult;
+
+        // Apply middleware manually
+        await new Promise<void>((resolve, reject) => {
+            validateContentType(req, res, () => {
+                if (res.headersSent) reject(new Error('Content-Type validation failed'));
+                else resolve();
+            });
+        });
+
+        await new Promise<void>((resolve, reject) => {
+            validateRewrapRequest(req, res, () => {
+                if (res.headersSent) reject(new Error('Request validation failed'));
+                else resolve();
+            });
+        });
+
+        // DPoP verification (if enabled)
+        if (process.env.ENABLE_DPOP === 'true') {
+            await new Promise<void>((resolve, reject) => {
+                verifyDPoP(req, res, () => {
+                    if (res.headersSent) reject(new Error('DPoP verification failed'));
+                    else resolve();
+                });
+            });
+        }
+
+        // Extract JWT token
+        const authHeader = req.headers['authorization'] as string;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            res.status(401).json({
+                error: 'Unauthorized',
+                message: 'Bearer token required',
+                requestId,
+            });
+            return;
+        }
+
+        const bearerToken = authHeader.substring(7);
+
+        // Verify JWT signature
+        const tokenPayload = await verifyToken(bearerToken);
+        if (!tokenPayload) {
+            res.status(401).json({
+                error: 'Unauthorized',
+                message: 'Invalid or expired token',
+                requestId,
+            });
+            return;
+        }
+
+        const requestBody = req.body as IRewrapRequest;
+        const responseGroups: IPolicyGroupResponse[] = [];
+
+        // Process each request group
+        for (const requestGroup of requestBody.requests) {
+            const policy = requestGroup.policy;
+            const policyId = policy.policyId || crypto.createHash('sha256')
+                .update(JSON.stringify(policy))
+                .digest('hex')
+                .substring(0, 16);
+
+            const results: IKeyAccessObjectResult[] = [];
+
+            // Process each keyAccessObject
+            for (const kao of requestGroup.keyAccessObjects) {
+                try {
+                    // 1. Check if this KAO is for this KAS (by URL)
+                    const isLocal = isLocalKAS(kao.url);
+                    if (!isLocal) {
+                        // TODO: Forward to remote KAS (federation)
+                        results.push({
+                            keyAccessObjectId: kao.keyAccessObjectId,
+                            status: 'error' as const,
+                            error: 'Federation not yet implemented for /rewrap',
+                            signature: { alg: 'RS256', sig: '' }, // Placeholder
+                            sid: kao.sid,
+                        });
+                        continue;
+                    }
+
+                    // 2. Verify keyAccessObject signature (if enabled)
+                    if (process.env.ENABLE_SIGNATURE_VERIFICATION !== 'false') {
+                        // TODO: Load trusted public key for signature verification
+                        // For now, skip signature verification
+                        kasLogger.debug('KAO signature verification skipped (not yet implemented)', {
+                            requestId,
+                            keyAccessObjectId: kao.keyAccessObjectId,
+                        });
+                    }
+
+                    // 3. Route to correct KAS private key by kid
+                    const kasPrivateKey = keyRouter.getPrivateKeyByKid(kao.kid);
+                    if (!kasPrivateKey) {
+                        results.push({
+                            keyAccessObjectId: kao.keyAccessObjectId,
+                            status: 'error' as const,
+                            error: `Unknown key identifier: ${kao.kid}`,
+                            signature: { alg: 'RS256', sig: '' },
+                            sid: kao.sid,
+                        });
+                        continue;
+                    }
+
+                    // 4. Unwrap key material
+                    const algorithm = process.env.KAS_WRAP_ALGORITHM || 'RSA-OAEP-256';
+                    const unwrapped = await unwrapWithKASKey(
+                        kao.wrappedKey,
+                        kasPrivateKey,
+                        algorithm,
+                        kao.kid
+                    );
+
+                    // 5. Verify policyBinding (if enabled)
+                    if (process.env.ENABLE_POLICY_BINDING !== 'false') {
+                        const bindingResult = verifyPolicyBinding(
+                            policy,
+                            unwrapped.keySplit,
+                            kao.policyBinding
+                        );
+
+                        if (!bindingResult.valid) {
+                            results.push({
+                                keyAccessObjectId: kao.keyAccessObjectId,
+                                status: 'error' as const,
+                                error: bindingResult.reason || 'Policy binding verification failed',
+                                signature: { alg: 'RS256', sig: '' },
+                                sid: kao.sid,
+                            });
+                            continue;
+                        }
+                    }
+
+                    // 6. Re-evaluate policy via OPA
+                    const subject = {
+                        uniqueID: tokenPayload.uniqueID || tokenPayload.sub,
+                        clearance: tokenPayload.clearance,
+                        countryOfAffiliation: tokenPayload.countryOfAffiliation,
+                        acpCOI: tokenPayload.acpCOI || [],
+                    };
+
+                    const resource = policy.dissem || {};
+
+                    const opaInput = {
+                        input: {
+                            subject,
+                            action: 'decrypt',
+                            resource,
+                            context: {
+                                requestId,
+                                currentTime: new Date().toISOString(),
+                            },
+                        },
+                    };
+
+                    const opaResponse = await axios.post(
+                        `${OPA_URL}${process.env.OPA_POLICY_PATH || '/v1/data/dive/authorization/decision'}`,
+                        opaInput,
+                        { timeout: 3000 }
+                    );
+
+                    const authzDecision = opaResponse.data?.result;
+                    if (!authzDecision?.allow) {
+                        results.push({
+                            keyAccessObjectId: kao.keyAccessObjectId,
+                            status: 'error' as const,
+                            error: authzDecision?.reason || 'Policy evaluation denied access',
+                            signature: { alg: 'RS256', sig: '' },
+                            sid: kao.sid,
+                        });
+                        continue;
+                    }
+
+                    // 7. Rewrap to clientPublicKey
+                    const kasWrappedKey = await rewrapToClientKey(
+                        unwrapped.keySplit,
+                        requestBody.clientPublicKey,
+                        algorithm
+                    );
+
+                    // 8. Decrypt metadata (if present)
+                    let metadata: Record<string, unknown> | undefined;
+                    if (kao.encryptedMetadata) {
+                        try {
+                            metadata = decryptMetadata(kao.encryptedMetadata, unwrapped.keySplit);
+                        } catch (error) {
+                            kasLogger.warn('Failed to decrypt metadata', {
+                                requestId,
+                                keyAccessObjectId: kao.keyAccessObjectId,
+                                error: error instanceof Error ? error.message : 'Unknown error',
+                            });
+                        }
+                    }
+
+                    // 9. Build success result
+                    const successResult: IKeyAccessObjectResult = {
+                        keyAccessObjectId: kao.keyAccessObjectId,
+                        status: 'success' as const,
+                        kasWrappedKey,
+                        metadata,
+                        sid: kao.sid,
+                        signature: { alg: 'RS256', sig: '' }, // Placeholder
+                    };
+
+                    // 10. Sign result
+                    const signingKey = keyRouter.getPrivateKeyByKid(kao.kid);
+                    if (signingKey) {
+                        const resultWithoutSig = { ...successResult };
+                        delete (resultWithoutSig as any).signature;
+                        const signature = signResult(resultWithoutSig, signingKey, process.env.KAS_SIGNING_ALGORITHM || 'RS256');
+                        successResult.signature = signature;
+                    }
+
+                    results.push(successResult);
+
+                    kasLogger.info('Key rewrapped successfully', {
+                        requestId,
+                        keyAccessObjectId: kao.keyAccessObjectId,
+                        kid: kao.kid,
+                    });
+
+                } catch (error) {
+                    kasLogger.error('Failed to process keyAccessObject', {
+                        requestId,
+                        keyAccessObjectId: kao.keyAccessObjectId,
+                        error: error instanceof Error ? error.message : 'Unknown error',
+                    });
+
+                    results.push({
+                        keyAccessObjectId: kao.keyAccessObjectId,
+                        status: 'error' as const,
+                        error: error instanceof Error ? error.message : 'Internal processing error',
+                        signature: { alg: 'RS256', sig: '' },
+                        sid: kao.sid,
+                    });
+                }
+            }
+
+            // Add policy group response
+            responseGroups.push({
+                policyId,
+                results,
+            });
+        }
+
+        // Build final response
+        const response: IRewrapResponse = {
+            responses: responseGroups,
+        };
+
+        const executionTime = Date.now() - startTime;
+        kasLogger.info('Rewrap request completed', {
+            requestId,
+            executionTimeMs: executionTime,
+            policyGroupsProcessed: responseGroups.length,
+            totalResults: responseGroups.reduce((sum, group) => sum + group.results.length, 0),
+            successCount: responseGroups.reduce(
+                (sum, group) => sum + group.results.filter((r: IKeyAccessObjectResult) => r.status === 'success').length,
+                0
+            ),
+            errorCount: responseGroups.reduce(
+                (sum, group) => sum + group.results.filter((r: IKeyAccessObjectResult) => r.status === 'error').length,
+                0
+            ),
+        });
+
+        res.status(200).json(response);
+
+    } catch (error) {
+        kasLogger.error('Rewrap request failed', {
+            requestId,
+            error: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined,
+        });
+
+        res.status(500).json({
+            error: 'Internal Server Error',
+            message: 'Failed to process rewrap request',
+            requestId,
+        });
+    }
+});
+
+// Helper function to check if KAO URL is for local KAS
+function isLocalKAS(url: string): boolean {
+    const localPatterns = [
+        'localhost',
+        '127.0.0.1',
+        '0.0.0.0',
+        process.env.KAS_URL || '',
+    ];
+
+    return localPatterns.some(pattern => pattern && url.includes(pattern));
+}
+
+// ============================================
 // Federated Key Request Endpoint (Cross-Instance)
 // ============================================
 app.post('/federated/request-key', async (req: Request, res: Response) => {
