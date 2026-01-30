@@ -1,0 +1,291 @@
+# ACP-240 KAS Phase 3.5: Multi-KAS Integration Testing Environment
+# 3-KAS Federation Test Setup: USA, FRA, GBR
+
+version: '3.8'
+
+services:
+  # ============================================
+  # KAS USA (Primary/Hub)
+  # ============================================
+  kas-usa:
+    build:
+      context: ./kas
+      dockerfile: Dockerfile
+    container_name: kas-usa
+    hostname: kas-usa
+    environment:
+      - NODE_ENV=test
+      - KAS_PORT=8080
+      - HTTPS_ENABLED=true
+      - KAS_ID=kas-usa
+      - KAS_URL=https://kas-usa:8080
+      
+      # Feature Flags
+      - ENABLE_REWRAP_PROTOCOL=true
+      - ENABLE_FEDERATION=true
+      - ENABLE_DPOP=true
+      - ENABLE_SIGNATURE_VERIFICATION=true
+      - ENABLE_POLICY_BINDING=true
+      
+      # Federation Configuration
+      - FEDERATION_TIMEOUT_MS=10000
+      - FEDERATION_MAX_RETRIES=3
+      - FEDERATION_MAX_DEPTH=3
+      - FEDERATION_MTLS_ENABLED=true
+      
+      # mTLS Configuration (per-KAS)
+      - MTLS_CLIENT_CERT_KAS_FRA=/certs/usa/client.crt
+      - MTLS_CLIENT_KEY_KAS_FRA=/certs/usa/client.key
+      - MTLS_CA_CERT_KAS_FRA=/certs/ca/ca.crt
+      - MTLS_CLIENT_CERT_KAS_GBR=/certs/usa/client.crt
+      - MTLS_CLIENT_KEY_KAS_GBR=/certs/usa/client.key
+      - MTLS_CA_CERT_KAS_GBR=/certs/ca/ca.crt
+      
+      # Shared/default certificates
+      - MTLS_CLIENT_CERT=/certs/usa/client.crt
+      - MTLS_CLIENT_KEY=/certs/usa/client.key
+      - MTLS_CA_CERT=/certs/ca/ca.crt
+      
+      # MongoDB
+      - MONGODB_URL=mongodb://admin:DiveMongoTest2025!@mongodb-shared:27017/dive-v3-kas-test?authSource=admin
+      - MONGODB_DATABASE=dive-v3-kas-test
+      
+      # OPA
+      - OPA_URL=https://opa-usa:8181
+      
+      # Keycloak
+      - KEYCLOAK_URL=https://keycloak:8443
+      - KEYCLOAK_REALM=dive-v3-broker-usa
+      
+      # HSM
+      - KAS_HSM_PROVIDER=mock
+      
+      # TLS Certificates
+      - CERT_PATH=/certs/usa
+      - CERT_FILE=server.crt
+      - KEY_FILE=server.key
+      
+      # Disable strict TLS for test environment
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
+    
+    volumes:
+      - ./certs/kas-federation/usa:/certs/usa:ro
+      - ./certs/kas-federation/ca:/certs/ca:ro
+    
+    networks:
+      - kas-federation
+    
+    ports:
+      - "8081:8080"
+    
+    healthcheck:
+      # Health check (localhost is appropriate for test environment in Docker)
+      # Health endpoint is internal to container, not exposed to host
+      test: ["CMD", "curl", "-f", "-k", "https://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    
+    depends_on:
+      - mongodb-shared
+
+  # ============================================
+  # KAS FRA (France)
+  # ============================================
+  kas-fra:
+    build:
+      context: ./kas
+      dockerfile: Dockerfile
+    container_name: kas-fra
+    hostname: kas-fra
+    environment:
+      - NODE_ENV=test
+      - KAS_PORT=8080
+      - HTTPS_ENABLED=true
+      - KAS_ID=kas-fra
+      - KAS_URL=https://kas-fra:8080
+      
+      # Feature Flags
+      - ENABLE_REWRAP_PROTOCOL=true
+      - ENABLE_FEDERATION=true
+      - ENABLE_DPOP=true
+      - ENABLE_SIGNATURE_VERIFICATION=true
+      - ENABLE_POLICY_BINDING=true
+      
+      # Federation Configuration
+      - FEDERATION_TIMEOUT_MS=10000
+      - FEDERATION_MAX_RETRIES=3
+      - FEDERATION_MAX_DEPTH=3
+      - FEDERATION_MTLS_ENABLED=true
+      
+      # mTLS Configuration
+      - MTLS_CLIENT_CERT_KAS_USA=/certs/fra/client.crt
+      - MTLS_CLIENT_KEY_KAS_USA=/certs/fra/client.key
+      - MTLS_CA_CERT_KAS_USA=/certs/ca/ca.crt
+      - MTLS_CLIENT_CERT_KAS_GBR=/certs/fra/client.crt
+      - MTLS_CLIENT_KEY_KAS_GBR=/certs/fra/client.key
+      - MTLS_CA_CERT_KAS_GBR=/certs/ca/ca.crt
+      - MTLS_CLIENT_CERT=/certs/fra/client.crt
+      - MTLS_CLIENT_KEY=/certs/fra/client.key
+      - MTLS_CA_CERT=/certs/ca/ca.crt
+      
+      # MongoDB
+      - MONGODB_URL=mongodb://admin:DiveMongoTest2025!@mongodb-shared:27017/dive-v3-kas-test?authSource=admin
+      - MONGODB_DATABASE=dive-v3-kas-test
+      
+      # OPA
+      - OPA_URL=https://opa-fra:8181
+      
+      # Keycloak
+      - KEYCLOAK_URL=https://keycloak:8443
+      - KEYCLOAK_REALM=dive-v3-broker-fra
+      
+      # HSM
+      - KAS_HSM_PROVIDER=mock
+      
+      # TLS Certificates
+      - CERT_PATH=/certs/fra
+      - CERT_FILE=server.crt
+      - KEY_FILE=server.key
+      
+      # Disable strict TLS for test environment
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
+    
+    volumes:
+      - ./certs/kas-federation/fra:/certs/fra:ro
+      - ./certs/kas-federation/ca:/certs/ca:ro
+    
+    networks:
+      - kas-federation
+    
+    ports:
+      - "8082:8080"
+    
+    healthcheck:
+      # Health check (localhost is appropriate for test environment in Docker)
+      # Health endpoint is internal to container, not exposed to host
+      test: ["CMD", "curl", "-f", "-k", "https://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    
+    depends_on:
+      - mongodb-shared
+
+  # ============================================
+  # KAS GBR (United Kingdom)
+  # ============================================
+  kas-gbr:
+    build:
+      context: ./kas
+      dockerfile: Dockerfile
+    container_name: kas-gbr
+    hostname: kas-gbr
+    environment:
+      - NODE_ENV=test
+      - KAS_PORT=8080
+      - HTTPS_ENABLED=true
+      - KAS_ID=kas-gbr
+      - KAS_URL=https://kas-gbr:8080
+      
+      # Feature Flags
+      - ENABLE_REWRAP_PROTOCOL=true
+      - ENABLE_FEDERATION=true
+      - ENABLE_DPOP=true
+      - ENABLE_SIGNATURE_VERIFICATION=true
+      - ENABLE_POLICY_BINDING=true
+      
+      # Federation Configuration
+      - FEDERATION_TIMEOUT_MS=10000
+      - FEDERATION_MAX_RETRIES=3
+      - FEDERATION_MAX_DEPTH=3
+      - FEDERATION_MTLS_ENABLED=true
+      
+      # mTLS Configuration
+      - MTLS_CLIENT_CERT_KAS_USA=/certs/gbr/client.crt
+      - MTLS_CLIENT_KEY_KAS_USA=/certs/gbr/client.key
+      - MTLS_CA_CERT_KAS_USA=/certs/ca/ca.crt
+      - MTLS_CLIENT_CERT_KAS_FRA=/certs/gbr/client.crt
+      - MTLS_CLIENT_KEY_KAS_FRA=/certs/gbr/client.key
+      - MTLS_CA_CERT_KAS_FRA=/certs/ca/ca.crt
+      - MTLS_CLIENT_CERT=/certs/gbr/client.crt
+      - MTLS_CLIENT_KEY=/certs/gbr/client.key
+      - MTLS_CA_CERT=/certs/ca/ca.crt
+      
+      # MongoDB
+      - MONGODB_URL=mongodb://admin:DiveMongoTest2025!@mongodb-shared:27017/dive-v3-kas-test?authSource=admin
+      - MONGODB_DATABASE=dive-v3-kas-test
+      
+      # OPA
+      - OPA_URL=https://opa-gbr:8181
+      
+      # Keycloak
+      - KEYCLOAK_URL=https://keycloak:8443
+      - KEYCLOAK_REALM=dive-v3-broker-gbr
+      
+      # HSM
+      - KAS_HSM_PROVIDER=mock
+      
+      # TLS Certificates
+      - CERT_PATH=/certs/gbr
+      - CERT_FILE=server.crt
+      - KEY_FILE=server.key
+      
+      # Disable strict TLS for test environment
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
+    
+    volumes:
+      - ./certs/kas-federation/gbr:/certs/gbr:ro
+      - ./certs/kas-federation/ca:/certs/ca:ro
+    
+    networks:
+      - kas-federation
+    
+    ports:
+      - "8083:8080"
+    
+    healthcheck:
+      # Health check (localhost is appropriate for test environment in Docker)
+      # Health endpoint is internal to container, not exposed to host
+      test: ["CMD", "curl", "-f", "-k", "https://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    
+    depends_on:
+      - mongodb-shared
+
+  # ============================================
+  # Shared MongoDB (KAS Registry & Test Data)
+  # ============================================
+  mongodb-shared:
+    image: mongo:7
+    container_name: mongodb-kas-federation
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=DiveMongoTest2025!
+      - MONGO_INITDB_DATABASE=dive-v3-kas-test
+    volumes:
+      - mongo-kas-federation-data:/data/db
+      - ./kas/tests/fixtures/federation-seed.js:/docker-entrypoint-initdb.d/seed.js:ro
+    networks:
+      - kas-federation
+    ports:
+      - "27018:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+networks:
+  kas-federation:
+    driver: bridge
+    name: kas-federation-network
+
+volumes:
+  mongo-kas-federation-data:
+    name: mongo-kas-federation-data
