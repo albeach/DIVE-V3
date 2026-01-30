@@ -16,6 +16,7 @@
 
 import axios from 'axios';
 import https from 'https';
+import crypto from 'crypto';
 import { generateKeyPair, generateTestJWT, wrapKey, computePolicyBinding } from '../integration/federation.test';
 
 describe('Phase 3.5: Audit Trail Verification', () => {
