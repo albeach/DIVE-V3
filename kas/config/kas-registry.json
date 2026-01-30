@@ -11,7 +11,7 @@
     {
       "kasId": "kas-usa",
       "organization": "United States",
-      "kasUrl": "https://usa-kas.dive25.com/request-key",
+      "kasUrl": "https://usa-kas.dive25.com/rewrap",
       "authMethod": "jwt",
       "authConfig": {
         "jwtIssuer": "https://usa-idp.dive25.com/realms/dive-v3-broker"
@@ -37,7 +37,7 @@
     {
       "kasId": "kas-fra",
       "organization": "France",
-      "kasUrl": "https://fra-kas.dive25.com/request-key",
+      "kasUrl": "https://fra-kas.dive25.com/rewrap",
       "authMethod": "jwt",
       "authConfig": {
         "jwtIssuer": "https://fra-idp.dive25.com/realms/dive-v3-broker"
@@ -71,7 +71,7 @@
     {
       "kasId": "kas-gbr",
       "organization": "United Kingdom",
-      "kasUrl": "https://gbr-kas.dive25.com/request-key",
+      "kasUrl": "https://gbr-kas.dive25.com/rewrap",
       "authMethod": "jwt",
       "authConfig": {
         "jwtIssuer": "https://gbr-idp.dive25.com/realms/dive-v3-broker"
@@ -97,7 +97,7 @@
     {
       "kasId": "kas-deu",
       "organization": "Germany",
-      "kasUrl": "https://deu-kas.dive25.com/request-key",
+      "kasUrl": "https://deu-kas.dive25.com/rewrap",
       "authMethod": "jwt",
       "authConfig": {
         "jwtIssuer": "https://deu-idp.dive25.com/realms/dive-v3-broker"
@@ -128,10 +128,10 @@
     {
       "kasId": "kas-local",
       "organization": "Local Development",
-      "kasUrl": "http://localhost:8080/request-key",
+      "kasUrl": "http://kas-local:8080/rewrap",
       "authMethod": "jwt",
       "authConfig": {
-        "jwtIssuer": "https://localhost:8443/realms/dive-v3-broker"
+        "jwtIssuer": "https://keycloak:8443/realms/dive-v3-broker"
       },
       "trustLevel": "medium",
       "supportedCountries": ["USA", "FRA", "GBR", "DEU"],
