@@ -29,6 +29,7 @@ import {
     IFederationError,
 } from '../types/federation.types';
 import { IRewrapRequest, IPolicy, IKeyAccessObject } from '../types/rewrap.types';
+import { getMTLSAgent, isMTLSEnabled } from '../utils/mtls-config';
 
 // Circuit state type
 export type CircuitState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
@@ -192,6 +193,8 @@ export class KASFederationService {
     
     /**
      * Get or create authenticated HTTP client for target KAS
+     * 
+     * Updated in Phase 3.4 to use new mTLS configuration utility
      */
     private getHttpClient(kasEntry: IKASRegistryEntry): AxiosInstance {
         const existing = this.httpClients.get(kasEntry.kasId);
@@ -201,7 +204,7 @@ export class KASFederationService {
         
         const config: any = {
             baseURL: kasEntry.kasUrl.replace('/request-key', ''),
-            timeout: 10000,
+            timeout: parseInt(process.env.FEDERATION_TIMEOUT_MS || '10000', 10),
             headers: {
                 'Content-Type': 'application/json',
                 'User-Agent': 'DIVE-V3-KAS-Federation/1.0',
@@ -211,14 +214,36 @@ export class KASFederationService {
         // Configure authentication
         switch (kasEntry.authMethod) {
             case 'mtls':
-                if (kasEntry.authConfig.clientCert && kasEntry.authConfig.clientKey) {
-                    config.httpsAgent = new https.Agent({
-                        cert: fs.readFileSync(kasEntry.authConfig.clientCert),
-                        key: fs.readFileSync(kasEntry.authConfig.clientKey),
-                        ca: kasEntry.authConfig.caCert
-                            ? fs.readFileSync(kasEntry.authConfig.caCert)
-                            : undefined,
-                        rejectUnauthorized: !!kasEntry.authConfig.caCert,
+                // Phase 3.4: Use new mTLS configuration utility
+                if (isMTLSEnabled()) {
+                    const mtlsAgent = getMTLSAgent(kasEntry.kasId);
+                    
+                    if (mtlsAgent) {
+                        config.httpsAgent = mtlsAgent.agent;
+                        kasLogger.info('Using mTLS agent for federation', {
+                            targetKAS: kasEntry.kasId,
+                            url: kasEntry.kasUrl,
+                        });
+                    } else {
+                        // Fallback to legacy cert loading from kasEntry
+                        kasLogger.warn('mTLS agent not available, falling back to legacy cert loading', {
+                            targetKAS: kasEntry.kasId,
+                        });
+                        
+                        if (kasEntry.authConfig.clientCert && kasEntry.authConfig.clientKey) {
+                            config.httpsAgent = new https.Agent({
+                                cert: fs.readFileSync(kasEntry.authConfig.clientCert),
+                                key: fs.readFileSync(kasEntry.authConfig.clientKey),
+                                ca: kasEntry.authConfig.caCert
+                                    ? fs.readFileSync(kasEntry.authConfig.caCert)
+                                    : undefined,
+                                rejectUnauthorized: !!kasEntry.authConfig.caCert,
+                            });
+                        }
+                    }
+                } else {
+                    kasLogger.debug('mTLS disabled, using standard HTTPS', {
+                        targetKAS: kasEntry.kasId,
                     });
                 }
                 break;
@@ -226,11 +251,35 @@ export class KASFederationService {
             case 'apikey':
                 const headerName = kasEntry.authConfig.apiKeyHeader || 'X-API-Key';
                 config.headers[headerName] = kasEntry.authConfig.apiKey;
+                kasLogger.debug('Using API key authentication', {
+                    targetKAS: kasEntry.kasId,
+                    headerName,
+                });
+                break;
+                
+            case 'jwt':
+                // JWT will be added via Authorization header in request
+                kasLogger.debug('Using JWT authentication', {
+                    targetKAS: kasEntry.kasId,
+                });
+                break;
+                
+            case 'oauth2':
+                // OAuth2 token will be obtained and added in request
+                kasLogger.debug('Using OAuth2 authentication', {
+                    targetKAS: kasEntry.kasId,
+                });
                 break;
         }
         
         const client = axios.create(config);
         this.httpClients.set(kasEntry.kasId, client);
+        
+        kasLogger.info('Created HTTP client for federation', {
+            targetKAS: kasEntry.kasId,
+            authMethod: kasEntry.authMethod,
+            baseURL: config.baseURL,
+        });
         
         return client;
     }
