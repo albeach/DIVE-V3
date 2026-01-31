@@ -50,6 +50,14 @@ services:
       - MONGODB_URL=mongodb://admin:DiveMongoTest2025!@mongodb-shared:27017/dive-v3-kas-test?authSource=admin
       - MONGODB_DATABASE=dive-v3-kas-test
       
+      # Redis Cache (Phase 4.2.2)
+      - REDIS_HOST=redis-kas-cache
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=DiveRedisTest2025!
+      - ENABLE_CACHE=true
+      - CACHE_TTL_DEK=60
+      - CACHE_TTL_PUBLIC_KEY=3600
+      
       # OPA
       - OPA_URL=https://opa-usa:8181
       
@@ -59,6 +67,14 @@ services:
       
       # HSM
       - KAS_HSM_PROVIDER=mock
+      
+      # GCP KMS Configuration (Phase 4.2.1)
+      - USE_GCP_KMS=false
+      - GCP_PROJECT_ID=dive25
+      - GCP_KMS_LOCATION=us-central1
+      - GCP_KMS_KEY_RING=kas-usa
+      - GCP_KMS_KEY_NAME=kas-usa-private-key
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcp-service-account.json
       
       # TLS Certificates
       - CERT_PATH=/certs/usa
@@ -71,6 +87,7 @@ services:
     volumes:
       - ./certs/kas-federation/usa:/certs/usa:ro
       - ./certs/kas-federation/ca:/certs/ca:ro
+      - ./credentials:/app/credentials:ro
     
     networks:
       - kas-federation
@@ -89,6 +106,7 @@ services:
     
     depends_on:
       - mongodb-shared
+      - redis-kas-cache
 
   # ============================================
   # KAS FRA (France)
@@ -134,6 +152,14 @@ services:
       - MONGODB_URL=mongodb://admin:DiveMongoTest2025!@mongodb-shared:27017/dive-v3-kas-test?authSource=admin
       - MONGODB_DATABASE=dive-v3-kas-test
       
+      # Redis Cache (Phase 4.2.2)
+      - REDIS_HOST=redis-kas-cache
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=DiveRedisTest2025!
+      - ENABLE_CACHE=true
+      - CACHE_TTL_DEK=60
+      - CACHE_TTL_PUBLIC_KEY=3600
+      
       # OPA
       - OPA_URL=https://opa-fra:8181
       
@@ -143,6 +169,14 @@ services:
       
       # HSM
       - KAS_HSM_PROVIDER=mock
+      
+      # GCP KMS Configuration (Phase 4.2.1)
+      - USE_GCP_KMS=false
+      - GCP_PROJECT_ID=dive25
+      - GCP_KMS_LOCATION=europe-west1
+      - GCP_KMS_KEY_RING=kas-fra
+      - GCP_KMS_KEY_NAME=kas-fra-private-key
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcp-service-account.json
       
       # TLS Certificates
       - CERT_PATH=/certs/fra
@@ -155,6 +189,7 @@ services:
     volumes:
       - ./certs/kas-federation/fra:/certs/fra:ro
       - ./certs/kas-federation/ca:/certs/ca:ro
+      - ./credentials:/app/credentials:ro
     
     networks:
       - kas-federation
@@ -173,6 +208,7 @@ services:
     
     depends_on:
       - mongodb-shared
+      - redis-kas-cache
 
   # ============================================
   # KAS GBR (United Kingdom)
@@ -218,6 +254,14 @@ services:
       - MONGODB_URL=mongodb://admin:DiveMongoTest2025!@mongodb-shared:27017/dive-v3-kas-test?authSource=admin
       - MONGODB_DATABASE=dive-v3-kas-test
       
+      # Redis Cache (Phase 4.2.2)
+      - REDIS_HOST=redis-kas-cache
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=DiveRedisTest2025!
+      - ENABLE_CACHE=true
+      - CACHE_TTL_DEK=60
+      - CACHE_TTL_PUBLIC_KEY=3600
+      
       # OPA
       - OPA_URL=https://opa-gbr:8181
       
@@ -227,6 +271,14 @@ services:
       
       # HSM
       - KAS_HSM_PROVIDER=mock
+      
+      # GCP KMS Configuration (Phase 4.2.1)
+      - USE_GCP_KMS=false
+      - GCP_PROJECT_ID=dive25
+      - GCP_KMS_LOCATION=europe-west2
+      - GCP_KMS_KEY_RING=kas-gbr
+      - GCP_KMS_KEY_NAME=kas-gbr-private-key
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/credentials/gcp-service-account.json
       
       # TLS Certificates
       - CERT_PATH=/certs/gbr
@@ -239,6 +291,7 @@ services:
     volumes:
       - ./certs/kas-federation/gbr:/certs/gbr:ro
       - ./certs/kas-federation/ca:/certs/ca:ro
+      - ./credentials:/app/credentials:ro
     
     networks:
       - kas-federation
@@ -257,6 +310,7 @@ services:
     
     depends_on:
       - mongodb-shared
+      - redis-kas-cache
 
   # ============================================
   # Shared MongoDB (KAS Registry & Test Data)
@@ -281,6 +335,29 @@ services:
       timeout: 5s
       retries: 5
 
+  # ============================================
+  # Redis Cache (Phase 4.2.2)
+  # ============================================
+  redis-kas-cache:
+    image: redis:7-alpine
+    container_name: redis-kas-cache
+    hostname: redis-kas-cache
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass DiveRedisTest2025!
+    environment:
+      - REDIS_PASSWORD=DiveRedisTest2025!
+    networks:
+      - kas-federation
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "--pass", "DiveRedisTest2025!", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    volumes:
+      - redis-kas-cache-data:/data
+
 networks:
   kas-federation:
     driver: bridge
@@ -289,3 +366,5 @@ networks:
 volumes:
   mongo-kas-federation-data:
     name: mongo-kas-federation-data
+  redis-kas-cache-data:
+    name: redis-kas-cache-data
