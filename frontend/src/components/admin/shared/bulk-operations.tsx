@@ -180,10 +180,73 @@ export function BulkOperationsToolbar({
     }
 
     const lastOp = operationHistory[0];
-    // TODO: Implement actual rollback logic per action type
-    notify.toast.info(`Rolling back operation ${lastOp.operationId}...`);
-    setOperationHistory((prev) => prev.slice(1));
-    notify.toast.success('Operation rolled back successfully');
+    const rollback = lastOp.rollbackData;
+
+    if (!rollback || !rollback.action || !rollback.ids) {
+      notify.toast.error('Rollback data unavailable for this operation');
+      setOperationHistory((prev) => prev.slice(1));
+      return;
+    }
+
+    setIsExecuting(true);
+    notify.toast.info(`Rolling back operation ${lastOp.operationId || 'unknown'}...`);
+
+    try {
+      // Determine the reverse action and execute it
+      const reverseActionMap: Record<string, { method: string; pathSuffix: string }> = {
+        delete: { method: 'POST', pathSuffix: '' }, // restore via create
+        suspend: { method: 'POST', pathSuffix: '/activate' },
+        disable: { method: 'POST', pathSuffix: '/enable' },
+        revoke: { method: 'POST', pathSuffix: '/restore' },
+      };
+
+      const reverseAction = reverseActionMap[rollback.action];
+      let successCount = 0;
+      let failCount = 0;
+
+      if (reverseAction && Array.isArray(rollback.ids)) {
+        for (const item of rollback.ids) {
+          try {
+            const endpoint = rollback.apiBase
+              ? `${rollback.apiBase}/${item.id || item}${reverseAction.pathSuffix}`
+              : null;
+
+            if (endpoint) {
+              const res = await fetch(endpoint, {
+                method: reverseAction.method,
+                headers: { 'Content-Type': 'application/json' },
+                body: item.data ? JSON.stringify(item.data) : undefined,
+              });
+              if (res.ok) {
+                successCount++;
+              } else {
+                failCount++;
+              }
+            } else if (rollback.handler) {
+              // Use custom rollback handler if provided
+              await rollback.handler(item);
+              successCount++;
+            } else {
+              failCount++;
+            }
+          } catch {
+            failCount++;
+          }
+        }
+      }
+
+      setOperationHistory((prev) => prev.slice(1));
+
+      if (failCount === 0) {
+        notify.toast.success(`Rollback complete: ${successCount} items restored`);
+      } else {
+        notify.toast.warning(`Rollback partial: ${successCount} restored, ${failCount} failed`);
+      }
+    } catch (error) {
+      notify.toast.error('Rollback failed', error instanceof Error ? error.message : 'Unknown error');
+    } finally {
+      setIsExecuting(false);
+    }
   };
 
   const variantStyles = {

@@ -102,7 +102,73 @@ export default function AdvancedAnalyticsPage() {
 
   const exportData = (format: 'csv' | 'json' | 'pdf') => {
     notify.toast.success(`Exporting as ${format.toUpperCase()}...`);
-    // TODO: Implement actual export logic
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const filename = `analytics-${selectedMetric}-${timeRange}-${timestamp}`;
+
+    if (format === 'json') {
+      const blob = new Blob(
+        [JSON.stringify({ metric: selectedMetric, timeRange, filters: drillDownFilters, data: analyticsData }, null, 2)],
+        { type: 'application/json' }
+      );
+      triggerDownload(blob, `${filename}.json`);
+    } else if (format === 'csv') {
+      const headers = Object.keys(analyticsData[0] || { label: '', value: '' });
+      const csvRows = [
+        headers.join(','),
+        ...analyticsData.map((row: AnalyticsData) =>
+          headers.map((h) => {
+            const val = row[h];
+            const str = String(val ?? '');
+            return str.includes(',') || str.includes('"') || str.includes('\n')
+              ? `"${str.replace(/"/g, '""')}"`
+              : str;
+          }).join(',')
+        ),
+      ];
+      const blob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
+      triggerDownload(blob, `${filename}.csv`);
+    } else if (format === 'pdf') {
+      // Generate a printable HTML report and trigger print-to-PDF
+      const htmlContent = `
+        <!DOCTYPE html>
+        <html><head><title>Analytics Report</title>
+        <style>
+          body { font-family: Arial, sans-serif; margin: 40px; color: #111; }
+          h1 { font-size: 24px; margin-bottom: 4px; }
+          .meta { color: #666; font-size: 12px; margin-bottom: 24px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+          th, td { border: 1px solid #ddd; padding: 8px 12px; text-align: left; font-size: 13px; }
+          th { background: #f3f4f6; font-weight: 600; }
+          tr:nth-child(even) { background: #f9fafb; }
+        </style></head><body>
+        <h1>Analytics Report: ${selectedMetric}</h1>
+        <div class="meta">Time Range: ${timeRange} | Generated: ${new Date().toLocaleString()} | Filters: ${drillDownFilters.length || 'None'}</div>
+        <table>
+          <thead><tr>${Object.keys(analyticsData[0] || {}).map((h) => `<th>${h}</th>`).join('')}</tr></thead>
+          <tbody>${analyticsData.map((row: AnalyticsData) =>
+            `<tr>${Object.values(row).map((v) => `<td>${String(v ?? '')}</td>`).join('')}</tr>`
+          ).join('')}</tbody>
+        </table>
+        </body></html>`;
+      const printWindow = window.open('', '_blank');
+      if (printWindow) {
+        printWindow.document.write(htmlContent);
+        printWindow.document.close();
+        printWindow.print();
+      }
+    }
+  };
+
+  const triggerDownload = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
   };
 
   return (

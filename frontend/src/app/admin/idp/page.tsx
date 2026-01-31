@@ -21,6 +21,7 @@
 import React, { useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
+import { useQuery } from '@tanstack/react-query';
 import PageLayout from '@/components/layout/page-layout';
 import AdminBreadcrumbs from '@/components/admin/AdminBreadcrumbs';
 import IdPCard2025 from '@/components/admin/IdPCard2025';
@@ -78,6 +79,17 @@ function IdPManagementPageContent() {
     const testIdPMutation = useTestIdP();
     const deleteIdPMutation = useDeleteIdP();
 
+    const { data: certHealth } = useQuery({
+        queryKey: ['admin', 'certificates', 'health'],
+        queryFn: async () => {
+            const res = await fetch('/api/admin/certificates/health');
+            if (!res.ok) return null;
+            return res.json();
+        },
+        staleTime: 60_000,
+        retry: false,
+    });
+
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [showDetailPanel, setShowDetailPanel] = useState(false);
 
@@ -130,15 +142,28 @@ function IdPManagementPageContent() {
     }, [idps, filters]);
 
     const stats: IdPStats = useMemo(() => {
-        // Ensure idps is always an array
         const idpsList = Array.isArray(idps) ? idps : [];
+
+        // Calculate warnings from certificate health data
+        let warningCount = 0;
+        if (certHealth) {
+            const certs = Array.isArray(certHealth.certificates) ? certHealth.certificates : [];
+            const now = Date.now();
+            const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+            warningCount += certs.filter((cert: { expiresAt?: string; status?: string }) => {
+                if (cert.status === 'expired' || cert.status === 'revoked') return false;
+                const expiresAt = cert.expiresAt ? new Date(cert.expiresAt).getTime() : 0;
+                return expiresAt > 0 && expiresAt - now < THIRTY_DAYS_MS;
+            }).length;
+        }
+
         return {
             total: idpsList.length,
             online: idpsList.filter(idp => idp.enabled).length,
             offline: idpsList.filter(idp => !idp.enabled).length,
-            warning: 0 // TODO: Calculate from health checks
+            warning: warningCount,
         };
-    }, [idps]);
+    }, [idps, certHealth]);
 
     // ============================================
     // Handlers
