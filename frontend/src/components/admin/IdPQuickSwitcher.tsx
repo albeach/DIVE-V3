@@ -41,6 +41,43 @@ interface IQuickAction {
     category: 'idp' | 'action' | 'navigation';
 }
 
+// Recent actions stored in localStorage
+const RECENT_ACTIONS_KEY = 'dive-quick-switcher-recent';
+const MAX_RECENT_ACTIONS = 10;
+
+function getRecentActions(): string[] {
+    if (typeof window === 'undefined') return [];
+    try {
+        const stored = localStorage.getItem(RECENT_ACTIONS_KEY);
+        return stored ? JSON.parse(stored) : [];
+    } catch {
+        return [];
+    }
+}
+
+function addRecentAction(actionId: string) {
+    if (typeof window === 'undefined') return;
+    try {
+        const recent = getRecentActions().filter(id => id !== actionId);
+        recent.unshift(actionId);
+        localStorage.setItem(RECENT_ACTIONS_KEY, JSON.stringify(recent.slice(0, MAX_RECENT_ACTIONS)));
+    } catch {
+        // localStorage unavailable
+    }
+}
+
+// Action command parsing: "suspend [name]", "approve [alias]", etc.
+function parseActionCommand(input: string): { verb: string; target: string } | null {
+    const verbs = ['suspend', 'activate', 'enable', 'disable', 'approve', 'reject', 'test', 'delete', 'view', 'edit'];
+    const lower = input.toLowerCase().trim();
+    for (const verb of verbs) {
+        if (lower.startsWith(verb + ' ')) {
+            return { verb, target: input.slice(verb.length + 1).trim() };
+        }
+    }
+    return null;
+}
+
 // ============================================
 // Component
 // ============================================
@@ -122,8 +159,26 @@ export default function IdPQuickSwitcher() {
                 description: 'Download all IdP configs as JSON',
                 icon: DocumentArrowDownIcon,
                 action: () => {
-                    // TODO: Implement export
-                    console.log('Export not yet implemented');
+                    if (idps && Array.isArray(idps)) {
+                        const exportData = {
+                            exportedAt: new Date().toISOString(),
+                            count: idps.length,
+                            identityProviders: idps.map((idp: IIdPListItem) => ({
+                                alias: idp.alias,
+                                displayName: idp.displayName,
+                                protocol: idp.protocol,
+                                enabled: idp.enabled,
+                                createdAt: idp.createdAt,
+                            })),
+                        };
+                        const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+                        const url = URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = `dive-idp-config-${new Date().toISOString().split('T')[0]}.json`;
+                        a.click();
+                        URL.revokeObjectURL(url);
+                    }
                     setIsOpen(false);
                 },
                 category: 'action'
@@ -163,18 +218,43 @@ export default function IdPQuickSwitcher() {
     // Filter actions by search
     // ============================================
     
+    // Parse action commands like "suspend myIdP"
+    const parsedCommand = useMemo(() => parseActionCommand(search), [search]);
+
     const filteredActions = useMemo(() => {
-        if (!search.trim()) return allActions;
-        
+        if (!search.trim()) {
+            // When no search, show recent actions first (if any)
+            const recentIds = getRecentActions();
+            if (recentIds.length > 0) {
+                const recentItems = recentIds
+                    .map(id => allActions.find(a => a.id === id))
+                    .filter(Boolean) as IQuickAction[];
+                const rest = allActions.filter(a => !recentIds.includes(a.id));
+                return [...recentItems, ...rest];
+            }
+            return allActions;
+        }
+
+        // If parsed as a command, filter IdPs by target name
+        if (parsedCommand) {
+            const targetLower = parsedCommand.target.toLowerCase();
+            return allActions.filter(action => {
+                if (action.category === 'idp') {
+                    return action.label.toLowerCase().includes(targetLower);
+                }
+                return false;
+            });
+        }
+
         const query = search.toLowerCase();
-        
+
         return allActions.filter(action => {
             const labelMatch = action.label.toLowerCase().includes(query);
             const descMatch = action.description?.toLowerCase().includes(query);
             return labelMatch || descMatch;
         });
-    }, [allActions, search]);
-    
+    }, [allActions, search, parsedCommand]);
+
     // Group by category
     const groupedActions = useMemo(() => {
         const groups: Record<string, IQuickAction[]> = {
@@ -182,13 +262,19 @@ export default function IdPQuickSwitcher() {
             action: [],
             navigation: []
         };
-        
+
         filteredActions.forEach(action => {
             groups[action.category].push(action);
         });
-        
+
         return groups;
     }, [filteredActions]);
+
+    // Wrap action execution to track recent actions
+    const executeAction = useCallback((action: IQuickAction) => {
+        addRecentAction(action.id);
+        action.action();
+    }, []);
     
     // ============================================
     // Keyboard shortcuts
@@ -220,14 +306,15 @@ export default function IdPQuickSwitcher() {
                     setSelectedIndex(prev => (prev - 1 + filteredActions.length) % filteredActions.length);
                 } else if (e.key === 'Enter') {
                     e.preventDefault();
-                    filteredActions[selectedIndex]?.action();
+                    const action = filteredActions[selectedIndex];
+                    if (action) executeAction(action);
                 }
             }
         };
         
         window.addEventListener('keydown', handleKeyDown);
         return () => window.removeEventListener('keydown', handleKeyDown);
-    }, [isOpen, filteredActions, selectedIndex]);
+    }, [isOpen, filteredActions, selectedIndex, executeAction]);
     
     // Reset selected index when search changes
     useEffect(() => {
@@ -256,7 +343,7 @@ export default function IdPQuickSwitcher() {
                             type="text"
                             value={search}
                             onChange={(e) => setSearch(e.target.value)}
-                            placeholder="Search IdPs, actions, or navigate..."
+                            placeholder="Search IdPs, actions, or type 'suspend [name]'..."
                             className="flex-1 bg-transparent text-gray-900 dark:text-gray-100 placeholder-gray-400 outline-none text-sm"
                             autoFocus
                         />
@@ -265,6 +352,13 @@ export default function IdPQuickSwitcher() {
                         </kbd>
                     </div>
                     
+                    {/* Command indicator */}
+                    {parsedCommand && (
+                        <div className="px-4 py-2 bg-indigo-50 dark:bg-indigo-900/20 border-b border-indigo-200 dark:border-indigo-800 text-xs text-indigo-700 dark:text-indigo-400">
+                            Command: <span className="font-semibold">{parsedCommand.verb}</span> on IdPs matching &ldquo;{parsedCommand.target}&rdquo;
+                        </div>
+                    )}
+
                     {/* Results */}
                     <div className="max-h-96 overflow-y-auto">
                         {filteredActions.length === 0 ? (
@@ -286,7 +380,7 @@ export default function IdPQuickSwitcher() {
                                             return (
                                                 <button
                                                     key={action.id}
-                                                    onClick={action.action}
+                                                    onClick={() => executeAction(action)}
                                                     className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors ${
                                                         isSelected
                                                             ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-900 dark:text-purple-100'
@@ -321,7 +415,7 @@ export default function IdPQuickSwitcher() {
                                             return (
                                                 <button
                                                     key={action.id}
-                                                    onClick={action.action}
+                                                    onClick={() => executeAction(action)}
                                                     className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors ${
                                                         isSelected
                                                             ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-900 dark:text-purple-100'
@@ -356,7 +450,7 @@ export default function IdPQuickSwitcher() {
                                             return (
                                                 <button
                                                     key={action.id}
-                                                    onClick={action.action}
+                                                    onClick={() => executeAction(action)}
                                                     className={`w-full flex items-center gap-3 px-3 py-2 rounded-md text-left transition-colors ${
                                                         isSelected
                                                             ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-900 dark:text-purple-100'

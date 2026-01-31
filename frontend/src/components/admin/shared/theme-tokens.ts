@@ -98,6 +98,102 @@ export const adminColors = {
 };
 
 // ============================================
+// STATUS COLOR MAPS
+// ============================================
+
+export type EntityStatus = 'active' | 'pending' | 'suspended' | 'disabled' | 'testing' | 'error' | 'online' | 'offline';
+
+export const adminStatusColors: Record<EntityStatus, {
+  bg: string;
+  bgSubtle: string;
+  text: string;
+  border: string;
+  borderLeft: string;
+  dot: string;
+  ring: string;
+}> = {
+  active: {
+    bg: 'bg-emerald-100 dark:bg-emerald-900/30',
+    bgSubtle: 'bg-emerald-50 dark:bg-emerald-950/20',
+    text: 'text-emerald-700 dark:text-emerald-400',
+    border: 'border-emerald-300 dark:border-emerald-700',
+    borderLeft: 'border-l-4 border-l-emerald-500 dark:border-l-emerald-400',
+    dot: 'bg-emerald-500',
+    ring: 'ring-emerald-500/20',
+  },
+  online: {
+    bg: 'bg-emerald-100 dark:bg-emerald-900/30',
+    bgSubtle: 'bg-emerald-50 dark:bg-emerald-950/20',
+    text: 'text-emerald-700 dark:text-emerald-400',
+    border: 'border-emerald-300 dark:border-emerald-700',
+    borderLeft: 'border-l-4 border-l-emerald-500 dark:border-l-emerald-400',
+    dot: 'bg-emerald-500',
+    ring: 'ring-emerald-500/20',
+  },
+  pending: {
+    bg: 'bg-amber-100 dark:bg-amber-900/30',
+    bgSubtle: 'bg-amber-50 dark:bg-amber-950/20',
+    text: 'text-amber-700 dark:text-amber-400',
+    border: 'border-amber-300 dark:border-amber-700',
+    borderLeft: 'border-l-4 border-l-amber-500 dark:border-l-amber-400',
+    dot: 'bg-amber-500',
+    ring: 'ring-amber-500/20',
+  },
+  suspended: {
+    bg: 'bg-red-100 dark:bg-red-900/30',
+    bgSubtle: 'bg-red-50 dark:bg-red-950/20',
+    text: 'text-red-700 dark:text-red-400',
+    border: 'border-red-300 dark:border-red-700',
+    borderLeft: 'border-l-4 border-l-red-500 dark:border-l-red-400',
+    dot: 'bg-red-500',
+    ring: 'ring-red-500/20',
+  },
+  disabled: {
+    bg: 'bg-gray-100 dark:bg-gray-800/50',
+    bgSubtle: 'bg-gray-50 dark:bg-gray-900/30',
+    text: 'text-gray-500 dark:text-gray-500',
+    border: 'border-gray-300 dark:border-gray-700',
+    borderLeft: 'border-l-4 border-l-gray-400 dark:border-l-gray-600',
+    dot: 'bg-gray-400',
+    ring: 'ring-gray-400/20',
+  },
+  offline: {
+    bg: 'bg-gray-100 dark:bg-gray-800/50',
+    bgSubtle: 'bg-gray-50 dark:bg-gray-900/30',
+    text: 'text-gray-500 dark:text-gray-500',
+    border: 'border-gray-300 dark:border-gray-700',
+    borderLeft: 'border-l-4 border-l-gray-400 dark:border-l-gray-600',
+    dot: 'bg-gray-400',
+    ring: 'ring-gray-400/20',
+  },
+  testing: {
+    bg: 'bg-sky-100 dark:bg-sky-900/30',
+    bgSubtle: 'bg-sky-50 dark:bg-sky-950/20',
+    text: 'text-sky-700 dark:text-sky-400',
+    border: 'border-sky-300 dark:border-sky-700',
+    borderLeft: 'border-l-4 border-l-sky-500 dark:border-l-sky-400',
+    dot: 'bg-sky-500',
+    ring: 'ring-sky-500/20',
+  },
+  error: {
+    bg: 'bg-red-100 dark:bg-red-900/30',
+    bgSubtle: 'bg-red-50 dark:bg-red-950/20',
+    text: 'text-red-700 dark:text-red-400',
+    border: 'border-red-300 dark:border-red-700',
+    borderLeft: 'border-l-4 border-l-red-600 dark:border-l-red-500',
+    dot: 'bg-red-600',
+    ring: 'ring-red-600/20',
+  },
+};
+
+/**
+ * Get status color classes for a given entity status
+ */
+export function getStatusColors(status: EntityStatus) {
+  return adminStatusColors[status] || adminStatusColors.disabled;
+}
+
+// ============================================
 // EFFECTS (Glassmorphism, Shadows, etc.)
 // ============================================
 
