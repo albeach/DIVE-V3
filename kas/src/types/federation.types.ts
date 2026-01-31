@@ -170,7 +170,7 @@ export interface IFederationError {
     kasId: string;
 
     /** Error type */
-    errorType: 'timeout' | 'circuit_open' | 'auth_failure' | 'network_error' | 'policy_violation' | 'unknown';
+    errorType: 'timeout' | 'circuit_open' | 'auth_failure' | 'network_error' | 'policy_violation' | 'invalid_request' | 'all_kas_unavailable' | 'unknown';
 
     /** Error message */
     message: string;
@@ -180,6 +180,9 @@ export interface IFederationError {
 
     /** Timestamp */
     timestamp: string;
+    
+    /** Additional metadata (optional) */
+    metadata?: Record<string, unknown>;
 }
 
 /**

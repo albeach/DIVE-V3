@@ -1239,3 +1239,253 @@ describe('Phase 4.1.2: Key Split Recombination (All-Of Mode)', () => {
         expect(failedResult).toBeDefined();
     }, 15000);
 });
+
+// ============================================
+// Phase 4.1.3: Any-Of KAS Routing Integration Tests
+// ============================================
+describe('Phase 4.1.3: Any-Of KAS Routing with Failover', () => {
+    const KAS_USA_URL = process.env.KAS_USA_URL || 'https://localhost:8081';
+    const KAS_FRA_URL = process.env.KAS_FRA_URL || 'https://localhost:8082';
+    const KAS_GBR_URL = process.env.KAS_GBR_URL || 'https://localhost:8083';
+    
+    const httpsAgent = new https.Agent({
+        rejectUnauthorized: false
+    });
+    
+    const generateKeyPair = () => {
+        const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+            modulusLength: 2048,
+            publicKeyEncoding: { type: 'spki', format: 'pem' },
+            privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+        });
+        return { publicKey, privateKey };
+    };
+    
+    const wrapKey = (keySplit: Buffer, publicKey: string): string => {
+        const encrypted = crypto.publicEncrypt(
+            {
+                key: publicKey,
+                padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+                oaepHash: 'sha256'
+            },
+            keySplit
+        );
+        return encrypted.toString('base64');
+    };
+    
+    const computePolicyBinding = (policy: any, keySplit: Buffer): string => {
+        const policyJson = JSON.stringify(policy, Object.keys(policy).sort());
+        return crypto.createHmac('sha256', keySplit)
+            .update(policyJson, 'utf8')
+            .digest('base64');
+    };
+    
+    const generateTestJWT = (payload: any) => {
+        const { privateKey } = generateKeyPair();
+        return jwt.sign(payload, privateKey, { algorithm: 'RS256', expiresIn: '1h' });
+    };
+    
+    test('should succeed on primary KAS in Any-Of mode', async () => {
+        const { publicKey: clientPublicKey } = generateKeyPair();
+        const { publicKey: kasUsaPublicKey } = generateKeyPair();
+        
+        const keySplit = crypto.randomBytes(32);
+        const policy = {
+            policyId: 'policy-anyof-001',
+            dissem: {
+                classification: 'SECRET',
+                releasabilityTo: ['USA'],
+            }
+        };
+        
+        // Create single KAO (primary KAS)
+        const kao = {
+            keyAccessObjectId: 'kao-anyof-primary',
+            wrappedKey: wrapKey(keySplit, kasUsaPublicKey),
+            url: KAS_USA_URL,
+            kid: 'kas-usa-001',
+            policyBinding: computePolicyBinding(policy, keySplit),
+            sid: 'session-anyof-001',
+            signature: { alg: 'RS256', sig: '' }
+        };
+        
+        const requestBody = {
+            clientPublicKey,
+            requests: [
+                {
+                    policy,
+                    keyAccessObjects: [kao]
+                }
+            ]
+        };
+        
+        const token = generateTestJWT({
+            uniqueID: 'test-user@example.com',
+            clearance: 'SECRET',
+            countryOfAffiliation: 'USA',
+            acpCOI: []
+        });
+        
+        const response = await axios.post(
+            `${KAS_USA_URL}/rewrap`,
+            requestBody,
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                httpsAgent
+            }
+        );
+        
+        expect(response.status).toBe(200);
+        expect(response.data.responses).toHaveLength(1);
+        const result = response.data.responses[0].results[0];
+        expect(result.status).toBe('success');
+        expect(result.kasWrappedKey).toBeDefined();
+    }, 10000);
+    
+    test('should provide alternate KAS options in Any-Of mode', async () => {
+        const { publicKey: clientPublicKey } = generateKeyPair();
+        const { publicKey: kasUsaPublicKey } = generateKeyPair();
+        const { publicKey: kasFraPublicKey } = generateKeyPair();
+        
+        const keySplit = crypto.randomBytes(32);
+        const policy = {
+            policyId: 'policy-anyof-002',
+            dissem: {
+                classification: 'CONFIDENTIAL',
+                releasabilityTo: ['USA', 'FRA'],
+            }
+        };
+        
+        // Create two KAOs (alternate KAS instances)
+        // In production, these would be different KAS instances holding the same key
+        const kaos = [
+            {
+                keyAccessObjectId: 'kao-anyof-usa',
+                wrappedKey: wrapKey(keySplit, kasUsaPublicKey),
+                url: KAS_USA_URL,
+                kid: 'kas-usa-001',
+                policyBinding: computePolicyBinding(policy, keySplit),
+                sid: 'session-anyof-002',
+                signature: { alg: 'RS256', sig: '' }
+            },
+            {
+                keyAccessObjectId: 'kao-anyof-fra',
+                wrappedKey: wrapKey(keySplit, kasFraPublicKey),
+                url: KAS_FRA_URL,
+                kid: 'kas-fra-001',
+                policyBinding: computePolicyBinding(policy, keySplit),
+                sid: 'session-anyof-002',
+                signature: { alg: 'RS256', sig: '' }
+            }
+        ];
+        
+        const requestBody = {
+            clientPublicKey,
+            requests: [
+                {
+                    policy,
+                    keyAccessObjects: kaos
+                }
+            ]
+        };
+        
+        const token = generateTestJWT({
+            uniqueID: 'test-user@example.com',
+            clearance: 'CONFIDENTIAL',
+            countryOfAffiliation: 'USA',
+            acpCOI: []
+        });
+        
+        const response = await axios.post(
+            `${KAS_USA_URL}/rewrap`,
+            requestBody,
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                httpsAgent
+            }
+        );
+        
+        expect(response.status).toBe(200);
+        expect(response.data.responses).toHaveLength(1);
+        
+        // At least one KAO should succeed
+        const results = response.data.responses[0].results;
+        expect(results.length).toBeGreaterThan(0);
+        
+        const successResult = results.find((r: any) => r.status === 'success');
+        expect(successResult).toBeDefined();
+    }, 15000);
+    
+    test('should document Any-Of mode behavior in response', async () => {
+        const { publicKey: clientPublicKey } = generateKeyPair();
+        const { publicKey: kasUsaPublicKey } = generateKeyPair();
+        
+        const keySplit = crypto.randomBytes(32);
+        const policy = {
+            policyId: 'policy-anyof-003',
+            dissem: {
+                classification: 'SECRET',
+                releasabilityTo: ['USA'],
+            }
+        };
+        
+        const kao = {
+            keyAccessObjectId: 'kao-anyof-doc',
+            wrappedKey: wrapKey(keySplit, kasUsaPublicKey),
+            url: KAS_USA_URL,
+            kid: 'kas-usa-001',
+            policyBinding: computePolicyBinding(policy, keySplit),
+            sid: 'session-anyof-003',
+            signature: { alg: 'RS256', sig: '' }
+        };
+        
+        const requestBody = {
+            clientPublicKey,
+            requests: [
+                {
+                    policy,
+                    keyAccessObjects: [kao]
+                }
+            ]
+        };
+        
+        const token = generateTestJWT({
+            uniqueID: 'test-user@example.com',
+            clearance: 'SECRET',
+            countryOfAffiliation: 'USA',
+            acpCOI: []
+        });
+        
+        const response = await axios.post(
+            `${KAS_USA_URL}/rewrap`,
+            requestBody,
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                httpsAgent
+            }
+        );
+        
+        expect(response.status).toBe(200);
+        
+        // Response should contain standard rewrap result structure
+        const result = response.data.responses[0].results[0];
+        expect(result).toHaveProperty('keyAccessObjectId');
+        expect(result).toHaveProperty('status');
+        expect(result).toHaveProperty('signature');
+        
+        if (result.status === 'success') {
+            expect(result).toHaveProperty('kasWrappedKey');
+        } else {
+            expect(result).toHaveProperty('error');
+        }
+    }, 10000);
+});
