@@ -16,8 +16,9 @@
 
 import { GcpKmsService, GcpKmsFactory, IGcpKmsConfig } from '../services/gcp-kms.service';
 import { KeyManagementServiceClient } from '@google-cloud/kms';
+import { cacheManager, CacheManager } from '../services/cache-manager';
 
-// Mock the KMS client
+// Mock the KMS client and cache manager
 jest.mock('@google-cloud/kms');
 jest.mock('../utils/kas-logger', () => ({
     kasLogger: {
@@ -25,6 +26,15 @@ jest.mock('../utils/kas-logger', () => ({
         debug: jest.fn(),
         warn: jest.fn(),
         error: jest.fn(),
+    },
+}));
+jest.mock('../services/cache-manager', () => ({
+    cacheManager: {
+        get: jest.fn(),
+        set: jest.fn(),
+    },
+    CacheManager: {
+        buildPublicKeyKey: jest.fn((keyName) => `pubkey:${keyName}`),
     },
 }));
 
@@ -179,6 +189,52 @@ describe('GcpKmsService', () => {
                 /Failed to fetch public key/
             );
         });
+
+        it('should return cached public key on cache hit', async () => {
+            const cachedPem = '-----BEGIN PUBLIC KEY-----\nCACHED...\n-----END PUBLIC KEY-----';
+            (cacheManager.get as jest.Mock).mockResolvedValue({ pem: cachedPem });
+
+            const result = await service.getPublicKey(keyName);
+
+            expect(result).toBe(cachedPem);
+            expect(mockClient.getPublicKey).not.toHaveBeenCalled();
+            expect(cacheManager.get).toHaveBeenCalledWith(`pubkey:${keyName}`);
+        });
+
+        it('should fetch and cache public key on cache miss', async () => {
+            (cacheManager.get as jest.Mock).mockResolvedValue(null); // Cache miss
+            mockClient.getPublicKey.mockResolvedValue([
+                {
+                    pem: pemPublicKey,
+                    algorithm: 'RSA_DECRYPT_OAEP_4096_SHA256',
+                },
+            ]);
+
+            const result = await service.getPublicKey(keyName);
+
+            expect(result).toBe(pemPublicKey);
+            expect(cacheManager.get).toHaveBeenCalledWith(`pubkey:${keyName}`);
+            expect(mockClient.getPublicKey).toHaveBeenCalledWith({ name: keyName });
+            expect(cacheManager.set).toHaveBeenCalledWith(
+                `pubkey:${keyName}`,
+                { pem: pemPublicKey }
+            );
+        });
+
+        it('should handle cache errors gracefully (fail-open)', async () => {
+            (cacheManager.get as jest.Mock).mockResolvedValue(null); // Cache returns null on error (fail-open)
+            mockClient.getPublicKey.mockResolvedValue([
+                {
+                    pem: pemPublicKey,
+                    algorithm: 'RSA_DECRYPT_OAEP_4096_SHA256',
+                },
+            ]);
+
+            const result = await service.getPublicKey(keyName);
+
+            expect(result).toBe(pemPublicKey);
+            expect(mockClient.getPublicKey).toHaveBeenCalled();
+        });
     });
 
     describe('rotateKey', () => {
@@ -293,6 +349,7 @@ describe('GcpKmsService', () => {
         const pemPublicKey = '-----BEGIN PUBLIC KEY-----\nMIIBIjANBg...\n-----END PUBLIC KEY-----';
 
         it('should return true if KMS is healthy', async () => {
+            (cacheManager.get as jest.Mock).mockResolvedValue(null); // Cache miss
             mockClient.getPublicKey.mockResolvedValue([{ pem: pemPublicKey }]);
 
             const result = await service.healthCheck(keyName);
