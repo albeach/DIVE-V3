@@ -3,8 +3,8 @@
  *
  * Replaces: DashboardCard, StatsCard, IdPCard2025, FeatureShowcaseCard
  *
- * @version 2.0.0
- * @date 2026-01-29
+ * @version 3.0.0
+ * @date 2026-01-31
  */
 
 'use client';
@@ -13,8 +13,9 @@ import { motion, HTMLMotionProps } from 'framer-motion';
 import { cn } from '@/lib/utils';
 import { ReactNode } from 'react';
 
-export type CardVariant = 'glass' | 'gradient' | 'solid' | 'minimal';
+export type CardVariant = 'glass' | 'gradient' | 'solid' | 'minimal' | 'neo';
 export type CardPadding = 'none' | 'sm' | 'md' | 'lg';
+export type CardStatus = 'default' | 'active' | 'pending' | 'suspended' | 'testing' | 'error';
 
 export interface UnifiedCardProps extends Omit<HTMLMotionProps<'div'>, 'children'> {
   /** Visual variant */
@@ -34,6 +35,10 @@ export interface UnifiedCardProps extends Omit<HTMLMotionProps<'div'>, 'children
   /** Gradient colors (only for gradient variant) */
   gradientFrom?: string;
   gradientTo?: string;
+  /** Status-aware styling */
+  status?: CardStatus;
+  /** Respect prefers-reduced-motion */
+  reduceMotion?: boolean;
 }
 
 /**
@@ -57,6 +62,26 @@ export interface UnifiedCardProps extends Omit<HTMLMotionProps<'div'>, 'children
  * </UnifiedCard>
  * ```
  */
+// Status-aware border/accent colors
+const statusStyles: Record<CardStatus, string> = {
+  default: '',
+  active: 'border-l-4 border-l-emerald-500 dark:border-l-emerald-400',
+  pending: 'border-l-4 border-l-amber-500 dark:border-l-amber-400',
+  suspended: 'border-l-4 border-l-red-500 dark:border-l-red-400',
+  testing: 'border-l-4 border-l-sky-500 dark:border-l-sky-400',
+  error: 'border-l-4 border-l-red-600 dark:border-l-red-500',
+};
+
+// Status glow on hover
+const statusGlowStyles: Record<CardStatus, string> = {
+  default: '',
+  active: 'hover:shadow-emerald-500/10 dark:hover:shadow-emerald-400/10',
+  pending: 'hover:shadow-amber-500/10 dark:hover:shadow-amber-400/10',
+  suspended: 'hover:shadow-red-500/10 dark:hover:shadow-red-400/10',
+  testing: 'hover:shadow-sky-500/10 dark:hover:shadow-sky-400/10',
+  error: 'hover:shadow-red-600/10 dark:hover:shadow-red-500/10',
+};
+
 export function UnifiedCard({
   variant = 'solid',
   padding = 'md',
@@ -67,12 +92,16 @@ export function UnifiedCard({
   className,
   gradientFrom = 'from-blue-500',
   gradientTo = 'to-purple-600',
+  status = 'default',
+  reduceMotion = false,
   ...motionProps
 }: UnifiedCardProps) {
   // Base styles
   const baseStyles = cn(
     'rounded-xl transition-all duration-200',
     clickable && 'cursor-pointer',
+    status !== 'default' && statusStyles[status],
+    hover && status !== 'default' && statusGlowStyles[status],
   );
 
   // Padding styles
@@ -86,7 +115,8 @@ export function UnifiedCard({
   // Variant styles
   const variantStyles = {
     glass: cn(
-      'bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl',
+      'bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl backdrop-saturate-150',
+      'shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]',
       border && 'border border-white/20 dark:border-slate-700/20',
       'shadow-lg',
       hover && 'hover:shadow-xl hover:scale-[1.02]',
@@ -108,6 +138,13 @@ export function UnifiedCard({
       border && 'border border-gray-100 dark:border-slate-800',
       hover && 'hover:bg-gray-50 dark:hover:bg-slate-900/50',
     ),
+    neo: cn(
+      'bg-slate-50 dark:bg-slate-800/90',
+      'shadow-[6px_6px_12px_rgba(0,0,0,0.08),-6px_-6px_12px_rgba(255,255,255,0.8)]',
+      'dark:shadow-[6px_6px_12px_rgba(0,0,0,0.3),-6px_-6px_12px_rgba(255,255,255,0.05)]',
+      border && 'border border-slate-200/50 dark:border-slate-700/30',
+      hover && 'hover:shadow-[8px_8px_16px_rgba(0,0,0,0.1),-8px_-8px_16px_rgba(255,255,255,0.9)] dark:hover:shadow-[8px_8px_16px_rgba(0,0,0,0.4),-8px_-8px_16px_rgba(255,255,255,0.07)]',
+    ),
   };
 
   // Combine all styles
@@ -118,14 +155,16 @@ export function UnifiedCard({
     className
   );
 
-  // Default motion props for smooth animations
-  const defaultMotionProps: HTMLMotionProps<'div'> = {
-    initial: { opacity: 0, y: 20 },
-    animate: { opacity: 1, y: 0 },
-    transition: { duration: 0.3, ease: 'easeOut' },
-    whileHover: hover ? { scale: 1.02 } : undefined,
-    whileTap: clickable ? { scale: 0.98 } : undefined,
-  };
+  // Default motion props for smooth animations (respects prefers-reduced-motion)
+  const defaultMotionProps: HTMLMotionProps<'div'> = reduceMotion
+    ? {}
+    : {
+        initial: { opacity: 0, y: 20 },
+        animate: { opacity: 1, y: 0 },
+        transition: { duration: 0.3, ease: 'easeOut' },
+        whileHover: hover ? { y: -4, transition: { duration: 0.2 } } : undefined,
+        whileTap: clickable ? { scale: 0.98 } : undefined,
+      };
 
   return (
     <motion.div
@@ -257,6 +296,8 @@ export interface StatsCardProps {
   };
   icon?: ReactNode;
   variant?: CardVariant;
+  status?: CardStatus;
+  sparklineData?: number[];
   className?: string;
 }
 
@@ -266,16 +307,23 @@ export function StatsCard({
   change,
   icon,
   variant = 'solid',
+  status = 'default',
+  sparklineData,
   className,
 }: StatsCardProps) {
   return (
-    <UnifiedCard variant={variant} hover className={className}>
+    <UnifiedCard variant={variant} hover status={status} className={cn('relative overflow-hidden', className)}>
       <CardStats
         value={value}
         label={title}
         trend={change}
         icon={icon}
       />
+      {sparklineData && sparklineData.length > 1 && (
+        <div className="mt-3">
+          <Sparkline data={sparklineData} />
+        </div>
+      )}
     </UnifiedCard>
   );
 }
@@ -332,5 +380,60 @@ export function GlassCard({ children, hover = true, padding = 'md', className }:
     <UnifiedCard variant="glass" hover={hover} padding={padding} className={className}>
       {children}
     </UnifiedCard>
+  );
+}
+
+/**
+ * Sparkline Component - Lightweight inline SVG area chart
+ * 7-point mini chart with gradient fill, color-coded by trend direction
+ */
+export interface SparklineProps {
+  data: number[];
+  width?: number;
+  height?: number;
+  className?: string;
+}
+
+export function Sparkline({ data, width = 120, height = 32, className }: SparklineProps) {
+  if (data.length < 2) return null;
+
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+
+  // Normalize data points to SVG coordinates
+  const points = data.map((val, i) => ({
+    x: (i / (data.length - 1)) * width,
+    y: height - ((val - min) / range) * (height - 4) - 2,
+  }));
+
+  const linePath = points.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x} ${p.y}`).join(' ');
+  const areaPath = `${linePath} L ${width} ${height} L 0 ${height} Z`;
+
+  // Color based on trend: last value vs first value
+  const trending = data[data.length - 1] >= data[0];
+  const strokeColor = trending ? '#10b981' : '#ef4444';
+  const gradientId = `sparkline-grad-${Math.random().toString(36).slice(2, 8)}`;
+
+  return (
+    <svg
+      width={width}
+      height={height}
+      viewBox={`0 0 ${width} ${height}`}
+      className={cn('overflow-visible', className)}
+      role="img"
+      aria-label={`Trend: ${trending ? 'upward' : 'downward'}`}
+    >
+      <defs>
+        <linearGradient id={gradientId} x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" stopColor={strokeColor} stopOpacity="0.3" />
+          <stop offset="100%" stopColor={strokeColor} stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+      <path d={areaPath} fill={`url(#${gradientId})`} />
+      <path d={linePath} fill="none" stroke={strokeColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      {/* End dot */}
+      <circle cx={points[points.length - 1].x} cy={points[points.length - 1].y} r="2" fill={strokeColor} />
+    </svg>
   );
 }

@@ -29,6 +29,7 @@ import {
     ChartBarIcon
 } from '@heroicons/react/24/outline';
 import { IIdPListItem } from '@/types/admin.types';
+import { getStatusColors, type EntityStatus } from '@/components/admin/shared/theme-tokens';
 
 // ============================================
 // Types
@@ -86,6 +87,10 @@ export default function IdPCard2025({
         fail: 'text-red-700 dark:text-red-400'
     };
 
+    // Derive status for color coding
+    const cardStatus: EntityStatus = idp.enabled ? 'active' : 'disabled';
+    const statusColors = getStatusColors(cardStatus);
+
     const handleCardClick = () => {
         if (onClick) {
             onClick(idp.alias);
@@ -105,16 +110,18 @@ export default function IdPCard2025({
             className={`
                 relative group cursor-pointer
                 ${selected ? 'ring-2 ring-purple-500' : ''}
+                ${!idp.enabled ? 'opacity-75 saturate-[0.6]' : ''}
             `}
             onClick={handleCardClick}
             data-testid={`idp-card-${idp.alias}`}
         >
-            {/* Glassmorphism Card */}
+            {/* Glassmorphism Card with status-aware left border */}
             <div className={`
                 relative overflow-hidden rounded-xl
                 bg-white/70 dark:bg-gray-800/70
-                backdrop-blur-xl
+                backdrop-blur-xl backdrop-saturate-150
                 border border-gray-200/50 dark:border-gray-700/50
+                ${statusColors.borderLeft}
                 shadow-lg hover:shadow-2xl
                 transition-all duration-300
                 ${isHovered ? 'shadow-purple-500/20' : ''}
