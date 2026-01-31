@@ -17,7 +17,7 @@
 import axios from 'axios';
 import https from 'https';
 import crypto from 'crypto';
-import { generateKeyPair, generateTestJWT, wrapKey, computePolicyBinding } from '../integration/federation.test';
+import { generateKeyPair, generateTestJWT, wrapKey, computePolicyBinding } from '../helpers/test-utilities';
 
 describe('Phase 3.5: Audit Trail Verification', () => {
     // Test configuration (localhost is appropriate for test environment)
