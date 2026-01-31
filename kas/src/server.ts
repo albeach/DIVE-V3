@@ -1030,17 +1030,56 @@ app.post('/rewrap', async (req: Request, res: Response) => {
                         algorithm
                     );
 
-                    // 7. Decrypt metadata (if present)
+                    // 7. Decrypt metadata (if present) - Enhanced with policy validation (Phase 4.1.1)
                     let metadata: Record<string, unknown> | undefined;
                     if (kao.encryptedMetadata) {
                         try {
-                            metadata = decryptMetadata(kao.encryptedMetadata, unwrapped.keySplit);
+                            // Import metadata decryptor service (Phase 4.1.1)
+                            const { metadataDecryptorService } = await import('./services/metadata-decryptor');
+                            
+                            // Compute expected policy hash for validation
+                            const expectedPolicyHash = kao.policyBinding;
+                            
+                            // Decrypt metadata with policy validation
+                            const decryptedMetadata = await metadataDecryptorService.decryptMetadata(
+                                kao.encryptedMetadata,
+                                unwrapped.keySplit,
+                                {
+                                    algorithm: 'AES-256-GCM',
+                                    validatePolicy: true,
+                                    expectedPolicy: policy,
+                                    expectedPolicyHash,
+                                }
+                            );
+                            
+                            metadata = decryptedMetadata.fields;
+                            
+                            kasLogger.info('Metadata decrypted and validated successfully', {
+                                requestId,
+                                keyAccessObjectId: kao.keyAccessObjectId,
+                                fieldCount: Object.keys(metadata).length,
+                                hasPolicyAssertion: !!decryptedMetadata.policyAssertion,
+                                policyValidationPassed: true,
+                            });
+                            
                         } catch (error) {
-                            kasLogger.warn('Failed to decrypt metadata', {
+                            kasLogger.error('Metadata decryption or validation failed', {
                                 requestId,
                                 keyAccessObjectId: kao.keyAccessObjectId,
                                 error: error instanceof Error ? error.message : 'Unknown error',
                             });
+                            
+                            // Fail the KAO if metadata decryption/validation fails
+                            localResults.push({
+                                keyAccessObjectId: kao.keyAccessObjectId,
+                                status: 'error' as const,
+                                error: `Metadata decryption failed: ${
+                                    error instanceof Error ? error.message : 'Unknown error'
+                                }`,
+                                signature: { alg: 'RS256', sig: '' },
+                                sid: kao.sid,
+                            });
+                            continue;
                         }
                     }
 
