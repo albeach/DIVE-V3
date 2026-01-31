@@ -230,6 +230,7 @@ export default function IdPThemeEditor({ idpAlias, onSave }: IdPThemeEditorProps
 
                     {activeTab === 'background' && (
                         <BackgroundTab
+                            idpAlias={idpAlias}
                             background={theme.background}
                             onChange={(background) => updateThemeField('background', background)}
                         />
@@ -406,23 +407,79 @@ function ColorPicker({ label, value, onChange }: ColorPickerProps) {
 // ============================================
 
 interface BackgroundTabProps {
+    idpAlias: string;
     background: any;
     onChange: (background: any) => void;
 }
 
-function BackgroundTab({ background, onChange }: BackgroundTabProps) {
+function BackgroundTab({ idpAlias, background, onChange }: BackgroundTabProps) {
     const [dragActive, setDragActive] = useState(false);
+    const [uploading, setUploading] = useState(false);
+    const [uploadProgress, setUploadProgress] = useState(0);
+    const [uploadError, setUploadError] = useState<string | null>(null);
+
+    const MAX_FILE_SIZE = 2 * 1024 * 1024; // 2MB
+    const ALLOWED_TYPES = ['image/jpeg', 'image/jpg', 'image/png', 'image/svg+xml', 'image/webp'];
+
+    const uploadFile = useCallback(async (file: File) => {
+        if (!ALLOWED_TYPES.includes(file.type)) {
+            setUploadError(`Invalid file type: ${file.type}. Allowed: JPG, PNG, SVG, WebP`);
+            return;
+        }
+        if (file.size > MAX_FILE_SIZE) {
+            setUploadError(`File too large: ${(file.size / 1024 / 1024).toFixed(1)}MB. Max: 2MB`);
+            return;
+        }
+
+        setUploading(true);
+        setUploadProgress(0);
+        setUploadError(null);
+
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+
+            // Simulate progress since fetch doesn't support progress natively
+            const progressInterval = setInterval(() => {
+                setUploadProgress(prev => Math.min(prev + 15, 90));
+            }, 200);
+
+            const response = await fetch(`/api/admin/idps/${idpAlias}/theme/upload`, {
+                method: 'POST',
+                body: formData,
+            });
+
+            clearInterval(progressInterval);
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({ message: 'Upload failed' }));
+                throw new Error(error.message || `Upload failed with status ${response.status}`);
+            }
+
+            const data = await response.json();
+            setUploadProgress(100);
+
+            onChange({
+                ...background,
+                imageUrl: data.url || data.imageUrl,
+                fileName: file.name,
+            });
+        } catch (err) {
+            setUploadError(err instanceof Error ? err.message : 'Upload failed');
+        } finally {
+            setUploading(false);
+            setTimeout(() => setUploadProgress(0), 1500);
+        }
+    }, [idpAlias, background, onChange]);
 
     const handleDrop = useCallback((e: React.DragEvent) => {
         e.preventDefault();
         setDragActive(false);
 
         if (e.dataTransfer.files && e.dataTransfer.files[0]) {
-            const file = e.dataTransfer.files[0];
-            // TODO: Upload file to backend
-            console.log('File dropped:', file.name);
+            uploadFile(e.dataTransfer.files[0]);
         }
-    }, []);
+    }, [uploadFile]);
 
     const handleDragOver = useCallback((e: React.DragEvent) => {
         e.preventDefault();
@@ -463,15 +520,34 @@ function BackgroundTab({ background, onChange }: BackgroundTabProps) {
                                 className="hidden"
                                 onChange={(e) => {
                                     if (e.target.files && e.target.files[0]) {
-                                        console.log('File selected:', e.target.files[0].name);
+                                        uploadFile(e.target.files[0]);
                                     }
                                 }}
                             />
                         </label>
                     </p>
                     <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                        JPG, PNG, WebP up to 5MB
+                        JPG, PNG, SVG, WebP up to 2MB
                     </p>
+                    {uploading && (
+                        <div className="mt-3 w-full max-w-xs mx-auto">
+                            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
+                                <div
+                                    className="bg-purple-600 h-2 rounded-full transition-all duration-300"
+                                    style={{ width: `${uploadProgress}%` }}
+                                />
+                            </div>
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{uploadProgress}%</p>
+                        </div>
+                    )}
+                    {uploadError && (
+                        <p className="mt-2 text-sm text-red-600 dark:text-red-400">{uploadError}</p>
+                    )}
+                    {background?.fileName && !uploading && (
+                        <p className="mt-2 text-xs text-green-600 dark:text-green-400">
+                            Current: {background.fileName}
+                        </p>
+                    )}
                 </div>
             </div>
 
