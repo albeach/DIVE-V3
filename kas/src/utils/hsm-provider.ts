@@ -16,6 +16,7 @@
 import { kasLogger } from './kas-logger';
 import crypto from 'crypto';
 import { GcpKmsService, GcpKmsFactory } from '../services/gcp-kms.service';
+import { cacheManager, CacheManager } from '../services/cache-manager';
 
 export interface IHSMProvider {
     /** Wrap (encrypt) a DEK with KEK */
@@ -76,6 +77,17 @@ export class MockHSMProvider implements IHSMProvider {
     }
 
     async unwrapKey(wrappedKey: string, kekId: string): Promise<Buffer> {
+        // Check cache first (Phase 4.2.2)
+        const cacheKey = CacheManager.buildDekKey(wrappedKey, kekId);
+        const cached = await cacheManager.get<{ dek: string }>(cacheKey);
+        
+        if (cached) {
+            kasLogger.debug('DEK cache hit', { kekId, cacheKey });
+            return Buffer.from(cached.dek, 'base64');
+        }
+        
+        kasLogger.debug('DEK cache miss', { kekId, cacheKey });
+        
         const kek = this.kekStore.get(kekId);
         if (!kek) {
             throw new Error(`KEK not found: ${kekId}`);
@@ -94,6 +106,9 @@ export class MockHSMProvider implements IHSMProvider {
         
         let decrypted = decipher.update(encrypted);
         decrypted = Buffer.concat([decrypted, decipher.final()]);
+        
+        // Cache the unwrapped DEK (Phase 4.2.2)
+        await cacheManager.set(cacheKey, { dek: decrypted.toString('base64') });
         
         return decrypted;
     }
@@ -175,6 +190,17 @@ export class GcpKmsProvider implements IHSMProvider {
     }
 
     async unwrapKey(wrappedKey: string, kekId: string): Promise<Buffer> {
+        // Check cache first (Phase 4.2.2)
+        const cacheKey = CacheManager.buildDekKey(wrappedKey, kekId);
+        const cached = await cacheManager.get<{ dek: string }>(cacheKey);
+        
+        if (cached) {
+            kasLogger.debug('DEK cache hit (GCP KMS)', { kekId, cacheKey });
+            return Buffer.from(cached.dek, 'base64');
+        }
+        
+        kasLogger.debug('DEK cache miss (GCP KMS)', { kekId, cacheKey });
+        
         try {
             // Decrypt the wrapped key using GCP KMS
             const decrypted = await this.kmsService.decryptWithKMS(wrappedKey, this.keyName);
@@ -184,6 +210,9 @@ export class GcpKmsProvider implements IHSMProvider {
                 keyName: this.keyName,
                 decryptedLength: decrypted.length,
             });
+            
+            // Cache the unwrapped DEK (Phase 4.2.2)
+            await cacheManager.set(cacheKey, { dek: decrypted.toString('base64') });
             
             return decrypted;
             

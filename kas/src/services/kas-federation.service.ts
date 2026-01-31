@@ -916,6 +916,221 @@ export class KASFederationService {
      * @param requestId - Request correlation ID
      * @returns First successful KAO result or error
      */
+    /**
+     * Route rewrap request using Any-Of logic with parallel execution (Phase 4.2.2)
+     * 
+     * Optimized version that tries all KAOs in parallel and returns first success.
+     * Falls back to sequential if ENABLE_PARALLEL_FEDERATION=false
+     * 
+     * @param kaos - Array of Key Access Objects
+     * @param policy - Policy object
+     * @param clientPublicKey - Client's public key
+     * @param authHeader - Authorization header
+     * @param dpopHeader - Optional DPoP header
+     * @param requestId - Request ID for correlation
+     * @returns Federation result with first successful KAS response
+     */
+    async routeAnyOfParallel(
+        kaos: IKeyAccessObject[],
+        policy: IPolicy,
+        clientPublicKey: string,
+        authHeader: string,
+        dpopHeader: string | undefined,
+        requestId: string
+    ): Promise<IFederationResult> {
+        const enableParallel = process.env.ENABLE_PARALLEL_FEDERATION !== 'false';
+        
+        if (!enableParallel) {
+            kasLogger.debug('Parallel federation disabled, using sequential routing', { requestId });
+            return this.routeAnyOf(kaos, policy, clientPublicKey, authHeader, dpopHeader, requestId);
+        }
+        
+        kasLogger.info('Starting parallel Any-Of routing', {
+            requestId,
+            kaoCount: kaos.length,
+            kasTargets: kaos.map(kao => kao.kid),
+        });
+        
+        if (kaos.length === 0) {
+            return {
+                success: false,
+                kasId: 'unknown',
+                error: {
+                    kasId: 'unknown',
+                    errorType: 'invalid_request',
+                    message: 'No KAOs provided for Any-Of routing',
+                    affectedKAOIds: [],
+                    timestamp: new Date().toISOString(),
+                },
+                latencyMs: 0,
+            };
+        }
+        
+        const startTime = Date.now();
+        
+        // Filter out KAOs with open circuit breakers
+        const viableKaos = kaos.filter(kao => {
+            const targetKasId = this.extractKasIdFromKAO(kao);
+            const cb = getCircuitBreaker(targetKasId);
+            
+            if (cb.isOpen()) {
+                kasLogger.warn('Circuit breaker open, excluding from parallel dispatch', {
+                    requestId,
+                    targetKasId,
+                    kaoId: kao.keyAccessObjectId,
+                });
+                return false;
+            }
+            
+            return true;
+        });
+        
+        if (viableKaos.length === 0) {
+            kasLogger.error('All KAS instances have open circuit breakers', { requestId });
+            return {
+                success: false,
+                kasId: 'all',
+                error: {
+                    kasId: 'all',
+                    errorType: 'circuit_breaker_open',
+                    message: 'All KAS instances unavailable (circuit breakers open)',
+                    affectedKAOIds: kaos.map(k => k.keyAccessObjectId),
+                    timestamp: new Date().toISOString(),
+                },
+                latencyMs: Date.now() - startTime,
+            };
+        }
+        
+        // Create parallel requests for all viable KAOs
+        const parallelRequests = viableKaos.map(async (kao) => {
+            const attemptStart = Date.now();
+            const targetKasId = this.extractKasIdFromKAO(kao);
+            
+            try {
+                const federationMetadata = {
+                    originKasId: process.env.KAS_ID || 'kas-local',
+                    originCountry: process.env.KAS_COUNTRY || 'USA',
+                    federationRequestId: `anyof-parallel-${requestId}`,
+                    routedVia: [],
+                    translationApplied: false,
+                    originTimestamp: new Date().toISOString(),
+                };
+                
+                const forwardContext: IFederationForwardContext = {
+                    targetKasId,
+                    targetKasUrl: kao.url,
+                    policy,
+                    kaosToForward: [kao],
+                    clientPublicKey,
+                    authHeader,
+                    dpopHeader,
+                    requestId,
+                    federationMetadata,
+                };
+                
+                const result = await this.forwardRewrapRequest(forwardContext);
+                
+                return {
+                    kasId: targetKasId,
+                    kaoId: kao.keyAccessObjectId,
+                    success: result.success,
+                    latencyMs: Date.now() - attemptStart,
+                    result: result.success ? result : undefined,
+                    error: result.error?.message,
+                };
+            } catch (error) {
+                kasLogger.error('Parallel routing attempt failed', {
+                    requestId,
+                    targetKasId,
+                    kaoId: kao.keyAccessObjectId,
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                });
+                
+                return {
+                    kasId: targetKasId,
+                    kaoId: kao.keyAccessObjectId,
+                    success: false,
+                    latencyMs: Date.now() - attemptStart,
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                };
+            }
+        });
+        
+        // Wait for all requests to settle
+        const results = await Promise.allSettled(parallelRequests);
+        
+        // Find first successful result
+        for (const settledResult of results) {
+            if (settledResult.status === 'fulfilled' && settledResult.value.success && settledResult.value.result) {
+                const successResult = settledResult.value;
+                const latencyMs = Date.now() - startTime;
+                
+                kasLogger.info('Parallel Any-Of routing succeeded', {
+                    requestId,
+                    targetKasId: successResult.kasId,
+                    kaoId: successResult.kaoId,
+                    parallelAttempts: viableKaos.length,
+                    latencyMs,
+                });
+                
+                // Log audit event
+                const auditEvent: IKASAuditEvent = {
+                    eventType: 'ANYOF_ROUTING_SUCCESS_PARALLEL',
+                    timestamp: new Date().toISOString(),
+                    requestId,
+                    subject: 'anyof-routing-parallel',
+                    resourceId: successResult.kaoId,
+                    outcome: 'ALLOW',
+                    reason: `Parallel Any-Of routing succeeded (${viableKaos.length} parallel attempts)`,
+                    latencyMs,
+                };
+                logKASAuditEvent(auditEvent);
+                
+                return successResult.result;
+            }
+        }
+        
+        // All attempts failed
+        const totalLatencyMs = Date.now() - startTime;
+        const failureDetails = results
+            .map(r => r.status === 'fulfilled' ? r.value : { error: 'Promise rejected', kasId: 'unknown', kaoId: 'unknown' })
+            .map(r => `${r.kasId}: ${r.error || 'unknown error'}`)
+            .join('; ');
+        
+        kasLogger.error('All parallel Any-Of routing attempts failed', {
+            requestId,
+            totalAttempts: viableKaos.length,
+            totalLatencyMs,
+            failures: failureDetails,
+        });
+        
+        // Log audit event
+        const auditEvent: IKASAuditEvent = {
+            eventType: 'ANYOF_ROUTING_FAILURE_PARALLEL',
+            timestamp: new Date().toISOString(),
+            requestId,
+            subject: 'anyof-routing-parallel',
+            resourceId: kaos.map(k => k.keyAccessObjectId).join(','),
+            outcome: 'DENY',
+            reason: `All ${viableKaos.length} parallel Any-Of attempts failed`,
+            latencyMs: totalLatencyMs,
+        };
+        logKASAuditEvent(auditEvent);
+        
+        return {
+            success: false,
+            kasId: 'all',
+            error: {
+                kasId: 'all',
+                errorType: 'all_kas_unavailable',
+                message: `All ${viableKaos.length} KAS instances failed: ${failureDetails}`,
+                affectedKAOIds: kaos.map(k => k.keyAccessObjectId),
+                timestamp: new Date().toISOString(),
+            },
+            latencyMs: totalLatencyMs,
+        };
+    }
+
     async routeAnyOf(
         kaos: IKeyAccessObject[],
         policy: IPolicy,
