@@ -17,6 +17,7 @@
 import { KeyManagementServiceClient } from '@google-cloud/kms';
 import { GoogleAuth } from 'google-auth-library';
 import { kasLogger } from '../utils/kas-logger';
+import { cacheManager, CacheManager } from './cache-manager';
 
 export interface IGcpKmsConfig {
     projectId: string;
@@ -119,15 +120,24 @@ export class GcpKmsService {
     }
 
     /**
-     * Get public key from Cloud KMS
+     * Get public key from Cloud KMS (with caching)
      * 
      * @param keyName - Full KMS key resource name
      * @returns PEM-encoded public key
      */
     async getPublicKey(keyName: string): Promise<string> {
-        try {
-            kasLogger.debug('Fetching public key from Cloud KMS', { keyName });
+        // Check cache first
+        const cacheKey = CacheManager.buildPublicKeyKey(keyName);
+        const cached = await cacheManager.get<{ pem: string }>(cacheKey);
+        
+        if (cached) {
+            kasLogger.debug('Public key cache hit', { keyName, cacheKey });
+            return cached.pem;
+        }
+        
+        kasLogger.debug('Public key cache miss - fetching from Cloud KMS', { keyName, cacheKey });
 
+        try {
             const [publicKey] = await this.client.getPublicKey({
                 name: keyName,
             });
@@ -141,6 +151,9 @@ export class GcpKmsService {
                 algorithm: publicKey.algorithm,
                 pemLength: publicKey.pem.length,
             });
+
+            // Cache for 1 hour (3600s)
+            await cacheManager.set(cacheKey, { pem: publicKey.pem });
 
             return publicKey.pem;
 
