@@ -452,3 +452,115 @@ export function LoadingOverlay({
     </div>
   );
 }
+
+// ============================================
+// 11. CONTEXTUAL LOADER (entity-aware loading messages)
+// ============================================
+
+export interface ContextualLoaderProps {
+  entity: string;
+  count?: number;
+  action?: 'fetching' | 'saving' | 'deleting' | 'syncing' | 'processing';
+  variant?: LoadingVariant;
+  size?: LoadingSize;
+  className?: string;
+}
+
+export function ContextualLoader({
+  entity,
+  count,
+  action = 'fetching',
+  variant = 'spinner',
+  size = 'md',
+  className,
+}: ContextualLoaderProps) {
+  const actionVerbs = {
+    fetching: 'Fetching',
+    saving: 'Saving',
+    deleting: 'Deleting',
+    syncing: 'Syncing',
+    processing: 'Processing',
+  };
+
+  const message = count !== undefined
+    ? `${actionVerbs[action]} ${count.toLocaleString()} ${entity}...`
+    : `${actionVerbs[action]} ${entity}...`;
+
+  const LoaderComponent = {
+    spinner: Spinner,
+    dots: LoadingDots,
+    pulse: LoadingPulse,
+    bars: LoadingBars,
+  }[variant];
+
+  return (
+    <div className={cn('flex flex-col items-center justify-center gap-3 py-8', className)} role="status">
+      <LoaderComponent size={size} className="text-indigo-600 dark:text-indigo-400" />
+      <p className="text-sm font-medium text-gray-600 dark:text-gray-400 animate-pulse">
+        {message}
+      </p>
+      <span className="sr-only">{message}</span>
+    </div>
+  );
+}
+
+// ============================================
+// 12. STEP PROGRESS (multi-step operation tracker)
+// ============================================
+
+export interface StepProgressStep {
+  label: string;
+  status: 'pending' | 'active' | 'completed' | 'error';
+}
+
+export interface StepProgressProps {
+  steps: StepProgressStep[];
+  className?: string;
+}
+
+export function StepProgress({ steps, className }: StepProgressProps) {
+  return (
+    <div className={cn('space-y-2', className)} role="progressbar" aria-valuemin={0} aria-valuemax={steps.length} aria-valuenow={steps.filter(s => s.status === 'completed').length}>
+      {steps.map((step, i) => (
+        <div key={i} className="flex items-center gap-3">
+          {/* Step indicator */}
+          <div className={cn(
+            'flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold',
+            step.status === 'completed' && 'bg-emerald-500 text-white',
+            step.status === 'active' && 'bg-indigo-500 text-white animate-pulse',
+            step.status === 'pending' && 'bg-gray-200 dark:bg-slate-700 text-gray-500 dark:text-gray-400',
+            step.status === 'error' && 'bg-red-500 text-white',
+          )}>
+            {step.status === 'completed' ? (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+            ) : step.status === 'error' ? (
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            ) : (
+              i + 1
+            )}
+          </div>
+
+          {/* Step label */}
+          <span className={cn(
+            'text-sm',
+            step.status === 'completed' && 'text-emerald-700 dark:text-emerald-400 line-through',
+            step.status === 'active' && 'text-indigo-700 dark:text-indigo-400 font-medium',
+            step.status === 'pending' && 'text-gray-500 dark:text-gray-400',
+            step.status === 'error' && 'text-red-700 dark:text-red-400 font-medium',
+          )}>
+            {step.label}
+          </span>
+
+          {/* Active spinner */}
+          {step.status === 'active' && (
+            <Spinner size="xs" className="text-indigo-500" />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
