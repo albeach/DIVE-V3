@@ -73,6 +73,7 @@ yarn-error.log*
 **/output/
 **/results/
 **/reports/
+!frontend/src/app/api/admin/compliance/reports/
 **/cache/
 **/uploads/
 **/tmp/
