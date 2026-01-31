@@ -14,7 +14,8 @@
 
 import axios from 'axios';
 import https from 'https';
-import { generateKeyPair, generateTestJWT, wrapKey, computePolicyBinding } from '../integration/federation.test';
+import crypto from 'crypto';
+import { generateKeyPair, generateTestJWT, wrapKey, computePolicyBinding } from '../helpers/test-utilities';
 
 describe('Phase 3.5: End-to-End Scenarios', () => {
     // Test configuration (localhost is appropriate for test environment)
