@@ -23,7 +23,7 @@ import https from 'https';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { generateKeyPair, generateTestJWT, wrapKey, computePolicyBinding } from '../integration/federation.test';
+import { generateKeyPair, generateTestJWT, wrapKey, computePolicyBinding } from '../helpers/test-utilities';
 
 interface IPerformanceMetrics {
     // Latency metrics
