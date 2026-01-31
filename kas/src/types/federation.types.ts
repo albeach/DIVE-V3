@@ -170,7 +170,7 @@ export interface IFederationError {
     kasId: string;
 
     /** Error type */
-    errorType: 'timeout' | 'circuit_open' | 'auth_failure' | 'network_error' | 'policy_violation' | 'invalid_request' | 'all_kas_unavailable' | 'unknown';
+    errorType: 'timeout' | 'circuit_open' | 'circuit_breaker_open' | 'auth_failure' | 'network_error' | 'policy_violation' | 'invalid_request' | 'all_kas_unavailable' | 'unknown';
 
     /** Error message */
     message: string;

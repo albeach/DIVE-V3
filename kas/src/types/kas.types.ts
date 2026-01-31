@@ -136,7 +136,9 @@ export type KASAuditEventType =
     | 'FEDERATION_SUCCESS' // Federation request successful (Phase 3.4)
     | 'FEDERATION_FAILURE' // Federation request failed (Phase 3.4)
     | 'ANYOF_ROUTING_SUCCESS' // Any-Of routing succeeded (Phase 4.1.3)
-    | 'ANYOF_ROUTING_FAILURE'; // Any-Of routing failed (Phase 4.1.3)
+    | 'ANYOF_ROUTING_FAILURE' // Any-Of routing failed (Phase 4.1.3)
+    | 'ANYOF_ROUTING_SUCCESS_PARALLEL' // Parallel Any-Of routing succeeded (Phase 4.2.2)
+    | 'ANYOF_ROUTING_FAILURE_PARALLEL'; // Parallel Any-Of routing failed (Phase 4.2.2)
 
 /**
  * KAS Audit Event
