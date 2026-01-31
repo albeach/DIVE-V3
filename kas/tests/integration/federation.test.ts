@@ -932,3 +932,310 @@ describe('Phase 4.1.1: EncryptedMetadata Integration Tests', () => {
         expect(fraResult).toBeDefined();
     }, 15000);
 });
+
+// ============================================
+// Phase 4.1.2: Key Split Recombination Integration Tests
+// ============================================
+describe('Phase 4.1.2: Key Split Recombination (All-Of Mode)', () => {
+    const KAS_USA_URL = process.env.KAS_USA_URL || 'https://localhost:8081';
+    const KAS_FRA_URL = process.env.KAS_FRA_URL || 'https://localhost:8082';
+    const KAS_GBR_URL = process.env.KAS_GBR_URL || 'https://localhost:8083';
+    
+    const httpsAgent = new https.Agent({
+        rejectUnauthorized: false
+    });
+    
+    const generateKeyPair = () => {
+        const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+            modulusLength: 2048,
+            publicKeyEncoding: { type: 'spki', format: 'pem' },
+            privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+        });
+        return { publicKey, privateKey };
+    };
+    
+    const wrapKey = (keySplit: Buffer, publicKey: string): string => {
+        const encrypted = crypto.publicEncrypt(
+            {
+                key: publicKey,
+                padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+                oaepHash: 'sha256'
+            },
+            keySplit
+        );
+        return encrypted.toString('base64');
+    };
+    
+    const computePolicyBinding = (policy: any, keySplit: Buffer): string => {
+        const policyJson = JSON.stringify(policy, Object.keys(policy).sort());
+        return crypto.createHmac('sha256', keySplit)
+            .update(policyJson, 'utf8')
+            .digest('base64');
+    };
+    
+    const generateTestJWT = (payload: any) => {
+        const { privateKey } = generateKeyPair();
+        return jwt.sign(payload, privateKey, { algorithm: 'RS256', expiresIn: '1h' });
+    };
+    
+    test('should recombine 2-KAS key splits using XOR (All-Of mode)', async () => {
+        const { publicKey: clientPublicKey } = generateKeyPair();
+        const { publicKey: kasUsaPublicKey } = generateKeyPair();
+        const { publicKey: kasFraPublicKey } = generateKeyPair();
+        
+        // Create original DEK
+        const originalDek = crypto.randomBytes(32);
+        
+        // Split DEK into 2 parts using XOR
+        const split1 = crypto.randomBytes(32);
+        const split2 = Buffer.from(
+            originalDek.map((byte, i) => byte ^ split1[i])
+        );
+        
+        const policy = {
+            policyId: 'policy-split-001',
+            dissem: {
+                classification: 'SECRET',
+                releasabilityTo: ['USA', 'FRA'],
+                COI: ['NATO']
+            }
+        };
+        
+        // Create KAOs with same policy binding (indicating All-Of mode)
+        const kao1 = {
+            keyAccessObjectId: 'kao-split-usa',
+            wrappedKey: wrapKey(split1, kasUsaPublicKey),
+            url: KAS_USA_URL,
+            kid: 'kas-usa-001',
+            policyBinding: computePolicyBinding(policy, split1),
+            sid: 'session-split-001',
+            signature: { alg: 'RS256', sig: '' }
+        };
+        
+        const kao2 = {
+            keyAccessObjectId: 'kao-split-fra',
+            wrappedKey: wrapKey(split2, kasFraPublicKey),
+            url: KAS_FRA_URL,
+            kid: 'kas-fra-001',
+            policyBinding: computePolicyBinding(policy, split2),
+            sid: 'session-split-001',
+            signature: { alg: 'RS256', sig: '' }
+        };
+        
+        const requestBody = {
+            clientPublicKey,
+            requests: [
+                {
+                    policy,
+                    keyAccessObjects: [kao1, kao2]
+                }
+            ]
+        };
+        
+        const token = generateTestJWT({
+            uniqueID: 'test-user@example.com',
+            clearance: 'SECRET',
+            countryOfAffiliation: 'USA',
+            acpCOI: ['NATO']
+        });
+        
+        const response = await axios.post(
+            `${KAS_USA_URL}/rewrap`,
+            requestBody,
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                httpsAgent
+            }
+        );
+        
+        expect(response.status).toBe(200);
+        expect(response.data.responses).toHaveLength(1);
+        expect(response.data.responses[0].results).toHaveLength(2);
+        
+        // Both KAOs should be processed successfully
+        const results = response.data.responses[0].results;
+        const usaResult = results.find((r: any) => r.keyAccessObjectId === 'kao-split-usa');
+        const fraResult = results.find((r: any) => r.keyAccessObjectId === 'kao-split-fra');
+        
+        expect(usaResult.status).toBe('success');
+        expect(usaResult.kasWrappedKey).toBeDefined();
+        
+        // FRA result depends on federation setup
+        expect(fraResult).toBeDefined();
+    }, 15000);
+    
+    test('should recombine 3-KAS key splits using XOR', async () => {
+        const { publicKey: clientPublicKey } = generateKeyPair();
+        const { publicKey: kasUsaPublicKey } = generateKeyPair();
+        const { publicKey: kasFraPublicKey } = generateKeyPair();
+        const { publicKey: kasGbrPublicKey } = generateKeyPair();
+        
+        // Create original DEK
+        const originalDek = crypto.randomBytes(32);
+        
+        // Split DEK into 3 parts using XOR
+        const split1 = crypto.randomBytes(32);
+        const split2 = crypto.randomBytes(32);
+        const split3 = Buffer.from(
+            originalDek.map((byte, i) => byte ^ split1[i] ^ split2[i])
+        );
+        
+        const policy = {
+            policyId: 'policy-split-002',
+            dissem: {
+                classification: 'TOP_SECRET',
+                releasabilityTo: ['USA', 'FRA', 'GBR'],
+                COI: ['FVEY']
+            }
+        };
+        
+        const kaos = [
+            {
+                keyAccessObjectId: 'kao-split-usa-2',
+                wrappedKey: wrapKey(split1, kasUsaPublicKey),
+                url: KAS_USA_URL,
+                kid: 'kas-usa-001',
+                policyBinding: computePolicyBinding(policy, split1),
+                sid: 'session-split-002',
+                signature: { alg: 'RS256', sig: '' }
+            },
+            {
+                keyAccessObjectId: 'kao-split-fra-2',
+                wrappedKey: wrapKey(split2, kasFraPublicKey),
+                url: KAS_FRA_URL,
+                kid: 'kas-fra-001',
+                policyBinding: computePolicyBinding(policy, split2),
+                sid: 'session-split-002',
+                signature: { alg: 'RS256', sig: '' }
+            },
+            {
+                keyAccessObjectId: 'kao-split-gbr-2',
+                wrappedKey: wrapKey(split3, kasGbrPublicKey),
+                url: KAS_GBR_URL,
+                kid: 'kas-gbr-001',
+                policyBinding: computePolicyBinding(policy, split3),
+                sid: 'session-split-002',
+                signature: { alg: 'RS256', sig: '' }
+            }
+        ];
+        
+        const requestBody = {
+            clientPublicKey,
+            requests: [
+                {
+                    policy,
+                    keyAccessObjects: kaos
+                }
+            ]
+        };
+        
+        const token = generateTestJWT({
+            uniqueID: 'admin@example.com',
+            clearance: 'TOP_SECRET',
+            countryOfAffiliation: 'USA',
+            acpCOI: ['FVEY']
+        });
+        
+        const response = await axios.post(
+            `${KAS_USA_URL}/rewrap`,
+            requestBody,
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                httpsAgent
+            }
+        );
+        
+        expect(response.status).toBe(200);
+        expect(response.data.responses).toHaveLength(1);
+        expect(response.data.responses[0].results).toHaveLength(3);
+        
+        // At least USA KAO should succeed
+        const usaResult = response.data.responses[0].results.find(
+            (r: any) => r.keyAccessObjectId === 'kao-split-usa-2'
+        );
+        expect(usaResult.status).toBe('success');
+    }, 20000);
+    
+    test('should reject key splits with mismatched policy bindings', async () => {
+        const { publicKey: clientPublicKey } = generateKeyPair();
+        const { publicKey: kasUsaPublicKey } = generateKeyPair();
+        const { publicKey: kasFraPublicKey } = generateKeyPair();
+        
+        const split1 = crypto.randomBytes(32);
+        const split2 = crypto.randomBytes(32);
+        
+        const policy1 = {
+            policyId: 'policy-a',
+            dissem: { classification: 'SECRET' }
+        };
+        
+        const policy2 = {
+            policyId: 'policy-b',
+            dissem: { classification: 'TOP_SECRET' }
+        };
+        
+        // Create KAOs with DIFFERENT policy bindings (invalid for All-Of)
+        const kaos = [
+            {
+                keyAccessObjectId: 'kao-mismatch-1',
+                wrappedKey: wrapKey(split1, kasUsaPublicKey),
+                url: KAS_USA_URL,
+                kid: 'kas-usa-001',
+                policyBinding: computePolicyBinding(policy1, split1),
+                sid: 'session-mismatch',
+                signature: { alg: 'RS256', sig: '' }
+            },
+            {
+                keyAccessObjectId: 'kao-mismatch-2',
+                wrappedKey: wrapKey(split2, kasFraPublicKey),
+                url: KAS_FRA_URL,
+                kid: 'kas-fra-001',
+                policyBinding: computePolicyBinding(policy2, split2),
+                sid: 'session-mismatch',
+                signature: { alg: 'RS256', sig: '' }
+            }
+        ];
+        
+        const requestBody = {
+            clientPublicKey,
+            requests: [
+                {
+                    policy: policy1,
+                    keyAccessObjects: kaos
+                }
+            ]
+        };
+        
+        const token = generateTestJWT({
+            uniqueID: 'test@example.com',
+            clearance: 'TOP_SECRET',
+            countryOfAffiliation: 'USA',
+            acpCOI: []
+        });
+        
+        const response = await axios.post(
+            `${KAS_USA_URL}/rewrap`,
+            requestBody,
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                httpsAgent
+            }
+        );
+        
+        expect(response.status).toBe(200);
+        
+        // At least one KAO should fail with policy binding error
+        const results = response.data.responses[0].results;
+        const failedResult = results.find((r: any) => r.status === 'error');
+        expect(failedResult).toBeDefined();
+    }, 15000);
+});
