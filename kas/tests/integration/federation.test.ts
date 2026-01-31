@@ -592,15 +592,6 @@ describe('Phase 3.5: Federation Integration Tests', () => {
     });
 });
 
-// Export test utilities for use in other test files
-export {
-    generateKeyPair,
-    generateTestJWT,
-    wrapKey,
-    computePolicyBinding,
-    signKAO
-};
-
 // ============================================
 // Phase 4.1.1: EncryptedMetadata Integration Tests
 // ============================================
