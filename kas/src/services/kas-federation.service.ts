@@ -893,6 +893,249 @@ export class KASFederationService {
             kasStatus,
         };
     }
+    
+    /**
+     * Route request to first available KAS (Any-Of mode)
+     * 
+     * Phase 4.1.3: Any-Of KAS Routing
+     * 
+     * Implements KAS-REQ-120: Any-Of routing with failover
+     * 
+     * Features:
+     * - Try KAS instances in order of preference
+     * - Fallback to next KAS on failure
+     * - Circuit breaker integration
+     * - Return single successful result
+     * - Log routing decisions for audit
+     * 
+     * @param kaos - Array of Key Access Objects (alternate KAS)
+     * @param policy - Policy governing the request
+     * @param clientPublicKey - Client's ephemeral public key
+     * @param authHeader - Authorization header
+     * @param dpopHeader - DPoP header (optional)
+     * @param requestId - Request correlation ID
+     * @returns First successful KAO result or error
+     */
+    async routeAnyOf(
+        kaos: IKeyAccessObject[],
+        policy: IPolicy,
+        clientPublicKey: string,
+        authHeader: string,
+        dpopHeader: string | undefined,
+        requestId: string
+    ): Promise<IFederationResult> {
+        kasLogger.info('Starting Any-Of routing', {
+            requestId,
+            kaoCount: kaos.length,
+            kasTargets: kaos.map(kao => kao.kid),
+        });
+        
+        if (kaos.length === 0) {
+            return {
+                success: false,
+                kasId: 'unknown',
+                error: {
+                    kasId: 'unknown',
+                    errorType: 'invalid_request',
+                    message: 'No KAOs provided for Any-Of routing',
+                    affectedKAOIds: [],
+                    timestamp: new Date().toISOString(),
+                },
+                latencyMs: 0,
+            };
+        }
+        
+        const startTime = Date.now();
+        const attemptResults: Array<{
+            kasId: string;
+            kaoId: string;
+            success: boolean;
+            latencyMs: number;
+            error?: string;
+        }> = [];
+        
+        // Try each KAO in order
+        for (const kao of kaos) {
+            const attemptStart = Date.now();
+            
+            // Extract target KAS ID from URL or kid
+            const targetKasId = this.extractKasIdFromKAO(kao);
+            
+            // Check circuit breaker
+            const cb = getCircuitBreaker(targetKasId);
+            if (cb.isOpen()) {
+                kasLogger.warn('Circuit breaker open, skipping KAS', {
+                    requestId,
+                    targetKasId,
+                    kaoId: kao.keyAccessObjectId,
+                });
+                
+                attemptResults.push({
+                    kasId: targetKasId,
+                    kaoId: kao.keyAccessObjectId,
+                    success: false,
+                    latencyMs: Date.now() - attemptStart,
+                    error: 'Circuit breaker open',
+                });
+                
+                continue; // Skip to next KAS
+            }
+            
+            try {
+                // Build federation context for this KAO
+                const federationMetadata = {
+                    originKasId: process.env.KAS_ID || 'kas-local',
+                    originCountry: process.env.KAS_COUNTRY || 'USA',
+                    federationRequestId: `anyof-${requestId}`,
+                    routedVia: [],
+                    translationApplied: false,
+                    originTimestamp: new Date().toISOString(),
+                };
+                
+                const forwardContext: IFederationForwardContext = {
+                    targetKasId,
+                    targetKasUrl: kao.url,
+                    policy,
+                    kaosToForward: [kao],
+                    clientPublicKey,
+                    authHeader,
+                    dpopHeader,
+                    requestId,
+                    federationMetadata,
+                };
+                
+                // Attempt to forward to this KAS
+                const result = await this.forwardRewrapRequest(forwardContext);
+                
+                if (result.success && result.response) {
+                    // Success! Return immediately
+                    const latencyMs = Date.now() - startTime;
+                    
+                    kasLogger.info('Any-Of routing succeeded', {
+                        requestId,
+                        targetKasId,
+                        kaoId: kao.keyAccessObjectId,
+                        attemptNumber: attemptResults.length + 1,
+                        totalAttempts: kaos.length,
+                        latencyMs,
+                    });
+                    
+                    attemptResults.push({
+                        kasId: targetKasId,
+                        kaoId: kao.keyAccessObjectId,
+                        success: true,
+                        latencyMs: Date.now() - attemptStart,
+                    });
+                    
+                    // Log routing decision for audit
+                    const auditEvent: IKASAuditEvent = {
+                        eventType: 'ANYOF_ROUTING_SUCCESS',
+                        timestamp: new Date().toISOString(),
+                        requestId,
+                        subject: 'anyof-routing',
+                        resourceId: kao.keyAccessObjectId,
+                        outcome: 'ALLOW',
+                        reason: `Any-Of routing succeeded on attempt ${attemptResults.length}`,
+                        latencyMs,
+                    };
+                    logKASAuditEvent(auditEvent);
+                    
+                    return result;
+                }
+                
+                // Result failed, try next KAS
+                attemptResults.push({
+                    kasId: targetKasId,
+                    kaoId: kao.keyAccessObjectId,
+                    success: false,
+                    latencyMs: Date.now() - attemptStart,
+                    error: result.error?.message || 'Federation request failed',
+                });
+                
+            } catch (error) {
+                kasLogger.error('Any-Of routing attempt failed', {
+                    requestId,
+                    targetKasId,
+                    kaoId: kao.keyAccessObjectId,
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                });
+                
+                attemptResults.push({
+                    kasId: targetKasId,
+                    kaoId: kao.keyAccessObjectId,
+                    success: false,
+                    latencyMs: Date.now() - attemptStart,
+                    error: error instanceof Error ? error.message : 'Unknown error',
+                });
+            }
+        }
+        
+        // All attempts failed
+        const totalLatencyMs = Date.now() - startTime;
+        
+        kasLogger.error('Any-Of routing failed - all KAS unavailable', {
+            requestId,
+            totalAttempts: attemptResults.length,
+            latencyMs: totalLatencyMs,
+            attempts: attemptResults,
+        });
+        
+        // Log routing failure for audit
+        const auditEvent: IKASAuditEvent = {
+            eventType: 'ANYOF_ROUTING_FAILURE',
+            timestamp: new Date().toISOString(),
+            requestId,
+            subject: 'anyof-routing',
+            resourceId: kaos[0].keyAccessObjectId,
+            outcome: 'DENY',
+            reason: `All ${attemptResults.length} Any-Of routing attempts failed`,
+            latencyMs: totalLatencyMs,
+        };
+        logKASAuditEvent(auditEvent);
+        
+        return {
+            success: false,
+            kasId: 'anyof-routing',
+            error: {
+                kasId: 'anyof-routing',
+                errorType: 'all_kas_unavailable',
+                message: `All ${attemptResults.length} KAS instances unavailable`,
+                affectedKAOIds: kaos.map(kao => kao.keyAccessObjectId),
+                timestamp: new Date().toISOString(),
+                metadata: {
+                    attempts: attemptResults,
+                },
+            },
+            latencyMs: totalLatencyMs,
+        };
+    }
+    
+    /**
+     * Extract KAS ID from KeyAccessObject
+     * 
+     * @param kao - Key Access Object
+     * @returns KAS identifier
+     */
+    private extractKasIdFromKAO(kao: IKeyAccessObject): string {
+        // Try to extract from kid (e.g., "kas-fra-001" -> "kas-fra")
+        if (kao.kid && kao.kid.startsWith('kas-')) {
+            const parts = kao.kid.split('-');
+            if (parts.length >= 2) {
+                return `${parts[0]}-${parts[1]}`; // e.g., "kas-fra"
+            }
+        }
+        
+        // Try to extract from URL (e.g., "https://kas-fra.example.com" -> "kas-fra")
+        if (kao.url) {
+            const urlMatch = kao.url.match(/kas-([a-z]{3})/i);
+            if (urlMatch) {
+                return `kas-${urlMatch[1].toLowerCase()}`;
+            }
+        }
+        
+        // Fallback: use kid as-is
+        return kao.kid || 'unknown';
+    }
 }
 
 // Export singleton instance
