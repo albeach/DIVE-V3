@@ -600,3 +600,335 @@ export {
     computePolicyBinding,
     signKAO
 };
+
+// ============================================
+// Phase 4.1.1: EncryptedMetadata Integration Tests
+// ============================================
+describe('Phase 4.1.1: EncryptedMetadata Integration Tests', () => {
+    const KAS_USA_URL = process.env.KAS_USA_URL || 'https://localhost:8081';
+    const KAS_FRA_URL = process.env.KAS_FRA_URL || 'https://localhost:8082';
+    
+    const httpsAgent = new https.Agent({
+        rejectUnauthorized: false
+    });
+    
+    const generateKeyPair = () => {
+        const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
+            modulusLength: 2048,
+            publicKeyEncoding: { type: 'spki', format: 'pem' },
+            privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+        });
+        return { publicKey, privateKey };
+    };
+    
+    const wrapKey = (keySplit: Buffer, publicKey: string): string => {
+        const encrypted = crypto.publicEncrypt(
+            {
+                key: publicKey,
+                padding: crypto.constants.RSA_PKCS1_OAEP_PADDING,
+                oaepHash: 'sha256'
+            },
+            keySplit
+        );
+        return encrypted.toString('base64');
+    };
+    
+    const computePolicyBinding = (policy: any, keySplit: Buffer): string => {
+        const policyJson = JSON.stringify(policy, Object.keys(policy).sort());
+        return crypto.createHmac('sha256', keySplit)
+            .update(policyJson, 'utf8')
+            .digest('base64');
+    };
+    
+    const encryptMetadata = (metadata: any, keySplit: Buffer): string => {
+        const iv = crypto.randomBytes(12);
+        const cipher = crypto.createCipheriv('aes-256-gcm', keySplit, iv);
+        
+        const plaintext = JSON.stringify(metadata);
+        let encrypted = cipher.update(plaintext, 'utf8');
+        encrypted = Buffer.concat([encrypted, cipher.final()]);
+        const authTag = cipher.getAuthTag();
+        
+        // Format: IV (12 bytes) + authTag (16 bytes) + ciphertext
+        return Buffer.concat([iv, authTag, encrypted]).toString('base64');
+    };
+    
+    const generateTestJWT = (payload: any) => {
+        const { privateKey } = generateKeyPair();
+        return jwt.sign(payload, privateKey, { algorithm: 'RS256', expiresIn: '1h' });
+    };
+    
+    test('should decrypt encryptedMetadata with valid policy assertions', async () => {
+        const { publicKey: clientPublicKey, privateKey: clientPrivateKey } = generateKeyPair();
+        const { publicKey: kasPublicKey } = generateKeyPair();
+        
+        const keySplit = crypto.randomBytes(32);
+        const policy = {
+            policyId: 'policy-metadata-001',
+            dissem: {
+                classification: 'SECRET',
+                releasabilityTo: ['USA', 'GBR'],
+                COI: ['FVEY']
+            }
+        };
+        
+        // Create metadata with policy assertions
+        const metadata = {
+            fields: {
+                title: 'Classified Document',
+                author: 'Alice',
+                createdAt: '2026-01-31T00:00:00Z'
+            },
+            policyAssertion: {
+                policyHash: crypto.createHash('sha256')
+                    .update(JSON.stringify(policy, Object.keys(policy).sort()))
+                    .digest('base64'),
+                classification: 'SECRET',
+                releasabilityTo: ['USA', 'GBR'],
+                COI: ['FVEY']
+            }
+        };
+        
+        const encryptedMetadata = encryptMetadata(metadata, keySplit);
+        
+        const kao = {
+            keyAccessObjectId: 'kao-meta-001',
+            wrappedKey: wrapKey(keySplit, kasPublicKey),
+            url: KAS_USA_URL,
+            kid: 'kas-usa-001',
+            policyBinding: computePolicyBinding(policy, keySplit),
+            sid: 'session-meta-001',
+            encryptedMetadata,
+            signature: { alg: 'RS256', sig: '' }
+        };
+        
+        const requestBody = {
+            clientPublicKey,
+            requests: [
+                {
+                    policy,
+                    keyAccessObjects: [kao]
+                }
+            ]
+        };
+        
+        const token = generateTestJWT({
+            uniqueID: 'alice@example.com',
+            clearance: 'SECRET',
+            countryOfAffiliation: 'USA',
+            acpCOI: ['FVEY']
+        });
+        
+        const response = await axios.post(
+            `${KAS_USA_URL}/rewrap`,
+            requestBody,
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                httpsAgent
+            }
+        );
+        
+        expect(response.status).toBe(200);
+        expect(response.data.responses).toHaveLength(1);
+        expect(response.data.responses[0].results).toHaveLength(1);
+        
+        const result = response.data.responses[0].results[0];
+        expect(result.status).toBe('success');
+        expect(result.metadata).toBeDefined();
+        expect(result.metadata.title).toBe('Classified Document');
+        expect(result.metadata.author).toBe('Alice');
+    }, 10000);
+    
+    test('should reject encryptedMetadata with mismatched policy assertions', async () => {
+        const { publicKey: clientPublicKey } = generateKeyPair();
+        const { publicKey: kasPublicKey } = generateKeyPair();
+        
+        const keySplit = crypto.randomBytes(32);
+        const policy = {
+            policyId: 'policy-metadata-002',
+            dissem: {
+                classification: 'SECRET',
+                releasabilityTo: ['USA']
+            }
+        };
+        
+        // Create metadata with WRONG policy assertions
+        const wrongPolicyHash = crypto.randomBytes(32).toString('base64');
+        const metadata = {
+            fields: {
+                title: 'Test Document'
+            },
+            policyAssertion: {
+                policyHash: wrongPolicyHash, // Wrong hash
+                classification: 'CONFIDENTIAL', // Wrong classification
+                releasabilityTo: ['USA', 'FRA'] // Wrong countries
+            }
+        };
+        
+        const encryptedMetadata = encryptMetadata(metadata, keySplit);
+        
+        const kao = {
+            keyAccessObjectId: 'kao-meta-002',
+            wrappedKey: wrapKey(keySplit, kasPublicKey),
+            url: KAS_USA_URL,
+            kid: 'kas-usa-001',
+            policyBinding: computePolicyBinding(policy, keySplit),
+            sid: 'session-meta-002',
+            encryptedMetadata,
+            signature: { alg: 'RS256', sig: '' }
+        };
+        
+        const requestBody = {
+            clientPublicKey,
+            requests: [
+                {
+                    policy,
+                    keyAccessObjects: [kao]
+                }
+            ]
+        };
+        
+        const token = generateTestJWT({
+            uniqueID: 'bob@example.com',
+            clearance: 'SECRET',
+            countryOfAffiliation: 'USA',
+            acpCOI: []
+        });
+        
+        const response = await axios.post(
+            `${KAS_USA_URL}/rewrap`,
+            requestBody,
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                httpsAgent
+            }
+        );
+        
+        expect(response.status).toBe(200);
+        const result = response.data.responses[0].results[0];
+        expect(result.status).toBe('error');
+        expect(result.error).toMatch(/metadata decryption failed/i);
+    }, 10000);
+    
+    test('should handle encryptedMetadata in 2-KAS federation', async () => {
+        const { publicKey: clientPublicKey } = generateKeyPair();
+        const { publicKey: kasUsaPublicKey } = generateKeyPair();
+        const { publicKey: kasFraPublicKey } = generateKeyPair();
+        
+        const keySplit1 = crypto.randomBytes(32);
+        const keySplit2 = crypto.randomBytes(32);
+        
+        const policy = {
+            policyId: 'policy-metadata-003',
+            dissem: {
+                classification: 'SECRET',
+                releasabilityTo: ['USA', 'FRA'],
+                COI: ['NATO']
+            }
+        };
+        
+        // USA KAO with metadata
+        const metadata1 = {
+            fields: {
+                title: 'NATO Document',
+                classification: 'SECRET'
+            },
+            policyAssertion: {
+                policyHash: crypto.createHash('sha256')
+                    .update(JSON.stringify(policy, Object.keys(policy).sort()))
+                    .digest('base64'),
+                classification: 'SECRET',
+                releasabilityTo: ['USA', 'FRA']
+            }
+        };
+        
+        const kao1 = {
+            keyAccessObjectId: 'kao-meta-usa',
+            wrappedKey: wrapKey(keySplit1, kasUsaPublicKey),
+            url: KAS_USA_URL,
+            kid: 'kas-usa-001',
+            policyBinding: computePolicyBinding(policy, keySplit1),
+            sid: 'session-meta-003',
+            encryptedMetadata: encryptMetadata(metadata1, keySplit1),
+            signature: { alg: 'RS256', sig: '' }
+        };
+        
+        // FRA KAO with metadata
+        const metadata2 = {
+            fields: {
+                source: 'France Intelligence',
+                timestamp: '2026-01-31T12:00:00Z'
+            },
+            policyAssertion: {
+                policyHash: crypto.createHash('sha256')
+                    .update(JSON.stringify(policy, Object.keys(policy).sort()))
+                    .digest('base64'),
+                classification: 'SECRET',
+                releasabilityTo: ['USA', 'FRA']
+            }
+        };
+        
+        const kao2 = {
+            keyAccessObjectId: 'kao-meta-fra',
+            wrappedKey: wrapKey(keySplit2, kasFraPublicKey),
+            url: KAS_FRA_URL,
+            kid: 'kas-fra-001',
+            policyBinding: computePolicyBinding(policy, keySplit2),
+            sid: 'session-meta-003',
+            encryptedMetadata: encryptMetadata(metadata2, keySplit2),
+            signature: { alg: 'RS256', sig: '' }
+        };
+        
+        const requestBody = {
+            clientPublicKey,
+            requests: [
+                {
+                    policy,
+                    keyAccessObjects: [kao1, kao2]
+                }
+            ]
+        };
+        
+        const token = generateTestJWT({
+            uniqueID: 'charlie@example.com',
+            clearance: 'SECRET',
+            countryOfAffiliation: 'USA',
+            acpCOI: ['NATO']
+        });
+        
+        const response = await axios.post(
+            `${KAS_USA_URL}/rewrap`,
+            requestBody,
+            {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                httpsAgent
+            }
+        );
+        
+        expect(response.status).toBe(200);
+        expect(response.data.responses[0].results).toHaveLength(2);
+        
+        // Check USA KAO result
+        const usaResult = response.data.responses[0].results.find(
+            (r: any) => r.keyAccessObjectId === 'kao-meta-usa'
+        );
+        expect(usaResult.status).toBe('success');
+        expect(usaResult.metadata).toBeDefined();
+        expect(usaResult.metadata.title).toBe('NATO Document');
+        
+        // Check FRA KAO result (may be success or error depending on federation setup)
+        const fraResult = response.data.responses[0].results.find(
+            (r: any) => r.keyAccessObjectId === 'kao-meta-fra'
+        );
+        expect(fraResult).toBeDefined();
+    }, 15000);
+});

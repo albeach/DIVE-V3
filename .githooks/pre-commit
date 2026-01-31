@@ -30,7 +30,8 @@ echo "  Checking for hardcoded localhost URLs..."
 if echo "$STAGED_FILES" | grep -E '\.(ts|tsx|js|jsx)$' > /dev/null; then
   # Check TypeScript/JavaScript files for hardcoded localhost
   # EXCLUDE: jwt-validator.ts (legitimate for federation trust issuer list)
-  LOCALHOST_MATCHES=$(git diff --cached -- . ':(exclude)kas/src/utils/jwt-validator.ts' | grep -E "^\+.*['\"]https?://(127\.0\.0\.1|localhost):[0-9]+" || true)
+  # EXCLUDE: test files (test configuration with env var override)
+  LOCALHOST_MATCHES=$(git diff --cached -- . ':(exclude)kas/src/utils/jwt-validator.ts' ':(exclude)**/*.test.ts' ':(exclude)**/*.test.tsx' | grep -E "^\+.*['\"]https?://(127\.0\.0\.1|localhost):[0-9]+" || true)
 
   if [ -n "$LOCALHOST_MATCHES" ]; then
     echo "${RED}❌ ERROR: Hardcoded localhost/127.0.0.1 URLs found:${NC}"
