@@ -57,11 +57,20 @@ export default function PageLayout({
     const { instanceCode, instanceName } = useInstanceTheme();
 
     return (
-        <div className="min-h-screen bg-gray-50 pb-24 lg:pb-0">
+        <div className="min-h-screen bg-gray-50 dark:bg-gray-950 pb-24 lg:pb-0">
+            {/* Skip to content - WCAG 2.1 AA */}
+            <a
+                href="#main-content"
+                className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-indigo-600 focus:text-white focus:rounded-lg focus:text-sm focus:font-medium focus:shadow-lg"
+            >
+                Skip to main content
+            </a>
+
             {/* Instance-themed subtle background accent */}
             <div
                 className="fixed top-0 left-0 right-0 h-1 z-[60]"
                 style={{ background: 'var(--instance-banner-bg)' }}
+                role="presentation"
             />
 
             {/* Navigation Bar */}
@@ -73,7 +82,11 @@ export default function PageLayout({
             )}
 
             {/* Main Content */}
-            <main className={`${maxWidthClass} ${noPadding ? '' : 'px-4 sm:px-6 lg:px-8 py-8'} ${className}`}>
+            <main
+                id="main-content"
+                role="main"
+                className={`${maxWidthClass} ${noPadding ? '' : 'px-4 sm:px-6 lg:px-8 py-8'} ${className}`}
+            >
                 {children}
             </main>
 
