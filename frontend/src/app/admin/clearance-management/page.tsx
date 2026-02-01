@@ -118,10 +118,10 @@ export default function ClearanceManagementPage() {
 
     if (status === 'loading' || loading) {
         return (
-            <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
+            <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 dark:from-gray-900 dark:to-gray-950">
                 <div className="text-center">
                     <div className="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-indigo-600"></div>
-                    <p className="mt-4 text-lg text-gray-600">Loading Clearance Mappings...</p>
+                    <p className="mt-4 text-lg text-gray-600 dark:text-gray-400">Loading Clearance Mappings...</p>
                 </div>
             </div>
         );
@@ -148,15 +148,15 @@ export default function ClearanceManagementPage() {
             ]}
             maxWidth="7xl"
         >
-            <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30">
+            <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 dark:from-gray-900 dark:via-gray-950 dark:to-indigo-950/10">
                 {/* Header */}
-                <div className="mb-6 bg-white rounded-2xl shadow-xl border border-slate-200 p-6">
+                <div className="mb-6 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-slate-200 dark:border-gray-700 p-6">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="space-y-2">
                             <h1 className="text-3xl lg:text-4xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
                                 🔐 Clearance Management
                             </h1>
-                            <p className="text-gray-600 text-sm lg:text-base">
+                            <p className="text-gray-600 dark:text-gray-400 text-sm lg:text-base">
                                 Manage national clearance mappings across 32 NATO members
                             </p>
                         </div>
@@ -168,7 +168,7 @@ export default function ClearanceManagementPage() {
                                 className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
                                     autoRefresh
                                         ? 'bg-green-500 text-white shadow-lg shadow-green-500/30'
-                                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                                        : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
                                 }`}
                                 title="Auto-refresh every minute"
                             >
@@ -185,7 +185,7 @@ export default function ClearanceManagementPage() {
                             </button>
 
                             {/* Last refresh time */}
-                            <div className="text-xs text-gray-500">
+                            <div className="text-xs text-gray-500 dark:text-gray-400">
                                 Last: {lastRefresh.toLocaleTimeString()}
                             </div>
                         </div>
@@ -193,16 +193,17 @@ export default function ClearanceManagementPage() {
 
                     {/* Error banner */}
                     {error && (
-                        <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg">
+                        <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
                             <div className="flex items-start gap-3">
-                                <span className="text-red-600 text-xl">⚠️</span>
+                                <span className="text-red-600 dark:text-red-400 text-xl">⚠️</span>
                                 <div className="flex-1">
-                                    <p className="text-red-800 font-medium">Error</p>
-                                    <p className="text-red-700 text-sm">{error}</p>
+                                    <p className="text-red-800 dark:text-red-200 font-medium">Error</p>
+                                    <p className="text-red-700 dark:text-red-300 text-sm">{error}</p>
                                 </div>
                                 <button
                                     onClick={() => setError(null)}
-                                    className="text-red-400 hover:text-red-600"
+                                    className="text-red-400 hover:text-red-600 dark:hover:text-red-300"
+                                    aria-label="Dismiss error"
                                 >
                                     ✕
                                 </button>
@@ -212,7 +213,7 @@ export default function ClearanceManagementPage() {
                 </div>
 
                 {/* Tab Navigation */}
-                <div className="mb-6 bg-white rounded-xl shadow-lg border border-slate-200 p-2">
+                <div className="mb-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-slate-200 dark:border-gray-700 p-2">
                     <div className="flex flex-wrap gap-2">
                         {tabs.map((tab) => (
                             <button
@@ -221,7 +222,7 @@ export default function ClearanceManagementPage() {
                                 className={`flex-1 min-w-[140px] px-4 py-3 rounded-lg font-medium transition-all duration-200 ${
                                     activeTab === tab.id
                                         ? 'bg-gradient-to-r from-indigo-500 to-purple-500 text-white shadow-lg shadow-indigo-500/30'
-                                        : 'bg-gray-50 text-gray-700 hover:bg-gray-100'
+                                        : 'bg-gray-50 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600'
                                 }`}
                                 title={tab.description}
                             >
@@ -269,11 +270,11 @@ export default function ClearanceManagementPage() {
                     )}
 
                     {activeTab === 'audit' && (
-                        <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
-                            <h3 className="text-xl font-bold text-gray-800 mb-4">
+                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-slate-200 dark:border-gray-700 p-6">
+                            <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-4">
                                 📋 Audit Log
                             </h3>
-                            <p className="text-gray-600 text-center py-12">
+                            <p className="text-gray-600 dark:text-gray-400 text-center py-12">
                                 Audit log tracking coming soon...
                             </p>
                         </div>
