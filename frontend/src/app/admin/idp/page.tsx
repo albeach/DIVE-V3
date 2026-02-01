@@ -44,6 +44,11 @@ import {
 } from '@heroicons/react/24/outline';
 import { motion, AnimatePresence } from 'framer-motion';
 
+// Phase 5.3 integrations
+import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
+import { KeyboardShortcutsModal } from '@/components/ui/keyboard-shortcuts-modal';
+import { useKeyboardNavigation } from '@/hooks/use-keyboard-navigation';
+
 // ============================================
 // Main Component (Wrapped)
 // ============================================
@@ -92,6 +97,9 @@ function IdPManagementPageContent() {
 
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [showDetailPanel, setShowDetailPanel] = useState(false);
+    const { isHelpOpen, setIsHelpOpen } = useKeyboardNavigation({
+        searchSelector: '[data-search-input]',
+    });
 
     // Debug: Log session and IdPs data
     React.useEffect(() => {
@@ -242,9 +250,10 @@ function IdPManagementPageContent() {
 
     return (
         <PageLayout user={session.user || {}}>
+            <KeyboardShortcutsModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
             <div className="max-w-7xl mx-auto space-y-6">
                 {/* Breadcrumbs */}
-                <AdminBreadcrumbs />
+                <InteractiveBreadcrumbs />
 
                 {/* Header */}
                 <div className="flex items-center justify-between">

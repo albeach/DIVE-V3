@@ -29,6 +29,12 @@ import DemoScenarioManager from '@/components/admin/demo-scenario-manager';
 import FederationDashboard from '@/components/admin/federation-dashboard';
 import { CertificateExpiryWarnings } from '@/components/admin/smart-suggestions';
 
+// Phase 5.2/5.3 integrations
+import { AuthorizationHeatmap, generateSampleHeatmapData } from '@/components/admin/authorization-heatmap';
+import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
+import { KeyboardShortcutsModal } from '@/components/ui/keyboard-shortcuts-modal';
+import { useKeyboardNavigation } from '@/hooks/use-keyboard-navigation';
+
 type TabView = 'overview' | 'federation' | 'insights';
 
 export default function AdminDashboard() {
@@ -38,6 +44,7 @@ export default function AdminDashboard() {
     const [dateRange, setDateRange] = useState<'24h' | '7d' | '30d' | '90d'>('7d');
     const [autoRefresh, setAutoRefresh] = useState(true);
     const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+    const { isHelpOpen, setIsHelpOpen } = useKeyboardNavigation({ enabled: status === 'authenticated' });
 
     // Auto-refresh every 30 seconds
     useEffect(() => {
@@ -104,7 +111,12 @@ export default function AdminDashboard() {
                 { label: 'Dashboard', href: null }
             ]}
         >
+            <KeyboardShortcutsModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
             <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
+                {/* Interactive Breadcrumbs */}
+                <div className="mb-4">
+                    <InteractiveBreadcrumbs />
+                </div>
                 {/* Enhanced Header */}
                 <div className="mb-6 bg-white rounded-xl shadow-lg border border-slate-200 p-4 sm:p-6">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -321,6 +333,21 @@ export default function AdminDashboard() {
                                     <ThreatIntelligence
                                         dateRange={dateRange}
                                         refreshTrigger={lastRefresh}
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Authorization Heatmap */}
+                            <div>
+                                <h3 className="text-lg font-bold text-slate-900 mb-4 flex items-center gap-2">
+                                    <span>🗓️</span> Authorization Decision Heatmap
+                                </h3>
+                                <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
+                                    <AuthorizationHeatmap
+                                        data={generateSampleHeatmapData()}
+                                        onCellClick={(cell) => {
+                                            router.push(`/admin/analytics/advanced?day=${cell.day}&hour=${cell.hour}`);
+                                        }}
                                     />
                                 </div>
                             </div>
