@@ -589,6 +589,7 @@ services:
       OPA_URL: https://opa:8181
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb:27017?authSource=admin
       MONGODB_DATABASE: dive-v3-hub
+      REDIS_URL: redis://:${REDIS_PASSWORD_USA}@redis:6379
       LOG_LEVEL: debug
       KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker-usa
@@ -596,10 +597,15 @@ services:
     ports:
       - "127.0.0.1:8085:8080"
     depends_on:
-      - opa
-      - mongodb
+      opa:
+        condition: service_healthy
+      mongodb:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - hub-internal
+      - dive-shared  # For federation with spokes
     volumes:
       - ./kas/certs:/opt/app/certs:ro
       - ./certs/mkcert:/app/certs/ca:ro  # mkcert root CA for TLS trust

@@ -358,6 +358,52 @@ hub_deploy() {
     phase_times+=("Phase 7 (Seeding): ${phase7_duration}s")
     log_verbose "Phase 7 completed in ${phase7_duration}s"
 
+    # Phase 7.5: Initialize and verify Key Access Service (KAS)
+    phase_start=$(date +%s)
+    if type progress_set_phase &>/dev/null; then
+        progress_set_phase 7.5 "Initializing KAS"
+    fi
+    log_info "Phase 7.5: Initializing Key Access Service (KAS)"
+
+    if docker ps --format '{{.Names}}' | grep -q "${HUB_COMPOSE_PROJECT}-kas"; then
+        log_info "Waiting for KAS to be healthy..."
+        local kas_wait=0
+        local kas_max_wait=60
+
+        while [ $kas_wait -lt $kas_max_wait ]; do
+            local kas_health=$(docker inspect "${HUB_COMPOSE_PROJECT}-kas" \
+                --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+
+            if [ "$kas_health" = "healthy" ]; then
+                log_success "✓ KAS is healthy"
+                break
+            fi
+
+            sleep 2
+            ((kas_wait += 2))
+        done
+
+        if [ $kas_wait -ge $kas_max_wait ]; then
+            log_warn "KAS health check timeout after ${kas_max_wait}s"
+            log_warn "Check logs: docker logs ${HUB_COMPOSE_PROJECT}-kas"
+        else
+            # Verify health endpoint directly
+            local kas_port="${KAS_HOST_PORT:-8085}"
+            if curl -sf -k "https://localhost:${kas_port}/health" >/dev/null 2>&1; then
+                log_success "✓ KAS health endpoint responding on port ${kas_port}"
+            else
+                log_warn "KAS health endpoint not accessible on port ${kas_port}"
+            fi
+        fi
+    else
+        log_info "KAS container not found - skipping (optional service)"
+    fi
+
+    phase_end=$(date +%s)
+    local phase7_5_duration=$((phase_end - phase_start))
+    phase_times+=("Phase 7.5 (KAS Init): ${phase7_5_duration}s")
+    log_verbose "Phase 7.5 completed in ${phase7_5_duration}s"
+
     # Stop timeout monitor (success)
     kill $timeout_monitor_pid 2>/dev/null || true
     trap - EXIT

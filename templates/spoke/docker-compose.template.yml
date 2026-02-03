@@ -556,6 +556,7 @@ services:
       OPA_URL: https://opa-{{INSTANCE_CODE_LOWER}}:8181
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/?authSource=admin&directConnection=true
       MONGODB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
+      REDIS_URL: redis://:${REDIS_PASSWORD_{{INSTANCE_CODE_UPPER}}}@redis-{{INSTANCE_CODE_LOWER}}:6379
       LOG_LEVEL: info
       KEYCLOAK_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
       KEYCLOAK_REALM: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
@@ -563,12 +564,17 @@ services:
     ports:
       - "{{KAS_HOST_PORT}}:8080"
     depends_on:
+      opa-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy
       opal-client-{{INSTANCE_CODE_LOWER}}:
         condition: service_healthy
       mongodb-{{INSTANCE_CODE_LOWER}}:
         condition: service_healthy
+      redis-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy
     networks:
       - dive-internal
+      - dive-shared  # For federation with hub and other spokes
     volumes:
       - ./certs:/opt/app/certs:ro
       - ../../certs/mkcert:/app/certs/ca:ro  # mkcert root CA for TLS trust
@@ -576,7 +582,7 @@ services:
       - kas_logs:/app/logs
       - ../../config:/app/config:ro
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-check-certificate -q -O- https://localhost:8080/health || exit 1"]
+      test: ["CMD", "curl", "-kfs", "https://localhost:8080/health"]
       interval: 15s
       timeout: 10s
       retries: 5
