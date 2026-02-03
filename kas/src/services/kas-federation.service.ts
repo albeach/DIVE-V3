@@ -1063,6 +1063,7 @@ export class KASFederationService {
         for (const settledResult of results) {
             if (settledResult.status === 'fulfilled' && settledResult.value.success && settledResult.value.result) {
                 const successResult = settledResult.value;
+                const result = successResult.result!; // Non-null assertion: we checked above
                 const latencyMs = Date.now() - startTime;
                 
                 kasLogger.info('Parallel Any-Of routing succeeded', {
@@ -1086,7 +1087,7 @@ export class KASFederationService {
                 };
                 logKASAuditEvent(auditEvent);
                 
-                return successResult.result;
+                return result;
             }
         }
         
