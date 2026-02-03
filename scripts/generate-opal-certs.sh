@@ -101,7 +101,7 @@ if [ ! -f "$OPAL_CERTS_DIR/server.crt" ]; then
         -key "$OPAL_CERTS_DIR/server.key" \
         -out "$OPAL_CERTS_DIR/server.csr" \
         -subj "/C=$COUNTRY/ST=$STATE/O=$ORG/CN=$SERVER_CN"
-    
+
     # Sign with CA
     openssl x509 -req \
         -days $CERT_VALIDITY \
@@ -111,7 +111,7 @@ if [ ! -f "$OPAL_CERTS_DIR/server.crt" ]; then
         -CAcreateserial \
         -out "$OPAL_CERTS_DIR/server.crt" \
         -extfile "$OPAL_CERTS_DIR/server.ext"
-    
+
     rm -f "$OPAL_CERTS_DIR/server.csr"
     echo "  ✓ Server certificate generated"
 else
@@ -145,7 +145,7 @@ if [ ! -f "$OPAL_CERTS_DIR/client.crt" ]; then
         -key "$OPAL_CERTS_DIR/client.key" \
         -out "$OPAL_CERTS_DIR/client.csr" \
         -subj "/C=$COUNTRY/ST=$STATE/O=$ORG/CN=$CLIENT_CN"
-    
+
     # Sign with CA
     openssl x509 -req \
         -days $CERT_VALIDITY \
@@ -155,7 +155,7 @@ if [ ! -f "$OPAL_CERTS_DIR/client.crt" ]; then
         -CAcreateserial \
         -out "$OPAL_CERTS_DIR/client.crt" \
         -extfile "$OPAL_CERTS_DIR/client.ext"
-    
+
     rm -f "$OPAL_CERTS_DIR/client.csr"
     echo "  ✓ Client certificate generated"
 else

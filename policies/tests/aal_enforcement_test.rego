@@ -30,9 +30,11 @@ test_aal1_unclass_user_access_unclass_resource if {
             "uniqueID": "testuser-usa-1",
             "clearance": "UNCLASSIFIED",
             "countryOfAffiliation": "USA",
-            "authenticated": true
+            "authenticated": true,
+            "mfaVerified": false,
+            "aal": 1
         },
-        "action": "read",
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "USA-UNCLASS-001",
             "classification": "UNCLASSIFIED",
@@ -46,6 +48,8 @@ test_aal1_unclass_user_access_unclass_resource if {
             "amr": ["pwd"]
         }
     }
+    with data.dive.tenant.base.trusted_issuers as {}
+    with data.dive.tenant.federation_constraints.federation_matrix as {}
     result.allow == true
 }
 
@@ -56,9 +60,11 @@ test_aal1_unclass_no_acr_amr if {
             "uniqueID": "testuser-usa-1",
             "clearance": "UNCLASSIFIED",
             "countryOfAffiliation": "USA",
+            "mfaVerified": false,
+            "aal": 1,
             "authenticated": true
         },
-        "action": "read",
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "USA-UNCLASS-001",
             "classification": "UNCLASSIFIED",
@@ -81,9 +87,11 @@ test_aal1_unclass_user_denied_confidential_resource if {
             "uniqueID": "testuser-usa-1",
             "clearance": "UNCLASSIFIED",
             "countryOfAffiliation": "USA",
+            "mfaVerified": false,
+            "aal": 1,
             "authenticated": true
         },
-        "action": "read",
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "USA-CONF-001",
             "classification": "CONFIDENTIAL",
@@ -112,9 +120,11 @@ test_aal2_confidential_user_access_confidential_resource if {
             "uniqueID": "testuser-usa-2",
             "clearance": "CONFIDENTIAL",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
-        "action": "read",
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "USA-CONF-001",
             "classification": "CONFIDENTIAL",
@@ -138,9 +148,11 @@ test_aal2_confidential_string_format if {
             "uniqueID": "testuser-usa-2",
             "clearance": "CONFIDENTIAL",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
-        "action": "read",
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "USA-CONF-001",
             "classification": "CONFIDENTIAL",
@@ -164,9 +176,11 @@ test_aal2_confidential_silver_acr if {
             "uniqueID": "testuser-usa-2",
             "clearance": "CONFIDENTIAL",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
-        "action": "read",
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "USA-CONF-001",
             "classification": "CONFIDENTIAL",
@@ -190,9 +204,11 @@ test_aal2_secret_user_access_secret_resource if {
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
-        "action": "read",
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "USA-SECRET-001",
             "classification": "SECRET",
@@ -216,9 +232,11 @@ test_aal1_confidential_user_denied_without_mfa if {
             "uniqueID": "testuser-usa-2",
             "clearance": "CONFIDENTIAL",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
-        "action": "read",
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "USA-CONF-001",
             "classification": "CONFIDENTIAL",
@@ -243,9 +261,11 @@ test_aal1_secret_user_denied_without_mfa if {
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
-        "action": "read",
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "USA-SECRET-001",
             "classification": "SECRET",
@@ -270,9 +290,11 @@ test_aal2_secret_user_access_confidential_resource if {
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
-        "action": "read",
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "USA-CONF-001",
             "classification": "CONFIDENTIAL",
@@ -300,9 +322,11 @@ test_aal3_ts_user_access_ts_resource_numeric if {
             "uniqueID": "testuser-usa-4",
             "clearance": "TOP_SECRET",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
-        "action": "read",
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "USA-TS-001",
             "classification": "TOP_SECRET",
@@ -326,9 +350,11 @@ test_aal3_ts_user_access_ts_resource_gold if {
             "uniqueID": "testuser-usa-4",
             "clearance": "TOP_SECRET",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
-        "action": "read",
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "USA-TS-001",
             "classification": "TOP_SECRET",
@@ -354,9 +380,11 @@ test_aal2_ts_user_access_ts_resource if {
             "uniqueID": "testuser-usa-4",
             "clearance": "TOP_SECRET",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
-        "action": "read",
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "USA-TS-001",
             "classification": "TOP_SECRET",
@@ -382,9 +410,11 @@ test_aal3_ts_user_access_secret_resource if {
             "uniqueID": "testuser-usa-4",
             "clearance": "TOP_SECRET",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
-        "action": "read",
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "USA-SECRET-001",
             "classification": "SECRET",
@@ -412,9 +442,11 @@ test_amr_otp_factor if {
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
-        "action": "read",
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "USA-SECRET-001",
             "classification": "SECRET",
@@ -438,9 +470,11 @@ test_amr_hwtoken_factor if {
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
-        "action": "read",
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "USA-SECRET-001",
             "classification": "SECRET",
@@ -464,9 +498,11 @@ test_amr_single_factor_denied if {
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
-        "action": "read",
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "USA-SECRET-001",
             "classification": "SECRET",
@@ -494,9 +530,11 @@ test_amr_non_mfa_factors_allowed_by_count if {
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
-        "action": "read",
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "USA-SECRET-001",
             "classification": "SECRET",
@@ -526,9 +564,11 @@ test_federated_fra_user_with_aal2 if {
             "uniqueID": "testuser-fra-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "FRA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
-        "action": "read",
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "USA-SECRET-RELEASABLE-001",
             "classification": "SECRET",
@@ -553,9 +593,11 @@ test_federated_deu_user_with_aal1_denied if {
             "uniqueID": "testuser-deu-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "DEU",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
-        "action": "read",
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "USA-SECRET-RELEASABLE-002",
             "classification": "SECRET",
@@ -585,9 +627,11 @@ test_secret_user_cannot_access_ts if {
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
-        "action": "read",
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "USA-TS-001",
             "classification": "TOP_SECRET",
@@ -612,9 +656,11 @@ test_confidential_user_cannot_access_secret if {
             "uniqueID": "testuser-usa-2",
             "clearance": "CONFIDENTIAL",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
-        "action": "read",
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "USA-SECRET-001",
             "classification": "SECRET",
@@ -643,9 +689,11 @@ test_denial_reason_insufficient_aal if {
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
-        "action": "read",
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "USA-SECRET-001",
             "classification": "SECRET",
@@ -669,9 +717,11 @@ test_denial_reason_missing_mfa if {
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
-        "action": "read",
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "USA-SECRET-001",
             "classification": "SECRET",

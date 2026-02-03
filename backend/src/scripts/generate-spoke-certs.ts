@@ -114,10 +114,10 @@ async function generateSelfSignedCert(
   // In Node.js, we can't easily generate X.509 certs without external libs
   // This creates a placeholder that indicates a self-signed cert would be generated
   // In production, use openssl command or node-forge library
-  
+
   const now = new Date();
   const notAfter = new Date(now.getTime() + options.validDays * 24 * 60 * 60 * 1000);
-  
+
   // For actual implementation, we'd use openssl or a library like node-forge
   // This is a simplified representation
   const certContent = `-----BEGIN CERTIFICATE-----
@@ -226,7 +226,7 @@ async function generateSpokeCerts(options: CertOptions): Promise<GeneratedCerts>
     });
     certificatePath = path.join(outputDir, 'spoke.crt');
     await fs.writeFile(certificatePath, cert, { mode: 0o644 });
-    
+
     // Calculate fingerprint
     fingerprint = crypto
       .createHash('sha256')
@@ -235,7 +235,7 @@ async function generateSpokeCerts(options: CertOptions): Promise<GeneratedCerts>
       .toUpperCase()
       .match(/.{2}/g)!
       .join(':');
-    
+
     console.log(`         ✓ Certificate saved: ${certificatePath}`);
   } else {
     console.log('   [3/4] Skipping self-signed certificate (CSR only mode)');

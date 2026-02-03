@@ -1,7 +1,7 @@
 /**
  * ACP-240 Logger Test Suite
  * Target: 100% coverage for acp240-logger.ts
- * 
+ *
  * Tests:
  * - logACP240Event() - base audit logging
  * - logEncryptEvent() - ENCRYPT event logging
@@ -73,7 +73,7 @@ describe('ACP-240 Logger', () => {
         jest.clearAllMocks();
         mockCollection.insertOne.mockResolvedValue({ insertedId: 'mock-id' });
         mockMongoClient.connect.mockResolvedValue(undefined);
-        
+
         // Reset connection by closing before each test
         await closeAuditLogConnection();
     });
@@ -166,7 +166,7 @@ describe('ACP-240 Logger', () => {
             it('should handle MongoDB connection error gracefully', async () => {
                 // Close existing connection first
                 await closeAuditLogConnection();
-                
+
                 mockMongoClient.connect.mockRejectedValueOnce(new Error('Connection failed'));
 
                 const event: IACP240AuditEvent = {

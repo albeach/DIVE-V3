@@ -92,26 +92,26 @@ test_ssh() {
 # Pre-deployment checks
 pre_deployment_checks() {
     echo -e "${BLUE}🔍 Pre-deployment checks...${NC}"
-    
+
     # Check Docker
     if ! ssh ${SSH_USER}@${REMOTE_SERVER} "docker --version" > /dev/null 2>&1; then
         echo -e "${RED}❌ Docker not installed on remote server${NC}"
         exit 1
     fi
-    
+
     # Check Docker Compose
     if ! ssh ${SSH_USER}@${REMOTE_SERVER} "docker compose version" > /dev/null 2>&1; then
         echo -e "${RED}❌ Docker Compose not installed on remote server${NC}"
         exit 1
     fi
-    
+
     # Check DIVE CLI exists
     if ! ssh ${SSH_USER}@${REMOTE_SERVER} "test -f ${DEPLOY_PATH}/dive" > /dev/null 2>&1; then
         echo -e "${YELLOW}⚠️  DIVE CLI not found at ${DEPLOY_PATH}/dive${NC}"
         echo "Please ensure the repository is cloned on the remote server"
         exit 1
     fi
-    
+
     echo -e "${GREEN}✅ Pre-deployment checks passed${NC}"
 }
 
@@ -121,37 +121,37 @@ backup_databases() {
         echo -e "${YELLOW}⚠️  Skipping database backup (--skip-backup)${NC}"
         return
     fi
-    
+
     echo -e "${BLUE}💾 Backing up databases...${NC}"
-    
+
     # Create backup directory
     ssh ${SSH_USER}@${REMOTE_SERVER} "mkdir -p ${DEPLOY_PATH}/backups"
-    
+
     # Backup PostgreSQL
     ssh ${SSH_USER}@${REMOTE_SERVER} "cd ${DEPLOY_PATH} && docker exec dive-pilot-postgres pg_dump -U postgres dive_v3_app > backups/dive_v3_app_\$(date +%Y%m%d_%H%M%S).sql 2>/dev/null || echo 'Database dive_v3_app not found (first deployment)'"
     ssh ${SSH_USER}@${REMOTE_SERVER} "cd ${DEPLOY_PATH} && docker exec dive-pilot-postgres pg_dump -U postgres keycloak_db > backups/keycloak_db_\$(date +%Y%m%d_%H%M%S).sql 2>/dev/null || echo 'Database keycloak_db not found (first deployment)'"
-    
+
     # Backup MongoDB
     ssh ${SSH_USER}@${REMOTE_SERVER} "cd ${DEPLOY_PATH} && docker exec dive-pilot-mongo mongodump --archive=backups/mongo_\$(date +%Y%m%d_%H%M%S).archive 2>/dev/null || echo 'MongoDB backup failed (may not exist)'"
-    
+
     echo -e "${GREEN}✅ Backups complete${NC}"
 }
 
 # Deploy
 deploy() {
     echo -e "${BLUE}🚀 Deploying DIVE V3...${NC}"
-    
+
     # Pull latest code
     echo "  Pulling latest code..."
     ssh ${SSH_USER}@${REMOTE_SERVER} "cd ${DEPLOY_PATH} && git pull origin main || git pull origin master"
-    
+
     # Ensure DIVE CLI is executable
     ssh ${SSH_USER}@${REMOTE_SERVER} "chmod +x ${DEPLOY_PATH}/dive"
-    
+
     # Run reset (clean slate deployment)
     echo "  Running clean slate deployment..."
     ssh ${SSH_USER}@${REMOTE_SERVER} "cd ${DEPLOY_PATH} && ./dive reset"
-    
+
     echo -e "${GREEN}✅ Deployment complete${NC}"
 }
 
@@ -161,13 +161,13 @@ health_check() {
         echo -e "${YELLOW}⚠️  Skipping health check (--skip-health)${NC}"
         return 0
     fi
-    
+
     echo -e "${BLUE}🏥 Running health check...${NC}"
-    
+
     # Wait for services to be ready
     echo "  Waiting for services to start..."
     sleep 30
-    
+
     # Run health check script
     if ssh ${SSH_USER}@${REMOTE_SERVER} "cd ${DEPLOY_PATH} && ./scripts/health-check.sh" > /tmp/health-check.log 2>&1; then
         echo -e "${GREEN}✅ Health check passed${NC}"
@@ -183,30 +183,30 @@ health_check() {
 # Rollback
 rollback() {
     echo -e "${RED}⏪ Rolling back to previous version...${NC}"
-    
+
     # Find latest backup
     LATEST_SQL=$(ssh ${SSH_USER}@${REMOTE_SERVER} "ls -t ${DEPLOY_PATH}/backups/dive_v3_app_*.sql 2>/dev/null | head -1" || echo "")
-    
+
     if [ -z "$LATEST_SQL" ]; then
         echo -e "${YELLOW}⚠️  No backup found, cannot rollback${NC}"
         return 1
     fi
-    
+
     echo "  Restoring from: $LATEST_SQL"
     ssh ${SSH_USER}@${REMOTE_SERVER} "cd ${DEPLOY_PATH} && docker exec -i dive-pilot-postgres psql -U postgres dive_v3_app < $LATEST_SQL"
-    
+
     echo -e "${GREEN}✅ Rollback complete${NC}"
 }
 
 # Main execution
 main() {
     print_header
-    
+
     test_ssh
     pre_deployment_checks
     backup_databases
     deploy
-    
+
     if ! health_check; then
         if [ "$FORCE_DEPLOY" = true ]; then
             echo -e "${YELLOW}⚠️  Health check failed but --force specified, continuing...${NC}"
@@ -216,7 +216,7 @@ main() {
             exit 1
         fi
     fi
-    
+
     echo ""
     echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║          ✅ DEPLOYMENT SUCCESSFUL                           ║${NC}"

@@ -1,6 +1,6 @@
 /**
  * Admin IdP Session Delete API Route
- * 
+ *
  * Proxy for backend IdP session revocation endpoint
  * DELETE - Revoke a specific session
  */
@@ -18,7 +18,7 @@ export async function DELETE(
 ): Promise<NextResponse> {
     try {
         const { alias, sessionId } = await params;
-        
+
         const validation = await validateSession();
         if (!validation.isValid) {
             return NextResponse.json(

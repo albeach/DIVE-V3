@@ -1,14 +1,14 @@
 /**
  * @file idp-validation.service.ts
  * @description IdP configuration validation service
- * 
+ *
  * Phase 1: Automated security validation of IdP submissions
- * 
+ *
  * Validates:
  * - TLS version and cipher strength
  * - Cryptographic algorithms (JWKS for OIDC, XML signatures for SAML)
  * - Endpoint reachability
- * 
+ *
  * Rejects:
  * - TLS < 1.2
  * - Weak algorithms (MD5, SHA-1 in strict mode)
@@ -53,7 +53,7 @@ const TLS_VERSION_MAP: Record<string, number> = {
 
 /**
  * IdP Validation Service
- * 
+ *
  * Performs automated security checks on IdP configurations
  * before allowing submission for admin approval.
  */
@@ -246,7 +246,7 @@ class IdPValidationService {
 
   /**
    * Perform TLS handshake with target host
-   * 
+   *
    * @private
    */
   private performTLSHandshake(
@@ -314,7 +314,7 @@ class IdPValidationService {
 
   /**
    * Check if cipher suite is considered weak
-   * 
+   *
    * @private
    */
   private isWeakCipher(cipher: string): boolean {
@@ -333,10 +333,10 @@ class IdPValidationService {
 
   /**
    * Validate cryptographic algorithms in OIDC JWKS
-   * 
+   *
    * @param jwksUrl - The JWKS endpoint URL
    * @returns Algorithm validation results with scoring
-   * 
+   *
    * Scoring:
    * - All SHA-256+ = 25 points
    * - Contains SHA-1 = 10 points (warning)
@@ -455,7 +455,7 @@ class IdPValidationService {
 
   /**
    * Validate cryptographic algorithms in SAML metadata
-   * 
+   *
    * @param signatureAlgorithm - Signature algorithm URI from SAML metadata
    * @returns Algorithm validation results with scoring
    */
@@ -536,7 +536,7 @@ class IdPValidationService {
 
   /**
    * Check endpoint reachability
-   * 
+   *
    * @param url - The endpoint URL to check
    * @returns Endpoint check results with scoring
    */

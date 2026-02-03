@@ -1,6 +1,6 @@
 /**
  * Auth0 MCP Integration Tests
- * 
+ *
  * Tests for Auth0 service helper functions
  * Week 3.4.6: Auth0 MCP Server Integration
  */

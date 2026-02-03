@@ -1,14 +1,14 @@
 /**
  * Federation Cache Service - Comprehensive Unit Tests
  * Phase 3: Distributed Query Caching
- * 
+ *
  * Test Coverage:
  * - Cache key generation
  * - Cache get/set logic
  * - TTL behavior
  * - User-aware caching (ABAC compliance)
  * - Cache invalidation logic
- * 
+ *
  * NATO Compliance: ACP-240 §5.4 (Federated Resource Access)
  */
 
@@ -282,12 +282,12 @@ describe('FederationCacheService - In-Memory Cache', () => {
         get(key: string): T | null {
             const entry = this.cache.get(key);
             if (!entry) return null;
-            
+
             if (Date.now() > entry.expiresAt) {
                 this.cache.delete(key);
                 return null;
             }
-            
+
             return entry.value;
         }
 
@@ -341,7 +341,7 @@ describe('FederationCacheService - In-Memory Cache', () => {
         it('should expire entries after TTL', () => {
             const shortTTLCache = new InMemoryCache(0); // 0 second TTL
             shortTTLCache.set('test-key', { data: 'test' });
-            
+
             // Immediate read should still work (within same tick)
             // But this simulates expiration - the entry may or may not be there
             // depending on timing (within same millisecond vs not)

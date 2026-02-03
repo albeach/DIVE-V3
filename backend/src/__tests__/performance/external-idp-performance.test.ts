@@ -1,6 +1,6 @@
 /**
  * DIVE V3 - External IdP Performance Tests
- * 
+ *
  * Benchmarks authorization decisions with external IdP attributes
  * Target: p95 < 200ms for authorization decisions
  */
@@ -247,14 +247,14 @@ describe('External IdP Performance Tests', () => {
 
 /**
  * Performance Benchmarks Summary
- * 
+ *
  * Expected Results:
  * - Spanish SAML normalization: < 5ms average, < 10ms p95
  * - USA OIDC normalization: < 3ms average, < 8ms p95
  * - Attribute enrichment: < 2ms average, < 5ms p95
  * - Throughput: > 5000 ops/sec per service
  * - Memory: < 10MB increase for 10K operations
- * 
+ *
  * If tests fail:
  * 1. Check for blocking I/O in normalization functions
  * 2. Optimize string operations and regex patterns

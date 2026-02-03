@@ -1,8 +1,8 @@
 /**
  * DIVE V3 - TokenExpiryBadge Unit Tests
- * 
+ *
  * Tests for the TokenExpiryBadge component that displays token status.
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -72,7 +72,7 @@ describe('TokenExpiryBadge', () => {
     it('renders just an icon', () => {
       const futureDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
       render(<TokenExpiryBadge expiresAt={futureDate} variant="minimal" />);
-      
+
       // Should render a small icon container
       const container = document.querySelector('.rounded');
       expect(container).toBeInTheDocument();
@@ -81,14 +81,14 @@ describe('TokenExpiryBadge', () => {
     it('applies valid status styling', () => {
       const futureDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
       const { container } = render(<TokenExpiryBadge expiresAt={futureDate} variant="minimal" />);
-      
+
       expect(container.innerHTML).toContain('emerald');
     });
 
     it('applies expired status styling', () => {
       const pastDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       const { container } = render(<TokenExpiryBadge expiresAt={pastDate} variant="minimal" />);
-      
+
       expect(container.innerHTML).toContain('red');
     });
   });
@@ -97,27 +97,27 @@ describe('TokenExpiryBadge', () => {
     it('renders countdown text', () => {
       const futureDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
       render(<TokenExpiryBadge expiresAt={futureDate} variant="compact" />);
-      
+
       expect(screen.getByText(/\d+ days/)).toBeInTheDocument();
     });
 
     it('shows "Expired" for expired tokens', () => {
       const pastDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       render(<TokenExpiryBadge expiresAt={pastDate} variant="compact" />);
-      
+
       expect(screen.getByText('Expired')).toBeInTheDocument();
     });
 
     it('shows "No token" when no expiry', () => {
       render(<TokenExpiryBadge variant="compact" />);
-      
+
       expect(screen.getByText('No token')).toBeInTheDocument();
     });
 
     it('shows hours when less than a day remaining', () => {
       const futureDate = new Date(Date.now() + 12 * 60 * 60 * 1000).toISOString();
       render(<TokenExpiryBadge expiresAt={futureDate} variant="compact" />);
-      
+
       expect(screen.getByText(/\d+h/)).toBeInTheDocument();
     });
   });
@@ -126,7 +126,7 @@ describe('TokenExpiryBadge', () => {
     it('renders status label and countdown', () => {
       const futureDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
       render(<TokenExpiryBadge expiresAt={futureDate} variant="badge" />);
-      
+
       expect(screen.getByText('Valid')).toBeInTheDocument();
       expect(screen.getByText(/\d+ days/)).toBeInTheDocument();
     });
@@ -134,20 +134,20 @@ describe('TokenExpiryBadge', () => {
     it('shows Expiring Soon for expiring tokens', () => {
       const futureDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
       render(<TokenExpiryBadge expiresAt={futureDate} variant="badge" />);
-      
+
       expect(screen.getByText('Expiring Soon')).toBeInTheDocument();
     });
 
     it('shows Expired for expired tokens', () => {
       const pastDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
       render(<TokenExpiryBadge expiresAt={pastDate} variant="badge" />);
-      
+
       expect(screen.getByText('Expired')).toBeInTheDocument();
     });
 
     it('shows No Token when no expiry', () => {
       render(<TokenExpiryBadge variant="badge" />);
-      
+
       expect(screen.getByText('No Token')).toBeInTheDocument();
     });
   });
@@ -156,7 +156,7 @@ describe('TokenExpiryBadge', () => {
     it('renders complete token status card', () => {
       const futureDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
       render(<TokenExpiryBadge expiresAt={futureDate} variant="full" />);
-      
+
       expect(screen.getByText('Token Status')).toBeInTheDocument();
       expect(screen.getByText('Valid')).toBeInTheDocument();
       expect(screen.getByText('Expires')).toBeInTheDocument();
@@ -172,7 +172,7 @@ describe('TokenExpiryBadge', () => {
           spoke={{ ...mockSpoke, tokenScopes: ['scope:one', 'scope:two'] }}
         />
       );
-      
+
       expect(screen.getByText('Scopes')).toBeInTheDocument();
       expect(screen.getByText('scope:one')).toBeInTheDocument();
       expect(screen.getByText('scope:two')).toBeInTheDocument();
@@ -181,13 +181,13 @@ describe('TokenExpiryBadge', () => {
     it('shows warning badge for expiring tokens', () => {
       const futureDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
       render(<TokenExpiryBadge expiresAt={futureDate} variant="full" />);
-      
+
       expect(screen.getByText(/left/)).toBeInTheDocument();
     });
 
     it('shows message for no token', () => {
       render(<TokenExpiryBadge variant="full" />);
-      
+
       expect(screen.getByText('No token has been issued for this spoke.')).toBeInTheDocument();
     });
   });
@@ -198,7 +198,7 @@ describe('TokenExpiryBadge', () => {
       const { container } = render(
         <TokenExpiryBadge expiresAt={futureDate} variant="badge" showIcon={false} />
       );
-      
+
       // Check that lucide icon SVG is not rendered
       expect(container.querySelectorAll('svg').length).toBe(0);
     });
@@ -208,7 +208,7 @@ describe('TokenExpiryBadge', () => {
       const { container } = render(
         <TokenExpiryBadge expiresAt={futureDate} variant="badge" />
       );
-      
+
       expect(container.querySelectorAll('svg').length).toBeGreaterThan(0);
     });
   });
@@ -217,25 +217,25 @@ describe('TokenExpiryBadge', () => {
     it('calls onClick when provided', () => {
       const handleClick = jest.fn();
       const futureDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-      
+
       const { container } = render(
         <TokenExpiryBadge expiresAt={futureDate} variant="badge" onClick={handleClick} />
       );
-      
+
       const badge = container.firstChild as Element;
       badge.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-      
+
       expect(handleClick).toHaveBeenCalled();
     });
 
     it('applies cursor pointer when onClick is provided', () => {
       const handleClick = jest.fn();
       const futureDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-      
+
       const { container } = render(
         <TokenExpiryBadge expiresAt={futureDate} variant="badge" onClick={handleClick} />
       );
-      
+
       expect(container.innerHTML).toContain('cursor-pointer');
     });
   });
@@ -262,7 +262,7 @@ describe('useExpiringTokens', () => {
   it('counts expiring tokens', () => {
     const expiringDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
     const validDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-    
+
     const spokes = [
       createSpoke(expiringDate),
       createSpoke(validDate),
@@ -270,7 +270,7 @@ describe('useExpiringTokens', () => {
     ];
 
     const { result } = renderHook(() => useExpiringTokens(spokes));
-    
+
     expect(result.current.expiringCount).toBe(2);
     expect(result.current.expiringSpokes).toHaveLength(2);
   });
@@ -278,35 +278,35 @@ describe('useExpiringTokens', () => {
   it('counts expired tokens', () => {
     const expiredDate = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const validDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-    
+
     const spokes = [
       createSpoke(expiredDate),
       createSpoke(validDate),
     ];
 
     const { result } = renderHook(() => useExpiringTokens(spokes));
-    
+
     expect(result.current.expiringCount).toBe(1);
     expect(result.current.expiringSpokes).toHaveLength(1);
   });
 
   it('returns 0 when no expiring tokens', () => {
     const validDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-    
+
     const spokes = [
       createSpoke(validDate),
       createSpoke(validDate),
     ];
 
     const { result } = renderHook(() => useExpiringTokens(spokes));
-    
+
     expect(result.current.expiringCount).toBe(0);
     expect(result.current.expiringSpokes).toHaveLength(0);
   });
 
   it('handles empty spoke array', () => {
     const { result } = renderHook(() => useExpiringTokens([]));
-    
+
     expect(result.current.expiringCount).toBe(0);
     expect(result.current.expiringSpokes).toHaveLength(0);
   });

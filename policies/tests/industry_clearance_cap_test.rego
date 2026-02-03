@@ -37,14 +37,16 @@ tenant_configs := {
 # Base input for industry user tests
 base_industry_input := {
     "subject": {
-        "authenticated": true,
+        "mfaVerified": true,
+            "aal": 2,
+            "authenticated": true,
         "uniqueID": "bob.contractor@lockheed.com",
         "clearance": "TOP_SECRET",
         "countryOfAffiliation": "USA",
         "organizationType": "INDUSTRY",
         "acpCOI": ["US-ONLY"],
     },
-    "action": {"operation": "read"},
+    "action": {"type": "read"},
     "resource": {
         "resourceId": "test-resource",
         "classification": "SECRET",
@@ -250,6 +252,8 @@ test_mil_user_not_affected_by_industry_cap if {
 test_missing_org_type_with_gov_email_passes if {
     test_input := object.union(base_industry_input, {
         "subject": {
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true,
             "uniqueID": "test@mail.mil",
             "clearance": "TOP_SECRET",

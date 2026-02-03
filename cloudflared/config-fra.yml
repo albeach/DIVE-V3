@@ -37,7 +37,7 @@ ingress:
       noTLSVerify: true
       connectTimeout: 60s
       httpHostHeader: fra-app.dive25.com
-  
+
   # ─────────────────────────────────────────────────────────────────────────
   # Backend API (Express.js)
   # Docker Service: backend-fra
@@ -50,7 +50,7 @@ ingress:
       noTLSVerify: true
       connectTimeout: 60s
       httpHostHeader: fra-api.dive25.com
-  
+
   # ─────────────────────────────────────────────────────────────────────────
   # Keycloak IdP
   # Docker Service: keycloak-fra
@@ -63,7 +63,7 @@ ingress:
       noTLSVerify: true
       connectTimeout: 60s
       httpHostHeader: fra-idp.dive25.com
-  
+
   # ─────────────────────────────────────────────────────────────────────────
   # Key Access Service (KAS)
   # Docker Service: kas-fra
@@ -75,7 +75,7 @@ ingress:
     originRequest:
       connectTimeout: 60s
       httpHostHeader: fra-kas.dive25.com
-  
+
   # ─────────────────────────────────────────────────────────────────────────
   # Catch-all (required by Cloudflare)
   # ─────────────────────────────────────────────────────────────────────────

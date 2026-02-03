@@ -1,9 +1,9 @@
 /**
  * DIVE V3 - Token Rotation Modal
- * 
+ *
  * Modal for rotating spoke tokens with confirmation and one-time token display.
  * Follows security best practices by showing the token only once.
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -53,12 +53,12 @@ function getTokenExpiryInfo(expiresAt?: string): { daysRemaining: number; isExpi
   if (!expiresAt) {
     return { daysRemaining: 0, isExpiring: false, isExpired: true };
   }
-  
+
   const now = new Date();
   const expires = new Date(expiresAt);
   const diffMs = expires.getTime() - now.getTime();
   const daysRemaining = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
-  
+
   return {
     daysRemaining,
     isExpiring: daysRemaining > 0 && daysRemaining <= 7,
@@ -89,7 +89,7 @@ export function TokenRotationModal({
 
     try {
       const result = await onRotate(validityDays, notifyAdmin);
-      
+
       if (result.success && result.token) {
         setNewToken(result);
         setPhase('success');
@@ -105,7 +105,7 @@ export function TokenRotationModal({
 
   const handleCopy = useCallback(async () => {
     if (!newToken?.token) return;
-    
+
     try {
       await navigator.clipboard.writeText(newToken.token);
       setCopied(true);
@@ -121,7 +121,7 @@ export function TokenRotationModal({
       // Prevent closing without copying
       return;
     }
-    
+
     // Reset state
     setPhase('confirm');
     setValidityDays(30);

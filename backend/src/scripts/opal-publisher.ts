@@ -1,18 +1,18 @@
 #!/usr/bin/env ts-node
 /**
  * DIVE V3 - OPAL Data Publisher
- * 
+ *
  * Standalone script that publishes policy data updates to OPAL.
  * Can be run as:
  * 1. One-time sync: npm run opal-publisher -- --sync
  * 2. Continuous watcher: npm run opal-publisher -- --watch
  * 3. Health check: npm run opal-publisher -- --health
- * 
+ *
  * Environment Variables:
  *   OPAL_SERVER_URL - OPAL server URL (default: http://opal-server:7002)
  *   MONGODB_URL - MongoDB connection string
  *   OPAL_DATA_DIR - Path to policy data files
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */
@@ -32,7 +32,7 @@ interface ICommandOptions {
 
 function parseArgs(): ICommandOptions {
   const args = process.argv.slice(2);
-  
+
   const options: ICommandOptions = {
     command: 'help',
     verbose: false
@@ -122,7 +122,7 @@ async function runHealthCheck(verbose: boolean): Promise<void> {
     }
   } else {
     console.log('❌ OPAL Server is not healthy or not reachable');
-    
+
     if (!opalClient.isOPALEnabled()) {
       console.log('   Note: OPAL integration is disabled');
     }
@@ -134,7 +134,7 @@ async function runHealthCheck(verbose: boolean): Promise<void> {
     console.log(`   Server URL: ${config.serverUrl}`);
     console.log(`   Data Topics: ${config.dataTopics.join(', ')}`);
     console.log(`   Timeout: ${config.timeoutMs}ms`);
-    
+
     console.log('\nData Directory:');
     console.log(`   Path: ${opalDataService.getDataDirectory()}`);
   }
@@ -151,7 +151,7 @@ async function runSync(verbose: boolean): Promise<void> {
   // Load data from files
   console.log('1. Loading data from files...');
   const data = await opalDataService.loadAllData();
-  
+
   console.log(`   ✓ Trusted Issuers: ${Object.keys(data.trusted_issuers).length}`);
   console.log(`   ✓ Federation Matrix: ${Object.keys(data.federation_matrix).length} tenants`);
   console.log(`   ✓ COI Members: ${Object.keys(data.coi_members).length} communities`);
@@ -216,13 +216,13 @@ async function runWatch(_verbose: boolean): Promise<void> {
   process.on('SIGINT', async () => {
     console.log('\n\n🛑 Shutting down...');
     await opalMongoDBSyncService.stop();
-    
+
     const stats = opalMongoDBSyncService.getStats();
     console.log('\n📊 Session Statistics:');
     console.log(`   Events Processed: ${stats.changeEventsProcessed}`);
     console.log(`   Errors: ${stats.errors}`);
     console.log(`   Last Sync: ${stats.lastSyncAt?.toISOString() || 'N/A'}`);
-    
+
     process.exit(0);
   });
 

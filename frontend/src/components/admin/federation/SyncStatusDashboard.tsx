@@ -1,9 +1,9 @@
 /**
  * DIVE V3 - Sync Status Dashboard
- * 
+ *
  * Dashboard showing policy sync status across all federation spokes.
  * Supports force sync for individual spokes or all at once.
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -94,7 +94,7 @@ function formatRelativeTime(dateStr?: string): string {
   const diffMinutes = Math.floor(diffMs / (1000 * 60));
   const diffHours = Math.floor(diffMinutes / 60);
   const diffDays = Math.floor(diffHours / 24);
-  
+
   if (diffMinutes < 1) return 'Just now';
   if (diffMinutes < 60) return `${diffMinutes}m ago`;
   if (diffHours < 24) return `${diffHours}h ago`;
@@ -113,7 +113,7 @@ export function SyncStatusDashboard({
 
   const handleForceSync = async (spokeId: string) => {
     if (!onForceSync || syncingSpokes.has(spokeId)) return;
-    
+
     setSyncingSpokes((prev) => new Set([...prev, spokeId]));
     try {
       await onForceSync(spokeId);
@@ -128,7 +128,7 @@ export function SyncStatusDashboard({
 
   const handleForceSyncAll = async () => {
     if (!onForceSyncAll || syncingAll) return;
-    
+
     setSyncingAll(true);
     try {
       await onForceSyncAll();
@@ -195,7 +195,7 @@ export function SyncStatusDashboard({
               Sync All
             </button>
           )}
-          
+
           {onRefresh && (
             <button
               onClick={onRefresh}

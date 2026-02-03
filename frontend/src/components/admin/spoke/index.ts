@@ -1,6 +1,6 @@
 /**
  * DIVE V3 - Spoke Admin Components
- * 
+ *
  * Components for spoke administrator dashboard.
  */
 

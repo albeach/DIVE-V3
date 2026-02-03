@@ -379,7 +379,7 @@ spec:
         # OPA decision latency alert
         - alert: OPAHighLatency
           expr: |
-            histogram_quantile(0.95, 
+            histogram_quantile(0.95,
               sum(rate(http_request_duration_seconds_bucket{job="opa", handler="/v1/data/dive/authorization/decision"}[5m])) by (le)
             ) > 0.020
           for: 5m
@@ -389,7 +389,7 @@ spec:
           annotations:
             summary: "OPA decision latency p95 > 20ms"
             description: "OPA decision latency p95 is {{ $value | humanizeDuration }} (target: <20ms)"
-        
+
         # Throughput alert
         - alert: LowThroughput
           expr: |
@@ -401,7 +401,7 @@ spec:
           annotations:
             summary: "OPA throughput below 300 req/s"
             description: "Current throughput is {{ $value | humanize }} req/s (target: ≥300)"
-        
+
         # OPA memory alert (Phase 9 target: <500MB)
         - alert: OPAHighMemory
           expr: |
@@ -413,12 +413,12 @@ spec:
           annotations:
             summary: "OPA memory usage > 500MB"
             description: "OPA container is using {{ $value | humanize1024 }}B (target: <500MB)"
-        
+
         # Cache hit rate alert
         - alert: LowCacheHitRate
           expr: |
             sum(rate(decision_cache_hits_total{namespace="dive-v3"}[5m])) /
-            (sum(rate(decision_cache_hits_total{namespace="dive-v3"}[5m])) + 
+            (sum(rate(decision_cache_hits_total{namespace="dive-v3"}[5m])) +
              sum(rate(decision_cache_misses_total{namespace="dive-v3"}[5m]))) < 0.5
           for: 10m
           labels:

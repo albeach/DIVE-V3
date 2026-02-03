@@ -1,6 +1,6 @@
 /**
  * Real-Time Activity Section
- * 
+ *
  * Live feed of system events and activity
  */
 
@@ -35,7 +35,7 @@ export default function RealTimeActivity({ refreshTrigger }: Props) {
     // Auto-refresh every 2 seconds when live mode is on
     useEffect(() => {
         if (!isLive) return;
-        
+
         const interval = setInterval(() => {
             fetchData(true); // Pass true to indicate auto-refresh
         }, 2000);
@@ -54,26 +54,26 @@ export default function RealTimeActivity({ refreshTrigger }: Props) {
         try {
             // Use server API route (secure!)
             const res = await fetch(`/api/admin/logs?limit=100`);
-            
+
             const contentType = res.headers.get('content-type');
             if (contentType && contentType.includes('application/json')) {
                 const data = await res.json();
                 if (data.success && data.data.logs) {
                     const newLogs = data.data.logs;
-                    
+
                     // Detect new logs (compare by timestamp)
                     if (isAutoRefresh && logs.length > 0) {
                         const lastTimestamp = logs[0]?.timestamp;
-                        const newCount = newLogs.filter((log: ILogEntry) => 
+                        const newCount = newLogs.filter((log: ILogEntry) =>
                             new Date(log.timestamp) > new Date(lastTimestamp)
                         ).length;
-                        
+
                         if (newCount > 0) {
                             setNewLogsCount(newCount);
                             setTimeout(() => setNewLogsCount(0), 3000);
                         }
                     }
-                    
+
                     setLogs(newLogs);
                 }
             }
@@ -87,7 +87,7 @@ export default function RealTimeActivity({ refreshTrigger }: Props) {
     };
 
     const eventTypes = Array.from(new Set(logs.map(log => log.eventType)));
-    
+
     const filteredLogs = logs.filter(log => {
         if (filterOutcome !== 'all' && log.outcome !== filterOutcome) return false;
         if (filterEventType !== 'all' && log.eventType !== filterEventType) return false;
@@ -207,8 +207,8 @@ export default function RealTimeActivity({ refreshTrigger }: Props) {
                     <button
                         onClick={() => setIsLive(!isLive)}
                         className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                            isLive 
-                                ? 'bg-green-600 text-white hover:bg-green-700' 
+                            isLive
+                                ? 'bg-green-600 text-white hover:bg-green-700'
                                 : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                         }`}
                     >
@@ -221,11 +221,11 @@ export default function RealTimeActivity({ refreshTrigger }: Props) {
                         filteredLogs.map((log, idx) => {
                             const isNew = idx < newLogsCount && isLive;
                             return (
-                            <div 
+                            <div
                                 key={`${log.timestamp}-${idx}`}
                                 className={`p-4 rounded-lg border transition-all hover:shadow-md ${
-                                    log.outcome === 'ALLOW' 
-                                        ? 'bg-green-50 border-green-200 hover:bg-green-100' 
+                                    log.outcome === 'ALLOW'
+                                        ? 'bg-green-50 border-green-200 hover:bg-green-100'
                                         : 'bg-red-50 border-red-200 hover:bg-red-100'
                                 } ${
                                     isNew ? 'animate-pulse border-2 border-blue-400 shadow-lg' : ''

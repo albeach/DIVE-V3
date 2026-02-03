@@ -191,7 +191,9 @@ router.get('/federated-query', authenticateJWT, async (req: Request, res: Respon
                 (Array.isArray(req.query.instances) ? req.query.instances as string[] : [req.query.instances as string]) :
                 undefined,
             limit: parseInt(req.query.limit as string || '100'),
-            offset: parseInt(req.query.offset as string || '0')
+            offset: parseInt(req.query.offset as string || '0'),
+            // CRITICAL FIX (Issue #4 - 2026-02-03): Forward auth header for API-based federation
+            authHeader: req.headers.authorization
         };
 
         const userAttributes: IUserAttributes = {

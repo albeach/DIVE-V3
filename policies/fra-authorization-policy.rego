@@ -64,32 +64,32 @@ decision := result if {
     subject_clearance := normalized_clearance(input.subject.clearance)
     subject_country := input.subject.countryOfAffiliation
     subject_coi := normalized_coi(input.subject.acpCOI)
-    
+
     # Extract resource attributes
     resource_classification := input.resource.classification
     resource_releasability := input.resource.releasabilityTo
     resource_coi := input.resource.COI
     resource_origin := object.get(input.resource, "originRealm", "FRA")
-    
+
     # Generate correlation ID if not provided
     correlation_id := input.context.correlationId
-    
+
     # Evaluation checks
     clearance_check := clearance_satisfied(subject_clearance, resource_classification)
     releasability_check := releasability_satisfied(subject_country, resource_releasability)
     coi_check := coi_satisfied(subject_coi, resource_coi)
-    
+
     # Determine final decision
     allow_access := clearance_check.pass
     allow_access == releasability_check.pass
     allow_access == coi_check.pass
-    
+
     # Build obligations using intermediate variables to work around array.concat arity
     audit_obs := get_audit_obligations
     enc_obs := get_encryption_obligations(input.resource)
     wm_obs := get_watermark_obligations(input.resource, resource_origin)
     all_obligations := array.concat(array.concat(audit_obs, enc_obs), wm_obs)
-    
+
     # Build decision response
     result := {
         "allow": allow_access,
@@ -112,13 +112,13 @@ decision := result if {
 clearance_satisfied(subject_clearance, resource_classification) := result if {
     subject_level := clearance_levels[subject_clearance]
     resource_level := clearance_levels[resource_classification]
-    
+
     result := {
         "pass": subject_level >= resource_level,
         "subjectLevel": subject_clearance,
         "requiredLevel": resource_classification,
-        "details": sprintf("Subject clearance %s %s resource classification %s", 
-            [subject_clearance, 
+        "details": sprintf("Subject clearance %s %s resource classification %s",
+            [subject_clearance,
              conditional_string(subject_level >= resource_level, "meets", "below"),
              resource_classification])
     }
@@ -137,13 +137,13 @@ releasability_satisfied(subject_country, resource_releasability) := result if {
 } else := result if {
     # Check if subject's country is in the list
     is_allowed := subject_country in resource_releasability
-    
+
     result := {
         "pass": is_allowed,
         "subjectCountry": subject_country,
         "allowedCountries": resource_releasability,
-        "details": sprintf("Country %s %s in releasabilityTo list", 
-            [subject_country, 
+        "details": sprintf("Country %s %s in releasabilityTo list",
+            [subject_country,
              conditional_string(is_allowed, "is", "not")])
     }
 }
@@ -162,15 +162,15 @@ coi_satisfied(subject_coi, resource_coi) := result if {
     # Check for intersection between subject and resource COIs
     intersection := {c | c := subject_coi[_]; c in resource_coi}
     has_match := count(intersection) > 0
-    
+
     result := {
         "pass": has_match,
         "subjectCOI": subject_coi,
         "requiredCOI": resource_coi,
         "matchedCOI": intersection,
-        "details": sprintf("COI match: %s", 
-            [conditional_string(has_match, 
-                sprintf("found %v", [intersection]), 
+        "details": sprintf("COI match: %s",
+            [conditional_string(has_match,
+                sprintf("found %v", [intersection]),
                 "none found")])
     }
 }
@@ -181,14 +181,14 @@ build_reason(clearance_check, releasability_check, coi_check) := reason if {
     all_pass == releasability_check.pass
     all_pass == coi_check.pass
     all_pass == true
-    
+
     reason := "All authorization requirements satisfied"
 } else := reason if {
     failures := [check.details |
         check := [clearance_check, releasability_check, coi_check][_]
         not check.pass
     ]
-    
+
     reason := sprintf("Authorization denied: %s", [concat("; ", failures)])
 }
 
@@ -257,7 +257,7 @@ data_residency_check(resource) := result if {
         "pass": is_french_ip,
         "sourceIP": source_ip,
         "requirement": "FR-ONLY",
-        "details": sprintf("French data residency %s", 
+        "details": sprintf("French data residency %s",
             [conditional_string(is_french_ip, "satisfied", "violated")])
     }
 } else := {

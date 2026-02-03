@@ -1,9 +1,9 @@
 /**
  * Federation Query Utilities
- * 
+ *
  * Phase 1: Performance Foundation
  * Optimized federated search with batching and caching
- * 
+ *
  * Features:
  * - Request batching across instances
  * - Response caching with TTL
@@ -88,19 +88,19 @@ interface CacheEntry<T> {
 
 class QueryCache<T> {
   private cache = new Map<string, CacheEntry<T>>();
-  
+
   get(key: string): T | null {
     const entry = this.cache.get(key);
     if (!entry) return null;
-    
+
     if (Date.now() - entry.timestamp > entry.ttl) {
       this.cache.delete(key);
       return null;
     }
-    
+
     return entry.data;
   }
-  
+
   set(key: string, data: T, ttl: number = CACHE_TTL): void {
     this.cache.set(key, {
       data,
@@ -108,15 +108,15 @@ class QueryCache<T> {
       ttl,
     });
   }
-  
+
   invalidate(key: string): void {
     this.cache.delete(key);
   }
-  
+
   invalidateAll(): void {
     this.cache.clear();
   }
-  
+
   generateKey(options: IFederatedSearchOptions): string {
     return JSON.stringify({
       query: options.query,
@@ -139,21 +139,21 @@ interface CircuitBreakerState {
 
 class CircuitBreaker {
   private states = new Map<string, CircuitBreakerState>();
-  
+
   getState(instance: string): CircuitBreakerState['state'] {
     const state = this.states.get(instance);
     if (!state) return 'closed';
-    
+
     // Check if should transition from open to half-open
-    if (state.state === 'open' && 
+    if (state.state === 'open' &&
         Date.now() - state.lastFailure > CIRCUIT_BREAKER_RESET_TIME) {
       state.state = 'half-open';
       this.states.set(instance, state);
     }
-    
+
     return state.state;
   }
-  
+
   recordSuccess(instance: string): void {
     this.states.set(instance, {
       state: 'closed',
@@ -161,24 +161,24 @@ class CircuitBreaker {
       lastFailure: 0,
     });
   }
-  
+
   recordFailure(instance: string): void {
     const current = this.states.get(instance) || {
       state: 'closed' as const,
       failures: 0,
       lastFailure: 0,
     };
-    
+
     current.failures++;
     current.lastFailure = Date.now();
-    
+
     if (current.failures >= CIRCUIT_BREAKER_THRESHOLD) {
       current.state = 'open';
     }
-    
+
     this.states.set(instance, current);
   }
-  
+
   isOpen(instance: string): boolean {
     return this.getState(instance) === 'open';
   }
@@ -201,13 +201,13 @@ async function withRetry<T>(
   baseDelay: number = 1000
 ): Promise<T> {
   let lastError: Error | null = null;
-  
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       return await fn();
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
-      
+
       if (attempt < maxRetries) {
         // Exponential backoff
         const delay = baseDelay * Math.pow(2, attempt);
@@ -215,7 +215,7 @@ async function withRetry<T>(
       }
     }
   }
-  
+
   throw lastError;
 }
 
@@ -231,7 +231,7 @@ async function withTimeout<T>(
   const timeoutPromise = new Promise<never>((_, reject) => {
     setTimeout(() => reject(new Error(errorMessage)), timeoutMs);
   });
-  
+
   return Promise.race([promise, timeoutPromise]);
 }
 
@@ -241,7 +241,7 @@ async function withTimeout<T>(
 
 export class FederationQueryService {
   private abortController: AbortController | null = null;
-  
+
   /**
    * Execute federated search across multiple instances
    */
@@ -250,7 +250,7 @@ export class FederationQueryService {
     signal?: AbortSignal
   ): Promise<IFederatedSearchResponse> {
     const startTime = Date.now();
-    
+
     // Check cache first
     const cacheKey = queryCache.generateKey(options);
     const cached = queryCache.get(cacheKey);
@@ -261,7 +261,7 @@ export class FederationQueryService {
         executionTimeMs: Date.now() - startTime,
       };
     }
-    
+
     // Cancel previous request if any
     if (this.abortController) {
       try {
@@ -271,35 +271,35 @@ export class FederationQueryService {
       }
     }
     this.abortController = new AbortController();
-    
+
     // Merge signals
     const mergedSignal = signal || this.abortController.signal;
-    
+
     // Filter out instances with open circuit breakers
     const availableInstances = options.instances.filter(
       instance => !circuitBreaker.isOpen(instance)
     );
-    
+
     // Execute parallel searches
     const instancePromises = availableInstances.map(instance =>
       this.searchInstance(instance, options, mergedSignal)
     );
-    
+
     // Wait for all with timeout
     const instanceResults = await Promise.allSettled(
-      instancePromises.map(p => 
+      instancePromises.map(p =>
         withTimeout(p, options.timeout || DEFAULT_TIMEOUT)
       )
     );
-    
+
     // Process results
     const results: IFederatedSearchResult[] = [];
     const instanceResultsMap: Record<string, IInstanceResult> = {};
     let totalResults = 0;
-    
+
     instanceResults.forEach((result, index) => {
       const instance = availableInstances[index];
-      
+
       if (result.status === 'fulfilled') {
         const instanceResult = result.value;
         instanceResultsMap[instance] = instanceResult;
@@ -319,7 +319,7 @@ export class FederationQueryService {
         };
       }
     });
-    
+
     // Add unavailable instances
     options.instances
       .filter(i => !availableInstances.includes(i))
@@ -334,7 +334,7 @@ export class FederationQueryService {
           circuitBreakerState: 'open',
         };
       });
-    
+
     const response: IFederatedSearchResponse = {
       results: this.deduplicateAndSort(results, options.limit),
       totalResults,
@@ -342,13 +342,13 @@ export class FederationQueryService {
       executionTimeMs: Date.now() - startTime,
       cacheHit: false,
     };
-    
+
     // Cache the response
     queryCache.set(cacheKey, response);
-    
+
     return response;
   }
-  
+
   /**
    * Search a single instance
    */
@@ -358,7 +358,7 @@ export class FederationQueryService {
     signal: AbortSignal
   ): Promise<IInstanceResult> {
     const startTime = Date.now();
-    
+
     try {
       const response = await fetch('/api/resources/federated-search', {
         method: 'POST',
@@ -372,14 +372,14 @@ export class FederationQueryService {
         }),
         signal,
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`);
       }
-      
+
       const data = await response.json();
       const latencyMs = Date.now() - startTime;
-      
+
       return {
         instance,
         results: data.results || [],
@@ -390,7 +390,7 @@ export class FederationQueryService {
       };
     } catch (error) {
       const latencyMs = Date.now() - startTime;
-      
+
       return {
         instance,
         results: [],
@@ -402,7 +402,7 @@ export class FederationQueryService {
       };
     }
   }
-  
+
   /**
    * Deduplicate results and apply limit
    */
@@ -417,18 +417,18 @@ export class FederationQueryService {
       seen.add(r.resourceId);
       return true;
     });
-    
+
     // Sort by title
     unique.sort((a, b) => a.title.localeCompare(b.title));
-    
+
     // Apply limit
     if (limit && limit > 0) {
       return unique.slice(0, limit);
     }
-    
+
     return unique;
   }
-  
+
   /**
    * Cancel ongoing request
    */
@@ -442,14 +442,14 @@ export class FederationQueryService {
       this.abortController = null;
     }
   }
-  
+
   /**
    * Clear cache
    */
   clearCache(): void {
     queryCache.invalidateAll();
   }
-  
+
   /**
    * Get circuit breaker states
    */

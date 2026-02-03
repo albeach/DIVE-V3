@@ -124,7 +124,16 @@ class KASRegistryService {
   private instanceRealm: string;
 
   constructor() {
-    this.instanceRealm = process.env.INSTANCE_REALM || 'USA';
+    // CRITICAL FIX (2026-02-03): Use INSTANCE_CODE as primary identifier
+    // Spoke deployments set INSTANCE_CODE, not INSTANCE_REALM
+    // Fall back to INSTANCE_REALM for backward compatibility with Hub
+    this.instanceRealm = process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA';
+
+    logger.info('KASRegistryService initialized', {
+      instanceRealm: this.instanceRealm,
+      source: process.env.INSTANCE_CODE ? 'INSTANCE_CODE' :
+              process.env.INSTANCE_REALM ? 'INSTANCE_REALM' : 'default'
+    });
   }
 
   /**

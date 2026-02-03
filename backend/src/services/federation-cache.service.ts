@@ -1,13 +1,13 @@
 /**
  * Federation Cache Service
  * Phase 3: Distributed caching for federated resource queries
- * 
+ *
  * Provides Redis-based caching for federated search results with:
  * - TTL-based cache expiration (configurable)
  * - User-aware cache keys (respects ABAC)
  * - Cache invalidation on resource updates
  * - Circuit breaker for Redis unavailability
- * 
+ *
  * NATO Compliance: ACP-240 §5.4 (Federated Resource Access)
  */
 
@@ -20,8 +20,8 @@ import { IFederatedSearchOptions, IFederatedSearchResponse, IUserAttributes } fr
 // Configuration
 // ============================================
 
-const REDIS_URL = process.env.FEDERATION_CACHE_REDIS_URL || 
-                  process.env.REDIS_URL || 
+const REDIS_URL = process.env.FEDERATION_CACHE_REDIS_URL ||
+                  process.env.REDIS_URL ||
                   'redis://localhost:6379';
 
 const CACHE_TTL_SECONDS = parseInt(process.env.FEDERATION_CACHE_TTL || '60'); // 1 minute default
@@ -76,11 +76,11 @@ class FederationCacheService {
             this.redis.on('error', (error) => {
                 this.errorCount++;
                 this.lastError = new Date();
-                
+
                 if (this.errorCount >= 3) {
                     this.circuitOpen = true;
                 }
-                
+
                 logger.warn('Federation cache Redis error', {
                     error: error.message,
                     errorCount: this.errorCount,
@@ -180,7 +180,7 @@ class FederationCacheService {
 
         try {
             const key = this.generateCacheKey(options, user);
-            
+
             // Don't cache if there was an error in any instance
             const hasErrors = Object.values(response.instanceResults).some(r => r.error);
             if (hasErrors) {
@@ -190,9 +190,9 @@ class FederationCacheService {
 
             // Clone response and mark as cached
             const cacheData = { ...response, cacheHit: true };
-            
+
             await this.redis!.setex(key, CACHE_TTL_SECONDS, JSON.stringify(cacheData));
-            
+
             logger.debug('Federation cache SET', {
                 key: key.substring(0, 30),
                 ttl: CACHE_TTL_SECONDS,
@@ -218,7 +218,7 @@ class FederationCacheService {
             // Instead, we rely on TTL for cache expiration
             // For critical updates, clear all federation cache
             const keys = await this.redis!.keys(`${CACHE_PREFIX}*`);
-            
+
             if (keys.length > 0) {
                 await this.redis!.del(...keys);
                 logger.info('Federation cache invalidated', {
@@ -245,7 +245,7 @@ class FederationCacheService {
 
         try {
             const keys = await this.redis!.keys(`${CACHE_PREFIX}*`);
-            
+
             if (keys.length > 0) {
                 await this.redis!.del(...keys);
             }
@@ -313,7 +313,7 @@ class FederationCacheService {
     private handleError(error: unknown): void {
         this.errorCount++;
         this.lastError = new Date();
-        
+
         if (this.errorCount >= 3) {
             this.circuitOpen = true;
             logger.warn('Federation cache circuit opened due to errors', {

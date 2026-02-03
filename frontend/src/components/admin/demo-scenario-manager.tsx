@@ -1,6 +1,6 @@
 /**
  * Demo Scenario Manager
- * 
+ *
  * Quick preset buttons to load demo scenarios for presentations
  * Makes demos smooth and professional
  */
@@ -152,7 +152,7 @@ export default function DemoScenarioManager() {
                     >
                         {/* Background pattern */}
                         <div className="absolute top-0 right-0 w-32 h-32 bg-white opacity-10 rounded-full -mr-16 -mt-16"></div>
-                        
+
                         <div className="relative z-10">
                             <div className="flex items-start justify-between mb-2">
                                 <span className="text-3xl">{scenario.icon}</span>

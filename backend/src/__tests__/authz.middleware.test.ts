@@ -1,7 +1,7 @@
 /**
  * Authorization Middleware (PEP) Test Suite
  * Tests for JWT validation, OPA integration, and authorization enforcement
- * 
+ *
  * Target Coverage: 90%
  * Priority: CRITICAL (Core security component)
  */
@@ -121,7 +121,7 @@ describe('Authorization Middleware (PEP)', () => {
 
         // Reset mocks
         jest.clearAllMocks();
-        
+
         // Week 4: Reset JWT mock to default implementation (for test isolation)
         mockJwtService.verify.mockImplementation(defaultJwtVerifyImpl);
 
@@ -1603,7 +1603,7 @@ describe('Authorization Middleware (PEP)', () => {
                     }
                 }
             };
-            
+
             // Mock resource with classification equivalency data
             mockedGetResourceById.mockResolvedValue(frenchResource as any);
 
@@ -1666,14 +1666,14 @@ describe('Authorization Middleware (PEP)', () => {
 
             // Verify SP token was validated
             expect(mockValidateSPToken).toHaveBeenCalledWith(spToken);
-            
+
             // SP tokens bypass OPA and use direct authorization checks for performance
             // Verify OPA was NOT called (SP uses direct checks)
             expect(mockedAxios.post).not.toHaveBeenCalled();
-            
+
             // Verify request proceeded (SP authorization passed)
             expect(next).toHaveBeenCalled();
-            
+
             // Verify SP context was attached to request
             expect((req as any).authzDecision).toBeDefined();
             expect((req as any).authzDecision.allow).toBe(true);

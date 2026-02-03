@@ -1,8 +1,8 @@
 /**
  * DIVE V3 - Policy Bundle Management E2E Tests
- * 
+ *
  * Tests for Hub policy bundle building, publishing, and sync operations.
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -17,10 +17,10 @@ test.describe('Policy Bundle Management', () => {
   test.describe('Policy Bundle API Endpoints', () => {
     test('should return available policy scopes', async ({ request }) => {
       const response = await request.get(`${HUB_API_URL}/api/opal/bundle/scopes`);
-      
+
       expect(response.ok()).toBeTruthy();
       const data = await response.json();
-      
+
       expect(data).toHaveProperty('scopes');
       expect(Array.isArray(data.scopes)).toBe(true);
       expect(data).toHaveProperty('descriptions');
@@ -28,10 +28,10 @@ test.describe('Policy Bundle Management', () => {
 
     test('should return policy version', async ({ request }) => {
       const response = await request.get(`${HUB_API_URL}/api/opal/version`);
-      
+
       expect(response.ok()).toBeTruthy();
       const data = await response.json();
-      
+
       expect(data).toHaveProperty('version');
       expect(data).toHaveProperty('hash');
       expect(data).toHaveProperty('timestamp');
@@ -39,10 +39,10 @@ test.describe('Policy Bundle Management', () => {
 
     test('should return OPAL health status', async ({ request }) => {
       const response = await request.get(`${HUB_API_URL}/api/opal/health`);
-      
+
       expect(response.ok()).toBeTruthy();
       const data = await response.json();
-      
+
       expect(data).toHaveProperty('opalEnabled');
       // May or may not be healthy depending on OPAL server status
       expect(data).toHaveProperty('healthy');
@@ -57,10 +57,10 @@ test.describe('Policy Bundle Management', () => {
           compress: true,
         },
       });
-      
+
       expect(response.ok()).toBeTruthy();
       const data = await response.json();
-      
+
       expect(data).toHaveProperty('success', true);
       expect(data).toHaveProperty('bundleId');
       expect(data).toHaveProperty('version');
@@ -77,10 +77,10 @@ test.describe('Policy Bundle Management', () => {
           sign: true,
         },
       });
-      
+
       expect(response.ok()).toBeTruthy();
       const data = await response.json();
-      
+
       expect(data.success).toBe(true);
       expect(data.fileCount).toBeGreaterThan(0);
     });
@@ -93,13 +93,13 @@ test.describe('Policy Bundle Management', () => {
           sign: true,
         },
       });
-      
+
       // Then get current bundle
       const response = await request.get(`${HUB_API_URL}/api/opal/bundle/current`);
-      
+
       expect(response.ok()).toBeTruthy();
       const data = await response.json();
-      
+
       expect(data).toHaveProperty('bundleId');
       expect(data).toHaveProperty('version');
       expect(data).toHaveProperty('hash');
@@ -116,13 +116,13 @@ test.describe('Policy Bundle Management', () => {
           sign: true,
         },
       });
-      
+
       // Then publish
       const response = await request.post(`${HUB_API_URL}/api/opal/bundle/publish`);
-      
+
       // Publish may fail if OPAL server is not running
       const data = await response.json();
-      
+
       // Either succeeds or fails gracefully
       if (response.ok()) {
         expect(data.success).toBe(true);
@@ -139,13 +139,13 @@ test.describe('Policy Bundle Management', () => {
           includeData: true,
         },
       });
-      
+
       const data = await response.json();
-      
+
       expect(data).toHaveProperty('build');
       expect(data.build).toHaveProperty('success');
       expect(data.build).toHaveProperty('bundleId');
-      
+
       // Publish section may not exist if OPAL failed
       if (data.publish) {
         expect(data.publish).toHaveProperty('success');
@@ -161,14 +161,14 @@ test.describe('Policy Bundle Management', () => {
         },
       });
       const buildData = await buildRes.json();
-      
+
       if (buildData.success && buildData.hash) {
         // Verify by hash
         const response = await request.get(`${HUB_API_URL}/api/opal/bundle/verify/${buildData.hash}`);
-        
+
         expect(response.ok()).toBeTruthy();
         const data = await response.json();
-        
+
         expect(data).toHaveProperty('verified');
         expect(data).toHaveProperty('hash');
         expect(data).toHaveProperty('bundleId');
@@ -177,10 +177,10 @@ test.describe('Policy Bundle Management', () => {
 
     test('should return 404 for non-existent bundle hash', async ({ request }) => {
       const response = await request.get(`${HUB_API_URL}/api/opal/bundle/verify/nonexistent123`);
-      
+
       expect(response.status()).toBe(404);
       const data = await response.json();
-      
+
       expect(data).toHaveProperty('verified', false);
     });
   });
@@ -188,15 +188,15 @@ test.describe('Policy Bundle Management', () => {
   test.describe('Sync Status API', () => {
     test('should return sync status for all spokes', async ({ request }) => {
       const response = await request.get(`${HUB_API_URL}/api/opal/sync-status`);
-      
+
       expect(response.ok()).toBeTruthy();
       const data = await response.json();
-      
+
       expect(data).toHaveProperty('currentVersion');
       expect(data).toHaveProperty('spokes');
       expect(data).toHaveProperty('summary');
       expect(Array.isArray(data.spokes)).toBe(true);
-      
+
       // Summary should have counts
       expect(data.summary).toHaveProperty('total');
       expect(data.summary).toHaveProperty('current');
@@ -211,10 +211,10 @@ test.describe('Policy Bundle Management', () => {
       const response = await request.post(`${HUB_API_URL}/api/opal/force-sync`, {
         data: {},
       });
-      
+
       // May fail if no spokes are connected
       const data = await response.json();
-      
+
       if (response.ok()) {
         expect(data.success).toBe(true);
         expect(data).toHaveProperty('spokes');
@@ -226,10 +226,10 @@ test.describe('Policy Bundle Management', () => {
       const response = await request.post(`${HUB_API_URL}/api/opal/force-sync`, {
         data: { spokeId: 'spoke-nzl-001' },
       });
-      
+
       // May fail if spoke doesn't exist
       const data = await response.json();
-      
+
       if (response.ok()) {
         expect(data.success).toBe(true);
         expect(data).toHaveProperty('spokeId');
@@ -240,10 +240,10 @@ test.describe('Policy Bundle Management', () => {
   test.describe('OPAL Refresh API', () => {
     test('should trigger policy refresh', async ({ request }) => {
       const response = await request.post(`${HUB_API_URL}/api/opal/refresh`);
-      
+
       // May fail if OPAL server is not running
       const data = await response.json();
-      
+
       if (response.ok()) {
         expect(data.success).toBe(true);
         expect(data).toHaveProperty('message');
@@ -257,7 +257,7 @@ test.describe('Policy Bundle Management', () => {
     test('should display policies page structure', async ({ page }) => {
       // Navigate to policy management page
       await page.goto(`${HUB_URL}/admin/federation/policies`);
-      
+
       // Check for authentication redirect or page content
       const url = page.url();
       if (url.includes('/login') || url === `${HUB_URL}/`) {
@@ -271,7 +271,7 @@ test.describe('Policy Bundle Management', () => {
 
     test('should have proper page title', async ({ page }) => {
       await page.goto(`${HUB_URL}/admin/federation/policies`);
-      
+
       // Title should contain DIVE
       await expect(page).toHaveTitle(/DIVE/);
     });
@@ -280,7 +280,7 @@ test.describe('Policy Bundle Management', () => {
   test.describe('Spoke Policy Sync Integration', () => {
     test('should check spoke policy version', async ({ request }) => {
       const response = await request.get(`${SPOKE_API_URL}/api/spoke/policies/version`);
-      
+
       // May return 404 if endpoint not implemented, or policy version
       if (response.ok()) {
         const data = await response.json();
@@ -290,10 +290,10 @@ test.describe('Policy Bundle Management', () => {
 
     test('should trigger spoke policy sync', async ({ request }) => {
       const response = await request.post(`${SPOKE_API_URL}/api/spoke/sync`);
-      
+
       expect(response.ok()).toBeTruthy();
       const data = await response.json();
-      
+
       expect(data.success).toBe(true);
     });
   });

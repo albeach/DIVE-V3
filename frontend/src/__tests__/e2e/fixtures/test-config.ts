@@ -1,13 +1,13 @@
 /**
  * Test Configuration for E2E Tests
- * 
+ *
  * Centralized configuration to avoid hardcoded values
  * Environment-aware settings for local, CI, and staging
- * 
+ *
  * Usage:
  * ```typescript
  * import { TEST_CONFIG } from '../fixtures/test-config';
- * 
+ *
  * await page.waitForTimeout(TEST_CONFIG.TIMEOUTS.NETWORK);
  * ```
  */
@@ -24,7 +24,7 @@ export const TEST_ENV = {
 
 /**
  * Timeouts (in milliseconds)
- * 
+ *
  * CI timeouts are 2x local to account for slower infrastructure
  */
 export const TIMEOUTS = {
@@ -81,7 +81,7 @@ export const TIMEOUTS = {
 
 /**
  * URLs
- * 
+ *
  * IMPORTANT: Use relative paths in tests (e.g., '/login')
  * Playwright's baseURL config handles the full URL
  */
@@ -155,7 +155,7 @@ export const ARTIFACTS = {
 
 /**
  * Selectors - Common data-testid values
- * 
+ *
  * Update these if component data-testids change
  */
 export const SELECTORS = {
@@ -187,7 +187,7 @@ export const SELECTORS = {
 
 /**
  * Keycloak selectors
- * 
+ *
  * Update these if Keycloak UI changes
  * Version: Keycloak 23+
  */
@@ -224,7 +224,7 @@ export const KEYCLOAK_SELECTORS = {
 
 /**
  * Feature flags
- * 
+ *
  * Enable/disable test scenarios based on feature availability
  */
 export const FEATURES = {

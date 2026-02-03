@@ -1,13 +1,13 @@
 /**
  * DIVE V3 - Compliance Metrics Service
  * Phase 6: Continuous Compliance Automation
- * 
+ *
  * Aggregates and provides metrics for compliance monitoring:
  * - Policy drift detection status
  * - Test coverage metrics
  * - Decision statistics and trends
  * - SLA compliance tracking
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */
@@ -228,7 +228,7 @@ class ComplianceMetricsService {
    */
   async getPolicyDriftStatus(): Promise<IPolicyDriftStatus> {
     const baselinePath = path.join(BASELINES_DIR, 'policy-baseline.json');
-    
+
     // Default status
     const status: IPolicyDriftStatus = {
       status: 'unknown',
@@ -244,7 +244,7 @@ class ComplianceMetricsService {
       // Check if baseline exists
       if (fs.existsSync(baselinePath)) {
         const baseline = JSON.parse(fs.readFileSync(baselinePath, 'utf-8'));
-        
+
         status.lastCheck = baseline.timestamp || null;
         status.sourceHash = baseline.source?.hash?.substring(0, 12) || null;
         status.status = baseline.status === 'baseline' ? 'no_drift' : 'drift_detected';
@@ -348,12 +348,12 @@ class ComplianceMetricsService {
    */
   async getDecisionMetrics(): Promise<IDecisionMetrics> {
     const decisions = metricsStore.decisions;
-    
+
     // Calculate metrics
     const totalDecisions = decisions.length;
     const allowedDecisions = decisions.filter(d => d.allowed).length;
     const deniedDecisions = decisions.filter(d => !d.allowed).length;
-    
+
     // Calculate latencies
     const latencies = decisions.map(d => d.latencyMs).sort((a, b) => a - b);
     const averageLatencyMs = latencies.length > 0
@@ -365,24 +365,24 @@ class ComplianceMetricsService {
     // Group by classification
     const decisionsByClassification: Record<string, number> = {};
     for (const decision of decisions) {
-      decisionsByClassification[decision.classification] = 
+      decisionsByClassification[decision.classification] =
         (decisionsByClassification[decision.classification] || 0) + 1;
     }
 
     // Group by tenant
     const decisionsByTenant: Record<string, number> = {};
     for (const decision of decisions) {
-      decisionsByTenant[decision.tenant] = 
+      decisionsByTenant[decision.tenant] =
         (decisionsByTenant[decision.tenant] || 0) + 1;
     }
 
     // Top denial reasons
     const denialReasons: Record<string, number> = {};
     for (const decision of decisions.filter(d => !d.allowed && d.denialReason)) {
-      denialReasons[decision.denialReason!] = 
+      denialReasons[decision.denialReason!] =
         (denialReasons[decision.denialReason!] || 0) + 1;
     }
-    
+
     const topDenialReasons = Object.entries(denialReasons)
       .map(([reason, count]) => ({
         reason,
@@ -398,13 +398,13 @@ class ComplianceMetricsService {
     for (let i = 23; i >= 0; i--) {
       const hourStart = now - (i + 1) * 60 * 60 * 1000;
       const hourEnd = now - i * 60 * 60 * 1000;
-      
+
       const hourDecisions = decisions.filter(
         d => d.timestamp.getTime() >= hourStart && d.timestamp.getTime() < hourEnd
       );
-      
+
       const hourLatencies = hourDecisions.map(d => d.latencyMs);
-      
+
       trend.push({
         timestamp: new Date(hourStart).toISOString(),
         allowed: hourDecisions.filter(d => d.allowed).length,
@@ -440,7 +440,7 @@ class ComplianceMetricsService {
     // Calculate uptime
     const uptimeMs = Date.now() - this.startTime.getTime();
     const uptimeHours = uptimeMs / (1000 * 60 * 60);
-    
+
     // Calculate downtime from events
     let downtimeMs = 0;
     let lastDownTime: Date | null = null;
@@ -452,7 +452,7 @@ class ComplianceMetricsService {
         lastDownTime = null;
       }
     }
-    
+
     const totalMs = uptimeMs;
     const availability = totalMs > 0 ? ((totalMs - downtimeMs) / totalMs) * 100 : 100;
 

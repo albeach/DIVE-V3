@@ -1,14 +1,14 @@
 /**
  * DEBUG: Diagnose WebAuthn/Passkey Issues
- * 
+ *
  * This script helps debug "Unknown user authenticated by the Passkey" errors
  * by checking:
  * 1. WebAuthn credentials registered for the user
  * 2. RP ID configuration
  * 3. UserHandle in credentials
  * 4. Realm configuration
- * 
- * Usage: 
+ *
+ * Usage:
  *   KEYCLOAK_URL=https://usa-idp.dive25.com npm run debug-webauthn -- --username admin-dive
  */
 
@@ -55,7 +55,7 @@ async function debugWebAuthn(username: string) {
 
   // Step 1: Get admin password
   const adminPassword = await getAdminPassword();
-  
+
   // Step 2: Authenticate
   console.log('[1/6] Authenticating...');
   let adminToken: string;
@@ -109,8 +109,8 @@ async function debugWebAuthn(username: string) {
   );
 
   const credentials = credentialsResponse.data;
-  const webauthnCredentials = credentials.filter((cred: any) => 
-    cred.type === 'webauthn' || 
+  const webauthnCredentials = credentials.filter((cred: any) =>
+    cred.type === 'webauthn' ||
     cred.type === 'webauthn-passwordless' ||
     cred.type?.toLowerCase().includes('fido') ||
     cred.type?.toLowerCase().includes('webauthn')
@@ -129,18 +129,18 @@ async function debugWebAuthn(username: string) {
       console.log(`  Label: ${cred.userLabel || '(no label)'}`);
       console.log(`  Created: ${cred.createdDate ? new Date(cred.createdDate).toISOString() : 'unknown'}`);
       console.log(`  Counter: ${cred.counter || 'N/A'}`);
-      
+
       // Parse credential data to check userHandle
       if (cred.credentialData) {
         try {
           const credData = JSON.parse(cred.credentialData);
           console.log(`  Credential Data Structure:`);
           console.log(`    Keys: ${Object.keys(credData).join(', ')}`);
-          
+
           // Try different possible locations for userHandle
           let userHandle: string | undefined;
           let userHandleHex: string | undefined;
-          
+
           if (credData.userHandle) {
             userHandle = credData.userHandle;
           } else if (credData.user) {
@@ -148,7 +148,7 @@ async function debugWebAuthn(username: string) {
           } else if (credData.publicKeyCredentialUserEntity) {
             userHandle = credData.publicKeyCredentialUserEntity.id;
           }
-          
+
           if (userHandle) {
             try {
               // Try base64url decode
@@ -163,13 +163,13 @@ async function debugWebAuthn(username: string) {
               }
             }
           }
-          
+
           const expectedUserIdHex = Buffer.from(user.id!, 'utf8').toString('hex');
-          
+
           console.log(`    User Handle (raw): ${userHandle || 'N/A'}`);
           console.log(`    User Handle (hex): ${userHandleHex || 'N/A'}`);
           console.log(`    Expected User ID (hex): ${expectedUserIdHex}`);
-          
+
           // Check if userHandle matches user ID
           if (userHandleHex && expectedUserIdHex) {
             const match = userHandleHex.toLowerCase() === expectedUserIdHex.toLowerCase();
@@ -223,7 +223,7 @@ async function debugWebAuthn(username: string) {
   console.log('[5/6] Checking RP ID Configuration...');
   const expectedRpId = 'dive25.com';
   const actualRpId = realm.webAuthnPolicyRpId || realm.webAuthnPolicyPasswordlessRpId;
-  
+
   if (actualRpId === expectedRpId) {
     console.log(`✅ RP ID is correct: "${actualRpId}"`);
   } else {
@@ -236,7 +236,7 @@ async function debugWebAuthn(username: string) {
 
   // Step 6: Recommendations
   console.log('[6/6] Recommendations:\n');
-  
+
   if (webauthnCredentials.length === 0) {
     console.log('1. Register a new passkey:');
     console.log('   - Log in with username/password');

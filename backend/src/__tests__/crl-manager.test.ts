@@ -1,7 +1,7 @@
 /**
  * CRL Manager Test Suite
  * Target: 95%+ coverage for crl-manager.ts
- * 
+ *
  * Tests:
  * - CRLManager class initialization
  * - loadCRL() - CRL loading with caching
@@ -82,9 +82,9 @@ describe('CRL Manager', () => {
         describe('Happy Path', () => {
             it('should create CRLManager with custom directory', () => {
                 mockedFs.existsSync.mockReturnValue(true);
-                
+
                 const manager = new CRLManager(testCrlDir);
-                
+
                 expect(manager).toBeInstanceOf(CRLManager);
                 expect(logger.info).toHaveBeenCalledWith(
                     'CRL Manager initialized',
@@ -94,9 +94,9 @@ describe('CRL Manager', () => {
 
             it('should create CRLManager with default directory', () => {
                 mockedFs.existsSync.mockReturnValue(true);
-                
+
                 const manager = new CRLManager();
-                
+
                 expect(manager).toBeInstanceOf(CRLManager);
                 expect(logger.info).toHaveBeenCalledWith(
                     'CRL Manager initialized',
@@ -107,9 +107,9 @@ describe('CRL Manager', () => {
             it('should create CRL directory if not exists', () => {
                 mockedFs.existsSync.mockReturnValue(false);
                 mockedFs.mkdirSync.mockReturnValue(undefined);
-                
+
                 new CRLManager(testCrlDir);
-                
+
                 expect(mockedFs.mkdirSync).toHaveBeenCalledWith(
                     testCrlDir,
                     { recursive: true, mode: 0o700 }
@@ -131,9 +131,9 @@ describe('CRL Manager', () => {
             it('should load CRL from disk', async () => {
                 mockedFs.existsSync.mockReturnValue(true);
                 mockedFs.readFileSync.mockReturnValue(JSON.stringify(mockCRL));
-                
+
                 const result = await manager.loadCRL(testCrlPath);
-                
+
                 expect(mockedFs.readFileSync).toHaveBeenCalledWith(testCrlPath, 'utf8');
                 expect(result.issuer.CN).toBe('Test CA');
                 expect(result.revokedCertificates).toHaveLength(1);
@@ -143,9 +143,9 @@ describe('CRL Manager', () => {
             it('should convert date strings to Date objects', async () => {
                 mockedFs.existsSync.mockReturnValue(true);
                 mockedFs.readFileSync.mockReturnValue(JSON.stringify(mockCRL));
-                
+
                 const result = await manager.loadCRL(testCrlPath);
-                
+
                 expect(result.thisUpdate).toBeInstanceOf(Date);
                 expect(result.nextUpdate).toBeInstanceOf(Date);
                 expect(result.revokedCertificates[0].revocationDate).toBeInstanceOf(Date);
@@ -154,13 +154,13 @@ describe('CRL Manager', () => {
             it('should cache loaded CRL', async () => {
                 mockedFs.existsSync.mockReturnValue(true);
                 mockedFs.readFileSync.mockReturnValue(JSON.stringify(mockCRL));
-                
+
                 // First load
                 await manager.loadCRL(testCrlPath);
-                
+
                 // Second load (should use cache)
                 await manager.loadCRL(testCrlPath);
-                
+
                 // Should only read from disk once
                 expect(mockedFs.readFileSync).toHaveBeenCalledTimes(1);
             });
@@ -168,16 +168,16 @@ describe('CRL Manager', () => {
             it('should reload CRL when cache expires', async () => {
                 mockedFs.existsSync.mockReturnValue(true);
                 mockedFs.readFileSync.mockReturnValue(JSON.stringify(mockCRL));
-                
+
                 // First load
                 await manager.loadCRL(testCrlPath);
-                
+
                 // Advance time beyond cache TTL (1 hour + 1 second)
                 jest.advanceTimersByTime(3600001);
-                
+
                 // Second load (cache expired, should reload)
                 await manager.loadCRL(testCrlPath);
-                
+
                 expect(mockedFs.readFileSync).toHaveBeenCalledTimes(2);
             });
         });
@@ -185,7 +185,7 @@ describe('CRL Manager', () => {
         describe('Error Handling', () => {
             it('should throw error when CRL file not found', async () => {
                 mockedFs.existsSync.mockReturnValue(false);
-                
+
                 await expect(manager.loadCRL(testCrlPath)).rejects.toThrow('CRL file not found');
                 expect(logger.error).toHaveBeenCalled();
             });
@@ -193,7 +193,7 @@ describe('CRL Manager', () => {
             it('should throw error on invalid JSON', async () => {
                 mockedFs.existsSync.mockReturnValue(true);
                 mockedFs.readFileSync.mockReturnValue('invalid json {]');
-                
+
                 await expect(manager.loadCRL(testCrlPath)).rejects.toThrow();
                 expect(logger.error).toHaveBeenCalled();
             });
@@ -213,9 +213,9 @@ describe('CRL Manager', () => {
             it('should identify revoked certificate', async () => {
                 mockedFs.existsSync.mockReturnValue(true);
                 mockedFs.readFileSync.mockReturnValue(JSON.stringify(mockCRL));
-                
+
                 const result = await manager.isRevoked('1234567890', testCrlPath);
-                
+
                 expect(result.revoked).toBe(true);
                 expect(result.reason).toBe('keyCompromise');
                 expect(result.revocationDate).toBeInstanceOf(Date);
@@ -230,9 +230,9 @@ describe('CRL Manager', () => {
             it('should identify non-revoked certificate', async () => {
                 mockedFs.existsSync.mockReturnValue(true);
                 mockedFs.readFileSync.mockReturnValue(JSON.stringify(mockCRL));
-                
+
                 const result = await manager.isRevoked('9999999999', testCrlPath);
-                
+
                 expect(result.revoked).toBe(false);
                 expect(result.reason).toBeUndefined();
                 expect(result.revocationDate).toBeUndefined();
@@ -243,9 +243,9 @@ describe('CRL Manager', () => {
             it('should be case-insensitive for serial number', async () => {
                 mockedFs.existsSync.mockReturnValue(true);
                 mockedFs.readFileSync.mockReturnValue(JSON.stringify(mockCRL));
-                
+
                 const result = await manager.isRevoked('1234567890', testCrlPath);
-                
+
                 expect(result.revoked).toBe(true);
             });
 
@@ -256,9 +256,9 @@ describe('CRL Manager', () => {
                 };
                 mockedFs.existsSync.mockReturnValue(true);
                 mockedFs.readFileSync.mockReturnValue(JSON.stringify(staleCRL));
-                
+
                 const result = await manager.isRevoked('9999999999', testCrlPath);
-                
+
                 expect(result.crlFresh).toBe(false);
             });
         });
@@ -266,7 +266,7 @@ describe('CRL Manager', () => {
         describe('Error Handling', () => {
             it('should throw error when CRL cannot be loaded', async () => {
                 mockedFs.existsSync.mockReturnValue(false);
-                
+
                 await expect(manager.isRevoked('1234567890', testCrlPath)).rejects.toThrow();
                 expect(logger.error).toHaveBeenCalled();
             });
@@ -287,9 +287,9 @@ describe('CRL Manager', () => {
                 mockedFs.existsSync.mockReturnValue(true);
                 mockedFs.readFileSync.mockReturnValue(JSON.stringify(mockCRL));
                 mockedFs.writeFileSync.mockReturnValue(undefined);
-                
+
                 await manager.revokeCertificate('9999999999', 'keyCompromise', testCrlPath, 'Test revocation');
-                
+
                 expect(mockedFs.writeFileSync).toHaveBeenCalled();
                 expect(logger.warn).toHaveBeenCalledWith(
                     'Certificate REVOKED',
@@ -303,10 +303,10 @@ describe('CRL Manager', () => {
             it('should handle already revoked certificate', async () => {
                 mockedFs.existsSync.mockReturnValue(true);
                 mockedFs.readFileSync.mockReturnValue(JSON.stringify(mockCRL));
-                
+
                 // Try to revoke already revoked cert
                 await manager.revokeCertificate('1234567890', 'superseded', testCrlPath);
-                
+
                 expect(logger.warn).toHaveBeenCalledWith(
                     'Certificate already revoked',
                     expect.any(Object)
@@ -319,13 +319,13 @@ describe('CRL Manager', () => {
                 mockedFs.existsSync.mockReturnValue(true);
                 mockedFs.readFileSync.mockReturnValue(JSON.stringify(crlWithNumber));
                 mockedFs.writeFileSync.mockReturnValue(undefined);
-                
+
                 await manager.revokeCertificate('8888888888', 'cessationOfOperation', testCrlPath);
-                
+
                 // Verify writeFileSync was called with updated CRL
                 const writeCall = mockedFs.writeFileSync.mock.calls[0];
                 const savedData = JSON.parse(writeCall[1] as string);
-                
+
                 expect(savedData.crlNumber).toBe(11);
                 expect(savedData.revokedCertificates).toHaveLength(2);
             });
@@ -334,7 +334,7 @@ describe('CRL Manager', () => {
         describe('Error Handling', () => {
             it('should handle CRL load error', async () => {
                 mockedFs.existsSync.mockReturnValue(false);
-                
+
                 await expect(
                     manager.revokeCertificate('9999999999', 'keyCompromise', testCrlPath)
                 ).rejects.toThrow();
@@ -347,7 +347,7 @@ describe('CRL Manager', () => {
                 mockedFs.writeFileSync.mockImplementation(() => {
                     throw new Error('Write failed');
                 });
-                
+
                 await expect(
                     manager.revokeCertificate('9999999999', 'keyCompromise', testCrlPath)
                 ).rejects.toThrow('Write failed');
@@ -373,9 +373,9 @@ describe('CRL Manager', () => {
                 };
                 mockedFs.existsSync.mockReturnValue(true);
                 mockedFs.readFileSync.mockReturnValue(JSON.stringify(freshCRL));
-                
+
                 const result = await manager.updateCRL(testCrlPath);
-                
+
                 expect(result.updated).toBe(false);
                 expect(result.revokedCount).toBe(1);
                 expect(mockedFs.writeFileSync).not.toHaveBeenCalled();
@@ -394,9 +394,9 @@ describe('CRL Manager', () => {
                 mockedFs.existsSync.mockReturnValue(true);
                 mockedFs.readFileSync.mockReturnValue(JSON.stringify(expiredCRL));
                 mockedFs.writeFileSync.mockReturnValue(undefined);
-                
+
                 const result = await manager.updateCRL(testCrlPath);
-                
+
                 expect(result.updated).toBe(true);
                 expect(mockedFs.writeFileSync).toHaveBeenCalled();
                 expect(logger.info).toHaveBeenCalledWith(
@@ -409,7 +409,7 @@ describe('CRL Manager', () => {
         describe('Error Handling', () => {
             it('should handle CRL load error', async () => {
                 mockedFs.existsSync.mockReturnValue(false);
-                
+
                 await expect(manager.updateCRL(testCrlPath)).rejects.toThrow();
                 expect(logger.error).toHaveBeenCalled();
             });
@@ -432,9 +432,9 @@ describe('CRL Manager', () => {
                     thisUpdate: new Date('2025-11-20T00:00:00Z'),
                     nextUpdate: new Date('2025-12-20T00:00:00Z'),
                 };
-                
+
                 const result = manager.validateCRLFreshness(freshCRL);
-                
+
                 expect(result.valid).toBe(true);
                 expect(result.fresh).toBe(true);
                 expect(result.errors).toHaveLength(0);
@@ -446,9 +446,9 @@ describe('CRL Manager', () => {
                     thisUpdate: new Date('2025-10-01T00:00:00Z'),
                     nextUpdate: new Date('2025-11-01T00:00:00Z'), // Past
                 };
-                
+
                 const result = manager.validateCRLFreshness(expiredCRL);
-                
+
                 expect(result.valid).toBe(false);
                 expect(result.fresh).toBe(false);
                 expect(result.errors.some(err => err.includes('CRL expired'))).toBe(true);
@@ -460,9 +460,9 @@ describe('CRL Manager', () => {
                     thisUpdate: new Date('2025-12-01T00:00:00Z'), // Future
                     nextUpdate: new Date('2026-01-01T00:00:00Z'),
                 };
-                
+
                 const result = manager.validateCRLFreshness(futureCRL);
-                
+
                 expect(result.valid).toBe(false);
                 expect(result.errors.some(err => err.includes('not yet valid'))).toBe(true);
             });
@@ -473,9 +473,9 @@ describe('CRL Manager', () => {
                     thisUpdate: new Date('2025-11-01T00:00:00Z'), // 19 days old
                     nextUpdate: new Date('2025-12-20T00:00:00Z'),
                 };
-                
+
                 const result = manager.validateCRLFreshness(oldCRL);
-                
+
                 expect(result.valid).toBe(true);
                 expect(result.warnings.some(warn => warn.includes('CRL is old'))).toBe(true);
             });
@@ -486,15 +486,15 @@ describe('CRL Manager', () => {
                     thisUpdate: new Date('2025-11-19T00:00:00Z'),
                     nextUpdate: new Date('2025-11-20T18:00:00Z'), // Expires in 6 hours
                 };
-                
+
                 const result = manager.validateCRLFreshness(soonExpireCRL);
-                
+
                 expect(result.warnings.some(warn => warn.includes('expiring soon'))).toBe(true);
             });
 
             it('should calculate age correctly', () => {
                 const result = manager.validateCRLFreshness(mockCRL);
-                
+
                 expect(result.age).toBeGreaterThan(0);
                 expect(result.revokedCount).toBe(1);
             });
@@ -515,12 +515,12 @@ describe('CRL Manager', () => {
                 // Mock sequence: 1) constructor check, 2) initializeCRL check
                 mockedFs.existsSync.mockReturnValue(false);
                 mockedFs.writeFileSync.mockReturnValue(undefined);
-                
+
                 const result = await manager.initializeCRL('test-ca', {
                     CN: 'Test CA',
                     O: 'Test Org',
                 });
-                
+
                 expect(mockedFs.writeFileSync).toHaveBeenCalled();
                 expect(result.version).toBe(2);
                 expect(result.issuer.CN).toBe('Test CA');
@@ -535,11 +535,11 @@ describe('CRL Manager', () => {
             it('should load existing CRL when file exists', async () => {
                 mockedFs.existsSync.mockReturnValue(true);
                 mockedFs.readFileSync.mockReturnValue(JSON.stringify(mockCRL));
-                
+
                 const result = await manager.initializeCRL('test-ca', {
                     CN: 'Test CA',
                 });
-                
+
                 expect(mockedFs.readFileSync).toHaveBeenCalled();
                 expect(result.issuer.CN).toBe('Test CA');
                 expect(logger.info).toHaveBeenCalledWith(
@@ -555,7 +555,7 @@ describe('CRL Manager', () => {
                 mockedFs.writeFileSync.mockImplementation(() => {
                     throw new Error('Write failed');
                 });
-                
+
                 await expect(
                     manager.initializeCRL('test-ca', { CN: 'Test CA' })
                 ).rejects.toThrow();
@@ -577,9 +577,9 @@ describe('CRL Manager', () => {
             it('should return CRL statistics', async () => {
                 mockedFs.existsSync.mockReturnValue(true);
                 mockedFs.readFileSync.mockReturnValue(JSON.stringify(mockCRL));
-                
+
                 const result = await manager.getCRLStats(testCrlPath);
-                
+
                 expect(result.revokedCount).toBe(1);
                 expect(result.age).toBeGreaterThan(0);
                 expect(result.fresh).toBe(true);
@@ -594,9 +594,9 @@ describe('CRL Manager', () => {
                 };
                 mockedFs.existsSync.mockReturnValue(true);
                 mockedFs.readFileSync.mockReturnValue(JSON.stringify(expiredCRL));
-                
+
                 const result = await manager.getCRLStats(testCrlPath);
-                
+
                 expect(result.fresh).toBe(false);
                 expect(result.nextUpdateIn).toBeLessThan(0);
             });
@@ -605,7 +605,7 @@ describe('CRL Manager', () => {
         describe('Error Handling', () => {
             it('should handle CRL load error', async () => {
                 mockedFs.existsSync.mockReturnValue(false);
-                
+
                 await expect(manager.getCRLStats(testCrlPath)).rejects.toThrow();
                 expect(logger.error).toHaveBeenCalled();
             });
@@ -626,11 +626,11 @@ describe('CRL Manager', () => {
             mockedFs.existsSync.mockReturnValue(true);
             mockedFs.readFileSync.mockReturnValue(JSON.stringify(mockCRL));
             await manager.loadCRL(testCrlPath);
-            
+
             jest.clearAllMocks();
-            
+
             manager.clearCache();
-            
+
             expect(logger.info).toHaveBeenCalledWith(
                 'CRL cache cleared',
                 expect.objectContaining({ entriesCleared: expect.any(Number) })
@@ -639,7 +639,7 @@ describe('CRL Manager', () => {
 
         it('should handle empty cache', () => {
             manager.clearCache();
-            
+
             expect(logger.info).toHaveBeenCalledWith(
                 'CRL cache cleared',
                 { entriesCleared: 0 }
@@ -657,9 +657,9 @@ describe('CRL Manager', () => {
             it('should initialize root and intermediate CRLs', async () => {
                 mockedFs.existsSync.mockReturnValue(false);
                 mockedFs.writeFileSync.mockReturnValue(undefined);
-                
+
                 await initializeCRLInfrastructure();
-                
+
                 // Should create 2 CRLs (root + intermediate)
                 expect(mockedFs.writeFileSync).toHaveBeenCalledTimes(2);
                 expect(logger.info).toHaveBeenCalledWith('Initializing CRL infrastructure...');
@@ -669,9 +669,9 @@ describe('CRL Manager', () => {
             it('should load existing CRLs if present', async () => {
                 mockedFs.existsSync.mockReturnValue(true);
                 mockedFs.readFileSync.mockReturnValue(JSON.stringify(mockCRL));
-                
+
                 await initializeCRLInfrastructure();
-                
+
                 expect(mockedFs.readFileSync).toHaveBeenCalled();
                 expect(logger.info).toHaveBeenCalledWith('CRL infrastructure initialized');
             });
@@ -683,7 +683,7 @@ describe('CRL Manager', () => {
                 mockedFs.writeFileSync.mockImplementation(() => {
                     throw new Error('Init failed');
                 });
-                
+
                 await expect(initializeCRLInfrastructure()).rejects.toThrow();
                 expect(logger.error).toHaveBeenCalledWith(
                     'Failed to initialize CRL infrastructure',

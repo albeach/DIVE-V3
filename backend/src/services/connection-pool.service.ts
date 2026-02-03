@@ -1,23 +1,23 @@
 /**
  * DIVE V3 - Connection Pool Service
  * Phase 9: Performance Optimization & Scalability
- * 
+ *
  * Optimized connection pooling for:
  * - OPA HTTP connections (keep-alive)
  * - Redis connections (pipelining)
  * - MongoDB connections (connection pooling)
- * 
+ *
  * Features:
  * - Adaptive pool sizing based on load
  * - Connection health monitoring
  * - Circuit breaker integration
  * - Graceful degradation
- * 
+ *
  * Targets (Phase 9):
  * - Connection reuse rate: >95%
  * - Connection establishment time: <5ms
  * - Zero connection leaks
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */
@@ -244,7 +244,7 @@ class ResourcePool<T> extends EventEmitter {
 
   constructor(config: IResourcePoolConfig<T>) {
     super();
-    
+
     // Set defaults, then override with provided config
     const defaults: Partial<IPoolConfig> = {
       minConnections: 2,
@@ -258,7 +258,7 @@ class ResourcePool<T> extends EventEmitter {
       scaleUpThreshold: 5,
       scaleDownThreshold: 2,
     };
-    
+
     this.config = {
       ...defaults,
       ...config,
@@ -323,11 +323,11 @@ class ResourcePool<T> extends EventEmitter {
           consecutiveFailures: 0,
         },
       };
-      
+
       this.pool.push(pooled);
       this.stats.totalCreated++;
       this.updateStats();
-      
+
       logger.debug('Resource created', { id: pooled.id });
     } catch (error) {
       this.stats.errors++;
@@ -404,8 +404,8 @@ class ResourcePool<T> extends EventEmitter {
 
       // Update average acquire time
       const acquireTime = performance.now() - startTime;
-      this.stats.avgAcquireTimeMs = 
-        (this.stats.avgAcquireTimeMs * (this.stats.totalAcquired - 1) + acquireTime) / 
+      this.stats.avgAcquireTimeMs =
+        (this.stats.avgAcquireTimeMs * (this.stats.totalAcquired - 1) + acquireTime) /
         this.stats.totalAcquired;
 
       this.updateStats();

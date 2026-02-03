@@ -86,21 +86,7 @@ export default function ApprovalsPage() {
         setError(null);
 
         try {
-            const token = (session as any)?.accessToken;
-            if (!token) {
-                setError('No access token available. Please refresh the page.');
-                setLoading(false);
-                return;
-            }
-
-            const response = await fetch(
-                `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/approvals/pending`,
-                {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
-                }
-            );
+            const response = await fetch('/api/admin/approvals/pending');
 
             // Check if response is JSON
             const contentType = response.headers.get('content-type');
@@ -132,17 +118,10 @@ export default function ApprovalsPage() {
         setIsProcessing(true);
 
         try {
-            const token = (session as any)?.accessToken;
-            const response = await fetch(
-                `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/approvals/${alias}/approve`,
-                {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    }
-                }
-            );
+            const response = await fetch(`/api/admin/approvals/${alias}/approve`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+            });
 
             const result = await response.json();
 
@@ -169,18 +148,11 @@ export default function ApprovalsPage() {
         setIsProcessing(true);
 
         try {
-            const token = (session as any)?.accessToken;
-            const response = await fetch(
-                `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/admin/approvals/${alias}/reject`,
-                {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${token}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify({ reason: rejectReason })
-                }
-            );
+            const response = await fetch(`/api/admin/approvals/${alias}/reject`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ reason: rejectReason }),
+            });
 
             const result = await response.json();
 

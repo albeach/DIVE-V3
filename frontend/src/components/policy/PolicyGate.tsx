@@ -2,30 +2,30 @@
 
 /**
  * DIVE V3 - PolicyGate Component
- * 
+ *
  * Declarative authorization component that shows/hides children
  * based on policy decisions.
- * 
+ *
  * Phase 5: DIVE-V3 Enforcement Harmonization
- * 
+ *
  * Features:
  * - Declarative authorization in JSX
  * - Loading states with customizable spinner
  * - Fallback content for denied access
  * - Integration with PolicyContext
  * - Debug mode for development
- * 
+ *
  * @example
  * ```tsx
- * <PolicyGate 
- *   resourceId="doc-123" 
+ * <PolicyGate
+ *   resourceId="doc-123"
  *   action="view"
  *   fallback={<AccessDenied />}
  * >
  *   <ClassifiedDocument />
  * </PolicyGate>
  * ```
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */
@@ -79,17 +79,17 @@ function DefaultLoader() {
 function DefaultAccessDenied({ reason }: { reason?: string }) {
   return (
     <div className="flex flex-col items-center justify-center p-6 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
-      <svg 
-        className="w-12 h-12 text-red-500 mb-3" 
-        fill="none" 
-        stroke="currentColor" 
+      <svg
+        className="w-12 h-12 text-red-500 mb-3"
+        fill="none"
+        stroke="currentColor"
         viewBox="0 0 24 24"
       >
-        <path 
-          strokeLinecap="round" 
-          strokeLinejoin="round" 
-          strokeWidth={2} 
-          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" 
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
         />
       </svg>
       <h3 className="text-lg font-semibold text-red-700 dark:text-red-300 mb-1">
@@ -107,17 +107,17 @@ function DefaultAccessDenied({ reason }: { reason?: string }) {
 function DefaultError({ error }: { error: Error }) {
   return (
     <div className="flex flex-col items-center justify-center p-6 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
-      <svg 
-        className="w-12 h-12 text-yellow-500 mb-3" 
-        fill="none" 
-        stroke="currentColor" 
+      <svg
+        className="w-12 h-12 text-yellow-500 mb-3"
+        fill="none"
+        stroke="currentColor"
         viewBox="0 0 24 24"
       >
-        <path 
-          strokeLinecap="round" 
-          strokeLinejoin="round" 
-          strokeWidth={2} 
-          d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" 
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
         />
       </svg>
       <h3 className="text-lg font-semibold text-yellow-700 dark:text-yellow-300 mb-1">
@@ -130,13 +130,13 @@ function DefaultError({ error }: { error: Error }) {
   );
 }
 
-function DebugPanel({ 
-  resourceId, 
-  action, 
-  decision, 
-  isLoading, 
+function DebugPanel({
+  resourceId,
+  action,
+  decision,
+  isLoading,
   error,
-  cached 
+  cached
 }: {
   resourceId: string;
   action: string;
@@ -264,10 +264,10 @@ export function PolicyGate({
 
   // Error state
   if (error) {
-    const errorContent = typeof errorFallback === 'function' 
+    const errorContent = typeof errorFallback === 'function'
       ? errorFallback(error)
       : errorFallback || <DefaultError error={error} />;
-    
+
     return (
       <div className={className}>
         {errorContent}

@@ -1,7 +1,7 @@
 # DIVE V3 Key Access Service (KAS)
 
-**Version**: 1.0.0-acp240  
-**Status**: Production-Ready  
+**Version**: 1.0.0-acp240
+**Status**: Production-Ready
 **Compliance**: ACP-240 SUPP-5(A) AMDT 1 (partial)
 
 ---

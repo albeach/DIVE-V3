@@ -1,10 +1,10 @@
 /**
  * Policy Version Monitor Service
  * Phase 4, Task 3.1: Prevent policy drift across federation instances
- * 
+ *
  * Monitors OPA policy versions across all federated instances and alerts
  * when policy drift is detected (instances running different versions).
- * 
+ *
  * NATO Compliance: ACP-240 §4.2 (Policy Consistency Requirements)
  */
 
@@ -195,7 +195,7 @@ class PolicyVersionMonitor {
     // Analyze results
     const healthyInstances = instanceStatuses.filter(s => s.healthy && s.policyVersion);
     const versions: Record<string, string> = {};
-    
+
     for (const status of healthyInstances) {
       if (status.policyVersion) {
         versions[status.instanceCode] = status.policyVersion.version;
@@ -256,7 +256,7 @@ class PolicyVersionMonitor {
    */
   private getLatestVersion(versions: string[]): string {
     if (versions.length === 0) return 'unknown';
-    
+
     return versions.sort((a, b) => {
       const aParts = a.split('.').map(Number);
       const bParts = b.split('.').map(Number);

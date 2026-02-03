@@ -225,7 +225,7 @@ describe('SpokeMetricsService', () => {
             service.recordAuthorizationDecision('allow', 'read', 50);
 
             expect(service.getCounter('authorization_decisions_total', { decision: 'allow', action: 'read', instance: 'local' })).toBe(1);
-            
+
             const stats = service.getHistogramStats('authorization_latency_seconds', { action: 'read', instance: 'local' });
             expect(stats?.count).toBe(1);
         });

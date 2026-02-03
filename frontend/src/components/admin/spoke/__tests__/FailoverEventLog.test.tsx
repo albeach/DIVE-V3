@@ -1,6 +1,6 @@
 /**
  * DIVE V3 - FailoverEventLog Tests
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -113,20 +113,20 @@ describe('FailoverEventLog', () => {
 
     it('filters events by state', () => {
       render(<FailoverEventLog events={mockEvents} />);
-      
+
       const filter = screen.getByRole('combobox');
       fireEvent.change(filter, { target: { value: 'CLOSED' } });
-      
+
       // Should only show events where CLOSED is involved
       // Events 1, 3, 4 involve CLOSED state
     });
 
     it('shows all events when filter is ALL', () => {
       render(<FailoverEventLog events={mockEvents} />);
-      
+
       const filter = screen.getByRole('combobox');
       fireEvent.change(filter, { target: { value: 'ALL' } });
-      
+
       expect(screen.getByText('4 events')).toBeInTheDocument();
     });
   });
@@ -134,24 +134,24 @@ describe('FailoverEventLog', () => {
   describe('Event Expansion', () => {
     it('expands event details on click', () => {
       render(<FailoverEventLog events={mockEvents} />);
-      
+
       // Click on first event
       const eventCards = screen.getAllByText('Circuit opened after 5 consecutive failures');
       fireEvent.click(eventCards[0].closest('[class*="cursor-pointer"]') as Element);
-      
+
       // Should show expanded details
       expect(screen.getByText('Event ID')).toBeInTheDocument();
     });
 
     it('collapses event on second click', () => {
       render(<FailoverEventLog events={mockEvents} />);
-      
+
       const eventCard = screen.getByText('Circuit opened after 5 consecutive failures').closest('[class*="cursor-pointer"]') as Element;
-      
+
       // Expand
       fireEvent.click(eventCard);
       expect(screen.getByText('Event ID')).toBeInTheDocument();
-      
+
       // Collapse
       fireEvent.click(eventCard);
       // Event ID should no longer be visible (or animation should hide it)
@@ -162,7 +162,7 @@ describe('FailoverEventLog', () => {
     it('renders refresh button when onRefresh provided', () => {
       const onRefresh = jest.fn();
       render(<FailoverEventLog events={mockEvents} onRefresh={onRefresh} />);
-      
+
       const refreshButton = screen.getAllByRole('button').find(
         btn => btn.querySelector('svg[class*="lucide-refresh"]') || btn.getAttribute('title') === 'Refresh'
       );
@@ -172,13 +172,13 @@ describe('FailoverEventLog', () => {
     it('calls onRefresh when clicked', async () => {
       const onRefresh = jest.fn().mockResolvedValue(undefined);
       render(<FailoverEventLog events={mockEvents} onRefresh={onRefresh} />);
-      
+
       // Find refresh button by its container or SVG
       const buttons = screen.getAllByRole('button');
       const refreshButton = buttons[buttons.length - 1]; // Usually last button
-      
+
       fireEvent.click(refreshButton);
-      
+
       await waitFor(() => {
         expect(onRefresh).toHaveBeenCalled();
       });
@@ -189,7 +189,7 @@ describe('FailoverEventLog', () => {
     it('renders export button when onExport provided', () => {
       const onExport = jest.fn();
       render(<FailoverEventLog events={mockEvents} onExport={onExport} />);
-      
+
       // Export button should be present
       const buttons = screen.getAllByRole('button');
       expect(buttons.length).toBeGreaterThanOrEqual(1);
@@ -198,14 +198,14 @@ describe('FailoverEventLog', () => {
     it('calls onExport when clicked', () => {
       const onExport = jest.fn();
       render(<FailoverEventLog events={mockEvents} onExport={onExport} />);
-      
+
       // Find export button (usually has download icon)
       const buttons = screen.getAllByRole('button');
       // Export is typically the second-to-last button
       if (buttons.length > 1) {
         fireEvent.click(buttons[buttons.length - 2]);
       }
-      
+
       // Note: This might not trigger onExport if button order is different
       // The test verifies the button exists
     });
@@ -214,7 +214,7 @@ describe('FailoverEventLog', () => {
   describe('Timestamp Formatting', () => {
     it('displays formatted timestamp', () => {
       render(<FailoverEventLog events={mockEvents} />);
-      
+
       // Should display date and time
       expect(screen.getAllByText(/at/).length).toBeGreaterThanOrEqual(1);
     });

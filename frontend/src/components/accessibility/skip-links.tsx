@@ -1,9 +1,9 @@
 /**
  * Skip Links Component - Phase 4 Accessibility
- * 
+ *
  * Provides keyboard users with quick navigation to main content areas.
  * Implements WCAG 2.1 SC 2.4.1 (Bypass Blocks) - Level A
- * 
+ *
  * Features:
  * - Hidden by default, visible on focus
  * - Links to main content, navigation, and search
@@ -37,13 +37,13 @@ export default function SkipLinks({ additionalLinks = [] }: SkipLinksProps) {
     e.preventDefault();
     const targetId = href.replace('#', '');
     const targetElement = document.getElementById(targetId);
-    
+
     if (targetElement) {
       // Make element focusable if it isn't already
       if (!targetElement.hasAttribute('tabindex')) {
         targetElement.setAttribute('tabindex', '-1');
       }
-      
+
       // Focus and scroll to element
       targetElement.focus({ preventScroll: true });
       targetElement.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -51,7 +51,7 @@ export default function SkipLinks({ additionalLinks = [] }: SkipLinksProps) {
   };
 
   return (
-    <nav 
+    <nav
       aria-label="Skip links"
       className="fixed top-0 left-0 z-[100] p-4"
     >
@@ -83,7 +83,7 @@ export default function SkipLinks({ additionalLinks = [] }: SkipLinksProps) {
 
 /**
  * Hook to add skip link targets to elements
- * 
+ *
  * Usage:
  * ```tsx
  * const mainRef = useSkipLinkTarget('main-content');

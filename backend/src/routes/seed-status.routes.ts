@@ -1,9 +1,9 @@
 /**
  * Seed Status Routes
- * 
+ *
  * API endpoints to check the status of seeded resources
  * Used for validation and monitoring of the seeding process.
- * 
+ *
  * Endpoints:
  *   GET /api/resources/seed-status       - Overall seed status
  *   GET /api/resources/distribution      - Classification/COI/KAS breakdown
@@ -70,7 +70,7 @@ router.get('/seed-status', async (_req: Request, res: Response) => {
     try {
         const database = await getDb();
         const collection = database.collection('resources');
-        
+
         // Get total count
         const totalCount = await collection.countDocuments({});
         const seededCount = await collection.countDocuments({
@@ -79,13 +79,13 @@ router.get('/seed-status', async (_req: Request, res: Response) => {
                 { resourceId: { $regex: /^doc-/ } }
             ]
         });
-        
+
         // Get most recent seed batch
         const latestSeed = await collection.findOne(
             { seedBatchId: { $exists: true } },
             { sort: { createdAt: -1 }, projection: { seedBatchId: 1, instanceCode: 1, createdAt: 1 } }
         );
-        
+
         // Get unique seed batches
         const seedBatches = await collection.aggregate([
             { $match: { seedBatchId: { $exists: true } } },
@@ -98,14 +98,14 @@ router.get('/seed-status', async (_req: Request, res: Response) => {
             { $sort: { timestamp: -1 } },
             { $limit: 10 }
         ]).toArray();
-        
+
         // Get instance distribution
         const instanceDistribution = await collection.aggregate([
             { $match: { instanceCode: { $exists: true } } },
             { $group: { _id: '$instanceCode', count: { $sum: 1 } } },
             { $sort: { _id: 1 } }
         ]).toArray();
-        
+
         const status = {
             database: MONGODB_DATABASE,
             status: 'healthy',
@@ -131,10 +131,10 @@ router.get('/seed-status', async (_req: Request, res: Response) => {
                 return acc;
             }, {})
         };
-        
+
         logger.info('Seed status requested', { totalCount: status.counts.total });
         res.json(status);
-        
+
     } catch (error) {
         logger.error('Failed to get seed status', { error });
         res.status(500).json({
@@ -152,9 +152,9 @@ router.get('/distribution', async (_req: Request, res: Response) => {
     try {
         const database = await getDb();
         const collection = database.collection('resources');
-        
+
         const totalCount = await collection.countDocuments({});
-        
+
         // Classification distribution
         const classificationDist = await collection.aggregate([
             { $group: {
@@ -163,7 +163,7 @@ router.get('/distribution', async (_req: Request, res: Response) => {
             }},
             { $sort: { _id: 1 } }
         ]).toArray();
-        
+
         // COI distribution (top 15)
         const coiDist = await collection.aggregate([
             { $unwind: { path: '$ztdf.policy.securityLabel.COI', preserveNullAndEmptyArrays: true } },
@@ -174,7 +174,7 @@ router.get('/distribution', async (_req: Request, res: Response) => {
             { $sort: { count: -1 } },
             { $limit: 15 }
         ]).toArray();
-        
+
         // KAS count distribution
         const kasDist = await collection.aggregate([
             { $project: {
@@ -186,7 +186,7 @@ router.get('/distribution', async (_req: Request, res: Response) => {
             }},
             { $sort: { _id: 1 } }
         ]).toArray();
-        
+
         // Industry access distribution
         const industryDist = await collection.aggregate([
             { $group: {
@@ -194,7 +194,7 @@ router.get('/distribution', async (_req: Request, res: Response) => {
                 count: { $sum: 1 }
             }}
         ]).toArray();
-        
+
         // Releasability distribution (top 10 patterns)
         const releasabilityDist = await collection.aggregate([
             { $group: {
@@ -204,7 +204,7 @@ router.get('/distribution', async (_req: Request, res: Response) => {
             { $sort: { count: -1 } },
             { $limit: 10 }
         ]).toArray();
-        
+
         // Calculate variance from expected
         const classificationVariance: Record<string, { actual: number; expected: number; variance: number }> = {};
         for (const item of classificationDist) {
@@ -216,7 +216,7 @@ router.get('/distribution', async (_req: Request, res: Response) => {
                 variance: parseFloat(((actual - expected) * 100).toFixed(2))
             };
         }
-        
+
         const distribution = {
             timestamp: new Date().toISOString(),
             totalCount,
@@ -269,10 +269,10 @@ router.get('/distribution', async (_req: Request, res: Response) => {
                 percentage: ((item.count / totalCount) * 100).toFixed(2) + '%'
             }))
         };
-        
+
         logger.info('Distribution requested', { totalCount });
         res.json(distribution);
-        
+
     } catch (error) {
         logger.error('Failed to get distribution', { error });
         res.status(500).json({
@@ -290,7 +290,7 @@ router.get('/seed-manifests', async (_req: Request, res: Response) => {
     try {
         const database = await getDb();
         const collection = database.collection('resources');
-        
+
         // Get all unique seed batches with statistics
         const manifests = await collection.aggregate([
             { $match: { seedBatchId: { $exists: true, $ne: null } } },
@@ -305,7 +305,7 @@ router.get('/seed-manifests', async (_req: Request, res: Response) => {
             { $sort: { lastCreated: -1 } },
             { $limit: 50 }
         ]).toArray();
-        
+
         const result = {
             timestamp: new Date().toISOString(),
             count: manifests.length,
@@ -318,10 +318,10 @@ router.get('/seed-manifests', async (_req: Request, res: Response) => {
                 lastCreated: m.lastCreated
             }))
         };
-        
+
         logger.info('Seed manifests requested', { count: result.count });
         res.json(result);
-        
+
     } catch (error) {
         logger.error('Failed to get seed manifests', { error });
         res.status(500).json({

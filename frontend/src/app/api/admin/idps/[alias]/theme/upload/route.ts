@@ -1,6 +1,6 @@
 /**
  * Admin IdP Theme Upload API Route
- * 
+ *
  * Proxy for backend IdP theme upload endpoint
  * POST - Upload theme asset (background/logo)
  */
@@ -18,7 +18,7 @@ export async function POST(
 ): Promise<NextResponse> {
     try {
         const { alias } = await params;
-        
+
         const validation = await validateSession();
         if (!validation.isValid) {
             return NextResponse.json(

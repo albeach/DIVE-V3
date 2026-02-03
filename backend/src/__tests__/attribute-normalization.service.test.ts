@@ -1,7 +1,7 @@
 /**
  * Attribute Normalization Service Test Suite
  * Tests for IdP attribute normalization (Spanish SAML, USA OIDC)
- * 
+ *
  * Target Coverage: 95%+
  * Priority: HIGH (Federation critical)
  */

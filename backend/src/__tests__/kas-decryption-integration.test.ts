@@ -1,7 +1,7 @@
 /**
  * KAS Decryption Integration Tests
  * CRITICAL: Verifies that ALL resource types can decrypt successfully
- * 
+ *
  * Tests:
  * 1. Seeded resources (deterministic DEK)
  * 2. Uploaded resources (random DEK in wrappedKey)

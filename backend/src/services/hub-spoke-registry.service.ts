@@ -2198,17 +2198,31 @@ federation_partners = {
 
   /**
    * Get port offset for a country based on NATO convention
+   * SSOT: Must match scripts/nato-countries.sh NATO_PORT_OFFSETS
    */
   private getPortOffsetForCountry(countryCode: string): number {
-    // NATO port offset convention (from nato-countries.sh)
+    // First check environment variable (set by deployment pipeline)
+    const envOffset = process.env.SPOKE_PORT_OFFSET;
+    if (envOffset) {
+      return parseInt(envOffset, 10);
+    }
+
+    // NATO port offset convention - MUST match scripts/nato-countries.sh
     const portOffsets: Record<string, number> = {
-      'USA': 0, 'ALB': 1, 'BEL': 2, 'BGR': 3, 'CAN': 4,
-      'HRV': 5, 'CZE': 6, 'DNK': 7, 'EST': 8, 'FRA': 9,
-      'DEU': 10, 'GRC': 11, 'HUN': 12, 'ISL': 13, 'ITA': 14,
-      'LVA': 15, 'LTU': 16, 'LUX': 17, 'MNE': 18, 'NLD': 19,
-      'MKD': 20, 'NOR': 21, 'POL': 22, 'PRT': 23, 'ROU': 24,
-      'SVK': 25, 'SVN': 26, 'ESP': 27, 'TUR': 28, 'GBR': 29,
-      'FIN': 30, 'SWE': 31, 'NZL': 32
+      // Hub
+      'USA': 0,    // 8443
+
+      // NATO countries (alphabetical, offsets 1-31)
+      'ALB': 1, 'BEL': 2, 'BGR': 3, 'CAN': 4, 'HRV': 5,
+      'CZE': 6, 'DNK': 7, 'EST': 8, 'FIN': 9, 'FRA': 10,
+      'DEU': 11, 'GRC': 12, 'HUN': 13, 'ISL': 14, 'ITA': 15,
+      'LVA': 16, 'LTU': 17, 'LUX': 18, 'MNE': 19, 'NLD': 20,
+      'MKD': 21, 'NOR': 22, 'POL': 23, 'PRT': 24, 'ROU': 25,
+      'SVK': 26, 'SVN': 27, 'ESP': 28, 'SWE': 29, 'TUR': 30,
+      'GBR': 31,  // 8474
+
+      // Partner nations (offsets 32-39)
+      'AUS': 32, 'NZL': 33, 'JPN': 34, 'KOR': 35, 'ISR': 36, 'UKR': 37,
     };
     return portOffsets[countryCode.toUpperCase()] || 0;
   }

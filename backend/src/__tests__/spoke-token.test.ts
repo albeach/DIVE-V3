@@ -53,7 +53,7 @@ describe('SpokeTokenService', () => {
   beforeEach(async () => {
     // Create temporary directory for tests
     testDir = await fs.mkdtemp(path.join(os.tmpdir(), 'spoke-token-test-'));
-    
+
     testConfig = {
       storagePath: path.join(testDir, 'token.json'),
       refreshBufferMs: 5 * 60 * 1000,
@@ -77,7 +77,7 @@ describe('SpokeTokenService', () => {
   describe('Initialization', () => {
     it('should initialize successfully', async () => {
       await service.initialize(testConfig);
-      
+
       const status = service.getStatus();
       expect(status.hasToken).toBe(false);
       expect(status.isValid).toBe(false);
@@ -86,11 +86,11 @@ describe('SpokeTokenService', () => {
     it('should create storage directory if not exists', async () => {
       const deepPath = path.join(testDir, 'deep', 'nested', 'token.json');
       await service.initialize({ ...testConfig, storagePath: deepPath });
-      
+
       const dirExists = await fs.access(path.dirname(deepPath))
         .then(() => true)
         .catch(() => false);
-      
+
       expect(dirExists).toBe(true);
     });
 
@@ -139,13 +139,13 @@ describe('SpokeTokenService', () => {
       const fileExists = await fs.access(testConfig.storagePath!)
         .then(() => true)
         .catch(() => false);
-      
+
       expect(fileExists).toBe(true);
     });
 
     it('should reject invalid token structure', async () => {
       const invalidToken = { token: '', spokeId: '' } as ISpokeToken;
-      
+
       await expect(service.storeToken(invalidToken)).rejects.toThrow(
         'Invalid token structure'
       );
@@ -298,13 +298,13 @@ describe('SpokeTokenService', () => {
         ...testConfig,
         encryptionKey: 'test-encryption-key-32chars!!',
       };
-      
+
       await service.initialize(encryptedConfig);
       await service.storeToken(createTestToken());
 
       // Read raw file content
       const fileContent = await fs.readFile(testConfig.storagePath!, 'utf-8');
-      
+
       // Should be encrypted (base64 format with colons)
       expect(fileContent).toMatch(/^[A-Za-z0-9+/=]+:[A-Za-z0-9+/=]+:/);
     });
@@ -314,7 +314,7 @@ describe('SpokeTokenService', () => {
         ...testConfig,
         encryptionKey: 'test-encryption-key-32chars!!',
       };
-      
+
       const token = createTestToken();
       await service.initialize(encryptedConfig);
       await service.storeToken(token);
@@ -335,7 +335,7 @@ describe('SpokeTokenService', () => {
   describe('Refresh Scheduling', () => {
     it('should emit tokenNeedsRefresh when token near expiry', async () => {
       await service.initialize({ ...testConfig, autoRefresh: true });
-      
+
       const handler = jest.fn();
       service.on('tokenNeedsRefresh', handler);
 
@@ -352,9 +352,9 @@ describe('SpokeTokenService', () => {
     it('should cancel refresh timer on shutdown', async () => {
       await service.initialize({ ...testConfig, autoRefresh: true });
       await service.storeToken(createTestToken());
-      
+
       service.shutdown();
-      
+
       // No error should occur (timer cleanup)
       expect(true).toBe(true);
     });

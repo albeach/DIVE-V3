@@ -1,9 +1,9 @@
 /**
  * DIVE V3 - Failover Management Page
- * 
+ *
  * Dedicated page for spoke administrators to manage circuit breaker state
  * and view failover event history.
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -177,8 +177,8 @@ export default function FailoverPage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
               <div className={`p-4 rounded-2xl shadow-lg ${
-                isHealthy 
-                  ? 'bg-gradient-to-br from-emerald-500 to-teal-600' 
+                isHealthy
+                  ? 'bg-gradient-to-br from-emerald-500 to-teal-600'
                   : circuitBreaker?.state === 'HALF_OPEN'
                     ? 'bg-gradient-to-br from-amber-500 to-orange-600'
                     : 'bg-gradient-to-br from-red-500 to-rose-600'
@@ -198,8 +198,8 @@ export default function FailoverPage() {
             <div className="flex items-center gap-3">
               {/* Health Badge */}
               <div className={`flex items-center gap-2 px-4 py-2 rounded-full border ${
-                isHealthy 
-                  ? 'bg-emerald-50 border-emerald-200' 
+                isHealthy
+                  ? 'bg-emerald-50 border-emerald-200'
                   : circuitBreaker?.state === 'HALF_OPEN'
                     ? 'bg-amber-50 border-amber-200'
                     : 'bg-red-50 border-red-200'
@@ -315,8 +315,8 @@ export default function FailoverPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Circuit Breaker Control */}
           <div>
-            <CircuitBreakerControl 
-              status={circuitBreaker} 
+            <CircuitBreakerControl
+              status={circuitBreaker}
               loading={loading}
               onForceState={handleForceCircuitState}
               onReset={handleResetCircuit}

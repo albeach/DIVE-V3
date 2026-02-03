@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # ACR/AAL Integration Test Runner
-# 
+#
 # This script runs integration tests to verify that users receive correct ACR/AAL
 # based on clearance level by authenticating with real Keycloak instances.
 #

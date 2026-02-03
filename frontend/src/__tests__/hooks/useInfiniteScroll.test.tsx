@@ -1,9 +1,9 @@
 /**
  * useInfiniteScroll Hook Unit Tests
- * 
+ *
  * Tests for @/hooks/useInfiniteScroll.ts
  * Phase 1: Performance Foundation
- * 
+ *
  * Coverage targets:
  * - Initial state and loading
  * - Cursor-based pagination
@@ -14,10 +14,10 @@
  */
 
 import { renderHook, act, waitFor } from '@testing-library/react';
-import useInfiniteScroll, { 
-  IPaginatedSearchResponse, 
-  ISearchFilters, 
-  ISortOptions 
+import useInfiniteScroll, {
+  IPaginatedSearchResponse,
+  ISearchFilters,
+  ISortOptions
 } from '@/hooks/useInfiniteScroll';
 
 // Mock IntersectionObserver
@@ -27,15 +27,15 @@ const mockDisconnect = jest.fn();
 
 class MockIntersectionObserver {
   callback: IntersectionObserverCallback;
-  
+
   constructor(callback: IntersectionObserverCallback) {
     this.callback = callback;
   }
-  
+
   observe = mockObserve;
   unobserve = mockUnobserve;
   disconnect = mockDisconnect;
-  
+
   // Helper to trigger intersection
   trigger(isIntersecting: boolean) {
     this.callback([{ isIntersecting } as IntersectionObserverEntry], this as unknown as IntersectionObserver);
@@ -99,7 +99,7 @@ describe('useInfiniteScroll', () => {
     jest.clearAllMocks();
     mockFetch.mockReset();
     observerInstance = null;
-    
+
     // Default successful response
     mockFetch.mockResolvedValue({
       ok: true,
@@ -130,7 +130,7 @@ describe('useInfiniteScroll', () => {
 
       // Wait a bit to ensure no fetch happens
       await new Promise(resolve => setTimeout(resolve, 100));
-      
+
       // fetch is called once for initial load regardless of autoLoad for sentinel
       // The autoLoad controls the IntersectionObserver auto-loading
       expect(mockFetch).toHaveBeenCalled();
@@ -171,7 +171,7 @@ describe('useInfiniteScroll', () => {
       });
 
       const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
-      
+
       expect(requestBody.filters.classifications).toEqual(['SECRET']);
       expect(requestBody.filters.countries).toEqual(['USA']);
       expect(requestBody.sort).toEqual({ field: 'title', order: 'desc' });
@@ -485,7 +485,7 @@ describe('useInfiniteScroll', () => {
         return new Promise((resolve, reject) => {
           const abortError = new Error('Aborted');
           abortError.name = 'AbortError';
-          
+
           options.signal?.addEventListener('abort', () => {
             reject(abortError);
           });
@@ -524,7 +524,7 @@ describe('useInfiniteScroll', () => {
 
       // Simulate setting the ref
       const mockElement = document.createElement('div');
-      
+
       act(() => {
         result.current.sentinelRef(mockElement);
       });
@@ -540,7 +540,7 @@ describe('useInfiniteScroll', () => {
       });
 
       const mockElement = document.createElement('div');
-      
+
       act(() => {
         result.current.sentinelRef(mockElement);
       });
@@ -560,7 +560,7 @@ describe('useInfiniteScroll', () => {
       });
 
       const mockElement = document.createElement('div');
-      
+
       act(() => {
         result.current.sentinelRef(mockElement);
       });
@@ -591,7 +591,7 @@ describe('useInfiniteScroll', () => {
       });
 
       const requestBody = JSON.parse(mockFetch.mock.calls[0][1].body);
-      
+
       expect(requestBody.federated).toBe(true);
       expect(requestBody.filters.instances).toEqual(['USA', 'FRA']);
     });

@@ -1,16 +1,16 @@
 /**
  * DIVE V3 Federated Search - Comprehensive Test Suite
  * =====================================================
- * 
+ *
  * Scalable test architecture for ALL instances (local and remote)
  * with support for new partner resources.
- * 
+ *
  * Test Coverage:
  * - Unit tests: Controller logic, relevance scoring, deduplication
  * - Integration tests: Cross-instance communication, authorization filtering
  * - E2E tests: Real MongoDB data (21,000 documents across instances)
  * - Performance tests: Latency, throughput, scalability
- * 
+ *
  * NATO Compliance: ACP-240 §5.4 (Federated Resource Access)
  */
 
@@ -230,7 +230,7 @@ describe('Federated Search - Unit Tests', () => {
     describe('1.1 Relevance Scoring', () => {
         it('should score title matches higher than other matches', () => {
             const queryTerms = 'fuel';
-            
+
             const titleMatch = createMockSearchResult({
                 resourceId: 'doc-001',
                 classification: 'SECRET',
@@ -423,7 +423,7 @@ describe('Federated Search - Unit Tests', () => {
 describe('Federated Search - Integration Tests', () => {
     // Mock axios for integration tests
     // Note: Actual mocking would be done via jest.mock() at module level
-    
+
     beforeAll(() => {
         // Setup mocks
     });
@@ -675,7 +675,7 @@ describe('Federated Search - Performance Tests', () => {
         it('should aggregate results in parallel', () => {
             const instanceCount = getEnabledPartners().length;
             const perInstanceLatency = 200; // ms
-            
+
             // Parallel execution should not multiply latency
             const parallelLatency = perInstanceLatency + 50; // Small overhead
             const serialLatency = instanceCount * perInstanceLatency;
@@ -692,7 +692,7 @@ describe('Federated Search - Performance Tests', () => {
 
             // Total potential results before filtering
             const totalPotentialResults = enabledPartners.length * TOTAL_DOCUMENTS_PER_INSTANCE;
-            
+
             // Should limit results
             expect(MAX_RESULTS).toBeLessThan(totalPotentialResults);
         });
@@ -741,7 +741,7 @@ describe('Federated Search - Partner Matrix', () => {
                     it(`${origin.code} user → ${target.code} resources`, () => {
                         // Verify user exists from origin country (for documentation)
                         const userExists = TEST_USERS.some(u => u.countryOfAffiliation === origin.code);
-                        
+
                         // Check if countries have shared COIs
                         const sharedCOIs = origin.supportedCOIs.filter(
                             coi => target.supportedCOIs.includes(coi)
@@ -751,7 +751,7 @@ describe('Federated Search - Partner Matrix', () => {
                         if (sharedCOIs.length > 0) {
                             expect(sharedCOIs).toContain('NATO'); // Most common shared COI
                         }
-                        
+
                         // If no user exists, test still validates COI matrix
                         expect(userExists || sharedCOIs.length >= 0).toBe(true);
                     });

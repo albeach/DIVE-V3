@@ -10,12 +10,12 @@
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                 </svg>
             </div>
-            
+
             <!-- Message -->
             <div class="dive-logout-message">
                 <p class="dive-logout-text">${msg("frontchannel-logout.message")}</p>
             </div>
-            
+
             <!-- Logout Progress -->
             <div class="dive-logout-progress">
                 <ul class="dive-logout-clients">
@@ -31,7 +31,7 @@
                     </#list>
                 </ul>
             </div>
-            
+
             <!-- Continue Button -->
             <div class="dive-logout-actions">
                 <#-- Pick the safest non-hardcoded destination: logoutRedirectUri -> loginUrl -> root -->

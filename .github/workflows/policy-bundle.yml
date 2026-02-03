@@ -30,7 +30,7 @@ jobs:
     name: Validate Rego Syntax & Style
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -63,27 +63,27 @@ jobs:
       - name: Check for Hardcoded Values
         run: |
           echo "🔍 Scanning for hardcoded secrets/URLs..."
-          
+
           # Check for hardcoded localhost (except in test files)
           if grep -r "localhost" policies/*.rego 2>/dev/null | grep -v "_test.rego"; then
             echo "⚠️ Warning: Found hardcoded localhost in policies"
           fi
-          
+
           # Check for hardcoded secrets
           if grep -rE "(password|secret|key)\s*:=\s*\"" policies/*.rego 2>/dev/null; then
             echo "❌ ERROR: Potential hardcoded secrets found!"
             exit 1
           fi
-          
+
           echo "✅ No hardcoded secrets detected"
 
       - name: Verify Package Naming Convention
         run: |
           echo "🔍 Verifying package naming convention..."
-          
+
           # All packages must start with 'dive.'
           INVALID_PACKAGES=$(grep -rh "^package" policies/*.rego 2>/dev/null | grep -v "^package dive\." | grep -v "^package data\." || true)
-          
+
           if [ -n "$INVALID_PACKAGES" ]; then
             echo "❌ ERROR: Invalid package names found:"
             echo "$INVALID_PACKAGES"
@@ -91,7 +91,7 @@ jobs:
             echo "All packages must start with 'dive.' namespace"
             exit 1
           fi
-          
+
           echo "✅ Package naming convention verified"
 
   # ============================================
@@ -102,7 +102,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     needs: validate
-    
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -116,15 +116,15 @@ jobs:
         run: |
           echo "🧪 Running OPA policy tests..."
           opa test policies/ -v --coverage --format=json > test-results.json
-          
+
           # Extract coverage percentage
           COVERAGE=$(jq '.coverage // 0' test-results.json)
           echo "📊 Test coverage: ${COVERAGE}%"
-          
+
           # Display test summary
           PASSED=$(jq '[.[] | select(.pass == true)] | length' test-results.json || echo "0")
           FAILED=$(jq '[.[] | select(.pass == false)] | length' test-results.json || echo "0")
-          
+
           echo "## OPA Policy Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
@@ -137,12 +137,12 @@ jobs:
         run: |
           COVERAGE=$(jq '.coverage // 0' test-results.json)
           THRESHOLD=70
-          
+
           if (( $(echo "$COVERAGE < $THRESHOLD" | bc -l) )); then
             echo "❌ Coverage ${COVERAGE}% below ${THRESHOLD}% threshold"
             exit 1
           fi
-          
+
           echo "✅ Coverage ${COVERAGE}% meets ${THRESHOLD}% threshold"
 
       - name: Upload Test Results
@@ -160,7 +160,7 @@ jobs:
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     needs: validate
-    
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -175,18 +175,18 @@ jobs:
       - name: Generate Policy Diff
         run: |
           echo "📝 Generating policy diff..."
-          
+
           # Get changed policy files
           CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- 'policies/*.rego' || true)
-          
+
           if [ -z "$CHANGED_FILES" ]; then
             echo "No policy files changed"
             exit 0
           fi
-          
+
           echo "Changed policy files:"
           echo "$CHANGED_FILES"
-          
+
           # Generate diff report
           echo "## Policy Changes" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -194,11 +194,11 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
           echo "$CHANGED_FILES" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
-          
+
           # Show actual diffs for each file
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Detailed Changes" >> $GITHUB_STEP_SUMMARY
-          
+
           for file in $CHANGED_FILES; do
             if [ -f "$file" ]; then
               echo "" >> $GITHUB_STEP_SUMMARY
@@ -212,10 +212,10 @@ jobs:
       - name: Impact Analysis
         run: |
           echo "🔍 Analyzing policy impact..."
-          
+
           # Check for changes to allow rules
           ALLOW_CHANGES=$(git diff origin/${{ github.base_ref }}...HEAD -- 'policies/*.rego' | grep -E "^[+-].*allow" | head -20 || true)
-          
+
           if [ -n "$ALLOW_CHANGES" ]; then
             echo ""
             echo "## ⚠️ Changes to Allow Rules Detected" >> $GITHUB_STEP_SUMMARY
@@ -236,10 +236,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     if: github.event_name == 'push' || github.event.inputs.force_build == 'true'
-    
+
     outputs:
       bundle_version: ${{ steps.version.outputs.version }}
-      
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -256,7 +256,7 @@ jobs:
           SHORT_VERSION="${VERSION:0:8}"
           TIMESTAMP=$(date -u +"%Y%m%d%H%M%S")
           FULL_VERSION="${SHORT_VERSION}-${TIMESTAMP}"
-          
+
           echo "version=${FULL_VERSION}" >> $GITHUB_OUTPUT
           echo "📦 Bundle version: ${FULL_VERSION}"
 
@@ -269,24 +269,24 @@ jobs:
       - name: Build Base Bundle
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          
+
           echo "📦 Building base policy bundle..."
           opa build \
             -b policies/ \
             -o bundles/${VERSION}/dive-base.tar.gz \
             --revision ${VERSION}
-          
+
           echo "✅ Base bundle built: bundles/${VERSION}/dive-base.tar.gz"
           ls -la bundles/${VERSION}/
 
       - name: Build Tenant Bundles
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          
+
           # Build per-tenant bundles (when tenant directories exist)
           for tenant in usa fra gbr deu; do
             TENANT_DIR="policies/tenant/${tenant}"
-            
+
             if [ -d "$TENANT_DIR" ]; then
               echo "📦 Building ${tenant} tenant bundle..."
               opa build \
@@ -304,7 +304,7 @@ jobs:
       - name: Generate Bundle Manifest
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          
+
           cat > bundles/${VERSION}/manifest.json << EOF
           {
             "version": "${VERSION}",
@@ -321,7 +321,7 @@ jobs:
             ]
           }
           EOF
-          
+
           echo "📋 Generated manifest:"
           cat bundles/${VERSION}/manifest.json
 
@@ -335,7 +335,7 @@ jobs:
       - name: Bundle Summary
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          
+
           echo "## 📦 Policy Bundle Build" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
@@ -357,7 +357,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: test
     if: github.event_name == 'pull_request'
-    
+
     services:
       opa:
         image: openpolicyagent/opa:latest
@@ -387,7 +387,7 @@ jobs:
         run: |
           # Wait for OPA to be ready
           sleep 5
-          
+
           # Load all policies
           for file in policies/*.rego; do
             if [ -f "$file" ]; then
@@ -398,7 +398,7 @@ jobs:
                 --data-binary @"$file"
             fi
           done
-          
+
           # Load test policies
           for file in policies/tests/*.rego; do
             if [ -f "$file" ]; then
@@ -427,7 +427,7 @@ jobs:
           cd scripts/policy
           npm install -g ts-node typescript
           npm install axios
-          
+
           # Run comparison
           npx ts-node capture-baseline.ts compare
         env:
@@ -440,7 +440,7 @@ jobs:
     name: Policy Performance Benchmark
     runs-on: ubuntu-latest
     needs: test
-    
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -453,13 +453,13 @@ jobs:
       - name: Run OPA Benchmark
         run: |
           echo "⏱️ Running OPA performance benchmark..."
-          
+
           # Benchmark main authorization policy
           if [ -f "policies/fuel_inventory_abac_policy.rego" ]; then
             echo "Benchmarking fuel_inventory_abac_policy.rego..."
             opa bench policies/fuel_inventory_abac_policy.rego --count 1000 2>&1 | tee benchmark-main.txt
           fi
-          
+
           # Benchmark federation policy
           if [ -f "policies/federation_abac_policy.rego" ]; then
             echo "Benchmarking federation_abac_policy.rego..."
@@ -470,14 +470,14 @@ jobs:
         run: |
           echo "## ⏱️ Policy Performance Benchmark" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           if [ -f "benchmark-main.txt" ]; then
             echo "### Main Authorization Policy" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             cat benchmark-main.txt >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
           fi
-          
+
           if [ -f "benchmark-federation.txt" ]; then
             echo "### Federation Policy" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY

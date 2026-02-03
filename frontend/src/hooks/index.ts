@@ -1,6 +1,6 @@
 /**
  * Hooks Index
- * 
+ *
  * Centralized exports for all custom hooks.
  * Import from '@/hooks' for cleaner imports.
  */
@@ -9,8 +9,8 @@
 // Phase 1: Performance Foundation
 // ============================================
 
-export { 
-  default as useInfiniteScroll, 
+export {
+  default as useInfiniteScroll,
   useDebouncedFilters,
   type ISearchFilters,
   type ISortOptions,
@@ -21,7 +21,7 @@ export {
   type UseInfiniteScrollReturn,
 } from './useInfiniteScroll';
 
-export { 
+export {
   default as useAbortController,
   useAbortControllers,
   useDebouncedFetch,
@@ -31,7 +31,7 @@ export {
   type UseDebouncedFetchReturn,
 } from './useAbortController';
 
-export { 
+export {
   default as useKeyboardNavigation,
   KeyboardShortcutsHelp,
   type KeyboardNavigationOptions,

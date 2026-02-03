@@ -2,14 +2,14 @@
 
 /**
  * Instance Background Component
- * 
+ *
  * Provides a visually distinct background for each coalition instance.
  * Supports multiple background types:
  * - gradient: Uses CSS variables for instance-specific gradients
  * - image: Country-specific background images
  * - pattern: Geometric patterns with instance colors
  * - animated: Subtle animated backgrounds with data flow effects
- * 
+ *
  * Scalable design - new instances only need to add their theme to instance.json
  */
 
@@ -37,7 +37,7 @@ function GradientBackground({ intensity = 'medium' }: { intensity: string }) {
   };
 
   return (
-    <div 
+    <div
       className={`absolute inset-0 ${opacityMap[intensity as keyof typeof opacityMap]}`}
       style={{ background: 'var(--instance-banner-bg)' }}
     />
@@ -58,13 +58,13 @@ function PatternBackground({ intensity = 'medium' }: { intensity: string }) {
   return (
     <>
       {/* Base gradient */}
-      <div 
+      <div
         className="absolute inset-0"
         style={{ background: 'var(--instance-banner-bg)' }}
       />
-      
+
       {/* Grid pattern overlay */}
-      <div 
+      <div
         className="absolute inset-0"
         style={{
           backgroundImage: `
@@ -74,9 +74,9 @@ function PatternBackground({ intensity = 'medium' }: { intensity: string }) {
           backgroundSize: '50px 50px',
         }}
       />
-      
+
       {/* Diagonal lines */}
-      <div 
+      <div
         className="absolute inset-0"
         style={{
           backgroundImage: `
@@ -122,14 +122,14 @@ function ImageBackground({ instanceCode, intensity = 'medium' }: { instanceCode:
   return (
     <>
       {/* Background image */}
-      <div 
+      <div
         className="absolute inset-0 bg-cover bg-center bg-no-repeat"
         style={{ backgroundImage: `url(${imagePath})` }}
       />
       {/* Gradient overlay for readability */}
       <div className={`absolute inset-0 ${overlayOpacity[intensity as keyof typeof overlayOpacity]}`} />
       {/* Instance color tint */}
-      <div 
+      <div
         className="absolute inset-0 mix-blend-overlay opacity-30"
         style={{ background: 'var(--instance-banner-bg)' }}
       />
@@ -151,13 +151,13 @@ function AnimatedBackground({ intensity = 'medium' }: { intensity: string }) {
   return (
     <>
       {/* Base gradient */}
-      <div 
+      <div
         className="absolute inset-0"
         style={{ background: 'var(--instance-banner-bg)' }}
       />
-      
+
       {/* Animated grid */}
-      <div 
+      <div
         className="absolute inset-0"
         style={{
           backgroundImage: `
@@ -168,7 +168,7 @@ function AnimatedBackground({ intensity = 'medium' }: { intensity: string }) {
           animation: 'backgroundScroll 20s linear infinite',
         }}
       />
-      
+
       {/* Animated circuit lines */}
       <div className="absolute inset-0 overflow-hidden" style={{ opacity: opacities.lines }}>
         <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
@@ -182,7 +182,7 @@ function AnimatedBackground({ intensity = 'medium' }: { intensity: string }) {
           <line x1="0" y1="75%" x2="100%" y2="75%" stroke="rgba(var(--instance-accent-rgb, 255, 255, 255), 0.5)" strokeWidth="1" strokeDasharray="8,4">
             <animate attributeName="stroke-dashoffset" from="0" to="12" dur="2.5s" repeatCount="indefinite" />
           </line>
-          
+
           {/* Data nodes */}
           <circle cx="15%" cy="25%" r="4" fill="rgba(var(--instance-accent-rgb, 255, 255, 255), 0.8)">
             <animate attributeName="opacity" values="0.3;1;0.3" dur="2s" repeatCount="indefinite" />
@@ -198,7 +198,7 @@ function AnimatedBackground({ intensity = 'medium' }: { intensity: string }) {
           </circle>
         </svg>
       </div>
-      
+
       {/* Floating particles */}
       <div className="absolute inset-0 overflow-hidden">
         {[...Array(8)].map((_, i) => (
@@ -217,15 +217,15 @@ function AnimatedBackground({ intensity = 'medium' }: { intensity: string }) {
           />
         ))}
       </div>
-      
+
       {/* Subtle radial glow */}
-      <div 
+      <div
         className="absolute inset-0 opacity-30"
         style={{
           background: 'radial-gradient(ellipse at 30% 20%, rgba(var(--instance-accent-rgb, 255, 255, 255), 0.15) 0%, transparent 50%)',
         }}
       />
-      <div 
+      <div
         className="absolute inset-0 opacity-20"
         style={{
           background: 'radial-gradient(ellipse at 70% 80%, rgba(var(--instance-secondary-rgb, 255, 255, 255), 0.15) 0%, transparent 50%)',
@@ -242,21 +242,21 @@ function MinimalBackground() {
   return (
     <>
       {/* Base gradient */}
-      <div 
+      <div
         className="absolute inset-0"
         style={{ background: 'var(--instance-banner-bg)' }}
       />
-      
+
       {/* Subtle texture */}
-      <div 
+      <div
         className="absolute inset-0 opacity-5"
         style={{
           backgroundImage: `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%23ffffff' fill-opacity='1'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E")`,
         }}
       />
-      
+
       {/* Top shine accent */}
-      <div 
+      <div
         className="absolute top-0 left-0 right-0 h-px opacity-20"
         style={{ background: 'linear-gradient(90deg, transparent, rgba(var(--instance-accent-rgb, 255, 255, 255), 0.5), transparent)' }}
       />
@@ -267,8 +267,8 @@ function MinimalBackground() {
 /**
  * Main InstanceBackground Component
  */
-export function InstanceBackground({ 
-  children, 
+export function InstanceBackground({
+  children,
   type = 'animated',
   className = '',
   overlay = false,
@@ -297,12 +297,12 @@ export function InstanceBackground({
     <div className={`relative overflow-hidden ${className}`}>
       {/* Background layer */}
       {renderBackground()}
-      
+
       {/* Optional dark overlay for better content visibility */}
       {overlay && (
         <div className="absolute inset-0 bg-black/20" />
       )}
-      
+
       {/* Content layer */}
       <div className="relative z-10">
         {children}
@@ -314,14 +314,14 @@ export function InstanceBackground({
 /**
  * Full-page background wrapper
  */
-export function InstancePageBackground({ 
+export function InstancePageBackground({
   children,
   type = 'animated',
   intensity = 'medium',
 }: InstanceBackgroundProps) {
   return (
-    <InstanceBackground 
-      type={type} 
+    <InstanceBackground
+      type={type}
       intensity={intensity}
       className="min-h-screen"
     >
@@ -333,14 +333,14 @@ export function InstancePageBackground({
 /**
  * Hero section background
  */
-export function InstanceHeroBackground({ 
+export function InstanceHeroBackground({
   children,
   type = 'animated',
   className = '',
 }: InstanceBackgroundProps) {
   return (
-    <InstanceBackground 
-      type={type} 
+    <InstanceBackground
+      type={type}
       intensity="medium"
       className={`py-12 md:py-20 ${className}`}
     >
@@ -352,19 +352,19 @@ export function InstanceHeroBackground({
 /**
  * Card/Section background with lighter treatment
  */
-export function InstanceCardBackground({ 
+export function InstanceCardBackground({
   children,
   className = '',
 }: { children: React.ReactNode; className?: string }) {
   return (
     <div className={`relative overflow-hidden ${className}`}>
       {/* Light gradient background */}
-      <div 
+      <div
         className="absolute inset-0 opacity-5"
         style={{ background: 'var(--instance-banner-bg)' }}
       />
       {/* Subtle border accent */}
-      <div 
+      <div
         className="absolute top-0 left-0 right-0 h-1"
         style={{ background: 'var(--instance-banner-bg)' }}
       />

@@ -75,7 +75,7 @@ check_kubectl() {
 fetch_secret() {
     local secret_name=$1
     local project=${2:-dive25}
-    
+
     gcloud secrets versions access latest \
         --secret="${secret_name}" \
         --project="${project}" 2>/dev/null || echo ""
@@ -84,18 +84,18 @@ fetch_secret() {
 # Update database credentials secret
 update_database_secrets() {
     echo -e "${BLUE}🔐 Updating database credentials...${NC}"
-    
+
     # Fetch secrets from GCP
     POSTGRES_PASSWORD=$(fetch_secret "dive-v3-postgres-${INSTANCE}")
     MONGO_PASSWORD=$(fetch_secret "dive-v3-mongodb-${INSTANCE}")
-    
+
     if [ -z "$POSTGRES_PASSWORD" ] || [ -z "$MONGO_PASSWORD" ]; then
         echo -e "${YELLOW}⚠️  Some secrets not found in GCP Secret Manager${NC}"
         echo "Using placeholder values. Update manually if needed."
         POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-CHANGE_ME}"
         MONGO_PASSWORD="${MONGO_PASSWORD:-CHANGE_ME}"
     fi
-    
+
     # Database URLs - use base service names (postgres, mongo, redis) for all instances
     case "${INSTANCE}" in
         usa)
@@ -107,15 +107,15 @@ update_database_secrets() {
             MONGO_DB="dive-v3-${INSTANCE}"
             ;;
     esac
-    
+
     POSTGRES_SVC="postgres"
     MONGO_SVC="mongo"
     REDIS_SVC="redis"
-    
+
     POSTGRES_URL="postgresql://postgres:${POSTGRES_PASSWORD}@${POSTGRES_SVC}.${NAMESPACE}.svc.cluster.local:5432/${POSTGRES_DB}"
     MONGO_URL="mongodb://admin:${MONGO_PASSWORD}@${MONGO_SVC}.${NAMESPACE}.svc.cluster.local:27017/${MONGO_DB}?authSource=admin"
     REDIS_URL="redis://${REDIS_SVC}.${NAMESPACE}.svc.cluster.local:6379"
-    
+
     # Create/update secret
     # NOTE: MongoDB deployment expects 'password' key to be MongoDB password, not PostgreSQL
     kubectl create secret generic database-credentials \
@@ -125,42 +125,42 @@ update_database_secrets() {
         --from-literal=password="${MONGO_PASSWORD}" \
         --namespace="${NAMESPACE}" \
         --dry-run=client -o yaml | kubectl apply -f -
-    
+
     echo -e "${GREEN}✅ Database credentials updated${NC}"
 }
 
 # Update auth secrets
 update_auth_secrets() {
     echo -e "${BLUE}🔐 Updating auth secrets...${NC}"
-    
+
     # Fetch secrets from GCP
     NEXTAUTH_SECRET=$(fetch_secret "dive-v3-auth-secret-${INSTANCE}")
     KEYCLOAK_CLIENT_SECRET=$(fetch_secret "dive-v3-keycloak-client-secret-${INSTANCE}")
-    
+
     if [ -z "$NEXTAUTH_SECRET" ]; then
         echo -e "${YELLOW}⚠️  NextAuth secret not found, generating random...${NC}"
         NEXTAUTH_SECRET=$(openssl rand -base64 32)
     fi
-    
+
     if [ -z "$KEYCLOAK_CLIENT_SECRET" ]; then
         echo -e "${YELLOW}⚠️  Keycloak client secret not found${NC}"
         KEYCLOAK_CLIENT_SECRET="CHANGE_ME"
     fi
-    
+
     # Create/update secret
     kubectl create secret generic auth-secrets \
         --from-literal=nextauth_secret="${NEXTAUTH_SECRET}" \
         --from-literal=keycloak_client_secret="${KEYCLOAK_CLIENT_SECRET}" \
         --namespace="${NAMESPACE}" \
         --dry-run=client -o yaml | kubectl apply -f -
-    
+
     echo -e "${GREEN}✅ Auth secrets updated${NC}"
 }
 
 # Verify secrets
 verify_secrets() {
     echo -e "${BLUE}🔍 Verifying secrets...${NC}"
-    
+
     echo "Secrets in namespace ${NAMESPACE}:"
     kubectl get secrets -n "${NAMESPACE}" | grep -E "database-credentials|auth-secrets" || echo "  (none found)"
 }
@@ -168,12 +168,12 @@ verify_secrets() {
 # Main execution
 main() {
     print_header
-    
+
     check_kubectl
     update_database_secrets
     update_auth_secrets
     verify_secrets
-    
+
     echo ""
     echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║          ✅ Secrets Updated Successfully                   ║${NC}"

@@ -2,20 +2,20 @@
 /**
  * DIVE V3 - Tenant Policy Bundle Builder
  * Phase 4: Multi-Tenant Policy Isolation
- * 
+ *
  * Generates per-tenant OPA policy bundles with:
  * - Tenant-specific configuration
  * - Tenant-specific data files
  * - Base/org/entrypoint policies
  * - Classification mappings
  * - OPAL scope isolation
- * 
+ *
  * Usage:
  *   npx ts-node scripts/policy/build-tenant-bundle.ts build --all
  *   npx ts-node scripts/policy/build-tenant-bundle.ts build --tenant USA
  *   npx ts-node scripts/policy/build-tenant-bundle.ts verify --tenant USA
  *   npx ts-node scripts/policy/build-tenant-bundle.ts list
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */
@@ -231,7 +231,7 @@ function stagePolicies(
     for (const file of tenantFiles) {
       // Skip test files
       if (file.endsWith('_test.rego')) continue;
-      
+
       const srcPath = path.join(tenantDir, file);
       if (fs.statSync(srcPath).isFile()) {
         const destPath = path.join(stagingDir, 'tenant', tenant.id.toLowerCase(), file);
@@ -269,10 +269,10 @@ function stageData(
 
   if (fs.existsSync(tenantDataPath)) {
     const destPath = path.join(stagingDir, 'data.json');
-    
+
     // Load and merge with shared data if needed
     const tenantData = JSON.parse(fs.readFileSync(tenantDataPath, 'utf-8'));
-    
+
     // Add isolation metadata
     tenantData._isolation = {
       tenant_id: tenant.id,
@@ -280,7 +280,7 @@ function stageData(
       namespace_prefix: config.isolation.namespacePrefix,
       cross_tenant_deny: config.isolation.crossTenantDeny,
     };
-    
+
     fs.writeFileSync(destPath, JSON.stringify(tenantData, null, 2));
     files.push('data.json');
   }
@@ -434,7 +434,7 @@ function verifyBundle(
     const inspectCmd = `${OPA_BIN} inspect ${bundlePath}`;
     const inspectResult = child_process.execSync(inspectCmd, { encoding: 'utf-8' });
     console.log('  ✓ OPA can inspect bundle');
-    
+
     // Check for expected namespaces
     if (inspectResult.includes('dive.tenant')) {
       console.log('  ✓ Contains tenant policies');
@@ -471,7 +471,7 @@ function listTenants(config: BundleConfig): void {
   console.log('\n📋 Available Tenants:\n');
   console.log('ID    | Name                | Classification  | OPAL Scope');
   console.log('------+---------------------+-----------------+------------------');
-  
+
   for (const tenant of config.tenants) {
     const status = tenant.enabled ? '✓' : '✗';
     console.log(
@@ -481,7 +481,7 @@ function listTenants(config: BundleConfig): void {
       `${tenant.opalScope}`
     );
   }
-  
+
   console.log(`\nTotal: ${config.tenants.length} tenants (${config.tenants.filter(t => t.enabled).length} enabled)`);
 }
 
@@ -491,7 +491,7 @@ function listTenants(config: BundleConfig): void {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const command = args[0];
-  
+
   if (!command) {
     console.log('DIVE V3 Tenant Policy Bundle Builder');
     console.log('=====================================');

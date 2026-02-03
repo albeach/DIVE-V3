@@ -1,6 +1,6 @@
 # E2E Testing Infrastructure - Modern Patterns (2025)
 
-**Last Updated:** November 16, 2025  
+**Last Updated:** November 16, 2025
 **Status:** ✅ Infrastructure Complete - Ready for Test Refactoring
 
 ---
@@ -83,12 +83,12 @@ import { ResourcesPage } from './pages/ResourcesPage';
 test('User can access authorized resources', async ({ page }) => {
   // Login
   await loginAs(page, TEST_USERS.USA.SECRET);
-  
+
   // Navigate & interact
   const resources = new ResourcesPage(page);
   await resources.goto();
   await resources.verifyResourceAccessible(TEST_RESOURCES.SECRET.FVEY.resourceId);
-  
+
   // Cleanup
   await logout(page);
 });
@@ -261,18 +261,18 @@ test('User can access authorized resources', async ({ page }) => {
   test.step('Login as USA SECRET user', async () => {
     await loginAs(page, TEST_USERS.USA.SECRET);
   });
-  
+
   test.step('Navigate to resources page', async () => {
     const resources = new ResourcesPage(page);
     await resources.goto();
     await resources.verifyResourcesDisplayed();
   });
-  
+
   test.step('Access FVEY document - expect ALLOW', async () => {
     const resources = new ResourcesPage(page);
     await resources.verifyResourceAccessible(TEST_RESOURCES.SECRET.FVEY.resourceId);
   });
-  
+
   test.step('Logout', async () => {
     await logout(page);
   });
@@ -287,7 +287,7 @@ test.describe('Resource Access Tests', () => {
     // Setup before each test
     console.log('Starting test...');
   });
-  
+
   test.afterEach(async ({ page }) => {
     // Cleanup after each test
     await logout(page);
@@ -305,7 +305,7 @@ test.describe('Resource Access Tests', () => {
    ```typescript
    // ✅ Good
    await loginAs(page, TEST_USERS.USA.SECRET);
-   
+
    // ❌ Bad
    const user = { username: 'testuser-usa-3', password: 'Password123!' };
    ```
@@ -315,7 +315,7 @@ test.describe('Resource Access Tests', () => {
    // ✅ Good
    const resources = new ResourcesPage(page);
    await resources.goto();
-   
+
    // ❌ Bad
    await page.goto('/resources');
    ```
@@ -324,7 +324,7 @@ test.describe('Resource Access Tests', () => {
    ```typescript
    // ✅ Good
    await page.getByRole('button', { name: 'Sign In' }).click();
-   
+
    // ❌ Bad
    await page.click('button.submit-btn');
    ```
@@ -333,7 +333,7 @@ test.describe('Resource Access Tests', () => {
    ```typescript
    // ✅ Good
    await page.goto('/resources');
-   
+
    // ❌ Bad
    await page.goto('http://localhost:3000/resources');
    ```
@@ -342,7 +342,7 @@ test.describe('Resource Access Tests', () => {
    ```typescript
    // ✅ Good
    await page.getByRole('button', { name: 'Submit' }).waitFor({ state: 'visible' });
-   
+
    // ❌ Bad
    await page.waitForTimeout(5000);
    ```
@@ -352,7 +352,7 @@ test.describe('Resource Access Tests', () => {
    // ✅ Good
    test.step('Login', async () => { ... });
    test.step('Navigate', async () => { ... });
-   
+
    // ❌ Bad
    // ... single flat test with no steps
    ```
@@ -378,11 +378,11 @@ test.describe('Resource Access Tests', () => {
 test('User can view dashboard', async ({ page }) => {
   // Login
   await loginAs(page, TEST_USERS.USA.SECRET);
-  
+
   // Navigate
   const dashboard = new DashboardPage(page);
   await dashboard.goto();
-  
+
   // Verify
   await dashboard.verifyLoggedIn();
   await dashboard.verifyUserInfo('testuser-usa-3', 'SECRET', 'USA');
@@ -394,10 +394,10 @@ test('User can view dashboard', async ({ page }) => {
 ```typescript
 test('France user denied access to FVEY document', async ({ page }) => {
   await loginAs(page, TEST_USERS.FRA.SECRET);
-  
+
   const resources = new ResourcesPage(page);
   await resources.verifyResourceDenied(TEST_RESOURCES.SECRET.FVEY.resourceId);
-  
+
   // Verify denial reason
   const reason = page.getByText(/country|releasability/i);
   await expect(reason).toBeVisible();
@@ -414,14 +414,14 @@ test('Different users see different resources', async ({ page }) => {
   await resources1.goto();
   const usaCount = await resources1.getResourceCount();
   await logout(page);
-  
+
   // France user
   await loginAs(page, TEST_USERS.FRA.SECRET);
   const resources2 = new ResourcesPage(page);
   await resources2.goto();
   const fraCount = await resources2.getResourceCount();
   await logout(page);
-  
+
   // USA should see more (FVEY documents)
   expect(usaCount).toBeGreaterThan(fraCount);
 });
@@ -639,6 +639,6 @@ export const CURRENT_INSTANCE = INSTANCE_CONFIG[process.env.DIVE_INSTANCE || 'hu
 
 ---
 
-**Created:** November 16, 2025  
-**Last Updated:** November 16, 2025  
+**Created:** November 16, 2025
+**Last Updated:** November 16, 2025
 **Status:** ✅ Ready for Use

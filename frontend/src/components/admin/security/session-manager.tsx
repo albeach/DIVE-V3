@@ -30,6 +30,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import { adminToast, notify } from '@/lib/admin-toast';
+import { VirtualList } from '@/components/ui/virtual-list';
 
 // ============================================
 // Types
@@ -291,25 +292,27 @@ export function SessionManager() {
 
       {/* Session List */}
       <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
-        <div className="divide-y divide-gray-100">
-          {filteredSessions.length === 0 ? (
-            <div className="p-8 text-center">
-              <Users className="mx-auto h-12 w-12 text-gray-300" />
-              <p className="mt-2 text-gray-500">No sessions found</p>
-            </div>
-          ) : (
-            filteredSessions.map((session, index) => {
+        {filteredSessions.length === 0 ? (
+          <div className="p-8 text-center">
+            <Users className="mx-auto h-12 w-12 text-gray-300" />
+            <p className="mt-2 text-gray-500">No sessions found</p>
+          </div>
+        ) : (
+          <VirtualList<ISession>
+            items={filteredSessions}
+            estimateSize={88}
+            overscan={5}
+            className="max-h-[600px]"
+            getItemKey={(index) => filteredSessions[index].id}
+            emptyMessage="No sessions found"
+            renderItem={(session) => {
               const DeviceIcon = DEVICE_ICONS[session.device];
               const isSelected = selectedSessions.has(session.id);
               const isActive = new Date().getTime() - new Date(session.lastActive).getTime() < 5 * 60 * 1000;
 
               return (
-                <motion.div
-                  key={session.id}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.03 }}
-                  className={`p-4 hover:bg-slate-50 transition-colors ${isSelected ? 'bg-blue-50' : ''}`}
+                <div
+                  className={`p-4 hover:bg-slate-50 transition-colors border-b border-gray-100 ${isSelected ? 'bg-blue-50' : ''}`}
                 >
                   <div className="flex items-center gap-4">
                     {/* Checkbox */}
@@ -382,11 +385,11 @@ export function SessionManager() {
                       <LogOut className="h-4 w-4" />
                     </button>
                   </div>
-                </motion.div>
+                </div>
               );
-            })
-          )}
-        </div>
+            }}
+          />
+        )}
       </div>
 
       {/* Terminate Confirmation Modal */}

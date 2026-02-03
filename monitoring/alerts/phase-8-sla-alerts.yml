@@ -16,7 +16,7 @@ groups:
       # ============================================
       # LATENCY SLA ALERTS
       # ============================================
-      
+
       - alert: AuthorizationLatencyP95High
         expr: histogram_quantile(0.95, sum(rate(dive_v3_authorization_latency_seconds_bucket[5m])) by (le, tenant)) > 0.030
         for: 2m

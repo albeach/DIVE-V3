@@ -158,10 +158,10 @@ export function SearchBox({ className = '', user }: SearchBoxProps) {
           }}
           onFocus={() => query && setIsOpen(true)}
           onKeyDown={handleKeyDown}
-          className="w-full pl-10 pr-10 py-2 text-sm border border-gray-300 dark:border-gray-600 
+          className={`w-full pl-10 pr-10 py-2 text-sm border border-gray-300 dark:border-gray-600 
                      rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 
                      placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-[#4497ac] 
-                     focus:border-transparent transition-all"
+                     focus:border-transparent transition-all`}
           aria-label="Search navigation and content"
           aria-expanded={isOpen}
           aria-autocomplete="list"
@@ -173,8 +173,8 @@ export function SearchBox({ className = '', user }: SearchBoxProps) {
               setResults([]);
               inputRef.current?.focus();
             }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 
-                       dark:hover:text-gray-300 transition-colors"
+            className={`absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 
+                       dark:hover:text-gray-300 transition-colors`}
             aria-label="Clear search"
           >
             <X className="h-4 w-4" />
@@ -189,9 +189,9 @@ export function SearchBox({ className = '', user }: SearchBoxProps) {
       {isOpen && (query || results.length > 0) && (
         <div
           ref={dropdownRef}
-          className="absolute top-full mt-2 w-full min-w-[320px] max-w-md bg-white dark:bg-gray-900 
+          className={`absolute top-full mt-2 w-full min-w-[320px] max-w-md bg-white dark:bg-gray-900 
                      rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden 
-                     z-50 animate-in fade-in slide-in-from-top-2"
+                     z-50 animate-in fade-in slide-in-from-top-2`}
         >
           {results.length > 0 ? (
             <div className="max-h-80 overflow-y-auto">
@@ -201,9 +201,9 @@ export function SearchBox({ className = '', user }: SearchBoxProps) {
                   <button
                     key={result.id}
                     onClick={() => handleSelect(result.href)}
-                    className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 
+                    className={`w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-50 
                                dark:hover:bg-gray-800 transition-colors text-left border-b 
-                               border-gray-100 dark:border-gray-800 last:border-0"
+                               border-gray-100 dark:border-gray-800 last:border-0`}
                   >
                     <Icon className="h-5 w-5 text-gray-400 flex-shrink-0" />
                     <div className="flex-1 min-w-0">
@@ -266,8 +266,8 @@ export function MobileSearchModal({ isOpen, onClose, user }: {
       <div className="flex items-center gap-3 px-4 py-3 border-b border-gray-200 dark:border-gray-700">
         <button
           onClick={onClose}
-          className="p-2 -ml-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 
-                     dark:hover:bg-gray-800 rounded-lg transition-colors"
+          className={`p-2 -ml-2 text-gray-600 dark:text-gray-400 hover:bg-gray-100 
+                     dark:hover:bg-gray-800 rounded-lg transition-colors`}
           aria-label="Close search"
         >
           <X className="h-5 w-5" />

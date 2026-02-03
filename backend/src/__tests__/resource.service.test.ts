@@ -1,7 +1,7 @@
 /**
  * Resource Service Test Suite
  * Tests for ZTDF resource management, integrity validation, and MongoDB operations
- * 
+ *
  * Target Coverage: 90%
  * Priority: CRITICAL (ZTDF compliance)
  */
@@ -808,11 +808,11 @@ describe('Resource Service', () => {
             it('should query resources by single resourceId', async () => {
                 const allResources = await getAllResources();
                 const testResource = allResources[0];
-                
+
                 const results = await getResourcesByQuery({
                     resourceId: testResource.resourceId
                 });
-                
+
                 expect(results).toHaveLength(1);
                 expect(results[0].resourceId).toBe(testResource.resourceId);
                 expect(results[0].encrypted).toBe(true);
@@ -821,11 +821,11 @@ describe('Resource Service', () => {
             it('should query resources by resourceId array ($in)', async () => {
                 const allResources = await getAllResources();
                 const ids = allResources.slice(0, 2).map(r => r.resourceId);
-                
+
                 const results = await getResourcesByQuery({
                     resourceId: { $in: ids }
                 });
-                
+
                 expect(results.length).toBeGreaterThanOrEqual(2);
                 expect(results.every(r => ids.includes(r.resourceId))).toBe(true);
             });
@@ -834,7 +834,7 @@ describe('Resource Service', () => {
                 const results = await getResourcesByQuery({
                     classification: 'SECRET'
                 });
-                
+
                 expect(results.length).toBeGreaterThan(0);
                 expect(results.every(r => r.classification === 'SECRET')).toBe(true);
             });
@@ -843,7 +843,7 @@ describe('Resource Service', () => {
                 const results = await getResourcesByQuery({
                     releasabilityTo: 'USA'
                 });
-                
+
                 expect(results.length).toBeGreaterThan(0);
                 expect(results.every(r => r.releasabilityTo.includes('USA'))).toBe(true);
             });
@@ -852,7 +852,7 @@ describe('Resource Service', () => {
                 const results = await getResourcesByQuery({
                     COI: 'FVEY'
                 });
-                
+
                 expect(results.length).toBeGreaterThan(0);
             });
 
@@ -863,7 +863,7 @@ describe('Resource Service', () => {
                     const results = await getResourcesByQuery({
                         $text: { $search: 'Query' }
                     });
-                    
+
                     // If index exists, should return results
                     expect(Array.isArray(results)).toBe(true);
                 } catch (error) {
@@ -874,14 +874,14 @@ describe('Resource Service', () => {
 
             it('should support limit option', async () => {
                 const results = await getResourcesByQuery({}, { limit: 2 });
-                
+
                 expect(results.length).toBeLessThanOrEqual(2);
             });
 
             it('should support offset option', async () => {
                 const allResults = await getResourcesByQuery({}, { limit: 100 });
                 const offsetResults = await getResourcesByQuery({}, { offset: 1, limit: 100 });
-                
+
                 if (allResults.length > 1) {
                     expect(offsetResults[0].resourceId).toBe(allResults[1].resourceId);
                 }
@@ -891,27 +891,27 @@ describe('Resource Service', () => {
                 const results = await getResourcesByQuery({}, {
                     fields: { resourceId: 1, title: 1, _id: 0 }
                 });
-                
+
                 expect(Array.isArray(results)).toBe(true);
             });
 
             it('should use default limit of 100', async () => {
                 // Query without options should use default limit
                 const results = await getResourcesByQuery({});
-                
+
                 expect(results.length).toBeLessThanOrEqual(100);
             });
 
             it('should use default offset of 0', async () => {
                 // Query without offset should start from beginning
                 const results = await getResourcesByQuery({}, { limit: 1 });
-                
+
                 expect(results.length).toBeLessThanOrEqual(1);
             });
 
             it('should transform ZTDF resources to simplified format', async () => {
                 const results = await getResourcesByQuery({});
-                
+
                 if (results.length > 0) {
                     const result = results[0];
                     expect(result.resourceId).toBeDefined();
@@ -946,7 +946,7 @@ describe('Resource Service', () => {
                 // This would test the legacy path (line 415)
                 // In practice, all resources are ZTDF, but the code has this fallback
                 const results = await getResourcesByQuery({});
-                
+
                 // All should be ZTDF in our test setup
                 expect(results.every(r => r.encrypted === true)).toBe(true);
             });
@@ -958,7 +958,7 @@ describe('Resource Service', () => {
                     classification: 'SECRET',
                     releasabilityTo: 'USA'
                 });
-                
+
                 expect(results.length).toBeGreaterThan(0);
                 expect(results.every(r => r.classification === 'SECRET')).toBe(true);
             });
@@ -969,7 +969,7 @@ describe('Resource Service', () => {
                     releasabilityTo: 'USA',
                     COI: 'NATO-COSMIC'
                 });
-                
+
                 expect(Array.isArray(results)).toBe(true);
             });
         });
@@ -979,13 +979,13 @@ describe('Resource Service', () => {
                 const results = await getResourcesByQuery({
                     resourceId: 'non-existent-doc-12345'
                 });
-                
+
                 expect(results).toEqual([]);
             });
 
             it('should handle very large limit values', async () => {
                 const results = await getResourcesByQuery({}, { limit: 10000 });
-                
+
                 // Should succeed but be limited by actual data
                 expect(Array.isArray(results)).toBe(true);
                 expect(results.length).toBeLessThanOrEqual(10000);
@@ -993,7 +993,7 @@ describe('Resource Service', () => {
 
             it('should handle offset beyond available results', async () => {
                 const results = await getResourcesByQuery({}, { offset: 99999 });
-                
+
                 expect(results).toEqual([]);
             });
         });
@@ -1001,27 +1001,27 @@ describe('Resource Service', () => {
         describe('Edge Cases', () => {
             it('should handle empty query object', async () => {
                 const results = await getResourcesByQuery({});
-                
+
                 expect(Array.isArray(results)).toBe(true);
                 expect(results.length).toBeGreaterThan(0);
             });
 
             it('should handle undefined options', async () => {
                 const results = await getResourcesByQuery({}, undefined);
-                
+
                 expect(Array.isArray(results)).toBe(true);
             });
 
             it('should handle empty fields projection', async () => {
                 const results = await getResourcesByQuery({}, { fields: {} });
-                
+
                 expect(Array.isArray(results)).toBe(true);
             });
 
             it('should handle limit of 0', async () => {
                 // MongoDB treats limit(0) as no limit, so we might get results
                 const results = await getResourcesByQuery({}, { limit: 0 });
-                
+
                 // Should succeed, result count depends on MongoDB behavior
                 expect(Array.isArray(results)).toBe(true);
             });

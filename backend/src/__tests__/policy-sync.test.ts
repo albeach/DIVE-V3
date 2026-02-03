@@ -1,6 +1,6 @@
 /**
  * DIVE V3 - Policy Sync Service Tests
- * 
+ *
  * Comprehensive test suite for policy synchronization.
  * Tests cover:
  * - Version management
@@ -8,7 +8,7 @@
  * - Guardrail validation
  * - Delta updates
  * - Critical update propagation
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-04
  */
@@ -57,7 +57,7 @@ const invalidTenantPolicy = {
 // ============================================
 
 describe('Policy Sync Service', () => {
-  
+
   // ============================================
   // VERSION MANAGEMENT TESTS
   // ============================================
@@ -279,7 +279,7 @@ describe('Policy Sync Service', () => {
 
       const afterVersion = policySyncService.getCurrentVersion();
       expect(afterVersion.layers.tenant['aus']).toBeDefined();
-      
+
       // Push another update - version should change
       const versionBefore = afterVersion.layers.tenant['aus'];
       await policySyncService.pushPolicyUpdate({
@@ -287,7 +287,7 @@ describe('Policy Sync Service', () => {
         priority: 'normal',
         description: 'AUS update 2'
       });
-      
+
       const finalVersion = policySyncService.getCurrentVersion();
       expect(finalVersion.layers.tenant['aus']).not.toBe(versionBefore);
     });

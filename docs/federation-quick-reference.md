@@ -105,8 +105,8 @@ docker-compose down && docker-compose up -d
 
 ## 🆘 Emergency Contacts
 
-**DIVE CLI:** `./dive --help`  
-**Federation Health:** `./dive federation health --instance <SPOKE>`  
+**DIVE CLI:** `./dive --help`
+**Federation Health:** `./dive federation health --instance <SPOKE>`
 **Check Logs:** `./dive logs <service> --instance <SPOKE>`
 
 ---
@@ -156,6 +156,6 @@ docker exec <container> printenv | grep <VAR_NAME>
 
 ---
 
-**Last Updated:** December 15, 2025  
-**Version:** 1.0  
+**Last Updated:** December 15, 2025
+**Version:** 1.0
 **Tested On:** ALB Spoke (100% success rate)

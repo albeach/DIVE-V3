@@ -1,11 +1,11 @@
 /**
  * Check and Clean WebAuthn Credentials for a User
- * 
+ *
  * This script:
  * 1. Finds a user by username
  * 2. Lists all their WebAuthn credentials
  * 3. Optionally deletes all credentials (so they can re-register)
- * 
+ *
  * Usage:
  *   npm run check-webauthn-credentials -- --username admin-dive
  *   npm run check-webauthn-credentials -- --username admin-dive --delete
@@ -51,7 +51,7 @@ async function checkAndCleanCredentials(username: string, deleteCredentials: boo
   // Find user
   console.log(`[INFO] Searching for user: ${username}...`);
   const users = await kcAdminClient.users.find({ username, exact: true });
-  
+
   if (users.length === 0) {
     console.error(`[ERROR] User "${username}" not found in realm "${REALM}"`);
     process.exit(1);
@@ -63,10 +63,10 @@ async function checkAndCleanCredentials(username: string, deleteCredentials: boo
   // Get user's credentials
   console.log('[INFO] Fetching WebAuthn credentials...');
   const credentials = await kcAdminClient.users.getCredentials({ id: user.id! });
-  
+
   // Filter for WebAuthn/FIDO2 credentials
-  const webauthnCredentials = credentials.filter((cred: any) => 
-    cred.type === 'webauthn' || 
+  const webauthnCredentials = credentials.filter((cred: any) =>
+    cred.type === 'webauthn' ||
     cred.type === 'webauthn-passwordless' ||
     cred.type?.toLowerCase().includes('fido') ||
     cred.type?.toLowerCase().includes('webauthn')
@@ -88,7 +88,7 @@ async function checkAndCleanCredentials(username: string, deleteCredentials: boo
     console.log(`    User Label: ${cred.userLabel || '(no label)'}`);
     console.log(`    Created: ${cred.createdDate ? new Date(cred.createdDate).toISOString() : 'unknown'}`);
     console.log(`    Counter: ${cred.counter || 'N/A'}`);
-    
+
     // Try to extract RP ID from credential data if available
     if (cred.credentialData) {
       try {
@@ -104,7 +104,7 @@ async function checkAndCleanCredentials(username: string, deleteCredentials: boo
   // Delete credentials if requested
   if (deleteCredentials && webauthnCredentials.length > 0) {
     console.log(`[INFO] Deleting ${webauthnCredentials.length} credential(s)...\n`);
-    
+
     for (const cred of webauthnCredentials) {
       try {
         await kcAdminClient.users.deleteCredential({
@@ -116,7 +116,7 @@ async function checkAndCleanCredentials(username: string, deleteCredentials: boo
         console.error(`  ❌ Failed to delete credential ${cred.id}: ${error.message}`);
       }
     }
-    
+
     console.log('\n[INFO] All credentials deleted successfully!');
     console.log('[INFO] The user can now register a new WebAuthn credential.\n');
   } else if (deleteCredentials) {

@@ -1,6 +1,6 @@
 /**
  * Recent Activity Page
- * 
+ *
  * Shows user's recent activity including:
  * - Document views
  * - Downloads
@@ -22,7 +22,7 @@ export default async function ActivityPage() {
   }
 
   return (
-    <PageLayout 
+    <PageLayout
       user={session.user}
       breadcrumbs={[
         { label: 'Dashboard', href: '/dashboard' },

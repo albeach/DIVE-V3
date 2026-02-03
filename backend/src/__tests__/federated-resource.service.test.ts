@@ -1,7 +1,7 @@
 /**
  * Federated Resource Service - Integration Tests
  * Phase 3: Distributed Query Federation
- * 
+ *
  * NATO Compliance: ACP-240 §5.4 (Federated Resource Access)
  */
 
@@ -157,12 +157,12 @@ describe('FederatedResourceService', () => {
     describe('2. Search Functionality', () => {
         it('should execute search query', async () => {
             await federatedResourceService.initialize();
-            
+
             const result = await federatedResourceService.search(
                 { limit: 50 },
                 TEST_USERS.usaSecret
             );
-            
+
             expect(result).toBeDefined();
             expect(result).toHaveProperty('totalResults');
             expect(result).toHaveProperty('results');
@@ -172,12 +172,12 @@ describe('FederatedResourceService', () => {
 
         it('should handle connection errors gracefully', async () => {
             mockConnect.mockImplementationOnce(() => Promise.reject(new Error('Connection refused')));
-            
+
             const result = await federatedResourceService.search(
                 { limit: 10 },
                 TEST_USERS.usaSecret
             );
-            
+
             // Should return partial results, not throw
             expect(result).toBeDefined();
         });
@@ -192,7 +192,7 @@ describe('FederatedResourceService', () => {
                 { limit: 10 },
                 TEST_USERS.usaSecret
             );
-            
+
             expect(result).toHaveProperty('totalResults');
             expect(result).toHaveProperty('results');
             expect(result).toHaveProperty('instanceResults');
@@ -205,7 +205,7 @@ describe('FederatedResourceService', () => {
                 { limit: 10 },
                 TEST_USERS.usaSecret
             );
-            
+
             expect(typeof result.cacheHit).toBe('boolean');
         });
     });
@@ -221,7 +221,7 @@ describe('FederatedResourceService', () => {
                 TEST_USERS.usaSecret
             );
             const duration = Date.now() - start;
-            
+
             // With mocks, should be very fast
             expect(duration).toBeLessThan(500);
         });
@@ -231,7 +231,7 @@ describe('FederatedResourceService', () => {
                 { limit: 10 },
                 TEST_USERS.usaSecret
             );
-            
+
             expect(result.executionTimeMs).toBeGreaterThanOrEqual(0);
         });
     });

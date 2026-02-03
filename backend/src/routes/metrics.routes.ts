@@ -1,16 +1,16 @@
 /**
  * DIVE V3 - Metrics Routes
- * 
+ *
  * Phase 8: Observability & Alerting
- * 
+ *
  * Exposes Prometheus metrics endpoint for scraping.
  * Provides additional metrics endpoints for debugging and dashboards.
- * 
+ *
  * Endpoints:
  * - GET /metrics - Prometheus exposition format
  * - GET /metrics/json - JSON format for debugging
  * - GET /metrics/health - Aggregated health status
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */
@@ -25,13 +25,13 @@ const router = Router();
 /**
  * GET /metrics
  * Prometheus metrics endpoint
- * 
+ *
  * Returns metrics in Prometheus exposition format for scraping
  */
 router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const metrics = await prometheusMetrics.getMetrics();
-    
+
     res.set('Content-Type', prometheusMetrics.getContentType());
     res.end(metrics);
   } catch (error) {
@@ -47,7 +47,7 @@ router.get('/', async (_req: Request, res: Response, next: NextFunction) => {
 router.get('/prometheus', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const metrics = await prometheusMetrics.getMetrics();
-    
+
     res.set('Content-Type', prometheusMetrics.getContentType());
     res.end(metrics);
   } catch (error) {
@@ -64,7 +64,7 @@ router.get('/json', async (_req: Request, res: Response, next: NextFunction) => 
   try {
     const prometheusJson = await prometheusMetrics.getMetricsJSON();
     const legacyMetrics = metricsService.getSummary();
-    
+
     res.json({
       success: true,
       timestamp: new Date().toISOString(),
@@ -87,7 +87,7 @@ router.get('/health', async (_req: Request, res: Response, _next: NextFunction) 
     // Import health service dynamically to avoid circular dependencies
     const { healthService } = await import('../services/health.service');
     const healthStatus = await healthService.detailedHealthCheck();
-    
+
     // Update Prometheus health metrics
     prometheusMetrics.setServiceHealth('backend', healthStatus.services.mongodb?.status === 'up');
     prometheusMetrics.setOPAHealth(
@@ -102,11 +102,11 @@ router.get('/health', async (_req: Request, res: Response, _next: NextFunction) 
       process.env.INSTANCE_NAME || 'usa',
       healthStatus.services.mongodb?.status === 'up'
     );
-    
+
     const overallHealthy = Object.values(healthStatus).every(
       (s: any) => s?.healthy !== false
     );
-    
+
     res.status(overallHealthy ? 200 : 503).json({
       success: true,
       timestamp: new Date().toISOString(),
@@ -116,7 +116,7 @@ router.get('/health', async (_req: Request, res: Response, _next: NextFunction) 
     });
   } catch (error) {
     logger.error('Failed to get health metrics', { error });
-    
+
     res.status(503).json({
       success: false,
       timestamp: new Date().toISOString(),
@@ -133,14 +133,14 @@ router.get('/health', async (_req: Request, res: Response, _next: NextFunction) 
 router.get('/authorization', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const metricsJson = await prometheusMetrics.getMetricsJSON();
-    
+
     // Filter to authorization-related metrics
     const authzMetrics = (metricsJson as any[]).filter((m: any) =>
-      m.name.includes('authorization') || 
+      m.name.includes('authorization') ||
       m.name.includes('decision') ||
       m.name.includes('policy')
     );
-    
+
     res.json({
       success: true,
       timestamp: new Date().toISOString(),
@@ -160,12 +160,12 @@ router.get('/authorization', async (_req: Request, res: Response, next: NextFunc
 router.get('/cache', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const metricsJson = await prometheusMetrics.getMetricsJSON();
-    
+
     // Filter to cache-related metrics
     const cacheMetrics = (metricsJson as any[]).filter((m: any) =>
       m.name.includes('cache')
     );
-    
+
     res.json({
       success: true,
       timestamp: new Date().toISOString(),
@@ -185,12 +185,12 @@ router.get('/cache', async (_req: Request, res: Response, next: NextFunction) =>
 router.get('/federation', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const metricsJson = await prometheusMetrics.getMetricsJSON();
-    
+
     // Filter to federation-related metrics
     const fedMetrics = (metricsJson as any[]).filter((m: any) =>
       m.name.includes('federation') || m.name.includes('federated')
     );
-    
+
     res.json({
       success: true,
       timestamp: new Date().toISOString(),
@@ -210,7 +210,7 @@ router.get('/federation', async (_req: Request, res: Response, next: NextFunctio
 router.get('/opal', async (_req: Request, res: Response, next: NextFunction) => {
   try {
     const metricsJson = await prometheusMetrics.getMetricsJSON();
-    
+
     // Filter to OPAL and policy-related metrics
     const opalMetrics = (metricsJson as any[]).filter((m: any) =>
       m.name.includes('opal') ||
@@ -219,7 +219,7 @@ router.get('/opal', async (_req: Request, res: Response, next: NextFunction) => 
       m.name.includes('sp_clients') ||
       m.name.includes('opa_test')
     );
-    
+
     res.json({
       success: true,
       timestamp: new Date().toISOString(),
@@ -246,15 +246,15 @@ router.post('/reset', async (req: Request, res: Response, next: NextFunction) =>
       });
       return;
     }
-    
+
     prometheusMetrics.resetMetrics();
     metricsService.reset();
-    
+
     logger.warn('Metrics reset by admin request', {
       ip: req.ip,
       timestamp: new Date().toISOString()
     });
-    
+
     res.json({
       success: true,
       message: 'All metrics reset',

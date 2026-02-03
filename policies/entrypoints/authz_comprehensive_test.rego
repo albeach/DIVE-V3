@@ -258,7 +258,7 @@ test_obligations_kas_encrypted if {
 }
 
 # ============================================
-# Reason Tests  
+# Reason Tests
 # ============================================
 
 test_reason_allow if {

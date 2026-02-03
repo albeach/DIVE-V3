@@ -1,7 +1,7 @@
 /**
  * NATO Compliance: ADatP-5663 §5.4.2 - Attribute Signing
  * Phase 4, Task 4.2
- * 
+ *
  * JWS (RFC 7515) signing for attribute payloads.
  */
 
@@ -146,7 +146,7 @@ export class AttributeSignerService {
     }
 
     const jwk = await jose.exportJWK(this.publicKey);
-    
+
     return {
       ...jwk,
       use: 'sig',

@@ -1,6 +1,6 @@
 /**
  * Admin IdP Session Stats API Route
- * 
+ *
  * Proxy for backend IdP session statistics endpoint
  * GET - Get session statistics for IdP
  */
@@ -18,7 +18,7 @@ export async function GET(
 ): Promise<NextResponse> {
     try {
         const { alias } = await params;
-        
+
         const validation = await validateSession();
         if (!validation.isValid) {
             return NextResponse.json(

@@ -1,6 +1,6 @@
 /**
  * Admin IdP Theme Preview API Route
- * 
+ *
  * Proxy for backend IdP theme preview endpoint
  * GET - Get theme preview HTML
  */
@@ -18,7 +18,7 @@ export async function GET(
 ): Promise<NextResponse> {
     try {
         const { alias } = await params;
-        
+
         const validation = await validateSession();
         if (!validation.isValid) {
             return NextResponse.json(

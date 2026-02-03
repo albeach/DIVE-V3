@@ -31,7 +31,9 @@ import data.dive.authorization
 
 base_input := {
 	"subject": {
-		"authenticated": true,
+		"mfaVerified": true,
+            "aal": 2,
+            "authenticated": true,
 		"uniqueID": "testuser@example.com",
 		"clearance": "SECRET",
 		"countryOfAffiliation": "USA",
@@ -426,7 +428,9 @@ test_empty_org_type_defaults_gov if {
 test_comprehensive_gov_all_checks_pass if {
 	test_input := {
 		"subject": {
-			"authenticated": true,
+			"mfaVerified": true,
+            "aal": 2,
+            "authenticated": true,
 			"uniqueID": "john.smith@mil.gov",
 			"clearance": "TOP_SECRET",
 			"countryOfAffiliation": "USA",
@@ -440,7 +444,7 @@ test_comprehensive_gov_all_checks_pass if {
 			"COI": ["NATO-COSMIC"],
 			"releasableToIndustry": false,
 		},
-		"action": {"operation": "read"},
+		"action": {"type": "read"},
 		"context": {"currentTime": "2025-11-26T12:00:00Z"},
 	}
 	authorization.allow with input as test_input
@@ -456,7 +460,9 @@ test_comprehensive_gov_all_checks_pass if {
 test_comprehensive_industry_blocked_despite_other_checks if {
 	test_input := {
 		"subject": {
-			"authenticated": true,
+			"mfaVerified": true,
+            "aal": 2,
+            "authenticated": true,
 			"uniqueID": "contractor@abc-llc.de",
 			"clearance": "SECRET",
 			"countryOfAffiliation": "DEU",
@@ -470,7 +476,7 @@ test_comprehensive_industry_blocked_despite_other_checks if {
 			"COI": ["NATO"], # User has matching COI
 			"releasableToIndustry": false, # But gov-only
 		},
-		"action": {"operation": "read"},
+		"action": {"type": "read"},
 		"context": {"currentTime": "2025-11-26T12:00:00Z"},
 	}
 	not authorization.allow with input as test_input

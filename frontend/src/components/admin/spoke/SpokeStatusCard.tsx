@@ -1,8 +1,8 @@
 /**
  * DIVE V3 - Spoke Status Card
- * 
+ *
  * Displays spoke registration status, connectivity info, and timestamps.
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -40,37 +40,37 @@ interface SpokeStatusCardProps {
   loading?: boolean;
 }
 
-const STATUS_CONFIGS: Record<SpokeStatus, { 
-  label: string; 
-  color: string; 
+const STATUS_CONFIGS: Record<SpokeStatus, {
+  label: string;
+  color: string;
   bg: string;
   icon: typeof CheckCircle2;
   glow: string;
 }> = {
-  pending: { 
-    label: 'Pending Approval', 
-    color: 'text-amber-600', 
+  pending: {
+    label: 'Pending Approval',
+    color: 'text-amber-600',
     bg: 'bg-amber-50 border-amber-200',
     icon: Clock,
     glow: 'shadow-amber-200/50',
   },
-  active: { 
-    label: 'Active', 
-    color: 'text-emerald-600', 
+  active: {
+    label: 'Active',
+    color: 'text-emerald-600',
     bg: 'bg-emerald-50 border-emerald-200',
     icon: CheckCircle2,
     glow: 'shadow-emerald-200/50',
   },
-  suspended: { 
-    label: 'Suspended', 
-    color: 'text-orange-600', 
+  suspended: {
+    label: 'Suspended',
+    color: 'text-orange-600',
     bg: 'bg-orange-50 border-orange-200',
     icon: AlertTriangle,
     glow: 'shadow-orange-200/50',
   },
-  revoked: { 
-    label: 'Revoked', 
-    color: 'text-red-600', 
+  revoked: {
+    label: 'Revoked',
+    color: 'text-red-600',
     bg: 'bg-red-50 border-red-200',
     icon: XCircle,
     glow: 'shadow-red-200/50',
@@ -103,7 +103,7 @@ function formatRelativeTime(dateStr?: string): string {
   const diffMinutes = Math.floor(diffMs / (1000 * 60));
   const diffHours = Math.floor(diffMinutes / 60);
   const diffDays = Math.floor(diffHours / 24);
-  
+
   if (diffMinutes < 1) return 'Just now';
   if (diffMinutes < 60) return `${diffMinutes}m ago`;
   if (diffHours < 24) return `${diffHours}h ago`;
@@ -168,7 +168,7 @@ export function SpokeStatusCard({ runtime, loading }: SpokeStatusCardProps) {
             <p className="text-slate-600">{runtime.name}</p>
           </div>
         </div>
-        
+
         {/* Status Badge */}
         <div className={`flex items-center gap-2 px-4 py-2 rounded-full border ${statusConfig.bg}`}>
           <StatusIcon className={`w-5 h-5 ${statusConfig.color}`} />

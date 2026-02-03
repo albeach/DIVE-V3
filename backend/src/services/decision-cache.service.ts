@@ -1,17 +1,17 @@
 /**
  * DIVE V3 - Decision Cache Service
- * 
+ *
  * Provides caching for OPA authorization decisions with:
  * - Classification-based TTL (higher classification = shorter cache)
  * - OPAL-triggered cache invalidation
  * - Tenant-aware cache keys
  * - Circuit breaker state awareness
- * 
+ *
  * ACP-240 Compliance:
  * - Shorter TTLs for sensitive classifications ensure freshness
  * - Invalidation hooks support real-time policy updates via OPAL
  * - Audit logging of cache operations
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */
@@ -68,7 +68,7 @@ export interface ICacheStats {
   tenantBreakdown: Record<string, number>;
 }
 
-export type CacheInvalidationReason = 
+export type CacheInvalidationReason =
   | 'policy_update'
   | 'data_update'
   | 'user_logout'
@@ -123,7 +123,7 @@ class DecisionCacheService extends EventEmitter {
 
   constructor(config: Partial<ICacheConfig> = {}) {
     super();
-    
+
     this.config = {
       defaultTTL: parseInt(process.env.DECISION_CACHE_TTL || '60', 10),
       checkPeriod: parseInt(process.env.DECISION_CACHE_CHECK_PERIOD || '120', 10),
@@ -218,11 +218,11 @@ class DecisionCacheService extends EventEmitter {
    */
   get(key: string): ICachedDecision | undefined {
     const cached = this.cache.get<ICachedDecision>(key);
-    
+
     if (cached) {
       this.stats.hits++;
-      logger.debug('Decision cache hit', { 
-        key, 
+      logger.debug('Decision cache hit', {
+        key,
         cachedAt: new Date(cached.cachedAt).toISOString(),
         classification: cached.classification
       });
@@ -244,7 +244,7 @@ class DecisionCacheService extends EventEmitter {
     tenant?: string
   ): boolean {
     const ttl = this.getTTLForClassification(classification);
-    
+
     const cachedDecision: ICachedDecision = {
       result: decision,
       cachedAt: Date.now(),
@@ -254,7 +254,7 @@ class DecisionCacheService extends EventEmitter {
     };
 
     const success = this.cache.set(key, cachedDecision, ttl);
-    
+
     logger.debug('Decision cached', {
       key,
       ttl,
@@ -271,11 +271,11 @@ class DecisionCacheService extends EventEmitter {
    */
   invalidate(key: string, reason: CacheInvalidationReason = 'manual'): boolean {
     const deleted = this.cache.del(key);
-    
+
     if (deleted > 0) {
       this.stats.invalidations++;
       logger.info('Cache entry invalidated', { key, reason });
-      
+
       this.emit('invalidation', {
         reason,
         scope: 'resource' as const,
@@ -305,7 +305,7 @@ class DecisionCacheService extends EventEmitter {
     if (invalidated > 0) {
       this.stats.invalidations += invalidated;
       logger.info('User cache entries invalidated', { uniqueID, count: invalidated, reason });
-      
+
       this.emit('invalidation', {
         reason,
         scope: 'user' as const,
@@ -340,7 +340,7 @@ class DecisionCacheService extends EventEmitter {
     if (invalidated > 0) {
       this.stats.invalidations += invalidated;
       logger.info('Tenant cache entries invalidated', { tenant, count: invalidated, reason });
-      
+
       this.emit('invalidation', {
         reason,
         scope: 'tenant' as const,
@@ -359,10 +359,10 @@ class DecisionCacheService extends EventEmitter {
   invalidateAll(reason: CacheInvalidationReason = 'manual'): number {
     const keyCount = this.cache.keys().length;
     this.cache.flushAll();
-    
+
     this.stats.invalidations += keyCount;
     logger.info('All cache entries invalidated', { count: keyCount, reason });
-    
+
     this.emit('invalidation', {
       reason,
       scope: 'all' as const,
@@ -425,7 +425,7 @@ class DecisionCacheService extends EventEmitter {
     // Path-specific invalidation
     // e.g., if path is "trusted_issuers", invalidate federation-related caches
     logger.info('OPAL data update received for path', { path });
-    
+
     // For now, invalidate all on any data update
     // Future: Implement more granular invalidation based on path
     this.invalidateAll('data_update');
@@ -437,7 +437,7 @@ class DecisionCacheService extends EventEmitter {
   getStats(): ICacheStats {
     const keys = this.cache.keys();
     const totalHits = this.stats.hits + this.stats.misses;
-    
+
     // Calculate tenant breakdown if isolation is enabled
     const tenantBreakdown: Record<string, number> = {};
     let oldestEntry: number | null = null;
@@ -449,12 +449,12 @@ class DecisionCacheService extends EventEmitter {
         // Track tenant breakdown
         const tenant = cached.tenant || 'default';
         tenantBreakdown[tenant] = (tenantBreakdown[tenant] || 0) + 1;
-        
+
         // Track oldest entry
         if (oldestEntry === null || cached.cachedAt < oldestEntry) {
           oldestEntry = cached.cachedAt;
         }
-        
+
         // Track TTL for average
         totalTTL += cached.ttl;
       }

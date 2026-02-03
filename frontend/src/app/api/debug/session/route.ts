@@ -1,6 +1,6 @@
 /**
  * Debug Session API Route
- * 
+ *
  * Returns current authentication context including ACR/AMR/AAL
  * for troubleshooting AAL2 issues
  */

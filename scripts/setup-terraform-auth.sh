@@ -21,23 +21,23 @@ if [ ! -f "$KEY_FILE" ]; then
     echo "❌ Service account key not found: $KEY_FILE"
     echo ""
     echo "Creating service account and key..."
-    
+
     # Create service account
     gcloud iam service-accounts create terraform-deployer \
         --display-name="Terraform Deployer" \
         --project=dive25 2>&1 | grep -v "already exists" || true
-    
+
     # Grant permissions
     gcloud projects add-iam-policy-binding dive25 \
         --member="serviceAccount:terraform-deployer@dive25.iam.gserviceaccount.com" \
         --role="roles/owner" 2>&1 | grep -v "already" || true
-    
+
     # Create key
     mkdir -p "$PROJECT_ROOT/.terraform-keys"
     gcloud iam service-accounts keys create "$KEY_FILE" \
         --iam-account=terraform-deployer@dive25.iam.gserviceaccount.com \
         --project=dive25
-    
+
     echo "✅ Service account key created"
 fi
 

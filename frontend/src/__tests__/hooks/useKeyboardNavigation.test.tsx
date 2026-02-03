@@ -1,9 +1,9 @@
 /**
  * useKeyboardNavigation Hook Unit Tests
- * 
+ *
  * Tests for @/hooks/useKeyboardNavigation.tsx
  * Phase 3: Power User Features
- * 
+ *
  * Coverage targets:
  * - Vim-style navigation (j/k)
  * - G-commands (gg, G)
@@ -14,7 +14,7 @@
  */
 
 import { renderHook, act } from '@testing-library/react';
-import useKeyboardNavigation, { 
+import useKeyboardNavigation, {
   KeyboardNavigationOptions,
   KeyboardNavigationState,
   KeyboardNavigationActions,
@@ -60,7 +60,7 @@ describe('useKeyboardNavigation', () => {
       const { result } = renderHook(() => useKeyboardNavigation(defaultOptions));
 
       const [state] = result.current;
-      
+
       expect(state.focusedIndex).toBe(-1);
       expect(state.focusedItem).toBeNull();
       expect(state.selectedKeys.size).toBe(0);
@@ -71,7 +71,7 @@ describe('useKeyboardNavigation', () => {
       const { result } = renderHook(() => useKeyboardNavigation(defaultOptions));
 
       const [state] = result.current;
-      
+
       expect(state.selectedKeys).toBeInstanceOf(Set);
       expect(state.selectedKeys.size).toBe(0);
       expect(state.selectedItems).toEqual([]);
@@ -719,11 +719,11 @@ describe('useKeyboardNavigation', () => {
     it('should clear invalid selections when items change', () => {
       const { result, rerender } = renderHook(
         (props: KeyboardNavigationOptions<TestItem>) => useKeyboardNavigation(props),
-        { 
+        {
           initialProps: {
             ...defaultOptions,
             enableMultiSelect: true,
-          } 
+          }
         }
       );
 
@@ -750,7 +750,7 @@ describe('useKeyboardNavigation', () => {
   describe('custom bindings', () => {
     it('should execute custom key bindings', () => {
       const customAction = jest.fn();
-      
+
       renderHook(() => useKeyboardNavigation({
         ...defaultOptions,
         customBindings: {
@@ -794,7 +794,7 @@ describe('useKeyboardNavigation', () => {
   describe('onMultiSelect callback', () => {
     it('should call onMultiSelect when selection changes', () => {
       const onMultiSelect = jest.fn();
-      
+
       const { result } = renderHook(() => useKeyboardNavigation({
         ...defaultOptions,
         enableMultiSelect: true,

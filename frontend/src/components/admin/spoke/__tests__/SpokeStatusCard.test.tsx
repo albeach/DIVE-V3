@@ -1,6 +1,6 @@
 /**
  * DIVE V3 - SpokeStatusCard Tests
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -58,7 +58,7 @@ describe('SpokeStatusCard', () => {
 
     it('renders spoke information correctly', () => {
       render(<SpokeStatusCard runtime={mockActiveRuntime} />);
-      
+
       expect(screen.getByText('NZL')).toBeInTheDocument();
       expect(screen.getByText('New Zealand Defence Force')).toBeInTheDocument();
     });

@@ -134,8 +134,8 @@ export function ClearanceTestTool({ mappings, countries }: Props) {
     return (
         <div className="space-y-6">
             {/* Test Interface */}
-            <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
-                <h3 className="text-2xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-slate-200 dark:border-gray-700 p-6">
+                <h3 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-6 flex items-center gap-2">
                     🧪 Clearance Mapping Test Tool
                 </h3>
 
@@ -143,7 +143,7 @@ export function ClearanceTestTool({ mappings, countries }: Props) {
                     {/* Input Section */}
                     <div className="space-y-4">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                 🌍 Country
                             </label>
                             <select
@@ -152,7 +152,7 @@ export function ClearanceTestTool({ mappings, countries }: Props) {
                                     setSelectedCountry(e.target.value);
                                     setTestResult(null);
                                 }}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                             >
                                 <option value="">-- Select a country --</option>
                                 {countries.map(country => (
@@ -164,7 +164,7 @@ export function ClearanceTestTool({ mappings, countries }: Props) {
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                 🔐 National Clearance Level
                             </label>
                             <input
@@ -178,9 +178,9 @@ export function ClearanceTestTool({ mappings, countries }: Props) {
                                     }
                                 }}
                                 placeholder="Enter clearance level..."
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                             />
-                            <p className="mt-1 text-xs text-gray-500">
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                                 💡 Case-insensitive. Include diacritics if applicable.
                             </p>
                         </div>
@@ -195,7 +195,7 @@ export function ClearanceTestTool({ mappings, countries }: Props) {
                             </button>
                             <button
                                 onClick={clearTest}
-                                className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-all duration-200"
+                                className="px-6 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-all duration-200"
                             >
                                 🗑️ Clear
                             </button>
@@ -204,7 +204,7 @@ export function ClearanceTestTool({ mappings, countries }: Props) {
                         {/* Examples */}
                         {selectedCountry && examples[selectedCountry] && (
                             <div>
-                                <p className="text-sm font-medium text-gray-700 mb-2">
+                                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                                     📋 Quick Examples for {selectedCountry}:
                                 </p>
                                 <div className="flex flex-wrap gap-2">
@@ -212,7 +212,7 @@ export function ClearanceTestTool({ mappings, countries }: Props) {
                                         <button
                                             key={idx}
                                             onClick={() => loadExample(example)}
-                                            className="px-3 py-1 bg-indigo-50 text-indigo-700 rounded-lg text-sm hover:bg-indigo-100 transition-colors"
+                                            className="px-3 py-1 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded-lg text-sm hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
                                         >
                                             {example}
                                         </button>
@@ -224,25 +224,25 @@ export function ClearanceTestTool({ mappings, countries }: Props) {
 
                     {/* Result Section */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             📊 Test Result
                         </label>
 
                         {testResult ? (
                             <div className={`p-6 rounded-xl border-2 ${
                                 testResult.success
-                                    ? 'bg-green-50 border-green-200'
-                                    : 'bg-red-50 border-red-200'
+                                    ? 'bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-700'
+                                    : 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-700'
                             }`}>
                                 {testResult.success ? (
                                     <div className="space-y-4">
-                                        <div className="flex items-center gap-2 text-green-700 font-bold text-lg">
+                                        <div className="flex items-center gap-2 text-green-700 dark:text-green-400 font-bold text-lg">
                                             ✅ Mapping Found
                                         </div>
 
                                         <div className="space-y-3">
                                             <div>
-                                                <p className="text-xs text-gray-600 mb-1">DIVE Standard Level</p>
+                                                <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">DIVE Standard Level</p>
                                                 <div className={`inline-block px-4 py-2 ${getLevelColor(testResult.standardLevel!)} text-white rounded-lg font-bold`}>
                                                     {testResult.standardLevel}
                                                 </div>
@@ -250,46 +250,46 @@ export function ClearanceTestTool({ mappings, countries }: Props) {
 
                                             <div className="grid grid-cols-3 gap-2">
                                                 <div>
-                                                    <p className="text-xs text-gray-600 mb-1">AAL Level</p>
+                                                    <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">AAL Level</p>
                                                     <div className="px-3 py-2 bg-indigo-100 text-indigo-800 rounded-lg font-bold text-center">
                                                         {testResult.aalLevel}
                                                     </div>
                                                 </div>
                                                 <div>
-                                                    <p className="text-xs text-gray-600 mb-1">ACR Level</p>
+                                                    <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">ACR Level</p>
                                                     <div className="px-3 py-2 bg-purple-100 text-purple-800 rounded-lg font-bold text-center">
                                                         {testResult.acrLevel}
                                                     </div>
                                                 </div>
                                                 <div>
-                                                    <p className="text-xs text-gray-600 mb-1">MFA</p>
+                                                    <p className="text-xs text-gray-600 dark:text-gray-400 mb-1">MFA</p>
                                                     <div className={`px-3 py-2 ${testResult.mfaRequired ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100 text-gray-600'} rounded-lg font-bold text-center`}>
                                                         {testResult.mfaRequired ? '✓' : '–'}
                                                     </div>
                                                 </div>
                                             </div>
 
-                                            <p className="text-sm text-gray-700 italic">
+                                            <p className="text-sm text-gray-700 dark:text-gray-300 italic">
                                                 {testResult.details}
                                             </p>
                                         </div>
                                     </div>
                                 ) : (
                                     <div className="space-y-3">
-                                        <div className="flex items-center gap-2 text-red-700 font-bold text-lg">
+                                        <div className="flex items-center gap-2 text-red-700 dark:text-red-400 font-bold text-lg">
                                             ❌ No Mapping Found
                                         </div>
-                                        <p className="text-red-700 font-medium">
+                                        <p className="text-red-700 dark:text-red-400 font-medium">
                                             {testResult.error}
                                         </p>
-                                        <p className="text-sm text-gray-600">
+                                        <p className="text-sm text-gray-600 dark:text-gray-400">
                                             {testResult.details}
                                         </p>
                                     </div>
                                 )}
                             </div>
                         ) : (
-                            <div className="p-6 bg-gray-50 border-2 border-gray-200 rounded-xl text-center text-gray-500">
+                            <div className="p-6 bg-gray-50 dark:bg-gray-800 border-2 border-gray-200 dark:border-gray-700 rounded-xl text-center text-gray-500 dark:text-gray-400">
                                 <div className="text-4xl mb-2">🔍</div>
                                 <p>Enter a country and clearance level to test</p>
                             </div>
@@ -300,14 +300,14 @@ export function ClearanceTestTool({ mappings, countries }: Props) {
 
             {/* Test History */}
             {testHistory.length > 0 && (
-                <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
+                <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-slate-200 dark:border-gray-700 p-6">
                     <div className="flex items-center justify-between mb-4">
-                        <h3 className="text-lg font-bold text-gray-800">
+                        <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100">
                             📜 Recent Tests
                         </h3>
                         <button
                             onClick={() => setTestHistory([])}
-                            className="text-sm text-gray-600 hover:text-red-600"
+                            className="text-sm text-gray-600 dark:text-gray-400 hover:text-red-600"
                         >
                             Clear History
                         </button>
@@ -319,8 +319,8 @@ export function ClearanceTestTool({ mappings, countries }: Props) {
                                 key={idx}
                                 className={`p-3 rounded-lg border ${
                                     test.result.success
-                                        ? 'bg-green-50 border-green-200'
-                                        : 'bg-red-50 border-red-200'
+                                        ? 'bg-green-50 dark:bg-green-900/30 border-green-200 dark:border-green-700'
+                                        : 'bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-700'
                                 }`}
                             >
                                 <div className="flex items-center justify-between">
@@ -329,17 +329,17 @@ export function ClearanceTestTool({ mappings, countries }: Props) {
                                             {test.result.success ? '✅' : '❌'}
                                         </span>
                                         <div>
-                                            <p className="font-medium text-gray-800">
+                                            <p className="font-medium text-gray-800 dark:text-gray-200">
                                                 {test.country}: "{test.input}"
                                             </p>
-                                            <p className="text-sm text-gray-600">
+                                            <p className="text-sm text-gray-600 dark:text-gray-400">
                                                 {test.result.success
                                                     ? `→ ${test.result.standardLevel} (AAL${test.result.aalLevel})`
                                                     : test.result.error}
                                             </p>
                                         </div>
                                     </div>
-                                    <span className="text-xs text-gray-500">
+                                    <span className="text-xs text-gray-500 dark:text-gray-400">
                                         {test.timestamp.toLocaleTimeString()}
                                     </span>
                                 </div>
@@ -350,34 +350,34 @@ export function ClearanceTestTool({ mappings, countries }: Props) {
             )}
 
             {/* Coverage Stats */}
-            <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl shadow-lg border border-indigo-200 p-6">
-                <h3 className="text-lg font-bold text-gray-800 mb-4">
+            <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 rounded-xl shadow-lg border border-indigo-200 dark:border-indigo-700 p-6">
+                <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4">
                     📊 Coverage Statistics
                 </h3>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                    <div className="bg-white rounded-lg p-4 shadow">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
                         <div className="text-2xl font-bold text-indigo-600">
                             {mappings.length}
                         </div>
-                        <div className="text-sm text-gray-600">Standard Levels</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">Standard Levels</div>
                     </div>
-                    <div className="bg-white rounded-lg p-4 shadow">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
                         <div className="text-2xl font-bold text-purple-600">
                             {countries.length}
                         </div>
-                        <div className="text-sm text-gray-600">Countries</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">Countries</div>
                     </div>
-                    <div className="bg-white rounded-lg p-4 shadow">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
                         <div className="text-2xl font-bold text-green-600">
                             {mappings.reduce((sum, m) => sum + Object.keys(m.nationalEquivalents).length, 0)}
                         </div>
-                        <div className="text-sm text-gray-600">Total Mappings</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">Total Mappings</div>
                     </div>
-                    <div className="bg-white rounded-lg p-4 shadow">
+                    <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
                         <div className="text-2xl font-bold text-orange-600">
                             {testHistory.length}
                         </div>
-                        <div className="text-sm text-gray-600">Tests Run</div>
+                        <div className="text-sm text-gray-600 dark:text-gray-400">Tests Run</div>
                     </div>
                 </div>
             </div>

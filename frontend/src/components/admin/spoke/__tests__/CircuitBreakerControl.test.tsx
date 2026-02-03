@@ -1,6 +1,6 @@
 /**
  * DIVE V3 - CircuitBreakerControl Tests
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -60,7 +60,7 @@ describe('CircuitBreakerControl', () => {
 
     it('renders CLOSED state correctly', () => {
       render(<CircuitBreakerControl status={mockClosedStatus} />);
-      
+
       expect(screen.getByText('Circuit Breaker')).toBeInTheDocument();
       // Multiple "Closed" texts appear (header + indicator) - check at least one exists
       expect(screen.getAllByText('Closed').length).toBeGreaterThanOrEqual(1);
@@ -69,14 +69,14 @@ describe('CircuitBreakerControl', () => {
 
     it('renders OPEN state correctly', () => {
       render(<CircuitBreakerControl status={mockOpenStatus} />);
-      
+
       expect(screen.getAllByText('Open').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText('Circuit tripped, requests blocked, using fallback')).toBeInTheDocument();
     });
 
     it('renders HALF_OPEN state correctly', () => {
       render(<CircuitBreakerControl status={mockHalfOpenStatus} />);
-      
+
       expect(screen.getAllByText('Half Open').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText('Testing connection, limited requests allowed')).toBeInTheDocument();
     });
@@ -110,7 +110,7 @@ describe('CircuitBreakerControl', () => {
   describe('State Indicator Dots', () => {
     it('shows all three state indicators', () => {
       render(<CircuitBreakerControl status={mockClosedStatus} />);
-      
+
       // Should have labels for all states
       const closedLabels = screen.getAllByText('Closed');
       expect(closedLabels.length).toBeGreaterThanOrEqual(1);
@@ -121,16 +121,16 @@ describe('CircuitBreakerControl', () => {
     it('renders reset button when onReset provided', () => {
       const onReset = jest.fn();
       render(<CircuitBreakerControl status={mockClosedStatus} onReset={onReset} />);
-      
+
       expect(screen.getByText('Reset')).toBeInTheDocument();
     });
 
     it('calls onReset when clicked', async () => {
       const onReset = jest.fn().mockResolvedValue(undefined);
       render(<CircuitBreakerControl status={mockClosedStatus} onReset={onReset} />);
-      
+
       fireEvent.click(screen.getByText('Reset'));
-      
+
       await waitFor(() => {
         expect(onReset).toHaveBeenCalled();
       });
@@ -141,16 +141,16 @@ describe('CircuitBreakerControl', () => {
     it('shows manual override toggle', () => {
       const onForceState = jest.fn();
       render(<CircuitBreakerControl status={mockClosedStatus} onForceState={onForceState} />);
-      
+
       expect(screen.getByText('Manual Override')).toBeInTheDocument();
     });
 
     it('expands controls when clicked', () => {
       const onForceState = jest.fn();
       render(<CircuitBreakerControl status={mockClosedStatus} onForceState={onForceState} />);
-      
+
       fireEvent.click(screen.getByText('Manual Override'));
-      
+
       expect(screen.getByText(/Manual state changes bypass automatic recovery/)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /force closed/i })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /force half-open/i })).toBeInTheDocument();
@@ -160,9 +160,9 @@ describe('CircuitBreakerControl', () => {
     it('disables current state button', () => {
       const onForceState = jest.fn();
       render(<CircuitBreakerControl status={mockClosedStatus} onForceState={onForceState} />);
-      
+
       fireEvent.click(screen.getByText('Manual Override'));
-      
+
       const forceClosedButton = screen.getByRole('button', { name: /force closed/i });
       expect(forceClosedButton).toBeDisabled();
     });
@@ -170,10 +170,10 @@ describe('CircuitBreakerControl', () => {
     it('calls onForceState with correct state', async () => {
       const onForceState = jest.fn().mockResolvedValue(undefined);
       render(<CircuitBreakerControl status={mockClosedStatus} onForceState={onForceState} />);
-      
+
       fireEvent.click(screen.getByText('Manual Override'));
       fireEvent.click(screen.getByRole('button', { name: /force open/i }));
-      
+
       await waitFor(() => {
         expect(onForceState).toHaveBeenCalledWith('OPEN');
       });

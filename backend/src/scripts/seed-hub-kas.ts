@@ -130,20 +130,31 @@ function getOrganizationName(code: string): string {
 
 /**
  * Get port offset for instance (for development multi-instance setup)
+ * SSOT: Must match scripts/nato-countries.sh NATO_PORT_OFFSETS
  */
 function getPortOffset(code: string): number {
+  // First check environment variable (set by deployment pipeline)
+  const envOffset = process.env.SPOKE_PORT_OFFSET;
+  if (envOffset) {
+    return parseInt(envOffset, 10);
+  }
+
+  // Fallback: NATO_PORT_OFFSETS from scripts/nato-countries.sh
   const offsets: Record<string, number> = {
-    USA: 0,    // Hub: 10000, 8443
-    FRA: 1,    // Spoke: 10001, 8444
-    GBR: 2,    // Spoke: 10002, 8445
-    DEU: 3,    // Spoke: 10003, 8446
-    CAN: 4,
-    AUS: 5,
-    NZL: 6,
-    ITA: 7,
-    ESP: 8,
-    NLD: 9,
-    BEL: 10,
+    // Hub
+    USA: 0,    // 8443, 10000
+
+    // NATO countries (alphabetical, offsets 1-31)
+    ALB: 1, BEL: 2, BGR: 3, CAN: 4, HRV: 5,
+    CZE: 6, DNK: 7, EST: 8, FIN: 9, FRA: 10,
+    DEU: 11, GRC: 12, HUN: 13, ISL: 14, ITA: 15,
+    LVA: 16, LTU: 17, LUX: 18, MNE: 19, NLD: 20,
+    MKD: 21, NOR: 22, POL: 23, PRT: 24, ROU: 25,
+    SVK: 26, SVN: 27, ESP: 28, SWE: 29, TUR: 30,
+    GBR: 31,  // 8474, 10031
+
+    // Partner nations (offsets 32-39)
+    AUS: 32, NZL: 33, JPN: 34, KOR: 35, ISR: 36, UKR: 37,
   };
   return offsets[code] || 0;
 }

@@ -1,9 +1,9 @@
 /**
  * Live Region Component - Phase 4 Accessibility
- * 
+ *
  * Provides screen reader announcements for dynamic content changes.
  * Implements WCAG 2.1 SC 4.1.3 (Status Messages) - Level AA
- * 
+ *
  * Features:
  * - Visually hidden but announced by screen readers
  * - Supports polite and assertive modes
@@ -53,15 +53,15 @@ interface LiveRegionProviderProps {
   maxQueue?: number;
 }
 
-export function LiveRegionProvider({ 
-  children, 
+export function LiveRegionProvider({
+  children,
   debounceMs = 1000,
   maxQueue = 5,
 }: LiveRegionProviderProps) {
   const [politeMessage, setPoliteMessage] = useState('');
   const [assertiveMessage, setAssertiveMessage] = useState('');
   const [mounted, setMounted] = useState(false);
-  
+
   const queueRef = useRef<Announcement[]>([]);
   const lastAnnouncementRef = useRef<number>(0);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -77,10 +77,10 @@ export function LiveRegionProvider({
 
   const processQueue = useCallback(() => {
     if (queueRef.current.length === 0) return;
-    
+
     const now = Date.now();
     const timeSinceLastAnnouncement = now - lastAnnouncementRef.current;
-    
+
     if (timeSinceLastAnnouncement < debounceMs) {
       // Wait for debounce period
       const waitTime = debounceMs - timeSinceLastAnnouncement;
@@ -163,7 +163,7 @@ export function LiveRegionProvider({
           >
             {politeMessage}
           </div>
-          
+
           {/* Assertive announcements - interrupt immediately */}
           <div
             role="alert"
@@ -186,21 +186,21 @@ export function LiveRegionProvider({
 
 /**
  * Hook to access the live region for screen reader announcements
- * 
+ *
  * Usage:
  * ```tsx
  * const { announce } = useLiveRegion();
- * 
+ *
  * // Polite announcement (waits for user to finish)
  * announce('Search results updated');
- * 
+ *
  * // Assertive announcement (interrupts immediately)
  * announce('Error: Session expired', 'assertive');
  * ```
  */
 export function useLiveRegion(): LiveRegionContextValue {
   const context = useContext(LiveRegionContext);
-  
+
   if (!context) {
     // Return no-op if used outside provider (SSR safety)
     return {
@@ -208,7 +208,7 @@ export function useLiveRegion(): LiveRegionContextValue {
       clearAnnouncements: () => {},
     };
   }
-  
+
   return context;
 }
 
@@ -227,17 +227,17 @@ interface AnnounceOnMountProps {
 
 /**
  * Component that announces a message when mounted
- * 
+ *
  * Usage:
  * ```tsx
  * {isLoading && <AnnounceOnMount message="Loading results" />}
  * {!isLoading && <AnnounceOnMount message={`${count} results found`} />}
  * ```
  */
-export function AnnounceOnMount({ 
-  message, 
-  politeness = 'polite', 
-  delay = 100 
+export function AnnounceOnMount({
+  message,
+  politeness = 'polite',
+  delay = 100
 }: AnnounceOnMountProps) {
   const { announce } = useLiveRegion();
 
@@ -263,7 +263,7 @@ export const announcements = {
   /** Announce search results count */
   searchResults: (count: number, query?: string) => {
     if (count === 0) {
-      return query 
+      return query
         ? `No results found for "${query}"`
         : 'No results found';
     }
@@ -313,14 +313,14 @@ export const announcements = {
 
   /** Announce bookmark action */
   bookmark: (title: string, added: boolean) => {
-    return added 
+    return added
       ? `Bookmarked: ${title}`
       : `Removed bookmark: ${title}`;
   },
 
   /** Announce modal state */
   modal: (title: string, opened: boolean) => {
-    return opened 
+    return opened
       ? `Dialog opened: ${title}`
       : `Dialog closed: ${title}`;
   },

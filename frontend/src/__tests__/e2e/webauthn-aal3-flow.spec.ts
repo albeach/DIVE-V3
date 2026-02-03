@@ -1,14 +1,14 @@
 /**
  * WebAuthn AAL3 Flow E2E Tests
- * 
+ *
  * Tests WebAuthn/passkey authentication for TOP_SECRET users (AAL3)
- * 
+ *
  * Created: November 23, 2025
  * - ✅ Uses centralized test users (fixtures/test-users.ts)
  * - ✅ Uses authentication helper with virtual authenticator support
  * - ✅ Tests both registration and authentication flows
  * - ✅ Verifies AAL3 enforcement for TOP_SECRET clearance
- * 
+ *
  * Requirements:
  * - Keycloak configured with WebAuthn authentication flows
  * - TOP_SECRET users configured to require WebAuthn (AAL3)
@@ -25,7 +25,7 @@ test.describe('WebAuthn AAL3 Flow - TOP_SECRET Users', () => {
     test.beforeEach(async ({ page }) => {
         console.log('\n🔐 Starting WebAuthn AAL3 test...');
     });
-    
+
     test.afterEach(async ({ page }) => {
         try {
             await logout(page);
@@ -54,12 +54,12 @@ test.describe('WebAuthn AAL3 Flow - TOP_SECRET Users', () => {
 
         await test.step('Logout and test returning user flow', async () => {
             await logout(page);
-            
+
             // Returning user should use existing WebAuthn credential
             await loginAs(page, TEST_USERS.USA.TOP_SECRET, {
                 expectMFASetup: false, // Already registered
             });
-            
+
             const dashboard = new DashboardPage(page);
             await dashboard.verifyLoggedIn();
         });
@@ -127,7 +127,7 @@ test.describe('WebAuthn AAL3 Flow - Error Scenarios', () => {
                 'SECRET',
                 'USA'
             );
-            
+
             // TODO: Add check for ACR claim = "1" (AAL2) vs "2" (AAL3)
             // This would require inspecting JWT tokens or session data
         });

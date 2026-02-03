@@ -1,7 +1,7 @@
 /**
  * SCIM Utils Test Suite
  * Target: 100% coverage for scim.utils.ts
- * 
+ *
  * Tests:
  * - parseSCIMFilter() - equality, presence, complex (and/or) filters
  * - validateResourceType() - valid and invalid resource types
@@ -46,7 +46,7 @@ describe('SCIM Utils', () => {
         describe('Happy Path', () => {
             it('should parse simple equality filter', () => {
                 const result = parseSCIMFilter('userName eq "bjensen"');
-                
+
                 expect(result).toEqual({
                     attribute: 'userName',
                     operator: 'eq',
@@ -56,7 +56,7 @@ describe('SCIM Utils', () => {
 
             it('should parse nested attribute equality filter', () => {
                 const result = parseSCIMFilter('name.familyName eq "Jensen"');
-                
+
                 expect(result).toEqual({
                     attribute: 'name.familyName',
                     operator: 'eq',
@@ -66,7 +66,7 @@ describe('SCIM Utils', () => {
 
             it('should parse presence filter', () => {
                 const result = parseSCIMFilter('userName pr');
-                
+
                 expect(result).toEqual({
                     attribute: 'userName',
                     operator: 'pr',
@@ -75,7 +75,7 @@ describe('SCIM Utils', () => {
 
             it('should parse nested attribute presence filter', () => {
                 const result = parseSCIMFilter('emails.value pr');
-                
+
                 expect(result).toEqual({
                     attribute: 'emails.value',
                     operator: 'pr',
@@ -84,7 +84,7 @@ describe('SCIM Utils', () => {
 
             it('should parse complex AND filter', () => {
                 const result = parseSCIMFilter('userName eq "bjensen" and emails pr');
-                
+
                 expect(result.operator).toBe('and');
                 expect(result.filters).toHaveLength(2);
                 expect(result.filters[0]).toEqual({
@@ -100,7 +100,7 @@ describe('SCIM Utils', () => {
 
             it('should parse complex OR filter', () => {
                 const result = parseSCIMFilter('userName eq "bjensen" or userName eq "jsmith"');
-                
+
                 expect(result.operator).toBe('or');
                 expect(result.filters).toHaveLength(2);
                 expect(result.filters[0]).toEqual({
@@ -119,31 +119,31 @@ describe('SCIM Utils', () => {
         describe('Edge Cases', () => {
             it('should return empty object for empty filter', () => {
                 const result = parseSCIMFilter('');
-                
+
                 expect(result).toEqual({});
             });
 
             it('should return empty object for null filter', () => {
                 const result = parseSCIMFilter(null as any);
-                
+
                 expect(result).toEqual({});
             });
 
             it('should return empty object for undefined filter', () => {
                 const result = parseSCIMFilter(undefined as any);
-                
+
                 expect(result).toEqual({});
             });
 
             it('should handle invalid filter gracefully', () => {
                 const result = parseSCIMFilter('invalid filter syntax');
-                
+
                 expect(result).toEqual({});
             });
 
             it('should handle filter with only spaces', () => {
                 const result = parseSCIMFilter('   ');
-                
+
                 expect(result).toEqual({});
             });
 
@@ -151,7 +151,7 @@ describe('SCIM Utils', () => {
                 // Force an error by providing something that throws during split
                 const badFilter = 'userName eq "unclosed';
                 const result = parseSCIMFilter(badFilter);
-                
+
                 // Returns partial parsed result or empty
                 expect(result).toBeDefined();
             });
@@ -204,7 +204,7 @@ describe('SCIM Utils', () => {
         describe('Happy Path', () => {
             it('should build error with all fields', () => {
                 const error = buildSCIMError(404, 'Resource not found', 'invalidValue');
-                
+
                 expect(error).toEqual({
                     schemas: ["urn:ietf:params:scim:api:messages:2.0:Error"],
                     status: '404',
@@ -215,7 +215,7 @@ describe('SCIM Utils', () => {
 
             it('should build error without scimType', () => {
                 const error = buildSCIMError(500, 'Internal server error');
-                
+
                 expect(error).toEqual({
                     schemas: ["urn:ietf:params:scim:api:messages:2.0:Error"],
                     status: '500',
@@ -226,7 +226,7 @@ describe('SCIM Utils', () => {
 
             it('should build 400 bad request error', () => {
                 const error = buildSCIMError(400, 'Invalid request', 'invalidSyntax');
-                
+
                 expect(error.status).toBe('400');
                 expect(error.detail).toBe('Invalid request');
                 expect(error.scimType).toBe('invalidSyntax');
@@ -234,7 +234,7 @@ describe('SCIM Utils', () => {
 
             it('should build 403 forbidden error', () => {
                 const error = buildSCIMError(403, 'Access denied');
-                
+
                 expect(error.status).toBe('403');
                 expect(error.detail).toBe('Access denied');
             });
@@ -243,13 +243,13 @@ describe('SCIM Utils', () => {
         describe('Edge Cases', () => {
             it('should handle status code 0', () => {
                 const error = buildSCIMError(0, 'No status');
-                
+
                 expect(error.status).toBe('0');
             });
 
             it('should handle empty detail', () => {
                 const error = buildSCIMError(400, '');
-                
+
                 expect(error.detail).toBe('');
             });
         });
@@ -263,7 +263,7 @@ describe('SCIM Utils', () => {
                     path: 'emails',
                     value: { type: 'work', value: 'test@example.com' },
                 };
-                
+
                 expect(validatePatchOperation(operation)).toBe(true);
             });
 
@@ -273,7 +273,7 @@ describe('SCIM Utils', () => {
                     path: 'userName',
                     value: 'newusername',
                 };
-                
+
                 expect(validatePatchOperation(operation)).toBe(true);
             });
 
@@ -282,7 +282,7 @@ describe('SCIM Utils', () => {
                     op: 'remove',
                     path: 'emails[type eq "work"]',
                 };
-                
+
                 expect(validatePatchOperation(operation)).toBe(true);
             });
 
@@ -292,7 +292,7 @@ describe('SCIM Utils', () => {
                     path: 'count',
                     value: 0,
                 };
-                
+
                 expect(validatePatchOperation(operation)).toBe(true);
             });
 
@@ -302,7 +302,7 @@ describe('SCIM Utils', () => {
                     path: 'active',
                     value: false,
                 };
-                
+
                 expect(validatePatchOperation(operation)).toBe(true);
             });
         });
@@ -313,7 +313,7 @@ describe('SCIM Utils', () => {
                     path: 'userName',
                     value: 'test',
                 };
-                
+
                 expect(validatePatchOperation(operation)).toBe(false);
             });
 
@@ -323,7 +323,7 @@ describe('SCIM Utils', () => {
                     path: 'userName',
                     value: 'test',
                 };
-                
+
                 expect(validatePatchOperation(operation)).toBe(false);
             });
 
@@ -332,7 +332,7 @@ describe('SCIM Utils', () => {
                     op: 'add',
                     path: 'emails',
                 };
-                
+
                 expect(validatePatchOperation(operation)).toBe(false);
             });
 
@@ -341,7 +341,7 @@ describe('SCIM Utils', () => {
                     op: 'replace',
                     path: 'userName',
                 };
-                
+
                 expect(validatePatchOperation(operation)).toBe(false);
             });
 
@@ -349,7 +349,7 @@ describe('SCIM Utils', () => {
                 const operation = {
                     op: 'remove',
                 };
-                
+
                 expect(validatePatchOperation(operation)).toBe(false);
             });
 
@@ -358,7 +358,7 @@ describe('SCIM Utils', () => {
                     op: 'add',
                     value: 'test',
                 };
-                
+
                 expect(validatePatchOperation(operation)).toBe(false);
             });
         });
@@ -368,7 +368,7 @@ describe('SCIM Utils', () => {
         describe('Happy Path', () => {
             it('should parse simple attribute path', () => {
                 const result = parseAttributePath('userName');
-                
+
                 expect(result).toEqual({
                     attribute: 'userName',
                 });
@@ -376,7 +376,7 @@ describe('SCIM Utils', () => {
 
             it('should parse nested attribute path', () => {
                 const result = parseAttributePath('name.givenName');
-                
+
                 expect(result).toEqual({
                     attribute: 'name',
                     subAttribute: 'givenName',
@@ -385,7 +385,7 @@ describe('SCIM Utils', () => {
 
             it('should parse deeply nested attribute path', () => {
                 const result = parseAttributePath('meta.location.country');
-                
+
                 expect(result).toEqual({
                     attribute: 'meta',
                     subAttribute: 'location.country',
@@ -394,7 +394,7 @@ describe('SCIM Utils', () => {
 
             it('should parse filtered path without subattribute', () => {
                 const result = parseAttributePath('emails[type eq "work"]');
-                
+
                 expect(result).toEqual({
                     attribute: 'emails',
                     filter: 'type eq "work"',
@@ -404,7 +404,7 @@ describe('SCIM Utils', () => {
 
             it('should parse filtered path with subattribute', () => {
                 const result = parseAttributePath('emails[type eq "work"].value');
-                
+
                 expect(result).toEqual({
                     attribute: 'emails',
                     filter: 'type eq "work"',
@@ -416,7 +416,7 @@ describe('SCIM Utils', () => {
         describe('Edge Cases', () => {
             it('should handle empty string', () => {
                 const result = parseAttributePath('');
-                
+
                 expect(result).toEqual({
                     attribute: '',
                 });
@@ -424,7 +424,7 @@ describe('SCIM Utils', () => {
 
             it('should handle path with multiple dots', () => {
                 const result = parseAttributePath('a.b.c.d');
-                
+
                 expect(result).toEqual({
                     attribute: 'a',
                     subAttribute: 'b.c.d',
@@ -451,13 +451,13 @@ describe('SCIM Utils', () => {
         describe('Happy Path', () => {
             it('should return resource unchanged when no filters', () => {
                 const result = filterAttributes(testResource);
-                
+
                 expect(result).toEqual(testResource);
             });
 
             it('should include only specified attributes', () => {
                 const result = filterAttributes(testResource, ['userName', 'emails']);
-                
+
                 expect(result).toEqual({
                     schemas: testResource.schemas,
                     id: testResource.id,
@@ -468,7 +468,7 @@ describe('SCIM Utils', () => {
 
             it('should exclude specified attributes', () => {
                 const result = filterAttributes(testResource, undefined, ['name', 'active']);
-                
+
                 expect(result).toEqual({
                     schemas: testResource.schemas,
                     id: testResource.id,
@@ -479,7 +479,7 @@ describe('SCIM Utils', () => {
 
             it('should handle single include attribute', () => {
                 const result = filterAttributes(testResource, ['userName']);
-                
+
                 expect(result.userName).toBe('bjensen');
                 expect(result.name).toBeUndefined();
                 expect(result.emails).toBeUndefined();
@@ -487,7 +487,7 @@ describe('SCIM Utils', () => {
 
             it('should handle single exclude attribute', () => {
                 const result = filterAttributes(testResource, undefined, ['userName']);
-                
+
                 expect(result.userName).toBeUndefined();
                 expect(result.name).toBeDefined();
                 expect(result.emails).toBeDefined();
@@ -497,20 +497,20 @@ describe('SCIM Utils', () => {
         describe('Edge Cases', () => {
             it('should handle empty include array', () => {
                 const result = filterAttributes(testResource, []);
-                
+
                 // Empty array means length check fails, returns full resource
                 expect(result).toEqual(testResource);
             });
 
             it('should handle empty exclude array', () => {
                 const result = filterAttributes(testResource, undefined, []);
-                
+
                 expect(result).toEqual(testResource);
             });
 
             it('should handle non-existent attributes in include', () => {
                 const result = filterAttributes(testResource, ['nonExistent']);
-                
+
                 expect(result).toEqual({
                     schemas: testResource.schemas,
                     id: testResource.id,
@@ -519,7 +519,7 @@ describe('SCIM Utils', () => {
 
             it('should handle non-existent attributes in exclude', () => {
                 const result = filterAttributes(testResource, undefined, ['nonExistent']);
-                
+
                 expect(result.userName).toBeDefined();
                 expect(result.name).toBeDefined();
             });
@@ -681,7 +681,7 @@ describe('SCIM Utils', () => {
             it('should normalize string values', () => {
                 const values = ['value1', 'value2', 'value3'];
                 const result = normalizeMultiValuedAttribute(values);
-                
+
                 expect(result).toEqual([
                     { value: 'value1', primary: true },
                     { value: 'value2', primary: false },
@@ -695,7 +695,7 @@ describe('SCIM Utils', () => {
                     { type: 'home', value: 'home@example.com' },
                 ];
                 const result = normalizeMultiValuedAttribute(values);
-                
+
                 expect(result[0].primary).toBe(true);
                 expect(result[1].primary).toBe(false);
             });
@@ -706,7 +706,7 @@ describe('SCIM Utils', () => {
                     { type: 'home', value: 'home@example.com', primary: true },
                 ];
                 const result = normalizeMultiValuedAttribute(values);
-                
+
                 expect(result[0].primary).toBe(false);
                 expect(result[1].primary).toBe(true);
             });
@@ -714,7 +714,7 @@ describe('SCIM Utils', () => {
             it('should handle single value', () => {
                 const values = ['onlyValue'];
                 const result = normalizeMultiValuedAttribute(values);
-                
+
                 expect(result).toEqual([
                     { value: 'onlyValue', primary: true },
                 ]);
@@ -726,7 +726,7 @@ describe('SCIM Utils', () => {
                     { type: 'complex', value: 'complexValue' },
                 ];
                 const result = normalizeMultiValuedAttribute(values);
-                
+
                 expect(result[0]).toEqual({ value: 'stringValue', primary: true });
                 expect(result[1].primary).toBe(false);
             });
@@ -736,14 +736,14 @@ describe('SCIM Utils', () => {
             it('should handle empty array', () => {
                 const values: any[] = [];
                 const result = normalizeMultiValuedAttribute(values);
-                
+
                 expect(result).toEqual([]);
             });
 
             it('should handle numeric string values', () => {
                 const values = ['123', '456'];
                 const result = normalizeMultiValuedAttribute(values);
-                
+
                 expect(result).toEqual([
                     { value: '123', primary: true },
                     { value: '456', primary: false },
@@ -753,7 +753,7 @@ describe('SCIM Utils', () => {
             it('should handle empty string values', () => {
                 const values = ['', 'value'];
                 const result = normalizeMultiValuedAttribute(values);
-                
+
                 expect(result).toEqual([
                     { value: '', primary: true },
                     { value: 'value', primary: false },

@@ -1,13 +1,13 @@
 /**
  * DIVE V3 Federated Search - E2E Tests with Real MongoDB Data
  * ============================================================
- * 
+ *
  * Tests the federated search functionality against actual MongoDB instances
  * with the seeded 21,000 documents (7,000 per instance).
- * 
+ *
  * Run with: npm test -- --testPathPattern=federated-search.e2e --runInBand
  * Requires: All instances running with seeded data
- * 
+ *
  * Environment Variables:
  *   RUN_E2E_TESTS=true           Enable E2E tests
  *   TEST_AUTH_TOKEN=<token>      JWT token for authenticated requests
@@ -155,7 +155,7 @@ describeFn('Federated Search E2E Tests', () => {
     beforeAll(async () => {
         // Check which instances are healthy
         console.log('\n🔍 Checking instance health...');
-        
+
         for (const instance of INSTANCES) {
             const healthy = await checkInstanceHealth(instance);
             if (healthy) {
@@ -183,7 +183,7 @@ describeFn('Federated Search E2E Tests', () => {
         INSTANCES.forEach(instance => {
             it(`${instance.code} should be running and healthy`, async () => {
                 const healthy = await checkInstanceHealth(instance);
-                
+
                 if (RUN_E2E) {
                     expect(healthy).toBe(true);
                 }
@@ -210,11 +210,11 @@ describeFn('Federated Search E2E Tests', () => {
                 }
 
                 const count = await getLocalDocumentCount(instance, authToken);
-                
+
                 // Allow 10% variance
                 const minExpected = instance.expectedDocuments * 0.9;
                 const maxExpected = instance.expectedDocuments * 1.1;
-                
+
                 expect(count).toBeGreaterThanOrEqual(minExpected);
                 expect(count).toBeLessThanOrEqual(maxExpected);
             });
@@ -303,7 +303,7 @@ describeFn('Federated Search E2E Tests', () => {
             );
 
             expect(response.data.federatedFrom.length).toBeGreaterThanOrEqual(1);
-            
+
             // Check instanceResults has multiple entries
             const instanceCodes = Object.keys(response.data.instanceResults);
             expect(instanceCodes.length).toBeGreaterThanOrEqual(1);
@@ -346,7 +346,7 @@ describeFn('Federated Search E2E Tests', () => {
                 );
 
                 expect(response.status).toBe(200);
-                
+
                 // All returned results should match the classification
                 response.data.results.forEach((result: any) => {
                     expect(result.classification).toBe(classification);
@@ -374,7 +374,7 @@ describeFn('Federated Search E2E Tests', () => {
                 );
 
                 expect(response.status).toBe(200);
-                
+
                 // All returned results should include the COI
                 response.data.results.forEach((result: any) => {
                     expect(result.COI).toContain(coi);
@@ -435,7 +435,7 @@ describeFn('Federated Search E2E Tests', () => {
 
             const instance = healthyInstances[0];
             const startTime = Date.now();
-            
+
             const response = await client.post(
                 `${instance.apiUrl}/api/resources/federated-search`,
                 { limit: 100 },
@@ -474,7 +474,7 @@ describeFn('Federated Search E2E Tests', () => {
             if (healthyInstances.length === 0) return;
 
             const instance = healthyInstances[0];
-            
+
             try {
                 await client.post(
                     `${instance.apiUrl}/api/resources/federated-search`,
@@ -499,11 +499,11 @@ describeFn('Federated Search E2E Tests', () => {
 
             // Should still return results even if some instances failed
             expect(response.data.results).toBeDefined();
-            
+
             // Check if any instances had errors
             const hasErrors = Object.values(response.data.instanceResults)
                 .some((r: any) => r.error);
-            
+
             // Log if there were errors (not a failure, just info)
             if (hasErrors) {
                 console.log('Note: Some instances returned errors (graceful degradation working)');
@@ -549,7 +549,7 @@ describeFn('Federated Search E2E Tests', () => {
             response.data.results.forEach((result: any) => {
                 // Origin realm should be 3-letter code
                 expect(result.originRealm).toMatch(/^[A-Z]{3}$/);
-                
+
                 // All releasability codes should be 3-letter
                 result.releasabilityTo.forEach((code: string) => {
                     expect(code).toMatch(/^[A-Z]{3}$/);
@@ -591,7 +591,7 @@ describeFn('Federated Search Performance Benchmarks', () => {
         const parallelTime = Date.now() - parallelStart;
 
         console.log(`Sequential: ${sequentialTime}ms, Parallel: ${parallelTime}ms`);
-        
+
         // Parallel should be faster
         expect(parallelTime).toBeLessThan(sequentialTime);
     });
@@ -616,7 +616,7 @@ describeFn('Federated Search Performance Benchmarks', () => {
         const failed = responses.filter(r => r.status === 'rejected').length;
 
         console.log(`Concurrent requests: ${concurrentRequests}, Success: ${successful}, Failed: ${failed}, Time: ${totalTime}ms`);
-        
+
         // At least 80% should succeed
         expect(successful / concurrentRequests).toBeGreaterThanOrEqual(0.8);
     });

@@ -1,13 +1,13 @@
 /**
  * DIVE V3 - Policy Compliance Dashboard
  * Phase 6: Continuous Compliance Automation
- * 
+ *
  * Provides real-time visibility into:
  * - Policy drift detection status
  * - Test coverage metrics
  * - Decision statistics and trends
  * - SLA compliance tracking
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */
@@ -401,7 +401,7 @@ export default function PolicyComplianceDashboard() {
                       <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
                         🔍 Policy Drift Status
                       </h3>
-                      
+
                       {overview.drift.driftDetails.length === 0 ? (
                         <div className="text-center py-8">
                           <div className="text-5xl mb-4">✅</div>
@@ -440,7 +440,7 @@ export default function PolicyComplianceDashboard() {
                       <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
                         📈 SLA Compliance
                       </h3>
-                      
+
                       <div className="space-y-4">
                         {/* Availability */}
                         <div className={`p-4 rounded-lg ${overview.sla.availability.compliant ? 'bg-green-50 dark:bg-green-900/20' : 'bg-red-50 dark:bg-red-900/20'}`}>
@@ -498,7 +498,7 @@ export default function PolicyComplianceDashboard() {
                           <div className="flex justify-between items-center">
                             <span className="font-medium text-gray-700 dark:text-gray-300">Policy Sync</span>
                             <span className={`font-bold ${overview.sla.policySync.compliant ? 'text-green-600' : 'text-yellow-600'}`}>
-                              {overview.sla.policySync.lastSyncTime 
+                              {overview.sla.policySync.lastSyncTime
                                 ? new Date(overview.sla.policySync.lastSyncTime).toLocaleString()
                                 : 'Not synced'}
                             </span>
@@ -547,7 +547,7 @@ export default function PolicyComplianceDashboard() {
                   <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
                     🧪 Policy Test Coverage
                   </h3>
-                  
+
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
                     <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-xl p-6">
                       <p className="text-sm text-emerald-700 dark:text-emerald-400 mb-2">Total Tests</p>

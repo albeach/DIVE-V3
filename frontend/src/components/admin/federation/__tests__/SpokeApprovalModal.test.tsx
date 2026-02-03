@@ -1,6 +1,6 @@
 /**
  * DIVE V3 - SpokeApprovalModal Tests
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -240,7 +240,7 @@ describe('SpokeApprovalModal', () => {
   describe('Form Submission', () => {
     it('calls onApprove with correct data on submit', async () => {
       mockOnApprove.mockResolvedValue(undefined);
-      
+
       render(
         <SpokeApprovalModal
           spoke={mockPendingSpoke}
@@ -268,7 +268,7 @@ describe('SpokeApprovalModal', () => {
 
     it('shows loading state during submission', async () => {
       mockOnApprove.mockImplementation(() => new Promise(resolve => setTimeout(resolve, 100)));
-      
+
       render(
         <SpokeApprovalModal
           spoke={mockPendingSpoke}
@@ -288,7 +288,7 @@ describe('SpokeApprovalModal', () => {
 
     it('shows error message on failure', async () => {
       mockOnApprove.mockRejectedValue(new Error('Network error'));
-      
+
       render(
         <SpokeApprovalModal
           spoke={mockPendingSpoke}
@@ -308,7 +308,7 @@ describe('SpokeApprovalModal', () => {
 
     it('calls onClose after successful submission', async () => {
       mockOnApprove.mockResolvedValue(undefined);
-      
+
       render(
         <SpokeApprovalModal
           spoke={mockPendingSpoke}
@@ -380,7 +380,7 @@ describe('SpokeApprovalModal', () => {
 
     it('includes notes in approval request', async () => {
       mockOnApprove.mockResolvedValue(undefined);
-      
+
       render(
         <SpokeApprovalModal
           spoke={mockPendingSpoke}

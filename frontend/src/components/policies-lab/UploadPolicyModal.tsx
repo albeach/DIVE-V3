@@ -27,7 +27,7 @@ export default function UploadPolicyModal({ isOpen, onClose, onSuccess }: Upload
     if (acceptedFiles.length > 0) {
       const selectedFile = acceptedFiles[0];
       setFile(selectedFile);
-      
+
       // Auto-fill name from filename
       if (!name) {
         const filename = selectedFile.name.replace(/\.(rego|xml)$/, '');
@@ -90,7 +90,7 @@ export default function UploadPolicyModal({ isOpen, onClose, onSuccess }: Upload
 
       setState('success');
       setUploadedPolicyId(data.policyId);
-      
+
       // Wait 2 seconds to show success, then close and refresh
       setTimeout(() => {
         onSuccess();

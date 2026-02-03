@@ -2,22 +2,22 @@
 /**
  * DIVE V3 - Policy Drift Detector
  * Phase 6: Continuous Compliance Automation
- * 
+ *
  * Detects drift between source policies and deployed OPA instances.
- * 
+ *
  * Features:
  * - Compares source policy checksums with deployed bundles
  * - Validates bundle manifests across all tenants
  * - Checks OPA server policy versions
  * - Generates detailed drift reports
  * - Supports automated remediation triggers
- * 
+ *
  * Usage:
  *   npx ts-node --esm scripts/policy/drift-detector.ts check
  *   npx ts-node --esm scripts/policy/drift-detector.ts check --tenant USA
  *   npx ts-node --esm scripts/policy/drift-detector.ts report
  *   npx ts-node --esm scripts/policy/drift-detector.ts compare --baseline latest
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */

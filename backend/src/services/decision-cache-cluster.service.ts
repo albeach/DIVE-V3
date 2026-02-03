@@ -1,24 +1,24 @@
 /**
  * DIVE V3 - Decision Cache Cluster Service
  * Phase 7: Production Hardening
- * 
+ *
  * Provides distributed caching for OPA authorization decisions with:
  * - Redis Sentinel/Cluster backend
  * - Classification-based TTL
  * - Distributed cache invalidation via pub/sub
  * - Failover handling
  * - Tenant-aware cache keys
- * 
+ *
  * Architecture:
  *   Backend → DecisionCacheCluster → Redis Sentinel
  *                                  ← Pub/Sub invalidation
  *                                  ← Failover events
- * 
+ *
  * ACP-240 Compliance:
  * - Shorter TTLs for sensitive classifications
  * - Real-time invalidation on policy updates
  * - Audit logging of cache operations
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */
@@ -74,7 +74,7 @@ export interface ICacheClusterStats {
   redisHealth: IRedisClusterHealth | null;
 }
 
-export type CacheInvalidationReason = 
+export type CacheInvalidationReason =
   | 'policy_update'
   | 'data_update'
   | 'user_logout'
@@ -128,7 +128,7 @@ class DecisionCacheClusterService extends EventEmitter {
 
   constructor(config: Partial<ICacheClusterConfig> = {}) {
     super();
-    
+
     this.config = {
       defaultTTL: parseInt(process.env.DECISION_CACHE_TTL || '60', 10),
       classificationBasedTTL: process.env.DECISION_CACHE_CLASSIFICATION_TTL !== 'false',
@@ -148,7 +148,7 @@ class DecisionCacheClusterService extends EventEmitter {
 
     // Generate unique node ID
     this.nodeId = `node-${process.pid}-${Date.now().toString(36)}`;
-    
+
     // Local fallback cache (used when Redis is unavailable)
     this.localFallbackCache = new Map();
 
@@ -198,7 +198,7 @@ class DecisionCacheClusterService extends EventEmitter {
       (message) => {
         try {
           const event: ICacheInvalidationEvent = JSON.parse(message);
-          
+
           // Ignore our own invalidation events
           if (event.nodeId === this.nodeId) {
             return;
@@ -322,7 +322,7 @@ class DecisionCacheClusterService extends EventEmitter {
       // Try Redis first
       if (redisClusterService.isConnected()) {
         const cached = await redisClusterService.get<ICachedDecision>(key);
-        
+
         if (cached) {
           this.stats.hits++;
           logger.debug('Decision cache hit (Redis)', {
@@ -361,7 +361,7 @@ class DecisionCacheClusterService extends EventEmitter {
     tenant?: string
   ): Promise<boolean> {
     const ttl = this.getTTLForClassification(classification);
-    
+
     const cachedDecision: ICachedDecision = {
       result: decision,
       cachedAt: Date.now(),
@@ -584,7 +584,7 @@ class DecisionCacheClusterService extends EventEmitter {
    */
   async getStats(): Promise<ICacheClusterStats> {
     const totalHits = this.stats.hits + this.stats.misses;
-    
+
     let redisMetrics: IRedisMetrics | null = null;
     let redisHealth: IRedisClusterHealth | null = null;
 

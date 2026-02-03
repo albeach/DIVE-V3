@@ -1,6 +1,6 @@
 /**
  * Blacklist Statistics API Route
- * 
+ *
  * Proxy for blacklist statistics endpoint
  * Returns token revocation metrics for admin monitoring
  */

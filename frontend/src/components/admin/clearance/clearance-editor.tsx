@@ -139,16 +139,16 @@ export function ClearanceEditor({ mappings, countries, onUpdate }: Props) {
     return (
         <div className="space-y-6">
             {/* Country Selector */}
-            <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-slate-200 dark:border-gray-700 p-6">
                 <div className="flex items-center gap-4">
                     <div className="flex-1">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             🌍 Select Country to Edit
                         </label>
                         <select
                             value={selectedCountry}
                             onChange={(e) => setSelectedCountry(e.target.value)}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-lg"
+                            className="w-full px-4 py-3 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent text-lg"
                         >
                             <option value="">-- Select a country --</option>
                             {countries.map(country => (
@@ -171,7 +171,7 @@ export function ClearanceEditor({ mappings, countries, onUpdate }: Props) {
                             <button
                                 onClick={handleReset}
                                 disabled={saving}
-                                className="px-6 py-3 bg-gray-200 text-gray-700 rounded-lg font-medium hover:bg-gray-300 transition-all duration-200 disabled:opacity-50"
+                                className="px-6 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg font-medium hover:bg-gray-300 dark:hover:bg-gray-600 transition-all duration-200 disabled:opacity-50"
                             >
                                 ↶ Reset
                             </button>
@@ -181,12 +181,12 @@ export function ClearanceEditor({ mappings, countries, onUpdate }: Props) {
 
                 {/* Status Messages */}
                 {error && (
-                    <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
+                    <div className="mt-4 p-4 bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-700 rounded-lg text-red-700 dark:text-red-400">
                         ⚠️ {error}
                     </div>
                 )}
                 {success && (
-                    <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg text-green-700">
+                    <div className="mt-4 p-4 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700 rounded-lg text-green-700 dark:text-green-400">
                         {success}
                     </div>
                 )}
@@ -200,11 +200,11 @@ export function ClearanceEditor({ mappings, countries, onUpdate }: Props) {
                         const tags = editedMappings[level] || [];
 
                         return (
-                            <div key={level} className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
+                            <div key={level} className="bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-slate-200 dark:border-gray-700 p-6">
                                 {/* Level Header */}
                                 <div className="flex items-center justify-between mb-4">
                                     <div className="flex items-center gap-3">
-                                        <h3 className="text-xl font-bold text-gray-800">
+                                        <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">
                                             {level}
                                         </h3>
                                         <div className="flex items-center gap-2">
@@ -222,7 +222,7 @@ export function ClearanceEditor({ mappings, countries, onUpdate }: Props) {
                                         </div>
                                     </div>
 
-                                    <div className="text-sm text-gray-600">
+                                    <div className="text-sm text-gray-600 dark:text-gray-400">
                                         {tags.length} variant{tags.length !== 1 ? 's' : ''}
                                     </div>
                                 </div>
@@ -233,7 +233,7 @@ export function ClearanceEditor({ mappings, countries, onUpdate }: Props) {
                                         {tags.map((tag, index) => (
                                             <div
                                                 key={index}
-                                                className="inline-flex items-center gap-2 px-3 py-2 bg-indigo-50 text-indigo-800 rounded-lg border border-indigo-200 group hover:bg-indigo-100 transition-colors"
+                                                className="inline-flex items-center gap-2 px-3 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-300 rounded-lg border border-indigo-200 dark:border-indigo-700 group hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
                                             >
                                                 <span className="font-medium">{tag}</span>
                                                 <button
@@ -246,7 +246,7 @@ export function ClearanceEditor({ mappings, countries, onUpdate }: Props) {
                                             </div>
                                         ))}
                                         {tags.length === 0 && (
-                                            <div className="text-gray-400 italic">
+                                            <div className="text-gray-400 dark:text-gray-500 italic">
                                                 No mappings defined for {selectedCountry}
                                             </div>
                                         )}
@@ -266,7 +266,7 @@ export function ClearanceEditor({ mappings, countries, onUpdate }: Props) {
                                             }
                                         }}
                                         placeholder="Add national clearance equivalent..."
-                                        className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                                     />
                                     <button
                                         onClick={() => addTag(level)}
@@ -276,7 +276,7 @@ export function ClearanceEditor({ mappings, countries, onUpdate }: Props) {
                                     </button>
                                 </div>
 
-                                <p className="mt-2 text-xs text-gray-500">
+                                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
                                     💡 Tip: Press Enter to add. Include variants with/without diacritics.
                                 </p>
                             </div>
@@ -287,33 +287,33 @@ export function ClearanceEditor({ mappings, countries, onUpdate }: Props) {
 
             {/* Instructions */}
             {!selectedCountry && (
-                <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl shadow-lg border border-indigo-200 p-8 text-center">
+                <div className="bg-gradient-to-br from-indigo-50 to-purple-50 dark:from-indigo-900/30 dark:to-purple-900/30 rounded-xl shadow-lg border border-indigo-200 dark:border-indigo-700 p-8 text-center">
                     <div className="text-6xl mb-4">📝</div>
-                    <h3 className="text-2xl font-bold text-gray-800 mb-2">
+                    <h3 className="text-2xl font-bold text-gray-800 dark:text-gray-100 mb-2">
                         Select a Country to Edit
                     </h3>
-                    <p className="text-gray-600 mb-6">
+                    <p className="text-gray-600 dark:text-gray-400 mb-6">
                         Choose a country from the dropdown above to edit its clearance mappings.
                     </p>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-left">
-                        <div className="bg-white rounded-lg p-4 shadow">
+                        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
                             <div className="text-2xl mb-2">➕</div>
-                            <h4 className="font-semibold text-gray-800 mb-1">Add Equivalents</h4>
-                            <p className="text-sm text-gray-600">
+                            <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-1">Add Equivalents</h4>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
                                 Type and press Enter or click Add button
                             </p>
                         </div>
-                        <div className="bg-white rounded-lg p-4 shadow">
+                        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
                             <div className="text-2xl mb-2">✕</div>
-                            <h4 className="font-semibold text-gray-800 mb-1">Remove Equivalents</h4>
-                            <p className="text-sm text-gray-600">
+                            <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-1">Remove Equivalents</h4>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
                                 Click the ✕ button on any tag
                             </p>
                         </div>
-                        <div className="bg-white rounded-lg p-4 shadow">
+                        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 shadow">
                             <div className="text-2xl mb-2">💾</div>
-                            <h4 className="font-semibold text-gray-800 mb-1">Save Changes</h4>
-                            <p className="text-sm text-gray-600">
+                            <h4 className="font-semibold text-gray-800 dark:text-gray-200 mb-1">Save Changes</h4>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
                                 Click Save when done editing
                             </p>
                         </div>

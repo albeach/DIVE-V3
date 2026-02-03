@@ -1,14 +1,14 @@
 /**
  * Federated Search Multi-Instance E2E Tests
- * 
+ *
  * Phase 3: Federation Query Optimization
  * Tests federated search across USA, FRA, GBR, and DEU instances
- * 
+ *
  * Prerequisites:
  * - All four instances must be running (USA, FRA, GBR, DEU)
  * - Cloudflare tunnels configured
  * - User must be authenticated
- * 
+ *
  * Test Coverage:
  * - Local (USA) only search
  * - Federated USA + FRA search

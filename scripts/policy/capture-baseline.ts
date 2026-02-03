@@ -2,10 +2,10 @@
 /**
  * Policy Decision Baseline Capture
  * Phase 0: Safety Net for Policy Refactoring
- * 
+ *
  * This script captures current OPA decision behavior for all test cases,
  * creating a baseline that can be compared against after policy changes.
- * 
+ *
  * Usage:
  *   npx ts-node scripts/policy/capture-baseline.ts capture
  *   npx ts-node scripts/policy/capture-baseline.ts compare
@@ -119,9 +119,9 @@ function generateTestCases(): TestCase[] {
             if (resourceCOI.includes('US-ONLY') && country !== 'USA') {
               // US-ONLY resource, non-US user - should always deny
             }
-            
+
             const releasabilityTo = generateReleasability(country, resourceCOI);
-            
+
             cases.push({
               id: `matrix-${++caseId}`,
               description: `${clearance} user from ${country} accessing ${classification} resource (COI: ${resourceCOI.join(',')||'none'})`,
@@ -494,7 +494,7 @@ async function captureBaseline(): Promise<void> {
   for (let i = 0; i < testCases.length; i++) {
     const testCase = testCases[i];
     const decision = await callOPA(testCase.input);
-    
+
     if (decision.allow) {
       allowCount++;
     } else {
@@ -558,7 +558,7 @@ async function compareBaseline(): Promise<void> {
   for (const testCase of testCases) {
     const hash = hashInput(testCase.input);
     const baselineEntry = baseline.entries.find(e => e.inputHash === hash);
-    
+
     if (!baselineEntry) {
       console.warn(`⚠️ New test case not in baseline: ${testCase.id}`);
       continue;

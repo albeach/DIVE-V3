@@ -1,8 +1,8 @@
 /**
  * DIVE V3 - Hub Connectivity Widget
- * 
+ *
  * Real-time display of Hub and OPAL connection status.
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -46,18 +46,18 @@ function formatRelativeTime(dateStr?: string): string {
   const diffMs = now.getTime() - date.getTime();
   const diffSeconds = Math.floor(diffMs / 1000);
   const diffMinutes = Math.floor(diffSeconds / 60);
-  
+
   if (diffSeconds < 10) return 'Just now';
   if (diffSeconds < 60) return `${diffSeconds}s ago`;
   if (diffMinutes < 60) return `${diffMinutes}m ago`;
   return `${Math.floor(diffMinutes / 60)}h ago`;
 }
 
-export function HubConnectivityWidget({ 
-  connectivity, 
-  loading, 
+export function HubConnectivityWidget({
+  connectivity,
+  loading,
   onRefresh,
-  refreshing 
+  refreshing
 }: HubConnectivityWidgetProps) {
   const hubConnected = connectivity?.hubReachable ?? false;
   const opalConnected = connectivity?.opalConnected ?? false;
@@ -84,8 +84,8 @@ export function HubConnectivityWidget({
       animate={{ opacity: 1, y: 0 }}
       transition={{ delay: 0.1 }}
       className={`bg-white rounded-2xl border shadow-lg p-6 ${
-        overallHealthy 
-          ? 'border-emerald-200 shadow-emerald-100' 
+        overallHealthy
+          ? 'border-emerald-200 shadow-emerald-100'
           : 'border-red-200 shadow-red-100'
       }`}
     >
@@ -122,8 +122,8 @@ export function HubConnectivityWidget({
       <div className="grid grid-cols-2 gap-4">
         {/* Hub Status */}
         <div className={`p-4 rounded-xl border ${
-          hubConnected 
-            ? 'bg-emerald-50 border-emerald-200' 
+          hubConnected
+            ? 'bg-emerald-50 border-emerald-200'
             : 'bg-red-50 border-red-200'
         }`}>
           <div className="flex items-center justify-between mb-3">
@@ -137,20 +137,20 @@ export function HubConnectivityWidget({
               <XCircle className="w-5 h-5 text-red-500" />
             )}
           </div>
-          
+
           <div className={`text-lg font-bold mb-1 ${
             hubConnected ? 'text-emerald-700' : 'text-red-700'
           }`}>
             {hubConnected ? 'Connected' : 'Disconnected'}
           </div>
-          
+
           <div className="text-xs text-slate-500">
-            {connectivity?.lastHeartbeat 
+            {connectivity?.lastHeartbeat
               ? `Last heartbeat: ${formatRelativeTime(connectivity.lastHeartbeat)}`
               : 'No heartbeat received'
             }
           </div>
-          
+
           {connectivity?.latencyMs !== undefined && hubConnected && (
             <div className="mt-2 flex items-center gap-1">
               <Activity className="w-3 h-3 text-slate-400" />
@@ -163,8 +163,8 @@ export function HubConnectivityWidget({
 
         {/* OPAL Status */}
         <div className={`p-4 rounded-xl border ${
-          opalConnected 
-            ? 'bg-emerald-50 border-emerald-200' 
+          opalConnected
+            ? 'bg-emerald-50 border-emerald-200'
             : 'bg-red-50 border-red-200'
         }`}>
           <div className="flex items-center justify-between mb-3">
@@ -178,15 +178,15 @@ export function HubConnectivityWidget({
               <XCircle className="w-5 h-5 text-red-500" />
             )}
           </div>
-          
+
           <div className={`text-lg font-bold mb-1 ${
             opalConnected ? 'text-emerald-700' : 'text-red-700'
           }`}>
             {opalConnected ? 'Synced' : 'Disconnected'}
           </div>
-          
+
           <div className="text-xs text-slate-500">
-            {connectivity?.lastOpalSync 
+            {connectivity?.lastOpalSync
               ? `Last sync: ${formatRelativeTime(connectivity.lastOpalSync)}`
               : 'No sync data'
             }
@@ -205,8 +205,8 @@ export function HubConnectivityWidget({
           <span className={`text-sm font-medium ${
             overallHealthy ? 'text-emerald-700' : 'text-amber-700'
           }`}>
-            {overallHealthy 
-              ? 'Federation link operational' 
+            {overallHealthy
+              ? 'Federation link operational'
               : 'Operating in degraded mode'
             }
           </span>

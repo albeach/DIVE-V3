@@ -1,6 +1,6 @@
 /**
  * DIVE V3 - SyncStatusDashboard Tests
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -72,7 +72,7 @@ describe('SyncStatusDashboard', () => {
   describe('Loading State', () => {
     it('renders loading skeleton when loading', () => {
       const { container } = render(<SyncStatusDashboard syncStatus={null} loading />);
-      
+
       expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
     });
   });
@@ -80,7 +80,7 @@ describe('SyncStatusDashboard', () => {
   describe('Empty State', () => {
     it('shows empty state when no spokes', () => {
       render(<SyncStatusDashboard syncStatus={{ ...mockSyncStatus, spokes: [] }} />);
-      
+
       expect(screen.getByText('No Spokes Registered')).toBeInTheDocument();
     });
   });
@@ -88,7 +88,7 @@ describe('SyncStatusDashboard', () => {
   describe('Header', () => {
     it('displays hub version', () => {
       render(<SyncStatusDashboard syncStatus={mockSyncStatus} />);
-      
+
       expect(screen.getByText('Policy Sync Status')).toBeInTheDocument();
       // Version appears multiple times - check that at least one exists
       expect(screen.getAllByText(/v1\.2\.3/).length).toBeGreaterThan(0);
@@ -101,7 +101,7 @@ describe('SyncStatusDashboard', () => {
           onForceSyncAll={jest.fn()}
         />
       );
-      
+
       expect(screen.getByText('Sync All')).toBeInTheDocument();
     });
   });
@@ -109,7 +109,7 @@ describe('SyncStatusDashboard', () => {
   describe('Summary Stats', () => {
     it('displays summary statistics', () => {
       render(<SyncStatusDashboard syncStatus={mockSyncStatus} />);
-      
+
       expect(screen.getByText('Total')).toBeInTheDocument();
       // "Current" appears in both summary and legend - check at least one exists
       expect(screen.getAllByText('Current').length).toBeGreaterThan(0);
@@ -120,7 +120,7 @@ describe('SyncStatusDashboard', () => {
 
     it('displays correct counts', () => {
       render(<SyncStatusDashboard syncStatus={mockSyncStatus} />);
-      
+
       // Check if all counts are displayed (4, 1, 1, 1, 1)
       expect(screen.getByText('4')).toBeInTheDocument();
       expect(screen.getAllByText('1')).toHaveLength(4);
@@ -130,7 +130,7 @@ describe('SyncStatusDashboard', () => {
   describe('Status Legend', () => {
     it('displays status legend', () => {
       render(<SyncStatusDashboard syncStatus={mockSyncStatus} />);
-      
+
       // Check legend items
       const legendItems = ['Current', 'Behind', 'Stale', 'Critical', 'Offline'];
       legendItems.forEach((item) => {
@@ -142,7 +142,7 @@ describe('SyncStatusDashboard', () => {
   describe('Spoke List', () => {
     it('displays all spokes', () => {
       render(<SyncStatusDashboard syncStatus={mockSyncStatus} />);
-      
+
       expect(screen.getByText('NZL')).toBeInTheDocument();
       expect(screen.getByText('AUS')).toBeInTheDocument();
       expect(screen.getByText('USA')).toBeInTheDocument();
@@ -151,7 +151,7 @@ describe('SyncStatusDashboard', () => {
 
     it('displays country flags', () => {
       render(<SyncStatusDashboard syncStatus={mockSyncStatus} />);
-      
+
       expect(screen.getByText('🇳🇿')).toBeInTheDocument();
       expect(screen.getByText('🇦🇺')).toBeInTheDocument();
       expect(screen.getByText('🇺🇸')).toBeInTheDocument();
@@ -160,7 +160,7 @@ describe('SyncStatusDashboard', () => {
 
     it('shows versions behind count for out-of-sync spokes', () => {
       render(<SyncStatusDashboard syncStatus={mockSyncStatus} />);
-      
+
       expect(screen.getByText('(1 behind)')).toBeInTheDocument();
       expect(screen.getByText('(3 behind)')).toBeInTheDocument();
     });
@@ -175,11 +175,11 @@ describe('SyncStatusDashboard', () => {
           onForceSync={onForceSync}
         />
       );
-      
+
       // Click sync button for first spoke (NZL)
       const syncButtons = screen.getAllByText('Sync');
       fireEvent.click(syncButtons[0]);
-      
+
       await waitFor(() => {
         expect(onForceSync).toHaveBeenCalledWith('spoke-nzl-001');
       });
@@ -192,7 +192,7 @@ describe('SyncStatusDashboard', () => {
           onForceSync={jest.fn()}
         />
       );
-      
+
       // There should be 3 sync buttons (not 4, because FRA is offline)
       const syncButtons = screen.getAllByText('Sync');
       expect(syncButtons).toHaveLength(3);
@@ -206,9 +206,9 @@ describe('SyncStatusDashboard', () => {
           onForceSyncAll={onForceSyncAll}
         />
       );
-      
+
       fireEvent.click(screen.getByText('Sync All'));
-      
+
       await waitFor(() => {
         expect(onForceSyncAll).toHaveBeenCalled();
       });
@@ -224,12 +224,12 @@ describe('SyncStatusDashboard', () => {
           onRefresh={onRefresh}
         />
       );
-      
+
       // Find refresh button (second button after Sync All)
       const buttons = screen.getAllByRole('button');
       const refreshButton = buttons.find(b => !b.textContent?.includes('Sync'));
       fireEvent.click(refreshButton!);
-      
+
       expect(onRefresh).toHaveBeenCalled();
     });
   });

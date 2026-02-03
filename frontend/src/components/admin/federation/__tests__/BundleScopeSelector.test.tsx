@@ -1,6 +1,6 @@
 /**
  * DIVE V3 - BundleScopeSelector Tests
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -23,13 +23,13 @@ describe('BundleScopeSelector', () => {
   describe('Rendering', () => {
     it('renders the component with header', () => {
       render(<BundleScopeSelector {...defaultProps} />);
-      
+
       expect(screen.getByText('Select Policy Scopes')).toBeInTheDocument();
     });
 
     it('renders all policy scopes', () => {
       render(<BundleScopeSelector {...defaultProps} />);
-      
+
       POLICY_SCOPES.forEach((scope) => {
         expect(screen.getByText(scope.label)).toBeInTheDocument();
       });
@@ -37,25 +37,25 @@ describe('BundleScopeSelector', () => {
 
     it('shows Core Policies section', () => {
       render(<BundleScopeSelector {...defaultProps} />);
-      
+
       expect(screen.getByText('Core Policies')).toBeInTheDocument();
     });
 
     it('shows Tenant Policies section', () => {
       render(<BundleScopeSelector {...defaultProps} />);
-      
+
       expect(screen.getByText('Tenant Policies')).toBeInTheDocument();
     });
 
     it('shows required badge for base guardrails', () => {
       render(<BundleScopeSelector {...defaultProps} />);
-      
+
       expect(screen.getByText('Required')).toBeInTheDocument();
     });
 
     it('displays selection count', () => {
       render(<BundleScopeSelector {...defaultProps} selectedScopes={['policy:base', 'policy:usa']} />);
-      
+
       expect(screen.getByText(/2/)).toBeInTheDocument();
       expect(screen.getByText(/of/)).toBeInTheDocument();
     });
@@ -70,11 +70,11 @@ describe('BundleScopeSelector', () => {
           onScopesChange={onScopesChange}
         />
       );
-      
+
       // Click on USA scope (optional)
       const usaScope = screen.getByText('USA Tenant');
       fireEvent.click(usaScope.closest('button')!);
-      
+
       expect(onScopesChange).toHaveBeenCalledWith(['policy:base', 'policy:usa']);
     });
 
@@ -86,11 +86,11 @@ describe('BundleScopeSelector', () => {
           onScopesChange={onScopesChange}
         />
       );
-      
+
       // Click on USA scope to deselect
       const usaScope = screen.getByText('USA Tenant');
       fireEvent.click(usaScope.closest('button')!);
-      
+
       expect(onScopesChange).toHaveBeenCalledWith(['policy:base']);
     });
 
@@ -102,11 +102,11 @@ describe('BundleScopeSelector', () => {
           onScopesChange={onScopesChange}
         />
       );
-      
+
       // Try to click on Base Guardrails (required)
       const baseScope = screen.getByText('Base Guardrails');
       fireEvent.click(baseScope.closest('button')!);
-      
+
       // Should not be called because it's required
       expect(onScopesChange).not.toHaveBeenCalled();
     });
@@ -121,9 +121,9 @@ describe('BundleScopeSelector', () => {
           onScopesChange={onScopesChange}
         />
       );
-      
+
       fireEvent.click(screen.getByText('Select All'));
-      
+
       expect(onScopesChange).toHaveBeenCalledWith(POLICY_SCOPES.map((s) => s.id));
     });
 
@@ -135,9 +135,9 @@ describe('BundleScopeSelector', () => {
           onScopesChange={onScopesChange}
         />
       );
-      
+
       fireEvent.click(screen.getByText('Required Only'));
-      
+
       const requiredScopes = POLICY_SCOPES.filter((s) => s.required).map((s) => s.id);
       expect(onScopesChange).toHaveBeenCalledWith(requiredScopes);
     });
@@ -153,11 +153,11 @@ describe('BundleScopeSelector', () => {
           disabled
         />
       );
-      
+
       // Click on USA scope
       const usaScope = screen.getByText('USA Tenant');
       fireEvent.click(usaScope.closest('button')!);
-      
+
       expect(onScopesChange).not.toHaveBeenCalled();
     });
 
@@ -170,9 +170,9 @@ describe('BundleScopeSelector', () => {
           disabled
         />
       );
-      
+
       fireEvent.click(screen.getByText('Select All'));
-      
+
       expect(onScopesChange).not.toHaveBeenCalled();
     });
   });
@@ -185,7 +185,7 @@ describe('BundleScopeSelector', () => {
           showDescriptions
         />
       );
-      
+
       expect(screen.getByText(/Core security guardrails/)).toBeInTheDocument();
     });
   });

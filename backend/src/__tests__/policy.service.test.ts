@@ -1,7 +1,7 @@
 /**
  * Policy Service Test Suite
  * Tests for OPA Rego policy management and testing
- * 
+ *
  * Target Coverage: 90%
  * Priority: MEDIUM (Policy transparency)
  */
@@ -756,7 +756,7 @@ default allow := false
         it('should count test matches when test file has test_ rules', async () => {
             // Setup: test directory exists with test files containing test_ rules
             jest.spyOn(mockedFs, 'readdirSync')
-                .mockReturnValueOnce(['fuel_inventory_policy.rego'] as any) // policy files  
+                .mockReturnValueOnce(['fuel_inventory_policy.rego'] as any) // policy files
                 .mockReturnValueOnce(['fuel_inventory_test.rego'] as any); // test files
 
             existsSyncSpy.mockImplementation((_path: any) => {

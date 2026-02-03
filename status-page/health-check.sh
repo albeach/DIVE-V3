@@ -31,28 +31,28 @@ echo -n '{"timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","instances":['
 first=true
 for inst in "${INSTANCES[@]}"; do
     IFS='|' read -r code name type app_url idp_url api_url <<< "$inst"
-    
+
     # Check each service
     IFS='|' read -r app_code app_ms app_status <<< "$(check_url "$app_url")"
     IFS='|' read -r idp_code idp_ms idp_status <<< "$(check_url "${idp_url}/realms/dive-v3-broker")"
     IFS='|' read -r api_code api_ms api_status <<< "$(check_url "${api_url}/health")"
-    
+
     # Also check IdP public endpoint (GAP-001 indicator)
     IFS='|' read -r idp_api_code idp_api_ms idp_api_status <<< "$(check_url "${api_url}/api/idps/public")"
-    
+
     # Determine overall status
     overall="HEALTHY"
     [[ "$app_status" == "DOWN" || "$idp_status" == "DOWN" || "$api_status" == "DOWN" ]] && overall="DEGRADED"
     [[ "$app_status" == "DOWN" && "$idp_status" == "DOWN" && "$api_status" == "DOWN" ]] && overall="DOWN"
-    
+
     # IdP API failure indicates GAP-001
     if [[ "$idp_api_status" == "DOWN" && "$api_status" == "UP" ]]; then
         overall="DEGRADED"
     fi
-    
+
     $first || echo -n ','
     first=false
-    
+
     cat << EOF
 {"instance":"$code","name":"$name","type":"$type","status":"$overall","services":{"frontend":{"url":"$app_url","status":"$app_status","http_code":$app_code,"latency_ms":$app_ms},"keycloak":{"url":"$idp_url","status":"$idp_status","http_code":$idp_code,"latency_ms":$idp_ms},"backend":{"url":"$api_url","status":"$api_status","http_code":$api_code,"latency_ms":$api_ms},"idp_api":{"url":"${api_url}/api/idps/public","status":"$idp_api_status","http_code":$idp_api_code,"latency_ms":$idp_api_ms}}}
 EOF

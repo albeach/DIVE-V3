@@ -1,24 +1,24 @@
 /**
  * DIVE V3 - Decision Batch Service
  * Phase 9: Performance Optimization & Scalability
- * 
+ *
  * Provides batch authorization decision processing for:
  * - Reduced HTTP overhead via batching multiple decisions
  * - Parallel OPA query execution
  * - Efficient cache utilization
  * - Improved throughput for bulk operations
- * 
+ *
  * Targets (Phase 9):
  * - Throughput: 300 req/s (from ~150 req/s)
  * - Batch latency: <50ms for up to 10 decisions
  * - Zero duplicate OPA queries within batch
- * 
+ *
  * Usage:
  *   const results = await decisionBatchService.evaluateBatch([
  *     { subject, action, resource, context },
  *     { subject, action, resource, context },
  *   ]);
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */
@@ -218,7 +218,7 @@ class DecisionBatchService extends EventEmitter {
 
     return new Promise((resolve, reject) => {
       const body = JSON.stringify({ input });
-      
+
       const options = {
         hostname: url.hostname,
         port: url.port || (isHttps ? 443 : 80),
@@ -373,7 +373,7 @@ class DecisionBatchService extends EventEmitter {
     if (this.config.deduplication && dedupeMap.size > 0) {
       const expandedResults: IBatchResult[] = [];
       const resultMap = new Map(results.map(r => [this.generateCacheKey(items.find(i => i.id === r.id)!.input), r]));
-      
+
       for (const item of items) {
         const key = this.generateCacheKey(item.input);
         const baseResult = resultMap.get(key)!;

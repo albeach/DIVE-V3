@@ -1,12 +1,12 @@
 /**
  * IdP Management API Layer
- * 
+ *
  * Consolidated API calls with React Query for:
  * - Caching
  * - Retries
  * - Optimistic updates
  * - Error recovery
- * 
+ *
  * Phase 1.4: Shared API Layer
  */
 

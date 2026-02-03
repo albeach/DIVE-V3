@@ -1,7 +1,7 @@
 /**
  * Metrics Service Test Suite
  * Target: 95%+ coverage for metrics.service.ts
- * 
+ *
  * Tests:
  * - Recording approval durations (with memory management)
  * - Recording test results (success/failure)
@@ -372,7 +372,7 @@ describe('Metrics Service', () => {
         });
 
         it('should handle unsorted duration values', () => {
-            [500, 100, 300, 200, 400].forEach(d => 
+            [500, 100, 300, 200, 400].forEach(d =>
                 metricsService.recordApprovalDuration(d)
             );
 

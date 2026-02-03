@@ -1,11 +1,11 @@
 /**
  * Delete WebAuthn Credential and Prepare for Re-registration
- * 
+ *
  * This script:
  * 1. Deletes the existing WebAuthn credential for admin-dive
  * 2. Verifies deletion
  * 3. Provides instructions for re-registration
- * 
+ *
  * Usage: KEYCLOAK_URL=https://usa-idp.dive25.com npm run delete-webauthn -- --username admin-dive
  */
 
@@ -49,7 +49,7 @@ async function deleteWebAuthnCredential(username: string) {
   // Step 1: Authenticate
   console.log('[1/4] Authenticating...');
   const adminPassword = await getAdminPassword();
-  
+
   let adminToken: string;
   try {
     const adminTokenResponse = await axios.post(
@@ -94,8 +94,8 @@ async function deleteWebAuthnCredential(username: string) {
   );
 
   const credentials = credentialsResponse.data;
-  const webauthnCredentials = credentials.filter((cred: any) => 
-    cred.type === 'webauthn' || 
+  const webauthnCredentials = credentials.filter((cred: any) =>
+    cred.type === 'webauthn' ||
     cred.type === 'webauthn-passwordless' ||
     cred.type?.toLowerCase().includes('fido') ||
     cred.type?.toLowerCase().includes('webauthn')
@@ -140,7 +140,7 @@ async function deleteWebAuthnCredential(username: string) {
     `${KEYCLOAK_URL}/admin/realms/${REALM}/users/${user.id}/credentials`,
     { headers: { 'Authorization': `Bearer ${adminToken}` } }
   );
-  const remaining = verifyResponse.data.filter((cred: any) => 
+  const remaining = verifyResponse.data.filter((cred: any) =>
     cred.type === 'webauthn' || cred.type === 'webauthn-passwordless'
   );
 

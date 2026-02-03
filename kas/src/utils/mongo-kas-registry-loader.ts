@@ -12,7 +12,19 @@ import { MongoClient, Db, Collection } from 'mongodb';
 import { kasLogger } from './kas-logger';
 import { kasRegistry, IKASRegistryEntry } from './kas-federation';
 
-const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
+// Lazy evaluation to ensure env vars are loaded before use
+function getMongoDBUrl(): string {
+    const url = process.env.MONGODB_URL;
+    if (!url) {
+        kasLogger.error('MONGODB_URL environment variable not set - cannot connect to MongoDB', {
+            hint: 'Ensure MONGODB_URL is configured in docker-compose.yml or environment',
+            fallbackDisabled: true,
+        });
+        throw new Error('MONGODB_URL environment variable is required');
+    }
+    return url;
+}
+
 const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
 const COLLECTION_NAME = 'federation_spokes';
 
@@ -59,13 +71,14 @@ export class MongoKASRegistryLoader {
         if (this.initialized) return;
         
         try {
+            const mongoUrl = getMongoDBUrl();
             kasLogger.info('Initializing MongoDB KAS Registry Loader', {
-                mongoUrl: MONGODB_URL,
+                mongoUrl,
                 database: DB_NAME,
                 collection: COLLECTION_NAME,
             });
-            
-            this.client = await MongoClient.connect(MONGODB_URL);
+
+            this.client = await MongoClient.connect(mongoUrl);
             this.db = this.client.db(DB_NAME);
             this.collection = this.db.collection<IMongoSpokeRegistration>(COLLECTION_NAME);
             

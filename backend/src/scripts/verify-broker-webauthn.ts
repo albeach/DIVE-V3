@@ -17,10 +17,10 @@ async function verifyBrokerWebAuthn() {
   });
 
   console.log('\n✅ Checking WebAuthn Policy Configuration for dive-v3-broker realm...\n');
-  
+
   kcAdminClient.setConfig({ realmName: 'dive-v3-broker' });
   const realm = await kcAdminClient.realms.findOne({ realm: 'dive-v3-broker' });
-  
+
   console.log('WebAuthn Policy (2FA):');
   console.log('================================');
   console.log(`RP Entity Name: ${realm.webAuthnPolicyRpEntityName}`);
@@ -28,16 +28,16 @@ async function verifyBrokerWebAuthn() {
   console.log(`User Verification: ${realm.webAuthnPolicyUserVerificationRequirement}`);
   console.log(`Require Resident Key: ${realm.webAuthnPolicyRequireResidentKey}`);
   console.log(`Signature Algorithms: ${JSON.stringify(realm.webAuthnPolicySignatureAlgorithms)}`);
-  
+
   console.log('\nWebAuthn Passwordless Policy:');
   console.log('================================');
   console.log(`RP Entity Name: ${realm.webAuthnPolicyPasswordlessRpEntityName}`);
   console.log(`RP ID: "${realm.webAuthnPolicyPasswordlessRpId}"`);
   console.log(`User Verification: ${realm.webAuthnPolicyPasswordlessUserVerificationRequirement}`);
   console.log(`Require Resident Key: ${realm.webAuthnPolicyPasswordlessRequireResidentKey}`);
-  
+
   console.log('\n');
-  
+
   if (!realm.webAuthnPolicyRpId || realm.webAuthnPolicyRpId === '') {
     console.error('❌ ERROR: WebAuthn Policy RP ID is empty!');
   } else if (realm.webAuthnPolicyRpId !== 'dive25.com') {
@@ -45,7 +45,7 @@ async function verifyBrokerWebAuthn() {
   } else {
     console.log('✅ WebAuthn Policy RP ID is correctly set to "dive25.com"');
   }
-  
+
   if (!realm.webAuthnPolicyPasswordlessRpId || realm.webAuthnPolicyPasswordlessRpId === '') {
     console.error('❌ ERROR: WebAuthn Passwordless Policy RP ID is empty!');
   } else if (realm.webAuthnPolicyPasswordlessRpId !== 'dive25.com') {
@@ -53,7 +53,7 @@ async function verifyBrokerWebAuthn() {
   } else {
     console.log('✅ WebAuthn Passwordless Policy RP ID is correctly set to "dive25.com"');
   }
-  
+
   if (realm.webAuthnPolicyRpId === 'dive25.com' && realm.webAuthnPolicyPasswordlessRpId === 'dive25.com') {
     console.log('\n✅ SUCCESS! Both WebAuthn policies are correctly configured!');
     console.log('\n⚠️  IMPORTANT: You must re-register your YubiKey now!');

@@ -1,23 +1,23 @@
 /**
  * DIVE V3 Unified Notification Service
- * 
+ *
  * Bridges the gap between:
  * - Sonner toast (ephemeral UI feedback)
  * - Persistent notifications (backend-stored, notification center)
- * 
+ *
  * Usage:
  *   import { notify } from '@/lib/notification-service';
- *   
+ *
  *   // Just toast (ephemeral)
  *   notify.toast.success('Saved!');
- *   
+ *
  *   // Toast + persistent notification
  *   notify.important({
  *     type: 'security',
  *     title: 'Session Terminated',
  *     message: 'Admin terminated a user session'
  *   });
- *   
+ *
  *   // Admin-specific with audit
  *   notify.admin.userCreated('john.doe');
  */
@@ -289,7 +289,7 @@ const adminNotifications = {
     });
   },
 
-  // Federation events  
+  // Federation events
   spokeApproved: (spokeName: string) => {
     toastFunctions.success(`Spoke "${spokeName}" approved`);
     createPersistentNotification({

@@ -1,6 +1,6 @@
 /**
  * OTP Status API Route
- * 
+ *
  * Proxy for OTP status endpoint
  * Checks if user has OTP configured
  */
