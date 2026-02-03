@@ -1,17 +1,17 @@
 /**
  * Origin Realm Migration Script
  * Phase 4, Task 1.5: Add originRealm and kasAuthority to all resources
- * 
+ *
  * This migration ensures 100% resource origin tracking for cross-instance
  * KAS integration. Resources without originRealm cannot be properly routed
  * to their authoritative KAS for key requests.
- * 
+ *
  * Usage:
  *   INSTANCE_REALM=USA ts-node src/scripts/add-origin-realm-migration.ts
  *   INSTANCE_REALM=FRA ts-node src/scripts/add-origin-realm-migration.ts
  *   INSTANCE_REALM=GBR ts-node src/scripts/add-origin-realm-migration.ts
  *   INSTANCE_REALM=DEU ts-node src/scripts/add-origin-realm-migration.ts
- * 
+ *
  * NATO Compliance: ACP-240 §5.3 (Resource Origin Authority)
  */
 
@@ -232,13 +232,13 @@ async function runMigration(): Promise<void> {
     // Create index on originRealm for performance
     if (!DRY_RUN) {
       console.log('\nCreating indexes...');
-      
+
       await collection.createIndex({ originRealm: 1 });
       console.log('  ✓ Index created: originRealm');
-      
+
       await collection.createIndex({ kasAuthority: 1 });
       console.log('  ✓ Index created: kasAuthority');
-      
+
       await collection.createIndex({ originRealm: 1, classification: 1 });
       console.log('  ✓ Compound index created: originRealm + classification');
     }
@@ -313,7 +313,7 @@ async function verifyMigration(): Promise<void> {
       kasAuthority: { $exists: true, $nin: [null, ''] }
     });
 
-    const coveragePercent = totalResources > 0 
+    const coveragePercent = totalResources > 0
       ? ((withOriginRealm / totalResources) * 100).toFixed(2)
       : '0.00';
 
@@ -334,7 +334,7 @@ async function verifyMigration(): Promise<void> {
 
     // Check index exists
     const indexes = await collection.indexes();
-    const hasOriginRealmIndex = indexes.some(idx => 
+    const hasOriginRealmIndex = indexes.some(idx =>
       idx.key && 'originRealm' in idx.key
     );
 

@@ -112,11 +112,11 @@ describe('SpokeRuntimeService', () => {
 
     it('should apply environment variable overrides', async () => {
       mockFs.readFile.mockResolvedValueOnce(JSON.stringify(validConfigData));
-      
+
       // Set environment variables
       const originalHubUrl = process.env.DIVE_HUB_URL;
       const originalHeartbeat = process.env.DIVE_HEARTBEAT_INTERVAL_MS;
-      
+
       process.env.DIVE_HUB_URL = 'https://custom-hub.dive25.com';
       process.env.DIVE_HEARTBEAT_INTERVAL_MS = '60000';
 
@@ -161,10 +161,10 @@ describe('SpokeRuntimeService', () => {
     it('should auto-detect config path from INSTANCE_CODE', async () => {
       const originalInstanceCode = process.env.INSTANCE_CODE;
       const originalDiveRoot = process.env.DIVE_ROOT;
-      
+
       process.env.INSTANCE_CODE = 'aus';
       process.env.DIVE_ROOT = '/test';
-      
+
       mockFs.readFile.mockResolvedValueOnce(JSON.stringify({
         ...validConfigData,
         instanceCode: 'AUS',

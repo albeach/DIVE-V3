@@ -1,9 +1,9 @@
 /**
  * Resource Export Utility (2025)
- * 
+ *
  * Phase 3.4: Export Functionality
  * Export selected or all resources to CSV, JSON, or Excel formats
- * 
+ *
  * Features:
  * - CSV export with proper escaping
  * - JSON export with formatting
@@ -86,14 +86,14 @@ function escapeCSV(value: unknown): string {
   if (value === null || value === undefined) {
     return '';
   }
-  
+
   const str = String(value);
-  
+
   // If contains comma, quote, or newline, wrap in quotes and escape internal quotes
   if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
     return `"${str.replace(/"/g, '""')}"`;
   }
-  
+
   return str;
 }
 
@@ -102,9 +102,9 @@ function escapeCSV(value: unknown): string {
  */
 function formatDate(date: string | undefined, formatDates: boolean): string {
   if (!date) return '';
-  
+
   if (!formatDates) return date;
-  
+
   try {
     const d = new Date(date);
     return d.toLocaleDateString('en-US', {
@@ -134,7 +134,7 @@ function getFieldValue(
   formatDates: boolean
 ): string {
   const value = resource[field];
-  
+
   switch (field) {
     case 'releasabilityTo':
     case 'COI':
@@ -165,16 +165,16 @@ function getTimestamp(): string {
 function downloadFile(content: string | Blob, filename: string, mimeType: string): void {
   const blob = content instanceof Blob ? content : new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
-  
+
   const link = document.createElement('a');
   link.href = url;
   link.download = filename;
   link.style.display = 'none';
-  
+
   document.body.appendChild(link);
   link.click();
   document.body.removeChild(link);
-  
+
   // Clean up the URL object
   setTimeout(() => URL.revokeObjectURL(url), 100);
 }
@@ -193,18 +193,18 @@ function exportToCSV(
   const columns = options.columns || DEFAULT_COLUMNS;
   const headers = { ...DEFAULT_HEADERS, ...options.customHeaders };
   const formatDates = options.formatDates ?? true;
-  
+
   // Build header row
   const headerRow = columns.map(col => escapeCSV(headers[col] || col)).join(',');
-  
+
   // Build data rows
-  const dataRows = resources.map(resource => 
+  const dataRows = resources.map(resource =>
     columns.map(col => escapeCSV(getFieldValue(resource, col, formatDates))).join(',')
   );
-  
+
   // Add BOM for Excel UTF-8 compatibility
   const BOM = '\uFEFF';
-  
+
   return BOM + [headerRow, ...dataRows].join('\r\n');
 }
 
@@ -217,13 +217,13 @@ function exportToJSON(
 ): string {
   const columns = options.columns || DEFAULT_COLUMNS;
   const formatDates = options.formatDates ?? true;
-  
+
   // Transform resources to include only selected columns
   const data = resources.map(resource => {
     const obj: Record<string, unknown> = {};
     for (const col of columns) {
       const value = resource[col];
-      
+
       if (col === 'creationDate' && formatDates && value) {
         obj[col] = new Date(value as string).toISOString();
       } else {
@@ -232,7 +232,7 @@ function exportToJSON(
     }
     return obj;
   });
-  
+
   // Build export object with optional metadata
   const exportData = options.includeMetadata
     ? {
@@ -246,7 +246,7 @@ function exportToJSON(
         resources: data,
       }
     : data;
-  
+
   return JSON.stringify(exportData, null, 2);
 }
 
@@ -270,25 +270,25 @@ export async function exportResources(
     formatDates: options.formatDates ?? true,
     customHeaders: options.customHeaders,
   };
-  
+
   try {
     let content: string;
     let mimeType: string;
     let extension: string;
-    
+
     switch (fullOptions.format) {
       case 'csv':
         content = exportToCSV(resources, fullOptions);
         mimeType = 'text/csv;charset=utf-8';
         extension = 'csv';
         break;
-        
+
       case 'json':
         content = exportToJSON(resources, fullOptions);
         mimeType = 'application/json;charset=utf-8';
         extension = 'json';
         break;
-        
+
       case 'excel':
         // For Excel, we export as CSV with .xlsx extension hint
         // Excel will open and convert it properly
@@ -296,17 +296,17 @@ export async function exportResources(
         mimeType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
         extension = 'csv'; // Using CSV since we don't have a real XLSX library
         break;
-        
+
       default:
         throw new Error(`Unsupported export format: ${fullOptions.format}`);
     }
-    
+
     const filename = `${fullOptions.filename}.${extension}`;
     const sizeBytes = new Blob([content]).size;
-    
+
     // Trigger download
     downloadFile(content, filename, mimeType);
-    
+
     return {
       success: true,
       filename,
@@ -314,11 +314,11 @@ export async function exportResources(
       recordCount: resources.length,
       sizeBytes,
     };
-    
+
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : 'Export failed';
     console.error('[Export] Error:', errorMessage);
-    
+
     return {
       success: false,
       filename: '',
@@ -355,7 +355,7 @@ export function estimateExportSize(
   // Rough estimates based on average resource size
   const avgResourceSize = format === 'json' ? 500 : 200; // bytes per resource
   const overhead = format === 'json' ? 200 : 100; // header/metadata
-  
+
   return overhead + (resources.length * avgResourceSize);
 }
 
@@ -364,11 +364,11 @@ export function estimateExportSize(
  */
 export function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
-  
+
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  
+
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 

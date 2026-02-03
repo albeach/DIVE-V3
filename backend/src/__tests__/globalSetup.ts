@@ -1,15 +1,15 @@
 /**
  * Global Setup for Jest Tests
- * 
+ *
  * BEST PRACTICE: Start MongoDB Memory Server ONCE before all tests
- * 
+ *
  * Benefits:
  * - Consistent across local and CI environments
  * - No external MongoDB service needed
  * - Fast in-memory database
  * - Proper test isolation
  * - Industry standard approach
- * 
+ *
  * This runs BEFORE any test files or modules load, ensuring
  * all services use the memory server connection string.
  */

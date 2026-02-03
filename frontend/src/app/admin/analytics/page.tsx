@@ -1,15 +1,15 @@
 /**
  * IdP Governance Dashboard - Complete Redesign (2025)
- * 
+ *
  * Purpose: Monitor and analyze the IdP partner ecosystem health
- * 
+ *
  * Focus Areas:
  * - IdP Onboarding Quality & Risk Assessment
  * - Partner Compliance & Standards Adherence
  * - SLA Performance & Review Efficiency
  * - Security Posture of Partner IdPs
  * - Authorization Performance via Partner IdPs
- * 
+ *
  * This dashboard is specifically for evaluating the federation partners and their
  * identity providers, NOT general system analytics (that's in /admin/dashboard)
  */
@@ -132,7 +132,7 @@ export default function IdPGovernanceDashboard() {
         const interval = setInterval(() => {
             fetchAnalytics();
         }, 5 * 60 * 1000); // 5 minutes
-        
+
         return () => clearInterval(interval);
     }, [autoRefresh, fetchAnalytics]);
 
@@ -737,7 +737,7 @@ export default function IdPGovernanceDashboard() {
                                                 <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl p-4 border border-purple-200 dark:border-purple-800">
                                                     <p className="text-sm text-purple-700 dark:text-purple-400 mb-1">Avg Query Length</p>
                                                     <p className="text-2xl font-bold text-purple-900 dark:text-purple-300">
-                                                        {zeroResultQueries.length > 0 
+                                                        {zeroResultQueries.length > 0
                                                             ? Math.round(zeroResultQueries.reduce((sum, q) => sum + q.queryLength, 0) / zeroResultQueries.length)
                                                             : 0
                                                         } chars
@@ -797,9 +797,9 @@ export default function IdPGovernanceDashboard() {
                                             About IdP Governance Analytics
                                         </h4>
                                         <p className="text-sm text-purple-800 dark:text-purple-400">
-                                            This dashboard provides insights into the <strong>federation partner ecosystem</strong>. 
-                                            It tracks IdP onboarding quality, risk assessments, compliance with NATO/NIST standards, 
-                                            and operational performance. For general system analytics (resources, users, sessions), 
+                                            This dashboard provides insights into the <strong>federation partner ecosystem</strong>.
+                                            It tracks IdP onboarding quality, risk assessments, compliance with NATO/NIST standards,
+                                            and operational performance. For general system analytics (resources, users, sessions),
                                             visit the <button onClick={() => router.push('/admin/dashboard')} className="underline hover:text-purple-600">main admin dashboard</button>.
                                         </p>
                                     </div>

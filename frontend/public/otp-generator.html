@@ -11,7 +11,7 @@
             let value = 0;
             let index = 0;
             const output = new Uint8Array(((str.length * 5) / 8) | 0);
-            
+
             for (let i = 0; i < str.length; i++) {
                 value = (value << 5) | base32chars.indexOf(str[i].toUpperCase());
                 bits += 5;
@@ -22,7 +22,7 @@
             }
             return output;
         }
-        
+
         // HMAC-SHA256 implementation using Web Crypto API
         async function hmacSha256(key, message) {
             const cryptoKey = await crypto.subtle.importKey(
@@ -35,7 +35,7 @@
             const signature = await crypto.subtle.sign('HMAC', cryptoKey, message);
             return new Uint8Array(signature);
         }
-        
+
         // TOTP generation
         async function generateTOTP(secret, timeStep = 30) {
             const key = base32Decode(secret);
@@ -43,14 +43,14 @@
             const timeBuffer = new ArrayBuffer(8);
             const timeView = new DataView(timeBuffer);
             timeView.setUint32(4, time, false);
-            
+
             const hmac = await hmacSha256(key, timeBuffer);
             const offset = hmac[hmac.length - 1] & 0x0f;
             const code = ((hmac[offset] & 0x7f) << 24) |
                         ((hmac[offset + 1] & 0xff) << 16) |
                         ((hmac[offset + 2] & 0xff) << 8) |
                         (hmac[offset + 3] & 0xff);
-            
+
             return (code % 1000000).toString().padStart(6, '0');
         }
     </script>
@@ -135,7 +135,7 @@
                 // Use local TOTP implementation (no CDN)
                 const token = await generateTOTP(SECRET, 30);
                 document.getElementById('otp').textContent = token;
-                
+
                 // Reset countdown
                 countdown = 30;
             } catch (error) {
@@ -147,7 +147,7 @@
         function updateCountdown() {
             countdown--;
             document.getElementById('countdown').textContent = countdown + 's';
-            
+
             if (countdown <= 0) {
                 generateOTP();
             }
@@ -162,10 +162,10 @@
 
         // Generate initial OTP
         generateOTP();
-        
+
         // Update countdown every second
         setInterval(updateCountdown, 1000);
-        
+
         // Regenerate OTP every 30 seconds
         setInterval(generateOTP, 30000);
     </script>

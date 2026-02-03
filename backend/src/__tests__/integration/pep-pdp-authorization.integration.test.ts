@@ -1,6 +1,6 @@
 /**
  * PEP/PDP Integration Test Suite - Phase 3
- * 
+ *
  * Tests the complete authorization flow:
  * 1. Extract attributes from JWT (PEP)
  * 2. Fetch resource metadata (PEP)
@@ -8,16 +8,16 @@
  * 4. Call OPA for decision (PDP)
  * 5. Enforce decision (PEP)
  * 6. Log decision (PEP)
- * 
+ *
  * Coverage: All 10 countries with clearanceOriginal support
- * 
+ *
  * Test Matrix:
  * - 10 countries × multiple authorization scenarios
  * - Clearance-based access control
  * - Releasability checks
  * - COI filtering
  * - Cross-country authorization
- * 
+ *
  * Last Updated: October 29, 2025 (Phase 3)
  */
 
@@ -48,7 +48,7 @@ describe('PEP/PDP Integration Tests - Phase 3', () => {
         // Mock Keycloak JWKS and OPA
         await mockKeycloakJWKS();
         mockOPAServer();
-        
+
         // Connect to MongoDB Memory Server
         mongoClient = await MongoClient.connect(MONGODB_URI);
         db = mongoClient.db(TEST_DB);
@@ -64,7 +64,7 @@ describe('PEP/PDP Integration Tests - Phase 3', () => {
         });
 
         await mongoClient.close();
-        
+
         // Clean up mocks
         cleanupJWKSMock();
         cleanupOPAMock();

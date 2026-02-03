@@ -49,13 +49,13 @@ jobs:
     name: Update Kubernetes Manifests
     runs-on: ubuntu-latest
     if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'workflow_dispatch' }}
-    
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-      
+
       - name: Determine Image Tag
         id: image-tag
         run: |
@@ -68,50 +68,50 @@ jobs:
           fi
           echo "tag=$IMAGE_TAG" >> $GITHUB_OUTPUT
           echo "Using image tag: $IMAGE_TAG"
-      
+
       - name: Update Backend Deployment
         run: |
           IMAGE_TAG="${{ steps.image-tag.outputs.tag }}"
           REGISTRY="us-east4-docker.pkg.dev/dive25/dive-v3-repo"
-          
+
           # Update backend deployment image
           sed -i.bak \
             "s|image:.*dive-v3-backend.*|image: ${REGISTRY}/dive-v3-backend:${IMAGE_TAG}|g" \
             k8s/base/backend/deployment.yaml
-          
+
           echo "Updated backend image to: ${REGISTRY}/dive-v3-backend:${IMAGE_TAG}"
-      
+
       - name: Update Frontend Deployment
         run: |
           IMAGE_TAG="${{ steps.image-tag.outputs.tag }}"
           REGISTRY="us-east4-docker.pkg.dev/dive25/dive-v3-repo"
-          
+
           # Update frontend deployment image
           sed -i.bak \
             "s|image:.*dive-v3-frontend.*|image: ${REGISTRY}/dive-v3-frontend:${IMAGE_TAG}|g" \
             k8s/base/frontend/deployment.yaml
-          
+
           echo "Updated frontend image to: ${REGISTRY}/dive-v3-frontend:${IMAGE_TAG}"
-      
+
       - name: Update Keycloak Deployment
         run: |
           IMAGE_TAG="${{ steps.image-tag.outputs.tag }}"
           REGISTRY="us-east4-docker.pkg.dev/dive25/dive-v3-repo"
-          
+
           # Update keycloak deployment image
           sed -i.bak \
             "s|image:.*dive-v3-keycloak.*|image: ${REGISTRY}/dive-v3-keycloak:${IMAGE_TAG}|g" \
             k8s/base/keycloak/deployment.yaml
-          
+
           echo "Updated keycloak image to: ${REGISTRY}/dive-v3-keycloak:${IMAGE_TAG}"
-      
+
       - name: Commit Manifest Updates
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          
+
           git add k8s/base/*/deployment.yaml
-          
+
           if git diff --staged --quiet; then
             echo "No manifest changes to commit"
           else
@@ -119,7 +119,7 @@ jobs:
             git push
             echo "✅ Manifest updates committed and pushed"
           fi
-      
+
       - name: Deployment Summary
         run: |
           echo "## 🚀 Deployment Initiated" >> $GITHUB_STEP_SUMMARY
@@ -139,36 +139,36 @@ jobs:
     runs-on: ubuntu-latest
     needs: [update-manifests]
     if: ${{ inputs.sync_argocd != false }}
-    
+
     steps:
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
         with:
           workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
-      
+
       - name: Set up Cloud SDK
         uses: google-github-actions/setup-gcloud@v2
-      
+
       - name: Configure kubectl
         run: |
           gcloud container clusters get-credentials ${{ env.GKE_CLUSTER }} \
             --region ${{ env.GKE_LOCATION }} \
             --project ${{ env.GCP_PROJECT_ID }}
-      
+
       - name: Get ArgoCD Admin Password
         id: argocd-password
         run: |
           PASSWORD=$(kubectl -n ${{ env.ARGOCD_NAMESPACE }} get secret argocd-initial-admin-secret \
             -o jsonpath="{.data.password}" | base64 -d)
           echo "password=$PASSWORD" >> $GITHUB_OUTPUT
-      
+
       - name: Port Forward ArgoCD Server
         run: |
           kubectl port-forward -n ${{ env.ARGOCD_NAMESPACE }} svc/argocd-server 8080:443 &
           sleep 5
         continue-on-error: true
-      
+
       - name: Trigger ArgoCD Sync
         run: |
           # Use ArgoCD CLI or API to trigger sync

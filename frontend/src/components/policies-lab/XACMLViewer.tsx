@@ -35,13 +35,13 @@ export default function XACMLViewer({ policyId, source }: XACMLViewerProps) {
       const response = await fetch(`/api/policies-lab/${policyId}`, {
         credentials: 'include', // Required for session cookies to be sent
       });
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch policy');
       }
 
       const data = await response.json();
-      
+
       // Read the actual file content
       // For now, we'll use metadata to construct a representative view
       setPolicySource(`<?xml version="1.0" encoding="UTF-8"?>
@@ -57,9 +57,9 @@ export default function XACMLViewer({ policyId, source }: XACMLViewerProps) {
            PolicyCombiningAlgId="urn:oasis:names:tc:xacml:3.0:policy-combining-algorithm:deny-overrides"
            Version="1.0">
   <Description>${data.metadata.description || 'ABAC Policy'}</Description>
-  
+
   <!-- Policies and Rules would appear here -->
-  
+
 </PolicySet>
 `);
       setStructure(data.structure);
@@ -91,7 +91,7 @@ export default function XACMLViewer({ policyId, source }: XACMLViewerProps) {
     // Extract individual policies (simple count)
     const policyMatches = source.match(/<Policy /g);
     const ruleMatches = source.match(/<Rule /g);
-    
+
     if (policyMatches) {
       parsed.policies?.push({
         policyId: 'main-policy',

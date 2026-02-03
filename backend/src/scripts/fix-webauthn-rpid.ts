@@ -1,16 +1,16 @@
 /**
  * Fix WebAuthn Relying Party ID Configuration
- * 
+ *
  * This script configures the WebAuthn Policy for all realms using the Keycloak Admin REST API
- * 
+ *
  * Problem: Empty rpId causes internal server errors on production domains
  * Solution: Set rpId to 'dive25.com' (the effective domain)
- * 
+ *
  * Reference: https://www.keycloak.org/docs/latest/server_admin/#webauthn_server_administration_guide
  * Keycloak docs: "The ID must be the origin's effective domain"
- * 
+ *
  * Usage: npm run fix-webauthn-rpid
- * 
+ *
  * Version: 1.0.0
  * Author: DIVE V3 Team
  * Date: November 10, 2025

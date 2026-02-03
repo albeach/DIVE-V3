@@ -70,9 +70,10 @@ function getBlacklistRedisClient(): Redis {
                 });
                 return delay;
             },
-            maxRetriesPerRequest: 3,
+            maxRetriesPerRequest: 2, // Reduced from 3 for faster fail-open
             enableReadyCheck: true,
-            connectTimeout: 10000,
+            connectTimeout: 2000, // Reduced from 10000ms to 2000ms for faster fail-open when blacklist Redis is unavailable
+            commandTimeout: 1000, // Max 1s per Redis command (fail-open if slow)
             // Connection pool for better performance
             lazyConnect: false
         });

@@ -25,7 +25,7 @@ jobs:
     name: Rego Syntax Check
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -55,7 +55,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: syntax
-    
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -71,43 +71,43 @@ jobs:
         id: lint
         run: |
           echo "🔍 Running Regal linter..."
-          
+
           # Run with custom config if exists
           if [ -f "scripts/policy/regal-config.yaml" ]; then
             regal lint policies/ --config scripts/policy/regal-config.yaml --format=json > lint-results.json || true
           else
             regal lint policies/ --format=json > lint-results.json || true
           fi
-          
+
           # Count issues
           ERRORS=$(jq '[.violations[] | select(.level == "error")] | length' lint-results.json 2>/dev/null || echo "0")
           WARNINGS=$(jq '[.violations[] | select(.level == "warning")] | length' lint-results.json 2>/dev/null || echo "0")
-          
+
           echo "errors=${ERRORS}" >> $GITHUB_OUTPUT
           echo "warnings=${WARNINGS}" >> $GITHUB_OUTPUT
-          
+
           echo "📊 Lint results: ${ERRORS} errors, ${WARNINGS} warnings"
 
       - name: Generate Lint Report
         run: |
           echo "## 📋 Regal Lint Report" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           ERRORS=${{ steps.lint.outputs.errors }}
           WARNINGS=${{ steps.lint.outputs.warnings }}
-          
+
           if [ "${ERRORS}" -gt 0 ]; then
             echo "### ❌ Errors (${ERRORS})" >> $GITHUB_STEP_SUMMARY
             jq -r '.violations[] | select(.level == "error") | "- **\(.rule)**: \(.description) (\(.location.file):\(.location.row))"' lint-results.json >> $GITHUB_STEP_SUMMARY || true
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
-          
+
           if [ "${WARNINGS}" -gt 0 ]; then
             echo "### ⚠️ Warnings (${WARNINGS})" >> $GITHUB_STEP_SUMMARY
             jq -r '.violations[] | select(.level == "warning") | "- **\(.rule)**: \(.description) (\(.location.file):\(.location.row))"' lint-results.json >> $GITHUB_STEP_SUMMARY || true
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
-          
+
           if [ "${ERRORS}" -eq 0 ] && [ "${WARNINGS}" -eq 0 ]; then
             echo "### ✅ No Issues Found" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
@@ -136,7 +136,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     needs: syntax
-    
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -145,13 +145,13 @@ jobs:
         id: package-check
         run: |
           echo "🔍 Checking package naming convention..."
-          
+
           VIOLATIONS=""
           VIOLATION_COUNT=0
-          
+
           for file in $(find policies -name "*.rego" -type f ! -name "*_test.rego"); do
             PACKAGE=$(grep -m1 "^package" "$file" 2>/dev/null | awk '{print $2}' || true)
-            
+
             if [ -n "$PACKAGE" ]; then
               # Check if package starts with dive. (except for data. packages)
               if [[ ! "$PACKAGE" =~ ^dive\. ]] && [[ ! "$PACKAGE" =~ ^data\. ]]; then
@@ -160,21 +160,21 @@ jobs:
               fi
             fi
           done
-          
+
           echo "violation_count=${VIOLATION_COUNT}" >> $GITHUB_OUTPUT
-          
+
           if [ ${VIOLATION_COUNT} -gt 0 ]; then
             echo "❌ Found ${VIOLATION_COUNT} package naming violations:"
             echo -e "${VIOLATIONS}"
             exit 1
           fi
-          
+
           echo "✅ All packages follow naming convention"
 
       - name: Check for Hardcoded Secrets
         run: |
           echo "🔍 Scanning for hardcoded secrets..."
-          
+
           # Patterns to check (excluding test files)
           PATTERNS=(
             'password\s*:=\s*"'
@@ -182,7 +182,7 @@ jobs:
             'api_key\s*:=\s*"'
             'token\s*:=\s*"'
           )
-          
+
           FOUND=0
           for pattern in "${PATTERNS[@]}"; do
             MATCHES=$(grep -rn "$pattern" policies/*.rego 2>/dev/null | grep -v "_test.rego" || true)
@@ -192,21 +192,21 @@ jobs:
               FOUND=1
             fi
           done
-          
+
           if [ $FOUND -eq 1 ]; then
             echo "❌ Potential hardcoded secrets detected!"
             exit 1
           fi
-          
+
           echo "✅ No hardcoded secrets found"
 
       - name: Check Default Deny Pattern
         run: |
           echo "🔍 Checking for default deny pattern..."
-          
+
           # Find main authorization files
           AUTH_FILES=$(find policies -name "*.rego" -type f | xargs grep -l "^default allow" 2>/dev/null || true)
-          
+
           if [ -z "$AUTH_FILES" ]; then
             echo "⚠️ No files with 'default allow' found"
           else
@@ -224,10 +224,10 @@ jobs:
       - name: Check Country Code Format
         run: |
           echo "🔍 Checking country code format..."
-          
+
           # ISO 3166-1 alpha-3 codes we use
           VALID_CODES="USA|FRA|GBR|DEU|CAN|ESP|ITA|NLD|BEL|NOR|DNK|POL|PRT"
-          
+
           # Invalid 2-letter codes that might be mistakenly used
           INVALID_PATTERNS=(
             '"\<US\>"'
@@ -237,7 +237,7 @@ jobs:
             '"\<CA\>"'
             '"\<ES\>"'
           )
-          
+
           FOUND=0
           for pattern in "${INVALID_PATTERNS[@]}"; do
             MATCHES=$(grep -rn "$pattern" policies/*.rego 2>/dev/null | grep -v "_test.rego" | grep -v "# alpha-2 ok" || true)
@@ -247,51 +247,51 @@ jobs:
               FOUND=1
             fi
           done
-          
+
           if [ $FOUND -eq 1 ]; then
             echo "❌ Use ISO 3166-1 alpha-3 codes (USA, FRA, GBR, DEU, CAN)"
             # Warning only, don't fail
           fi
-          
+
           echo "✅ Country code check complete"
 
       - name: Check Test File Coverage
         run: |
           echo "🔍 Checking test file coverage..."
-          
+
           # Get all non-test rego files with rules
           RULE_FILES=$(find policies -name "*.rego" -type f ! -name "*_test.rego" ! -path "*/baselines/*")
-          
+
           MISSING_TESTS=0
           TOTAL_FILES=0
-          
+
           for file in $RULE_FILES; do
             # Skip data files and config files
             if grep -q "^package.*\.data$" "$file" 2>/dev/null; then
               continue
             fi
-            
+
             TOTAL_FILES=$((TOTAL_FILES + 1))
-            
+
             # Check for corresponding test file
             TEST_FILE="${file%.rego}_test.rego"
             DIR_TEST_FILE=$(dirname "$file")/test_$(basename "$file")
-            
+
             if [ ! -f "$TEST_FILE" ] && [ ! -f "$DIR_TEST_FILE" ]; then
               # Check if there's any test file in the same directory
               DIR=$(dirname "$file")
               TESTS_IN_DIR=$(find "$DIR" -name "*_test.rego" -type f 2>/dev/null | wc -l | tr -d ' ')
-              
+
               if [ "$TESTS_IN_DIR" -eq 0 ]; then
                 echo "⚠️ No test file for: $file"
                 MISSING_TESTS=$((MISSING_TESTS + 1))
               fi
             fi
           done
-          
+
           COVERAGE_PCT=$((100 - (MISSING_TESTS * 100 / TOTAL_FILES)))
           echo "📊 Test file coverage: ${COVERAGE_PCT}% (${TOTAL_FILES} files, ${MISSING_TESTS} without tests)"
-          
+
           if [ $COVERAGE_PCT -lt 50 ]; then
             echo "⚠️ Warning: Test coverage below 50%"
           else
@@ -318,7 +318,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: [syntax, lint, dive-checks]
     if: always()
-    
+
     steps:
       - name: Check Results
         run: |
@@ -326,17 +326,17 @@ jobs:
             echo "❌ Syntax check failed"
             exit 1
           fi
-          
+
           if [ "${{ needs.lint.result }}" = "failure" ]; then
             echo "❌ Lint check failed"
             exit 1
           fi
-          
+
           if [ "${{ needs.dive-checks.result }}" = "failure" ]; then
             echo "❌ DIVE V3 custom checks failed"
             exit 1
           fi
-          
+
           echo "✅ All quality checks passed"
 
       - name: Summary

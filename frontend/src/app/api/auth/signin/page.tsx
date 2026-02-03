@@ -1,6 +1,6 @@
 /**
  * Custom Sign-In Page - DIVE V3 Themed
- * 
+ *
  * Matches the DIVE V3 theme and redirects directly to Keycloak.
  * This page is only shown if someone navigates directly to /api/auth/signin.
  * Normal flow goes: Homepage (/) → Keycloak (port 8443) with custom theme.
@@ -61,9 +61,9 @@ export default function SignInPage() {
                             <div className="relative flex flex-col items-center gap-4">
                                 {/* Logo */}
                                 <div className="flex-shrink-0 animate-scale-in">
-                                    <img 
-                                        src="/DIVE-Logo.png" 
-                                        alt="DIVE - Digital Interoperability Verification Experiment" 
+                                    <img
+                                        src="/DIVE-Logo.png"
+                                        alt="DIVE - Digital Interoperability Verification Experiment"
                                         className="h-32 w-32 drop-shadow-2xl animate-float-logo"
                                     />
                                 </div>
@@ -73,7 +73,7 @@ export default function SignInPage() {
                                     <div className="mb-2">
                                         <InstanceHeroBadge size="lg" className="justify-center" />
                                     </div>
-                                    
+
                                     <h1 className="text-3xl font-bold text-white mb-1 tracking-tight">
                                         DIVE V3
                                     </h1>

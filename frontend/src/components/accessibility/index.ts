@@ -1,9 +1,9 @@
 /**
  * Accessibility Components Index
- * 
+ *
  * Centralized exports for accessibility components.
  * Phase 4: Visual Polish & Accessibility
- * 
+ *
  * Import from '@/components/accessibility' for cleaner imports.
  */
 

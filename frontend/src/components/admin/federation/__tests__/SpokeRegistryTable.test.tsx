@@ -1,6 +1,6 @@
 /**
  * DIVE V3 - SpokeRegistryTable Tests
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -83,7 +83,7 @@ describe('SpokeRegistryTable', () => {
 
     it('renders table with spokes', () => {
       render(<SpokeRegistryTable spokes={[mockActiveSpoke, mockPendingSpoke]} />);
-      
+
       expect(screen.getByText('NZL')).toBeInTheDocument();
       expect(screen.getByText('New Zealand Defence Force')).toBeInTheDocument();
       expect(screen.getByText('AUS')).toBeInTheDocument();
@@ -92,7 +92,7 @@ describe('SpokeRegistryTable', () => {
 
     it('displays correct status badges', () => {
       render(<SpokeRegistryTable spokes={[mockActiveSpoke, mockPendingSpoke, mockSuspendedSpoke]} />);
-      
+
       expect(screen.getByText('Active')).toBeInTheDocument();
       expect(screen.getByText('Pending Approval')).toBeInTheDocument();
       expect(screen.getByText('Suspended')).toBeInTheDocument();
@@ -125,7 +125,7 @@ describe('SpokeRegistryTable', () => {
     it('shows Approve button for pending spokes', () => {
       const onApprove = jest.fn();
       render(<SpokeRegistryTable spokes={[mockPendingSpoke]} onApprove={onApprove} />);
-      
+
       const approveButton = screen.getByRole('button', { name: /approve/i });
       expect(approveButton).toBeInTheDocument();
     });
@@ -133,7 +133,7 @@ describe('SpokeRegistryTable', () => {
     it('calls onApprove when Approve button clicked', () => {
       const onApprove = jest.fn();
       render(<SpokeRegistryTable spokes={[mockPendingSpoke]} onApprove={onApprove} />);
-      
+
       fireEvent.click(screen.getByRole('button', { name: /approve/i }));
       expect(onApprove).toHaveBeenCalledWith(mockPendingSpoke);
     });
@@ -142,16 +142,16 @@ describe('SpokeRegistryTable', () => {
       const onViewDetails = jest.fn();
       const onRotateToken = jest.fn();
       const onSuspend = jest.fn();
-      
+
       render(
-        <SpokeRegistryTable 
-          spokes={[mockActiveSpoke]} 
+        <SpokeRegistryTable
+          spokes={[mockActiveSpoke]}
           onViewDetails={onViewDetails}
           onRotateToken={onRotateToken}
           onSuspend={onSuspend}
         />
       );
-      
+
       expect(screen.getByTitle('View Details')).toBeInTheDocument();
       expect(screen.getByTitle('Rotate Token')).toBeInTheDocument();
       expect(screen.getByTitle('Suspend')).toBeInTheDocument();
@@ -160,7 +160,7 @@ describe('SpokeRegistryTable', () => {
     it('calls onViewDetails when View button clicked', () => {
       const onViewDetails = jest.fn();
       render(<SpokeRegistryTable spokes={[mockActiveSpoke]} onViewDetails={onViewDetails} />);
-      
+
       fireEvent.click(screen.getByTitle('View Details'));
       expect(onViewDetails).toHaveBeenCalledWith(mockActiveSpoke);
     });
@@ -168,7 +168,7 @@ describe('SpokeRegistryTable', () => {
     it('calls onSuspend when Suspend button clicked', () => {
       const onSuspend = jest.fn();
       render(<SpokeRegistryTable spokes={[mockActiveSpoke]} onSuspend={onSuspend} />);
-      
+
       fireEvent.click(screen.getByTitle('Suspend'));
       expect(onSuspend).toHaveBeenCalledWith(mockActiveSpoke);
     });
@@ -176,14 +176,14 @@ describe('SpokeRegistryTable', () => {
     it('shows Reactivate button for suspended spokes', () => {
       const onApprove = jest.fn();
       render(<SpokeRegistryTable spokes={[mockSuspendedSpoke]} onApprove={onApprove} />);
-      
+
       expect(screen.getByRole('button', { name: /reactivate/i })).toBeInTheDocument();
     });
 
     it('shows Revoke button for suspended spokes', () => {
       const onRevoke = jest.fn();
       render(<SpokeRegistryTable spokes={[mockSuspendedSpoke]} onRevoke={onRevoke} />);
-      
+
       expect(screen.getByTitle('Revoke')).toBeInTheDocument();
     });
   });
@@ -192,7 +192,7 @@ describe('SpokeRegistryTable', () => {
     it('shows healthy status for recent heartbeat', () => {
       const recentHeartbeat = { ...mockActiveSpoke, lastHeartbeat: new Date().toISOString() };
       render(<SpokeRegistryTable spokes={[recentHeartbeat]} />);
-      
+
       // Should show "Just now" for recent heartbeat
       expect(screen.getByText('Just now')).toBeInTheDocument();
     });
@@ -201,7 +201,7 @@ describe('SpokeRegistryTable', () => {
       const oldHeartbeat = new Date();
       oldHeartbeat.setMinutes(oldHeartbeat.getMinutes() - 5);
       const spoke = { ...mockActiveSpoke, lastHeartbeat: oldHeartbeat.toISOString() };
-      
+
       render(<SpokeRegistryTable spokes={[spoke]} />);
       expect(screen.getByText('5m ago')).toBeInTheDocument();
     });
@@ -210,7 +210,7 @@ describe('SpokeRegistryTable', () => {
   describe('Table Structure', () => {
     it('renders all column headers', () => {
       render(<SpokeRegistryTable spokes={[mockActiveSpoke]} />);
-      
+
       expect(screen.getByText('Spoke')).toBeInTheDocument();
       expect(screen.getByText('Status')).toBeInTheDocument();
       expect(screen.getByText('Trust Level')).toBeInTheDocument();
@@ -221,7 +221,7 @@ describe('SpokeRegistryTable', () => {
 
     it('renders external link for spoke base URL', () => {
       render(<SpokeRegistryTable spokes={[mockActiveSpoke]} />);
-      
+
       const link = screen.getByRole('link');
       expect(link).toHaveAttribute('href', mockActiveSpoke.baseUrl);
       expect(link).toHaveAttribute('target', '_blank');

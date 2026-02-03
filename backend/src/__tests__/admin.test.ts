@@ -1,6 +1,6 @@
 /**
  * Admin API Integration Tests
- * 
+ *
  * Tests for Keycloak Admin API integration
  * Note: These tests require Keycloak to be running
  */

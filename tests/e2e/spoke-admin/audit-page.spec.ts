@@ -1,9 +1,9 @@
 /**
  * DIVE V3 - Audit Queue Page E2E Tests
- * 
+ *
  * End-to-end tests for the Spoke Admin Audit Queue Management page.
  * Tests audit queue status, sync operations, and event history.
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -92,7 +92,7 @@ test.describe('Audit Queue Page', () => {
     test('opens filter dropdown on click', async ({ page }) => {
       const filterButton = page.getByRole('button', { name: /All/i }).first();
       await filterButton.click();
-      
+
       await expect(page.getByText('Success')).toBeVisible();
       await expect(page.getByText('Failed')).toBeVisible();
     });
@@ -120,9 +120,9 @@ test.describe('Audit Queue Page', () => {
 test.describe('Audit Queue API Endpoints', () => {
   test('GET /api/spoke/audit/status returns queue status', async ({ request }) => {
     const response = await request.get(`${SPOKE_BACKEND_URL}/api/spoke/audit/status`);
-    
+
     expect(response.status()).toBe(200);
-    
+
     const data = await response.json();
     expect(data).toHaveProperty('success');
     expect(data).toHaveProperty('queueSize');
@@ -131,9 +131,9 @@ test.describe('Audit Queue API Endpoints', () => {
 
   test('GET /api/spoke/audit/history returns event history', async ({ request }) => {
     const response = await request.get(`${SPOKE_BACKEND_URL}/api/spoke/audit/history`);
-    
+
     expect(response.status()).toBe(200);
-    
+
     const data = await response.json();
     expect(data).toHaveProperty('success', true);
     expect(data).toHaveProperty('events');
@@ -144,9 +144,9 @@ test.describe('Audit Queue API Endpoints', () => {
 
   test('GET /api/spoke/audit/history supports pagination', async ({ request }) => {
     const response = await request.get(`${SPOKE_BACKEND_URL}/api/spoke/audit/history?limit=10&offset=0`);
-    
+
     expect(response.status()).toBe(200);
-    
+
     const data = await response.json();
     expect(data).toHaveProperty('limit', 10);
     expect(data).toHaveProperty('offset', 0);
@@ -154,9 +154,9 @@ test.describe('Audit Queue API Endpoints', () => {
 
   test('GET /api/spoke/audit/history supports type filtering', async ({ request }) => {
     const response = await request.get(`${SPOKE_BACKEND_URL}/api/spoke/audit/history?type=sync_success`);
-    
+
     expect(response.status()).toBe(200);
-    
+
     const data = await response.json();
     expect(data).toHaveProperty('success', true);
     // All events should be sync_success type if filter is applied
@@ -167,9 +167,9 @@ test.describe('Audit Queue API Endpoints', () => {
 
   test('POST /api/spoke/audit/sync triggers sync operation', async ({ request }) => {
     const response = await request.post(`${SPOKE_BACKEND_URL}/api/spoke/audit/sync`);
-    
+
     expect(response.status()).toBe(200);
-    
+
     const data = await response.json();
     expect(data).toHaveProperty('success');
     expect(data).toHaveProperty('message');
@@ -180,9 +180,9 @@ test.describe('Audit Queue API Endpoints', () => {
     const response1 = await request.post(`${SPOKE_BACKEND_URL}/api/spoke/audit/clear`, {
       data: {},
     });
-    
+
     expect(response1.status()).toBe(400);
-    
+
     const data1 = await response1.json();
     expect(data1).toHaveProperty('error');
     expect(data1.error).toContain('confirm');
@@ -190,10 +190,10 @@ test.describe('Audit Queue API Endpoints', () => {
 
   test('GET /api/spoke/audit/export returns JSON export', async ({ request }) => {
     const response = await request.get(`${SPOKE_BACKEND_URL}/api/spoke/audit/export?format=json`);
-    
+
     expect(response.status()).toBe(200);
     expect(response.headers()['content-type']).toContain('application/json');
-    
+
     const data = await response.json();
     expect(data).toHaveProperty('exportedAt');
     expect(data).toHaveProperty('history');
@@ -201,10 +201,10 @@ test.describe('Audit Queue API Endpoints', () => {
 
   test('GET /api/spoke/audit/export returns CSV export', async ({ request }) => {
     const response = await request.get(`${SPOKE_BACKEND_URL}/api/spoke/audit/export?format=csv`);
-    
+
     expect(response.status()).toBe(200);
     expect(response.headers()['content-type']).toContain('text/csv');
-    
+
     const text = await response.text();
     // CSV should have headers
     expect(text).toContain('id,timestamp,type');
@@ -221,10 +221,10 @@ test.describe('Audit Page Interactions', () => {
 
   test('refresh button updates data', async ({ page }) => {
     const refreshButton = page.getByRole('button', { name: /Refresh/i });
-    
+
     // Click refresh
     await refreshButton.click();
-    
+
     // Button should show loading state briefly
     // Then return to normal state
     await expect(refreshButton).toBeEnabled({ timeout: 5000 });
@@ -234,10 +234,10 @@ test.describe('Audit Page Interactions', () => {
     // Open filter dropdown
     const filterButton = page.getByRole('button', { name: /All/i }).first();
     await filterButton.click();
-    
+
     // Select "Success" filter
     await page.getByText('Success').click();
-    
+
     // Filter button should now show "Success"
     await expect(page.getByRole('button', { name: /Success/i }).first()).toBeVisible();
   });
@@ -246,7 +246,7 @@ test.describe('Audit Page Interactions', () => {
     // Click back arrow
     const backLink = page.locator('a[href="/admin/spoke"]').first();
     await backLink.click();
-    
+
     // Should navigate to spoke dashboard
     await expect(page).toHaveURL(/\/admin\/spoke$/);
   });
@@ -264,18 +264,18 @@ test.describe('Audit Page Status Indicators', () => {
     // This test checks for the success state when queue is empty
     // May not always be present depending on queue state
     const successBanner = page.getByText('Audit queue is empty');
-    
+
     // Either the banner is visible, or there are pending events
     const bannerVisible = await successBanner.isVisible().catch(() => false);
     const eventsVisible = await page.getByText(/events? pending/i).isVisible().catch(() => false);
-    
+
     expect(bannerVisible || eventsVisible).toBe(true);
   });
 
   test('displays queue state indicator', async ({ page }) => {
     // Queue state should be visible (idle, syncing, error, or blocked)
     const stateIndicators = ['idle', 'syncing', 'error', 'blocked'];
-    
+
     let stateFound = false;
     for (const state of stateIndicators) {
       const indicator = page.getByText(new RegExp(state, 'i'));
@@ -284,7 +284,7 @@ test.describe('Audit Page Status Indicators', () => {
         break;
       }
     }
-    
+
     // If no explicit state, check for Queue State label
     if (!stateFound) {
       await expect(page.getByText('Queue State')).toBeVisible();

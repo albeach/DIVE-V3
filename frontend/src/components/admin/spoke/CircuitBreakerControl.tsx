@@ -1,8 +1,8 @@
 /**
  * DIVE V3 - Circuit Breaker Control
- * 
+ *
  * Visual control for spoke failover circuit breaker state.
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -82,17 +82,17 @@ function formatRelativeTime(dateStr?: string): string {
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMinutes = Math.floor(diffMs / (1000 * 60));
-  
+
   if (diffMinutes < 1) return 'Just now';
   if (diffMinutes < 60) return `${diffMinutes}m ago`;
   return `${Math.floor(diffMinutes / 60)}h ago`;
 }
 
-export function CircuitBreakerControl({ 
-  status, 
+export function CircuitBreakerControl({
+  status,
   loading,
   onForceState,
-  onReset 
+  onReset
 }: CircuitBreakerControlProps) {
   const [showControls, setShowControls] = useState(false);
   const [processing, setProcessing] = useState(false);
@@ -189,8 +189,8 @@ export function CircuitBreakerControl({
           {(['CLOSED', 'HALF_OPEN', 'OPEN'] as CircuitBreakerState[]).map((s) => (
             <div key={s} className="flex flex-col items-center gap-1">
               <div className={`w-4 h-4 rounded-full border-2 transition-all ${
-                s === state 
-                  ? `${STATE_CONFIG[s].bg} border-transparent scale-125` 
+                s === state
+                  ? `${STATE_CONFIG[s].bg} border-transparent scale-125`
                   : 'bg-slate-100 border-slate-300'
               }`} />
               <span className={`text-xs ${s === state ? 'font-semibold text-slate-700' : 'text-slate-400'}`}>

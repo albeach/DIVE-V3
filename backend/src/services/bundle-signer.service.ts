@@ -1,19 +1,19 @@
 /**
  * DIVE V3 - Bundle Signer Service
  * Phase 7: Production Hardening
- * 
+ *
  * Provides cryptographic signing for OPA policy bundles with:
  * - RSA-4096 key pair management
  * - Bundle signing with SHA-256
  * - Signature verification
  * - Key rotation support
  * - GCP Secret Manager integration for private keys
- * 
+ *
  * OPA Bundle Signing Specification:
  * - Signs the bundle tarball with RSA-PSS
  * - Creates detached signature file (.sig)
  * - Includes public key for verification
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */
@@ -148,7 +148,7 @@ class BundleSignerService {
       if (!this.signingKey && generateIfMissing) {
         logger.warn('No signing key found, generating new key pair');
         this.signingKey = this.generateKeyPair();
-        
+
         // Save to file if path provided
         if (keyPath) {
           await this.saveKeyToFile(keyPath);
@@ -177,7 +177,7 @@ class BundleSignerService {
   private async loadKeyFromGCP(): Promise<void> {
     try {
       const { execSync } = await import('child_process');
-      
+
       // Try to fetch private key from GCP
       const privateKey = execSync(
         `gcloud secrets versions access latest --secret=${GCP_SIGNING_KEY_SECRET} --project=${GCP_PROJECT_ID}`,
@@ -220,7 +220,7 @@ class BundleSignerService {
     }
 
     const privateKey = fs.readFileSync(privateKeyPath, 'utf-8');
-    
+
     let publicKey: string;
     if (fs.existsSync(publicKeyPath)) {
       publicKey = fs.readFileSync(publicKeyPath, 'utf-8');
@@ -261,7 +261,7 @@ class BundleSignerService {
 
     // Save private key (with restrictive permissions)
     fs.writeFileSync(privateKeyPath, this.signingKey.privateKey, { mode: 0o600 });
-    
+
     // Save public key
     fs.writeFileSync(publicKeyPath, this.signingKey.publicKey, { mode: 0o644 });
     logger.info('Saved signing key to file', { privateKeyPath, publicKeyPath });
@@ -315,7 +315,7 @@ class BundleSignerService {
 
     try {
       const dataBuffer = typeof data === 'string' ? Buffer.from(data) : data;
-      
+
       const signature = crypto.sign(HASH_ALGORITHM, dataBuffer, {
         key: this.signingKey.privateKey,
         padding: crypto.constants.RSA_PKCS1_PSS_PADDING,
@@ -341,7 +341,7 @@ class BundleSignerService {
     try {
       const dataBuffer = typeof data === 'string' ? Buffer.from(data) : data;
       const signatureBuffer = Buffer.from(signature, 'base64');
-      
+
       const keyToUse = publicKey || this.signingKey?.publicKey;
       if (!keyToUse) {
         return { valid: false, error: 'No public key available for verification' };
@@ -380,7 +380,7 @@ class BundleSignerService {
     try {
       // Read bundle file
       const bundleData = fs.readFileSync(bundlePath);
-      
+
       // Calculate checksum
       const bundleChecksum = crypto
         .createHash('sha256')
@@ -443,7 +443,7 @@ class BundleSignerService {
    */
   async verifyBundle(bundlePath: string): Promise<IVerificationResult> {
     const sigManifestPath = bundlePath.replace('bundle.tar.gz', 'signature.json');
-    
+
     if (!fs.existsSync(bundlePath)) {
       return { valid: false, error: 'Bundle file not found' };
     }
@@ -526,10 +526,10 @@ class BundleSignerService {
    */
   async rotateKey(saveToFile?: string): Promise<ISigningKey> {
     logger.warn('Rotating signing key');
-    
+
     const oldKeyId = this.signingKey?.keyId;
     this.signingKey = this.generateKeyPair();
-    
+
     if (saveToFile) {
       await this.saveKeyToFile(saveToFile);
     }

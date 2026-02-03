@@ -136,6 +136,16 @@ svk = {
     client_secret         = ""  # Loaded from GCP: dive-v3-federation-svk-usa
     disable_trust_manager = true
   }
+gbr = {
+    instance_code         = "GBR"
+    instance_name         = "GBR Instance"
+    idp_url               = "https://localhost:8474"
+    idp_internal_url      = "https://dive-spoke-gbr-keycloak:8443"
+    frontend_url          = "https://localhost:3031"
+    enabled               = true
+    client_secret         = ""  # Loaded from GCP: dive-v3-federation-gbr-usa
+    disable_trust_manager = true
+  }
 }
 
 # =============================================================================

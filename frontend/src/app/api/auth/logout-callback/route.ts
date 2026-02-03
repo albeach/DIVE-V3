@@ -1,8 +1,8 @@
 /**
  * Keycloak Frontchannel Logout Callback
- * 
+ *
  * Based on: https://koyukan.medium.com/mastering-keycloak-front-channel-logout-with-next-js-nextauth-js-a-post-mortem-turned-how-to-631d06118d7b
- * 
+ *
  * Frontchannel logout flow:
  * 1. Keycloak loads this endpoint in a hidden iframe
  * 2. This route deletes HttpOnly cookies (can't be done with JavaScript)
@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
 <body>
     <script>
         console.log('[DIVE Iframe] Frontchannel logout executing...');
-        
+
         // Clear browser storage (this runs in iframe context)
         try {
             localStorage.clear();
@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
         } catch (e) {
             console.error('[DIVE Iframe] Storage clear error:', e);
         }
-        
+
         // Notify parent window that logout is complete
         if (window.parent !== window) {
             console.log('[DIVE Iframe] Sending logout-complete message to parent');

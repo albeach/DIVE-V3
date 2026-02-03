@@ -63,13 +63,13 @@ export function LocaleSelector() {
       <button
         onClick={() => setIsOpen(!isOpen)}
         onKeyDown={handleKeyDown}
-        className="
+        className={`
           flex items-center gap-1.5 px-2 py-1.5 rounded-lg
           bg-white border border-gray-300
           hover:bg-gray-50 hover:border-gray-400
           focus:outline-none focus:ring-2 focus:ring-blue-500
           transition-colors duration-200
-        "
+        `}
         aria-label="Select Language"
         aria-expanded={isOpen}
         aria-haspopup="listbox"
@@ -84,13 +84,13 @@ export function LocaleSelector() {
       {/* Dropdown Menu - Compact grid of flags */}
       {isOpen && (
         <div
-          className="
+          className={`
             absolute right-0 mt-2 w-[280px]
             bg-white border border-gray-300 rounded-lg shadow-lg
             z-50
             p-2
             max-h-96 overflow-y-auto
-          "
+          `}
           role="listbox"
           aria-label="Language options"
         >

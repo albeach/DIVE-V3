@@ -1,18 +1,18 @@
 #!/usr/bin/env npx ts-node
 /**
  * DIVE V3 - Pilot Load Testing Script
- * 
+ *
  * Performs load testing to verify:
  * - 500 req/s target throughput
  * - p95 latency <15ms for authorization decisions
  * - System stability under load
- * 
+ *
  * Uses native HTTP for simplicity (no k6 dependency)
- * 
+ *
  * Usage:
  *   npx ts-node scripts/policy/load-test-pilot.ts
  *   npx ts-node scripts/policy/load-test-pilot.ts --concurrent=50 --duration=60
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */
@@ -110,13 +110,13 @@ const httpAgent = new http.Agent({
  */
 async function makeRequest(url: string, payload?: string): Promise<void> {
   const startTime = Date.now();
-  
+
   return new Promise((resolve) => {
     const urlObj = new URL(url);
     const isHttps = urlObj.protocol === 'https:';
     const agent = isHttps ? httpsAgent : httpAgent;
     const lib = isHttps ? https : http;
-    
+
     const options: https.RequestOptions = {
       hostname: urlObj.hostname,
       port: urlObj.port || (isHttps ? 443 : 80),
@@ -129,7 +129,7 @@ async function makeRequest(url: string, payload?: string): Promise<void> {
         ...(payload && { 'Content-Length': Buffer.byteLength(payload) }),
       },
     };
-    
+
     const req = lib.request(options, (res) => {
       let data = '';
       res.on('data', (chunk) => { data += chunk; });
@@ -137,7 +137,7 @@ async function makeRequest(url: string, payload?: string): Promise<void> {
         const latency = Date.now() - startTime;
         metrics.latencies.push(latency);
         metrics.requests++;
-        
+
         if (res.statusCode && res.statusCode >= 200 && res.statusCode < 400) {
           metrics.successes++;
         } else {
@@ -147,7 +147,7 @@ async function makeRequest(url: string, payload?: string): Promise<void> {
         resolve();
       });
     });
-    
+
     req.on('error', (err) => {
       const latency = Date.now() - startTime;
       metrics.latencies.push(latency);
@@ -156,7 +156,7 @@ async function makeRequest(url: string, payload?: string): Promise<void> {
       metrics.errors.push(err.message);
       resolve();
     });
-    
+
     req.setTimeout(5000, () => {
       metrics.requests++;
       metrics.failures++;
@@ -164,7 +164,7 @@ async function makeRequest(url: string, payload?: string): Promise<void> {
       req.destroy();
       resolve();
     });
-    
+
     if (payload) {
       req.write(payload);
     }
@@ -191,18 +191,18 @@ async function runOPALoadTest(): Promise<void> {
   console.log(`   Concurrent: ${CONCURRENT}`);
   console.log(`   Duration: ${DURATION}s`);
   console.log('');
-  
+
   metrics.startTime = Date.now();
   const endTime = metrics.startTime + (DURATION * 1000);
-  
+
   // Ramp-up phase
   console.log(`⏳ Ramping up over ${RAMP_UP}s...`);
   const rampUpInterval = (RAMP_UP * 1000) / CONCURRENT;
   const workers: Promise<void>[] = [];
-  
+
   for (let i = 0; i < CONCURRENT; i++) {
     await new Promise(r => setTimeout(r, rampUpInterval));
-    
+
     // Start a worker that continuously makes requests
     const worker = (async () => {
       while (Date.now() < endTime) {
@@ -212,13 +212,13 @@ async function runOPALoadTest(): Promise<void> {
         );
       }
     })();
-    
+
     workers.push(worker);
     process.stdout.write(`\r   Workers started: ${i + 1}/${CONCURRENT}`);
   }
-  
+
   console.log('\n🏃 Load test in progress...');
-  
+
   // Progress reporting
   const progressInterval = setInterval(() => {
     const elapsed = (Date.now() - metrics.startTime) / 1000;
@@ -226,11 +226,11 @@ async function runOPALoadTest(): Promise<void> {
     const p95 = percentile(metrics.latencies.slice(-1000), 95);
     process.stdout.write(`\r   Elapsed: ${elapsed.toFixed(0)}s | Requests: ${metrics.requests} | Throughput: ${throughput.toFixed(0)} req/s | p95: ${p95.toFixed(0)}ms`);
   }, 1000);
-  
+
   // Wait for all workers to complete
   await Promise.all(workers);
   clearInterval(progressInterval);
-  
+
   metrics.endTime = Date.now();
 }
 
@@ -243,19 +243,19 @@ async function runBackendLoadTest(): Promise<void> {
   console.log(`   Concurrent: ${CONCURRENT}`);
   console.log(`   Duration: ${DURATION}s`);
   console.log('');
-  
+
   // Reset metrics
   metrics.requests = 0;
   metrics.successes = 0;
   metrics.failures = 0;
   metrics.latencies = [];
   metrics.errors = [];
-  
+
   metrics.startTime = Date.now();
   const endTime = metrics.startTime + (DURATION * 1000);
-  
+
   const workers: Promise<void>[] = [];
-  
+
   for (let i = 0; i < CONCURRENT; i++) {
     const worker = (async () => {
       while (Date.now() < endTime) {
@@ -264,18 +264,18 @@ async function runBackendLoadTest(): Promise<void> {
     })();
     workers.push(worker);
   }
-  
+
   console.log('🏃 Load test in progress...');
-  
+
   const progressInterval = setInterval(() => {
     const elapsed = (Date.now() - metrics.startTime) / 1000;
     const throughput = metrics.requests / elapsed;
     process.stdout.write(`\r   Requests: ${metrics.requests} | Throughput: ${throughput.toFixed(0)} req/s`);
   }, 1000);
-  
+
   await Promise.all(workers);
   clearInterval(progressInterval);
-  
+
   metrics.endTime = Date.now();
 }
 
@@ -287,12 +287,12 @@ function printResults(testName: string): void {
   const throughput = metrics.requests / duration;
   const successRate = (metrics.successes / metrics.requests) * 100;
   const errorRate = (metrics.failures / metrics.requests) * 100;
-  
+
   const p50 = percentile(metrics.latencies, 50);
   const p95 = percentile(metrics.latencies, 95);
   const p99 = percentile(metrics.latencies, 99);
   const avg = metrics.latencies.reduce((a, b) => a + b, 0) / metrics.latencies.length;
-  
+
   console.log('\n');
   console.log('═'.repeat(60));
   console.log(`📈 ${testName} Results`);
@@ -315,28 +315,28 @@ function printResults(testName: string): void {
   console.log(`   p95:          ${p95.toFixed(2)}ms`);
   console.log(`   p99:          ${p99.toFixed(2)}ms`);
   console.log('');
-  
+
   // Check against thresholds
   console.log('✅ Threshold Checks:');
-  
+
   const throughputPass = throughput >= CONFIG.thresholds.throughput;
   const p95Pass = p95 <= CONFIG.thresholds.p95Latency;
   const errorRatePass = (errorRate / 100) <= CONFIG.thresholds.errorRate;
-  
+
   console.log(`   Throughput ≥ ${CONFIG.thresholds.throughput} req/s: ${throughputPass ? '✅ PASS' : '❌ FAIL'} (${throughput.toFixed(0)} req/s)`);
   console.log(`   p95 ≤ ${CONFIG.thresholds.p95Latency}ms:         ${p95Pass ? '✅ PASS' : '❌ FAIL'} (${p95.toFixed(0)}ms)`);
   console.log(`   Error rate ≤ ${CONFIG.thresholds.errorRate * 100}%:      ${errorRatePass ? '✅ PASS' : '❌ FAIL'} (${errorRate.toFixed(2)}%)`);
-  
+
   if (metrics.errors.length > 0) {
     console.log('');
     console.log('❌ Sample Errors:');
     const uniqueErrors = [...new Set(metrics.errors)].slice(0, 5);
     uniqueErrors.forEach(e => console.log(`   - ${e}`));
   }
-  
+
   console.log('');
   console.log('═'.repeat(60));
-  
+
   // Exit with error if thresholds not met
   if (!throughputPass || !p95Pass || !errorRatePass) {
     console.log('\n⚠️  Some thresholds were not met!');
@@ -366,15 +366,15 @@ async function main(): Promise<void> {
   console.log(`   Throughput: ≥ ${CONFIG.thresholds.throughput} req/s`);
   console.log(`   p95 Latency: ≤ ${CONFIG.thresholds.p95Latency}ms`);
   console.log(`   Error Rate: ≤ ${CONFIG.thresholds.errorRate * 100}%`);
-  
+
   // Run OPA load test
   await runOPALoadTest();
   printResults('OPA Authorization Decision Test');
-  
+
   // Run Backend load test
   await runBackendLoadTest();
   printResults('Backend Health Check Test');
-  
+
   console.log('\n✨ Load testing complete!');
 }
 

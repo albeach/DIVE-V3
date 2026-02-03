@@ -1,6 +1,6 @@
 /**
  * Policy Comparison View
- * 
+ *
  * Side-by-side comparison of policy versions
  * Shows policy evolution and impact
  */
@@ -27,7 +27,7 @@ export default function PolicyComparisonView({ currentPolicy, modifiedPolicy, ru
     // Simple diff highlighting (in production, use a proper diff library)
     const highlightDiff = (text: string, isModified: boolean) => {
         if (!isModified) return text;
-        
+
         // Find lines that differ (simple approach)
         const lines = text.split('\n');
         return lines.map((line, idx) => {

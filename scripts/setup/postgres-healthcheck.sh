@@ -1,6 +1,6 @@
 #!/bin/bash
 # DIVE V3 - Postgres Health Check with Password Verification
-# 
+#
 # This script does two things:
 # 1. Verifies Postgres is accepting connections (pg_isready)
 # 2. Verifies the password works (psql connection test)

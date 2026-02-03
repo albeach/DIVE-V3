@@ -70,12 +70,12 @@ print_header() {
 start_instance() {
     local instance=$1
     local instance_dir="$INSTANCES_DIR/$instance"
-    
+
     if [[ ! -d "$instance_dir" ]]; then
         log_error "Instance '$instance' not found at $instance_dir"
         return 1
     fi
-    
+
     log_info "Starting $instance instance..."
     (cd "$instance_dir" && docker compose up -d)
     log_success "$instance instance started"
@@ -84,12 +84,12 @@ start_instance() {
 stop_instance() {
     local instance=$1
     local instance_dir="$INSTANCES_DIR/$instance"
-    
+
     if [[ ! -d "$instance_dir" ]]; then
         log_error "Instance '$instance' not found"
         return 1
     fi
-    
+
     log_info "Stopping $instance instance..."
     (cd "$instance_dir" && docker compose down)
     log_success "$instance instance stopped"
@@ -103,45 +103,45 @@ restart_instance() {
 
 start_all() {
     print_header "Starting All Instances"
-    
+
     # Start shared services first
     log_info "Starting shared services..."
     (cd "$INSTANCES_DIR/shared" && docker compose up -d)
     log_success "Shared services started"
-    
+
     # Wait for shared network to be ready
     sleep 2
-    
+
     # Start each instance
     for instance in "${INSTANCES[@]}"; do
         start_instance "$instance"
     done
-    
+
     print_header "All Instances Started"
 }
 
 stop_all() {
     print_header "Stopping All Instances"
-    
+
     # Stop instances first
     for instance in "${INSTANCES[@]}"; do
         stop_instance "$instance" || true
     done
-    
+
     # Stop shared services last
     log_info "Stopping shared services..."
     (cd "$INSTANCES_DIR/shared" && docker compose down) || true
     log_success "Shared services stopped"
-    
+
     print_header "All Instances Stopped"
 }
 
 show_status() {
     print_header "Instance Status"
-    
+
     echo "Containers by Project:"
     echo ""
-    
+
     docker ps -a --format '{{json .}}' | python3 -c "
 import json, sys
 from collections import defaultdict
@@ -174,33 +174,33 @@ for p in sorted(projects.keys()):
 show_logs() {
     local instance=$1
     local instance_dir="$INSTANCES_DIR/$instance"
-    
+
     if [[ ! -d "$instance_dir" ]]; then
         log_error "Instance '$instance' not found"
         return 1
     fi
-    
+
     (cd "$instance_dir" && docker compose logs -f)
 }
 
 clean_all() {
     print_header "Cleaning All Instances"
-    
+
     log_warn "This will remove ALL containers, networks, and volumes!"
     read -p "Are you sure? (y/N) " -n 1 -r
     echo
-    
+
     if [[ $REPLY =~ ^[Yy]$ ]]; then
         # Stop and remove all instances
         for instance in "${INSTANCES[@]}"; do
             log_info "Cleaning $instance..."
             (cd "$INSTANCES_DIR/$instance" && docker compose down -v --remove-orphans) || true
         done
-        
+
         # Clean shared
         log_info "Cleaning shared services..."
         (cd "$INSTANCES_DIR/shared" && docker compose down -v --remove-orphans) || true
-        
+
         log_success "All instances cleaned"
     else
         log_info "Aborted"
@@ -228,7 +228,7 @@ show_usage() {
 main() {
     local command=${1:-"status"}
     local instance=${2:-""}
-    
+
     case "$command" in
         start)
             if [[ -z "$instance" ]]; then

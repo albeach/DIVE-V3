@@ -1,7 +1,7 @@
 /**
  * Decision Replay Service Test Suite
  * Target: 95%+ coverage for decision-replay.service.ts
- * 
+ *
  * Tests:
  * - Decision replay with step-by-step evaluation
  * - Clearance comparison logic
@@ -318,10 +318,10 @@ describe('Decision Replay Service', () => {
         it('should handle RESTRICTED level correctly', () => {
             // UNCLASSIFIED cannot access RESTRICTED
             expect((DecisionReplayService as any).compareClearance('UNCLASSIFIED', 'RESTRICTED')).toBe(false);
-            
+
             // RESTRICTED can access UNCLASSIFIED
             expect((DecisionReplayService as any).compareClearance('RESTRICTED', 'UNCLASSIFIED')).toBe(true);
-            
+
             // CONFIDENTIAL can access RESTRICTED
             expect((DecisionReplayService as any).compareClearance('CONFIDENTIAL', 'RESTRICTED')).toBe(true);
         });
@@ -333,7 +333,7 @@ describe('Decision Replay Service', () => {
 
         it('should handle all clearance levels in order', () => {
             const levels = ['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
-            
+
             // Each level should access itself
             levels.forEach(level => {
                 expect((DecisionReplayService as any).compareClearance(level, level)).toBe(true);

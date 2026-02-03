@@ -1,6 +1,6 @@
 /**
  * Skeleton Loading Components (2025)
- * 
+ *
  * Modern skeleton loading states with:
  * - Shimmer animation effect
  * - Matching component layouts
@@ -39,7 +39,7 @@ export function Skeleton({ className = '', animate = true }: SkeletonProps) {
 export function ShimmerSkeleton({ className = '' }: { className?: string }) {
   return (
     <div className={`relative overflow-hidden bg-gray-200 dark:bg-gray-700 rounded ${className}`}>
-      <div 
+      <div
         className="absolute inset-0 -translate-x-full animate-shimmer bg-gradient-to-r from-transparent via-white/40 dark:via-gray-600/40 to-transparent"
         style={{
           animation: 'shimmer 2s infinite',
@@ -113,7 +113,7 @@ export function ResourceCardSkeletonList() {
       <div className="flex items-center gap-4">
         {/* Classification Badge */}
         <div className="h-8 w-28 bg-gray-200 dark:bg-gray-700 rounded-lg" />
-        
+
         {/* Title & ID */}
         <div className="flex-1 space-y-2 min-w-0">
           <div className="h-5 bg-gray-200 dark:bg-gray-700 rounded w-3/4" />
@@ -158,12 +158,12 @@ interface ResourceGridSkeletonProps {
 }
 
 export function ResourceGridSkeleton({ viewMode, count = 6 }: ResourceGridSkeletonProps) {
-  const SkeletonComponent = 
+  const SkeletonComponent =
     viewMode === 'grid' ? ResourceCardSkeletonGrid :
     viewMode === 'list' ? ResourceCardSkeletonList :
     ResourceCardSkeletonCompact;
 
-  const gridClasses = 
+  const gridClasses =
     viewMode === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4' :
     'space-y-3';
 
@@ -311,7 +311,7 @@ export function ResourcesPageSkeleton() {
       <div className="animate-pulse">
         <div className="h-10 w-64 bg-gray-200 dark:bg-gray-700 rounded mb-3" />
         <div className="h-6 w-96 bg-gray-200 dark:bg-gray-700 rounded mb-4" />
-        
+
         {/* Federation toggle */}
         <div className="flex items-center gap-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl mb-4">
           <div className="h-7 w-14 bg-gray-200 dark:bg-gray-700 rounded-full" />

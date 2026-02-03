@@ -27,7 +27,7 @@ prometheus:
     # Retention: 30 days
     retention: 30d
     retentionSize: 50GB
-    
+
     # Resource limits for GKE Autopilot
     resources:
       requests:
@@ -36,7 +36,7 @@ prometheus:
       limits:
         cpu: 2000m
         memory: 4Gi
-    
+
     # Storage
     storageSpec:
       volumeClaimTemplate:
@@ -46,14 +46,14 @@ prometheus:
           resources:
             requests:
               storage: 50Gi
-    
+
     # Service monitors
     serviceMonitorSelectorNilUsesHelmValues: false
     podMonitorSelectorNilUsesHelmValues: false
-    
+
     # Additional scrape configs
     additionalScrapeConfigs: []
-    
+
     # Alerting
     alerting:
       alertmanagers:
@@ -73,7 +73,7 @@ alertmanager:
       limits:
         cpu: 500m
         memory: 512Mi
-    
+
     # Storage
     storage:
       volumeClaimTemplate:
@@ -83,7 +83,7 @@ alertmanager:
           resources:
             requests:
               storage: 10Gi
-    
+
     # Configuration
     config:
       global:
@@ -107,11 +107,11 @@ alertmanager:
 # Grafana
 grafana:
   enabled: true
-  
+
   # Admin credentials (should be in GCP Secret Manager)
   adminUser: admin
   adminPassword: admin  # TODO: Move to GCP Secret Manager
-  
+
   # Resource limits
   resources:
     requests:
@@ -120,19 +120,19 @@ grafana:
     limits:
       cpu: 500m
       memory: 512Mi
-  
+
   # Storage
   persistence:
     enabled: true
     storageClassName: standard-rwo
     accessModes: ["ReadWriteOnce"]
     size: 10Gi
-  
+
   # Service configuration
   service:
     type: ClusterIP
     port: 80
-  
+
   # Dashboard provisioning
   dashboardProviders:
     dashboardproviders.yaml:
@@ -146,7 +146,7 @@ grafana:
           editable: true
           options:
             path: /var/lib/grafana/dashboards/dive-v3
-  
+
   # Dashboards
   dashboards:
     dive-v3:
@@ -175,7 +175,7 @@ grafana:
         revision: null
         datasource: Prometheus
         file: compliance-overview.json
-  
+
   # Datasource provisioning
   datasources:
     datasources.yaml:

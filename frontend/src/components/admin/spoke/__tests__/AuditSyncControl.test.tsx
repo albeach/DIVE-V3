@@ -1,8 +1,8 @@
 /**
  * DIVE V3 - AuditSyncControl Unit Tests
- * 
+ *
  * Tests for the AuditSyncControl component that handles audit queue sync operations.
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -414,7 +414,7 @@ describe('AuditSyncControl', () => {
       );
 
       await user.click(screen.getByRole('button', { name: /Export/i }));
-      
+
       // Find the Export button in the modal (there are two buttons with Export text)
       const exportButtons = screen.getAllByRole('button', { name: /Export/i });
       const modalExportButton = exportButtons.find(btn => btn.closest('.fixed'));

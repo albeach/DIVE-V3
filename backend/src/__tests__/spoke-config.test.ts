@@ -375,7 +375,7 @@ describe('SpokeConfigService', () => {
 
     it('should warn on non-HTTPS hub URL in production', async () => {
       process.env.NODE_ENV = 'production';
-      
+
       const httpConfig = {
         ...validFlatConfig,
         hubUrl: 'http://hub.dive25.com',
@@ -389,7 +389,7 @@ describe('SpokeConfigService', () => {
 
     it('should allow HTTP in development', async () => {
       process.env.NODE_ENV = 'development';
-      
+
       const httpConfig = {
         ...validFlatConfig,
         hubUrl: 'http://localhost:4000',
@@ -590,7 +590,7 @@ describe('SpokeConfigService', () => {
       mockFs.readFile.mockResolvedValueOnce(JSON.stringify(validFlatConfig));
       mockFs.mkdir.mockResolvedValue(undefined);
       mockFs.writeFile.mockResolvedValue();
-      
+
       await service.loadFromFile(testConfigPath);
 
       const beforeSave = service.getConfig().metadata.lastModified;

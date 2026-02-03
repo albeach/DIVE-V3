@@ -1,13 +1,13 @@
 /**
  * Tests for Instance Resource Seeding Script
- * 
+ *
  * Validates:
  * - COI template coherence
  * - Classification distribution targets
  * - Multi-KAS distribution targets
  * - Industry access distribution
  * - Document structure integrity
- * 
+ *
  * Date: November 29, 2025
  */
 

@@ -139,7 +139,7 @@ VQQDDAlsb2NhbGhvc3QwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC+
 
     it('should return null info when no certificate loaded', async () => {
       await service.initialize(testConfig);
-      
+
       const certInfo = service.getCertificateInfo();
       expect(certInfo).toBeNull();
     });
@@ -355,7 +355,7 @@ VQQDDAlsb2NhbGhvc3QwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAwggEKAoIBAQC+
 
     it('should register event listeners', () => {
       const handler = jest.fn();
-      
+
       service.on('certificateExpired', handler);
       service.on('certificateExpiringSoon', handler);
       service.on('certificateExpiryWarning', handler);

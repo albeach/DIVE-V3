@@ -1,13 +1,13 @@
 /**
  * MongoDB Text Index Creation Script
- * 
+ *
  * Phase 2: Search & Discovery Enhancement
  * Creates text indexes for full-text search across all federation instances
- * 
+ *
  * Usage:
  *   npx ts-node scripts/create-text-indexes.ts
  *   npm run create-text-indexes
- * 
+ *
  * Features:
  * - Creates compound text index on title, resourceId, and content
  * - Weighted relevance scoring (title > resourceId > content)
@@ -130,7 +130,7 @@ const PERFORMANCE_INDEXES: IndexDefinition[] = [
 
 async function createIndexes(db: Db, instance: string): Promise<void> {
   const collection = db.collection(COLLECTION_NAME);
-  
+
   console.log(`\n📦 Creating indexes for ${instance}...`);
 
   // Check existing indexes
@@ -170,15 +170,15 @@ async function createIndexes(db: Db, instance: string): Promise<void> {
 
 async function validateIndexes(db: Db, instance: string): Promise<boolean> {
   const collection = db.collection(COLLECTION_NAME);
-  
+
   console.log(`\n🔍 Validating indexes for ${instance}...`);
 
   const indexes = await collection.indexes();
   const indexNames = indexes.map(idx => idx.name);
 
   // Check text index
-  const hasTextIndex = indexes.some(idx => 
-    idx.name === TEXT_INDEX.name || 
+  const hasTextIndex = indexes.some(idx =>
+    idx.name === TEXT_INDEX.name ||
     Object.values(idx.key || {}).includes('text')
   );
 
@@ -205,7 +205,7 @@ async function validateIndexes(db: Db, instance: string): Promise<boolean> {
 
 async function testTextSearch(db: Db, instance: string): Promise<void> {
   const collection = db.collection(COLLECTION_NAME);
-  
+
   console.log(`\n🧪 Testing text search for ${instance}...`);
 
   try {
@@ -233,7 +233,7 @@ async function testTextSearch(db: Db, instance: string): Promise<void> {
 
 async function getCollectionStats(db: Db, instance: string): Promise<void> {
   const collection = db.collection(COLLECTION_NAME);
-  
+
   console.log(`\n📊 Collection stats for ${instance}...`);
 
   try {
@@ -260,7 +260,7 @@ async function main(): Promise<void> {
   console.log('═══════════════════════════════════════════════════════════════');
 
   const args = process.argv.slice(2);
-  const targetInstances = args.length > 0 
+  const targetInstances = args.length > 0
     ? args.filter(arg => INSTANCES.includes(arg.toUpperCase())).map(a => a.toUpperCase())
     : INSTANCES;
 

@@ -1,8 +1,8 @@
 /**
  * DIVE V3 - Maintenance Mode Toggle
- * 
+ *
  * Toggle control for spoke maintenance mode.
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -39,17 +39,17 @@ function formatRelativeTime(dateStr?: string): string {
   const diffMs = now.getTime() - date.getTime();
   const diffMinutes = Math.floor(diffMs / (1000 * 60));
   const diffHours = Math.floor(diffMinutes / 60);
-  
+
   if (diffMinutes < 1) return 'Just now';
   if (diffMinutes < 60) return `${diffMinutes}m ago`;
   return `${diffHours}h ${diffMinutes % 60}m ago`;
 }
 
-export function MaintenanceModeToggle({ 
-  status, 
+export function MaintenanceModeToggle({
+  status,
   loading,
   onEnter,
-  onExit 
+  onExit
 }: MaintenanceModeToggleProps) {
   const [showModal, setShowModal] = useState(false);
   const [reason, setReason] = useState('');
@@ -103,8 +103,8 @@ export function MaintenanceModeToggle({
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.4 }}
         className={`rounded-2xl border shadow-lg p-6 transition-all ${
-          isActive 
-            ? 'bg-amber-50 border-amber-300 shadow-amber-100' 
+          isActive
+            ? 'bg-amber-50 border-amber-300 shadow-amber-100'
             : 'bg-white border-slate-200'
         }`}
       >
@@ -116,7 +116,7 @@ export function MaintenanceModeToggle({
             <div>
               <h3 className="font-bold text-slate-900">Maintenance Mode</h3>
               <p className={`text-sm ${isActive ? 'text-amber-700' : 'text-slate-500'}`}>
-                {isActive 
+                {isActive
                   ? `Active since ${formatRelativeTime(status?.maintenanceEnteredAt)}`
                   : 'System is operational'
                 }

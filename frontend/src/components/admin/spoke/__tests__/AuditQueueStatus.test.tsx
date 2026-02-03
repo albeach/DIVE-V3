@@ -1,6 +1,6 @@
 /**
  * DIVE V3 - AuditQueueStatus Tests
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -59,7 +59,7 @@ describe('AuditQueueStatus', () => {
 
     it('renders empty queue state', () => {
       render(<AuditQueueStatus queue={mockEmptyQueue} />);
-      
+
       expect(screen.getByText('Audit Queue')).toBeInTheDocument();
       expect(screen.getByText('0')).toBeInTheDocument();
       expect(screen.getByText('Queue is empty')).toBeInTheDocument();
@@ -67,14 +67,14 @@ describe('AuditQueueStatus', () => {
 
     it('renders queue with items', () => {
       render(<AuditQueueStatus queue={mockSmallQueue} />);
-      
+
       expect(screen.getByText('15')).toBeInTheDocument();
       expect(screen.getByText('Events pending')).toBeInTheDocument();
     });
 
     it('displays pending bytes', () => {
       render(<AuditQueueStatus queue={mockLargeQueue} />);
-      
+
       expect(screen.getByText('1 MB total')).toBeInTheDocument();
     });
   });
@@ -82,21 +82,21 @@ describe('AuditQueueStatus', () => {
   describe('Queue Size Visual', () => {
     it('shows empty queue in green', () => {
       render(<AuditQueueStatus queue={mockEmptyQueue} />);
-      
+
       const queueCount = screen.getByText('0');
       expect(queueCount).toHaveClass('text-emerald-600');
     });
 
     it('shows small queue in blue', () => {
       render(<AuditQueueStatus queue={mockSmallQueue} />);
-      
+
       const queueCount = screen.getByText('15');
       expect(queueCount).toHaveClass('text-blue-600');
     });
 
     it('shows large queue (>100) in amber with warning', () => {
       render(<AuditQueueStatus queue={mockLargeQueue} />);
-      
+
       const queueCount = screen.getByText('150');
       expect(queueCount).toHaveClass('text-amber-600');
       expect(screen.getByText('Large queue detected')).toBeInTheDocument();
@@ -104,7 +104,7 @@ describe('AuditQueueStatus', () => {
 
     it('shows blocked queue in red', () => {
       render(<AuditQueueStatus queue={mockBlockedQueue} />);
-      
+
       const queueCount = screen.getByText('50');
       expect(queueCount).toHaveClass('text-red-600');
     });
@@ -113,13 +113,13 @@ describe('AuditQueueStatus', () => {
   describe('Status Grid', () => {
     it('displays last sync time', () => {
       render(<AuditQueueStatus queue={mockSmallQueue} />);
-      
+
       expect(screen.getByText('Last Sync')).toBeInTheDocument();
     });
 
     it('displays queue state', () => {
       render(<AuditQueueStatus queue={mockSmallQueue} />);
-      
+
       expect(screen.getByText('Queue State')).toBeInTheDocument();
       // State is displayed with capitalize class, check case-insensitively
       expect(screen.getByText(/idle/i)).toBeInTheDocument();
@@ -128,7 +128,7 @@ describe('AuditQueueStatus', () => {
     it('shows syncing state correctly', () => {
       const syncingQueue = { ...mockSmallQueue, state: 'syncing' as const };
       render(<AuditQueueStatus queue={syncingQueue} />);
-      
+
       // Component capitalizes state, but we check case-insensitively
       expect(screen.getByText(/syncing/i)).toBeInTheDocument();
     });
@@ -137,14 +137,14 @@ describe('AuditQueueStatus', () => {
   describe('Oldest/Newest Entry', () => {
     it('shows oldest and newest entry times when queue has items', () => {
       render(<AuditQueueStatus queue={mockSmallQueue} />);
-      
+
       expect(screen.getByText(/Oldest:/)).toBeInTheDocument();
       expect(screen.getByText(/Newest:/)).toBeInTheDocument();
     });
 
     it('does not show entry times for empty queue', () => {
       render(<AuditQueueStatus queue={mockEmptyQueue} />);
-      
+
       expect(screen.queryByText(/Oldest:/)).not.toBeInTheDocument();
     });
   });
@@ -153,16 +153,16 @@ describe('AuditQueueStatus', () => {
     it('renders sync button when onSync provided', () => {
       const onSync = jest.fn();
       render(<AuditQueueStatus queue={mockSmallQueue} onSync={onSync} />);
-      
+
       expect(screen.getByRole('button', { name: /sync now/i })).toBeInTheDocument();
     });
 
     it('calls onSync when clicked', async () => {
       const onSync = jest.fn().mockResolvedValue(undefined);
       render(<AuditQueueStatus queue={mockSmallQueue} onSync={onSync} />);
-      
+
       fireEvent.click(screen.getByRole('button', { name: /sync now/i }));
-      
+
       await waitFor(() => {
         expect(onSync).toHaveBeenCalled();
       });
@@ -171,9 +171,9 @@ describe('AuditQueueStatus', () => {
     it('shows syncing state during sync', async () => {
       const onSync = jest.fn().mockImplementation(() => new Promise(resolve => setTimeout(resolve, 100)));
       render(<AuditQueueStatus queue={mockSmallQueue} onSync={onSync} />);
-      
+
       fireEvent.click(screen.getByRole('button', { name: /sync now/i }));
-      
+
       await waitFor(() => {
         expect(screen.getByText('Syncing...')).toBeInTheDocument();
       });
@@ -184,23 +184,23 @@ describe('AuditQueueStatus', () => {
     it('shows clear button when onClear provided and queue has items', () => {
       const onClear = jest.fn();
       render(<AuditQueueStatus queue={mockSmallQueue} onClear={onClear} />);
-      
+
       expect(screen.getByText(/Clear Queue/)).toBeInTheDocument();
     });
 
     it('does not show clear button for empty queue', () => {
       const onClear = jest.fn();
       render(<AuditQueueStatus queue={mockEmptyQueue} onClear={onClear} />);
-      
+
       expect(screen.queryByText(/Clear Queue/)).not.toBeInTheDocument();
     });
 
     it('opens confirmation modal when clear clicked', () => {
       const onClear = jest.fn();
       render(<AuditQueueStatus queue={mockSmallQueue} onClear={onClear} />);
-      
+
       fireEvent.click(screen.getByText(/Clear Queue/));
-      
+
       expect(screen.getByText('Clear Audit Queue?')).toBeInTheDocument();
       expect(screen.getByText('15 events will be lost')).toBeInTheDocument();
     });
@@ -208,25 +208,25 @@ describe('AuditQueueStatus', () => {
     it('shows warning in confirmation modal', () => {
       const onClear = jest.fn();
       render(<AuditQueueStatus queue={mockSmallQueue} onClear={onClear} />);
-      
+
       fireEvent.click(screen.getByText(/Clear Queue/));
-      
+
       expect(screen.getByText(/This action is irreversible/)).toBeInTheDocument();
     });
 
     it('calls onClear when confirmed', async () => {
       const onClear = jest.fn().mockResolvedValue(undefined);
       render(<AuditQueueStatus queue={mockSmallQueue} onClear={onClear} />);
-      
+
       fireEvent.click(screen.getByText(/Clear Queue \(destructive\)/));
-      
+
       // Click the confirm button in modal
       const confirmButtons = screen.getAllByRole('button', { name: /clear queue/i });
       const confirmButton = confirmButtons.find(b => b.textContent?.includes('Clear Queue') && !b.textContent?.includes('destructive'));
       if (confirmButton) {
         fireEvent.click(confirmButton);
       }
-      
+
       await waitFor(() => {
         expect(onClear).toHaveBeenCalled();
       });
@@ -235,12 +235,12 @@ describe('AuditQueueStatus', () => {
     it('closes modal on cancel', () => {
       const onClear = jest.fn();
       render(<AuditQueueStatus queue={mockSmallQueue} onClear={onClear} />);
-      
+
       fireEvent.click(screen.getByText(/Clear Queue \(destructive\)/));
       expect(screen.getByText('Clear Audit Queue?')).toBeInTheDocument();
-      
+
       fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
-      
+
       expect(screen.queryByText('Clear Audit Queue?')).not.toBeInTheDocument();
     });
   });
@@ -248,14 +248,14 @@ describe('AuditQueueStatus', () => {
   describe('Large Queue Warning', () => {
     it('shows warning for queues over 100 items', () => {
       render(<AuditQueueStatus queue={mockLargeQueue} />);
-      
+
       expect(screen.getByText('Large queue detected')).toBeInTheDocument();
       expect(screen.getByText(/Consider syncing or checking hub connectivity/)).toBeInTheDocument();
     });
 
     it('does not show warning for small queues', () => {
       render(<AuditQueueStatus queue={mockSmallQueue} />);
-      
+
       expect(screen.queryByText('Large queue detected')).not.toBeInTheDocument();
     });
   });
@@ -263,13 +263,13 @@ describe('AuditQueueStatus', () => {
   describe('Edge Cases', () => {
     it('handles null queue gracefully', () => {
       render(<AuditQueueStatus queue={null} />);
-      
+
       expect(screen.getByText('0')).toBeInTheDocument();
     });
 
     it('handles zero pending bytes', () => {
       render(<AuditQueueStatus queue={mockEmptyQueue} />);
-      
+
       // Should not display bytes section for zero bytes
       expect(screen.queryByText(/total$/)).not.toBeInTheDocument();
     });

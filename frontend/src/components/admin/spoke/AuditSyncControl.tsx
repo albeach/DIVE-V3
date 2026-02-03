@@ -1,8 +1,8 @@
 /**
  * DIVE V3 - Audit Sync Control
- * 
+ *
  * Enhanced sync controls for audit queue with scheduling and export options.
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -55,7 +55,7 @@ function formatRelativeTime(dateStr?: string): string {
   const diffMs = now.getTime() - date.getTime();
   const diffMinutes = Math.floor(diffMs / (1000 * 60));
   const diffHours = Math.floor(diffMinutes / 60);
-  
+
   if (diffMinutes < 1) return 'Just now';
   if (diffMinutes < 60) return `${diffMinutes}m ago`;
   if (diffHours < 24) return `${diffHours}h ago`;
@@ -93,7 +93,7 @@ export function AuditSyncControl({
     try {
       const result = await onSyncNow();
       setSyncResult(result);
-      
+
       // Clear result after 5 seconds
       setTimeout(() => setSyncResult(null), 5000);
     } catch (error) {
@@ -124,7 +124,7 @@ export function AuditSyncControl({
 
     try {
       const blob = await onExport({ format: exportFormat });
-      
+
       // Create download link
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -134,7 +134,7 @@ export function AuditSyncControl({
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      
+
       setShowExportModal(false);
     } catch (error) {
       console.error('Export failed:', error);
@@ -205,7 +205,7 @@ export function AuditSyncControl({
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
             className={`mb-4 p-3 rounded-lg ${
-              syncResult.success 
+              syncResult.success
                 ? 'bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800'
                 : 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800'
             }`}
@@ -219,7 +219,7 @@ export function AuditSyncControl({
               <span className={`text-sm font-medium ${
                 syncResult.success ? 'text-emerald-700 dark:text-emerald-300' : 'text-red-700 dark:text-red-300'
               }`}>
-                {syncResult.success 
+                {syncResult.success
                   ? `Synced ${syncResult.eventsProcessed || 0} events in ${syncResult.duration || 0}ms`
                   : syncResult.error || 'Sync failed'
                 }
@@ -313,7 +313,7 @@ export function AuditSyncControl({
                 {isBlocked ? 'Sync Blocked' : 'Sync Error'}
               </p>
               <p className="text-xs text-red-700 dark:text-red-300 mt-1">
-                {isBlocked 
+                {isBlocked
                   ? 'Hub connectivity lost. Events are being queued locally.'
                   : 'Check hub connectivity and retry.'}
               </p>

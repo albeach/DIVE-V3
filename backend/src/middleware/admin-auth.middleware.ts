@@ -1,6 +1,6 @@
 /**
  * Admin Authentication Middleware
- * 
+ *
  * Enforces super_admin role requirement for admin endpoints
  * Pattern:
  * 1. Verify JWT (reuse authenticateJWT)
@@ -8,7 +8,7 @@
  * 3. Check for super_admin role
  * 4. Log admin action
  * 5. Fail-closed if role missing
- * 
+ *
  * Security: All admin actions are logged for audit compliance
  */
 

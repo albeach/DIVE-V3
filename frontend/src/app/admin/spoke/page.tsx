@@ -1,9 +1,9 @@
 /**
  * DIVE V3 - Spoke Administrator Dashboard
- * 
+ *
  * Dashboard for spoke administrators to view their registration status,
  * hub connectivity, policy sync, and failover state.
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -164,14 +164,14 @@ export default function SpokeDashboardPage() {
     if (!data.connectivity?.opalConnected) return 'offline';
     if (data.versionsBehind && data.versionsBehind > 5) return 'critical_stale';
     if (data.versionsBehind && data.versionsBehind > 0) return 'behind';
-    
+
     // Check if last sync was too long ago
     if (data.lastPolicySync) {
       const syncTime = new Date(data.lastPolicySync);
       const diffHours = (Date.now() - syncTime.getTime()) / (1000 * 60 * 60);
       if (diffHours > 24) return 'stale';
     }
-    
+
     return 'current';
   }
 
@@ -267,8 +267,8 @@ export default function SpokeDashboardPage() {
   };
 
   // Calculate overall health
-  const isHealthy = connectivity?.hubReachable && 
-                    connectivity?.opalConnected && 
+  const isHealthy = connectivity?.hubReachable &&
+                    connectivity?.opalConnected &&
                     circuitBreaker?.state === 'CLOSED' &&
                     !maintenance?.isInMaintenanceMode;
 
@@ -310,8 +310,8 @@ export default function SpokeDashboardPage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
               <div className={`p-4 rounded-2xl shadow-lg ${
-                isHealthy 
-                  ? 'bg-gradient-to-br from-emerald-500 to-teal-600' 
+                isHealthy
+                  ? 'bg-gradient-to-br from-emerald-500 to-teal-600'
                   : 'bg-gradient-to-br from-amber-500 to-orange-600'
               }`}>
                 <Server className="w-8 h-8 text-white" />
@@ -329,8 +329,8 @@ export default function SpokeDashboardPage() {
             <div className="flex items-center gap-3">
               {/* Health Badge */}
               <div className={`flex items-center gap-2 px-4 py-2 rounded-full border ${
-                isHealthy 
-                  ? 'bg-emerald-50 border-emerald-200' 
+                isHealthy
+                  ? 'bg-emerald-50 border-emerald-200'
                   : 'bg-amber-50 border-amber-200'
               }`}>
                 {isHealthy ? (
@@ -381,16 +381,16 @@ export default function SpokeDashboardPage() {
             <SpokeStatusCard runtime={spokeRuntime} loading={loading} />
 
             {/* Hub Connectivity */}
-            <HubConnectivityWidget 
-              connectivity={connectivity} 
+            <HubConnectivityWidget
+              connectivity={connectivity}
               loading={loading}
               onRefresh={() => fetchStatus(true)}
               refreshing={refreshing}
             />
 
             {/* Policy Sync */}
-            <PolicySyncStatusCard 
-              policyInfo={policyInfo} 
+            <PolicySyncStatusCard
+              policyInfo={policyInfo}
               loading={loading}
               onForceSync={handleForceSync}
             />
@@ -399,24 +399,24 @@ export default function SpokeDashboardPage() {
           {/* Right Column */}
           <div className="space-y-6">
             {/* Circuit Breaker */}
-            <CircuitBreakerControl 
-              status={circuitBreaker} 
+            <CircuitBreakerControl
+              status={circuitBreaker}
               loading={loading}
               onForceState={handleForceCircuitState}
               onReset={handleResetCircuit}
             />
 
             {/* Maintenance Mode */}
-            <MaintenanceModeToggle 
-              status={maintenance} 
+            <MaintenanceModeToggle
+              status={maintenance}
               loading={loading}
               onEnter={handleEnterMaintenance}
               onExit={handleExitMaintenance}
             />
 
             {/* Audit Queue */}
-            <AuditQueueStatus 
-              queue={auditQueue} 
+            <AuditQueueStatus
+              queue={auditQueue}
               loading={loading}
               onSync={handleSyncAudit}
               onClear={handleClearAudit}

@@ -1,11 +1,11 @@
 /**
  * DIVE V3 - OPAL Data Service Tests
- * 
+ *
  * Tests for the OPAL data service functionality including:
  * - Loading data from JSON files
  * - Publishing data updates
  * - Managing trusted issuers, federation, and COI data
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */
@@ -81,7 +81,7 @@ describe('OPAL Data Service', () => {
   describe('loadAllData', () => {
     it('should load data from JSON files without errors', async () => {
       const data = await opalDataService.loadAllData();
-      
+
       expect(data).toBeDefined();
       expect(data).toHaveProperty('trusted_issuers');
       expect(data).toHaveProperty('federation_matrix');
@@ -91,7 +91,7 @@ describe('OPAL Data Service', () => {
 
     it('should return empty objects if files do not exist', async () => {
       const data = await opalDataService.loadAllData();
-      
+
       // Should not throw, should return empty objects or loaded data
       expect(typeof data.trusted_issuers).toBe('object');
       expect(typeof data.federation_matrix).toBe('object');
@@ -103,7 +103,7 @@ describe('OPAL Data Service', () => {
   describe('getCurrentData', () => {
     it('should return current data state', async () => {
       const data = await opalDataService.getCurrentData();
-      
+
       expect(data).toBeDefined();
       expect(data).toHaveProperty('trusted_issuers');
     });
@@ -111,7 +111,7 @@ describe('OPAL Data Service', () => {
     it('should return same reference on subsequent calls', async () => {
       const data1 = await opalDataService.getCurrentData();
       const data2 = await opalDataService.getCurrentData();
-      
+
       // Should return cached data
       expect(data1).toBe(data2);
     });
@@ -120,7 +120,7 @@ describe('OPAL Data Service', () => {
   describe('syncAllToOPAL', () => {
     it('should sync all data successfully', async () => {
       const result = await opalDataService.syncAllToOPAL();
-      
+
       expect(result).toBeDefined();
       expect(result.syncedAt).toBeDefined();
       expect(result.sources).toBeDefined();
@@ -128,7 +128,7 @@ describe('OPAL Data Service', () => {
 
     it('should report source status for each data type', async () => {
       const result = await opalDataService.syncAllToOPAL();
-      
+
       expect(result.sources).toHaveProperty('trusted_issuers');
       expect(result.sources).toHaveProperty('federation_matrix');
       expect(result.sources).toHaveProperty('coi_members');
@@ -137,9 +137,9 @@ describe('OPAL Data Service', () => {
 
     it('should call opal client with correct data when OPAL is enabled', async () => {
       (opalClient.isOPALEnabled as jest.Mock).mockReturnValue(true);
-      
+
       await opalDataService.syncAllToOPAL();
-      
+
       expect(opalClient.publishDataUpdate).toHaveBeenCalled();
     });
   });
@@ -147,21 +147,21 @@ describe('OPAL Data Service', () => {
   describe('updateTrustedIssuer', () => {
     it('should update a trusted issuer', async () => {
       const issuerUrl = 'https://test-issuer.example.com';
-      
+
       const result = await opalDataService.updateTrustedIssuer(
         issuerUrl,
         sampleTrustedIssuer
       );
-      
+
       expect(result).toBeDefined();
       expect(result.success).toBe(true);
     });
 
     it('should call publishInlineData with correct path', async () => {
       const issuerUrl = 'https://new-issuer.example.com';
-      
+
       await opalDataService.updateTrustedIssuer(issuerUrl, sampleTrustedIssuer);
-      
+
       expect(opalClient.publishInlineData).toHaveBeenCalledWith(
         'trusted_issuers',
         expect.any(Object),
@@ -173,13 +173,13 @@ describe('OPAL Data Service', () => {
   describe('removeTrustedIssuer', () => {
     it('should remove a trusted issuer', async () => {
       const issuerUrl = 'https://remove-me.example.com';
-      
+
       // First add the issuer
       await opalDataService.updateTrustedIssuer(issuerUrl, sampleTrustedIssuer);
-      
+
       // Then remove it
       const result = await opalDataService.removeTrustedIssuer(issuerUrl);
-      
+
       expect(result).toBeDefined();
       expect(result.success).toBe(true);
     });
@@ -188,14 +188,14 @@ describe('OPAL Data Service', () => {
   describe('addFederationLink', () => {
     it('should add bidirectional federation link', async () => {
       const result = await opalDataService.addFederationLink('USA', 'CAN');
-      
+
       expect(result).toBeDefined();
       expect(result.success).toBe(true);
     });
 
     it('should call publishInlineData with federation_matrix path', async () => {
       await opalDataService.addFederationLink('USA', 'AUS');
-      
+
       expect(opalClient.publishInlineData).toHaveBeenCalledWith(
         'federation_matrix',
         expect.any(Object),
@@ -208,10 +208,10 @@ describe('OPAL Data Service', () => {
     it('should remove bidirectional federation link', async () => {
       // First add
       await opalDataService.addFederationLink('USA', 'NZL');
-      
+
       // Then remove
       const result = await opalDataService.removeFederationLink('USA', 'NZL');
-      
+
       expect(result).toBeDefined();
       expect(result.success).toBe(true);
     });
@@ -223,14 +223,14 @@ describe('OPAL Data Service', () => {
         'TEST-COI',
         ['USA', 'GBR', 'CAN']
       );
-      
+
       expect(result).toBeDefined();
       expect(result.success).toBe(true);
     });
 
     it('should call publishInlineData with coi_members path', async () => {
       await opalDataService.updateCOIMembership('NEW-COI', ['USA']);
-      
+
       expect(opalClient.publishInlineData).toHaveBeenCalledWith(
         'coi_members',
         expect.any(Object),
@@ -245,14 +245,14 @@ describe('OPAL Data Service', () => {
         'USA',
         sampleTenantConfig
       );
-      
+
       expect(result).toBeDefined();
       expect(result.success).toBe(true);
     });
 
     it('should merge config with existing values', async () => {
       await opalDataService.updateTenantConfig('USA', { max_session_hours: 12 });
-      
+
       expect(opalClient.publishInlineData).toHaveBeenCalledWith(
         'tenant_configs',
         expect.any(Object),
@@ -265,7 +265,7 @@ describe('OPAL Data Service', () => {
     it('should return true if never synced', async () => {
       // Before any sync
       const needsSync = await opalDataService.needsSync();
-      
+
       // Will be true or false depending on test order
       expect(typeof needsSync).toBe('boolean');
     });
@@ -274,7 +274,7 @@ describe('OPAL Data Service', () => {
   describe('getDataDirectory', () => {
     it('should return a valid path', () => {
       const dataDir = opalDataService.getDataDirectory();
-      
+
       expect(dataDir).toBeDefined();
       expect(typeof dataDir).toBe('string');
       expect(dataDir.length).toBeGreaterThan(0);
@@ -284,7 +284,7 @@ describe('OPAL Data Service', () => {
   describe('getLastSyncTime', () => {
     it('should return null before first sync or Date after sync', () => {
       const lastSync = opalDataService.getLastSyncTime();
-      
+
       // Can be null or Date
       expect(lastSync === null || lastSync instanceof Date).toBe(true);
     });
@@ -292,7 +292,7 @@ describe('OPAL Data Service', () => {
     it('should return Date after sync', async () => {
       await opalDataService.syncAllToOPAL();
       const lastSync = opalDataService.getLastSyncTime();
-      
+
       expect(lastSync).toBeInstanceOf(Date);
     });
   });
@@ -309,7 +309,7 @@ describe('OPAL Client', () => {
   describe('checkHealth', () => {
     it('should return health status', async () => {
       const health = await opalClient.checkHealth();
-      
+
       expect(health).toBeDefined();
       expect(health).toHaveProperty('healthy');
       expect(health).toHaveProperty('opaConnected');
@@ -325,7 +325,7 @@ describe('OPAL Client', () => {
         }],
         reason: 'Test update'
       });
-      
+
       expect(result).toBeDefined();
       expect(result.success).toBe(true);
     });
@@ -338,7 +338,7 @@ describe('OPAL Client', () => {
         { key: 'value' },
         'Test inline publish'
       );
-      
+
       expect(result).toBeDefined();
       expect(result.success).toBe(true);
     });
@@ -349,14 +349,14 @@ describe('Federation Data Operations', () => {
   it('should support adding new federation partner without code changes', async () => {
     // This test verifies the Phase 2 success criteria:
     // "Adding new federation partner requires ZERO code changes"
-    
+
     // Step 1: Add federation link via data service
     const result = await opalDataService.addFederationLink('USA', 'JPN');
     expect(result.success).toBe(true);
-    
+
     // Step 2: Verify OPAL publish was called
     expect(opalClient.publishInlineData).toHaveBeenCalled();
-    
+
     // Step 3: Clean up - remove the test link
     await opalDataService.removeFederationLink('USA', 'JPN');
   });
@@ -364,7 +364,7 @@ describe('Federation Data Operations', () => {
   it('should support removing federation partner without code changes', async () => {
     // Add first
     await opalDataService.addFederationLink('USA', 'BRA');
-    
+
     // Remove
     const result = await opalDataService.removeFederationLink('USA', 'BRA');
     expect(result.success).toBe(true);
@@ -380,12 +380,12 @@ describe('Federation Data Operations', () => {
       protocol: 'saml',
       federation_class: 'NATIONAL'
     };
-    
+
     const result = await opalDataService.updateTrustedIssuer(
       'https://jpn-idp.example.com',
       newIssuer
     );
-    
+
     expect(result.success).toBe(true);
   });
 
@@ -394,7 +394,7 @@ describe('Federation Data Operations', () => {
       'PACIFIC-ALLIANCE',
       ['USA', 'JPN', 'AUS', 'KOR']
     );
-    
+
     expect(result.success).toBe(true);
     expect(opalClient.publishInlineData).toHaveBeenCalledWith(
       'coi_members',

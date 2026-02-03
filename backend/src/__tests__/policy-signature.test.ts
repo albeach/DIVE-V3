@@ -1,8 +1,8 @@
 /**
  * Policy Signature Verification Tests - Production Grade
- * 
+ *
  * Tests for ACP-240 Section 5.4: X.509 and HMAC signature verification
- * 
+ *
  * Coverage:
  * - X.509 certificate generation and validation
  * - Full signature verification with chain validation

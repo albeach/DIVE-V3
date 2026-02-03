@@ -1,11 +1,11 @@
 /**
  * Multi-Instance Federation Dashboard
- * 
+ *
  * Phase 1: Federation Discovery & Health
- * 
+ *
  * Live status view of all federation instances (USA, FRA, GBR, DEU)
  * Shows coalition-wide visibility and health status from REAL API data.
- * 
+ *
  * Features:
  * - Real-time health checks every 10 seconds
  * - Instance latency monitoring
@@ -18,11 +18,11 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { 
-  Globe2, 
-  Activity, 
-  Users, 
-  Shield, 
+import {
+  Globe2,
+  Activity,
+  Users,
+  Shield,
   Clock,
   RefreshCw,
   AlertTriangle,
@@ -395,7 +395,7 @@ export default function FederationDashboard() {
                 <div className="text-xs opacity-75 space-y-1">
                   <div className="flex items-center gap-2">
                     <span className="w-8">App:</span>
-                    <a 
+                    <a
                       href={instance.endpoints.app}
                       target="_blank"
                       rel="noopener noreferrer"

@@ -1,8 +1,8 @@
 /**
  * DIVE V3 - Attribute Normalization Service
- * 
+ *
  * Normalizes attributes from external IdPs (Spain SAML, USA OIDC) to DIVE standard claims.
- * 
+ *
  * DIVE Standard Attributes:
  * - uniqueID: Unique user identifier
  * - clearance: UNCLASSIFIED | CONFIDENTIAL | SECRET | TOP_SECRET
@@ -199,7 +199,7 @@ export function normalizeUSAOIDCAttributes(
 /**
  * Generic attribute normalizer
  * Routes to IdP-specific normalizers based on identity provider alias
- * 
+ *
  * Phase 3: Extended with comprehensive multi-IdP support
  * - Spain SAML (test fixture)
  * - USA OIDC (test fixture)
@@ -259,7 +259,7 @@ export function normalizeExternalIdPAttributes(
 
 /**
  * German attribute normalization
- * 
+ *
  * German clearance levels (VSA):
  * - STRENG GEHEIM → TOP_SECRET
  * - GEHEIM / VS-GEHEIM → SECRET
@@ -286,15 +286,15 @@ function normalizeGermanAttributes(
 
     const normalized: Partial<NormalizedDIVEAttributes> = {};
 
-    normalized.uniqueID = 
-        getFirstValue(attributes.uniqueID) || 
+    normalized.uniqueID =
+        getFirstValue(attributes.uniqueID) ||
         getFirstValue(attributes.email) ||
         getFirstValue(attributes.preferred_username);
 
-    const clearance = 
-        getFirstValue(attributes.clearance) || 
+    const clearance =
+        getFirstValue(attributes.clearance) ||
         getFirstValue(attributes.sicherheitsstufe);
-        
+
     if (clearance) {
         const normalizedClearance = clearance.toUpperCase().trim();
         normalized.clearance = GERMAN_CLEARANCE_MAP[normalizedClearance] || 'UNCLASSIFIED';
@@ -316,7 +316,7 @@ function normalizeGermanAttributes(
 
 /**
  * UK attribute normalization
- * 
+ *
  * UK clearance levels (GPMS):
  * - TOP SECRET → TOP_SECRET
  * - SECRET → SECRET
@@ -337,8 +337,8 @@ function normalizeUKAttributes(
 
     const normalized: Partial<NormalizedDIVEAttributes> = {};
 
-    normalized.uniqueID = 
-        getFirstValue(attributes.uniqueID) || 
+    normalized.uniqueID =
+        getFirstValue(attributes.uniqueID) ||
         getFirstValue(attributes.email) ||
         getFirstValue(attributes.preferred_username);
 
@@ -364,14 +364,14 @@ function normalizeUKAttributes(
 
 /**
  * Industry IdP attribute normalization
- * 
+ *
  * Industry clearance levels:
  * - HIGHLY_SENSITIVE → TOP_SECRET (but will be capped by policy)
  * - SENSITIVE → SECRET
  * - CONFIDENTIAL → CONFIDENTIAL
  * - INTERNAL → RESTRICTED
  * - PUBLIC → UNCLASSIFIED
- * 
+ *
  * Note: Industry users are subject to clearance caps per tenant policy
  */
 function normalizeIndustryAttributes(
@@ -392,8 +392,8 @@ function normalizeIndustryAttributes(
 
     const normalized: Partial<NormalizedDIVEAttributes> = {};
 
-    normalized.uniqueID = 
-        getFirstValue(attributes.uniqueID) || 
+    normalized.uniqueID =
+        getFirstValue(attributes.uniqueID) ||
         getFirstValue(attributes.email) ||
         getFirstValue(attributes.preferred_username);
 
@@ -427,14 +427,14 @@ function normalizeIndustryAttributes(
 
 /**
  * French attribute normalization (IGI 1300 security classification)
- * 
+ *
  * French clearance levels (IGI 1300):
  * - TRES SECRET DEFENSE (TSD) → TOP_SECRET
- * - SECRET DEFENSE (SD) → SECRET  
+ * - SECRET DEFENSE (SD) → SECRET
  * - CONFIDENTIEL DEFENSE (CD) → CONFIDENTIAL
  * - DIFFUSION RESTREINTE (DR) → RESTRICTED
  * - NON PROTEGE (NP) → UNCLASSIFIED
- * 
+ *
  * Phase 3: Enhanced to handle all French clearance formats with/without accents
  */
 function normalizeFrenchAttributes(
@@ -448,26 +448,26 @@ function normalizeFrenchAttributes(
         'TRÈS_SECRET_DÉFENSE': 'TOP_SECRET',
         'TRÈS SECRET DÉFENSE': 'TOP_SECRET',
         'TSD': 'TOP_SECRET',
-        
+
         // SECRET DEFENSE variants
         'SECRET_DEFENSE': 'SECRET',
         'SECRET-DEFENSE': 'SECRET',
         'SECRET_DÉFENSE': 'SECRET',
         'SECRET DÉFENSE': 'SECRET',
         'SD': 'SECRET',
-        
+
         // CONFIDENTIEL DEFENSE variants
         'CONFIDENTIEL_DEFENSE': 'CONFIDENTIAL',
         'CONFIDENTIEL-DEFENSE': 'CONFIDENTIAL',
         'CONFIDENTIEL_DÉFENSE': 'CONFIDENTIAL',
         'CONFIDENTIEL DÉFENSE': 'CONFIDENTIAL',
         'CD': 'CONFIDENTIAL',
-        
+
         // DIFFUSION RESTREINTE variants (maps to RESTRICTED, but we use UNCLASSIFIED as fallback)
         'DIFFUSION_RESTREINTE': 'UNCLASSIFIED',
         'DIFFUSION-RESTREINTE': 'UNCLASSIFIED',
         'DR': 'UNCLASSIFIED',
-        
+
         // NON PROTEGE variants
         'NON_PROTEGE': 'UNCLASSIFIED',
         'NON-PROTEGE': 'UNCLASSIFIED',
@@ -479,22 +479,22 @@ function normalizeFrenchAttributes(
     const normalized: Partial<NormalizedDIVEAttributes> = {};
 
     // UniqueID: Try multiple French attribute names
-    normalized.uniqueID = 
-        getFirstValue(attributes.uid) || 
+    normalized.uniqueID =
+        getFirstValue(attributes.uid) ||
         getFirstValue(attributes.mail) ||
         getFirstValue(attributes.email) ||
         getFirstValue(attributes.identifiantUnique);
 
     // Clearance: Try multiple French attribute names and normalize
-    const clearance = 
+    const clearance =
         getFirstValue(attributes.niveauHabilitation) ||
         getFirstValue(attributes.niveauSecret) ||
         getFirstValue(attributes.clearance);
-        
+
     if (clearance) {
         const normalizedClearance = clearance.toUpperCase().trim();
         normalized.clearance = FRENCH_CLEARANCE_MAP[normalizedClearance] || 'UNCLASSIFIED';
-        
+
         logger.info('Normalized French clearance', {
             original: clearance,
             normalized: normalized.clearance,
@@ -502,33 +502,33 @@ function normalizeFrenchAttributes(
     }
 
     // Country: Always FRA for French IdP
-    normalized.countryOfAffiliation = 
+    normalized.countryOfAffiliation =
         getFirstValue(attributes.paysAffiliation) ||
         getFirstValue(attributes.pays) ||
         'FRA';
-    
+
     // Normalize country code
     if (normalized.countryOfAffiliation) {
         normalized.countryOfAffiliation = COUNTRY_CODE_MAP[normalized.countryOfAffiliation] || normalized.countryOfAffiliation;
     }
 
     // COI tags: Try multiple French attribute names
-    const coi = 
-        attributes.groupeInteret || 
+    const coi =
+        attributes.groupeInteret ||
         attributes.acpCOI ||
         attributes.communauteInteret;
-        
+
     if (coi) {
         normalized.acpCOI = Array.isArray(coi) ? coi : [coi];
     }
 
     // Organization
-    normalized.organization = 
+    normalized.organization =
         getFirstValue(attributes.organisation) ||
         getFirstValue(attributes.organization);
 
     // Rank
-    normalized.rank = 
+    normalized.rank =
         getFirstValue(attributes.grade) ||
         getFirstValue(attributes.rank);
 
@@ -542,7 +542,7 @@ function normalizeFrenchAttributes(
 
 /**
  * Canadian attribute normalization
- * 
+ *
  * Canadian clearance levels (PSCP):
  * - TOP SECRET → TOP_SECRET
  * - SECRET → SECRET
@@ -550,7 +550,7 @@ function normalizeFrenchAttributes(
  * - PROTECTED B → CONFIDENTIAL (Canadian designation)
  * - PROTECTED A → RESTRICTED
  * - UNCLASSIFIED → UNCLASSIFIED
- * 
+ *
  * Phase 3: Enhanced to handle Canadian-specific PROTECTED designations
  */
 function normalizeCanadianAttributes(
@@ -568,7 +568,7 @@ function normalizeCanadianAttributes(
         'C': 'CONFIDENTIAL',
         'UNCLASSIFIED': 'UNCLASSIFIED',
         'U': 'UNCLASSIFIED',
-        
+
         // Canadian PROTECTED designations
         'PROTECTED_C': 'SECRET',
         'PROTECTED C': 'SECRET',
@@ -581,8 +581,8 @@ function normalizeCanadianAttributes(
     const normalized: Partial<NormalizedDIVEAttributes> = {};
 
     // UniqueID: Try multiple attribute names
-    normalized.uniqueID = 
-        getFirstValue(attributes.uniqueID) || 
+    normalized.uniqueID =
+        getFirstValue(attributes.uniqueID) ||
         getFirstValue(attributes.email) ||
         getFirstValue(attributes.preferred_username) ||
         getFirstValue(attributes.sub);
@@ -592,13 +592,13 @@ function normalizeCanadianAttributes(
     if (clearance) {
         const normalizedClearance = clearance.toUpperCase().trim();
         const mappedClearance = CANADIAN_CLEARANCE_MAP[normalizedClearance];
-        
+
         if (mappedClearance) {
             normalized.clearance = mappedClearance;
         } else if (isValidClearance(clearance)) {
             normalized.clearance = clearance as NormalizedDIVEAttributes['clearance'];
         }
-        
+
         logger.info('Normalized Canadian clearance', {
             original: clearance,
             normalized: normalized.clearance,
@@ -606,11 +606,11 @@ function normalizeCanadianAttributes(
     }
 
     // Country: Always CAN for Canadian IdP, but allow override
-    normalized.countryOfAffiliation = 
+    normalized.countryOfAffiliation =
         getFirstValue(attributes.countryOfAffiliation) ||
         getFirstValue(attributes.country) ||
         'CAN';
-    
+
     // Normalize country code
     if (normalized.countryOfAffiliation) {
         normalized.countryOfAffiliation = COUNTRY_CODE_MAP[normalized.countryOfAffiliation] || normalized.countryOfAffiliation;
@@ -623,12 +623,12 @@ function normalizeCanadianAttributes(
     }
 
     // Organization
-    normalized.organization = 
+    normalized.organization =
         getFirstValue(attributes.organization) ||
         getFirstValue(attributes.organisation);
 
-    // Rank  
-    normalized.rank = 
+    // Rank
+    normalized.rank =
         getFirstValue(attributes.rank) ||
         getFirstValue(attributes.grade);
 

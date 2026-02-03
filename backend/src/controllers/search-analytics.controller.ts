@@ -1,9 +1,9 @@
 /**
  * Search Analytics Controller
- * 
+ *
  * Phase 2: Search & Discovery Enhancement
  * Track search queries, click-through rates, and zero-result searches
- * 
+ *
  * Features:
  * - Anonymized search query logging
  * - Click-through event tracking
@@ -162,7 +162,7 @@ export const trackSearchEventHandler = async (
   _next: NextFunction
 ): Promise<void> => {
   const requestId = req.headers['x-request-id'] as string;
-  
+
   try {
     const event: ISearchAnalyticsEvent = req.body;
     const instance = getInstanceFromRequest(req);
@@ -232,7 +232,7 @@ export const getSearchMetricsHandler = async (
   next: NextFunction
 ): Promise<void> => {
   const requestId = req.headers['x-request-id'] as string;
-  
+
   try {
     const { days = 7 } = req.query;
     const daysNum = Math.min(parseInt(days as string) || 7, 90);
@@ -354,12 +354,12 @@ export const getPopularSearchesHandler = async (
   next: NextFunction
 ): Promise<void> => {
   const requestId = req.headers['x-request-id'] as string;
-  
+
   try {
     const { limit = 10, days = 7 } = req.query;
     const limitNum = Math.min(parseInt(limit as string) || 10, 50);
     const daysNum = Math.min(parseInt(days as string) || 7, 30);
-    
+
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - daysNum);
 
@@ -398,8 +398,8 @@ export const getPopularSearchesHandler = async (
       avgResultCount: Math.round(search.avgResultCount || 0),
       avgLatencyMs: Math.round(search.avgLatencyMs || 0),
       lastSearched: search.lastSearched,
-      clickThroughRate: search.searchCount > 0 
-        ? ((clickMap.get(search._id) || 0) / search.searchCount) * 100 
+      clickThroughRate: search.searchCount > 0
+        ? ((clickMap.get(search._id) || 0) / search.searchCount) * 100
         : 0,
     }));
 
@@ -437,24 +437,24 @@ export const getZeroResultQueriesHandler = async (
   next: NextFunction
 ): Promise<void> => {
   const requestId = req.headers['x-request-id'] as string;
-  
+
   try {
     const { limit = 20, days = 7 } = req.query;
     const limitNum = Math.min(parseInt(limit as string) || 20, 100);
     const daysNum = Math.min(parseInt(days as string) || 7, 30);
-    
+
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - daysNum);
 
     const collection = await getAnalyticsCollection();
 
     const pipeline = [
-      { 
-        $match: { 
-          event: { $in: ['search', 'zero_results'] }, 
+      {
+        $match: {
+          event: { $in: ['search', 'zero_results'] },
           resultCount: 0,
           timestamp: { $gte: startDate },
-        } 
+        }
       },
       {
         $group: {
@@ -511,11 +511,11 @@ export const cleanupAnalyticsHandler = async (
   next: NextFunction
 ): Promise<void> => {
   const requestId = req.headers['x-request-id'] as string;
-  
+
   try {
     const { days = RETENTION_DAYS } = req.query;
     const daysNum = Math.max(parseInt(days as string) || RETENTION_DAYS, 7);
-    
+
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - daysNum);
 

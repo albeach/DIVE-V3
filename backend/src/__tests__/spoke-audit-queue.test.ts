@@ -66,7 +66,7 @@ describe('SpokeAuditQueueService', () => {
         it('should initialize with default config', async () => {
             const defaultService = new SpokeAuditQueueService();
             const defaultTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'audit-default-'));
-            
+
             await defaultService.initialize({ queuePath: defaultTempDir });
 
             expect(defaultService.getQueueSize()).toBe(0);
@@ -176,7 +176,7 @@ describe('SpokeAuditQueueService', () => {
             // Create service with small max size
             const smallService = new SpokeAuditQueueService();
             const smallTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'audit-small-'));
-            
+
             await smallService.initialize({
                 queuePath: smallTempDir,
                 maxQueueSize: 3,
@@ -210,7 +210,7 @@ describe('SpokeAuditQueueService', () => {
         it('should track dropped entries in metrics', async () => {
             const smallService = new SpokeAuditQueueService();
             const smallTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'audit-metrics-'));
-            
+
             await smallService.initialize({
                 queuePath: smallTempDir,
                 maxQueueSize: 2,
@@ -232,7 +232,7 @@ describe('SpokeAuditQueueService', () => {
         it('should report isFull correctly', async () => {
             const smallService = new SpokeAuditQueueService();
             const smallTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'audit-full-'));
-            
+
             await smallService.initialize({
                 queuePath: smallTempDir,
                 maxQueueSize: 2,
@@ -380,7 +380,7 @@ describe('SpokeAuditQueueService', () => {
 
         it('should track sync metrics', async () => {
             await service.enqueue(createTestEntry());
-            
+
             await service.syncToHub(async () => ({ success: true, synced: 1, failed: 0 }));
 
             const metrics = service.getMetrics();
@@ -398,7 +398,7 @@ describe('SpokeAuditQueueService', () => {
             // Use very short retry delays for testing
             const retryService = new SpokeAuditQueueService();
             const retryTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'audit-retry-'));
-            
+
             await retryService.initialize({
                 queuePath: retryTempDir,
                 maxRetries: 3,
@@ -431,7 +431,7 @@ describe('SpokeAuditQueueService', () => {
         it('should mark entry as failed after max retries', async () => {
             const failService = new SpokeAuditQueueService();
             const failTempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'audit-fail-'));
-            
+
             await failService.initialize({
                 queuePath: failTempDir,
                 maxRetries: 2,
@@ -448,7 +448,7 @@ describe('SpokeAuditQueueService', () => {
 
             // Fail first time
             await failService.syncToHub(async () => ({ success: false, synced: 0, failed: 1 }));
-            
+
             // Wait for retry delay
             await new Promise((r) => setTimeout(r, 15));
 

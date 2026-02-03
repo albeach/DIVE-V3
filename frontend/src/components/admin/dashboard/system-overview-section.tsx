@@ -8,6 +8,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useSession } from 'next-auth/react';
+import { AnimatedCounter, AnimatedPercentage } from '@/components/ui/animated-counter';
 
 interface ISystemStats {
     totalEvents: number;
@@ -117,7 +118,9 @@ export default function SystemOverviewSection({ dateRange, refreshTrigger }: Pro
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-blue-100 text-sm font-medium">Total Events</p>
-                            <p className="text-4xl font-bold mt-2">{stats?.totalEvents.toLocaleString() || 0}</p>
+                            <p className="text-4xl font-bold mt-2">
+                                <AnimatedCounter value={stats?.totalEvents || 0} className="text-white" />
+                            </p>
                             <p className="text-blue-100 text-xs mt-2">Last {dateRange}</p>
                         </div>
                         <div className="text-5xl opacity-20">📊</div>
@@ -129,8 +132,12 @@ export default function SystemOverviewSection({ dateRange, refreshTrigger }: Pro
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-green-100 text-sm font-medium">Success Rate</p>
-                            <p className="text-4xl font-bold mt-2">{successRate}%</p>
-                            <p className="text-green-100 text-xs mt-2">{stats?.successfulAccess.toLocaleString()} allowed</p>
+                            <p className="text-4xl font-bold mt-2">
+                                <AnimatedPercentage value={parseFloat(successRate)} className="text-white" />
+                            </p>
+                            <p className="text-green-100 text-xs mt-2">
+                                <AnimatedCounter value={stats?.successfulAccess || 0} className="text-green-100" /> allowed
+                            </p>
                         </div>
                         <div className="text-5xl opacity-20">✅</div>
                     </div>
@@ -141,7 +148,9 @@ export default function SystemOverviewSection({ dateRange, refreshTrigger }: Pro
                     <div className="flex items-center justify-between">
                         <div>
                             <p className="text-red-100 text-sm font-medium">Access Denied</p>
-                            <p className="text-4xl font-bold mt-2">{stats?.deniedAccess.toLocaleString() || 0}</p>
+                            <p className="text-4xl font-bold mt-2">
+                                <AnimatedCounter value={stats?.deniedAccess || 0} className="text-white" />
+                            </p>
                             <p className="text-red-100 text-xs mt-2">Security violations</p>
                         </div>
                         <div className="text-5xl opacity-20">🚫</div>

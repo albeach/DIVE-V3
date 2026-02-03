@@ -1,11 +1,11 @@
 /**
  * QUICK FIX: Set ACR=2 (AAL3) for admin-dive user
- * 
+ *
  * This script:
  * 1. Checks if user has WebAuthn credentials registered
  * 2. If yes, sets a user attribute that protocol mappers can read
  * 3. Forces token refresh by updating user
- * 
+ *
  * Usage: npm run quick-fix-acr -- --username admin-dive
  */
 
@@ -48,7 +48,7 @@ async function quickFixACR(username: string) {
   // Find user
   console.log(`[2/4] Searching for user: ${username}...`);
   const users = await kcAdminClient.users.find({ username, exact: true });
-  
+
   if (users.length === 0) {
     console.error(`❌ ERROR: User "${username}" not found in realm "${REALM}"`);
     process.exit(1);
@@ -60,8 +60,8 @@ async function quickFixACR(username: string) {
   // Check WebAuthn credentials
   console.log('[3/4] Checking WebAuthn credentials...');
   const credentials = await kcAdminClient.users.getCredentials({ id: user.id! });
-  const webauthnCredentials = credentials.filter((cred: any) => 
-    cred.type === 'webauthn' || 
+  const webauthnCredentials = credentials.filter((cred: any) =>
+    cred.type === 'webauthn' ||
     cred.type === 'webauthn-passwordless' ||
     cred.type?.toLowerCase().includes('fido') ||
     cred.type?.toLowerCase().includes('webauthn')
@@ -82,7 +82,7 @@ async function quickFixACR(username: string) {
   // Get current user attributes
   console.log('[4/4] Setting ACR=2 via user attribute...');
   const currentAttributes = user.attributes || {};
-  
+
   // Set ACR attribute to "2" (AAL3)
   // Protocol mappers can read this and set it in the token
   const updatedAttributes = {

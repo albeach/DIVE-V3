@@ -1,8 +1,8 @@
 /**
  * DIVE V3 - Failover Event Log
- * 
+ *
  * Timeline visualization of circuit breaker state transitions.
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -69,15 +69,15 @@ const TRIGGER_CONFIG: Record<string, { label: string; icon: typeof User }> = {
 function formatTimestamp(dateStr: string): { date: string; time: string } {
   const date = new Date(dateStr);
   return {
-    date: date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric', 
-      year: 'numeric' 
+    date: date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
     }),
-    time: date.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit', 
-      second: '2-digit' 
+    time: date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit'
     }),
   };
 }
@@ -92,11 +92,11 @@ function formatDuration(ms?: number): string {
   return `${hours}h ${minutes % 60}m`;
 }
 
-export function FailoverEventLog({ 
-  events, 
-  loading, 
+export function FailoverEventLog({
+  events,
+  loading,
   onRefresh,
-  onExport 
+  onExport
 }: FailoverEventLogProps) {
   const [expandedEvent, setExpandedEvent] = useState<string | null>(null);
   const [filter, setFilter] = useState<CircuitBreakerState | 'ALL'>('ALL');
@@ -112,8 +112,8 @@ export function FailoverEventLog({
     }
   };
 
-  const filteredEvents = filter === 'ALL' 
-    ? events 
+  const filteredEvents = filter === 'ALL'
+    ? events
     : events.filter(e => e.newState === filter || e.previousState === filter);
 
   if (loading) {

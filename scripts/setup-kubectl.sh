@@ -40,7 +40,7 @@ check_plugin() {
 # Install plugin
 install_plugin() {
     echo -e "${BLUE}📦 Installing gke-gcloud-auth-plugin...${NC}"
-    
+
     if [[ "$OSTYPE" == "darwin"* ]]; then
         # macOS - use gcloud components
         echo "Installing via gcloud components..."
@@ -53,7 +53,7 @@ install_plugin() {
         echo "Please install manually: https://cloud.google.com/kubernetes-engine/docs/how-to/cluster-access-for-kubectl#install_plugin"
         exit 1
     fi
-    
+
     if check_plugin; then
         echo -e "${GREEN}✅ Plugin installed successfully${NC}"
     else
@@ -65,18 +65,18 @@ install_plugin() {
 # Configure kubectl
 configure_kubectl() {
     echo -e "${BLUE}🔧 Configuring kubectl for cluster...${NC}"
-    
+
     gcloud container clusters get-credentials "${CLUSTER_NAME}" \
         --region "${REGION}" \
         --project "${PROJECT_ID}"
-    
+
     echo -e "${GREEN}✅ kubectl configured${NC}"
 }
 
 # Verify access
 verify_access() {
     echo -e "${BLUE}🔍 Verifying cluster access...${NC}"
-    
+
     if kubectl cluster-info &> /dev/null; then
         echo -e "${GREEN}✅ Successfully connected to cluster${NC}"
         echo ""
@@ -92,20 +92,20 @@ verify_access() {
 # Main execution
 main() {
     print_header
-    
+
     echo "Project: ${PROJECT_ID}"
     echo "Cluster: ${CLUSTER_NAME}"
     echo "Region: ${REGION}"
     echo ""
-    
+
     # Check plugin
     if ! check_plugin; then
         install_plugin
     fi
-    
+
     # Configure kubectl
     configure_kubectl
-    
+
     # Verify
     if verify_access; then
         echo ""

@@ -1,20 +1,20 @@
 /**
  * Mock OPA Server for E2E Testing
- * 
+ *
  * BEST PRACTICE: Mock OPA HTTP endpoint for E2E tests
- * 
+ *
  * This provides a realistic OPA mock that:
  * - Intercepts HTTP requests to OPA (nock)
  * - Returns intelligent ALLOW/DENY decisions
  * - Based on actual clearance/releasability logic
  * - Runs automatically as part of test infrastructure
- * 
+ *
  * Usage in E2E tests:
  * ```typescript
  * beforeAll(async () => {
  *   await mockOPAServer();
  * });
- * 
+ *
  * afterAll(() => {
  *   cleanupOPAMock();
  * });
@@ -27,7 +27,7 @@ const OPA_URL = process.env.OPA_URL || 'http://localhost:8181';
 
 /**
  * Mock OPA server with intelligent decision logic
- * 
+ *
  * Returns ALLOW/DENY based on actual ABAC rules:
  * - Clearance level comparison
  * - Releasability check
@@ -36,11 +36,11 @@ const OPA_URL = process.env.OPA_URL || 'http://localhost:8181';
  */
 export function mockOPAServer(): void {
     const opaUrl = new URL(OPA_URL);
-    
+
     // Mock BOTH endpoints (different services use different paths)
     // /v1/data/dive/authorization - Used by authzMiddleware, policy.service
     // /v1/data/dive/authorization/decision - Alternative endpoint
-    
+
     const mockHandler = (_uri: string, requestBody: any) => {
         const input = requestBody.input;
 
@@ -57,12 +57,12 @@ export function mockOPAServer(): void {
             }
         };
     };
-    
+
     nock(opaUrl.origin)
         .persist()
         .post('/v1/data/dive/authorization')
         .reply(200, mockHandler);
-    
+
     nock(opaUrl.origin)
         .persist()
         .post('/v1/data/dive/authorization/decision')
@@ -114,7 +114,7 @@ const CLEARANCE_LEVELS: Record<string, number> = {
 
 /**
  * Evaluate ABAC decision (simplified OPA logic for testing)
- * 
+ *
  * This implements the core ABAC rules:
  * 1. User must be authenticated
  * 2. User clearance >= resource classification
@@ -124,7 +124,7 @@ const CLEARANCE_LEVELS: Record<string, number> = {
 function evaluateABAC(input: any): any {
     const subject = input.subject;
     const resource = input.resource;
-    
+
     // Check 1: Authentication
     if (!subject.authenticated) {
         return {
@@ -135,11 +135,11 @@ function evaluateABAC(input: any): any {
             }
         };
     }
-    
+
     // Check 2: Clearance level
     const userClearanceLevel = CLEARANCE_LEVELS[subject.clearance] ?? -1;
     const resourceClassLevel = CLEARANCE_LEVELS[resource.classification] ?? 999;
-    
+
     if (userClearanceLevel < resourceClassLevel) {
         return {
             allow: false,
@@ -151,7 +151,7 @@ function evaluateABAC(input: any): any {
             }
         };
     }
-    
+
     // Check 3: Releasability
     if (!resource.releasabilityTo || resource.releasabilityTo.length === 0) {
         return {
@@ -164,7 +164,7 @@ function evaluateABAC(input: any): any {
             }
         };
     }
-    
+
     if (!resource.releasabilityTo.includes(subject.countryOfAffiliation)) {
         return {
             allow: false,
@@ -176,12 +176,12 @@ function evaluateABAC(input: any): any {
             }
         };
     }
-    
+
     // Check 4: COI (if resource has COI requirements)
     if (resource.COI && resource.COI.length > 0) {
         const userCOI = subject.acpCOI || [];
         const hasIntersection = resource.COI.some((coi: string) => userCOI.includes(coi));
-        
+
         if (!hasIntersection) {
             return {
                 allow: false,
@@ -194,10 +194,10 @@ function evaluateABAC(input: any): any {
             };
         }
     }
-    
+
     // All checks passed - ALLOW
     const obligations: any[] = [];
-    
+
     // Add KAS obligation if resource is encrypted
     if (resource.encrypted && resource.ztdf?.payloadHash) {
         obligations.push({
@@ -205,7 +205,7 @@ function evaluateABAC(input: any): any {
             resourceId: resource.resourceId
         });
     }
-    
+
     return {
         allow: true,
         reason: 'All conditions satisfied',
@@ -221,21 +221,21 @@ function evaluateABAC(input: any): any {
 
 /**
  * Mock OPA server with custom decision logic
- * 
+ *
  * @param decisionFn Custom function to return decisions
  */
 export function mockOPAServerWithCustomLogic(
     decisionFn: (input: any) => any
 ): void {
     const opaUrl = new URL(OPA_URL);
-    
+
     nock(opaUrl.origin)
         .persist()
         .post('/v1/data/dive/authorization/decision')
         .reply(200, (_uri, requestBody: any) => {
             return { result: decisionFn(requestBody.input) };
         });
-    
+
     console.log(`✅ Mocked OPA server with custom logic: ${OPA_URL}`);
 }
 

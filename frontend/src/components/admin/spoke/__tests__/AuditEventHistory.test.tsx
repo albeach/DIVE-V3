@@ -1,8 +1,8 @@
 /**
  * DIVE V3 - AuditEventHistory Unit Tests
- * 
+ *
  * Tests for the AuditEventHistory component that displays sync event timeline.
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -345,7 +345,7 @@ describe('AuditEventHistory', () => {
 
       // Resolve the promise
       resolveLoadMore!();
-      
+
       await waitFor(() => {
         expect(screen.queryByText('Loading...')).not.toBeInTheDocument();
       });

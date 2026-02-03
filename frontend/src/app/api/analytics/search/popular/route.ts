@@ -1,6 +1,6 @@
 /**
  * Popular Searches API Route
- * 
+ *
  * Proxy for popular searches endpoint
  * Returns most popular search queries for autocomplete/suggestions
  */

@@ -256,7 +256,7 @@ export default function EvaluateTab() {
 
   const handleCopyInputJSON = () => {
     const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-    
+
     const unifiedInput: IUnifiedInput = {
       subject: {
         uniqueID,
@@ -299,7 +299,7 @@ export default function EvaluateTab() {
 
     try {
       const requestId = `req-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      
+
       const unifiedInput: IUnifiedInput = {
         subject: {
           uniqueID,
@@ -438,7 +438,7 @@ export default function EvaluateTab() {
         {/* Subject */}
         <div className="space-y-4 p-4 border border-blue-200 rounded-lg bg-blue-50">
           <h3 className="text-lg font-semibold text-blue-900">👤 Subject</h3>
-          
+
           <div>
             <label htmlFor="subject-uniqueID" className="block text-sm font-medium text-gray-700 mb-1">Unique ID *</label>
             <input
@@ -525,7 +525,7 @@ export default function EvaluateTab() {
         {/* Resource */}
         <div className="space-y-4 p-4 border border-green-200 rounded-lg bg-green-50">
           <h3 className="text-lg font-semibold text-green-900">📄 Resource</h3>
-          
+
           <div>
             <label htmlFor="resource-id" className="block text-sm font-medium text-gray-700 mb-1">Resource ID *</label>
             <input
@@ -631,7 +631,7 @@ export default function EvaluateTab() {
 
           <div className="p-4 border border-amber-200 rounded-lg bg-amber-50">
             <h3 className="text-lg font-semibold text-amber-900 mb-4">🌐 Context</h3>
-            
+
             <div className="space-y-4">
               <div>
                 <label htmlFor="context-current-time" className="block text-sm font-medium text-gray-700 mb-1">Current Time *</label>

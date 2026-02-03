@@ -15,7 +15,7 @@ export default async function NotificationsPage() {
   }
 
   return (
-    <PageLayout 
+    <PageLayout
       user={session.user}
       breadcrumbs={[
         { label: 'Dashboard', href: '/dashboard' },

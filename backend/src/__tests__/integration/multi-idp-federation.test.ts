@@ -1,14 +1,14 @@
 /**
  * DIVE V3 - Multi-IdP Federation Integration Tests
- * 
+ *
  * Comprehensive test suite for Phase 3 Multi-IdP support:
  * - France SAML attribute normalization
- * - Canada OIDC attribute normalization  
+ * - Canada OIDC attribute normalization
  * - Germany OIDC attribute normalization
  * - Industry IdP with enrichment and clearance caps
  * - Cross-IdP attribute consistency
  * - Token introspection for federated tokens
- * 
+ *
  * Test Coverage Target: 95%+
  */
 
@@ -18,10 +18,10 @@ import {
     enrichAttributes,
     NormalizedDIVEAttributes,
 } from '../../services/attribute-normalization.service';
-import { 
-    normalizeClearance, 
+import {
+    normalizeClearance,
     StandardClearance,
-    getClearanceLevel 
+    getClearanceLevel
 } from '../../services/clearance-normalization.service';
 
 // Mock logger
@@ -169,7 +169,7 @@ describe('France SAML IdP Integration', () => {
 });
 
 // ============================================================================
-// CANADA OIDC IdP TESTS  
+// CANADA OIDC IdP TESTS
 // ============================================================================
 
 describe('Canada OIDC IdP Integration', () => {
@@ -355,7 +355,7 @@ describe('Industry IdP Integration', () => {
             const industryMaxUSA = StandardClearance.SECRET;
             const clearanceLevel = getClearanceLevel(industryMaxUSA);
             const topSecretLevel = getClearanceLevel(StandardClearance.TOP_SECRET);
-            
+
             expect(clearanceLevel).toBeLessThan(topSecretLevel);
             expect(industryMaxUSA).toBe('SECRET');
         });
@@ -365,7 +365,7 @@ describe('Industry IdP Integration', () => {
             const industryMaxFRA = StandardClearance.CONFIDENTIAL;
             const clearanceLevel = getClearanceLevel(industryMaxFRA);
             const secretLevel = getClearanceLevel(StandardClearance.SECRET);
-            
+
             expect(clearanceLevel).toBeLessThan(secretLevel);
             expect(industryMaxFRA).toBe('CONFIDENTIAL');
         });
@@ -454,7 +454,7 @@ describe('Cross-IdP Attribute Consistency', () => {
     describe('Country Code Normalization', () => {
         test('should normalize all country codes to ISO 3166-1 alpha-3', () => {
             const countryCodes = ['USA', 'FRA', 'CAN', 'GBR', 'DEU'];
-            
+
             countryCodes.forEach(code => {
                 expect(code).toMatch(/^[A-Z]{3}$/);
             });
@@ -599,18 +599,18 @@ describe('Edge Cases and Error Handling', () => {
 describe('Performance', () => {
     test('should normalize 100 clearances in under 50ms', () => {
         const start = Date.now();
-        
+
         for (let i = 0; i < 100; i++) {
             normalizeClearance('SECRET_DEFENSE', 'FRA');
         }
-        
+
         const duration = Date.now() - start;
         expect(duration).toBeLessThan(50);
     });
 
     test('should enrich 50 attribute sets in under 100ms', () => {
         const start = Date.now();
-        
+
         for (let i = 0; i < 50; i++) {
             normalizeExternalIdPAttributes('france-idp', {
                 uid: `user${i}@defense.gouv.fr`,
@@ -618,7 +618,7 @@ describe('Performance', () => {
                 paysAffiliation: 'FRA',
             });
         }
-        
+
         const duration = Date.now() - start;
         expect(duration).toBeLessThan(100);
     });

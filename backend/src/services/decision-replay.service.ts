@@ -11,7 +11,7 @@ const OPA_URL = process.env.OPA_URL || 'http://localhost:8181';
 
 /**
  * Decision Replay Service
- * 
+ *
  * Provides detailed OPA policy evaluation for UI visualization.
  * Breaks down authorization decision into step-by-step rule evaluation.
  */

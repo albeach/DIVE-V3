@@ -1,9 +1,9 @@
 /**
  * useAbortController Hook
- * 
+ *
  * Phase 1: Performance Foundation
  * Request cancellation utilities for API calls
- * 
+ *
  * Features:
  * - Automatic cleanup on unmount
  * - Request deduplication
@@ -67,17 +67,17 @@ export function useAbortController({
   const getSignal = useCallback((_requestId?: string): AbortSignal => {
     // Cancel any existing request
     cleanup();
-    
+
     // Create new controller
     controllerRef.current = new AbortController();
-    
+
     // Set timeout if specified
     if (timeout > 0) {
       timeoutRef.current = setTimeout(() => {
         controllerRef.current?.abort('Request timeout');
       }, timeout);
     }
-    
+
     return controllerRef.current.signal;
   }, [cleanup, timeout]);
 
@@ -159,11 +159,11 @@ export function useAbortControllers({
   const getSignal = useCallback((requestId: string = 'default'): AbortSignal => {
     // Cancel any existing request with same ID
     cleanupOne(requestId);
-    
+
     // Create new controller
     const controller = new AbortController();
     controllersRef.current.set(requestId, controller);
-    
+
     // Set timeout if specified
     if (timeout > 0) {
       const timeoutId = setTimeout(() => {
@@ -173,7 +173,7 @@ export function useAbortControllers({
       }, timeout);
       timeoutsRef.current.set(requestId, timeoutId);
     }
-    
+
     return controller.signal;
   }, [cleanupOne, timeout]);
 
@@ -244,7 +244,7 @@ export function useDebouncedFetch<T>({
   const [data, setData] = useState<T | null>(initialData);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
-  
+
   const abortControllerRef = useRef<AbortController | null>(null);
   const debounceTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const requestTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -271,28 +271,28 @@ export function useDebouncedFetch<T>({
   const fetchFn = useCallback((url: string, options?: RequestInit) => {
     cleanup();
     setError(null);
-    
+
     debounceTimeoutRef.current = setTimeout(async () => {
       setIsLoading(true);
       abortControllerRef.current = new AbortController();
-      
+
       // Set request timeout
       if (timeout > 0) {
         requestTimeoutRef.current = setTimeout(() => {
           abortControllerRef.current?.abort('Request timeout');
         }, timeout);
       }
-      
+
       try {
         const response = await fetch(url, {
           ...options,
           signal: abortControllerRef.current.signal,
         });
-        
+
         if (!response.ok) {
           throw new Error(`HTTP ${response.status}`);
         }
-        
+
         const result = await response.json();
         setData(result);
         setError(null);

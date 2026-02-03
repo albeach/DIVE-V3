@@ -63,8 +63,8 @@ export function Breadcrumbs({ items, className = '' }: BreadcrumbsProps) {
       {/* Home icon */}
       <Link
         href="/dashboard"
-        className="flex items-center text-gray-500 hover:text-[#4497ac] dark:text-gray-400
-                   dark:hover:text-[#4497ac] transition-colors"
+        className={`flex items-center text-gray-500 hover:text-[#4497ac] dark:text-gray-400
+                   dark:hover:text-[#4497ac] transition-colors`}
         aria-label="Home"
       >
         <Home className="h-4 w-4" />
@@ -84,8 +84,8 @@ export function Breadcrumbs({ items, className = '' }: BreadcrumbsProps) {
             {item.href && !isLast ? (
               <Link
                 href={item.href}
-                className="flex items-center gap-2 text-gray-600 hover:text-[#4497ac]
-                           dark:text-gray-300 dark:hover:text-[#4497ac] transition-colors"
+                className={`flex items-center gap-2 text-gray-600 hover:text-[#4497ac]
+                           dark:text-gray-300 dark:hover:text-[#4497ac] transition-colors`}
               >
                 {item.icon && <span className="flex-shrink-0">{item.icon}</span>}
                 <span className="truncate max-w-[200px] sm:max-w-none">{displayLabel}</span>

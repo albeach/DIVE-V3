@@ -1,6 +1,6 @@
 /**
  * Multi-KAS Support Tests
- * 
+ *
  * Tests for ACP-240 Section 5.3: Multiple KAS per resource
  */
 

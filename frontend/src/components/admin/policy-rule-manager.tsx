@@ -65,7 +65,7 @@ export function PolicyRuleManager({
     // Filter rules based on search
     const filteredCategories = useMemo(() => {
         if (!searchQuery.trim()) return categories;
-        
+
         const query = searchQuery.toLowerCase();
         return categories.map(category => ({
             ...category,
@@ -236,7 +236,7 @@ export function PolicyRuleManager({
                     {filteredCategories.map((category, categoryIndex) => {
                         const isExpanded = expandedCategories.has(category.name);
                         const enabledInCategory = category.rules.filter(r => enabledRules.has(r.name)).length;
-                        
+
                         return (
                             <motion.div
                                 key={category.name}
@@ -299,7 +299,7 @@ export function PolicyRuleManager({
                                                 {category.rules.map((rule, ruleIndex) => {
                                                     const isEnabled = enabledRules.has(rule.name);
                                                     const isToggling = togglingRules.has(rule.name);
-                                                    
+
                                                     return (
                                                         <RuleCard
                                                             key={rule.name}
@@ -535,7 +535,7 @@ function RuleCard({ rule, enabled, toggling, onToggle, categoryColor, index }: I
             {enabled && (
                 <div className={`absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r ${categoryColor}`} />
             )}
-            
+
             <div className="p-4">
                 <div className="flex items-center justify-between gap-4">
                     <div className="flex-1 min-w-0">
@@ -585,7 +585,7 @@ function RuleCard({ rule, enabled, toggling, onToggle, categoryColor, index }: I
                             Line {rule.lineNumber}
                         </div>
                     </div>
-                    
+
                     {/* Toggle Switch */}
                     <div className="flex-shrink-0">
                         <button

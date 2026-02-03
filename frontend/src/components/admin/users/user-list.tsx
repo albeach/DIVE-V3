@@ -39,6 +39,7 @@ import { adminToast } from '@/lib/admin-toast';
 import { exportUsers } from '@/lib/export-utils';
 import type { IAdminUser } from '@/types/admin.types';
 import { auditActions } from '@/lib/admin-audit';
+import { VirtualList } from '@/components/ui/virtual-list';
 
 // ============================================
 // Types
@@ -423,139 +424,118 @@ export default function UserList() {
 
       {/* Users Table */}
       <div className="bg-white rounded-xl shadow-lg border border-gray-200 overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gradient-to-r from-gray-50 to-slate-50">
-              <tr>
-                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  User
-                </th>
-                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Clearance
-                </th>
-                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Country
-                </th>
-                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Status
-                </th>
-                <th scope="col" className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">
-                  Roles
-                </th>
-                <th scope="col" className="relative px-6 py-4">
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-100">
-              {loading ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center">
-                    <div className="flex justify-center">
-                      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
-                    </div>
-                    <p className="mt-3 text-sm text-gray-500">Loading users...</p>
-                  </td>
-                </tr>
-              ) : users.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="px-6 py-12 text-center">
-                    <UserIcon className="mx-auto h-12 w-12 text-gray-300" />
-                    <p className="mt-2 text-gray-500">No users found</p>
-                  </td>
-                </tr>
-              ) : (
-                users.map((user) => (
-                  <motion.tr
-                    key={user.id}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    className="hover:bg-slate-50 transition-colors"
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex items-center">
-                        <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-md">
-                          {user.username.substring(0, 2).toUpperCase()}
-                        </div>
-                        <div className="ml-4">
-                          <div className="text-sm font-medium text-gray-900">
-                            {user.firstName} {user.lastName}
-                          </div>
-                          <div className="text-sm text-gray-500 flex items-center gap-1">
-                            <Mail className="h-3 w-3" />
-                            {user.email || 'No email'}
-                          </div>
-                          <div className="text-xs text-gray-400">@{user.username}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold border ${getClearanceBadgeColor(user.clearance || 'UNCLASSIFIED')}`}>
-                        <Shield className="h-3 w-3 mr-1" />
-                        {user.clearance || 'UNCLASSIFIED'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1 text-sm text-gray-700">
-                        <Globe className="h-4 w-4 text-gray-400" />
-                        {user.countryOfAffiliation || 'N/A'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                        user.enabled
-                          ? 'bg-green-100 text-green-800'
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {user.enabled ? <CheckCircle className="h-3 w-3 mr-1" /> : <XCircle className="h-3 w-3 mr-1" />}
-                        {user.enabled ? 'Active' : 'Disabled'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="flex flex-wrap gap-1">
-                        {(user.realmRoles || []).slice(0, 2).map(role => (
-                          <span key={role} className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs">
-                            {role}
-                          </span>
-                        ))}
-                        {(user.realmRoles?.length || 0) > 2 && (
-                          <span className="px-2 py-0.5 bg-slate-200 text-slate-600 rounded text-xs">
-                            +{(user.realmRoles?.length || 0) - 2}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => openEditModal(user)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                          title="Edit User"
-                        >
-                          <Edit2 className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => { setSelectedUser(user); setShowPasswordModal(true); }}
-                          className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
-                          title="Reset Password"
-                        >
-                          <Key className="h-4 w-4" />
-                        </button>
-                        <button
-                          onClick={() => { setSelectedUser(user); setShowDeleteConfirm(true); }}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                          title="Delete User"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </td>
-                  </motion.tr>
-                ))
-              )}
-            </tbody>
-          </table>
+        {/* Header Row */}
+        <div className="bg-gradient-to-r from-gray-50 to-slate-50 border-b border-gray-200">
+          <div className="grid grid-cols-[minmax(250px,2fr)_120px_100px_100px_150px_120px] gap-0">
+            <div className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">User</div>
+            <div className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Clearance</div>
+            <div className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Country</div>
+            <div className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Status</div>
+            <div className="px-6 py-4 text-left text-xs font-semibold text-gray-600 uppercase tracking-wider">Roles</div>
+            <div className="px-6 py-4"><span className="sr-only">Actions</span></div>
+          </div>
         </div>
+
+        {/* Virtualized Body */}
+        {loading ? (
+          <div className="px-6 py-12 text-center">
+            <div className="flex justify-center">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
+            </div>
+            <p className="mt-3 text-sm text-gray-500">Loading users...</p>
+          </div>
+        ) : (
+          <VirtualList<IAdminUser>
+            items={users}
+            estimateSize={72}
+            overscan={5}
+            className="max-h-[600px]"
+            getItemKey={(index) => users[index].id}
+            emptyMessage="No users found"
+            renderItem={(user) => (
+              <div className="grid grid-cols-[minmax(250px,2fr)_120px_100px_100px_150px_120px] gap-0 hover:bg-slate-50 transition-colors border-b border-gray-100">
+                <div className="px-6 py-4 whitespace-nowrap">
+                  <div className="flex items-center">
+                    <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-sm shadow-md flex-shrink-0">
+                      {user.username.substring(0, 2).toUpperCase()}
+                    </div>
+                    <div className="ml-4 min-w-0">
+                      <div className="text-sm font-medium text-gray-900 truncate">
+                        {user.firstName} {user.lastName}
+                      </div>
+                      <div className="text-sm text-gray-500 flex items-center gap-1">
+                        <Mail className="h-3 w-3 flex-shrink-0" />
+                        <span className="truncate">{user.email || 'No email'}</span>
+                      </div>
+                      <div className="text-xs text-gray-400">@{user.username}</div>
+                    </div>
+                  </div>
+                </div>
+                <div className="px-6 py-4 whitespace-nowrap flex items-center">
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-semibold border ${getClearanceBadgeColor(user.clearance || 'UNCLASSIFIED')}`}>
+                    <Shield className="h-3 w-3 mr-1" />
+                    {user.clearance || 'UNCLASSIFIED'}
+                  </span>
+                </div>
+                <div className="px-6 py-4 whitespace-nowrap flex items-center">
+                  <span className="inline-flex items-center gap-1 text-sm text-gray-700">
+                    <Globe className="h-4 w-4 text-gray-400" />
+                    {user.countryOfAffiliation || 'N/A'}
+                  </span>
+                </div>
+                <div className="px-6 py-4 whitespace-nowrap flex items-center">
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
+                    user.enabled
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-red-100 text-red-800'
+                  }`}>
+                    {user.enabled ? <CheckCircle className="h-3 w-3 mr-1" /> : <XCircle className="h-3 w-3 mr-1" />}
+                    {user.enabled ? 'Active' : 'Disabled'}
+                  </span>
+                </div>
+                <div className="px-6 py-4 whitespace-nowrap flex items-center">
+                  <div className="flex flex-wrap gap-1">
+                    {(user.realmRoles || []).slice(0, 2).map(role => (
+                      <span key={role} className="px-2 py-0.5 bg-slate-100 text-slate-700 rounded text-xs">
+                        {role}
+                      </span>
+                    ))}
+                    {(user.realmRoles?.length || 0) > 2 && (
+                      <span className="px-2 py-0.5 bg-slate-200 text-slate-600 rounded text-xs">
+                        +{(user.realmRoles?.length || 0) - 2}
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div className="px-6 py-4 whitespace-nowrap flex items-center justify-end">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => openEditModal(user)}
+                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                      title="Edit User"
+                    >
+                      <Edit2 className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => { setSelectedUser(user); setShowPasswordModal(true); }}
+                      className="p-2 text-amber-600 hover:bg-amber-50 rounded-lg transition-colors"
+                      title="Reset Password"
+                    >
+                      <Key className="h-4 w-4" />
+                    </button>
+                    <button
+                      onClick={() => { setSelectedUser(user); setShowDeleteConfirm(true); }}
+                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                      title="Delete User"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+          />
+        )}
       </div>
 
       {/* Create/Edit User Modal */}

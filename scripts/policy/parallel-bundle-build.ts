@@ -2,24 +2,24 @@
 /**
  * DIVE V3 - Parallel Tenant Policy Bundle Builder
  * Phase 9: Performance Optimization & Scalability
- * 
+ *
  * Optimized bundle builder with:
  * - Parallel bundle compilation across tenants
  * - Worker thread pool for CPU-intensive tasks
  * - Incremental build support
  * - Build caching for unchanged policies
  * - Performance profiling integration
- * 
+ *
  * Targets (Phase 9):
  * - Total build time for 4 tenants: <300ms (from ~480ms)
  * - Per-tenant build time: <100ms
  * - Memory efficiency: <200MB peak during build
- * 
+ *
  * Usage:
  *   npx ts-node --esm scripts/policy/parallel-bundle-build.ts build --all
  *   npx ts-node --esm scripts/policy/parallel-bundle-build.ts build --tenant USA --parallel
  *   npx ts-node --esm scripts/policy/parallel-bundle-build.ts benchmark
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */
@@ -227,7 +227,7 @@ function saveCacheEntry(tenant: string, entry: CacheEntry): void {
 
 function getSourceFiles(config: BundleConfig, tenant: TenantConfig): string[] {
   const files: string[] = [];
-  
+
   // Base policies
   for (const policyPath of config.basePolicies) {
     const srcPath = path.join(PROJECT_ROOT, policyPath);
@@ -235,7 +235,7 @@ function getSourceFiles(config: BundleConfig, tenant: TenantConfig): string[] {
       files.push(srcPath);
     }
   }
-  
+
   // Org policies
   for (const policyPath of config.orgPolicies) {
     const srcPath = path.join(PROJECT_ROOT, policyPath);
@@ -243,7 +243,7 @@ function getSourceFiles(config: BundleConfig, tenant: TenantConfig): string[] {
       files.push(srcPath);
     }
   }
-  
+
   // Entrypoints
   for (const policyPath of config.sharedEntrypoints) {
     const srcPath = path.join(PROJECT_ROOT, policyPath);
@@ -251,7 +251,7 @@ function getSourceFiles(config: BundleConfig, tenant: TenantConfig): string[] {
       files.push(srcPath);
     }
   }
-  
+
   // Tenant-specific files
   const tenantDir = path.join(POLICIES_DIR, 'tenant', tenant.id.toLowerCase());
   if (fs.existsSync(tenantDir)) {
@@ -262,7 +262,7 @@ function getSourceFiles(config: BundleConfig, tenant: TenantConfig): string[] {
       }
     }
   }
-  
+
   return files;
 }
 
@@ -378,14 +378,14 @@ function stageDataOptimized(
   if (fs.existsSync(tenantDataPath)) {
     const destPath = path.join(stagingDir, 'data.json');
     const tenantData = JSON.parse(fs.readFileSync(tenantDataPath, 'utf-8'));
-    
+
     tenantData._isolation = {
       tenant_id: tenant.id,
       opal_scope: tenant.opalScope,
       namespace_prefix: config.isolation.namespacePrefix,
       cross_tenant_deny: config.isolation.crossTenantDeny,
     };
-    
+
     fs.writeFileSync(destPath, JSON.stringify(tenantData, null, 2));
     files.push('data.json');
   }
@@ -415,8 +415,8 @@ async function buildTenantBundle(
       const sourceFiles = getSourceFiles(config, tenant);
       const currentHash = calculateSourceHash(sourceFiles);
       const cacheEntry = loadCacheEntry(tenant.id);
-      
-      if (cacheEntry && 
+
+      if (cacheEntry &&
           cacheEntry.sourceHash === currentHash &&
           fs.existsSync(bundlePath)) {
         const existingChecksum = calculateChecksum(bundlePath);
@@ -454,7 +454,7 @@ async function buildTenantBundle(
     // Build with OPA (timed)
     const compilationStart = Date.now();
     const revision = generateRevision(config.bundleOptions.revisionFormat);
-    
+
     const buildCmd = [
       OPA_BIN,
       'build',
@@ -550,7 +550,7 @@ async function buildTenantsParallel(
   parallelConfig: ParallelBuildConfig
 ): Promise<BuildResult[]> {
   const maxWorkers = Math.min(parallelConfig.maxWorkers, tenants.length, os.cpus().length);
-  
+
   console.log(`\n🚀 Building ${tenants.length} bundles in parallel (workers: ${maxWorkers})...\n`);
 
   // Split tenants into batches based on worker count
@@ -566,7 +566,7 @@ async function buildTenantsParallel(
     const batchPromises = batch.map(tenant =>
       buildTenantBundle(config, tenant, outputDir, parallelConfig)
     );
-    
+
     const batchResults = await Promise.all(batchPromises);
     allResults.push(...batchResults);
   }
@@ -600,13 +600,13 @@ async function buildTenantsSequential(
 
 async function runBenchmark(config: BundleConfig, outputDir: string): Promise<BenchmarkResult> {
   const tenants = config.tenants.filter(t => t.enabled);
-  
+
   console.log('═'.repeat(60));
   console.log('BUNDLE BUILD BENCHMARK');
   console.log('═'.repeat(60));
   console.log(`\nTenants: ${tenants.map(t => t.id).join(', ')}`);
   console.log(`CPU Cores: ${os.cpus().length}`);
-  
+
   // Clear cache for fair comparison
   if (fs.existsSync(CACHE_DIR)) {
     fs.rmSync(CACHE_DIR, { recursive: true });
@@ -656,7 +656,7 @@ async function runBenchmark(config: BundleConfig, outputDir: string): Promise<Be
   console.log(`  Parallel Time:   ${parallelTimeMs}ms`);
   console.log(`  Speedup:         ${speedup.toFixed(2)}x`);
   console.log(`  Memory Peak:     ${memoryPeakMB.toFixed(1)}MB`);
-  
+
   console.log('\n  Per-Tenant Build Times:');
   for (const [tenant, time] of Object.entries(perTenantTimes)) {
     console.log(`    ${tenant}: ${time}ms`);
@@ -668,11 +668,11 @@ async function runBenchmark(config: BundleConfig, outputDir: string): Promise<Be
   console.log('═'.repeat(60));
   const targetMet = parallelTimeMs < 300;
   console.log(`  ${targetMet ? '✅' : '❌'} Total build time: ${parallelTimeMs}ms (target: <300ms)`);
-  
+
   const avgPerTenant = parallelTimeMs / tenants.length;
   const perTenantMet = avgPerTenant < 100;
   console.log(`  ${perTenantMet ? '✅' : '❌'} Avg per-tenant: ${avgPerTenant.toFixed(0)}ms (target: <100ms)`);
-  
+
   const memoryMet = memoryPeakMB < 200;
   console.log(`  ${memoryMet ? '✅' : '❌'} Memory peak: ${memoryPeakMB.toFixed(1)}MB (target: <200MB)`);
 

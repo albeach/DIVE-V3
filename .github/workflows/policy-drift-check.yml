@@ -29,11 +29,11 @@ jobs:
     name: Capture Running Policy State
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    
+
     outputs:
       has_drift: ${{ steps.drift-check.outputs.has_drift }}
       drift_summary: ${{ steps.drift-check.outputs.drift_summary }}
-      
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -61,22 +61,22 @@ jobs:
         id: source-state
         run: |
           echo "📸 Capturing source policy state..."
-          
+
           # Count policy files
           POLICY_COUNT=$(find policies -name "*.rego" -type f | wc -l | tr -d ' ')
           echo "policy_count=${POLICY_COUNT}" >> $GITHUB_OUTPUT
-          
+
           # Generate policy checksums
           find policies -name "*.rego" -type f -exec sha256sum {} \; | sort > source-checksums.txt
-          
+
           # Calculate overall hash
           OVERALL_HASH=$(sha256sum source-checksums.txt | awk '{print $1}')
           echo "overall_hash=${OVERALL_HASH}" >> $GITHUB_OUTPUT
-          
+
           # Get latest commit for policies
           POLICY_COMMIT=$(git log -1 --format="%H" -- policies/)
           echo "policy_commit=${POLICY_COMMIT}" >> $GITHUB_OUTPUT
-          
+
           echo "📊 Source state captured:"
           echo "   Policy files: ${POLICY_COUNT}"
           echo "   Overall hash: ${OVERALL_HASH}"
@@ -91,7 +91,7 @@ jobs:
         run: |
           echo "🧪 Running policy tests..."
           opa test policies/ -v --coverage --format=json > test-results.json || true
-          
+
           # Extract key metrics
           PASS_COUNT=$(jq 'length' test-results.json 2>/dev/null || echo "0")
           echo "✅ ${PASS_COUNT} tests executed"
@@ -100,7 +100,7 @@ jobs:
         id: drift-check
         run: |
           echo "🔍 Checking for policy drift..."
-          
+
           # Create drift report
           cat > drift-report.json << EOF
           {
@@ -120,17 +120,17 @@ jobs:
             "status": "captured"
           }
           EOF
-          
+
           # Check for drift indicators
           # Note: In production, this would compare against deployed OPA instances
           HAS_DRIFT="false"
           DRIFT_SUMMARY=""
-          
+
           # Check if stored baseline exists
           if [ -f "policies/baselines/policy-baseline.json" ]; then
             STORED_HASH=$(jq -r '.source.hash // ""' policies/baselines/policy-baseline.json)
             CURRENT_HASH="${{ steps.source-state.outputs.overall_hash }}"
-            
+
             if [ "${STORED_HASH}" != "${CURRENT_HASH}" ] && [ -n "${STORED_HASH}" ]; then
               HAS_DRIFT="true"
               DRIFT_SUMMARY="Policy hash changed from ${STORED_HASH:0:12} to ${CURRENT_HASH:0:12}"
@@ -138,10 +138,10 @@ jobs:
           else
             DRIFT_SUMMARY="No baseline found - creating initial baseline"
           fi
-          
+
           echo "has_drift=${HAS_DRIFT}" >> $GITHUB_OUTPUT
           echo "drift_summary=${DRIFT_SUMMARY}" >> $GITHUB_OUTPUT
-          
+
           echo "📋 Drift check result: ${HAS_DRIFT}"
           if [ -n "${DRIFT_SUMMARY}" ]; then
             echo "   ${DRIFT_SUMMARY}"
@@ -165,7 +165,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: capture-state
     if: needs.capture-state.outputs.has_drift == 'true' && (github.event.inputs.alert_on_drift != 'false')
-    
+
     steps:
       - name: Download Drift Report
         uses: actions/download-artifact@v4
@@ -178,43 +178,43 @@ jobs:
           script: |
             const fs = require('fs');
             const report = JSON.parse(fs.readFileSync('drift-report.json', 'utf8'));
-            
+
             const issueTitle = `⚠️ Policy Drift Detected - ${new Date().toISOString().split('T')[0]}`;
             const issueBody = `
             ## Policy Drift Detection Alert
-            
+
             **Timestamp:** ${report.timestamp}
             **Summary:** ${{ needs.capture-state.outputs.drift_summary }}
-            
+
             ### Source State
             - **Commit:** \`${report.source.commit}\`
             - **Policy Hash:** \`${report.source.hash}\`
             - **Policy Count:** ${report.source.policy_count}
-            
+
             ### Actions Required
-            
+
             1. Review recent policy changes
             2. Verify deployed OPA instances have latest policies
             3. Check OPAL synchronization status
             4. Run full policy test suite
-            
+
             ### Remediation Commands
-            
+
             \`\`\`bash
             # Rebuild all tenant bundles
             npx ts-node --esm scripts/policy/build-tenant-bundle.ts build --all
-            
+
             # Verify bundles
             npx ts-node --esm scripts/policy/build-tenant-bundle.ts verify --tenant USA
-            
+
             # Trigger OPAL update
             npx ts-node --esm backend/src/scripts/opal-publisher.ts --trigger-update
             \`\`\`
-            
+
             ---
             _This issue was created automatically by the Policy Drift Detection workflow._
             `;
-            
+
             // Check for existing open issue
             const issues = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
@@ -222,7 +222,7 @@ jobs:
               state: 'open',
               labels: 'policy-drift'
             });
-            
+
             if (issues.data.length === 0) {
               await github.rest.issues.create({
                 owner: context.repo.owner,
@@ -259,7 +259,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: capture-state
     if: needs.capture-state.outputs.has_drift == 'false' || github.event_name == 'workflow_dispatch'
-    
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -275,15 +275,15 @@ jobs:
       - name: Update Baseline File
         run: |
           echo "📝 Updating policy baseline..."
-          
+
           mkdir -p policies/baselines
           mv drift-report.json policies/baselines/policy-baseline.json
-          
+
           # Update timestamp
           jq '.status = "baseline" | .baseline_updated = now' \
             policies/baselines/policy-baseline.json > tmp.json && \
             mv tmp.json policies/baselines/policy-baseline.json
-          
+
           echo "✅ Baseline updated"
           cat policies/baselines/policy-baseline.json | jq '.source'
 

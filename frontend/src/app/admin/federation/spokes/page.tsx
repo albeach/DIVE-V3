@@ -192,6 +192,30 @@ export default function FederationSpokesPage() {
     setDetailPanelSpoke(null);
   };
 
+  // Unsuspend spoke (reactivate)
+  const handleUnsuspend = async (spoke: ISpoke) => {
+    const response = await fetch(`/api/federation/spokes/${spoke.spokeId}/unsuspend`, {
+      method: 'POST',
+    });
+
+    if (!response.ok) {
+      const errData = await response.json().catch(() => ({}));
+      notify.toast.error('Failed to reactivate spoke', errData.error || 'Unknown error');
+      throw new Error(errData.error || 'Failed to reactivate spoke');
+    }
+
+    notify.toast.success(`Spoke "${spoke.instanceCode}" reactivated`);
+    notify.persist({
+      type: 'info',
+      title: 'Spoke Reactivated',
+      message: `Federation spoke "${spoke.name}" (${spoke.instanceCode}) has been reactivated.`,
+      actionUrl: '/admin/federation/spokes',
+    });
+
+    await fetchSpokes();
+    setDetailPanelSpoke(null);
+  };
+
   // Rotate token
   const handleRotateToken = async (spoke: ISpoke) => {
     const response = await fetch(`/api/federation/spokes/${spoke.spokeId}/token`, {

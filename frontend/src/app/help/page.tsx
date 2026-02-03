@@ -15,7 +15,7 @@ export default async function HelpPage() {
   }
 
   return (
-    <PageLayout 
+    <PageLayout
       user={session.user}
       breadcrumbs={[
         { label: 'Dashboard', href: '/dashboard' },

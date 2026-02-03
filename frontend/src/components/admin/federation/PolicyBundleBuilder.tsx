@@ -1,9 +1,9 @@
 /**
  * DIVE V3 - Policy Bundle Builder
- * 
+ *
  * UI component for building and publishing policy bundles.
  * Supports scope selection, build options, and one-click build+publish.
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -59,15 +59,15 @@ export function PolicyBundleBuilder({
 
   const handleBuild = async () => {
     if (disabled || !onBuild) return;
-    
+
     setBuildState({ phase: 'building' });
-    
+
     try {
       const result = await onBuild({
         scopes: selectedScopes,
         ...options,
       });
-      
+
       if (result.success) {
         setBuildState({ phase: 'complete', buildResult: result });
       } else {
@@ -83,12 +83,12 @@ export function PolicyBundleBuilder({
 
   const handlePublish = async () => {
     if (disabled || !onPublish) return;
-    
+
     setBuildState({ phase: 'publishing' });
-    
+
     try {
       const result = await onPublish();
-      
+
       if (result.success) {
         setBuildState((prev) => ({
           ...prev,
@@ -108,15 +108,15 @@ export function PolicyBundleBuilder({
 
   const handleBuildAndPublish = async () => {
     if (disabled || !onBuildAndPublish) return;
-    
+
     setBuildState({ phase: 'building' });
-    
+
     try {
       const { build, publish } = await onBuildAndPublish({
         scopes: selectedScopes,
         ...options,
       });
-      
+
       if (build.success && publish?.success) {
         setBuildState({
           phase: 'complete',
@@ -284,7 +284,7 @@ export function PolicyBundleBuilder({
                     Dismiss
                   </button>
                 </div>
-                
+
                 {buildState.buildResult && (
                   <div className="text-sm text-emerald-700 space-y-1">
                     <p>Version: <strong>{buildState.buildResult.version}</strong></p>
@@ -292,7 +292,7 @@ export function PolicyBundleBuilder({
                     <p>Signed: <strong>{buildState.buildResult.signed ? 'Yes' : 'No'}</strong></p>
                   </div>
                 )}
-                
+
                 {buildState.publishResult && (
                   <div className="text-sm text-emerald-700 border-t border-emerald-200 pt-2 mt-2">
                     <p>Published at: <strong>{buildState.publishResult.publishedAt}</strong></p>

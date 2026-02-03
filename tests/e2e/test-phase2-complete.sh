@@ -66,7 +66,7 @@ log_error() {
 
 test_phase2_objective1() {
     log_section "Phase 2 Objective 1: Single Source of Truth"
-    
+
     # Test 1.1: Federation registry exists and is valid
     log_test "1.1: Federation registry v2.0 exists and validates"
     if [ -f "$PROJECT_ROOT/config/federation-registry.json" ]; then
@@ -83,7 +83,7 @@ test_phase2_objective1() {
     else
         log_fail "Federation registry not found"
     fi
-    
+
     # Test 1.2: JSON Schema exists
     log_test "1.2: JSON Schema validation file exists"
     if [ -f "$PROJECT_ROOT/config/federation-registry.schema.json" ]; then
@@ -91,7 +91,7 @@ test_phase2_objective1() {
     else
         log_fail "JSON Schema not found"
     fi
-    
+
     # Test 1.3: Generator scripts exist
     log_test "1.3: Configuration generator scripts exist"
     local scripts_exist=true
@@ -104,7 +104,7 @@ test_phase2_objective1() {
     if [ "$scripts_exist" = true ]; then
         log_pass "All generator scripts found"
     fi
-    
+
     # Test 1.4: Terraform .tfvars auto-generation
     log_test "1.4: Terraform .tfvars files are auto-generated"
     local tfvars_count=0
@@ -122,7 +122,7 @@ test_phase2_objective1() {
     else
         log_fail "Expected 4 .tfvars files (found $tfvars_count, marked $tfvars_marked)"
     fi
-    
+
     # Test 1.5: Docker Compose auto-generation
     log_test "1.5: Docker Compose files are auto-generated"
     local compose_count=0
@@ -140,29 +140,29 @@ test_phase2_objective1() {
     else
         log_fail "Expected 3 docker-compose files (found $compose_count, marked $compose_marked)"
     fi
-    
+
     # Test 1.6: Configuration consistency
     log_test "1.6: Configuration consistency across registry and generated files"
     local consistent=true
-    
+
     # Check USA frontend port consistency
     local registry_port=$(jq -r '.instances.usa.ports.frontend' "$PROJECT_ROOT/config/federation-registry.json")
     if ! grep -q "\"$registry_port:3000\"" "$PROJECT_ROOT/instances/usa/docker-compose.yml"; then
         log_fail "USA frontend port mismatch"
         consistent=false
     fi
-    
+
     # Check FRA keycloak URL consistency
     local registry_idp=$(jq -r '.instances.fra.urls.idp' "$PROJECT_ROOT/config/federation-registry.json")
     if ! grep -q "idp_url.*=.*\"$registry_idp\"" "$PROJECT_ROOT/terraform/instances/fra.tfvars"; then
         log_fail "FRA IDP URL mismatch"
         consistent=false
     fi
-    
+
     if [ "$consistent" = true ]; then
         log_pass "Configuration is consistent"
     fi
-    
+
     # Test 1.7: Git pre-commit hooks installed
     log_test "1.7: Git pre-commit hooks prevent manual edits"
     if [ -f "$PROJECT_ROOT/.git/hooks/pre-commit" ]; then
@@ -182,7 +182,7 @@ test_phase2_objective1() {
 
 test_phase2_objective2() {
     log_section "Phase 2 Objective 2: Secrets Management"
-    
+
     # Test 2.1: GCP secret paths defined in registry
     log_test "2.1: GCP secret paths defined in federation registry"
     local secrets_defined=true
@@ -195,7 +195,7 @@ test_phase2_objective2() {
     if [ "$secrets_defined" = true ]; then
         log_pass "All instances have GCP secret paths defined"
     fi
-    
+
     # Test 2.2: GCP configuration in registry
     log_test "2.2: GCP configuration section exists in registry"
     if jq -e '.gcp' "$PROJECT_ROOT/config/federation-registry.json" > /dev/null 2>&1; then
@@ -205,7 +205,7 @@ test_phase2_objective2() {
     else
         log_fail "GCP configuration missing from registry"
     fi
-    
+
     # Test 2.3: No plaintext passwords in generated files (except defaults)
     log_test "2.3: Generated files use environment variables for secrets"
     local env_vars_used=true
@@ -226,7 +226,7 @@ test_phase2_objective2() {
 
 test_phase2_kpis() {
     log_section "Phase 2 KPIs"
-    
+
     # KPI 1: Configuration Generation Time
     log_test "KPI 1: Configuration generation time < 5 minutes"
     local start_time=$(date +%s)
@@ -241,25 +241,25 @@ test_phase2_kpis() {
     else
         log_fail "Generation took ${duration}s (target: < 300s)"
     fi
-    
+
     # KPI 2: SSOT Coverage
     log_test "KPI 2: SSOT Coverage = 100%"
     local expected_tfvars=4  # USA, FRA, GBR, DEU
     local expected_compose=3  # USA, FRA, GBR (local instances only)
-    
+
     local actual_tfvars=$(find "$PROJECT_ROOT/terraform/instances" -name "*.tfvars" -type f | grep -E "(usa|fra|gbr|deu)\.tfvars" | wc -l | tr -d ' ')
     local actual_compose=$(find "$PROJECT_ROOT/instances" -name "docker-compose.yml" -type f | grep -E "(usa|fra|gbr)/docker-compose.yml" | wc -l | tr -d ' ')
-    
+
     local tfvars_coverage=$((actual_tfvars * 100 / expected_tfvars))
     local compose_coverage=$((actual_compose * 100 / expected_compose))
     local total_coverage=$(( (tfvars_coverage + compose_coverage) / 2 ))
-    
+
     if [ $total_coverage -eq 100 ]; then
         log_pass "SSOT coverage: ${total_coverage}% (tfvars: $actual_tfvars/$expected_tfvars, compose: $actual_compose/$expected_compose)"
     else
         log_fail "SSOT coverage: ${total_coverage}% (tfvars: $actual_tfvars/$expected_tfvars, compose: $actual_compose/$expected_compose)"
     fi
-    
+
     # KPI 3: Manual Config Edits
     log_test "KPI 3: Manual configuration edits = 0"
     # Check if generated files have auto-generated warnings
@@ -282,7 +282,7 @@ test_phase2_kpis() {
 
 test_phase2_success_criteria() {
     log_section "Phase 2 Success Criteria"
-    
+
     # Criterion 1: All configs generated from registry
     log_test "Success Criterion 1: All configs generated from registry.json"
     if [ -f "$PROJECT_ROOT/config/federation-registry.json" ] && \
@@ -292,7 +292,7 @@ test_phase2_success_criteria() {
     else
         log_fail "SSOT infrastructure incomplete"
     fi
-    
+
     # Criterion 2: Git secrets prevented
     log_test "Success Criterion 2: Git hooks prevent manual edits"
     if [ -f "$PROJECT_ROOT/.git/hooks/pre-commit" ]; then
@@ -300,7 +300,7 @@ test_phase2_success_criteria() {
     else
         log_fail "Pre-commit hooks not installed"
     fi
-    
+
     # Criterion 3: GCP integration ready
     log_test "Success Criterion 3: GCP Secret Manager integration prepared"
     if jq -e '.gcp.services.secretManager.enabled' "$PROJECT_ROOT/config/federation-registry.json" > /dev/null 2>&1; then
@@ -309,7 +309,7 @@ test_phase2_success_criteria() {
     else
         log_fail "GCP Secret Manager not configured"
     fi
-    
+
     # Criterion 4: Documentation updated
     log_test "Success Criterion 4: All scripts have documentation"
     local scripts_with_docs=0
@@ -343,13 +343,13 @@ main() {
     echo "║                                                           ║"
     echo "╚═══════════════════════════════════════════════════════════╝"
     echo ""
-    
+
     # Run all test suites
     test_phase2_objective1
     test_phase2_objective2
     test_phase2_kpis
     test_phase2_success_criteria
-    
+
     # Summary
     log_section "Phase 2 Test Summary"
     echo "  Total Tests:           $TESTS_TOTAL"
@@ -357,7 +357,7 @@ main() {
     echo "  Failed:                $TESTS_FAILED"
     echo "  Success Rate:          $(( TESTS_PASSED * 100 / TESTS_TOTAL ))%"
     echo ""
-    
+
     # Phase 2 Objectives Checklist
     echo "Phase 2 Objectives Checklist:"
     echo ""
@@ -377,11 +377,11 @@ main() {
     echo "    ⚠ GCP project setup (requires manual step with gcloud CLI)"
     echo "    ⚠ Terraform GCP provider (requires GCP credentials)"
     echo ""
-    
+
     # Final verdict
     echo "═══════════════════════════════════════════════════════════"
     echo ""
-    
+
     if [ $TESTS_FAILED -eq 0 ]; then
         echo -e "${GREEN}╔═══════════════════════════════════════════════════════════╗${NC}"
         echo -e "${GREEN}║                                                           ║${NC}"

@@ -41,7 +41,7 @@ export function ThemeToggle() {
   return (
     <button
       onClick={() => setTheme(resolvedTheme === 'dark' ? 'light' : 'dark')}
-      className="
+      className={`
         flex items-center justify-center
         w-9 h-9 rounded-lg
         bg-gray-100 dark:bg-gray-800
@@ -49,7 +49,7 @@ export function ThemeToggle() {
         hover:bg-gray-200 dark:hover:bg-gray-700
         focus:outline-none focus:ring-2 focus:ring-blue-500
         transition-colors duration-200
-      "
+      `}
       aria-label={`Switch to ${resolvedTheme === 'dark' ? 'light' : 'dark'} mode`}
       title={`Current theme: ${theme || 'system'}`}
     >
@@ -87,7 +87,7 @@ export function ThemeSelector() {
     <div className="relative">
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="
+        className={`
           flex items-center gap-2 px-3 py-2 rounded-lg
           bg-gray-100 dark:bg-gray-800
           border border-gray-300 dark:border-gray-600
@@ -95,7 +95,7 @@ export function ThemeSelector() {
           focus:outline-none focus:ring-2 focus:ring-blue-500
           transition-colors duration-200
           text-sm font-medium text-gray-700 dark:text-gray-300
-        "
+        `}
         aria-expanded={isOpen}
         aria-label="Select theme"
       >
@@ -110,14 +110,14 @@ export function ThemeSelector() {
             onClick={() => setIsOpen(false)}
             aria-hidden="true"
           />
-          <div className="
+          <div className={`
             absolute right-0 mt-2 w-40
             bg-white dark:bg-gray-800
             border border-gray-300 dark:border-gray-600
             rounded-lg shadow-lg
             z-20
             overflow-hidden
-          ">
+          `}>
             {themes.map((themeOption) => (
               <button
                 key={themeOption.value}

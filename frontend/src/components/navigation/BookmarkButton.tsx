@@ -91,16 +91,16 @@ export function BookmarkButton({
 
         {/* Error tooltip */}
         {error && (
-          <div className="absolute top-full mt-2 left-0 px-3 py-2 bg-red-100 text-red-800 text-xs 
-                         font-medium rounded-lg shadow-lg z-50 whitespace-nowrap animate-in fade-in">
+          <div className={`absolute top-full mt-2 left-0 px-3 py-2 bg-red-100 text-red-800 text-xs 
+                         font-medium rounded-lg shadow-lg z-50 whitespace-nowrap animate-in fade-in`}>
             {error}
           </div>
         )}
 
         {/* Hover tooltip */}
         {isHovered && !error && (
-          <div className="absolute top-full mt-2 left-0 px-3 py-2 bg-gray-900 text-white text-xs 
-                         font-medium rounded-lg shadow-lg z-50 whitespace-nowrap animate-in fade-in">
+          <div className={`absolute top-full mt-2 left-0 px-3 py-2 bg-gray-900 text-white text-xs 
+                         font-medium rounded-lg shadow-lg z-50 whitespace-nowrap animate-in fade-in`}>
             {bookmarked ? 'Remove from bookmarks' : 'Add to bookmarks'}
           </div>
         )}
@@ -132,16 +132,16 @@ export function BookmarkButton({
 
       {/* Error tooltip */}
       {error && (
-        <div className="absolute top-full mt-2 right-0 px-3 py-2 bg-red-100 text-red-800 text-xs 
-                       font-medium rounded-lg shadow-lg z-50 whitespace-nowrap animate-in fade-in">
+        <div className={`absolute top-full mt-2 right-0 px-3 py-2 bg-red-100 text-red-800 text-xs 
+                       font-medium rounded-lg shadow-lg z-50 whitespace-nowrap animate-in fade-in`}>
           {error}
         </div>
       )}
 
       {/* Hover tooltip */}
       {isHovered && !error && (
-        <div className="absolute top-full mt-2 right-0 px-3 py-2 bg-gray-900 text-white text-xs 
-                       font-medium rounded-lg shadow-lg z-50 whitespace-nowrap animate-in fade-in">
+        <div className={`absolute top-full mt-2 right-0 px-3 py-2 bg-gray-900 text-white text-xs 
+                       font-medium rounded-lg shadow-lg z-50 whitespace-nowrap animate-in fade-in`}>
           {bookmarked ? 'Remove bookmark' : 'Add bookmark'}
         </div>
       )}

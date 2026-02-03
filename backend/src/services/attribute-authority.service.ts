@@ -1,7 +1,7 @@
 /**
  * NATO Compliance: ADatP-5663 §3.4, §5.4.2 - Attribute Authority
  * Phase 4, Task 4.1
- * 
+ *
  * Standalone Attribute Authority service that:
  * 1. Fetches additional attributes (LDAP, database, computed)
  * 2. Signs attributes with JWS (RFC 7515)
@@ -91,7 +91,7 @@ export class AttributeAuthorityService {
 
   /**
    * Main AA endpoint: Get signed attributes
-   * 
+   *
    * ADatP-5663 §5.4.2:
    * - AA retrieval requires valid access token
    * - Attributes digitally signed by AA for integrity

@@ -8,14 +8,14 @@
             <div class="dive-authenticator-message">
                 <p>${msg("selectAuthenticatorHelp")}</p>
             </div>
-            
+
             <!-- Authenticator Options -->
             <form id="kc-select-credential-form" class="dive-authenticator-form" action="${url.loginAction}" method="post">
                 <div class="dive-authenticator-list">
                     <#list auth.authenticationSelections as authenticationSelection>
-                        <button type="submit" 
-                                class="dive-authenticator-option" 
-                                name="authenticationExecution" 
+                        <button type="submit"
+                                class="dive-authenticator-option"
+                                name="authenticationExecution"
                                 value="${authenticationSelection.authExecId}">
                             <div class="dive-authenticator-icon">
                                 <#if authenticationSelection.iconCssClass?has_content>

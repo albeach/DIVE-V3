@@ -52,7 +52,18 @@ class FederationDiscoveryService {
 
     constructor() {
         this.instanceCode = process.env.INSTANCE_CODE || 'USA';
-        this.isHub = this.instanceCode === 'USA' || process.env.IS_HUB === 'true';
+
+        // CRITICAL FIX (Issue #3 - 2026-02-03): Use explicit IS_HUB flag
+        // Don't rely on instance code comparison which is fragile
+        // Hub deployments MUST set IS_HUB=true, spokes MUST set IS_HUB=false or SPOKE_MODE=true
+        this.isHub = process.env.IS_HUB === 'true' || (process.env.SPOKE_MODE !== 'true' && this.instanceCode === 'USA');
+
+        logger.info('FederationDiscoveryService initialized', {
+            instanceCode: this.instanceCode,
+            isHub: this.isHub,
+            IS_HUB: process.env.IS_HUB,
+            SPOKE_MODE: process.env.SPOKE_MODE
+        });
     }
 
     /**

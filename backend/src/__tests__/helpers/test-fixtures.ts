@@ -286,13 +286,13 @@ export function createZTDFResourceWithoutHashes(): IZTDFResource {
 
 /**
  * Sample user profiles for testing
- * 
+ *
  * User Pattern: testuser-{country}-{1,2,3,4}
  *   1 = UNCLASSIFIED
  *   2 = CONFIDENTIAL
  *   3 = SECRET
  *   4 = TOP_SECRET
- * 
+ *
  * Password: TestUser2025!Pilot
  */
 export const TEST_USERS = {

@@ -39,14 +39,14 @@ echo ""
 create_or_update_record() {
     local name=$1
     local ip=$2
-    
+
     echo "Configuring $name.dive25.com -> $ip"
-    
+
     # Check if record exists
     EXISTING=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$ZONE_ID/dns_records?name=$name.dive25.com&type=A" \
         -H "Authorization: Bearer $API_TOKEN" \
         -H "Content-Type: application/json" | jq -r '.result[0].id' 2>/dev/null || echo "")
-    
+
     if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
         # Update existing record
         echo "  Updating existing record..."

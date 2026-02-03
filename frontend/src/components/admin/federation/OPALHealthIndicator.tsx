@@ -1,8 +1,8 @@
 /**
  * DIVE V3 - OPAL Health Indicator
- * 
+ *
  * Displays OPAL Server connection status, health, and configuration.
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */

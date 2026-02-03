@@ -1,6 +1,6 @@
 /**
  * Search Analytics Routes
- * 
+ *
  * Phase 2: Search & Discovery Enhancement
  * API routes for search analytics tracking and metrics
  */

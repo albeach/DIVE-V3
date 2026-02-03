@@ -1,9 +1,9 @@
 /**
  * useSearchHistory Hook
- * 
+ *
  * Phase 2: Search & Discovery Enhancement
  * Persistent search history and pinned searches
- * 
+ *
  * Features:
  * - Recent searches persisted to localStorage
  * - Pinned/favorite searches
@@ -213,7 +213,7 @@ export function useSearchHistory({
   // ========================================
 
   const removeFromHistory = useCallback((query: string) => {
-    setRecentSearches(prev => 
+    setRecentSearches(prev =>
       prev.filter(item => normalizeQuery(item.query) !== normalizeQuery(query))
     );
   }, []);
@@ -361,7 +361,7 @@ export function useSearchHistory({
   const importHistory = useCallback((data: string): boolean => {
     try {
       const parsed = JSON.parse(data);
-      
+
       if (parsed.version !== 1) {
         console.warn('Unknown history version:', parsed.version);
       }

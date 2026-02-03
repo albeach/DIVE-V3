@@ -2,15 +2,15 @@
 /**
  * DIVE V3 - OPAL JWT Token Generator
  * Phase 7: Production Hardening
- * 
+ *
  * Generates JWT tokens for OPAL client authentication.
  * Uses RS256 algorithm with the OPAL JWT signing key.
- * 
+ *
  * Usage:
  *   npx ts-node backend/src/scripts/generate-opal-jwt.ts
  *   npx ts-node backend/src/scripts/generate-opal-jwt.ts --tenant USA
  *   npx ts-node backend/src/scripts/generate-opal-jwt.ts --expiry 30d
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */
@@ -57,7 +57,7 @@ function base64url(data: Buffer | string): string {
 async function loadKeyFromGCP(): Promise<string | null> {
   try {
     const { execSync } = await import('child_process');
-    
+
     console.log('  Loading signing key from GCP Secret Manager...');
     const privateKey = execSync(
       `gcloud secrets versions access latest --secret=${GCP_SECRET_NAME} --project=${GCP_PROJECT_ID}`,
@@ -273,7 +273,7 @@ async function main(): Promise<void> {
   if (verify) {
     console.log('🔍 Verifying token...\n');
     const result = verifyToken(verify, publicKey);
-    
+
     if (result.valid) {
       console.log('✅ Token is valid!\n');
       console.log('Payload:');

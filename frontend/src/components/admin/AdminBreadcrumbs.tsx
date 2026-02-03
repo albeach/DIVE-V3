@@ -1,6 +1,6 @@
 /**
  * Admin Breadcrumbs Component
- * 
+ *
  * Shows full navigation path with interactive links
  * Phase 1.3: Cross-Page Navigation
  */
@@ -31,27 +31,27 @@ export default function AdminBreadcrumbs() {
     // Note: selectedIdPAlias from IdPManagementContext is only available in IdP pages
     // Use empty string as fallback for other admin pages
     const selectedIdPAlias = '';
-    
+
     // Generate breadcrumbs from pathname
     const breadcrumbs: IBreadcrumb[] = React.useMemo(() => {
         const parts = pathname.split('/').filter(Boolean);
         const crumbs: IBreadcrumb[] = [];
-        
+
         // Always start with Home
         crumbs.push({
             label: 'Home',
             href: '/'
         });
-        
+
         // Build path incrementally
         let currentPath = '';
-        
+
         for (let i = 0; i < parts.length; i++) {
             const part = parts[i];
             currentPath += `/${part}`;
-            
+
             let label = part;
-            
+
             // Beautify labels
             if (part === 'admin') {
                 label = 'Admin';
@@ -70,17 +70,17 @@ export default function AdminBreadcrumbs() {
                 // Capitalize first letter
                 label = part.charAt(0).toUpperCase() + part.slice(1);
             }
-            
+
             crumbs.push({
                 label,
                 href: currentPath,
                 current: i === parts.length - 1
             });
         }
-        
+
         return crumbs;
     }, [pathname, selectedIdPAlias]);
-    
+
     return (
         <nav className="flex mb-4" aria-label="Breadcrumb">
             <ol role="list" className="flex items-center space-x-2">
@@ -88,9 +88,9 @@ export default function AdminBreadcrumbs() {
                     <li key={crumb.href}>
                         <div className="flex items-center">
                             {index > 0 && (
-                                <ChevronRightIcon 
-                                    className="h-4 w-4 text-gray-400 dark:text-gray-600 mx-2" 
-                                    aria-hidden="true" 
+                                <ChevronRightIcon
+                                    className="h-4 w-4 text-gray-400 dark:text-gray-600 mx-2"
+                                    aria-hidden="true"
                                 />
                             )}
                             {crumb.current ? (

@@ -54,7 +54,7 @@ start_port_forward() {
     local port=$1
     local service=$2
     local target_port=${3:-$port}
-    
+
     if ! check_port_forward $port; then
         echo -e "${YELLOW}Starting port-forward for $service...${NC}"
         kubectl port-forward -n $NAMESPACE svc/$service $port:$target_port > /dev/null 2>&1 &

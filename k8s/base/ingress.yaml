@@ -36,7 +36,7 @@ spec:
                 name: frontend
                 port:
                   number: 80
-    
+
     # Backend API
     - host: api.dive25.com
       http:
@@ -48,7 +48,7 @@ spec:
                 name: backend
                 port:
                   number: 80
-    
+
     # Keycloak IdP
     - host: idp.dive25.com
       http:

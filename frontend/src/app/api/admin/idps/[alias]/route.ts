@@ -1,6 +1,6 @@
 /**
  * Admin IdP Detail API Route
- * 
+ *
  * Proxy for backend IdP detail endpoint
  * GET - Get IdP details
  * PUT - Update IdP
@@ -20,7 +20,7 @@ export async function GET(
 ): Promise<NextResponse> {
     try {
         const { alias } = await params;
-        
+
         const validation = await validateSession();
         if (!validation.isValid) {
             return NextResponse.json(
@@ -66,7 +66,7 @@ export async function PUT(
 ): Promise<NextResponse> {
     try {
         const { alias } = await params;
-        
+
         const validation = await validateSession();
         if (!validation.isValid) {
             return NextResponse.json(
@@ -113,7 +113,7 @@ export async function DELETE(
 ): Promise<NextResponse> {
     try {
         const { alias } = await params;
-        
+
         const validation = await validateSession();
         if (!validation.isValid) {
             return NextResponse.json(

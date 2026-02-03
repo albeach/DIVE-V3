@@ -1,8 +1,8 @@
 /**
  * DIVE V3 - TokenRotationModal Unit Tests
- * 
+ *
  * Tests for the TokenRotationModal component that handles spoke token rotation.
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -112,7 +112,7 @@ describe('TokenRotationModal', () => {
 
       const select = screen.getByRole('combobox');
       await user.selectOptions(select, '60');
-      
+
       expect(select).toHaveValue('60');
     });
 
@@ -129,7 +129,7 @@ describe('TokenRotationModal', () => {
 
       const checkbox = screen.getByRole('checkbox');
       expect(checkbox).toBeChecked();
-      
+
       await user.click(checkbox);
       expect(checkbox).not.toBeChecked();
     });
@@ -480,7 +480,7 @@ describe('TokenRotationModal', () => {
 
       // Click to show token
       await user.click(screen.getByTitle('Show token'));
-      
+
       expect(screen.getByText('toggleable-token')).toBeInTheDocument();
       expect(screen.getByTitle('Hide token')).toBeInTheDocument();
     });

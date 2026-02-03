@@ -134,6 +134,12 @@ const nextConfig: NextConfig = {
         serverActions: {
             bodySizeLimit: "2mb",
         },
+        optimizePackageImports: [
+            'lucide-react',
+            'framer-motion',
+            'recharts',
+            '@tanstack/react-virtual',
+        ],
     },
     // Externalize native Node deps used by postgres driver to avoid client/edge bundling errors
     serverExternalPackages: ["postgres"],

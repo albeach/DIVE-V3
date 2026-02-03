@@ -1,8 +1,8 @@
 /**
  * DIVE V3 - Get Demo OTP Code
- * 
+ *
  * Generates the current OTP code for demo users
- * 
+ *
  * Usage:
  *   npm run ts-node backend/src/scripts/get-demo-otp-code.ts
  */
@@ -27,7 +27,7 @@ function getCurrentOTPCode(): string {
 
 function getOTPCodes(): { current: string; next: string; previous: string } {
     const current = getCurrentOTPCode();
-    
+
     // Get next code (30 seconds from now)
     const next = speakeasy.totp({
         secret: DEMO_OTP_SECRET,
@@ -75,7 +75,7 @@ function main() {
 
 if (require.main === module) {
     main();
-    
+
     // Update every 5 seconds for convenience
     setInterval(() => {
         console.clear();

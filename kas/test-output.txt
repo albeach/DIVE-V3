@@ -1,0 +1,2223 @@
+
+> dive-v3-kas@1.0.0-acp240 test
+> jest
+
+  console.log
+    
+    📈 Single-KAS Performance:
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:197:17)
+
+  console.log
+       p50: 158.00ms
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:198:17)
+
+  console.log
+       p95: 370.00ms
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:199:17)
+
+  console.log
+       p99: 414.00ms
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:200:17)
+
+  console.log
+       mean: 181.28ms
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:201:17)
+
+  console.log
+       req/s: 5.52
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:202:17)
+
+  console.log
+       success rate: 0.00%
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:203:17)
+
+  console.log
+    
+    📈 2-KAS Performance:
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:305:17)
+
+  console.log
+       p50: 542.00ms
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:306:17)
+
+  console.log
+       p95: 854.00ms
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:307:17)
+
+  console.log
+       p99: 880.00ms
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:308:17)
+
+  console.log
+       mean: 554.46ms
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:309:17)
+
+  console.log
+       req/s: 1.80
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:310:17)
+
+  console.log
+       success rate: 0.00%
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:311:17)
+
+  console.log
+    
+    📈 3-KAS Performance:
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:405:17)
+
+  console.log
+       p50: 641.00ms
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:406:17)
+
+  console.log
+       p95: 991.00ms
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:407:17)
+
+  console.log
+       p99: 1146.00ms
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:408:17)
+
+  console.log
+       mean: 698.43ms
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:409:17)
+
+  console.log
+       req/s: 1.43
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:410:17)
+
+  console.log
+       success rate: 0.00%
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:411:17)
+
+  console.log
+    
+    📊 Performance report saved to: /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/kas/tests/performance/report.json
+
+      at savePerformanceReport (tests/performance/federation-benchmark.test.ts:111:17)
+
+  console.log
+    
+    📊 Performance Summary:
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:459:21)
+
+  console.log
+    ==================================
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:460:21)
+
+  console.log
+    
+    single-kas:
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:463:25)
+
+  console.log
+       p50: 158.00ms
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:464:25)
+
+  console.log
+       p95: 370.00ms (target: 200ms)
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:465:25)
+
+  console.log
+       p99: 414.00ms
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:466:25)
+
+  console.log
+       req/s: 5.52
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:467:25)
+
+  console.log
+       error rate: 100.00%
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:468:25)
+
+  console.log
+       target met: ❌
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:473:25)
+
+  console.log
+    
+    2-kas:
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:463:25)
+
+  console.log
+       p50: 542.00ms
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:464:25)
+
+  console.log
+       p95: 854.00ms (target: 350ms)
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:465:25)
+
+  console.log
+       p99: 880.00ms
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:466:25)
+
+  console.log
+       req/s: 1.80
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:467:25)
+
+  console.log
+       error rate: 100.00%
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:468:25)
+
+  console.log
+       target met: ❌
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:473:25)
+
+  console.log
+    
+    3-kas:
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:463:25)
+
+  console.log
+       p50: 641.00ms
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:464:25)
+
+  console.log
+       p95: 991.00ms (target: 500ms)
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:465:25)
+
+  console.log
+       p99: 1146.00ms
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:466:25)
+
+  console.log
+       req/s: 1.43
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:467:25)
+
+  console.log
+       error rate: 100.00%
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:468:25)
+
+  console.log
+       target met: ❌
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:473:25)
+
+  console.log
+    
+    ==================================
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:476:21)
+
+FAIL tests/performance/federation-benchmark.test.ts (68.899 s)
+  Phase 3.5: Performance Benchmarks
+    ✕ should measure single-KAS latency (p95 < 200ms) (18534 ms)
+    ✕ should measure 2-KAS latency (p95 < 350ms) (27872 ms)
+    ✕ should measure 3-KAS latency (p95 < 500ms) (21081 ms)
+    ✓ should measure throughput at 10 req/s
+    ✓ should measure throughput at 50 req/s (1 ms)
+    ✓ should measure throughput at 100 req/s
+    ✓ should measure federation overhead
+    ✓ should measure circuit breaker recovery
+    ✓ should measure connection pooling efficiency (1 ms)
+
+  ● Phase 3.5: Performance Benchmarks › should measure single-KAS latency (p95 < 200ms)
+
+    expect(received).toBeLessThan(expected)
+
+    Expected: < 200
+    Received:   370
+
+      204 |         
+      205 |         // Assert performance targets
+    > 206 |         expect(metrics.p95).toBeLessThan(200);
+          |                             ^
+      207 |         expect(metrics.errorRate).toBeLessThan(5);
+      208 |     }, 60000); // 60 second timeout
+      209 |     
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:206:29)
+
+  ● Phase 3.5: Performance Benchmarks › should measure 2-KAS latency (p95 < 350ms)
+
+    expect(received).toBeLessThan(expected)
+
+    Expected: < 350
+    Received:   854
+
+      312 |         
+      313 |         // Assert performance targets
+    > 314 |         expect(metrics.p95).toBeLessThan(350);
+          |                             ^
+      315 |         expect(metrics.errorRate).toBeLessThan(10);
+      316 |     }, 120000);
+      317 |     
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:314:29)
+
+  ● Phase 3.5: Performance Benchmarks › should measure 3-KAS latency (p95 < 500ms)
+
+    expect(received).toBeLessThan(expected)
+
+    Expected: < 500
+    Received:   991
+
+      412 |         
+      413 |         // Assert performance targets
+    > 414 |         expect(metrics.p95).toBeLessThan(500);
+          |                             ^
+      415 |         expect(metrics.errorRate).toBeLessThan(15);
+      416 |     }, 180000);
+      417 |     
+
+      at Object.<anonymous> (tests/performance/federation-benchmark.test.ts:414:29)
+
+FAIL tests/integration/federation.test.ts (6.792 s)
+  Phase 3.5: Federation Integration Tests
+    1. Single KAS Operations
+      ✕ should handle local KAOs only (559 ms)
+      ✓ should sign results with local KAS key
+      ✓ should enforce local policy evaluation
+      ✓ should handle DPoP verification (1 ms)
+      ✓ should validate policyBinding
+      ✓ should reject invalid signatures
+      ✓ should handle classification caps
+      ✓ should validate COI restrictions
+      ✓ should audit all operations
+      ✓ should handle error responses
+    2. 2-KAS Federation (USA → FRA)
+      ✕ should forward foreign KAOs (548 ms)
+      ✓ should preserve policy associations
+      ✓ should aggregate responses
+      ✓ should preserve downstream signatures
+      ✓ should add X-Forwarded-By header
+      ✓ should validate federation agreements
+      ✓ should enforce classification caps
+      ✓ should handle partial failures
+      ✓ should respect circuit breaker
+      ✓ should correlate audit trails
+      ✓ should handle timeout gracefully
+      ✓ should retry transient failures
+      ✓ should validate mTLS certificates
+      ✓ should reject untrusted forwarders
+      ✓ should enforce max federation depth
+    3. 3-KAS Federation (USA + FRA + GBR)
+      ✕ should forward to multiple KAS (624 ms)
+      ✓ should aggregate results from all KAS
+      ✓ should handle mixed success/failure
+      ✓ should preserve all signatures
+      ✓ should maintain policy grouping
+      ✓ should correlate federation IDs
+      ✓ should handle complex forwarding chains
+      ✓ should detect and prevent loops
+      ✓ should enforce depth across chain
+      ✓ should audit complete trail
+    4. Federation Failure Handling
+      ✓ should handle KAS unavailable
+      ✓ should trigger circuit breaker
+      ✓ should recover from circuit breaker
+      ✓ should handle network timeout
+      ✓ should handle connection refused
+      ✓ should handle TLS handshake failure
+      ✓ should handle invalid certificates (1 ms)
+      ✓ should handle malformed responses
+      ✓ should handle partial KAO failures
+      ✓ should return successful results despite failures
+      ✓ should audit all failures
+      ✓ should track error metrics
+      ✓ should handle MongoDB unavailable
+      ✓ should handle OPA unavailable
+      ✓ should fail closed on security violations
+    5. Signature Preservation
+      ✓ should not re-sign downstream results (1 ms)
+      ✓ should preserve signature metadata
+      ✓ should allow client verification of all signatures
+      ✓ should track signing KAS per result
+      ✓ should handle signature verification failures
+      ✓ should validate signature algorithms
+      ✓ should handle multiple signature formats
+      ✓ should audit signature verification events
+    6. Policy Association Preservation
+      ✓ should group KAOs by policy
+      ✓ should forward policy with KAOs
+      ✓ should maintain grouping in response
+      ✓ should handle multiple policies per request
+      ✓ should evaluate each policy independently
+      ✓ should return results grouped by policyId
+      ✓ should preserve policy translations
+      ✓ should handle policy conflicts
+      ✓ should validate policyBinding per group
+      ✓ should audit policy evaluations
+  Phase 4.1.1: EncryptedMetadata Integration Tests
+    ✕ should decrypt encryptedMetadata with valid policy assertions (392 ms)
+    ✕ should reject encryptedMetadata with mismatched policy assertions (680 ms)
+    ✕ should handle encryptedMetadata in 2-KAS federation (520 ms)
+  Phase 4.1.2: Key Split Recombination (All-Of Mode)
+    ✕ should recombine 2-KAS key splits using XOR (All-Of mode) (645 ms)
+    ✕ should recombine 3-KAS key splits using XOR (560 ms)
+    ✕ should reject key splits with mismatched policy bindings (470 ms)
+  Phase 4.1.3: Any-Of KAS Routing with Failover
+    ✕ should succeed on primary KAS in Any-Of mode (459 ms)
+    ✕ should provide alternate KAS options in Any-Of mode (540 ms)
+    ✕ should document Any-Of mode behavior in response (681 ms)
+
+  ● Phase 3.5: Federation Integration Tests › 1. Single KAS Operations › should handle local KAOs only
+
+    AggregateError: Error
+
+      121 |             });
+      122 |             
+    > 123 |             const response = await axios.post(
+          |                              ^
+      124 |                 `${KAS_USA_URL}/rewrap`,
+      125 |                 rewrapRequest,
+      126 |                 {
+
+      at Function.Object.<anonymous>.AxiosError.from (node_modules/axios/lib/core/AxiosError.js:96:14)
+      at RedirectableRequest.handleRequestError (node_modules/axios/lib/adapters/http.js:638:25)
+      at ClientRequest.eventHandlers.<computed> (node_modules/follow-redirects/index.js:49:24)
+      at Axios.request (node_modules/axios/lib/core/Axios.js:45:41)
+      at Object.<anonymous> (tests/integration/federation.test.ts:123:30)
+
+    Cause:
+    AggregateError:
+
+
+
+  ● Phase 3.5: Federation Integration Tests › 2. 2-KAS Federation (USA → FRA) › should forward foreign KAOs
+
+    AggregateError: Error
+
+      234 |             });
+      235 |             
+    > 236 |             const response = await axios.post(
+          |                              ^
+      237 |                 `${KAS_USA_URL}/rewrap`,
+      238 |                 rewrapRequest,
+      239 |                 {
+
+      at Function.Object.<anonymous>.AxiosError.from (node_modules/axios/lib/core/AxiosError.js:96:14)
+      at RedirectableRequest.handleRequestError (node_modules/axios/lib/adapters/http.js:638:25)
+      at ClientRequest.eventHandlers.<computed> (node_modules/follow-redirects/index.js:49:24)
+      at Axios.request (node_modules/axios/lib/core/Axios.js:45:41)
+      at Object.<anonymous> (tests/integration/federation.test.ts:236:30)
+
+    Cause:
+    AggregateError:
+
+
+
+  ● Phase 3.5: Federation Integration Tests › 3. 3-KAS Federation (USA + FRA + GBR) › should forward to multiple KAS
+
+    AggregateError: Error
+
+      372 |             });
+      373 |             
+    > 374 |             const response = await axios.post(
+          |                              ^
+      375 |                 `${KAS_USA_URL}/rewrap`,
+      376 |                 rewrapRequest,
+      377 |                 {
+
+      at Function.Object.<anonymous>.AxiosError.from (node_modules/axios/lib/core/AxiosError.js:96:14)
+      at RedirectableRequest.handleRequestError (node_modules/axios/lib/adapters/http.js:638:25)
+      at ClientRequest.eventHandlers.<computed> (node_modules/follow-redirects/index.js:49:24)
+      at Axios.request (node_modules/axios/lib/core/Axios.js:45:41)
+      at Object.<anonymous> (tests/integration/federation.test.ts:374:30)
+
+    Cause:
+    AggregateError:
+
+
+
+  ● Phase 4.1.1: EncryptedMetadata Integration Tests › should decrypt encryptedMetadata with valid policy assertions
+
+    AggregateError: Error
+
+      711 |         });
+      712 |         
+    > 713 |         const response = await axios.post(
+          |                          ^
+      714 |             `${KAS_USA_URL}/rewrap`,
+      715 |             requestBody,
+      716 |             {
+
+      at Function.Object.<anonymous>.AxiosError.from (node_modules/axios/lib/core/AxiosError.js:96:14)
+      at RedirectableRequest.handleRequestError (node_modules/axios/lib/adapters/http.js:638:25)
+      at ClientRequest.eventHandlers.<computed> (node_modules/follow-redirects/index.js:49:24)
+      at Axios.request (node_modules/axios/lib/core/Axios.js:45:41)
+      at Object.<anonymous> (tests/integration/federation.test.ts:713:26)
+
+    Cause:
+    AggregateError:
+
+
+
+  ● Phase 4.1.1: EncryptedMetadata Integration Tests › should reject encryptedMetadata with mismatched policy assertions
+
+    AggregateError: Error
+
+      790 |         });
+      791 |         
+    > 792 |         const response = await axios.post(
+          |                          ^
+      793 |             `${KAS_USA_URL}/rewrap`,
+      794 |             requestBody,
+      795 |             {
+
+      at Function.Object.<anonymous>.AxiosError.from (node_modules/axios/lib/core/AxiosError.js:96:14)
+      at RedirectableRequest.handleRequestError (node_modules/axios/lib/adapters/http.js:638:25)
+      at ClientRequest.eventHandlers.<computed> (node_modules/follow-redirects/index.js:49:24)
+      at Axios.request (node_modules/axios/lib/core/Axios.js:45:41)
+      at Object.<anonymous> (tests/integration/federation.test.ts:792:26)
+
+    Cause:
+    AggregateError:
+
+
+
+  ● Phase 4.1.1: EncryptedMetadata Integration Tests › should handle encryptedMetadata in 2-KAS federation
+
+    AggregateError: Error
+
+      894 |         });
+      895 |         
+    > 896 |         const response = await axios.post(
+          |                          ^
+      897 |             `${KAS_USA_URL}/rewrap`,
+      898 |             requestBody,
+      899 |             {
+
+      at Function.Object.<anonymous>.AxiosError.from (node_modules/axios/lib/core/AxiosError.js:96:14)
+      at RedirectableRequest.handleRequestError (node_modules/axios/lib/adapters/http.js:638:25)
+      at ClientRequest.eventHandlers.<computed> (node_modules/follow-redirects/index.js:49:24)
+      at Axios.request (node_modules/axios/lib/core/Axios.js:45:41)
+      at Object.<anonymous> (tests/integration/federation.test.ts:896:26)
+
+    Cause:
+    AggregateError:
+
+
+
+  ● Phase 4.1.2: Key Split Recombination (All-Of Mode) › should recombine 2-KAS key splits using XOR (All-Of mode)
+
+    AggregateError: Error
+
+      1031 |         });
+      1032 |         
+    > 1033 |         const response = await axios.post(
+           |                          ^
+      1034 |             `${KAS_USA_URL}/rewrap`,
+      1035 |             requestBody,
+      1036 |             {
+
+      at Function.Object.<anonymous>.AxiosError.from (node_modules/axios/lib/core/AxiosError.js:96:14)
+      at RedirectableRequest.handleRequestError (node_modules/axios/lib/adapters/http.js:638:25)
+      at ClientRequest.eventHandlers.<computed> (node_modules/follow-redirects/index.js:49:24)
+      at Axios.request (node_modules/axios/lib/core/Axios.js:45:41)
+      at Object.<anonymous> (tests/integration/federation.test.ts:1033:26)
+
+    Cause:
+    AggregateError:
+
+
+
+  ● Phase 4.1.2: Key Split Recombination (All-Of Mode) › should recombine 3-KAS key splits using XOR
+
+    AggregateError: Error
+
+      1131 |         });
+      1132 |         
+    > 1133 |         const response = await axios.post(
+           |                          ^
+      1134 |             `${KAS_USA_URL}/rewrap`,
+      1135 |             requestBody,
+      1136 |             {
+
+      at Function.Object.<anonymous>.AxiosError.from (node_modules/axios/lib/core/AxiosError.js:96:14)
+      at RedirectableRequest.handleRequestError (node_modules/axios/lib/adapters/http.js:638:25)
+      at ClientRequest.eventHandlers.<computed> (node_modules/follow-redirects/index.js:49:24)
+      at Axios.request (node_modules/axios/lib/core/Axios.js:45:41)
+      at Object.<anonymous> (tests/integration/federation.test.ts:1133:26)
+
+    Cause:
+    AggregateError:
+
+
+
+  ● Phase 4.1.2: Key Split Recombination (All-Of Mode) › should reject key splits with mismatched policy bindings
+
+    AggregateError: Error
+
+      1211 |         });
+      1212 |         
+    > 1213 |         const response = await axios.post(
+           |                          ^
+      1214 |             `${KAS_USA_URL}/rewrap`,
+      1215 |             requestBody,
+      1216 |             {
+
+      at Function.Object.<anonymous>.AxiosError.from (node_modules/axios/lib/core/AxiosError.js:96:14)
+      at RedirectableRequest.handleRequestError (node_modules/axios/lib/adapters/http.js:638:25)
+      at ClientRequest.eventHandlers.<computed> (node_modules/follow-redirects/index.js:49:24)
+      at Axios.request (node_modules/axios/lib/core/Axios.js:45:41)
+      at Object.<anonymous> (tests/integration/federation.test.ts:1213:26)
+
+    Cause:
+    AggregateError:
+
+
+
+  ● Phase 4.1.3: Any-Of KAS Routing with Failover › should succeed on primary KAS in Any-Of mode
+
+    AggregateError: Error
+
+      1318 |         });
+      1319 |         
+    > 1320 |         const response = await axios.post(
+           |                          ^
+      1321 |             `${KAS_USA_URL}/rewrap`,
+      1322 |             requestBody,
+      1323 |             {
+
+      at Function.Object.<anonymous>.AxiosError.from (node_modules/axios/lib/core/AxiosError.js:96:14)
+      at RedirectableRequest.handleRequestError (node_modules/axios/lib/adapters/http.js:638:25)
+      at ClientRequest.eventHandlers.<computed> (node_modules/follow-redirects/index.js:49:24)
+      at Axios.request (node_modules/axios/lib/core/Axios.js:45:41)
+      at Object.<anonymous> (tests/integration/federation.test.ts:1320:26)
+
+    Cause:
+    AggregateError:
+
+
+
+  ● Phase 4.1.3: Any-Of KAS Routing with Failover › should provide alternate KAS options in Any-Of mode
+
+    AggregateError: Error
+
+      1391 |         });
+      1392 |         
+    > 1393 |         const response = await axios.post(
+           |                          ^
+      1394 |             `${KAS_USA_URL}/rewrap`,
+      1395 |             requestBody,
+      1396 |             {
+
+      at Function.Object.<anonymous>.AxiosError.from (node_modules/axios/lib/core/AxiosError.js:96:14)
+      at RedirectableRequest.handleRequestError (node_modules/axios/lib/adapters/http.js:638:25)
+      at ClientRequest.eventHandlers.<computed> (node_modules/follow-redirects/index.js:49:24)
+      at Axios.request (node_modules/axios/lib/core/Axios.js:45:41)
+      at Object.<anonymous> (tests/integration/federation.test.ts:1393:26)
+
+    Cause:
+    AggregateError:
+
+
+
+  ● Phase 4.1.3: Any-Of KAS Routing with Failover › should document Any-Of mode behavior in response
+
+    AggregateError: Error
+
+      1454 |         });
+      1455 |         
+    > 1456 |         const response = await axios.post(
+           |                          ^
+      1457 |             `${KAS_USA_URL}/rewrap`,
+      1458 |             requestBody,
+      1459 |             {
+
+      at Function.Object.<anonymous>.AxiosError.from (node_modules/axios/lib/core/AxiosError.js:96:14)
+      at RedirectableRequest.handleRequestError (node_modules/axios/lib/adapters/http.js:638:25)
+      at ClientRequest.eventHandlers.<computed> (node_modules/follow-redirects/index.js:49:24)
+      at Axios.request (node_modules/axios/lib/core/Axios.js:45:41)
+      at Object.<anonymous> (tests/integration/federation.test.ts:1456:26)
+
+    Cause:
+    AggregateError:
+
+
+
+FAIL tests/integration/e2e-scenarios.test.ts (5.96 s)
+  Phase 3.5: End-to-End Scenarios
+    Scenario 1: Local Only
+      ✕ USA client requests USA-only resource (all KAOs local) (742 ms)
+      ✓ USA client requests USA-only resource (policy denies FRA user)
+    Scenario 2: Simple Federation
+      ✕ USA client requests FRA resource (2 USA KAOs, 1 FRA KAO) (651 ms)
+      ✓ FRA client requests USA resource (federation bidirectional)
+    Scenario 3: Multi-National Resource
+      ✕ USA client requests NATO resource (2 USA, 2 FRA, 1 GBR KAOs) (1288 ms)
+      ✓ Multi-national resource with COI restriction (FVEY only)
+    Scenario 4: Circuit Breaker
+      ✕ FRA KAS down, circuit breaker prevents attempts, USA + GBR succeed (1621 ms)
+    Scenario 5: Partial Failure
+      ✓ FRA KAS returns error for 1 KAO, USA + GBR succeed
+    Scenario 6: Federation Loop Prevention
+      ✕ Malicious X-Forwarded-By with loop detected (485 ms)
+    Scenario 7: Depth Limit
+      ✕ X-Forwarded-By chain exceeds MAX_FEDERATION_DEPTH (586 ms)
+    Scenario 8: Classification Cap
+      ✕ USA → FRA federation agreement maxClassification: SECRET, TOP_SECRET resource denied (538 ms)
+
+  ● Phase 3.5: End-to-End Scenarios › Scenario 1: Local Only › USA client requests USA-only resource (all KAOs local)
+
+    AggregateError: Error
+
+      74 |             });
+      75 |             
+    > 76 |             const response = await axios.post(
+         |                              ^
+      77 |                 `${KAS_USA_URL}/rewrap`,
+      78 |                 {
+      79 |                     clientPublicKey,
+
+      at Function.Object.<anonymous>.AxiosError.from (node_modules/axios/lib/core/AxiosError.js:96:14)
+      at RedirectableRequest.handleRequestError (node_modules/axios/lib/adapters/http.js:638:25)
+      at ClientRequest.eventHandlers.<computed> (node_modules/follow-redirects/index.js:49:24)
+      at Axios.request (node_modules/axios/lib/core/Axios.js:45:41)
+      at Object.<anonymous> (tests/integration/e2e-scenarios.test.ts:76:30)
+
+    Cause:
+    AggregateError:
+
+
+
+  ● Phase 3.5: End-to-End Scenarios › Scenario 2: Simple Federation › USA client requests FRA resource (2 USA KAOs, 1 FRA KAO)
+
+    AggregateError: Error
+
+      156 |             });
+      157 |             
+    > 158 |             const response = await axios.post(
+          |                              ^
+      159 |                 `${KAS_USA_URL}/rewrap`,
+      160 |                 {
+      161 |                     clientPublicKey,
+
+      at Function.Object.<anonymous>.AxiosError.from (node_modules/axios/lib/core/AxiosError.js:96:14)
+      at RedirectableRequest.handleRequestError (node_modules/axios/lib/adapters/http.js:638:25)
+      at ClientRequest.eventHandlers.<computed> (node_modules/follow-redirects/index.js:49:24)
+      at Axios.request (node_modules/axios/lib/core/Axios.js:45:41)
+      at Object.<anonymous> (tests/integration/e2e-scenarios.test.ts:158:30)
+
+    Cause:
+    AggregateError:
+
+
+
+  ● Phase 3.5: End-to-End Scenarios › Scenario 3: Multi-National Resource › USA client requests NATO resource (2 USA, 2 FRA, 1 GBR KAOs)
+
+    AggregateError: Error
+
+      236 |             });
+      237 |             
+    > 238 |             const response = await axios.post(
+          |                              ^
+      239 |                 `${KAS_USA_URL}/rewrap`,
+      240 |                 {
+      241 |                     clientPublicKey,
+
+      at Function.Object.<anonymous>.AxiosError.from (node_modules/axios/lib/core/AxiosError.js:96:14)
+      at RedirectableRequest.handleRequestError (node_modules/axios/lib/adapters/http.js:638:25)
+      at ClientRequest.eventHandlers.<computed> (node_modules/follow-redirects/index.js:49:24)
+      at Axios.request (node_modules/axios/lib/core/Axios.js:45:41)
+      at Object.<anonymous> (tests/integration/e2e-scenarios.test.ts:238:30)
+
+    Cause:
+    AggregateError:
+
+
+
+  ● Phase 3.5: End-to-End Scenarios › Scenario 4: Circuit Breaker › FRA KAS down, circuit breaker prevents attempts, USA + GBR succeed
+
+    AggregateError: Error
+
+      308 |             });
+      309 |             
+    > 310 |             const response = await axios.post(
+          |                              ^
+      311 |                 `${KAS_USA_URL}/rewrap`,
+      312 |                 {
+      313 |                     clientPublicKey,
+
+      at Function.Object.<anonymous>.AxiosError.from (node_modules/axios/lib/core/AxiosError.js:96:14)
+      at RedirectableRequest.handleRequestError (node_modules/axios/lib/adapters/http.js:638:25)
+      at ClientRequest.eventHandlers.<computed> (node_modules/follow-redirects/index.js:49:24)
+      at Axios.request (node_modules/axios/lib/core/Axios.js:45:41)
+      at Object.<anonymous> (tests/integration/e2e-scenarios.test.ts:310:30)
+
+    Cause:
+    AggregateError:
+
+
+
+  ● Phase 3.5: End-to-End Scenarios › Scenario 6: Federation Loop Prevention › Malicious X-Forwarded-By with loop detected
+
+    TypeError: Cannot read properties of undefined (reading 'status')
+
+      397 |                 fail('Expected loop detection to reject request');
+      398 |             } catch (error: any) {
+    > 399 |                 expect(error.response.status).toBe(400);
+          |                                       ^
+      400 |                 expect(error.response.data.error).toMatch(/loop/i);
+      401 |             }
+      402 |         });
+
+      at Object.<anonymous> (tests/integration/e2e-scenarios.test.ts:399:39)
+
+  ● Phase 3.5: End-to-End Scenarios › Scenario 7: Depth Limit › X-Forwarded-By chain exceeds MAX_FEDERATION_DEPTH
+
+    TypeError: Cannot read properties of undefined (reading 'status')
+
+      457 |                 fail('Expected depth limit to reject request');
+      458 |             } catch (error: any) {
+    > 459 |                 expect(error.response.status).toBe(400);
+          |                                       ^
+      460 |                 expect(error.response.data.error).toMatch(/depth/i);
+      461 |             }
+      462 |         });
+
+      at Object.<anonymous> (tests/integration/e2e-scenarios.test.ts:459:39)
+
+  ● Phase 3.5: End-to-End Scenarios › Scenario 8: Classification Cap › USA → FRA federation agreement maxClassification: SECRET, TOP_SECRET resource denied
+
+    AggregateError: Error
+
+      498 |             });
+      499 |             
+    > 500 |             const response = await axios.post(
+          |                              ^
+      501 |                 `${KAS_USA_URL}/rewrap`,
+      502 |                 {
+      503 |                     clientPublicKey,
+
+      at Function.Object.<anonymous>.AxiosError.from (node_modules/axios/lib/core/AxiosError.js:96:14)
+      at RedirectableRequest.handleRequestError (node_modules/axios/lib/adapters/http.js:638:25)
+      at ClientRequest.eventHandlers.<computed> (node_modules/follow-redirects/index.js:49:24)
+      at Axios.request (node_modules/axios/lib/core/Axios.js:45:41)
+      at Object.<anonymous> (tests/integration/e2e-scenarios.test.ts:500:30)
+
+    Cause:
+    AggregateError:
+
+
+
+FAIL tests/integration/audit-trail.test.ts
+  Phase 3.5: Audit Trail Verification
+    ✕ should log X-Forwarded-By in all KAS instances (616 ms)
+    ✕ should correlate federation request IDs across KAS instances (707 ms)
+    ✓ should track forwarding decisions (FEDERATION_ALLOWED/DENIED events) (1 ms)
+    ✓ should audit all security checks (mTLS, X-Forwarded-By, depth, agreement)
+    ✓ should preserve audit trail completeness (no gaps across KAS)
+    ✓ should handle audit log rotation without data loss
+    ✕ should export audit trail in SIEM-compatible format (3 ms)
+    ✕ should generate ACP-240 compliance reports (2 ms)
+    ✓ should detect suspicious patterns (multiple denials, loop attempts) (509 ms)
+    ✕ should maintain audit trail for 90+ days per ACP-240 requirements (2 ms)
+
+  ● Phase 3.5: Audit Trail Verification › should log X-Forwarded-By in all KAS instances
+
+    AggregateError: Error
+
+      88 |         const requestId = `audit-test-${Date.now()}`;
+      89 |         
+    > 90 |         const response = await axios.post(
+         |                          ^
+      91 |             `${KAS_USA_URL}/rewrap`,
+      92 |             {
+      93 |                 clientPublicKey,
+
+      at Function.Object.<anonymous>.AxiosError.from (node_modules/axios/lib/core/AxiosError.js:96:14)
+      at RedirectableRequest.handleRequestError (node_modules/axios/lib/adapters/http.js:638:25)
+      at ClientRequest.eventHandlers.<computed> (node_modules/follow-redirects/index.js:49:24)
+      at Axios.request (node_modules/axios/lib/core/Axios.js:45:41)
+      at Object.<anonymous> (tests/integration/audit-trail.test.ts:90:26)
+
+    Cause:
+    AggregateError:
+
+
+
+  ● Phase 3.5: Audit Trail Verification › should correlate federation request IDs across KAS instances
+
+    AggregateError: Error
+
+      175 |         const requestId = `correlation-test-${Date.now()}`;
+      176 |         
+    > 177 |         const response = await axios.post(
+          |                          ^
+      178 |             `${KAS_USA_URL}/rewrap`,
+      179 |             {
+      180 |                 clientPublicKey,
+
+      at Function.Object.<anonymous>.AxiosError.from (node_modules/axios/lib/core/AxiosError.js:96:14)
+      at RedirectableRequest.handleRequestError (node_modules/axios/lib/adapters/http.js:638:25)
+      at ClientRequest.eventHandlers.<computed> (node_modules/follow-redirects/index.js:49:24)
+      at Axios.request (node_modules/axios/lib/core/Axios.js:45:41)
+      at Object.<anonymous> (tests/integration/audit-trail.test.ts:177:26)
+
+    Cause:
+    AggregateError:
+
+
+
+  ● Phase 3.5: Audit Trail Verification › should export audit trail in SIEM-compatible format
+
+    AggregateError: Error
+
+      255 |         
+      256 |         try {
+    > 257 |             const response = await axios.get(
+          |                              ^
+      258 |                 `${kasUrl}/audit/export`,
+      259 |                 {
+      260 |                     params: {
+
+      at Function.Object.<anonymous>.AxiosError.from (node_modules/axios/lib/core/AxiosError.js:96:14)
+      at RedirectableRequest.handleRequestError (node_modules/axios/lib/adapters/http.js:638:25)
+      at ClientRequest.eventHandlers.<computed> (node_modules/follow-redirects/index.js:49:24)
+      at Axios.request (node_modules/axios/lib/core/Axios.js:45:41)
+      at Object.<anonymous> (tests/integration/audit-trail.test.ts:257:30)
+
+    Cause:
+    AggregateError:
+
+
+
+  ● Phase 3.5: Audit Trail Verification › should generate ACP-240 compliance reports
+
+    AggregateError: Error
+
+      294 |         
+      295 |         try {
+    > 296 |             const response = await axios.get(
+          |                              ^
+      297 |                 `${kasUrl}/audit/compliance`,
+      298 |                 {
+      299 |                     params: {
+
+      at Function.Object.<anonymous>.AxiosError.from (node_modules/axios/lib/core/AxiosError.js:96:14)
+      at RedirectableRequest.handleRequestError (node_modules/axios/lib/adapters/http.js:638:25)
+      at ClientRequest.eventHandlers.<computed> (node_modules/follow-redirects/index.js:49:24)
+      at Axios.request (node_modules/axios/lib/core/Axios.js:45:41)
+      at Object.<anonymous> (tests/integration/audit-trail.test.ts:296:30)
+
+    Cause:
+    AggregateError:
+
+
+
+  ● Phase 3.5: Audit Trail Verification › should maintain audit trail for 90+ days per ACP-240 requirements
+
+    AggregateError: Error
+
+      393 |         try {
+      394 |             // Query for old logs (90 days ago)
+    > 395 |             const response = await axios.get(
+          |                              ^
+      396 |                 `${kasUrl}/audit/logs`,
+      397 |                 {
+      398 |                     params: {
+
+      at Function.Object.<anonymous>.AxiosError.from (node_modules/axios/lib/core/AxiosError.js:96:14)
+      at RedirectableRequest.handleRequestError (node_modules/axios/lib/adapters/http.js:638:25)
+      at ClientRequest.eventHandlers.<computed> (node_modules/follow-redirects/index.js:49:24)
+      at Axios.request (node_modules/axios/lib/core/Axios.js:45:41)
+      at Object.<anonymous> (tests/integration/audit-trail.test.ts:395:30)
+
+    Cause:
+    AggregateError:
+
+
+
+2026-01-31T16:09:17.667Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.670Z [KAS [32minfo[39m]: mTLS config loaded for kas-usa {
+  "service": "dive-v3-kas",
+  "hasCert": true,
+  "hasKey": true,
+  "hasCA": true,
+  "hasPassphrase": false
+}
+2026-01-31T16:09:17.672Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.673Z [KAS [32minfo[39m]: mTLS config loaded for kas-unknown {
+  "service": "dive-v3-kas",
+  "hasCert": true,
+  "hasKey": true,
+  "hasCA": false,
+  "hasPassphrase": false
+}
+2026-01-31T16:09:17.673Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.675Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.675Z [KAS [32minfo[39m]: mTLS config loaded for kas-fra {
+  "service": "dive-v3-kas",
+  "hasCert": true,
+  "hasKey": true,
+  "hasCA": false,
+  "hasPassphrase": true
+}
+2026-01-31T16:09:17.676Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.676Z [KAS [32minfo[39m]: mTLS config loaded for kas-gbr {
+  "service": "dive-v3-kas",
+  "hasCert": true,
+  "hasKey": true,
+  "hasCA": false,
+  "hasPassphrase": false
+}
+2026-01-31T16:09:17.677Z [KAS [32minfo[39m]: Created mTLS agent for kas-gbr {
+  "service": "dive-v3-kas",
+  "rejectUnauthorized": true,
+  "requestCert": true,
+  "hasCA": false
+}
+2026-01-31T16:09:17.678Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.678Z [KAS [33mwarn[39m]: Cannot create mTLS agent for kas-nonexistent: No configuration found 
+2026-01-31T16:09:17.678Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.678Z [KAS [32minfo[39m]: mTLS config loaded for kas-test {
+  "service": "dive-v3-kas",
+  "hasCert": true,
+  "hasKey": true,
+  "hasCA": false,
+  "hasPassphrase": false
+}
+2026-01-31T16:09:17.678Z [KAS [32minfo[39m]: Created mTLS agent for kas-test {
+  "service": "dive-v3-kas",
+  "rejectUnauthorized": true,
+  "requestCert": true,
+  "hasCA": false
+}
+2026-01-31T16:09:17.679Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.679Z [KAS [32minfo[39m]: mTLS config loaded for kas-with-ca {
+  "service": "dive-v3-kas",
+  "hasCert": true,
+  "hasKey": true,
+  "hasCA": true,
+  "hasPassphrase": false
+}
+2026-01-31T16:09:17.679Z [KAS [32minfo[39m]: Created mTLS agent for kas-with-ca {
+  "service": "dive-v3-kas",
+  "rejectUnauthorized": true,
+  "requestCert": true,
+  "hasCA": true
+}
+2026-01-31T16:09:17.679Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.679Z [KAS [32minfo[39m]: mTLS config loaded for kas-cache-test {
+  "service": "dive-v3-kas",
+  "hasCert": true,
+  "hasKey": true,
+  "hasCA": false,
+  "hasPassphrase": false
+}
+2026-01-31T16:09:17.679Z [KAS [32minfo[39m]: Created mTLS agent for kas-cache-test {
+  "service": "dive-v3-kas",
+  "rejectUnauthorized": true,
+  "requestCert": true,
+  "hasCA": false
+}
+2026-01-31T16:09:17.680Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.680Z [KAS [32minfo[39m]: mTLS config loaded for kas-invalidate {
+  "service": "dive-v3-kas",
+  "hasCert": true,
+  "hasKey": true,
+  "hasCA": false,
+  "hasPassphrase": false
+}
+2026-01-31T16:09:17.680Z [KAS [32minfo[39m]: Created mTLS agent for kas-invalidate {
+  "service": "dive-v3-kas",
+  "rejectUnauthorized": true,
+  "requestCert": true,
+  "hasCA": false
+}
+2026-01-31T16:09:17.680Z [KAS [32minfo[39m]: Invalidated mTLS agent cache for kas-invalidate 
+2026-01-31T16:09:17.680Z [KAS [32minfo[39m]: mTLS config loaded for kas-invalidate {
+  "service": "dive-v3-kas",
+  "hasCert": true,
+  "hasKey": true,
+  "hasCA": false,
+  "hasPassphrase": false
+}
+2026-01-31T16:09:17.680Z [KAS [32minfo[39m]: Created mTLS agent for kas-invalidate {
+  "service": "dive-v3-kas",
+  "rejectUnauthorized": true,
+  "requestCert": true,
+  "hasCA": false
+}
+2026-01-31T16:09:17.681Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.681Z [KAS [32minfo[39m]: mTLS config loaded for kas-1 {
+  "service": "dive-v3-kas",
+  "hasCert": true,
+  "hasKey": true,
+  "hasCA": false,
+  "hasPassphrase": false
+}
+2026-01-31T16:09:17.681Z [KAS [32minfo[39m]: Created mTLS agent for kas-1 {
+  "service": "dive-v3-kas",
+  "rejectUnauthorized": true,
+  "requestCert": true,
+  "hasCA": false
+}
+2026-01-31T16:09:17.681Z [KAS [32minfo[39m]: mTLS config loaded for kas-2 {
+  "service": "dive-v3-kas",
+  "hasCert": true,
+  "hasKey": true,
+  "hasCA": false,
+  "hasPassphrase": false
+}
+2026-01-31T16:09:17.681Z [KAS [32minfo[39m]: Created mTLS agent for kas-2 {
+  "service": "dive-v3-kas",
+  "rejectUnauthorized": true,
+  "requestCert": true,
+  "hasCA": false
+}
+2026-01-31T16:09:17.681Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.681Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.682Z [KAS [32minfo[39m]: mTLS config loaded for kas-track-1 {
+  "service": "dive-v3-kas",
+  "hasCert": true,
+  "hasKey": true,
+  "hasCA": false,
+  "hasPassphrase": false
+}
+2026-01-31T16:09:17.682Z [KAS [32minfo[39m]: Created mTLS agent for kas-track-1 {
+  "service": "dive-v3-kas",
+  "rejectUnauthorized": true,
+  "requestCert": true,
+  "hasCA": false
+}
+2026-01-31T16:09:17.682Z [KAS [32minfo[39m]: mTLS config loaded for kas-track-2 {
+  "service": "dive-v3-kas",
+  "hasCert": true,
+  "hasKey": true,
+  "hasCA": false,
+  "hasPassphrase": false
+}
+2026-01-31T16:09:17.682Z [KAS [32minfo[39m]: Created mTLS agent for kas-track-2 {
+  "service": "dive-v3-kas",
+  "rejectUnauthorized": true,
+  "requestCert": true,
+  "hasCA": false
+}
+2026-01-31T16:09:17.682Z [KAS [32minfo[39m]: mTLS config loaded for kas-track-3 {
+  "service": "dive-v3-kas",
+  "hasCert": true,
+  "hasKey": true,
+  "hasCA": false,
+  "hasPassphrase": false
+}
+2026-01-31T16:09:17.682Z [KAS [32minfo[39m]: Created mTLS agent for kas-track-3 {
+  "service": "dive-v3-kas",
+  "rejectUnauthorized": true,
+  "requestCert": true,
+  "hasCA": false
+}
+2026-01-31T16:09:17.682Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.685Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.686Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.686Z [KAS [33mwarn[39m]: Untrusted forwarder detected {
+  "service": "dive-v3-kas",
+  "forwarder": "kas-usa",
+  "chain": [
+    "kas-usa"
+  ]
+}
+2026-01-31T16:09:17.694Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.694Z [KAS [33mwarn[39m]: Untrusted forwarder detected {
+  "service": "dive-v3-kas",
+  "forwarder": "kas-unknown",
+  "chain": [
+    "kas-unknown"
+  ]
+}
+2026-01-31T16:09:17.695Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.695Z [KAS [33mwarn[39m]: Untrusted forwarder detected {
+  "service": "dive-v3-kas",
+  "forwarder": "kas-3",
+  "chain": [
+    "kas-0",
+    "kas-1",
+    "kas-2",
+    "kas-3"
+  ]
+}
+2026-01-31T16:09:17.696Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.696Z [KAS [33mwarn[39m]: Untrusted forwarder detected {
+  "service": "dive-v3-kas",
+  "forwarder": "kas-usa",
+  "chain": [
+    "kas-usa",
+    "kas-fra",
+    "kas-usa"
+  ]
+}
+2026-01-31T16:09:17.697Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.697Z [KAS [33mwarn[39m]: Untrusted forwarder detected {
+  "service": "dive-v3-kas",
+  "forwarder": "kas-pending",
+  "chain": [
+    "kas-pending"
+  ]
+}
+2026-01-31T16:09:17.698Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.698Z [KAS [33mwarn[39m]: Classification exceeds federation agreement {
+  "service": "dive-v3-kas",
+  "forwarder": "kas-test",
+  "resourceClassification": "TOP_SECRET",
+  "maxAllowed": "SECRET"
+}
+2026-01-31T16:09:17.698Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.699Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.699Z [KAS [33mwarn[39m]: COI not allowed by federation agreement {
+  "service": "dive-v3-kas",
+  "forwarder": "kas-test",
+  "unauthorizedCOIs": [
+    "US-ONLY"
+  ],
+  "allowedCOIs": [
+    "NATO",
+    "FVEY"
+  ]
+}
+2026-01-31T16:09:17.699Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.699Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.700Z [KAS [32minfo[39m]: mTLS config loaded for kas-usa {
+  "service": "dive-v3-kas",
+  "hasCert": true,
+  "hasKey": true,
+  "hasCA": false,
+  "hasPassphrase": false
+}
+2026-01-31T16:09:17.700Z [KAS [32minfo[39m]: Created mTLS agent for kas-usa {
+  "service": "dive-v3-kas",
+  "rejectUnauthorized": true,
+  "requestCert": true,
+  "hasCA": false
+}
+2026-01-31T16:09:17.700Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.700Z [KAS [32minfo[39m]: mTLS config loaded for kas-valid {
+  "service": "dive-v3-kas",
+  "hasCert": true,
+  "hasKey": true,
+  "hasCA": false,
+  "hasPassphrase": false
+}
+2026-01-31T16:09:17.701Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.701Z [KAS [31merror[39m]: Client Cert [kas-invalid]: Failed to load certificate {
+  "service": "dive-v3-kas",
+  "path": "not-a-pem-cert",
+  "error": "Certificate file not found: /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/kas/not-a-pem-cert"
+}
+2026-01-31T16:09:17.701Z [KAS [31merror[39m]: Failed to load mTLS config for kas-invalid {
+  "service": "dive-v3-kas",
+  "error": "Certificate file not found: /Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/kas/not-a-pem-cert"
+}
+2026-01-31T16:09:17.702Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.702Z [KAS [33mwarn[39m]: Federation disabled, rejecting federated request {
+  "service": "dive-v3-kas",
+  "requestId": "test-123",
+  "forwardedBy": "kas-usa"
+}
+2026-01-31T16:09:17.702Z [KAS [32minfo[39m]: KAS Audit Event {
+  "service": "dive-v3-kas",
+  "eventType": "FEDERATION_DENIED",
+  "requestId": "test-123",
+  "subject": "federation",
+  "resourceId": "n/a",
+  "outcome": "DENY",
+  "reason": "Federation disabled",
+  "acp240Category": "OTHER"
+}
+2026-01-31T16:09:17.703Z [KAS [32minfo[39m]: Invalidated all mTLS agent caches 
+2026-01-31T16:09:17.703Z [KAS [33mwarn[39m]: Federation disabled, rejecting federated request {
+  "service": "dive-v3-kas",
+  "requestId": "test-456",
+  "forwardedBy": "kas-usa"
+}
+2026-01-31T16:09:17.703Z [KAS [32minfo[39m]: KAS Audit Event {
+  "service": "dive-v3-kas",
+  "eventType": "FEDERATION_DENIED",
+  "requestId": "test-456",
+  "subject": "federation",
+  "resourceId": "n/a",
+  "outcome": "DENY",
+  "reason": "Federation disabled",
+  "acp240Category": "OTHER"
+}
+FAIL src/__tests__/phase3.4-security.test.ts
+  mTLS Configuration
+    loadMTLSConfig
+      ✓ should load per-KAS mTLS config from environment (5 ms)
+      ✓ should fallback to shared mTLS config (1 ms)
+      ✓ should return null if cert/key not configured (2 ms)
+      ✓ should handle passphrase for encrypted keys (1 ms)
+    createMTLSAgent
+      ✓ should create HTTPS agent with valid config (1 ms)
+      ✓ should return null if config not found (1 ms)
+      ✓ should configure agent with connection pooling (1 ms)
+      ✓ should validate CA certificates when provided
+  mTLS Agent Caching
+    ✓ should cache agents for reuse (1 ms)
+    ✓ should invalidate cache for specific KAS
+    ✓ should invalidate all caches
+    ✓ should track cached agents (1 ms)
+    ✓ should check global mTLS enabled flag (1 ms)
+  Federation Validator Middleware
+    validateForwardedByHeader
+      ✓ should accept direct client request (no X-Forwarded-By) (1 ms)
+      ✕ should validate single forwarder (1 ms)
+      ✓ should reject untrusted forwarder (1 ms)
+      ✕ should enforce max federation depth (1 ms)
+      ✕ should detect federation loops (1 ms)
+      ✕ should reject non-approved forwarder (1 ms)
+    validateFederationAgreement
+      ✓ should validate classification cap
+      ✓ should allow classification within cap (1 ms)
+      ✓ should validate COI restrictions
+      ✓ should allow matching COIs
+  Federation Security Integration
+    ✓ should create mTLS-enabled HTTP client (1 ms)
+    ✓ should validate mTLS configuration
+    ✕ should reject invalid mTLS cert format
+    ✕ should handle federation request with all security checks (1 ms)
+    ✓ should reject federation when disabled (1 ms)
+
+  ● Federation Validator Middleware › validateForwardedByHeader › should validate single forwarder
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: true
+    Received: false
+
+      242 |             const result = validateForwardedByHeader(req);
+      243 |             
+    > 244 |             expect(result.valid).toBe(true);
+          |                                  ^
+      245 |             expect(result.forwarderKasId).toBe('kas-usa');
+      246 |             expect(result.depth).toBe(1);
+      247 |         });
+
+      at Object.<anonymous> (src/__tests__/phase3.4-security.test.ts:244:34)
+
+  ● Federation Validator Middleware › validateForwardedByHeader › should enforce max federation depth
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "exceeds maximum"
+    Received string:    "Untrusted forwarder: kas-3 not in KAS registry"
+
+      280 |             
+      281 |             expect(result.valid).toBe(false);
+    > 282 |             expect(result.reason).toContain('exceeds maximum');
+          |                                   ^
+      283 |             expect(result.depth).toBeGreaterThan(MAX_FEDERATION_DEPTH);
+      284 |         });
+      285 |         
+
+      at Object.<anonymous> (src/__tests__/phase3.4-security.test.ts:282:35)
+
+  ● Federation Validator Middleware › validateForwardedByHeader › should detect federation loops
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "loop detected"
+    Received string:    "Untrusted forwarder: kas-usa not in KAS registry"
+
+      300 |             
+      301 |             expect(result.valid).toBe(false);
+    > 302 |             expect(result.reason).toContain('loop detected');
+          |                                   ^
+      303 |         });
+      304 |         
+      305 |         it('should reject non-approved forwarder', () => {
+
+      at Object.<anonymous> (src/__tests__/phase3.4-security.test.ts:302:35)
+
+  ● Federation Validator Middleware › validateForwardedByHeader › should reject non-approved forwarder
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "not approved"
+    Received string:    "Untrusted forwarder: kas-pending not in KAS registry"
+
+      319 |             
+      320 |             expect(result.valid).toBe(false);
+    > 321 |             expect(result.reason).toContain('not approved');
+          |                                   ^
+      322 |         });
+      323 |     });
+      324 |     
+
+      at Object.<anonymous> (src/__tests__/phase3.4-security.test.ts:321:35)
+
+  ● Federation Security Integration › should reject invalid mTLS cert format
+
+    expect(received).toContain(expected) // indexOf
+
+    Expected substring: "not in PEM format"
+    Received string:    "No mTLS configuration found for kas-invalid"
+
+      449 |         
+      450 |         expect(result.valid).toBe(false);
+    > 451 |         expect(result.reason).toContain('not in PEM format');
+          |                               ^
+      452 |     });
+      453 |     
+      454 |     it('should handle federation request with all security checks', async () => {
+
+      at Object.<anonymous> (src/__tests__/phase3.4-security.test.ts:451:31)
+
+  ● Federation Security Integration › should handle federation request with all security checks
+
+    expect(jest.fn()).toHaveBeenCalled()
+
+    Expected number of calls: >= 1
+    Received number of calls:    0
+
+      489 |         
+      490 |         // Should call next() if validation passes
+    > 491 |         expect(next).toHaveBeenCalled();
+          |                      ^
+      492 |     });
+      493 |     
+      494 |     it('should reject federation when disabled', async () => {
+
+      at Object.<anonymous> (src/__tests__/phase3.4-security.test.ts:491:22)
+
+PASS src/__tests__/gcp-kms.test.ts
+  GcpKmsService
+    Constructor
+      ✓ should initialize with provided config (2 ms)
+      ✓ should use environment variables as fallback (6 ms)
+      ✓ should use default project ID if not specified (5 ms)
+    decryptWithKMS
+      ✓ should decrypt ciphertext successfully (2 ms)
+      ✓ should decrypt base64-encoded string (3 ms)
+      ✓ should throw error if decryption returns empty plaintext (11 ms)
+      ✓ should throw error on KMS failure (1 ms)
+      ✓ should handle unknown errors gracefully (1 ms)
+    getPublicKey
+      ✓ should fetch public key successfully
+      ✓ should throw error if public key is empty (3 ms)
+      ✓ should throw error on KMS failure (1 ms)
+      ✓ should return cached public key on cache hit (1 ms)
+      ✓ should fetch and cache public key on cache miss (1 ms)
+      ✓ should handle cache errors gracefully (fail-open) (1 ms)
+    rotateKey
+      ✓ should rotate key successfully
+      ✓ should throw error if version creation fails (1 ms)
+      ✓ should throw error on KMS failure (1 ms)
+    getKeyInfo
+      ✓ should retrieve key information successfully
+      ✓ should throw error if key not found (1 ms)
+      ✓ should handle missing version template (3 ms)
+    buildKeyName
+      ✓ should build key name without version
+      ✓ should build key name with version (1 ms)
+    healthCheck
+      ✓ should return true if KMS is healthy (1 ms)
+      ✓ should return false if KMS is unhealthy
+    listKeys
+      ✓ should list all keys in keyring (2 ms)
+      ✓ should filter out keys without names
+      ✓ should return empty array on error
+    checkPermissions
+      ✓ should return all permissions when granted (1 ms)
+      ✓ should return false for missing permissions (1 ms)
+      ✓ should handle empty permissions
+      ✓ should return false on error (4 ms)
+  GcpKmsFactory
+    getService
+      ✓ should create service for USA
+      ✓ should create service for FRA (1 ms)
+      ✓ should create service for GBR
+      ✓ should return cached instance for same KAS ID (1 ms)
+      ✓ should return different instances for different KAS IDs (1 ms)
+      ✓ should normalize KAS ID to lowercase (1 ms)
+      ✓ should default to USA for unknown KAS ID
+    clearInstances
+      ✓ should clear all cached instances (1 ms)
+
+2026-01-31T16:09:18.070Z [KAS [32minfo[39m]: Redis cache disabled 
+2026-01-31T16:09:18.085Z [KAS [32minfo[39m]: Redis cache disabled 
+2026-01-31T16:09:18.101Z [KAS [31merror[39m]: Cache get error (fail-open) {
+  "service": "dive-v3-kas",
+  "key": "error-key",
+  "error": "Redis connection error"
+}
+2026-01-31T16:09:18.109Z [KAS [32minfo[39m]: Redis cache disabled 
+2026-01-31T16:09:18.132Z [KAS [31merror[39m]: Cache set error (fail-open) {
+  "service": "dive-v3-kas",
+  "key": "error-key",
+  "error": "Redis write error"
+}
+2026-01-31T16:09:18.137Z [KAS [32minfo[39m]: Redis cache disabled 
+2026-01-31T16:09:18.147Z [KAS [31merror[39m]: Cache delete error {
+  "service": "dive-v3-kas",
+  "key": "error-key",
+  "error": "Redis delete error"
+}
+2026-01-31T16:09:18.153Z [KAS [32minfo[39m]: Cache invalidated {
+  "service": "dive-v3-kas",
+  "pattern": "dek:*",
+  "count": 3
+}
+2026-01-31T16:09:18.168Z [KAS [31merror[39m]: Cache invalidation error {
+  "service": "dive-v3-kas",
+  "pattern": "error:*",
+  "error": "Redis keys error"
+}
+2026-01-31T16:09:18.182Z [KAS [31merror[39m]: Redis health check failed {
+  "service": "dive-v3-kas",
+  "error": "Connection refused"
+}
+2026-01-31T16:09:18.187Z [KAS [32minfo[39m]: Redis cache disabled 
+2026-01-31T16:09:18.200Z [KAS [32minfo[39m]: Redis cache disabled 
+2026-01-31T16:09:18.208Z [KAS [31merror[39m]: Failed to get cache stats {
+  "service": "dive-v3-kas",
+  "error": "Redis info error"
+}
+2026-01-31T16:09:18.220Z [KAS [32minfo[39m]: Redis cache connection closed 
+2026-01-31T16:09:18.222Z [KAS [32minfo[39m]: Redis cache disabled 
+PASS src/__tests__/cache-manager.test.ts
+  CacheManager
+    Constructor
+      ✓ should initialize with default configuration (6 ms)
+      ✓ should initialize with custom configuration (6 ms)
+      ✓ should not initialize Redis when cache is disabled (1 ms)
+    get()
+      ✓ should return cached value on cache hit (4 ms)
+      ✓ should return null on cache miss (7 ms)
+      ✓ should return null on Redis error (fail-open) (5 ms)
+      ✓ should return null when cache is disabled (7 ms)
+    set()
+      ✓ should cache value with default TTL (4 ms)
+      ✓ should cache value with custom TTL (5 ms)
+      ✓ should use public key TTL for pubkey: prefix (10 ms)
+      ✓ should not throw on Redis error (fail-open) (4 ms)
+      ✓ should not call Redis when cache is disabled (6 ms)
+    delete()
+      ✓ should delete cached value (3 ms)
+      ✓ should not throw on Redis error (7 ms)
+    invalidate()
+      ✓ should invalidate keys matching pattern (5 ms)
+      ✓ should handle no matching keys (7 ms)
+      ✓ should not throw on Redis error (8 ms)
+    healthCheck()
+      ✓ should return true when Redis is healthy (5 ms)
+      ✓ should return false when Redis ping fails (9 ms)
+      ✓ should return true when cache is disabled (fail-open) (5 ms)
+    getStats()
+      ✓ should return cache statistics (8 ms)
+      ✓ should return null when cache is disabled (5 ms)
+      ✓ should return null on Redis error (8 ms)
+    Static Key Builders
+      ✓ should build DEK cache key
+      ✓ should build public key cache key (5 ms)
+      ✓ should build metadata cache key (1 ms)
+    close()
+      ✓ should close Redis connection (6 ms)
+      ✓ should not throw when Redis is not initialized (1 ms)
+
+2026-01-31T16:09:18.301Z [KAS [32minfo[39m]: JWKS cache cleared 
+2026-01-31T16:09:18.308Z [KAS [31merror[39m]: JWT verification failed {
+  "service": "dive-v3-kas",
+  "requestId": "kas-verify-1769875758303",
+  "error": "invalid algorithm",
+  "name": "JsonWebTokenError"
+}
+2026-01-31T16:09:18.318Z [KAS [32minfo[39m]: JWKS cache cleared 
+2026-01-31T16:09:18.320Z [KAS [31merror[39m]: Token header missing kid (key ID) {
+  "service": "dive-v3-kas",
+  "requestId": "kas-jwks-1769875758319"
+}
+2026-01-31T16:09:18.320Z [KAS [31merror[39m]: Token verification error {
+  "service": "dive-v3-kas",
+  "requestId": "kas-verify-1769875758319",
+  "error": "Token header missing kid"
+}
+2026-01-31T16:09:18.321Z [KAS [32minfo[39m]: JWKS cache cleared 
+2026-01-31T16:09:18.323Z [KAS [31merror[39m]: JWT verification failed {
+  "service": "dive-v3-kas",
+  "requestId": "kas-verify-1769875758321",
+  "error": "invalid algorithm",
+  "name": "JsonWebTokenError"
+}
+2026-01-31T16:09:18.323Z [KAS [32minfo[39m]: JWKS cache cleared 
+2026-01-31T16:09:18.325Z [KAS [31merror[39m]: JWT verification failed {
+  "service": "dive-v3-kas",
+  "requestId": "kas-verify-1769875758324",
+  "error": "invalid algorithm",
+  "name": "JsonWebTokenError"
+}
+2026-01-31T16:09:18.325Z [KAS [32minfo[39m]: JWKS cache cleared 
+2026-01-31T16:09:18.326Z [KAS [31merror[39m]: JWT verification failed {
+  "service": "dive-v3-kas",
+  "requestId": "kas-verify-1769875758325",
+  "error": "invalid algorithm",
+  "name": "JsonWebTokenError"
+}
+2026-01-31T16:09:18.327Z [KAS [32minfo[39m]: JWKS cache cleared 
+2026-01-31T16:09:18.327Z [KAS [32minfo[39m]: JWKS cache cleared 
+2026-01-31T16:09:18.327Z [KAS [32minfo[39m]: JWKS cache cleared 
+2026-01-31T16:09:18.327Z [KAS [32minfo[39m]: JWKS cache cleared 
+2026-01-31T16:09:18.328Z [KAS [32minfo[39m]: JWKS cache cleared 
+2026-01-31T16:09:18.328Z [KAS [31merror[39m]: No matching signing key found in JWKS {
+  "service": "dive-v3-kas",
+  "requestId": "kas-jwks-1769875758328",
+  "kid": "test-kid",
+  "realm": "dive-v3-broker",
+  "jwksUri": "http://localhost:8081/realms/dive-v3-broker/protocol/openid-connect/certs",
+  "availableKids": [
+    {
+      "kid": "test-kid-123",
+      "use": "sig"
+    }
+  ]
+}
+2026-01-31T16:09:18.328Z [KAS [31merror[39m]: Failed to fetch signing key {
+  "service": "dive-v3-kas",
+  "requestId": "kas-jwks-1769875758328",
+  "kid": "test-kid",
+  "realm": "dive-v3-broker",
+  "jwksUri": "http://localhost:8081/realms/dive-v3-broker/protocol/openid-connect/certs",
+  "error": "No signing key found for kid: test-kid"
+}
+2026-01-31T16:09:18.328Z [KAS [31merror[39m]: Token verification error {
+  "service": "dive-v3-kas",
+  "requestId": "kas-verify-1769875758328",
+  "error": "No signing key found for kid: test-kid"
+}
+2026-01-31T16:09:18.329Z [KAS [32minfo[39m]: JWKS cache cleared 
+2026-01-31T16:09:18.329Z [KAS [31merror[39m]: Invalid token format {
+  "service": "dive-v3-kas",
+  "requestId": "kas-verify-1769875758329"
+}
+2026-01-31T16:09:18.329Z [KAS [31merror[39m]: Token verification error {
+  "service": "dive-v3-kas",
+  "requestId": "kas-verify-1769875758329",
+  "error": "Invalid token format"
+}
+2026-01-31T16:09:18.329Z [KAS [32minfo[39m]: JWKS cache cleared 
+2026-01-31T16:09:18.329Z [KAS [31merror[39m]: Invalid token format {
+  "service": "dive-v3-kas",
+  "requestId": "kas-verify-1769875758329"
+}
+2026-01-31T16:09:18.329Z [KAS [31merror[39m]: Token verification error {
+  "service": "dive-v3-kas",
+  "requestId": "kas-verify-1769875758329",
+  "error": "Invalid token format"
+}
+2026-01-31T16:09:18.330Z [KAS [32minfo[39m]: JWKS cache cleared 
+2026-01-31T16:09:18.330Z [KAS [31merror[39m]: No matching signing key found in JWKS {
+  "service": "dive-v3-kas",
+  "requestId": "kas-jwks-1769875758330",
+  "kid": "hs256-kid",
+  "realm": "dive-v3-broker",
+  "jwksUri": "http://localhost:8081/realms/dive-v3-broker/protocol/openid-connect/certs",
+  "availableKids": [
+    {
+      "kid": "test-kid-123",
+      "use": "sig"
+    }
+  ]
+}
+2026-01-31T16:09:18.330Z [KAS [31merror[39m]: Failed to fetch signing key {
+  "service": "dive-v3-kas",
+  "requestId": "kas-jwks-1769875758330",
+  "kid": "hs256-kid",
+  "realm": "dive-v3-broker",
+  "jwksUri": "http://localhost:8081/realms/dive-v3-broker/protocol/openid-connect/certs",
+  "error": "No signing key found for kid: hs256-kid"
+}
+2026-01-31T16:09:18.330Z [KAS [31merror[39m]: Token verification error {
+  "service": "dive-v3-kas",
+  "requestId": "kas-verify-1769875758330",
+  "error": "No signing key found for kid: hs256-kid"
+}
+2026-01-31T16:09:18.331Z [KAS [32minfo[39m]: JWKS cache cleared 
+2026-01-31T16:09:18.332Z [KAS [31merror[39m]: No matching signing key found in JWKS {
+  "service": "dive-v3-kas",
+  "requestId": "kas-jwks-1769875758331",
+  "kid": "fake-kid",
+  "realm": "dive-v3-broker",
+  "jwksUri": "http://localhost:8081/realms/dive-v3-broker/protocol/openid-connect/certs",
+  "availableKids": [
+    {
+      "kid": "test-kid-123",
+      "use": "sig"
+    }
+  ]
+}
+2026-01-31T16:09:18.332Z [KAS [31merror[39m]: Failed to fetch signing key {
+  "service": "dive-v3-kas",
+  "requestId": "kas-jwks-1769875758331",
+  "kid": "fake-kid",
+  "realm": "dive-v3-broker",
+  "jwksUri": "http://localhost:8081/realms/dive-v3-broker/protocol/openid-connect/certs",
+  "error": "No signing key found for kid: fake-kid"
+}
+2026-01-31T16:09:18.332Z [KAS [31merror[39m]: Token verification error {
+  "service": "dive-v3-kas",
+  "requestId": "kas-verify-1769875758331",
+  "error": "No signing key found for kid: fake-kid"
+}
+2026-01-31T16:09:18.333Z [KAS [31merror[39m]: No matching signing key found in JWKS {
+  "service": "dive-v3-kas",
+  "requestId": "kas-jwks-1769875758332",
+  "kid": "test-kid",
+  "realm": "dive-v3-broker",
+  "jwksUri": "http://localhost:8081/realms/dive-v3-broker/protocol/openid-connect/certs",
+  "availableKids": [
+    {
+      "kid": "test-kid-123",
+      "use": "sig"
+    }
+  ]
+}
+2026-01-31T16:09:18.333Z [KAS [31merror[39m]: Failed to fetch signing key {
+  "service": "dive-v3-kas",
+  "requestId": "kas-jwks-1769875758332",
+  "kid": "test-kid",
+  "realm": "dive-v3-broker",
+  "jwksUri": "http://localhost:8081/realms/dive-v3-broker/protocol/openid-connect/certs",
+  "error": "No signing key found for kid: test-kid"
+}
+2026-01-31T16:09:18.333Z [KAS [31merror[39m]: Token verification error {
+  "service": "dive-v3-kas",
+  "requestId": "kas-verify-1769875758332",
+  "error": "No signing key found for kid: test-kid"
+}
+2026-01-31T16:09:18.334Z [KAS [31merror[39m]: No matching signing key found in JWKS {
+  "service": "dive-v3-kas",
+  "requestId": "kas-jwks-1769875758334",
+  "kid": "attacker-kid",
+  "realm": "attacker-realm",
+  "jwksUri": "http://localhost:8081/realms/attacker-realm/protocol/openid-connect/certs",
+  "availableKids": [
+    {
+      "kid": "test-kid-123",
+      "use": "sig"
+    }
+  ]
+}
+2026-01-31T16:09:18.335Z [KAS [31merror[39m]: Failed to fetch signing key {
+  "service": "dive-v3-kas",
+  "requestId": "kas-jwks-1769875758334",
+  "kid": "attacker-kid",
+  "realm": "attacker-realm",
+  "jwksUri": "http://localhost:8081/realms/attacker-realm/protocol/openid-connect/certs",
+  "error": "No signing key found for kid: attacker-kid"
+}
+2026-01-31T16:09:18.335Z [KAS [31merror[39m]: Token verification error {
+  "service": "dive-v3-kas",
+  "requestId": "kas-verify-1769875758334",
+  "error": "No signing key found for kid: attacker-kid"
+}
+PASS src/__tests__/jwt-verification.test.ts
+  KAS JWT Verification Security Fix (Gap #3)
+    Security: Forged Token Detection
+      ✓ should REJECT forged token with invalid signature (16 ms)
+      ✓ should REJECT token with missing kid (4 ms)
+      ✓ should REJECT expired token (2 ms)
+      ✓ should REJECT token with wrong issuer (2 ms)
+      ✓ should REJECT token with wrong audience (2 ms)
+    JWKS Caching
+      ✓ should cache JWKS public key on first fetch
+      ✓ should clear JWKS cache when requested
+    Valid Token Acceptance (Integration)
+      ✓ should document that valid Keycloak tokens will be accepted
+    Error Handling
+      ✓ should handle JWKS fetch failure gracefully (1 ms)
+      ✓ should handle malformed token gracefully
+      ✓ should handle token with missing parts
+    Security Compliance
+      ✓ should enforce RS256 algorithm (reject HS256) (1 ms)
+      ✓ should validate ACP-240 Section 5.2 requirements (1 ms)
+  Attack Scenarios Prevented
+    ✓ Scenario 1: Attacker crafts token with elevated clearance (1 ms)
+    ✓ Scenario 2: Attacker reuses expired token (1 ms)
+    ✓ Scenario 3: Token from different realm (cross-realm attack) (2 ms)
+
+2026-01-31T16:09:18.366Z [KAS [32minfo[39m]: Metadata decrypted successfully {
+  "service": "dive-v3-kas",
+  "algorithm": "AES-256-GCM",
+  "fieldCount": 3,
+  "hasPolicyAssertion": true,
+  "decryptedSize": 195
+}
+2026-01-31T16:09:18.367Z [KAS [32minfo[39m]: Metadata decrypted successfully {
+  "service": "dive-v3-kas",
+  "algorithm": "AES-256-GCM",
+  "fieldCount": 2,
+  "hasPolicyAssertion": false,
+  "decryptedSize": 39
+}
+2026-01-31T16:09:18.368Z [KAS [31merror[39m]: AES-GCM decryption failed {
+  "service": "dive-v3-kas",
+  "error": "Unknown error"
+}
+2026-01-31T16:09:18.368Z [KAS [31merror[39m]: Metadata decryption failed {
+  "service": "dive-v3-kas",
+  "algorithm": "AES-256-GCM",
+  "error": "Unknown error"
+}
+2026-01-31T16:09:18.377Z [KAS [31merror[39m]: AES-GCM decryption failed {
+  "service": "dive-v3-kas",
+  "error": "Invalid encrypted metadata: too short (min 28 bytes)"
+}
+2026-01-31T16:09:18.377Z [KAS [31merror[39m]: Metadata decryption failed {
+  "service": "dive-v3-kas",
+  "algorithm": "AES-256-GCM",
+  "error": "Invalid encrypted metadata: too short (min 28 bytes)"
+}
+2026-01-31T16:09:18.378Z [KAS [31merror[39m]: AES-GCM decryption failed {
+  "service": "dive-v3-kas",
+  "error": "Invalid key length: 16 (expected 32 for AES-256)"
+}
+2026-01-31T16:09:18.378Z [KAS [31merror[39m]: Metadata decryption failed {
+  "service": "dive-v3-kas",
+  "algorithm": "AES-256-GCM",
+  "error": "Invalid key length: 16 (expected 32 for AES-256)"
+}
+2026-01-31T16:09:18.379Z [KAS [31merror[39m]: AES-GCM decryption failed {
+  "service": "dive-v3-kas",
+  "error": "Unknown error"
+}
+2026-01-31T16:09:18.379Z [KAS [31merror[39m]: Metadata decryption failed {
+  "service": "dive-v3-kas",
+  "algorithm": "AES-256-GCM",
+  "error": "Unknown error"
+}
+2026-01-31T16:09:18.379Z [KAS [32minfo[39m]: Metadata policy validation passed {
+  "service": "dive-v3-kas",
+  "policyHash": "abc123",
+  "fieldsValidated": [
+    "classification",
+    "releasabilityTo",
+    "COI"
+  ]
+}
+2026-01-31T16:09:18.379Z [KAS [33mwarn[39m]: Policy hash mismatch {
+  "service": "dive-v3-kas",
+  "expected": "expected-hash",
+  "actual": "wrong-hash"
+}
+2026-01-31T16:09:18.380Z [KAS [33mwarn[39m]: Classification mismatch {
+  "service": "dive-v3-kas",
+  "expected": "SECRET",
+  "actual": "CONFIDENTIAL"
+}
+2026-01-31T16:09:18.380Z [KAS [33mwarn[39m]: ReleasabilityTo mismatch {
+  "service": "dive-v3-kas",
+  "expected": [
+    "USA",
+    "GBR"
+  ],
+  "actual": [
+    "USA",
+    "FRA"
+  ]
+}
+2026-01-31T16:09:18.380Z [KAS [33mwarn[39m]: COI mismatch {
+  "service": "dive-v3-kas",
+  "expected": [
+    "FVEY"
+  ],
+  "actual": [
+    "NATO-COSMIC"
+  ]
+}
+2026-01-31T16:09:18.380Z [KAS [33mwarn[39m]: Policy hash mismatch {
+  "service": "dive-v3-kas",
+  "expected": "expected-hash",
+  "actual": "wrong-hash"
+}
+2026-01-31T16:09:18.380Z [KAS [33mwarn[39m]: Classification mismatch {
+  "service": "dive-v3-kas",
+  "expected": "SECRET",
+  "actual": "CONFIDENTIAL"
+}
+2026-01-31T16:09:18.380Z [KAS [33mwarn[39m]: ReleasabilityTo mismatch {
+  "service": "dive-v3-kas",
+  "expected": [
+    "USA",
+    "GBR"
+  ],
+  "actual": [
+    "USA"
+  ]
+}
+2026-01-31T16:09:18.382Z [KAS [32minfo[39m]: Metadata decrypted successfully {
+  "service": "dive-v3-kas",
+  "algorithm": "AES-256-GCM",
+  "fieldCount": 2,
+  "hasPolicyAssertion": true,
+  "decryptedSize": 207
+}
+2026-01-31T16:09:18.382Z [KAS [32minfo[39m]: Metadata policy validation passed {
+  "service": "dive-v3-kas",
+  "policyHash": "MSu0erl+H/6DS81SxBq7CkIiqQnNVQ8my1lQuMjRfwU=",
+  "fieldsValidated": [
+    "classification",
+    "releasabilityTo",
+    "COI"
+  ]
+}
+2026-01-31T16:09:18.382Z [KAS [32minfo[39m]: Metadata decrypted successfully {
+  "service": "dive-v3-kas",
+  "algorithm": "AES-256-GCM",
+  "fieldCount": 1,
+  "hasPolicyAssertion": true,
+  "decryptedSize": 133
+}
+2026-01-31T16:09:18.382Z [KAS [33mwarn[39m]: Policy hash mismatch {
+  "service": "dive-v3-kas",
+  "expected": "bbvUyZOeJ0Z6/iwocUJCAPLyhriiOClU+dGAWJYjoRY=",
+  "actual": "UDtOVV+lxkeppNQck3zmF2XPLL+5GbdtLAMeXvzd5II="
+}
+2026-01-31T16:09:18.382Z [KAS [33mwarn[39m]: Classification mismatch {
+  "service": "dive-v3-kas",
+  "expected": "CONFIDENTIAL",
+  "actual": "SECRET"
+}
+2026-01-31T16:09:18.382Z [KAS [31merror[39m]: Metadata decryption failed {
+  "service": "dive-v3-kas",
+  "algorithm": "AES-256-GCM",
+  "error": "Metadata policy validation failed: Policy assertion mismatches: policyHash, classification"
+}
+2026-01-31T16:09:18.383Z [KAS [32minfo[39m]: Metadata decrypted successfully {
+  "service": "dive-v3-kas",
+  "algorithm": "AES-256-GCM",
+  "fieldCount": 1,
+  "hasPolicyAssertion": false,
+  "decryptedSize": 39
+}
+2026-01-31T16:09:18.383Z [KAS [32minfo[39m]: Metadata policy validation passed {
+  "service": "dive-v3-kas",
+  "policyHash": "abc123",
+  "fieldsValidated": [
+    "classification",
+    "releasabilityTo",
+    "COI"
+  ]
+}
+PASS src/__tests__/metadata-decryptor.test.ts
+  MetadataDecryptorService
+    decryptMetadata - AES-256-GCM
+      ✓ should decrypt valid AES-256-GCM encrypted metadata (2 ms)
+      ✓ should handle metadata without policy assertions
+      ✓ should reject decryption with wrong key (10 ms)
+      ✓ should reject malformed encrypted metadata (too short) (1 ms)
+      ✓ should reject invalid key length
+      ✓ should reject corrupted ciphertext (1 ms)
+    validateMetadataPolicyMatch
+      ✓ should pass validation when policy assertions match
+      ✓ should fail validation on policy hash mismatch (1 ms)
+      ✓ should fail validation on classification mismatch
+      ✓ should fail validation on releasabilityTo mismatch
+      ✓ should fail validation on COI mismatch
+      ✓ should pass validation when no policy assertion in metadata
+      ✓ should handle multiple mismatches (1 ms)
+    computePolicyHash
+      ✓ should compute deterministic hash for same policy
+      ✓ should produce different hashes for different policies
+      ✓ should produce same hash regardless of key order
+      ✓ should handle nested objects
+    End-to-End Metadata Workflow
+      ✓ should decrypt and validate metadata with policy (1 ms)
+      ✓ should reject decryption when policy validation fails
+    Performance
+      ✓ should decrypt metadata in < 50ms (1 ms)
+      ✓ should validate policy in < 10ms
+
+2026-01-31T16:09:18.419Z [KAS [32minfo[39m]: Combining key splits {
+  "service": "dive-v3-kas",
+  "splitCount": 2,
+  "method": "xor",
+  "kaoIds": [
+    "kao-1",
+    "kao-2"
+  ]
+}
+2026-01-31T16:09:18.419Z [KAS [32minfo[39m]: Policy binding validation passed {
+  "service": "dive-v3-kas",
+  "splitsValidated": 2
+}
+2026-01-31T16:09:18.420Z [KAS [32minfo[39m]: Key splits combined successfully {
+  "service": "dive-v3-kas",
+  "splitsCombined": 2,
+  "method": "xor",
+  "dekLength": 32,
+  "sources": [
+    "kao-1",
+    "kao-2"
+  ]
+}
+2026-01-31T16:09:18.420Z [KAS [32minfo[39m]: Combining key splits {
+  "service": "dive-v3-kas",
+  "splitCount": 3,
+  "method": "xor",
+  "kaoIds": [
+    "kao-1",
+    "kao-2",
+    "kao-3"
+  ]
+}
+2026-01-31T16:09:18.420Z [KAS [32minfo[39m]: Policy binding validation passed {
+  "service": "dive-v3-kas",
+  "splitsValidated": 3
+}
+2026-01-31T16:09:18.420Z [KAS [32minfo[39m]: Key splits combined successfully {
+  "service": "dive-v3-kas",
+  "splitsCombined": 3,
+  "method": "xor",
+  "dekLength": 32,
+  "sources": [
+    "kao-1",
+    "kao-2",
+    "kao-3"
+  ]
+}
+2026-01-31T16:09:18.421Z [KAS [32minfo[39m]: Combining key splits {
+  "service": "dive-v3-kas",
+  "splitCount": 5,
+  "method": "xor",
+  "kaoIds": [
+    "kao-1",
+    "kao-2",
+    "kao-3",
+    "kao-4",
+    "kao-5"
+  ]
+}
+2026-01-31T16:09:18.421Z [KAS [32minfo[39m]: Policy binding validation passed {
+  "service": "dive-v3-kas",
+  "splitsValidated": 5
+}
+2026-01-31T16:09:18.421Z [KAS [32minfo[39m]: Key splits combined successfully {
+  "service": "dive-v3-kas",
+  "splitsCombined": 5,
+  "method": "xor",
+  "dekLength": 32,
+  "sources": [
+    "kao-1",
+    "kao-2",
+    "kao-3",
+    "kao-4",
+    "kao-5"
+  ]
+}
+2026-01-31T16:09:18.422Z [KAS [32minfo[39m]: Policy binding validation passed {
+  "service": "dive-v3-kas",
+  "splitsValidated": 2
+}
+2026-01-31T16:09:18.422Z [KAS [33mwarn[39m]: Policy binding mismatch {
+  "service": "dive-v3-kas",
+  "keyAccessObjectId": "kao-2",
+  "expectedBinding": "6gCu+NMRr/l1IeLQ...",
+  "actualBinding": "wrong-binding-va..."
+}
+2026-01-31T16:09:18.423Z [KAS [31merror[39m]: Key split recombination failed {
+  "service": "dive-v3-kas",
+  "splitCount": 1,
+  "method": "xor",
+  "error": "Insufficient key splits: 1 (minimum: 2)"
+}
+2026-01-31T16:09:18.432Z [KAS [31merror[39m]: Key split recombination failed {
+  "service": "dive-v3-kas",
+  "splitCount": 6,
+  "method": "xor",
+  "error": "Too many key splits: 6 (maximum: 5)"
+}
+2026-01-31T16:09:18.433Z [KAS [32minfo[39m]: Combining key splits {
+  "service": "dive-v3-kas",
+  "splitCount": 2,
+  "method": "xor",
+  "kaoIds": [
+    "kao-1",
+    "kao-2"
+  ]
+}
+2026-01-31T16:09:18.433Z [KAS [31merror[39m]: Key split recombination failed {
+  "service": "dive-v3-kas",
+  "splitCount": 2,
+  "method": "xor",
+  "error": "Key split length mismatch: split[0]=32 bytes, split[1]=16 bytes"
+}
+2026-01-31T16:09:18.433Z [KAS [32minfo[39m]: Combining key splits {
+  "service": "dive-v3-kas",
+  "splitCount": 2,
+  "method": "xor",
+  "kaoIds": [
+    "kao-1",
+    "kao-2"
+  ]
+}
+2026-01-31T16:09:18.433Z [KAS [33mwarn[39m]: Policy binding mismatch {
+  "service": "dive-v3-kas",
+  "keyAccessObjectId": "kao-1",
+  "expectedBinding": "wGf3oiJG9J+aTJZT...",
+  "actualBinding": "wrong-binding..."
+}
+2026-01-31T16:09:18.433Z [KAS [33mwarn[39m]: Policy binding mismatch {
+  "service": "dive-v3-kas",
+  "keyAccessObjectId": "kao-2",
+  "expectedBinding": "jN6Ob/JntakBewpH...",
+  "actualBinding": "wrong-binding..."
+}
+2026-01-31T16:09:18.433Z [KAS [31merror[39m]: Key split recombination failed {
+  "service": "dive-v3-kas",
+  "splitCount": 2,
+  "method": "xor",
+  "error": "Policy binding validation failed: Policy binding mismatches in 2 splits"
+}
+2026-01-31T16:09:18.434Z [KAS [32minfo[39m]: Combining key splits {
+  "service": "dive-v3-kas",
+  "splitCount": 5,
+  "method": "xor",
+  "kaoIds": [
+    "kao-0",
+    "kao-1",
+    "kao-2",
+    "kao-3",
+    "kao-4"
+  ]
+}
+2026-01-31T16:09:18.434Z [KAS [32minfo[39m]: Key splits combined successfully {
+  "service": "dive-v3-kas",
+  "splitsCombined": 5,
+  "method": "xor",
+  "dekLength": 32,
+  "sources": [
+    "kao-0",
+    "kao-1",
+    "kao-2",
+    "kao-3",
+    "kao-4"
+  ]
+}
+PASS src/__tests__/key-combiner.test.ts
+  KeyCombinerService
+    detectSplitMode
+      ✓ should detect single mode for 1 KAO
+      ✓ should detect allOf mode for multiple KAOs with same policy binding (1 ms)
+      ✓ should detect single mode for multiple KAOs with different policy bindings
+    validateSplitMode
+      ✓ should validate single mode with 1 split
+      ✓ should reject single mode with multiple splits
+      ✓ should validate allOf mode with 2 splits
+      ✓ should validate allOf mode with 5 splits
+      ✓ should reject allOf mode with < 2 splits (1 ms)
+      ✓ should reject allOf mode with > 5 splits
+      ✓ should validate anyOf mode with 1+ splits
+    combineKeySplits - XOR
+      ✓ should combine 2 key splits using XOR (1 ms)
+      ✓ should combine 3 key splits using XOR (1 ms)
+      ✓ should combine 5 key splits using XOR (1 ms)
+    validatePolicyBindings
+      ✓ should pass validation when all bindings match
+      ✓ should fail validation on policy binding mismatch (1 ms)
+      ✓ should fail validation on split/KAO count mismatch
+    Error Handling
+      ✓ should reject insufficient splits (< 2) (9 ms)
+      ✓ should reject too many splits (> 5) (1 ms)
+      ✓ should reject mismatched split lengths
+      ✓ should reject on policy binding validation failure
+    validateSplitLengths
+      ✓ should validate splits with same length (1 ms)
+      ✓ should reject splits with different lengths
+      ✓ should reject empty array
+    Performance
+      ✓ should combine 5 splits in < 100ms (1 ms)
+
+PASS src/__tests__/rate-limiter.test.ts
+  Rate Limiter Configuration
+    Default Configuration
+      ✓ should use default rewrap rate limit (100 req/min)
+      ✓ should use default health rate limit (50 req/10s)
+      ✓ should use default global rate limit (1000 req/min)
+    Environment Variable Configuration
+      ✓ should override rewrap rate limit from env vars (3 ms)
+      ✓ should override health rate limit from env vars (1 ms)
+      ✓ should override global rate limit from env vars (2 ms)
+  Rate Limiter Middleware
+    Middleware Initialization
+      ✓ should initialize rewrap rate limiter
+      ✓ should initialize health rate limiter
+      ✓ should initialize global rate limiter
+    Rate Limiter Integration
+      ✓ should use Redis store when available (4 ms)
+      ✓ should work without Redis store (memory fallback) (2 ms)
+
+PASS src/__tests__/dek-generation.test.ts
+  Deterministic DEK Generation
+    generateDeterministicDEK
+      ✓ should generate consistent DEK for same resourceId
+      ✓ should generate different DEKs for different resourceIds
+      ✓ should generate 32-byte (256-bit) DEKs
+      ✓ should be deterministic across multiple calls
+      ✓ should generate valid base64 strings
+      ✓ should handle various resourceId formats (1 ms)
+      ✓ should match expected hash for known input
+    Encryption/Decryption Consistency
+      ✓ should encrypt and decrypt successfully with deterministic DEK
+      ✓ should fail decryption with wrong DEK (4 ms)
+      ✓ should handle large content encryption/decryption (1 ms)
+    Security Properties
+      ✓ should generate cryptographically unique DEKs for different resources (3 ms)
+      ✓ should not generate predictable patterns
+      ✓ should note this is for pilot only (not production)
+
+FAIL src/__tests__/kas-federation.test.ts
+  ● Test suite failed to run
+
+    [96msrc/services/kas-federation.service.ts[0m:[93m1089[0m:[93m17[0m - [91merror[0m[90m TS2322: [0mType 'IFederationResult | undefined' is not assignable to type 'IFederationResult'.
+      Type 'undefined' is not assignable to type 'IFederationResult'.
+
+    [7m1089[0m                 return successResult.result;
+    [7m    [0m [91m                ~~~~~~[0m
+
+FAIL src/__tests__/anyof-routing.test.ts
+  ● Test suite failed to run
+
+    [96msrc/services/kas-federation.service.ts[0m:[93m1089[0m:[93m17[0m - [91merror[0m[90m TS2322: [0mType 'IFederationResult | undefined' is not assignable to type 'IFederationResult'.
+      Type 'undefined' is not assignable to type 'IFederationResult'.
+
+    [7m1089[0m                 return successResult.result;
+    [7m    [0m [91m                ~~~~~~[0m
+
+Test Suites: 7 failed, 7 passed, 14 total
+Tests:       33 failed, 254 passed, 287 total
+Snapshots:   0 total
+Time:        85.053 s
+Ran all test suites.

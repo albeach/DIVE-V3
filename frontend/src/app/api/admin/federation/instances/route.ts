@@ -1,11 +1,11 @@
 /**
  * Federation Instances API Route
- * 
+ *
  * Phase 1: Federation Discovery & Health
- * 
+ *
  * Server-side route that DYNAMICALLY fetches federation instances
  * from the backend's federation-registry.json via the API.
- * 
+ *
  * This ensures instances are never hardcoded and new spokes
  * are automatically discovered.
  */

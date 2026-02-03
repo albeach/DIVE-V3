@@ -1,13 +1,13 @@
 /**
  * KAS Flow API Proxy Route
- * 
+ *
  * GET /api/resources/[id]/kas-flow
- * 
+ *
  * This route handles federation-aware KAS flow requests by:
  * 1. Validating the user's session server-side
  * 2. Proxying the request to the local backend with proper auth
  * 3. The backend handles federation if the resource is on another instance
- * 
+ *
  * Modern 2025 pattern: Server-side token handling only
  */
 
@@ -51,9 +51,9 @@ export async function GET(
         });
 
         if (!response.ok) {
-            const error = await response.json().catch(() => ({ 
+            const error = await response.json().catch(() => ({
                 error: 'Unknown error',
-                message: `Backend returned ${response.status}` 
+                message: `Backend returned ${response.status}`
             }));
 
             return NextResponse.json(error, { status: response.status });

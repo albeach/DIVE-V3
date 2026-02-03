@@ -145,9 +145,9 @@ export function CommandPalette({ user, onLogout, onRefreshSession }: CommandPale
       {/* Compact Search Button - Matches nav item styling */}
       <button
         onClick={() => setOpen(true)}
-        className="group relative px-3 py-2 rounded-xl transition-all duration-300
+        className={`group relative px-3 py-2 rounded-xl transition-all duration-300
                    hover:bg-gradient-to-r hover:from-gray-50 hover:to-gray-100/50
-                   focus:outline-none focus:ring-2 focus:ring-[#4497ac]/50 focus:ring-offset-2"
+                   focus:outline-none focus:ring-2 focus:ring-[#4497ac]/50 focus:ring-offset-2`}
         aria-label="Search (⌘K)"
         title="Search everything (⌘K)"
       >
@@ -156,8 +156,8 @@ export function CommandPalette({ user, onLogout, onRefreshSession }: CommandPale
           <span className="hidden xl:inline text-sm font-bold text-gray-700 group-hover:text-gray-900">
             Search
           </span>
-          <kbd className="hidden xl:inline-flex items-center px-1.5 py-0.5 text-[10px] font-semibold text-gray-500
-                          bg-gray-100 border border-gray-200 rounded shadow-sm">
+          <kbd className={`hidden xl:inline-flex items-center px-1.5 py-0.5 text-[10px] font-semibold text-gray-500
+                          bg-gray-100 border border-gray-200 rounded shadow-sm`}>
             ⌘K
           </kbd>
         </div>
@@ -171,12 +171,12 @@ export function CommandPalette({ user, onLogout, onRefreshSession }: CommandPale
 
           {/* Command Palette Container */}
           <Dialog.Content
-            className="fixed left-[50%] top-[20%] z-50 w-full max-w-2xl translate-x-[-50%]
+            className={`fixed left-[50%] top-[20%] z-50 w-full max-w-2xl translate-x-[-50%]
                        data-[state=open]:animate-in data-[state=closed]:animate-out
                        data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0
                        data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95
                        data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%]
-                       data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]"
+                       data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%]`}
           >
             {/* Visually Hidden Title for Screen Readers */}
             <VisuallyHidden.Root asChild>
@@ -196,11 +196,11 @@ export function CommandPalette({ user, onLogout, onRefreshSession }: CommandPale
                   value={search}
                   onValueChange={setSearch}
                   placeholder="Type a command or search..."
-                  className="w-full px-4 py-4 text-base bg-transparent border-0 outline-none
-                             text-gray-900 dark:text-gray-100 placeholder:text-gray-500 focus:outline-none"
+                  className={`w-full px-4 py-4 text-base bg-transparent border-0 outline-none
+                             text-gray-900 dark:text-gray-100 placeholder:text-gray-500 focus:outline-none`}
                 />
-                <kbd className="hidden sm:inline-block px-2 py-1 text-xs font-semibold text-gray-500
-                              bg-gray-100 dark:bg-gray-800 rounded">
+                <kbd className={`hidden sm:inline-block px-2 py-1 text-xs font-semibold text-gray-500
+                              bg-gray-100 dark:bg-gray-800 rounded`}>
                   ESC
                 </kbd>
               </div>
@@ -225,9 +225,9 @@ export function CommandPalette({ user, onLogout, onRefreshSession }: CommandPale
                         const path = item.type === 'document' ? `/resources/${item.id}` : `/policies/${item.id}`;
                         router.push(path);
                       })}
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer
                                  data-[selected=true]:bg-gray-100 dark:data-[selected=true]:bg-gray-800
-                                 transition-colors"
+                                 transition-colors`}
                     >
                       <Clock className="h-4 w-4 text-gray-400" />
                       <div className="flex-1 min-w-0">
@@ -260,9 +260,9 @@ export function CommandPalette({ user, onLogout, onRefreshSession }: CommandPale
                         const path = item.type === 'document' ? `/resources/${item.id}` : `/policies/${item.id}`;
                         router.push(path);
                       })}
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer
                                  data-[selected=true]:bg-gray-100 dark:data-[selected=true]:bg-gray-800
-                                 transition-colors"
+                                 transition-colors`}
                     >
                       <Star className="h-4 w-4 text-yellow-500 fill-yellow-500" />
                       <div className="flex-1 min-w-0">
@@ -297,9 +297,9 @@ export function CommandPalette({ user, onLogout, onRefreshSession }: CommandPale
                       value={`nav-${itemName}`}
                       keywords={[itemName, itemDesc]}
                       onSelect={() => handleSelect(() => router.push(item.href))}
-                      className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer
                                  data-[selected=true]:bg-gray-100 dark:data-[selected=true]:bg-gray-800
-                                 transition-colors"
+                                 transition-colors`}
                     >
                       <Icon className="h-4 w-4 text-gray-400" />
                       <div className="flex-1">
@@ -329,9 +329,9 @@ export function CommandPalette({ user, onLogout, onRefreshSession }: CommandPale
                           value={`nav-${subItemName}`}
                           keywords={[subItemName, parentName, categoryName]}
                           onSelect={() => handleSelect(() => router.push(subItem.href))}
-                          className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer
+                          className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer
                                      data-[selected=true]:bg-gray-100 dark:data-[selected=true]:bg-gray-800
-                                     transition-colors"
+                                     transition-colors`}
                         >
                           <Icon className="h-4 w-4 text-gray-400" />
                           <div className="flex-1">
@@ -367,9 +367,9 @@ export function CommandPalette({ user, onLogout, onRefreshSession }: CommandPale
                         value={`admin-${itemName}`}
                         keywords={[itemName, itemDesc]}
                         onSelect={() => handleSelect(() => router.push(item.href))}
-                        className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer
                                    data-[selected=true]:bg-gray-100 dark:data-[selected=true]:bg-gray-800
-                                   transition-colors"
+                                   transition-colors`}
                       >
                         <Icon className="h-4 w-4 text-gray-400" />
                         <div className="flex-1">
@@ -381,8 +381,8 @@ export function CommandPalette({ user, onLogout, onRefreshSession }: CommandPale
                           </div>
                         </div>
                         {item.badge && (
-                          <span className="px-2 py-0.5 text-xs font-semibold bg-red-100 text-red-800
-                                         dark:bg-red-900 dark:text-red-200 rounded-full">
+                          <span className={`px-2 py-0.5 text-xs font-semibold bg-red-100 text-red-800
+                                         dark:bg-red-900 dark:text-red-200 rounded-full`}>
                             {item.badge}
                           </span>
                         )}
@@ -402,9 +402,9 @@ export function CommandPalette({ user, onLogout, onRefreshSession }: CommandPale
                   <Command.Item
                     value="action-refresh"
                     onSelect={() => handleSelect(() => onRefreshSession())}
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer
                                data-[selected=true]:bg-gray-100 dark:data-[selected=true]:bg-gray-800
-                               transition-colors"
+                               transition-colors`}
                   >
                     <RefreshCw className="h-4 w-4 text-gray-400" />
                     <span className="text-sm text-gray-900 dark:text-gray-100">
@@ -416,9 +416,9 @@ export function CommandPalette({ user, onLogout, onRefreshSession }: CommandPale
                   <Command.Item
                     value="action-logout"
                     onSelect={() => handleSelect(() => onLogout())}
-                    className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer
+                    className={`flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer
                                data-[selected=true]:bg-red-50 dark:data-[selected=true]:bg-red-900/20
-                               transition-colors"
+                               transition-colors`}
                   >
                     <LogOut className="h-4 w-4 text-red-500" />
                     <span className="text-sm text-red-600 dark:text-red-400">

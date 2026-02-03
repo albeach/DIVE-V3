@@ -51,6 +51,8 @@ test_allow_federated_search_authenticated_user if {
     federation.allow_federated_search 
     with input as {
         "subject": {
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -72,7 +74,9 @@ test_allow_federated_search_authenticated_user if {
 test_deny_federated_search_unauthenticated if {
     not federation.allow_federated_search 
     with input as {
-        "subject": {"authenticated": false},
+        "subject": {"mfaVerified": true,
+            "aal": 2,
+            "authenticated": false},
         "context": {
             "currentTime": "2025-12-01T12:00:00Z",
             "acr": "aal2",
@@ -92,6 +96,8 @@ test_allow_federated_resource_usa_user_usa_origin if {
     federation.allow_federated_resource 
     with input as {
         "subject": {
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -122,6 +128,8 @@ test_allow_federated_resource_cross_instance if {
     federation.allow_federated_resource 
     with input as {
         "subject": {
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -254,6 +262,8 @@ test_deny_federated_resource_insufficient_clearance if {
     not federation.allow_federated_resource 
     with input as {
         "subject": {
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-gbr-2",
             "clearance": "CONFIDENTIAL",
@@ -284,6 +294,8 @@ test_deny_federated_resource_not_releasable if {
     not federation.allow_federated_resource 
     with input as {
         "subject": {
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-fra-3",
             "clearance": "SECRET",
@@ -314,6 +326,8 @@ test_deny_federated_resource_missing_coi if {
     not federation.allow_federated_resource 
     with input as {
         "subject": {
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-deu-2",
             "clearance": "CONFIDENTIAL",
@@ -347,6 +361,8 @@ test_decision_includes_federated_fields if {
     decision := federation.decision 
     with input as {
         "subject": {
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -380,6 +396,8 @@ test_decision_allow_true_when_all_pass if {
     decision := federation.decision 
     with input as {
         "subject": {
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -410,7 +428,9 @@ test_decision_allow_true_when_all_pass if {
 test_decision_allow_false_when_not_authenticated if {
     decision := federation.decision 
     with input as {
-        "subject": {"authenticated": false},
+        "subject": {"mfaVerified": true,
+            "aal": 2,
+            "authenticated": false},
         "resource": {
             "resourceId": "USA-DOC-001",
             "classification": "SECRET",
@@ -439,6 +459,8 @@ test_include_in_results_when_authorized if {
     federation.include_in_federated_results 
     with input as {
         "subject": {
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -473,6 +495,8 @@ test_handle_empty_releasability if {
     not federation.allow_federated_resource 
     with input as {
         "subject": {
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -503,6 +527,8 @@ test_handle_no_coi_requirement if {
     federation.allow_federated_resource 
     with input as {
         "subject": {
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-no-coi",
             "clearance": "CONFIDENTIAL",

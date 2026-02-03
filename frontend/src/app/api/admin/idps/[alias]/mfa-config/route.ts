@@ -1,6 +1,6 @@
 /**
  * Admin IdP MFA Config API Route
- * 
+ *
  * Proxy for backend IdP MFA configuration endpoint
  * GET - Get MFA configuration
  * PUT - Update MFA configuration
@@ -19,7 +19,7 @@ export async function GET(
 ): Promise<NextResponse> {
     try {
         const { alias } = await params;
-        
+
         const validation = await validateSession();
         if (!validation.isValid) {
             return NextResponse.json(
@@ -65,7 +65,7 @@ export async function PUT(
 ): Promise<NextResponse> {
     try {
         const { alias } = await params;
-        
+
         const validation = await validateSession();
         if (!validation.isValid) {
             return NextResponse.json(

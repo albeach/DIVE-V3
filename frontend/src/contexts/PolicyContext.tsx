@@ -2,27 +2,27 @@
 
 /**
  * DIVE V3 - Policy Context
- * 
+ *
  * Provides React context for policy decisions, enabling:
  * - Declarative authorization in UI components
  * - Caching of policy decisions
  * - Real-time decision updates via session changes
  * - Integration with NextAuth session
- * 
+ *
  * Phase 5: DIVE-V3 Enforcement Harmonization
- * 
+ *
  * Usage:
  * ```tsx
  * // In a component
  * const { checkAccess, isLoading } = usePolicyContext();
  * const canView = await checkAccess({ resourceId: 'doc-123', action: 'view' });
- * 
+ *
  * // Or use PolicyGate component
  * <PolicyGate resourceId="doc-123" action="view">
  *   <SecretContent />
  * </PolicyGate>
  * ```
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */
@@ -145,7 +145,7 @@ export function PolicyProvider({
   // Extract subject from session
   const subject = useMemo((): IPolicySubject | null => {
     if (!session?.user) return null;
-    
+
     const user = session.user as any;
     return {
       uniqueID: user.uniqueID || user.email || user.sub || '',
@@ -323,7 +323,7 @@ export function PolicyProvider({
     } catch (err) {
       const error = err instanceof Error ? err : new Error('Policy check failed');
       setError(error);
-      
+
       // Return deny on error (fail-secure)
       return {
         allow: false,
@@ -409,11 +409,11 @@ export function usePolicyContext(): IPolicyContextValue {
 
 /**
  * Hook to check policy decision for a specific resource
- * 
+ *
  * @example
  * ```tsx
  * const { canAccess, isLoading, reason } = usePolicyDecision('doc-123');
- * 
+ *
  * if (isLoading) return <Spinner />;
  * if (!canAccess) return <AccessDenied reason={reason} />;
  * return <ResourceContent />;
