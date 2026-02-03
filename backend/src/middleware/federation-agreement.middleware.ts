@@ -2,7 +2,7 @@
  * Federation Agreement Enforcement Middleware
  * NATO Compliance: ADatP-5663 §3.10, §6.8
  * Phase 4, Task 3.3: SP Access Control Enforcement
- * 
+ *
  * Validates that Service Provider (SP) requests comply with their
  * federation agreement terms (classification limits, allowed countries, etc.)
  */
@@ -113,7 +113,7 @@ export async function enforceFederationAgreement(
 
     // Store agreement in request for later use
     (req as any).federationAgreement = result.agreement;
-    
+
     logger.info(`✅ Federation agreement validated for SP ${spId}`, {
       spId,
       resourceId: resource.resourceId,

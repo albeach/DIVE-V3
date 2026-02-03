@@ -470,11 +470,22 @@ cmd_nuke() {
         echo ""
         echo "  Options:"
         echo "    --keep-images                                # Keep Docker images (faster redeployment)"
-        echo "    --deep or --deep-clean                       # Remove ALL unused images (mongo, postgres, redis, opa, etc.)"
+        echo "    --deep or --deep-clean                       # FULL CLEAN SLATE: removes all images, builder cache,"
+        echo "                                                 # and Terraform state (recommended for debugging)"
         echo "    --reset-spokes                               # Clear spoke federation registrations"
         echo ""
+        echo "  What gets cleaned (nuke all):"
+        echo "    - All DIVE containers, volumes, networks"
+        echo "    - Instance directories (instances/gbr/, etc.)"
+        echo "    - Checkpoint directory (.dive-checkpoint/)"
+        echo "    - Orchestration database (.dive-orch.db)"
+        echo "    - State directory (.dive-state/)"
+        echo "    - Terraform state for hub/spoke"
+        echo "    + With --deep: ALL Docker images, builder cache, ALL Terraform caches"
+        echo ""
         echo "  Examples:"
-        echo "    ./dive nuke all --confirm --deep            # Complete clean including base images"
+        echo "    ./dive nuke all --confirm                   # Standard nuke (keeps images)"
+        echo "    ./dive nuke all --confirm --deep            # FULL CLEAN SLATE (recommended)"
         echo "    ./dive nuke hub --confirm --keep-images     # Fast hub reset (keeps images)"
         echo ""
         return 1
@@ -1132,6 +1143,39 @@ cmd_nuke() {
             log_verbose "  Removing instance directory: ${instance_lower}/"
             rm -rf "${DIVE_ROOT}/instances/${instance_lower}"
         fi
+    fi
+
+    # =========================================================================
+    # CLEAN SLATE: Additional cleanup for full reset (target_type=all)
+    # =========================================================================
+    if [ "$target_type" = "all" ]; then
+        log_verbose "  Cleaning orchestration state..."
+
+        # Orchestration SQLite database
+        if [ -f "${DIVE_ROOT}/.dive-orch.db" ]; then
+            rm -f "${DIVE_ROOT}/.dive-orch.db"
+            log_verbose "    ✓ Orchestration database removed (.dive-orch.db)"
+        fi
+
+        # State directory (file-based state)
+        if [ -d "${DIVE_ROOT}/.dive-state" ]; then
+            rm -rf "${DIVE_ROOT}/.dive-state"
+            log_verbose "    ✓ State directory removed (.dive-state/)"
+        fi
+
+        # Legacy state files
+        rm -f "${DIVE_ROOT}/.dive-deployment-state" 2>/dev/null || true
+        rm -f "${DIVE_ROOT}/.dive-federation-state" 2>/dev/null || true
+
+        # Docker builder cache (only with --deep flag to avoid slow operations)
+        if [ "$deep_clean" = true ]; then
+            log_verbose "  Deep clean: Pruning Docker builder cache..."
+            local cache_freed
+            cache_freed=$(${DOCKER_CMD:-docker} builder prune -af 2>&1 | grep -i "reclaimed" || echo "0B reclaimed")
+            log_verbose "    ✓ Builder cache pruned ($cache_freed)"
+        fi
+
+        log_verbose "  Clean slate complete"
     fi
 
     # =========================================================================

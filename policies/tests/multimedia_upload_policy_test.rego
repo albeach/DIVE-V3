@@ -88,7 +88,7 @@ test_is_multimedia_video if {
 
 test_allow_small_unclassified_video if {
     multimedia.allow_upload with input as {
-        "action": "upload",
+        "action": {"type": "upload"},
         "resource": {
             "mimeType": "video/mp4",
             "fileSize": 100 * 1024 * 1024,  # 100MB
@@ -100,7 +100,7 @@ test_allow_small_unclassified_video if {
 
 test_allow_secret_video_within_limits if {
     multimedia.allow_upload with input as {
-        "action": "upload",
+        "action": {"type": "upload"},
         "resource": {
             "mimeType": "video/mp4",
             "fileSize": 80 * 1024 * 1024,  # 80MB
@@ -112,7 +112,7 @@ test_allow_secret_video_within_limits if {
 
 test_deny_oversized_secret_file if {
     not multimedia.allow_upload with input as {
-        "action": "upload",
+        "action": {"type": "upload"},
         "resource": {
             "mimeType": "video/mp4",
             "fileSize": 150 * 1024 * 1024,  # 150MB > 100MB limit
@@ -123,7 +123,7 @@ test_deny_oversized_secret_file if {
 
 test_deny_overlong_top_secret_video if {
     not multimedia.allow_upload with input as {
-        "action": "upload",
+        "action": {"type": "upload"},
         "resource": {
             "mimeType": "video/mp4",
             "fileSize": 30 * 1024 * 1024,  # 30MB - within limit
@@ -135,7 +135,7 @@ test_deny_overlong_top_secret_video if {
 
 test_allow_audio_without_duration_check if {
     multimedia.allow_upload with input as {
-        "action": "upload",
+        "action": {"type": "upload"},
         "resource": {
             "mimeType": "audio/mpeg",
             "fileSize": 50 * 1024 * 1024,  # 50MB
@@ -151,7 +151,7 @@ test_allow_audio_without_duration_check if {
 
 test_violation_message_for_oversized_file if {
     violations := multimedia.violations with input as {
-        "action": "upload",
+        "action": {"type": "upload"},
         "resource": {
             "mimeType": "video/mp4",
             "fileSize": 150 * 1024 * 1024,  # 150MB
@@ -165,7 +165,7 @@ test_violation_message_for_oversized_file if {
 
 test_violation_message_for_overlong_video if {
     violations := multimedia.violations with input as {
-        "action": "upload",
+        "action": {"type": "upload"},
         "resource": {
             "mimeType": "video/mp4",
             "fileSize": 30 * 1024 * 1024,
@@ -184,7 +184,7 @@ test_violation_message_for_overlong_video if {
 
 test_decision_includes_limits if {
     decision := multimedia.decision with input as {
-        "action": "upload",
+        "action": {"type": "upload"},
         "resource": {
             "mimeType": "video/mp4",
             "fileSize": 50 * 1024 * 1024,
@@ -197,7 +197,7 @@ test_decision_includes_limits if {
 
 test_decision_includes_metadata if {
     decision := multimedia.decision with input as {
-        "action": "upload",
+        "action": {"type": "upload"},
         "resource": {
             "mimeType": "audio/mpeg",
             "fileSize": 50 * 1024 * 1024,

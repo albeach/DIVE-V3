@@ -28,12 +28,12 @@
                     </svg>
                 </#if>
             </div>
-            
+
             <!-- Message -->
             <div class="dive-info-message">
                 <p class="dive-info-text">${kcSanitize(message.summary)?no_esc}</p>
             </div>
-            
+
             <!-- Actions -->
             <div class="dive-info-actions">
                 <#if skipLink??>
@@ -62,7 +62,7 @@
                     </#if>
                 </#if>
             </div>
-            
+
             <#if requiredActions??>
                 <div class="dive-required-actions">
                     <p class="dive-required-title">${msg("requiredAction")}</p>

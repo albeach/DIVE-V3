@@ -1,6 +1,6 @@
 /**
  * Admin IdP Test API Route
- * 
+ *
  * Proxy for backend IdP test endpoint
  * POST - Test IdP connection
  */
@@ -18,7 +18,7 @@ export async function POST(
 ): Promise<NextResponse> {
     try {
         const { alias } = await params;
-        
+
         const validation = await validateSession();
         if (!validation.isValid) {
             return NextResponse.json(

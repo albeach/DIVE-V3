@@ -1,9 +1,9 @@
 /**
  * Fix WebAuthn Server-Side Credential Lookup Issue
- * 
+ *
  * Problem: With requireResidentKey=No, credentials are server-side stored.
  * Keycloak needs to know the user ID BEFORE it can look up credentials.
- * 
+ *
  * This script:
  * 1. Verifies WebAuthn policy has requireResidentKey=No
  * 2. Checks that credentials are properly stored with correct userHandle

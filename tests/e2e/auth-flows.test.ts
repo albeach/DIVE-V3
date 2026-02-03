@@ -1,22 +1,22 @@
 /**
  * DIVE V3 - End-to-End Authentication Flow Tests
- * 
+ *
  * Tests complete authentication workflows including:
  * - OIDC authentication via Keycloak
  * - MFA enforcement (TOTP, WebAuthn)
  * - Federation scenarios (USA, FRA, GBR, DEU)
  * - Token refresh and session management
  * - Authorization decision flows
- * 
+ *
  * Prerequisites:
  * - All services running (docker compose up -d)
  * - Test users seeded in Keycloak
  * - OPA policies loaded
- * 
+ *
  * Usage:
  *   npm run test:e2e
  *   npx playwright test tests/e2e/auth-flows.test.ts
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */

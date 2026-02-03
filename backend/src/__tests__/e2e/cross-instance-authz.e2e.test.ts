@@ -202,7 +202,7 @@ describe('Cross-Instance Authorization E2E Flow', () => {
 
             // Verify audit trail captures the processing
             expect(result.auditTrail.length).toBeGreaterThan(0);
-            
+
             // Trust check should have been performed
             const trustCheckEntry = result.auditTrail.find(
                 e => e.action === 'bilateral_trust_check'
@@ -479,7 +479,7 @@ describe('Cross-Instance Authorization E2E Flow', () => {
             // Use fixed request ID for caching
             const fixedRequestId = 'cache-test-fixed-id';
             const fixedToken = generateMockToken(USA_USER);
-            
+
             const request = {
                 subject: USA_USER,
                 resource: FRA_RESOURCE,
@@ -496,7 +496,7 @@ describe('Cross-Instance Authorization E2E Flow', () => {
             // In test environment without OPA, policy evaluation may fail
             // We verify the cache infrastructure exists and responds correctly
             const result2 = await crossInstanceAuthzService.evaluateAccess(request);
-            
+
             // Both results should have evaluationDetails
             expect(result2.evaluationDetails).toBeDefined();
             expect(typeof result2.evaluationDetails.cacheHit).toBe('boolean');

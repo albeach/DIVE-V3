@@ -357,7 +357,7 @@ class SpokePolicyCacheService extends EventEmitter {
 
   /**
    * Verify bundle signature using Hub's public key (X.509 certificate)
-   * 
+   *
    * Verification steps:
    * 1. Check signature exists
    * 2. Validate signature timestamp (must be recent)

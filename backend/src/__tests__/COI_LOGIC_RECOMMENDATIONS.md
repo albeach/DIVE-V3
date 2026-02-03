@@ -82,11 +82,11 @@ is_coi_violation := msg if {
     count(input.resource.COI) > 0
     some resource_coi in input.resource.COI
     resource_coi in no_affiliation_cois
-    
+
     # User MUST have this exact COI tag (no country fallback)
     user_coi := object.get(input.subject, "acpCOI", [])
     not resource_coi in user_coi
-    
+
     msg := sprintf("Resource requires exclusive COI membership: %s (user COI: %v, no country fallback allowed)", [
         resource_coi,
         user_coi
@@ -94,17 +94,17 @@ is_coi_violation := msg if {
 } else := msg if {
     # Case 3: Resource has country-based COI - check tag match OR country membership
     count(input.resource.COI) > 0
-    
+
     # Get user COI and country
     user_coi := object.get(input.subject, "acpCOI", [])
     user_country := input.subject.countryOfAffiliation
-    
+
     # Get COI operator (default to ALL)
     operator := object.get(input.resource, "coiOperator", "ALL")
-    
+
     # Check if user has COI tag match
     has_coi_tag_match := check_coi_tag_match(user_coi, input.resource.COI, operator)
-    
+
     # Check if user has country-based access
     # Compute union of all COI member countries
     coi_country_union := {c |
@@ -112,14 +112,14 @@ is_coi_violation := msg if {
         not resource_coi in no_affiliation_cois
         some c in coi_members[resource_coi]
     }
-    
+
     # User's country must be in COI membership AND releasabilityTo
     has_country_access := user_country in coi_country_union && user_country in input.resource.releasabilityTo
-    
+
     # Deny if neither COI tag match NOR country-based access
     not has_coi_tag_match
     not has_country_access
-    
+
     msg := sprintf("COI violation: user has no COI tag match (%v) and country %s not in COI membership %v or not in releasabilityTo %v", [
         user_coi,
         user_country,
@@ -328,7 +328,7 @@ test_deny_eucom_can_not_in_membership if {
 
 ## Summary
 
-**Current State**: 
+**Current State**:
 - ❌ Users without COI can access ANY resource (bypasses COI restrictions)
 - ❌ No distinction between country-based and exclusive COIs
 - ❌ Inconsistent logic between `fuel_inventory_abac_policy.rego` and `federation_abac_policy.rego`

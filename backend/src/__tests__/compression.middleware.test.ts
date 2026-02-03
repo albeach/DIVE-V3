@@ -1,7 +1,7 @@
 /**
  * Compression Middleware Test Suite
  * Target: 90%+ coverage for compression.middleware.ts
- * 
+ *
  * Tests:
  * - shouldCompress logic (various scenarios)
  * - compressionMiddleware configuration

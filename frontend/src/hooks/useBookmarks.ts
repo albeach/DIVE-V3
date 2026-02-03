@@ -1,9 +1,9 @@
 /**
  * useBookmarks Hook - Phase 3
- * 
+ *
  * React hook for managing bookmarks with state synchronization.
  * Wraps the bookmarks library for reactive updates.
- * 
+ *
  * Features:
  * - Real-time state updates
  * - Cross-tab synchronization via storage events

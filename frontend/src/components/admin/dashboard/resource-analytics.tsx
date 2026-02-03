@@ -1,6 +1,6 @@
 /**
  * Resource Analytics Section
- * 
+ *
  * Resource access patterns and statistics
  */
 
@@ -38,7 +38,7 @@ export default function ResourceAnalytics({ dateRange, refreshTrigger }: Props) 
             const facetsRes = await fetch(`/api/resources/search/facets`, {
                 cache: 'no-store',
             });
-            
+
             // Also fetch top denied resources from logs stats
             const logsRes = await fetch(`/api/admin/logs/stats?days=${dateRange === '24h' ? 1 : dateRange === '7d' ? 7 : dateRange === '30d' ? 30 : 90}`, {
                 cache: 'no-store',
@@ -64,7 +64,7 @@ export default function ResourceAnalytics({ dateRange, refreshTrigger }: Props) 
             // Transform facets data to resource stats
             if (facetsData?.facets) {
                 const facets = facetsData.facets;
-                
+
                 // Build classification counts
                 const byClassification: Record<string, number> = {};
                 facets.classifications?.forEach((c: { value: string; count: number }) => {
@@ -87,7 +87,7 @@ export default function ResourceAnalytics({ dateRange, refreshTrigger }: Props) 
                 const totalResources = Object.values(byClassification).reduce((sum, count) => sum + count, 0);
 
                 // Get most accessed from logs (top denied resources can indicate access patterns)
-                const mostAccessed: Array<{ resourceId: string; count: number; classification: string }> = 
+                const mostAccessed: Array<{ resourceId: string; count: number; classification: string }> =
                     logsData?.data?.topDeniedResources?.map((r: { resourceId: string; count: number }) => ({
                         resourceId: r.resourceId,
                         count: r.count,
@@ -180,7 +180,7 @@ export default function ResourceAnalytics({ dateRange, refreshTrigger }: Props) 
                             .map(([classification, count]) => {
                                 const percentage = ((count as number) / stats.totalResources * 100).toFixed(1);
                                 const colors = classificationColors[classification] || { bg: 'bg-gray-100', text: 'text-gray-700' };
-                                
+
                                 return (
                                     <div key={classification} className="flex items-center">
                                         <div className="w-40">

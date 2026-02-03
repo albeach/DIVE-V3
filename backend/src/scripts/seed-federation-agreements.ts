@@ -28,30 +28,30 @@ interface IFederationAgreement {
 async function seedFederationAgreements() {
   const connectionString = getMongoDBUrl();
   const dbName = getMongoDBName();
-  
+
   const client = new MongoClient(connectionString);
   await client.connect();
-  
+
   const db = client.db(dbName);
   const collection = db.collection<IFederationAgreement>('federation_agreements');
 
   const now = new Date();
-  
+
   const agreements: IFederationAgreement[] = [
     {
       spId: 'uk-coalition-portal',
       spName: 'United Kingdom Coalition Portal',
       agreementId: 'USA-GBR-2025-001',
-      
+
       allowedIdPs: ['dive-v3-usa', 'dive-v3-gbr', 'dive-v3-can'],
       allowedCountries: ['USA', 'GBR', 'CAN'], // FVEY partners
       allowedClassifications: ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET'],
       maxClassification: 'SECRET',
       allowedCOIs: ['NATO-COSMIC', 'FVEY'],
-      
+
       minAAL: 2, // AAL2 required
       maxAuthAge: 1800, // 30 minutes
-      
+
       releaseAttributes: [
         'uniqueID',
         'clearance',
@@ -60,7 +60,7 @@ async function seedFederationAgreements() {
         'givenName',
         'surname',
       ],
-      
+
       effectiveDate: new Date('2025-01-01'),
       expirationDate: new Date('2026-12-31'),
       status: 'active',
@@ -71,23 +71,23 @@ async function seedFederationAgreements() {
       spId: 'france-defense-system',
       spName: 'France Ministry of Defense System',
       agreementId: 'USA-FRA-2025-002',
-      
+
       allowedIdPs: ['dive-v3-usa', 'dive-v3-fra'],
       allowedCountries: ['USA', 'FRA'],
       allowedClassifications: ['UNCLASSIFIED', 'CONFIDENTIAL'],
       maxClassification: 'CONFIDENTIAL',
       allowedCOIs: ['NATO-COSMIC'],
-      
+
       minAAL: 2,
       maxAuthAge: 3600, // 1 hour
-      
+
       releaseAttributes: [
         'uniqueID',
         'clearance',
         'countryOfAffiliation',
         'acpCOI',
       ],
-      
+
       effectiveDate: new Date('2025-06-01'),
       expirationDate: new Date('2026-05-31'),
       status: 'active',
@@ -98,19 +98,19 @@ async function seedFederationAgreements() {
       spId: 'industry-contractor-portal',
       spName: 'Industry Contractor Portal',
       agreementId: 'USA-IND-2025-003',
-      
+
       allowedIdPs: ['dive-v3-industry'],
       allowedCountries: ['USA'],
       allowedClassifications: ['UNCLASSIFIED'],
       maxClassification: 'UNCLASSIFIED',
       allowedCOIs: [],
-      
+
       minAAL: 1, // AAL1 for unclassified
       maxAuthAge: 7200, // 2 hours
-      
+
       // Limited attribute release (pseudonymized)
       releaseAttributes: ['uniqueID'], // Only pseudonymous ID
-      
+
       effectiveDate: new Date('2025-01-01'),
       status: 'active',
       createdAt: now,

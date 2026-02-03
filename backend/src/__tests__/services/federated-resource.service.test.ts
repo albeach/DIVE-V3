@@ -1,7 +1,7 @@
 /**
  * Federated Resource Service - Comprehensive Unit Tests
  * Phase 3: Distributed Query Federation
- * 
+ *
  * Test Coverage:
  * - Service initialization and configuration
  * - MongoDB connection management
@@ -10,7 +10,7 @@
  * - Result deduplication
  * - Query transformation
  * - Error handling
- * 
+ *
  * NATO Compliance: ACP-240 §5.4 (Federated Resource Access)
  */
 
@@ -433,8 +433,8 @@ describe('FederatedResourceService - ABAC Logic', () => {
             'TOP_SECRET': 4
         };
 
-        const checkAccess = (user: User, resource: Resource): { 
-            allowed: boolean; 
+        const checkAccess = (user: User, resource: Resource): {
+            allowed: boolean;
             reason?: string;
         } => {
             // Check clearance
@@ -700,13 +700,13 @@ describe('FederatedResourceService - Deduplication Logic', () => {
 
     const deduplicateResults = (results: FederatedResult[]): FederatedResult[] => {
         const seen = new Map<string, FederatedResult>();
-        
+
         for (const result of results) {
             if (!seen.has(result.resourceId)) {
                 seen.set(result.resourceId, result);
             }
         }
-        
+
         return Array.from(seen.values());
     };
 

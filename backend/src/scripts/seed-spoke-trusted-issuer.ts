@@ -94,23 +94,66 @@ function loadEnvironment(): void {
 // ============================================
 
 /**
- * Get port offset for instance (matches hub-kas seeding)
+ * Get port offset for instance
+ * SSOT: Must match scripts/nato-countries.sh NATO_PORT_OFFSETS
+ *
+ * Priority:
+ * 1. Environment variable SPOKE_PORT_OFFSET (set by deployment pipeline)
+ * 2. Hardcoded NATO offsets (fallback)
  */
 function getPortOffset(code: string): number {
+  // First, check for environment-provided offset (set by deploy pipeline)
+  const envOffset = process.env.SPOKE_PORT_OFFSET;
+  if (envOffset) {
+    return parseInt(envOffset, 10);
+  }
+
+  // Fallback: NATO_PORT_OFFSETS from scripts/nato-countries.sh (SSOT)
+  // IMPORTANT: Keep synchronized with nato-countries.sh
   const offsets: Record<string, number> = {
-    USA: 0,    // Hub: 8443
-    FRA: 10,   // Spoke: 8453
-    GBR: 20,   // Spoke: 8463
-    DEU: 30,   // Spoke: 8473
-    CAN: 40,   // Spoke: 8483
-    AUS: 50,   // Spoke: 8493
-    NZL: 60,   // Spoke: 8503
-    ITA: 70,   // Spoke: 8513
-    ESP: 80,   // Spoke: 8523
-    NLD: 90,   // Spoke: 8533
-    BEL: 100,  // Spoke: 8543
-    POL: 110,  // Spoke: 8553
-    SVK: 26,   // Spoke: 8469 (240 offset from common.sh maps to port 8469)
+    // Hub
+    USA: 0,    // 8443
+
+    // NATO countries (alphabetical, offsets 1-31)
+    ALB: 1,    // 8444
+    BEL: 2,    // 8445
+    BGR: 3,    // 8446
+    CAN: 4,    // 8447
+    HRV: 5,    // 8448
+    CZE: 6,    // 8449
+    DNK: 7,    // 8450
+    EST: 8,    // 8451
+    FIN: 9,    // 8452
+    FRA: 10,   // 8453
+    DEU: 11,   // 8454
+    GRC: 12,   // 8455
+    HUN: 13,   // 8456
+    ISL: 14,   // 8457
+    ITA: 15,   // 8458
+    LVA: 16,   // 8459
+    LTU: 17,   // 8460
+    LUX: 18,   // 8461
+    MNE: 19,   // 8462
+    NLD: 20,   // 8463
+    MKD: 21,   // 8464
+    NOR: 22,   // 8465
+    POL: 23,   // 8466
+    PRT: 24,   // 8467
+    ROU: 25,   // 8468
+    SVK: 26,   // 8469
+    SVN: 27,   // 8470
+    ESP: 28,   // 8471
+    SWE: 29,   // 8472
+    TUR: 30,   // 8473
+    GBR: 31,   // 8474
+
+    // Partner nations (offsets 32-39)
+    AUS: 32,   // 8475
+    NZL: 33,   // 8476
+    JPN: 34,   // 8477
+    KOR: 35,   // 8478
+    ISR: 36,   // 8479
+    UKR: 37,   // 8480
   };
   return offsets[code] || 0;
 }

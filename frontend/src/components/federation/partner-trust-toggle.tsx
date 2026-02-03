@@ -2,7 +2,7 @@
 
 /**
  * Partner Trust Toggle Component
- * 
+ *
  * Allows federation administrators to view and toggle
  * trusted partners for their instance. For pilot mode,
  * this is a UI demonstration - changes are logged but
@@ -36,44 +36,44 @@ const PILOT_PARTNERS: FederationPartner[] = [
 ];
 
 const STATUS_STYLES = {
-  trusted: { 
+  trusted: {
     badge: 'bg-green-100 text-green-800 border-green-200',
     dot: 'bg-green-500',
     label: 'Trusted'
   },
-  pending: { 
+  pending: {
     badge: 'bg-yellow-100 text-yellow-800 border-yellow-200',
     dot: 'bg-yellow-500',
     label: 'Pending'
   },
-  disabled: { 
+  disabled: {
     badge: 'bg-gray-100 text-gray-600 border-gray-200',
     dot: 'bg-gray-400',
     label: 'Disabled'
   },
 };
 
-export default function PartnerTrustToggle({ 
-  instanceCode, 
+export default function PartnerTrustToggle({
+  instanceCode,
   onTrustChange,
-  className = '' 
+  className = ''
 }: PartnerTrustToggleProps) {
   const [partners, setPartners] = useState<FederationPartner[]>([]);
   const [loading, setLoading] = useState(true);
   const [pendingChanges, setPendingChanges] = useState<string[]>([]);
-  
+
   useEffect(() => {
     // In pilot mode, use default partners excluding self
     const filteredPartners = PILOT_PARTNERS.filter(p => p.code !== instanceCode);
     setPartners(filteredPartners);
     setLoading(false);
   }, [instanceCode]);
-  
+
   const handleToggle = (partnerCode: string) => {
     setPartners(prev => prev.map(p => {
       if (p.code === partnerCode) {
         const newStatus = p.status === 'trusted' ? 'disabled' : 'trusted';
-        
+
         // Track pending change
         setPendingChanges(changes => {
           if (changes.includes(partnerCode)) {
@@ -81,16 +81,16 @@ export default function PartnerTrustToggle({
           }
           return [...changes, partnerCode];
         });
-        
+
         // Callback
         onTrustChange?.(partnerCode, newStatus === 'trusted');
-        
+
         return { ...p, status: newStatus };
       }
       return p;
     }));
   };
-  
+
   if (loading) {
     return (
       <div className={`animate-pulse ${className}`}>
@@ -103,7 +103,7 @@ export default function PartnerTrustToggle({
       </div>
     );
   }
-  
+
   return (
     <div className={`${className}`}>
       {/* Header */}
@@ -117,7 +117,7 @@ export default function PartnerTrustToggle({
           </span>
         )}
       </div>
-      
+
       {/* Pilot Mode Notice */}
       <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
         <div className="flex items-center gap-2">
@@ -125,11 +125,11 @@ export default function PartnerTrustToggle({
           <span className="text-sm text-purple-800 font-medium">Pilot Mode</span>
         </div>
         <p className="text-xs text-purple-600 mt-1">
-          Trust changes are simulated for demonstration. In production, 
+          Trust changes are simulated for demonstration. In production,
           changes require approval workflow.
         </p>
       </div>
-      
+
       {/* Partner List */}
       <div className="space-y-2">
         {partners.map(partner => {
@@ -137,9 +137,9 @@ export default function PartnerTrustToggle({
           const statusStyle = STATUS_STYLES[partner.status];
           const isPending = partner.status === 'pending';
           const hasChange = pendingChanges.includes(partner.code);
-          
+
           return (
-            <div 
+            <div
               key={partner.code}
               className={`
                 flex items-center justify-between p-3 rounded-lg border
@@ -162,7 +162,7 @@ export default function PartnerTrustToggle({
                   </div>
                 </div>
               </div>
-              
+
               <div className="flex items-center gap-3">
                 {/* Status Badge */}
                 <span className={`
@@ -173,21 +173,21 @@ export default function PartnerTrustToggle({
                   <span className={`w-1.5 h-1.5 rounded-full ${statusStyle.dot}`} />
                   {statusStyle.label}
                 </span>
-                
+
                 {/* Toggle Switch */}
                 {!isPending && (
                   <button
                     onClick={() => handleToggle(partner.code)}
                     className={`
                       relative w-12 h-6 rounded-full transition-colors duration-200
-                      ${partner.status === 'trusted' 
-                        ? 'bg-green-500' 
+                      ${partner.status === 'trusted'
+                        ? 'bg-green-500'
                         : 'bg-gray-300'
                       }
                     `}
                     aria-label={`Toggle trust for ${partner.name}`}
                   >
-                    <span 
+                    <span
                       className={`
                         absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow
                         transition-transform duration-200
@@ -196,7 +196,7 @@ export default function PartnerTrustToggle({
                     />
                   </button>
                 )}
-                
+
                 {/* Pending indicator */}
                 {isPending && (
                   <span className="text-xs text-yellow-600">
@@ -208,7 +208,7 @@ export default function PartnerTrustToggle({
           );
         })}
       </div>
-      
+
       {/* Save Actions (for pilot demonstration) */}
       {pendingChanges.length > 0 && (
         <div className="mt-4 flex items-center justify-end gap-2">
@@ -240,12 +240,12 @@ export default function PartnerTrustToggle({
 }
 
 // Compact partner list (read-only)
-export function PartnerList({ 
-  instanceCode, 
-  className = '' 
+export function PartnerList({
+  instanceCode,
+  className = ''
 }: { instanceCode: string; className?: string }) {
   const partners = PILOT_PARTNERS.filter(p => p.code !== instanceCode && p.status === 'trusted');
-  
+
   return (
     <div className={`flex items-center gap-2 ${className}`}>
       <span className="text-xs text-gray-500">Trusts:</span>
@@ -253,8 +253,8 @@ export function PartnerList({
         {partners.map(p => {
           const FlagIcon = getFlagComponent(p.code);
           return (
-            <div 
-              key={p.code} 
+            <div
+              key={p.code}
               className="w-6 h-6 rounded-full border-2 border-white overflow-hidden"
               title={p.name}
             >

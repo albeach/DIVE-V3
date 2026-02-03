@@ -1,13 +1,13 @@
 /**
  * Decision Log Service Test Suite - Phase 3
- * 
+ *
  * Tests the decision logging service for:
  * - Logging decisions to MongoDB
  * - Query functionality
  * - Statistics aggregation
  * - TTL index creation
  * - PII minimization
- * 
+ *
  * Last Updated: October 29, 2025 (Phase 3)
  */
 
@@ -462,7 +462,7 @@ describe.skip('Decision Log Service', () => {
             const db = mongoClient.db(TEST_DB);
             const indexes = await db.collection('key_releases').indexes();
 
-            const ttlIndex = indexes.find(idx => 
+            const ttlIndex = indexes.find(idx =>
                 idx.key && idx.key.timestamp && idx.expireAfterSeconds
             );
 
@@ -643,7 +643,7 @@ describe.skip('Decision Log Service', () => {
                 resourceId: 'doc-a'
             });
 
-            expect(results.every(r => 
+            expect(results.every(r =>
                 r.subjectUniqueID === 'alice@mil' &&
                 r.decision === 'GRANT' &&
                 r.resourceId === 'doc-a'

@@ -1,15 +1,15 @@
 /**
  * Comprehensive ACR/AAL Clearance Verification Test Suite
- * 
+ *
  * Purpose: Verify that users receive correct ACR/AAL based on clearance level
  * and that OPA Rego policies correctly use AAL for authorization decisions.
- * 
+ *
  * Full Stack Trace:
  * 1. Keycloak sets ACR/AMR based on clearance and MFA factors
  * 2. Backend normalizes ACR (numeric/string/URN formats)
  * 3. Backend passes ACR to OPA in context field
  * 4. OPA parses AAL from ACR and enforces clearance-based requirements
- * 
+ *
  * Test Coverage:
  * - All clearance levels (UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET)
  * - All ACR formats (numeric "0"/"1"/"2", string "aal1"/"aal2"/"aal3", URN)

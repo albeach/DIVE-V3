@@ -2,7 +2,7 @@
 
 /**
  * Demo Mode Badge Component
- * 
+ *
  * Shows current test user's clearance level and country
  * for pilot demonstrations. Helps coordinators verify
  * the correct user context during demos.
@@ -31,23 +31,23 @@ const CLEARANCE_STYLES: Record<string, { bg: string; text: string; level: number
 export default function DemoModeBadge({ user, className = '' }: DemoModeBadgeProps) {
   // Only show in demo/pilot mode when user is a test user
   const isTestUser = user?.uniqueID?.startsWith('testuser-');
-  
+
   if (!isTestUser || !user) {
     return null;
   }
-  
+
   const clearance = user.clearance || 'UNCLASSIFIED';
   const country = user.countryOfAffiliation || 'USA';
   const style = CLEARANCE_STYLES[clearance] || CLEARANCE_STYLES.UNCLASSIFIED;
-  
+
   // Extract level from uniqueID (e.g., testuser-usa-3 → 3)
   const levelMatch = user.uniqueID?.match(/-(\d)$/);
   const level = levelMatch ? parseInt(levelMatch[1]) : style.level;
-  
+
   const FlagIcon = getFlagComponent(country);
-  
+
   return (
-    <div 
+    <div
       className={`
         fixed bottom-4 right-4 z-50
         bg-white border-2 border-purple-500 rounded-lg shadow-lg
@@ -62,7 +62,7 @@ export default function DemoModeBadge({ user, className = '' }: DemoModeBadgePro
           Pilot Mode
         </span>
       </div>
-      
+
       {/* User Info */}
       <div className="flex items-center gap-3">
         <FlagIcon size={24} />
@@ -82,7 +82,7 @@ export default function DemoModeBadge({ user, className = '' }: DemoModeBadgePro
           </div>
         </div>
       </div>
-      
+
       {/* Quick Tip */}
       <div className="mt-2 pt-2 border-t border-gray-100 text-xs text-gray-500">
         Higher level = Higher clearance
@@ -92,19 +92,19 @@ export default function DemoModeBadge({ user, className = '' }: DemoModeBadgePro
 }
 
 // Compact inline version
-export function DemoModeInlineBadge({ 
-  user, 
-  className = '' 
+export function DemoModeInlineBadge({
+  user,
+  className = ''
 }: DemoModeBadgeProps) {
   const isTestUser = user?.uniqueID?.startsWith('testuser-');
-  
+
   if (!isTestUser || !user) {
     return null;
   }
-  
+
   const clearance = user.clearance || 'UNCLASSIFIED';
   const style = CLEARANCE_STYLES[clearance] || CLEARANCE_STYLES.UNCLASSIFIED;
-  
+
   return (
     <div className={`flex items-center gap-2 ${className}`}>
       <div className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-pulse" />

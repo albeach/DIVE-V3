@@ -1,10 +1,10 @@
 /**
  * EMERGENCY FIX: Set ACR=2 (AAL3) for admin-dive WITHOUT passkey
- * 
+ *
  * This bypasses passkey authentication and manually sets ACR=2
  * for demo purposes. Works immediately - no rebuild needed!
- * 
- * Usage: 
+ *
+ * Usage:
  *   KEYCLOAK_URL=https://usa-idp.dive25.com npm run emergency-set-acr -- --username admin-dive
  */
 
@@ -78,8 +78,8 @@ async function emergencySetACR(username: string) {
     `${KEYCLOAK_URL}/admin/realms/${REALM}/clients`,
     { headers: { 'Authorization': `Bearer ${adminToken}` } }
   );
-  
-  const appClient = clientResponse.data.find((c: any) => 
+
+  const appClient = clientResponse.data.find((c: any) =>
     c.clientId === 'dive-v3-client' || c.clientId === 'dive-v3-app-broker'
   );
 
@@ -89,7 +89,7 @@ async function emergencySetACR(username: string) {
       { headers: { 'Authorization': `Bearer ${adminToken}` } }
     );
 
-    const acrMapper = mappersResponse.data.find((m: any) => 
+    const acrMapper = mappersResponse.data.find((m: any) =>
       m.name === 'acr-from-session' || m.name === 'acr-attribute-mapper'
     );
 
@@ -108,7 +108,7 @@ async function emergencySetACR(username: string) {
 
   // Step 5: Create/update protocol mapper to read from user attribute
   console.log('[5/5] Ensuring protocol mapper reads user attribute...');
-  
+
   if (appClient) {
     // Check if we need to create a mapper that reads from user attribute
     const mappersResponse = await axios.get(
@@ -116,8 +116,8 @@ async function emergencySetACR(username: string) {
       { headers: { 'Authorization': `Bearer ${adminToken}` } }
     );
 
-    const attributeMapper = mappersResponse.data.find((m: any) => 
-      m.name === 'acr-from-attribute' || 
+    const attributeMapper = mappersResponse.data.find((m: any) =>
+      m.name === 'acr-from-attribute' ||
       (m.protocolMapper === 'oidc-usermodel-attribute-mapper' && m.config?.['user.attribute'] === 'acr')
     );
 

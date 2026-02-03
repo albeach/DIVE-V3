@@ -1,7 +1,7 @@
 /**
  * Cross-KAS Client Test Suite
  * Target: 100% coverage for cross-kas-client.ts
- * 
+ *
  * Tests:
  * - createKASClient() with all auth methods (mtls, apikey, jwt, oauth2)
  * - requestKeyFromExternalKAS() success and error cases

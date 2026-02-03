@@ -1,9 +1,9 @@
 /**
  * DIVE V3 - Current Bundle Card
- * 
+ *
  * Displays current policy bundle metadata including version, hash,
  * signature status, and file manifest.
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -50,7 +50,7 @@ function formatRelativeTime(dateStr?: string): string {
   const diffMinutes = Math.floor(diffMs / (1000 * 60));
   const diffHours = Math.floor(diffMinutes / 60);
   const diffDays = Math.floor(diffHours / 24);
-  
+
   if (diffMinutes < 1) return 'Just now';
   if (diffMinutes < 60) return `${diffMinutes}m ago`;
   if (diffHours < 24) return `${diffHours}h ago`;

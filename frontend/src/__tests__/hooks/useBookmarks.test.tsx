@@ -1,9 +1,9 @@
 /**
  * useBookmarks Hook Unit Tests
- * 
+ *
  * Tests for @/hooks/useBookmarks.ts
  * Phase 3: Power User Features
- * 
+ *
  * Coverage targets:
  * - Initial state loading
  * - Cross-tab synchronization
@@ -52,7 +52,7 @@ describe('useBookmarks', () => {
   beforeEach(() => {
     // Reset all mocks
     jest.clearAllMocks();
-    
+
     // Default mock implementations
     mockBookmarksLib.getBookmarks.mockReturnValue([]);
     mockBookmarksLib.isBookmarked.mockReturnValue(false);
@@ -130,7 +130,7 @@ describe('useBookmarks', () => {
       const { result } = renderHook(() => useBookmarks());
 
       const isBookmarked = result.current.isItemBookmarked('doc-001', 'document');
-      
+
       expect(mockBookmarksLib.isBookmarked).toHaveBeenCalledWith('doc-001', 'document');
       expect(isBookmarked).toBe(true);
     });
@@ -141,7 +141,7 @@ describe('useBookmarks', () => {
       const { result } = renderHook(() => useBookmarks());
 
       const isBookmarked = result.current.isItemBookmarked('doc-999', 'document');
-      
+
       expect(isBookmarked).toBe(false);
     });
   });

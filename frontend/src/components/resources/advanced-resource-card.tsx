@@ -263,7 +263,7 @@ export default function AdvancedResourceCard({
 
             {/* REL TO - Highly condensed */}
             <div className="flex items-center gap-2 text-sm">
-              <span className="text-gray-500 font-medium">Releasable to:</span>
+              <span className="text-gray-500 font-medium">REL TO:</span>
               <span className="text-gray-700 font-medium">
                 {resource.releasabilityTo.slice(0, 4).join(', ')}
                 {resource.releasabilityTo.length > 4 && (

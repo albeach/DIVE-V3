@@ -1,11 +1,11 @@
 /**
  * Federation Health API Route
- * 
+ *
  * Phase 1: Federation Discovery & Health
- * 
+ *
  * Server-side route that checks health of all federation instances
  * and returns real-time status data for the admin dashboard.
- * 
+ *
  * This route:
  * 1. Checks health of each configured instance
  * 2. Measures latency to each endpoint
@@ -91,20 +91,20 @@ interface IInstanceHealth {
  */
 async function checkEndpoint(url: string, timeoutMs: number = 5000): Promise<IServiceHealth> {
   const startTime = Date.now();
-  
+
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-    
+
     const response = await fetch(url, {
       method: 'GET',
       signal: controller.signal,
       cache: 'no-store',
     });
-    
+
     clearTimeout(timeoutId);
     const latencyMs = Date.now() - startTime;
-    
+
     return {
       healthy: response.ok || response.status < 500,
       latencyMs,
@@ -129,10 +129,10 @@ async function checkInstanceHealth(instance: typeof FEDERATION_INSTANCES[0]): Pr
     checkEndpoint(`${instance.endpoints.api}/health`),
     checkEndpoint(`${instance.endpoints.idp}/health`),
   ]);
-  
+
   // Determine overall status
   let status: 'healthy' | 'degraded' | 'down' = 'healthy';
-  
+
   if (!backendHealth.healthy && !keycloakHealth.healthy) {
     status = 'down';
   } else if (!backendHealth.healthy || !keycloakHealth.healthy) {
@@ -140,12 +140,12 @@ async function checkInstanceHealth(instance: typeof FEDERATION_INSTANCES[0]): Pr
   } else if (backendHealth.latencyMs > 2000 || keycloakHealth.latencyMs > 2000) {
     status = 'degraded';
   }
-  
+
   // Calculate average latency
   const latencyMs = Math.round(
     (backendHealth.latencyMs + keycloakHealth.latencyMs) / 2
   );
-  
+
   return {
     code: instance.code,
     name: instance.name,
@@ -175,21 +175,21 @@ export async function GET(request: NextRequest) {
         { status: 401 }
       );
     }
-    
+
     // Check health of all instances in parallel
     const healthChecks = await Promise.all(
       FEDERATION_INSTANCES.map(checkInstanceHealth)
     );
-    
+
     // Calculate summary stats
     const healthyCount = healthChecks.filter(h => h.status === 'healthy').length;
     const degradedCount = healthChecks.filter(h => h.status === 'degraded').length;
     const downCount = healthChecks.filter(h => h.status === 'down').length;
-    
+
     const averageLatency = Math.round(
       healthChecks.reduce((sum, h) => sum + h.latencyMs, 0) / healthChecks.length
     );
-    
+
     return NextResponse.json({
       instances: healthChecks,
       summary: {
@@ -201,7 +201,7 @@ export async function GET(request: NextRequest) {
       },
       timestamp: new Date().toISOString(),
     });
-    
+
   } catch (error) {
     console.error('[FederationHealth] Error:', error);
     return NextResponse.json(

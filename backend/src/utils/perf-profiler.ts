@@ -1,20 +1,20 @@
 /**
  * DIVE V3 - Performance Profiler Utility
  * Phase 9: Performance Optimization & Scalability
- * 
+ *
  * Provides comprehensive performance profiling for:
  * - Bundle build time measurement
  * - Decision latency profiling
  * - Memory usage tracking
  * - OPA query optimization analysis
  * - Throughput benchmarking
- * 
+ *
  * Targets (Phase 9):
  * - Bundle build time: <300ms
  * - Decision latency p95: <20ms
  * - Throughput: 300 req/s
  * - Memory per OPA: <500MB
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */
@@ -135,7 +135,7 @@ class PerfProfiler extends EventEmitter {
 
   constructor(config: Partial<IProfilerConfig> = {}) {
     super();
-    
+
     this.config = {
       enableMemoryProfiling: process.env.PERF_MEMORY_PROFILING !== 'false',
       sampleInterval: parseInt(process.env.PERF_SAMPLE_INTERVAL || '100', 10),
@@ -175,7 +175,7 @@ class PerfProfiler extends EventEmitter {
     if (!this.timingSamples.has(name)) {
       this.timingSamples.set(name, []);
     }
-    
+
     const samples = this.timingSamples.get(name)!;
     samples.push(sample);
 
@@ -360,12 +360,12 @@ class PerfProfiler extends EventEmitter {
     try {
       // Run the decision function
       const result = await decisionFn();
-      
+
       profile.totalTimeMs = performance.now() - startTotal;
       profile.cacheHit = result.cached;
       profile.classification = result.classification;
       profile.tenant = result.tenant;
-      
+
       // Record latency
       this.recordDecisionLatency(profile.totalTimeMs);
 
@@ -408,7 +408,7 @@ class PerfProfiler extends EventEmitter {
     }
 
     const totalBuildTimeMs = this.bundleProfiles.reduce((sum, p) => sum + p.buildTimeMs, 0);
-    
+
     return {
       avgBuildTimeMs: totalBuildTimeMs / this.bundleProfiles.length,
       totalBuildTimeMs,
@@ -431,7 +431,7 @@ class PerfProfiler extends EventEmitter {
     const startTime = Date.now();
     const endTime = startTime + (durationSeconds * 1000);
     const requestInterval = 1000 / targetRPS;
-    
+
     const latencies: number[] = [];
     let successfulRequests = 0;
     let failedRequests = 0;
@@ -439,10 +439,10 @@ class PerfProfiler extends EventEmitter {
 
     while (Date.now() < endTime) {
       const now = Date.now();
-      
+
       if (now >= nextRequestTime) {
         const requestStart = performance.now();
-        
+
         try {
           const success = await requestFn();
           if (success) {
@@ -453,11 +453,11 @@ class PerfProfiler extends EventEmitter {
         } catch {
           failedRequests++;
         }
-        
+
         latencies.push(performance.now() - requestStart);
         nextRequestTime += requestInterval;
       }
-      
+
       // Small yield to prevent blocking
       await new Promise(resolve => setImmediate(resolve));
     }
@@ -467,8 +467,8 @@ class PerfProfiler extends EventEmitter {
 
     return {
       requestsPerSecond: totalRequests / actualDuration,
-      averageLatencyMs: latencies.length > 0 
-        ? latencies.reduce((a, b) => a + b, 0) / latencies.length 
+      averageLatencyMs: latencies.length > 0
+        ? latencies.reduce((a, b) => a + b, 0) / latencies.length
         : 0,
       errorRate: totalRequests > 0 ? failedRequests / totalRequests : 0,
       duration: actualDuration,
@@ -505,7 +505,7 @@ class PerfProfiler extends EventEmitter {
     const count = sorted.length;
     const sum = sorted.reduce((a, b) => a + b, 0);
     const avg = sum / count;
-    
+
     // Standard deviation
     const squaredDiffs = sorted.map(v => Math.pow(v - avg, 2));
     const avgSquaredDiff = squaredDiffs.reduce((a, b) => a + b, 0) / count;
@@ -550,7 +550,7 @@ class PerfProfiler extends EventEmitter {
     this.isProfilingActive = true;
     this.profileStartTime = Date.now();
     this.reset();
-    
+
     if (this.config.enableMemoryProfiling) {
       this.startMemoryProfiling();
     }
@@ -571,7 +571,7 @@ class PerfProfiler extends EventEmitter {
     this.isProfilingActive = false;
 
     const report = this.generateReport();
-    
+
     logger.info('Profiling session stopped', {
       duration: report.duration,
       decisionP95: report.decisionStats.p95,
@@ -593,7 +593,7 @@ class PerfProfiler extends EventEmitter {
 
     // Generate recommendations
     const recommendations: string[] = [];
-    
+
     // Check decision latency
     if (decisionStats.p95 > 20) {
       recommendations.push(

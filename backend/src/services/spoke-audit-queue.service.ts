@@ -554,7 +554,7 @@ class SpokeAuditQueueService extends EventEmitter {
             }, null, 2);
 
             await fs.writeFile(this.queueFilePath, data, 'utf-8');
-            
+
             const stats = await fs.stat(this.queueFilePath);
             this.state.queueFileSize = stats.size;
             this.state.lastFlush = new Date();
@@ -582,7 +582,7 @@ class SpokeAuditQueueService extends EventEmitter {
     private async loadQueue(): Promise<void> {
         try {
             const exists = await fs.access(this.queueFilePath).then(() => true).catch(() => false);
-            
+
             if (!exists) {
                 logger.debug('No existing audit queue file found');
                 return;

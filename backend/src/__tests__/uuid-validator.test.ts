@@ -1,7 +1,7 @@
 /**
  * UUID Validator Test Suite
  * Target: 100% coverage for uuid-validator.ts
- * 
+ *
  * Tests:
  * - RFC 4122 UUID validation
  * - UUID version detection (v1, v3, v4, v5)

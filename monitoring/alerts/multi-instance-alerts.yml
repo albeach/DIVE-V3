@@ -118,7 +118,7 @@ groups:
       # High authorization latency per instance
       - alert: HighAuthzLatencyByInstance
         expr: |
-          histogram_quantile(0.95, 
+          histogram_quantile(0.95,
             sum by (instance, le) (rate(dive_v3_authorization_latency_seconds_bucket[5m]))
           ) > 0.2
         for: 5m

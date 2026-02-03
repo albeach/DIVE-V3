@@ -211,7 +211,7 @@ describe('SpokeConnectivityService', () => {
     it('should register online/offline event listeners', () => {
       const onlineHandler = jest.fn();
       const offlineHandler = jest.fn();
-      
+
       service.on('online', onlineHandler);
       service.on('offline', offlineHandler);
 
@@ -236,7 +236,7 @@ describe('SpokeConnectivityService', () => {
     it('should return state after force check attempt', () => {
       // Just verify the method exists and returns the right structure
       const state = service.getState();
-      
+
       expect(state).toHaveProperty('mode');
       expect(state).toHaveProperty('hubReachable');
       expect(state).toHaveProperty('opalConnected');
@@ -245,7 +245,7 @@ describe('SpokeConnectivityService', () => {
 
     it('should provide time since last contact method', () => {
       const time = service.getTimeSinceLastContact();
-      
+
       // Initially null since no successful contact
       expect(time).toBeNull();
     });

@@ -4949,4 +4949,119 @@ router.delete('/unlink-idp/:alias', requireSuperAdmin, async (req: Request, res:
     }
 });
 
+// ============================================
+// COI SYNC ENDPOINTS (Issue #2 Fix: 2026-02-03)
+// ============================================
+
+/**
+ * @openapi
+ * /api/federation/coi/sync:
+ *   get:
+ *     summary: Sync COI definitions from Hub to Spoke
+ *     description: |
+ *       Returns all active COI definitions from Hub's MongoDB.
+ *       Spokes call this endpoint on startup to populate their local coi_definitions collection.
+ *
+ *       CRITICAL FIX: Addresses Issue #2 - Spokes need COI definitions for OPA policy evaluation.
+ *       Without this, spokes fail COI validation with "Failed to load COI membership from MongoDB".
+ *     tags: [Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: COI definitions successfully retrieved
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 coiDefinitions:
+ *                   type: array
+ *                   items:
+ *                     type: object
+ *                     properties:
+ *                       coiId:
+ *                         type: string
+ *                       name:
+ *                         type: string
+ *                       type:
+ *                         type: string
+ *                       members:
+ *                         type: array
+ *                         items:
+ *                           type: string
+ *                       description:
+ *                         type: string
+ *                       status:
+ *                         type: string
+ *                       color:
+ *                         type: string
+ *                       icon:
+ *                         type: string
+ *                 count:
+ *                   type: integer
+ *                 syncedAt:
+ *                   type: string
+ *                   format: date-time
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ *       500:
+ *         description: Failed to retrieve COI definitions
+ */
+router.get('/coi/sync', async (req: Request, res: Response): Promise<void> => {
+    const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
+    const instanceCode = process.env.INSTANCE_CODE || 'USA';
+
+    try {
+        const { mongoCoiDefinitionStore } = await import('../models/coi-definition.model');
+        await mongoCoiDefinitionStore.initialize();
+
+        // Get all COI definitions from Hub's MongoDB (SSOT)
+        const coiDefinitions = await mongoCoiDefinitionStore.findAll();
+
+        logger.info('COI definitions synced to spoke', {
+            requestId,
+            spokeInstance: req.headers['x-origin-realm'] || 'unknown',
+            coiCount: coiDefinitions.length,
+            instanceCode
+        });
+
+        res.status(200).json({
+            success: true,
+            coiDefinitions: coiDefinitions.map(coi => ({
+                coiId: coi.coiId,
+                name: coi.name,
+                type: coi.type,
+                members: coi.members,
+                description: coi.description,
+                status: coi.enabled ? 'active' : 'inactive',
+                color: (coi as any).color,
+                icon: (coi as any).icon,
+                mutable: coi.mutable,
+                autoUpdate: coi.autoUpdate,
+                priority: coi.priority,
+                mutuallyExclusiveWith: (coi as any).mutuallyExclusiveWith,
+                subsetOf: (coi as any).subsetOf,
+                supersetOf: (coi as any).supersetOf
+            })),
+            count: coiDefinitions.length,
+            syncedAt: new Date().toISOString()
+        });
+    } catch (error) {
+        logger.error('Failed to sync COI definitions', {
+            requestId,
+            error: error instanceof Error ? error.message : 'Unknown error',
+            instanceCode
+        });
+
+        res.status(500).json({
+            success: false,
+            error: 'Failed to sync COI definitions',
+            message: error instanceof Error ? error.message : 'Unknown error'
+        });
+    }
+});
+
 export default router;

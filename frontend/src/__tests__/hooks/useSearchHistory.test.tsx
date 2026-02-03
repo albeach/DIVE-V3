@@ -1,9 +1,9 @@
 /**
  * useSearchHistory Hook Unit Tests
- * 
+ *
  * Tests for @/hooks/useSearchHistory.ts
  * Phase 2: Search & Discovery Enhancement
- * 
+ *
  * Coverage targets:
  * - Recent search management
  * - Pinned search management

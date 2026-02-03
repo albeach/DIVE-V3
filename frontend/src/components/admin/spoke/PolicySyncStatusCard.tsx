@@ -1,8 +1,8 @@
 /**
  * DIVE V3 - Policy Sync Status Card
- * 
+ *
  * Displays current policy version and sync status.
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -86,17 +86,17 @@ function formatRelativeTime(dateStr?: string): string {
   const diffMs = now.getTime() - date.getTime();
   const diffMinutes = Math.floor(diffMs / (1000 * 60));
   const diffHours = Math.floor(diffMinutes / 60);
-  
+
   if (diffMinutes < 1) return 'Just now';
   if (diffMinutes < 60) return `${diffMinutes}m ago`;
   if (diffHours < 24) return `${diffHours}h ago`;
   return `${Math.floor(diffHours / 24)}d ago`;
 }
 
-export function PolicySyncStatusCard({ 
-  policyInfo, 
+export function PolicySyncStatusCard({
+  policyInfo,
   loading,
-  onForceSync 
+  onForceSync
 }: PolicySyncStatusCardProps) {
   const [syncing, setSyncing] = useState(false);
 
@@ -207,7 +207,7 @@ export function PolicySyncStatusCard({
             </p>
           </div>
         </div>
-        
+
         <div className="text-right">
           <p className="text-sm font-medium text-slate-700">
             {policyInfo?.policiesLoaded || 0} Policies
@@ -231,7 +231,7 @@ export function PolicySyncStatusCard({
               Policy sync required
             </p>
             <p className="text-xs text-amber-600">
-              {status === 'offline' 
+              {status === 'offline'
                 ? 'Unable to reach Hub. Operating from local cache.'
                 : 'Policies may be outdated. Consider forcing a sync.'
               }

@@ -8,8 +8,8 @@
 import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useInstanceTheme } from '@/components/ui/theme-provider';
-import { 
-  Bell, 
+import {
+  Bell,
   BellOff,
   Check,
   CheckCheck,
@@ -263,7 +263,7 @@ export function NotificationsContent({ user }: NotificationsContentProps) {
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
-          <div 
+          <div
             className="w-11 h-11 rounded-2xl flex items-center justify-center shadow-inner"
             style={{ background: 'var(--instance-banner-bg)' }}
           >
@@ -317,7 +317,7 @@ export function NotificationsContent({ user }: NotificationsContentProps) {
         <button
           onClick={() => setFilter('all')}
           className={`px-3 py-1.5 text-xs font-semibold rounded-full transition-all border ${
-            filter === 'all' 
+            filter === 'all'
               ? 'text-white border-transparent shadow-sm'
               : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
           }`}
@@ -328,7 +328,7 @@ export function NotificationsContent({ user }: NotificationsContentProps) {
         <button
           onClick={() => setFilter('unread')}
           className={`px-3 py-1.5 text-xs font-semibold rounded-full transition-all border ${
-            filter === 'unread' 
+            filter === 'unread'
               ? 'text-white border-transparent shadow-sm'
               : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300'
           }`}
@@ -389,8 +389,8 @@ export function NotificationsContent({ user }: NotificationsContentProps) {
                   <div
                     key={notification.id}
                     className={`group relative bg-white/80 backdrop-blur border rounded-2xl p-4 transition-all hover:shadow-md ${
-                      notification.read 
-                        ? 'border-gray-100 hover:border-gray-200' 
+                      notification.read
+                        ? 'border-gray-100 hover:border-gray-200'
                         : 'border-l-4 border-gray-200 hover:border-gray-300'
                     }`}
                     style={!notification.read ? { borderLeftColor: 'var(--instance-primary)' } : undefined}
@@ -481,7 +481,7 @@ export function NotificationsContent({ user }: NotificationsContentProps) {
 function EmptyNotifications() {
   return (
     <div className="text-center py-12">
-      <div 
+      <div
         className="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4"
         style={{ background: 'linear-gradient(to br, rgba(var(--instance-primary-rgb), 0.1), rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.1))' }}
       >

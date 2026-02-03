@@ -85,9 +85,9 @@ export default function OPAPolicyPage() {
     // Filter and categorize policies
     const { filteredPolicies, categorizedPolicies } = useMemo(() => {
         if (!opaStatus?.policyFiles) return { filteredPolicies: [], categorizedPolicies: {} };
-        
-        const filtered = opaStatus.policyFiles.filter(file => 
-            !policySearchQuery.trim() || 
+
+        const filtered = opaStatus.policyFiles.filter(file =>
+            !policySearchQuery.trim() ||
             file.toLowerCase().includes(policySearchQuery.toLowerCase()) ||
             file.split('/').pop()?.toLowerCase().includes(policySearchQuery.toLowerCase())
         );
@@ -140,7 +140,7 @@ export default function OPAPolicyPage() {
 
     if (status === 'loading' || loading) {
         return (
-            <PageLayout 
+            <PageLayout
                 user={session?.user || {}}
                 breadcrumbs={[
                     { label: 'Admin', href: '/admin/dashboard' },
@@ -170,7 +170,7 @@ export default function OPAPolicyPage() {
     }
 
     return (
-        <PageLayout 
+        <PageLayout
             user={session?.user || {}}
             breadcrumbs={[
                 { label: 'Admin', href: '/admin/dashboard' },
@@ -304,7 +304,7 @@ export default function OPAPolicyPage() {
                                 if (files.length === 0) return null;
                                 const colors = categoryColors[category] || categoryColors['Other'];
                                 const icon = categoryIcons[category] || categoryIcons['Other'];
-                                
+
                                 return (
                                     <div key={category} className="mb-4">
                                         <div className="px-4 py-2 bg-gray-100 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 sticky top-0 z-10">
@@ -384,12 +384,12 @@ export default function OPAPolicyPage() {
                                                     file: selectedFile
                                                 })
                                             });
-                                            
+
                                             if (!response.ok) {
                                                 const error = await response.json();
                                                 throw new Error(error.message || 'Failed to toggle rule');
                                             }
-                                            
+
                                             await loadData();
                                         } catch (error) {
                                             console.error('Failed to toggle rule:', error);

@@ -1,9 +1,9 @@
 /**
  * Seed Policies Lab with Sample Policies
- * 
+ *
  * Creates example Rego and XACML policies for users to explore in Policy Lab
  * Policies are owned by "system" user and serve as learning examples
- * 
+ *
  * Run: npx tsx src/scripts/seed-policies-lab.ts
  */
 
@@ -171,9 +171,9 @@ const SAMPLE_XACML_POLICY = {
         PolicyId="clearance-policy"
         Version="1.0"
         RuleCombiningAlgId="urn:oasis:names:tc:xacml:3.0:rule-combining-algorithm:deny-unless-permit">
-    
+
     <Description>Simple clearance-based access control policy</Description>
-    
+
     <Target>
         <AnyOf>
             <AllOf>
@@ -188,7 +188,7 @@ const SAMPLE_XACML_POLICY = {
             </AllOf>
         </AnyOf>
     </Target>
-    
+
     <Rule RuleId="clearance-check" Effect="Permit">
         <Description>Permit if user clearance >= resource classification</Description>
         <Condition>

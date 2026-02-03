@@ -1,7 +1,7 @@
 # FRA Instance Rollout Documentation
-**Project:** DIVE V3 France (FRA) Federation Deployment  
-**Phase:** 1 of 8 - Planning & Baseline  
-**Status:** IN PROGRESS  
+**Project:** DIVE V3 France (FRA) Federation Deployment
+**Phase:** 1 of 8 - Planning & Baseline
+**Status:** IN PROGRESS
 **Date:** November 24, 2025
 
 ## Overview
@@ -145,7 +145,7 @@ Dec 01                                    ┗━━━━━┛ Handoff
 
 ## License
 
-UNCLASSIFIED // FOR OFFICIAL USE ONLY  
+UNCLASSIFIED // FOR OFFICIAL USE ONLY
 Distribution limited to authorized DIVE V3 federation partners
 
 ---

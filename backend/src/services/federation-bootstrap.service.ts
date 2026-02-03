@@ -50,13 +50,16 @@ class FederationBootstrapService {
       return;
     }
 
-    const isHub = process.env.SPOKE_MODE !== 'true';
+    // CRITICAL FIX (Issue #3 - 2026-02-03): Use explicit IS_HUB flag
+    // Don't rely solely on SPOKE_MODE - Hub must explicitly set IS_HUB=true
+    const isHub = process.env.IS_HUB === 'true' || (process.env.SPOKE_MODE !== 'true');
     const instanceCode = process.env.INSTANCE_CODE || 'USA';
 
     if (!isHub) {
       logger.info('Skipping federation bootstrap - running in spoke mode', {
         instanceCode,
-        spokeMode: process.env.SPOKE_MODE
+        spokeMode: process.env.SPOKE_MODE,
+        IS_HUB: process.env.IS_HUB
       });
       this.initialized = true;
       return;
@@ -64,7 +67,8 @@ class FederationBootstrapService {
 
     logger.info('Initializing federation bootstrap service', {
       instanceCode,
-      isHub: true
+      isHub: true,
+      IS_HUB: process.env.IS_HUB
     });
 
     try {
@@ -80,6 +84,10 @@ class FederationBootstrapService {
 
       // Wire up event subscriptions from Hub-Spoke Registry
       this.registerEventHandlers();
+
+      // CRITICAL FIX (Issue #6 - 2026-02-03): Event replay mechanism
+      // Replay events for spokes that were approved while Hub was down
+      await this.replayMissedEvents();
 
       this.initialized = true;
       this.bootstrapComplete = true;  // Mark bootstrap as complete
@@ -527,16 +535,24 @@ class FederationBootstrapService {
       return CUSTOM_TEST_CODES[code];
     }
 
-    // NATO member offsets - MUST MATCH common.sh and seed-spoke-trusted-issuer.ts
+    // NATO member offsets - MUST MATCH scripts/nato-countries.sh NATO_PORT_OFFSETS
     // Formula: Keycloak HTTPS Port = 8443 + offset
+    // SSOT: scripts/nato-countries.sh
     const NATO_OFFSETS: Record<string, number> = {
-      'USA': 0, 'GBR': 20, 'FRA': 10, 'DEU': 30, 'CAN': 40, 'AUS': 50,
-      'NZL': 60, 'ITA': 70, 'ESP': 80, 'NLD': 90, 'BEL': 100,
-      'POL': 110, 'NOR': 120, 'DNK': 130, 'SWE': 140, 'FIN': 150,
-      'PRT': 160, 'GRC': 170, 'TUR': 180, 'CZE': 190, 'HUN': 200,
-      'ROU': 210, 'BGR': 220, 'HRV': 230, 'SVK': 240, 'SVN': 250,
-      'EST': 260, 'LVA': 270, 'LTU': 280, 'LUX': 290, 'ALB': 300,
-      'MNE': 310, 'ISL': 320,
+      // Hub
+      'USA': 0,    // 8443
+
+      // NATO countries (alphabetical, offsets 1-31)
+      'ALB': 1, 'BEL': 2, 'BGR': 3, 'CAN': 4, 'HRV': 5,
+      'CZE': 6, 'DNK': 7, 'EST': 8, 'FIN': 9, 'FRA': 10,
+      'DEU': 11, 'GRC': 12, 'HUN': 13, 'ISL': 14, 'ITA': 15,
+      'LVA': 16, 'LTU': 17, 'LUX': 18, 'MNE': 19, 'NLD': 20,
+      'MKD': 21, 'NOR': 22, 'POL': 23, 'PRT': 24, 'ROU': 25,
+      'SVK': 26, 'SVN': 27, 'ESP': 28, 'SWE': 29, 'TUR': 30,
+      'GBR': 31,  // 8474
+
+      // Partner nations (offsets 32-39)
+      'AUS': 32, 'NZL': 33, 'JPN': 34, 'KOR': 35, 'ISR': 36, 'UKR': 37,
     };
 
     if (NATO_OFFSETS[code] !== undefined) {
@@ -765,6 +781,85 @@ class FederationBootstrapService {
     logger.info('Federation event handlers registered', {
       events: ['spoke:approved', 'spoke:suspended', 'spoke:revoked']
     });
+  }
+
+  /**
+   * Replay missed events for spokes that changed state while Hub was down
+   *
+   * CRITICAL FIX (Issue #6 - 2026-02-03):
+   * Event handlers only fire when Hub is running. If Hub restarts, it needs to
+   * replay events for spokes that were approved/suspended/revoked while it was down.
+   */
+  private async replayMissedEvents(): Promise<void> {
+    try {
+      logger.info('Replaying missed federation events');
+
+      const { MongoClient } = await import('mongodb');
+      const mongoUrl = process.env.MONGODB_URL || 'mongodb://localhost:27017';
+      const dbName = process.env.MONGODB_DATABASE || 'dive-v3-hub';
+
+      const client = new MongoClient(mongoUrl);
+      await client.connect();
+      const db = client.db(dbName);
+      const collection = db.collection('federation_spokes');
+
+      // Find all approved spokes (these should have trusted issuers registered)
+      const approvedSpokes = await collection.find({ status: 'approved' }).toArray();
+
+      logger.info('Found approved spokes for event replay', {
+        count: approvedSpokes.length,
+        spokes: approvedSpokes.map(s => ({ instanceCode: s.instanceCode, spokeId: s.spokeId }))
+      });
+
+      // Replay approval events for each spoke
+      for (const spoke of approvedSpokes) {
+        try {
+          // Check if trusted issuer already exists
+          const trustedIssuersCollection = db.collection('trusted_issuers');
+          const existingIssuer = await trustedIssuersCollection.findOne({
+            instanceCode: spoke.instanceCode
+          });
+
+          if (!existingIssuer) {
+            logger.info('Replaying approval event - registering missing trusted issuer', {
+              instanceCode: spoke.instanceCode,
+              spokeId: spoke.spokeId
+            });
+
+            // Register the trusted issuer (this should have happened when spoke was approved)
+            await this.registerSpokeTrustedIssuer(spoke.instanceCode);
+
+            logger.info('Event replay: Trusted issuer registered', {
+              instanceCode: spoke.instanceCode,
+              spokeId: spoke.spokeId
+            });
+          } else {
+            logger.debug('Event replay: Trusted issuer already exists', {
+              instanceCode: spoke.instanceCode,
+              issuerId: existingIssuer.issuerId
+            });
+          }
+        } catch (error) {
+          logger.error('Failed to replay event for spoke', {
+            instanceCode: spoke.instanceCode,
+            error: error instanceof Error ? error.message : 'Unknown error'
+          });
+          // Don't throw - continue replaying other events
+        }
+      }
+
+      await client.close();
+
+      logger.info('Event replay completed', {
+        processedCount: approvedSpokes.length
+      });
+
+    } catch (error) {
+      logger.error('Failed to replay missed events', {
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+      // Don't throw - event replay failure shouldn't block Hub startup
+    }
   }
 
   /**

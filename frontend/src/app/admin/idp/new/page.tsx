@@ -186,7 +186,7 @@ export default function NewIdPWizard() {
             <div className="flex min-h-screen items-center justify-center">
                 <div className="text-center">
                     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
-                    <p className="mt-4 text-gray-600">Loading...</p>
+                    <p className="mt-4 text-gray-600 dark:text-gray-400">Loading...</p>
                 </div>
             </div>
         );
@@ -437,10 +437,10 @@ export default function NewIdPWizard() {
                         </div>
                     </div>
                     <div className="flex-1">
-                        <h1 className="text-5xl font-black bg-gradient-to-r from-gray-900 via-blue-900 to-purple-900 bg-clip-text text-transparent tracking-tight">
+                        <h1 className="text-5xl font-black bg-gradient-to-r from-gray-900 via-blue-900 to-purple-900 dark:from-gray-100 dark:via-blue-300 dark:to-purple-300 bg-clip-text text-transparent tracking-tight">
                             Connect External Identity Provider
                         </h1>
-                        <p className="mt-3 text-lg text-gray-600 font-medium">
+                        <p className="mt-3 text-lg text-gray-600 dark:text-gray-400 font-medium">
                             Connect your organization's existing identity provider to DIVE for federated authentication
                         </p>
                     </div>
@@ -464,8 +464,8 @@ export default function NewIdPWizard() {
             <div className="mb-10">
                 <div className="relative">
                     {/* Background track */}
-                    <div className="absolute top-5 left-0 w-full h-2 bg-gray-200 rounded-full overflow-hidden">
-                        <div className="absolute inset-0 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 opacity-50" />
+                    <div className="absolute top-5 left-0 w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                        <div className="absolute inset-0 bg-gradient-to-r from-gray-200 via-gray-300 to-gray-200 dark:from-gray-700 dark:via-gray-600 dark:to-gray-700 opacity-50" />
                 </div>
 
                     {/* Animated progress */}
@@ -484,8 +484,8 @@ export default function NewIdPWizard() {
                                     step.number < currentStep
                                         ? 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-lg shadow-green-500/50 scale-105'
                                         : step.number === currentStep
-                                        ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-2xl shadow-blue-600/70 scale-125 ring-4 ring-blue-200'
-                                        : 'bg-white border-2 border-gray-300 text-gray-400 scale-90'
+                                        ? 'bg-gradient-to-br from-blue-600 to-indigo-600 text-white shadow-2xl shadow-blue-600/70 scale-125 ring-4 ring-blue-200 dark:ring-blue-800'
+                                        : 'bg-white dark:bg-gray-800 border-2 border-gray-300 dark:border-gray-600 text-gray-400 scale-90'
                                 }`}>
                                     {step.number < currentStep ? (
                                         <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
@@ -502,7 +502,7 @@ export default function NewIdPWizard() {
                                     step.number === currentStep ? 'opacity-100' : 'opacity-60'
                                 }`}>
                                     <p className={`text-[10px] font-bold leading-tight ${
-                                        step.number === currentStep ? 'text-blue-600' : 'text-gray-600'
+                                        step.number === currentStep ? 'text-blue-600 dark:text-blue-400' : 'text-gray-600 dark:text-gray-400'
                                     }`}>
                                         {step.title}
                                     </p>
@@ -516,13 +516,13 @@ export default function NewIdPWizard() {
             {/* Wizard Card with subtle glow */}
             <div className="relative">
                 <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-600 to-purple-600 rounded-2xl opacity-20 blur-xl" />
-                <div className="relative bg-white shadow-2xl rounded-2xl border border-gray-100">
+                <div className="relative bg-white dark:bg-gray-900 shadow-2xl rounded-2xl border border-gray-100 dark:border-gray-700">
                     <div className="px-6 py-8 sm:p-10">
                         {/* Step 1: Protocol Selection */}
                         {currentStep === 1 && (
                             <div className="space-y-8">
                                 <div className="text-center">
-                                    <h3 className="text-2xl font-bold text-gray-900 flex items-center justify-center gap-2">
+                                    <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 flex items-center justify-center gap-2">
                                         Choose Protocol
                                         <InlineHelp
                                             variant="info"
@@ -540,7 +540,7 @@ export default function NewIdPWizard() {
                                             }}
                                         />
                                     </h3>
-                                    <p className="mt-2 text-gray-600">
+                                    <p className="mt-2 text-gray-600 dark:text-gray-400">
                                         Select your identity provider's authentication protocol
                                     </p>
                                 </div>
@@ -561,7 +561,7 @@ export default function NewIdPWizard() {
                                         <div className={`relative flex flex-col items-center rounded-2xl p-8 transition-all duration-300 ${
                                             formData.providerId === 'oidc'
                                                 ? 'bg-gradient-to-br from-blue-600 to-cyan-600 text-white shadow-2xl'
-                                                : 'bg-white text-gray-900 shadow-lg group-hover:shadow-xl'
+                                                : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-lg group-hover:shadow-xl'
                                         }`}>
                                             <div className={`text-6xl mb-3 transition-transform duration-300 ${
                                                 formData.providerId === 'oidc' ? 'scale-110' : 'group-hover:scale-110'
@@ -571,7 +571,7 @@ export default function NewIdPWizard() {
                                             <span className={`text-xl font-bold mb-1 ${formData.providerId === 'oidc' ? 'text-white' : 'text-gray-900'}`}>
                                                 OIDC
                                             </span>
-                                            <span className={`text-sm ${formData.providerId === 'oidc' ? 'text-blue-100' : 'text-gray-600'}`}>
+                                            <span className={`text-sm ${formData.providerId === 'oidc' ? 'text-blue-100' : 'text-gray-600 dark:text-gray-400'}`}>
                                                 OpenID Connect
                                             </span>
                                             {formData.providerId === 'oidc' && (
@@ -599,7 +599,7 @@ export default function NewIdPWizard() {
                                         <div className={`relative flex flex-col items-center rounded-2xl p-8 transition-all duration-300 ${
                                             formData.providerId === 'saml'
                                                 ? 'bg-gradient-to-br from-orange-600 to-pink-600 text-white shadow-2xl'
-                                                : 'bg-white text-gray-900 shadow-lg group-hover:shadow-xl'
+                                                : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-lg group-hover:shadow-xl'
                                         }`}>
                                             <div className={`text-6xl mb-3 transition-transform duration-300 ${
                                                 formData.providerId === 'saml' ? 'scale-110' : 'group-hover:scale-110'
@@ -609,7 +609,7 @@ export default function NewIdPWizard() {
                                             <span className={`text-xl font-bold mb-1 ${formData.providerId === 'saml' ? 'text-white' : 'text-gray-900'}`}>
                                                 SAML
                                             </span>
-                                            <span className={`text-sm ${formData.providerId === 'saml' ? 'text-orange-100' : 'text-gray-600'}`}>
+                                            <span className={`text-sm ${formData.providerId === 'saml' ? 'text-orange-100' : 'text-gray-600 dark:text-gray-400'}`}>
                                                 SAML 2.0
                                             </span>
                                             {formData.providerId === 'saml' && (
@@ -624,9 +624,9 @@ export default function NewIdPWizard() {
                                 </div>
 
                                 {/* Phase 4: Federation Partner Quick-Add */}
-                                <div className="relative mt-8 pt-8 border-t border-gray-200">
-                                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-white px-4">
-                                        <span className="text-sm font-medium text-gray-500">Or quick-add a federation partner</span>
+                                <div className="relative mt-8 pt-8 border-t border-gray-200 dark:border-gray-700">
+                                    <div className="absolute -top-3 left-1/2 transform -translate-x-1/2 bg-white dark:bg-gray-900 px-4">
+                                        <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Or quick-add a federation partner</span>
                                     </div>
 
                                     <button
@@ -646,7 +646,7 @@ export default function NewIdPWizard() {
                                         <div className={`relative flex items-center gap-6 rounded-2xl p-6 transition-all duration-300 ${
                                             isFederationMode
                                                 ? 'bg-gradient-to-br from-emerald-600 to-teal-600 text-white shadow-2xl'
-                                                : 'bg-white text-gray-900 shadow-lg group-hover:shadow-xl border-2 border-dashed border-gray-300 group-hover:border-emerald-400'
+                                                : 'bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 shadow-lg group-hover:shadow-xl border-2 border-dashed border-gray-300 dark:border-gray-600 group-hover:border-emerald-400'
                                         }`}>
                                             <div className={`text-5xl transition-transform duration-300 ${
                                                 isFederationMode ? 'scale-110' : 'group-hover:scale-110'
@@ -654,10 +654,10 @@ export default function NewIdPWizard() {
                                                 🌐
                                             </div>
                                             <div className="flex-1 text-left">
-                                                <span className={`text-xl font-bold block ${isFederationMode ? 'text-white' : 'text-gray-900'}`}>
+                                                <span className={`text-xl font-bold block ${isFederationMode ? 'text-white' : 'text-gray-900 dark:text-gray-100'}`}>
                                                     DIVE V3 Federation Partner
                                                 </span>
-                                                <span className={`text-sm ${isFederationMode ? 'text-emerald-100' : 'text-gray-600'}`}>
+                                                <span className={`text-sm ${isFederationMode ? 'text-emerald-100' : 'text-gray-600 dark:text-gray-400'}`}>
                                                     Instantly connect a pre-configured coalition partner (&lt;5 min setup)
                                                 </span>
                                             </div>
@@ -682,7 +682,7 @@ export default function NewIdPWizard() {
                                     {/* Partner Selector (shown when federation mode is active) */}
                                     {isFederationMode && (
                                         <div className="mt-6 space-y-4 animate-in slide-in-from-top-4 duration-300">
-                                            <h4 className="text-lg font-semibold text-gray-900">Select Federation Partner</h4>
+                                            <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Select Federation Partner</h4>
                                             <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                                                 {FEDERATION_PARTNERS.filter(p => p.enabled).map((partner) => (
                                                     <button
@@ -716,8 +716,8 @@ export default function NewIdPWizard() {
                                                         }}
                                                         className={`relative p-4 rounded-xl border-2 transition-all duration-200 ${
                                                             selectedPartner?.code === partner.code
-                                                                ? 'border-emerald-500 bg-emerald-50 shadow-lg'
-                                                                : 'border-gray-200 hover:border-emerald-300 hover:bg-emerald-50/50'
+                                                                ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/30 shadow-lg'
+                                                                : 'border-gray-200 dark:border-gray-600 hover:border-emerald-300 hover:bg-emerald-50/50 dark:hover:bg-emerald-900/20'
                                                         }`}
                                                     >
                                                         <div className="text-3xl mb-2">
@@ -728,8 +728,8 @@ export default function NewIdPWizard() {
                                                             {partner.code === 'CAN' && '🇨🇦'}
                                                             {partner.code === 'ESP' && '🇪🇸'}
                                                         </div>
-                                                        <div className="font-semibold text-gray-900">{partner.name}</div>
-                                                        <div className="text-xs text-gray-500 mt-1">{partner.code}</div>
+                                                        <div className="font-semibold text-gray-900 dark:text-gray-100">{partner.name}</div>
+                                                        <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">{partner.code}</div>
                                                         {selectedPartner?.code === partner.code && (
                                                             <div className="absolute top-2 right-2 w-6 h-6 bg-emerald-500 rounded-full flex items-center justify-center">
                                                                 <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={3}>
@@ -743,10 +743,10 @@ export default function NewIdPWizard() {
 
                                             {/* Coming Soon Partners */}
                                             <div className="mt-4">
-                                                <p className="text-xs text-gray-500 mb-2">Coming soon:</p>
+                                                <p className="text-xs text-gray-500 dark:text-gray-400 mb-2">Coming soon:</p>
                                                 <div className="flex gap-2">
                                                     {FEDERATION_PARTNERS.filter(p => !p.enabled).map((partner) => (
-                                                        <span key={partner.code} className="px-3 py-1 bg-gray-100 text-gray-500 rounded-full text-xs">
+                                                        <span key={partner.code} className="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-500 dark:text-gray-400 rounded-full text-xs">
                                                             {partner.code === 'CAN' && '🇨🇦'} {partner.code === 'ESP' && '🇪🇸'} {partner.name}
                                                         </span>
                                                     ))}
@@ -755,7 +755,7 @@ export default function NewIdPWizard() {
 
                                             {/* Quick Setup Note */}
                                             {selectedPartner && (
-                                                <div className="mt-4 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                                                <div className="mt-4 p-4 bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-700 rounded-xl">
                                                     <div className="flex items-start gap-3">
                                                         <div className="w-8 h-8 bg-emerald-100 rounded-full flex items-center justify-center flex-shrink-0">
                                                             <svg className="w-5 h-5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -763,8 +763,8 @@ export default function NewIdPWizard() {
                                                             </svg>
                                                         </div>
                                                         <div>
-                                                            <h5 className="font-semibold text-emerald-900">Auto-Configured for {selectedPartner.name}</h5>
-                                                            <p className="text-sm text-emerald-700 mt-1">
+                                                            <h5 className="font-semibold text-emerald-900 dark:text-emerald-200">Auto-Configured for {selectedPartner.name}</h5>
+                                                            <p className="text-sm text-emerald-700 dark:text-emerald-300 mt-1">
                                                                 OIDC endpoints, attribute mappings, and security settings have been pre-populated.
                                                                 You only need to provide the <strong>client secret</strong> (obtain from {selectedPartner.name} admin).
                                                             </p>
@@ -780,7 +780,7 @@ export default function NewIdPWizard() {
                                                     setIsFederationMode(false);
                                                     setSelectedPartner(null);
                                                 }}
-                                                className="text-sm text-gray-500 hover:text-gray-700 underline"
+                                                className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 underline"
                                             >
                                                 ← Back to manual configuration
                                             </button>
@@ -795,14 +795,14 @@ export default function NewIdPWizard() {
                         {currentStep === 2 && (
                             <div className="space-y-6">
                                 <div>
-                                    <h3 className="text-lg font-medium text-gray-900">Basic Configuration</h3>
-                                    <p className="mt-1 text-sm text-gray-500">
+                                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Basic Configuration</h3>
+                                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                                         Provide basic information about this identity provider.
                                     </p>
                                 </div>
 
                                 <div>
-                                    <label htmlFor="alias" className="block text-sm font-medium text-gray-700 flex items-center gap-2">
+                                    <label htmlFor="alias" className="block text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
                                         Alias <span className="text-red-500">*</span>
                                         <InlineHelp
                                             variant="help"
@@ -841,13 +841,13 @@ export default function NewIdPWizard() {
                                     {errors.alias && (
                                         <p className="mt-1 text-sm text-red-600">{errors.alias}</p>
                                     )}
-                                    <p className="mt-1 text-xs text-gray-500">
+                                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                                         Unique identifier (lowercase, alphanumeric, hyphens only)
                                     </p>
                                 </div>
 
                                 <div>
-                                    <label htmlFor="displayName" className="block text-sm font-medium text-gray-700 flex items-center gap-2">
+                                    <label htmlFor="displayName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 flex items-center gap-2">
                                         Display Name <span className="text-red-500">*</span>
                                         <InlineHelp
                                             variant="help"
@@ -889,7 +889,7 @@ export default function NewIdPWizard() {
                                 </div>
 
                                 <div>
-                                    <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+                                    <label htmlFor="description" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                         Description
                                     </label>
                                     <textarea
@@ -900,7 +900,7 @@ export default function NewIdPWizard() {
                                             setFormData({ ...formData, description: e.target.value })
                                         }
                                         placeholder="Identity provider for German Armed Forces personnel..."
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                                        className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                                     />
                                 </div>
                             </div>
@@ -956,45 +956,45 @@ export default function NewIdPWizard() {
                         {currentStep === 4 && (
                             <div className="space-y-6">
                                 <div>
-                                    <h3 className="text-lg font-medium text-gray-900">Supporting Documentation (Optional)</h3>
-                                    <p className="mt-1 text-sm text-gray-600">
+                                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Supporting Documentation (Optional)</h3>
+                                    <p className="mt-1 text-sm text-gray-600 dark:text-gray-400">
                                         Upload or reference supporting documentation. These are <strong>optional</strong> and improve your approval chances.
                                     </p>
                                 </div>
 
                                 {/* Info Card - Auto-Detection */}
-                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                                    <h4 className="font-semibold text-blue-900 flex items-center gap-2 mb-2">
+                                <div className="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-700 rounded-lg p-4">
+                                    <h4 className="font-semibold text-blue-900 dark:text-blue-200 flex items-center gap-2 mb-2">
                                         <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                                         </svg>
                                         Automatic Security Assessment
                                     </h4>
-                                    <p className="text-sm text-blue-800">
+                                    <p className="text-sm text-blue-800 dark:text-blue-300">
                                         We will automatically assess your IdP's security configuration by testing:
                                     </p>
-                                    <ul className="mt-2 text-sm text-blue-900 space-y-1 ml-4">
+                                    <ul className="mt-2 text-sm text-blue-900 dark:text-blue-200 space-y-1 ml-4">
                                         <li>✓ TLS version and cipher strength (connects to your endpoint)</li>
                                         <li>✓ Cryptographic algorithms (analyzes your JWKS/certificates)</li>
                                         <li>✓ MFA support (checks discovery document)</li>
                                         <li>✓ Endpoint reachability (tests connectivity)</li>
                                     </ul>
-                                    <p className="mt-3 text-xs text-blue-700">
+                                    <p className="mt-3 text-xs text-blue-700 dark:text-blue-400">
                                         <strong>These cannot be gamed</strong> - we verify by connecting to your actual endpoints!
                                     </p>
                                 </div>
 
                                 {/* Compliance Documentation - Upload References */}
-                                <div className="bg-gray-50 rounded-lg p-4 space-y-4">
+                                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 space-y-4">
                                     <div>
-                                        <h4 className="font-semibold text-gray-900">📋 Compliance Documentation</h4>
-                                        <p className="text-sm text-gray-600 mt-1">
+                                        <h4 className="font-semibold text-gray-900 dark:text-gray-100">📋 Compliance Documentation</h4>
+                                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
                                             Provide references to compliance documents. Admins will verify these during review.
                                         </p>
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700">
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                             MFA Policy Document
                                         </label>
                                         <input
@@ -1008,13 +1008,13 @@ export default function NewIdPWizard() {
                                                 }
                                             })}
                                             placeholder="e.g., MFA-Policy-2024.pdf or URL to policy"
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                                            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                                         />
-                                        <p className="mt-1 text-xs text-gray-500">Optional: Reference to your MFA enforcement policy</p>
+                                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Optional: Reference to your MFA enforcement policy</p>
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700">
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                             ACP-240 Certification
                                         </label>
                                         <input
@@ -1028,13 +1028,13 @@ export default function NewIdPWizard() {
                                                 }
                                             })}
                                             placeholder="e.g., ACP-240-Cert-2024.pdf"
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                                            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                                         />
-                                        <p className="mt-1 text-xs text-gray-500">Optional: NATO ACP-240 certification (improves score)</p>
+                                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Optional: NATO ACP-240 certification (improves score)</p>
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700">
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                             STANAG 4774 Certification
                                         </label>
                                         <input
@@ -1048,13 +1048,13 @@ export default function NewIdPWizard() {
                                                 }
                                             })}
                                             placeholder="e.g., STANAG-4774-Cert.pdf"
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                                            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                                         />
-                                        <p className="mt-1 text-xs text-gray-500">Optional: NATO security labeling certification</p>
+                                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Optional: NATO security labeling certification</p>
                                     </div>
 
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700">
+                                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                                             Audit/Logging Documentation
                                         </label>
                                         <input
@@ -1068,13 +1068,13 @@ export default function NewIdPWizard() {
                                                 }
                                             })}
                                             placeholder="e.g., Audit-Plan-2024.pdf or logging policy"
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                                            className="mt-1 block w-full rounded-md border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                                         />
-                                        <p className="mt-1 text-xs text-gray-500">Optional: Audit plan or logging policy reference</p>
+                                        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">Optional: Audit plan or logging policy reference</p>
                                     </div>
 
-                                    <div className="bg-yellow-50 border border-yellow-200 rounded p-3 mt-4">
-                                        <p className="text-xs text-yellow-800">
+                                    <div className="bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded p-3 mt-4">
+                                        <p className="text-xs text-yellow-800 dark:text-yellow-300">
                                             <strong>Note:</strong> Admins will verify these documents during review. Providing valid documentation improves your approval speed and risk score. Leaving fields blank is acceptable - the system will score based on technical validation only.
                                         </p>
                                     </div>
@@ -1099,41 +1099,41 @@ export default function NewIdPWizard() {
                         {currentStep === 6 && (
                             <div className="space-y-6">
                                 <div>
-                                    <h3 className="text-lg font-medium text-gray-900">Review Configuration</h3>
-                                    <p className="mt-1 text-sm text-gray-500">
+                                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Review Configuration</h3>
+                                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                                         Review your configuration and test connectivity before submitting.
                                     </p>
                                 </div>
 
                                 {/* Configuration Summary */}
-                                <div className="bg-gray-50 rounded-lg p-4 space-y-3">
+                                <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-4 space-y-3">
                                     <div>
-                                        <span className="text-sm font-medium text-gray-700">Alias:</span>
-                                        <span className="ml-2 text-sm text-gray-900">{formData.alias}</span>
+                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Alias:</span>
+                                        <span className="ml-2 text-sm text-gray-900 dark:text-gray-100">{formData.alias}</span>
                                     </div>
                                     <div>
-                                        <span className="text-sm font-medium text-gray-700">Display Name:</span>
-                                        <span className="ml-2 text-sm text-gray-900">{formData.displayName}</span>
+                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Display Name:</span>
+                                        <span className="ml-2 text-sm text-gray-900 dark:text-gray-100">{formData.displayName}</span>
                                     </div>
                                     <div>
-                                        <span className="text-sm font-medium text-gray-700">Protocol:</span>
-                                        <span className="ml-2 text-sm text-gray-900">{formData.providerId.toUpperCase()}</span>
+                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Protocol:</span>
+                                        <span className="ml-2 text-sm text-gray-900 dark:text-gray-100">{formData.providerId.toUpperCase()}</span>
                                     </div>
                                     {formData.providerId === 'oidc' && formData.oidcConfig && (
                                         <>
                                             <div>
-                                                <span className="text-sm font-medium text-gray-700">Issuer:</span>
-                                                <span className="ml-2 text-sm text-gray-900">{formData.oidcConfig.issuer}</span>
+                                                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Issuer:</span>
+                                                <span className="ml-2 text-sm text-gray-900 dark:text-gray-100">{formData.oidcConfig.issuer}</span>
                                             </div>
                                             <div>
-                                                <span className="text-sm font-medium text-gray-700">Client ID:</span>
-                                                <span className="ml-2 text-sm text-gray-900">{formData.oidcConfig.clientId}</span>
+                                                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Client ID:</span>
+                                                <span className="ml-2 text-sm text-gray-900 dark:text-gray-100">{formData.oidcConfig.clientId}</span>
                                             </div>
                                         </>
                                     )}
                                     <div>
-                                        <span className="text-sm font-medium text-gray-700">Attribute Mappings:</span>
-                                        <span className="ml-2 text-sm text-gray-900">4 configured</span>
+                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Attribute Mappings:</span>
+                                        <span className="ml-2 text-sm text-gray-900 dark:text-gray-100">4 configured</span>
                                     </div>
                                 </div>
 
@@ -1143,7 +1143,7 @@ export default function NewIdPWizard() {
                                         type="button"
                                         onClick={handleTestConnection}
                                         disabled={isSubmitting}
-                                        className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
+                                        className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
                                     >
                                         {isSubmitting ? 'Testing...' : 'Test Connection'}
                                     </button>
@@ -1183,13 +1183,13 @@ export default function NewIdPWizard() {
                         {currentStep === 7 && (
                             <div className="space-y-6">
                                 <div>
-                                    <h3 className="text-lg font-medium text-gray-900">Submit for Approval</h3>
-                                    <p className="mt-1 text-sm text-gray-500">
+                                    <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Submit for Approval</h3>
+                                    <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
                                         Your IdP configuration will be submitted for approval by a super administrator.
                                     </p>
                                 </div>
 
-                                <div className="bg-yellow-50 rounded-lg p-4">
+                                <div className="bg-yellow-50 dark:bg-yellow-900/30 rounded-lg p-4">
                                     <div className="flex">
                                         <div className="flex-shrink-0">
                                             <svg className="h-5 w-5 text-yellow-400" viewBox="0 0 20 20" fill="currentColor">
@@ -1197,8 +1197,8 @@ export default function NewIdPWizard() {
                                             </svg>
                                         </div>
                                         <div className="ml-3">
-                                            <h3 className="text-sm font-medium text-yellow-800">Approval Required</h3>
-                                            <div className="mt-2 text-sm text-yellow-700">
+                                            <h3 className="text-sm font-medium text-yellow-800 dark:text-yellow-300">Approval Required</h3>
+                                            <div className="mt-2 text-sm text-yellow-700 dark:text-yellow-400">
                                                 <p>
                                                     New identity providers must be approved before they become active.
                                                     You will be notified once a super administrator reviews your submission.
@@ -1218,10 +1218,10 @@ export default function NewIdPWizard() {
                                         />
                                     </div>
                                     <div className="ml-3 text-sm">
-                                        <label htmlFor="confirm" className="font-medium text-gray-700">
+                                        <label htmlFor="confirm" className="font-medium text-gray-700 dark:text-gray-300">
                                             I verify that this configuration is correct
                                         </label>
-                                        <p className="text-gray-500">
+                                        <p className="text-gray-500 dark:text-gray-400">
                                             I have reviewed all settings and tested the connection.
                                         </p>
                                     </div>
@@ -1256,10 +1256,10 @@ export default function NewIdPWizard() {
                         {currentStep === 8 && submissionResult && (
                             <div className="space-y-8">
                                 <div>
-                                    <h3 className="text-2xl font-bold text-gray-900">
+                                    <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
                                         {submissionResult.status === 'validation-failed' ? '⚠️ Validation Results' : '✅ Submission Complete!'}
                                     </h3>
-                                    <p className="mt-2 text-sm text-gray-600">
+                                    <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
                                         {submissionResult.status === 'validation-failed'
                                             ? 'Your configuration has validation issues. Review the details below and fix before resubmitting.'
                                             : 'Your Identity Provider has been validated and assessed. Review the results below.'
@@ -1311,7 +1311,7 @@ export default function NewIdPWizard() {
                                                  submissionResult.status === 'rejected' ? 'Automatically Rejected' :
                                                  'Pending Review'}
                                             </h4>
-                                            <p className="text-sm text-gray-700 mt-1">
+                                            <p className="text-sm text-gray-700 dark:text-gray-300 mt-1">
                                                 {submissionResult.approvalDecision?.reason || 'Awaiting administrator review'}
                                             </p>
                                         </div>
@@ -1321,7 +1321,7 @@ export default function NewIdPWizard() {
 
                                 {/* Phase 2: Risk Score Badge */}
                                 {submissionResult.comprehensiveRiskScore && submissionResult.status !== 'validation-failed' && (
-                                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
                                         <h4 className="text-lg font-semibold mb-4 flex items-center gap-2">
                                             🏆 Risk Assessment
                                         </h4>
@@ -1337,7 +1337,7 @@ export default function NewIdPWizard() {
 
                                 {/* Phase 2: Risk Breakdown */}
                                 {submissionResult.comprehensiveRiskScore && (
-                                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
                                         <h4 className="text-lg font-semibold mb-4">📊 Risk Score Breakdown</h4>
                                         <RiskBreakdown breakdown={submissionResult.comprehensiveRiskScore.breakdown} />
                                     </div>
@@ -1345,7 +1345,7 @@ export default function NewIdPWizard() {
 
                                 {/* Phase 2: Compliance Status */}
                                 {submissionResult.complianceCheck && (
-                                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
                                         <h4 className="text-lg font-semibold mb-4">📋 Compliance Status</h4>
                                         <ComplianceStatusCard complianceCheck={submissionResult.complianceCheck} />
                                     </div>
@@ -1353,14 +1353,14 @@ export default function NewIdPWizard() {
 
                                 {/* Phase 2: SLA Countdown (if fast-track or standard review) */}
                                 {submissionResult.approvalDecision?.slaDeadline && submissionResult.status === 'pending' && (
-                                    <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
+                                    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6">
                                         <h4 className="text-lg font-semibold mb-4">⏱️ Review Deadline</h4>
                                         <SLACountdown
                                             slaDeadline={submissionResult.approvalDecision.slaDeadline}
                                             slaStatus={submissionResult.slaStatus || 'within'}
                                             action={submissionResult.approvalDecision.action}
                                         />
-                                        <p className="mt-2 text-xs text-gray-600">
+                                        <p className="mt-2 text-xs text-gray-600 dark:text-gray-400">
                                             {submissionResult.approvalDecision.action === 'fast-track' ?
                                                 'Fast-track review (2-hour SLA)' :
                                                 'Standard review (24-hour SLA)'}
@@ -1370,11 +1370,11 @@ export default function NewIdPWizard() {
 
                                 {/* Next Steps */}
                                 {submissionResult.approvalDecision?.nextSteps && (
-                                    <div className="bg-blue-50 rounded-xl border border-blue-200 p-6">
-                                        <h4 className="text-lg font-semibold text-blue-900 mb-3">📝 Next Steps</h4>
+                                    <div className="bg-blue-50 dark:bg-blue-900/30 rounded-xl border border-blue-200 dark:border-blue-700 p-6">
+                                        <h4 className="text-lg font-semibold text-blue-900 dark:text-blue-200 mb-3">📝 Next Steps</h4>
                                         <ul className="space-y-2">
                                             {submissionResult.approvalDecision.nextSteps.map((step: string, idx: number) => (
-                                                <li key={idx} className="flex items-start gap-2 text-sm text-blue-800">
+                                                <li key={idx} className="flex items-start gap-2 text-sm text-blue-800 dark:text-blue-300">
                                                     <span className="font-bold">{idx + 1}.</span>
                                                     <span>{step}</span>
                                                 </li>
@@ -1406,7 +1406,7 @@ export default function NewIdPWizard() {
 
                     {/* Navigation Buttons - Hide on Step 8 (Results) */}
                     {currentStep < 8 && (
-                    <div className="bg-gray-50 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse rounded-b-lg">
+                    <div className="bg-gray-50 dark:bg-gray-800 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse rounded-b-lg">
                             {currentStep < 7 ? (
                             <button
                                 type="button"
@@ -1437,7 +1437,7 @@ export default function NewIdPWizard() {
                             <button
                                 type="button"
                                 onClick={handleBack}
-                                className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:w-auto sm:text-sm"
+                                className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-gray-800 text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 sm:mt-0 sm:w-auto sm:text-sm"
                             >
                                 ← Back
                             </button>
@@ -1446,7 +1446,7 @@ export default function NewIdPWizard() {
                         <button
                             type="button"
                             onClick={() => router.push('/admin/idp')}
-                            className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 sm:mt-0 sm:w-auto sm:text-sm"
+                            className="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 dark:border-gray-600 shadow-sm px-4 py-2 bg-white dark:bg-gray-800 text-base font-medium text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500 sm:mt-0 sm:w-auto sm:text-sm"
                         >
                             Cancel
                         </button>

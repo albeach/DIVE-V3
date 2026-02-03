@@ -1,6 +1,6 @@
 /**
  * Zero Results Queries API Route
- * 
+ *
  * Proxy for zero-result queries endpoint
  * Returns queries that returned zero results for content gap analysis
  */

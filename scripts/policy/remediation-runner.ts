@@ -2,23 +2,23 @@
 /**
  * DIVE V3 - Automated Policy Remediation Runner
  * Phase 6: Continuous Compliance Automation
- * 
+ *
  * Provides automated remediation for common policy drift scenarios.
- * 
+ *
  * Features:
  * - Bundle rebuild for all tenants
  * - OPAL sync verification
  * - Health check for OPA instances
  * - Rollback to previous baseline
  * - Data synchronization
- * 
+ *
  * Usage:
  *   npx ts-node --esm scripts/policy/remediation-runner.ts rebuild
  *   npx ts-node --esm scripts/policy/remediation-runner.ts sync
  *   npx ts-node --esm scripts/policy/remediation-runner.ts health
  *   npx ts-node --esm scripts/policy/remediation-runner.ts rollback
  *   npx ts-node --esm scripts/policy/remediation-runner.ts auto
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */
@@ -120,12 +120,12 @@ async function rebuildBundles(): Promise<RemediationResult> {
 
   if (result.code === 0) {
     // Verify bundles were created
-    const bundlesCreated = TENANTS.filter(t => 
+    const bundlesCreated = TENANTS.filter(t =>
       fs.existsSync(path.join(BUNDLES_DIR, t.toLowerCase(), 'bundle.tar.gz'))
     );
 
     console.log(result.stdout);
-    
+
     return {
       action: 'rebuild_bundles',
       success: true,
@@ -139,7 +139,7 @@ async function rebuildBundles(): Promise<RemediationResult> {
   }
 
   console.error(result.stderr);
-  
+
   return {
     action: 'rebuild_bundles',
     success: false,
@@ -203,7 +203,7 @@ async function triggerOPALSync(): Promise<RemediationResult> {
 
   // Check if OPAL is reachable
   const opalReachable = await isServiceReachable(`${OPAL_SERVER_URL}/healthz`);
-  
+
   if (!opalReachable) {
     return {
       action: 'opal_sync',
@@ -296,7 +296,7 @@ async function checkHealth(): Promise<HealthCheck[]> {
   for (const tenant of TENANTS) {
     const bundlePath = path.join(BUNDLES_DIR, tenant.toLowerCase(), 'bundle.tar.gz');
     const manifestPath = path.join(BUNDLES_DIR, tenant.toLowerCase(), 'manifest.json');
-    
+
     if (fs.existsSync(bundlePath) && fs.existsSync(manifestPath)) {
       const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
       checks.push({
@@ -319,10 +319,10 @@ async function checkHealth(): Promise<HealthCheck[]> {
 
   // Check OPA server (if running)
   try {
-    const opaHealthResponse = await fetch(`${OPA_URL}/health`, { 
-      signal: AbortSignal.timeout(3000) 
+    const opaHealthResponse = await fetch(`${OPA_URL}/health`, {
+      signal: AbortSignal.timeout(3000)
     });
-    
+
     if (opaHealthResponse.ok) {
       checks.push({
         component: 'OPA Server',
@@ -347,10 +347,10 @@ async function checkHealth(): Promise<HealthCheck[]> {
 
   // Check OPAL server (if running)
   try {
-    const opalHealthResponse = await fetch(`${OPAL_SERVER_URL}/healthz`, { 
-      signal: AbortSignal.timeout(3000) 
+    const opalHealthResponse = await fetch(`${OPAL_SERVER_URL}/healthz`, {
+      signal: AbortSignal.timeout(3000)
     });
-    
+
     checks.push({
       component: 'OPAL Server',
       status: opalHealthResponse.ok ? 'healthy' : 'unhealthy',
@@ -497,14 +497,14 @@ async function updateBaseline(): Promise<RemediationResult> {
 async function autoRemediate(): Promise<RemediationResult[]> {
   console.log('\n🤖 Starting automated remediation...\n');
   console.log('='.repeat(50));
-  
+
   const results: RemediationResult[] = [];
 
   // Step 1: Health check
   console.log('\n📍 Step 1: Health Check');
   const healthChecks = await checkHealth();
   const unhealthyComponents = healthChecks.filter(h => h.status === 'unhealthy');
-  
+
   results.push({
     action: 'health_check',
     success: unhealthyComponents.length === 0,
@@ -530,11 +530,11 @@ async function autoRemediate(): Promise<RemediationResult[]> {
   // Step 3: Rebuild bundles if needed
   console.log('\n📍 Step 3: Bundle Check & Rebuild');
   const bundleMissing = unhealthyComponents.some(h => h.component.startsWith('Bundle:'));
-  
+
   if (bundleMissing) {
     const rebuildResult = await rebuildBundles();
     results.push(rebuildResult);
-    
+
     if (!rebuildResult.success) {
       console.log('\n⚠️ Bundle rebuild failed - stopping auto-remediation');
       return results;
@@ -551,7 +551,7 @@ async function autoRemediate(): Promise<RemediationResult[]> {
   // Step 5: OPAL sync (if available)
   console.log('\n📍 Step 5: OPAL Sync');
   const opalHealthy = healthChecks.find(h => h.component === 'OPAL Server')?.status === 'healthy';
-  
+
   if (opalHealthy) {
     const syncResult = await triggerOPALSync();
     results.push(syncResult);
@@ -563,10 +563,10 @@ async function autoRemediate(): Promise<RemediationResult[]> {
   console.log('\n' + '='.repeat(50));
   console.log('🤖 Automated Remediation Summary');
   console.log('='.repeat(50));
-  
+
   const successful = results.filter(r => r.success).length;
   const failed = results.filter(r => !r.success).length;
-  
+
   console.log(`   ✅ Successful: ${successful}`);
   console.log(`   ❌ Failed: ${failed}`);
   console.log(`   ⏱️  Total Duration: ${results.reduce((a, r) => a + r.duration, 0)}ms`);
@@ -580,10 +580,10 @@ async function autoRemediate(): Promise<RemediationResult[]> {
 function displayHealthResults(checks: HealthCheck[]): void {
   console.log('\n📊 Health Check Results');
   console.log('='.repeat(50));
-  
+
   for (const check of checks) {
-    const icon = check.status === 'healthy' ? '✅' 
-               : check.status === 'unhealthy' ? '❌' 
+    const icon = check.status === 'healthy' ? '✅'
+               : check.status === 'unhealthy' ? '❌'
                : '⚠️';
     console.log(`${icon} ${check.component}`);
     console.log(`   ${check.message}`);
@@ -607,11 +607,11 @@ function displayResult(result: RemediationResult): void {
   console.log('\n' + '='.repeat(50));
   console.log(`📋 Remediation Result: ${result.action}`);
   console.log('='.repeat(50));
-  
+
   const icon = result.success ? '✅' : '❌';
   console.log(`${icon} ${result.message}`);
   console.log(`⏱️  Duration: ${result.duration}ms`);
-  
+
   if (result.details) {
     console.log('\nDetails:');
     for (const [key, value] of Object.entries(result.details)) {
@@ -626,7 +626,7 @@ function displayResult(result: RemediationResult): void {
 async function main(): Promise<void> {
   const args = process.argv.slice(2);
   const command = args[0];
-  
+
   if (!command) {
     console.log('DIVE V3 Policy Remediation Runner');
     console.log('==================================');

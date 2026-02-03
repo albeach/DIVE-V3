@@ -33,7 +33,7 @@ scrape_configs:
   # --------------------------------------------------------------------------
   # USA INSTANCE
   # --------------------------------------------------------------------------
-  
+
   - job_name: 'dive-v3-backend-usa'
     static_configs:
       - targets: ['backend:4000']
@@ -85,7 +85,7 @@ scrape_configs:
   # --------------------------------------------------------------------------
   # FRA INSTANCE
   # --------------------------------------------------------------------------
-  
+
   - job_name: 'dive-v3-backend-fra'
     static_configs:
       - targets: ['backend-fra:4000']
@@ -133,7 +133,7 @@ scrape_configs:
   # --------------------------------------------------------------------------
   # DEU INSTANCE
   # --------------------------------------------------------------------------
-  
+
   - job_name: 'dive-v3-backend-deu'
     static_configs:
       - targets: ['backend-deu:4000']
@@ -262,11 +262,11 @@ scrape_configs:
 #       # Total requests per instance
 #       - record: dive_v3:requests:rate5m
 #         expr: sum by (instance) (rate(dive_v3_http_requests_total[5m]))
-#       
+#
 #       # Authorization decision latency per instance
 #       - record: dive_v3:authz_latency:p95
 #         expr: histogram_quantile(0.95, sum by (instance, le) (rate(dive_v3_authorization_latency_seconds_bucket[5m])))
-#       
+#
 #       # Error rate per instance
 #       - record: dive_v3:errors:rate5m
 #         expr: sum by (instance) (rate(dive_v3_http_requests_total{status=~"5.."}[5m])) / sum by (instance) (rate(dive_v3_http_requests_total[5m]))

@@ -1,8 +1,8 @@
 /**
  * DIVE V3 - Maintenance History
- * 
+ *
  * Displays past maintenance windows with duration and reason.
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -32,14 +32,14 @@ interface MaintenanceHistoryProps {
 function formatDateTime(dateStr: string): { date: string; time: string } {
   const date = new Date(dateStr);
   return {
-    date: date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric', 
-      year: 'numeric' 
+    date: date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric'
     }),
-    time: date.toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
+    time: date.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit'
     }),
   };
 }
@@ -69,10 +69,10 @@ function formatTimeRange(enteredAt: string, exitedAt?: string): string {
   return `${entered.date} ${entered.time} - ${exited.date} ${exited.time}`;
 }
 
-export function MaintenanceHistory({ 
-  history, 
+export function MaintenanceHistory({
+  history,
   currentSession,
-  loading, 
+  loading,
   onRefresh,
 }: MaintenanceHistoryProps) {
   const [refreshing, setRefreshing] = React.useState(false);
@@ -163,8 +163,8 @@ export function MaintenanceHistory({
                   exit={{ opacity: 0, y: -10 }}
                   transition={{ delay: index * 0.05 }}
                   className={`p-4 rounded-xl border ${
-                    isActive 
-                      ? 'bg-amber-50 border-amber-300' 
+                    isActive
+                      ? 'bg-amber-50 border-amber-300'
                       : 'bg-slate-50 border-slate-200'
                   }`}
                 >

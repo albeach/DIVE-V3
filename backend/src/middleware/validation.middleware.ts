@@ -29,10 +29,10 @@ export const handleValidationErrors = (
     next: NextFunction
 ): void => {
     const errors = validationResult(req);
-    
+
     if (!errors.isEmpty()) {
         const requestId = req.headers['x-request-id'] as string;
-        
+
         logger.warn('Validation error', {
             requestId,
             path: req.path,
@@ -340,12 +340,12 @@ export const sanitizeAllStrings = (
             if (typeof obj === 'string') {
                 // Trim whitespace
                 obj = obj.trim();
-                
+
                 // Limit length
                 if (obj.length > MAX_STRING_LENGTH) {
                     obj = obj.substring(0, MAX_STRING_LENGTH);
                 }
-                
+
                 // Escape HTML (basic XSS prevention)
                 obj = obj
                     .replace(/&/g, '&amp;')

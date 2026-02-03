@@ -4,7 +4,7 @@ import { logger } from '../utils/logger';
 
 /**
  * Comprehensive WebAuthn Configuration Verification
- * 
+ *
  * This script verifies ALL aspects of WebAuthn/Passkey configuration
  * according to Keycloak best practices and troubleshooting guidelines.
  */
@@ -35,7 +35,7 @@ async function initializeAdminClient(): Promise<KcAdminClient> {
   console.log('\n╔════════════════════════════════════════════════════════════╗');
   console.log('║   DIVE V3 - Comprehensive WebAuthn Configuration Check   ║');
   console.log('╚════════════════════════════════════════════════════════════╝\n');
-  
+
   const kcAdminClient = new KcAdminClient({
     baseUrl: KEYCLOAK_URL,
     realmName: 'master',
@@ -128,7 +128,7 @@ async function checkPolicySettings(kcAdminClient: KcAdminClient): Promise<void> 
   // authenticatorAttachment Check
   console.log(`\nAuthenticator Attachment: "${realm.webAuthnPolicyAuthenticatorAttachment || 'not specified'}"`);
   const attachmentValue = realm.webAuthnPolicyAuthenticatorAttachment;
-  
+
   // Empty string, undefined, or "not specified" is the best practice (allows all)
   if (!attachmentValue || attachmentValue === '' || attachmentValue === 'not specified') {
     checks.push({
@@ -238,14 +238,14 @@ async function checkClientConfiguration(kcAdminClient: KcAdminClient): Promise<v
 
   kcAdminClient.setConfig({ realmName: TEST_REALM });
   const clients = await kcAdminClient.clients.find();
-  
+
   const brokerClient = clients.find(c => c.clientId === 'dive-v3-broker-client');
-  
+
   if (brokerClient) {
     console.log(`Client ID: ${brokerClient.clientId}`);
     console.log(`Base URL: ${brokerClient.baseUrl}`);
     console.log(`Root URL: ${brokerClient.rootUrl}`);
-    
+
     // Check redirect URIs
     console.log('\nRedirect URIs:');
     brokerClient.redirectUris?.forEach(uri => {
@@ -266,11 +266,11 @@ async function checkClientConfiguration(kcAdminClient: KcAdminClient): Promise<v
         });
       }
     });
-    
+
     // Check URL consistency
     const expectedBaseUrl = KEYCLOAK_PUBLIC_URL;
     const expectedAppUrl = 'https://dev-app.dive25.com';
-    
+
     // In federated architecture, client base URL points to the app, not auth server
     // This is CORRECT for OIDC clients that live on a different domain
     if (brokerClient.baseUrl?.includes('dev-app.dive25.com')) {
@@ -322,15 +322,15 @@ async function checkRequiredActions(kcAdminClient: KcAdminClient): Promise<void>
 
   kcAdminClient.setConfig({ realmName: TEST_REALM });
   const requiredActions = await kcAdminClient.authenticationManagement.getRequiredActions();
-  
+
   const webauthnAction = requiredActions.find(a => a.alias === 'webauthn-register');
-  
+
   if (webauthnAction) {
     console.log(`Required Action: ${webauthnAction.alias}`);
     console.log(`  Name: ${webauthnAction.name}`);
     console.log(`  Enabled: ${webauthnAction.enabled}`);
     console.log(`  Default Action: ${webauthnAction.defaultAction}`);
-    
+
     if (webauthnAction.enabled) {
       checks.push({
         name: 'WebAuthn Required Action Enabled',
@@ -369,13 +369,13 @@ async function checkTestUserSetup(kcAdminClient: KcAdminClient): Promise<void> {
 
   kcAdminClient.setConfig({ realmName: TEST_REALM });
   const users = await kcAdminClient.users.find({ username: 'testuser-usa-4' });
-  
+
   if (users.length > 0) {
     const user = users[0];
     console.log(`Username: ${user.username}`);
     console.log(`Enabled: ${user.enabled}`);
     console.log(`Required Actions: ${user.requiredActions?.join(', ') || 'None'}`);
-    
+
     if (user.requiredActions?.includes('webauthn-register')) {
       checks.push({
         name: 'Test User WebAuthn Required Action',
@@ -393,11 +393,11 @@ async function checkTestUserSetup(kcAdminClient: KcAdminClient): Promise<void> {
       });
       console.log('\n  ⚠ WARN: User does not have webauthn-register required action');
     }
-    
+
     // Check if user already has WebAuthn credentials
     const credentials = await kcAdminClient.users.getCredentials({ id: user.id! });
     const webauthnCreds = credentials.filter(c => c.type === 'webauthn');
-    
+
     console.log(`\nExisting WebAuthn Credentials: ${webauthnCreds.length}`);
     if (webauthnCreds.length > 0) {
       webauthnCreds.forEach((cred, idx) => {
@@ -439,7 +439,7 @@ function checkHttpsConfiguration(): void {
 
   console.log(`Keycloak URL: ${KEYCLOAK_URL}`);
   console.log(`Public Keycloak URL: ${KEYCLOAK_PUBLIC_URL}`);
-  
+
   if (KEYCLOAK_URL.startsWith('https://')) {
     checks.push({
       name: 'Keycloak HTTPS',
@@ -457,7 +457,7 @@ function checkHttpsConfiguration(): void {
     });
     console.log('  ✗ FAIL: Keycloak not using HTTPS');
   }
-  
+
   if (KEYCLOAK_PUBLIC_URL.startsWith('https://')) {
     checks.push({
       name: 'Public Keycloak HTTPS',
@@ -549,16 +549,16 @@ function printSummary(): void {
 async function main(): Promise<void> {
   try {
     const kcAdminClient = await initializeAdminClient();
-    
+
     await checkPasskeysEnabled(kcAdminClient);
     await checkPolicySettings(kcAdminClient);
     await checkClientConfiguration(kcAdminClient);
     await checkRequiredActions(kcAdminClient);
     await checkTestUserSetup(kcAdminClient);
     checkHttpsConfiguration();
-    
+
     printSummary();
-    
+
     const failCount = checks.filter(c => c.status === 'FAIL').length;
     process.exit(failCount > 0 ? 1 : 0);
   } catch (error) {

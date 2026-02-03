@@ -37,7 +37,7 @@ ingress:
       noTLSVerify: true
       connectTimeout: 60s
       httpHostHeader: deu-app.prosecurity.biz
-  
+
   # ─────────────────────────────────────────────────────────────────────────
   # Backend API (Express.js)
   # Docker Service: backend-deu
@@ -50,7 +50,7 @@ ingress:
       noTLSVerify: true
       connectTimeout: 60s
       httpHostHeader: deu-api.prosecurity.biz
-  
+
   # ─────────────────────────────────────────────────────────────────────────
   # Keycloak IdP
   # Docker Service: keycloak-deu
@@ -63,7 +63,7 @@ ingress:
       noTLSVerify: true
       connectTimeout: 60s
       httpHostHeader: deu-idp.prosecurity.biz
-  
+
   # ─────────────────────────────────────────────────────────────────────────
   # Key Access Service (KAS)
   # Docker Service: kas-deu
@@ -75,7 +75,7 @@ ingress:
     originRequest:
       connectTimeout: 60s
       httpHostHeader: deu-kas.prosecurity.biz
-  
+
   # ─────────────────────────────────────────────────────────────────────────
   # Catch-all (required by Cloudflare)
   # ─────────────────────────────────────────────────────────────────────────

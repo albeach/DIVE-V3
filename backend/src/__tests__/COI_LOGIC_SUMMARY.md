@@ -84,11 +84,11 @@ is_coi_violation := msg if {
     count(input.resource.COI) > 0
     some resource_coi in input.resource.COI
     resource_coi in no_affiliation_cois
-    
+
     # User MUST have this exact COI tag (no country fallback)
     user_coi := object.get(input.subject, "acpCOI", [])
     not resource_coi in user_coi
-    
+
     msg := sprintf("Resource requires exclusive COI membership: %s (user COI: %v, no country fallback)", [
         resource_coi,
         user_coi
@@ -96,14 +96,14 @@ is_coi_violation := msg if {
 } else := msg if {
     # Case 3: Resource has country-based COI - check tag match OR country membership
     count(input.resource.COI) > 0
-    
+
     user_coi := object.get(input.subject, "acpCOI", [])
     user_country := input.subject.countryOfAffiliation
     operator := object.get(input.resource, "coiOperator", "ALL")
-    
+
     # Check COI tag match
     has_coi_tag_match := check_coi_tag_match(user_coi, input.resource.COI, operator)
-    
+
     # Check country-based access
     coi_country_union := {c |
         some resource_coi in input.resource.COI
@@ -111,11 +111,11 @@ is_coi_violation := msg if {
         some c in coi_members[resource_coi]
     }
     has_country_access := user_country in coi_country_union && user_country in input.resource.releasabilityTo
-    
+
     # Deny if neither tag match NOR country access
     not has_coi_tag_match
     not has_country_access
-    
+
     msg := sprintf("COI violation: no tag match (%v) and country %s not in COI membership %v or releasabilityTo %v", [
         user_coi,
         user_country,

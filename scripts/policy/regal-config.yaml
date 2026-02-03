@@ -15,33 +15,33 @@ rules:
   # ============================================
   # STYLE RULES
   # ============================================
-  
+
   style:
     # Require consistent line length
     line-length:
       level: warning
       max-line-length: 120
-    
+
     # Require consistent indentation (tabs)
     opa-fmt:
       level: error
-    
+
     # Require comments on complex rules
     todo-comment:
       level: warning
-    
+
     # Prefer snake_case for rule names
     prefer-snake-case:
       level: warning
-    
+
     # Avoid unnecessary else blocks
     avoid-get-and-list-prefix:
       level: ignore
-    
+
     # Consistent use of some/every keywords
     prefer-some-in-iteration:
       level: warning
-    
+
     # Use sets for membership checks
     use-in-operator:
       level: warning
@@ -49,36 +49,36 @@ rules:
   # ============================================
   # BUGS RULES
   # ============================================
-  
+
   bugs:
     # Detect constant conditions
     constant-condition:
       level: error
-    
+
     # Detect duplicate imports
     duplicate-rule:
       level: error
-    
+
     # Detect inconsistent args
     inconsistent-args:
       level: error
-    
+
     # Detect invalid metadata annotations
     invalid-metadata-attribute:
       level: error
-    
+
     # Detect unreachable rules
     rule-shadows-builtin:
       level: error
-    
+
     # Detect unused return values
     not-equals-in-loop:
       level: error
-    
+
     # Detect deprecated built-in functions
     deprecated-builtin:
       level: error
-    
+
     # Top-level iteration should use some
     top-level-iteration:
       level: warning
@@ -86,24 +86,24 @@ rules:
   # ============================================
   # IDIOMATIC RULES
   # ============================================
-  
+
   idiomatic:
     # Use assignment over comparison
     use-assignment-operator:
       level: warning
-    
+
     # Prefer := for assignment
     no-defined-entrypoint:
       level: ignore
-    
+
     # Custom function naming
     custom-has-key-construct:
       level: ignore
-    
+
     # Prefer object access over indexing
     prefer-object-rule:
       level: ignore
-    
+
     # Use boolean operators appropriately
     boolean-assignment:
       level: warning
@@ -111,24 +111,24 @@ rules:
   # ============================================
   # IMPORTS RULES
   # ============================================
-  
+
   imports:
     # Avoid importing input
     avoid-importing-input:
       level: error
-    
+
     # Redundant data imports
     redundant-data-import:
       level: warning
-    
+
     # Prefer package imports
     prefer-package-imports:
       level: warning
-    
+
     # Import shadows
     import-shadows-import:
       level: error
-    
+
     # Unresolved imports (might be okay for data)
     unresolved-import:
       level: ignore
@@ -136,20 +136,20 @@ rules:
   # ============================================
   # TESTING RULES
   # ============================================
-  
+
   testing:
     # Test file naming
     file-missing-test-suffix:
       level: ignore  # We use convention of _test.rego
-    
+
     # Test without assertion
     identically-named-tests:
       level: error
-    
+
     # Metasyntactic variable
     metasyntactic-variable:
       level: warning
-    
+
     # Print in test
     print-or-trace-call:
       level: warning
@@ -157,12 +157,12 @@ rules:
   # ============================================
   # CUSTOM RULES (DIVE V3 Specific)
   # ============================================
-  
+
   custom:
     # These are checked by our custom scripts
     naming-convention:
       level: ignore
-    
+
     # Checked by policy-bundle.yml workflow
     hardcoded-credentials:
       level: ignore

@@ -1,15 +1,15 @@
 /**
  * OTP Service
- * 
+ *
  * Handles OTP (TOTP) generation, validation, and Keycloak credential management
  * using industry-standard speakeasy library and Keycloak Admin API
- * 
+ *
  * Architecture:
  * - Generate OTP secret → Return QR code to frontend
  * - Frontend shows QR → User scans with authenticator app
  * - User enters code → Backend validates with speakeasy
  * - If valid → Create credential via Keycloak Admin API
- * 
+ *
  * This approach is production-ready and avoids stateless Direct Grant limitations
  */
 
@@ -120,7 +120,7 @@ export class OTPService {
             // This bypasses normal TOTP validation for convenience
             const DEMO_MODE = process.env.DEMO_MODE === 'true' || process.env.NODE_ENV === 'demo';
             const DEMO_OTP_CODE = '123456';
-            
+
             if (DEMO_MODE && token === DEMO_OTP_CODE) {
                 logger.info('OTP code verified (DEMO MODE - using override code)', {
                     code: token,
@@ -422,7 +422,7 @@ export class OTPService {
             });
 
             // Check if any credential is of type 'webauthn'
-            const hasWebAuthn = response.data.some((cred: any) => 
+            const hasWebAuthn = response.data.some((cred: any) =>
                 cred.type === 'webauthn' || cred.type === 'webauthn-passwordless'
             );
 

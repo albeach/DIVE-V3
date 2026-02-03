@@ -1,9 +1,9 @@
 /**
  * DIVE V3 - Maintenance Mode Page
- * 
+ *
  * Dedicated page for spoke administrators to manage maintenance mode
  * and view maintenance history.
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -177,8 +177,8 @@ export default function MaintenancePage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="flex items-center gap-4">
               <div className={`p-4 rounded-2xl shadow-lg ${
-                isInMaintenance 
-                  ? 'bg-gradient-to-br from-amber-500 to-orange-600' 
+                isInMaintenance
+                  ? 'bg-gradient-to-br from-amber-500 to-orange-600'
                   : 'bg-gradient-to-br from-emerald-500 to-teal-600'
               }`}>
                 <Wrench className="w-8 h-8 text-white" />
@@ -196,8 +196,8 @@ export default function MaintenancePage() {
             <div className="flex items-center gap-3">
               {/* Status Badge */}
               <div className={`flex items-center gap-2 px-4 py-2 rounded-full border ${
-                isInMaintenance 
-                  ? 'bg-amber-50 border-amber-200' 
+                isInMaintenance
+                  ? 'bg-amber-50 border-amber-200'
                   : 'bg-emerald-50 border-emerald-200'
               }`}>
                 {isInMaintenance ? (
@@ -310,8 +310,8 @@ export default function MaintenancePage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Maintenance Mode Control */}
           <div className="space-y-6">
-            <MaintenanceModeToggle 
-              status={maintenanceStatus} 
+            <MaintenanceModeToggle
+              status={maintenanceStatus}
               loading={loading}
               onEnter={handleEnterMaintenance}
               onExit={handleExitMaintenance}

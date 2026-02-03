@@ -88,10 +88,10 @@ default allow := false
 allow if {
     # Subject must be FVEY-affiliated
     is_fvey_affiliated(input.subject)
-    
+
     # Resource must be FVEY-marked or releasable to subject's country
     fvey_resource_accessible
-    
+
     # Standard clearance check (delegated to base package)
     clearance_sufficient
 }

@@ -1,6 +1,6 @@
 /**
  * Search Analytics API Route
- * 
+ *
  * Phase 2: Search & Discovery Enhancement
  * Proxy for search analytics events
  */
@@ -18,7 +18,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   try {
     // Get session for authorization (NextAuth v5)
     const session = await auth();
-    
+
     if (!session?.user) {
       // Don't fail - just log warning and skip tracking
       console.warn('Analytics tracking attempted without session');
@@ -66,7 +66,7 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
 export async function GET(request: NextRequest): Promise<NextResponse> {
   try {
     const session = await auth();
-    
+
     if (!session?.user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }

@@ -101,7 +101,7 @@ log_info() {
 assert_success() {
     local exit_code=$1
     local message=$2
-    
+
     if [ $exit_code -eq 0 ]; then
         log_pass "$message"
         return 0
@@ -115,7 +115,7 @@ assert_contains() {
     local haystack="$1"
     local needle="$2"
     local message="$3"
-    
+
     if echo "$haystack" | grep -q "$needle"; then
         log_pass "$message"
         return 0
@@ -129,7 +129,7 @@ assert_not_contains() {
     local haystack="$1"
     local needle="$2"
     local message="$3"
-    
+
     if echo "$haystack" | grep -q "$needle"; then
         log_fail "$message (unexpectedly found: $needle)"
         return 1
@@ -144,9 +144,9 @@ assert_json_field() {
     local field="$2"
     local expected="$3"
     local message="$4"
-    
+
     local actual=$(echo "$json" | grep -o "\"$field\"[[:space:]]*:[[:space:]]*\"[^\"]*\"" | head -1 | cut -d'"' -f4)
-    
+
     if [ "$actual" = "$expected" ]; then
         log_pass "$message"
         return 0
@@ -161,19 +161,19 @@ api_call() {
     local endpoint="$2"
     local data="${3:-}"
     local token="${4:-}"
-    
+
     local curl_args=("-ks" "-X" "$method" "${HUB_API_URL}${endpoint}")
     curl_args+=("-H" "Content-Type: application/json")
     curl_args+=("-H" "X-Admin-Key: ${FEDERATION_ADMIN_KEY}")
-    
+
     if [ -n "$token" ]; then
         curl_args+=("-H" "Authorization: Bearer $token")
     fi
-    
+
     if [ -n "$data" ]; then
         curl_args+=("-d" "$data")
     fi
-    
+
     curl "${curl_args[@]}" --max-time 30 2>/dev/null
 }
 
@@ -188,17 +188,17 @@ setup() {
     echo -e "${BOLD}Phase 4: Policy Distribution & Scoping${NC}"
     echo -e "${BOLD}=================================================${NC}"
     echo ""
-    
+
     log_info "Hub API URL: $HUB_API_URL"
     log_info "Test Spoke: $TEST_SPOKE_CODE - $TEST_SPOKE_NAME"
     echo ""
-    
+
     # Check prerequisites
     if ! command -v curl &> /dev/null; then
         log_fail "curl is required but not installed"
         exit 1
     fi
-    
+
     if ! command -v jq &> /dev/null; then
         log_info "jq not installed - some output may be less readable"
     fi
@@ -210,10 +210,10 @@ setup() {
 
 test_01_hub_running() {
     log_test "1. Verify hub is running and OPAL routes available"
-    
+
     # Check health endpoint
     local health=$(api_call GET "/health" "" "")
-    
+
     if echo "$health" | grep -q '"status"[[:space:]]*:[[:space:]]*"healthy"'; then
         log_pass "Hub health endpoint responding"
     elif echo "$health" | grep -q '"healthy"'; then
@@ -223,10 +223,10 @@ test_01_hub_running() {
         echo "Response: $health"
         return 1
     fi
-    
+
     # Check OPAL version endpoint
     local version=$(api_call GET "/api/opal/version" "" "")
-    
+
     if echo "$version" | grep -q '"version"'; then
         BUNDLE_VERSION=$(echo "$version" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
         log_pass "OPAL version endpoint available (version: $BUNDLE_VERSION)"
@@ -239,15 +239,15 @@ test_01_hub_running() {
 
 test_02_build_policy_bundle() {
     log_test "2. Build policy bundle with specific scopes"
-    
+
     local response=$(api_call POST "/api/opal/bundle/build" '{"scopes": ["policy:base"], "sign": true, "includeData": true}' "")
-    
+
     if echo "$response" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
         local bundle_id=$(echo "$response" | grep -o '"bundleId"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
         BUNDLE_VERSION=$(echo "$response" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
         BUNDLE_HASH=$(echo "$response" | grep -o '"hash"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
         local file_count=$(echo "$response" | grep -o '"fileCount"[[:space:]]*:[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
-        
+
         log_pass "Bundle built successfully"
         log_info "  Bundle ID: $bundle_id"
         log_info "  Version: $BUNDLE_VERSION"
@@ -262,13 +262,13 @@ test_02_build_policy_bundle() {
 
 test_03_verify_bundle_signed() {
     log_test "3. Verify bundle is signed"
-    
+
     local response=$(api_call GET "/api/opal/bundle/current" "" "")
-    
+
     if echo "$response" | grep -q '"signedAt"'; then
         local signed_at=$(echo "$response" | grep -o '"signedAt"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
         local signed_by=$(echo "$response" | grep -o '"signedBy"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
-        
+
         log_pass "Bundle is signed"
         log_info "  Signed At: $signed_at"
         log_info "  Signed By: $signed_by"
@@ -279,14 +279,14 @@ test_03_verify_bundle_signed() {
 
 test_04_get_policy_version() {
     log_test "4. Get policy version from hub"
-    
+
     local response=$(api_call GET "/api/opal/version" "" "")
-    
+
     if echo "$response" | grep -q '"version"'; then
         local version=$(echo "$response" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
         local hash=$(echo "$response" | grep -o '"hash"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
         local timestamp=$(echo "$response" | grep -o '"timestamp"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
-        
+
         log_pass "Policy version retrieved"
         log_info "  Version: $version"
         log_info "  Hash: ${hash:0:16}..."
@@ -300,7 +300,7 @@ test_04_get_policy_version() {
 
 test_05_register_test_spoke() {
     log_test "5. Register and approve test spoke"
-    
+
     # Register spoke
     local register_payload=$(cat <<EOF
 {
@@ -315,9 +315,9 @@ test_05_register_test_spoke() {
 }
 EOF
 )
-    
+
     local register_response=$(api_call POST "/api/federation/register" "$register_payload" "")
-    
+
     if echo "$register_response" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
         SPOKE_ID=$(echo "$register_response" | grep -o '"spokeId"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
         log_pass "Spoke registered (ID: $SPOKE_ID)"
@@ -337,7 +337,7 @@ EOF
         echo "Response: $register_response"
         return 1
     fi
-    
+
     # Approve spoke
     local approve_payload=$(cat <<EOF
 {
@@ -348,9 +348,9 @@ EOF
 }
 EOF
 )
-    
+
     local approve_response=$(api_call POST "/api/federation/spokes/${SPOKE_ID}/approve" "$approve_payload" "")
-    
+
     if echo "$approve_response" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
         SPOKE_TOKEN=$(echo "$approve_response" | grep -o '"token"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
         if [ -n "$SPOKE_TOKEN" ]; then
@@ -381,21 +381,21 @@ EOF
 
 test_06_download_scoped_bundle() {
     log_test "6. Download scoped bundle (with token)"
-    
+
     if [ -z "$SPOKE_TOKEN" ]; then
         log_skip "No spoke token available"
         return 0
     fi
-    
+
     # Download base scope bundle
     local response=$(api_call GET "/api/opal/bundle/base" "" "$SPOKE_TOKEN")
-    
+
     if echo "$response" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
         local bundle_version=$(echo "$response" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
         local bundle_hash=$(echo "$response" | grep -o '"hash"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
         local file_count=$(echo "$response" | grep -o '"fileCount"[[:space:]]*:[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
         local has_content=$(echo "$response" | grep -q '"bundleContent"' && echo "yes" || echo "no")
-        
+
         log_pass "Scoped bundle downloaded"
         log_info "  Version: $bundle_version"
         log_info "  Hash: ${bundle_hash:0:16}..."
@@ -410,18 +410,18 @@ test_06_download_scoped_bundle() {
 
 test_07_verify_bundle_signature() {
     log_test "7. Verify bundle signature via API"
-    
+
     if [ -z "$BUNDLE_HASH" ]; then
         log_skip "No bundle hash available"
         return 0
     fi
-    
+
     local response=$(api_call GET "/api/opal/bundle/verify/${BUNDLE_HASH}" "" "")
-    
+
     if echo "$response" | grep -q '"verified"[[:space:]]*:[[:space:]]*true'; then
         local bundle_id=$(echo "$response" | grep -o '"bundleId"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
         local signed_by=$(echo "$response" | grep -o '"signedBy"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
-        
+
         log_pass "Bundle signature verified"
         log_info "  Bundle ID: $bundle_id"
         log_info "  Signed By: $signed_by"
@@ -442,15 +442,15 @@ test_07_verify_bundle_signature() {
 
 test_08_scope_filtering() {
     log_test "8. Test scope filtering (spoke gets only allowed scopes)"
-    
+
     if [ -z "$SPOKE_TOKEN" ]; then
         log_skip "No spoke token available"
         return 0
     fi
-    
+
     # Download spoke-specific scope (should work)
     local response=$(api_call GET "/api/opal/bundle/${TEST_SPOKE_CODE,,}" "" "$SPOKE_TOKEN")
-    
+
     if echo "$response" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
         local scope=$(echo "$response" | grep -o '"scope"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
         log_pass "Allowed scope accessible (scope: $scope)"
@@ -467,15 +467,15 @@ test_08_scope_filtering() {
 
 test_09_unauthorized_scope() {
     log_test "9. Test unauthorized scope access (should fail)"
-    
+
     if [ -z "$SPOKE_TOKEN" ]; then
         log_skip "No spoke token available"
         return 0
     fi
-    
+
     # Try to access a scope we don't have (e.g., fra)
     local response=$(api_call GET "/api/opal/bundle/fra" "" "$SPOKE_TOKEN")
-    
+
     if echo "$response" | grep -q '"error"[[:space:]]*:[[:space:]]*"Access denied"'; then
         log_pass "Unauthorized scope correctly denied"
     elif echo "$response" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
@@ -495,10 +495,10 @@ test_09_unauthorized_scope() {
 
 test_10_force_sync() {
     log_test "10. Force sync and verify"
-    
+
     # Trigger force sync for all spokes
     local response=$(api_call POST "/api/opal/force-sync" '{}' "")
-    
+
     if echo "$response" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
         log_pass "Force sync triggered successfully"
     elif echo "$response" | grep -q '"spokes"'; then
@@ -511,14 +511,14 @@ test_10_force_sync() {
 
 test_11_sync_status() {
     log_test "11. Get sync status for all spokes"
-    
+
     local response=$(api_call GET "/api/opal/sync-status" "" "")
-    
+
     if echo "$response" | grep -q '"currentVersion"'; then
         local total=$(echo "$response" | grep -o '"total"[[:space:]]*:[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
         local current=$(echo "$response" | grep -o '"current"[[:space:]]*:[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
         local behind=$(echo "$response" | grep -o '"behind"[[:space:]]*:[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
-        
+
         log_pass "Sync status retrieved"
         log_info "  Total spokes: ${total:-0}"
         log_info "  Current: ${current:-0}"
@@ -531,16 +531,16 @@ test_11_sync_status() {
 
 test_12_push_policy_update() {
     log_test "12. Push policy update and verify version changes"
-    
+
     local old_version="$BUNDLE_VERSION"
-    
+
     # Push a policy update
     local push_payload='{"layers": ["base"], "priority": "normal", "description": "E2E test update"}'
     local response=$(api_call POST "/api/federation/policy/push" "$push_payload" "")
-    
+
     if echo "$response" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
         local new_version=$(echo "$response" | grep -o '"version"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
-        
+
         if [ "$new_version" != "$old_version" ]; then
             log_pass "Policy update pushed (version changed: $old_version -> $new_version)"
             BUNDLE_VERSION="$new_version"
@@ -559,7 +559,7 @@ test_12_push_policy_update() {
 
 cleanup() {
     log_info "Cleaning up test spoke..."
-    
+
     if [ -n "$SPOKE_ID" ]; then
         # Revoke the test spoke
         api_call POST "/api/federation/spokes/${SPOKE_ID}/revoke" '{"reason": "E2E test cleanup"}' "" > /dev/null 2>&1 || true
@@ -581,7 +581,7 @@ print_summary() {
     echo -e "  ${RED}Failed:${NC}  $TESTS_FAILED"
     echo -e "  ${YELLOW}Skipped:${NC} $TESTS_SKIPPED"
     echo ""
-    
+
     local total=$((TESTS_PASSED + TESTS_FAILED))
     if [ $TESTS_FAILED -eq 0 ]; then
         echo -e "${GREEN}${BOLD}All tests passed!${NC}"
@@ -600,7 +600,7 @@ print_summary() {
 
 main() {
     setup
-    
+
     # Run tests
     test_01_hub_running || true
     test_02_build_policy_bundle || true
@@ -614,10 +614,10 @@ main() {
     test_10_force_sync || true
     test_11_sync_status || true
     test_12_push_policy_update || true
-    
+
     # Cleanup
     cleanup
-    
+
     # Print summary
     print_summary
 }

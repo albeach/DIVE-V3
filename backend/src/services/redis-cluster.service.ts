@@ -1,20 +1,20 @@
 /**
  * DIVE V3 - Redis Cluster Service
  * Phase 7: Production Hardening
- * 
+ *
  * Provides high-availability Redis client with:
  * - Sentinel support for automatic failover
  * - Connection pooling
  * - Retry logic with exponential backoff
  * - Health monitoring
  * - Cluster metrics
- * 
+ *
  * Configuration:
  *   REDIS_SENTINEL_ENABLED=true
  *   REDIS_SENTINELS=sentinel-1:26379,sentinel-2:26380,sentinel-3:26381
  *   REDIS_MASTER_NAME=mymaster
  *   REDIS_PASSWORD=<from GCP Secret Manager>
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */
@@ -331,7 +331,7 @@ class RedisClusterService extends EventEmitter {
    */
   private recordLatency(latencyMs: number): void {
     this.latencies.push(latencyMs);
-    
+
     // Keep last 1000 measurements
     if (this.latencies.length > 1000) {
       this.latencies.shift();
@@ -385,7 +385,7 @@ class RedisClusterService extends EventEmitter {
     const start = Date.now();
     try {
       const serialized = typeof value === 'string' ? value : JSON.stringify(value);
-      
+
       if (ttlSeconds) {
         await this.client.setex(key, ttlSeconds, serialized);
       } else {
@@ -442,10 +442,10 @@ class RedisClusterService extends EventEmitter {
       // Remove prefix for deletion (ioredis adds prefix automatically)
       const keysWithoutPrefix = keys.map(k => k.replace(this.config.keyPrefix, ''));
       const result = await this.client.del(...keysWithoutPrefix);
-      
+
       this.metrics.operations.del += keys.length;
       this.metrics.operations.total += keys.length;
-      
+
       return result;
     } catch (error) {
       this.metrics.errors++;
@@ -482,9 +482,9 @@ class RedisClusterService extends EventEmitter {
 
     // Create a separate subscriber connection
     const subscriber = this.client.duplicate();
-    
+
     await subscriber.subscribe(channel);
-    
+
     subscriber.on('message', (ch, message) => {
       if (ch === this.config.keyPrefix + channel) {
         callback(message);
@@ -529,7 +529,7 @@ class RedisClusterService extends EventEmitter {
       // Get server info
       const info = await this.client.info();
       const lines = info.split('\r\n');
-      
+
       for (const line of lines) {
         const [key, value] = line.split(':');
         switch (key) {
@@ -554,7 +554,7 @@ class RedisClusterService extends EventEmitter {
       // Get replication info
       const replicationInfo = await this.client.info('replication');
       const replicationLines = replicationInfo.split('\r\n');
-      
+
       // Check if this node is the master
       for (const line of replicationLines) {
         const [key, value] = line.split(':');

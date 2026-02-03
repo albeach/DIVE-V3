@@ -31,6 +31,8 @@ test_batch_usa_users_varied_resources if {
             "uniqueID": "batch.user1@mil",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -48,6 +50,8 @@ test_batch_usa_users_varied_resources if {
             "uniqueID": "batch.user2@mil",
             "clearance": "CONFIDENTIAL",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -69,6 +73,8 @@ test_batch_coalition_users if {
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
             "acpCOI": ["FVEY"],
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -88,6 +94,8 @@ test_batch_coalition_users if {
             "clearance": "SECRET",
             "countryOfAffiliation": "GBR",
             "acpCOI": ["FVEY"],
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -109,6 +117,8 @@ test_batch_deny_scenarios if {
             "uniqueID": "deny.user1@mil",
             "clearance": "UNCLASSIFIED",
             "countryOfAffiliation": "USA",
+            "mfaVerified": false,
+            "aal": 1,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -126,6 +136,8 @@ test_batch_deny_scenarios if {
             "uniqueID": "deny.user2@defense.gouv.fr",
             "clearance": "TOP_SECRET",
             "countryOfAffiliation": "FRA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -150,6 +162,8 @@ test_cache_repeated_access if {
             "uniqueID": "cache.user@mil",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -224,6 +238,8 @@ test_throughput_unclassified if {
             "uniqueID": "throughput.user@example.com",
             "clearance": "UNCLASSIFIED",
             "countryOfAffiliation": "USA",
+            "mfaVerified": false,
+            "aal": 1,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -242,6 +258,8 @@ test_throughput_minimal_attributes if {
             "uniqueID": "minimal.user@mil",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -260,6 +278,8 @@ test_throughput_action_types if {
             "uniqueID": "action.user@mil",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
         "resource": {
@@ -288,6 +308,8 @@ test_tenant_usa_isolation if {
             "uniqueID": "tenant.usa@mil",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -310,6 +332,8 @@ test_tenant_fra_isolation if {
             "uniqueID": "tenant.fra@defense.gouv.fr",
             "clearance": "SECRET",
             "countryOfAffiliation": "FRA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -332,6 +356,8 @@ test_tenant_gbr_isolation if {
             "uniqueID": "tenant.gbr@mod.uk",
             "clearance": "SECRET",
             "countryOfAffiliation": "GBR",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -354,6 +380,8 @@ test_tenant_deu_isolation if {
             "uniqueID": "tenant.deu@bundeswehr.de",
             "clearance": "SECRET",
             "countryOfAffiliation": "DEU",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -380,6 +408,8 @@ test_classification_unclassified_perf if {
             "uniqueID": "class.unclass@mil",
             "clearance": "UNCLASSIFIED",
             "countryOfAffiliation": "USA",
+            "mfaVerified": false,
+            "aal": 1,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -397,6 +427,8 @@ test_classification_confidential_perf if {
             "uniqueID": "class.conf@mil",
             "clearance": "CONFIDENTIAL",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -414,6 +446,8 @@ test_classification_secret_perf if {
             "uniqueID": "class.secret@mil",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -431,6 +465,8 @@ test_classification_top_secret_perf if {
             "uniqueID": "class.ts@mil",
             "clearance": "TOP_SECRET",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -454,6 +490,8 @@ test_coi_fvey_access_perf if {
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
             "acpCOI": ["FVEY"],
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -474,6 +512,8 @@ test_coi_nato_access_perf if {
             "clearance": "SECRET",
             "countryOfAffiliation": "FRA",
             "acpCOI": ["NATO-COSMIC"],
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -494,6 +534,8 @@ test_coi_multiple_perf if {
             "clearance": "TOP_SECRET",
             "countryOfAffiliation": "USA",
             "acpCOI": ["FVEY", "NATO-COSMIC"],
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -519,6 +561,8 @@ test_edge_empty_coi_perf if {
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
             "acpCOI": [],
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -538,6 +582,8 @@ test_edge_large_releasability_perf if {
             "uniqueID": "edge.large@defense.gouv.fr",
             "clearance": "SECRET",
             "countryOfAffiliation": "FRA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -556,6 +602,8 @@ test_edge_nato_keyword_perf if {
             "uniqueID": "edge.nato@bundeswehr.de",
             "clearance": "SECRET",
             "countryOfAffiliation": "DEU",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -579,6 +627,8 @@ test_scale_stateless_decision if {
             "uniqueID": "scale.stateless@mil",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -597,6 +647,8 @@ test_scale_traceable_decision if {
             "uniqueID": "scale.trace@mil",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA",
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": true
         },
         "action": {"type": "read"},
@@ -619,6 +671,8 @@ test_scale_deny_with_reason if {
             "uniqueID": "scale.deny@example.com",
             "clearance": "UNCLASSIFIED",
             "countryOfAffiliation": "USA",
+            "mfaVerified": false,
+            "aal": 1,
             "authenticated": true
         },
         "action": {"type": "read"},

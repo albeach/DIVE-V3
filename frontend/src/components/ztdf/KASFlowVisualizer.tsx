@@ -398,7 +398,7 @@ export default function KASFlowVisualizer({ resourceId }: KASFlowVisualizerProps
                             <div>
                                 <p className="text-green-800 font-semibold">Showing Completed Key Request</p>
                                 <p className="text-green-700 text-sm">
-                                    This shows your most recent successful key request for this resource. 
+                                    This shows your most recent successful key request for this resource.
                                     The flow completed and content was decrypted.
                                 </p>
                             </div>

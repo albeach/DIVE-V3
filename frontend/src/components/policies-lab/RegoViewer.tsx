@@ -35,13 +35,13 @@ export default function RegoViewer({ policyId, source }: RegoViewerProps) {
       const response = await fetch(`/api/policies-lab/${policyId}`, {
         credentials: 'include', // Required for session cookies to be sent
       });
-      
+
       if (!response.ok) {
         throw new Error('Failed to fetch policy');
       }
 
       const data = await response.json();
-      
+
       // Read the actual file content
       // For now, we'll use metadata to construct a representative view
       // In production, you'd extend the backend to return the source
@@ -79,7 +79,7 @@ default allow := false
 
     lines.forEach(line => {
       const trimmed = line.trim();
-      
+
       if (trimmed.startsWith('package ')) {
         parsed.package = trimmed.replace('package ', '').trim();
       } else if (trimmed.startsWith('import ')) {

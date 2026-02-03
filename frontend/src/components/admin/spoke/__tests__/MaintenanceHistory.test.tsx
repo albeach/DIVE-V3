@@ -1,6 +1,6 @@
 /**
  * DIVE V3 - MaintenanceHistory Tests
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -106,10 +106,10 @@ describe('MaintenanceHistory', () => {
 
     it('shows current session at top of list', () => {
       render(<MaintenanceHistory history={mockHistory} currentSession={mockCurrentSession} />);
-      
+
       // Active badge should be visible
       expect(screen.getByText('Active')).toBeInTheDocument();
-      
+
       // Current session reason should be displayed
       expect(screen.getByText('Database maintenance')).toBeInTheDocument();
     });
@@ -147,7 +147,7 @@ describe('MaintenanceHistory', () => {
   describe('Summary Stats', () => {
     it('displays summary stats when history exists', () => {
       render(<MaintenanceHistory history={mockHistory} currentSession={null} />);
-      
+
       expect(screen.getByText('Total Windows')).toBeInTheDocument();
       expect(screen.getByText('Avg Duration')).toBeInTheDocument();
       expect(screen.getByText('Longest')).toBeInTheDocument();
@@ -155,7 +155,7 @@ describe('MaintenanceHistory', () => {
 
     it('shows correct total count', () => {
       render(<MaintenanceHistory history={mockHistory} currentSession={null} />);
-      
+
       // Total windows should be 3
       const totalWindows = screen.getByText('Total Windows').previousElementSibling;
       expect(totalWindows).toHaveTextContent('3');
@@ -163,21 +163,21 @@ describe('MaintenanceHistory', () => {
 
     it('calculates average duration', () => {
       render(<MaintenanceHistory history={mockHistory} currentSession={null} />);
-      
+
       // Average of 45m, 30m, 4h = (2700000 + 1800000 + 14400000) / 3 = ~105 minutes
       expect(screen.getByText('Avg Duration')).toBeInTheDocument();
     });
 
     it('shows longest maintenance window', () => {
       render(<MaintenanceHistory history={mockHistory} currentSession={null} />);
-      
+
       // Longest is 4 hours
       expect(screen.getByText('Longest')).toBeInTheDocument();
     });
 
     it('hides stats when no history', () => {
       render(<MaintenanceHistory history={[]} currentSession={null} />);
-      
+
       expect(screen.queryByText('Total Windows')).not.toBeInTheDocument();
     });
   });
@@ -186,7 +186,7 @@ describe('MaintenanceHistory', () => {
     it('renders refresh button when onRefresh provided', () => {
       const onRefresh = jest.fn();
       render(<MaintenanceHistory history={mockHistory} currentSession={null} onRefresh={onRefresh} />);
-      
+
       const refreshButton = screen.getByRole('button');
       expect(refreshButton).toBeInTheDocument();
     });
@@ -194,9 +194,9 @@ describe('MaintenanceHistory', () => {
     it('calls onRefresh when clicked', async () => {
       const onRefresh = jest.fn().mockResolvedValue(undefined);
       render(<MaintenanceHistory history={mockHistory} currentSession={null} onRefresh={onRefresh} />);
-      
+
       fireEvent.click(screen.getByRole('button'));
-      
+
       await waitFor(() => {
         expect(onRefresh).toHaveBeenCalled();
       });
@@ -205,9 +205,9 @@ describe('MaintenanceHistory', () => {
     it('shows loading spinner during refresh', async () => {
       const onRefresh = jest.fn().mockImplementation(() => new Promise(resolve => setTimeout(resolve, 100)));
       render(<MaintenanceHistory history={mockHistory} currentSession={null} onRefresh={onRefresh} />);
-      
+
       fireEvent.click(screen.getByRole('button'));
-      
+
       // Button should show spinning animation
       await waitFor(() => {
         const button = screen.getByRole('button');
@@ -219,7 +219,7 @@ describe('MaintenanceHistory', () => {
   describe('Date Formatting', () => {
     it('displays formatted dates', () => {
       render(<MaintenanceHistory history={mockHistory} currentSession={null} />);
-      
+
       // Should show dates like "Dec 10, 2025"
       expect(screen.getAllByText(/Dec/).length).toBeGreaterThanOrEqual(1);
     });
@@ -234,7 +234,7 @@ describe('MaintenanceHistory', () => {
         reason: '',
         duration: 1800000,
       }];
-      
+
       render(<MaintenanceHistory history={historyWithNoReason} currentSession={null} />);
       expect(screen.getByText('No reason provided')).toBeInTheDocument();
     });

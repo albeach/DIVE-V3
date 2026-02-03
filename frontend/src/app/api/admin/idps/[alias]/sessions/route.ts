@@ -1,6 +1,6 @@
 /**
  * Admin IdP Sessions API Route
- * 
+ *
  * Proxy for backend IdP sessions endpoint
  * GET - Get active sessions for IdP
  */
@@ -18,7 +18,7 @@ export async function GET(
 ): Promise<NextResponse> {
     try {
         const { alias } = await params;
-        
+
         const validation = await validateSession();
         if (!validation.isValid) {
             return NextResponse.json(
@@ -28,10 +28,10 @@ export async function GET(
         }
 
         const tokens = await getSessionTokens();
-        
+
         // Forward query parameters
         const queryString = request.nextUrl.searchParams.toString();
-        const url = queryString 
+        const url = queryString
             ? `${BACKEND_URL}/api/admin/idps/${alias}/sessions?${queryString}`
             : `${BACKEND_URL}/api/admin/idps/${alias}/sessions`;
 

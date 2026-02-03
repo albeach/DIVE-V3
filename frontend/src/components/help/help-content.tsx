@@ -8,7 +8,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useInstanceTheme } from '@/components/ui/theme-provider';
-import { 
+import {
   HelpCircle,
   Book,
   MessageCircle,
@@ -97,7 +97,7 @@ export function HelpContent() {
     <div className="max-w-4xl mx-auto">
       {/* Header */}
       <div className="text-center mb-8">
-        <div 
+        <div
           className="w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-4"
           style={{ background: 'var(--instance-banner-bg)' }}
         >
@@ -127,13 +127,13 @@ export function HelpContent() {
         {helpCategories.map((category, index) => {
           const Icon = category.icon;
           return (
-            <div 
+            <div
               key={category.title}
               className="bg-white border border-gray-100 rounded-xl p-5 hover:border-gray-200 hover:shadow-sm transition-all animate-fade-in"
               style={{ animationDelay: `${index * 50}ms` }}
             >
               <div className="flex items-start gap-4">
-                <div 
+                <div
                   className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0"
                   style={{ background: 'rgba(var(--instance-primary-rgb), 0.1)' }}
                 >
@@ -168,7 +168,7 @@ export function HelpContent() {
           {faqs.map((faq, index) => {
             const Icon = faq.icon;
             return (
-              <div 
+              <div
                 key={index}
                 className="bg-white border border-gray-100 rounded-xl p-4 hover:border-gray-200 transition-all"
               >
@@ -186,7 +186,7 @@ export function HelpContent() {
       </div>
 
       {/* Contact Support */}
-      <div 
+      <div
         className="rounded-xl p-6 text-center"
         style={{ background: 'linear-gradient(to br, rgba(var(--instance-primary-rgb), 0.05), rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.05))' }}
       >

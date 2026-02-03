@@ -2,28 +2,28 @@
 /**
  * DIVE V3 - Load Testing Script
  * Phase 7: Production Hardening
- * 
+ *
  * Performance testing for OPA policy decisions using k6-style patterns.
  * This script uses native Node.js for compatibility but follows k6 patterns.
- * 
+ *
  * Tests:
  *   1. Authorization decision throughput
  *   2. Latency percentiles (p50, p95, p99)
  *   3. Concurrent user simulation
  *   4. Redis cache hit rates
  *   5. OPA bundle loading
- * 
+ *
  * Targets (Phase 7):
  *   - p95 latency < 30ms
  *   - 150+ req/s sustained
  *   - Zero errors under load
- * 
+ *
  * Usage:
  *   npx ts-node --esm scripts/policy/load-test.ts quick      # 30s quick test
  *   npx ts-node --esm scripts/policy/load-test.ts standard   # 5min test
  *   npx ts-node --esm scripts/policy/load-test.ts stress     # 15min stress test
  *   npx ts-node --esm scripts/policy/load-test.ts soak       # 1hr soak test
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */
@@ -283,7 +283,7 @@ function makeRequest(url: string, body: unknown): Promise<{ status: number; data
     const parsedUrl = new URL(url);
     const isHttps = parsedUrl.protocol === 'https:';
     const lib = isHttps ? https : http;
-    
+
     const options = {
       hostname: parsedUrl.hostname,
       port: parsedUrl.port || (isHttps ? 443 : 80),
@@ -398,7 +398,7 @@ async function runLoadTest(profile: TestProfile): Promise<TestSummary> {
     if (now >= nextRequestTime) {
       // Select random scenario
       const scenario = TEST_SCENARIOS[Math.floor(Math.random() * TEST_SCENARIOS.length)];
-      
+
       // Fire and forget (don't await) to maintain throughput
       runRequest(scenario).then(result => {
         results.push(result);
@@ -534,12 +534,12 @@ function printResults(summary: TestSummary, profile: TestProfile): void {
 // Save results to file
 function saveResults(summary: TestSummary): string {
   fs.mkdirSync(RESULTS_DIR, { recursive: true });
-  
+
   const filename = `load-test-${summary.profile.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}.json`;
   const filepath = path.join(RESULTS_DIR, filename);
-  
+
   fs.writeFileSync(filepath, JSON.stringify(summary, null, 2));
-  
+
   return filepath;
 }
 

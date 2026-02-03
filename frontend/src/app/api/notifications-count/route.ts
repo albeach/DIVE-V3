@@ -17,7 +17,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get account to retrieve access token
+    // Try to use access token from session first (may be present even if DB account is missing)
+    const sessionAccessToken = (session as any).accessToken as string | undefined;
+
+    // Get account to retrieve access token (fallback)
     const { db } = await import('@/lib/db');
     const { accounts } = await import('@/lib/db/schema');
     const { eq } = await import('drizzle-orm');
@@ -29,7 +32,9 @@ export async function GET(request: NextRequest) {
       .limit(1);
 
     const account = accountResults[0];
-    if (!account?.access_token) {
+    const accessToken = account?.access_token || sessionAccessToken;
+
+    if (!accessToken) {
       return NextResponse.json(
         { error: 'Unauthorized', message: 'No access token available' },
         { status: 401 }
@@ -42,7 +47,7 @@ export async function GET(request: NextRequest) {
     const response = await fetch(backendUrl, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${account.access_token}`,
+        'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
         'X-Request-ID': request.headers.get('x-request-id') || `req-${Date.now()}`,
       },

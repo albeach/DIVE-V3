@@ -1,9 +1,9 @@
 /**
  * DIVE V3 - Token Expiry Badge
- * 
+ *
  * Visual indicator for token expiry status with countdown.
  * Shows warning states for expiring and expired tokens.
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -121,7 +121,7 @@ export function TokenExpiryBadge({
   // Update token status periodically
   useEffect(() => {
     setTokenInfo(getTokenStatus(expiresAt));
-    
+
     // Update every minute
     const interval = setInterval(() => {
       setTokenInfo(getTokenStatus(expiresAt));
@@ -136,15 +136,15 @@ export function TokenExpiryBadge({
   const formatCountdown = () => {
     if (tokenInfo.status === 'none') return 'No token';
     if (tokenInfo.status === 'expired') return 'Expired';
-    
+
     if (tokenInfo.daysUntilExpiry && tokenInfo.daysUntilExpiry > 1) {
       return `${tokenInfo.daysUntilExpiry} days`;
     }
-    
+
     if (tokenInfo.hoursUntilExpiry && tokenInfo.hoursUntilExpiry > 0) {
       return `${tokenInfo.hoursUntilExpiry}h`;
     }
-    
+
     return 'Expiring soon';
   };
 
@@ -175,7 +175,7 @@ export function TokenExpiryBadge({
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         className={`
-          inline-flex items-center gap-1.5 px-2 py-1 rounded-full 
+          inline-flex items-center gap-1.5 px-2 py-1 rounded-full
           ${config.bg} ${config.border} border
           ${onClick ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}
           ${tokenInfo.status === 'expiring' ? 'animate-pulse' : ''}
@@ -198,7 +198,7 @@ export function TokenExpiryBadge({
         initial={{ scale: 0.9, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         className={`
-          inline-flex items-center gap-2 px-3 py-1.5 rounded-lg 
+          inline-flex items-center gap-2 px-3 py-1.5 rounded-lg
           ${config.bg} ${config.border} border
           ${onClick ? 'cursor-pointer hover:opacity-80 transition-opacity' : ''}
           ${tokenInfo.status === 'expiring' ? 'animate-pulse' : ''}
@@ -245,7 +245,7 @@ export function TokenExpiryBadge({
             <p className={`text-sm ${config.color}`}>{config.label}</p>
           </div>
         </div>
-        
+
         {tokenInfo.status === 'expiring' && (
           <motion.div
             animate={{ scale: [1, 1.1, 1] }}
@@ -268,7 +268,7 @@ export function TokenExpiryBadge({
               {formatFullDate()}
             </span>
           </div>
-          
+
           {tokenInfo.daysUntilExpiry !== undefined && tokenInfo.status !== 'expired' && (
             <div className="flex items-center justify-between text-sm">
               <span className="text-gray-500 dark:text-gray-400">
@@ -318,14 +318,14 @@ export function useExpiringTokens(spokes: ISpoke[], thresholdDays: number = 7) {
         const status = getTokenStatus(spoke.tokenExpiresAt);
         return status.status === 'expiring' || status.status === 'expired';
       });
-      
+
       setExpiringCount(expiring.length);
       setExpiringSpokes(expiring);
     };
 
     checkTokens();
     const interval = setInterval(checkTokens, 60000);
-    
+
     return () => clearInterval(interval);
   }, [spokes, thresholdDays]);
 

@@ -1,6 +1,6 @@
 /**
  * DIVE V3 - CurrentBundleCard Tests
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -43,7 +43,7 @@ describe('CurrentBundleCard', () => {
   describe('Loading State', () => {
     it('renders loading skeleton when loading', () => {
       const { container } = render(<CurrentBundleCard bundle={null} loading />);
-      
+
       expect(container.querySelector('.animate-pulse')).toBeInTheDocument();
     });
   });
@@ -51,7 +51,7 @@ describe('CurrentBundleCard', () => {
   describe('Empty State', () => {
     it('shows empty state when no bundle', () => {
       render(<CurrentBundleCard bundle={null} />);
-      
+
       expect(screen.getByText('No Bundle Available')).toBeInTheDocument();
       expect(screen.getByText(/Build a bundle to see its details/)).toBeInTheDocument();
     });
@@ -60,26 +60,26 @@ describe('CurrentBundleCard', () => {
   describe('Bundle Display', () => {
     it('displays bundle version', () => {
       render(<CurrentBundleCard bundle={mockBundle} />);
-      
+
       expect(screen.getByText(/v1\.2\.3/)).toBeInTheDocument();
     });
 
     it('displays signature status when signed', () => {
       render(<CurrentBundleCard bundle={mockBundle} />);
-      
+
       expect(screen.getByText('Cryptographically Signed')).toBeInTheDocument();
     });
 
     it('displays not signed warning when unsigned', () => {
       const unsignedBundle = { ...mockBundle, signedAt: undefined };
       render(<CurrentBundleCard bundle={unsignedBundle} />);
-      
+
       expect(screen.getByText('Not Signed')).toBeInTheDocument();
     });
 
     it('displays bundle ID (truncated)', () => {
       render(<CurrentBundleCard bundle={mockBundle} />);
-      
+
       expect(screen.getByText('Bundle ID')).toBeInTheDocument();
       // Bundle ID is truncated to first 16 chars + "..."
       expect(screen.getByText(/bundle-12345678/)).toBeInTheDocument();
@@ -87,28 +87,28 @@ describe('CurrentBundleCard', () => {
 
     it('displays content hash (truncated)', () => {
       render(<CurrentBundleCard bundle={mockBundle} />);
-      
+
       expect(screen.getByText('Content Hash')).toBeInTheDocument();
       expect(screen.getByText(/abc123def4567890/)).toBeInTheDocument();
     });
 
     it('displays bundle size formatted', () => {
       render(<CurrentBundleCard bundle={mockBundle} />);
-      
+
       expect(screen.getByText('Bundle Size')).toBeInTheDocument();
       expect(screen.getByText('24 KB')).toBeInTheDocument();
     });
 
     it('displays file count', () => {
       render(<CurrentBundleCard bundle={mockBundle} />);
-      
+
       expect(screen.getByText('Files')).toBeInTheDocument();
       expect(screen.getByText('2')).toBeInTheDocument();
     });
 
     it('displays included scopes', () => {
       render(<CurrentBundleCard bundle={mockBundle} />);
-      
+
       expect(screen.getByText('Included Scopes')).toBeInTheDocument();
       expect(screen.getByText('base')).toBeInTheDocument();
       expect(screen.getByText('usa')).toBeInTheDocument();
@@ -117,7 +117,7 @@ describe('CurrentBundleCard', () => {
 
     it('displays signer information', () => {
       render(<CurrentBundleCard bundle={mockBundle} />);
-      
+
       expect(screen.getByText('DIVE Hub')).toBeInTheDocument();
     });
   });
@@ -125,22 +125,22 @@ describe('CurrentBundleCard', () => {
   describe('File Manifest', () => {
     it('can toggle file manifest visibility', async () => {
       render(<CurrentBundleCard bundle={mockBundle} />);
-      
+
       // File list should be hidden initially
       expect(screen.queryByText('dive/authorization.rego')).not.toBeInTheDocument();
-      
+
       // Click to show files
       fireEvent.click(screen.getByText(/Show File Manifest/));
-      
+
       // Files should now be visible
       await waitFor(() => {
         expect(screen.getByText('dive/authorization.rego')).toBeInTheDocument();
         expect(screen.getByText('dive/data.json')).toBeInTheDocument();
       });
-      
+
       // Click to hide
       fireEvent.click(screen.getByText(/Hide File Manifest/));
-      
+
       await waitFor(() => {
         expect(screen.queryByText('dive/authorization.rego')).not.toBeInTheDocument();
       });
@@ -150,13 +150,13 @@ describe('CurrentBundleCard', () => {
   describe('Copy Functionality', () => {
     it('copies bundle ID to clipboard', async () => {
       render(<CurrentBundleCard bundle={mockBundle} />);
-      
+
       // Find and click copy button for bundle ID
       const bundleIdSection = screen.getByText('Bundle ID').closest('div')!.parentElement!;
       const copyButton = bundleIdSection.querySelector('button')!;
-      
+
       fireEvent.click(copyButton);
-      
+
       expect(navigator.clipboard.writeText).toHaveBeenCalledWith(mockBundle.bundleId);
     });
   });
@@ -165,9 +165,9 @@ describe('CurrentBundleCard', () => {
     it('calls onRefresh when refresh button clicked', () => {
       const onRefresh = jest.fn();
       render(<CurrentBundleCard bundle={mockBundle} onRefresh={onRefresh} />);
-      
+
       fireEvent.click(screen.getByText('Refresh'));
-      
+
       expect(onRefresh).toHaveBeenCalled();
     });
   });

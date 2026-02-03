@@ -321,9 +321,10 @@ export function useInfiniteScroll<T = any>({
         sort: currentSort,
         cursor: isInitial ? undefined : cursorRef.current || undefined,
         limit: pageSize,
-        // Always include facets when requested, not just on initial load
-        // This ensures facets update when filters change
-        includeFacets: includeFacets && isInitial,
+        // Always include facets when requested - this ensures facets update when filters change
+        // FIXED: Previously only included facets on initial load (includeFacets && isInitial)
+        // Now facets update every time filters change so counts reflect current filter state
+        includeFacets: includeFacets,
         federated,
         signal: abortControllerRef.current.signal,
       });

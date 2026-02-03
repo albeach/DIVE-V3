@@ -457,7 +457,7 @@ services:
       # - REDIS_PASSWORD_BLACKLIST must be set in spoke's .env (from GCP secret)
       # - For remote Hub: Update dive-hub-redis-blacklist to Hub's actual hostname
       # ==========================================================================
-      BLACKLIST_REDIS_URL: redis://:${REDIS_PASSWORD_BLACKLIST}@dive-hub-redis-blacklist:6379
+      BLACKLIST_REDIS_URL: redis://:${REDIS_PASSWORD_BLACKLIST}@dive-hub-redis:6379
       # Keycloak (internal Docker network URL for backend API calls)
       KEYCLOAK_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
       KEYCLOAK_REALM: dive-v3-broker-{{INSTANCE_CODE_LOWER}}

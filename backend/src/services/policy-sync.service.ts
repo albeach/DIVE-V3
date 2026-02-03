@@ -1,6 +1,6 @@
 /**
  * DIVE V3 - Policy Sync Service
- * 
+ *
  * Manages policy synchronization between Hub and Spokes.
  * Handles:
  * - Version tracking across all spokes
@@ -8,7 +8,7 @@
  * - Critical update propagation
  * - Stale policy detection and handling
  * - Guardrail validation for tenant policies
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-04
  */
@@ -115,7 +115,7 @@ class PolicySyncService {
     this.currentVersion = this.initializeVersion();
     // Enable MongoDB persistence unless explicitly disabled
     this.useMongoDb = process.env.POLICY_SYNC_STORE !== 'memory';
-    
+
     logger.info('Policy Sync Service initialized', {
       version: this.currentVersion.version,
       persistence: this.useMongoDb ? 'mongodb' : 'memory'
@@ -136,10 +136,10 @@ class PolicySyncService {
    */
   private async initializeStore(): Promise<void> {
     if (this.initialized) return;
-    
+
     try {
       await policyVersionStore.initialize();
-      
+
       // Load latest version from MongoDB if available
       const latestVersion = await policyVersionStore.getLatestVersion();
       if (latestVersion) {
@@ -153,7 +153,7 @@ class PolicySyncService {
           version: this.currentVersion.version
         });
       }
-      
+
       // Load sync status cache
       const syncStatuses = await policyVersionStore.getAllSyncStatus();
       for (const status of syncStatuses) {
@@ -167,7 +167,7 @@ class PolicySyncService {
           lastAckTime: status.lastAckTime
         });
       }
-      
+
       this.initialized = true;
       logger.info('Policy sync MongoDB store initialized', {
         cachedStatuses: this.spokeSyncStatus.size
@@ -224,7 +224,7 @@ class PolicySyncService {
    * Record a sync heartbeat from a spoke
    */
   async recordSpokeSync(
-    spokeId: string, 
+    spokeId: string,
     reportedVersion: string
   ): Promise<ISpokeSync> {
     const spoke = await hubSpokeRegistry.getSpoke(spokeId);
@@ -234,7 +234,7 @@ class PolicySyncService {
 
     const now = new Date();
     const isCurrentVersion = reportedVersion === this.currentVersion.version;
-    
+
     const syncStatus: ISpokeSync = {
       spokeId,
       instanceCode: spoke.instanceCode,
@@ -280,7 +280,7 @@ class PolicySyncService {
 
     // Update status based on time since last sync
     const timeSinceSync = Date.now() - status.lastSyncTime.getTime();
-    
+
     if (timeSinceSync > SYNC_THRESHOLDS.CRITICAL_STALE) {
       status.status = 'offline';
     } else if (timeSinceSync > SYNC_THRESHOLDS.STALE) {
@@ -301,11 +301,11 @@ class PolicySyncService {
    */
   async getAllSpokeStatus(): Promise<ISpokeSync[]> {
     const spokes = await hubSpokeRegistry.listActiveSpokes();
-    
+
     return spokes.map(spoke => {
       const status = this.getSpokeStatus(spoke.spokeId);
       if (status) return status;
-      
+
       // Spoke hasn't synced yet
       return {
         spokeId: spoke.spokeId,
@@ -345,7 +345,7 @@ class PolicySyncService {
   }): Promise<IPolicyUpdate> {
     const now = new Date();
     const newVersion = this.generateVersionString(now);
-    
+
     const update: IPolicyUpdate = {
       updateId: `update-${crypto.randomBytes(4).toString('hex')}`,
       priority: options.priority,
@@ -425,7 +425,7 @@ class PolicySyncService {
 
     const checkAcks = async (): Promise<void> => {
       const unackedSpokes: string[] = [];
-      
+
       for (const spoke of spokes) {
         const status = this.getSpokeStatus(spoke.spokeId);
         if (!status || status.currentVersion !== update.version) {
@@ -466,7 +466,7 @@ class PolicySyncService {
    * Validate tenant policy against hub guardrails
    */
   validateTenantPolicy(
-    tenantCode: string, 
+    tenantCode: string,
     tenantPolicy: Record<string, unknown>
   ): IGuardrailValidation {
     const violations: IGuardrailViolation[] = [];
@@ -506,7 +506,7 @@ class PolicySyncService {
       const value = tenantPolicy.mfa_required_above as string;
       const hubIndex = HUB_GUARDRAILS.VALID_CLEARANCES.indexOf(HUB_GUARDRAILS.MFA_REQUIRED_ABOVE);
       const tenantIndex = HUB_GUARDRAILS.VALID_CLEARANCES.indexOf(value);
-      
+
       if (tenantIndex > hubIndex) {
         // Tenant is trying to require MFA at a HIGHER clearance (less strict)
         violations.push({
@@ -602,7 +602,7 @@ class PolicySyncService {
   }
 
   private async signPolicyBundle(
-    tenantCode: string, 
+    tenantCode: string,
     policy: Record<string, unknown>
   ): Promise<string> {
     // In production, this would use a real signing key
@@ -619,7 +619,7 @@ class PolicySyncService {
    * Get delta update for a spoke
    */
   async getDeltaUpdate(
-    spokeId: string, 
+    spokeId: string,
     fromVersion: string
   ): Promise<{
     updates: IPolicyUpdate[];
@@ -638,19 +638,19 @@ class PolicySyncService {
       return update.layers.some(layer => {
         // Base policies go to everyone
         if (layer === 'base') return true;
-        
+
         // Org policies check scope
         if (layer.startsWith('org.')) {
           const org = layer.replace('org.', '');
           return spoke.allowedPolicyScopes.includes(`policy:${org}`);
         }
-        
+
         // Tenant policies only go to that tenant
         if (layer.startsWith('tenant.')) {
           const tenant = layer.replace('tenant.', '').toUpperCase();
           return tenant === spoke.instanceCode;
         }
-        
+
         return false;
       });
     });

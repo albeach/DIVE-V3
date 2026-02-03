@@ -1,9 +1,9 @@
 /**
  * DIVE V3 - Bundle Scope Selector
- * 
+ *
  * Multi-select component for choosing policy scopes to include in a bundle.
  * Supports required scopes that cannot be deselected.
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-12
  */
@@ -53,7 +53,7 @@ export function BundleScopeSelector({
 }: BundleScopeSelectorProps) {
   const handleToggle = (scopeId: string, isRequired: boolean) => {
     if (disabled || isRequired) return;
-    
+
     if (selectedScopes.includes(scopeId)) {
       onScopesChange(selectedScopes.filter((s) => s !== scopeId));
     } else {
@@ -114,7 +114,7 @@ export function BundleScopeSelector({
           {coreScopes.map((scope, index) => {
             const isSelected = selectedScopes.includes(scope.id);
             const Icon = SCOPE_ICONS[scope.id] || Shield;
-            
+
             return (
               <motion.button
                 key={scope.id}
@@ -143,7 +143,7 @@ export function BundleScopeSelector({
                     <Square className="w-5 h-5" />
                   )}
                 </div>
-                
+
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <Icon className={`w-4 h-4 ${
@@ -179,7 +179,7 @@ export function BundleScopeSelector({
           {tenantScopes.map((scope, index) => {
             const isSelected = selectedScopes.includes(scope.id);
             const flag = COUNTRY_FLAGS[scope.id];
-            
+
             return (
               <motion.button
                 key={scope.id}
@@ -202,7 +202,7 @@ export function BundleScopeSelector({
                     <Square className="w-5 h-5" />
                   )}
                 </div>
-                
+
                 <div className="flex items-center gap-2 flex-1 min-w-0">
                   {flag && <span className="text-xl">{flag}</span>}
                   <span className={`font-medium truncate ${

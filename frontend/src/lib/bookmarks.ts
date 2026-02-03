@@ -1,6 +1,6 @@
 /**
  * Bookmarks System - Phase 3
- * 
+ *
  * Features:
  * - Allow users to bookmark resources/policies
  * - Store in localStorage (per user)
@@ -28,21 +28,21 @@ export function addBookmark(item: Omit<Bookmark, 'addedAt'>): void {
 
   try {
     const bookmarks = getBookmarks();
-    
+
     // Check limit
     if (bookmarks.length >= MAX_BOOKMARKS) {
       throw new Error(`Maximum ${MAX_BOOKMARKS} bookmarks allowed`);
     }
-    
+
     // Check duplicate
     if (bookmarks.some((b) => b.id === item.id && b.type === item.type)) {
       // Already bookmarked, silently return
       return;
     }
-    
+
     const newBookmark: Bookmark = { ...item, addedAt: Date.now() };
     const updated = [...bookmarks, newBookmark];
-    
+
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
   } catch (error) {
     // Re-throw for user feedback
@@ -93,7 +93,7 @@ export function toggleBookmark(item: Omit<Bookmark, 'addedAt'>): boolean {
  */
 export function isBookmarked(id: string, type: 'document' | 'policy'): boolean {
   if (typeof window === 'undefined') return false;
-  
+
   return getBookmarks().some((b) => b.id === id && b.type === type);
 }
 
@@ -106,12 +106,12 @@ export function getBookmarks(): Bookmark[] {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (!stored) return [];
-    
+
     const items = JSON.parse(stored) as Bookmark[];
-    
+
     // Validate structure
     if (!Array.isArray(items)) return [];
-    
+
     // Sort by addedAt (newest first)
     return items.sort((a, b) => b.addedAt - a.addedAt);
   } catch (error) {

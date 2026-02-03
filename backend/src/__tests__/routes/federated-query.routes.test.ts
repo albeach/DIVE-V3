@@ -1,7 +1,7 @@
 /**
  * Federated Query Routes - API Unit Tests
  * Phase 3: Distributed Query Federation
- * 
+ *
  * NATO Compliance: ACP-240 §5.4 (Federated Resource Access)
  */
 
@@ -108,7 +108,7 @@ describe('Federated Query Routes - Unit Tests', () => {
     });
 
     // ============================================
-    // 2. Input Validation Logic Tests  
+    // 2. Input Validation Logic Tests
     // ============================================
     describe('2. Input Validation', () => {
         it('should validate classification is array or string', () => {

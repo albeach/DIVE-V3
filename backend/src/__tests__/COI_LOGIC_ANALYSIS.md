@@ -1,6 +1,6 @@
 # COI Logic Analysis and Recommendations
 
-**Date:** December 2025  
+**Date:** December 2025
 **Purpose:** Review and fix COI authorization logic per user requirements
 
 ## User Requirements Summary
@@ -87,41 +87,41 @@ is_coi_violation := msg if {
     count(input.resource.COI) > 0
     some resource_coi in input.resource.COI
     resource_coi in no_affiliation_cois  # {"Alpha", "Beta", "Gamma"}
-    
+
     # User MUST have this exact COI tag
     user_coi := object.get(input.subject, "acpCOI", [])
     not resource_coi in user_coi
-    
+
     msg := sprintf("Resource requires exclusive COI membership: %s (user COI: %v)", [resource_coi, user_coi])
 } else := msg if {
     # Case 3: Resource has COI with country membership
     # Check if user has COI tag OR country-based access
     count(input.resource.COI) > 0
-    
+
     # Get COI operator (default to ALL)
     operator := object.get(input.resource, "coiOperator", "ALL")
-    
+
     # Get user COI (default to empty array if missing)
     user_coi := object.get(input.subject, "acpCOI", [])
-    
+
     # Compute union of all COI member countries (excluding no-affiliation COIs)
     coi_country_union := {c |
         some resource_coi in input.resource.COI
         not resource_coi in no_affiliation_cois
         some c in coi_members[resource_coi]
     }
-    
+
     # Check if user has COI tag match
     has_coi_tag_match := check_coi_tag_match(user_coi, input.resource.COI, operator)
-    
+
     # Check if user has country-based access
     user_country := input.subject.countryOfAffiliation
     has_country_access := user_country in coi_country_union && user_country in input.resource.releasabilityTo
-    
+
     # Deny if neither COI tag match NOR country-based access
     not has_coi_tag_match
     not has_country_access
-    
+
     msg := sprintf("COI violation: user has no COI tag match (%v) and country %s not in COI membership or releasabilityTo", [
         user_coi,
         user_country

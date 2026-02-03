@@ -1,9 +1,9 @@
 /**
  * Column Customizer Component - Phase 3
- * 
+ *
  * Allows users to customize which columns are visible in list view
  * and their order via drag-and-drop.
- * 
+ *
  * Features:
  * - Toggle column visibility
  * - Drag-and-drop reordering
@@ -15,11 +15,11 @@
 'use client';
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  Settings2, 
-  GripVertical, 
-  Eye, 
-  EyeOff, 
+import {
+  Settings2,
+  GripVertical,
+  Eye,
+  EyeOff,
   RotateCcw,
   Check,
   X,
@@ -139,7 +139,7 @@ export function useColumnCustomizer(
   // Load from localStorage on mount
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    
+
     try {
       const stored = localStorage.getItem(storageKey);
       if (stored) {
@@ -148,12 +148,12 @@ export function useColumnCustomizer(
         const allColumnIds = new Set(columns.map(c => c.id));
         const validVisible = parsed.visibleColumns.filter(id => allColumnIds.has(id));
         const validOrder = parsed.columnOrder.filter(id => allColumnIds.has(id));
-        
+
         // Add any new columns that weren't in storage
         const missingColumns = columns
           .filter(c => !validOrder.includes(c.id))
           .map(c => c.id);
-        
+
         setStateInternal({
           visibleColumns: validVisible,
           columnOrder: [...validOrder, ...missingColumns],
@@ -167,7 +167,7 @@ export function useColumnCustomizer(
   // Save to localStorage on change
   const setState = useCallback((newState: ColumnCustomizerState) => {
     setStateInternal(newState);
-    
+
     if (typeof window !== 'undefined') {
       try {
         localStorage.setItem(storageKey, JSON.stringify(newState));
@@ -224,15 +224,15 @@ function ColumnItem({ column, isVisible, onToggle, isDragging, dragHandleProps }
     <div
       className={`
         flex items-center gap-3 px-3 py-2 rounded-lg border transition-all
-        ${isDragging 
-          ? 'bg-blue-50 border-blue-300 shadow-lg' 
+        ${isDragging
+          ? 'bg-blue-50 border-blue-300 shadow-lg'
           : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300'
         }
         ${!isVisible ? 'opacity-60' : ''}
       `}
     >
       {/* Drag Handle */}
-      <div 
+      <div
         {...dragHandleProps}
         className="cursor-grab active:cursor-grabbing text-gray-400 hover:text-gray-600"
       >
@@ -257,9 +257,9 @@ function ColumnItem({ column, isVisible, onToggle, isDragging, dragHandleProps }
         disabled={column.required}
         className={`
           p-1.5 rounded-lg transition-colors
-          ${column.required 
-            ? 'text-gray-300 cursor-not-allowed' 
-            : isVisible 
+          ${column.required
+            ? 'text-gray-300 cursor-not-allowed'
+            : isVisible
               ? 'text-green-600 hover:bg-green-50 dark:hover:bg-green-900/30'
               : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
           }
@@ -358,7 +358,7 @@ export default function ColumnCustomizer({
         onClick={() => setIsOpen(!isOpen)}
         className={`
           flex items-center gap-2 px-3 py-2 rounded-lg border transition-colors
-          ${isOpen 
+          ${isOpen
             ? 'bg-blue-50 border-blue-300 text-blue-700 dark:bg-blue-900/30 dark:border-blue-700 dark:text-blue-300'
             : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-gray-300'
           }
@@ -375,7 +375,7 @@ export default function ColumnCustomizer({
       {isOpen && (
         <>
           {/* Backdrop */}
-          <div 
+          <div
             className="fixed inset-0 z-40"
             onClick={() => setIsOpen(false)}
           />
@@ -407,7 +407,7 @@ export default function ColumnCustomizer({
                 {presets.map(preset => {
                   const isActive = preset.columns.length === state.visibleColumns.length &&
                     preset.columns.every(id => state.visibleColumns.includes(id));
-                  
+
                   return (
                     <button
                       key={preset.id}

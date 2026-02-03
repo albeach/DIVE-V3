@@ -46,7 +46,7 @@ patches:
     target:
       kind: Service
       name: frontend
-  
+
   # Backend patches
   - path: backend/serviceaccount-patch.yaml
     target:
@@ -64,7 +64,7 @@ patches:
     target:
       kind: Service
       name: backend
-  
+
   # Keycloak patches
   - path: keycloak/serviceaccount-patch.yaml
     target:
@@ -78,7 +78,7 @@ patches:
     target:
       kind: Service
       name: keycloak
-  
+
   # Database patches (MongoDB, PostgreSQL, Redis)
   - path: mongo/deployment-patch.yaml
     target:
@@ -92,7 +92,7 @@ patches:
     target:
       kind: PersistentVolumeClaim
       name: mongo-data
-  
+
   - path: postgres/deployment-patch.yaml
     target:
       kind: Deployment
@@ -105,7 +105,7 @@ patches:
     target:
       kind: PersistentVolumeClaim
       name: postgres-data
-  
+
   - path: redis/deployment-patch.yaml
     target:
       kind: Deployment
@@ -118,7 +118,7 @@ patches:
     target:
       kind: PersistentVolumeClaim
       name: redis-data
-  
+
   # OPA patches
   - path: opa/deployment-patch.yaml
     target:

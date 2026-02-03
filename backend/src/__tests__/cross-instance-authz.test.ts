@@ -250,7 +250,7 @@ describe('CrossInstanceAuthzService', () => {
             });
 
             // If bilateral trust was verified, it should be in the details
-            const trustEntry = result.auditTrail.find(a => 
+            const trustEntry = result.auditTrail.find(a =>
                 a.action === 'bilateral_trust_verified' || a.action === 'bilateral_trust_denied'
             );
             expect(trustEntry).toBeDefined();
@@ -544,7 +544,7 @@ describe('CrossInstanceAuthzService', () => {
             });
 
             expect(result.auditTrail.length).toBeGreaterThan(0);
-            
+
             for (const entry of result.auditTrail) {
                 expect(entry.timestamp).toBeDefined();
                 expect(entry.instanceId).toBeDefined();
@@ -575,7 +575,7 @@ describe('CrossInstanceAuthzService', () => {
                 bearerToken: 'test-token',
             });
 
-            const policyEntry = result.auditTrail.find(a => 
+            const policyEntry = result.auditTrail.find(a =>
                 a.action.includes('policy')
             );
             expect(policyEntry).toBeDefined();

@@ -1,15 +1,15 @@
 /**
  * OTP Controller
- * 
+ *
  * Handles OTP enrollment and verification endpoints for custom login flow
- * 
+ *
  * Endpoints:
  * - POST /api/auth/otp/setup - Generate OTP secret and QR code
  * - POST /api/auth/otp/verify - Verify OTP code and create Keycloak credential
- * 
+ *
  * Architecture:
  * Frontend → Backend → OTP Service → Speakeasy (validation) → Keycloak Admin API (credential creation)
- * 
+ *
  * This bypasses Direct Grant flow limitations for multi-step enrollment
  */
 
@@ -362,7 +362,7 @@ export const otpStatusHandler = async (
 /**
  * GET /api/auth/otp/pending-secret/:userId
  * Get pending OTP secret from Redis (called by Custom SPI)
- * 
+ *
  * This endpoint is called by the Keycloak Custom SPI during Direct Grant authentication
  * to retrieve the pending OTP secret for credential creation.
  */

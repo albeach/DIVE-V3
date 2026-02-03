@@ -1,7 +1,7 @@
 /**
  * Policy Controller Test Suite
  * Target: 90%+ coverage for policy.controller.ts
- * 
+ *
  * Tests OPA policy viewer functionality:
  * - List all policies
  * - Get policy by ID

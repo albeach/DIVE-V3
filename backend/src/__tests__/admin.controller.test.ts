@@ -1,12 +1,12 @@
 /**
  * Admin Controller Test Suite
  * Target: 70%+ coverage for admin.controller.ts (focus on key functions)
- * 
+ *
  * Note: Admin controller is very complex (1735 lines, 22 exported functions).
  * This test suite focuses on the most critical IdP management operations
  * that represent the core business logic: list, get, update, delete.
- * 
- * createIdP and testIdP require complex validation workflows that are 
+ *
+ * createIdP and testIdP require complex validation workflows that are
  * better tested at integration level.
  */
 

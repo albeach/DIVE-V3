@@ -20,7 +20,7 @@ DIVE V3 Playwright tests support MFA (Multi-Factor Authentication) and Passkey (
 **Use Case**: Feature demonstrations where MFA is not the focus
 
 ```typescript
-await loginAs(page, TEST_USERS.USA.SECRET, { 
+await loginAs(page, TEST_USERS.USA.SECRET, {
   skipMFA: true // Bypass MFA prompts
 });
 ```
@@ -32,7 +32,7 @@ await loginAs(page, TEST_USERS.USA.SECRET, {
 **Use Case**: Testing OTP flow with real Keycloak
 
 ```typescript
-await loginAs(page, TEST_USERS.USA.SECRET, { 
+await loginAs(page, TEST_USERS.USA.SECRET, {
   otpCode: '123456' // Real OTP code from authenticator app
 });
 ```
@@ -105,13 +105,13 @@ test('User can access resources', async ({ page }) => {
 test('All clearance levels can authenticate', async ({ page }) => {
   // UNCLASSIFIED - no MFA
   await loginAs(page, TEST_USERS.USA.UNCLASS);
-  
+
   // CONFIDENTIAL - bypass OTP for demo
   await loginAs(page, TEST_USERS.USA.CONFIDENTIAL, { skipMFA: true });
-  
+
   // SECRET - bypass OTP for demo
   await loginAs(page, TEST_USERS.USA.SECRET, { skipMFA: true });
-  
+
   // TOP_SECRET - WebAuthn automatically mocked
   await loginAs(page, TEST_USERS.USA.TOP_SECRET);
 });

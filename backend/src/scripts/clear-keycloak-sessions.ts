@@ -42,10 +42,10 @@ async function clearKeycloakSessions() {
   for (const realmName of realms) {
     try {
       kcAdminClient.setConfig({ realmName });
-      
+
       // Delete all sessions in the realm
       await kcAdminClient.realms.logoutAll({ realm: realmName });
-      
+
       console.log(`[INFO] ✅ Cleared sessions for realm: ${realmName}`);
       successCount++;
     } catch (error) {

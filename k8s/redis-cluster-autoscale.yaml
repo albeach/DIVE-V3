@@ -31,7 +31,7 @@ data:
     sentinel failover-timeout dive-v3-master 60000
     sentinel parallel-syncs dive-v3-master 1
     sentinel auth-pass dive-v3-master ${REDIS_PASSWORD}
-    
+
   redis.conf: |
     maxmemory 256mb
     maxmemory-policy allkeys-lru

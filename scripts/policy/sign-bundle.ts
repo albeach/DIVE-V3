@@ -2,16 +2,16 @@
 /**
  * DIVE V3 - Bundle Signing Script
  * Phase 7: Production Hardening
- * 
+ *
  * Signs OPA policy bundles with RSA-4096 keys.
  * Supports GCP Secret Manager and local key files.
- * 
+ *
  * Usage:
  *   npx ts-node --esm scripts/policy/sign-bundle.ts sign --all
  *   npx ts-node --esm scripts/policy/sign-bundle.ts sign --tenant USA
  *   npx ts-node --esm scripts/policy/sign-bundle.ts generate-key --output ./certs/bundle-signing
  *   npx ts-node --esm scripts/policy/sign-bundle.ts verify --tenant USA
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */
@@ -62,7 +62,7 @@ interface SigningResult {
  */
 function generateKeyPair(keySize: number = DEFAULT_KEY_SIZE): { privateKey: string; publicKey: string } {
   console.log(`🔐 Generating RSA-${keySize} key pair...`);
-  
+
   const { publicKey, privateKey } = crypto.generateKeyPairSync('rsa', {
     modulusLength: keySize,
     publicKeyEncoding: {
@@ -120,7 +120,7 @@ function verifySignature(data: Buffer, signature: string, publicKey: string): bo
 async function loadKeyFromGCP(): Promise<{ privateKey: string; publicKey: string } | null> {
   try {
     const { execSync } = await import('child_process');
-    
+
     console.log('  📥 Loading private key from GCP Secret Manager...');
     const privateKey = execSync(
       `gcloud secrets versions access latest --secret=${GCP_SECRET_NAME} --project=${GCP_PROJECT_ID}`,
@@ -153,7 +153,7 @@ function loadKeyFromFile(keyPath: string): { privateKey: string; publicKey: stri
 
   console.log(`  📥 Loading private key from ${privateKeyPath}...`);
   const privateKey = fs.readFileSync(privateKeyPath, 'utf-8');
-  
+
   let publicKey: string;
   if (fs.existsSync(publicKeyPath)) {
     publicKey = fs.readFileSync(publicKeyPath, 'utf-8');
@@ -173,12 +173,12 @@ function loadKeyFromFile(keyPath: string): { privateKey: string; publicKey: stri
 async function loadSigningKey(keyPath?: string): Promise<{ privateKey: string; publicKey: string; keyId: string } | null> {
   // Try GCP first
   let keys = await loadKeyFromGCP();
-  
+
   // Fall back to local file
   if (!keys && keyPath) {
     keys = loadKeyFromFile(keyPath);
   }
-  
+
   // Fall back to default path
   if (!keys) {
     keys = loadKeyFromFile(DEFAULT_KEY_PATH);
@@ -211,10 +211,10 @@ async function signTenantBundle(
   try {
     // Read bundle
     const bundleData = fs.readFileSync(bundlePath);
-    
+
     // Calculate checksum
     const bundleChecksum = crypto.createHash('sha256').update(bundleData).digest('hex');
-    
+
     // Get revision from manifest
     let revision = 'unknown';
     if (fs.existsSync(manifestPath)) {
@@ -240,7 +240,7 @@ async function signTenantBundle(
 
     // Write signature manifest
     fs.writeFileSync(sigManifestPath, JSON.stringify(sigManifest, null, 2));
-    
+
     // Write detached signature
     fs.writeFileSync(sigPath, signature);
 
@@ -277,7 +277,7 @@ function verifyTenantBundle(tenant: string): { valid: boolean; error?: string; k
 
     // Verify signature
     const valid = verifySignature(bundleData, sigManifest.signature, sigManifest.publicKey);
-    
+
     return {
       valid,
       keyId: sigManifest.keyId,
@@ -294,10 +294,10 @@ function verifyTenantBundle(tenant: string): { valid: boolean; error?: string; k
  */
 function generateAndSaveKey(outputPath: string): void {
   console.log(`\n🔐 Generating new RSA-${DEFAULT_KEY_SIZE} key pair...\n`);
-  
+
   const keys = generateKeyPair(DEFAULT_KEY_SIZE);
   const keyId = calculateKeyId(keys.publicKey);
-  
+
   const privateKeyPath = outputPath.endsWith('.pem') ? outputPath : `${outputPath}.pem`;
   const publicKeyPath = privateKeyPath.replace('.pem', '.pub.pem');
 
@@ -314,7 +314,7 @@ function generateAndSaveKey(outputPath: string): void {
   console.log(`   Key ID:      ${keyId}`);
   console.log(`   Key Size:    ${DEFAULT_KEY_SIZE} bits`);
   console.log(`   Algorithm:   RSA-PSS\n`);
-  
+
   console.log('📋 Next steps:');
   console.log('   1. Store private key in GCP Secret Manager:');
   console.log(`      gcloud secrets create ${GCP_SECRET_NAME} --project=${GCP_PROJECT_ID}`);
@@ -424,7 +424,7 @@ async function main(): Promise<void> {
         console.log(`📦 Signing ${tenant.toUpperCase()} bundle...`);
         const result = await signTenantBundle(tenant, keys);
         results.push(result);
-        
+
         if (result.success) {
           console.log(`   ✅ Signed successfully\n`);
         } else {
@@ -465,7 +465,7 @@ async function main(): Promise<void> {
       for (const tenant of tenantsToVerify) {
         console.log(`📦 Verifying ${tenant.toUpperCase()} bundle...`);
         const result = verifyTenantBundle(tenant);
-        
+
         if (result.valid) {
           console.log(`   ✅ Signature valid`);
           console.log(`   🔑 Key ID: ${result.keyId}`);

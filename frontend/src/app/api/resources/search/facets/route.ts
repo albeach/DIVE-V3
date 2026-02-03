@@ -1,6 +1,6 @@
 /**
  * Facets API Proxy Route
- * 
+ *
  * Phase 1: Performance Foundation
  * Proxies facet aggregation requests to backend
  */

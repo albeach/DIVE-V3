@@ -14,7 +14,7 @@ const router = Router();
 /**
  * POST /api/aa/attributes
  * Request signed attributes from Attribute Authority
- * 
+ *
  * ADatP-5663 §5.4.2: AA retrieval requires valid access token
  */
 router.post('/attributes', authenticateJWT, async (req: Request, res: Response): Promise<void> => {

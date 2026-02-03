@@ -2,10 +2,10 @@
 
 /**
  * Enhanced Landing Page Preview - 2025 UI/UX Design Patterns
- * 
+ *
  * This is a PREVIEW page showcasing modern design enhancements.
  * Access at: /landing-preview
- * 
+ *
  * Features demonstrated:
  * - Bento Grid Layout
  * - Enhanced Micro-interactions
@@ -20,12 +20,12 @@ import { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { IdpSelector } from '@/components/auth/idp-selector';
 import { Globe2, Target, Shield, MapPin, Users, Lock, Sparkles, ArrowRight, CheckCircle2, Activity, Zap } from 'lucide-react';
-import { 
-  InstanceHeroBadge, 
-  IdpSectionHeader, 
+import {
+  InstanceHeroBadge,
+  IdpSectionHeader,
   CoalitionPartnersFooter,
   LocalizedFeatureBadges,
-  LocalizedPilotCapabilities 
+  LocalizedPilotCapabilities
 } from '@/components/ui/instance-hero-badge';
 import { useInstanceTheme } from '@/components/ui/theme-provider';
 import Link from 'next/link';
@@ -45,10 +45,10 @@ export default function LandingPreviewPage() {
       ([entry]) => setIsVisible(entry.isIntersecting),
       { threshold: 0.1 }
     );
-    
+
     if (heroRef.current) observer.observe(heroRef.current);
     if (featuresRef.current) observer.observe(featuresRef.current);
-    
+
     return () => observer.disconnect();
   }, []);
 
@@ -66,7 +66,7 @@ export default function LandingPreviewPage() {
     <div className="min-h-screen relative overflow-hidden" style={{ background: 'var(--instance-banner-bg, linear-gradient(135deg, #1a365d 0%, #2b6cb0 100%))' }}>
       {/* Preview Banner */}
       <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-r from-purple-600 via-pink-600 to-orange-600 text-white py-2 px-4 text-center text-sm font-bold shadow-lg animate-pulse">
-        🎨 PREVIEW MODE - Enhanced 2025 UI/UX Design Patterns | 
+        🎨 PREVIEW MODE - Enhanced 2025 UI/UX Design Patterns |
         <Link href="/" className="ml-2 underline hover:no-underline">← Back to Original</Link>
       </div>
 
@@ -103,20 +103,20 @@ export default function LandingPreviewPage() {
         <div className="max-w-7xl mx-auto w-full">
           {/* Bento Grid Layout */}
           <div className="grid grid-cols-12 gap-4 md:gap-6 auto-rows-fr">
-            
+
             {/* Hero Card - Spans 8 columns, 2 rows */}
-            <div 
+            <div
               ref={heroRef}
               className="col-span-12 md:col-span-8 row-span-2 bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-white/20 overflow-hidden animate-fade-in-up"
             >
               {/* Header with enhanced depth */}
               <div className="relative px-6 py-5 overflow-hidden" style={{ background: 'var(--instance-banner-bg)' }}>
                 {/* Multi-layer glow effect */}
-                <div 
+                <div
                   className="absolute inset-0 opacity-30 blur-2xl"
                   style={{ background: 'var(--instance-banner-bg)' }}
                 />
-                
+
                 {/* Grid pattern overlay */}
                 <div className="absolute inset-0 opacity-20" style={{
                   backgroundImage: `
@@ -132,9 +132,9 @@ export default function LandingPreviewPage() {
                   <div className="flex-shrink-0 group cursor-pointer">
                     <div className="absolute inset-0 border-4 border-white/30 rounded-full opacity-0 group-hover:opacity-100 animate-ping transition-opacity"></div>
                     <div className="relative">
-                      <img 
-                        src="/DIVE-Logo.png" 
-                        alt="DIVE Logo" 
+                      <img
+                        src="/DIVE-Logo.png"
+                        alt="DIVE Logo"
                         className="h-32 w-32 md:h-40 md:w-40 drop-shadow-2xl animate-float-logo group-hover:scale-110 transition-transform duration-500"
                       />
                     </div>
@@ -145,21 +145,21 @@ export default function LandingPreviewPage() {
                     <div className="mb-2">
                       <InstanceHeroBadge size="lg" className="justify-center md:justify-start" />
                     </div>
-                    
+
                     <h1 className="fluid-heading-1 font-bold text-white mb-2 tracking-tight">
                       DIVE V3
                     </h1>
-                    
+
                     <div className="inline-block px-3 py-1.5 bg-white/20 backdrop-blur-sm rounded-full border border-white/30 mb-2">
                       <p className="fluid-body text-white font-semibold">
                         Digital Interoperability Verification Experiment
                       </p>
                     </div>
-                    
+
                     <p className="text-white/90 fluid-body leading-relaxed mb-2">
                       Coalition Identity & Access Management Platform
                     </p>
-                    
+
                     <LocalizedFeatureBadges />
                   </div>
                 </div>
@@ -184,7 +184,7 @@ export default function LandingPreviewPage() {
                   <div className="relative w-3 h-3 bg-emerald-500 rounded-full"></div>
                 </div>
               </div>
-              
+
               {/* Metrics Grid */}
               <div className="grid grid-cols-2 gap-4 mb-4">
                 <div className="bg-white/60 backdrop-blur-sm rounded-xl p-4 border border-emerald-200">
@@ -196,7 +196,7 @@ export default function LandingPreviewPage() {
                   <div className="text-xs text-gray-600 mt-1">Active IdPs</div>
                 </div>
               </div>
-              
+
               {/* Progress Bar */}
               <div>
                 <div className="flex justify-between text-xs text-gray-600 mb-2">
@@ -204,7 +204,7 @@ export default function LandingPreviewPage() {
                   <span className="font-bold">95%</span>
                 </div>
                 <div className="h-2 bg-white/60 rounded-full overflow-hidden">
-                  <div 
+                  <div
                     className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600 rounded-full transition-all duration-1000"
                     style={{ width: '95%' }}
                   />
@@ -213,7 +213,7 @@ export default function LandingPreviewPage() {
 
               {/* Quick Actions */}
               <div className="mt-6 pt-4 border-t border-emerald-200">
-                <Link 
+                <Link
                   href="/dashboard"
                   className="flex items-center justify-between p-3 bg-white/60 backdrop-blur-sm rounded-xl hover:bg-white/80 transition-all duration-300 group"
                 >
@@ -224,7 +224,7 @@ export default function LandingPreviewPage() {
             </div>
 
             {/* Feature Cards - Varied Sizes */}
-            <div 
+            <div
               ref={featuresRef}
               className="col-span-12 md:col-span-6 lg:col-span-4 bg-white rounded-3xl shadow-xl border border-gray-200 p-6 hover:shadow-2xl transition-all duration-300 hover:-translate-y-2 group cursor-pointer"
               onClick={handleRipple}
@@ -245,7 +245,7 @@ export default function LandingPreviewPage() {
               ))}
 
               {/* Background glow on hover */}
-              <div 
+              <div
                 className="absolute inset-0 rounded-3xl opacity-0 group-hover:opacity-100 blur-xl transition-opacity duration-500"
                 style={{ background: 'var(--instance-banner-bg)' }}
               />
@@ -303,7 +303,7 @@ export default function LandingPreviewPage() {
                 style={{ animationDelay: `${0.6 + idx * 0.1}s` }}
               >
                 {/* Animated gradient background on hover */}
-                <div 
+                <div
                   className={`absolute inset-0 bg-gradient-to-br ${feature.color} opacity-0 group-hover:opacity-100 transition-opacity duration-300`}
                 />
 
@@ -316,11 +316,11 @@ export default function LandingPreviewPage() {
                 <div className="relative z-10">
                   <div className="mb-4 flex items-center justify-center">
                     <div className="relative w-14 h-14 flex items-center justify-center">
-                      <div 
+                      <div
                         className="absolute inset-0 rounded-full opacity-0 group-hover:opacity-20 blur-lg transition-all duration-300"
                         style={{ background: feature.iconColor }}
                       ></div>
-                      <feature.Icon 
+                      <feature.Icon
                         className={`relative ${feature.iconColor} transition-all duration-300 group-hover:scale-110 group-hover:rotate-6`}
                         size={32}
                         strokeWidth={2}

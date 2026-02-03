@@ -1,7 +1,7 @@
 # DEPRECATED: Custom Keycloak SPIs - REMOVED & ARCHIVED
 
-**Date:** December 18, 2025  
-**Version:** 3.0.0  
+**Date:** December 18, 2025
+**Version:** 3.0.0
 **Status:** ❌ **PERMANENTLY REMOVED**
 
 ---
@@ -19,7 +19,7 @@
 
 ## Notice
 
-All custom Keycloak SPIs have been **PERMANENTLY REMOVED** in DIVE V3 v3.0.0 as part of the 
+All custom Keycloak SPIs have been **PERMANENTLY REMOVED** in DIVE V3 v3.0.0 as part of the
 SSOT (Single Source of Truth) consolidation effort.
 
 ### What Was Removed
@@ -151,7 +151,7 @@ docker logs dive-hub-keycloak 2>&1 | grep -i "dive"
 
 ---
 
-**Last Custom SPI Version:** v2.1.0  
-**Removal Date:** December 18, 2025  
-**Removed By:** SSOT Consolidation - Keycloak Refactoring  
+**Last Custom SPI Version:** v2.1.0
+**Removal Date:** December 18, 2025
+**Removed By:** SSOT Consolidation - Keycloak Refactoring
 **Approval:** Technical Lead

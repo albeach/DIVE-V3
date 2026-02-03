@@ -1,6 +1,6 @@
 /**
  * Admin IdP SAML Metadata Parse API Route
- * 
+ *
  * Proxy for backend SAML metadata parsing endpoint
  * POST - Parse SAML metadata XML
  */

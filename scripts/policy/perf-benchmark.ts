@@ -2,26 +2,26 @@
 /**
  * DIVE V3 - Performance Benchmark Suite
  * Phase 9: Performance Optimization & Scalability
- * 
+ *
  * Comprehensive benchmarking for:
  * - Bundle build performance
  * - OPA decision latency
  * - Cache hit rates
  * - Throughput under load
  * - Memory usage
- * 
+ *
  * Targets (Phase 9):
  * - Bundle build time: <300ms total
  * - Decision latency p95: <20ms
  * - Throughput: 300 req/s
  * - Memory per OPA: <500MB
- * 
+ *
  * Usage:
  *   npx ts-node --esm scripts/policy/perf-benchmark.ts all
  *   npx ts-node --esm scripts/policy/perf-benchmark.ts bundle
  *   npx ts-node --esm scripts/policy/perf-benchmark.ts decision
  *   npx ts-node --esm scripts/policy/perf-benchmark.ts throughput
- * 
+ *
  * @version 1.0.0
  * @date 2025-12-03
  */
@@ -105,7 +105,7 @@ function calculateLatencyStats(latencies: number[]): LatencyStats {
   if (latencies.length === 0) {
     return { min: 0, max: 0, avg: 0, p50: 0, p75: 0, p90: 0, p95: 0, p99: 0 };
   }
-  
+
   const sorted = [...latencies].sort((a, b) => a - b);
   return {
     min: sorted[0],
@@ -182,7 +182,7 @@ async function benchmarkBundleBuild(): Promise<BenchmarkResult[]> {
 
   // Clean existing bundles
   const bundleDir = path.join(PROJECT_ROOT, 'dist/bundles');
-  
+
   for (let i = 0; i < iterations; i++) {
     // Clean bundles between runs
     if (fs.existsSync(bundleDir)) {
@@ -190,7 +190,7 @@ async function benchmarkBundleBuild(): Promise<BenchmarkResult[]> {
     }
 
     const startTime = Date.now();
-    
+
     try {
       child_process.execSync(
         `npx ts-node --esm scripts/policy/parallel-bundle-build.ts build --all`,
@@ -200,7 +200,7 @@ async function benchmarkBundleBuild(): Promise<BenchmarkResult[]> {
           encoding: 'utf-8',
         }
       );
-      
+
       const buildTime = Date.now() - startTime;
       buildTimes.push(buildTime);
       console.log(`  Run ${i + 1}/${iterations}: ${buildTime}ms`);
@@ -216,7 +216,7 @@ async function benchmarkBundleBuild(): Promise<BenchmarkResult[]> {
     : -1;
 
   const buildPassed = avgBuildTime > 0 && avgBuildTime < 300;
-  
+
   results.push({
     name: 'Bundle Build Time',
     passed: buildPassed,
@@ -340,10 +340,10 @@ async function benchmarkDecisionLatency(): Promise<BenchmarkResult[]> {
 
   // Run benchmark
   console.log(`  Running ${iterations} iterations per scenario...\n`);
-  
+
   for (const scenario of scenarios) {
     const scenarioLatencies: number[] = [];
-    
+
     for (let i = 0; i < iterations; i++) {
       const result = await makeOPARequest({ input: scenario.input });
       if (result.success) {
@@ -525,7 +525,7 @@ async function benchmarkMemory(): Promise<BenchmarkResult[]> {
   console.log('='.repeat(50));
 
   const results: BenchmarkResult[] = [];
-  
+
   // Get current process memory
   const memUsage = process.memoryUsage();
   const heapUsedMB = memUsage.heapUsed / (1024 * 1024);
@@ -592,7 +592,7 @@ function printReport(report: BenchmarkReport): void {
 
   console.log('Results:');
   console.log('-'.repeat(60));
-  
+
   for (const result of report.results) {
     const status = result.passed ? '✅' : '❌';
     console.log(`  ${status} ${result.name}`);
@@ -641,19 +641,19 @@ async function main(): Promise<void> {
       allResults.push(...await benchmarkThroughput());
       allResults.push(...await benchmarkMemory());
       break;
-      
+
     case 'bundle':
       allResults.push(...await benchmarkBundleBuild());
       break;
-      
+
     case 'decision':
       allResults.push(...await benchmarkDecisionLatency());
       break;
-      
+
     case 'throughput':
       allResults.push(...await benchmarkThroughput());
       break;
-      
+
     case 'memory':
       allResults.push(...await benchmarkMemory());
       break;
@@ -670,7 +670,7 @@ async function main(): Promise<void> {
       console.log('\nEnvironment Variables:');
       console.log('  OPA_URL     OPA endpoint (default: http://localhost:8181)');
       process.exit(0);
-      
+
     default:
       console.error(`❌ Unknown command: ${command}`);
       process.exit(1);

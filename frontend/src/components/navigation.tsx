@@ -45,6 +45,7 @@ import { SearchBox } from '@/components/navigation/SearchBox';
 import { SkipNavigation } from '@/components/navigation/SkipNavigation';
 import { ScreenReaderAnnouncer } from '@/components/navigation/ScreenReaderAnnouncer';
 import { LocaleSelector } from '@/components/navigation/LocaleSelector';
+import { NotificationBell } from '@/components/navigation/NotificationBell';
 // TEMPORARY: ThemeToggle disabled until container rebuild picks up next-themes
 // import { ThemeToggle } from '@/components/navigation/ThemeToggle';
 import { navItems, adminItems, getNationalClearance, getCountryName } from '@/components/navigation/nav-config';
@@ -518,6 +519,11 @@ export default function Navigation({ user }: INavigationProps) {
                             {/* TESTING: Made always visible (remove hidden lg:block) */}
                             <div>
                                 <LocaleSelector />
+                            </div>
+
+                            {/* Notification Bell - Phase 6.1 */}
+                            <div className="hidden lg:block">
+                                <NotificationBell />
                             </div>
 
                             {/* Unified User + Admin Dropdown - Responsive: Avatar-only at lg, full at xl */}

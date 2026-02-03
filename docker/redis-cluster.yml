@@ -1,6 +1,6 @@
 # DIVE V3 - Redis Sentinel Cluster
 # Phase 7: Production Hardening
-# 
+#
 # Provides high-availability Redis cluster with:
 # - Master/replica replication
 # - Sentinel for automatic failover

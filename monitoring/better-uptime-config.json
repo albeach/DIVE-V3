@@ -2,7 +2,7 @@
   "_comment": "Better Uptime Monitor Configuration for DIVE V3",
   "_docs": "https://betterstack.com/docs/uptime/api/",
   "_setup_url": "https://betteruptime.com",
-  
+
   "status_page": {
     "name": "DIVE V3 Status",
     "subdomain": "dive25",
@@ -14,7 +14,7 @@
       "logo_url": "https://dive25.com/logo.svg"
     }
   },
-  
+
   "monitors": [
     {
       "name": "🇺🇸 USA - Frontend",
@@ -134,7 +134,7 @@
       "group": "Infrastructure"
     }
   ],
-  
+
   "monitor_groups": [
     {
       "name": "USA Instance",
@@ -157,7 +157,7 @@
       "sort_index": 5
     }
   ],
-  
+
   "incident_templates": [
     {
       "name": "Scheduled Maintenance",
@@ -175,7 +175,7 @@
       "status": "down"
     }
   ],
-  
+
   "alerting": {
     "wait_seconds_before_alerting": 60,
     "recovery_period_seconds": 60,

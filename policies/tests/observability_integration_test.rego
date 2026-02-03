@@ -25,9 +25,7 @@ test_metrics_access_authorized if {
             "mfaVerified": true,
             "aal": 2
         },
-        "action": {
-            "operation": "read"
-        },
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "metrics-endpoint",
             "classification": "UNCLASSIFIED",
@@ -54,9 +52,7 @@ test_latency_sensitive_decision if {
             "mfaVerified": true,
             "aal": 2
         },
-        "action": {
-            "operation": "read"
-        },
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "latency-test-resource",
             "classification": "UNCLASSIFIED",
@@ -86,9 +82,7 @@ test_cache_determinism_allow if {
             "mfaVerified": true,
             "aal": 2
         },
-        "action": {
-            "operation": "read"
-        },
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "cache-test-resource",
             "classification": "SECRET",
@@ -115,9 +109,7 @@ test_cache_determinism_deny if {
             "mfaVerified": true,
             "aal": 2
         },
-        "action": {
-            "operation": "read"
-        },
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "cache-test-resource-2",
             "classification": "TOP_SECRET",
@@ -150,9 +142,7 @@ test_federation_usa_to_fra if {
             "mfaVerified": true,
             "aal": 2
         },
-        "action": {
-            "operation": "read"
-        },
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "fra-resource",
             "classification": "SECRET",
@@ -181,9 +171,7 @@ test_federation_gbr_to_deu if {
             "mfaVerified": true,
             "aal": 2
         },
-        "action": {
-            "operation": "read"
-        },
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "deu-resource",
             "classification": "CONFIDENTIAL",
@@ -212,9 +200,7 @@ test_federation_denied_releasability if {
             "mfaVerified": true,
             "aal": 2
         },
-        "action": {
-            "operation": "read"
-        },
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "us-only-resource",
             "classification": "SECRET",
@@ -244,9 +230,7 @@ test_acp240_compliant_decision if {
             "mfaVerified": true,
             "aal": 3
         },
-        "action": {
-            "operation": "read"
-        },
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "compliance-test-resource",
             "classification": "TOP_SECRET",
@@ -273,9 +257,7 @@ test_embargo_audit_compliance if {
             "mfaVerified": true,
             "aal": 2
         },
-        "action": {
-            "operation": "read"
-        },
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "embargoed-resource",
             "classification": "SECRET",
@@ -306,9 +288,7 @@ test_denial_reason_clearance if {
             "mfaVerified": true,
             "aal": 2
         },
-        "action": {
-            "operation": "read"
-        },
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "ts-resource",
             "classification": "TOP_SECRET",
@@ -334,9 +314,7 @@ test_denial_reason_releasability if {
             "mfaVerified": true,
             "aal": 2
         },
-        "action": {
-            "operation": "read"
-        },
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "usa-only-resource",
             "classification": "SECRET",
@@ -362,9 +340,7 @@ test_denial_reason_coi if {
             "mfaVerified": true,
             "aal": 2
         },
-        "action": {
-            "operation": "read"
-        },
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "coi-required-resource",
             "classification": "SECRET",
@@ -382,12 +358,12 @@ test_denial_reason_coi if {
 test_denial_reason_auth if {
     result := authz.allow with input as {
         "subject": {
+            "mfaVerified": true,
+            "aal": 2,
             "authenticated": false,
             "uniqueID": "anon-user"
         },
-        "action": {
-            "operation": "read"
-        },
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "any-resource",
             "classification": "UNCLASSIFIED",
@@ -417,9 +393,7 @@ test_kas_obligation_encrypted if {
             "mfaVerified": true,
             "aal": 2
         },
-        "action": {
-            "operation": "read"
-        },
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "encrypted-resource",
             "classification": "SECRET",
@@ -447,9 +421,7 @@ test_no_kas_obligation_unencrypted if {
             "mfaVerified": true,
             "aal": 2
         },
-        "action": {
-            "operation": "read"
-        },
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "unencrypted-resource",
             "classification": "SECRET",
@@ -480,9 +452,7 @@ test_empty_resource_coi if {
             "mfaVerified": true,
             "aal": 2
         },
-        "action": {
-            "operation": "read"
-        },
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "no-coi-resource",
             "classification": "SECRET",
@@ -508,9 +478,7 @@ test_multiple_coi_memberships if {
             "mfaVerified": true,
             "aal": 3
         },
-        "action": {
-            "operation": "read"
-        },
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "fvey-resource",
             "classification": "TOP_SECRET",
@@ -536,9 +504,7 @@ test_classification_boundary if {
             "mfaVerified": true,
             "aal": 2
         },
-        "action": {
-            "operation": "read"
-        },
+        "action": {"type": "read"},
         "resource": {
             "resourceId": "secret-resource",
             "classification": "SECRET",

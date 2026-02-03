@@ -57,13 +57,13 @@ create_namespace() {
 # Create secrets (using GCP Secret Manager values or defaults)
 create_secrets() {
     echo -e "${BLUE}🔐 Creating Kubernetes secrets...${NC}"
-    
+
     # Check if secrets already exist
     if kubectl get secret database-credentials -n dive-v3 > /dev/null 2>&1; then
         echo -e "${YELLOW}⚠️  Secrets already exist, skipping...${NC}"
         return
     fi
-    
+
     # Database credentials (placeholder - should use GCP Secret Manager)
     kubectl create secret generic database-credentials \
         --from-literal=url="postgresql://postgres:CHANGE_ME@postgres:5432/dive_v3_app" \
@@ -71,14 +71,14 @@ create_secrets() {
         --from-literal=redis_url="redis://redis:6379" \
         --namespace=dive-v3 \
         --dry-run=client -o yaml | kubectl apply -f -
-    
+
     # Auth secrets (placeholder - should use GCP Secret Manager)
     kubectl create secret generic auth-secrets \
         --from-literal=nextauth_secret="$(openssl rand -base64 32)" \
         --from-literal=keycloak_client_secret="CHANGE_ME" \
         --namespace=dive-v3 \
         --dry-run=client -o yaml | kubectl apply -f -
-    
+
     echo -e "${YELLOW}⚠️  Using placeholder secrets - update with real values from GCP Secret Manager${NC}"
     echo -e "${GREEN}✅ Secrets created${NC}"
 }
@@ -86,49 +86,49 @@ create_secrets() {
 # Deploy base manifests
 deploy_manifests() {
     echo -e "${BLUE}🚀 Deploying base Kubernetes manifests...${NC}"
-    
+
     # Apply ServiceAccounts first
     kubectl apply -f "$PROJECT_ROOT/k8s/base/frontend/serviceaccount.yaml" 2>/dev/null || true
     kubectl apply -f "$PROJECT_ROOT/k8s/base/backend/serviceaccount.yaml" 2>/dev/null || true
-    
+
     # Apply ConfigMaps
     kubectl apply -f "$PROJECT_ROOT/k8s/base/frontend/configmap.yaml"
     kubectl apply -f "$PROJECT_ROOT/k8s/base/backend/configmap.yaml"
-    
+
     # Apply Services
     kubectl apply -f "$PROJECT_ROOT/k8s/base/frontend/service.yaml"
     kubectl apply -f "$PROJECT_ROOT/k8s/base/backend/service.yaml"
-    
+
     # Apply Deployments (will fail if images don't exist yet, that's OK)
     kubectl apply -f "$PROJECT_ROOT/k8s/base/frontend/deployment.yaml" || echo "⚠️  Frontend deployment may fail until images are built"
     kubectl apply -f "$PROJECT_ROOT/k8s/base/backend/deployment.yaml" || echo "⚠️  Backend deployment may fail until images are built"
-    
+
     echo -e "${GREEN}✅ Base manifests deployed${NC}"
 }
 
 # Verify deployment
 verify_deployment() {
     echo -e "${BLUE}🔍 Verifying deployment...${NC}"
-    
+
     echo "Namespaces:"
     kubectl get namespaces | grep dive-v3 || echo "  (none)"
-    
+
     echo ""
     echo "Secrets:"
     kubectl get secrets -n dive-v3 || echo "  (none)"
-    
+
     echo ""
     echo "ConfigMaps:"
     kubectl get configmaps -n dive-v3 || echo "  (none)"
-    
+
     echo ""
     echo "Services:"
     kubectl get services -n dive-v3 || echo "  (none)"
-    
+
     echo ""
     echo "Deployments:"
     kubectl get deployments -n dive-v3 || echo "  (none)"
-    
+
     echo ""
     echo "Pods:"
     kubectl get pods -n dive-v3 || echo "  (none)"
@@ -137,13 +137,13 @@ verify_deployment() {
 # Main execution
 main() {
     print_header
-    
+
     check_kubectl
     create_namespace
     create_secrets
     deploy_manifests
     verify_deployment
-    
+
     echo ""
     echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
     echo -e "${GREEN}║          ✅ Base Deployment Complete                        ║${NC}"

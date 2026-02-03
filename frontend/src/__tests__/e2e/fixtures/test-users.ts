@@ -1,16 +1,16 @@
 /**
  * Centralized Test Users for E2E Tests
- * 
+ *
  * Based on Terraform configuration in terraform/modules/federated-instance/test-users.tf
- * 
+ *
  * User Pattern: testuser-{country}-{1,2,3,4}
  *   1 = UNCLASSIFIED
  *   2 = CONFIDENTIAL
  *   3 = SECRET
  *   4 = TOP_SECRET
- * 
+ *
  * Password: TestUser2025!Pilot (from terraform)
- * 
+ *
  * MFA Requirements:
  * - Level 1 (UNCLASSIFIED): No MFA (AAL1)
  * - Level 2 (CONFIDENTIAL): OTP required (AAL2)
@@ -334,7 +334,7 @@ export const INDUSTRY_USERS = {
 /**
  * Consolidated Test Users Object
  * Use in tests: import { TEST_USERS } from '../fixtures/test-users';
- * 
+ *
  * Access patterns:
  * - TEST_USERS.USA.LEVEL_3 (SECRET)
  * - TEST_USERS.USA.SECRET (alias for LEVEL_3)

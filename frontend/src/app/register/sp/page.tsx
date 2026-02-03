@@ -1,13 +1,13 @@
 /**
  * DIVE V3 SP Self-Service Registration Portal
  * Phase 4, Task 1.2: Public SP Registration for External Organizations
- * 
+ *
  * Allows external organizations (contractors, partners) to self-register
  * as OAuth clients. Registration requires:
  * 1. Federated authentication (user must be logged in via IdP)
  * 2. Organization details auto-populated from token claims
  * 3. Approval workflow (SuperAdmin review)
- * 
+ *
  * NATO Compliance: ACP-240 §4.5 (External Entity Registration)
  */
 
@@ -586,7 +586,7 @@ export default function SPSelfServiceRegistration() {
                     <div>
                         <h4 className="font-semibold text-amber-800">Approval Required</h4>
                         <p className="text-sm text-amber-700 mt-1">
-                            Your registration will be reviewed by a DIVE administrator. 
+                            Your registration will be reviewed by a DIVE administrator.
                             You will receive an email notification when your application is approved.
                         </p>
                     </div>

@@ -112,11 +112,11 @@ export function ClearanceMatrixTable({ mappings, countries, onUpdate }: Props) {
     return (
         <div className="space-y-6">
             {/* Controls */}
-            <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-slate-200 dark:border-gray-700 p-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     {/* Search */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             🔍 Search Countries
                         </label>
                         <input
@@ -124,19 +124,19 @@ export function ClearanceMatrixTable({ mappings, countries, onUpdate }: Props) {
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             placeholder="USA, FRA, EST..."
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                         />
                     </div>
 
                     {/* Filter by Level */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             🔐 Filter by Level
                         </label>
                         <select
                             value={filterLevel}
                             onChange={(e) => setFilterLevel(e.target.value)}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                         >
                             <option value="all">All Levels</option>
                             <option value="UNCLASSIFIED">UNCLASSIFIED</option>
@@ -149,13 +149,13 @@ export function ClearanceMatrixTable({ mappings, countries, onUpdate }: Props) {
 
                     {/* Filter by MFA */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             🛡️ Filter by MFA
                         </label>
                         <select
                             value={filterMFA}
                             onChange={(e) => setFilterMFA(e.target.value)}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                         >
                             <option value="all">All</option>
                             <option value="required">MFA Required</option>
@@ -165,13 +165,13 @@ export function ClearanceMatrixTable({ mappings, countries, onUpdate }: Props) {
 
                     {/* Sort */}
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                             📊 Sort By
                         </label>
                         <select
                             value={sortBy}
                             onChange={(e) => setSortBy(e.target.value as any)}
-                            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                         >
                             <option value="level">Clearance Level</option>
                             <option value="aal">AAL Level</option>
@@ -181,7 +181,7 @@ export function ClearanceMatrixTable({ mappings, countries, onUpdate }: Props) {
                 </div>
 
                 {/* Quick Stats */}
-                <div className="mt-4 flex flex-wrap gap-4 text-sm text-gray-600">
+                <div className="mt-4 flex flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-400">
                     <span>📊 Showing: {filteredMappings.length} levels</span>
                     <span>🌍 Countries: {filteredCountries.length} of {countries.length}</span>
                     <span>🔢 Total Cells: {filteredMappings.length * filteredCountries.length}</span>
@@ -189,7 +189,7 @@ export function ClearanceMatrixTable({ mappings, countries, onUpdate }: Props) {
             </div>
 
             {/* Matrix Table */}
-            <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-slate-200 dark:border-gray-700 overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full">
                         <thead className="bg-gradient-to-r from-indigo-500 to-purple-500 text-white">
@@ -210,9 +210,9 @@ export function ClearanceMatrixTable({ mappings, countries, onUpdate }: Props) {
                                 ))}
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-gray-200">
+                        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                             {filteredMappings.map((mapping, idx) => (
-                                <tr key={mapping.standardLevel} className={idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                                <tr key={mapping.standardLevel} className={idx % 2 === 0 ? 'bg-white dark:bg-gray-900' : 'bg-gray-50 dark:bg-gray-800'}>
                                     {/* Level */}
                                     <td className="sticky left-0 z-10 px-6 py-4 font-medium bg-inherit">
                                         <span className={`inline-block px-3 py-1 rounded-lg text-sm font-semibold border-2 ${getLevelColor(mapping.standardLevel)}`}>
@@ -248,13 +248,13 @@ export function ClearanceMatrixTable({ mappings, countries, onUpdate }: Props) {
                                                         className="w-full text-left"
                                                     >
                                                         <div className="space-y-1">
-                                                            <div className="text-sm font-medium text-gray-900">
+                                                            <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
                                                                 {equivalents[0]}
                                                             </div>
                                                             {equivalents.length > 1 && (
                                                                 <>
                                                                     {isExpanded ? (
-                                                                        <div className="text-xs text-gray-600 space-y-0.5">
+                                                                        <div className="text-xs text-gray-600 dark:text-gray-400 space-y-0.5">
                                                                             {equivalents.slice(1).map((eq, i) => (
                                                                                 <div key={i}>{eq}</div>
                                                                             ))}
@@ -269,7 +269,7 @@ export function ClearanceMatrixTable({ mappings, countries, onUpdate }: Props) {
                                                         </div>
                                                     </button>
                                                 ) : (
-                                                    <div className="text-sm text-gray-400 text-center">
+                                                    <div className="text-sm text-gray-400 dark:text-gray-500 text-center">
                                                         –
                                                     </div>
                                                 )}
@@ -284,12 +284,12 @@ export function ClearanceMatrixTable({ mappings, countries, onUpdate }: Props) {
             </div>
 
             {/* Legend */}
-            <div className="bg-white rounded-xl shadow-lg border border-slate-200 p-6">
-                <h3 className="text-lg font-bold text-gray-800 mb-4">📖 Legend</h3>
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-slate-200 dark:border-gray-700 p-6">
+                <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 mb-4">📖 Legend</h3>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                        <p className="font-medium text-gray-700 mb-2">AAL Levels</p>
-                        <div className="space-y-1 text-sm text-gray-600">
+                        <p className="font-medium text-gray-700 dark:text-gray-300 mb-2">AAL Levels</p>
+                        <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
                             <div className="flex items-center gap-2">
                                 {getAALBadge(1)} <span>AAL1: No MFA</span>
                             </div>
@@ -303,22 +303,22 @@ export function ClearanceMatrixTable({ mappings, countries, onUpdate }: Props) {
                     </div>
 
                     <div>
-                        <p className="font-medium text-gray-700 mb-2">Clearance Levels</p>
+                        <p className="font-medium text-gray-700 dark:text-gray-300 mb-2">Clearance Levels</p>
                         <div className="space-y-1 text-sm">
                             {['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'].map(level => (
                                 <div key={level} className="flex items-center gap-2">
                                     <span className={`px-2 py-0.5 rounded text-xs font-semibold ${getLevelColor(level)}`}>
                                         {level.substring(0, 3)}
                                     </span>
-                                    <span className="text-gray-600">{level}</span>
+                                    <span className="text-gray-600 dark:text-gray-400">{level}</span>
                                 </div>
                             ))}
                         </div>
                     </div>
 
                     <div>
-                        <p className="font-medium text-gray-700 mb-2">Interactions</p>
-                        <div className="space-y-1 text-sm text-gray-600">
+                        <p className="font-medium text-gray-700 dark:text-gray-300 mb-2">Interactions</p>
+                        <div className="space-y-1 text-sm text-gray-600 dark:text-gray-400">
                             <p>🖱️ Click cell to expand all variants</p>
                             <p>🔍 Use filters to narrow view</p>
                             <p>📊 Sort by level, AAL, or count</p>

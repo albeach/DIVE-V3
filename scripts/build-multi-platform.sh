@@ -48,9 +48,9 @@ build_and_push() {
     local SERVICE=$1
     local DOCKERFILE_PATH=$2
     local IMAGE="${REGISTRY}/dive-v3-${SERVICE}:${VERSION}"
-    
+
     echo -e "${BLUE}Building ${SERVICE} for ${PLATFORMS}...${NC}"
-    
+
     docker buildx build \
         --platform ${PLATFORMS} \
         --tag ${IMAGE} \
@@ -60,7 +60,7 @@ build_and_push() {
         echo -e "${RED}Failed to build ${SERVICE}${NC}"
         exit 1
     }
-    
+
     echo -e "${GREEN}✅ ${SERVICE} built and pushed${NC}"
     echo ""
 }

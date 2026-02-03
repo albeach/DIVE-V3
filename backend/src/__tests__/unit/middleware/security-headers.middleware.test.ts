@@ -1,7 +1,7 @@
 /**
  * Security Headers Middleware Test Suite
  * Target: 90%+ coverage for security-headers.middleware.ts
- * 
+ *
  * Tests:
  * - securityHeaders (Helmet configuration)
  * - customSecurityHeaders
