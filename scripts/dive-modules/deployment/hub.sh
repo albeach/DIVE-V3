@@ -540,9 +540,58 @@ hub_init() {
     mkdir -p "${HUB_DATA_DIR}/config"
     mkdir -p "${DIVE_ROOT}/logs/hub"
     mkdir -p "${DIVE_ROOT}/instances/hub/certs"
+    mkdir -p "${DIVE_ROOT}/instances/hub"
 
     # Note: dive-shared network is created in hub_preflight()
     # (must exist before docker-compose validates external networks)
+
+    # Generate MongoDB keyfile if not exists
+    # CRITICAL: Required for MongoDB replica set internal authentication
+    local keyfile_path="${DIVE_ROOT}/instances/hub/mongo-keyfile"
+    if [ ! -f "$keyfile_path" ]; then
+        log_verbose "Generating MongoDB replica set keyfile..."
+        
+        # Use the standard keyfile generation script
+        if [ -f "${DIVE_ROOT}/scripts/generate-mongo-keyfile.sh" ]; then
+            if bash "${DIVE_ROOT}/scripts/generate-mongo-keyfile.sh" "$keyfile_path" >/dev/null 2>&1; then
+                log_verbose "MongoDB keyfile generated: $keyfile_path"
+            else
+                log_error "Failed to generate MongoDB keyfile using script"
+                return 1
+            fi
+        else
+            # Fallback: Generate keyfile directly
+            log_verbose "Generating MongoDB keyfile directly (script not found)"
+            openssl rand -base64 756 | tr -d '\n' > "$keyfile_path"
+            chmod 400 "$keyfile_path"
+            
+            # Verify file size (MongoDB requires 6-1024 characters)
+            local file_size=$(wc -c < "$keyfile_path" | tr -d ' ')
+            if [ "$file_size" -lt 6 ] || [ "$file_size" -gt 1024 ]; then
+                log_error "KeyFile size ($file_size bytes) outside valid range (6-1024)"
+                rm -f "$keyfile_path"
+                return 1
+            fi
+            log_verbose "MongoDB keyfile generated directly: $keyfile_path ($file_size bytes)"
+        fi
+    else
+        log_verbose "MongoDB keyfile already exists: $keyfile_path"
+        
+        # Verify it's a file (not a directory)
+        if [ -d "$keyfile_path" ]; then
+            log_error "MongoDB keyfile is a directory (should be a file): $keyfile_path"
+            log_info "Removing directory and regenerating..."
+            rm -rf "$keyfile_path"
+            
+            # Regenerate
+            if [ -f "${DIVE_ROOT}/scripts/generate-mongo-keyfile.sh" ]; then
+                bash "${DIVE_ROOT}/scripts/generate-mongo-keyfile.sh" "$keyfile_path" >/dev/null 2>&1
+            else
+                openssl rand -base64 756 | tr -d '\n' > "$keyfile_path"
+                chmod 400 "$keyfile_path"
+            fi
+        fi
+    fi
 
     # Generate certificates if not exists
     local cert_dir="${DIVE_ROOT}/instances/hub/certs"
