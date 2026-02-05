@@ -382,7 +382,8 @@ services:
       LOG_LEVEL: warn  # Reduce log verbosity (info/warn/error)
       PORT: "4000"
       # Heap limit only in NODE_OPTIONS (report flags must be in command - Node disallows them in NODE_OPTIONS)
-      NODE_OPTIONS: "--max-old-space-size=4096"
+      # --use-openssl-ca: Forces Node.js to load NODE_EXTRA_CA_CERTS (required for mkcert trust)
+      NODE_OPTIONS: "--max-old-space-size=4096 --use-openssl-ca"
       INSTANCE_CODE: USA
       INSTANCE_NAME: "United States"
       INSTANCE_REALM: USA
