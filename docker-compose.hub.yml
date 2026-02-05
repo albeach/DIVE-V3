@@ -661,6 +661,10 @@ services:
       AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       AUTH_KEYCLOAK_ISSUER: ${AUTH_KEYCLOAK_ISSUER:-https://localhost:8443/realms/dive-v3-broker-usa}
       AUTH_TRUST_HOST: "true"
+      # TLS Certificate Paths
+      CERT_PATH: /opt/app/certs  # Path to HTTPS server certificates (key.pem, certificate.pem)
+      KEY_FILE: key.pem
+      CERT_FILE: certificate.pem
       # TLS Certificate Handling - Proper mkcert Integration (2026 Best Practice)
       # Makes Node.js fetch() API use system CA trust store (mkcert CA installed via entrypoint)
       # See: docs/TLS_BEST_PRACTICES_2026.md
