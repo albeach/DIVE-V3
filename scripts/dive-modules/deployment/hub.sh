@@ -595,6 +595,8 @@ hub_init() {
 
     # Generate certificates if not exists
     local cert_dir="${DIVE_ROOT}/instances/hub/certs"
+    local mkcert_ca_dir="${DIVE_ROOT}/certs/mkcert"
+    
     if [ ! -f "${cert_dir}/certificate.pem" ]; then
         log_verbose "Generating hub certificates..."
         if command -v mkcert >/dev/null 2>&1; then
@@ -613,6 +615,18 @@ hub_init() {
             cp "${cert_dir}/certificate.pem" "${cert_dir}/mkcert-rootCA.pem"
             log_verbose "Certificates generated with openssl"
         fi
+        
+        # Fix permissions for Docker containers (non-root users need read access)
+        chmod 644 "${cert_dir}/key.pem" 2>/dev/null || true
+    fi
+    
+    # Copy mkcert root CA to shared location for docker-compose volume mounts
+    # Services expect: ./certs/mkcert:/app/certs/ca:ro
+    mkdir -p "${mkcert_ca_dir}"
+    if [ -f "${cert_dir}/mkcert-rootCA.pem" ]; then
+        cp "${cert_dir}/mkcert-rootCA.pem" "${mkcert_ca_dir}/rootCA.pem"
+        chmod 644 "${mkcert_ca_dir}/rootCA.pem"
+        log_verbose "mkcert CA copied to ${mkcert_ca_dir}/rootCA.pem"
     fi
 
     # Initialize hub config if not exists
