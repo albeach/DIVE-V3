@@ -50,7 +50,6 @@ test.describe(`${INSTANCE_NAME} (${DIVE_INSTANCE}) - Health & Basic Functionalit
     // Try multiple possible health endpoints
     const healthEndpoints = [
       '/api/health',
-      '/health',
       '/api/health/ready'
     ];
 
@@ -94,8 +93,8 @@ test.describe(`${INSTANCE_NAME} (${DIVE_INSTANCE}) - Health & Basic Functionalit
     }
 
     try {
-      const response = await request.get(`${backendUrl}/health`, { timeout: 5000 });
-      expect([200, 404]).toContain(response.status()); // 404 is OK if no health endpoint
+      const response = await request.get(`${backendUrl}/api/health`, { timeout: 5000 });
+      expect([200, 503]).toContain(response.status());
       console.log(`✅ Backend accessible at ${backendUrl}`);
     } catch (error) {
       console.log(`⚠️ Backend not accessible at ${backendUrl}: ${error.message}`);
@@ -182,4 +181,3 @@ test.describe(`${INSTANCE_NAME} (${DIVE_INSTANCE}) - Health & Basic Functionalit
     });
   }
 });
-

@@ -131,10 +131,18 @@ export function InteractiveBreadcrumbs({ className }: InteractiveBreadcrumbsProp
   return (
     <nav
       aria-label="Breadcrumb"
-      className={cn('flex items-center text-sm', className)}
+      className={cn(
+        'border-b py-2',
+        className
+      )}
+      style={{
+        backgroundColor: 'rgba(var(--instance-primary-rgb, 59, 130, 246), 0.03)',
+        borderColor: 'rgba(var(--instance-primary-rgb, 59, 130, 246), 0.1)'
+      }}
       ref={dropdownRef}
     >
-      <ol className="flex items-center gap-1">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <ol className="flex items-center gap-1 text-sm">
         {crumbs.map((crumb, i) => {
           const isLast = i === crumbs.length - 1;
           const hasSiblings = crumb.siblings && crumb.siblings.length > 1;
@@ -228,6 +236,7 @@ export function InteractiveBreadcrumbs({ className }: InteractiveBreadcrumbsProp
           );
         })}
       </ol>
+      </div>
     </nav>
   );
 }

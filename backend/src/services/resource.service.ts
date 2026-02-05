@@ -501,7 +501,7 @@ export async function getResourceByIdFederated(
     resourceId: string,
     authToken?: string
 ): Promise<{ resource: IZTDFResource | null; source: 'local' | 'federated'; error?: string }> {
-    const CURRENT_INSTANCE = process.env.INSTANCE_REALM || 'USA';
+    const CURRENT_INSTANCE = process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA';
 
     // Step 1: Try local MongoDB first
     try {

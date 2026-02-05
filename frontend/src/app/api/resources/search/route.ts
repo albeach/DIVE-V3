@@ -17,6 +17,7 @@ import { db } from '@/lib/db';
 import { accounts } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { updateAccountTokensByUserId } from '@/lib/db/operations';
+import { getBackendUrl } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -141,7 +142,7 @@ export async function POST(request: NextRequest) {
         const hasRemoteInstances = instances.some((inst: string) => inst !== currentInstance);
         const isFederated = instances.length > 1 || hasRemoteInstances;
 
-        const backendUrl = process.env.BACKEND_URL || 'https://localhost:4000';
+        const backendUrl = getBackendUrl();
 
         let backendResponse: Response;
 

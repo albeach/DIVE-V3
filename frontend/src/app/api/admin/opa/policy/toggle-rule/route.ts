@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 import { validateSession, getSessionTokens } from '@/lib/session-validation';
+import { getBackendUrl } from '@/lib/api-utils';
 
 /**
  * Admin OPA Policy Toggle Rule API Route
@@ -28,7 +29,7 @@ export async function POST(request: Request) {
             );
         }
 
-        const backendUrl = process.env.BACKEND_URL || 'https://localhost:4000';
+        const backendUrl = getBackendUrl();
         const url = new URL(`${backendUrl}/api/admin/opa/policy/toggle-rule`);
         if (file) {
             url.searchParams.set('file', file);

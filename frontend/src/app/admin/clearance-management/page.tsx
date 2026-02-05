@@ -24,6 +24,7 @@ import { ClearanceMatrixTable } from '@/components/admin/clearance/clearance-mat
 import { ClearanceStatsCards } from '@/components/admin/clearance/clearance-stats-cards';
 import { ClearanceEditor } from '@/components/admin/clearance/clearance-editor';
 import { ClearanceTestTool } from '@/components/admin/clearance/clearance-test-tool';
+import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 
 type TabView = 'overview' | 'matrix' | 'editor' | 'test' | 'audit';
 
@@ -142,10 +143,6 @@ export default function ClearanceManagementPage() {
     return (
         <PageLayout
             user={session?.user || {}}
-            breadcrumbs={[
-                { label: 'Admin', href: '/admin/dashboard' },
-                { label: 'Clearance Management', href: null }
-            ]}
             maxWidth="7xl"
         >
             <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 dark:from-gray-900 dark:via-gray-950 dark:to-indigo-950/10">

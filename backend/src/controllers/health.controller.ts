@@ -23,7 +23,7 @@ import { mongoKasRegistryStore } from '../models/kas-registry.model';
 // ============================================
 
 const OPA_URL = process.env.OPA_URL || 'http://opa:8181';
-const INSTANCE_REALM = process.env.INSTANCE_REALM || 'USA';
+const INSTANCE_REALM = process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA';
 
 // ============================================
 // Basic Health Check

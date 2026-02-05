@@ -47,7 +47,7 @@ const INSTANCES: IInstanceConfig[] = [
         code: 'USA',
         name: 'United States',
         apiUrl: process.env.USA_API_URL || 'https://localhost:4000',
-        healthEndpoint: '/health',
+        healthEndpoint: '/api/health',
         federatedSearchEndpoint: '/api/resources/federated-search',
         localResourcesEndpoint: '/api/resources',
         expectedDocuments: 5000
@@ -56,7 +56,7 @@ const INSTANCES: IInstanceConfig[] = [
         code: 'FRA',
         name: 'France',
         apiUrl: process.env.FRA_API_URL || 'https://localhost:4001',
-        healthEndpoint: '/health',
+        healthEndpoint: '/api/health',
         federatedSearchEndpoint: '/api/resources/federated-search',
         localResourcesEndpoint: '/api/resources',
         expectedDocuments: 5000
@@ -65,7 +65,7 @@ const INSTANCES: IInstanceConfig[] = [
         code: 'GBR',
         name: 'United Kingdom',
         apiUrl: process.env.GBR_API_URL || 'https://localhost:4002',
-        healthEndpoint: '/health',
+        healthEndpoint: '/api/health',
         federatedSearchEndpoint: '/api/resources/federated-search',
         localResourcesEndpoint: '/api/resources',
         expectedDocuments: 5000

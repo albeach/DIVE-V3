@@ -13,6 +13,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { validateSession, getSessionTokens } from '@/lib/session-validation';
+import { getBackendUrl } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -40,7 +41,7 @@ export async function GET(
         const tokens = await getSessionTokens();
 
         // Proxy request to local backend (backend handles federation)
-        const backendUrl = process.env.BACKEND_URL || 'https://localhost:4000';
+        const backendUrl = getBackendUrl();
         const response = await fetch(`${backendUrl}/api/resources/${resourceId}/kas-flow`, {
             method: 'GET',
             headers: {

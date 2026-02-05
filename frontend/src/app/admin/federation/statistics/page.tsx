@@ -14,6 +14,7 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import PageLayout from '@/components/layout/page-layout';
 import { useFederationStatistics, useFederationTraffic } from '@/lib/api/admin-queries';
+import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 import {
   RefreshCw,
   Globe,
@@ -374,11 +375,6 @@ export default function FederationStatisticsPage() {
   return (
     <PageLayout
       user={session?.user || {}}
-      breadcrumbs={[
-        { label: 'Admin', href: '/admin/dashboard' },
-        { label: 'Federation', href: '/admin/federation' },
-        { label: 'Statistics', href: null },
-      ]}
     >
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-purple-50 to-indigo-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900">
         {/* Header */}

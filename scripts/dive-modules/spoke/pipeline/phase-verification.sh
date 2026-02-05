@@ -130,7 +130,13 @@ spoke_verify_service_health() {
 
     # Get services dynamically from compose file
     # Phase 1 Sprint 1.2: Replace hardcoded array with dynamic discovery
-    local services=($(compose_get_spoke_services "$instance_code"))
+    local services
+    if type compose_get_spoke_services &>/dev/null; then
+        services=($(compose_get_spoke_services "$instance_code"))
+    else
+        log_warn "compose_get_spoke_services not available, using fallback service list"
+        services=("frontend" "backend" "redis" "keycloak" "postgres" "mongodb" "opa" "opal-client")
+    fi
 
     for service in "${services[@]}"; do
         local container="dive-spoke-${code_lower}-${service}"
@@ -178,9 +184,11 @@ spoke_verify_service_health() {
         log_success "All services healthy"
         return 0
     else
-        orch_record_error "$SPOKE_ERROR_HEALTH_CHECK" "$ORCH_SEVERITY_MEDIUM" \
-            "$unhealthy_count services unhealthy" "verification" \
-            "$(spoke_error_get_remediation $SPOKE_ERROR_HEALTH_CHECK $instance_code)"
+        if type orch_record_error &>/dev/null; then
+            orch_record_error "${SPOKE_ERROR_HEALTH_CHECK:-1200}" "${ORCH_SEVERITY_MEDIUM:-medium}" \
+                "$unhealthy_count services unhealthy" "verification" \
+                "$(spoke_error_get_remediation ${SPOKE_ERROR_HEALTH_CHECK:-1200} "$instance_code" 2>/dev/null || echo 'Check container health: docker ps')"
+        fi
         return 1
     fi
 }
@@ -224,16 +232,22 @@ spoke_verify_database_connectivity() {
         issues=$((issues + 1))
     fi
 
-    # MongoDB
+    # MongoDB (requires authentication since keyFile auth is enabled)
     local mongo_container="dive-spoke-${code_lower}-mongodb"
     if docker ps --format '{{.Names}}' | grep -q "^${mongo_container}$"; then
         local mongo_test
-        mongo_test=$(docker exec "$mongo_container" mongosh --eval "db.runCommand({ ping: 1 })" --quiet 2>&1 || echo "failed")
+        local mongo_pass_var="MONGO_PASSWORD_$(upper "$instance_code")"
+        local mongo_pass="${!mongo_pass_var:-}"
+        if [ -n "$mongo_pass" ]; then
+            mongo_test=$(docker exec "$mongo_container" mongosh admin -u admin -p "$mongo_pass" --quiet --eval "db.runCommand({ ping: 1 })" 2>&1 || echo "failed")
+        else
+            mongo_test=$(docker exec "$mongo_container" mongosh --eval "db.runCommand({ ping: 1 })" --quiet 2>&1 || echo "failed")
+        fi
 
         if echo "$mongo_test" | grep -q "ok"; then
             echo "  ✅ MongoDB: responding to ping"
         else
-            echo "  ⚠️  MongoDB: ping failed (may still be initializing)"
+            echo "  ⚠️  MongoDB: ping failed (may still be initializing or need auth)"
         fi
     else
         echo "  ⚠️  MongoDB: container not running"
@@ -524,7 +538,7 @@ spoke_verify_opal_sync() {
         echo "     • Spoke in federation_matrix ✓"
         return 0
     else
-        echo "  ⚠️  OPAL sync verification incomplete after $max_retries attempts (~${max_retries}0s)"
+        echo "  ⚠️  OPAL sync verification incomplete after $max_retries attempts (~$((max_retries * retry_delay))s)"
         echo "  ℹ️  This is non-fatal - OPAL CDC will sync when it detects MongoDB changes"
         echo ""
         echo "  Manual fix if SSO fails:"
@@ -563,7 +577,9 @@ _spoke_verify_federation_oidc_endpoints() {
     # Test both OIDC discovery endpoints (quick test - 3s timeout)
     local spoke_ok hub_ok
     spoke_ok=$(curl -sk --max-time 3 "https://localhost:${spoke_kc_port}/realms/${spoke_realm}/.well-known/openid-configuration" 2>/dev/null | grep -c '"issuer"' || echo "0")
-    hub_ok=$(curl -sk --max-time 3 "https://localhost:8443/realms/${hub_realm}/.well-known/openid-configuration" 2>/dev/null | grep -c '"issuer"' || echo "0")
+    # Hub Keycloak port: use HUB_KEYCLOAK_HTTPS_PORT if set, or default 8443
+    local hub_kc_port="${HUB_KEYCLOAK_HTTPS_PORT:-8443}"
+    hub_ok=$(curl -sk --max-time 3 "https://localhost:${hub_kc_port}/realms/${hub_realm}/.well-known/openid-configuration" 2>/dev/null | grep -c '"issuer"' || echo "0")
 
     [ "$spoke_ok" -ge 1 ] && [ "$hub_ok" -ge 1 ]
 }
@@ -764,6 +780,15 @@ spoke_verify_generate_report() {
         keycloak_port="8443"
     fi
 
+    # Determine individual check results based on overall result
+    # When overall_result is false, at least services or federation failed
+    local services_ok="true"
+    local federation_ok="true"
+    if [ "$overall_result" != "true" ]; then
+        services_ok="false"
+        federation_ok="false"
+    fi
+
     # Build report with calculated ports
     cat > "$report_file" << EOF
 {
@@ -772,10 +797,10 @@ spoke_verify_generate_report() {
     "timestamp": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
     "containers": $container_status,
     "checks": {
-        "services": true,
+        "services": $services_ok,
         "databases": true,
         "keycloak": true,
-        "federation": true,
+        "federation": $federation_ok,
         "api": true
     },
     "endpoints": {

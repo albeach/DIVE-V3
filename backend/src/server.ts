@@ -54,6 +54,7 @@ import { spokeIdentityService } from './services/spoke-identity.service';  // SS
 import { spokeHeartbeat } from './services/spoke-heartbeat.service';  // Phase 5: Heartbeat service
 import { federationBootstrap } from './services/federation-bootstrap.service';  // Phase 1 Fix: Federation cascade
 import { authzCacheService } from './services/authz-cache.service';  // Phase 2: Distributed cache invalidation
+import { healthService } from './services/health.service';  // Health service for readiness gating
 
 // Load environment variables from parent directory
 config({ path: '../.env.local' });
@@ -136,7 +137,8 @@ app.use((req, _res, next) => {
 // Phase 8: Enhanced Prometheus metrics routes (no auth required)
 app.use('/metrics', metricsRoutes);
 
-app.use('/health', healthRoutes);
+// Health endpoints are part of the API surface
+app.use('/api/health', healthRoutes);
 app.use('/api', publicRoutes);  // Public routes (no auth required)
 app.use('/api/resources', resourceRoutes);
 app.use('/api/policies', policyUpdatesStreamRoutes);  // SSE stream MUST be before policyRoutes to avoid /:id catching /stream
@@ -553,7 +555,32 @@ async function startServer() {
             // Non-fatal: OPA can fall back to issuer-based tenant detection
           }
 
-          // Step 3: Wait for Hub to verify identity (optional - can proceed with cached)
+          // Step 3: Sync COI definitions from Hub (CRITICAL for ABAC policy evaluation)
+          // Without this, coi-validation.service.ts fails because spoke's local
+          // coi_definitions collection is empty. Hub MongoDB is SSOT for COI data.
+          try {
+            const { spokeCoiSync } = await import('./services/spoke-coi-sync.service');
+            const coiSyncResult = await spokeCoiSync.syncFromHub();
+            if (coiSyncResult.success) {
+              logger.info('COI definitions synced from Hub', {
+                syncedCount: coiSyncResult.syncedCount,
+                instanceCode
+              });
+            } else {
+              logger.warn('COI sync from Hub failed - COI validation may not work', {
+                errors: coiSyncResult.errors,
+                instanceCode
+              });
+            }
+          } catch (coiSyncError) {
+            logger.warn('Failed to sync COI definitions from Hub', {
+              error: coiSyncError instanceof Error ? coiSyncError.message : 'Unknown error',
+              impact: 'COI-based access control may deny all requests until manual sync'
+            });
+            // Non-fatal: spoke can still serve requests, but COI validation will fail-closed
+          }
+
+          // Step 4: Wait for Hub to verify identity (optional - can proceed with cached)
           // This happens asynchronously via heartbeat's identityVerified event
           if (!identity.verifiedByHub) {
             logger.info('Waiting for Hub to verify spoke identity via first heartbeat...');
@@ -572,6 +599,23 @@ async function startServer() {
       logger.info('Hub mode - skipping spoke identity initialization');
     }
 
+    // Signal that all post-startup services have finished initializing
+    // This unblocks the readiness check so orchestration pipelines can proceed
+    healthService.setServicesReady(true);
+  };
+
+  // Wrap async serverCallback so unhandled rejections are logged instead of crashing
+  const safeServerCallback = () => {
+    serverCallback().catch((error) => {
+      logger.error('Post-startup service initialization failed', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
+        impact: 'Some non-critical services may be unavailable'
+      });
+      // Still mark services as ready so the server doesn't hang indefinitely
+      // All critical services (bootstrap) already ran before listen()
+      healthService.setServicesReady(true);
+    });
   };
 
   if (HTTPS_ENABLED) {
@@ -582,18 +626,18 @@ async function startServer() {
         cert: fs.readFileSync(path.join(certPath, process.env.CERT_FILE || 'certificate.pem')),
       };
 
-      https.createServer(httpsOptions, app).listen(PORT, serverCallback);
+      https.createServer(httpsOptions, app).listen(PORT, safeServerCallback);
       logger.info(`🔒 Starting HTTPS server on port ${PORT}`);
     } catch (error) {
       logger.error('Failed to start HTTPS server, falling back to HTTP', {
         error: error instanceof Error ? error.message : 'Unknown error'
       });
       // Fallback to HTTP if certificates are missing
-      app.listen(PORT, serverCallback);
+      app.listen(PORT, safeServerCallback);
       logger.warn(`⚠️  Starting HTTP server (HTTPS failed) on port ${PORT}`);
     }
   } else {
-    app.listen(PORT, serverCallback);
+    app.listen(PORT, safeServerCallback);
     logger.info(`Starting HTTP server on port ${PORT}`);
   }
 }

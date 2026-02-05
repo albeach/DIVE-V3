@@ -1,6 +1,6 @@
 /**
  * System Overview Section
- * 
+ *
  * High-level system metrics and KPIs
  */
 
@@ -60,7 +60,7 @@ export default function SystemOverviewSection({ dateRange, refreshTrigger }: Pro
             // Fetch stats via server API
             const daysMap = { '24h': 1, '7d': 7, '30d': 30, '90d': 90 };
             const statsRes = await fetch(`/api/admin/logs/stats?days=${daysMap[dateRange]}`);
-            
+
             const contentType = statsRes.headers.get('content-type');
             if (contentType && contentType.includes('application/json')) {
                 const statsData = await statsRes.json();

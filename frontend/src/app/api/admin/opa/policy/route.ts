@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 import { validateSession, getSessionTokens } from '@/lib/session-validation';
+import { getBackendUrl } from '@/lib/api-utils';
 
 /**
  * Admin OPA Policy API Route
@@ -21,7 +22,7 @@ export async function GET(request: Request) {
         const { searchParams } = new URL(request.url);
         const file = searchParams.get('file') || 'entrypoints/authz.rego';
 
-        const backendUrl = process.env.BACKEND_URL || 'https://localhost:4000';
+        const backendUrl = getBackendUrl();
         const response = await fetch(`${backendUrl}/api/admin/opa/policy?file=${file}`, {
             headers: { 'Authorization': `Bearer ${tokens.accessToken}` }
         });

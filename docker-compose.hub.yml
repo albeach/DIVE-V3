@@ -287,7 +287,7 @@ services:
       OTEL_TRACES_EXPORTER: "otlp"
       OTEL_METRICS_EXPORTER: "otlp"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
-      OTEL_SERVICE_NAME: "keycloak-${INSTANCE_CODE:-usa}"
+      OTEL_SERVICE_NAME: "keycloak-${INSTANCE:-usa}"
     ports:
       - "127.0.0.1:${KEYCLOAK_HTTP_PORT:-8080}:8080"
       - "127.0.0.1:${KEYCLOAK_HTTPS_PORT:-8443}:8443"
@@ -373,6 +373,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile.dev
     container_name: ${COMPOSE_PROJECT_NAME}-backend
+    init: true
     restart: unless-stopped
     env_file:
       - .env.hub
@@ -385,6 +386,7 @@ services:
       INSTANCE_CODE: USA
       INSTANCE_NAME: "United States"
       INSTANCE_REALM: USA
+      IS_HUB: "true"
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb:27017?authSource=admin&directConnection=true
       MONGODB_DATABASE: dive-v3-hub
       OPA_URL: https://opa:8181
@@ -464,8 +466,8 @@ services:
       opa:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://localhost:4000/health || exit 1"]
-      interval: 5s
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:4000/api/health"]
+      interval: 30s
       timeout: 10s
       retries: 10
       start_period: 45s

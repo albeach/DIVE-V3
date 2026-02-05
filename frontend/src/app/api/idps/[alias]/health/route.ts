@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import https from 'https';
 import http from 'http';
+import { getBackendUrl } from '@/lib/api-utils';
 
 export const runtime = 'nodejs';
 
@@ -11,11 +12,7 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ alias: string }> }
 ): Promise<NextResponse> {
-  const backendUrl =
-    process.env.BACKEND_URL ||
-    process.env.NEXT_PUBLIC_BACKEND_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    'https://localhost:4000';
+  const backendUrl = getBackendUrl();
 
   const { alias } = await params;
   const target = `${backendUrl}/api/idps/${alias}/health`;

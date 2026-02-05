@@ -6,6 +6,7 @@
 
 'use client';
 
+
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
@@ -15,6 +16,7 @@ import RiskBreakdown from '@/components/admin/risk-breakdown';
 import ComplianceStatusCard from '@/components/admin/compliance-status-card';
 import SLACountdown from '@/components/admin/sla-countdown';
 import RiskFactorAnalysis from '@/components/admin/risk-factor-analysis';
+import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 
 interface IIdPSubmission {
     submissionId: string;
@@ -187,12 +189,8 @@ export default function ApprovalsPage() {
     }
 
     return (
-        <PageLayout 
+        <PageLayout
             user={session?.user || {}}
-            breadcrumbs={[
-                { label: 'Admin', href: '/admin/dashboard' },
-                { label: 'Approvals', href: null }
-            ]}
         >
             {/* Header */}
             <div className="mb-8">

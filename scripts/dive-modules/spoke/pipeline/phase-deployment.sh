@@ -436,11 +436,15 @@ spoke_deployment_run_init_scripts() {
         # Previous: bash "$init_script" → Usage error
         # Fixed: bash "$init_script" "$code_upper" → Proper execution
         log_verbose "Running init-all.sh $code_upper..."
-        if bash "$init_script" "$code_upper" 2>&1 | head -20; then
+        local init_exit_code=0
+        bash "$init_script" "$code_upper" > /tmp/dive-init-$$.log 2>&1 || init_exit_code=$?
+        head -20 /tmp/dive-init-$$.log
+        rm -f /tmp/dive-init-$$.log
+        if [ $init_exit_code -eq 0 ]; then
             log_success "Post-startup initialization complete"
             touch "$init_marker"
         else
-            log_warn "Post-startup initialization had issues (non-blocking)"
+            log_warn "Post-startup initialization had issues (exit code: $init_exit_code, non-blocking)"
         fi
     else
         log_verbose "No init-all.sh found - skipping"
@@ -741,10 +745,14 @@ spoke_deployment_provision_opal_token() {
                 echo "SPOKE_OPAL_TOKEN=$new_token" >> "$env_file"
             fi
 
-            # Update running container (best effort - container may not support runtime env update)
-            if ! docker exec "dive-spoke-${code_lower}-opal-client" \
-                sh -c "export SPOKE_OPAL_TOKEN=$new_token" 2>/dev/null; then
-                log_verbose "Could not update OPAL token in running container (restart may be needed)"
+            # Restart OPAL client container to pick up new token from .env
+            # NOTE: docker exec export is a no-op (only affects ephemeral shell),
+            # so we must restart the container for it to re-read environment
+            local opal_container="dive-spoke-${code_lower}-opal-client"
+            if docker ps --format '{{.Names}}' | grep -q "^${opal_container}$"; then
+                log_verbose "Restarting OPAL client to pick up new token..."
+                docker restart "$opal_container" 2>/dev/null || \
+                    log_verbose "Could not restart OPAL client (manual restart may be needed)"
             fi
 
             log_success "OPAL token provisioned"
@@ -777,6 +785,7 @@ spoke_deployment_restart_services() {
     log_verbose "Restarting services: $services"
 
     export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
+    local _saved_dir="$PWD"
     cd "$spoke_dir"
 
     for service in $services; do
@@ -788,6 +797,8 @@ spoke_deployment_restart_services() {
             fi
         fi
     done
+
+    cd "$_saved_dir"
 }
 
 # =============================================================================
@@ -811,7 +822,8 @@ spoke_checkpoint_deployment() {
     log_verbose "Validating deployment checkpoint for $instance_code"
 
     # Load secrets if needed for MongoDB password
-    local mongo_password_var="MONGO_PASSWORD_${instance_code}"
+    local code_upper_ckpt=$(upper "$instance_code")
+    local mongo_password_var="MONGO_PASSWORD_${code_upper_ckpt}"
     local mongo_password="${!mongo_password_var}"
 
     if [ -z "$mongo_password" ]; then

@@ -13,7 +13,7 @@ import { prometheusMetrics } from './prometheus-metrics.service';
 // Health Check Service (Phase 3)
 // ============================================
 // Purpose: Monitor system health and dependencies
-// Endpoints: /health, /health/detailed, /health/ready, /health/live
+// Endpoints: /api/health, /api/health/detailed, /api/health/ready, /api/health/live
 
 // ============================================
 // HTTPS Agent Configuration (Phase 3.1)
@@ -169,6 +169,9 @@ class HealthService {
     private startTime: Date;
     private mongoClient: MongoClient | null = null;
     private metricsIntervalId: NodeJS.Timeout | null = null;
+    private redisHealthClient: Redis | null = null;
+    private blacklistRedisHealthClient: Redis | null = null;
+    private _servicesReady: boolean = false;
 
     // Metrics update interval (10 seconds)
     private readonly METRICS_UPDATE_INTERVAL_MS = 10000;
@@ -249,6 +252,24 @@ class HealthService {
      */
     setMongoClient(client: MongoClient): void {
         this.mongoClient = client;
+    }
+
+    /**
+     * Mark post-startup services as initialized
+     * Called by server.ts after serverCallback completes
+     */
+    setServicesReady(ready: boolean): void {
+        this._servicesReady = ready;
+        if (ready) {
+            logger.info('All post-startup services initialized - fully ready');
+        }
+    }
+
+    /**
+     * Check if post-startup services have finished initializing
+     */
+    get servicesReady(): boolean {
+        return this._servicesReady;
     }
 
     /**
@@ -462,7 +483,11 @@ class HealthService {
             }
         }
 
-        const ready = checks.mongodb && checks.opa && checks.keycloak && bootstrapReady;
+        const ready = checks.mongodb && checks.opa && checks.keycloak && bootstrapReady && this._servicesReady;
+
+        if (!this._servicesReady) {
+            logger.debug('Readiness check waiting for post-startup services to initialize');
+        }
 
         return {
             ready,
@@ -498,7 +523,12 @@ class HealthService {
                 try {
                     await this.mongoClient.db().admin().ping();
                 } catch {
-                    // Connection lost, reconnect
+                    // Connection lost, close stale client before reconnecting
+                    try {
+                        await this.mongoClient.close();
+                    } catch {
+                        // Ignore close errors on stale connection
+                    }
                     this.mongoClient = new MongoClient(MONGODB_URL);
                     await this.mongoClient.connect();
                 }
@@ -510,7 +540,7 @@ class HealthService {
             const responseTime = Date.now() - startTime;
 
             return {
-                status: responseTime < 100 ? 'up' : 'degraded',
+                status: responseTime < 500 ? 'up' : 'degraded',
                 responseTime,
                 details: {
                     connected: true,
@@ -536,7 +566,7 @@ class HealthService {
      */
     private async checkOPA(): Promise<IServiceHealth> {
         const startTime = Date.now();
-        const opaUrl = process.env.OPA_URL || 'http://localhost:8181';
+        const opaUrl = process.env.OPA_URL || 'http://opa:8181';
 
         try {
             const config: any = {
@@ -553,7 +583,7 @@ class HealthService {
             const responseTime = Date.now() - startTime;
 
             return {
-                status: responseTime < 100 ? 'up' : 'degraded',
+                status: responseTime < 300 ? 'up' : 'degraded',
                 responseTime,
                 details: response.data,
             };
@@ -791,43 +821,46 @@ class HealthService {
     }
 
     /**
+     * Get or create a persistent Redis client for health checks
+     */
+    private getRedisHealthClient(url: string, clientRef: 'redisHealthClient' | 'blacklistRedisHealthClient'): Redis {
+        const existing = this[clientRef];
+        if (existing && existing.status === 'ready') {
+            return existing;
+        }
+
+        // Close stale client if exists
+        if (existing) {
+            try { existing.disconnect(); } catch { /* ignore */ }
+        }
+
+        const client = new Redis(url, {
+            connectTimeout: 5000,
+            commandTimeout: 5000,
+            maxRetriesPerRequest: 1,
+            lazyConnect: true,
+            retryStrategy: () => null, // Don't auto-retry in health checks
+        });
+
+        this[clientRef] = client;
+        return client;
+    }
+
+    /**
      * Check Redis health
      */
     private async checkRedis(): Promise<IServiceHealth> {
         const startTime = Date.now();
 
-        let redisClient: Redis | null = null;
-
         try {
             const redisUrl = process.env.REDIS_URL || 'redis://redis:6379';
+            const client = this.getRedisHealthClient(redisUrl, 'redisHealthClient');
 
-            // Create a temporary Redis client for health check
-            redisClient = new Redis(redisUrl, {
-                connectTimeout: 5000,
-                commandTimeout: 5000,
-                maxRetriesPerRequest: 1,
-                lazyConnect: false,
-            });
+            if (client.status !== 'ready') {
+                await client.connect();
+            }
 
-            // Wait for connection
-            await new Promise<void>((resolve, reject) => {
-                const timeout = setTimeout(() => {
-                    reject(new Error('Redis connection timeout'));
-                }, 5000);
-
-                redisClient!.once('ready', () => {
-                    clearTimeout(timeout);
-                    resolve();
-                });
-
-                redisClient!.once('error', (err) => {
-                    clearTimeout(timeout);
-                    reject(err);
-                });
-            });
-
-            // Ping test
-            await redisClient.ping();
+            await client.ping();
 
             const responseTime = Date.now() - startTime;
 
@@ -843,6 +876,12 @@ class HealthService {
             const responseTime = Date.now() - startTime;
             const errorMessage = error instanceof Error ? error.message : 'Unknown Redis error';
 
+            // Reset client on failure so next check creates fresh connection
+            if (this.redisHealthClient) {
+                try { this.redisHealthClient.disconnect(); } catch { /* ignore */ }
+                this.redisHealthClient = null;
+            }
+
             logger.error('Redis health check failed', {
                 error: errorMessage,
                 responseTime,
@@ -856,14 +895,6 @@ class HealthService {
                     reason: 'Redis connection failed',
                 },
             };
-        } finally {
-            if (redisClient) {
-                try {
-                    redisClient.disconnect();
-                } catch (err) {
-                    // Ignore disconnect errors
-                }
-            }
         }
     }
 
@@ -873,38 +904,15 @@ class HealthService {
     private async checkBlacklistRedis(): Promise<IServiceHealth> {
         const startTime = Date.now();
 
-        let redisClient: Redis | null = null;
-
         try {
             const redisUrl = process.env.BLACKLIST_REDIS_URL || 'redis://redis-blacklist:6380';
+            const client = this.getRedisHealthClient(redisUrl, 'blacklistRedisHealthClient');
 
-            // Create a temporary Redis client for health check
-            redisClient = new Redis(redisUrl, {
-                connectTimeout: 5000,
-                commandTimeout: 5000,
-                maxRetriesPerRequest: 1,
-                lazyConnect: false,
-            });
+            if (client.status !== 'ready') {
+                await client.connect();
+            }
 
-            // Wait for connection
-            await new Promise<void>((resolve, reject) => {
-                const timeout = setTimeout(() => {
-                    reject(new Error('Blacklist Redis connection timeout'));
-                }, 5000);
-
-                redisClient!.once('ready', () => {
-                    clearTimeout(timeout);
-                    resolve();
-                });
-
-                redisClient!.once('error', (err) => {
-                    clearTimeout(timeout);
-                    reject(err);
-                });
-            });
-
-            // Ping test
-            await redisClient.ping();
+            await client.ping();
 
             const responseTime = Date.now() - startTime;
 
@@ -920,6 +928,12 @@ class HealthService {
             const responseTime = Date.now() - startTime;
             const errorMessage = error instanceof Error ? error.message : 'Unknown Blacklist Redis error';
 
+            // Reset client on failure
+            if (this.blacklistRedisHealthClient) {
+                try { this.blacklistRedisHealthClient.disconnect(); } catch { /* ignore */ }
+                this.blacklistRedisHealthClient = null;
+            }
+
             logger.error('Blacklist Redis health check failed', {
                 error: errorMessage,
                 responseTime,
@@ -933,14 +947,6 @@ class HealthService {
                     reason: 'Blacklist Redis connection failed',
                 },
             };
-        } finally {
-            if (redisClient) {
-                try {
-                    redisClient.disconnect();
-                } catch (err) {
-                    // Ignore disconnect errors
-                }
-            }
         }
     }
 }

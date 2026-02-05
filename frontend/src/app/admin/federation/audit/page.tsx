@@ -13,6 +13,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import PageLayout from '@/components/layout/page-layout';
+import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 import {
   useFederationAuditAggregated,
   useFederationAuditStats,
@@ -199,11 +200,6 @@ export default function FederationAuditPage() {
   return (
     <PageLayout
       user={session?.user || {}}
-      breadcrumbs={[
-        { label: 'Admin', href: '/admin/dashboard' },
-        { label: 'Federation', href: '/admin/federation' },
-        { label: 'Audit Logs', href: null },
-      ]}
     >
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-violet-50 to-purple-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900">
         {/* Header */}

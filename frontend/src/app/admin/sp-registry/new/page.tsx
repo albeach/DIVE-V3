@@ -13,6 +13,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useForm } from 'react-hook-form';
 import { spRegistrationSchema, type SPRegistrationFormData } from '@/lib/validations/sp-registry';
 import { AVAILABLE_SCOPES, AVAILABLE_GRANT_TYPES, NATO_COUNTRIES, ORGANIZATION_TYPES } from '@/types/sp-federation.types';
+import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 
 export default function NewSPRegistrationPage() {
   const router = useRouter();
@@ -153,11 +154,6 @@ export default function NewSPRegistrationPage() {
   return (
     <PageLayout
       user={session?.user || {}}
-      breadcrumbs={[
-        { label: 'Admin', href: '/admin/dashboard' },
-        { label: 'SP Registry', href: '/admin/sp-registry' },
-        { label: 'New Registration', href: null }
-      ]}
     >
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 py-8">
         {/* Header */}

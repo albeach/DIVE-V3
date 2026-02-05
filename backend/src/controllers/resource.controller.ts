@@ -9,8 +9,9 @@ import { mongoKasRegistryStore } from '../models/kas-registry.model';
 import { kasRouterService } from '../services/kas-router.service';
 import { generateMarking } from '../services/spif-parser.service';
 
-// Helper: Get INSTANCE_REALM constant for cross-instance checks
-const INSTANCE_REALM = process.env.INSTANCE_REALM || 'USA';
+// Helper: Get instance code for cross-instance checks
+// CRITICAL FIX: Use INSTANCE_CODE (set by spoke deployment) with INSTANCE_REALM fallback
+const INSTANCE_REALM = process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA';
 
 /**
  * Check if resource requires cross-instance KAS access
@@ -179,7 +180,7 @@ export const getResourceHandler = async (
 ): Promise<void> => {
     const requestId = req.headers['x-request-id'] as string;
     const { id } = req.params;
-    const INSTANCE_REALM = process.env.INSTANCE_REALM || 'USA';
+    const INSTANCE_REALM = process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA';
 
     try {
         logger.info('Fetching resource', { requestId, resourceId: id });
@@ -404,7 +405,7 @@ export const getZTDFDetailsHandler = async (
         if (!resource) {
             const { extractOriginFromResourceId, FEDERATION_API_URLS } = await import('../services/resource.service');
             const originInstance = extractOriginFromResourceId(id);
-            const CURRENT_INSTANCE = process.env.INSTANCE_REALM || 'USA';
+            const CURRENT_INSTANCE = process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA';
 
             if (originInstance && originInstance !== CURRENT_INSTANCE) {
                 // Proxy to origin instance's ZTDF endpoint
@@ -598,7 +599,7 @@ export const getKASFlowHandler = async (
         if (!resource) {
             const { extractOriginFromResourceId, FEDERATION_API_URLS } = await import('../services/resource.service');
             const originInstance = extractOriginFromResourceId(id);
-            const CURRENT_INSTANCE = process.env.INSTANCE_REALM || 'USA';
+            const CURRENT_INSTANCE = process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA';
 
             if (originInstance && originInstance !== CURRENT_INSTANCE) {
                 // Proxy to origin instance's KAS flow endpoint
@@ -744,7 +745,7 @@ export const requestKeyHandler = async (
     const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
     const { resourceId, kaoId } = req.body;
     const startTime = Date.now();
-    const INSTANCE_REALM = process.env.INSTANCE_REALM || 'USA';
+    const INSTANCE_REALM = process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA';
 
     try {
         logger.info('Key request initiated', { requestId, resourceId, kaoId });
@@ -778,7 +779,7 @@ export const requestKeyHandler = async (
         if (!resource) {
             const { extractOriginFromResourceId, FEDERATION_API_URLS } = await import('../services/resource.service');
             const originInstance = extractOriginFromResourceId(resourceId);
-            const CURRENT_INSTANCE = process.env.INSTANCE_REALM || 'USA';
+            const CURRENT_INSTANCE = process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA';
 
             if (originInstance && originInstance !== CURRENT_INSTANCE) {
                 // Proxy the key request to origin instance's backend

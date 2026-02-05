@@ -108,18 +108,11 @@ export default function AdminDashboard() {
     ];
 
     return (
-        <PageLayout
-            user={session?.user || {}}
-            breadcrumbs={[
-                { label: 'Admin', href: '/admin/dashboard' },
-                { label: 'Dashboard', href: null }
-            ]}
-        >
+        <PageLayout user={session?.user || {}}>
             <KeyboardShortcutsModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
             <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900">
-                {/* Interactive Breadcrumbs */}
+                {/* Interactive Breadcrumbs - SSOT for Admin Navigation */}
                 <div className="mb-4">
-                    <InteractiveBreadcrumbs />
                 </div>
                 {/* Enhanced Header */}
                 <div className="mb-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-slate-200 dark:border-gray-700 p-4 sm:p-6">

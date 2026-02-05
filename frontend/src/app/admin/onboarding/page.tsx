@@ -53,10 +53,6 @@ export default function AdminOnboardingPage() {
   return (
     <PageLayout
       user={session?.user || {}}
-      breadcrumbs={[
-        { label: 'Admin', href: '/admin/dashboard' },
-        { label: 'Onboarding Tour', href: null },
-      ]}
     >
       <div className="min-h-[60vh]">
         <p className="text-slate-600 mb-4">

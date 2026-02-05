@@ -15,6 +15,7 @@ import { auth } from '@/auth';
 import { db } from '@/lib/db';
 import { accounts } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { getSecureFetchOptions } from '@/lib/https-agent';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,6 +56,7 @@ async function fetchFederationInstances(): Promise<IFederationInstance[]> {
         'Content-Type': 'application/json',
       },
       cache: 'no-store',
+      ...getSecureFetchOptions(),
     });
 
     if (!response.ok) {
@@ -91,6 +93,7 @@ async function fetchInstanceStats(
       method: 'GET',
       headers,
       cache: 'no-store',
+      ...getSecureFetchOptions(),
     });
 
     if (response.ok) {
@@ -98,9 +101,10 @@ async function fetchInstanceStats(
     }
 
     // Fallback: try health endpoint for basic info
-    const healthResponse = await fetch(`${apiUrl}/health`, {
+    const healthResponse = await fetch(`${apiUrl}/api/health`, {
       method: 'GET',
       cache: 'no-store',
+      ...getSecureFetchOptions(),
     });
 
     if (healthResponse.ok) {

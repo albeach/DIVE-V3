@@ -6,12 +6,13 @@
  */
 
 import { NextResponse } from 'next/server';
+import { getBackendUrl } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
   try {
-    const backendUrl = process.env.BACKEND_URL || 'https://localhost:4000';
+    const backendUrl = getBackendUrl();
 
     const response = await fetch(`${backendUrl}/api-docs/json`, {
       headers: {

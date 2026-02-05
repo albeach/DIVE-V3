@@ -84,7 +84,9 @@ spoke_phase_configuration() {
             export FEDERATION_ADMIN_KEY
             log_verbose "✓ FEDERATION_ADMIN_KEY loaded from Hub environment"
         else
-            log_warn "FEDERATION_ADMIN_KEY not found in .env.hub (will use default)"
+            log_warn "FEDERATION_ADMIN_KEY not found in .env.hub"
+            log_warn "Spoke registration/approval API calls may fail without this key"
+            log_warn "Fix: Ensure .env.hub exists and contains FEDERATION_ADMIN_KEY"
         fi
 
         # Also export Hub Keycloak admin password for wait_for_keycloak_admin_api_ready()
@@ -238,7 +240,7 @@ spoke_phase_configuration() {
         log_verbose "AMR sync skipped (optional feature)"
     fi
 
-    # Step 6: Configure Keycloak client redirect URIs (CRITICAL - required for OAuth flow)
+    # Step 5: Configure Keycloak client redirect URIs (CRITICAL - required for OAuth flow)
     log_step "Step 5/6: Updating OAuth redirect URIs"
     if ! spoke_config_update_redirect_uris "$instance_code"; then
         log_error "Redirect URI update failed - OAuth login broken"
@@ -443,8 +445,8 @@ spoke_config_register_in_hub_mongodb() {
 EOF
 )
 
-    # Call Hub registration endpoint
-    local hub_api="https://localhost:4000/api/federation/register"
+    # Call Hub registration endpoint using discovered hub_url
+    local hub_api="${hub_url}/api/federation/register"
     local response
     local http_code
 
@@ -478,7 +480,7 @@ EOF
             # the public registration-status endpoint. Works without Hub code changes or restart.
             if [ -z "$spoke_token" ] && [ -n "$registered_spoke_id" ]; then
                 log_info "Token not in register response; fetching from registration status endpoint..."
-                local status_url="https://localhost:4000/api/federation/registration/${registered_spoke_id}/status"
+                local status_url="${hub_url}/api/federation/registration/${registered_spoke_id}/status"
                 local status_resp
                 status_resp=$(curl -sk --max-time 10 "$status_url" 2>/dev/null)
                 spoke_token=$(echo "$status_resp" | jq -r '.token.token // empty' 2>/dev/null)
@@ -489,7 +491,7 @@ EOF
             # Also try by instance code (route accepts spokeId or instanceCode)
             if [ -z "$spoke_token" ] && [ -n "$code_upper" ]; then
                 log_verbose "Trying registration status by instance code..."
-                local status_url="https://localhost:4000/api/federation/registration/${code_upper}/status"
+                local status_url="${hub_url}/api/federation/registration/${code_upper}/status"
                 local status_resp
                 status_resp=$(curl -sk --max-time 10 "$status_url" 2>/dev/null)
                 spoke_token=$(echo "$status_resp" | jq -r '.token.token // empty' 2>/dev/null)
@@ -691,7 +693,8 @@ spoke_config_approve_and_get_token() {
 
     # Approve spoke
     local approve_payload='{"allowedScopes":["policy:base","policy:org"],"allowedFeatures":["federation","ztdf","audit"]}'
-    local hub_approve_api="https://localhost:4000/api/federation/spokes/$spoke_id/approve"
+    # Use hub_url from parent scope (spoke_config_register_in_hub_mongodb), fallback to localhost
+    local hub_approve_api="${hub_url:-https://localhost:4000}/api/federation/spokes/$spoke_id/approve"
 
     local approve_response
     approve_response=$(curl -sk -X POST "$hub_approve_api" \
@@ -837,7 +840,7 @@ spoke_config_register_in_registries() {
                 kas_exit_code=1
             fi
         else
-            log_warn "MongoDB KAS registration failed after $kas_retries attempts"
+            log_warn "MongoDB KAS registration failed"
             log_warn "Error output:"
             echo "$kas_output" | head -20
             log_warn "KAS registration can be retried later: ./dive spoke kas register $code_upper"
@@ -973,7 +976,7 @@ spoke_config_apply_terraform() {
     export KEYCLOAK_PASSWORD="${!keycloak_password_var}"
 
     # Load terraform module if available
-    if [ -f "${DIVE_ROOT}/scripts/dive-modules/terraform.sh" ]; then
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/configuration/terraform.sh" ]; then
         source "${DIVE_ROOT}/scripts/dive-modules/configuration/terraform.sh"
 
         # Check if terraform_spoke function exists
@@ -1162,8 +1165,8 @@ spoke_config_nato_localization() {
     fi
 
     local display_name
-    # Use safe array access with set -u compatibility
-    if declare -A NATO_COUNTRIES 2>/dev/null && [ -n "${NATO_COUNTRIES[$code_upper]:-}" ]; then
+    # Check if NATO_COUNTRIES array has our country (without re-declaring which resets it)
+    if [ -n "${NATO_COUNTRIES[$code_upper]+_}" ] && [ -n "${NATO_COUNTRIES[$code_upper]:-}" ]; then
         # Extract country name (first field before |)
         local country_name=$(echo "${NATO_COUNTRIES[$code_upper]}" | cut -d'|' -f1)
         display_name="${country_name} DIVE Portal"
@@ -1450,15 +1453,16 @@ spoke_config_update_redirect_uris() {
     local kc_container="dive-spoke-${code_lower}-keycloak"
 
     if ! docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
-        log_verbose "Keycloak container not running"
-        return 0
+        log_error "Keycloak container not running - cannot update redirect URIs"
+        return 1
     fi
 
     local admin_token
     admin_token=$(spoke_federation_get_admin_token "$kc_container")
 
     if [ -z "$admin_token" ]; then
-        return 0
+        log_error "Cannot get admin token for Keycloak - redirect URI update failed"
+        return 1
     fi
 
     local realm_name="dive-v3-broker-${code_lower}"
@@ -1472,8 +1476,8 @@ spoke_config_update_redirect_uris() {
         grep -o '"id":"[^"]*' | head -1 | cut -d'"' -f4)
 
     if [ -z "$client_uuid" ]; then
-        log_verbose "Client not found: $client_id"
-        return 0
+        log_error "Client not found in Keycloak: $client_id"
+        return 1
     fi
 
     # Get ports
@@ -1555,7 +1559,9 @@ spoke_checkpoint_configuration() {
     local realm="dive-v3-broker-${code_lower}"
     local keycloak_url="https://localhost:${spoke_keycloak_port}"
 
+    local realm_response
     realm_response=$(curl -sk --max-time 10 "${keycloak_url}/realms/${realm}" 2>/dev/null)
+    local realm_name
     realm_name=$(echo "$realm_response" | jq -r '.realm // empty' 2>/dev/null)
 
     if [ "$realm_name" != "$realm" ]; then

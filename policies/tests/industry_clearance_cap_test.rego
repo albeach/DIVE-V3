@@ -2,13 +2,13 @@
 # Package: dive.tests.industry_clearance_cap
 #
 # Tests for ACP-240 Section 4.9: Industry Clearance Cap
-# 
-# Ensures industry users cannot access resources above their 
+#
+# Ensures industry users cannot access resources above their
 # tenant's industry_max_classification level.
 #
 # Test Matrix:
 # - USA: industry_max_classification = SECRET
-# - FRA: industry_max_classification = CONFIDENTIAL  
+# - FRA: industry_max_classification = CONFIDENTIAL
 # - GBR: industry_max_classification = SECRET
 # - DEU: industry_max_classification = CONFIDENTIAL
 #
@@ -74,7 +74,7 @@ test_usa_industry_user_can_access_secret if {
             "classification": "SECRET",
         }),
     })
-    
+
     acp240.check_industry_clearance_cap_ok with input as test_input
         with data.tenant_configs as tenant_configs
 }
@@ -90,7 +90,7 @@ test_usa_industry_user_can_access_confidential if {
             "classification": "CONFIDENTIAL",
         }),
     })
-    
+
     acp240.check_industry_clearance_cap_ok with input as test_input
         with data.tenant_configs as tenant_configs
 }
@@ -106,7 +106,7 @@ test_usa_industry_user_can_access_unclassified if {
             "classification": "UNCLASSIFIED",
         }),
     })
-    
+
     acp240.check_industry_clearance_cap_ok with input as test_input
         with data.tenant_configs as tenant_configs
 }
@@ -123,7 +123,7 @@ test_usa_industry_user_blocked_from_top_secret if {
             "releasabilityTo": ["USA"],
         }),
     })
-    
+
     not acp240.check_industry_clearance_cap_ok with input as test_input
         with data.tenant_configs as tenant_configs
 }
@@ -145,7 +145,7 @@ test_fra_industry_user_can_access_confidential if {
             "releasabilityTo": ["FRA", "USA"],
         }),
     })
-    
+
     acp240.check_industry_clearance_cap_ok with input as test_input
         with data.tenant_configs as tenant_configs
 }
@@ -163,7 +163,7 @@ test_fra_industry_user_blocked_from_secret if {
             "releasabilityTo": ["FRA", "USA"],
         }),
     })
-    
+
     not acp240.check_industry_clearance_cap_ok with input as test_input
         with data.tenant_configs as tenant_configs
 }
@@ -181,7 +181,7 @@ test_fra_industry_user_blocked_from_top_secret if {
             "releasabilityTo": ["FRA"],
         }),
     })
-    
+
     not acp240.check_industry_clearance_cap_ok with input as test_input
         with data.tenant_configs as tenant_configs
 }
@@ -203,7 +203,7 @@ test_deu_industry_user_blocked_from_secret if {
             "releasabilityTo": ["DEU", "USA"],
         }),
     })
-    
+
     not acp240.check_industry_clearance_cap_ok with input as test_input
         with data.tenant_configs as tenant_configs
 }
@@ -224,13 +224,13 @@ test_gov_user_not_affected_by_industry_cap if {
             "classification": "TOP_SECRET",
         }),
     })
-    
+
     # GOV users should always pass the industry cap check
     acp240.check_industry_clearance_cap_ok with input as test_input
         with data.tenant_configs as tenant_configs
 }
 
-# Test: MIL user NOT affected by industry cap  
+# Test: MIL user NOT affected by industry cap
 test_mil_user_not_affected_by_industry_cap if {
     test_input := object.union(base_industry_input, {
         "subject": object.union(base_industry_input.subject, {
@@ -242,7 +242,7 @@ test_mil_user_not_affected_by_industry_cap if {
             "classification": "TOP_SECRET",
         }),
     })
-    
+
     # MIL users should always pass the industry cap check
     acp240.check_industry_clearance_cap_ok with input as test_input
         with data.tenant_configs as tenant_configs
@@ -265,7 +265,7 @@ test_missing_org_type_with_gov_email_passes if {
             "classification": "TOP_SECRET",
         }),
     })
-    
+
     # Should pass because org type is GOV
     acp240.check_industry_clearance_cap_ok with input as test_input
         with data.tenant_configs as tenant_configs
@@ -286,7 +286,7 @@ test_unknown_tenant_defaults_to_confidential_cap if {
             "classification": "SECRET",  # Above default CONFIDENTIAL cap
         }),
     })
-    
+
     # Should fail because default cap is CONFIDENTIAL
     not acp240.check_industry_clearance_cap_ok with input as test_input
         with data.tenant_configs as {}  # Empty configs to trigger default
@@ -302,13 +302,13 @@ test_industry_user_unclassified_to_unclassified if {
             "classification": "UNCLASSIFIED",
         }),
     })
-    
+
     acp240.check_industry_clearance_cap_ok with input as test_input
         with data.tenant_configs as tenant_configs
 }
 
 # ============================================
-# Error Message Tests  
+# Error Message Tests
 # ============================================
 
 # Test: Verify error message contains useful information
@@ -322,10 +322,10 @@ test_error_message_contains_details if {
             "classification": "TOP_SECRET",
         }),
     })
-    
+
     msg := acp240.is_industry_clearance_exceeded with input as test_input
         with data.tenant_configs as tenant_configs
-    
+
     contains(msg, "Industry clearance cap exceeded")
     contains(msg, "TOP_SECRET")
     contains(msg, "SECRET")

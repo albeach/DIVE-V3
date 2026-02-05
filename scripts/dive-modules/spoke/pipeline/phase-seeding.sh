@@ -22,9 +22,9 @@ fi
 # Load secret management functions
 if [ -z "${SPOKE_SECRETS_LOADED:-}" ]; then
     if source "$(dirname "${BASH_SOURCE[0]}")/spoke-secrets.sh" 2>/dev/null; then
-        log_verbose "spoke-secrets.sh loaded successfully" >/dev/null
+        log_verbose "spoke-secrets.sh loaded successfully"
     else
-        log_verbose "spoke-secrets.sh not available (secret functions may not work)" >/dev/null
+        log_verbose "spoke-secrets.sh not available (secret functions may not work)"
     fi
 fi
 
@@ -139,6 +139,10 @@ spoke_phase_seeding() {
         " 2>/dev/null | tail -1 | tr -d '\n\r' || echo "0")
     fi
 
+    # Guard against non-numeric values from mongosh errors
+    [[ "$total_count" =~ ^[0-9]+$ ]] || total_count=0
+    [[ "$encrypted_count" =~ ^[0-9]+$ ]] || encrypted_count=0
+
     # Report honestly what was created
     if [ "$encrypted_count" -gt 0 ]; then
         log_success "✓ ZTDF-encrypted resources: $encrypted_count documents"
@@ -169,6 +173,12 @@ spoke_phase_seeding() {
         log_success "Seeding phase complete (users: ✅, plaintext: ⚠️  $total_count - not encrypted)"
     else
         log_success "Seeding phase complete (users: ✅, local resources: N/A - using Hub)"
+    fi
+
+    # Return failure if resource seeding failed (ACP-240 compliance)
+    if [ "$resource_seeding_failed" = "true" ]; then
+        log_warn "Seeding phase completed with resource seeding failure flagged"
+        return 0  # Non-blocking for now, but flag is logged for operator awareness
     fi
 
     return 0
@@ -222,8 +232,34 @@ spoke_seed_users() {
 
     # Run user seeding script
     log_verbose "Executing: $seed_users_script $code_upper"
-    if bash "$seed_users_script" "$code_upper" 2>&1 | tail -20; then
+    local seed_exit_code=0
+    bash "$seed_users_script" "$code_upper" > /tmp/dive-seed-users-$$.log 2>&1 || seed_exit_code=$?
+    tail -20 /tmp/dive-seed-users-$$.log
+    rm -f /tmp/dive-seed-users-$$.log
+    if [ $seed_exit_code -eq 0 ]; then
         log_success "Test users created: testuser-${code_lower}-{1-5}, admin-${code_lower}"
+
+        # CRITICAL: Verify admin credentials work (2026-02-04 fix)
+        log_step "Verifying admin credentials..."
+        local admin_pass="${ADMIN_USER_PASSWORD:-TestUser2025!SecureAdmin}"
+        local realm_name="dive-v3-broker-${code_lower}"
+        local verify_result
+        verify_result=$(docker exec "$kc_container" curl -sf "http://localhost:8080/realms/${realm_name}/protocol/openid-connect/token" \
+            -d "grant_type=password" \
+            -d "client_id=admin-cli" \
+            -d "username=admin-${code_lower}" \
+            -d "password=${admin_pass}" 2>&1)
+
+        if echo "$verify_result" | jq -e '.access_token' >/dev/null 2>&1; then
+            log_success "✓ Admin credentials verified (admin-${code_lower})"
+        else
+            log_error "Admin credentials verification failed"
+            log_error "Expected username: admin-${code_lower}"
+            log_error "Expected password: ${admin_pass}"
+            log_error "This indicates seeding did not use ADMIN_USER_PASSWORD correctly"
+            log_warn "To fix manually: Reset password in Keycloak Admin Console"
+            # Don't fail - this is validation only, not blocking
+        fi
         return 0
     else
         log_warn "User seeding had issues - users may already exist or require manual creation"

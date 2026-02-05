@@ -17,7 +17,7 @@ describe('Multimedia Upload E2E', () => {
   // Helper to check if server is available
   const checkServer = async () => {
     try {
-      const response = await request(API_URL).get('/health');
+      const response = await request(API_URL).get('/api/health');
       return response.status === 200;
     } catch {
       return false;

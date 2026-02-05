@@ -83,7 +83,7 @@ test.describe.parallel('All Instances - Health Checks', () => {
   Object.entries(INSTANCE_CONFIG).forEach(([instanceKey, config]) => {
     test(`${config.name} is healthy`, async ({ page }) => {
       // Override baseURL for this specific test
-      await page.goto(`${config.baseURL}/health`, {
+      await page.goto(`${config.baseURL}/api/health`, {
         timeout: 10000
       });
 
@@ -142,4 +142,3 @@ test.describe(`${CURRENT_INSTANCE.name} - Resource Access`, () => {
 });
 
 export { INSTANCE_CONFIG, CURRENT_INSTANCE };
-
