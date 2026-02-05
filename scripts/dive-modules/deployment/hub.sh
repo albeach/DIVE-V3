@@ -601,11 +601,15 @@ hub_init() {
         log_verbose "Generating hub certificates..."
         if command -v mkcert >/dev/null 2>&1; then
             cd "$cert_dir"
+            # Generate certificate with all Docker service names as SANs
             mkcert -cert-file certificate.pem -key-file key.pem \
-                localhost "*.localhost" hub.dive.local keycloak >/dev/null 2>&1
+                localhost "*.localhost" 127.0.0.1 \
+                hub.dive.local \
+                backend keycloak opa mongodb postgres redis kas opal-server frontend \
+                >/dev/null 2>&1
             cp "$(mkcert -CAROOT)/rootCA.pem" mkcert-rootCA.pem 2>/dev/null || true
             cd - >/dev/null
-            log_verbose "Certificates generated with mkcert"
+            log_verbose "Certificates generated with mkcert (includes all Docker service names)"
         else
             # Fallback to openssl
             openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
