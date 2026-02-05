@@ -225,12 +225,18 @@ services:
       dive.service.description: "Redis cache for session state and policy decisions"
     image: redis:7-alpine
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-redis
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD_{{INSTANCE_CODE_UPPER}}:-}
+      --appendonly yes
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
     networks:
       - dive-internal
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD_{{INSTANCE_CODE_UPPER}}:-}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -365,7 +371,7 @@ services:
       OPAL_SERVER_URL: ${HUB_OPAL_URL:?HUB_OPAL_URL required - set in .env}
       # Authentication - token and public key from Hub
       OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:-}
-      OPAL_AUTH_PUBLIC_KEY: ${OPAL_AUTH_PUBLIC_KEY}
+      OPAL_AUTH_PUBLIC_KEY: ${OPAL_AUTH_PUBLIC_KEY:-}
       # Policy subscription directories - CRITICAL FIX for duplicate paths issue
       # Request only specific directories from Hub (NOT "." which requests entire repo)
       # This prevents OPAL from including files with "policies/" prefix duplicates
@@ -427,6 +433,7 @@ services:
       context: ../../backend
       dockerfile: Dockerfile.dev
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-backend
+    init: true
     command: ["/bin/sh","-c","mkdir -p /app/certs/crl && npm install && npm run dev"]
     environment:
       NODE_ENV: development
@@ -439,12 +446,13 @@ services:
       INSTANCE_NAME: "{{INSTANCE_NAME}}"
       INSTANCE_REALM: {{INSTANCE_CODE_UPPER}}
       SPOKE_MODE: "true"
+      IS_HUB: "false"
       # MongoDB
       MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/dive-v3-{{INSTANCE_CODE_LOWER}}?authSource=admin&directConnection=true
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/?authSource=admin&directConnection=true
       MONGODB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
-      # Local Redis for session cache
-      REDIS_URL: redis://redis-{{INSTANCE_CODE_LOWER}}:6379
+      # Local Redis for session cache (authenticated)
+      REDIS_URL: redis://:${REDIS_PASSWORD_{{INSTANCE_CODE_UPPER}}:-}@redis-{{INSTANCE_CODE_LOWER}}:6379
       # ==========================================================================
       # SHARED BLACKLIST REDIS (ACP-240 Cross-Instance Token Revocation)
       # ==========================================================================
@@ -465,7 +473,7 @@ services:
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_{{INSTANCE_CODE_UPPER}}}
       KEYCLOAK_ISSUER: {{IDP_BASE_URL}}/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}}
       # CRITICAL: Include Hub issuer for cross-instance federation
-      TRUSTED_ISSUERS: {{IDP_BASE_URL}}/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}},https://keycloak-{{INSTANCE_CODE_LOWER}}:8443/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}},https://localhost:8443/realms/dive-v3-broker,https://keycloak:8443/realms/dive-v3-broker,https://usa-idp.dive25.com/realms/dive-v3-broker
+      TRUSTED_ISSUERS: {{IDP_BASE_URL}}/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}},https://keycloak-{{INSTANCE_CODE_LOWER}}:8443/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}},https://localhost:8443/realms/dive-v3-broker-usa,https://keycloak:8443/realms/dive-v3-broker-usa,https://usa-idp.dive25.com/realms/dive-v3-broker-usa
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_{{INSTANCE_CODE_UPPER}}}
       # OPA
@@ -524,7 +532,7 @@ services:
       - dive-internal      # Internal spoke communication
       - dive-shared        # CRITICAL: Required for Hub federation and OPAL policy sync
     healthcheck:
-      test: ["CMD", "curl", "-sf", "https://localhost:4000/health", "-k"]
+      test: ["CMD", "curl", "-k", "-f", "https://localhost:4000/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3

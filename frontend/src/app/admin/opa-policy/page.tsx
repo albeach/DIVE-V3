@@ -6,6 +6,7 @@ import { useSession } from 'next-auth/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import PageLayout from '@/components/layout/page-layout';
 import { PolicyRuleManager } from '@/components/admin/policy-rule-manager';
+import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 
 interface IPolicyContent {
     fileName: string;
@@ -142,10 +143,6 @@ export default function OPAPolicyPage() {
         return (
             <PageLayout
                 user={session?.user || {}}
-                breadcrumbs={[
-                    { label: 'Admin', href: '/admin/dashboard' },
-                    { label: 'OPA Policies', href: '/admin/opa-policy' }
-                ]}
             >
                 <div className="flex items-center justify-center min-h-[60vh]">
                     <motion.div
@@ -172,10 +169,6 @@ export default function OPAPolicyPage() {
     return (
         <PageLayout
             user={session?.user || {}}
-            breadcrumbs={[
-                { label: 'Admin', href: '/admin/dashboard' },
-                { label: 'OPA Policies', href: '/admin/opa-policy' }
-            ]}
         >
             <div className="min-h-[calc(100vh-12rem)] flex flex-col">
                 {/* Top Bar - Sticky */}

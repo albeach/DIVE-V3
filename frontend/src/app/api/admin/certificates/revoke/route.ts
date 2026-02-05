@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 // Mark this route as dynamic to prevent build-time execution
 export const dynamic = 'force-dynamic';
 import { validateSession, getSessionTokens } from '@/lib/session-validation';
+import { getBackendUrl } from '@/lib/api-utils';
 
 /**
  * Admin Certificates Revoke API Route
@@ -21,7 +22,7 @@ export async function POST(request: Request) {
 
         const body = await request.json();
 
-        const backendUrl = process.env.BACKEND_URL || 'https://localhost:4000';
+        const backendUrl = getBackendUrl();
         const response = await fetch(`${backendUrl}/api/admin/certificates/revoke`, {
             method: 'POST',
             headers: {

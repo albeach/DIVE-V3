@@ -3,6 +3,7 @@ import https from 'https';
 import http from 'http';
 import fs from 'fs';
 import path from 'path';
+import { getBackendUrl } from '@/lib/api-utils';
 
 export const runtime = 'nodejs';
 
@@ -46,12 +47,8 @@ const httpsAgent =
     : undefined;
 
 export async function GET(_req: NextRequest): Promise<NextResponse> {
-  // Prefer BACKEND_URL for server-side proxy (Docker: backend-fra:4000); fallback to public URL / default
-  const backendUrl =
-    process.env.BACKEND_URL ||
-    process.env.NEXT_PUBLIC_BACKEND_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    'https://localhost:4000';
+  // Use dynamic backend URL resolution (supports multi-domain deployment)
+  const backendUrl = getBackendUrl();
 
   const target = `${backendUrl}/api/idps/public`;
 

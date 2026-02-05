@@ -115,7 +115,11 @@ export const rateLimitConfig = {
     legacyHeaders: false,
     message: 'Too many requests from this IP, please try again later.',
     // Skip rate limiting for health checks
-    skip: (req: Request) => req.path === '/health' || req.path === '/metrics',
+    skip: (req: Request) =>
+        req.path === '/metrics' ||
+        req.path === '/api/health' ||
+        req.path === '/api/health/ready' ||
+        req.path === '/api/health/live',
 };
 
 /**

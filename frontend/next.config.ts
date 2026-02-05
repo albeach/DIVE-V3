@@ -2,11 +2,41 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
     async headers() {
-        // Dynamic CSP based on environment variables (like middleware.ts)
-        const keycloakBaseUrl = process.env.NEXT_PUBLIC_KEYCLOAK_URL || 'https://localhost:8443';
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
+        // Dynamic CSP - include all DIVE V3 domains for multi-instance support
+        // This ensures CSP works regardless of which domain the app is accessed from
         const allowExternalAnalytics = process.env.NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS === 'true';
         const externalDomains = process.env.NEXT_PUBLIC_EXTERNAL_DOMAINS || '';
+        
+        // Include all DIVE V3 domains for multi-instance federation
+        const diveDomains = [
+            'https://usa-app.dive25.com',
+            'https://usa-api.dive25.com',
+            'https://usa-idp.dive25.com',
+            'https://fra-app.dive25.com',
+            'https://fra-api.dive25.com',
+            'https://fra-idp.dive25.com',
+            'https://gbr-app.dive25.com',
+            'https://gbr-api.dive25.com',
+            'https://gbr-idp.dive25.com',
+            'https://localhost:3000',
+            'https://localhost:3010',
+            'https://localhost:3031',
+            'https://localhost:4000',
+            'https://localhost:4010',
+            'https://localhost:4031',
+            'https://localhost:8443',
+            'https://localhost:8453',
+            'https://localhost:8474',
+            'http://localhost:3000',
+            'http://localhost:3010',
+            'http://localhost:3031',
+            'http://localhost:4000',
+            'http://localhost:4010',
+            'http://localhost:4031',
+            'http://localhost:8443',
+            'http://localhost:8453',
+            'http://localhost:8474',
+        ];
 
         // Build CSP directives dynamically
         const scriptSrc = [
@@ -19,27 +49,7 @@ const nextConfig: NextConfig = {
             scriptSrc.push('https://static.cloudflareinsights.com');
         }
 
-        const connectSrc = ["'self'"];
-
-        // Add Keycloak URL (both HTTP and HTTPS versions for local dev)
-        if (keycloakBaseUrl) {
-            connectSrc.push(keycloakBaseUrl);
-            if (keycloakBaseUrl.startsWith('https://')) {
-                connectSrc.push(keycloakBaseUrl.replace('https://', 'http://'));
-            } else if (keycloakBaseUrl.startsWith('http://')) {
-                connectSrc.push(keycloakBaseUrl.replace('http://', 'https://'));
-            }
-        }
-
-        // Add API URL (both HTTP and HTTPS versions for local dev)
-        if (apiUrl) {
-            connectSrc.push(apiUrl);
-            if (apiUrl.startsWith('https://')) {
-                connectSrc.push(apiUrl.replace('https://', 'http://'));
-            } else if (apiUrl.startsWith('http://')) {
-                connectSrc.push(apiUrl.replace('http://', 'https://'));
-            }
-        }
+        const connectSrc = ["'self'", ...diveDomains];
 
         // Add optional external domains if configured
         if (externalDomains) {
@@ -54,10 +64,10 @@ const nextConfig: NextConfig = {
             "media-src 'self' data: blob:", // Allow audio/video from blob and data URIs
             `font-src 'self' data:`, // Self-hosted fonts only
             `connect-src ${connectSrc.join(' ')}`,
-            `frame-src 'self' data: ${keycloakBaseUrl}`, // Allow Keycloak iframe for OIDC and data URIs for PDF viewing
+            `frame-src 'self' data: ${diveDomains.filter(d => d.includes('idp')).join(' ')}`, // Allow Keycloak iframes for all instances
             "object-src 'none'", // Block Flash, Java, etc.
             "base-uri 'self'", // Prevent base tag injection
-            `form-action 'self' ${keycloakBaseUrl} https://*.dive25.com https://*.prosecurity.biz`, // Allow form submission to self, Keycloak, and federation IdPs
+            `form-action 'self' ${diveDomains.filter(d => d.includes('idp')).join(' ')} https://*.dive25.com https://*.prosecurity.biz`, // Allow form submission to all IdPs and federation partners
             "frame-ancestors 'none'", // Prevent clickjacking (use X-Frame-Options for broader support)
         ].join("; ");
 

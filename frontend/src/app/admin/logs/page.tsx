@@ -1,6 +1,6 @@
 /**
  * Admin Audit Logs - Complete Revamp (2025)
- * 
+ *
  * A comprehensive, state-of-the-art audit log analysis platform with:
  * - Real-time log streaming and filtering
  * - Interactive data visualizations and heatmaps
@@ -21,6 +21,30 @@ import { VirtualList } from '@/components/ui/virtual-list';
 import { AnimatedCounter, AnimatedPercentage } from '@/components/ui/animated-counter';
 
 // Types
+interface IRetentionConfig {
+    auditLogs: number;
+    securityLogs: number;
+    accessLogs: number;
+    systemLogs: number;
+    maxStorageGB: number;
+    currentUsageGB: number;
+    autoArchiveEnabled: boolean;
+    archiveDestination: string;
+    lastUpdated: string;
+    updatedBy: string;
+}
+
+interface IExportResult {
+    id: string;
+    format: string;
+    status: string;
+    totalRecords: number;
+    fileSize: string;
+    downloadUrl: string;
+    createdAt: string;
+    expiresAt: string;
+}
+
 interface IAuditLogEntry {
     timestamp: string;
     eventType: string;
@@ -57,7 +81,7 @@ interface IFilters {
     searchTerm: string;
 }
 
-type ViewMode = 'table' | 'timeline' | 'analytics';
+type ViewMode = 'table' | 'timeline' | 'analytics' | 'retention';
 
 export default function AdminAuditLogsPage() {
     const router = useRouter();
@@ -77,6 +101,19 @@ export default function AdminAuditLogsPage() {
     const [refreshInterval, setRefreshInterval] = useState(5000);
     const [statsDays, setStatsDays] = useState(7);
 
+    // Retention config
+    const [retention, setRetention] = useState<IRetentionConfig | null>(null);
+    const [retentionLoading, setRetentionLoading] = useState(false);
+    const [retentionSaving, setRetentionSaving] = useState(false);
+    const [retentionForm, setRetentionForm] = useState<Partial<IRetentionConfig>>({});
+
+    // Export modal
+    const [showExportModal, setShowExportModal] = useState(false);
+    const [exportFormat, setExportFormat] = useState<'csv' | 'json' | 'pdf'>('csv');
+    const [exportDateRange, setExportDateRange] = useState({ start: '', end: '' });
+    const [exportLoading, setExportLoading] = useState(false);
+    const [lastExportResult, setLastExportResult] = useState<IExportResult | null>(null);
+
     // Filters
     const [filters, setFilters] = useState<IFilters>({
         eventType: '',
@@ -91,9 +128,9 @@ export default function AdminAuditLogsPage() {
     // Filter logs based on search term
     const filteredLogs = useMemo(() => {
         if (!filters.searchTerm) return logs;
-        
+
         const term = filters.searchTerm.toLowerCase();
-        return logs.filter(log => 
+        return logs.filter(log =>
             log.eventType?.toLowerCase().includes(term) ||
             log.subject?.toLowerCase().includes(term) ||
             log.resourceId?.toLowerCase().includes(term) ||
@@ -198,11 +235,88 @@ export default function AdminAuditLogsPage() {
         }
     };
 
+    // Fetch retention config
+    const fetchRetention = useCallback(async () => {
+        if (status !== 'authenticated') return;
+        try {
+            setRetentionLoading(true);
+            const response = await fetch('/api/admin/logs/retention', { cache: 'no-store' });
+            if (response.ok) {
+                const data = await response.json();
+                const config = data.retention || data;
+                setRetention(config);
+                setRetentionForm(config);
+            }
+        } catch (err) {
+            console.error('Error fetching retention config:', err);
+        } finally {
+            setRetentionLoading(false);
+        }
+    }, [status]);
+
+    // Save retention config
+    const saveRetention = async () => {
+        if (status !== 'authenticated') return;
+        try {
+            setRetentionSaving(true);
+            const response = await fetch('/api/admin/logs/retention', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(retentionForm),
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setRetention(data.retention || data);
+                setRetentionForm(data.retention || data);
+            }
+        } catch (err) {
+            console.error('Error saving retention config:', err);
+        } finally {
+            setRetentionSaving(false);
+        }
+    };
+
+    // Enhanced export via API
+    const handleEnhancedExport = async () => {
+        if (status !== 'authenticated') return;
+        if (!exportDateRange.start || !exportDateRange.end) return;
+
+        try {
+            setExportLoading(true);
+            const response = await fetch('/api/admin/logs/export', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    format: exportFormat,
+                    dateRange: {
+                        start: new Date(exportDateRange.start).toISOString(),
+                        end: new Date(exportDateRange.end).toISOString(),
+                    },
+                    filters: {
+                        eventType: filters.eventType || undefined,
+                        subject: filters.subject || undefined,
+                        resourceId: filters.resourceId || undefined,
+                        outcome: filters.outcome || undefined,
+                    },
+                }),
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setLastExportResult(data.export);
+            }
+        } catch (err) {
+            console.error('Export error:', err);
+        } finally {
+            setExportLoading(false);
+        }
+    };
+
     // Initial load
     useEffect(() => {
         fetchLogs();
         fetchStats();
-    }, [fetchLogs, fetchStats]);
+        fetchRetention();
+    }, [fetchLogs, fetchStats, fetchRetention]);
 
     // Auto-refresh
     useEffect(() => {
@@ -430,15 +544,25 @@ export default function AdminAuditLogsPage() {
                                 >
                                     📈 Analytics View
                                 </button>
+                                <button
+                                    onClick={() => setViewMode('retention')}
+                                    className={`px-6 py-2 rounded-lg font-medium transition-all ${
+                                        viewMode === 'retention'
+                                            ? 'bg-white dark:bg-gray-700 shadow-md text-blue-600 dark:text-blue-400'
+                                            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                                    }`}
+                                >
+                                    ⚙️ Retention
+                                </button>
                             </div>
 
                             {/* Action Buttons */}
                             <div className="flex space-x-3">
                                 <button
-                                    onClick={() => handleExport('json')}
+                                    onClick={() => setShowExportModal(true)}
                                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg"
                                 >
-                                    📥 Export JSON
+                                    📥 Export Logs
                                 </button>
                                 <button
                                     onClick={() => {
@@ -459,7 +583,7 @@ export default function AdminAuditLogsPage() {
                             {/* Filters Section */}
                             <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-2xl p-6 border border-gray-200 dark:border-gray-700 shadow-xl">
                                 <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">🔍 Advanced Filters</h3>
-                                
+
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
                                     {/* Search */}
                                     <div>
@@ -744,7 +868,7 @@ export default function AdminAuditLogsPage() {
                     {viewMode === 'timeline' && (
                         <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-2xl p-8 border border-gray-200 dark:border-gray-700 shadow-xl">
                             <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">⏱️ Timeline View</h3>
-                            
+
                             <VirtualList<IAuditLogEntry>
                                 items={filteredLogs}
                                 estimateSize={100}
@@ -883,7 +1007,316 @@ export default function AdminAuditLogsPage() {
                             )}
                         </div>
                     )}
+
+                    {viewMode === 'retention' && (
+                        <div className="space-y-6">
+                            {/* Retention Configuration */}
+                            <div className="bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-2xl p-8 border border-gray-200 dark:border-gray-700 shadow-xl">
+                                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">⚙️ Log Retention Policy</h3>
+                                <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+                                    Configure how long different log types are retained before automatic archival or deletion.
+                                </p>
+
+                                {retentionLoading ? (
+                                    <div className="flex items-center justify-center py-12">
+                                        <div className="inline-block animate-spin rounded-full h-8 w-8 border-t-2 border-b-2 border-blue-500"></div>
+                                    </div>
+                                ) : retention ? (
+                                    <div className="space-y-6">
+                                        {/* Retention Days Grid */}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                    Audit Logs Retention (days)
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={retentionForm.auditLogs || ''}
+                                                    onChange={(e) => setRetentionForm({ ...retentionForm, auditLogs: parseInt(e.target.value) || 0 })}
+                                                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">Policy evaluation and access decision logs</p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                    Security Logs Retention (days)
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={retentionForm.securityLogs || ''}
+                                                    onChange={(e) => setRetentionForm({ ...retentionForm, securityLogs: parseInt(e.target.value) || 0 })}
+                                                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">Authentication, authorization, and threat detection logs</p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                    Access Logs Retention (days)
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={retentionForm.accessLogs || ''}
+                                                    onChange={(e) => setRetentionForm({ ...retentionForm, accessLogs: parseInt(e.target.value) || 0 })}
+                                                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">Resource access and API request logs</p>
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                    System Logs Retention (days)
+                                                </label>
+                                                <input
+                                                    type="number"
+                                                    min="1"
+                                                    value={retentionForm.systemLogs || ''}
+                                                    onChange={(e) => setRetentionForm({ ...retentionForm, systemLogs: parseInt(e.target.value) || 0 })}
+                                                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                                />
+                                                <p className="text-xs text-gray-500 dark:text-gray-500 mt-1">System health, performance, and operational logs</p>
+                                            </div>
+                                        </div>
+
+                                        {/* Storage Settings */}
+                                        <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                                            <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Storage Configuration</h4>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                        Max Storage (GB)
+                                                    </label>
+                                                    <input
+                                                        type="number"
+                                                        min="1"
+                                                        value={retentionForm.maxStorageGB || ''}
+                                                        onChange={(e) => setRetentionForm({ ...retentionForm, maxStorageGB: parseInt(e.target.value) || 0 })}
+                                                        className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                                    />
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                        Current Usage
+                                                    </label>
+                                                    <div className="mt-1">
+                                                        <div className="flex items-center justify-between mb-1">
+                                                            <span className="text-sm text-gray-600 dark:text-gray-400">
+                                                                {retention.currentUsageGB} GB / {retention.maxStorageGB} GB
+                                                            </span>
+                                                            <span className="text-sm font-medium text-gray-900 dark:text-white">
+                                                                {((retention.currentUsageGB / retention.maxStorageGB) * 100).toFixed(1)}%
+                                                            </span>
+                                                        </div>
+                                                        <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+                                                            <div
+                                                                className={`h-3 rounded-full transition-all ${
+                                                                    (retention.currentUsageGB / retention.maxStorageGB) > 0.8
+                                                                        ? 'bg-red-500'
+                                                                        : (retention.currentUsageGB / retention.maxStorageGB) > 0.6
+                                                                            ? 'bg-yellow-500'
+                                                                            : 'bg-green-500'
+                                                                }`}
+                                                                style={{ width: `${Math.min((retention.currentUsageGB / retention.maxStorageGB) * 100, 100)}%` }}
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Archive Settings */}
+                                        <div className="border-t border-gray-200 dark:border-gray-700 pt-6">
+                                            <h4 className="text-lg font-bold text-gray-900 dark:text-white mb-4">Auto-Archive</h4>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                                <div>
+                                                    <label className="flex items-center space-x-3 cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={retentionForm.autoArchiveEnabled ?? false}
+                                                            onChange={(e) => setRetentionForm({ ...retentionForm, autoArchiveEnabled: e.target.checked })}
+                                                            className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                                        />
+                                                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                                                            Enable automatic archival of expired logs
+                                                        </span>
+                                                    </label>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                        Archive Destination
+                                                    </label>
+                                                    <input
+                                                        type="text"
+                                                        value={retentionForm.archiveDestination || ''}
+                                                        onChange={(e) => setRetentionForm({ ...retentionForm, archiveDestination: e.target.value })}
+                                                        placeholder="s3://bucket/path"
+                                                        className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Metadata */}
+                                        {retention.lastUpdated && (
+                                            <div className="border-t border-gray-200 dark:border-gray-700 pt-4">
+                                                <p className="text-xs text-gray-500 dark:text-gray-500">
+                                                    Last updated: {new Date(retention.lastUpdated).toLocaleString()} by {retention.updatedBy}
+                                                </p>
+                                            </div>
+                                        )}
+
+                                        {/* Save Button */}
+                                        <div className="flex justify-end space-x-3">
+                                            <button
+                                                onClick={() => setRetentionForm(retention)}
+                                                className="px-6 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
+                                            >
+                                                Reset
+                                            </button>
+                                            <button
+                                                onClick={saveRetention}
+                                                disabled={retentionSaving}
+                                                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg disabled:opacity-50"
+                                            >
+                                                {retentionSaving ? 'Saving...' : 'Save Retention Policy'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <p className="text-gray-600 dark:text-gray-400">Unable to load retention configuration.</p>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
                 </div>
+
+                {/* Export Modal */}
+                {showExportModal && (
+                    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+                        <div className="bg-white dark:bg-gray-800 rounded-2xl max-w-lg w-full shadow-2xl">
+                            <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 rounded-t-2xl">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-xl font-bold">📥 Export Audit Logs</h3>
+                                    <button
+                                        onClick={() => { setShowExportModal(false); setLastExportResult(null); }}
+                                        className="text-white hover:text-gray-200 text-2xl font-bold"
+                                    >
+                                        ×
+                                    </button>
+                                </div>
+                            </div>
+
+                            <div className="p-6 space-y-4">
+                                {!lastExportResult ? (
+                                    <>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Format</label>
+                                            <select
+                                                value={exportFormat}
+                                                onChange={(e) => setExportFormat(e.target.value as 'csv' | 'json' | 'pdf')}
+                                                className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                            >
+                                                <option value="csv">CSV - Spreadsheet compatible</option>
+                                                <option value="json">JSON - Machine readable</option>
+                                                <option value="pdf">PDF - Printable report</option>
+                                            </select>
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Start Date</label>
+                                                <input
+                                                    type="datetime-local"
+                                                    value={exportDateRange.start}
+                                                    onChange={(e) => setExportDateRange({ ...exportDateRange, start: e.target.value })}
+                                                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">End Date</label>
+                                                <input
+                                                    type="datetime-local"
+                                                    value={exportDateRange.end}
+                                                    onChange={(e) => setExportDateRange({ ...exportDateRange, end: e.target.value })}
+                                                    className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        {filters.eventType || filters.outcome || filters.subject || filters.resourceId ? (
+                                            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3">
+                                                <p className="text-sm text-blue-700 dark:text-blue-400 font-medium mb-1">Active filters will be applied:</p>
+                                                <div className="flex flex-wrap gap-2">
+                                                    {filters.eventType && <span className="px-2 py-1 bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 rounded text-xs">Type: {filters.eventType}</span>}
+                                                    {filters.outcome && <span className="px-2 py-1 bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 rounded text-xs">Outcome: {filters.outcome}</span>}
+                                                    {filters.subject && <span className="px-2 py-1 bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 rounded text-xs">Subject: {filters.subject}</span>}
+                                                    {filters.resourceId && <span className="px-2 py-1 bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 rounded text-xs">Resource: {filters.resourceId}</span>}
+                                                </div>
+                                            </div>
+                                        ) : null}
+
+                                        <div className="flex justify-end space-x-3 pt-2">
+                                            <button
+                                                onClick={() => { setShowExportModal(false); setLastExportResult(null); }}
+                                                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
+                                            >
+                                                Cancel
+                                            </button>
+                                            <button
+                                                onClick={handleEnhancedExport}
+                                                disabled={exportLoading || !exportDateRange.start || !exportDateRange.end}
+                                                className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg disabled:opacity-50"
+                                            >
+                                                {exportLoading ? 'Exporting...' : 'Export'}
+                                            </button>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <div className="text-center space-y-4">
+                                        <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto text-3xl">
+                                            ✓
+                                        </div>
+                                        <h4 className="text-lg font-bold text-gray-900 dark:text-white">Export Ready</h4>
+                                        <div className="bg-gray-50 dark:bg-gray-900 rounded-lg p-4 text-left space-y-2">
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-gray-600 dark:text-gray-400">Format:</span>
+                                                <span className="text-gray-900 dark:text-white font-medium">{lastExportResult.format.toUpperCase()}</span>
+                                            </div>
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-gray-600 dark:text-gray-400">Records:</span>
+                                                <span className="text-gray-900 dark:text-white font-medium">{lastExportResult.totalRecords.toLocaleString()}</span>
+                                            </div>
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-gray-600 dark:text-gray-400">File Size:</span>
+                                                <span className="text-gray-900 dark:text-white font-medium">{lastExportResult.fileSize}</span>
+                                            </div>
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-gray-600 dark:text-gray-400">Expires:</span>
+                                                <span className="text-gray-900 dark:text-white font-medium">{new Date(lastExportResult.expiresAt).toLocaleString()}</span>
+                                            </div>
+                                        </div>
+                                        <div className="flex justify-center space-x-3">
+                                            <button
+                                                onClick={() => { setShowExportModal(false); setLastExportResult(null); }}
+                                                className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
+                                            >
+                                                Close
+                                            </button>
+                                            <button
+                                                onClick={() => { setLastExportResult(null); }}
+                                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg"
+                                            >
+                                                Export Another
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Log Detail Modal */}
                 {selectedLog && (

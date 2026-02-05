@@ -26,6 +26,7 @@ import PageLayout from '@/components/layout/page-layout';
 import { AuditQueueStatus, IAuditQueueInfo } from '@/components/admin/spoke/AuditQueueStatus';
 import { AuditSyncControl } from '@/components/admin/spoke/AuditSyncControl';
 import { AuditEventHistory } from '@/components/admin/spoke/AuditEventHistory';
+import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 import {
   IAuditEvent,
   IAuditHistoryResponse,
@@ -220,11 +221,6 @@ export default function AuditPage() {
   return (
     <PageLayout
       user={session?.user || {}}
-      breadcrumbs={[
-        { label: 'Admin', href: '/admin/dashboard' },
-        { label: 'Spoke', href: '/admin/spoke' },
-        { label: 'Audit Queue', href: null }
-      ]}
     >
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-800">
       <div className="max-w-7xl mx-auto">

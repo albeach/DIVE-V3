@@ -43,7 +43,7 @@ test_batch_usa_users_varied_resources if {
         },
         "context": {"requestId": "batch-001", "currentTime": "2025-12-03T12:00:00Z"}
     }
-    
+
     # User 2: CONFIDENTIAL access to CONFIDENTIAL resource
     authorization.allow with input as {
         "subject": {
@@ -86,7 +86,7 @@ test_batch_coalition_users if {
         },
         "context": {"requestId": "batch-coalition-usa"}
     }
-    
+
     # GBR user accessing same FVEY resource
     authorization.allow with input as {
         "subject": {
@@ -129,7 +129,7 @@ test_batch_deny_scenarios if {
         },
         "context": {"requestId": "deny-001"}
     }
-    
+
     # Deny: Not releasable
     not authorization.allow with input as {
         "subject": {
@@ -173,7 +173,7 @@ test_cache_repeated_access if {
             "releasabilityTo": ["USA"]
         }
     }
-    
+
     # First access
     authorization.allow with input as object.union(base_input, {"context": {"requestId": "cache-1"}})
     # Second access (would be cached)
@@ -191,7 +191,7 @@ test_cache_user_session if {
         "acpCOI": ["FVEY", "NATO-COSMIC"],
         "authenticated": true
     }
-    
+
     # Access resource 1
     authorization.allow with input as {
         "subject": user,
@@ -202,7 +202,7 @@ test_cache_user_session if {
             "releasabilityTo": ["USA", "GBR"]
         }
     }
-    
+
     # Access resource 2
     authorization.allow with input as {
         "subject": user,
@@ -213,7 +213,7 @@ test_cache_user_session if {
             "releasabilityTo": ["USA"]
         }
     }
-    
+
     # Access resource 3
     authorization.allow with input as {
         "subject": user,
@@ -288,10 +288,10 @@ test_throughput_action_types if {
             "releasabilityTo": ["USA"]
         }
     }
-    
+
     # Read action
     authorization.allow with input as object.union(base, {"action": {"type": "read"}})
-    
+
     # Write action (may have different rules)
     authorization.allow with input as object.union(base, {"action": {"type": "write"}})
 }

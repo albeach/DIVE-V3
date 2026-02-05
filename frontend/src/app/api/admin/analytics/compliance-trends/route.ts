@@ -3,6 +3,7 @@ import { NextResponse } from 'next/server';
 // Mark this route as dynamic to prevent build-time execution
 export const dynamic = 'force-dynamic';
 import { validateSession, getSessionTokens } from '@/lib/session-validation';
+import { getBackendUrl } from '@/lib/api-utils';
 
 /**
  * Admin Analytics Compliance Trends API Route
@@ -26,7 +27,7 @@ export async function GET() {
             );
         }
 
-        const backendUrl = process.env.BACKEND_URL || 'https://localhost:4000';
+        const backendUrl = getBackendUrl();
         const response = await fetch(`${backendUrl}/api/admin/analytics/compliance-trends`, {
             headers: {
                 'Authorization': `Bearer ${tokens.accessToken}`

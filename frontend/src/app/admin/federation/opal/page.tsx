@@ -21,6 +21,7 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { motion } from 'framer-motion';
 import PageLayout from '@/components/layout/page-layout';
+import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 import {
   OPALServerHealth,
   OPALClientList,
@@ -245,11 +246,6 @@ export default function OPALDashboardPage() {
   return (
     <PageLayout
       user={session?.user || {}}
-      breadcrumbs={[
-        { label: 'Admin', href: '/admin/dashboard' },
-        { label: 'Federation', href: '/admin/federation/spokes' },
-        { label: 'OPAL Status', href: null },
-      ]}
     >
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900">
         {/* Header */}

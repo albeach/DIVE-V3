@@ -230,7 +230,7 @@ router.get('/federated-status', authenticateJWT, async (_req: Request, res: Resp
         const available = federatedResourceService.getAvailableInstances();
 
         res.json({
-            currentInstance: process.env.INSTANCE_REALM || 'USA',
+            currentInstance: process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA',
             federatedQueryEnabled: true,
             mode: 'direct-mongodb',
             instances: status,

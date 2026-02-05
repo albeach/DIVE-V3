@@ -22,6 +22,7 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { motion } from 'framer-motion';
 import PageLayout from '@/components/layout/page-layout';
+import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 import {
   PolicyBundleBuilder,
   CurrentBundleCard,
@@ -248,11 +249,6 @@ export default function FederationPoliciesPage() {
   return (
     <PageLayout
       user={session?.user || {}}
-      breadcrumbs={[
-        { label: 'Admin', href: '/admin/dashboard' },
-        { label: 'Federation', href: '/admin/federation/spokes' },
-        { label: 'Policies', href: null },
-      ]}
     >
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
         {/* Header */}

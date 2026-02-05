@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { validateSession, getSessionTokens } from '@/lib/session-validation';
+import { getBackendUrl } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -55,7 +56,7 @@ export async function GET(request: NextRequest) {
 
         // Build backend URL with query params
         // Use NEXT_PUBLIC_BACKEND_URL for consistency with other routes
-        const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL || 'https://localhost:4000';
+        const backendUrl = getBackendUrl();
         const backendUrlWithParams = new URL(`${backendUrl}/api/activity`);
         backendUrlWithParams.searchParams.set('limit', limit);
         backendUrlWithParams.searchParams.set('offset', offset);

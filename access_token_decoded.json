@@ -1,0 +1,55 @@
+=== ACCESS TOKEN PAYLOAD ===
+{
+  "exp": 1770204797,
+  "iat": 1770203897,
+  "jti": "onrtrt:dd314221-9ec1-0083-70c8-575e712d1573",
+  "iss": "https://localhost:8474/realms/dive-v3-broker-gbr",
+  "aud": "account",
+  "typ": "Bearer",
+  "azp": "dive-v3-broker-gbr",
+  "sid": "-WF5rOlThOWgfA4iLhfX06GU",
+  "acr": "0",
+  "allowed-origins": [
+    "http://host.docker.internal:3031",
+    "https://gbr.dive25.com",
+    "https://localhost:3031",
+    "http://localhost:3031"
+  ],
+  "realm_access": {
+    "roles": [
+      "dive-admin",
+      "offline_access",
+      "uma_authorization",
+      "default-roles-dive-v3-broker-gbr"
+    ]
+  },
+  "resource_access": {
+    "account": {
+      "roles": [
+        "manage-account",
+        "manage-account-links",
+        "view-profile"
+      ]
+    }
+  },
+  "scope": "openid uniqueID profile countryOfAffiliation user_amr dive_acr acpCOI email dive_amr user_acr clearance",
+  "realm_roles": [
+    "dive-admin",
+    "offline_access",
+    "uma_authorization",
+    "default-roles-dive-v3-broker-gbr"
+  ],
+  "acpCOI": [
+    "NATO,FVEY"
+  ],
+  "email_verified": true,
+  "amr": [],
+  "name": "Admin User",
+  "clearance": "TOP_SECRET",
+  "countryOfAffiliation": "GBR",
+  "preferred_username": "admin-gbr",
+  "given_name": "Admin",
+  "family_name": "User",
+  "uniqueID": "admin-gbr",
+  "email": "admin-gbr@gbr.dive25.mil"
+}

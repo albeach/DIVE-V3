@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 
 export const dynamic = 'force-dynamic';
 import { validateSession, getSessionTokens } from '@/lib/session-validation';
+import { getBackendUrl } from '@/lib/api-utils';
 
 /**
  * Admin OPA Status API Route
@@ -18,7 +19,7 @@ export async function GET() {
             return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
         }
 
-        const backendUrl = process.env.BACKEND_URL || 'https://localhost:4000';
+        const backendUrl = getBackendUrl();
         const response = await fetch(`${backendUrl}/api/admin/opa/status`, {
             headers: { 'Authorization': `Bearer ${tokens.accessToken}` }
         });

@@ -252,9 +252,7 @@ function IdPManagementPageContent() {
         <PageLayout user={session.user || {}}>
             <KeyboardShortcutsModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
             <div className="max-w-7xl mx-auto space-y-6">
-                {/* Breadcrumbs */}
-                <InteractiveBreadcrumbs />
-
+                {/* Interactive Breadcrumbs - SSOT for Admin Navigation */}
                 {/* Header */}
                 <div className="flex items-center justify-between">
                     <div>

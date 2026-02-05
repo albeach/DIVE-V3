@@ -220,7 +220,7 @@ interface ResourceQueryParams {
 
 interface TenantQueryParams {
   search?: string;
-  status?: 'enabled' | 'disabled';
+  status?: 'enabled' | 'disabled' | 'suspended';
   limit?: number;
   offset?: number;
 }

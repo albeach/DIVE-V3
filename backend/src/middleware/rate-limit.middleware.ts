@@ -109,7 +109,7 @@ const rateLimitHandler = (req: Request, res: Response): void => {
  */
 const skipRateLimiting = (req: Request): boolean => {
     // Skip rate limiting for health checks
-    if (req.path === '/health' || req.path === '/health/live' || req.path === '/health/ready') {
+    if (req.path === '/api/health' || req.path === '/api/health/live' || req.path === '/api/health/ready') {
         return true;
     }
 

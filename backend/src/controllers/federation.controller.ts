@@ -117,7 +117,7 @@ router.get('/resources/search', authenticateJWT, async (req: Request, res: Respo
       encrypted: Boolean(r.ztdf?.payload?.encryptedContent),
       creationDate: r.ztdf?.policy?.securityLabel?.creationDate || r.creationDate,
       displayMarking: r.ztdf?.policy?.securityLabel?.displayMarking,
-      originRealm: process.env.INSTANCE_REALM || 'USA'
+      originRealm: process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA'
     }));
 
     logger.info('Federation user search completed', {
@@ -131,7 +131,7 @@ router.get('/resources/search', authenticateJWT, async (req: Request, res: Respo
       resources: results,
       resultsReturned: results.length,   // How many results in this response
       totalResults: trueTotalCount,       // TRUE total matching documents in this instance
-      originRealm: process.env.INSTANCE_REALM || 'USA',
+      originRealm: process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA',
       timestamp: new Date().toISOString()
     });
 

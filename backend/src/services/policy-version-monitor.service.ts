@@ -102,7 +102,7 @@ class PolicyVersionMonitor {
 
   constructor() {
     this.instances = FEDERATION_INSTANCES;
-    this.instanceRealm = process.env.INSTANCE_REALM || 'USA';
+    this.instanceRealm = process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA';
     this.opaUrl = process.env.OPA_URL || 'http://opa:8181';
   }
 

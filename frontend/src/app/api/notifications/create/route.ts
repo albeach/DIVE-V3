@@ -7,7 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
 
-const BACKEND_URL = process.env.BACKEND_URL || process.env.NEXT_PUBLIC_BACKEND_URL || 'https://localhost:4000';
+const BACKEND_URL = getBackendUrl();
 
 export async function POST(request: NextRequest) {
     try {
@@ -32,6 +32,7 @@ export async function POST(request: NextRequest) {
             const { db } = await import('@/lib/db');
             const { accounts } = await import('@/lib/db/schema');
             const { eq } = await import('drizzle-orm');
+import { getBackendUrl } from '@/lib/api-utils';
 
             const accountResults = await db
                 .select()

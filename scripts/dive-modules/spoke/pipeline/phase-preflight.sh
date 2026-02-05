@@ -186,9 +186,11 @@ spoke_preflight_check_conflicts() {
         echo "  SOLUTION: Ensure Hub infrastructure is running:"
         echo "    ./dive hub up"
         echo ""
-        orch_record_error "$SPOKE_ERROR_INSTANCE_CONFLICT" "$ORCH_SEVERITY_CRITICAL" \
-            "Orchestration database unavailable" "preflight" \
-            "Start Hub infrastructure: ./dive hub up"
+        if type orch_record_error &>/dev/null; then
+            orch_record_error "$SPOKE_ERROR_INSTANCE_CONFLICT" "$ORCH_SEVERITY_CRITICAL" \
+                "Orchestration database unavailable" "preflight" \
+                "Start Hub infrastructure: ./dive hub up"
+        fi
         return 1
     fi
 
@@ -205,9 +207,11 @@ spoke_preflight_check_conflicts() {
             echo "  ./dive orch-db rollback $code_upper"
             echo ""
 
-            orch_record_error "$SPOKE_ERROR_INSTANCE_CONFLICT" "$ORCH_SEVERITY_CRITICAL" \
-                "Instance $code_upper deployment already in progress" "preflight" \
-                "$(spoke_error_get_remediation $SPOKE_ERROR_INSTANCE_CONFLICT $instance_code)"
+            if type orch_record_error &>/dev/null; then
+                orch_record_error "$SPOKE_ERROR_INSTANCE_CONFLICT" "$ORCH_SEVERITY_CRITICAL" \
+                    "Instance $code_upper deployment already in progress" "preflight" \
+                    "$(spoke_error_get_remediation $SPOKE_ERROR_INSTANCE_CONFLICT $instance_code)"
+            fi
             return 1
             ;;
         FAILED)
@@ -299,9 +303,11 @@ spoke_preflight_check_hub() {
         echo "    3. Then deploy spokes: ./dive spoke deploy $instance_code"
         echo ""
 
-        orch_record_error "$SPOKE_ERROR_HUB_NOT_FOUND" "$ORCH_SEVERITY_CRITICAL" \
-            "Hub infrastructure not detected" "preflight" \
-            "$(spoke_error_get_remediation $SPOKE_ERROR_HUB_NOT_FOUND $instance_code)"
+        if type orch_record_error &>/dev/null; then
+            orch_record_error "$SPOKE_ERROR_HUB_NOT_FOUND" "$ORCH_SEVERITY_CRITICAL" \
+                "Hub infrastructure not detected" "preflight" \
+                "$(spoke_error_get_remediation $SPOKE_ERROR_HUB_NOT_FOUND $instance_code)"
+        fi
         return 1
     fi
 
@@ -311,9 +317,11 @@ spoke_preflight_check_hub() {
     if ! docker ps -q --filter "name=dive-hub-opal-server" 2>/dev/null | grep -q .; then
         log_error "Hub OPAL server not running - required for spoke federation"
 
-        orch_record_error "$SPOKE_ERROR_HUB_UNHEALTHY" "$ORCH_SEVERITY_CRITICAL" \
-            "Hub OPAL server not running" "preflight" \
-            "$(spoke_error_get_remediation $SPOKE_ERROR_HUB_UNHEALTHY $instance_code)"
+        if type orch_record_error &>/dev/null; then
+            orch_record_error "$SPOKE_ERROR_HUB_UNHEALTHY" "$ORCH_SEVERITY_CRITICAL" \
+                "Hub OPAL server not running" "preflight" \
+                "$(spoke_error_get_remediation $SPOKE_ERROR_HUB_UNHEALTHY $instance_code)"
+        fi
         return 1
     fi
 
@@ -359,9 +367,11 @@ spoke_preflight_ensure_network() {
     else
         log_error "Failed to create federation network"
 
-        orch_record_error "$SPOKE_ERROR_NETWORK_SETUP" "$ORCH_SEVERITY_CRITICAL" \
-            "Failed to create Docker network $network_name" "preflight" \
-            "$(spoke_error_get_remediation $SPOKE_ERROR_NETWORK_SETUP)"
+        if type orch_record_error &>/dev/null; then
+            orch_record_error "$SPOKE_ERROR_NETWORK_SETUP" "$ORCH_SEVERITY_CRITICAL" \
+                "Failed to create Docker network $network_name" "preflight" \
+                "$(spoke_error_get_remediation $SPOKE_ERROR_NETWORK_SETUP)"
+        fi
         return 1
     fi
 }
@@ -529,7 +539,14 @@ spoke_preflight_calculate_secret_hash() {
         secrets_concat="${secrets_concat}${value}"
     done
 
-    echo -n "$secrets_concat" | md5sum | cut -d' ' -f1
+    if command -v md5sum &>/dev/null; then
+        echo -n "$secrets_concat" | md5sum | cut -d' ' -f1
+    elif command -v md5 &>/dev/null; then
+        echo -n "$secrets_concat" | md5 -q
+    else
+        # Last resort: use cksum (available on all POSIX systems)
+        echo -n "$secrets_concat" | cksum | cut -d' ' -f1
+    fi
 }
 
 ##

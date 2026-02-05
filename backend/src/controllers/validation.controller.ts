@@ -32,7 +32,7 @@ interface ValidationResult {
  */
 async function validateSecretSync(): Promise<ValidationCheck> {
   try {
-    const instanceCode = process.env.INSTANCE_REALM || 'USA';
+    const instanceCode = process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA';
     const instanceLower = instanceCode.toLowerCase();
 
     // For hub, check main client secret
@@ -211,7 +211,7 @@ export async function validateSystem(req: Request, res: Response): Promise<void>
       ip: req.ip
     });
 
-    const instanceCode = process.env.INSTANCE_REALM || 'USA';
+    const instanceCode = process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA';
 
     // Run all validation checks
     const checks: ValidationCheck[] = [];
@@ -262,7 +262,7 @@ export function quickHealth(req: Request, res: Response): void {
   res.json({
     status: 'ok',
     timestamp: new Date().toISOString(),
-    instance: process.env.INSTANCE_REALM || 'USA',
+    instance: process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA',
     uptime: process.uptime()
   });
 }

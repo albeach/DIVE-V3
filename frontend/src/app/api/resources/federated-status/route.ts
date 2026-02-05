@@ -10,6 +10,7 @@ import { auth } from '@/auth';
 import { db } from '@/lib/db';
 import { accounts } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
+import { getBackendUrl } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -43,7 +44,7 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        const backendUrl = process.env.BACKEND_URL || 'https://localhost:4000';
+        const backendUrl = getBackendUrl();
 
         // Step 3: Call backend federated-status endpoint
         const backendResponse = await fetch(`${backendUrl}/api/resources/federated-status`, {

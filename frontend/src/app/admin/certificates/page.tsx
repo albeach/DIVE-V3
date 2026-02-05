@@ -17,6 +17,7 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import PageLayout from '@/components/layout/page-layout';
+import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 import { 
   Shield, 
   CheckCircle2, 
@@ -329,10 +330,6 @@ export default function AdminCertificatesPage() {
   return (
     <PageLayout
       user={session.user}
-      breadcrumbs={[
-        { label: 'Admin', href: '/admin/dashboard' },
-        { label: 'Certificates', href: null }
-      ]}
     >
       {/* Hero Section */}
       <div className="relative overflow-hidden bg-gradient-to-br from-purple-600 via-blue-600 to-indigo-700 rounded-2xl p-8 md:p-12 mb-8 shadow-2xl">

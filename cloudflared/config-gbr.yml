@@ -27,12 +27,12 @@ metrics: 0.0.0.0:9128
 ingress:
   # ─────────────────────────────────────────────────────────────────────────
   # Frontend (Next.js)
-  # Docker Service: frontend-gbr
-  # Internal Port:  3000
+  # Docker Service: dive-spoke-gbr-frontend
+  # Host Port: 3031
   # Hostname:       gbr-app.dive25.com
   # ─────────────────────────────────────────────────────────────────────────
   - hostname: gbr-app.dive25.com
-    service: https://host.docker.internal:3003
+    service: https://localhost:3031
     originRequest:
       noTLSVerify: true
       connectTimeout: 60s
@@ -40,12 +40,12 @@ ingress:
   
   # ─────────────────────────────────────────────────────────────────────────
   # Backend API (Express.js)
-  # Docker Service: backend-gbr
-  # Internal Port:  4000
+  # Docker Service: dive-spoke-gbr-backend
+  # Host Port: 4031
   # Hostname:       gbr-api.dive25.com
   # ─────────────────────────────────────────────────────────────────────────
   - hostname: gbr-api.dive25.com
-    service: https://host.docker.internal:4003
+    service: https://localhost:4031
     originRequest:
       noTLSVerify: true
       connectTimeout: 60s
@@ -53,12 +53,12 @@ ingress:
   
   # ─────────────────────────────────────────────────────────────────────────
   # Keycloak IdP
-  # Docker Service: keycloak-gbr
-  # Internal Port:  8443
+  # Docker Service: dive-spoke-gbr-keycloak
+  # Host Port: 8474 (HTTPS)
   # Hostname:       gbr-idp.dive25.com
   # ─────────────────────────────────────────────────────────────────────────
   - hostname: gbr-idp.dive25.com
-    service: https://host.docker.internal:8446
+    service: https://localhost:8474
     originRequest:
       noTLSVerify: true
       connectTimeout: 60s
@@ -66,15 +66,40 @@ ingress:
   
   # ─────────────────────────────────────────────────────────────────────────
   # Key Access Service (KAS)
-  # Docker Service: kas-gbr
-  # Internal Port:  8080
+  # Docker Service: dive-spoke-gbr-kas
+  # Host Port: 9031
   # Hostname:       gbr-kas.dive25.com
   # ─────────────────────────────────────────────────────────────────────────
   - hostname: gbr-kas.dive25.com
-    service: http://host.docker.internal:8093
+    service: https://localhost:9031
     originRequest:
+      noTLSVerify: true
       connectTimeout: 60s
       httpHostHeader: gbr-kas.dive25.com
+  
+  # ─────────────────────────────────────────────────────────────────────────
+  # OPA (Policy Decision Point)
+  # Docker Service: dive-spoke-gbr-opa
+  # Host Port: 8491
+  # Hostname:       gbr-opa.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
+  - hostname: gbr-opa.dive25.com
+    service: http://localhost:8491
+    originRequest:
+      connectTimeout: 60s
+      httpHostHeader: gbr-opa.dive25.com
+  
+  # ─────────────────────────────────────────────────────────────────────────
+  # OPAL Client (Policy Sync from Hub)
+  # Docker Service: dive-spoke-gbr-opal-client
+  # Host Port: 9212 (OPAL client exposes inline OPA on 8181, mapped to 9212)
+  # Hostname:       gbr-opal.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
+  - hostname: gbr-opal.dive25.com
+    service: http://localhost:9212
+    originRequest:
+      connectTimeout: 60s
+      httpHostHeader: gbr-opal.dive25.com
   
   # ─────────────────────────────────────────────────────────────────────────
   # Catch-all (required by Cloudflare)
