@@ -1,5 +1,6 @@
 import { auth } from "@/auth";
 import { NextRequest, NextResponse } from "next/server";
+import { getBackendUrl } from '@/lib/api-utils';
 
 const BACKEND_URL = getBackendUrl();
 
@@ -77,7 +78,6 @@ export async function POST(request: NextRequest) {
     const { db } = await import('@/lib/db');
     const { accounts } = await import('@/lib/db/schema');
     const { eq } = await import('drizzle-orm');
-import { getBackendUrl } from '@/lib/api-utils';
 
     const accountResults = await db
       .select()
