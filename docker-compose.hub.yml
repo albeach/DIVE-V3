@@ -638,6 +638,7 @@ services:
       start_period: 30s    # Start checking after 30s (was 90s)
     environment:
       NODE_ENV: development
+      PORT: "3000"  # Frontend listens on 3000 (override .env.hub PORT=4000 which is for backend)
       # Instance identification for frontend theme/branding
       NEXT_PUBLIC_INSTANCE: USA
       NEXT_PUBLIC_INSTANCE_NAME: "United States"
