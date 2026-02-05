@@ -2,17 +2,21 @@
 # =============================================================================
 # DIVE V3 Secret Management Module (Consolidated)
 # =============================================================================
-# GCP Secret Manager integration (SSOT)
+# Multi-Provider Secret Manager (GCP / AWS)
 # =============================================================================
-# Version: 5.0.0 (Module Consolidation)
-# Date: 2026-01-22
+# Version: 6.0.0 (AWS Support Added)
+# Date: 2026-02-04
 #
 # Consolidates:
 #   - secrets.sh
 #   - secret-sync.sh
 #   - spoke/pipeline/spoke-secrets.sh
 #
-# CRITICAL: All secrets must come from GCP Secret Manager
+# Supports:
+#   - GCP Secret Manager (default)
+#   - AWS Secrets Manager (set SECRETS_PROVIDER=aws)
+#
+# CRITICAL: All secrets must come from Secret Manager
 # NO hardcoded secrets allowed per project rules
 # =============================================================================
 
@@ -36,11 +40,129 @@ fi
 # CONFIGURATION
 # =============================================================================
 
+# Provider selection: gcp or aws
+SECRETS_PROVIDER="${SECRETS_PROVIDER:-gcp}"
+
+# GCP Configuration
 GCP_PROJECT_ID="${GCP_PROJECT_ID:-dive25}"
 USE_GCP_SECRETS="${USE_GCP_SECRETS:-true}"
 
+# AWS Configuration
+AWS_REGION="${AWS_REGION:-us-east-1}"
+USE_AWS_SECRETS="${USE_AWS_SECRETS:-false}"
+
 # Secret naming convention: dive-v3-<type>-<instance>
 SECRET_PREFIX="dive-v3"
+
+# Auto-detect provider if not explicitly set
+if [ "$SECRETS_PROVIDER" = "auto" ] || [ -z "$SECRETS_PROVIDER" ]; then
+    if command -v aws >/dev/null 2>&1 && aws sts get-caller-identity >/dev/null 2>&1; then
+        SECRETS_PROVIDER="aws"
+        log_verbose "Auto-detected AWS credentials, using AWS Secrets Manager"
+    elif command -v gcloud >/dev/null 2>&1 && gcloud auth print-access-token >/dev/null 2>&1; then
+        SECRETS_PROVIDER="gcp"
+        log_verbose "Auto-detected GCP credentials, using GCP Secret Manager"
+    else
+        SECRETS_PROVIDER="gcp"  # Default fallback
+    fi
+fi
+
+# Update provider-specific flags
+if [ "$SECRETS_PROVIDER" = "aws" ]; then
+    USE_AWS_SECRETS="true"
+    USE_GCP_SECRETS="false"
+else
+    USE_GCP_SECRETS="true"
+    USE_AWS_SECRETS="false"
+fi
+
+# =============================================================================
+# AWS SECRETS MANAGER FUNCTIONS
+# =============================================================================
+
+##
+# Check if AWS CLI is available and configured
+##
+aws_is_authenticated() {
+    if ! command -v aws >/dev/null 2>&1; then
+        return 1
+    fi
+    aws sts get-caller-identity >/dev/null 2>&1
+}
+
+##
+# Get secret from AWS Secrets Manager
+##
+aws_get_secret() {
+    local secret_name="$1"
+    local instance_code="${2:-}"
+    
+    local full_name="${SECRET_PREFIX}-${secret_name}"
+    [ -n "$instance_code" ] && full_name="${full_name}-$(lower "$instance_code")"
+    
+    if ! aws_is_authenticated; then
+        log_error "AWS not authenticated"
+        return 1
+    fi
+    
+    aws secretsmanager get-secret-value \
+        --secret-id "$full_name" \
+        --region "$AWS_REGION" \
+        --query 'SecretString' \
+        --output text \
+        2>/dev/null
+}
+
+##
+# Set secret in AWS Secrets Manager
+##
+aws_set_secret() {
+    local secret_name="$1"
+    local secret_value="$2"
+    local instance_code="${3:-}"
+    
+    local full_name="${SECRET_PREFIX}-${secret_name}"
+    [ -n "$instance_code" ] && full_name="${full_name}-$(lower "$instance_code")"
+    
+    if ! aws_is_authenticated; then
+        log_error "AWS not authenticated"
+        return 1
+    fi
+    
+    # Try to create secret first
+    if ! aws secretsmanager describe-secret --secret-id "$full_name" --region "$AWS_REGION" >/dev/null 2>&1; then
+        aws secretsmanager create-secret \
+            --name "$full_name" \
+            --secret-string "$secret_value" \
+            --region "$AWS_REGION" \
+            >/dev/null 2>&1
+    else
+        # Update existing secret
+        aws secretsmanager update-secret \
+            --secret-id "$full_name" \
+            --secret-string "$secret_value" \
+            --region "$AWS_REGION" \
+            >/dev/null 2>&1
+    fi
+    
+    log_verbose "Secret updated: $full_name"
+}
+
+##
+# Check if AWS secret exists
+##
+aws_secret_exists() {
+    local secret_name="$1"
+    local instance_code="${2:-}"
+    
+    local full_name="${SECRET_PREFIX}-${secret_name}"
+    [ -n "$instance_code" ] && full_name="${full_name}-$(lower "$instance_code")"
+    
+    aws secretsmanager describe-secret \
+        --secret-id "$full_name" \
+        --region "$AWS_REGION" \
+        >/dev/null 2>&1
+}
 
 # =============================================================================
 # GCP SECRET MANAGER FUNCTIONS
@@ -138,6 +260,64 @@ gcp_secret_exists() {
 }
 
 # =============================================================================
+# UNIFIED CONVENIENCE FUNCTIONS (Provider-agnostic)
+# =============================================================================
+
+##
+# Get secret (routes to correct provider)
+##
+get_secret() {
+    local secret_name="$1"
+    local instance_code="${2:-}"
+    
+    if [ "$SECRETS_PROVIDER" = "aws" ]; then
+        aws_get_secret "$secret_name" "$instance_code"
+    else
+        gcp_get_secret "$secret_name" "$instance_code"
+    fi
+}
+
+##
+# Set secret (routes to correct provider)
+##
+set_secret() {
+    local secret_name="$1"
+    local secret_value="$2"
+    local instance_code="${3:-}"
+    
+    if [ "$SECRETS_PROVIDER" = "aws" ]; then
+        aws_set_secret "$secret_name" "$secret_value" "$instance_code"
+    else
+        gcp_set_secret "$secret_name" "$secret_value" "$instance_code"
+    fi
+}
+
+##
+# Check if secret exists (routes to correct provider)
+##
+secret_exists() {
+    local secret_name="$1"
+    local instance_code="${2:-}"
+    
+    if [ "$SECRETS_PROVIDER" = "aws" ]; then
+        aws_secret_exists "$secret_name" "$instance_code"
+    else
+        gcp_secret_exists "$secret_name" "$instance_code"
+    fi
+}
+
+##
+# Check if authenticated (routes to correct provider)
+##
+is_authenticated() {
+    if [ "$SECRETS_PROVIDER" = "aws" ]; then
+        aws_is_authenticated
+    else
+        gcp_is_authenticated
+    fi
+}
+
+# =============================================================================
 # CONVENIENCE FUNCTIONS
 # =============================================================================
 
@@ -149,7 +329,11 @@ gcp_secret_exists() {
 ##
 get_keycloak_admin_password() {
     local instance_code="$1"
-    gcp_get_secret "keycloak" "$instance_code"
+    if [ "$SECRETS_PROVIDER" = "aws" ]; then
+        aws_get_secret "keycloak-admin-password" "$instance_code"
+    else
+        gcp_get_secret "keycloak" "$instance_code"
+    fi
 }
 
 ##
@@ -160,7 +344,11 @@ get_keycloak_admin_password() {
 ##
 get_postgres_password() {
     local instance_code="$1"
-    gcp_get_secret "postgres" "$instance_code"
+    if [ "$SECRETS_PROVIDER" = "aws" ]; then
+        aws_get_secret "postgres-password" "$instance_code"
+    else
+        gcp_get_secret "postgres" "$instance_code"
+    fi
 }
 
 ##
@@ -171,7 +359,11 @@ get_postgres_password() {
 ##
 get_mongodb_password() {
     local instance_code="$1"
-    gcp_get_secret "mongodb" "$instance_code"
+    if [ "$SECRETS_PROVIDER" = "aws" ]; then
+        aws_get_secret "mongo-password" "$instance_code"
+    else
+        gcp_get_secret "mongodb" "$instance_code"
+    fi
 }
 
 ##
@@ -182,14 +374,22 @@ get_mongodb_password() {
 ##
 get_auth_secret() {
     local instance_code="$1"
-    gcp_get_secret "auth-secret" "$instance_code"
+    if [ "$SECRETS_PROVIDER" = "aws" ]; then
+        aws_get_secret "auth-secret" "$instance_code"
+    else
+        gcp_get_secret "auth-secret" "$instance_code"
+    fi
 }
 
 ##
 # Get Keycloak client secret
 ##
 get_keycloak_client_secret() {
-    gcp_get_secret "keycloak-client-secret"
+    if [ "$SECRETS_PROVIDER" = "aws" ]; then
+        aws_get_secret "keycloak-client-secret"
+    else
+        gcp_get_secret "keycloak-client-secret"
+    fi
 }
 
 ##
@@ -202,8 +402,8 @@ get_keycloak_client_secret() {
 get_federation_secret() {
     local source="$1"
     local target="$2"
-
-    gcp_get_secret "federation-$(lower "$source")-$(lower "$target")"
+    
+    get_secret "federation-$(lower "$source")-$(lower "$target")"
 }
 
 # =============================================================================
@@ -220,10 +420,14 @@ secrets_load_for_instance() {
     local instance_code="$1"
     local code_lower=$(lower "$instance_code")
 
-    log_info "Loading secrets for $instance_code..."
+    log_info "Loading secrets for $instance_code (provider: $SECRETS_PROVIDER)..."
 
-    if [ "$USE_GCP_SECRETS" != "true" ]; then
-        log_warn "GCP secrets disabled"
+    if ! is_authenticated; then
+        if [ "$SECRETS_PROVIDER" = "aws" ]; then
+            log_error "AWS not authenticated - configure AWS CLI credentials"
+        else
+            log_error "GCP not authenticated - run: gcloud auth application-default login"
+        fi
         return 1
     fi
 
@@ -275,23 +479,34 @@ secrets_ensure() {
     local instance_code="$1"
     local code_lower=$(lower "$instance_code")
 
-    log_info "Ensuring secrets exist for $instance_code..."
+    log_info "Ensuring secrets exist for $instance_code (provider: $SECRETS_PROVIDER)..."
 
-    if ! gcp_is_authenticated; then
-        log_error "GCP not authenticated - run: gcloud auth application-default login"
+    if ! is_authenticated; then
+        if [ "$SECRETS_PROVIDER" = "aws" ]; then
+            log_error "AWS not authenticated - configure AWS CLI credentials"
+        else
+            log_error "GCP not authenticated - run: gcloud auth application-default login"
+        fi
         return 1
     fi
 
-    local secrets=("keycloak" "postgres" "mongodb" "auth-secret")
+    # Define secret names based on provider
+    local secrets
+    if [ "$SECRETS_PROVIDER" = "aws" ]; then
+        secrets=("keycloak-admin-password" "postgres-password" "mongo-password" "auth-secret")
+    else
+        secrets=("keycloak" "postgres" "mongodb" "auth-secret")
+    fi
+    
     local created=0
 
     for secret in "${secrets[@]}"; do
-        if ! gcp_secret_exists "$secret" "$instance_code"; then
+        if ! secret_exists "$secret" "$instance_code"; then
             log_info "Creating secret: ${SECRET_PREFIX}-${secret}-${code_lower}"
 
             # Generate secure random password
             local password=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
-            gcp_set_secret "$secret" "$password" "$instance_code"
+            set_secret "$secret" "$password" "$instance_code"
             ((created++))
         fi
     done
@@ -317,16 +532,20 @@ secrets_rotate() {
     local secret_type="${2:-all}"
     local code_lower=$(lower "$instance_code")
 
-    log_warn "Rotating secrets for $instance_code (type: $secret_type)..."
+    log_warn "Rotating secrets for $instance_code (type: $secret_type, provider: $SECRETS_PROVIDER)..."
 
-    if ! gcp_is_authenticated; then
-        log_error "GCP not authenticated"
+    if ! is_authenticated; then
+        log_error "Not authenticated"
         return 1
     fi
 
     local secrets
     if [ "$secret_type" = "all" ]; then
-        secrets=("keycloak" "postgres" "mongodb" "auth-secret")
+        if [ "$SECRETS_PROVIDER" = "aws" ]; then
+            secrets=("keycloak-admin-password" "postgres-password" "mongo-password" "auth-secret")
+        else
+            secrets=("keycloak" "postgres" "mongodb" "auth-secret")
+        fi
     else
         secrets=("$secret_type")
     fi
@@ -336,7 +555,7 @@ secrets_rotate() {
 
         # Generate new password
         local new_password=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
-        gcp_set_secret "$secret" "$new_password" "$instance_code"
+        set_secret "$secret" "$new_password" "$instance_code"
     done
 
     log_success "Secret rotation complete for $instance_code"
@@ -355,16 +574,22 @@ secrets_verify() {
     local instance_code="$1"
     local code_lower=$(lower "$instance_code")
 
-    log_info "Verifying secrets for $instance_code..."
+    log_info "Verifying secrets for $instance_code (provider: $SECRETS_PROVIDER)..."
 
-    local secrets=("keycloak" "postgres" "mongodb" "auth-secret")
+    local secrets
+    if [ "$SECRETS_PROVIDER" = "aws" ]; then
+        secrets=("keycloak-admin-password" "postgres-password" "mongo-password" "auth-secret")
+    else
+        secrets=("keycloak" "postgres" "mongodb" "auth-secret")
+    fi
+    
     local accessible=0
     local total=${#secrets[@]}
 
     for secret in "${secrets[@]}"; do
         local full_name="${SECRET_PREFIX}-${secret}-${code_lower}"
 
-        if gcp_get_secret "$secret" "$instance_code" >/dev/null 2>&1; then
+        if get_secret "$secret" "$instance_code" >/dev/null 2>&1; then
             log_verbose "Accessible: $full_name"
             ((accessible++))
         else
@@ -378,19 +603,27 @@ secrets_verify() {
 }
 
 ##
-# List all DIVE secrets in GCP
+# List all DIVE secrets
 ##
 secrets_list() {
-    if ! gcp_is_authenticated; then
-        log_error "GCP not authenticated"
+    if ! is_authenticated; then
+        log_error "Not authenticated"
         return 1
     fi
 
-    echo "=== DIVE Secrets in GCP (project: $GCP_PROJECT_ID) ==="
-    echo ""
-
-    gcloud secrets list --project="$GCP_PROJECT_ID" --filter="name:${SECRET_PREFIX}" \
-        --format="table(name,createTime,replication.automatic.customerManagedEncryption)"
+    if [ "$SECRETS_PROVIDER" = "aws" ]; then
+        echo "=== DIVE Secrets in AWS (region: $AWS_REGION) ==="
+        echo ""
+        aws secretsmanager list-secrets \
+            --region "$AWS_REGION" \
+            --query "SecretList[?starts_with(Name, '${SECRET_PREFIX}')].{Name:Name,LastChanged:LastChangedDate}" \
+            --output table
+    else
+        echo "=== DIVE Secrets in GCP (project: $GCP_PROJECT_ID) ==="
+        echo ""
+        gcloud secrets list --project="$GCP_PROJECT_ID" --filter="name:${SECRET_PREFIX}" \
+            --format="table(name,createTime,replication.automatic.customerManagedEncryption)"
+    fi
 }
 
 # =============================================================================
@@ -411,29 +644,45 @@ module_secrets() {
         verify)         secrets_verify "$@" ;;
         load)           secrets_load_for_instance "$@" ;;
         export)         secrets_export "$@" ;;
+        provider)
+            if [ -n "$1" ]; then
+                export SECRETS_PROVIDER="$1"
+                log_success "Secrets provider set to: $SECRETS_PROVIDER"
+            else
+                echo "Current provider: $SECRETS_PROVIDER"
+            fi
+            ;;
         get)
             local name="$1"
             local instance="${2:-}"
-            gcp_get_secret "$name" "$instance"
+            get_secret "$name" "$instance"
             ;;
         set)
             local name="$1"
             local value="$2"
             local instance="${3:-}"
-            gcp_set_secret "$name" "$value" "$instance"
+            set_secret "$name" "$value" "$instance"
             ;;
         help|*)
             echo "Usage: ./dive secrets <command> [args]"
             echo ""
             echo "Commands:"
-            echo "  list                  List all DIVE secrets in GCP"
+            echo "  list                  List all DIVE secrets"
             echo "  ensure <CODE>         Ensure secrets exist for instance"
             echo "  rotate <CODE> [type]  Rotate secrets"
             echo "  verify <CODE>         Verify secret access"
             echo "  load <CODE>           Load secrets into environment"
             echo "  export <CODE>         Export secrets as shell commands"
+            echo "  provider [gcp|aws]    Get/set secrets provider"
             echo "  get <name> [CODE]     Get specific secret"
             echo "  set <name> <value> [CODE]  Set specific secret"
+            echo ""
+            echo "Current provider: $SECRETS_PROVIDER"
+            echo ""
+            echo "Environment Variables:"
+            echo "  SECRETS_PROVIDER      Provider to use (gcp, aws, auto)"
+            echo "  GCP_PROJECT_ID        GCP project ID (default: dive25)"
+            echo "  AWS_REGION            AWS region (default: us-east-1)"
             ;;
     esac
 }
@@ -442,10 +691,18 @@ module_secrets() {
 # MODULE EXPORTS
 # =============================================================================
 
+export -f aws_is_authenticated
+export -f aws_get_secret
+export -f aws_set_secret
+export -f aws_secret_exists
 export -f gcp_is_authenticated
 export -f gcp_get_secret
 export -f gcp_set_secret
 export -f gcp_secret_exists
+export -f get_secret
+export -f set_secret
+export -f secret_exists
+export -f is_authenticated
 export -f get_keycloak_admin_password
 export -f get_postgres_password
 export -f get_mongodb_password
@@ -460,4 +717,4 @@ export -f secrets_verify
 export -f secrets_list
 export -f module_secrets
 
-log_verbose "Secrets module loaded (GCP Secret Manager SSOT)"
+log_verbose "Secrets module loaded (provider: $SECRETS_PROVIDER)"
