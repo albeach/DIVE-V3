@@ -42,20 +42,26 @@ RUN if [ "$TARGETARCH" = "amd64" ]; then \
     /usr/bin/curl --version
 
 # ============================================
-# Import mkcert SSL Certificate into Java Truststore
+# Import mkcert SSL Certificate into Java Truststore (DEPRECATED - REMOVED)
 # ============================================
-# Copy mkcert-generated SSL certificates into the image
-# These are locally-trusted certificates (no browser warnings in development)
-COPY --chown=1000:1000 certs/ /opt/keycloak/certs/
-
-# Import mkcert root CA into Java truststore for IdP broker federation
-COPY certs/rootCA.pem /tmp/rootCA.pem
-RUN keytool -importcert -noprompt -trustcacerts \
-    -alias mkcert-root-ca \
-    -file /tmp/rootCA.pem \
-    -keystore /etc/pki/java/cacerts \
-    -storepass changeit && \
-    rm /tmp/rootCA.pem
+# DEPRECATED PATTERN (Build-time cert copying):
+# The following lines were removed because certificates should be provided
+# at RUNTIME via docker-compose volume mounts, not baked into the image.
+#
+# OLD (Deprecated):
+#   COPY certs/ /opt/keycloak/certs/              # Build-time
+#   COPY certs/rootCA.pem /tmp/rootCA.pem         # Build-time
+#   RUN keytool -importcert ...                   # Build-time
+#
+# NEW (Best Practice):
+#   Certificates are mounted at runtime via docker-compose volumes:
+#   - ./instances/hub/certs:/opt/keycloak/certs:ro
+#   This allows the same image to work with different certificates
+#   See: docker-compose.hub.yml line 296
+#
+# mkcert root CA trust is handled by mounting to /opt/keycloak/certs/
+# and Keycloak's KC_TRUSTSTORE_PATHS configuration at runtime
+# See: docker-compose.hub.yml line 265
 
 # Copy custom DIVE V3 themes (base + all country variants)
 COPY --chown=1000:1000 themes/ /opt/keycloak/themes/
