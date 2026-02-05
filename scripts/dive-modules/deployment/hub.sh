@@ -1392,10 +1392,20 @@ hub_init_orchestration_db() {
     if [ -f "${DIVE_ROOT}/scripts/migrations/001_orchestration_state_db.sql" ]; then
         log_verbose "Applying full orchestration schema..."
 
-        if ${DOCKER_CMD:-docker} exec -i dive-hub-postgres psql -U postgres -d orchestration < "${DIVE_ROOT}/scripts/migrations/001_orchestration_state_db.sql" >/dev/null 2>&1; then
+        # Remove the \c orchestration command since we're already targeting the orchestration database
+        # and copy the migration into the container for proper execution
+        local temp_migration="/tmp/orchestration_migration_$$.sql"
+        grep -v '^\\c orchestration' "${DIVE_ROOT}/scripts/migrations/001_orchestration_state_db.sql" > "${temp_migration}"
+        
+        ${DOCKER_CMD:-docker} cp "${temp_migration}" dive-hub-postgres:/tmp/migration.sql
+        rm -f "${temp_migration}"
+
+        if ${DOCKER_CMD:-docker} exec dive-hub-postgres psql -U postgres -d orchestration -f /tmp/migration.sql >/dev/null 2>&1; then
             log_verbose "✓ Orchestration schema applied"
+            ${DOCKER_CMD:-docker} exec dive-hub-postgres rm -f /tmp/migration.sql
         else
             log_error "CRITICAL: Orchestration schema migration FAILED"
+            ${DOCKER_CMD:-docker} exec dive-hub-postgres rm -f /tmp/migration.sql
             return 1
         fi
 
