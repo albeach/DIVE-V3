@@ -46,8 +46,8 @@ async function checkInstance(instance: typeof INSTANCES[0]) {
     console.log('='.repeat(60));
 
     // Backend Health
-    console.log(`  Backend: ${instance.backend}/health`);
-    const backendHealth = await checkHealth(`${instance.backend}/health`, 'Backend');
+    console.log(`  Backend: ${instance.backend}/api/health`);
+    const backendHealth = await checkHealth(`${instance.backend}/api/health`, 'Backend');
     console.log(`    ${backendHealth.status} (${backendHealth.responseTime}ms)`);
 
     // Keycloak Health
@@ -94,4 +94,3 @@ async function main() {
 if (require.main === module) {
     main().catch(console.error);
 }
-

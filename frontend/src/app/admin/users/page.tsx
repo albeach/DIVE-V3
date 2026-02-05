@@ -26,6 +26,7 @@ import {
 } from '@/components/admin/shared';
 import { RequirePermission, useAdminPermissions } from '@/lib/admin-permissions';
 import { Users, UserPlus, Shield } from 'lucide-react';
+import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 
 export default function UsersPage() {
   const { data: session, status } = useSession();
@@ -59,10 +60,6 @@ export default function UsersPage() {
   return (
     <PageLayout
       user={session?.user || {}}
-      breadcrumbs={[
-        { label: 'Admin', href: '/admin/dashboard' },
-        { label: 'User Management', href: null }
-      ]}
     >
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
         {/* Header */}

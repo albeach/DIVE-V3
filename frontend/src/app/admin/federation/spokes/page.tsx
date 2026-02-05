@@ -43,6 +43,7 @@ import {
   Server,
 } from 'lucide-react';
 import { notify } from '@/lib/notification-service';
+import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 
 type FilterStatus = 'all' | SpokeStatus;
 
@@ -206,7 +207,7 @@ export default function FederationSpokesPage() {
 
     notify.toast.success(`Spoke "${spoke.instanceCode}" reactivated`);
     notify.persist({
-      type: 'info',
+      type: 'admin_action',
       title: 'Spoke Reactivated',
       message: `Federation spoke "${spoke.name}" (${spoke.instanceCode}) has been reactivated.`,
       actionUrl: '/admin/federation/spokes',
@@ -295,11 +296,6 @@ export default function FederationSpokesPage() {
   return (
     <PageLayout
       user={session?.user || {}}
-      breadcrumbs={[
-        { label: 'Admin', href: '/admin/dashboard' },
-        { label: 'Federation', href: '/admin/federation/spokes' },
-        { label: 'Spokes', href: null },
-      ]}
     >
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
         {/* Header */}

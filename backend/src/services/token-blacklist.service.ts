@@ -33,7 +33,7 @@ const BLACKLIST_CHANNEL = 'dive-v3:token-blacklist';
 const USER_REVOKE_CHANNEL = 'dive-v3:user-revoked';
 
 // Instance identifier for logging
-const INSTANCE_ID = process.env.INSTANCE_REALM || process.env.NEXT_PUBLIC_INSTANCE || 'unknown';
+const INSTANCE_ID = process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || process.env.NEXT_PUBLIC_INSTANCE || 'unknown';
 
 /**
  * Get the blacklist Redis URL

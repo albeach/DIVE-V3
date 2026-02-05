@@ -27,12 +27,12 @@ metrics: 0.0.0.0:9126
 ingress:
   # ─────────────────────────────────────────────────────────────────────────
   # Frontend (Next.js)
-  # Docker Service: frontend
-  # Internal Port:  3000
+  # Docker Service: dive-hub-frontend
+  # Host Port: 3000
   # Hostname:       usa-app.dive25.com
   # ─────────────────────────────────────────────────────────────────────────
   - hostname: usa-app.dive25.com
-    service: https://hub-frontend:3000
+    service: https://localhost:3000
     originRequest:
       noTLSVerify: true
       connectTimeout: 60s
@@ -40,12 +40,12 @@ ingress:
 
   # ─────────────────────────────────────────────────────────────────────────
   # Backend API (Express.js)
-  # Docker Service: backend
-  # Internal Port:  4000
+  # Docker Service: dive-hub-backend
+  # Host Port: 4000
   # Hostname:       usa-api.dive25.com
   # ─────────────────────────────────────────────────────────────────────────
   - hostname: usa-api.dive25.com
-    service: https://backend:4000
+    service: https://localhost:4000
     originRequest:
       noTLSVerify: true
       connectTimeout: 60s
@@ -53,12 +53,12 @@ ingress:
 
   # ─────────────────────────────────────────────────────────────────────────
   # Keycloak IdP
-  # Docker Service: keycloak
-  # Internal Port:  8443
+  # Docker Service: dive-hub-keycloak
+  # Host Port: 8443
   # Hostname:       usa-idp.dive25.com
   # ─────────────────────────────────────────────────────────────────────────
   - hostname: usa-idp.dive25.com
-    service: https://keycloak:8443
+    service: https://localhost:8443
     originRequest:
       noTLSVerify: true
       connectTimeout: 60s
@@ -66,15 +66,42 @@ ingress:
 
   # ─────────────────────────────────────────────────────────────────────────
   # Key Access Service (KAS)
-  # Docker Service: kas
-  # Internal Port:  8080
+  # Docker Service: dive-hub-kas
+  # Host Port: 8085
   # Hostname:       usa-kas.dive25.com
   # ─────────────────────────────────────────────────────────────────────────
   - hostname: usa-kas.dive25.com
-    service: http://kas:8080
+    service: https://localhost:8085
     originRequest:
+      noTLSVerify: true
       connectTimeout: 60s
       httpHostHeader: usa-kas.dive25.com
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # OPA (Policy Decision Point)
+  # Docker Service: dive-hub-opa
+  # Host Port: 8181
+  # Hostname:       usa-opa.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
+  - hostname: usa-opa.dive25.com
+    service: https://localhost:8181
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 60s
+      httpHostHeader: usa-opa.dive25.com
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # OPAL Server (Policy Distribution Hub)
+  # Docker Service: dive-hub-opal-server
+  # Host Port: 7002
+  # Hostname:       usa-opal.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
+  - hostname: usa-opal.dive25.com
+    service: https://localhost:7002
+    originRequest:
+      noTLSVerify: true
+      connectTimeout: 60s
+      httpHostHeader: usa-opal.dive25.com
 
   # ─────────────────────────────────────────────────────────────────────────
   # Catch-all (required by Cloudflare)

@@ -228,8 +228,8 @@ class OPALMetricsService {
 
     try {
       // Get Redis client list
-      const clientList = await this.redis!.client('LIST');
-      const lines = clientList.split('\n').filter((line) => line.trim());
+      const clientList = await this.redis!.client('LIST') as string;
+      const lines = clientList.split('\n').filter((line: string) => line.trim());
 
       const clients: IOPALClientMetrics[] = [];
       const now = new Date().toISOString();
@@ -276,7 +276,7 @@ class OPALMetricsService {
     }
 
     try {
-      const channels = await this.redis!.pubsub('CHANNELS');
+      const channels = await this.redis!.pubsub('CHANNELS') as string[];
       return channels;
     } catch (error) {
       logger.error('Failed to get pub/sub channels', {

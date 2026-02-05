@@ -32,6 +32,9 @@ import {
   Bug,
   BarChart3,
   Layers,
+  HeartPulse,
+  UserPlus,
+  FlaskConical,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -170,6 +173,16 @@ export const ADMIN_NAVIGATION: AdminNavItem[] = [
         category: 'federation',
         searchKeywords: ['opal', 'policy distribution', 'clients', 'transactions'],
       },
+      {
+        id: 'federation-statistics',
+        label: 'Statistics',
+        href: '/admin/federation/statistics',
+        icon: BarChart3,
+        description: 'Cross-spoke traffic visualization and latency maps',
+        category: 'federation',
+        searchKeywords: ['statistics', 'traffic', 'latency', 'sync rate', 'cross-spoke'],
+        quickAction: true,
+      },
     ],
   },
 
@@ -260,6 +273,18 @@ export const ADMIN_NAVIGATION: AdminNavItem[] = [
     description: 'User management and sessions',
     category: 'identity',
     searchKeywords: ['users', 'accounts', 'sessions', 'roles'],
+    children: [
+      {
+        id: 'users-provisioning',
+        label: 'Provisioning',
+        href: '/admin/users/provision',
+        icon: UserPlus,
+        description: 'CSV import wizard, bulk user provisioning',
+        category: 'identity',
+        searchKeywords: ['provisioning', 'csv import', 'bulk users', 'onboarding'],
+        quickAction: true,
+      },
+    ],
   },
   {
     id: 'clearance-management',
@@ -323,6 +348,18 @@ export const ADMIN_NAVIGATION: AdminNavItem[] = [
     category: 'security',
     searchKeywords: ['certificates', 'pki', 'rotation', 'crl', 'tls'],
     superAdminOnly: true,
+    children: [
+      {
+        id: 'certificates-management',
+        label: 'Certificate Dashboard',
+        href: '/admin/security/certificates',
+        icon: FileCheck,
+        description: 'Certificate expiry dashboard and rotation wizard',
+        category: 'security',
+        searchKeywords: ['certificate expiry', 'rotation', 'certificate health'],
+        quickAction: true,
+      },
+    ],
   },
 
   // ==========================================
@@ -362,6 +399,16 @@ export const ADMIN_NAVIGATION: AdminNavItem[] = [
         searchKeywords: ['advanced analytics', 'drill down', 'custom reports', 'export', 'charts'],
         quickAction: true,
       },
+      {
+        id: 'analytics-sessions',
+        label: 'Session Analytics',
+        href: '/admin/analytics/sessions',
+        icon: Activity,
+        description: 'Active sessions, geographic distribution, device breakdown',
+        category: 'overview',
+        searchKeywords: ['sessions', 'active sessions', 'geographic', 'device', 'browser'],
+        quickAction: true,
+      },
     ],
   },
 
@@ -379,16 +426,16 @@ export const ADMIN_NAVIGATION: AdminNavItem[] = [
   },
 
   // ==========================================
-  // ANALYTICS
+  // IDP GOVERNANCE
   // ==========================================
   {
-    id: 'analytics',
+    id: 'idp-governance',
     label: 'IdP Governance',
-    href: '/admin/analytics',
+    href: '/admin/idp-governance',
     icon: BarChart3,
     description: 'Partner IdP health and governance metrics',
     category: 'system',
-    searchKeywords: ['analytics', 'governance', 'metrics', 'idp health', 'sla'],
+    searchKeywords: ['governance', 'metrics', 'idp health', 'sla', 'partner idp'],
   },
 
   // ==========================================
@@ -417,6 +464,48 @@ export const ADMIN_NAVIGATION: AdminNavItem[] = [
     category: 'system',
     searchKeywords: ['integration', 'guide', 'documentation', 'federation'],
     badge: 'NEW',
+  },
+
+  // ==========================================
+  // RESOURCE HEALTH MONITORING (Phase 6.2)
+  // ==========================================
+  {
+    id: 'resource-health',
+    label: 'Resource Health',
+    href: '/admin/monitoring/resources',
+    icon: HeartPulse,
+    description: 'Real-time service health, latency graphs, error tracking',
+    category: 'system',
+    searchKeywords: ['resource health', 'monitoring', 'latency', 'uptime', 'services', 'postgresql', 'redis', 'keycloak'],
+    quickAction: true,
+  },
+
+  // ==========================================
+  // TENANT MANAGEMENT (Phase 6.2)
+  // ==========================================
+  {
+    id: 'tenants',
+    label: 'Tenants',
+    href: '/admin/tenants',
+    icon: Building2,
+    description: 'Tenant management with bulk operations',
+    category: 'identity',
+    searchKeywords: ['tenants', 'bulk operations', 'enable', 'disable', 'sync', 'countries'],
+    quickAction: true,
+  },
+
+  // ==========================================
+  // POLICY SIMULATION TOOL (Phase 6.2)
+  // ==========================================
+  {
+    id: 'policy-simulation',
+    label: 'Policy Simulation',
+    href: '/admin/tools/policy-simulation',
+    icon: FlaskConical,
+    description: 'Simulate policy evaluation and compare policy diffs',
+    category: 'policy',
+    searchKeywords: ['policy simulation', 'simulate', 'test policy', 'diff', 'impact analysis'],
+    quickAction: true,
   },
 
   // ==========================================

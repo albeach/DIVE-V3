@@ -157,9 +157,11 @@ spoke_init_setup_directories() {
     if [ -d "$spoke_dir" ]; then
         log_success "Directory structure created: $spoke_dir"
     else
-        orch_record_error "$SPOKE_ERROR_DIRECTORY_SETUP" "$ORCH_SEVERITY_CRITICAL" \
-            "Failed to create instance directories" "initialization" \
-            "$(spoke_error_get_remediation $SPOKE_ERROR_DIRECTORY_SETUP $instance_code)"
+        if type orch_record_error &>/dev/null; then
+            orch_record_error "$SPOKE_ERROR_DIRECTORY_SETUP" "$ORCH_SEVERITY_CRITICAL" \
+                "Failed to create instance directories" "initialization" \
+                "$(spoke_error_get_remediation $SPOKE_ERROR_DIRECTORY_SETUP $instance_code)"
+        fi
         return 1
     fi
 
@@ -177,9 +179,11 @@ spoke_init_setup_directories() {
         if bash "${DIVE_ROOT}/scripts/generate-mongo-keyfile.sh" "$keyfile_path"; then
             log_success "✓ MongoDB keyfile generated: $keyfile_path"
         else
-            orch_record_error "${SPOKE_ERROR_KEYFILE_GENERATE:-1102}" "$ORCH_SEVERITY_CRITICAL" \
-                "Failed to generate MongoDB keyfile" "initialization" \
-                "Check permissions and ensure openssl is available"
+            if type orch_record_error &>/dev/null; then
+                orch_record_error "${SPOKE_ERROR_KEYFILE_GENERATE:-1102}" "$ORCH_SEVERITY_CRITICAL" \
+                    "Failed to generate MongoDB keyfile" "initialization" \
+                    "Check permissions and ensure openssl is available"
+            fi
             return 1
         fi
     else
@@ -189,9 +193,11 @@ spoke_init_setup_directories() {
     # Validate keyfile exists and is a file (not directory)
     if [ ! -f "$keyfile_path" ] || [ -d "$keyfile_path" ]; then
         log_error "MongoDB keyfile missing or is a directory (must be file)"
-        orch_record_error "${SPOKE_ERROR_KEYFILE_INVALID:-1103}" "$ORCH_SEVERITY_CRITICAL" \
-            "MongoDB keyfile is not a valid file" "initialization" \
-            "Remove directory and regenerate: rm -rf $keyfile_path && ./dive spoke deploy $instance_code"
+        if type orch_record_error &>/dev/null; then
+            orch_record_error "${SPOKE_ERROR_KEYFILE_INVALID:-1103}" "$ORCH_SEVERITY_CRITICAL" \
+                "MongoDB keyfile is not a valid file" "initialization" \
+                "Remove directory and regenerate: rm -rf $keyfile_path && ./dive spoke deploy $instance_code"
+        fi
         return 1
     fi
 
@@ -199,9 +205,11 @@ spoke_init_setup_directories() {
     local keyfile_size=$(wc -c < "$keyfile_path" | tr -d ' ')
     if [ "$keyfile_size" -lt 6 ] || [ "$keyfile_size" -gt 1024 ]; then
         log_error "MongoDB keyfile size invalid: $keyfile_size bytes (must be 6-1024)"
-        orch_record_error "${SPOKE_ERROR_KEYFILE_SIZE:-1104}" "$ORCH_SEVERITY_CRITICAL" \
-            "MongoDB keyfile size out of valid range" "initialization" \
-            "Regenerate keyfile: rm $keyfile_path && ./dive spoke deploy $instance_code"
+        if type orch_record_error &>/dev/null; then
+            orch_record_error "${SPOKE_ERROR_KEYFILE_SIZE:-1104}" "$ORCH_SEVERITY_CRITICAL" \
+                "MongoDB keyfile size out of valid range" "initialization" \
+                "Regenerate keyfile: rm $keyfile_path && ./dive spoke deploy $instance_code"
+        fi
         return 1
     fi
 
@@ -235,9 +243,11 @@ spoke_init_ensure_mongo_keyfile() {
         if bash "${DIVE_ROOT}/scripts/generate-mongo-keyfile.sh" "$keyfile_path"; then
             log_success "✓ MongoDB keyfile generated: $keyfile_path"
         else
-            orch_record_error "${SPOKE_ERROR_KEYFILE_GENERATE:-1102}" "$ORCH_SEVERITY_CRITICAL" \
-                "Failed to generate MongoDB keyfile" "initialization" \
-                "Check permissions and ensure openssl is available"
+            if type orch_record_error &>/dev/null; then
+                orch_record_error "${SPOKE_ERROR_KEYFILE_GENERATE:-1102}" "$ORCH_SEVERITY_CRITICAL" \
+                    "Failed to generate MongoDB keyfile" "initialization" \
+                    "Check permissions and ensure openssl is available"
+            fi
             return 1
         fi
     else
@@ -247,9 +257,11 @@ spoke_init_ensure_mongo_keyfile() {
     # Validate keyfile exists and is a file (not directory)
     if [ ! -f "$keyfile_path" ] || [ -d "$keyfile_path" ]; then
         log_error "MongoDB keyfile missing or is a directory (must be file)"
-        orch_record_error "${SPOKE_ERROR_KEYFILE_INVALID:-1103}" "$ORCH_SEVERITY_CRITICAL" \
-            "MongoDB keyfile is not a valid file" "initialization" \
-            "Remove directory and regenerate: rm -rf $keyfile_path && ./dive spoke deploy $instance_code"
+        if type orch_record_error &>/dev/null; then
+            orch_record_error "${SPOKE_ERROR_KEYFILE_INVALID:-1103}" "$ORCH_SEVERITY_CRITICAL" \
+                "MongoDB keyfile is not a valid file" "initialization" \
+                "Remove directory and regenerate: rm -rf $keyfile_path && ./dive spoke deploy $instance_code"
+        fi
         return 1
     fi
 
@@ -257,9 +269,11 @@ spoke_init_ensure_mongo_keyfile() {
     local keyfile_size=$(wc -c < "$keyfile_path" | tr -d ' ')
     if [ "$keyfile_size" -lt 6 ] || [ "$keyfile_size" -gt 1024 ]; then
         log_error "MongoDB keyfile size invalid: $keyfile_size bytes (must be 6-1024)"
-        orch_record_error "${SPOKE_ERROR_KEYFILE_SIZE:-1104}" "$ORCH_SEVERITY_CRITICAL" \
-            "MongoDB keyfile size invalid" "initialization" \
-            "Regenerate keyfile: rm $keyfile_path && ./dive spoke deploy $instance_code"
+        if type orch_record_error &>/dev/null; then
+            orch_record_error "${SPOKE_ERROR_KEYFILE_SIZE:-1104}" "$ORCH_SEVERITY_CRITICAL" \
+                "MongoDB keyfile size invalid" "initialization" \
+                "Regenerate keyfile: rm $keyfile_path && ./dive spoke deploy $instance_code"
+        fi
         return 1
     fi
 
@@ -450,10 +464,6 @@ EOF
                     log_warn "Could not get OPAL token from Hub (will retry after container start)"
                     # Set placeholder token to prevent OPAL client from failing during deployment
                     # Real token will be provisioned in configuration phase after federation
-                    local env_file="$spoke_dir/.env"
-                    # Set placeholder token to prevent OPAL client from failing during deployment
-                    # Real token will be provisioned in configuration phase after federation
-                    local env_file="$spoke_dir/.env"
                     if [ -f "$env_file" ]; then
                         # Check if SPOKE_OPAL_TOKEN is empty or missing
                         local current_token
@@ -952,7 +962,7 @@ spoke_init_apply_terraform() {
     export KEYCLOAK_PASSWORD="${!keycloak_password_var}"
 
     # Load terraform module if available
-    if [ -f "${DIVE_ROOT}/scripts/dive-modules/terraform.sh" ]; then
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/configuration/terraform.sh" ]; then
         source "${DIVE_ROOT}/scripts/dive-modules/configuration/terraform.sh"
 
         # Check if terraform_spoke function exists

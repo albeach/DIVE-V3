@@ -10,6 +10,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import PageLayout from '@/components/layout/page-layout';
 import { IExternalSP } from '@/types/sp-federation.types';
+import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 
 interface SPDetailPageProps {
   params: Promise<{
@@ -198,11 +199,6 @@ export default function SPDetailPage({ params }: SPDetailPageProps) {
   return (
     <PageLayout
       user={session?.user || {}}
-      breadcrumbs={[
-        { label: 'Admin', href: '/admin/dashboard' },
-        { label: 'SP Registry', href: '/admin/sp-registry' },
-        { label: sp.name, href: null }
-      ]}
     >
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 py-8">
         {/* Header */}

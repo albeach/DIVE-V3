@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { getSecureFetchOptions } from '@/lib/https-agent';
+import { getBackendUrl } from '@/lib/api-utils';
 
 /**
  * Health check endpoint for frontend service
@@ -22,11 +24,11 @@ export async function GET(request: Request) {
 
     // Optional: Check backend connectivity
     // Only if BACKEND_URL is configured (avoid blocking in dev mode)
-    const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL || process.env.BACKEND_URL;
+    const backendUrl = getBackendUrl();
 
     if (backendUrl) {
         try {
-            const backendHealthUrl = `${backendUrl}/health`;
+            const backendHealthUrl = `${backendUrl}/api/health`;
 
             // Use Node.js fetch with timeout
             const controller = new AbortController();
@@ -35,8 +37,7 @@ export async function GET(request: Request) {
             const response = await fetch(backendHealthUrl, {
                 method: 'GET',
                 signal: controller.signal,
-                // @ts-ignore - Node.js fetch options
-                rejectUnauthorized: false,  // Accept self-signed certs in dev
+                ...getSecureFetchOptions(),
             });
 
             clearTimeout(timeoutId);

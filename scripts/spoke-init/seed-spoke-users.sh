@@ -45,6 +45,7 @@ REALM_NAME="dive-v3-broker-${CODE_LOWER}"
 CLIENT_ID="dive-v3-broker-${CODE_LOWER}"
 ADMIN_USER="admin"
 TEST_USER_PASSWORD="TestUser2025!Pilot"
+ADMIN_USER_PASSWORD="${ADMIN_USER_PASSWORD:-TestUser2025!SecureAdmin}"
 
 # Get admin password from container environment
 ADMIN_PASSWORD=$(docker exec "$KEYCLOAK_CONTAINER" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r' || echo "")
@@ -124,8 +125,9 @@ create_user() {
     local clearance="$5"  # NATO standard clearance (stored in Keycloak)
     local coi="${6:-}"
     local password="${7:-$TEST_USER_PASSWORD}"
+    local is_admin="${8:-false}"  # CRITICAL: Admin flag for role assignment
 
-    log_info "Creating: $username ($clearance)"
+    log_info "Creating: $username ($clearance)${is_admin:+ [ADMIN]}"
 
     # Check if user already exists
     local user_exists=$(docker exec "$KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get users \
@@ -185,6 +187,32 @@ EOF
         return 1
     fi
 
+    # CRITICAL: Assign dive-admin role if admin flag set (2026-02-04 fix)
+    # This is REQUIRED for /admin route access in frontend
+    if [ "$is_admin" = "true" ]; then
+        log_info "Assigning dive-admin role to $username..."
+        
+        # Get dive-admin role ID (if role doesn't exist, skip gracefully)
+        local role_id=$(docker exec "$KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get roles/dive-admin \
+            -r "$REALM_NAME" 2>/dev/null | jq -r '.id // empty')
+        
+        if [ -n "$role_id" ]; then
+            # Assign role to user
+            docker exec "$KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh add-roles \
+                -r "$REALM_NAME" \
+                --uusername "$username" \
+                --rolename dive-admin >/dev/null 2>&1
+            
+            if [ $? -eq 0 ]; then
+                log_success "✓ Assigned dive-admin role to $username"
+            else
+                log_warn "Could not assign dive-admin role (non-blocking)"
+            fi
+        else
+            log_warn "dive-admin role not found in realm (run realm configuration first)"
+        fi
+    fi
+
     log_success "Created: $username ($clearance)"
     return 0
 }
@@ -200,8 +228,8 @@ create_user "testuser-${CODE_LOWER}-3" "testuser-${CODE_LOWER}-3@${CODE_LOWER}.d
 create_user "testuser-${CODE_LOWER}-4" "testuser-${CODE_LOWER}-4@${CODE_LOWER}.dive25.mil" "Test" "User 4" "SECRET" "NATO" "$TEST_USER_PASSWORD"
 create_user "testuser-${CODE_LOWER}-5" "testuser-${CODE_LOWER}-5@${CODE_LOWER}.dive25.mil" "Test" "User 5" "TOP_SECRET" "NATO,FVEY" "$TEST_USER_PASSWORD"
 
-# Admin user
-create_user "admin-${CODE_LOWER}" "admin-${CODE_LOWER}@${CODE_LOWER}.dive25.mil" "Admin" "User" "TOP_SECRET" "NATO,FVEY" "$TEST_USER_PASSWORD"
+# Admin user (uses ADMIN_USER_PASSWORD for consistency with Hub admin-usa)
+create_user "admin-${CODE_LOWER}" "admin-${CODE_LOWER}@${CODE_LOWER}.dive25.mil" "Admin" "User" "TOP_SECRET" "NATO,FVEY" "$ADMIN_USER_PASSWORD" "true"
 
 # =============================================================================
 # Summary
@@ -215,7 +243,12 @@ USER_COUNT=$(docker exec "$KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get us
 log_info "Total users in realm: $USER_COUNT"
 echo ""
 echo "Test Credentials:"
-echo "  Username: testuser-${CODE_LOWER}-{1-5}, admin-${CODE_LOWER}"
+echo "  Username: testuser-${CODE_LOWER}-{1-5}"
 echo "  Password: $TEST_USER_PASSWORD"
-echo "  Realm: $REALM_NAME"
+echo ""
+echo "Admin Credentials:"
+echo "  Username: admin-${CODE_LOWER}"
+echo "  Password: $ADMIN_USER_PASSWORD"
+echo ""
+echo "Realm: $REALM_NAME"
 echo ""

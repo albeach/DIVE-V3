@@ -141,15 +141,15 @@ describe('Rate Limit Middleware', () => {
         beforeAll(() => {
             app = express();
             app.use(express.json());
-            app.get('/health', apiRateLimiter, (_req, res) => {
+            app.get('/api/health', apiRateLimiter, (_req, res) => {
                 res.json({ status: 'healthy' });
             });
 
-            app.get('/health/live', apiRateLimiter, (_req, res) => {
+            app.get('/api/health/live', apiRateLimiter, (_req, res) => {
                 res.json({ alive: true });
             });
 
-            app.get('/health/ready', apiRateLimiter, (_req, res) => {
+            app.get('/api/health/ready', apiRateLimiter, (_req, res) => {
                 res.json({ ready: true });
             });
 
@@ -158,24 +158,24 @@ describe('Rate Limit Middleware', () => {
             });
         });
 
-        it('should skip rate limiting for /health endpoint', async () => {
+        it('should skip rate limiting for /api/health endpoint', async () => {
             // Make many requests to health check
             for (let i = 0; i < 20; i++) {
-                const response = await request(app).get('/health');
+                const response = await request(app).get('/api/health');
                 expect(response.status).toBe(200);
             }
         });
 
-        it('should skip rate limiting for /health/live endpoint', async () => {
+        it('should skip rate limiting for /api/health/live endpoint', async () => {
             for (let i = 0; i < 20; i++) {
-                const response = await request(app).get('/health/live');
+                const response = await request(app).get('/api/health/live');
                 expect(response.status).toBe(200);
             }
         });
 
-        it('should skip rate limiting for /health/ready endpoint', async () => {
+        it('should skip rate limiting for /api/health/ready endpoint', async () => {
             for (let i = 0; i < 20; i++) {
-                const response = await request(app).get('/health/ready');
+                const response = await request(app).get('/api/health/ready');
                 expect(response.status).toBe(200);
             }
         });

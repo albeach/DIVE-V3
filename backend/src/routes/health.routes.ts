@@ -10,11 +10,11 @@ import { authenticateJWT } from '../middleware/authz.middleware';
 const router = Router();
 
 const OPA_URL = process.env.OPA_URL || 'http://opa:8181';
-const INSTANCE_REALM = process.env.INSTANCE_REALM || 'USA';
+const INSTANCE_REALM = process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA';
 
 /**
  * @openapi
- * /health:
+ * /api/health:
  *   get:
  *     summary: Basic health check
  *     description: Simple health check for load balancers and monitoring systems
@@ -47,7 +47,7 @@ router.get('/', async (_req: Request, res: Response) => {
 
 /**
  * @openapi
- * /health/detailed:
+ * /api/health/detailed:
  *   get:
  *     summary: Detailed health check
  *     description: |
@@ -100,7 +100,7 @@ router.get('/detailed', async (_req: Request, res: Response) => {
 });
 
 /**
- * GET /health/ready
+ * GET /api/health/ready
  * Kubernetes readiness probe
  */
 router.get('/ready', async (_req: Request, res: Response) => {
@@ -123,7 +123,7 @@ router.get('/ready', async (_req: Request, res: Response) => {
 });
 
 /**
- * GET /health/live
+ * GET /api/health/live
  * Kubernetes liveness probe
  */
 router.get('/live', (_req: Request, res: Response) => {
@@ -132,7 +132,7 @@ router.get('/live', (_req: Request, res: Response) => {
 });
 
 /**
- * GET /health/redis
+ * GET /api/health/redis
  * Redis-specific health check
  */
 router.get('/redis', async (_req: Request, res: Response) => {
@@ -167,7 +167,7 @@ router.get('/redis', async (_req: Request, res: Response) => {
 });
 
 /**
- * GET /health/policy-version
+ * GET /api/health/policy-version
  * Phase 4, Task 3.1: Returns OPA policy version for drift detection
  * Used by policy drift monitor to verify consistency across instances
  */
@@ -203,7 +203,7 @@ router.get('/policy-version', async (_req: Request, res: Response) => {
 });
 
 /**
- * GET /health/policy-consistency
+ * GET /api/health/policy-consistency
  * Phase 4, Task 3.1: Check policy consistency across federation
  * Requires authentication (admin access)
  */
@@ -243,7 +243,7 @@ router.get('/policy-consistency', authenticateJWT, async (req: Request, res: Res
 });
 
 /**
- * GET /health/kas-federation
+ * GET /api/health/kas-federation
  * Phase 4, Task 1.4: Returns KAS federation status (MongoDB SSOT)
  */
 router.get('/kas-federation', async (_req: Request, res: Response) => {
@@ -286,7 +286,7 @@ router.get('/kas-federation', async (_req: Request, res: Response) => {
 });
 
 /**
- * GET /health/brute-force-config
+ * GET /api/health/brute-force-config
  * Task 4.4: Dynamic brute force configuration health check
  * Query params:
  *   - realm: Keycloak realm ID (defaults to 'dive-v3-broker')

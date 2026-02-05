@@ -27,12 +27,12 @@ metrics: 0.0.0.0:9127
 ingress:
   # ─────────────────────────────────────────────────────────────────────────
   # Frontend (Next.js)
-  # Docker Service: frontend-fra
-  # Internal Port:  3000
+  # Docker Service: dive-spoke-fra-frontend
+  # Host Port: 3010
   # Hostname:       fra-app.dive25.com
   # ─────────────────────────────────────────────────────────────────────────
   - hostname: fra-app.dive25.com
-    service: https://frontend-fra:3000
+    service: https://localhost:3010
     originRequest:
       noTLSVerify: true
       connectTimeout: 60s
@@ -40,12 +40,12 @@ ingress:
 
   # ─────────────────────────────────────────────────────────────────────────
   # Backend API (Express.js)
-  # Docker Service: backend-fra
-  # Internal Port:  4000
+  # Docker Service: dive-spoke-fra-backend
+  # Host Port: 4010
   # Hostname:       fra-api.dive25.com
   # ─────────────────────────────────────────────────────────────────────────
   - hostname: fra-api.dive25.com
-    service: https://backend-fra:4000
+    service: https://localhost:4010
     originRequest:
       noTLSVerify: true
       connectTimeout: 60s
@@ -53,12 +53,12 @@ ingress:
 
   # ─────────────────────────────────────────────────────────────────────────
   # Keycloak IdP
-  # Docker Service: keycloak-fra
-  # Internal Port:  8443
+  # Docker Service: dive-spoke-fra-keycloak
+  # Host Port: 8453 (HTTPS)
   # Hostname:       fra-idp.dive25.com
   # ─────────────────────────────────────────────────────────────────────────
   - hostname: fra-idp.dive25.com
-    service: https://keycloak-fra:8443
+    service: https://localhost:8453
     originRequest:
       noTLSVerify: true
       connectTimeout: 60s
@@ -66,15 +66,40 @@ ingress:
 
   # ─────────────────────────────────────────────────────────────────────────
   # Key Access Service (KAS)
-  # Docker Service: kas-fra
-  # Internal Port:  8080
+  # Docker Service: dive-spoke-fra-kas
+  # Host Port: 9010
   # Hostname:       fra-kas.dive25.com
   # ─────────────────────────────────────────────────────────────────────────
   - hostname: fra-kas.dive25.com
-    service: http://kas-fra:8080
+    service: https://localhost:9010
     originRequest:
+      noTLSVerify: true
       connectTimeout: 60s
       httpHostHeader: fra-kas.dive25.com
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # OPA (Policy Decision Point)
+  # Docker Service: dive-spoke-fra-opa
+  # Host Port: 8281
+  # Hostname:       fra-opa.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
+  - hostname: fra-opa.dive25.com
+    service: http://localhost:8281
+    originRequest:
+      connectTimeout: 60s
+      httpHostHeader: fra-opa.dive25.com
+
+  # ─────────────────────────────────────────────────────────────────────────
+  # OPAL Client (Policy Sync from Hub)
+  # Docker Service: dive-spoke-fra-opal-client
+  # Host Port: 9191 (OPAL client exposes inline OPA on 8181, mapped to 9191)
+  # Hostname:       fra-opal.dive25.com
+  # ─────────────────────────────────────────────────────────────────────────
+  - hostname: fra-opal.dive25.com
+    service: http://localhost:9191
+    originRequest:
+      connectTimeout: 60s
+      httpHostHeader: fra-opal.dive25.com
 
   # ─────────────────────────────────────────────────────────────────────────
   # Catch-all (required by Cloudflare)

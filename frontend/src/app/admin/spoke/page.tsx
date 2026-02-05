@@ -30,6 +30,7 @@ import {
   IAuditQueueInfo,
 } from '@/components/admin/spoke';
 import { CircuitBreakerState, SyncStatus } from '@/types/federation.types';
+import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 import {
   Server,
   RefreshCw,
@@ -295,10 +296,6 @@ export default function SpokeDashboardPage() {
   return (
     <PageLayout
       user={session?.user || {}}
-      breadcrumbs={[
-        { label: 'Admin', href: '/admin/dashboard' },
-        { label: 'Spoke', href: null },
-      ]}
     >
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
         {/* Header */}

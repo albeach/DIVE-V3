@@ -21,6 +21,7 @@ import {
 } from '@/components/admin/spoke';
 import { MaintenanceHistory } from '@/components/admin/spoke/MaintenanceHistory';
 import { IMaintenanceEvent } from '@/types/federation.types';
+import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 import {
   Wrench,
   RefreshCw,
@@ -161,11 +162,6 @@ export default function MaintenancePage() {
   return (
     <PageLayout
       user={session?.user || {}}
-      breadcrumbs={[
-        { label: 'Admin', href: '/admin/dashboard' },
-        { label: 'Spoke', href: '/admin/spoke' },
-        { label: 'Maintenance', href: null },
-      ]}
     >
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
         {/* Header */}

@@ -42,6 +42,8 @@ export interface TokenIntrospectionResponse {
   aud?: string | string[];
   iss?: string;
   jti?: string;
+  // Standard OIDC claims
+  preferred_username?: string;
   // Custom claims
   uniqueID?: string;
   clearance?: string;

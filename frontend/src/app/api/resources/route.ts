@@ -17,6 +17,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { validateSession, getSessionTokens } from '@/lib/session-validation';
 import { getSecureHttpsAgent } from '@/lib/https-agent';
+import { getBackendUrl } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -61,7 +62,7 @@ export async function GET(request: NextRequest) {
         }
 
         // Proxy request to backend with access token
-        const backendUrl = process.env.BACKEND_URL || 'https://localhost:4000';
+        const backendUrl = getBackendUrl();
         
         console.log('[ResourcesAPI] Proxying to backend', {
             backendUrl,

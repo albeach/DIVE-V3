@@ -23,6 +23,7 @@
 import React, { useState } from 'react';
 import Navigation from '@/components/navigation';
 import Breadcrumbs, { BreadcrumbItem } from './breadcrumbs';
+import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 import { MobileBottomNav } from '@/components/navigation/mobile-bottom-nav';
 import { MobileDrawer } from '@/components/navigation/mobile-drawer';
 import { useInstanceTheme } from '@/components/ui/theme-provider';
@@ -77,9 +78,12 @@ export default function PageLayout({
             <Navigation user={user} />
 
             {/* Breadcrumbs with instance accent (if provided) */}
-            {breadcrumbs && breadcrumbs.length > 0 && (
+            {/* SSOT: Use InteractiveBreadcrumbs for admin pages, fallback to static Breadcrumbs */}
+            {typeof window !== 'undefined' && window.location.pathname.startsWith('/admin') ? (
+                <InteractiveBreadcrumbs />
+            ) : breadcrumbs && breadcrumbs.length > 0 ? (
                 <Breadcrumbs items={breadcrumbs} />
-            )}
+            ) : null}
 
             {/* Main Content */}
             <main

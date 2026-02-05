@@ -157,7 +157,7 @@ loadFederationInstancesFromDB().catch(err => {
 
 // Static instances from registry (loaded at startup)
 const STATIC_FEDERATION_INSTANCES = loadFederationInstances();
-const INSTANCE_REALM = process.env.INSTANCE_REALM || 'USA';
+const INSTANCE_REALM = process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA';
 // Phase 3: Increased timeout for remote instances (DEU)
 const FEDERATED_SEARCH_TIMEOUT_MS = parseInt(process.env.FEDERATED_SEARCH_TIMEOUT_MS || '5000');
 const REMOTE_INSTANCE_TIMEOUT_MS = parseInt(process.env.REMOTE_INSTANCE_TIMEOUT_MS || '8000');
@@ -751,7 +751,7 @@ export const federatedStatusHandler = async (
                         };
                     }
 
-                    await federationAxios.get(`${instance.apiUrl}/health`, { timeout: 2000 });
+                    await federationAxios.get(`${instance.apiUrl}/api/health`, { timeout: 2000 });
                     return {
                         code: instance.code,
                         apiUrl: instance.apiUrl,

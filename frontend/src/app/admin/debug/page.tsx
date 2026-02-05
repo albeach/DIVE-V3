@@ -11,6 +11,7 @@ import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import PageLayout from '@/components/layout/page-layout';
 import { adminToast } from '@/lib/admin-toast';
+import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 
 export default function AdminDebugPage() {
     const { data: session, status } = useSession();
@@ -84,10 +85,6 @@ export default function AdminDebugPage() {
     return (
         <PageLayout
             user={session?.user || {}}
-            breadcrumbs={[
-                { label: 'Admin', href: '/admin/dashboard' },
-                { label: 'Debug Console', href: null }
-            ]}
         >
             <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
                 {/* Header */}

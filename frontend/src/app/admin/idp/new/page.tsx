@@ -29,6 +29,7 @@ import { InlineHelp, QuickTipsCarousel } from '@/components/admin/educational/Co
 import { IdPHelpContent, AdminQuickTips } from '@/components/admin/educational/AdminHelpContent';
 import { IIdPFormData, IdPProtocol, IAdminAPIResponse, IIdentityProvider } from '@/types/admin.types';
 import { OIDCDiscoverySuggestion, ProtocolMapperSuggestions } from '@/components/admin/smart-suggestions';
+import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 
 const WIZARD_STEPS = [
     { number: 1, title: 'Protocol', description: 'Select IdP protocol' },
@@ -419,11 +420,6 @@ export default function NewIdPWizard() {
     return (
         <PageLayout
             user={session?.user || {}}
-            breadcrumbs={[
-                { label: 'Admin', href: '/admin/dashboard' },
-                { label: 'IdP Management', href: '/admin/idp' },
-                { label: 'Add New IdP', href: null }
-            ]}
             maxWidth="5xl"
         >
             {/* Modern Hero Header */}

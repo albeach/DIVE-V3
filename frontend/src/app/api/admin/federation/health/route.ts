@@ -14,6 +14,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@/auth';
+import { getSecureFetchOptions } from '@/lib/https-agent';
 
 export const dynamic = 'force-dynamic';
 
@@ -100,6 +101,7 @@ async function checkEndpoint(url: string, timeoutMs: number = 5000): Promise<ISe
       method: 'GET',
       signal: controller.signal,
       cache: 'no-store',
+      ...getSecureFetchOptions(),
     });
 
     clearTimeout(timeoutId);
@@ -126,7 +128,7 @@ async function checkEndpoint(url: string, timeoutMs: number = 5000): Promise<ISe
 async function checkInstanceHealth(instance: typeof FEDERATION_INSTANCES[0]): Promise<IInstanceHealth> {
   // Check both services in parallel
   const [backendHealth, keycloakHealth] = await Promise.all([
-    checkEndpoint(`${instance.endpoints.api}/health`),
+    checkEndpoint(`${instance.endpoints.api}/api/health`),
     checkEndpoint(`${instance.endpoints.idp}/health`),
   ]);
 
@@ -213,4 +215,3 @@ export async function GET(request: NextRequest) {
     );
   }
 }
-

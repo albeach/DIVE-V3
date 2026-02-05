@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { validateSession, getSessionTokens } from '@/lib/session-validation';
+import { getBackendUrl } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
 
@@ -33,7 +34,7 @@ export async function POST(request: Request) {
         const formData = await request.formData();
 
         // Call backend API with server-side token
-        const backendUrl = process.env.BACKEND_URL || 'https://localhost:4000';
+        const backendUrl = getBackendUrl();
         const response = await fetch(`${backendUrl}/api/upload`, {
             method: 'POST',
             headers: {
