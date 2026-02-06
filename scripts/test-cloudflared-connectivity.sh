@@ -28,13 +28,13 @@ test_endpoint() {
     local name=$1
     local url=$2
     local expected_code=$3
-    
+
     echo -e "${BLUE}Testing: ${name}${NC}"
     echo -e "  URL: ${url}"
-    
+
     # Test with curl
     http_code=$(curl -k -s -o /dev/null -w "%{http_code}" --connect-timeout 10 "${url}" 2>/dev/null || echo "000")
-    
+
     if [ "${http_code}" = "${expected_code}" ]; then
         echo -e "  Status: ${GREEN}✅ Success (HTTP ${http_code})${NC}"
         return 0

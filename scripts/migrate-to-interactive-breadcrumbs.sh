@@ -46,14 +46,14 @@ FILES_TO_MIGRATE=(
 
 for file in "${FILES_TO_MIGRATE[@]}"; do
   filepath="frontend/src/app/admin/$file"
-  
+
   if [ ! -f "$filepath" ]; then
     echo "⊘ Skipping $file (not found)"
     continue
   fi
-  
+
   echo "→ Processing: $file"
-  
+
   # Step 1: Add import if not present
   if ! grep -q "InteractiveBreadcrumbs" "$filepath"; then
     # Find where to insert (after last import, before export/function)
@@ -65,17 +65,17 @@ for file in "${FILES_TO_MIGRATE[@]}"; do
       }
       { print }
     ' "$filepath" > "$filepath.tmp" && mv "$filepath.tmp" "$filepath"
-    
+
     echo "  ✓ Added InteractiveBreadcrumbs import"
   fi
-  
+
   # Step 2: Add InteractiveBreadcrumbs after PageLayout opening
   # Find the PageLayout opening and add breadcrumbs right after
-  sed -i.bak '/return (/,/<PageLayout/{ 
-    /<PageLayout/{ 
+  sed -i.bak '/return (/,/<PageLayout/{
+    /<PageLayout/{
       :a
       n
-      />/{ 
+      />/{
         a\      {/* Interactive Breadcrumbs - SSOT */}\
       <div className="mb-6">\
         <InteractiveBreadcrumbs />\
@@ -86,11 +86,11 @@ for file in "${FILES_TO_MIGRATE[@]}"; do
       ba
     }
   }' "$filepath"
-  
+
   # Step 3: Remove breadcrumbs prop from PageLayout
   # This removes multi-line breadcrumbs={[...]} prop
   perl -i -0pe 's/breadcrumbs=\{\[[^\]]*\]\}\s*\n\s*//gs' "$filepath"
-  
+
   rm -f "$filepath.bak"
   echo "  ✓ Migrated"
 done

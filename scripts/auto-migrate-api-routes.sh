@@ -24,26 +24,26 @@ API_ROUTES=$(find "$FRONTEND_DIR/src/app/api" -name "route.ts" -type f | grep -v
 for file in $API_ROUTES; do
   # Check if file contains hardcoded URL patterns
   if grep -q "process.env.BACKEND_URL\|process.env.NEXT_PUBLIC_API_URL\|process.env.NEXT_PUBLIC_BACKEND_URL" "$file" 2>/dev/null; then
-    
+
     # Check if already has the import
     if ! grep -q "from '@/lib/api-utils'" "$file" 2>/dev/null; then
-      
+
       echo "  📝 Migrating: $(basename $(dirname $file))/$(basename $file)"
-      
+
       # Create backup
       cp "$file" "$file.bak"
-      
+
       # Add import after the first import block
       sed -i '' '/^import.*from/a\
 import { getBackendUrl } from '\''@/lib/api-utils'\'';
 ' "$file"
-      
+
       # Replace hardcoded BACKEND_URL patterns
       sed -i '' 's/const BACKEND_URL = process\.env\.BACKEND_URL || process\.env\.NEXT_PUBLIC_API_URL || process\.env\.NEXT_PUBLIC_BACKEND_URL || '\''[^'\'']*'\'';/const BACKEND_URL = getBackendUrl();/g' "$file"
       sed -i '' 's/const BACKEND_URL = process\.env\.BACKEND_URL || process\.env\.NEXT_PUBLIC_API_URL || '\''[^'\'']*'\'';/const BACKEND_URL = getBackendUrl();/g' "$file"
       sed -i '' 's/const backendUrl = process\.env\.BACKEND_URL || process\.env\.NEXT_PUBLIC_API_URL || process\.env\.NEXT_PUBLIC_BACKEND_URL || '\''[^'\'']*'\'';/const backendUrl = getBackendUrl();/g' "$file"
       sed -i '' 's/const backendUrl = process\.env\.BACKEND_URL || process\.env\.NEXT_PUBLIC_API_URL || '\''[^'\'']*'\'';/const backendUrl = getBackendUrl();/g' "$file"
-      
+
       MIGRATED=$((MIGRATED + 1))
     fi
   fi

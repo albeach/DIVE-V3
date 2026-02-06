@@ -5,56 +5,44 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import { withAuth, createAdminBackendFetch } from '@/middleware/admin-auth';
 import { getBackendUrl } from '@/lib/api-utils';
+
+export const dynamic = 'force-dynamic';
 
 const BACKEND_URL = getBackendUrl();
 
-export async function POST(request: NextRequest) {
-    try {
-        const session = await auth();
-        if (!session?.user) {
-            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-        }
+export const POST = withAuth(async (request, { tokens, session }) => {
+    const body = await request.json();
+    
+    // Enrich with session context
+    const enrichedLog = {
+        ...body,
+        actor: {
+            ...body.actor,
+            id: session.user.id || session.user.uniqueID,
+            username: session.user.uniqueID || session.user.email,
+            roles: session.user.roles || [],
+        },
+    };
 
-        const body = await request.json();
-        
-        // Enrich with additional context
-        const enrichedLog = {
-            ...body,
-            actor: {
-                ...body.actor,
-                id: session.user.id || session.user.uniqueID,
-                username: session.user.uniqueID || session.user.email,
-                roles: session.user.roles || [],
+    const backendFetch = createAdminBackendFetch(tokens, BACKEND_URL);
+    const response = await backendFetch(`/api/admin/audit`, {
+        method: 'POST',
+        body: JSON.stringify(enrichedLog),
+    });
+
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Failed to log audit' }));
+        return NextResponse.json(
+            {
+                success: false,
+                error: 'BackendError',
+                message: error.message || 'Failed to log audit',
             },
-        };
-
-        // Try to forward to backend
-        try {
-            const response = await fetch(`${BACKEND_URL}/api/admin/audit`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${(session as any).accessToken}`,
-                },
-                body: JSON.stringify(enrichedLog),
-            });
-
-            if (response.ok) {
-                return NextResponse.json({ success: true });
-            }
-        } catch (backendError) {
-            console.warn('[Audit API] Backend unavailable, logging locally');
-        }
-
-        // Log locally if backend unavailable
-        console.log('[AdminAudit]', JSON.stringify(enrichedLog, null, 2));
-        
-        return NextResponse.json({ success: true, stored: 'local' });
-        
-    } catch (error) {
-        console.error('[Audit API] Error:', error);
-        return NextResponse.json({ success: false, error: 'Failed to log audit' }, { status: 500 });
+            { status: response.status }
+        );
     }
-}
+
+    return NextResponse.json({ success: true });
+});

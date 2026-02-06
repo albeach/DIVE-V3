@@ -29,14 +29,14 @@ echo ""
 stop_tunnel() {
     local instance=$1
     local pid_file="${PROJECT_ROOT}/logs/cloudflared-${instance}.pid"
-    
+
     if [ -f "${pid_file}" ]; then
         local pid=$(cat "${pid_file}")
-        
+
         if ps -p "${pid}" > /dev/null 2>&1; then
             echo -e "${GREEN}🛑 Stopping ${instance} tunnel (PID: ${pid})...${NC}"
             kill "${pid}" 2>/dev/null || true
-            
+
             # Wait for process to stop (max 5 seconds)
             for i in {1..5}; do
                 if ! ps -p "${pid}" > /dev/null 2>&1; then
@@ -46,7 +46,7 @@ stop_tunnel() {
                 fi
                 sleep 1
             done
-            
+
             # Force kill if still running
             if ps -p "${pid}" > /dev/null 2>&1; then
                 echo -e "${YELLOW}⚠️  Force killing ${instance} tunnel...${NC}"

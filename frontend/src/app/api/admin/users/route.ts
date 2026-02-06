@@ -1,110 +1,77 @@
 /**
  * Admin Users API Route
- * 
+ *
+ * Modern 2026 implementation using standardized middleware:
+ * - Consistent authentication via withAdminAuth
+ * - Automatic token refresh
+ * - Standardized error responses
+ * - Audit logging
+ * - No mock data fallbacks
+ *
  * GET: List users
- * POST: Create user
+ * POST: Create user (requires super_admin)
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import { withAuth, withSuperAdmin, createAdminBackendFetch } from '@/middleware/admin-auth';
 import { getBackendUrl } from '@/lib/api-utils';
 
 const BACKEND_URL = getBackendUrl();
 
-export async function GET(request: NextRequest) {
-    try {
-        const session = await auth();
-        if (!session?.user) {
-            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-        }
+export const dynamic = 'force-dynamic';
 
-        const isAdmin = session.user.roles?.includes('super_admin') || 
-                       session.user.roles?.includes('admin') ||
-                       session.user.roles?.includes('dive-admin');
-        
-        if (!isAdmin) {
-            return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
-        }
+/**
+ * GET /api/admin/users
+ * List users with pagination and search
+ */
+export const GET = withAuth(async (request, { tokens }) => {
+    const { searchParams } = new URL(request.url);
+    const queryString = searchParams.toString();
 
-        const { searchParams } = new URL(request.url);
-        const queryString = searchParams.toString();
-        
-        const response = await fetch(`${BACKEND_URL}/api/admin/users?${queryString}`, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${(session as any).accessToken}`,
+    const backendFetch = createAdminBackendFetch(tokens, BACKEND_URL);
+    const response = await backendFetch(`/api/admin/users?${queryString}`);
+
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Backend error' }));
+        return NextResponse.json(
+            {
+                success: false,
+                error: 'BackendError',
+                message: error.message || `Backend returned ${response.status}`,
             },
-        });
-
-        if (!response.ok) {
-            console.warn('[Users API] Backend error, returning mock data');
-            return NextResponse.json({
-                success: true,
-                data: { users: generateMockUsers(), total: 7 }
-            });
-        }
-
-        const data = await response.json();
-        return NextResponse.json(data);
-        
-    } catch (error) {
-        console.error('[Users API] Error:', error);
-        return NextResponse.json({
-            success: true,
-            data: { users: generateMockUsers(), total: 7 }
-        });
+            { status: response.status }
+        );
     }
-}
 
-export async function POST(request: NextRequest) {
-    try {
-        const session = await auth();
-        if (!session?.user) {
-            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-        }
+    const data = await response.json();
+    return NextResponse.json(data);
+});
 
-        const isAdmin = session.user.roles?.includes('super_admin') || 
-                       session.user.roles?.includes('admin') ||
-                       session.user.roles?.includes('dive-admin');
-        
-        if (!isAdmin) {
-            return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
-        }
+/**
+ * POST /api/admin/users
+ * Create new user (requires super_admin role)
+ */
+export const POST = withSuperAdmin(async (request, { tokens }) => {
+    const body = await request.json();
 
-        const body = await request.json();
-        
-        const response = await fetch(`${BACKEND_URL}/api/admin/users`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${(session as any).accessToken}`,
+    const backendFetch = createAdminBackendFetch(tokens, BACKEND_URL);
+    const response = await backendFetch(`/api/admin/users`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Failed to create user' }));
+        return NextResponse.json(
+            {
+                success: false,
+                error: 'BackendError',
+                message: error.message || 'Failed to create user',
             },
-            body: JSON.stringify(body),
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            return NextResponse.json({ success: false, error: error.message || 'Failed to create user' }, { status: response.status });
-        }
-
-        const data = await response.json();
-        return NextResponse.json({ success: true, data });
-        
-    } catch (error) {
-        console.error('[Users API] Create error:', error);
-        return NextResponse.json({ success: false, error: 'Failed to create user' }, { status: 500 });
+            { status: response.status }
+        );
     }
-}
 
-function generateMockUsers() {
-    return [
-        { id: '1', username: 'testuser-usa-1', firstName: 'Test', lastName: 'User 1', email: 'testuser1@usa.mil', enabled: true, emailVerified: true, createdTimestamp: Date.now() - 86400000 * 30, attributes: { clearance: ['UNCLASSIFIED'], countryOfAffiliation: ['USA'], uniqueID: ['testuser-usa-1-001'] }, realmRoles: ['dive-user'] },
-        { id: '2', username: 'testuser-usa-2', firstName: 'Test', lastName: 'User 2', email: 'testuser2@usa.mil', enabled: true, emailVerified: true, createdTimestamp: Date.now() - 86400000 * 25, attributes: { clearance: ['CONFIDENTIAL'], countryOfAffiliation: ['USA'], uniqueID: ['testuser-usa-2-001'] }, realmRoles: ['dive-user'] },
-        { id: '3', username: 'testuser-usa-3', firstName: 'Test', lastName: 'User 3', email: 'testuser3@usa.mil', enabled: true, emailVerified: true, createdTimestamp: Date.now() - 86400000 * 20, attributes: { clearance: ['SECRET'], countryOfAffiliation: ['USA'], uniqueID: ['testuser-usa-3-001'] }, realmRoles: ['dive-user'] },
-        { id: '4', username: 'testuser-usa-4', firstName: 'Test', lastName: 'User 4', email: 'testuser4@usa.mil', enabled: true, emailVerified: true, createdTimestamp: Date.now() - 86400000 * 15, attributes: { clearance: ['TOP_SECRET'], countryOfAffiliation: ['USA'], uniqueID: ['testuser-usa-4-001'] }, realmRoles: ['dive-user'] },
-        { id: '5', username: 'admin-usa', firstName: 'Admin', lastName: 'USA', email: 'admin@usa.mil', enabled: true, emailVerified: true, createdTimestamp: Date.now() - 86400000 * 60, attributes: { clearance: ['TOP_SECRET'], countryOfAffiliation: ['USA'], uniqueID: ['admin-usa-001'] }, realmRoles: ['dive-user', 'dive-admin', 'super_admin'] },
-        { id: '6', username: 'testuser-gbr-1', firstName: 'British', lastName: 'User', email: 'user@mod.uk', enabled: true, emailVerified: false, createdTimestamp: Date.now() - 86400000 * 10, attributes: { clearance: ['SECRET'], countryOfAffiliation: ['GBR'], uniqueID: ['testuser-gbr-1-001'] }, realmRoles: ['dive-user'] },
-        { id: '7', username: 'testuser-fra-1', firstName: 'French', lastName: 'User', email: 'user@defense.gouv.fr', enabled: false, emailVerified: true, createdTimestamp: Date.now() - 86400000 * 5, attributes: { clearance: ['CONFIDENTIAL'], countryOfAffiliation: ['FRA'], uniqueID: ['testuser-fra-1-001'] }, realmRoles: ['dive-user'] },
-    ];
-}
+    const data = await response.json();
+    return NextResponse.json(data);
+});

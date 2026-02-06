@@ -21,7 +21,7 @@ import { getApiUrl, getKeycloakUrl, getDynamicConfig } from '@/lib/dynamic-confi
 function MyComponent() {
   const { apiUrl, keycloakUrl, realm, instance } = useDynamicConfig();
   const { isHub, isSpoke } = useInstance();
-  
+
   return (
     <div>
       <p>Instance: {instance}</p>
@@ -38,11 +38,11 @@ function MyComponent() {
 export async function GET(request: Request) {
   // Simple URL
   const backendUrl = getBackendUrl();
-  
+
   // Or use helper
   const response = await backendFetch('/api/resources');
   const data = await response.json();
-  
+
   return Response.json(data);
 }
 ```
@@ -54,7 +54,7 @@ export default async function Page() {
   const config = getDynamicConfig();
   const response = await fetch(`${config.api}/api/data`);
   const data = await response.json();
-  
+
   return <div>{/* render */}</div>;
 }
 ```

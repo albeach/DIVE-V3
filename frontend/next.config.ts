@@ -6,7 +6,7 @@ const nextConfig: NextConfig = {
         // This ensures CSP works regardless of which domain the app is accessed from
         const allowExternalAnalytics = process.env.NEXT_PUBLIC_ALLOW_EXTERNAL_ANALYTICS === 'true';
         const externalDomains = process.env.NEXT_PUBLIC_EXTERNAL_DOMAINS || '';
-        
+
         // Include all DIVE V3 domains for multi-instance federation
         const diveDomains = [
             'https://usa-app.dive25.com',

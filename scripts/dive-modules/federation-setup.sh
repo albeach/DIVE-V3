@@ -367,18 +367,8 @@ resolve_spoke_container() {
 # Get spoke ports - DELEGATED TO COMMON.SH (SSOT)
 #
 # This function now delegates to common.sh:get_instance_ports()
-# See: scripts/dive-modules/common.sh for authoritative implementation
-#
-# Arguments:
-#   $1 - Spoke code (uppercase)
-#
-# Outputs:
-#   Exports SPOKE_FRONTEND_PORT, SPOKE_KEYCLOAK_HTTPS_PORT, etc.
-##
-_get_spoke_ports() {
-    # Delegate to common.sh (SSOT)
-    get_instance_ports "$@"
-}
+# See: scripts/dive-modules/common.sh:get_instance_ports() for SSOT implementation
+# (No local delegation needed - common.sh is sourced at module load time)
 
 # =============================================================================
 # STATE PERSISTENCE
@@ -926,7 +916,7 @@ ensure_hub_idp_client_in_spoke() {
         return 1
     fi
 
-    eval "$(_get_spoke_ports "$spoke_code")"
+    eval "$(get_instance_ports "$spoke_code")"
     local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
 
     # Get token via API (more reliable than kcadm.sh)
@@ -971,7 +961,7 @@ ensure_hub_idp_client_in_spoke() {
     fi
 
     # Calculate spoke's frontend port using SSOT
-    eval "$(_get_spoke_ports "$spoke_code")"
+    eval "$(get_instance_ports "$spoke_code")"
     local frontend_port="${SPOKE_FRONTEND_PORT:-3000}"
     local backend_port="${SPOKE_BACKEND_PORT:-4000}"
 
@@ -1093,7 +1083,7 @@ ensure_spoke_client_in_hub() {
 
     log_step "Creating spoke ${code_upper} client in Hub realm..."
 
-    eval "$(_get_spoke_ports "$code_upper")"
+    eval "$(get_instance_ports "$code_upper")"
     local kc_https_port=$SPOKE_KEYCLOAK_HTTPS_PORT
     local frontend_port=$SPOKE_FRONTEND_PORT
 
@@ -1359,7 +1349,7 @@ create_spoke_idp_in_hub() {
     local spoke_idp="${code_lower}-idp"
     local spoke_display_name=$(get_country_name "$code_upper" 2>/dev/null || echo "$code_upper")
 
-    eval "$(_get_spoke_ports "$spoke_code")"
+    eval "$(get_instance_ports "$spoke_code")"
     local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
 
     source "${DIVE_ROOT}/.env.hub" 2>/dev/null || true
@@ -1616,7 +1606,7 @@ update_spoke_redirect_uris() {
     local code_lower=$(lower "$spoke_code")
     local code_upper=$(upper "$spoke_code")
 
-    eval "$(_get_spoke_ports "$code_upper")"
+    eval "$(get_instance_ports "$code_upper")"
     local frontend_port=$SPOKE_FRONTEND_PORT
 
     local token
@@ -1665,7 +1655,7 @@ update_hub_redirect_uris() {
     local code_lower=$(lower "$spoke_code")
     local code_upper=$(upper "$spoke_code")
 
-    eval "$(_get_spoke_ports "$code_upper")"
+    eval "$(get_instance_ports "$code_upper")"
     local kc_https_port=$SPOKE_KEYCLOAK_HTTPS_PORT
 
     local token
@@ -1904,7 +1894,7 @@ sync_opa_trusted_issuers() {
     local spoke_lower=$(lower "$spoke")
     local spoke_upper=$(upper "$spoke")
 
-    eval "$(_get_spoke_ports "$spoke_upper")"
+    eval "$(get_instance_ports "$spoke_upper")"
     local keycloak_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
 
     local realm="dive-v3-broker-${spoke_lower}"
@@ -2111,7 +2101,7 @@ register_spoke_in_hub() {
     echo -e "${BOLD}Registering ${spoke_upper} (${spoke_display_name}) in Hub${NC}"
     echo ""
 
-    eval "$(_get_spoke_ports "$spoke")"
+    eval "$(get_instance_ports "$spoke")"
 
     # Step 1: Create Hub client for spoke (Spoke→Hub flow)
     log_step "[1/7] Creating Hub client for spoke..."

@@ -1,9 +1,9 @@
 /**
  * Dynamic URL Configuration for Multi-Domain Deployment
- * 
+ *
  * This utility automatically detects the current domain and configures
  * the correct API and Keycloak URLs based on the domain pattern.
- * 
+ *
  * Supports:
  * - localhost (development)
  * - dive25.com domains (production)
@@ -58,7 +58,7 @@ const DOMAIN_CONFIG = {
 export function getDynamicConfig() {
   // Check if we're in browser or server
   const isBrowser = typeof window !== 'undefined';
-  
+
   // Get hostname from appropriate context
   let hostname = '';
   if (isBrowser) {
@@ -138,10 +138,10 @@ export function getKeycloakIssuer(): string {
  */
 export function getConfigFromRequest(host: string | null) {
   if (!host) return getDynamicConfig();
-  
+
   const config = DOMAIN_CONFIG[host as keyof typeof DOMAIN_CONFIG];
   if (config) return config;
-  
+
   // Try pattern matching
   const match = host.match(/^([a-z]+)-app/);
   if (match) {
@@ -151,7 +151,7 @@ export function getConfigFromRequest(host: string | null) {
     );
     if (foundConfig) return foundConfig;
   }
-  
+
   return getDynamicConfig();
 }
 

@@ -193,7 +193,7 @@ spoke_update_compose() {
         local spoke_id=$(grep "^# Spoke ID:" "${spoke_dir}/docker-compose.yml" | awk '{print $4}')
 
         # Get port assignments (preserve existing)
-        eval "$(_get_spoke_ports "$code_upper")"
+        eval "$(get_instance_ports "$code_upper")"
 
         # Legacy generator
         local idp_hostname="localhost"

@@ -76,10 +76,11 @@ test_cli_federation_module() {
     fi
 
     # Test federation functions exist
+    # Functions available via federation/setup.sh (sourced by federation.sh shim)
     local required_functions=(
         "federation_status"
-        "get_instance_admin_token"
-        "get_hub_super_admin_token"
+        "get_hub_admin_token"
+        "get_spoke_admin_token"
     )
 
     for func in "${required_functions[@]}"; do
@@ -96,17 +97,17 @@ test_cli_federation_module() {
 # Test hub.sh module
 #
 test_cli_hub_module() {
-    log_verbose "Testing hub.sh module..."
+    log_verbose "Testing deployment/hub.sh module..."
 
     # Source the module and check for syntax errors
-    if ! bash -n "${DIVE_ROOT}/scripts/dive-modules/hub.sh" 2>/dev/null; then
-        log_error "Syntax error in hub.sh"
+    if ! bash -n "${DIVE_ROOT}/scripts/dive-modules/deployment/hub.sh" 2>/dev/null; then
+        log_error "Syntax error in deployment/hub.sh"
         return 1
     fi
 
     # Try to source the module
-    if ! source "${DIVE_ROOT}/scripts/dive-modules/hub.sh" 2>/dev/null; then
-        log_error "Failed to source hub.sh"
+    if ! source "${DIVE_ROOT}/scripts/dive-modules/deployment/hub.sh" 2>/dev/null; then
+        log_error "Failed to source deployment/hub.sh"
         return 1
     fi
 
@@ -123,17 +124,17 @@ test_cli_hub_module() {
 # Test spoke.sh module
 #
 test_cli_spoke_module() {
-    log_verbose "Testing spoke.sh module..."
+    log_verbose "Testing deployment/spoke.sh module..."
 
     # Source the module and check for syntax errors
-    if ! bash -n "${DIVE_ROOT}/scripts/dive-modules/spoke.sh" 2>/dev/null; then
-        log_error "Syntax error in spoke.sh"
+    if ! bash -n "${DIVE_ROOT}/scripts/dive-modules/deployment/spoke.sh" 2>/dev/null; then
+        log_error "Syntax error in deployment/spoke.sh"
         return 1
     fi
 
     # Try to source the module
-    if ! source "${DIVE_ROOT}/scripts/dive-modules/spoke.sh" 2>/dev/null; then
-        log_error "Failed to source spoke.sh"
+    if ! source "${DIVE_ROOT}/scripts/dive-modules/deployment/spoke.sh" 2>/dev/null; then
+        log_error "Failed to source deployment/spoke.sh"
         return 1
     fi
 

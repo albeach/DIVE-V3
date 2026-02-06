@@ -13,7 +13,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import { withAuth } from '@/middleware/admin-auth';
 import { getSecureFetchOptions } from '@/lib/https-agent';
 
 export const dynamic = 'force-dynamic';
@@ -167,17 +167,8 @@ async function checkInstanceHealth(instance: typeof FEDERATION_INSTANCES[0]): Pr
  * GET /api/admin/federation/health
  * Returns health status of all federation instances
  */
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request, { session }) => {
   try {
-    // Verify authentication
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json(
-        { error: 'Unauthorized', message: 'Authentication required' },
-        { status: 401 }
-      );
-    }
-
     // Check health of all instances in parallel
     const healthChecks = await Promise.all(
       FEDERATION_INSTANCES.map(checkInstanceHealth)
@@ -214,4 +205,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

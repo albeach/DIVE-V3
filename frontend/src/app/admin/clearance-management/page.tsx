@@ -24,6 +24,7 @@ import { ClearanceMatrixTable } from '@/components/admin/clearance/clearance-mat
 import { ClearanceStatsCards } from '@/components/admin/clearance/clearance-stats-cards';
 import { ClearanceEditor } from '@/components/admin/clearance/clearance-editor';
 import { ClearanceTestTool } from '@/components/admin/clearance/clearance-test-tool';
+import { ClearanceAuditLog } from '@/components/admin/clearance/clearance-audit-log';
 import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 
 type TabView = 'overview' | 'matrix' | 'editor' | 'test' | 'audit';
@@ -267,14 +268,9 @@ export default function ClearanceManagementPage() {
                     )}
 
                     {activeTab === 'audit' && (
-                        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-slate-200 dark:border-gray-700 p-6">
-                            <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-4">
-                                📋 Audit Log
-                            </h3>
-                            <p className="text-gray-600 dark:text-gray-400 text-center py-12">
-                                Audit log tracking coming soon...
-                            </p>
-                        </div>
+                        <ClearanceAuditLog
+                            countries={countries}
+                        />
                     )}
                 </div>
             </div>

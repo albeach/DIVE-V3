@@ -11,7 +11,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import { withAuth } from '@/middleware/admin-auth';
 import { db } from '@/lib/db';
 import { accounts } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
@@ -128,17 +128,8 @@ async function fetchInstanceStats(
  * Returns detailed information about all federation instances
  * DYNAMICALLY loaded from backend's federation-registry.json
  */
-export async function GET(request: NextRequest) {
+export const GET = withAuth(async (request, { session, tokens }) => {
   try {
-    // Verify authentication
-    const session = await auth();
-    if (!session?.user?.id) {
-      return NextResponse.json(
-        { error: 'Unauthorized', message: 'Authentication required' },
-        { status: 401 }
-      );
-    }
-
     // Get access token for backend requests
     let accessToken: string | undefined;
     try {
@@ -148,9 +139,10 @@ export async function GET(request: NextRequest) {
         .where(eq(accounts.userId, session.user.id))
         .limit(1);
 
-      accessToken = accountResults[0]?.access_token || undefined;
+      accessToken = accountResults[0]?.access_token || tokens.accessToken;
     } catch (dbError) {
       console.warn('[FederationInstances] Could not get access token:', dbError);
+      accessToken = tokens.accessToken;
     }
 
     // DYNAMIC: Fetch instances from backend's federation-registry
@@ -210,4 +202,4 @@ export async function GET(request: NextRequest) {
       { status: 500 }
     );
   }
-}
+});

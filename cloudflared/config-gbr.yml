@@ -37,7 +37,7 @@ ingress:
       noTLSVerify: true
       connectTimeout: 60s
       httpHostHeader: gbr-app.dive25.com
-  
+
   # ─────────────────────────────────────────────────────────────────────────
   # Backend API (Express.js)
   # Docker Service: dive-spoke-gbr-backend
@@ -50,7 +50,7 @@ ingress:
       noTLSVerify: true
       connectTimeout: 60s
       httpHostHeader: gbr-api.dive25.com
-  
+
   # ─────────────────────────────────────────────────────────────────────────
   # Keycloak IdP
   # Docker Service: dive-spoke-gbr-keycloak
@@ -63,7 +63,7 @@ ingress:
       noTLSVerify: true
       connectTimeout: 60s
       httpHostHeader: gbr-idp.dive25.com
-  
+
   # ─────────────────────────────────────────────────────────────────────────
   # Key Access Service (KAS)
   # Docker Service: dive-spoke-gbr-kas
@@ -76,7 +76,7 @@ ingress:
       noTLSVerify: true
       connectTimeout: 60s
       httpHostHeader: gbr-kas.dive25.com
-  
+
   # ─────────────────────────────────────────────────────────────────────────
   # OPA (Policy Decision Point)
   # Docker Service: dive-spoke-gbr-opa
@@ -88,7 +88,7 @@ ingress:
     originRequest:
       connectTimeout: 60s
       httpHostHeader: gbr-opa.dive25.com
-  
+
   # ─────────────────────────────────────────────────────────────────────────
   # OPAL Client (Policy Sync from Hub)
   # Docker Service: dive-spoke-gbr-opal-client
@@ -100,7 +100,7 @@ ingress:
     originRequest:
       connectTimeout: 60s
       httpHostHeader: gbr-opal.dive25.com
-  
+
   # ─────────────────────────────────────────────────────────────────────────
   # Catch-all (required by Cloudflare)
   # ─────────────────────────────────────────────────────────────────────────
