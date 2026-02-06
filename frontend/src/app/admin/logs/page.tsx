@@ -19,6 +19,7 @@ import { useSession } from 'next-auth/react';
 import PageLayout from '@/components/layout/page-layout';
 import { VirtualList } from '@/components/ui/virtual-list';
 import { AnimatedCounter, AnimatedPercentage } from '@/components/ui/animated-counter';
+import { createAISearch, AISearchWrapper } from '@/lib/ai-search-wrapper';
 
 // Types
 interface IRetentionConfig {
@@ -125,19 +126,70 @@ export default function AdminAuditLogsPage() {
         searchTerm: ''
     });
 
-    // Filter logs based on search term
+    // AI Search state
+    const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [didYouMean, setDidYouMean] = useState<string[]>([]);
+
+    // Initialize AI search wrapper
+    const aiSearcher = useMemo(() => {
+        return createAISearch<IAuditLogEntry>(
+            logs,
+            {
+                keys: ['eventType', 'subject', 'resourceId', 'reason', 'requestId', 'action', 'outcome'],
+                threshold: 0.3, // 30% typo tolerance
+                ignoreLocation: true,
+            },
+            'dive-v3-search-logs'
+        );
+    }, [logs]);
+
+    // Update AI searcher when logs change
+    useEffect(() => {
+        if (logs.length > 0) {
+            aiSearcher.updateData(logs);
+        }
+    }, [logs, aiSearcher]);
+
+    // Filter logs with AI fuzzy search
     const filteredLogs = useMemo(() => {
         if (!filters.searchTerm) return logs;
 
-        const term = filters.searchTerm.toLowerCase();
-        return logs.filter(log =>
-            log.eventType?.toLowerCase().includes(term) ||
-            log.subject?.toLowerCase().includes(term) ||
-            log.resourceId?.toLowerCase().includes(term) ||
-            log.reason?.toLowerCase().includes(term) ||
-            log.requestId?.toLowerCase().includes(term)
-        );
-    }, [logs, filters.searchTerm]);
+        // Use AI fuzzy search
+        const results = aiSearcher.search(filters.searchTerm);
+        
+        // If no results, show "Did you mean?" suggestions
+        if (results.length === 0) {
+            const suggestions = aiSearcher.getDidYouMeanSuggestions(filters.searchTerm, 3);
+            setDidYouMean(suggestions);
+        } else {
+            setDidYouMean([]);
+        }
+        
+        return results;
+    }, [logs, filters.searchTerm, aiSearcher]);
+
+    // Update search suggestions as user types
+    const handleSearchChange = useCallback((value: string) => {
+        setFilters(prev => ({ ...prev, searchTerm: value }));
+        
+        if (value.length > 0) {
+            const suggestions = aiSearcher.getSuggestions(value, 5);
+            setSearchSuggestions(suggestions);
+            setShowSuggestions(suggestions.length > 0);
+        } else {
+            setSearchSuggestions([]);
+            setShowSuggestions(false);
+            setDidYouMean([]);
+        }
+    }, [aiSearcher]);
+
+    // Apply suggestion
+    const applySuggestion = useCallback((suggestion: string) => {
+        setFilters(prev => ({ ...prev, searchTerm: suggestion }));
+        setShowSuggestions(false);
+        setDidYouMean([]);
+    }, []);
 
     // Fetch logs
     const fetchLogs = useCallback(async () => {
@@ -588,15 +640,67 @@ export default function AdminAuditLogsPage() {
                                     {/* Search */}
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                                            Search
+                                            Search (AI-powered fuzzy matching)
                                         </label>
-                                        <input
-                                            type="text"
-                                            value={filters.searchTerm}
-                                            onChange={(e) => setFilters({ ...filters, searchTerm: e.target.value })}
-                                            placeholder="Search all fields..."
-                                            className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
-                                        />
+                                        <div className="relative">
+                                            <input
+                                                type="text"
+                                                value={filters.searchTerm}
+                                                onChange={(e) => handleSearchChange(e.target.value)}
+                                                onFocus={() => {
+                                                    if (searchSuggestions.length > 0) {
+                                                        setShowSuggestions(true);
+                                                    }
+                                                }}
+                                                onBlur={() => {
+                                                    // Delay to allow click on suggestion
+                                                    setTimeout(() => setShowSuggestions(false), 200);
+                                                }}
+                                                placeholder="Search logs (typo-tolerant)... Try 'denyed', 'frence', 'secrat'"
+                                                className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                            />
+                                            
+                                            {/* Search suggestions dropdown */}
+                                            {showSuggestions && searchSuggestions.length > 0 && (
+                                                <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 max-h-60 overflow-y-auto">
+                                                    <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                                                        Recent Searches
+                                                    </div>
+                                                    {searchSuggestions.map((suggestion, idx) => (
+                                                        <button
+                                                            key={idx}
+                                                            onClick={() => applySuggestion(suggestion)}
+                                                            className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
+                                                        >
+                                                            <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                            </svg>
+                                                            <span className="text-sm text-gray-700 dark:text-gray-300">{suggestion}</span>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )}
+                                            
+                                            {/* "Did you mean?" suggestions */}
+                                            {didYouMean.length > 0 && (
+                                                <div className="mt-2 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                                                    <p className="text-sm text-amber-800 dark:text-amber-300 mb-2">
+                                                        <span className="font-semibold">No results found.</span> Did you mean:
+                                                    </p>
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {didYouMean.map((suggestion, idx) => (
+                                                            <button
+                                                                key={idx}
+                                                                onClick={() => applySuggestion(suggestion)}
+                                                                className="px-3 py-1 bg-amber-100 dark:bg-amber-800/30 text-amber-800 dark:text-amber-200 rounded-md hover:bg-amber-200 dark:hover:bg-amber-700/40 transition-colors text-sm font-medium"
+                                                            >
+                                                                {suggestion}
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
 
                                     {/* Event Type */}
