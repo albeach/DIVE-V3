@@ -600,8 +600,8 @@ function EmptyState({ hasSearch, onClearFilters, onAddNew }: EmptyStateProps) {
                     )}
                 </div>
             </div>
-                </div>
-            </AdminPageTransition>
+        </div>
+        </AdminPageTransition>
         </PageLayout>
     );
 }
