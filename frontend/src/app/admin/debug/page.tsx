@@ -10,6 +10,7 @@ import React from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import PageLayout from '@/components/layout/page-layout';
+import { AdminPageTransition, AnimatedButton } from '@/components/admin/shared';
 import { adminToast } from '@/lib/admin-toast';
 import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 
@@ -86,6 +87,7 @@ export default function AdminDebugPage() {
         <PageLayout
             user={session?.user || {}}
         >
+            <AdminPageTransition pageKey="/admin/debug">
             <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
                 {/* Header */}
                 <div className="mb-6 bg-white rounded-xl shadow-lg border border-slate-200 p-6">
@@ -183,13 +185,13 @@ export default function AdminDebugPage() {
                         </h2>
                         
                         <div className="space-y-4">
-                            <button
+                            <AnimatedButton
                                 onClick={testBackend}
                                 className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-xl hover:from-blue-700 hover:to-indigo-700 transition-all shadow-lg hover:shadow-xl"
                             >
                                 <span>🔗</span>
                                 Test /api/admin/idps Endpoint
-                            </button>
+                            </AnimatedButton>
                             <p className="text-sm text-gray-500 text-center">
                                 Check browser console (F12) for detailed results
                             </p>
@@ -226,6 +228,7 @@ export default function AdminDebugPage() {
                     </pre>
                 </div>
             </div>
+            </AdminPageTransition>
         </PageLayout>
     );
 }

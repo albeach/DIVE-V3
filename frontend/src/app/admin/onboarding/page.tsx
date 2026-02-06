@@ -10,6 +10,7 @@
 import React, { useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import PageLayout from '@/components/layout/page-layout';
+import { AdminPageTransition, AnimatedButton } from '@/components/admin/shared';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import AdminOnboardingTour from '@/components/admin/educational/AdminOnboarding';
@@ -54,6 +55,7 @@ export default function AdminOnboardingPage() {
     <PageLayout
       user={session?.user || {}}
     >
+      <AdminPageTransition pageKey="/admin/onboarding">
       <div className="min-h-[60vh]">
         <p className="text-slate-600 mb-4">
           The tour runs automatically. If you already dismissed it,{' '}
@@ -68,6 +70,7 @@ export default function AdminOnboardingPage() {
           onSkip={() => {}}
         />
       </div>
+      </AdminPageTransition>
     </PageLayout>
   );
 }

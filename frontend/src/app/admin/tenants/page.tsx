@@ -13,6 +13,7 @@ import React, { useState, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import PageLayout from '@/components/layout/page-layout';
+import { AdminPageTransition, AnimatedButton } from '@/components/admin/shared';
 import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 import {
   useTenantsList,
@@ -158,6 +159,7 @@ export default function TenantsPage() {
     <PageLayout
       user={session?.user || {}}
     >
+      <AdminPageTransition pageKey="/admin/tenants">
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-sky-50 to-cyan-50 dark:from-gray-900 dark:via-gray-900 dark:to-gray-900">
         {/* Header */}
         <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40">
@@ -178,7 +180,7 @@ export default function TenantsPage() {
               >
                 <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
                 Refresh
-              </button>
+              </AnimatedButton>
             </div>
           </div>
         </div>
@@ -199,9 +201,9 @@ export default function TenantsPage() {
                     {bulkResult.summary.failed > 0 && ` ${bulkResult.summary.failed} failed.`}
                   </p>
                 </div>
-                <button onClick={() => setBulkResult(null)} className="ml-auto text-emerald-600 hover:text-emerald-800">
+                <AnimatedButton onClick={() => setBulkResult(null)} className="ml-auto text-emerald-600 hover:text-emerald-800">
                   <XCircle className="w-4 h-4" />
-                </button>
+                </AnimatedButton>
               </div>
             </div>
           )}
@@ -244,7 +246,7 @@ export default function TenantsPage() {
               >
                 {enableMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Power className="w-3.5 h-3.5" />}
                 Enable
-              </button>
+              </AnimatedButton>
               <button
                 onClick={() => handleBulkAction('disable')}
                 disabled={isBulkPending}
@@ -252,7 +254,7 @@ export default function TenantsPage() {
               >
                 {disableMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <PowerOff className="w-3.5 h-3.5" />}
                 Disable
-              </button>
+              </AnimatedButton>
               <button
                 onClick={() => handleBulkAction('sync')}
                 disabled={isBulkPending}
@@ -260,13 +262,13 @@ export default function TenantsPage() {
               >
                 {syncMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCcw className="w-3.5 h-3.5" />}
                 Sync
-              </button>
+              </AnimatedButton>
               <button
                 onClick={() => setSelectedIds(new Set())}
                 className="ml-auto text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
               >
                 Clear selection
-              </button>
+              </AnimatedButton>
             </div>
           )}
 
@@ -282,7 +284,7 @@ export default function TenantsPage() {
                   <thead className="bg-gray-50 dark:bg-gray-900/50">
                     <tr>
                       <th className="px-6 py-3 text-left w-10">
-                        <button onClick={toggleSelectAll} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+                        <AnimatedButton onClick={toggleSelectAll} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
                           {allSelected ? (
                             <CheckSquare className="w-5 h-5 text-blue-600" />
                           ) : someSelected ? (
@@ -290,7 +292,7 @@ export default function TenantsPage() {
                           ) : (
                             <Square className="w-5 h-5" />
                           )}
-                        </button>
+                        </AnimatedButton>
                       </th>
                       <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Tenant</th>
                       <th className="px-6 py-3 text-left text-xs font-bold text-gray-600 dark:text-gray-400 uppercase tracking-wider">Country</th>
@@ -316,13 +318,13 @@ export default function TenantsPage() {
                           }`}
                         >
                           <td className="px-6 py-4">
-                            <button onClick={() => toggleSelect(tenant.id)}>
+                            <AnimatedButton onClick={() => toggleSelect(tenant.id)}>
                               {isSelected ? (
                                 <CheckSquare className="w-5 h-5 text-blue-600" />
                               ) : (
                                 <Square className="w-5 h-5 text-gray-400 hover:text-gray-600" />
                               )}
-                            </button>
+                            </AnimatedButton>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="flex items-center gap-3">
@@ -386,6 +388,7 @@ export default function TenantsPage() {
           )}
         </div>
       </div>
+      </AdminPageTransition>
     </PageLayout>
   );
 }
