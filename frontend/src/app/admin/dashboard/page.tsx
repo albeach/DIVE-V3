@@ -38,6 +38,7 @@ import { generateSampleHeatmapData } from '@/components/admin/authorization-heat
 import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 import { KeyboardShortcutsModal } from '@/components/ui/keyboard-shortcuts-modal';
 import { useKeyboardNavigation } from '@/hooks/use-keyboard-navigation';
+import { AdminPageTransition, AdminSectionTransition, AnimatedButton } from '@/components/admin/shared';
 
 type TabView = 'overview' | 'federation' | 'insights';
 
@@ -109,6 +110,7 @@ export default function AdminDashboard() {
 
     return (
         <PageLayout user={session?.user || {}}>
+            <AdminPageTransition pageKey="/admin/dashboard">
             <KeyboardShortcutsModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
             <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50 dark:from-gray-900 dark:via-gray-950 dark:to-gray-900">
                 {/* Interactive Breadcrumbs - SSOT for Admin Navigation */}
@@ -128,7 +130,7 @@ export default function AdminDashboard() {
 
                         <div className="flex flex-wrap gap-3 items-center lg:justify-end">
                             {/* Auto-Refresh Toggle */}
-                            <button
+                            <AnimatedButton
                                 onClick={() => setAutoRefresh(!autoRefresh)}
                                 className={`flex items-center space-x-2 px-3 py-2 rounded-lg text-sm sm:text-base font-medium transition-all ${
                                     autoRefresh
@@ -138,7 +140,7 @@ export default function AdminDashboard() {
                             >
                                 <span className={autoRefresh ? 'animate-pulse' : ''}>●</span>
                                 <span>{autoRefresh ? 'Live' : 'Paused'}</span>
-                            </button>
+                            </AnimatedButton>
 
                             {/* Date Range Selector */}
                             <select
@@ -153,12 +155,12 @@ export default function AdminDashboard() {
                             </select>
 
                             {/* Manual Refresh */}
-                            <button
+                            <AnimatedButton
                                 onClick={() => setLastRefresh(new Date())}
                                 className="px-3 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm sm:text-base hover:bg-blue-700 transition-all shadow-md hover:shadow-lg"
                             >
                                 🔄 Refresh
-                            </button>
+                            </AnimatedButton>
                         </div>
                     </div>
 
@@ -176,10 +178,11 @@ export default function AdminDashboard() {
                         aria-label="Dashboard tabs"
                     >
                         {tabs.map((tab) => (
-                            <button
+                            <AnimatedButton
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id as TabView)}
                                 title={tab.tooltip}
+                                intensity="subtle"
                                 className={`
                                     group relative px-4 sm:px-6 py-4 sm:py-5 text-sm sm:text-base font-medium rounded-xl border-2
                                     transition-all duration-200 ease-in-out
@@ -203,7 +206,7 @@ export default function AdminDashboard() {
                                 {activeTab === tab.id && (
                                     <div className="absolute bottom-0 left-0 right-0 h-1 bg-white rounded-b-xl" />
                                 )}
-                            </button>
+                            </AnimatedButton>
                         ))}
                     </nav>
                 </div>
@@ -214,6 +217,7 @@ export default function AdminDashboard() {
                 </div>
 
                 {/* Content Area - Simplified 3-Tab Layout */}
+                <AdminSectionTransition sectionKey={activeTab}>
                 <div className="pb-8">
                     {activeTab === 'overview' && (
                         <div className="space-y-6">
@@ -362,6 +366,7 @@ export default function AdminDashboard() {
                         </div>
                     )}
                 </div>
+                </AdminSectionTransition>
 
                 {/* Quick Actions - responsive grid instead of floating buttons */}
                 <div className="mt-6">
@@ -373,18 +378,19 @@ export default function AdminDashboard() {
                             { label: 'Manage IdPs', icon: '🔧', href: '/admin/idp', gradient: 'from-green-600 to-teal-600' },
                             { label: 'IdP Governance', icon: '🏛️', href: '/admin/analytics', gradient: 'from-orange-600 to-pink-600' },
                         ].map((action) => (
-                            <button
+                            <AnimatedButton
                                 key={action.href}
                                 onClick={() => router.push(action.href)}
                                 className={`w-full flex items-center justify-center gap-2 text-center px-3 py-3 sm:py-4 rounded-xl text-sm sm:text-base font-semibold text-white bg-gradient-to-r ${action.gradient} shadow-lg hover:shadow-xl transition-transform hover:scale-[1.02]`}
                             >
                                 <span className="text-lg sm:text-xl">{action.icon}</span>
                                 <span className="truncate">{action.label}</span>
-                            </button>
+                            </AnimatedButton>
                         ))}
                     </div>
                 </div>
             </div>
+            </AdminPageTransition>
         </PageLayout>
     );
 }

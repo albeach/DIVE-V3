@@ -122,3 +122,20 @@ export {
   type AccordionItemProps,
   type AccordionControlsProps,
 } from './AccordionWrapper';
+
+// Page Transitions (Phase 3.4)
+export {
+  AdminPageTransition,
+  AdminSectionTransition,
+  useReducedMotion,
+  type AdminPageTransitionProps,
+} from './AdminPageTransition';
+
+// Animated Buttons (Phase 3.4)
+export {
+  AnimatedButton,
+  AnimatedIconButton,
+  AnimatedLinkButton,
+  AnimatedCardButton,
+  type AnimatedButtonProps,
+} from './AnimatedButton';
