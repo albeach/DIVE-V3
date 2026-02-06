@@ -163,7 +163,7 @@ export default function ClearanceManagementPage() {
 
                         <div className="flex items-center gap-3">
                             {/* Auto-refresh toggle */}
-                            <button
+                            <AnimatedButton
                                 onClick={() => setAutoRefresh(!autoRefresh)}
                                 className={`px-4 py-2 rounded-lg font-medium transition-all duration-200 ${
                                     autoRefresh
@@ -176,7 +176,7 @@ export default function ClearanceManagementPage() {
                             </AnimatedButton>
 
                             {/* Manual refresh button */}
-                            <button
+                            <AnimatedButton
                                 onClick={() => fetchData()}
                                 className="px-4 py-2 bg-indigo-500 text-white rounded-lg font-medium hover:bg-indigo-600 transition-all duration-200 shadow-lg shadow-indigo-500/30 disabled:opacity-50"
                                 disabled={loading}
@@ -200,7 +200,7 @@ export default function ClearanceManagementPage() {
                                     <p className="text-red-800 dark:text-red-200 font-medium">Error</p>
                                     <p className="text-red-700 dark:text-red-300 text-sm">{error}</p>
                                 </div>
-                                <button
+                                <AnimatedButton
                                     onClick={() => setError(null)}
                                     className="text-red-400 hover:text-red-600 dark:hover:text-red-300"
                                     aria-label="Dismiss error"
@@ -216,7 +216,7 @@ export default function ClearanceManagementPage() {
                 <div className="mb-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-slate-200 dark:border-gray-700 p-2">
                     <div className="flex flex-wrap gap-2">
                         {tabs.map((tab) => (
-                            <button
+                            <AnimatedButton
                                 key={tab.id}
                                 onClick={() => setActiveTab(tab.id as TabView)}
                                 className={`flex-1 min-w-[140px] px-4 py-3 rounded-lg font-medium transition-all duration-200 ${

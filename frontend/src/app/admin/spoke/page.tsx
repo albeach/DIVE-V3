@@ -15,6 +15,7 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { motion } from 'framer-motion';
 import PageLayout from '@/components/layout/page-layout';
+import { AdminPageTransition, AnimatedButton } from '@/components/admin/shared';
 import {
   SpokeStatusCard,
   HubConnectivityWidget,
@@ -297,6 +298,7 @@ export default function SpokeDashboardPage() {
     <PageLayout
       user={session?.user || {}}
     >
+      <AdminPageTransition pageKey="/admin/spoke">
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
         {/* Header */}
         <motion.div
@@ -351,7 +353,7 @@ export default function SpokeDashboardPage() {
               >
                 <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
                 Refresh
-              </button>
+              </AnimatedButton>
             </div>
           </div>
         </motion.div>
@@ -445,6 +447,7 @@ export default function SpokeDashboardPage() {
           </div>
         </motion.div>
       </div>
+      </AdminPageTransition>
     </PageLayout>
   );
 }

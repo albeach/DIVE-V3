@@ -282,7 +282,7 @@ function IdPManagementPageContent() {
                         </p>
                     </div>
 
-                    <button
+                    <AnimatedButton
                         onClick={() => router.push('/admin/idp/new')}
                         className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors font-medium flex items-center gap-2"
                     >
@@ -331,7 +331,7 @@ function IdPManagementPageContent() {
                     {/* Filter Pills */}
                     <div className="flex items-center gap-2">
                         {Object.entries(filters).filter(([key, val]) => val && val !== 'all').length > 0 && (
-                            <button
+                            <AnimatedButton
                                 onClick={clearFilters}
                                 className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
                             >
@@ -340,7 +340,7 @@ function IdPManagementPageContent() {
                         )}
 
                         <div className="flex items-center gap-1">
-                            <button
+                            <AnimatedButton
                                 onClick={() => updateFilters({ protocol: filters.protocol === 'oidc' ? 'all' : 'oidc' })}
                                 className={`
                                     px-3 py-1.5 rounded-full text-xs font-medium transition-colors
@@ -352,7 +352,7 @@ function IdPManagementPageContent() {
                                 OIDC
                             </AnimatedButton>
 
-                            <button
+                            <AnimatedButton
                                 onClick={() => updateFilters({ protocol: filters.protocol === 'saml' ? 'all' : 'saml' })}
                                 className={`
                                     px-3 py-1.5 rounded-full text-xs font-medium transition-colors
@@ -384,7 +384,7 @@ function IdPManagementPageContent() {
 
                     {/* View Toggle */}
                     <div className="flex items-center gap-1 bg-gray-200 dark:bg-gray-700 rounded-lg p-1">
-                        <button
+                        <AnimatedButton
                             onClick={() => setViewMode('grid')}
                             className={`
                                 p-2 rounded transition-colors
@@ -396,7 +396,7 @@ function IdPManagementPageContent() {
                         >
                             <Squares2X2Icon className="h-5 w-5" />
                         </AnimatedButton>
-                        <button
+                        <AnimatedButton
                             onClick={() => setViewMode('list')}
                             className={`
                                 p-2 rounded transition-colors
@@ -583,14 +583,14 @@ function EmptyState({ hasSearch, onClearFilters, onAddNew }: EmptyStateProps) {
 
                 <div className="flex items-center justify-center gap-3">
                     {hasSearch ? (
-                        <button
+                        <AnimatedButton
                             onClick={onClearFilters}
                             className="px-6 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
                         >
                             Clear Filters
                         </AnimatedButton>
                     ) : (
-                        <button
+                        <AnimatedButton
                             onClick={onAddNew}
                             className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-lg transition-colors font-medium flex items-center gap-2"
                         >
