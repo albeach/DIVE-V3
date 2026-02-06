@@ -23,6 +23,7 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { useQuery } from '@tanstack/react-query';
 import PageLayout from '@/components/layout/page-layout';
+import { AdminPageTransition, AnimatedButton } from '@/components/admin/shared';
 import AdminBreadcrumbs from '@/components/admin/AdminBreadcrumbs';
 import IdPCard2025 from '@/components/admin/IdPCard2025';
 import IdPStatsBar, { IdPStats } from '@/components/admin/IdPStatsBar';
@@ -250,6 +251,7 @@ function IdPManagementPageContent() {
 
     return (
         <PageLayout user={session.user || {}}>
+            <AdminPageTransition pageKey="/admin/idp">
             <KeyboardShortcutsModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
             <div className="max-w-7xl mx-auto space-y-6">
                 {/* Interactive Breadcrumbs - SSOT for Admin Navigation */}
@@ -286,7 +288,7 @@ function IdPManagementPageContent() {
                     >
                         <PlusIcon className="h-5 w-5" />
                         Add New IdP
-                    </button>
+                    </AnimatedButton>
                 </div>
 
                 {/* Stats Bar */}
@@ -334,7 +336,7 @@ function IdPManagementPageContent() {
                                 className="px-3 py-1.5 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition-colors"
                             >
                                 Clear filters
-                            </button>
+                            </AnimatedButton>
                         )}
 
                         <div className="flex items-center gap-1">
@@ -348,7 +350,7 @@ function IdPManagementPageContent() {
                                 `}
                             >
                                 OIDC
-                            </button>
+                            </AnimatedButton>
 
                             <button
                                 onClick={() => updateFilters({ protocol: filters.protocol === 'saml' ? 'all' : 'saml' })}
@@ -360,7 +362,7 @@ function IdPManagementPageContent() {
                                 `}
                             >
                                 SAML
-                            </button>
+                            </AnimatedButton>
 
                             <InlineHelp
                                 variant="info"
@@ -393,7 +395,7 @@ function IdPManagementPageContent() {
                             title="Grid View"
                         >
                             <Squares2X2Icon className="h-5 w-5" />
-                        </button>
+                        </AnimatedButton>
                         <button
                             onClick={() => setViewMode('list')}
                             className={`
@@ -405,7 +407,7 @@ function IdPManagementPageContent() {
                             title="List View"
                         >
                             <ListBulletIcon className="h-5 w-5" />
-                        </button>
+                        </AnimatedButton>
                     </div>
                 </div>
 
@@ -586,7 +588,7 @@ function EmptyState({ hasSearch, onClearFilters, onAddNew }: EmptyStateProps) {
                             className="px-6 py-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors font-medium"
                         >
                             Clear Filters
-                        </button>
+                        </AnimatedButton>
                     ) : (
                         <button
                             onClick={onAddNew}
@@ -594,10 +596,12 @@ function EmptyState({ hasSearch, onClearFilters, onAddNew }: EmptyStateProps) {
                         >
                             <PlusIcon className="h-5 w-5" />
                             Add Your First IdP
-                        </button>
+                        </AnimatedButton>
                     )}
                 </div>
             </div>
         </div>
+        </AdminPageTransition>
+        </PageLayout>
     );
 }
