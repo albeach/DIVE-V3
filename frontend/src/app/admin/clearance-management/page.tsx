@@ -26,7 +26,7 @@ import { ClearanceEditor } from '@/components/admin/clearance/clearance-editor';
 import { ClearanceTestTool } from '@/components/admin/clearance/clearance-test-tool';
 import { ClearanceAuditLog } from '@/components/admin/clearance/clearance-audit-log';
 import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
-import { AdminPageTransition, AnimatedButton } from '@/components/admin/shared';
+import { AdminPageTransition, AnimatedButton, PresenceIndicator } from '@/components/admin/shared';
 
 type TabView = 'overview' | 'matrix' | 'editor' | 'test' | 'audit';
 
@@ -152,7 +152,7 @@ export default function ClearanceManagementPage() {
                 {/* Header */}
                 <div className="mb-6 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-slate-200 dark:border-gray-700 p-6">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                        <div className="space-y-2">
+                        <div className="space-y-2 flex-1">
                             <h1 className="text-3xl lg:text-4xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
                                 🔐 Clearance Management
                             </h1>
@@ -161,7 +161,10 @@ export default function ClearanceManagementPage() {
                             </p>
                         </div>
 
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 flex-wrap">
+                            {/* Presence Indicator */}
+                            <PresenceIndicator page="clearance-management" />
+                            
                             {/* Auto-refresh toggle */}
                             <AnimatedButton
                                 onClick={() => setAutoRefresh(!autoRefresh)}
