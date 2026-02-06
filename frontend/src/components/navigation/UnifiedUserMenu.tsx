@@ -387,6 +387,7 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
                             <div className="flex items-center gap-1.5 mt-0.5">
                                 <span
                                     className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold"
+                                    data-testid="user-clearance"
                                     style={{
                                         background: 'rgba(var(--instance-primary-rgb), 0.1)',
                                         color: 'var(--instance-primary)'
@@ -394,11 +395,11 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
                                 >
                                     {clearanceAbbrev(user?.clearance)}
                                 </span>
-                                <span className="text-[10px] font-medium text-gray-500">
+                                <span className="text-[10px] font-medium text-gray-500" data-testid="user-country">
                                     {user?.countryOfAffiliation || 'USA'}
                                 </span>
                                 {Array.isArray(user?.acpCOI) && user.acpCOI.length > 0 && (
-                                    <span className="text-[10px] font-medium text-purple-600">
+                                    <span className="text-[10px] font-medium text-purple-600" data-testid="user-coi">
                                         +{user.acpCOI.length} COI
                                     </span>
                                 )}

@@ -546,6 +546,7 @@ export default function Navigation({ user }: INavigationProps) {
                                     aria-expanded={adminDropdownOpen}
                                     aria-haspopup="true"
                                     aria-label="User menu"
+                                    data-testid="user-menu"
                                     title={`${getPseudonymFromUser(user as any)} • ${getNationalClearance(user?.clearance, user?.countryOfAffiliation)} • ${user?.countryOfAffiliation || 'USA'}`}
                                 >
                                     {/* Modern Avatar with Instance-Themed Color */}
@@ -589,6 +590,7 @@ export default function Navigation({ user }: INavigationProps) {
                                         </span>
                                         <span
                                             className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[10px] font-bold shadow-sm group-hover:shadow-md transition-shadow"
+                                            data-testid="user-clearance"
                                             style={{
                                                 background: 'linear-gradient(135deg, rgba(var(--instance-primary-rgb), 0.1), rgba(var(--instance-secondary-rgb, var(--instance-primary-rgb)), 0.1))',
                                                 color: 'var(--instance-primary)',
