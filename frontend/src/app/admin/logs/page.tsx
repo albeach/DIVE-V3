@@ -20,6 +20,7 @@ import PageLayout from '@/components/layout/page-layout';
 import { VirtualList } from '@/components/ui/virtual-list';
 import { AnimatedCounter, AnimatedPercentage } from '@/components/ui/animated-counter';
 import { createAISearch, AISearchWrapper } from '@/lib/ai-search-wrapper';
+import { AdminPageTransition, AnimatedButton, PresenceIndicator } from '@/components/admin/shared';
 
 // Types
 interface IRetentionConfig {
@@ -440,6 +441,7 @@ export default function AdminAuditLogsPage() {
 
     return (
         <PageLayout user={session?.user || {}}>
+            <AdminPageTransition pageKey="/admin/logs">
             <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-gray-900 dark:via-blue-900/20 dark:to-indigo-900/20">
                 {/* Header */}
                 <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40">
@@ -455,8 +457,11 @@ export default function AdminAuditLogsPage() {
                             </div>
 
                             <div className="flex items-center space-x-4">
+                                {/* Presence Indicator */}
+                                <PresenceIndicator page="logs" />
+                                
                                 {/* Auto-refresh toggle */}
-                                <button
+                                <AnimatedButton
                                     onClick={() => setAutoRefresh(!autoRefresh)}
                                     className={`px-4 py-2 rounded-lg font-medium transition-all ${
                                         autoRefresh
@@ -465,7 +470,7 @@ export default function AdminAuditLogsPage() {
                                     }`}
                                 >
                                     {autoRefresh ? '🔄 Auto-Refresh ON' : '⏸️ Auto-Refresh OFF'}
-                                </button>
+                                </AnimatedButton>
 
                                 {/* Back to dashboard */}
                                 <button
@@ -473,7 +478,7 @@ export default function AdminAuditLogsPage() {
                                     className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
                                 >
                                     ← Dashboard
-                                </button>
+                                </AnimatedButton>
                             </div>
                         </div>
                     </div>
@@ -575,7 +580,7 @@ export default function AdminAuditLogsPage() {
                                     }`}
                                 >
                                     📋 Table View
-                                </button>
+                                </AnimatedButton>
                                 <button
                                     onClick={() => setViewMode('timeline')}
                                     className={`px-6 py-2 rounded-lg font-medium transition-all ${
@@ -585,7 +590,7 @@ export default function AdminAuditLogsPage() {
                                     }`}
                                 >
                                     ⏱️ Timeline View
-                                </button>
+                                </AnimatedButton>
                                 <button
                                     onClick={() => setViewMode('analytics')}
                                     className={`px-6 py-2 rounded-lg font-medium transition-all ${
@@ -595,7 +600,7 @@ export default function AdminAuditLogsPage() {
                                     }`}
                                 >
                                     📈 Analytics View
-                                </button>
+                                </AnimatedButton>
                                 <button
                                     onClick={() => setViewMode('retention')}
                                     className={`px-6 py-2 rounded-lg font-medium transition-all ${
@@ -605,7 +610,7 @@ export default function AdminAuditLogsPage() {
                                     }`}
                                 >
                                     ⚙️ Retention
-                                </button>
+                                </AnimatedButton>
                             </div>
 
                             {/* Action Buttons */}
@@ -615,7 +620,7 @@ export default function AdminAuditLogsPage() {
                                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg"
                                 >
                                     📥 Export Logs
-                                </button>
+                                </AnimatedButton>
                                 <button
                                     onClick={() => {
                                         fetchLogs();
@@ -624,7 +629,7 @@ export default function AdminAuditLogsPage() {
                                     className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors font-medium shadow-lg"
                                 >
                                     🔄 Refresh
-                                </button>
+                                </AnimatedButton>
                             </div>
                         </div>
                     </div>
@@ -676,7 +681,7 @@ export default function AdminAuditLogsPage() {
                                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                                                             </svg>
                                                             <span className="text-sm text-gray-700 dark:text-gray-300">{suggestion}</span>
-                                                        </button>
+                                                        </AnimatedButton>
                                                     ))}
                                                 </div>
                                             )}
@@ -695,7 +700,7 @@ export default function AdminAuditLogsPage() {
                                                                 className="px-3 py-1 bg-amber-100 dark:bg-amber-800/30 text-amber-800 dark:text-amber-200 rounded-md hover:bg-amber-200 dark:hover:bg-amber-700/40 transition-colors text-sm font-medium"
                                                             >
                                                                 {suggestion}
-                                                            </button>
+                                                            </AnimatedButton>
                                                         ))}
                                                     </div>
                                                 </div>
@@ -828,7 +833,7 @@ export default function AdminAuditLogsPage() {
                                         className="px-6 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
                                     >
                                         🗑️ Clear Filters
-                                    </button>
+                                    </AnimatedButton>
                                 </div>
                             </div>
 
@@ -924,7 +929,7 @@ export default function AdminAuditLogsPage() {
                                                                     className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium"
                                                                 >
                                                                     View Details →
-                                                                </button>
+                                                                </AnimatedButton>
                                                             </td>
                                                         </tr>
                                                     ))}
@@ -949,7 +954,7 @@ export default function AdminAuditLogsPage() {
                                                         className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
                                                     >
                                                         ← Previous
-                                                    </button>
+                                                    </AnimatedButton>
                                                     <span className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 font-medium">
                                                         Page {page} of {totalPages}
                                                     </span>
@@ -959,7 +964,7 @@ export default function AdminAuditLogsPage() {
                                                         className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
                                                     >
                                                         Next →
-                                                    </button>
+                                                    </AnimatedButton>
                                                 </div>
                                             </div>
                                         </div>
@@ -1277,14 +1282,14 @@ export default function AdminAuditLogsPage() {
                                                 className="px-6 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
                                             >
                                                 Reset
-                                            </button>
+                                            </AnimatedButton>
                                             <button
                                                 onClick={saveRetention}
                                                 disabled={retentionSaving}
                                                 className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg disabled:opacity-50"
                                             >
                                                 {retentionSaving ? 'Saving...' : 'Save Retention Policy'}
-                                            </button>
+                                            </AnimatedButton>
                                         </div>
                                     </div>
                                 ) : (
@@ -1308,7 +1313,7 @@ export default function AdminAuditLogsPage() {
                                         className="text-white hover:text-gray-200 text-2xl font-bold"
                                     >
                                         ×
-                                    </button>
+                                    </AnimatedButton>
                                 </div>
                             </div>
 
@@ -1367,14 +1372,14 @@ export default function AdminAuditLogsPage() {
                                                 className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
                                             >
                                                 Cancel
-                                            </button>
+                                            </AnimatedButton>
                                             <button
                                                 onClick={handleEnhancedExport}
                                                 disabled={exportLoading || !exportDateRange.start || !exportDateRange.end}
                                                 className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg disabled:opacity-50"
                                             >
                                                 {exportLoading ? 'Exporting...' : 'Export'}
-                                            </button>
+                                            </AnimatedButton>
                                         </div>
                                     </>
                                 ) : (
@@ -1407,13 +1412,13 @@ export default function AdminAuditLogsPage() {
                                                 className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
                                             >
                                                 Close
-                                            </button>
+                                            </AnimatedButton>
                                             <button
                                                 onClick={() => { setLastExportResult(null); }}
                                                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg"
                                             >
                                                 Export Another
-                                            </button>
+                                            </AnimatedButton>
                                         </div>
                                     </div>
                                 )}
@@ -1435,7 +1440,7 @@ export default function AdminAuditLogsPage() {
                                         className="text-white hover:text-gray-200 text-2xl font-bold"
                                     >
                                         ×
-                                    </button>
+                                    </AnimatedButton>
                                 </div>
                             </div>
 
@@ -1549,12 +1554,13 @@ export default function AdminAuditLogsPage() {
                                     className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg"
                                 >
                                     Close
-                                </button>
+                                </AnimatedButton>
                             </div>
                         </div>
                     </div>
                 )}
             </div>
+            </AdminPageTransition>
         </PageLayout>
     );
 }

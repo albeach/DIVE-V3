@@ -26,6 +26,7 @@ import { ClearanceEditor } from '@/components/admin/clearance/clearance-editor';
 import { ClearanceTestTool } from '@/components/admin/clearance/clearance-test-tool';
 import { ClearanceAuditLog } from '@/components/admin/clearance/clearance-audit-log';
 import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
+import { AdminPageTransition, AnimatedButton } from '@/components/admin/shared';
 
 type TabView = 'overview' | 'matrix' | 'editor' | 'test' | 'audit';
 
@@ -146,6 +147,7 @@ export default function ClearanceManagementPage() {
             user={session?.user || {}}
             maxWidth="7xl"
         >
+            <AdminPageTransition pageKey="/admin/clearance-management">
             <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 dark:from-gray-900 dark:via-gray-950 dark:to-indigo-950/10">
                 {/* Header */}
                 <div className="mb-6 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-slate-200 dark:border-gray-700 p-6">
@@ -171,7 +173,7 @@ export default function ClearanceManagementPage() {
                                 title="Auto-refresh every minute"
                             >
                                 {autoRefresh ? '🔄 Auto' : '⏸️ Manual'}
-                            </button>
+                            </AnimatedButton>
 
                             {/* Manual refresh button */}
                             <button
@@ -180,7 +182,7 @@ export default function ClearanceManagementPage() {
                                 disabled={loading}
                             >
                                 🔄 Refresh
-                            </button>
+                            </AnimatedButton>
 
                             {/* Last refresh time */}
                             <div className="text-xs text-gray-500 dark:text-gray-400">
@@ -204,7 +206,7 @@ export default function ClearanceManagementPage() {
                                     aria-label="Dismiss error"
                                 >
                                     ✕
-                                </button>
+                                </AnimatedButton>
                             </div>
                         </div>
                     )}
@@ -228,7 +230,7 @@ export default function ClearanceManagementPage() {
                                     <span>{tab.icon}</span>
                                     <span className="hidden sm:inline">{tab.label.split(' ')[1]}</span>
                                 </div>
-                            </button>
+                            </AnimatedButton>
                         ))}
                     </div>
                 </div>
@@ -274,6 +276,7 @@ export default function ClearanceManagementPage() {
                     )}
                 </div>
             </div>
+            </AdminPageTransition>
         </PageLayout>
     );
 }
