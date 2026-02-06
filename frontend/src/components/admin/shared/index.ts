@@ -112,3 +112,13 @@ export {
   useAdminTheme as useAdminThemeTokens,
   type EntityStatus,
 } from './theme-tokens';
+
+// Accordion Components (Phase 3.7)
+export {
+  AccordionWrapper,
+  AccordionItem,
+  AccordionControls,
+  type AccordionWrapperProps,
+  type AccordionItemProps,
+  type AccordionControlsProps,
+} from './AccordionWrapper';
