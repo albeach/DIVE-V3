@@ -381,9 +381,14 @@ get_required_aal_for_classification(classification) := 1 if {
 } else := 1  # Default to AAL1 for unknown classifications
 
 is_mfa_not_verified := msg if {
-	# Only check MFA for classifications that require AAL2 (CONFIDENTIAL, SECRET, TOP_SECRET)
+	# Only check MFA for classifications that require AAL2+ (CONFIDENTIAL, SECRET, TOP_SECRET)
 	# RESTRICTED only requires AAL1 (single factor)
 	input.resource.classification in ["CONFIDENTIAL", "SECRET", "TOP_SECRET"]
+	
+	# Don't fail if authentication strength check already passed (handles AAL properly)
+	not check_authentication_strength_sufficient
+	
+	# Fallback check: verify AMR has 2+ factors
 	input.context.amr
 	amr_factors := parse_amr(input.context.amr)
 	count(amr_factors) < 2
