@@ -399,19 +399,19 @@ _spoke_up_legacy() {
     # Phase 1 Enhancement: Uses $ENVIRONMENT variable (not DIVE_ENV)
     # Fallback chain: service account → user auth → local .env (dev only)
     log_step "🔐 Loading secrets from GCP Secret Manager..."
-    echo "[DEBUG] About to set DIVE_INSTANCE=$instance_code"
+    log_verbose "Setting DIVE_INSTANCE=$instance_code"
     export DIVE_INSTANCE="$instance_code"
     # Note: $ENVIRONMENT is set by common.sh (defaults to 'local')
     # In production (gcp/pilot/prod/staging), service account is required
     # In dev/local, service account or user auth can be used
-    echo "[DEBUG] About to call load_secrets"
+    log_verbose "Calling load_secrets for $instance_code"
     load_secrets_result=$(load_secrets 2>&1; echo $?)
     if [ "$load_secrets_result" != "0" ]; then
         log_error "❌ Failed to load secrets for $instance_code"
-        echo "[DEBUG] load_secrets output: $load_secrets_result"
+        log_verbose "load_secrets exit code: $load_secrets_result"
         return 1
     fi
-    echo "[DEBUG] load_secrets completed successfully"
+    log_verbose "load_secrets completed successfully for $instance_code"
 
     # ==========================================================================
     # CRITICAL FIX (2026-01-22): Write secrets with CORRECT instance suffix

@@ -7,15 +7,15 @@ import type { NextRequest } from 'next/server';
  */
 export function middleware(request: NextRequest) {
   const response = NextResponse.next();
-  
+
   // Get the hostname from the request
   const hostname = request.headers.get('host') || 'localhost:3000';
-  
+
   // Make it available to the application
   // Note: Next.js doesn't allow setting env vars in middleware,
   // so we'll pass it via a custom header that can be read in getServerSideProps
   response.headers.set('x-forwarded-host', hostname);
-  
+
   return response;
 }
 

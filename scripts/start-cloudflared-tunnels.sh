@@ -53,33 +53,33 @@ start_tunnel() {
     local config_file=$2
     local credentials_file=$3
     local log_file="${PROJECT_ROOT}/logs/cloudflared-${instance}.log"
-    
+
     # Create logs directory if it doesn't exist
     mkdir -p "${PROJECT_ROOT}/logs"
-    
+
     if is_tunnel_running "${instance}"; then
         echo -e "${YELLOW}⚠️  ${instance} tunnel is already running${NC}"
         return 0
     fi
-    
+
     echo -e "${GREEN}🚀 Starting ${instance} tunnel...${NC}"
     echo "   Config: ${config_file}"
     echo "   Credentials: ${credentials_file}"
     echo "   Log: ${log_file}"
-    
+
     # Start tunnel in background
     nohup cloudflared tunnel \
         --config "${config_file}" \
         --credentials-file "${credentials_file}" \
         run > "${log_file}" 2>&1 &
-    
+
     local pid=$!
     echo "   PID: ${pid}"
     echo "${pid}" > "${PROJECT_ROOT}/logs/cloudflared-${instance}.pid"
-    
+
     # Wait a moment to check if it started successfully
     sleep 2
-    
+
     if ps -p "${pid}" > /dev/null 2>&1; then
         echo -e "${GREEN}✅ ${instance} tunnel started successfully${NC}"
         echo ""

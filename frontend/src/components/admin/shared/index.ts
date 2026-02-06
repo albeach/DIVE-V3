@@ -82,3 +82,33 @@ export {
   type PaginationProps,
   type PaginationState,
 } from './pagination';
+
+// Glass Components (Phase 3.2)
+export {
+  GlassCard,
+  GlassHeader,
+  GlassSection,
+  GlassGrid,
+  withGlassEffect,
+  type GlassCardProps,
+  type GlassHeaderProps,
+  type GlassSectionProps,
+  type GlassGridProps,
+} from './GlassCard';
+
+// Theme Tokens (Phase 3.2)
+export {
+  adminColors,
+  adminStatusColors,
+  adminEffects,
+  adminAnimations,
+  adminSpacing,
+  adminTypography,
+  adminBreakpoints,
+  adminZIndex,
+  getStatusColors,
+  getAdminColor,
+  generateAdminCSSVariables,
+  useAdminTheme as useAdminThemeTokens,
+  type EntityStatus,
+} from './theme-tokens';

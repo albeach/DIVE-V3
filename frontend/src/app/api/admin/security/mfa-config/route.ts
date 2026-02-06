@@ -6,103 +6,53 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import { withAuth, withSuperAdmin, createAdminBackendFetch } from '@/middleware/admin-auth';
 import { getBackendUrl } from '@/lib/api-utils';
+
+export const dynamic = 'force-dynamic';
 
 const BACKEND_URL = getBackendUrl();
 
-const DEFAULT_CONFIG = {
-    mfaRequired: true,
-    mfaRequiredForAdmins: true,
-    mfaGracePeriodDays: 7,
-    totpEnabled: true,
-    totpAlgorithm: 'SHA256',
-    totpDigits: 6,
-    totpPeriod: 30,
-    totpInitialCounter: 0,
-    webauthnEnabled: true,
-    webauthnRpName: 'DIVE V3',
-    webauthnRpId: 'localhost',
-    webauthnAttestationConveyance: 'none',
-    webauthnUserVerification: 'preferred',
-    webauthnTimeout: 60000,
-    smsEnabled: false,
-    smsCodeLength: 6,
-    smsCodeExpiry: 300,
-    smsRateLimit: 3,
-    recoveryCodesEnabled: true,
-    recoveryCodeCount: 10,
-    recoveryCodeLength: 12,
-};
+export const GET = withAuth(async (request, { tokens }) => {
+    const backendFetch = createAdminBackendFetch(tokens, BACKEND_URL);
+    const response = await backendFetch(`/api/admin/security/mfa-config`);
 
-export async function GET(request: NextRequest) {
-    try {
-        const session = await auth();
-        if (!session?.user) {
-            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-        }
-
-        try {
-            const response = await fetch(`${BACKEND_URL}/api/admin/security/mfa-config`, {
-                headers: {
-                    'Authorization': `Bearer ${(session as any).accessToken}`,
-                },
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                return NextResponse.json({ success: true, data: data.config || data });
-            }
-        } catch (backendError) {
-            console.warn('[MFAConfig API] Backend unavailable');
-        }
-
-        return NextResponse.json({ success: true, data: DEFAULT_CONFIG });
-        
-    } catch (error) {
-        console.error('[MFAConfig API] Error:', error);
-        return NextResponse.json({ success: true, data: DEFAULT_CONFIG });
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Backend error' }));
+        return NextResponse.json(
+            {
+                success: false,
+                error: 'BackendError',
+                message: error.message || `Backend returned ${response.status}`,
+            },
+            { status: response.status }
+        );
     }
-}
 
-export async function PUT(request: NextRequest) {
-    try {
-        const session = await auth();
-        if (!session?.user) {
-            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-        }
+    const data = await response.json();
+    return NextResponse.json({ success: true, data: data.config || data });
+});
 
-        const isAdmin = session.user.roles?.includes('super_admin') || 
-                       session.user.roles?.includes('admin') ||
-                       session.user.roles?.includes('dive-admin');
-        
-        if (!isAdmin) {
-            return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
-        }
+export const PUT = withSuperAdmin(async (request, { tokens }) => {
+    const body = await request.json();
 
-        const body = await request.json();
+    const backendFetch = createAdminBackendFetch(tokens, BACKEND_URL);
+    const response = await backendFetch(`/api/admin/security/mfa-config`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+    });
 
-        try {
-            const response = await fetch(`${BACKEND_URL}/api/admin/security/mfa-config`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${(session as any).accessToken}`,
-                },
-                body: JSON.stringify(body),
-            });
-
-            if (response.ok) {
-                return NextResponse.json({ success: true, message: 'MFA configuration updated' });
-            }
-        } catch (backendError) {
-            console.warn('[MFAConfig API] Backend unavailable');
-        }
-
-        return NextResponse.json({ success: true, message: 'MFA configuration updated (local)' });
-        
-    } catch (error) {
-        console.error('[MFAConfig API] Update error:', error);
-        return NextResponse.json({ success: false, error: 'Failed to update MFA configuration' }, { status: 500 });
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Failed to update MFA configuration' }));
+        return NextResponse.json(
+            {
+                success: false,
+                error: 'BackendError',
+                message: error.message || 'Failed to update MFA configuration',
+            },
+            { status: response.status }
+        );
     }
-}
+
+    return NextResponse.json({ success: true, message: 'MFA configuration updated' });
+});

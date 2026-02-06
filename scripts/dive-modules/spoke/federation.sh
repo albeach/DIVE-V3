@@ -214,7 +214,7 @@ spoke_sync_secrets() {
         fi
 
         # Get spoke port for API check
-        eval "$(_get_spoke_ports "$code_upper" 2>/dev/null)" || true
+        eval "$(get_instance_ports "$code_upper" 2>/dev/null)" || true
         local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
 
         # Check if Keycloak API is actually ready (not just container healthy)
@@ -347,7 +347,7 @@ spoke_sync_federation_secrets() {
     fi
 
     # Get spoke port
-    eval "$(_get_spoke_ports "$code_upper" 2>/dev/null)" || true
+    eval "$(get_instance_ports "$code_upper" 2>/dev/null)" || true
     local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
 
     # Get spoke token

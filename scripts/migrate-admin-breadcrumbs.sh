@@ -31,29 +31,29 @@ skipped=0
 
 for page_file in $admin_pages; do
     ((total++))
-    
+
     relative_path="${page_file#$SCRIPT_DIR/../}"
     echo -e "${BLUE}[$total]${NC} Processing: $relative_path"
-    
+
     # Check if already uses InteractiveBreadcrumbs
     if grep -q "InteractiveBreadcrumbs" "$page_file"; then
         echo -e "  ${GREEN}✓${NC} Already migrated"
         ((migrated++))
         continue
     fi
-    
+
     # Check if it has breadcrumbs prop
     if ! grep -q "breadcrumbs={\[" "$page_file"; then
         echo -e "  ${YELLOW}⊘${NC} No breadcrumbs prop found (skipping)"
         ((skipped++))
         continue
     fi
-    
+
     echo -e "  ${BLUE}→${NC} Needs migration"
-    
+
     # Create backup
     cp "$page_file" "${page_file}.backup"
-    
+
     # Step 1: Add import if not present
     if ! grep -q "import.*InteractiveBreadcrumbs" "$page_file"; then
         # Find the last import line
@@ -66,12 +66,12 @@ import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs'
             echo -e "  ${GREEN}✓${NC} Added InteractiveBreadcrumbs import"
         fi
     fi
-    
+
     # Step 2: Remove breadcrumbs prop
     # This is complex - need to handle multi-line props
     # For now, mark for manual review
     echo -e "  ${YELLOW}⚠${NC}  Manual review needed for breadcrumbs prop removal"
-    
+
     ((migrated++))
 done
 

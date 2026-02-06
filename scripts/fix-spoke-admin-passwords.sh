@@ -50,32 +50,32 @@ reset_spoke_admin_password() {
     local instance_code="$1"
     local code_upper=$(echo "$instance_code" | tr '[:lower:]' '[:upper:]')
     local code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
-    
+
     local kc_container="dive-spoke-${code_lower}-keycloak"
     local realm_name="dive-v3-broker-${code_lower}"
     local admin_username="admin-${code_lower}"
-    
+
     echo ""
     log_step "Processing spoke: $code_upper"
-    
+
     # Check if container exists
     if ! docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
         log_warn "Keycloak container not running for $code_upper (skipping)"
         return 0
     fi
-    
+
     # Get Keycloak admin password
     local kc_admin_pass
     kc_admin_pass=$(docker exec "$kc_container" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r' || echo "")
     if [ -z "$kc_admin_pass" ]; then
         kc_admin_pass=$(docker exec "$kc_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r' || echo "")
     fi
-    
+
     if [ -z "$kc_admin_pass" ]; then
         log_error "Cannot get Keycloak admin password for $code_upper"
         return 1
     fi
-    
+
     # Test current password (to confirm it needs fixing)
     log_info "Testing current password..."
     local test_current
@@ -84,12 +84,12 @@ reset_spoke_admin_password() {
         -d "client_id=admin-cli" \
         -d "username=${admin_username}" \
         -d "password=${CORRECT_PASSWORD}" 2>&1 || echo "error")
-    
+
     if echo "$test_current" | jq -e '.access_token' >/dev/null 2>&1; then
         log_success "Password already correct for $admin_username (no action needed)"
         return 0
     fi
-    
+
     # Confirm it's using the wrong password
     local test_wrong
     test_wrong=$(docker exec "$kc_container" curl -sf "http://localhost:8080/realms/${realm_name}/protocol/openid-connect/token" \
@@ -97,14 +97,14 @@ reset_spoke_admin_password() {
         -d "client_id=admin-cli" \
         -d "username=${admin_username}" \
         -d "password=${INCORRECT_PASSWORD}" 2>&1 || echo "error")
-    
+
     if ! echo "$test_wrong" | jq -e '.access_token' >/dev/null 2>&1; then
         log_warn "Cannot authenticate with either password - may have custom password (skipping)"
         return 0
     fi
-    
+
     log_warn "Confirmed: $admin_username is using INCORRECT password (TestUser2025!Pilot)"
-    
+
     # Get admin access token for password reset
     log_info "Authenticating as Keycloak admin..."
     local admin_token
@@ -113,25 +113,25 @@ reset_spoke_admin_password() {
         -d "client_id=admin-cli" \
         -d "username=admin" \
         -d "password=${kc_admin_pass}" 2>&1 | jq -r '.access_token // empty')
-    
+
     if [ -z "$admin_token" ]; then
         log_error "Failed to authenticate as Keycloak admin for $code_upper"
         return 1
     fi
-    
+
     # Get user ID
     log_info "Looking up user ID..."
     local user_id
     user_id=$(docker exec "$kc_container" curl -sf "http://localhost:8080/admin/realms/${realm_name}/users?username=${admin_username}" \
         -H "Authorization: Bearer ${admin_token}" 2>&1 | jq -r '.[0].id // empty')
-    
+
     if [ -z "$user_id" ]; then
         log_error "User not found: $admin_username in realm $realm_name"
         return 1
     fi
-    
+
     log_info "User ID: $user_id"
-    
+
     # Reset password
     log_step "Resetting password to correct value..."
     local reset_result
@@ -144,7 +144,7 @@ reset_spoke_admin_password() {
             \"value\": \"${CORRECT_PASSWORD}\",
             \"temporary\": false
         }" 2>&1)
-    
+
     # Verify password reset worked
     log_info "Verifying new password..."
     local verify_new
@@ -153,7 +153,7 @@ reset_spoke_admin_password() {
         -d "client_id=admin-cli" \
         -d "username=${admin_username}" \
         -d "password=${CORRECT_PASSWORD}" 2>&1 || echo "error")
-    
+
     if echo "$verify_new" | jq -e '.access_token' >/dev/null 2>&1; then
         log_success "✓ Password successfully reset for $admin_username"
         log_info "New password: $CORRECT_PASSWORD"
@@ -202,12 +202,12 @@ if [ "$1" = "all" ]; then
         instance=$(echo "$container" | sed 's/dive-spoke-\(.*\)-keycloak/\1/' | tr '[:lower:]' '[:upper:]')
         INSTANCES+=("$instance")
     done
-    
+
     if [ ${#INSTANCES[@]} -eq 0 ]; then
         log_warn "No running spoke instances found"
         exit 0
     fi
-    
+
     log_info "Found ${#INSTANCES[@]} spoke instance(s): ${INSTANCES[*]}"
 else
     INSTANCES=("$@")

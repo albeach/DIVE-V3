@@ -5,8 +5,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import { withSuperAdmin, createAdminBackendFetch } from '@/middleware/admin-auth';
 import { getBackendUrl } from '@/lib/api-utils';
+
+export const dynamic = 'force-dynamic';
 
 const BACKEND_URL = getBackendUrl();
 
@@ -14,45 +16,30 @@ interface RouteContext {
     params: Promise<{ userId: string }>;
 }
 
-export async function POST(request: NextRequest, context: RouteContext) {
-    try {
-        const session = await auth();
-        if (!session?.user) {
-            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-        }
+export const POST = withSuperAdmin(async (request, { tokens }, context: RouteContext) => {
+    const { userId } = await context.params;
+    const body = await request.json();
 
-        const isAdmin = session.user.roles?.includes('super_admin') || 
-                       session.user.roles?.includes('admin') ||
-                       session.user.roles?.includes('dive-admin');
-        
-        if (!isAdmin) {
-            return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
-        }
+    const backendFetch = createAdminBackendFetch(tokens, BACKEND_URL);
+    const response = await backendFetch(`/api/admin/users/${userId}/reset-password`, {
+        method: 'POST',
+        body: JSON.stringify({
+            password: body.password,
+            temporary: body.temporary ?? false,
+        }),
+    });
 
-        const { userId } = await context.params;
-        const body = await request.json();
-        
-        const response = await fetch(`${BACKEND_URL}/api/admin/users/${userId}/reset-password`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${(session as any).accessToken}`,
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Failed to reset password' }));
+        return NextResponse.json(
+            {
+                success: false,
+                error: 'BackendError',
+                message: error.message || 'Failed to reset password',
             },
-            body: JSON.stringify({
-                password: body.password,
-                temporary: body.temporary ?? false,
-            }),
-        });
-
-        if (!response.ok) {
-            const error = await response.json();
-            return NextResponse.json({ success: false, error: error.message || 'Failed to reset password' }, { status: response.status });
-        }
-
-        return NextResponse.json({ success: true, message: 'Password reset successfully' });
-        
-    } catch (error) {
-        console.error('[Users API] Reset password error:', error);
-        return NextResponse.json({ success: false, error: 'Failed to reset password' }, { status: 500 });
+            { status: response.status }
+        );
     }
-}
+
+    return NextResponse.json({ success: true, message: 'Password reset successfully' });
+});

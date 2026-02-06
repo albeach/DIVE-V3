@@ -787,9 +787,9 @@ _create_spoke_docker_compose() {
 
     # ==========================================================================
     # Port allocation based on instance code (spoke-in-a-box pattern)
-    # Uses centralized _get_spoke_ports function for consistency
+    # Uses centralized get_instance_ports function for consistency
     # ==========================================================================
-    eval "$(_get_spoke_ports "$code_upper")"
+    eval "$(get_instance_ports "$code_upper")"
 
     local frontend_host_port=$SPOKE_FRONTEND_PORT
     local backend_host_port=$SPOKE_BACKEND_PORT
@@ -961,7 +961,7 @@ _spoke_init_legacy() {
     local hub_url="${DIVE_HUB_URL:-https://localhost:4000}"
 
     # Calculate ports using centralized function (ensures consistency with docker-compose)
-    eval "$(_get_spoke_ports "$code_upper")"
+    eval "$(get_instance_ports "$code_upper")"
 
     local frontend_port=$SPOKE_FRONTEND_PORT
     local backend_port=$SPOKE_BACKEND_PORT

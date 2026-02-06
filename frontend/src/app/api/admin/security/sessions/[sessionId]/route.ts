@@ -5,8 +5,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import { withSuperAdmin, createAdminBackendFetch } from '@/middleware/admin-auth';
 import { getBackendUrl } from '@/lib/api-utils';
+
+export const dynamic = 'force-dynamic';
 
 const BACKEND_URL = getBackendUrl();
 
@@ -14,43 +16,25 @@ interface RouteContext {
     params: Promise<{ sessionId: string }>;
 }
 
-export async function DELETE(request: NextRequest, context: RouteContext) {
-    try {
-        const session = await auth();
-        if (!session?.user) {
-            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-        }
+export const DELETE = withSuperAdmin(async (request, { tokens }, context: RouteContext) => {
+    const { sessionId } = await context.params;
 
-        const isAdmin = session.user.roles?.includes('super_admin') || 
-                       session.user.roles?.includes('admin') ||
-                       session.user.roles?.includes('dive-admin');
-        
-        if (!isAdmin) {
-            return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
-        }
+    const backendFetch = createAdminBackendFetch(tokens, BACKEND_URL);
+    const response = await backendFetch(`/api/admin/security/sessions/${sessionId}`, {
+        method: 'DELETE',
+    });
 
-        const { sessionId } = await context.params;
-
-        try {
-            const response = await fetch(`${BACKEND_URL}/api/admin/security/sessions/${sessionId}`, {
-                method: 'DELETE',
-                headers: {
-                    'Authorization': `Bearer ${(session as any).accessToken}`,
-                },
-            });
-
-            if (response.ok) {
-                return NextResponse.json({ success: true, message: 'Session terminated' });
-            }
-        } catch (backendError) {
-            console.warn('[Sessions API] Backend unavailable');
-        }
-
-        // Simulate success for development
-        return NextResponse.json({ success: true, message: 'Session terminated' });
-        
-    } catch (error) {
-        console.error('[Sessions API] Delete error:', error);
-        return NextResponse.json({ success: false, error: 'Failed to terminate session' }, { status: 500 });
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Failed to terminate session' }));
+        return NextResponse.json(
+            {
+                success: false,
+                error: 'BackendError',
+                message: error.message || 'Failed to terminate session',
+            },
+            { status: response.status }
+        );
     }
-}
+
+    return NextResponse.json({ success: true, message: 'Session terminated' });
+});

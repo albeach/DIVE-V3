@@ -30,11 +30,11 @@ test_bidirectional_sso() {
     echo "=================================================="
 
     # Get spoke configurations
-    eval "$(_get_spoke_ports "$source_spoke")"
+    eval "$(get_instance_ports "$source_spoke")"
     local source_port="${SPOKE_BACKEND_HTTPS_PORT:-4000}"
     local source_kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
 
-    eval "$(_get_spoke_ports "$target_spoke")"
+    eval "$(get_instance_ports "$target_spoke")"
     local target_port="${SPOKE_BACKEND_HTTPS_PORT:-4000}"
     local target_kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
 

@@ -198,12 +198,42 @@ export function getStatusColors(status: EntityStatus) {
 // ============================================
 
 export const adminEffects = {
+  // Glassmorphism patterns - Phase 3.2 Enhancement
   glass: {
     light: 'bg-white/70 backdrop-blur-xl border border-white/20 shadow-lg',
     dark: 'dark:bg-slate-900/70 dark:backdrop-blur-xl dark:border-slate-700/20 dark:shadow-2xl',
     combined: 'bg-white/70 dark:bg-slate-900/70 backdrop-blur-xl border border-white/20 dark:border-slate-700/20 shadow-lg dark:shadow-2xl',
+    
+    // Enhanced glassmorphism presets - Phase 3.2
+    card: 'bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-2xl shadow-xl border border-gray-200 dark:border-gray-700',
+    cardLight: 'bg-white/80 dark:bg-gray-800/80 backdrop-blur-lg rounded-xl shadow-lg border border-gray-200 dark:border-gray-700',
+    cardHeavy: 'bg-white/95 dark:bg-gray-800/95 backdrop-blur-2xl rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700',
+    panel: 'bg-white/85 dark:bg-gray-800/85 backdrop-blur-xl rounded-xl shadow-lg border border-gray-200 dark:border-gray-700',
+    modal: 'bg-white/95 dark:bg-gray-900/95 backdrop-blur-2xl rounded-2xl shadow-2xl border border-gray-200 dark:border-gray-700',
+    header: 'bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl border-b border-gray-200 dark:border-gray-700',
   },
 
+  // Depth hierarchy - Phase 3.2 Enhancement
+  depth: {
+    base: 'relative z-0',
+    elevated: 'relative z-10 shadow-lg',
+    floating: 'relative z-20 shadow-xl',
+    overlay: 'relative z-30 shadow-2xl',
+    modal: 'relative z-40',
+    top: 'relative z-50',
+  },
+
+  // 3D hover effects - Phase 3.2 Enhancement
+  hover3d: {
+    lift: 'hover:scale-[1.02] hover:-translate-y-1 hover:shadow-2xl transition-all duration-300 ease-out',
+    liftSmall: 'hover:scale-[1.01] hover:-translate-y-0.5 hover:shadow-xl transition-all duration-200 ease-out',
+    liftLarge: 'hover:scale-[1.03] hover:-translate-y-2 hover:shadow-2xl transition-all duration-300 ease-out',
+    tilt: 'hover:rotate-1 hover:scale-[1.02] transition-all duration-300 ease-out',
+    glow: 'hover:shadow-[0_0_30px_rgba(99,102,241,0.3)] dark:hover:shadow-[0_0_30px_rgba(129,140,248,0.4)] transition-all duration-300',
+    press: 'active:scale-95 transition-transform duration-100',
+  },
+
+  // Gradient patterns
   gradient: {
     primary: 'bg-gradient-to-br from-indigo-500 to-purple-600',
     success: 'bg-gradient-to-br from-emerald-500 to-teal-600',
@@ -211,24 +241,31 @@ export const adminEffects = {
     error: 'bg-gradient-to-br from-red-500 to-pink-600',
     info: 'bg-gradient-to-br from-sky-500 to-blue-600',
     ambient: 'bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900 dark:to-slate-800',
+    shimmer: 'bg-gradient-to-r from-transparent via-white/10 to-transparent',
   },
 
+  // Border styles
   border: {
     default: 'border border-gray-200 dark:border-slate-700',
     light: 'border border-white/20 dark:border-slate-700/20',
     strong: 'border-2 border-gray-300 dark:border-slate-600',
+    accent: 'border-l-4 border-l-indigo-500 dark:border-l-indigo-400',
   },
 
+  // Shadow levels
   shadow: {
     sm: 'shadow-sm hover:shadow-md transition-shadow',
     md: 'shadow-md hover:shadow-lg transition-shadow',
     lg: 'shadow-lg hover:shadow-xl transition-shadow',
     xl: 'shadow-xl hover:shadow-2xl transition-shadow',
+    inner: 'shadow-inner',
   },
 
+  // Focus rings
   ring: {
     focus: 'focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2',
     error: 'focus:ring-2 focus:ring-red-500 focus:ring-offset-2',
+    success: 'focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2',
   },
 };
 

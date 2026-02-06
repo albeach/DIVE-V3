@@ -6,7 +6,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import { withSuperAdmin, createAdminBackendFetch } from '@/middleware/admin-auth';
 import { getBackendUrl } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
@@ -17,92 +17,51 @@ interface RouteContext {
     params: Promise<{ country: string }>;
 }
 
-export async function PUT(request: NextRequest, context: RouteContext) {
-    try {
-        const session = await auth();
-        if (!session?.user) {
-            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-        }
+export const PUT = withSuperAdmin(async (request, { tokens }, context: RouteContext) => {
+    const { country } = await context.params;
+    const body = await request.json();
 
-        const isAdmin = session.user.roles?.includes('super_admin') ||
-                       session.user.roles?.includes('admin') ||
-                       session.user.roles?.includes('dive-admin');
+    const backendFetch = createAdminBackendFetch(tokens, BACKEND_URL);
+    const response = await backendFetch(`/api/admin/clearance/countries/${country}`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+    });
 
-        if (!isAdmin) {
-            return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
-        }
-
-        const { country } = await context.params;
-        const body = await request.json();
-
-        const response = await fetch(`${BACKEND_URL}/api/admin/clearance/countries/${country}`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${(session as any).accessToken}`,
-            },
-            body: JSON.stringify(body),
-        });
-
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            return NextResponse.json(
-                { success: false, error: error.message || 'Failed to update country configuration' },
-                { status: response.status }
-            );
-        }
-
-        const data = await response.json();
-        return NextResponse.json({ success: true, data });
-
-    } catch (error) {
-        console.error('[Clearance API] PUT country error:', error);
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Failed to update country configuration' }));
         return NextResponse.json(
-            { success: false, error: 'Failed to update clearance country configuration' },
-            { status: 500 }
+            {
+                success: false,
+                error: 'BackendError',
+                message: error.message || 'Failed to update country configuration',
+            },
+            { status: response.status }
         );
     }
-}
 
-export async function DELETE(request: NextRequest, context: RouteContext) {
-    try {
-        const session = await auth();
-        if (!session?.user) {
-            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-        }
+    const data = await response.json();
+    return NextResponse.json({ success: true, data });
+});
 
-        const isAdmin = session.user.roles?.includes('super_admin') ||
-                       session.user.roles?.includes('admin') ||
-                       session.user.roles?.includes('dive-admin');
+export const DELETE = withSuperAdmin(async (request, { tokens }, context: RouteContext) => {
+    const { country } = await context.params;
 
-        if (!isAdmin) {
-            return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
-        }
+    const backendFetch = createAdminBackendFetch(tokens, BACKEND_URL);
+    const response = await backendFetch(`/api/admin/clearance/countries/${country}`, {
+        method: 'DELETE',
+    });
 
-        const { country } = await context.params;
-
-        const response = await fetch(`${BACKEND_URL}/api/admin/clearance/countries/${country}`, {
-            method: 'DELETE',
-            headers: {
-                'Authorization': `Bearer ${(session as any).accessToken}`,
-            },
-        });
-
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            return NextResponse.json(
-                { success: false, error: error.message || 'Failed to delete country configuration' },
-                { status: response.status }
-            );
-        }
-
-        return NextResponse.json({ success: true, message: 'Country configuration deleted' });
-
-    } catch (error) {
-        console.error('[Clearance API] DELETE country error:', error);
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Failed to delete country configuration' }));
         return NextResponse.json(
-            { success: false, error: 'Failed to delete clearance country configuration' },
-            { status: 500 }
+            {
+                success: false,
+                error: 'BackendError',
+                message: error.message || 'Failed to delete country configuration',
+            },
+            { status: response.status }
         );
     }
-}
+
+    return NextResponse.json({ success: true, message: 'Country configuration deleted' });
+});

@@ -52,21 +52,21 @@ BREADCRUMBS_JSX = """      {/* Interactive Breadcrumbs - SSOT */}
 
 def migrate_file(filepath: Path) -> bool:
     """Migrate a single file to use InteractiveBreadcrumbs"""
-    
+
     if not filepath.exists():
         print(f"⊘ Skipping {filepath.relative_to(FRONTEND_DIR.parent.parent.parent)} (not found)")
         return False
-    
+
     content = filepath.read_text()
     original_content = content
-    
+
     # Check if already migrated
     if "InteractiveBreadcrumbs" in content:
         print(f"✓ Already migrated: {filepath.relative_to(FRONTEND_DIR)}")
         return False
-    
+
     print(f"→ Processing: {filepath.relative_to(FRONTEND_DIR)}")
-    
+
     # Step 1: Add import after last import statement
     if IMPORT_LINE not in content:
         # Find the last import line
@@ -76,27 +76,27 @@ def migrate_file(filepath: Path) -> bool:
             insert_pos = last_import.end()
             content = content[:insert_pos] + "\n" + IMPORT_LINE + content[insert_pos:]
             print(f"  ✓ Added InteractiveBreadcrumbs import")
-    
+
     # Step 2: Remove breadcrumbs prop from PageLayout
     # Match: breadcrumbs={[...]} across multiple lines
     breadcrumbs_pattern = r'\s*breadcrumbs=\{\s*\[[\s\S]*?\]\s*\}\s*\n'
     if re.search(breadcrumbs_pattern, content):
         content = re.sub(breadcrumbs_pattern, '\n', content)
         print(f"  ✓ Removed breadcrumbs prop")
-    
+
     # Step 3: Add InteractiveBreadcrumbs after PageLayout opening tag
     # Find <PageLayout...> and add breadcrumbs after the closing >
     pagelayout_pattern = r'(<PageLayout[^>]*>)\s*\n'
-    
+
     def add_breadcrumbs(match):
         return match.group(1) + "\n" + BREADCRUMBS_JSX
-    
+
     if re.search(pagelayout_pattern, content):
         # Only add if not already present
         if '<InteractiveBreadcrumbs />' not in content:
             content = re.sub(pagelayout_pattern, add_breadcrumbs, content, count=1)
             print(f"  ✓ Added InteractiveBreadcrumbs component")
-    
+
     # Write back if changed
     if content != original_content:
         filepath.write_text(content)
@@ -111,10 +111,10 @@ def main():
     print("🔄 Migrating Admin Pages to InteractiveBreadcrumbs SSOT")
     print("=" * 60)
     print()
-    
+
     migrated_count = 0
     skipped_count = 0
-    
+
     for file_path in FILES_TO_MIGRATE:
         full_path = FRONTEND_DIR / file_path
         if migrate_file(full_path):
@@ -122,7 +122,7 @@ def main():
         else:
             skipped_count += 1
         print()
-    
+
     print("=" * 60)
     print("✅ Migration Complete!")
     print(f"   Migrated: {migrated_count} files")
