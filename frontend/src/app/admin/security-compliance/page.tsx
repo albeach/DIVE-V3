@@ -3,16 +3,19 @@
  *
  * Displays NIST SP 800-63-3 and NATO ACP-240 compliance reports
  * Phase 2: Complete Admin Page Implementation
+ * Phase 3.7: Enhanced with progressive disclosure (accordions)
  * Date: 2026-02-05
  */
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import PageLayout from '@/components/layout/page-layout';
 import { Shield, FileText, Download, AlertCircle, CheckCircle, AlertTriangle, Info } from 'lucide-react';
+import { AccordionWrapper, AccordionItem, AccordionControls } from '@/components/admin/shared';
+import { Badge } from '@/components/ui/badge';
 
 // Types
 interface IComplianceFinding {
@@ -159,6 +162,20 @@ export default function SecurityCompliancePage() {
         if (score >= 70) return 'text-yellow-600 dark:text-yellow-400';
         return 'text-red-600 dark:text-red-400';
     };
+
+    // Group findings by severity
+    const groupedFindings = useMemo(() => {
+        if (!currentReport) return null;
+        
+        const grouped = {
+            critical: currentReport.findings.filter(f => f.severity === 'critical'),
+            high: currentReport.findings.filter(f => f.severity === 'high'),
+            medium: currentReport.findings.filter(f => f.severity === 'medium'),
+            low: currentReport.findings.filter(f => f.severity === 'low'),
+        };
+        
+        return grouped;
+    }, [currentReport]);
 
     // Redirect to login if not authenticated
     useEffect(() => {
@@ -525,5 +542,86 @@ export default function SecurityCompliancePage() {
                 </div>
             </div>
         </PageLayout>
+    );
+}
+
+/**
+ * FindingCard Component - Individual compliance finding display
+ */
+interface FindingCardProps {
+    finding: IComplianceFinding;
+}
+
+function FindingCard({ finding }: FindingCardProps) {
+    const getSeverityStyle = (severity: IComplianceFinding['severity']) => {
+        switch (severity) {
+            case 'critical':
+                return { icon: AlertCircle, color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20', border: 'border-red-200 dark:border-red-800' };
+            case 'high':
+                return { icon: AlertTriangle, color: 'text-orange-600 dark:text-orange-400', bg: 'bg-orange-50 dark:bg-orange-900/20', border: 'border-orange-200 dark:border-orange-800' };
+            case 'medium':
+                return { icon: AlertTriangle, color: 'text-yellow-600 dark:text-yellow-400', bg: 'bg-yellow-50 dark:bg-yellow-900/20', border: 'border-yellow-200 dark:border-yellow-800' };
+            case 'low':
+                return { icon: Info, color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20', border: 'border-blue-200 dark:border-blue-800' };
+        }
+    };
+
+    const style = getSeverityStyle(finding.severity);
+    const Icon = style.icon;
+
+    return (
+        <div className={`p-5 rounded-xl border ${style.border} ${style.bg}`}>
+            <div className="flex items-start gap-4">
+                <Icon className={`w-6 h-6 ${style.color} flex-shrink-0 mt-1`} />
+                <div className="flex-1">
+                    <div className="flex items-center justify-between mb-2">
+                        <h4 className="text-base font-bold text-gray-900 dark:text-white">
+                            {finding.category}
+                        </h4>
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${style.color}`}>
+                            {finding.severity}
+                        </span>
+                    </div>
+                    <p className="text-gray-800 dark:text-gray-200 mb-3">
+                        {finding.description}
+                    </p>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                        <div>
+                            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                Standard
+                            </p>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                                {finding.standard}
+                            </p>
+                        </div>
+                        <div>
+                            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                Requirement
+                            </p>
+                            <p className="text-sm text-gray-600 dark:text-gray-400">
+                                {finding.requirement}
+                            </p>
+                        </div>
+                    </div>
+                    {finding.evidence.length > 0 && (
+                        <div>
+                            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                Evidence ({finding.evidence.length})
+                            </p>
+                            <div className="bg-gray-900 dark:bg-gray-950 rounded-lg p-3 max-h-32 overflow-y-auto">
+                                {finding.evidence.map((ev, evIndex) => (
+                                    <p
+                                        key={evIndex}
+                                        className="text-xs font-mono text-gray-300 mb-1"
+                                    >
+                                        {ev}
+                                    </p>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
     );
 }
