@@ -23,6 +23,8 @@ import {
   RefreshButton,
   ThemedSection,
   SessionBar,
+  AdminPageTransition,
+  AnimatedButton,
 } from '@/components/admin/shared';
 import { RequirePermission, useAdminPermissions } from '@/lib/admin-permissions';
 import { Users, UserPlus, Shield } from 'lucide-react';
@@ -61,6 +63,7 @@ export default function UsersPage() {
     <PageLayout
       user={session?.user || {}}
     >
+      <AdminPageTransition pageKey="/admin/users">
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
         {/* Header */}
         <div className="mb-6 bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-slate-200 dark:border-gray-700 p-6">
@@ -85,13 +88,13 @@ export default function UsersPage() {
               
               {/* Add User button - only if permitted */}
               <RequirePermission permission="users:create">
-                <button
+                <AnimatedButton
                   onClick={() => router.push('/admin/users/new')}
                   className="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors shadow-md"
                 >
                   <UserPlus className="w-4 h-4" />
                   Add User
-                </button>
+                </AnimatedButton>
               </RequirePermission>
               
               {/* Refresh button */}
@@ -136,6 +139,7 @@ export default function UsersPage() {
           <UserList key={refreshKey.current} />
         </ThemedSection>
       </div>
+      </AdminPageTransition>
     </PageLayout>
   );
 }
