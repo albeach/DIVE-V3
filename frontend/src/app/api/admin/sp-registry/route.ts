@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
     }
 
     const userRoles = (validation.session.user as any).roles || [];
-    if (!userRoles.includes('admin') && !userRoles.includes('super_admin')) {
+    if (!hasAdminRole({ roles: userRoles, name: validation.session.user.name, email: validation.session.user.email })) {
       return NextResponse.json(
         { error: 'Forbidden', message: 'Admin access required' },
         { status: 403 }
