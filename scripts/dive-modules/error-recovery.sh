@@ -302,11 +302,26 @@ orch_circuit_breaker_execute() {
 
     # Execute operation
     local start_time=$(date +%s)
-    local output
     local exit_code
-
-    output=$("${command[@]}" 2>&1)
-    exit_code=$?
+    
+    # ARCHITECTURE DECISION: Stream vs Capture
+    # - BUILD operations: Generate gigabytes → MUST stream
+    # - SERVICE operations: Start containers, long health checks → MUST stream  
+    # - KAS_REGISTER: Takes 60+ seconds, needs visibility → MUST stream
+    # - Quick operations: Can capture for error reporting
+    case "$operation_name" in
+        *_BUILD|hub_phase_BUILD|*_SERVICES|hub_phase_SERVICES|hub_phase_services|*_KAS_REGISTER|hub_phase_KAS_REGISTER)
+            # Stream directly - no output capture
+            "${command[@]}"
+            exit_code=$?
+            ;;
+        *)
+            # Quick operations: capture for error reporting
+            local output
+            output=$("${command[@]}" 2>&1)
+            exit_code=$?
+            ;;
+    esac
 
     if [ $exit_code -eq 0 ]; then
         local end_time=$(date +%s)
@@ -339,8 +354,8 @@ orch_circuit_breaker_execute() {
     else
         log_warn "✗ $operation_name failed (exit code: $exit_code)"
 
-        # Log error output if available
-        if [ -n "$output" ]; then
+        # Log error output if available (only for captured operations)
+        if [ -n "${output:-}" ]; then
             log_verbose "Error output: $output"
         fi
 
