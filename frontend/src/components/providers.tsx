@@ -8,6 +8,7 @@ import { StandardsLensProvider } from "@/contexts/StandardsLensContext";
 import { IdentityDrawerProvider } from "@/contexts/IdentityDrawerContext";
 import { PolicyProvider } from "@/contexts/PolicyContext";
 import { CommandPaletteProvider } from "@/contexts/CommandPaletteContext";
+import { AnimationPreferencesProvider } from "@/contexts/AnimationPreferencesContext";
 import { InstanceThemeProvider } from "@/components/ui/theme-provider";
 // TEMPORARY: ThemeProvider disabled until container rebuild picks up next-themes
 // import { ThemeProvider } from "@/components/providers/ThemeProvider";
@@ -31,25 +32,27 @@ export function Providers({ children }: { children: React.ReactNode }) {
       <InstanceThemeProvider>
         <StandardsLensProvider>
           <LocaleProvider>
-            <QueryClientProvider client={queryClient}>
-              <SessionProvider
-                refetchInterval={5 * 60}
-                refetchOnWindowFocus={false}
-                refetchWhenOffline={false}
-              >
-                <PolicyProvider>
-                  <IdentityDrawerProvider>
-                    <CommandPaletteProvider>
-                      {children}
-                      <Toaster position="top-right" richColors />
-                    </CommandPaletteProvider>
-                  </IdentityDrawerProvider>
-                </PolicyProvider>
-              </SessionProvider>
-          </QueryClientProvider>
-        </LocaleProvider>
-      </StandardsLensProvider>
-    </InstanceThemeProvider>
+            <AnimationPreferencesProvider>
+              <QueryClientProvider client={queryClient}>
+                <SessionProvider
+                  refetchInterval={5 * 60}
+                  refetchOnWindowFocus={false}
+                  refetchWhenOffline={false}
+                >
+                  <PolicyProvider>
+                    <IdentityDrawerProvider>
+                      <CommandPaletteProvider>
+                        {children}
+                        <Toaster position="top-right" richColors />
+                      </CommandPaletteProvider>
+                    </IdentityDrawerProvider>
+                  </PolicyProvider>
+                </SessionProvider>
+              </QueryClientProvider>
+            </AnimationPreferencesProvider>
+          </LocaleProvider>
+        </StandardsLensProvider>
+      </InstanceThemeProvider>
     // </ThemeProvider> {/* TEMPORARY: Disabled - enable after container rebuild */}
   );
 }
