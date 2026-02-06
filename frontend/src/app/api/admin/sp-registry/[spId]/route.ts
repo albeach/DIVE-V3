@@ -21,8 +21,9 @@ interface RouteContext {
  * GET /api/admin/sp-registry/[spId]
  * Get SP details
  */
-export const GET = withAuth(async (request, { tokens }, context: RouteContext) => {
-  const { spId } = await context.params;
+export const GET = withAuth(async (request, context) => {
+  const { tokens, params } = context;
+  const { spId } = await params!;
 
   const backendFetch = createAdminBackendFetch(tokens, BACKEND_API_URL);
   const backendResponse = await backendFetch(`/api/sp-management/sps/${spId}`);
@@ -43,8 +44,9 @@ export const GET = withAuth(async (request, { tokens }, context: RouteContext) =
  * PUT /api/admin/sp-registry/[spId]
  * Update SP configuration
  */
-export const PUT = withSuperAdmin(async (request, { tokens }, context: RouteContext) => {
-  const { spId } = await context.params;
+export const PUT = withSuperAdmin(async (request, context) => {
+  const { tokens, params } = context;
+  const { spId } = await params!;
   const body = await request.json();
 
   const backendFetch = createAdminBackendFetch(tokens, BACKEND_API_URL);
@@ -69,8 +71,9 @@ export const PUT = withSuperAdmin(async (request, { tokens }, context: RouteCont
  * DELETE /api/admin/sp-registry/[spId]
  * Delete SP
  */
-export const DELETE = withSuperAdmin(async (request, { tokens }, context: RouteContext) => {
-  const { spId } = await context.params;
+export const DELETE = withSuperAdmin(async (request, context) => {
+  const { tokens, params } = context;
+  const { spId } = await params!;
 
   const backendFetch = createAdminBackendFetch(tokens, BACKEND_API_URL);
   const backendResponse = await backendFetch(`/api/sp-management/sps/${spId}`, {

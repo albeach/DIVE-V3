@@ -163,20 +163,6 @@ export default function SecurityCompliancePage() {
         return 'text-red-600 dark:text-red-400';
     };
 
-    // Group findings by severity
-    const groupedFindings = useMemo(() => {
-        if (!currentReport) return null;
-        
-        const grouped = {
-            critical: currentReport.findings.filter(f => f.severity === 'critical'),
-            high: currentReport.findings.filter(f => f.severity === 'high'),
-            medium: currentReport.findings.filter(f => f.severity === 'medium'),
-            low: currentReport.findings.filter(f => f.severity === 'low'),
-        };
-        
-        return grouped;
-    }, [currentReport]);
-
     // Redirect to login if not authenticated
     useEffect(() => {
         if (status !== 'loading' && status === 'unauthenticated') {
@@ -200,6 +186,20 @@ export default function SecurityCompliancePage() {
     }
 
     const currentReport = selectedReport === 'NIST' ? nistReport : selectedReport === 'NATO' ? natoReport : null;
+
+    // Group findings by severity
+    const groupedFindings = useMemo(() => {
+        if (!currentReport) return null;
+        
+        const grouped = {
+            critical: currentReport.findings.filter(f => f.severity === 'critical'),
+            high: currentReport.findings.filter(f => f.severity === 'high'),
+            medium: currentReport.findings.filter(f => f.severity === 'medium'),
+            low: currentReport.findings.filter(f => f.severity === 'low'),
+        };
+        
+        return grouped;
+    }, [currentReport]);
 
     return (
         <PageLayout user={session?.user || {}}>

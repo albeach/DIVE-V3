@@ -44,6 +44,13 @@ export interface AdminAuthContext {
 }
 
 /**
+ * Combined context for route handlers with dynamic params
+ */
+export interface AdminRouteContext<TParams = any> extends AdminAuthContext {
+    params?: Promise<TParams>;
+}
+
+/**
  * Admin auth options
  */
 export interface AdminAuthOptions {
@@ -70,10 +77,11 @@ export interface AdminAuthOptions {
 
 /**
  * Admin route handler type
+ * Supports both simple handlers and handlers with route context (for dynamic routes)
  */
-export type AdminRouteHandler = (
+export type AdminRouteHandler<TParams = any> = (
     request: NextRequest,
-    context: AdminAuthContext
+    context: AdminRouteContext<TParams>
 ) => Promise<Response> | Response;
 
 /**
@@ -103,11 +111,11 @@ function createErrorResponse(
  * @param options - Authentication options
  * @returns Wrapped handler with auth checks
  */
-export function withAdminAuth(
-    handler: AdminRouteHandler,
+export function withAdminAuth<TParams = any>(
+    handler: AdminRouteHandler<TParams>,
     options: AdminAuthOptions = {}
-): (request: NextRequest) => Promise<Response> {
-    return async (request: NextRequest): Promise<Response> => {
+): (request: NextRequest, routeContext?: { params: Promise<TParams> }) => Promise<Response> {
+    return async (request: NextRequest, routeContext?: { params: Promise<TParams> }): Promise<Response> => {
         const requestId = request.headers.get('x-request-id') || `req-${Date.now()}`;
         const startTime = Date.now();
 
@@ -217,8 +225,8 @@ export function withAdminAuth(
                 }
             }
 
-            // Step 5: Build auth context
-            const authContext: AdminAuthContext = {
+            // Step 5: Build auth context (merge with route params if provided)
+            const authContext: AdminRouteContext<TParams> = {
                 session,
                 tokens,
                 userId: validation.userId || session.user.id,
@@ -227,6 +235,7 @@ export function withAdminAuth(
                     roles: session.user.roles,
                     name: session.user.name || undefined,
                 }),
+                params: routeContext?.params,
             };
 
             // Step 6: Audit log (if enabled)

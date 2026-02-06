@@ -20,7 +20,10 @@ import { prefersReducedMotion } from '@/lib/animations';
 import { adminAnimations } from './theme-tokens';
 import { useAnimationPreferences, getAnimationDuration, getScaleIntensity } from '@/contexts/AnimationPreferencesContext';
 
-export interface AnimatedButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'style'> {
+export interface AnimatedButtonProps extends Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>, 
+  'style' | 'onDrag' | 'onDragStart' | 'onDragEnd' | 'onAnimationStart' | 'onAnimationEnd'
+> {
   /**
    * Animation intensity
    * @default 'normal'

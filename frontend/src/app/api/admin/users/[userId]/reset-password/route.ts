@@ -16,8 +16,9 @@ interface RouteContext {
     params: Promise<{ userId: string }>;
 }
 
-export const POST = withSuperAdmin(async (request, { tokens }, context: RouteContext) => {
-    const { userId } = await context.params;
+export const POST = withSuperAdmin(async (request, context) => {
+    const { tokens, params } = context;
+    const { userId } = await params!;
     const body = await request.json();
 
     const backendFetch = createAdminBackendFetch(tokens, BACKEND_URL);

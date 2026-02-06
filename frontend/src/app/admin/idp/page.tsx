@@ -533,6 +533,7 @@ function IdPManagementPageContent() {
                     />
                 )}
             </AnimatePresence>
+            </AdminPageTransition>
         </PageLayout>
     );
 }
@@ -601,7 +602,5 @@ function EmptyState({ hasSearch, onClearFilters, onAddNew }: EmptyStateProps) {
                 </div>
             </div>
         </div>
-        </AdminPageTransition>
-        </PageLayout>
     );
 }
