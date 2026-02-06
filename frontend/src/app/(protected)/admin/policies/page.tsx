@@ -85,6 +85,8 @@ export default function PolicyAdministrationDashboard() {
   const [activeUpdate, setActiveUpdate] = useState<PolicyUpdate | null>(null);
   const [isMonitoring, setIsMonitoring] = useState(true);
   const [notifications, setNotifications] = useState<string[]>([]);
+  const [liveLogsVisible, setLiveLogsVisible] = useState(false);
+  const [liveLogs, setLiveLogs] = useState<Array<{timestamp: Date; source: string; message: string}>>([]);
 
   // Simulate real-time policy updates via WebSocket
   useEffect(() => {
@@ -218,17 +220,30 @@ export default function PolicyAdministrationDashboard() {
             </h1>
             <p className="text-slate-400">Real-time policy distribution monitoring and control</p>
           </div>
-          <button
-            onClick={() => setIsMonitoring(!isMonitoring)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
-              isMonitoring 
-                ? 'bg-green-500/20 text-green-400 border border-green-500/50' 
-                : 'bg-slate-700 text-slate-400 border border-slate-600'
-            }`}
-          >
-            {isMonitoring ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
-            {isMonitoring ? 'Monitoring Active' : 'Monitoring Paused'}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setLiveLogsVisible(!liveLogsVisible)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                liveLogsVisible
+                  ? 'bg-purple-500/20 text-purple-400 border border-purple-500/50'
+                  : 'bg-slate-700 text-slate-400 border border-slate-600'
+              }`}
+            >
+              <FileText className="w-4 h-4" />
+              {liveLogsVisible ? 'Hide Logs' : 'Show Live Logs'}
+            </button>
+            <button
+              onClick={() => setIsMonitoring(!isMonitoring)}
+              className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-all ${
+                isMonitoring 
+                  ? 'bg-green-500/20 text-green-400 border border-green-500/50' 
+                  : 'bg-slate-700 text-slate-400 border border-slate-600'
+              }`}
+            >
+              {isMonitoring ? <Play className="w-4 h-4" /> : <Pause className="w-4 h-4" />}
+              {isMonitoring ? 'Monitoring Active' : 'Monitoring Paused'}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -310,6 +325,47 @@ export default function PolicyAdministrationDashboard() {
               )}
             </div>
           </div>
+
+          {/* Live OPAL Logs Viewer */}
+          <AnimatePresence>
+            {liveLogsVisible && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="bg-slate-800/50 backdrop-blur rounded-xl border border-slate-700 p-6 overflow-hidden"
+              >
+                <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-cyan-400" />
+                  Live OPAL Server Logs
+                  <span className="ml-auto text-xs text-slate-500">
+                    Last {liveLogs.length} entries
+                  </span>
+                </h3>
+                <div className="bg-slate-900/80 rounded-lg p-4 h-64 overflow-y-auto font-mono text-xs space-y-1">
+                  {liveLogs.length === 0 ? (
+                    <p className="text-slate-500">Connecting to log stream...</p>
+                  ) : (
+                    liveLogs.slice(-30).map((log, idx) => (
+                      <div key={idx} className="text-slate-300">
+                        <span className="text-slate-500">
+                          {log.timestamp.toLocaleTimeString()}
+                        </span>
+                        {' '}
+                        <span className="text-cyan-400">[{log.source}]</span>
+                        {' '}
+                        {log.message.includes('policy') || log.message.includes('broadcast') ? (
+                          <span className="text-yellow-400 font-semibold">{log.message}</span>
+                        ) : (
+                          <span>{log.message}</span>
+                        )}
+                      </div>
+                    ))
+                  )}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </div>
