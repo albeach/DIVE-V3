@@ -3,3 +3,6 @@
 # OPAL Test - Manual test at Fri Feb  6 03:33:49 EST 2026
 
 # OPAL Distribution Test - 2026-02-06 03:38:20
+# LIVE DEMO: Policy change at 2026-02-06 08:05:02
+
+# LIVE DEMO: Policy modified at 2026-02-06 08:06:00
