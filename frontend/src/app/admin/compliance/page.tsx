@@ -225,6 +225,7 @@ export default function PolicyComplianceDashboard() {
 
   return (
     <PageLayout user={session?.user || {}}>
+      <AdminPageTransition pageKey="/admin/compliance">
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-emerald-50 to-teal-50 dark:from-gray-900 dark:via-emerald-900/20 dark:to-teal-900/20">
         {/* Header */}
         <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40">
@@ -241,7 +242,7 @@ export default function PolicyComplianceDashboard() {
 
               <div className="flex items-center space-x-4">
                 {/* Auto-refresh toggle */}
-                <button
+                <AnimatedButton
                   onClick={() => setAutoRefresh(!autoRefresh)}
                   className={`px-4 py-2 rounded-lg font-medium transition-all ${
                     autoRefresh
@@ -252,7 +253,7 @@ export default function PolicyComplianceDashboard() {
                   {autoRefresh ? '🔄 Auto (1m)' : '⏸️ Manual'}
                 </AnimatedButton>
 
-                <button
+                <AnimatedButton
                   onClick={fetchComplianceData}
                   disabled={loading}
                   className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium shadow-lg disabled:opacity-50"
@@ -308,7 +309,7 @@ export default function PolicyComplianceDashboard() {
                 <h3 className="text-lg font-semibold text-red-800 dark:text-red-400">Error Loading Data</h3>
               </div>
               <p className="text-red-600 dark:text-red-400 mb-4">{error}</p>
-              <button
+              <AnimatedButton
                 onClick={fetchComplianceData}
                 className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
               >

@@ -225,7 +225,7 @@ export default function SPRegistryDashboard() {
               <div className="text-6xl mb-4">📋</div>
               <h3 className="text-xl font-semibold text-gray-700 mb-2">No Service Providers Found</h3>
               <p className="text-gray-500 mb-6">Get started by registering a new external SP</p>
-              <button
+              <AnimatedButton
                 onClick={() => router.push('/admin/sp-registry/new')}
                 className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-all"
               >
@@ -279,7 +279,7 @@ export default function SPRegistryDashboard() {
                       </td>
                       <td className="px-6 py-4">
                         <div className="flex justify-center gap-2">
-                          <button
+                          <AnimatedButton
                             onClick={() => router.push(`/admin/sp-registry/${sp.spId}`)}
                             className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-all"
                           >

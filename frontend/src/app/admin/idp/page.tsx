@@ -252,8 +252,8 @@ function IdPManagementPageContent() {
     return (
         <PageLayout user={session.user || {}}>
             <AdminPageTransition pageKey="/admin/idp">
-            <KeyboardShortcutsModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
-            <div className="max-w-7xl mx-auto space-y-6">
+                <KeyboardShortcutsModal isOpen={isHelpOpen} onClose={() => setIsHelpOpen(false)} />
+                <div className="max-w-7xl mx-auto space-y-6">
                 {/* Interactive Breadcrumbs - SSOT for Admin Navigation */}
                 {/* Header */}
                 <div className="flex items-center justify-between">
@@ -600,8 +600,8 @@ function EmptyState({ hasSearch, onClearFilters, onAddNew }: EmptyStateProps) {
                     )}
                 </div>
             </div>
-        </div>
-        </AdminPageTransition>
+                </div>
+            </AdminPageTransition>
         </PageLayout>
     );
 }
