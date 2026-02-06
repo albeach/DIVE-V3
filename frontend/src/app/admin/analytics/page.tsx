@@ -16,10 +16,11 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import PageLayout from '@/components/layout/page-layout';
+import { createAISearch, AISearchWrapper } from '@/lib/ai-search-wrapper';
 
 // Types
 interface IRiskDistribution {
@@ -84,6 +85,57 @@ export default function IdPGovernanceDashboard() {
     const [lastUpdated, setLastUpdated] = useState<Date>(new Date());
     const [viewMode, setViewMode] = useState<ViewMode>('overview');
     const [autoRefresh, setAutoRefresh] = useState(false);
+
+    // AI Search state for filtering metrics/IdPs
+    const [searchQuery, setSearchQuery] = useState('');
+    const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+
+    // Initialize AI search wrapper for zero-result queries
+    const querySearcher = useMemo(() => {
+        return createAISearch<IZeroResultQuery>(
+            zeroResultQueries,
+            {
+                keys: ['queryHash'],
+                threshold: 0.3,
+                ignoreLocation: true,
+            },
+            'dive-v3-search-analytics-queries'
+        );
+    }, [zeroResultQueries]);
+
+    // Update AI searcher when queries change
+    useEffect(() => {
+        if (zeroResultQueries.length > 0) {
+            querySearcher.updateData(zeroResultQueries);
+        }
+    }, [zeroResultQueries, querySearcher]);
+
+    // Filter zero-result queries with AI fuzzy search
+    const filteredZeroResultQueries = useMemo(() => {
+        if (!searchQuery) return zeroResultQueries;
+        return querySearcher.search(searchQuery);
+    }, [zeroResultQueries, searchQuery, querySearcher]);
+
+    // Update search suggestions
+    const handleSearchChange = useCallback((value: string) => {
+        setSearchQuery(value);
+        
+        if (value.length > 0) {
+            const suggestions = querySearcher.getSuggestions(value, 5);
+            setSearchSuggestions(suggestions);
+            setShowSuggestions(suggestions.length > 0);
+        } else {
+            setSearchSuggestions([]);
+            setShowSuggestions(false);
+        }
+    }, [querySearcher]);
+
+    // Apply suggestion
+    const applySuggestion = useCallback((suggestion: string) => {
+        setSearchQuery(suggestion);
+        setShowSuggestions(false);
+    }, []);
 
     // Fetch all analytics data
     const fetchAnalytics = useCallback(async () => {
@@ -709,6 +761,56 @@ export default function IdPGovernanceDashboard() {
                                         </button>
                                     </div>
 
+                                    {/* Search Filter for Zero-Result Queries */}
+                                    {zeroResultQueries.length > 0 && (
+                                        <div className="mb-6">
+                                            <div className="relative">
+                                                <input
+                                                    type="text"
+                                                    value={searchQuery}
+                                                    onChange={(e) => handleSearchChange(e.target.value)}
+                                                    onFocus={() => {
+                                                        if (searchSuggestions.length > 0) {
+                                                            setShowSuggestions(true);
+                                                        }
+                                                    }}
+                                                    onBlur={() => {
+                                                        setTimeout(() => setShowSuggestions(false), 200);
+                                                    }}
+                                                    placeholder="Search zero-result queries (AI-powered)..."
+                                                    className="w-full px-4 py-2.5 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:ring-2 focus:ring-indigo-500 transition-all"
+                                                />
+                                                
+                                                {/* Search suggestions dropdown */}
+                                                {showSuggestions && searchSuggestions.length > 0 && (
+                                                    <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 max-h-60 overflow-y-auto">
+                                                        <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                                                            Recent Searches
+                                                        </div>
+                                                        {searchSuggestions.map((suggestion, idx) => (
+                                                            <button
+                                                                key={idx}
+                                                                onClick={() => applySuggestion(suggestion)}
+                                                                className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
+                                                            >
+                                                                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                                </svg>
+                                                                <span className="text-sm text-gray-700 dark:text-gray-300">{suggestion}</span>
+                                                            </button>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            
+                                            {searchQuery && (
+                                                <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
+                                                    Showing {filteredZeroResultQueries.length} of {zeroResultQueries.length} queries
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
+
                                     {zeroResultQueries.length === 0 ? (
                                         <div className="text-center py-12">
                                             <div className="text-6xl mb-4">✅</div>
@@ -719,26 +821,36 @@ export default function IdPGovernanceDashboard() {
                                                 All recent searches returned results. Great job!
                                             </p>
                                         </div>
+                                    ) : filteredZeroResultQueries.length === 0 && searchQuery ? (
+                                        <div className="text-center py-12">
+                                            <div className="text-6xl mb-4">🔍</div>
+                                            <p className="text-lg font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                No Matching Queries
+                                            </p>
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">
+                                                No queries match "{searchQuery}"
+                                            </p>
+                                        </div>
                                     ) : (
                                         <div className="space-y-4">
                                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                                                 <div className="bg-gradient-to-br from-red-50 to-orange-50 dark:from-red-900/20 dark:to-orange-900/20 rounded-xl p-4 border border-red-200 dark:border-red-800">
                                                     <p className="text-sm text-red-700 dark:text-red-400 mb-1">Total Zero-Result Queries</p>
                                                     <p className="text-2xl font-bold text-red-900 dark:text-red-300">
-                                                        {zeroResultQueries.length}
+                                                        {searchQuery ? filteredZeroResultQueries.length : zeroResultQueries.length}
                                                     </p>
                                                 </div>
                                                 <div className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-800">
                                                     <p className="text-sm text-blue-700 dark:text-blue-400 mb-1">Total Searches</p>
                                                     <p className="text-2xl font-bold text-blue-900 dark:text-blue-300">
-                                                        {zeroResultQueries.reduce((sum, q) => sum + q.searchCount, 0)}
+                                                        {filteredZeroResultQueries.reduce((sum, q) => sum + q.searchCount, 0)}
                                                     </p>
                                                 </div>
                                                 <div className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 rounded-xl p-4 border border-purple-200 dark:border-purple-800">
                                                     <p className="text-sm text-purple-700 dark:text-purple-400 mb-1">Avg Query Length</p>
                                                     <p className="text-2xl font-bold text-purple-900 dark:text-purple-300">
-                                                        {zeroResultQueries.length > 0
-                                                            ? Math.round(zeroResultQueries.reduce((sum, q) => sum + q.queryLength, 0) / zeroResultQueries.length)
+                                                        {filteredZeroResultQueries.length > 0
+                                                            ? Math.round(filteredZeroResultQueries.reduce((sum, q) => sum + q.queryLength, 0) / filteredZeroResultQueries.length)
                                                             : 0
                                                         } chars
                                                     </p>
@@ -746,7 +858,7 @@ export default function IdPGovernanceDashboard() {
                                             </div>
 
                                             <div className="space-y-2">
-                                                {zeroResultQueries.map((query, idx) => (
+                                                {filteredZeroResultQueries.map((query, idx) => (
                                                     <div
                                                         key={idx}
                                                         className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
