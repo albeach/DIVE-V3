@@ -11,6 +11,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { blacklistToken, revokeAllUserTokens, getBlacklistStats, isTokenBlacklisted } from '../services/token-blacklist.service';
+import { decisionCacheService } from '../services/decision-cache.service';
 import { logger } from '../utils/logger';
 
 const router = Router();
@@ -103,6 +104,18 @@ router.post('/api/auth/blacklist-token', async (req: Request, res: Response, nex
         // Also revoke all user tokens if we have uniqueID
         if (uniqueID) {
             await revokeAllUserTokens(uniqueID, ttl, reason);
+            
+            // ============================================
+            // PHASE 6: Invalidate Decision Cache on Logout
+            // ============================================
+            // Clear all cached authorization decisions for this user
+            const invalidatedCount = decisionCacheService.invalidate('user', uniqueID, 'user_logout');
+            
+            logger.info('Invalidated decision cache on logout', {
+                uniqueID,
+                keysInvalidated: invalidatedCount,
+                reason
+            });
         }
 
         logger.info('Token blacklisted via API', {
