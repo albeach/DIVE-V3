@@ -13,7 +13,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSession } from 'next-auth/react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -40,6 +40,7 @@ import { exportUsers } from '@/lib/export-utils';
 import type { IAdminUser } from '@/types/admin.types';
 import { auditActions } from '@/lib/admin-audit';
 import { VirtualList } from '@/components/ui/virtual-list';
+import { createAISearch, AISearchWrapper } from '@/lib/ai-search-wrapper';
 
 // ============================================
 // Types
@@ -91,6 +92,11 @@ export default function UserList() {
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  // AI Search state
+  const [searchSuggestions, setSearchSuggestions] = useState<string[]>([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [didYouMean, setDidYouMean] = useState<string[]>([]);
+
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
@@ -114,6 +120,65 @@ export default function UserList() {
   });
 
   const [newPassword, setNewPassword] = useState('');
+
+  // Initialize AI search wrapper
+  const aiSearcher = useMemo(() => {
+    return createAISearch<IAdminUser>(
+      users,
+      {
+        keys: ['username', 'email', 'firstName', 'lastName', 'clearance', 'countryOfAffiliation', 'realmRoles'],
+        threshold: 0.3,
+        ignoreLocation: true,
+      },
+      'dive-v3-search-users'
+    );
+  }, [users]);
+
+  // Update AI searcher when users change
+  useEffect(() => {
+    if (users.length > 0) {
+      aiSearcher.updateData(users);
+    }
+  }, [users, aiSearcher]);
+
+  // Filter users with AI fuzzy search
+  const filteredUsers = useMemo(() => {
+    if (!search) return users;
+
+    const results = aiSearcher.search(search);
+    
+    // If no results, show "Did you mean?" suggestions
+    if (results.length === 0) {
+      const suggestions = aiSearcher.getDidYouMeanSuggestions(search, 3);
+      setDidYouMean(suggestions);
+    } else {
+      setDidYouMean([]);
+    }
+    
+    return results;
+  }, [users, search, aiSearcher]);
+
+  // Update search suggestions as user types
+  const handleSearchChange = useCallback((value: string) => {
+    setSearch(value);
+    
+    if (value.length > 0) {
+      const suggestions = aiSearcher.getSuggestions(value, 5);
+      setSearchSuggestions(suggestions);
+      setShowSuggestions(suggestions.length > 0);
+    } else {
+      setSearchSuggestions([]);
+      setShowSuggestions(false);
+      setDidYouMean([]);
+    }
+  }, [aiSearcher]);
+
+  // Apply suggestion
+  const applySuggestion = useCallback((suggestion: string) => {
+    setSearch(suggestion);
+    setShowSuggestions(false);
+    setDidYouMean([]);
+  }, []);
 
   // ============================================
   // API Functions
@@ -362,11 +427,60 @@ export default function UserList() {
           </div>
           <input
             type="text"
-            placeholder="Search users by name or email..."
+            placeholder="Search users (AI-powered)... Try 'secrat', 'admininstrator'"
             className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 rounded-xl leading-5 bg-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm transition-all"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => handleSearchChange(e.target.value)}
+            onFocus={() => {
+              if (searchSuggestions.length > 0) {
+                setShowSuggestions(true);
+              }
+            }}
+            onBlur={() => {
+              setTimeout(() => setShowSuggestions(false), 200);
+            }}
           />
+          
+          {/* Search suggestions dropdown */}
+          {showSuggestions && searchSuggestions.length > 0 && (
+            <div className="absolute z-50 mt-1 w-full bg-white dark:bg-gray-800 rounded-lg shadow-xl border border-gray-200 dark:border-gray-700 max-h-60 overflow-y-auto">
+              <div className="px-3 py-2 text-xs font-semibold text-gray-500 dark:text-gray-400 border-b border-gray-200 dark:border-gray-700">
+                Recent Searches
+              </div>
+              {searchSuggestions.map((suggestion, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => applySuggestion(suggestion)}
+                  className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span className="text-sm text-gray-700 dark:text-gray-300">{suggestion}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          
+          {/* "Did you mean?" suggestions */}
+          {didYouMean.length > 0 && (
+            <div className="mt-2 px-3 py-2 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <p className="text-sm text-amber-800 dark:text-amber-300 mb-2">
+                <span className="font-semibold">No results found.</span> Did you mean:
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {didYouMean.map((suggestion, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => applySuggestion(suggestion)}
+                    className="px-3 py-1 bg-amber-100 dark:bg-amber-800/30 text-amber-800 dark:text-amber-200 rounded-md hover:bg-amber-200 dark:hover:bg-amber-700/40 transition-colors text-sm font-medium"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="flex gap-2">
@@ -446,12 +560,12 @@ export default function UserList() {
           </div>
         ) : (
           <VirtualList<IAdminUser>
-            items={users}
+            items={filteredUsers}
             estimateSize={72}
             overscan={5}
             className="max-h-[600px]"
-            getItemKey={(index) => users[index].id}
-            emptyMessage="No users found"
+            getItemKey={(index) => filteredUsers[index].id}
+            emptyMessage={search ? `No users match "${search}"` : "No users found"}
             renderItem={(user) => (
               <div className="grid grid-cols-[minmax(250px,2fr)_120px_100px_100px_150px_120px] gap-0 hover:bg-slate-50 transition-colors border-b border-gray-100">
                 <div className="px-6 py-4 whitespace-nowrap">
