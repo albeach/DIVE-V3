@@ -346,7 +346,7 @@ export default function SpokeDashboardPage() {
               </div>
 
               {/* Refresh Button */}
-              <button
+              <AnimatedButton
                 onClick={() => fetchStatus(true)}
                 disabled={refreshing}
                 className="flex items-center gap-2 px-4 py-2 bg-slate-800 text-white rounded-lg font-medium hover:bg-slate-700 disabled:opacity-50 transition-colors shadow-md hover:shadow-lg"

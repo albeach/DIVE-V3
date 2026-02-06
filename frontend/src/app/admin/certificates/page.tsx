@@ -390,14 +390,14 @@ export default function AdminCertificatesPage() {
 
               {/* Quick Actions */}
               <div className="flex gap-3">
-                <button
+                <AnimatedButton
                   onClick={() => setRotationModalOpen(true)}
                   className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-all backdrop-blur-sm"
                 >
                   <RefreshCw className="w-4 h-4" />
                   Rotate Certificate
                 </AnimatedButton>
-                <button
+                <AnimatedButton
                   onClick={() => setRevokeModalOpen(true)}
                   className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-all backdrop-blur-sm"
                 >
@@ -433,7 +433,7 @@ export default function AdminCertificatesPage() {
       <div className="mb-6 bg-white rounded-xl p-2 shadow-md border border-gray-200">
         <div className="flex gap-2">
           {tabs.map((tab) => (
-            <button
+            <AnimatedButton
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
               className={`flex items-center gap-2 px-6 py-3 rounded-lg font-semibold transition-all ${
@@ -555,10 +555,10 @@ export default function AdminCertificatesPage() {
                       New: {health.rotationStatus.newCertificate}
                     </p>
                     <div className="mt-4 flex gap-3">
-                      <button className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
+                      <AnimatedButton className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
                         Complete Rotation
                       </AnimatedButton>
-                      <button className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700">
+                      <AnimatedButton className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700">
                         Rollback
                       </AnimatedButton>
                     </div>
@@ -579,7 +579,7 @@ export default function AdminCertificatesPage() {
                 </ol>
               </div>
 
-              <button
+              <AnimatedButton
                 onClick={() => setRotationModalOpen(true)}
                 disabled={health.rotationStatus?.inProgress}
                 className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl font-semibold hover:from-purple-700 hover:to-blue-700 transition-all shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
@@ -601,7 +601,7 @@ export default function AdminCertificatesPage() {
                 {crl.length} revoked certificate(s)
               </p>
             </div>
-            <button
+            <AnimatedButton
               onClick={() => setRevokeModalOpen(true)}
               className="flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 transition-all shadow-lg"
             >
@@ -660,14 +660,14 @@ export default function AdminCertificatesPage() {
             )}
 
             <div className="flex gap-3">
-              <button
+              <AnimatedButton
                 onClick={handleRotateCertificate}
                 disabled={rotationLoading}
                 className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl font-semibold hover:from-purple-700 hover:to-blue-700 transition-all disabled:opacity-50"
               >
                 {rotationLoading ? 'Starting...' : 'Start Rotation'}
               </AnimatedButton>
-              <button
+              <AnimatedButton
                 onClick={() => setRotationModalOpen(false)}
                 disabled={rotationLoading}
                 className="flex-1 px-6 py-3 bg-gray-200 text-gray-800 rounded-xl font-semibold hover:bg-gray-300 transition-all disabled:opacity-50"
@@ -722,14 +722,14 @@ export default function AdminCertificatesPage() {
             </div>
 
             <div className="flex gap-3">
-              <button
+              <AnimatedButton
                 onClick={handleRevokeCertificate}
                 disabled={revokeLoading || !revokeSerialNumber}
                 className="flex-1 px-6 py-3 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 transition-all disabled:opacity-50"
               >
                 {revokeLoading ? 'Revoking...' : 'Revoke Certificate'}
               </AnimatedButton>
-              <button
+              <AnimatedButton
                 onClick={() => setRevokeModalOpen(false)}
                 disabled={revokeLoading}
                 className="flex-1 px-6 py-3 bg-gray-200 text-gray-800 rounded-xl font-semibold hover:bg-gray-300 transition-all disabled:opacity-50"

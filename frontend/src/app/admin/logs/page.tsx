@@ -473,7 +473,7 @@ export default function AdminAuditLogsPage() {
                                 </AnimatedButton>
 
                                 {/* Back to dashboard */}
-                                <button
+                                <AnimatedButton
                                     onClick={() => router.push('/admin/dashboard')}
                                     className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
                                 >
@@ -571,7 +571,7 @@ export default function AdminAuditLogsPage() {
                         <div className="flex items-center justify-between flex-wrap gap-4">
                             {/* View Mode Tabs */}
                             <div className="flex space-x-2 bg-gray-100 dark:bg-gray-900 p-1 rounded-xl">
-                                <button
+                                <AnimatedButton
                                     onClick={() => setViewMode('table')}
                                     className={`px-6 py-2 rounded-lg font-medium transition-all ${
                                         viewMode === 'table'
@@ -581,7 +581,7 @@ export default function AdminAuditLogsPage() {
                                 >
                                     📋 Table View
                                 </AnimatedButton>
-                                <button
+                                <AnimatedButton
                                     onClick={() => setViewMode('timeline')}
                                     className={`px-6 py-2 rounded-lg font-medium transition-all ${
                                         viewMode === 'timeline'
@@ -591,7 +591,7 @@ export default function AdminAuditLogsPage() {
                                 >
                                     ⏱️ Timeline View
                                 </AnimatedButton>
-                                <button
+                                <AnimatedButton
                                     onClick={() => setViewMode('analytics')}
                                     className={`px-6 py-2 rounded-lg font-medium transition-all ${
                                         viewMode === 'analytics'
@@ -601,7 +601,7 @@ export default function AdminAuditLogsPage() {
                                 >
                                     📈 Analytics View
                                 </AnimatedButton>
-                                <button
+                                <AnimatedButton
                                     onClick={() => setViewMode('retention')}
                                     className={`px-6 py-2 rounded-lg font-medium transition-all ${
                                         viewMode === 'retention'
@@ -615,13 +615,13 @@ export default function AdminAuditLogsPage() {
 
                             {/* Action Buttons */}
                             <div className="flex space-x-3">
-                                <button
+                                <AnimatedButton
                                     onClick={() => setShowExportModal(true)}
                                     className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg"
                                 >
                                     📥 Export Logs
                                 </AnimatedButton>
-                                <button
+                                <AnimatedButton
                                     onClick={() => {
                                         fetchLogs();
                                         fetchStats();
@@ -672,7 +672,7 @@ export default function AdminAuditLogsPage() {
                                                         Recent Searches
                                                     </div>
                                                     {searchSuggestions.map((suggestion, idx) => (
-                                                        <button
+                                                        <AnimatedButton
                                                             key={idx}
                                                             onClick={() => applySuggestion(suggestion)}
                                                             className="w-full px-4 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
@@ -694,7 +694,7 @@ export default function AdminAuditLogsPage() {
                                                     </p>
                                                     <div className="flex flex-wrap gap-2">
                                                         {didYouMean.map((suggestion, idx) => (
-                                                            <button
+                                                            <AnimatedButton
                                                                 key={idx}
                                                                 onClick={() => applySuggestion(suggestion)}
                                                                 className="px-3 py-1 bg-amber-100 dark:bg-amber-800/30 text-amber-800 dark:text-amber-200 rounded-md hover:bg-amber-200 dark:hover:bg-amber-700/40 transition-colors text-sm font-medium"
@@ -818,7 +818,7 @@ export default function AdminAuditLogsPage() {
 
                                 {/* Clear Filters Button */}
                                 <div className="mt-4 flex justify-end">
-                                    <button
+                                    <AnimatedButton
                                         onClick={() => {
                                             setFilters({
                                                 eventType: '',
@@ -921,7 +921,7 @@ export default function AdminAuditLogsPage() {
                                                                 {log.latencyMs ? `${log.latencyMs}ms` : 'N/A'}
                                                             </td>
                                                             <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                                                <button
+                                                                <AnimatedButton
                                                                     onClick={(e) => {
                                                                         e.stopPropagation();
                                                                         setSelectedLog(log);
@@ -948,7 +948,7 @@ export default function AdminAuditLogsPage() {
                                                 </div>
 
                                                 <div className="flex space-x-2">
-                                                    <button
+                                                    <AnimatedButton
                                                         onClick={() => setPage(Math.max(1, page - 1))}
                                                         disabled={page === 1}
                                                         className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
@@ -958,7 +958,7 @@ export default function AdminAuditLogsPage() {
                                                     <span className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 font-medium">
                                                         Page {page} of {totalPages}
                                                     </span>
-                                                    <button
+                                                    <AnimatedButton
                                                         onClick={() => setPage(Math.min(totalPages, page + 1))}
                                                         disabled={page === totalPages}
                                                         className="px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-colors"
@@ -1277,13 +1277,13 @@ export default function AdminAuditLogsPage() {
 
                                         {/* Save Button */}
                                         <div className="flex justify-end space-x-3">
-                                            <button
+                                            <AnimatedButton
                                                 onClick={() => setRetentionForm(retention)}
                                                 className="px-6 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
                                             >
                                                 Reset
                                             </AnimatedButton>
-                                            <button
+                                            <AnimatedButton
                                                 onClick={saveRetention}
                                                 disabled={retentionSaving}
                                                 className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg disabled:opacity-50"
@@ -1308,7 +1308,7 @@ export default function AdminAuditLogsPage() {
                             <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 rounded-t-2xl">
                                 <div className="flex items-center justify-between">
                                     <h3 className="text-xl font-bold">📥 Export Audit Logs</h3>
-                                    <button
+                                    <AnimatedButton
                                         onClick={() => { setShowExportModal(false); setLastExportResult(null); }}
                                         className="text-white hover:text-gray-200 text-2xl font-bold"
                                     >
@@ -1367,13 +1367,13 @@ export default function AdminAuditLogsPage() {
                                         ) : null}
 
                                         <div className="flex justify-end space-x-3 pt-2">
-                                            <button
+                                            <AnimatedButton
                                                 onClick={() => { setShowExportModal(false); setLastExportResult(null); }}
                                                 className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
                                             >
                                                 Cancel
                                             </AnimatedButton>
-                                            <button
+                                            <AnimatedButton
                                                 onClick={handleEnhancedExport}
                                                 disabled={exportLoading || !exportDateRange.start || !exportDateRange.end}
                                                 className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg disabled:opacity-50"
@@ -1407,13 +1407,13 @@ export default function AdminAuditLogsPage() {
                                             </div>
                                         </div>
                                         <div className="flex justify-center space-x-3">
-                                            <button
+                                            <AnimatedButton
                                                 onClick={() => { setShowExportModal(false); setLastExportResult(null); }}
                                                 className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
                                             >
                                                 Close
                                             </AnimatedButton>
-                                            <button
+                                            <AnimatedButton
                                                 onClick={() => { setLastExportResult(null); }}
                                                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg"
                                             >
@@ -1435,7 +1435,7 @@ export default function AdminAuditLogsPage() {
                             <div className="sticky top-0 bg-gradient-to-r from-blue-600 to-purple-600 text-white p-6 rounded-t-2xl">
                                 <div className="flex items-center justify-between">
                                     <h3 className="text-2xl font-bold">📋 Audit Log Details</h3>
-                                    <button
+                                    <AnimatedButton
                                         onClick={() => setSelectedLog(null)}
                                         className="text-white hover:text-gray-200 text-2xl font-bold"
                                     >
@@ -1549,7 +1549,7 @@ export default function AdminAuditLogsPage() {
 
                             {/* Modal Footer */}
                             <div className="bg-gray-50 dark:bg-gray-900 p-6 rounded-b-2xl flex justify-end">
-                                <button
+                                <AnimatedButton
                                     onClick={() => setSelectedLog(null)}
                                     className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium shadow-lg"
                                 >
