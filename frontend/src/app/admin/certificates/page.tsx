@@ -17,6 +17,7 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import PageLayout from '@/components/layout/page-layout';
+import { AdminPageTransition, AnimatedButton } from '@/components/admin/shared';
 import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 import { 
   Shield, 
@@ -331,6 +332,7 @@ export default function AdminCertificatesPage() {
     <PageLayout
       user={session.user}
     >
+      <AdminPageTransition pageKey="/admin/certificates">
       {/* Hero Section */}
       <div className="relative overflow-hidden bg-gradient-to-br from-purple-600 via-blue-600 to-indigo-700 rounded-2xl p-8 md:p-12 mb-8 shadow-2xl">
         <div className="absolute inset-0 opacity-10">
@@ -394,14 +396,14 @@ export default function AdminCertificatesPage() {
                 >
                   <RefreshCw className="w-4 h-4" />
                   Rotate Certificate
-                </button>
+                </AnimatedButton>
                 <button
                   onClick={() => setRevokeModalOpen(true)}
                   className="flex items-center gap-2 px-4 py-2 bg-white/20 hover:bg-white/30 text-white rounded-lg transition-all backdrop-blur-sm"
                 >
                   <XCircle className="w-4 h-4" />
                   Revoke Certificate
-                </button>
+                </AnimatedButton>
               </div>
             </div>
 
@@ -442,7 +444,7 @@ export default function AdminCertificatesPage() {
             >
               {tab.icon}
               {tab.label}
-            </button>
+            </AnimatedButton>
           ))}
         </div>
       </div>
@@ -555,10 +557,10 @@ export default function AdminCertificatesPage() {
                     <div className="mt-4 flex gap-3">
                       <button className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm hover:bg-green-700">
                         Complete Rotation
-                      </button>
+                      </AnimatedButton>
                       <button className="px-4 py-2 bg-red-600 text-white rounded-lg text-sm hover:bg-red-700">
                         Rollback
-                      </button>
+                      </AnimatedButton>
                     </div>
                   </div>
                 </div>
@@ -584,7 +586,7 @@ export default function AdminCertificatesPage() {
               >
                 <RefreshCw className="w-5 h-5" />
                 {health.rotationStatus?.inProgress ? 'Rotation In Progress' : 'Start Certificate Rotation'}
-              </button>
+              </AnimatedButton>
             </div>
           </div>
         </div>
@@ -605,7 +607,7 @@ export default function AdminCertificatesPage() {
             >
               <XCircle className="w-5 h-5" />
               Revoke Certificate
-            </button>
+            </AnimatedButton>
           </div>
 
           {crl.length === 0 ? (
@@ -664,14 +666,14 @@ export default function AdminCertificatesPage() {
                 className="flex-1 px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 text-white rounded-xl font-semibold hover:from-purple-700 hover:to-blue-700 transition-all disabled:opacity-50"
               >
                 {rotationLoading ? 'Starting...' : 'Start Rotation'}
-              </button>
+              </AnimatedButton>
               <button
                 onClick={() => setRotationModalOpen(false)}
                 disabled={rotationLoading}
                 className="flex-1 px-6 py-3 bg-gray-200 text-gray-800 rounded-xl font-semibold hover:bg-gray-300 transition-all disabled:opacity-50"
               >
                 Cancel
-              </button>
+              </AnimatedButton>
             </div>
           </div>
         </div>
@@ -726,18 +728,19 @@ export default function AdminCertificatesPage() {
                 className="flex-1 px-6 py-3 bg-red-600 text-white rounded-xl font-semibold hover:bg-red-700 transition-all disabled:opacity-50"
               >
                 {revokeLoading ? 'Revoking...' : 'Revoke Certificate'}
-              </button>
+              </AnimatedButton>
               <button
                 onClick={() => setRevokeModalOpen(false)}
                 disabled={revokeLoading}
                 className="flex-1 px-6 py-3 bg-gray-200 text-gray-800 rounded-xl font-semibold hover:bg-gray-300 transition-all disabled:opacity-50"
               >
                 Cancel
-              </button>
+              </AnimatedButton>
             </div>
           </div>
         </div>
       )}
+      </AdminPageTransition>
     </PageLayout>
   );
 }
