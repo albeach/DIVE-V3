@@ -961,33 +961,25 @@ export const requestKeyHandler = async (
             });
 
         } else {
-            // Local KAS request with service account token (Option A fix)
-            // ISSUE B: KAS JWT Audience Validation Failing
-            // Fix: Use service account token instead of user token for KAS calls
-            const { getKASServiceAccountToken } = await import('../utils/keycloak-client');
-
-            // Get service account token with KAS audience
-            const kasServiceToken = await getKASServiceAccountToken({
-                uniqueID: subject.uniqueID,
-                clearance: subject.clearance,
-                countryOfAffiliation: subject.countryOfAffiliation,
-                acpCOI: subject.acpCOI
-            });
-
+            // Local KAS request with USER token (preserves AAL/MFA context)
+            // CRITICAL: We must use the user's original token to preserve:
+            // - acr (Authentication Context Class Reference) for AAL level
+            // - amr (Authentication Methods Reference) for MFA validation
+            // - auth_time for session validation
+            
             // CRITICAL: Always use internal KAS URL for local requests
             // The KAO's kasUrl is the external URL for frontend clients
             // Backend should use internal Docker network URL to avoid Cloudflare loop
             // Use KAS_URL env var, or try container name (dive-hub-kas) as fallback, then service name (kas)
             const kasUrl = `${process.env.KAS_URL || 'https://dive-hub-kas:8080'}/request-key`;
 
-            logger.info('Calling local KAS with service account token', {
+            logger.info('Calling local KAS with user token (preserves AAL/MFA)', {
                 requestId,
                 kasUrl,
                 kaoKasUrl: kao.kasUrl,  // External URL (for reference)
                 internalKasUrl: kasUrl,  // Actual URL being called
-                userTokenAudience: 'dive-v3-broker-usa', // Original user token audience
-                serviceTokenAudience: 'kas', // Service account token audience
-                subject: subject.uniqueID
+                subject: subject.uniqueID,
+                preservesUserContext: true
             });
 
             try {
@@ -1018,7 +1010,7 @@ export const requestKeyHandler = async (
                         resourceId,
                         kaoId,
                         wrappedKey,
-                        bearerToken: kasServiceToken, // Use service account token
+                        bearerToken, // Use original user token to preserve AAL/MFA context
                         userIdentity: subject, // Include original user identity for audit
                         requestTimestamp: new Date().toISOString(),
                         requestId,
