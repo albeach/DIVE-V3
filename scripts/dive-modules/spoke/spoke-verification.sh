@@ -208,7 +208,7 @@ spoke_verify_deployment() {
     fi
 
     # 4. Verify frontend is accessible
-    eval "$(_get_spoke_ports "$spoke_code")" 2>/dev/null || true
+    eval "$(get_instance_ports "$spoke_code")" 2>/dev/null || true
     local frontend_port="${SPOKE_FRONTEND_PORT:-3000}"
 
     if curl -sk -o /dev/null -w "%{http_code}" "https://localhost:$frontend_port" 2>/dev/null | grep -q "200\|301\|302"; then
@@ -282,15 +282,8 @@ spoke_verify_deployment() {
     fi
 }
 
-##
-# Helper to get spoke ports - DELEGATED TO COMMON.SH (SSOT)
-#
-# See: scripts/dive-modules/common.sh:get_instance_ports()
-##
-_get_spoke_ports() {
-    # Delegate to common.sh (SSOT)
-    get_instance_ports "$@"
-}
+# Port calculation: use get_instance_ports() from common.sh (SSOT)
+# (No local delegation needed - common.sh is sourced at module load time)
 
 # Mark module as loaded
 export DIVE_SPOKE_VERIFICATION_LOADED=1

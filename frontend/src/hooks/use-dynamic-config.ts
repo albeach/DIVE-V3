@@ -6,12 +6,12 @@ import { getDynamicConfig } from '@/lib/dynamic-config';
 /**
  * React hook for accessing dynamic configuration
  * Automatically detects the current domain and returns appropriate URLs
- * 
+ *
  * @example
  * ```tsx
  * function MyComponent() {
  *   const { apiUrl, keycloakUrl, realm, instance } = useDynamicConfig();
- *   
+ *
  *   const fetchData = async () => {
  *     const response = await fetch(`${apiUrl}/api/resources`);
  *     // ...

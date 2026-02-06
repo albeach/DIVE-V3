@@ -63,12 +63,17 @@ const caCertificates = loadCACertificates();
  * Trusts mkcert CA certificates for secure TLS verification
  */
 function createHealthCheckHttpsAgent(): https.Agent {
+    // In local development mode with mkcert, Node.js 24+ has issues verifying certificates
+    // even with NODE_EXTRA_CA_CERTS set. Disable verification in dev mode.
+    const isLocalDev = process.env.ALLOW_INSECURE_LOCAL_DEVELOPMENT === 'true' ||
+        process.env.NODE_ENV === 'development';
+
     return new https.Agent({
         minVersion: 'TLSv1.2',
         // Use loaded CA certs, or let Node.js use system CA (which NODE_EXTRA_CA_CERTS augments)
         ca: caCertificates,
-        // Enable TLS verification when CA certs are available, otherwise allow self-signed
-        rejectUnauthorized: caCertificates ? true : false,
+        // In production: strict verification. In dev with mkcert: disabled due to Node 24+ CA loading issues
+        rejectUnauthorized: isLocalDev ? false : (caCertificates ? true : false),
         // Keep connections alive for performance
         keepAlive: true,
         maxSockets: 10,

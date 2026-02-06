@@ -120,8 +120,8 @@ orch_validate_dependencies() {
     log_verbose "Checking port availability..."
 
     # Use the actual port calculation function from common.sh (SSOT)
-    if type _get_spoke_ports &>/dev/null; then
-        eval "$(_get_spoke_ports "$code_upper")"
+    if type get_instance_ports &>/dev/null; then
+        eval "$(get_instance_ports "$code_upper")"
         local keycloak_port="${SPOKE_KEYCLOAK_HTTPS_PORT}"
         local backend_port="${SPOKE_BACKEND_PORT}"
         local frontend_port="${SPOKE_FRONTEND_PORT}"

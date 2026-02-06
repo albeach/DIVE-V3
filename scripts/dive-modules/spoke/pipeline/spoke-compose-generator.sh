@@ -222,8 +222,8 @@ spoke_compose_get_ports() {
     fi
 
     # Priority 2: Use legacy port function if available
-    if type _get_spoke_ports &>/dev/null; then
-        _get_spoke_ports "$code_upper"
+    if type get_instance_ports &>/dev/null; then
+        get_instance_ports "$code_upper"
         return
     fi
 

@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import { withAuth, createAdminBackendFetch } from '@/middleware/admin-auth';
 import { getBackendUrl } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
@@ -16,52 +16,26 @@ interface RouteContext {
     params: Promise<{ country: string }>;
 }
 
-export async function GET(request: NextRequest, context: RouteContext) {
-    try {
-        const session = await auth();
-        if (!session?.user) {
-            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-        }
+export const GET = withAuth(async (request, { tokens }, context: RouteContext) => {
+    const { country } = await context.params;
+    const { searchParams } = new URL(request.url);
+    const queryString = searchParams.toString();
 
-        const isAdmin = session.user.roles?.includes('super_admin') ||
-                       session.user.roles?.includes('admin') ||
-                       session.user.roles?.includes('dive-admin');
+    const backendFetch = createAdminBackendFetch(tokens, BACKEND_URL);
+    const response = await backendFetch(`/api/admin/clearance/audit/${country}${queryString ? `?${queryString}` : ''}`);
 
-        if (!isAdmin) {
-            return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
-        }
-
-        const { country } = await context.params;
-        const { searchParams } = new URL(request.url);
-        const queryString = searchParams.toString();
-        const url = queryString
-            ? `${BACKEND_URL}/api/admin/clearance/audit/${country}?${queryString}`
-            : `${BACKEND_URL}/api/admin/clearance/audit/${country}`;
-
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${(session as any).accessToken}`,
-            },
-        });
-
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            return NextResponse.json(
-                { success: false, error: error.message || 'Failed to fetch audit trail' },
-                { status: response.status }
-            );
-        }
-
-        const data = await response.json();
-        return NextResponse.json(data);
-
-    } catch (error) {
-        console.error('[Clearance API] GET audit error:', error);
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Backend error' }));
         return NextResponse.json(
-            { success: false, error: 'Failed to fetch clearance audit trail' },
-            { status: 500 }
+            {
+                success: false,
+                error: 'BackendError',
+                message: error.message || `Backend returned ${response.status}`,
+            },
+            { status: response.status }
         );
     }
-}
+
+    const data = await response.json();
+    return NextResponse.json(data);
+});

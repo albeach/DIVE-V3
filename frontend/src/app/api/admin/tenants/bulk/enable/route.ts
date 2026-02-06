@@ -5,98 +5,42 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import { withAuth, createAdminBackendFetch } from '@/middleware/admin-auth';
 import { getBackendUrl } from '@/lib/api-utils';
 
 export const dynamic = 'force-dynamic';
 
 const BACKEND_URL = getBackendUrl();
 
-export async function POST(request: NextRequest) {
-  try {
-    const session = await auth();
-    if (!session?.user) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      );
-    }
-
-    const isAdmin = session.user.roles?.some((r: string) =>
-      ['super_admin', 'admin', 'dive-admin'].includes(r)
-    );
-
-    if (!isAdmin) {
-      return NextResponse.json(
-        { success: false, error: 'Forbidden' },
-        { status: 403 }
-      );
-    }
-
+export const POST = withAuth(async (request, { tokens }) => {
     const body = await request.json();
     const { tenantIds } = body;
 
     if (!Array.isArray(tenantIds) || tenantIds.length === 0) {
-      return NextResponse.json(
-        { success: false, error: 'tenantIds must be a non-empty array of strings' },
-        { status: 400 }
-      );
+        return NextResponse.json(
+            { success: false, error: 'ValidationError', message: 'tenantIds must be a non-empty array of strings' },
+            { status: 400 }
+        );
     }
 
-    try {
-      const response = await fetch(
-        `${BACKEND_URL}/api/admin/tenants/bulk/enable`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${(session as any).accessToken}`,
-          },
-          body: JSON.stringify({ tenantIds }),
-        }
-      );
+    const backendFetch = createAdminBackendFetch(tokens, BACKEND_URL);
+    const response = await backendFetch(`/api/admin/tenants/bulk/enable`, {
+        method: 'POST',
+        body: JSON.stringify({ tenantIds }),
+    });
 
-      if (!response.ok) {
-        console.warn('[Tenants Bulk Enable API] Backend error, returning mock data');
-        return NextResponse.json({
-          success: true,
-          data: generateMockBulkResponse(tenantIds, 'enable'),
-        });
-      }
-
-      const data = await response.json();
-      return NextResponse.json(data);
-    } catch {
-      console.warn('[Tenants Bulk Enable API] Backend unavailable, returning mock data');
-      return NextResponse.json({
-        success: true,
-        data: generateMockBulkResponse(tenantIds, 'enable'),
-      });
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Failed to enable tenants' }));
+        return NextResponse.json(
+            {
+                success: false,
+                error: 'BackendError',
+                message: error.message || `Backend returned ${response.status}`,
+            },
+            { status: response.status }
+        );
     }
-  } catch (error) {
-    console.error('[Tenants Bulk Enable API] Error:', error);
-    return NextResponse.json(
-      { success: false, error: 'Internal server error' },
-      { status: 500 }
-    );
-  }
-}
 
-function generateMockBulkResponse(tenantIds: string[], operation: string) {
-  const results = tenantIds.map((id) => ({
-    tenantId: id,
-    status: 'success' as const,
-    message: `Tenant ${id} ${operation}d successfully`,
-    updatedAt: new Date().toISOString(),
-  }));
-
-  return {
-    operation,
-    results,
-    summary: {
-      total: tenantIds.length,
-      succeeded: tenantIds.length,
-      failed: 0,
-    },
-  };
-}
+    const data = await response.json();
+    return NextResponse.json(data);
+});

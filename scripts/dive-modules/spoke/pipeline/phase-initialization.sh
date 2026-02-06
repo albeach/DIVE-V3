@@ -307,8 +307,8 @@ spoke_init_generate_config() {
     log_step "Generating instance configuration"
 
     # Get port assignments
-    if type _get_spoke_ports &>/dev/null; then
-        eval "$(_get_spoke_ports "$code_upper")"
+    if type get_instance_ports &>/dev/null; then
+        eval "$(get_instance_ports "$code_upper")"
     else
         # Default ports
         SPOKE_FRONTEND_PORT=3000
@@ -694,8 +694,8 @@ spoke_init_generate_compose() {
     # Fallback: Use legacy function if available
     if type _create_spoke_docker_compose &>/dev/null; then
         # Get required parameters
-        if type _get_spoke_ports &>/dev/null; then
-            eval "$(_get_spoke_ports "$code_upper")"
+        if type get_instance_ports &>/dev/null; then
+            eval "$(get_instance_ports "$code_upper")"
         fi
 
         local instance_name="$code_upper Instance"

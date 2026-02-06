@@ -1014,7 +1014,16 @@ load_secrets() {
 }
 
 # Get the correct external ports for a spoke instance
+# DEPRECATED: Use get_instance_ports() instead - this function uses hardcoded offsets
+# which are inconsistent with the NATO database SSOT. Will be removed in v6.0.0.
+# Migration: Replace `eval $(_get_spoke_ports "$code")` with `eval $(get_instance_ports "$code")`
 _get_spoke_ports() {
+    # Emit deprecation warning (once per session to avoid log spam)
+    if [ -z "${_GET_SPOKE_PORTS_DEPRECATED_WARNED:-}" ]; then
+        log_warn "[DEPRECATED] _get_spoke_ports() is deprecated. Use get_instance_ports() instead." >&2
+        export _GET_SPOKE_PORTS_DEPRECATED_WARNED=1
+    fi
+
     local code="$1"
     local code_lc
     code_lc=$(echo "$code" | tr '[:upper:]' '[:lower:]')
@@ -1174,6 +1183,15 @@ get_instance_ports() {
     local code="$1"
     local code_upper="${code^^}"
     local port_offset=0
+
+    # SSOT: Always load NATO database for port calculations
+    if [ -z "${NATO_COUNTRIES_LOADED:-}" ]; then
+        local nato_script="${DIVE_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}/scripts/nato-countries.sh"
+        if [ -f "$nato_script" ]; then
+            source "$nato_script" 2>/dev/null
+            export NATO_COUNTRIES_LOADED=1
+        fi
+    fi
 
     # Check if it's a NATO country (uses centralized database)
     if type -t is_nato_country &>/dev/null && is_nato_country "$code_upper" 2>/dev/null; then

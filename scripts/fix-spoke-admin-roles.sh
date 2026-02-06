@@ -47,32 +47,32 @@ assign_admin_role() {
     local instance_code="$1"
     local code_upper=$(echo "$instance_code" | tr '[:lower:]' '[:upper:]')
     local code_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
-    
+
     local kc_container="dive-spoke-${code_lower}-keycloak"
     local realm_name="dive-v3-broker-${code_lower}"
     local admin_username="admin-${code_lower}"
-    
+
     echo ""
     log_step "Processing spoke: $code_upper"
-    
+
     # Check if container exists
     if ! docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
         log_warn "Keycloak container not running for $code_upper (skipping)"
         return 0
     fi
-    
+
     # Get Keycloak admin password
     local kc_admin_pass
     kc_admin_pass=$(docker exec "$kc_container" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r' || echo "")
     if [ -z "$kc_admin_pass" ]; then
         kc_admin_pass=$(docker exec "$kc_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r' || echo "")
     fi
-    
+
     if [ -z "$kc_admin_pass" ]; then
         log_error "Cannot get Keycloak admin password for $code_upper"
         return 1
     fi
-    
+
     # Authenticate with kcadm
     log_info "Authenticating with Keycloak..."
     docker exec "$kc_container" /opt/keycloak/bin/kcadm.sh config credentials \
@@ -80,79 +80,79 @@ assign_admin_role() {
         --realm master \
         --user admin \
         --password "$kc_admin_pass" >/dev/null 2>&1
-    
+
     if [ $? -ne 0 ]; then
         log_error "Authentication failed for $code_upper"
         return 1
     fi
-    
+
     # Check if user exists
     log_info "Checking if $admin_username exists..."
     local user_exists
     user_exists=$(docker exec "$kc_container" /opt/keycloak/bin/kcadm.sh get users \
         -r "$realm_name" \
         -q username="$admin_username" 2>/dev/null | grep -c "\"username\"" || echo "0")
-    
+
     if [ "$user_exists" = "0" ]; then
         log_warn "User $admin_username not found in realm $realm_name (skipping)"
         return 0
     fi
-    
+
     # Check if dive-admin role exists
     log_info "Checking if dive-admin role exists..."
     local role_exists
     role_exists=$(docker exec "$kc_container" /opt/keycloak/bin/kcadm.sh get roles/dive-admin \
         -r "$realm_name" 2>/dev/null | jq -r '.name // empty')
-    
+
     if [ -z "$role_exists" ]; then
         log_warn "dive-admin role not found in realm $realm_name"
         log_warn "Creating dive-admin role..."
-        
+
         # Create dive-admin role
         docker exec "$kc_container" /opt/keycloak/bin/kcadm.sh create roles \
             -r "$realm_name" \
             -s name=dive-admin \
             -s description="DIVE Admin Access" >/dev/null 2>&1
-        
+
         if [ $? -ne 0 ]; then
             log_error "Failed to create dive-admin role"
             return 1
         fi
-        
+
         log_success "✓ Created dive-admin role"
     fi
-    
+
     # Check if user already has dive-admin role
     log_info "Checking current roles for $admin_username..."
     local has_role
     has_role=$(docker exec "$kc_container" /opt/keycloak/bin/kcadm.sh get-roles \
         -r "$realm_name" \
         --uusername "$admin_username" 2>/dev/null | grep -c "dive-admin" || echo "0")
-    
+
     if [ "$has_role" != "0" ]; then
         log_success "✓ User $admin_username already has dive-admin role"
         return 0
     fi
-    
+
     # Assign dive-admin role
     log_step "Assigning dive-admin role to $admin_username..."
     docker exec "$kc_container" /opt/keycloak/bin/kcadm.sh add-roles \
         -r "$realm_name" \
         --uusername "$admin_username" \
         --rolename dive-admin >/dev/null 2>&1
-    
+
     if [ $? -ne 0 ]; then
         log_error "Failed to assign dive-admin role"
         return 1
     fi
-    
+
     # Verify role assignment
     log_info "Verifying role assignment..."
     local verify_role
     verify_role=$(docker exec "$kc_container" /opt/keycloak/bin/kcadm.sh get-roles \
         -r "$realm_name" \
         --uusername "$admin_username" 2>/dev/null | grep -c "dive-admin" || echo "0")
-    
+
     if [ "$verify_role" != "0" ]; then
         log_success "✓ Successfully assigned dive-admin role to $admin_username"
         log_info "User can now access /admin routes in frontend"
@@ -200,12 +200,12 @@ if [ "$1" = "all" ]; then
         instance=$(echo "$container" | sed 's/dive-spoke-\(.*\)-keycloak/\1/' | tr '[:lower:]' '[:upper:]')
         INSTANCES+=("$instance")
     done
-    
+
     if [ ${#INSTANCES[@]} -eq 0 ]; then
         log_warn "No running spoke instances found"
         exit 0
     fi
-    
+
     log_info "Found ${#INSTANCES[@]} spoke instance(s): ${INSTANCES[*]}"
 else
     INSTANCES=("$@")

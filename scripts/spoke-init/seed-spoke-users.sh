@@ -191,18 +191,18 @@ EOF
     # This is REQUIRED for /admin route access in frontend
     if [ "$is_admin" = "true" ]; then
         log_info "Assigning dive-admin role to $username..."
-        
+
         # Get dive-admin role ID (if role doesn't exist, skip gracefully)
         local role_id=$(docker exec "$KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get roles/dive-admin \
             -r "$REALM_NAME" 2>/dev/null | jq -r '.id // empty')
-        
+
         if [ -n "$role_id" ]; then
             # Assign role to user
             docker exec "$KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh add-roles \
                 -r "$REALM_NAME" \
                 --uusername "$username" \
                 --rolename dive-admin >/dev/null 2>&1
-            
+
             if [ $? -eq 0 ]; then
                 log_success "✓ Assigned dive-admin role to $username"
             else

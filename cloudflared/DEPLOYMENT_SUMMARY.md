@@ -51,7 +51,7 @@ All three Cloudflare Tunnels have been successfully configured and deployed with
 
 **Endpoints**:
 - USA: https://usa-opa.dive25.com
-- FRA: https://fra-opa.dive25.com  
+- FRA: https://fra-opa.dive25.com
 - GBR: https://gbr-opa.dive25.com
 
 **Use Cases**:

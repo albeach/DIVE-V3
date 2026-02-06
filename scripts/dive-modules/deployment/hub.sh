@@ -44,12 +44,728 @@ if [ -f "${MODULES_DIR}/utilities/deployment-progress.sh" ]; then
     source "${MODULES_DIR}/utilities/deployment-progress.sh"
 fi
 
+# Load pipeline common module (Phase 3: Hub Pipeline Enhancement)
+if [ -f "${DEPLOYMENT_DIR}/pipeline-common.sh" ]; then
+    source "${DEPLOYMENT_DIR}/pipeline-common.sh"
+fi
+
+# Load hub checkpoint module (Phase 3: Hub Pipeline Enhancement)
+if [ -f "${DEPLOYMENT_DIR}/hub-checkpoint.sh" ]; then
+    source "${DEPLOYMENT_DIR}/hub-checkpoint.sh"
+fi
+
+# Load error recovery module (circuit breakers, retry, failure threshold)
+if [ -f "${MODULES_DIR}/error-recovery.sh" ]; then
+    source "${MODULES_DIR}/error-recovery.sh"
+fi
+
 # =============================================================================
 # HUB CONFIGURATION
 # =============================================================================
 
 HUB_COMPOSE_FILE="${DIVE_ROOT}/docker-compose.hub.yml"
 HUB_DATA_DIR="${DIVE_ROOT}/data/hub"
+
+# =============================================================================
+# HUB PIPELINE EXECUTION (Phase 3: Hub Pipeline Enhancement)
+# =============================================================================
+# Unified pipeline execution with:
+#   - Circuit breaker protection for each phase
+#   - Failure threshold enforcement
+#   - Checkpoint-based resume capability
+#   - Deployment lock management
+# =============================================================================
+
+##
+# Hub phase wrapper functions for circuit breaker integration
+# These wrap the actual phase implementations for protected execution
+##
+
+hub_phase_preflight() {
+    local instance_code="$1"
+    local pipeline_mode="$2"
+    hub_preflight
+}
+
+hub_phase_initialization() {
+    local instance_code="$1"
+    local pipeline_mode="$2"
+    hub_init
+}
+
+hub_phase_mongodb_init() {
+    local instance_code="$1"
+    local pipeline_mode="$2"
+    _hub_init_mongodb_replica_set
+}
+
+hub_phase_services() {
+    local instance_code="$1"
+    local pipeline_mode="$2"
+    hub_up
+}
+
+hub_phase_orchestration_db() {
+    local instance_code="$1"
+    local pipeline_mode="$2"
+    hub_init_orchestration_db
+}
+
+hub_phase_keycloak_config() {
+    local instance_code="$1"
+    local pipeline_mode="$2"
+    hub_configure_keycloak
+}
+
+hub_phase_realm_verify() {
+    local instance_code="$1"
+    local pipeline_mode="$2"
+    hub_verify_realm
+}
+
+hub_phase_kas_register() {
+    local instance_code="$1"
+    local pipeline_mode="$2"
+
+    # Load hub seed module for KAS registration
+    if [ -f "${MODULES_DIR}/hub/seed.sh" ]; then
+        source "${MODULES_DIR}/hub/seed.sh"
+        if type _hub_register_kas &>/dev/null; then
+            _hub_register_kas
+            return $?
+        fi
+    fi
+    log_warn "KAS registration function not available"
+    return 0  # Non-fatal
+}
+
+hub_phase_seeding() {
+    local instance_code="$1"
+    local pipeline_mode="$2"
+    hub_seed 5000
+}
+
+hub_phase_kas_init() {
+    local instance_code="$1"
+    local pipeline_mode="$2"
+    _hub_init_kas
+}
+
+##
+# Internal MongoDB replica set initialization
+# Extracted from hub_deploy() for circuit breaker wrapping
+##
+_hub_init_mongodb_replica_set() {
+    # Load secrets for MONGO_PASSWORD
+    if ! load_secrets; then
+        log_error "Failed to load secrets - cannot initialize MongoDB"
+        return 1
+    fi
+
+    # Start MongoDB first
+    log_verbose "Starting MongoDB container..."
+    if ! ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" up -d mongodb >/dev/null 2>&1; then
+        log_error "Failed to start MongoDB container"
+        return 1
+    fi
+
+    # Wait for MongoDB container to be healthy
+    log_verbose "Waiting for MongoDB container to be healthy..."
+    local mongo_wait=0
+    local mongo_max_wait=60
+    while [ $mongo_wait -lt $mongo_max_wait ]; do
+        if ${DOCKER_CMD:-docker} ps --filter "name=dive-hub-mongodb" --filter "health=healthy" --format "{{.Names}}" | grep -q "dive-hub-mongodb"; then
+            log_verbose "MongoDB container is healthy"
+            break
+        fi
+        sleep 2
+        mongo_wait=$((mongo_wait + 2))
+    done
+
+    if [ $mongo_wait -ge $mongo_max_wait ]; then
+        log_warn "MongoDB container not healthy after ${mongo_max_wait}s, attempting replica set init anyway..."
+    fi
+
+    # Initialize replica set
+    if [ ! -f "${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh" ]; then
+        log_error "MongoDB initialization script not found"
+        return 1
+    fi
+
+    if ! bash "${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh" dive-hub-mongodb admin "$MONGO_PASSWORD"; then
+        log_error "MongoDB replica set initialization FAILED"
+        return 1
+    fi
+
+    log_success "MongoDB replica set initialized and PRIMARY"
+    export HUB_MONGODB_RS_INITIALIZED=true
+
+    # Stability buffer for replica set discovery
+    log_verbose "Waiting 3s for MongoDB replica set discovery to stabilize..."
+    sleep 3
+
+    return 0
+}
+
+##
+# Internal KAS initialization
+# Extracted from hub_deploy() for circuit breaker wrapping
+##
+_hub_init_kas() {
+    if docker ps --format '{{.Names}}' | grep -q "${HUB_COMPOSE_PROJECT:-dive-hub}-kas"; then
+        log_info "Waiting for KAS to be healthy..."
+        local kas_wait=0
+        local kas_max_wait=60
+
+        while [ $kas_wait -lt $kas_max_wait ]; do
+            local kas_health=$(docker inspect "${HUB_COMPOSE_PROJECT:-dive-hub}-kas" \
+                --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+
+            if [ "$kas_health" = "healthy" ]; then
+                log_success "KAS is healthy"
+                break
+            fi
+
+            sleep 2
+            ((kas_wait += 2))
+        done
+
+        if [ $kas_wait -ge $kas_max_wait ]; then
+            log_warn "KAS health check timeout after ${kas_max_wait}s"
+            return 1
+        fi
+
+        # Verify health endpoint
+        local kas_port="${KAS_HOST_PORT:-8085}"
+        if curl -sf -k "https://localhost:${kas_port}/health" >/dev/null 2>&1; then
+            log_success "KAS health endpoint responding on port ${kas_port}"
+        fi
+    else
+        log_info "KAS container not found - skipping (optional service)"
+    fi
+
+    return 0
+}
+
+##
+# Execute hub deployment pipeline with circuit breaker protection
+#
+# This is the new orchestrated entry point for hub deployment that provides:
+#   - Deployment lock to prevent concurrent deployments
+#   - Circuit breaker protection for each phase
+#   - Failure threshold enforcement
+#   - Checkpoint-based resume capability
+#
+# Arguments:
+#   $1 - Pipeline mode (deploy|up|resume)
+#
+# Returns:
+#   0 - Success
+#   1 - Failure
+##
+hub_pipeline_execute() {
+    local pipeline_mode="${1:-deploy}"
+    local instance_code="USA"
+    local start_time=$(date +%s)
+
+    log_info "Starting Hub pipeline: $instance_code ($pipeline_mode mode)"
+
+    # Handle resume mode
+    local resume_mode=false
+    if [ "$pipeline_mode" = "resume" ]; then
+        resume_mode=true
+        pipeline_mode="deploy"
+
+        # Check if we can resume
+        if type hub_checkpoint_can_resume &>/dev/null; then
+            if ! hub_checkpoint_can_resume; then
+                log_error "Cannot resume - no valid hub checkpoints found"
+                log_error "Run without --resume to start a new deployment"
+                return 1
+            fi
+
+            # Validate checkpoint consistency
+            if type hub_checkpoint_validate_state &>/dev/null; then
+                hub_checkpoint_validate_state || log_warn "Checkpoint inconsistencies detected (auto-corrected)"
+            fi
+
+            # Show resume info
+            log_info "Resuming hub deployment"
+            if type hub_checkpoint_print_resume_info &>/dev/null; then
+                hub_checkpoint_print_resume_info
+            fi
+        else
+            log_warn "Checkpoint module not loaded - resume not available"
+            resume_mode=false
+        fi
+    fi
+
+    # Acquire deployment lock
+    local lock_acquired=false
+    if type deployment_acquire_lock &>/dev/null; then
+        if ! deployment_acquire_lock "$instance_code"; then
+            log_error "Cannot start hub deployment - lock acquisition failed"
+            log_error "Another deployment may be in progress"
+            return 1
+        fi
+        lock_acquired=true
+    fi
+
+    # Execute pipeline with guaranteed lock cleanup
+    local pipeline_result=0
+    _hub_pipeline_execute_internal "$instance_code" "$pipeline_mode" "$start_time" "$resume_mode" || pipeline_result=$?
+
+    # Always release lock
+    if [ "$lock_acquired" = true ] && type deployment_release_lock &>/dev/null; then
+        deployment_release_lock "$instance_code"
+    fi
+
+    return $pipeline_result
+}
+
+##
+# Internal hub pipeline execution
+# Separated for proper cleanup handling
+##
+_hub_pipeline_execute_internal() {
+    local instance_code="$1"
+    local pipeline_mode="$2"
+    local start_time="$3"
+    local resume_mode="${4:-false}"
+
+    local phase_result=0
+    local phase_times=()
+
+    # Initialize orchestration context
+    if type orch_init_context &>/dev/null; then
+        orch_init_context "$instance_code" "Hub Deployment"
+    fi
+
+    # Initialize metrics
+    if type orch_init_metrics &>/dev/null; then
+        orch_init_metrics "$instance_code"
+    fi
+
+    # Initialize progress tracking
+    if type progress_init &>/dev/null; then
+        progress_init "hub" "USA" 10
+    fi
+
+    # Set initial state
+    if type deployment_set_state &>/dev/null; then
+        deployment_set_state "$instance_code" "INITIALIZING" "" \
+            "{\"mode\":\"$pipeline_mode\",\"resume\":$resume_mode}"
+    fi
+
+    # =========================================================================
+    # Phase 1: Preflight
+    # =========================================================================
+    local phase_start=$(date +%s)
+    if type progress_set_phase &>/dev/null; then
+        progress_set_phase 1 "Preflight checks"
+    fi
+
+    if ! _hub_run_phase_with_circuit_breaker "$instance_code" "PREFLIGHT" "hub_phase_preflight" "$pipeline_mode" "$resume_mode"; then
+        phase_result=1
+    fi
+
+    local phase_end=$(date +%s)
+    phase_times+=("Phase 1 (Preflight): $((phase_end - phase_start))s")
+
+    # Check failure threshold
+    if [ $phase_result -eq 0 ]; then
+        if ! _hub_check_threshold "$instance_code" "PREFLIGHT"; then
+            phase_result=1
+        fi
+    fi
+
+    # =========================================================================
+    # Phase 2: Initialization
+    # =========================================================================
+    if [ $phase_result -eq 0 ]; then
+        phase_start=$(date +%s)
+        if type progress_set_phase &>/dev/null; then
+            progress_set_phase 2 "Initialization"
+        fi
+
+        if ! _hub_run_phase_with_circuit_breaker "$instance_code" "INITIALIZATION" "hub_phase_initialization" "$pipeline_mode" "$resume_mode"; then
+            phase_result=1
+        fi
+
+        phase_end=$(date +%s)
+        phase_times+=("Phase 2 (Initialization): $((phase_end - phase_start))s")
+
+        if [ $phase_result -eq 0 ]; then
+            if ! _hub_check_threshold "$instance_code" "INITIALIZATION"; then
+                phase_result=1
+            fi
+        fi
+    fi
+
+    # =========================================================================
+    # Phase 2.5: MongoDB Replica Set
+    # =========================================================================
+    if [ $phase_result -eq 0 ]; then
+        phase_start=$(date +%s)
+        if type progress_set_phase &>/dev/null; then
+            progress_set_phase 2.5 "MongoDB replica set"
+        fi
+
+        if ! _hub_run_phase_with_circuit_breaker "$instance_code" "MONGODB_INIT" "hub_phase_mongodb_init" "$pipeline_mode" "$resume_mode"; then
+            phase_result=1
+        fi
+
+        phase_end=$(date +%s)
+        phase_times+=("Phase 2.5 (MongoDB): $((phase_end - phase_start))s")
+
+        if [ $phase_result -eq 0 ]; then
+            if ! _hub_check_threshold "$instance_code" "MONGODB_INIT"; then
+                phase_result=1
+            fi
+        fi
+    fi
+
+    # =========================================================================
+    # Phase 3: Services
+    # =========================================================================
+    if [ $phase_result -eq 0 ]; then
+        phase_start=$(date +%s)
+        if type progress_set_phase &>/dev/null; then
+            progress_set_phase 3 "Starting services"
+            progress_set_services 0 12
+        fi
+
+        if type deployment_set_state &>/dev/null; then
+            deployment_set_state "$instance_code" "DEPLOYING" "" "{\"phase\":\"SERVICES\"}"
+        fi
+
+        if ! _hub_run_phase_with_circuit_breaker "$instance_code" "SERVICES" "hub_phase_services" "$pipeline_mode" "$resume_mode"; then
+            phase_result=1
+        fi
+
+        if type progress_set_services &>/dev/null; then
+            progress_set_services 12 12
+        fi
+
+        phase_end=$(date +%s)
+        phase_times+=("Phase 3 (Services): $((phase_end - phase_start))s")
+
+        if [ $phase_result -eq 0 ]; then
+            if ! _hub_check_threshold "$instance_code" "SERVICES"; then
+                phase_result=1
+            fi
+        fi
+    fi
+
+    # =========================================================================
+    # Phase 5: Orchestration Database
+    # =========================================================================
+    if [ $phase_result -eq 0 ]; then
+        phase_start=$(date +%s)
+        if type progress_set_phase &>/dev/null; then
+            progress_set_phase 5 "Orchestration database"
+        fi
+
+        if ! _hub_run_phase_with_circuit_breaker "$instance_code" "ORCHESTRATION_DB" "hub_phase_orchestration_db" "$pipeline_mode" "$resume_mode"; then
+            phase_result=1
+        fi
+
+        phase_end=$(date +%s)
+        phase_times+=("Phase 5 (Orch DB): $((phase_end - phase_start))s")
+
+        if [ $phase_result -eq 0 ]; then
+            if ! _hub_check_threshold "$instance_code" "ORCHESTRATION_DB"; then
+                phase_result=1
+            fi
+        fi
+    fi
+
+    # =========================================================================
+    # Phase 6: Keycloak Configuration
+    # =========================================================================
+    if [ $phase_result -eq 0 ]; then
+        phase_start=$(date +%s)
+        if type progress_set_phase &>/dev/null; then
+            progress_set_phase 6 "Keycloak configuration"
+        fi
+
+        if type deployment_set_state &>/dev/null; then
+            deployment_set_state "$instance_code" "CONFIGURING" "" "{\"phase\":\"KEYCLOAK_CONFIG\"}"
+        fi
+
+        if ! _hub_run_phase_with_circuit_breaker "$instance_code" "KEYCLOAK_CONFIG" "hub_phase_keycloak_config" "$pipeline_mode" "$resume_mode"; then
+            phase_result=1
+        fi
+
+        phase_end=$(date +%s)
+        phase_times+=("Phase 6 (Keycloak): $((phase_end - phase_start))s")
+
+        if [ $phase_result -eq 0 ]; then
+            if ! _hub_check_threshold "$instance_code" "KEYCLOAK_CONFIG"; then
+                phase_result=1
+            fi
+        fi
+    fi
+
+    # =========================================================================
+    # Phase 6.5: Realm Verification
+    # =========================================================================
+    if [ $phase_result -eq 0 ]; then
+        phase_start=$(date +%s)
+
+        if ! _hub_run_phase_with_circuit_breaker "$instance_code" "REALM_VERIFY" "hub_phase_realm_verify" "$pipeline_mode" "$resume_mode"; then
+            phase_result=1
+        fi
+
+        phase_end=$(date +%s)
+        phase_times+=("Phase 6.5 (Realm Verify): $((phase_end - phase_start))s")
+
+        if [ $phase_result -eq 0 ]; then
+            if ! _hub_check_threshold "$instance_code" "REALM_VERIFY"; then
+                phase_result=1
+            fi
+        fi
+    fi
+
+    # =========================================================================
+    # Phase 6.75: KAS Registration
+    # =========================================================================
+    if [ $phase_result -eq 0 ]; then
+        phase_start=$(date +%s)
+
+        # KAS registration is non-fatal
+        _hub_run_phase_with_circuit_breaker "$instance_code" "KAS_REGISTER" "hub_phase_kas_register" "$pipeline_mode" "$resume_mode" || \
+            log_warn "Hub KAS registration failed - KAS decryption may not work"
+
+        phase_end=$(date +%s)
+        phase_times+=("Phase 6.75 (KAS Register): $((phase_end - phase_start))s")
+    fi
+
+    # =========================================================================
+    # Phase 7: Seeding
+    # =========================================================================
+    if [ $phase_result -eq 0 ]; then
+        phase_start=$(date +%s)
+        if type progress_set_phase &>/dev/null; then
+            progress_set_phase 7 "Database seeding"
+        fi
+
+        # Seeding is non-fatal
+        _hub_run_phase_with_circuit_breaker "$instance_code" "SEEDING" "hub_phase_seeding" "$pipeline_mode" "$resume_mode" || \
+            log_warn "Database seeding failed - can be done manually: ./dive hub seed"
+
+        phase_end=$(date +%s)
+        phase_times+=("Phase 7 (Seeding): $((phase_end - phase_start))s")
+    fi
+
+    # =========================================================================
+    # Phase 7.5: KAS Initialization
+    # =========================================================================
+    if [ $phase_result -eq 0 ]; then
+        phase_start=$(date +%s)
+        if type progress_set_phase &>/dev/null; then
+            progress_set_phase 7.5 "KAS initialization"
+        fi
+
+        # KAS init is non-fatal
+        _hub_run_phase_with_circuit_breaker "$instance_code" "KAS_INIT" "hub_phase_kas_init" "$pipeline_mode" "$resume_mode" || \
+            log_warn "KAS initialization had issues"
+
+        phase_end=$(date +%s)
+        phase_times+=("Phase 7.5 (KAS Init): $((phase_end - phase_start))s")
+    fi
+
+    # =========================================================================
+    # Finalize
+    # =========================================================================
+    local end_time=$(date +%s)
+    local duration=$((end_time - start_time))
+
+    if [ $phase_result -eq 0 ]; then
+        # Mark complete
+        if type deployment_set_state &>/dev/null; then
+            deployment_set_state "$instance_code" "COMPLETE" "" \
+                "{\"duration_seconds\":$duration,\"mode\":\"$pipeline_mode\"}"
+        fi
+
+        # Create final checkpoint
+        if type hub_checkpoint_mark_complete &>/dev/null; then
+            hub_checkpoint_mark_complete "COMPLETE" "$duration"
+        fi
+
+        # Mark progress complete
+        if type progress_complete &>/dev/null; then
+            progress_complete
+        fi
+
+        # Print success banner and timing summary
+        _hub_print_performance_summary "${phase_times[@]}" "$duration"
+        deployment_print_success "$instance_code" "Hub" "$duration" "$pipeline_mode" "hub"
+
+        return 0
+    else
+        # Mark failed
+        if type deployment_set_state &>/dev/null; then
+            deployment_set_state "$instance_code" "FAILED" "Pipeline failed" \
+                "{\"duration_seconds\":$duration,\"mode\":\"$pipeline_mode\"}"
+        fi
+
+        # Mark progress failed
+        if type progress_fail &>/dev/null; then
+            progress_fail "Hub deployment failed"
+        fi
+
+        # Generate error summary
+        if type orch_generate_error_summary &>/dev/null; then
+            orch_generate_error_summary "$instance_code"
+        fi
+
+        deployment_print_failure "$instance_code" "Hub" "$duration" "hub"
+
+        return 1
+    fi
+}
+
+##
+# Run a hub phase with circuit breaker protection
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Phase name
+#   $3 - Phase function
+#   $4 - Pipeline mode
+#   $5 - Resume mode
+#
+# Returns:
+#   0 - Success
+#   1 - Failure
+#   2 - Circuit breaker open
+##
+_hub_run_phase_with_circuit_breaker() {
+    local instance_code="$1"
+    local phase_name="$2"
+    local phase_function="$3"
+    local pipeline_mode="$4"
+    local resume_mode="$5"
+
+    local circuit_name="hub_phase_${phase_name}"
+
+    # Check if phase should be skipped (resume mode + already complete)
+    if [ "$resume_mode" = "true" ]; then
+        if type hub_checkpoint_is_complete &>/dev/null; then
+            if hub_checkpoint_is_complete "$phase_name"; then
+                log_info "Skipping $phase_name (already complete - resuming)"
+                return 0
+            fi
+        fi
+    fi
+
+    log_step "Phase: $phase_name"
+    local phase_start=$(date +%s)
+
+    # Initialize circuit breaker
+    if type orch_circuit_breaker_init &>/dev/null; then
+        orch_circuit_breaker_init "$circuit_name" "CLOSED"
+    fi
+
+    # Execute through circuit breaker
+    local phase_result=0
+    if type orch_circuit_breaker_execute &>/dev/null; then
+        if ! orch_circuit_breaker_execute "$circuit_name" "$phase_function" "$instance_code" "$pipeline_mode"; then
+            local exit_code=$?
+            if [ $exit_code -eq 2 ]; then
+                log_error "Phase $phase_name: Circuit breaker OPEN - fast fail"
+                return 2
+            fi
+            phase_result=1
+        fi
+    else
+        # Fallback: Direct execution
+        if ! "$phase_function" "$instance_code" "$pipeline_mode"; then
+            phase_result=1
+        fi
+    fi
+
+    local phase_end=$(date +%s)
+    local phase_duration=$((phase_end - phase_start))
+
+    if [ $phase_result -eq 0 ]; then
+        log_success "Phase $phase_name completed in ${phase_duration}s"
+
+        # Mark checkpoint
+        if type hub_checkpoint_mark_complete &>/dev/null; then
+            hub_checkpoint_mark_complete "$phase_name" "$phase_duration"
+        fi
+
+        # Record step
+        if type orch_db_record_step &>/dev/null; then
+            orch_db_record_step "$instance_code" "$phase_name" "COMPLETED" ""
+        fi
+
+        return 0
+    else
+        log_error "Phase $phase_name failed after ${phase_duration}s"
+
+        # Record error
+        if type orch_record_error &>/dev/null; then
+            orch_record_error "HUB_PHASE_${phase_name}_FAIL" "$ORCH_SEVERITY_CRITICAL" \
+                "Phase $phase_name failed" "$phase_name" \
+                "Check logs: docker logs dive-hub-*"
+        fi
+
+        # Record failed step
+        if type orch_db_record_step &>/dev/null; then
+            orch_db_record_step "$instance_code" "$phase_name" "FAILED" "Phase execution failed"
+        fi
+
+        return 1
+    fi
+}
+
+##
+# Check failure threshold for hub deployment
+##
+_hub_check_threshold() {
+    local instance_code="$1"
+    local phase_name="$2"
+
+    if type orch_check_failure_threshold &>/dev/null; then
+        if ! orch_check_failure_threshold "$instance_code"; then
+            log_error "Failure threshold exceeded after $phase_name - aborting hub deployment"
+            return 1
+        fi
+    fi
+
+    return 0
+}
+
+##
+# Print performance summary
+##
+_hub_print_performance_summary() {
+    local -a phase_times=("${@:1:$#-1}")
+    local duration="${!#}"
+
+    echo ""
+    echo "==============================================================================="
+    echo "Deployment Performance Summary"
+    echo "==============================================================================="
+    for timing in "${phase_times[@]}"; do
+        echo "  $timing"
+    done
+    echo "  -------------------------------------------------------------------------------"
+    echo "  Total Duration: ${duration}s"
+
+    # Performance analysis
+    if [ $duration -lt 180 ]; then
+        echo "  Performance: EXCELLENT (< 3 minutes)"
+    elif [ $duration -lt 300 ]; then
+        echo "  Performance: ACCEPTABLE (3-5 minutes)"
+    else
+        echo "  Performance: SLOW (> 5 minutes)"
+    fi
+    echo "==============================================================================="
+}
 
 # =============================================================================
 # HUB DEPLOYMENT
@@ -59,9 +775,45 @@ HUB_DATA_DIR="${DIVE_ROOT}/data/hub"
 # Full hub deployment workflow
 # Phase 3 Sprint 1: Enhanced with timeout enforcement and parallel startup
 # Phase 3 Sprint 2: Enhanced with real-time progress display
+# Phase 3 Sprint 3: Enhanced with circuit breaker and checkpoint support
+#
+# Arguments:
+#   --resume    Resume from last checkpoint
+#   --legacy    Use legacy deployment (skip orchestration pipeline)
 ##
 hub_deploy() {
-    log_step "Starting Hub deployment..."
+    local use_pipeline="${HUB_USE_PIPELINE:-true}"
+    local resume_mode=false
+
+    # Parse arguments
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --resume)
+                resume_mode=true
+                shift
+                ;;
+            --legacy)
+                use_pipeline=false
+                shift
+                ;;
+            *)
+                shift
+                ;;
+        esac
+    done
+
+    # Use new orchestrated pipeline if available
+    if [ "$use_pipeline" = "true" ] && type hub_pipeline_execute &>/dev/null; then
+        local mode="deploy"
+        if [ "$resume_mode" = "true" ]; then
+            mode="resume"
+        fi
+        hub_pipeline_execute "$mode"
+        return $?
+    fi
+
+    # Legacy deployment path (fallback)
+    log_step "Starting Hub deployment (legacy mode)..."
 
     local start_time=$(date +%s)
     local phase_times=()
@@ -222,6 +974,9 @@ hub_deploy() {
         return 1
     fi
     log_success "MongoDB replica set initialized and PRIMARY"
+
+    # Set flag to prevent duplicate initialization in hub_up()
+    export HUB_MONGODB_RS_INITIALIZED=true
 
     # CRITICAL: Add stability buffer to allow replica set discovery to propagate
     # MongoDB drivers cache replica set topology - need time for connection pools to refresh
@@ -550,7 +1305,7 @@ hub_init() {
     local keyfile_path="${DIVE_ROOT}/instances/hub/mongo-keyfile"
     if [ ! -f "$keyfile_path" ]; then
         log_verbose "Generating MongoDB replica set keyfile..."
-        
+
         # Use the standard keyfile generation script
         if [ -f "${DIVE_ROOT}/scripts/generate-mongo-keyfile.sh" ]; then
             if bash "${DIVE_ROOT}/scripts/generate-mongo-keyfile.sh" "$keyfile_path" >/dev/null 2>&1; then
@@ -564,7 +1319,7 @@ hub_init() {
             log_verbose "Generating MongoDB keyfile directly (script not found)"
             openssl rand -base64 756 | tr -d '\n' > "$keyfile_path"
             chmod 400 "$keyfile_path"
-            
+
             # Verify file size (MongoDB requires 6-1024 characters)
             local file_size=$(wc -c < "$keyfile_path" | tr -d ' ')
             if [ "$file_size" -lt 6 ] || [ "$file_size" -gt 1024 ]; then
@@ -576,13 +1331,13 @@ hub_init() {
         fi
     else
         log_verbose "MongoDB keyfile already exists: $keyfile_path"
-        
+
         # Verify it's a file (not a directory)
         if [ -d "$keyfile_path" ]; then
             log_error "MongoDB keyfile is a directory (should be a file): $keyfile_path"
             log_info "Removing directory and regenerating..."
             rm -rf "$keyfile_path"
-            
+
             # Regenerate
             if [ -f "${DIVE_ROOT}/scripts/generate-mongo-keyfile.sh" ]; then
                 bash "${DIVE_ROOT}/scripts/generate-mongo-keyfile.sh" "$keyfile_path" >/dev/null 2>&1
@@ -596,7 +1351,7 @@ hub_init() {
     # Generate certificates if not exists
     local cert_dir="${DIVE_ROOT}/instances/hub/certs"
     local mkcert_ca_dir="${DIVE_ROOT}/certs/mkcert"
-    
+
     if [ ! -f "${cert_dir}/certificate.pem" ]; then
         log_verbose "Generating hub certificates..."
         if command -v mkcert >/dev/null 2>&1; then
@@ -619,11 +1374,11 @@ hub_init() {
             cp "${cert_dir}/certificate.pem" "${cert_dir}/mkcert-rootCA.pem"
             log_verbose "Certificates generated with openssl"
         fi
-        
+
         # Fix permissions for Docker containers (non-root users need read access)
         chmod 644 "${cert_dir}/key.pem" 2>/dev/null || true
     fi
-    
+
     # Copy mkcert root CA to shared location for docker-compose volume mounts
     # Services expect: ./certs/mkcert:/app/certs/ca:ro
     mkdir -p "${mkcert_ca_dir}"
@@ -682,6 +1437,15 @@ hub_up() {
         return 1
     fi
 
+    # CRITICAL: Pre-build all Docker images before parallel startup
+    # This prevents build delays during service health checks (frontend, backend, etc.)
+    log_info "Building Docker images (if needed)..."
+    if ! ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" build 2>&1 | grep -v "WARN"; then
+        log_error "Failed to build Docker images"
+        return 1
+    fi
+    log_success "Docker images built successfully"
+
     # Phase 3 Sprint 1: Enhanced parallel startup with dependency-aware orchestration
     local use_parallel="${PARALLEL_STARTUP_ENABLED:-true}"
 
@@ -700,9 +1464,14 @@ hub_up() {
         # CRITICAL: Initialize MongoDB replica set after MongoDB container is healthy
         # This must be done for quick-start (hub up) mode as well
         # Backend and OPAL require MongoDB replica set for change streams
-        log_step "Initializing MongoDB replica set..."
 
-        # Wait for MongoDB to be healthy first
+        # Guard: Skip if already initialized in Phase 2.5 (hub deploy)
+        if [ "${HUB_MONGODB_RS_INITIALIZED:-false}" = "true" ]; then
+            log_verbose "MongoDB replica set already initialized in Phase 2.5, skipping"
+        else
+            log_step "Initializing MongoDB replica set..."
+
+            # Wait for MongoDB to be healthy first
         local mongo_wait=0
         local mongo_max_wait=30
         while [ $mongo_wait -lt $mongo_max_wait ]; do
@@ -760,6 +1529,7 @@ hub_up() {
                 done
             fi
         fi
+        fi  # End HUB_MONGODB_RS_INITIALIZED guard
     else
         # Fallback: Traditional sequential startup
         log_verbose "Using traditional sequential startup (PARALLEL_STARTUP_ENABLED=false)"
@@ -1414,7 +2184,7 @@ hub_init_orchestration_db() {
         # and copy the migration into the container for proper execution
         local temp_migration="/tmp/orchestration_migration_$$.sql"
         grep -v '^\\c orchestration' "${DIVE_ROOT}/scripts/migrations/001_orchestration_state_db.sql" > "${temp_migration}"
-        
+
         ${DOCKER_CMD:-docker} cp "${temp_migration}" dive-hub-postgres:/tmp/migration.sql
         rm -f "${temp_migration}"
 

@@ -8,7 +8,7 @@ import { getApiUrl, getKeycloakUrl, getDynamicConfig } from '@/lib/dynamic-confi
 /**
  * Get backend API URL for server-side calls
  * Automatically detects the correct URL based on the current environment
- * 
+ *
  * Priority:
  * 1. BACKEND_URL env var (internal Docker service name for server-to-server)
  * 2. Dynamic config based on hostname (for external calls)
@@ -19,14 +19,14 @@ export function getBackendUrl(): string {
   if (process.env.BACKEND_URL) {
     return process.env.BACKEND_URL;
   }
-  
+
   // External/client-facing: use dynamic config
   return getApiUrl();
 }
 
 /**
  * Get Keycloak URL for server-side calls
- * 
+ *
  * Priority:
  * 1. KEYCLOAK_URL env var (internal Docker service name)
  * 2. Dynamic config based on hostname
@@ -37,14 +37,14 @@ export function getKeycloakServerUrl(): string {
   if (process.env.KEYCLOAK_URL) {
     return process.env.KEYCLOAK_URL;
   }
-  
+
   // External/client-facing: use dynamic config
   return getKeycloakUrl();
 }
 
 /**
  * Create a fetch wrapper with automatic backend URL resolution
- * 
+ *
  * @example
  * const data = await backendFetch('/api/resources');
  * const user = await backendFetch('/api/users/123', { method: 'GET' });
@@ -52,7 +52,7 @@ export function getKeycloakServerUrl(): string {
 export async function backendFetch(endpoint: string, options?: RequestInit) {
   const baseUrl = getBackendUrl();
   const url = endpoint.startsWith('http') ? endpoint : `${baseUrl}${endpoint}`;
-  
+
   const response = await fetch(url, {
     ...options,
     headers: {
@@ -60,17 +60,17 @@ export async function backendFetch(endpoint: string, options?: RequestInit) {
       ...options?.headers,
     },
   });
-  
+
   if (!response.ok) {
     throw new Error(`Backend request failed: ${response.status} ${response.statusText}`);
   }
-  
+
   return response;
 }
 
 /**
  * Create a fetch wrapper with authentication
- * 
+ *
  * @example
  * const data = await authenticatedBackendFetch('/api/resources', token);
  */

@@ -76,6 +76,33 @@ import {
     getOPAStatusHandler,
     toggleRuleHandler
 } from '../controllers/admin-opa.controller';
+import {
+    listUsersHandler,
+    getUserHandler,
+    createUserHandler,
+    updateUserHandler,
+    deleteUserHandler,
+    resetPasswordHandler
+} from '../controllers/admin-users.controller';
+import {
+    getResourceHealthHandler,
+    getResourceMetricsHandler
+} from '../controllers/admin-resources.controller';
+import {
+    getSessionAnalyticsHandler,
+    getSessionsListHandler,
+    revokeSessionHandler,
+    revokeAllUserSessionsHandler
+} from '../controllers/admin-sessions.controller';
+import {
+    getLogsRetentionHandler,
+    updateLogsRetentionHandler,
+    exportLogsAdvancedHandler
+} from '../controllers/admin-logs-retention.controller';
+import {
+    getFederationStatisticsHandler,
+    getFederationTrafficHandler
+} from '../controllers/federation-statistics.controller';
 
 const router = Router();
 
@@ -83,6 +110,219 @@ const router = Router();
 // Apply admin authentication to all routes
 // ============================================
 router.use(adminAuthMiddleware);
+
+// ============================================
+// User Management Routes
+// ============================================
+
+/**
+ * @swagger
+ * /api/admin/users:
+ *   get:
+ *     summary: List users
+ *     description: Returns paginated list of users with search capability
+ *     tags: [Admin]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *           default: 1
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *           default: 10
+ *       - in: query
+ *         name: search
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of users
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success:
+ *                   type: boolean
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     users:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                     total:
+ *                       type: integer
+ *                     page:
+ *                       type: integer
+ *                     limit:
+ *                       type: integer
+ *       401:
+ *         $ref: '#/components/responses/Unauthorized'
+ */
+router.get('/users', listUsersHandler);
+
+/**
+ * @swagger
+ * /api/admin/users/{id}:
+ *   get:
+ *     summary: Get user details
+ *     description: Returns detailed information for a specific user
+ *     tags: [Admin]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: User details
+ *       404:
+ *         description: User not found
+ */
+router.get('/users/:id', getUserHandler);
+
+/**
+ * @swagger
+ * /api/admin/users:
+ *   post:
+ *     summary: Create new user
+ *     description: Creates a new user in Keycloak (requires super_admin role)
+ *     tags: [Admin]
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - username
+ *               - email
+ *             properties:
+ *               username:
+ *                 type: string
+ *               email:
+ *                 type: string
+ *               firstName:
+ *                 type: string
+ *               lastName:
+ *                 type: string
+ *               enabled:
+ *                 type: boolean
+ *               password:
+ *                 type: string
+ *     responses:
+ *       201:
+ *         description: User created successfully
+ *       403:
+ *         description: Requires super_admin role
+ */
+router.post('/users', requireSuperAdmin, createUserHandler);
+
+/**
+ * @swagger
+ * /api/admin/users/{id}:
+ *   put:
+ *     summary: Update user
+ *     description: Updates user information (requires super_admin role)
+ *     tags: [Admin]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: User updated successfully
+ *       404:
+ *         description: User not found
+ *       403:
+ *         description: Requires super_admin role
+ */
+router.put('/users/:id', requireSuperAdmin, updateUserHandler);
+
+/**
+ * @swagger
+ * /api/admin/users/{id}:
+ *   delete:
+ *     summary: Delete user
+ *     description: Deletes a user from Keycloak (requires super_admin role)
+ *     tags: [Admin]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: User deleted successfully
+ *       404:
+ *         description: User not found
+ *       403:
+ *         description: Requires super_admin role
+ */
+router.delete('/users/:id', requireSuperAdmin, deleteUserHandler);
+
+/**
+ * @swagger
+ * /api/admin/users/{id}/reset-password:
+ *   post:
+ *     summary: Reset user password
+ *     description: Resets a user's password (requires super_admin role)
+ *     tags: [Admin]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             required:
+ *               - password
+ *             properties:
+ *               password:
+ *                 type: string
+ *               temporary:
+ *                 type: boolean
+ *                 default: false
+ *     responses:
+ *       200:
+ *         description: Password reset successfully
+ *       404:
+ *         description: User not found
+ *       403:
+ *         description: Requires super_admin role
+ */
+router.post('/users/:id/reset-password', requireSuperAdmin, resetPasswordHandler);
 
 // ============================================
 // Identity Provider Management Routes
@@ -1910,6 +2150,246 @@ router.post('/opa/policy/toggle-rule', requireSuperAdmin, toggleRuleHandler);
  *                         type: string
  */
 router.get('/validate', validateSystem);
+
+// ============================================
+// Resource Health & Monitoring Routes
+// ============================================
+
+/**
+ * @openapi
+ * /api/admin/resources/health:
+ *   get:
+ *     summary: Get resource health overview
+ *     description: Returns health status of all system resources (databases, cache, APIs)
+ *     tags: [Admin, Resources]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Resource health data
+ */
+router.get('/resources/health', getResourceHealthHandler);
+
+/**
+ * @openapi
+ * /api/admin/resources/{id}/metrics:
+ *   get:
+ *     summary: Get detailed metrics for a specific resource
+ *     description: Returns historical and current metrics for a resource
+ *     tags: [Admin, Resources]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Resource metrics
+ */
+router.get('/resources/:id/metrics', getResourceMetricsHandler);
+
+// ============================================
+// Session Analytics Routes
+// ============================================
+
+/**
+ * @openapi
+ * /api/admin/sessions/analytics:
+ *   get:
+ *     summary: Get session analytics dashboard data
+ *     description: Returns comprehensive session analytics including trends and distributions
+ *     tags: [Admin, Sessions]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Session analytics data
+ */
+router.get('/sessions/analytics', getSessionAnalyticsHandler);
+
+/**
+ * @openapi
+ * /api/admin/sessions:
+ *   get:
+ *     summary: Get list of active sessions
+ *     description: Returns paginated list of active sessions with filters
+ *     tags: [Admin, Sessions]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: limit
+ *         schema:
+ *           type: integer
+ *       - in: query
+ *         name: userId
+ *         schema:
+ *           type: string
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: List of sessions
+ */
+router.get('/sessions', getSessionsListHandler);
+
+/**
+ * @openapi
+ * /api/admin/sessions/{id}/revoke:
+ *   post:
+ *     summary: Revoke a specific session
+ *     description: Immediately revokes a user session (requires super_admin)
+ *     tags: [Admin, Sessions]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: Session revoked successfully
+ */
+router.post('/sessions/:id/revoke', requireSuperAdmin, revokeSessionHandler);
+
+/**
+ * @openapi
+ * /api/admin/sessions/revoke-all/{userId}:
+ *   post:
+ *     summary: Revoke all sessions for a user
+ *     description: Force logout by revoking all active sessions (requires super_admin)
+ *     tags: [Admin, Sessions]
+ *     security:
+ *       - BearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: userId
+ *         required: true
+ *         schema:
+ *           type: string
+ *     responses:
+ *       200:
+ *         description: All user sessions revoked
+ */
+router.post('/sessions/revoke-all/:userId', requireSuperAdmin, revokeAllUserSessionsHandler);
+
+// ============================================
+// Logs Retention Routes
+// ============================================
+
+/**
+ * @openapi
+ * /api/admin/logs/retention:
+ *   get:
+ *     summary: Get logs retention configuration
+ *     description: Returns current log retention policies and storage usage
+ *     tags: [Admin, Logs]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Logs retention configuration
+ */
+router.get('/logs/retention', getLogsRetentionHandler);
+
+/**
+ * @openapi
+ * /api/admin/logs/retention:
+ *   put:
+ *     summary: Update logs retention configuration
+ *     description: Updates log retention policies (requires super_admin)
+ *     tags: [Admin, Logs]
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *     responses:
+ *       200:
+ *         description: Configuration updated successfully
+ */
+router.put('/logs/retention', requireSuperAdmin, updateLogsRetentionHandler);
+
+/**
+ * @openapi
+ * /api/admin/logs/export-advanced:
+ *   post:
+ *     summary: Export logs with advanced options
+ *     description: Exports logs in specified format with filters (requires super_admin)
+ *     tags: [Admin, Logs]
+ *     security:
+ *       - BearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               format:
+ *                 type: string
+ *                 enum: [json, csv, pdf]
+ *               dateRange:
+ *                 type: object
+ *               filters:
+ *                 type: object
+ *     responses:
+ *       200:
+ *         description: Export initiated
+ */
+router.post('/logs/export-advanced', requireSuperAdmin, exportLogsAdvancedHandler);
+
+// ============================================
+// Federation Statistics Routes
+// ============================================
+
+/**
+ * @openapi
+ * /api/federation/statistics:
+ *   get:
+ *     summary: Get federation statistics
+ *     description: Returns federation-wide statistics and metrics
+ *     tags: [Admin, Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Federation statistics
+ */
+router.get('/federation/statistics', getFederationStatisticsHandler);
+
+/**
+ * @openapi
+ * /api/federation/traffic:
+ *   get:
+ *     summary: Get federation traffic data
+ *     description: Returns detailed traffic patterns across federation spokes
+ *     tags: [Admin, Federation]
+ *     security:
+ *       - BearerAuth: []
+ *     responses:
+ *       200:
+ *         description: Federation traffic data
+ */
+router.get('/federation/traffic', getFederationTrafficHandler);
+
+// ============================================
+// Health Check Routes
+// ============================================
 
 /**
  * @openapi

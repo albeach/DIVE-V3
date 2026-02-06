@@ -86,11 +86,11 @@ spoke_phase_preflight() {
         log_verbose "spoke_preflight_validation not available, using legacy checks"
     fi
 
-    # Step 1: Check for deployment conflicts (TEMPORARILY DISABLED)
-    # if ! spoke_preflight_check_conflicts "$instance_code"; then
-    #     return 1
-    # fi
-    log_verbose "DEBUG: Skipping conflict check for testing"
+    # Step 1: Check for deployment conflicts
+    # Validates no concurrent deployment is in progress and checks orchestration DB state
+    if ! spoke_preflight_check_conflicts "$instance_code"; then
+        return 1
+    fi
 
     # Step 2: Hub detection (required for deploy mode, optional for up mode)
     if [ "$pipeline_mode" = "deploy" ]; then

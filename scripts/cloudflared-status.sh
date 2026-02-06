@@ -28,7 +28,7 @@ echo ""
 is_tunnel_running() {
     local instance=$1
     local pid_file="${PROJECT_ROOT}/logs/cloudflared-${instance}.pid"
-    
+
     # Check PID file first
     if [ -f "${pid_file}" ]; then
         local pid=$(cat "${pid_file}")
@@ -36,7 +36,7 @@ is_tunnel_running() {
             return 0
         fi
     fi
-    
+
     # Fallback: check by config file name
     local config_pattern
     if [ "${instance}" = "usa" ]; then
@@ -44,7 +44,7 @@ is_tunnel_running() {
     else
         config_pattern="config-${instance}.yml"
     fi
-    
+
     pgrep -f "cloudflared.*${config_pattern}" > /dev/null 2>&1
 }
 
@@ -73,29 +73,29 @@ for instance in usa fra gbr; do
     instance_upper=$(echo "${instance}" | tr '[:lower:]' '[:upper:]')
     pid_file="${PROJECT_ROOT}/logs/cloudflared-${instance}.pid"
     log_file="${PROJECT_ROOT}/logs/cloudflared-${instance}.log"
-    
+
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo -e "${BLUE}${instance_upper} Tunnel${NC}"
     echo -e "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-    
+
     if is_tunnel_running "${instance}"; then
         echo -e "Status:        ${GREEN}✅ Running${NC}"
-        
+
         if [ -f "${pid_file}" ]; then
             pid=$(cat "${pid_file}")
             echo -e "PID:           ${pid}"
         fi
-        
+
         connections=$(get_connection_count "${log_file}")
         if [ "${connections}" -gt "0" ]; then
             echo -e "Connections:   ${GREEN}${connections}${NC}"
         else
             echo -e "Connections:   ${YELLOW}${connections} (starting up)${NC}"
         fi
-        
+
         last_log=$(get_last_log_time "${log_file}")
         echo -e "Last Activity: ${last_log}"
-        
+
         # Show domain endpoints
         echo ""
         echo "Domain Endpoints:"
@@ -125,13 +125,13 @@ for instance in usa fra gbr; do
                 echo "  📡 https://gbr-opal.dive25.com (OPAL Client)"
                 ;;
         esac
-        
+
     else
         echo -e "Status:        ${RED}❌ Not Running${NC}"
         echo ""
         echo "To start: ./scripts/start-cloudflared-tunnels.sh"
     fi
-    
+
     echo ""
 done
 

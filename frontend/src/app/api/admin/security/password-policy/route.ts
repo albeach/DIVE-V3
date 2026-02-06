@@ -6,100 +6,53 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@/auth';
+import { withAuth, withSuperAdmin, createAdminBackendFetch } from '@/middleware/admin-auth';
 import { getBackendUrl } from '@/lib/api-utils';
+
+export const dynamic = 'force-dynamic';
 
 const BACKEND_URL = getBackendUrl();
 
-const DEFAULT_POLICY = {
-    minLength: 12,
-    maxLength: 128,
-    requireUppercase: true,
-    requireLowercase: true,
-    requireDigits: true,
-    requireSpecialChars: true,
-    minUniqueChars: 5,
-    passwordHistory: 12,
-    preventReuse: true,
-    maxAgeDays: 90,
-    warnBeforeDays: 14,
-    maxFailedAttempts: 5,
-    lockoutDurationMinutes: 15,
-    lockoutIncrement: true,
-    requirePasswordChange: true,
-    preventCommonPasswords: true,
-    minDaysBetweenChanges: 1,
-};
+export const GET = withAuth(async (request, { tokens }) => {
+    const backendFetch = createAdminBackendFetch(tokens, BACKEND_URL);
+    const response = await backendFetch(`/api/admin/security/password-policy`);
 
-export async function GET(request: NextRequest) {
-    try {
-        const session = await auth();
-        if (!session?.user) {
-            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-        }
-
-        try {
-            const response = await fetch(`${BACKEND_URL}/api/admin/security/password-policy`, {
-                headers: {
-                    'Authorization': `Bearer ${(session as any).accessToken}`,
-                },
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                return NextResponse.json({ success: true, data: data.policy || data });
-            }
-        } catch (backendError) {
-            console.warn('[PasswordPolicy API] Backend unavailable');
-        }
-
-        return NextResponse.json({ success: true, data: DEFAULT_POLICY });
-        
-    } catch (error) {
-        console.error('[PasswordPolicy API] Error:', error);
-        return NextResponse.json({ success: true, data: DEFAULT_POLICY });
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Backend error' }));
+        return NextResponse.json(
+            {
+                success: false,
+                error: 'BackendError',
+                message: error.message || `Backend returned ${response.status}`,
+            },
+            { status: response.status }
+        );
     }
-}
 
-export async function PUT(request: NextRequest) {
-    try {
-        const session = await auth();
-        if (!session?.user) {
-            return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 });
-        }
+    const data = await response.json();
+    return NextResponse.json({ success: true, data: data.policy || data });
+});
 
-        const isAdmin = session.user.roles?.includes('super_admin') || 
-                       session.user.roles?.includes('admin') ||
-                       session.user.roles?.includes('dive-admin');
-        
-        if (!isAdmin) {
-            return NextResponse.json({ success: false, error: 'Forbidden' }, { status: 403 });
-        }
+export const PUT = withSuperAdmin(async (request, { tokens }) => {
+    const body = await request.json();
 
-        const body = await request.json();
+    const backendFetch = createAdminBackendFetch(tokens, BACKEND_URL);
+    const response = await backendFetch(`/api/admin/security/password-policy`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+    });
 
-        try {
-            const response = await fetch(`${BACKEND_URL}/api/admin/security/password-policy`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${(session as any).accessToken}`,
-                },
-                body: JSON.stringify(body),
-            });
-
-            if (response.ok) {
-                return NextResponse.json({ success: true, message: 'Policy updated' });
-            }
-        } catch (backendError) {
-            console.warn('[PasswordPolicy API] Backend unavailable');
-        }
-
-        // Simulate success for development
-        return NextResponse.json({ success: true, message: 'Policy updated (local)' });
-        
-    } catch (error) {
-        console.error('[PasswordPolicy API] Update error:', error);
-        return NextResponse.json({ success: false, error: 'Failed to update policy' }, { status: 500 });
+    if (!response.ok) {
+        const error = await response.json().catch(() => ({ message: 'Failed to update policy' }));
+        return NextResponse.json(
+            {
+                success: false,
+                error: 'BackendError',
+                message: error.message || 'Failed to update policy',
+            },
+            { status: response.status }
+        );
     }
-}
+
+    return NextResponse.json({ success: true, message: 'Policy updated' });
+});

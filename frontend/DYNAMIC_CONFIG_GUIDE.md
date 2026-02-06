@@ -23,14 +23,14 @@ import { useDynamicConfig } from '@/hooks/use-dynamic-config';
 
 function MyComponent() {
   const { apiUrl, keycloakUrl, realm, instance } = useDynamicConfig();
-  
+
   const fetchData = async () => {
     // Automatically uses correct URL based on current domain
     const response = await fetch(`${apiUrl}/api/resources`);
     const data = await response.json();
     return data;
   };
-  
+
   return (
     <div>
       <p>Instance: {instance}</p>
@@ -48,10 +48,10 @@ import { getDynamicConfig } from '@/lib/dynamic-config';
 export async function GET(request: Request) {
   // Get host from request headers
   const host = request.headers.get('host');
-  
+
   // Or use the utility
   const config = getDynamicConfig();
-  
+
   const response = await fetch(`${config.api}/api/backend-endpoint`);
   return Response.json(await response.json());
 }
@@ -64,9 +64,9 @@ import { getDynamicConfig } from '@/lib/dynamic-config';
 
 export default async function ServerPage() {
   const config = getDynamicConfig();
-  
+
   const data = await fetch(`${config.api}/api/data`);
-  
+
   return <div>{/* render data */}</div>;
 }
 ```
@@ -188,12 +188,12 @@ const DOMAIN_CONFIG = {
 
 ## Benefits
 
-✅ **No hardcoded URLs** - Works on any domain automatically  
-✅ **Multi-instance support** - USA, FRA, GBR work out of the box  
-✅ **Development friendly** - localhost:3000/3010/3031 all work  
-✅ **Easy to extend** - Add new instances by updating config only  
-✅ **Type-safe** - Full TypeScript support  
-✅ **SSR compatible** - Works in both client and server contexts  
+✅ **No hardcoded URLs** - Works on any domain automatically
+✅ **Multi-instance support** - USA, FRA, GBR work out of the box
+✅ **Development friendly** - localhost:3000/3010/3031 all work
+✅ **Easy to extend** - Add new instances by updating config only
+✅ **Type-safe** - Full TypeScript support
+✅ **SSR compatible** - Works in both client and server contexts
 
 ## Testing
 

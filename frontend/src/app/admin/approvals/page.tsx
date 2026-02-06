@@ -1,6 +1,6 @@
 /**
  * IdP Approvals Page
- * 
+ *
  * Review and approve/reject pending IdP submissions
  */
 
@@ -269,7 +269,7 @@ export default function ApprovalsPage() {
                                                 )}
                                             </div>
                                         </div>
-                                        
+
                                         {/* Phase 2: Risk Score Badge */}
                                         {submission.comprehensiveRiskScore && (
                                             <div className="flex-shrink-0">

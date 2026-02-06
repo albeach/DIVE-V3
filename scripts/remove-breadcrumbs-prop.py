@@ -16,13 +16,13 @@ for filepath in FILES:
     if not p.exists():
         print(f"Skip: {filepath} (not found)")
         continue
-    
+
     content = p.read_text()
-    
+
     # Remove breadcrumbs prop (multi-line)
     pattern = r'\s*breadcrumbs=\{\s*\[[\s\S]*?\]\s*\}\s*\n'
     new_content = re.sub(pattern, '\n', content)
-    
+
     if content != new_content:
         p.write_text(new_content)
         print(f"✓ Removed breadcrumbs prop from {filepath}")
