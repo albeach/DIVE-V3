@@ -139,3 +139,10 @@ export {
   AnimatedCardButton,
   type AnimatedButtonProps,
 } from './AnimatedButton';
+
+// Presence Indicators (Phase 3.5)
+export {
+  PresenceIndicator,
+  CompactPresenceIndicator,
+  type PresenceIndicatorProps,
+} from './PresenceIndicator';
