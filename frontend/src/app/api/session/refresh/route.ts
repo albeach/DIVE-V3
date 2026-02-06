@@ -5,6 +5,7 @@
  * This extends the session by refreshing tokens with Keycloak
  *
  * Week 3.4: Enhanced Session Management
+ * Phase 2: Security Hardening - Added Zod validation, enhanced logging, security headers
  */
 
 import { NextRequest, NextResponse } from 'next/server';
@@ -13,10 +14,44 @@ import { db } from '@/lib/db';
 import { accounts, sessions } from '@/lib/db/schema';
 import { eq } from 'drizzle-orm';
 import { updateAccountTokensByUserId } from '@/lib/db/operations';
+import { 
+    validateSessionRefreshRequest,
+    type SessionRefreshRequest 
+} from '@/schemas/session.schema';
+import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
 
+// Rate limiting applied via backend middleware (see session-rate-limit.middleware.ts)
+
 export async function POST(request: NextRequest) {
+    const requestId = request.headers.get('x-request-id') || `req-${Date.now()}`;
+    
+    // Parse and validate request body
+    let validatedBody: SessionRefreshRequest | undefined;
+    try {
+        const body = await request.json().catch(() => ({}));
+        validatedBody = validateSessionRefreshRequest(body);
+    } catch (error) {
+        if (error instanceof z.ZodError) {
+            console.error('[SessionRefresh] Validation error:', {
+                requestId,
+                errors: error.errors
+            });
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: 'ValidationError',
+                    message: 'Invalid request body',
+                    details: {
+                        code: 'INVALID_REQUEST_BODY',
+                        validationErrors: error.errors
+                    }
+                },
+                { status: 400 }
+            );
+        }
+    }
     try {
         // Get current session
         const session = await auth();
@@ -32,7 +67,12 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        console.log('[SessionRefresh] Manual refresh requested for user:', session.user.id);
+        console.log('[SessionRefresh] Manual refresh requested', {
+            requestId,
+            userId: session.user.id.substring(0, 8) + '...',
+            reason: validatedBody?.reason || 'manual',
+            forceRefresh: validatedBody?.forceRefresh || false
+        });
 
         // Get account to retrieve refresh token
         const accountResults = await db
@@ -44,14 +84,23 @@ export async function POST(request: NextRequest) {
         const account = accountResults[0];
 
         if (!account || !account.refresh_token) {
-            console.error('[SessionRefresh] No account or refresh token found');
+            console.error('[SessionRefresh] No account or refresh token found', { requestId });
             return NextResponse.json(
                 {
                     success: false,
                     error: 'NoRefreshToken',
-                    message: 'Unable to refresh session. Please login again.'
+                    message: 'Unable to refresh session. Please login again.',
+                    details: {
+                        code: 'NO_REFRESH_TOKEN',
+                        retryable: false
+                    }
                 },
-                { status: 400 }
+                { 
+                    status: 400,
+                    headers: {
+                        'X-Request-Id': requestId
+                    }
+                }
             );
         }
 
@@ -144,6 +193,12 @@ export async function POST(request: NextRequest) {
                 message: 'Session refreshed successfully',
                 expiresIn: tokens.expires_in,
                 expiresAt: new Date((Math.floor(Date.now() / 1000) + tokens.expires_in) * 1000).toISOString(),
+            }, {
+                headers: {
+                    'X-Request-Id': requestId,
+                    'Cache-Control': 'no-store, no-cache, must-revalidate',
+                    'Pragma': 'no-cache'
+                }
             });
 
         } catch (error) {
@@ -159,21 +214,39 @@ export async function POST(request: NextRequest) {
         }
 
     } catch (error) {
-        console.error('[SessionRefresh] Unexpected error:', error);
+        console.error('[SessionRefresh] Unexpected error:', {
+            requestId,
+            error: error instanceof Error ? error.message : 'Unknown',
+            stack: error instanceof Error ? error.stack : undefined
+        });
         return NextResponse.json(
             {
                 success: false,
                 error: 'InternalError',
-                message: 'An unexpected error occurred'
+                message: 'An unexpected error occurred',
+                details: {
+                    code: 'INTERNAL_ERROR',
+                    retryable: true
+                }
             },
-            { status: 500 }
+            { 
+                status: 500,
+                headers: {
+                    'X-Request-Id': requestId
+                }
+            }
         );
     }
 }
 
 // Health check endpoint - returns session status with server time
+// Phase 2: Security Hardening - Added validation, enhanced response
 export async function GET(request: NextRequest) {
+    const requestId = request.headers.get('x-request-id') || `req-${Date.now()}`;
     const serverTime = Math.floor(Date.now() / 1000); // Server time in seconds
+
+    // Parse query parameters (future: includeMetrics flag)
+    const includeMetrics = request.nextUrl.searchParams.get('includeMetrics') === 'true';
 
     const session = await auth();
 
@@ -212,7 +285,7 @@ export async function GET(request: NextRequest) {
     const isExpired = timeUntilExpiry <= 0;
 
     // Include session metadata
-    const response = {
+    const response: any = {
         authenticated: true,
         expiresAt: account.expires_at ? new Date(account.expires_at * 1000).toISOString() : null,
         timeUntilExpiry,
@@ -223,5 +296,19 @@ export async function GET(request: NextRequest) {
         provider: account.provider,
     };
 
-    return NextResponse.json(response);
+    // Include extended metrics if requested (for debugging)
+    if (includeMetrics) {
+        response.metrics = {
+            sessionAge: account.expires_at ? serverTime - (account.expires_at - 900) : 0, // Approximate
+            lastRefreshAt: account.expires_at ? new Date((account.expires_at - 900) * 1000).toISOString() : null,
+        };
+    }
+
+    return NextResponse.json(response, {
+        headers: {
+            'X-Request-Id': requestId,
+            'Cache-Control': 'no-store, no-cache, must-revalidate',
+            'Pragma': 'no-cache'
+        }
+    });
 }
