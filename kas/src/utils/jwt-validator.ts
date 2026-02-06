@@ -37,6 +37,7 @@ export interface IKeycloakToken {
     exp?: number;
     iat?: number;
     jti?: string;  // JWT ID for revocation
+    iss?: string;  // Issuer URL
     // AAL2/FAL2 claims (NIST SP 800-63B/C)
     aud?: string | string[];
     acr?: string;
