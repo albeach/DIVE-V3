@@ -136,12 +136,12 @@ spoke_preflight_validation() {
 preflight_check_hub_reachable() {
     local hub_url="${HUB_URL:-https://localhost:4000}"
 
-    # Try health endpoint with 5s timeout
-    if curl -sf --max-time 5 "$hub_url/health" >/dev/null 2>&1; then
+    # Try health endpoint with 5s timeout (HTTPS only - Zero Trust)
+    if curl -skf --max-time 5 "$hub_url/api/health" >/dev/null 2>&1; then
         return 0
     fi
 
-    log_error "Hub not accessible at $hub_url"
+    log_error "Hub not accessible at $hub_url/api/health (HTTPS)"
     log_error "Start Hub first: ./dive hub up"
     log_error "Check Hub status: ./dive hub status"
     return 1
