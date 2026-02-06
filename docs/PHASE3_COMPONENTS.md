@@ -571,6 +571,76 @@ import { CompactPresenceIndicator } from '@/components/admin/shared';
 />
 ```
 
+### Pages with PresenceIndicator
+
+As of Phase 4.1, PresenceIndicator is deployed on 6 collaborative admin pages:
+
+| Page | Route | Implementation | Phase |
+|------|-------|----------------|-------|
+| **Dashboard** | `/admin/dashboard` | Header section | Phase 3 |
+| **Analytics** | `/admin/analytics` | Header section | Phase 3 |
+| **Logs** | `/admin/logs` | Header section | Phase 3 |
+| **Approvals** | `/admin/approvals` | Header section | Phase 4.1 |
+| **Certificates** | `/admin/certificates` | Hero section | Phase 4.1 |
+| **Clearance Management** | `/admin/clearance-management` | Header section | Phase 4.1 |
+
+**Selection Criteria:** Pages chosen are those where multiple administrators commonly work simultaneously, requiring awareness of concurrent activity for coordination and conflict avoidance.
+
+#### Example Implementations
+
+**Approvals Page:**
+```tsx
+<div className="mb-8">
+    <div className="flex justify-between items-start">
+        <div>
+            <h1 className="text-3xl font-bold text-gray-900">IdP Approvals</h1>
+            <p className="mt-2 text-sm text-gray-600">
+                Review and approve or reject pending identity provider submissions.
+            </p>
+        </div>
+        <PresenceIndicator page="approvals" />
+    </div>
+</div>
+```
+
+**Certificates Page:**
+```tsx
+<div className="flex items-center justify-between gap-4 mb-4">
+    <div className="flex items-center gap-4">
+        <div className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl">
+            <Shield className="w-10 h-10 text-white" />
+        </div>
+        <div>
+            <h1 className="text-4xl md:text-5xl font-bold text-white mb-2">
+                Certificate Management
+            </h1>
+            <p className="text-blue-100 text-lg max-w-3xl">
+                Manage three-tier PKI infrastructure, rotation workflows, and certificate revocation
+            </p>
+        </div>
+    </div>
+    <PresenceIndicator page="certificates" />
+</div>
+```
+
+**Clearance Management Page:**
+```tsx
+<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <div className="space-y-2 flex-1">
+        <h1 className="text-3xl lg:text-4xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+            🔐 Clearance Management
+        </h1>
+        <p className="text-gray-600 dark:text-gray-400 text-sm lg:text-base">
+            Manage national clearance mappings across 32 NATO members
+        </p>
+    </div>
+    <div className="flex items-center gap-3 flex-wrap">
+        <PresenceIndicator page="clearance-management" />
+        {/* Other controls */}
+    </div>
+</div>
+```
+
 ### Features
 
 1. **Avatar Stacking**

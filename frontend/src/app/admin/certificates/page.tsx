@@ -17,7 +17,7 @@ import { useEffect, useState } from 'react';
 import { useSession } from 'next-auth/react';
 import { useRouter } from 'next/navigation';
 import PageLayout from '@/components/layout/page-layout';
-import { AdminPageTransition, AnimatedButton } from '@/components/admin/shared';
+import { AdminPageTransition, AnimatedButton, PresenceIndicator } from '@/components/admin/shared';
 import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 import { 
   Shield, 
@@ -343,18 +343,21 @@ export default function AdminCertificatesPage() {
         </div>
 
         <div className="relative z-10">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl">
-              <Shield className="w-10 h-10 text-white" />
+          <div className="flex items-center justify-between gap-4 mb-4">
+            <div className="flex items-center gap-4">
+              <div className="p-4 bg-white/20 backdrop-blur-sm rounded-2xl">
+                <Shield className="w-10 h-10 text-white" />
+              </div>
+              <div>
+                <h1 className="text-4xl md:text-5xl font-bold text-white mb-2">
+                  Certificate Management
+                </h1>
+                <p className="text-blue-100 text-lg max-w-3xl">
+                  Manage three-tier PKI infrastructure, rotation workflows, and certificate revocation
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-4xl md:text-5xl font-bold text-white mb-2">
-                Certificate Management
-              </h1>
-              <p className="text-blue-100 text-lg max-w-3xl">
-                Manage three-tier PKI infrastructure, rotation workflows, and certificate revocation
-              </p>
-            </div>
+            <PresenceIndicator page="certificates" />
           </div>
 
           {/* Overall Health Status */}
