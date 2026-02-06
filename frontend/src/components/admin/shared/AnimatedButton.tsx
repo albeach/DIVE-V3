@@ -18,6 +18,7 @@ import { motion, MotionProps } from 'framer-motion';
 import { ButtonHTMLAttributes, forwardRef } from 'react';
 import { prefersReducedMotion } from '@/lib/animations';
 import { adminAnimations } from './theme-tokens';
+import { useAnimationPreferences, getAnimationDuration, getScaleIntensity } from '@/contexts/AnimationPreferencesContext';
 
 export interface AnimatedButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'style'> {
   /**
@@ -53,7 +54,7 @@ const scaleIntensity = {
  * Animated Button Component
  * 
  * Drop-in replacement for <button> with smooth hover/tap animations.
- * Automatically respects user's motion preferences.
+ * Automatically respects user's motion preferences and animation settings.
  * 
  * @example
  * ```tsx
@@ -89,17 +90,34 @@ export const AnimatedButton = forwardRef<HTMLButtonElement, AnimatedButtonProps>
     ref
   ) => {
     const reducedMotion = prefersReducedMotion();
-    const shouldAnimate = !disableAnimation && !disabled && !reducedMotion;
+    
+    // Use animation preferences context if available, fallback to defaults
+    let preferences;
+    try {
+      preferences = useAnimationPreferences().preferences;
+    } catch {
+      // Not wrapped in provider, use defaults
+      preferences = { enabled: true, speed: 'normal', intensity: 'normal' };
+    }
+    
+    // Determine if animations should be active
+    const shouldAnimate = !disableAnimation && !disabled && !reducedMotion && preferences.enabled;
 
-    const scales = scaleIntensity[intensity];
+    // Use preference intensity if not explicitly overridden
+    const effectiveIntensity = intensity === 'normal' ? preferences.intensity : intensity;
+    const scales = getScaleIntensity(effectiveIntensity);
     const finalHoverScale = hoverScale ?? scales.hover;
     const finalTapScale = tapScale ?? scales.tap;
+
+    // Calculate duration based on speed preference
+    const baseDuration = 0.2;
+    const duration = getAnimationDuration(baseDuration, preferences.speed);
 
     const animationProps = shouldAnimate
       ? {
           whileHover: { scale: finalHoverScale },
           whileTap: { scale: finalTapScale },
-          transition: { duration: 0.2, ease: 'easeOut' },
+          transition: { duration, ease: 'easeOut' },
         }
       : {};
 
