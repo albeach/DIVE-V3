@@ -173,7 +173,7 @@ export default function TenantsPage() {
                   Manage federation tenants with bulk operations
                 </p>
               </div>
-              <button
+              <AnimatedButton
                 onClick={() => refetch()}
                 disabled={isLoading}
                 className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors disabled:opacity-50 flex items-center gap-2"
@@ -239,7 +239,7 @@ export default function TenantsPage() {
                 {selectedIds.size} selected
               </span>
               <div className="h-6 w-px bg-gray-300 dark:bg-gray-600" />
-              <button
+              <AnimatedButton
                 onClick={() => handleBulkAction('enable')}
                 disabled={isBulkPending}
                 className="px-4 py-2 text-xs font-medium text-emerald-700 bg-emerald-100 hover:bg-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-400 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
@@ -247,7 +247,7 @@ export default function TenantsPage() {
                 {enableMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <Power className="w-3.5 h-3.5" />}
                 Enable
               </AnimatedButton>
-              <button
+              <AnimatedButton
                 onClick={() => handleBulkAction('disable')}
                 disabled={isBulkPending}
                 className="px-4 py-2 text-xs font-medium text-red-700 bg-red-100 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-400 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
@@ -255,7 +255,7 @@ export default function TenantsPage() {
                 {disableMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <PowerOff className="w-3.5 h-3.5" />}
                 Disable
               </AnimatedButton>
-              <button
+              <AnimatedButton
                 onClick={() => handleBulkAction('sync')}
                 disabled={isBulkPending}
                 className="px-4 py-2 text-xs font-medium text-blue-700 bg-blue-100 hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-400 rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
@@ -263,7 +263,7 @@ export default function TenantsPage() {
                 {syncMutation.isPending ? <Loader2 className="w-3 h-3 animate-spin" /> : <RefreshCcw className="w-3.5 h-3.5" />}
                 Sync
               </AnimatedButton>
-              <button
+              <AnimatedButton
                 onClick={() => setSelectedIds(new Set())}
                 className="ml-auto text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
               >

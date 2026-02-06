@@ -222,7 +222,7 @@ export default function OPAPolicyPage() {
                                         Refresh
                                     </motion.button>
                                     {sidebarCollapsed && (
-                                        <button
+                                        <AnimatedButton
                                             onClick={() => setSidebarCollapsed(false)}
                                             className="px-4 py-2 bg-gray-200 dark:bg-gray-800 text-gray-800 dark:text-gray-100 rounded-lg font-medium border border-gray-300 dark:border-gray-700 lg:hidden"
                                         >
@@ -246,7 +246,7 @@ export default function OPAPolicyPage() {
                         >
                             <div className="flex items-center justify-between">
                                 <p className="text-red-800 dark:text-red-200 font-medium">{error}</p>
-                                <button onClick={() => setError(null)} className="text-red-600 hover:text-red-800">
+                                <AnimatedButton onClick={() => setError(null)} className="text-red-600 hover:text-red-800">
                                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                                     </svg>
@@ -270,7 +270,7 @@ export default function OPAPolicyPage() {
                         <div className="p-4 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
                             <div className="flex items-center justify-between mb-3">
                                 <h2 className="font-bold text-gray-900 dark:text-gray-100">Policies</h2>
-                                <button
+                                <AnimatedButton
                                     onClick={() => setSidebarCollapsed(true)}
                                     className="p-1.5 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                                 >
