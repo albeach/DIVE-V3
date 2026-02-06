@@ -14,7 +14,7 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import PageLayout from '@/components/layout/page-layout';
 import { Shield, FileText, Download, AlertCircle, CheckCircle, AlertTriangle, Info } from 'lucide-react';
-import { AccordionWrapper, AccordionItem, AccordionControls } from '@/components/admin/shared';
+import { AccordionWrapper, AccordionItem, AccordionControls, AdminPageTransition, AnimatedButton } from '@/components/admin/shared';
 import { Badge } from '@/components/ui/badge';
 
 // Types
@@ -203,6 +203,7 @@ export default function SecurityCompliancePage() {
 
     return (
         <PageLayout user={session?.user || {}}>
+            <AdminPageTransition pageKey="/admin/security-compliance">
             <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 dark:from-gray-900 dark:via-blue-900/20 dark:to-indigo-900/20">
                 {/* Header */}
                 <div className="bg-white/80 dark:bg-gray-800/80 backdrop-blur-xl border-b border-gray-200 dark:border-gray-700 sticky top-0 z-40">
@@ -218,12 +219,12 @@ export default function SecurityCompliancePage() {
                                 </p>
                             </div>
 
-                            <button
+                            <AnimatedButton
                                 onClick={() => router.push('/admin/dashboard')}
                                 className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
                             >
                                 ← Dashboard
-                            </button>
+                            </AnimatedButton>
                         </div>
                     </div>
                 </div>
@@ -261,10 +262,11 @@ export default function SecurityCompliancePage() {
                     {/* Report Type Selection */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         {/* NIST Card */}
-                        <button
+                        <AnimatedButton
                             onClick={() => fetchReport('NIST')}
                             disabled={loading}
                             className="group relative bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-2xl p-8 border-2 border-gray-200 dark:border-gray-700 hover:border-blue-500 dark:hover:border-blue-400 shadow-xl hover:shadow-2xl transition-all text-left disabled:opacity-50"
+                            disableAnimation={false}
                         >
                             <div className="flex items-center justify-between mb-4">
                                 <div className="w-16 h-16 bg-gradient-to-br from-blue-500 to-indigo-500 rounded-2xl flex items-center justify-center text-3xl shadow-lg">
@@ -293,13 +295,14 @@ export default function SecurityCompliancePage() {
                             <div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <FileText className="w-6 h-6 text-blue-500" />
                             </div>
-                        </button>
+                        </AnimatedButton>
 
                         {/* NATO Card */}
-                        <button
+                        <AnimatedButton
                             onClick={() => fetchReport('NATO')}
                             disabled={loading}
                             className="group relative bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-2xl p-8 border-2 border-gray-200 dark:border-gray-700 hover:border-purple-500 dark:hover:border-purple-400 shadow-xl hover:shadow-2xl transition-all text-left disabled:opacity-50"
+                            disableAnimation={false}
                         >
                             <div className="flex items-center justify-between mb-4">
                                 <div className="w-16 h-16 bg-gradient-to-br from-purple-500 to-pink-500 rounded-2xl flex items-center justify-center text-3xl shadow-lg">
@@ -328,7 +331,7 @@ export default function SecurityCompliancePage() {
                             <div className="absolute bottom-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <FileText className="w-6 h-6 text-purple-500" />
                             </div>
-                        </button>
+                        </AnimatedButton>
                     </div>
 
                     {/* Loading State */}
@@ -404,20 +407,20 @@ export default function SecurityCompliancePage() {
                                         Compliance Findings
                                     </h3>
                                     <div className="flex gap-2">
-                                        <button
+                                        <AnimatedButton
                                             onClick={() => handleExport('json')}
                                             className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-medium flex items-center gap-2"
                                         >
                                             <Download className="w-4 h-4" />
                                             JSON
-                                        </button>
-                                        <button
+                                        </AnimatedButton>
+                                        <AnimatedButton
                                             onClick={() => handleExport('csv')}
                                             className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium flex items-center gap-2"
                                         >
                                             <Download className="w-4 h-4" />
                                             CSV
-                                        </button>
+                                        </AnimatedButton>
                                     </div>
                                 </div>
 
@@ -541,6 +544,7 @@ export default function SecurityCompliancePage() {
                     )}
                 </div>
             </div>
+            </AdminPageTransition>
         </PageLayout>
     );
 }
