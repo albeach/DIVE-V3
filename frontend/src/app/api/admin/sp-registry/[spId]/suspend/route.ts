@@ -19,8 +19,9 @@ interface RouteContext {
  * POST /api/admin/sp-registry/[spId]/suspend
  * Suspend or reactivate SP
  */
-export const POST = withSuperAdmin(async (request, { tokens, session }, context: RouteContext) => {
-  const { spId } = await context.params;
+export const POST = withSuperAdmin(async (request, context) => {
+  const { tokens, session, params } = context;
+  const { spId } = await params!;
   const body = await request.json();
   const { reason } = body;
 

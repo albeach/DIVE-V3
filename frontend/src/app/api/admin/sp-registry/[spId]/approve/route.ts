@@ -19,8 +19,9 @@ interface RouteContext {
  * POST /api/admin/sp-registry/[spId]/approve
  * Approve or reject pending SP
  */
-export const POST = withSuperAdmin(async (request, { tokens, session }, context: RouteContext) => {
-  const { spId } = await context.params;
+export const POST = withSuperAdmin(async (request, context) => {
+  const { tokens, session, params } = context;
+  const { spId } = await params!;
   const body = await request.json();
   const { action, reason } = body;
 

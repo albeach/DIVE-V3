@@ -19,8 +19,9 @@ interface RouteContext {
  * POST /api/admin/sp-registry/[spId]/credentials
  * Regenerate client secret for confidential clients
  */
-export const POST = withSuperAdmin(async (request, { tokens, session }, context: RouteContext) => {
-  const { spId } = await context.params;
+export const POST = withSuperAdmin(async (request, context) => {
+  const { tokens, session, params } = context;
+  const { spId } = await params!;
 
   const backendFetch = createAdminBackendFetch(tokens, BACKEND_API_URL);
   const backendResponse = await backendFetch(`/api/sp-management/sps/${spId}/regenerate-secret`, {

@@ -171,13 +171,27 @@ export function AccordionWrapper({
     setOpenItems(newValue);
   }, []);
 
+  // Render with proper typing based on mode
+  if (multiple) {
+    return (
+      <Accordion.Root
+        type="multiple"
+        value={openItems}
+        onValueChange={handleValueChange as (value: string[]) => void}
+        className={cn('space-y-3', className)}
+      >
+        {children}
+      </Accordion.Root>
+    );
+  }
+
   return (
     <Accordion.Root
-      type={multiple ? 'multiple' : 'single'}
-      value={multiple ? openItems : openItems[0]}
-      onValueChange={handleValueChange as any}
+      type="single"
+      value={openItems[0] || ''}
+      onValueChange={(value: string) => handleValueChange(value)}
       className={cn('space-y-3', className)}
-      collapsible={!multiple}
+      collapsible
     >
       {children}
     </Accordion.Root>

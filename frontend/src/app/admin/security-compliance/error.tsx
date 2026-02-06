@@ -1,6 +1,6 @@
 'use client';
 
-import ErrorFallback from '@/components/admin/shared/error-fallback';
+import { ErrorFallback } from '@/components/admin/shared/error-fallback';
 
 export default function SecurityComplianceError({
   error,

@@ -16,8 +16,9 @@ interface RouteContext {
     params: Promise<{ sessionId: string }>;
 }
 
-export const DELETE = withSuperAdmin(async (request, { tokens }, context: RouteContext) => {
-    const { sessionId } = await context.params;
+export const DELETE = withSuperAdmin(async (request, context) => {
+    const { tokens, params } = context;
+    const { sessionId } = await params!;
 
     const backendFetch = createAdminBackendFetch(tokens, BACKEND_URL);
     const response = await backendFetch(`/api/admin/security/sessions/${sessionId}`, {
