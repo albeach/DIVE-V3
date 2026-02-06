@@ -16,6 +16,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import PageLayout from '@/components/layout/page-layout';
+import { AdminPageTransition, AnimatedButton } from '@/components/admin/shared';
 import { IExternalSP, ISPListFilter } from '@/types/sp-federation.types';
 import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 
@@ -135,6 +136,7 @@ export default function SPRegistryDashboard() {
     <PageLayout
       user={session?.user || {}}
     >
+      <AdminPageTransition pageKey="/admin/sp-registry">
       <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
         {/* Header */}
         <div className="mb-6 bg-white rounded-xl shadow-lg border border-slate-200 p-6">
@@ -148,19 +150,19 @@ export default function SPRegistryDashboard() {
               </p>
             </div>
 
-            <button
+            <AnimatedButton
               onClick={() => router.push('/admin/sp-registry/new')}
               className="px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg font-semibold hover:from-blue-700 hover:to-purple-700 transition-all shadow-md hover:shadow-lg"
             >
               ➕ Register New SP
-            </button>
+            </AnimatedButton>
           </div>
         </div>
 
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
           {(['ALL', 'PENDING', 'ACTIVE', 'SUSPENDED'] as SPStatus[]).map(status => (
-            <button
+            <AnimatedButton
               key={status}
               onClick={() => handleStatusFilterChange(status)}
               className={`p-6 rounded-xl shadow-lg transition-all ${
@@ -175,7 +177,7 @@ export default function SPRegistryDashboard() {
               <div className="mt-2 text-3xl font-bold">
                 {getStatusCount(status)}
               </div>
-            </button>
+            </AnimatedButton>
           ))}
         </div>
 
@@ -189,13 +191,13 @@ export default function SPRegistryDashboard() {
               onChange={(e) => setSearchQuery(e.target.value)}
               className="flex-1 px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all"
             />
-            <button
+            <AnimatedButton
               type="submit"
               className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-all shadow-md hover:shadow-lg"
             >
               🔍 Search
-            </button>
-            <button
+            </AnimatedButton>
+            <AnimatedButton
               type="button"
               onClick={() => {
                 setSearchQuery('');
@@ -205,7 +207,7 @@ export default function SPRegistryDashboard() {
               className="px-6 py-3 bg-gray-100 text-gray-700 rounded-lg font-semibold hover:bg-gray-200 transition-all"
             >
               🔄 Reset
-            </button>
+            </AnimatedButton>
           </form>
         </div>
 
@@ -228,7 +230,7 @@ export default function SPRegistryDashboard() {
                 className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-all"
               >
                 Register First SP
-              </button>
+              </AnimatedButton>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -282,14 +284,14 @@ export default function SPRegistryDashboard() {
                             className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-all"
                           >
                             View
-                          </button>
+                          </AnimatedButton>
                           {sp.status === 'PENDING' && (
-                            <button
+                            <AnimatedButton
                               onClick={() => router.push(`/admin/sp-registry/${sp.spId}?action=approve`)}
                               className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-all"
                             >
                               Approve
-                            </button>
+                            </AnimatedButton>
                           )}
                         </div>
                       </td>
@@ -304,26 +306,27 @@ export default function SPRegistryDashboard() {
         {/* Pagination */}
         {sps.length > 0 && totalCount > (filter.limit || 20) && (
           <div className="mt-6 flex justify-center gap-2">
-            <button
+            <AnimatedButton
               onClick={() => setFilter(prev => ({ ...prev, page: Math.max((prev.page || 1) - 1, 1) }))}
               disabled={(filter.page || 1) === 1}
               className="px-4 py-2 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
               ← Previous
-            </button>
+            </AnimatedButton>
             <span className="px-4 py-2 bg-white border border-slate-300 rounded-lg">
               Page {filter.page || 1} of {Math.ceil(totalCount / (filter.limit || 20))}
             </span>
-            <button
+            <AnimatedButton
               onClick={() => setFilter(prev => ({ ...prev, page: (prev.page || 1) + 1 }))}
               disabled={(filter.page || 1) >= Math.ceil(totalCount / (filter.limit || 20))}
               className="px-4 py-2 bg-white border border-slate-300 rounded-lg hover:bg-slate-50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
               Next →
-            </button>
+            </AnimatedButton>
           </div>
         )}
       </div>
+      </AdminPageTransition>
     </PageLayout>
   );
 }
