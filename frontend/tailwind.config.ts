@@ -87,6 +87,9 @@ const config: Config = {
                 'badge-in': 'badgeIn 0.3s ease-out',
                 'badge-bounce': 'badgeBounce 0.3s ease-in-out',
                 'badge-wiggle': 'badgeWiggle 0.4s ease-in-out',
+                // Accordion animations (Phase 3.7)
+                'accordion-down': 'accordionDown 0.3s ease-out',
+                'accordion-up': 'accordionUp 0.3s ease-out',
             },
             keyframes: {
                 fadeIn: {
@@ -151,6 +154,15 @@ const config: Config = {
                     '0%, 100%': { transform: 'rotate(0deg)' },
                     '25%': { transform: 'rotate(-2deg)' },
                     '75%': { transform: 'rotate(2deg)' },
+                },
+                // Accordion keyframes (Phase 3.7)
+                accordionDown: {
+                    '0%': { height: '0', opacity: '0' },
+                    '100%': { height: 'var(--radix-accordion-content-height)', opacity: '1' },
+                },
+                accordionUp: {
+                    '0%': { height: 'var(--radix-accordion-content-height)', opacity: '1' },
+                    '100%': { height: '0', opacity: '0' },
                 },
             },
         },

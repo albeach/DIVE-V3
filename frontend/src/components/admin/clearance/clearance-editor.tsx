@@ -4,12 +4,16 @@
  * Edit national clearance mappings for a specific country
  * Modern 2025 UI with tag input, validation, preview
  * Phase 3: MongoDB SSOT Admin UI
+ * Phase 3.7: Enhanced with progressive disclosure (accordions)
  * Date: 2026-01-04
+ * Updated: 2026-02-05
  */
 
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { AccordionWrapper, AccordionItem, AccordionControls } from '@/components/admin/shared';
+import { Badge } from '@/components/ui/badge';
 
 interface ClearanceMapping {
     standardLevel: string;
@@ -195,93 +199,111 @@ export function ClearanceEditor({ mappings, countries, onUpdate }: Props) {
             {/* Editor */}
             {selectedCountry && (
                 <div className="space-y-4">
-                    {levels.map(level => {
-                        const info = getLevelInfo(level);
-                        const tags = editedMappings[level] || [];
+                    {/* Expand/Collapse Controls */}
+                    <div className="flex items-center justify-between bg-white/90 dark:bg-gray-800/90 backdrop-blur-xl rounded-xl border border-gray-200 dark:border-gray-700 px-4 py-3 shadow-sm">
+                        <div className="text-sm text-gray-600 dark:text-gray-400">
+                            📂 {levels.length} clearance levels available
+                        </div>
+                        <AccordionControls
+                            onExpandAll={() => {
+                                // Force all accordions open (handled by state management)
+                                setError(null);
+                            }}
+                            onCollapseAll={() => {
+                                // Force all accordions closed (handled by state management)
+                                setError(null);
+                            }}
+                        />
+                    </div>
 
-                        return (
-                            <div key={level} className="bg-white dark:bg-gray-900 rounded-xl shadow-lg border border-slate-200 dark:border-gray-700 p-6">
-                                {/* Level Header */}
-                                <div className="flex items-center justify-between mb-4">
-                                    <div className="flex items-center gap-3">
-                                        <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">
-                                            {level}
-                                        </h3>
+                    {/* Clearance Levels Accordion */}
+                    <AccordionWrapper
+                        storageKey={`dive-v3-accordion-clearance-${selectedCountry}`}
+                        multiple={true}
+                        defaultOpen={['SECRET', 'TOP_SECRET']}
+                    >
+                        {levels.map(level => {
+                            const info = getLevelInfo(level);
+                            const tags = editedMappings[level] || [];
+
+                            return (
+                                <AccordionItem
+                                    key={level}
+                                    value={level}
+                                    title={level}
+                                    subtitle={`${tags.length} variant${tags.length !== 1 ? 's' : ''} defined for ${selectedCountry}`}
+                                    badge={
                                         <div className="flex items-center gap-2">
                                             {info?.mfaRequired && (
-                                                <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded text-xs font-semibold">
+                                                <Badge variant="warning" size="sm">
                                                     🛡️ MFA
-                                                </span>
+                                                </Badge>
                                             )}
-                                            <span className="px-2 py-1 bg-indigo-100 text-indigo-800 rounded text-xs font-semibold">
+                                            <Badge variant="default" size="sm">
                                                 AAL{info?.aalLevel}
-                                            </span>
-                                            <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs font-semibold">
+                                            </Badge>
+                                            <Badge variant="info" size="sm">
                                                 ACR{info?.acrLevel}
-                                            </span>
+                                            </Badge>
+                                        </div>
+                                    }
+                                >
+                                    {/* Tags Display */}
+                                    <div className="mb-4">
+                                        <div className="flex flex-wrap gap-2">
+                                            {tags.map((tag, index) => (
+                                                <div
+                                                    key={index}
+                                                    className="inline-flex items-center gap-2 px-3 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-300 rounded-lg border border-indigo-200 dark:border-indigo-700 group hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
+                                                >
+                                                    <span className="font-medium">{tag}</span>
+                                                    <button
+                                                        onClick={() => removeTag(level, tag)}
+                                                        className="text-indigo-600 hover:text-red-600 font-bold transition-colors"
+                                                        title="Remove"
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </div>
+                                            ))}
+                                            {tags.length === 0 && (
+                                                <div className="text-gray-400 dark:text-gray-500 italic">
+                                                    No mappings defined for {selectedCountry}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
 
-                                    <div className="text-sm text-gray-600 dark:text-gray-400">
-                                        {tags.length} variant{tags.length !== 1 ? 's' : ''}
+                                    {/* Add Tag Input */}
+                                    <div className="flex gap-2">
+                                        <input
+                                            type="text"
+                                            value={newTag[level] || ''}
+                                            onChange={(e) => setNewTag({ ...newTag, [level]: e.target.value })}
+                                            onKeyPress={(e) => {
+                                                if (e.key === 'Enter') {
+                                                    e.preventDefault();
+                                                    addTag(level);
+                                                }
+                                            }}
+                                            placeholder="Add national clearance equivalent..."
+                                            className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                                        />
+                                        <button
+                                            onClick={() => addTag(level)}
+                                            className="px-6 py-2 bg-indigo-500 text-white rounded-lg font-medium hover:bg-indigo-600 transition-colors"
+                                        >
+                                            ➕ Add
+                                        </button>
                                     </div>
-                                </div>
 
-                                {/* Tags Display */}
-                                <div className="mb-4">
-                                    <div className="flex flex-wrap gap-2">
-                                        {tags.map((tag, index) => (
-                                            <div
-                                                key={index}
-                                                className="inline-flex items-center gap-2 px-3 py-2 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-300 rounded-lg border border-indigo-200 dark:border-indigo-700 group hover:bg-indigo-100 dark:hover:bg-indigo-900/50 transition-colors"
-                                            >
-                                                <span className="font-medium">{tag}</span>
-                                                <button
-                                                    onClick={() => removeTag(level, tag)}
-                                                    className="text-indigo-600 hover:text-red-600 font-bold"
-                                                    title="Remove"
-                                                >
-                                                    ✕
-                                                </button>
-                                            </div>
-                                        ))}
-                                        {tags.length === 0 && (
-                                            <div className="text-gray-400 dark:text-gray-500 italic">
-                                                No mappings defined for {selectedCountry}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-
-                                {/* Add Tag Input */}
-                                <div className="flex gap-2">
-                                    <input
-                                        type="text"
-                                        value={newTag[level] || ''}
-                                        onChange={(e) => setNewTag({ ...newTag, [level]: e.target.value })}
-                                        onKeyPress={(e) => {
-                                            if (e.key === 'Enter') {
-                                                e.preventDefault();
-                                                addTag(level);
-                                            }
-                                        }}
-                                        placeholder="Add national clearance equivalent..."
-                                        className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-100 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
-                                    />
-                                    <button
-                                        onClick={() => addTag(level)}
-                                        className="px-6 py-2 bg-indigo-500 text-white rounded-lg font-medium hover:bg-indigo-600 transition-colors"
-                                    >
-                                        ➕ Add
-                                    </button>
-                                </div>
-
-                                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                                    💡 Tip: Press Enter to add. Include variants with/without diacritics.
-                                </p>
-                            </div>
-                        );
-                    })}
+                                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                        💡 Tip: Press Enter to add. Include variants with/without diacritics.
+                                    </p>
+                                </AccordionItem>
+                            );
+                        })}
+                    </AccordionWrapper>
                 </div>
             )}
 
