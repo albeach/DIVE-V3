@@ -345,7 +345,7 @@ spoke_config_register_in_hub_mongodb() {
     local hub_url=""
     local hub_urls=(
         "https://localhost:4000"           # Host access
-        "https://host.docker.internal:4000" # Docker Desktop host access
+        "https://host.docker.internal:4000" # Docker Desktop host access  
         "https://dive-hub-backend:4000"     # Docker network access (if running in container)
     )
 
@@ -354,7 +354,8 @@ spoke_config_register_in_hub_mongodb() {
 
         local hub_reachable=false
         for url in "${hub_urls[@]}"; do
-            if curl -sf --max-time 3 "$url/health" >/dev/null 2>&1; then
+            # Zero Trust: HTTPS only, correct endpoint path
+            if curl -skf --max-time 3 "$url/api/health" >/dev/null 2>&1; then
                 hub_url="$url"
                 hub_reachable=true
                 log_verbose "✓ Hub accessible at $url"
