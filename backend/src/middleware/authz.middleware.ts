@@ -1067,6 +1067,143 @@ export async function authzMiddleware(req: Request, res: Response, next: NextFun
             endpoint: OPA_DECISION_ENDPOINT,
         });
 
+        // ============================================
+        // PHASE 6: Redis Decision Caching Integration
+        // ============================================
+        // Check decision cache BEFORE calling OPA
+        const cacheKey = decisionCacheService.generateKey(
+            user.uniqueID,
+            resourceId,
+            {
+                clearance: user.clearance,
+                country: user.countryOfAffiliation,
+                coi: user.acpCOI,
+                acr: opaInput.input.context.acr,
+                amr: opaInput.input.context.amr
+            }
+        );
+
+        const cachedDecision = decisionCacheService.get(cacheKey);
+        
+        if (cachedDecision) {
+            logger.info('Using cached authorization decision', {
+                subject: user.uniqueID,
+                resource: resourceId,
+                decision: cachedDecision.result.allow ? 'ALLOW' : 'DENY',
+                cacheAge: Date.now() - cachedDecision.cachedAt,
+                ttl: cachedDecision.ttl,
+                classification: cachedDecision.classification
+            });
+
+            // Use cached decision (skip OPA call)
+            const opaResponse: IOPADecision = {
+                result: cachedDecision.result
+            };
+
+            // Store for downstream middleware
+            (req as any).policyEvaluation = {
+                decision: opaResponse.result.allow ? 'ALLOW' : 'DENY',
+                reason: opaResponse.result.reason,
+                evaluation_details: opaResponse.result.evaluation_details,
+                cached: true,
+                cacheAge: Date.now() - cachedDecision.cachedAt,
+                subject: {
+                    clearance: user.clearance,
+                    country: user.countryOfAffiliation,
+                    coi: user.acpCOI,
+                },
+                resource: {
+                    resourceId: resourceAttributes.resourceId,
+                    classification: resourceAttributes.classification,
+                    releasabilityTo: resourceAttributes.releasabilityTo,
+                    coi: resourceAttributes.COI,
+                },
+            };
+
+            // Handle cached decision (same flow as OPA decision below)
+            if (!opaResponse.result.allow) {
+                logger.info('Authorization denied by OPA (cached)', {
+                    subject: user.uniqueID,
+                    resource: resourceId,
+                    reason: opaResponse.result.reason,
+                    cached: true
+                });
+
+                auditService.logAccessDeny({
+                    subject: {
+                        uniqueID: user.uniqueID,
+                        clearance: user.clearance,
+                        countryOfAffiliation: user.countryOfAffiliation,
+                        acpCOI: user.acpCOI,
+                    },
+                    resource: {
+                        resourceId,
+                        classification: resourceAttributes.classification,
+                        releasabilityTo: resourceAttributes.releasabilityTo,
+                        COI: resourceAttributes.COI,
+                    },
+                    decision: {
+                        allow: false,
+                        reason: opaResponse.result.reason,
+                        details: opaResponse.result.evaluation_details,
+                        cached: true
+                    },
+                    context: {
+                        sourceIP: req.ip || 'unknown',
+                        userAgent: req.headers['user-agent'] || 'unknown',
+                        requestId: req.headers['x-request-id'] as string || `req-${Date.now()}`,
+                        timestamp: new Date().toISOString(),
+                    },
+                });
+
+                res.status(403).json({
+                    error: 'Forbidden',
+                    message: opaResponse.result.reason || 'Access denied',
+                    details: opaResponse.result.evaluation_details,
+                });
+                return;
+            }
+
+            // Log successful cached decision
+            decisionLogService.logDecision({
+                timestamp: new Date().toISOString(),
+                subject: {
+                    uniqueID: user.uniqueID,
+                    clearance: user.clearance || 'UNCLASSIFIED',
+                    countryOfAffiliation: user.countryOfAffiliation || 'UNKNOWN',
+                    acpCOI: user.acpCOI || [],
+                },
+                resource: {
+                    resourceId,
+                    classification: resourceAttributes.classification,
+                    releasabilityTo: resourceAttributes.releasabilityTo,
+                    COI: resourceAttributes.COI,
+                },
+                decision: {
+                    allow: true,
+                    reason: opaResponse.result.reason,
+                    policyVersion: 'current',
+                    evaluationTime: 0, // cached, no evaluation
+                    cached: true
+                },
+                context: {
+                    sourceIP: req.ip || 'unknown',
+                    userAgent: req.headers['user-agent'] || 'unknown',
+                    requestId: req.headers['x-request-id'] as string || `req-${Date.now()}`,
+                },
+            });
+
+            // Continue to next middleware (cache hit - allow)
+            next();
+            return;
+        }
+
+        logger.debug('Decision cache miss, calling OPA', {
+            subject: user.uniqueID,
+            resource: resourceId,
+            cacheKey
+        });
+
         // Call OPA with circuit breaker protection
         let opaResponse: IOPADecision;
         try {
@@ -1079,6 +1216,28 @@ export async function authzMiddleware(req: Request, res: Response, next: NextFun
             });
 
             opaResponse = response.data;
+
+            // ============================================
+            // PHASE 6: Cache OPA Decision
+            // ============================================
+            // Store decision in cache for future requests
+            if (opaResponse && opaResponse.result) {
+                const tenant = extractTenant(user, req);
+                decisionCacheService.set(
+                    cacheKey,
+                    opaResponse.result,
+                    resourceAttributes.classification || 'UNCLASSIFIED',
+                    tenant
+                );
+
+                logger.debug('Cached OPA decision', {
+                    subject: user.uniqueID,
+                    resource: resourceId,
+                    classification: resourceAttributes.classification,
+                    decision: opaResponse.result.allow ? 'ALLOW' : 'DENY',
+                    ttl: decisionCacheService.getTTLForClassification(resourceAttributes.classification || 'UNCLASSIFIED')
+                });
+            }
 
             // Check if OPA returned empty response (policies not loaded)
             if (!opaResponse || !opaResponse.result || Object.keys(opaResponse).length === 0) {
