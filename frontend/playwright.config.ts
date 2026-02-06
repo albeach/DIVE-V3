@@ -29,15 +29,17 @@ export default defineConfig({
     ],
 
     use: {
-        // Local development: Use localhost (requires docker-compose up)
-        // CI/Remote: Use Cloudflare Zero Trust tunnel
-        baseURL: process.env.BASE_URL || (process.env.CI ? 'https://dev-app.dive25.com' : 'http://localhost:3000'),
+        // Zero Trust Architecture: ALWAYS use HTTPS
+        // Local development: HTTPS with self-signed certs (mkcert)
+        // CI/Remote: HTTPS with valid Cloudflare certs
+        // Note: localhost is acceptable in test configuration files
+        baseURL: process.env.BASE_URL || process.env.PLAYWRIGHT_BASE_URL || (process.env.CI ? 'https://dev-app.dive25.com' : 'https://localhost:3000'),
         trace: 'on-first-retry', // Collect trace on first retry
         screenshot: 'only-on-failure',
         video: 'retain-on-failure',
         actionTimeout: 15000,
         navigationTimeout: 30000,
-        // Local: Ignore self-signed certs, Remote: Valid Cloudflare certs
+        // Local: Ignore self-signed certs (mkcert), Remote: Valid Cloudflare certs
         ignoreHTTPSErrors: !process.env.CI,
     },
 
@@ -62,7 +64,7 @@ export default defineConfig({
             name: 'hub-chromium',
             use: {
                 ...devices['Desktop Chrome'],
-                baseURL: process.env.HUB_FRONTEND_URL || 'http://localhost:3000'
+                baseURL: process.env.HUB_FRONTEND_URL || 'https://localhost:3000'
             },
             testMatch: '**/hub/**/*.spec.ts',
         },
@@ -70,7 +72,7 @@ export default defineConfig({
             name: 'hub-firefox',
             use: {
                 ...devices['Desktop Firefox'],
-                baseURL: process.env.HUB_FRONTEND_URL || 'http://localhost:3000'
+                baseURL: process.env.HUB_FRONTEND_URL || 'https://localhost:3000'
             },
             testMatch: '**/hub/**/*.spec.ts',
         },

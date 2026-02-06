@@ -28,6 +28,7 @@ export function SecureLogoutButton({ compact = false }: SecureLogoutButtonProps)
         type="button"
         onClick={handleLogout}
         disabled={isLoggingOut}
+        data-testid="logout-button"
         className="w-full flex items-center justify-center gap-2 px-3 py-2 text-xs font-semibold text-gray-600 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-50"
         aria-label="Sign out"
       >
@@ -56,6 +57,7 @@ export function SecureLogoutButton({ compact = false }: SecureLogoutButtonProps)
       type="button"
       onClick={handleLogout}
       disabled={isLoggingOut}
+      data-testid="logout-button"
       className="relative group w-full sm:w-auto px-4 py-2.5 bg-gradient-to-r from-gray-700 to-gray-800 hover:from-gray-800 hover:to-gray-900 text-white text-sm font-semibold rounded-xl shadow-md hover:shadow-lg active:scale-95 transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none flex items-center justify-center gap-2 overflow-hidden"
       aria-label="Sign out"
     >
