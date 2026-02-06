@@ -985,10 +985,13 @@ app.post('/rewrap', async (req: Request, res: Response) => {
 
                     // 5. Re-evaluate policy via OPA
                     const subject = {
+                        authenticated: true,
                         uniqueID: tokenPayload.uniqueID || tokenPayload.sub,
                         clearance: tokenPayload.clearance,
                         countryOfAffiliation: tokenPayload.countryOfAffiliation,
                         acpCOI: tokenPayload.acpCOI || [],
+                        issuer: tokenPayload.iss,
+                        mfa_used: Array.isArray(tokenPayload.amr) && tokenPayload.amr.length >= 2,
                     };
 
                     const resource = policy.dissem || {};
@@ -996,17 +999,24 @@ app.post('/rewrap', async (req: Request, res: Response) => {
                     const opaInput = {
                         input: {
                             subject,
-                            action: 'decrypt',
+                            action: { operation: 'get' },
                             resource,
                             context: {
                                 requestId,
                                 currentTime: new Date().toISOString(),
+                                sourceIP: req.ip || req.socket.remoteAddress,
+                                deviceCompliant: true,
+                                // CRITICAL: Include AAL2/AAL3 context for authentication strength checks
+                                acr: tokenPayload.acr,
+                                amr: tokenPayload.amr,
+                                auth_time: tokenPayload.auth_time,
+                                tenant: tokenPayload.countryOfAffiliation || 'USA',
                             },
                         },
                     };
 
                     const opaResponse = await axios.post(
-                        `${OPA_URL}${process.env.OPA_POLICY_PATH || '/v1/data/dive/authorization/decision'}`,
+                        `${OPA_URL}${process.env.OPA_POLICY_PATH || '/v1/data/dive/authz'}`,
                         opaInput,
                         { timeout: 3000 }
                     );
