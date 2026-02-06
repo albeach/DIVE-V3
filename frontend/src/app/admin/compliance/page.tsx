@@ -18,6 +18,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import PageLayout from '@/components/layout/page-layout';
+import { AdminPageTransition, AnimatedButton } from '@/components/admin/shared';
 
 // ============================================
 // TYPES
@@ -249,7 +250,7 @@ export default function PolicyComplianceDashboard() {
                   }`}
                 >
                   {autoRefresh ? '🔄 Auto (1m)' : '⏸️ Manual'}
-                </button>
+                </AnimatedButton>
 
                 <button
                   onClick={fetchComplianceData}
@@ -257,14 +258,14 @@ export default function PolicyComplianceDashboard() {
                   className="px-4 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 transition-colors font-medium shadow-lg disabled:opacity-50"
                 >
                   🔄 Refresh
-                </button>
+                </AnimatedButton>
 
-                <button
+                <AnimatedButton
                   onClick={() => router.push('/admin/dashboard')}
                   className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors font-medium"
                 >
                   ← Dashboard
-                </button>
+                </AnimatedButton>
               </div>
             </div>
 
@@ -275,7 +276,7 @@ export default function PolicyComplianceDashboard() {
               </p>
               <div className="flex space-x-2">
                 {(['overview', 'drift', 'tests', 'decisions', 'sla'] as ViewMode[]).map((mode) => (
-                  <button
+                  <AnimatedButton
                     key={mode}
                     onClick={() => setViewMode(mode)}
                     className={`px-4 py-1 rounded-lg text-sm font-medium transition-all ${
@@ -285,7 +286,7 @@ export default function PolicyComplianceDashboard() {
                     }`}
                   >
                     {mode.charAt(0).toUpperCase() + mode.slice(1)}
-                  </button>
+                  </AnimatedButton>
                 ))}
               </div>
             </div>
@@ -312,7 +313,7 @@ export default function PolicyComplianceDashboard() {
                 className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors font-medium"
               >
                 Retry
-              </button>
+              </AnimatedButton>
             </div>
           ) : overview && (
             <>
@@ -676,6 +677,7 @@ export default function PolicyComplianceDashboard() {
           )}
         </div>
       </div>
+      </AdminPageTransition>
     </PageLayout>
   );
 }
