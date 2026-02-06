@@ -38,7 +38,7 @@ import { generateSampleHeatmapData } from '@/components/admin/authorization-heat
 import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
 import { KeyboardShortcutsModal } from '@/components/ui/keyboard-shortcuts-modal';
 import { useKeyboardNavigation } from '@/hooks/use-keyboard-navigation';
-import { AdminPageTransition, AdminSectionTransition, AnimatedButton } from '@/components/admin/shared';
+import { AdminPageTransition, AdminSectionTransition, AnimatedButton, PresenceIndicator } from '@/components/admin/shared';
 
 type TabView = 'overview' | 'federation' | 'insights';
 
@@ -129,6 +129,9 @@ export default function AdminDashboard() {
                         </div>
 
                         <div className="flex flex-wrap gap-3 items-center lg:justify-end">
+                            {/* Presence Indicator */}
+                            <PresenceIndicator page="dashboard" />
+                            
                             {/* Auto-Refresh Toggle */}
                             <AnimatedButton
                                 onClick={() => setAutoRefresh(!autoRefresh)}
