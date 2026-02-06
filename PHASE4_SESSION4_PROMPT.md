@@ -1,10 +1,10 @@
 # PHASE 4 SESSION 4 PROMPT
 # E2E Test Completion + OPAL Distribution + Performance Optimization
 
-**Date**: February 6, 2026  
-**Session**: Phase 4, Session 4  
-**Previous Session**: Phase 4, Session 3 (Security Hardening & Session Management Testing)  
-**Status**: Phases 1-3 Complete (73/73 tests passing), E2E tests need navigation debugging  
+**Date**: February 6, 2026
+**Session**: Phase 4, Session 4
+**Previous Session**: Phase 4, Session 3 (Security Hardening & Session Management Testing)
+**Status**: Phases 1-3 Complete (73/73 tests passing), E2E tests need navigation debugging
 
 ---
 
@@ -38,19 +38,19 @@
    - Zod validation schemas for session refresh API
    - Type-safe request/response validation
    - Security against malformed payloads
-   
+
 2. **`frontend/src/app/api/session/refresh/route.ts`** (Enhanced)
    - Added Zod validation to POST endpoint
    - Enhanced logging with `requestId` and `reason`
    - Structured error responses with security headers
    - Added `includeMetrics` query parameter to GET endpoint
-   
+
 3. **`backend/src/middleware/session-rate-limit.middleware.ts`**
    - Specialized rate limiting for session endpoints
    - 10 refresh attempts per 5 minutes (configurable)
    - Redis-backed store for distributed rate limiting
    - Per-user/session + per-IP tracking
-   
+
 4. **`backend/src/__tests__/integration/token-blacklist.integration.test.ts`**
    - 27 comprehensive integration tests
    - Token blacklisting with TTL
@@ -299,7 +299,7 @@ OPAL (Open Policy Administration Layer) enables Git-based policy distribution:
    const cacheKey = `authz:${userId}:${resourceId}:${hash(attributes)}`;
    const cached = await redis.get(cacheKey);
    if (cached) return JSON.parse(cached);
-   
+
    const decision = await opa.evaluate(input);
    await redis.setex(cacheKey, 60, JSON.stringify(decision));
    ```
@@ -315,7 +315,7 @@ OPAL (Open Policy Administration Layer) enables Git-based policy distribution:
    db.resources.createIndex({ classification: 1, releasabilityTo: 1 });
    db.resources.createIndex({ COI: 1 });
    db.resources.createIndex({ creationDate: -1 });
-   
+
    -- PostgreSQL indexes for session queries
    CREATE INDEX idx_accounts_user_id ON accounts(user_id);
    CREATE INDEX idx_accounts_expires_at ON accounts(expires_at);
@@ -447,11 +447,11 @@ OPAL (Open Policy Administration Layer) enables Git-based policy distribution:
 ## 🎯 SMART Goals for Session 4
 
 ### Goal 1: Complete E2E Test Suite (2-3 hours)
-**Specific**: Fix navigation issue, achieve 10/10 E2E tests passing  
-**Measurable**: All 10 scenarios pass 3x consecutively with 0 flakes  
-**Achievable**: Infrastructure is in place, only navigation debugging needed  
-**Relevant**: Proves session management works end-to-end in real browser  
-**Time-bound**: Complete within first half of session  
+**Specific**: Fix navigation issue, achieve 10/10 E2E tests passing
+**Measurable**: All 10 scenarios pass 3x consecutively with 0 flakes
+**Achievable**: Infrastructure is in place, only navigation debugging needed
+**Relevant**: Proves session management works end-to-end in real browser
+**Time-bound**: Complete within first half of session
 
 **Success Criteria**:
 - [ ] Navigation to / loads IdP selection page
@@ -465,11 +465,11 @@ OPAL (Open Policy Administration Layer) enables Git-based policy distribution:
 ---
 
 ### Goal 2: Implement OPAL Hub-to-Spoke Distribution (2-3 hours)
-**Specific**: Configure OPAL hub and 2 spokes (FRA, GBR) with Git-based policy sync  
-**Measurable**: Policy change propagates to all spokes within 5 seconds  
-**Achievable**: OPAL containers exist, just need configuration  
-**Relevant**: Required for production policy management and compliance  
-**Time-bound**: Complete in second half of session  
+**Specific**: Configure OPAL hub and 2 spokes (FRA, GBR) with Git-based policy sync
+**Measurable**: Policy change propagates to all spokes within 5 seconds
+**Achievable**: OPAL containers exist, just need configuration
+**Relevant**: Required for production policy management and compliance
+**Time-bound**: Complete in second half of session
 
 **Success Criteria**:
 - [ ] OPAL hub connected to Git repo (or local policies/)
@@ -484,11 +484,11 @@ OPAL (Open Policy Administration Layer) enables Git-based policy distribution:
 ---
 
 ### Goal 3: Performance Optimization (1-2 hours)
-**Specific**: Implement Redis decision caching and database indexing  
-**Measurable**: p95 latency < 200ms, cache hit rate > 80%  
-**Achievable**: Clear implementation path, minimal code changes  
-**Relevant**: Required for 100 req/s production target  
-**Time-bound**: Complete if time permits, otherwise defer to Session 5  
+**Specific**: Implement Redis decision caching and database indexing
+**Measurable**: p95 latency < 200ms, cache hit rate > 80%
+**Achievable**: Clear implementation path, minimal code changes
+**Relevant**: Required for 100 req/s production target
+**Time-bound**: Complete if time permits, otherwise defer to Session 5
 
 **Success Criteria**:
 - [ ] Redis caching implemented in authz.middleware.ts
@@ -503,22 +503,22 @@ OPAL (Open Policy Administration Layer) enables Git-based policy distribution:
 ## 🔍 Known Issues & Troubleshooting
 
 ### Issue 1: E2E Test Navigation Blank Page
-**Symptom**: `page.goto('/')` results in blank white page  
-**Impact**: Login helper times out looking for IdP selector  
-**Workaround**: None currently  
-**Resolution**: Debug with Playwright trace viewer and middleware logs  
+**Symptom**: `page.goto('/')` results in blank white page
+**Impact**: Login helper times out looking for IdP selector
+**Workaround**: None currently
+**Resolution**: Debug with Playwright trace viewer and middleware logs
 
 ### Issue 2: Pre-commit Hook Rejecting Localhost URLs
-**Symptom**: Git pre-commit hook fails on `localhost` in Playwright config  
-**Impact**: Must use `--no-verify` to commit Playwright config changes  
-**Workaround**: Use `--no-verify` for test configuration files  
-**Resolution**: Update `.git/hooks/pre-commit` to allow localhost in `*.config.ts` files  
+**Symptom**: Git pre-commit hook fails on `localhost` in Playwright config
+**Impact**: Must use `--no-verify` to commit Playwright config changes
+**Workaround**: Use `--no-verify` for test configuration files
+**Resolution**: Update `.git/hooks/pre-commit` to allow localhost in `*.config.ts` files
 
 ### Issue 3: OPAL Not Yet Configured
-**Symptom**: OPAL containers defined but not operational  
-**Impact**: No policy distribution, spokes use local policies  
-**Workaround**: Manual policy sync via docker cp  
-**Resolution**: Complete Phase 5 OPAL configuration  
+**Symptom**: OPAL containers defined but not operational
+**Impact**: No policy distribution, spokes use local policies
+**Workaround**: Manual policy sync via docker cp
+**Resolution**: Complete Phase 5 OPAL configuration
 
 ---
 
@@ -680,7 +680,7 @@ docker logs dive-spoke-fra-opal-client -f
 ## 🎯 Phased Implementation Plan (Session 4)
 
 ### Phase 1: E2E Test Debugging & Completion (HIGH PRIORITY)
-**Duration**: 2-3 hours  
+**Duration**: 2-3 hours
 **Lead**: Fix navigation issue first, then verify all scenarios
 
 **Step 1.1: Debug Navigation (60 min)**
@@ -713,7 +713,7 @@ docker logs dive-spoke-fra-opal-client -f
 ---
 
 ### Phase 2: OPAL Hub-to-Spoke Distribution (MEDIUM PRIORITY)
-**Duration**: 2-3 hours  
+**Duration**: 2-3 hours
 **Lead**: Configure policy distribution infrastructure
 
 **Step 2.1: Hub Configuration (45 min)**
@@ -750,7 +750,7 @@ docker logs dive-spoke-fra-opal-client -f
 ---
 
 ### Phase 3: Performance Optimization (STRETCH GOAL)
-**Duration**: 1-2 hours (if time permits)  
+**Duration**: 1-2 hours (if time permits)
 **Lead**: Implement caching and indexing
 
 **Step 3.1: Redis Decision Caching (60 min)**
@@ -777,7 +777,7 @@ docker logs dive-spoke-fra-opal-client -f
 ---
 
 ### Phase 4: Documentation & Git Commits (ONGOING)
-**Duration**: Continuous throughout session  
+**Duration**: Continuous throughout session
 **Lead**: Document as you go, commit after each phase
 
 **Step 4.1: Update Documentation**
@@ -1002,7 +1002,7 @@ git add -A && git commit -m "feat(opal): implement hub-to-spoke policy distribut
 ## 🔧 Troubleshooting Guide
 
 ### E2E Tests Timing Out on Login
-**Symptoms**: Blank page, can't find IdP selector  
+**Symptoms**: Blank page, can't find IdP selector
 **Debug Steps**:
 1. Run with `--headed` to see what's actually rendering
 2. Check `docker logs dive-hub-frontend` for errors
@@ -1011,7 +1011,7 @@ git add -A && git commit -m "feat(opal): implement hub-to-spoke policy distribut
 5. Check if IdP selection page is at `/` or `/auth` or `/login`
 
 ### OPAL Spokes Not Connecting
-**Symptoms**: Spoke logs show connection refused  
+**Symptoms**: Spoke logs show connection refused
 **Debug Steps**:
 1. Verify hub is running: `docker ps | grep opal`
 2. Check hub logs: `docker logs dive-hub-opal-server`
@@ -1020,7 +1020,7 @@ git add -A && git commit -m "feat(opal): implement hub-to-spoke policy distribut
 5. Verify authentication tokens match
 
 ### Rate Limiting False Positives
-**Symptoms**: 429 errors for legitimate requests  
+**Symptoms**: 429 errors for legitimate requests
 **Debug Steps**:
 1. Check Redis for rate limit keys: `redis-cli keys "session:*"`
 2. Verify TTL: `redis-cli ttl "session:refresh:user123"`
@@ -1160,7 +1160,7 @@ You are picking up where Session 3 left off. The previous agent:
 
 **Your mission**: Debug the E2E navigation issue, get all 10 scenarios passing, then proceed with OPAL distribution and performance optimization.
 
-**Approach**: 
+**Approach**:
 - Use Playwright trace viewer to understand navigation flow
 - Reference working E2E tests for patterns
 - Test incrementally, commit frequently
