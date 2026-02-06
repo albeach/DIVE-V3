@@ -17,7 +17,7 @@ import ComplianceStatusCard from '@/components/admin/compliance-status-card';
 import SLACountdown from '@/components/admin/sla-countdown';
 import RiskFactorAnalysis from '@/components/admin/risk-factor-analysis';
 import { InteractiveBreadcrumbs } from '@/components/ui/interactive-breadcrumbs';
-import { AdminPageTransition, AnimatedButton } from '@/components/admin/shared';
+import { AdminPageTransition, AnimatedButton, PresenceIndicator } from '@/components/admin/shared';
 
 interface IIdPSubmission {
     submissionId: string;
@@ -196,10 +196,15 @@ export default function ApprovalsPage() {
             <AdminPageTransition pageKey="/admin/approvals">
             {/* Header */}
             <div className="mb-8">
-                <h1 className="text-3xl font-bold text-gray-900">IdP Approvals</h1>
-                <p className="mt-2 text-sm text-gray-600">
-                    Review and approve or reject pending identity provider submissions.
-                </p>
+                <div className="flex justify-between items-start">
+                    <div>
+                        <h1 className="text-3xl font-bold text-gray-900">IdP Approvals</h1>
+                        <p className="mt-2 text-sm text-gray-600">
+                            Review and approve or reject pending identity provider submissions.
+                        </p>
+                    </div>
+                    <PresenceIndicator page="approvals" />
+                </div>
             </div>
 
                 {/* Error Message */}
