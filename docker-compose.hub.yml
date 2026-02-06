@@ -713,16 +713,21 @@ services:
     environment:
       # Use Redis as broadcast backend for pub/sub
       OPAL_BROADCAST_URI: redis://:${REDIS_PASSWORD_USA}@redis:6379
-      # Local policy distribution with filesystem watching (not Git)
-      # CRITICAL: Use master-branch tracking to match actual Git branch
-      OPAL_POLICY_REPO_URL: file:///policies
+      # ============================================================
+      # PHASE 5: Git Repository Tracking (Official OPAL Architecture)
+      # ============================================================
+      # Following official OPAL architecture: Admin → Git → OPAL → Clients → OPA
+      # Source: https://docs.opal.ac/overview/architecture
+      OPAL_POLICY_REPO_URL: https://github.com/albeach/dive-v3-policies.git
       OPAL_POLICY_REPO_MAIN_BRANCH: master
       OPAL_REPO_WATCHER_ENABLED: "true"
-      OPAL_POLICY_REPO_POLLING_INTERVAL: 5
-      # Force policy reload on every poll (for development)
+      OPAL_POLICY_REPO_POLLING_INTERVAL: 30  # Poll GitHub every 30 seconds
+      # Clone to temporary directory (OPAL will manage)
       OPAL_POLICY_REPO_CLONE_PATH: /tmp/opal_repo
       OPAL_POLICY_REPO_REUSE_CLONE_PATH: "false"
-      # Policy paths to include (all .rego files in /policies)
+      # Authentication for private repository (if needed)
+      # OPAL_POLICY_REPO_AUTH_TOKEN: ${GITHUB_TOKEN}
+      # Policy paths to include (all .rego files in repository)
       OPAL_POLICY_SOURCE_DIRS: .,base,org,tenant,entrypoints,compat,data
       # Multiple data topics for real-time policy data distribution (Phase 2-3)
       OPAL_DATA_TOPICS_DEFAULT: policy_data,trusted_issuers,federation_matrix,tenant_configs,coi_definitions,federation_constraints
@@ -794,8 +799,8 @@ services:
       - hub-internal
       - dive-shared  # Allow spoke OPAL clients to connect via federation network
     volumes:
-      # Local policy bundle for distribution to spokes
-      - ./policies:/policies:ro
+      # OPAL will clone policy repo from GitHub (no local mount needed)
+      # Keep data source and certificates for backend integration
       - ./opal-data-source:/opal-data-source:ro
       - ./instances/hub/certs:/certs:ro
       - ./certs/opal:/opal-keys:ro
