@@ -28,11 +28,11 @@ if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     export DIVE_COMMON_LOADED=1
 fi
 
-# Load orchestration modules
-if [ -f "${MODULES_DIR}/orchestration/framework.sh" ]; then
-    source "${MODULES_DIR}/orchestration/framework.sh"
-elif [ -f "${MODULES_DIR}/orchestration-framework.sh" ]; then
+# Load orchestration modules (load the main one first)
+if [ -f "${MODULES_DIR}/orchestration-framework.sh" ]; then
     source "${MODULES_DIR}/orchestration-framework.sh"
+elif [ -f "${MODULES_DIR}/orchestration/framework.sh" ]; then
+    source "${MODULES_DIR}/orchestration/framework.sh"
 fi
 
 if [ -f "${MODULES_DIR}/orchestration-state-db.sh" ]; then
@@ -99,10 +99,84 @@ hub_phase_mongodb_init() {
     _hub_init_mongodb_replica_set
 }
 
+hub_phase_build() {
+    local instance_code="$1"
+    local pipeline_mode="$2"
+    
+    log_info "Building Docker images..."
+    
+    cd "$DIVE_ROOT"
+    
+    # Build images WITHOUT circuit breaker output capture
+    # This is heavyweight I/O that must stream to stdout
+    local build_log="${DIVE_ROOT}/logs/docker-builds/hub-build-$(date +%Y%m%d-%H%M%S).log"
+    mkdir -p "$(dirname "$build_log")"
+    
+    log_info "Build output: $build_log"
+    
+    if ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" build 2>&1 | tee "$build_log"; then
+        log_success "Docker images built successfully"
+        return 0
+    else
+        log_error "Failed to build Docker images"
+        log_error "Full build log: $build_log"
+        return 1
+    fi
+}
+
 hub_phase_services() {
     local instance_code="$1"
     local pipeline_mode="$2"
-    hub_up
+    
+    # SERVICES phase now ONLY starts services (build happens in BUILD phase)
+    log_info "Starting hub services..."
+    
+    # DIVE_ROOT is set by the main dive script and should already be in environment
+    # If not set, infer from script location
+    if [ -z "$DIVE_ROOT" ]; then
+        DIVE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+        export DIVE_ROOT
+    fi
+    
+    cd "$DIVE_ROOT" || {
+        log_error "Failed to change to DIVE_ROOT=$DIVE_ROOT"
+        return 1
+    }
+    
+    # Ensure dive-shared network exists
+    if ! ${DOCKER_CMD:-docker} network inspect dive-shared >/dev/null 2>&1; then
+        log_verbose "Creating dive-shared network..."
+        if ! ${DOCKER_CMD:-docker} network create dive-shared 2>/dev/null; then
+            log_error "Failed to create dive-shared network"
+            return 1
+        fi
+    fi
+    
+    # Load secrets
+    if ! load_secrets; then
+        log_error "Failed to load secrets"
+        return 1
+    fi
+    
+    # Start services (parallel or sequential)
+    local use_parallel="${PARALLEL_STARTUP_ENABLED:-true}"
+    
+    if [ "$use_parallel" = "true" ] && type hub_parallel_startup &>/dev/null; then
+        log_info "Using parallel service startup (dependency-aware)"
+        if ! hub_parallel_startup; then
+            log_error "Parallel service startup failed"
+            return 1
+        fi
+    else
+        log_info "Using sequential service startup"
+        if ! ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" up -d; then
+            log_error "Sequential service startup failed"
+            return 1
+        fi
+    fi
+    
+    log_success "Hub services started successfully"
+    return 0
 }
 
 hub_phase_orchestration_db() {
@@ -420,6 +494,38 @@ _hub_pipeline_execute_internal() {
 
         if [ $phase_result -eq 0 ]; then
             if ! _hub_check_threshold "$instance_code" "MONGODB_INIT"; then
+                phase_result=1
+            fi
+        fi
+    fi
+
+    # =========================================================================
+    # Phase 2.8: Docker Image Build (NEW - Separation of Concerns)
+    # =========================================================================
+    # ARCHITECTURE: Heavyweight I/O operations should NOT be wrapped in
+    # circuit breakers that capture output. Docker builds stream gigabytes
+    # of layer data that must go directly to stdout/logs, not Bash variables.
+    if [ $phase_result -eq 0 ]; then
+        phase_start=$(date +%s)
+        if type progress_set_phase &>/dev/null; then
+            progress_set_phase 2.8 "Building Docker images"
+        fi
+
+        if type deployment_set_state &>/dev/null; then
+            deployment_set_state "$instance_code" "DEPLOYING" "" "{\"phase\":\"BUILD\"}"
+        fi
+
+        # Build phase uses direct execution (no circuit breaker output capture)
+        if ! hub_phase_build "$instance_code" "$pipeline_mode"; then
+            phase_result=1
+            log_error "Docker image build failed"
+        fi
+
+        phase_end=$(date +%s)
+        phase_times+=("Phase 2.8 (Build): $((phase_end - phase_start))s")
+
+        if [ $phase_result -eq 0 ]; then
+            if ! _hub_check_threshold "$instance_code" "BUILD"; then
                 phase_result=1
             fi
         fi
@@ -1408,6 +1514,7 @@ EOF
 # Start hub services with parallel startup optimization (Phase 3 Sprint 1)
 ##
 hub_up() {
+    echo "DEBUG [hub_up]: ENTRY" >&2
     log_info "Starting hub services..."
 
     cd "$DIVE_ROOT"
@@ -1420,6 +1527,7 @@ hub_up() {
     # CRITICAL: Ensure dive-shared network exists (required by docker-compose.hub.yml)
     # This is normally done in hub_preflight(), but hub_up() can be called standalone
     # docker-compose.hub.yml declares dive-shared as "external: true" which is validated at parse time
+    echo "DEBUG [hub_up]: Checking dive-shared network..." >&2
     if ! ${DOCKER_CMD:-docker} network inspect dive-shared >/dev/null 2>&1; then
         log_verbose "Creating dive-shared network (required for hub services)..."
         if ! ${DOCKER_CMD:-docker} network create dive-shared 2>/dev/null; then
@@ -1429,22 +1537,31 @@ hub_up() {
         fi
         log_verbose "dive-shared network created"
     fi
+    echo "DEBUG [hub_up]: dive-shared network OK" >&2
 
     # CRITICAL: Load secrets from GCP or local before starting containers
     # This ensures all environment variables are available for docker-compose interpolation
+    echo "DEBUG [hub_up]: Loading secrets..." >&2
     if ! load_secrets; then
         log_error "Failed to load secrets - cannot start hub"
         return 1
     fi
+    echo "DEBUG [hub_up]: Secrets loaded" >&2
 
     # CRITICAL: Pre-build all Docker images before parallel startup
     # This prevents build delays during service health checks (frontend, backend, etc.)
+    echo "DEBUG [hub_up]: Building Docker images..." >&2
     log_info "Building Docker images (if needed)..."
-    if ! ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" build 2>&1 | grep -v "WARN"; then
+    local build_log="/tmp/hub-docker-build-$(date +%s).log"
+    if ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" build > "$build_log" 2>&1; then
+        log_success "Docker images built successfully"
+        echo "DEBUG [hub_up]: Docker images built" >&2
+    else
         log_error "Failed to build Docker images"
+        log_error "Build log: $build_log"
+        tail -50 "$build_log" >&2
         return 1
     fi
-    log_success "Docker images built successfully"
 
     # Phase 3 Sprint 1: Enhanced parallel startup with dependency-aware orchestration
     local use_parallel="${PARALLEL_STARTUP_ENABLED:-true}"
@@ -1845,7 +1962,7 @@ hub_parallel_startup() {
         service_levels["$svc"]=$level
 
         # Add to level_services map
-        if [ -z "${level_services[$level]}" ]; then
+        if [ -z "${level_services[$level]:-}" ]; then
             level_services[$level]="$svc"
         else
             level_services[$level]="${level_services[$level]} $svc"
@@ -1859,7 +1976,7 @@ hub_parallel_startup() {
 
     log_verbose "Dependency levels calculated (max level: $max_level):"
     for ((lvl=0; lvl<=max_level; lvl++)); do
-        local services_at_level="${level_services[$lvl]}"
+        local services_at_level="${level_services[$lvl]:-}"
         if [ -n "$services_at_level" ]; then
             local count=$(echo "$services_at_level" | wc -w | tr -d ' ')
             log_verbose "  Level $lvl: $services_at_level ($count services)"
@@ -1876,7 +1993,7 @@ hub_parallel_startup() {
     # Start services level by level
     for ((level=0; level<=max_level; level++)); do
         # Get services at this level
-        local level_services_str="${level_services[$level]}"
+        local level_services_str="${level_services[$level]:-}"
 
         if [ -z "$level_services_str" ]; then
             log_verbose "Level $level: No services to start"

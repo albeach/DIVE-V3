@@ -203,17 +203,16 @@ _hub_register_kas() {
     fi
 
     # Wait for backend API to be ready
-    log_info "Waiting for backend API to be ready..."
+    log_info "Waiting for backend API to be ready (HTTPS only - Zero Trust)..."
     local max_wait=60
     local waited=0
     local retry_count=0
 
     while [ $waited -lt $max_wait ]; do
-        # Try both HTTP and HTTPS (backend may use either depending on HTTPS_ENABLED)
-        if ${DOCKER_CMD:-docker} exec "$hub_backend_container" curl -sf http://localhost:4000/health > /dev/null 2>&1 || \
-           ${DOCKER_CMD:-docker} exec "$hub_backend_container" curl -skf https://localhost:4000/health > /dev/null 2>&1; then
-            log_success "Backend API is ready"
-            return 0
+        # Zero Trust: HTTPS only, no HTTP fallback
+        if ${DOCKER_CMD:-docker} exec "$hub_backend_container" curl -skf https://localhost:4000/api/health > /dev/null 2>&1; then
+            log_success "Backend API is ready (HTTPS)"
+            break  # Exit loop, continue with registration
         fi
 
         retry_count=$((retry_count + 1))
@@ -225,24 +224,26 @@ _hub_register_kas() {
         waited=$((waited + 2))
     done
 
-    log_error "Backend API not ready after ${max_wait}s"
-    log_error "Backend container status:"
-    ${DOCKER_CMD:-docker} ps --filter "name=${hub_backend_container}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-    log_error "Backend health check failed - check logs:"
-    log_error "  docker logs ${hub_backend_container} --tail 50"
-    return 1
+    if [ $waited -ge $max_wait ]; then
+        log_error "Backend API not ready after ${max_wait}s"
+        log_error "Backend container status:"
+        ${DOCKER_CMD:-docker} ps --filter "name=${hub_backend_container}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+        log_error "Backend health check failed - check logs:"
+        log_error "  docker logs ${hub_backend_container} --tail 50"
+        return 1
+    fi
 
-    # Check if already registered
+    # Check if already registered (HTTPS only)
     local already_registered=$(${DOCKER_CMD:-docker} exec "$hub_backend_container" curl -sk \
-        http://localhost:4000/api/kas/registry 2>/dev/null | \
+        https://localhost:4000/api/kas/registry 2>/dev/null | \
         jq -r ".kasServers[]? | select(.kasId == \"${kas_id}\") | .kasId" 2>/dev/null)
 
     if [ "$already_registered" = "$kas_id" ]; then
         log_success "Hub KAS already registered: ${kas_id}"
 
-        # Verify status
+        # Verify status (HTTPS only)
         local current_status=$(${DOCKER_CMD:-docker} exec "$hub_backend_container" curl -sk \
-            http://localhost:4000/api/kas/registry 2>/dev/null | \
+            https://localhost:4000/api/kas/registry 2>/dev/null | \
             jq -r ".kasServers[]? | select(.kasId == \"${kas_id}\") | .status" 2>/dev/null)
 
         if [ "$current_status" = "active" ]; then
@@ -272,7 +273,7 @@ _hub_register_kas() {
         log_warn "Could not read public key, proceeding without it"
     fi
 
-    # Register Hub KAS via API
+    # Register Hub KAS via API (HTTPS only - Zero Trust)
     log_info "Registering Hub KAS: ${kas_id}..."
 
     # Get organization name from instance code
@@ -288,7 +289,7 @@ _hub_register_kas() {
 
     local response
     response=$(${DOCKER_CMD:-docker} exec "$hub_backend_container" curl -sk -w "\n%{http_code}" -X POST \
-        http://localhost:4000/api/kas/register \
+        https://localhost:4000/api/kas/register \
         -H "Content-Type: application/json" \
         -d "{
             \"kasId\": \"${kas_id}\",
@@ -325,17 +326,17 @@ _hub_register_kas() {
         # Use CLI bypass header for dev mode approval
         log_info "Auto-approving Hub KAS..."
         ${DOCKER_CMD:-docker} exec "$hub_backend_container" curl -sk -X POST \
-            "http://localhost:4000/api/kas/registry/${kas_id}/approve" \
+            "https://localhost:4000/api/kas/registry/${kas_id}/approve" \
             -H "Content-Type: application/json" \
             -H "x-cli-bypass: dive-cli-local-dev" > /dev/null 2>&1
 
         # Small delay for database write
         sleep 1
 
-        # Verify registration
+        # Verify registration (HTTPS only)
         local verified
         verified=$(${DOCKER_CMD:-docker} exec "$hub_backend_container" curl -sk \
-            http://localhost:4000/api/kas/registry 2>/dev/null | \
+            https://localhost:4000/api/kas/registry 2>/dev/null | \
             jq -r ".kasServers[]? | select(.kasId == \"${kas_id}\") | .status" 2>/dev/null)
 
         if [ "$verified" = "active" ]; then
