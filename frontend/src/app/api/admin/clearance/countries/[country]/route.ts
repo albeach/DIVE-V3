@@ -17,8 +17,9 @@ interface RouteContext {
     params: Promise<{ country: string }>;
 }
 
-export const PUT = withSuperAdmin(async (request, { tokens }, context: RouteContext) => {
-    const { country } = await context.params;
+export const PUT = withSuperAdmin(async (request, context) => {
+    const { tokens, params } = context;
+    const { country } = await params!;
     const body = await request.json();
 
     const backendFetch = createAdminBackendFetch(tokens, BACKEND_URL);
@@ -43,8 +44,9 @@ export const PUT = withSuperAdmin(async (request, { tokens }, context: RouteCont
     return NextResponse.json({ success: true, data });
 });
 
-export const DELETE = withSuperAdmin(async (request, { tokens }, context: RouteContext) => {
-    const { country } = await context.params;
+export const DELETE = withSuperAdmin(async (request, context) => {
+    const { tokens, params } = context;
+    const { country } = await params!;
 
     const backendFetch = createAdminBackendFetch(tokens, BACKEND_URL);
     const response = await backendFetch(`/api/admin/clearance/countries/${country}`, {

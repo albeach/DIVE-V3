@@ -16,8 +16,9 @@ interface RouteContext {
     params: Promise<{ country: string }>;
 }
 
-export const GET = withAuth(async (request, { tokens }, context: RouteContext) => {
-    const { country } = await context.params;
+export const GET = withAuth(async (request, context) => {
+    const { tokens, params } = context;
+    const { country } = await params!;
     const { searchParams } = new URL(request.url);
     const queryString = searchParams.toString();
 

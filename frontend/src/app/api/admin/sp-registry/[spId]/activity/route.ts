@@ -19,8 +19,9 @@ interface RouteContext {
  * GET /api/admin/sp-registry/[spId]/activity
  * Get activity logs for an SP
  */
-export const GET = withAuth(async (request, { tokens }, context: RouteContext) => {
-  const { spId } = await context.params;
+export const GET = withAuth(async (request, context) => {
+  const { tokens, params } = context;
+  const { spId } = await params!;
   
   // Extract query parameters
   const searchParams = request.nextUrl.searchParams;

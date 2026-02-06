@@ -18,8 +18,9 @@ interface RouteContext {
     params: Promise<{ userId: string }>;
 }
 
-export const GET = withAuth(async (request, { tokens }, context: RouteContext) => {
-    const { userId } = await context.params;
+export const GET = withAuth(async (request, context) => {
+    const { tokens, params } = context;
+    const { userId } = await params!;
 
     const backendFetch = createAdminBackendFetch(tokens, BACKEND_URL);
     const response = await backendFetch(`/api/admin/users/${userId}`);
@@ -40,8 +41,9 @@ export const GET = withAuth(async (request, { tokens }, context: RouteContext) =
     return NextResponse.json({ success: true, data });
 });
 
-export const PUT = withSuperAdmin(async (request, { tokens }, context: RouteContext) => {
-    const { userId } = await context.params;
+export const PUT = withSuperAdmin(async (request, context) => {
+    const { tokens, params } = context;
+    const { userId } = await params!;
     const body = await request.json();
 
     const backendFetch = createAdminBackendFetch(tokens, BACKEND_URL);
@@ -66,8 +68,9 @@ export const PUT = withSuperAdmin(async (request, { tokens }, context: RouteCont
     return NextResponse.json({ success: true, data });
 });
 
-export const DELETE = withSuperAdmin(async (request, { tokens }, context: RouteContext) => {
-    const { userId } = await context.params;
+export const DELETE = withSuperAdmin(async (request, context) => {
+    const { tokens, params } = context;
+    const { userId } = await params!;
 
     const backendFetch = createAdminBackendFetch(tokens, BACKEND_URL);
     const response = await backendFetch(`/api/admin/users/${userId}`, {
