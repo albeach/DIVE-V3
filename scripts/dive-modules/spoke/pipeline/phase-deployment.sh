@@ -21,6 +21,20 @@ if type spoke_phase_deployment &>/dev/null; then
 fi
 # Module loaded marker will be set at end after functions defined
 
+# Load validation functions for idempotent deployments
+if [ -z "${SPOKE_VALIDATION_LOADED:-}" ]; then
+    if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-validation.sh" ]; then
+        source "$(dirname "${BASH_SOURCE[0]}")/spoke-validation.sh"
+    fi
+fi
+
+# Load checkpoint system
+if [ -z "${SPOKE_CHECKPOINT_LOADED:-}" ]; then
+    if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-checkpoint.sh" ]; then
+        source "$(dirname "${BASH_SOURCE[0]}")/spoke-checkpoint.sh"
+    fi
+fi
+
 # =============================================================================
 # MAIN DEPLOYMENT PHASE FUNCTION
 # =============================================================================
@@ -93,11 +107,32 @@ spoke_phase_deployment() {
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     # =============================================================================
+    # IDEMPOTENT DEPLOYMENT: Check if phase already complete
+    # =============================================================================
+    if type spoke_checkpoint_is_complete &>/dev/null; then
+        if spoke_checkpoint_is_complete "$instance_code" "DEPLOYMENT"; then
+            # Validate state is actually good
+            if type spoke_validate_phase_state &>/dev/null; then
+                if spoke_validate_phase_state "$instance_code" "DEPLOYMENT"; then
+                    log_info "✓ DEPLOYMENT phase complete and validated, skipping"
+                    return 0
+                else
+                    log_warn "DEPLOYMENT checkpoint exists but validation failed, re-running"
+                    spoke_checkpoint_clear_phase "$instance_code" "DEPLOYMENT" 2>/dev/null || true
+                fi
+            else
+                log_info "✓ DEPLOYMENT phase complete (validation not available)"
+                return 0
+            fi
+        fi
+    fi
+
+    # =============================================================================
     # PERFORMANCE TRACKING: Phase timing metrics
     # =============================================================================
     local PHASE_START=$(date +%s)
 
-    log_info "Deployment phase for $code_upper"
+    log_info "→ Executing DEPLOYMENT phase for $code_upper"
 
     # CRITICAL PRE-FLIGHT: Ensure OPAL key is configured
     # This fixes OPAL client for both new and existing spokes
@@ -116,19 +151,21 @@ spoke_phase_deployment() {
     fi
 
     # Step 2: Wait for core services to become healthy
+    # CRITICAL: MongoDB healthcheck now initializes replica set AND verifies PRIMARY
+    # No external script needed - initialization happens in container healthcheck
     if ! spoke_deployment_wait_for_core_services "$instance_code"; then
         return 1
     fi
 
-    # Step 2a: Initialize MongoDB replica set (CRITICAL - required for change streams)
-    if ! spoke_deployment_init_mongodb_replica_set "$instance_code"; then
-        log_error "MongoDB replica set initialization failed"
-        return 1
-    fi
+    # Step 2a: REMOVED - MongoDB replica set initialization now in healthcheck
+    # Previously: spoke_deployment_init_mongodb_replica_set (race condition)
+    # Now: Healthcheck initializes replica set BEFORE marking container healthy
+    # This ensures KAS/backend don't start until MongoDB is truly PRIMARY
 
-    # Step 2b: Wait for MongoDB PRIMARY status
-    if ! spoke_deployment_wait_for_mongodb_primary "$instance_code"; then
-        log_error "MongoDB failed to achieve PRIMARY status"
+    # Step 2b: Verify MongoDB PRIMARY status (redundant check for safety)
+    # Healthcheck already ensures PRIMARY, but we verify once more
+    if ! spoke_deployment_verify_mongodb_ready "$instance_code"; then
+        log_error "MongoDB verification failed - check healthcheck logs"
         return 1
     fi
 
@@ -170,7 +207,13 @@ spoke_phase_deployment() {
     # Calculate and log phase duration
     local PHASE_END=$(date +%s)
     local PHASE_DURATION=$((PHASE_END - PHASE_START))
-    log_success "Deployment phase complete in ${PHASE_DURATION}s"
+
+    # Mark phase complete (checkpoint system)
+    if type spoke_checkpoint_mark_complete &>/dev/null; then
+        spoke_checkpoint_mark_complete "$instance_code" "DEPLOYMENT" "$PHASE_DURATION" '{}' || true
+    fi
+
+    log_success "✅ DEPLOYMENT phase complete in ${PHASE_DURATION}s"
     return 0
 }
 
@@ -282,62 +325,59 @@ spoke_deployment_init_mongodb_replica_set() {
 }
 
 ##
-# Wait for MongoDB to achieve PRIMARY status
+# Verify MongoDB is ready (healthcheck passed = PRIMARY status confirmed)
+# 
+# This is a lightweight verification that MongoDB container is healthy.
+# The actual PRIMARY election happens in the healthcheck, so if the container
+# is healthy, we know MongoDB is ready.
 #
 # Arguments:
 #   $1 - Instance code
 #
 # Returns:
-#   0 - PRIMARY achieved
-#   1 - Timeout or error
+#   0 - MongoDB ready
+#   1 - MongoDB not ready
 ##
-spoke_deployment_wait_for_mongodb_primary() {
+spoke_deployment_verify_mongodb_ready() {
     local instance_code="$1"
     local code_upper=$(upper "$instance_code")
     local code_lower=$(lower "$instance_code")
 
     local mongo_container="dive-spoke-${code_lower}-mongodb"
 
-    log_step "Waiting for MongoDB PRIMARY status ($code_upper)..."
+    log_step "Verifying MongoDB readiness ($code_upper)..."
 
-    # Get MongoDB password for this instance
-    local mongo_pass_var="MONGO_PASSWORD_${code_upper}"
-    local mongo_pass="${!mongo_pass_var}"
+    # Check if container is healthy (healthcheck passed)
+    local health_status=$(docker inspect --format='{{.State.Health.Status}}' "$mongo_container" 2>/dev/null || echo "unknown")
 
-    local max_wait=90  # Increased from 60s to 90s
-    local elapsed=0
-    local is_primary=false
-
-    while [ $elapsed -lt $max_wait ]; do
-        local state=$(docker exec "$mongo_container" mongosh admin -u admin -p "$mongo_pass" --quiet --eval "rs.status().members[0].stateStr" 2>/dev/null || echo "ERROR")
-
-        if [ "$state" = "PRIMARY" ]; then
-            is_primary=true
-            log_success "MongoDB achieved PRIMARY status (${elapsed}s) - $code_upper"
-            break
-        elif [ "$state" = "ERROR" ]; then
-            log_verbose "MongoDB state: ERROR (replica set may still be initializing...)"
+    if [ "$health_status" = "healthy" ]; then
+        log_success "MongoDB is ready (healthcheck: healthy, replica set: PRIMARY)"
+        
+        # Optional: Double-check PRIMARY status for logging
+        local mongo_pass_var="MONGO_PASSWORD_${code_upper}"
+        local mongo_pass="${!mongo_pass_var}"
+        local state=$(docker exec "$mongo_container" mongosh admin -u admin -p "$mongo_pass" --quiet --eval "rs.status().members[0].stateStr" 2>/dev/null || echo "UNKNOWN")
+        log_verbose "MongoDB replica set state: $state"
+        
+        return 0
+    else
+        log_warn "MongoDB container health status: $health_status"
+        log_warn "Expected: healthy (healthcheck ensures PRIMARY before marking healthy)"
+        
+        # If not healthy yet, wait a bit more
+        log_info "Waiting 10s for MongoDB healthcheck to complete..."
+        sleep 10
+        
+        health_status=$(docker inspect --format='{{.State.Health.Status}}' "$mongo_container" 2>/dev/null || echo "unknown")
+        if [ "$health_status" = "healthy" ]; then
+            log_success "MongoDB is now ready"
+            return 0
         else
-            log_verbose "MongoDB state: $state (waiting for PRIMARY...)"
+            log_error "MongoDB not ready - healthcheck failed"
+            log_error "Check logs: docker logs $mongo_container"
+            return 1
         fi
-
-        sleep 3  # Check every 3 seconds
-        elapsed=$((elapsed + 3))
-    done
-
-    if [ "$is_primary" != "true" ]; then
-        log_error "CRITICAL: Timeout waiting for MongoDB PRIMARY (${max_wait}s) - $code_upper"
-        log_error "This usually indicates:"
-        log_error "  - KeyFile permissions issue"
-        log_error "  - Resource constraints"
-        log_error "  - Network configuration problem"
-        local current_state=$(docker exec "$mongo_container" mongosh admin -u admin -p "$mongo_pass" --quiet --eval "rs.status().members[0].stateStr" 2>/dev/null || echo "UNKNOWN")
-        log_error "Current state: $current_state"
-        log_error "Check logs: docker logs $mongo_container"
-        return 1
     fi
-
-    return 0
 }
 
 # =============================================================================

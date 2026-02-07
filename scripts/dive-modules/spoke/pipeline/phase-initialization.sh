@@ -22,6 +22,20 @@ if type spoke_phase_initialization &>/dev/null; then
 fi
 # Module loaded marker will be set at end after functions defined
 
+# Load validation functions for idempotent deployments
+if [ -z "${SPOKE_VALIDATION_LOADED:-}" ]; then
+    if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-validation.sh" ]; then
+        source "$(dirname "${BASH_SOURCE[0]}")/spoke-validation.sh"
+    fi
+fi
+
+# Load checkpoint system
+if [ -z "${SPOKE_CHECKPOINT_LOADED:-}" ]; then
+    if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-checkpoint.sh" ]; then
+        source "$(dirname "${BASH_SOURCE[0]}")/spoke-checkpoint.sh"
+    fi
+fi
+
 # =============================================================================
 # MAIN INITIALIZATION PHASE FUNCTION
 # =============================================================================
@@ -46,11 +60,32 @@ spoke_phase_initialization() {
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     # =============================================================================
+    # IDEMPOTENT DEPLOYMENT: Check if phase already complete
+    # =============================================================================
+    if type spoke_checkpoint_is_complete &>/dev/null; then
+        if spoke_checkpoint_is_complete "$instance_code" "INITIALIZATION"; then
+            # Validate state is actually good
+            if type spoke_validate_phase_state &>/dev/null; then
+                if spoke_validate_phase_state "$instance_code" "INITIALIZATION"; then
+                    log_info "✓ INITIALIZATION phase complete and validated, skipping"
+                    return 0
+                else
+                    log_warn "INITIALIZATION checkpoint exists but validation failed, re-running"
+                    spoke_checkpoint_clear_phase "$instance_code" "INITIALIZATION" 2>/dev/null || true
+                fi
+            else
+                log_info "✓ INITIALIZATION phase complete (validation not available)"
+                return 0
+            fi
+        fi
+    fi
+
+    # =============================================================================
     # PERFORMANCE TRACKING: Phase timing metrics
     # =============================================================================
     local PHASE_START=$(date +%s)
 
-    log_info "Initialization phase for $code_upper"
+    log_info "→ Executing INITIALIZATION phase for $code_upper"
 
     # Step 1: Check if already initialized (redeploy mode skips some steps)
     local init_marker="${spoke_dir}/.initialized"
@@ -120,7 +155,13 @@ spoke_phase_initialization() {
     # Calculate and log phase duration
     local PHASE_END=$(date +%s)
     local PHASE_DURATION=$((PHASE_END - PHASE_START))
-    log_success "Initialization phase complete in ${PHASE_DURATION}s"
+
+    # Mark phase complete (checkpoint system)
+    if type spoke_checkpoint_mark_complete &>/dev/null; then
+        spoke_checkpoint_mark_complete "$instance_code" "INITIALIZATION" "$PHASE_DURATION" '{}' || true
+    fi
+
+    log_success "✅ INITIALIZATION phase complete in ${PHASE_DURATION}s"
     return 0
 }
 
@@ -699,7 +740,7 @@ spoke_init_generate_compose() {
         fi
 
         local instance_name="$code_upper Instance"
-        local spoke_id=$(grep -o '"spokeId"[[:space:]]*:[[:space:]]*"[^"]*"' "$spoke_dir/config.json" 2>/dev/null | head -1 | cut -d'"' -f4 || echo "spoke-${code_lower}")
+        local spoke_id=$(json_get_field "$spoke_dir/config.json" "spokeId" "spoke-${code_lower}")
         local idp_hostname="dive-spoke-${code_lower}-keycloak"
         local api_url="https://localhost:${SPOKE_BACKEND_PORT:-4000}"
         local base_url="https://localhost:${SPOKE_FRONTEND_PORT:-3000}"
@@ -890,7 +931,7 @@ spoke_init_generate_mtls_certs() {
 
     # Generate unique spoke ID
     local spoke_id
-    spoke_id=$(grep -o '"spokeId"[[:space:]]*:[[:space:]]*"[^"]*"' "$spoke_dir/config.json" 2>/dev/null | head -1 | cut -d'"' -f4 || echo "spoke-${code_lower}")
+    spoke_id=$(json_get_field "$spoke_dir/config.json" "spokeId" "spoke-${code_lower}")
 
     log_verbose "Generating mTLS certificates"
 

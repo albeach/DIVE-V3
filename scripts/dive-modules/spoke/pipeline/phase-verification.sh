@@ -21,6 +21,20 @@ if type spoke_phase_verification &>/dev/null; then
 fi
 # Module loaded marker will be set at end after functions defined
 
+# Load validation functions for idempotent deployments
+if [ -z "${SPOKE_VALIDATION_LOADED:-}" ]; then
+    if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-validation.sh" ]; then
+        source "$(dirname "${BASH_SOURCE[0]}")/spoke-validation.sh"
+    fi
+fi
+
+# Load checkpoint system
+if [ -z "${SPOKE_CHECKPOINT_LOADED:-}" ]; then
+    if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-checkpoint.sh" ]; then
+        source "$(dirname "${BASH_SOURCE[0]}")/spoke-checkpoint.sh"
+    fi
+fi
+
 # =============================================================================
 # MAIN VERIFICATION PHASE FUNCTION
 # =============================================================================
@@ -44,7 +58,38 @@ spoke_phase_verification() {
     local code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
-    log_info "Verification phase for $code_upper"
+    # =============================================================================
+    # IDEMPOTENT DEPLOYMENT: Check if phase already complete
+    # =============================================================================
+    # NOTE: VERIFICATION phase should usually run again to confirm current state
+    # Only skip if explicitly marked complete AND recent (within last 5 minutes)
+    if type spoke_checkpoint_is_complete &>/dev/null; then
+        if spoke_checkpoint_is_complete "$instance_code" "VERIFICATION"; then
+            local checkpoint_age=$(spoke_checkpoint_get_timestamp "$instance_code" "VERIFICATION" 2>/dev/null || echo "")
+            if [ -n "$checkpoint_age" ]; then
+                local now=$(date +%s)
+                local checkpoint_ts=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$checkpoint_age" +%s 2>/dev/null || echo "0")
+                local age_seconds=$((now - checkpoint_ts))
+                
+                # Only skip if verification was recent (< 5 minutes)
+                if [ "$age_seconds" -lt 300 ]; then
+                    if type spoke_validate_phase_state &>/dev/null; then
+                        if spoke_validate_phase_state "$instance_code" "VERIFICATION"; then
+                            log_info "✓ VERIFICATION phase complete (${age_seconds}s ago) and validated, skipping"
+                            return 0
+                        fi
+                    else
+                        log_info "✓ VERIFICATION phase complete (${age_seconds}s ago), skipping"
+                        return 0
+                    fi
+                else
+                    log_info "VERIFICATION checkpoint is old (${age_seconds}s), re-running"
+                fi
+            fi
+        fi
+    fi
+
+    log_info "→ Executing VERIFICATION phase for $code_upper"
 
     local verification_passed=true
 
@@ -63,22 +108,27 @@ spoke_phase_verification() {
         log_warn "Keycloak health check failed"
     fi
 
-    # Step 4: Federation verification (deploy mode) - CRITICAL
+    # Step 4: Federation verification (deploy mode) - BLOCKING (2026-02-06 FIX)
+    # BEST PRACTICE: Wait for realistic stabilization time, then verify
+    # Either PASS (federation works) or FAIL (actionable remediation)
+    # NO false positive warnings like "this is expected"
     if [ "$pipeline_mode" = "deploy" ]; then
         if ! spoke_verify_federation "$instance_code"; then
-            log_error "Federation verification failed - this is critical for DIVE V3"
+            log_error "Federation verification failed - deployment incomplete"
             verification_passed=false
+            # FAIL FAST - no point continuing if federation is broken
         fi
     fi
 
-    # Step 4.5: OPAL data sync verification (deploy mode) - CRITICAL
-    # Verify that Hub OPAL has synced federation data to OPA
-    # Without this, federation is configured but OPA doesn't know about it (403 errors)
-    if [ "$pipeline_mode" = "deploy" ]; then
+    # Step 4.5: OPAL data sync verification (deploy mode) - BLOCKING (2026-02-06 FIX)
+    # BEST PRACTICE: Wait for OPAL CDC cycle, then verify
+    # Either PASS (data synced) or FAIL (actionable remediation)
+    # NO false positive warnings
+    if [ "$pipeline_mode" = "deploy" ] && [ "$verification_passed" = "true" ]; then
         if ! spoke_verify_opal_sync "$instance_code"; then
-            log_warn "OPAL sync verification failed - federation may not work until sync completes"
-            log_warn "Manual fix: curl -X POST https://localhost:4000/api/opal/cdc/force-sync"
-            # Non-blocking: OPAL CDC will eventually sync, so we don't fail deployment
+            log_error "OPAL sync verification failed - federation may not work"
+            verification_passed=false
+            # Continue but mark as failed - OPAL sync is critical
         fi
     fi
 
@@ -96,7 +146,12 @@ spoke_phase_verification() {
     fi
 
     if [ "$verification_passed" = true ]; then
-        log_success "Verification phase complete - all checks passed"
+        # Mark phase complete (checkpoint system)
+        if type spoke_checkpoint_mark_complete &>/dev/null; then
+            spoke_checkpoint_mark_complete "$instance_code" "VERIFICATION" 0 '{}' || true
+        fi
+
+        log_success "✅ VERIFICATION phase complete - all checks passed"
         return 0
     else
         log_error "Verification failed - critical issues detected"
@@ -257,13 +312,35 @@ spoke_verify_database_connectivity() {
     # Redis
     local redis_container="dive-spoke-${code_lower}-redis"
     if docker ps --format '{{.Names}}' | grep -q "^${redis_container}$"; then
+        # Get Redis password from environment (same source docker-compose uses)
+        local redis_password_var="REDIS_PASSWORD_${code_upper}"
+        local redis_password="${!redis_password_var}"
+        
+        # If not in environment, try .env file
+        if [ -z "$redis_password" ]; then
+            redis_password=$(grep "^REDIS_PASSWORD_${code_upper}=" "${spoke_dir}/.env" 2>/dev/null | cut -d'=' -f2- | tr -d '"' || echo "")
+        fi
+        
         local redis_test
-        redis_test=$(docker exec "$redis_container" redis-cli ping 2>&1 || echo "failed")
+        if [ -n "$redis_password" ]; then
+            # Use password authentication
+            redis_test=$(docker exec "$redis_container" redis-cli -a "$redis_password" --no-auth-warning ping 2>&1 || echo "failed")
+        else
+            # Try without auth (for spokes without Redis password configured)
+            log_verbose "Redis password not found - trying without auth"
+            redis_test=$(docker exec "$redis_container" redis-cli ping 2>&1 || echo "failed")
+        fi
 
         if echo "$redis_test" | grep -qi "pong"; then
             echo "  ✅ Redis: responding to ping"
         else
             echo "  ⚠️  Redis: ping failed"
+            log_verbose "Redis test result: $redis_test"
+            
+            # If auth error, provide helpful message
+            if echo "$redis_test" | grep -qi "NOAUTH"; then
+                log_verbose "Redis requires authentication - ensure REDIS_PASSWORD_${code_upper} is set"
+            fi
         fi
     else
         echo "  ⚠️  Redis: container not running"
@@ -386,22 +463,45 @@ spoke_verify_federation() {
     local code_upper=$(upper "$instance_code")
     local code_lower=$(lower "$instance_code")
 
-    log_step "Verifying federation configuration with exponential backoff..."
+    log_step "Verifying federation configuration..."
 
-    # Retry configuration
-    local max_retries=4
+    # BEST PRACTICE FIX (2026-02-06): Wait for realistic stabilization time BEFORE checking
+    # Eliminates false positive warnings from checking too early
+    #
+    # Keycloak OIDC discovery cache refresh: 10-30 seconds
+    # By waiting upfront, we avoid multiple retries and confusing "expected" warnings
+    local stabilization_time=35
+    
+    log_info "⏳ Waiting ${stabilization_time}s for Keycloak OIDC discovery cache refresh..."
+    log_verbose "   This allows both Hub and Spoke to discover each other's IdPs"
+    
+    # Progress indicator (better UX than silent wait)
+    local progress_interval=5
+    for ((i=progress_interval; i<=stabilization_time; i+=progress_interval)); do
+        log_verbose "   ${i}/${stabilization_time}s elapsed..."
+        sleep $progress_interval
+    done
+    
+    # Sleep remaining time if not divisible by progress_interval
+    local remaining=$((stabilization_time % progress_interval))
+    if [ $remaining -gt 0 ]; then
+        sleep $remaining
+    fi
+
+    # NOW check with focused retries (only 5 needed after stabilization)
+    local max_retries=5
     local base_delay=3
     local verification_passed=false
     local fed_status=""
 
     for ((attempt=1; attempt<=max_retries; attempt++)); do
-        local delay=$((base_delay * (2 ** (attempt - 1))))  # 3, 6, 12, 24 seconds
-
-        log_verbose "Federation verification attempt $attempt/$max_retries..."
+        log_verbose "Verification attempt $attempt/$max_retries..."
 
         # Use spoke-federation.sh verification if available
         if type spoke_federation_verify &>/dev/null; then
-            fed_status=$(spoke_federation_verify "$instance_code" 2>/dev/null)
+            # CRITICAL FIX (2026-02-06): Extract only JSON from output (filter out log messages)
+            # The function outputs log messages mixed with JSON, so we extract the JSON block
+            fed_status=$(spoke_federation_verify "$instance_code" 2>/dev/null | grep -A999 '^{' | grep -B999 '^}' | head -1)
 
             # Check for successful bidirectional federation
             if echo "$fed_status" | grep -q '"bidirectional":true'; then
@@ -417,46 +517,52 @@ spoke_verify_federation() {
 
         # Wait before retry (except on last attempt)
         if [ $attempt -lt $max_retries ] && [ "$verification_passed" != "true" ]; then
-            log_verbose "Waiting ${delay}s for Keycloak eventual consistency (attempt $attempt)..."
-            sleep $delay
+            log_verbose "Retrying in ${base_delay}s..."
+            sleep $base_delay
         fi
     done
 
     # Report results
     if [ "$verification_passed" = "true" ]; then
-        echo "  ✅ Bidirectional federation active (verified after $attempt attempts)"
-        echo "$fed_status" | grep -v '^{' | head -3 || true
+        log_success "✅ Federation verified - bidirectional IdP configuration active"
+        if [ -n "$fed_status" ] && command -v jq &>/dev/null; then
+            if echo "$fed_status" | jq -e . &>/dev/null; then
+                local spoke_to_hub hub_to_spoke
+                spoke_to_hub=$(echo "$fed_status" | jq -r '.spoke_to_hub // false' 2>/dev/null)
+                hub_to_spoke=$(echo "$fed_status" | jq -r '.hub_to_spoke // false' 2>/dev/null)
+                echo "     • Spoke → Hub (usa-idp in $code_upper): ✓"
+                echo "     • Hub → Spoke (${code_lower}-idp in USA): ✓"
+            fi
+        fi
         return 0
     else
-        # Federation incomplete - show detailed status
-        echo "  ⚠️  Federation verification incomplete after $max_retries attempts"
-        echo "  ℹ️  This is expected for eventual consistency - typically resolves within 60 seconds"
+        # Federation FAILED after reasonable wait - this is a REAL problem
+        log_error "❌ Federation verification failed"
+        log_error "   Waited ${stabilization_time}s + $((max_retries * base_delay))s retries = $((stabilization_time + max_retries * base_delay))s total"
+        log_error "   This indicates a configuration problem (not just timing)"
+        echo ""
+        
+        # Show detailed status if available
+        if [ -n "$fed_status" ] && command -v jq &>/dev/null; then
+            if echo "$fed_status" | jq -e . &>/dev/null; then
+                local spoke_to_hub hub_to_spoke
+                spoke_to_hub=$(echo "$fed_status" | jq -r '.spoke_to_hub // false' 2>/dev/null)
+                hub_to_spoke=$(echo "$fed_status" | jq -r '.hub_to_spoke // false' 2>/dev/null)
 
-        if [ -n "$fed_status" ]; then
-            # Parse and display status using jq if available
-            if command -v jq &>/dev/null; then
-                # Validate JSON before parsing (prevent jq parse errors)
-                if echo "$fed_status" | jq -e . &>/dev/null; then
-                    local spoke_to_hub hub_to_spoke
-                    spoke_to_hub=$(echo "$fed_status" | jq -r '.spoke_to_hub // false' 2>/dev/null)
-                    hub_to_spoke=$(echo "$fed_status" | jq -r '.hub_to_spoke // false' 2>/dev/null)
-
-                    echo "      $( [ "$spoke_to_hub" = "true" ] && echo "✅" || echo "❌" ) Spoke → Hub (usa-idp in spoke)"
-                    echo "      $( [ "$hub_to_spoke" = "true" ] && echo "✅" || echo "❌" ) Hub → Spoke (${code_lower}-idp in Hub)"
-                else
-                    log_verbose "Federation status is not valid JSON - skipping detailed display"
-                fi
+                log_error "   Federation Status:"
+                echo "      $( [ "$spoke_to_hub" = "true" ] && echo "✅" || echo "❌" ) Spoke → Hub (usa-idp in $code_upper)"
+                echo "      $( [ "$hub_to_spoke" = "true" ] && echo "✅" || echo "❌" ) Hub → Spoke (${code_lower}-idp in USA)"
             fi
         fi
 
         echo ""
-        echo "  Manual verification: ./dive federation verify $code_upper"
-        echo "  Manual fix: ./dive federation link $code_upper"
+        log_error "   Troubleshooting:"
+        log_error "     1. Check federation status: ./dive federation status $code_upper"
+        log_error "     2. Check Keycloak logs: docker logs dive-spoke-${code_lower}-keycloak"
+        log_error "     3. Retry federation link: ./dive federation link $code_upper"
+        echo ""
 
-        # Fallback: Basic IdP check for debugging
-        _spoke_verify_federation_fallback "$instance_code"
-
-        return 0  # Non-blocking - federation is often eventually consistent
+        return 1  # HARD FAIL - federation is critical
     fi
 }
 
@@ -485,8 +591,26 @@ spoke_verify_opal_sync() {
 
     log_step "Verifying OPAL data sync to Hub OPA..."
 
-    # Configuration
-    local max_retries=6
+    # BEST PRACTICE FIX (2026-02-06): Wait for realistic stabilization time BEFORE checking
+    # Eliminates false positive warnings from checking too early
+    #
+    # OPAL CDC polling: 5 seconds
+    # Data processing + MongoDB → OPAL → OPA: 5-15 seconds
+    # By waiting upfront, we avoid confusing "non-fatal" warnings
+    local stabilization_time=25
+    
+    log_info "⏳ Waiting ${stabilization_time}s for OPAL CDC to detect and process federation changes..."
+    log_verbose "   OPAL client polls MongoDB every 5s and syncs to OPA"
+    
+    # Progress indicator
+    local progress_interval=5
+    for ((i=progress_interval; i<=stabilization_time; i+=progress_interval)); do
+        log_verbose "   ${i}/${stabilization_time}s elapsed..."
+        sleep $progress_interval
+    done
+
+    # NOW check with focused retries (only 8 needed after stabilization)
+    local max_retries=8
     local retry_delay=5
     local verification_passed=false
     local hub_api="${HUB_URL:-https://localhost:4000}/api"
@@ -498,7 +622,6 @@ spoke_verify_opal_sync() {
 
         # Check 1: Verify spoke's issuer is in Hub OPA's trusted_issuers
         local opa_issuers
-        # FIXED: Use /trusted-issuers not /data/trusted_issuers
         opa_issuers=$(curl -sk "${hub_api}/opal/trusted-issuers" 2>/dev/null)
 
         local issuer_found=false
@@ -509,7 +632,6 @@ spoke_verify_opal_sync() {
 
         # Check 2: Verify spoke is in Hub OPA's federation_matrix
         local fed_matrix
-        # FIXED: Use /federation-matrix not /data/federation_matrix
         fed_matrix=$(curl -sk "${hub_api}/opal/federation-matrix" 2>/dev/null)
 
         local matrix_found=false
@@ -526,25 +648,33 @@ spoke_verify_opal_sync() {
 
         # Wait before retry (except on last attempt)
         if [ $attempt -lt $max_retries ]; then
-            log_verbose "Waiting ${retry_delay}s for OPAL sync (attempt $attempt)..."
+            log_verbose "Retrying in ${retry_delay}s..."
             sleep $retry_delay
         fi
     done
 
     # Report results
     if [ "$verification_passed" = "true" ]; then
-        echo "  ✅ OPAL data synced to Hub OPA (verified after $attempt attempts)"
-        echo "     • Spoke issuer in trusted_issuers ✓"
-        echo "     • Spoke in federation_matrix ✓"
+        log_success "✅ OPAL data synced to Hub OPA"
+        echo "     • Spoke issuer in trusted_issuers: ✓"
+        echo "     • Spoke in federation_matrix: ✓"
+        echo "     • Cross-instance SSO ready: ✓"
         return 0
     else
-        echo "  ⚠️  OPAL sync verification incomplete after $max_retries attempts (~$((max_retries * retry_delay))s)"
-        echo "  ℹ️  This is non-fatal - OPAL CDC will sync when it detects MongoDB changes"
+        # OPAL sync FAILED after reasonable wait - this is a REAL problem
+        log_error "❌ OPAL sync verification failed"
+        log_error "   Waited ${stabilization_time}s + $((max_retries * retry_delay))s retries = $((stabilization_time + max_retries * retry_delay))s total"
+        log_error "   Federation will NOT work until OPAL syncs"
         echo ""
-        echo "  Manual fix if SSO fails:"
-        echo "    curl -X POST ${hub_api}/opal/cdc/force-sync"
+        log_error "   Immediate fix:"
+        log_error "     curl -X POST ${hub_api}/opal/cdc/force-sync"
         echo ""
-        return 1  # Non-blocking - OPAL CDC will eventually sync
+        log_error "   If force-sync fails, check OPAL client health:"
+        log_error "     docker logs dive-hub-opal-client --tail 100"
+        log_error "     curl -sk ${hub_api}/opal/health"
+        echo ""
+        
+        return 1  # HARD FAIL - OPAL sync is critical for federation
     fi
 }
 
