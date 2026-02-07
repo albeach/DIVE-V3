@@ -269,3 +269,10 @@ This helps users understand that either attribute name is acceptable.
 ✅ **Best practice approach** using helper functions for attribute fallback  
 
 The simplified policy is now **ready for use** with systems using alternative attribute naming conventions and supports all common COI patterns including special access programs.
+
+
+
+
+
+
+

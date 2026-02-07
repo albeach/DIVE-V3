@@ -30,8 +30,6 @@ import data.dive.authorization
 test_allow_authenticated_user if {
     authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -51,8 +49,6 @@ test_allow_authenticated_user if {
 test_deny_unauthenticated_user if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": false,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -90,8 +86,6 @@ test_deny_missing_authentication_field if {
 test_deny_missing_uniqueID if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "clearance": "SECRET",
             "countryOfAffiliation": "USA"
@@ -108,8 +102,6 @@ test_deny_missing_uniqueID if {
 test_deny_empty_uniqueID if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "",
             "clearance": "SECRET",
@@ -127,8 +119,6 @@ test_deny_empty_uniqueID if {
 test_deny_missing_clearance if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "countryOfAffiliation": "USA"
@@ -145,8 +135,6 @@ test_deny_missing_clearance if {
 test_deny_empty_clearance if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "",
@@ -164,8 +152,6 @@ test_deny_empty_clearance if {
 test_deny_missing_country if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET"
@@ -182,8 +168,6 @@ test_deny_missing_country if {
 test_deny_empty_country if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -201,8 +185,6 @@ test_deny_empty_country if {
 test_deny_invalid_country_code if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -220,8 +202,6 @@ test_deny_invalid_country_code if {
 test_deny_missing_resource_classification if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -238,8 +218,6 @@ test_deny_missing_resource_classification if {
 test_deny_missing_releasabilityTo if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -260,8 +238,6 @@ test_deny_missing_releasabilityTo if {
 test_allow_equal_clearance if {
     authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -279,8 +255,6 @@ test_allow_equal_clearance if {
 test_allow_higher_clearance if {
     authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-4",
             "clearance": "TOP_SECRET",
@@ -298,8 +272,6 @@ test_allow_higher_clearance if {
 test_deny_insufficient_clearance if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-2",
             "clearance": "CONFIDENTIAL",
@@ -317,8 +289,6 @@ test_deny_insufficient_clearance if {
 test_allow_unclassified_access if {
     authorization.allow with input as {
         "subject": {
-            "mfaVerified": false,
-            "aal": 1,
             "authenticated": true,
             "uniqueID": "testuser-usa-1",
             "clearance": "UNCLASSIFIED",
@@ -336,8 +306,6 @@ test_allow_unclassified_access if {
 test_deny_invalid_clearance_level if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SUPER_SECRET",  # Invalid clearance
@@ -356,8 +324,6 @@ test_deny_invalid_clearance_level if {
 test_deny_unclassified_accessing_restricted if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": false,
-            "aal": 1,
             "authenticated": true,
             "uniqueID": "testuser-usa-1",
             "clearance": "UNCLASSIFIED",
@@ -379,8 +345,6 @@ test_deny_unclassified_accessing_restricted if {
 test_allow_country_in_releasability_list if {
     authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-fra-3",
             "clearance": "SECRET",
@@ -398,8 +362,6 @@ test_allow_country_in_releasability_list if {
 test_deny_country_not_in_releasability_list if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-deu-3",
             "clearance": "SECRET",
@@ -417,8 +379,6 @@ test_deny_country_not_in_releasability_list if {
 test_deny_empty_releasability_list if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -436,8 +396,6 @@ test_deny_empty_releasability_list if {
 test_allow_fvey_country if {
     authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-gbr-3",
             "clearance": "SECRET",
@@ -460,8 +418,6 @@ test_allow_fvey_country if {
 test_allow_user_without_coi_accessing_coi_resource if {
     authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -481,8 +437,6 @@ test_allow_user_without_coi_accessing_coi_resource if {
 test_allow_matching_coi_all_operator if {
     authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -503,8 +457,6 @@ test_allow_matching_coi_all_operator if {
 test_deny_missing_coi_all_operator if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -525,8 +477,6 @@ test_deny_missing_coi_all_operator if {
 test_allow_partial_coi_any_operator if {
     authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -547,8 +497,6 @@ test_allow_partial_coi_any_operator if {
 test_deny_no_matching_coi_any_operator if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -570,8 +518,6 @@ test_deny_no_matching_coi_any_operator if {
 test_allow_us_only_coi if {
     authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -591,8 +537,6 @@ test_allow_us_only_coi if {
 test_deny_us_only_with_foreign_sharing_coi if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -616,8 +560,6 @@ test_deny_us_only_with_foreign_sharing_coi if {
 test_deny_us_only_combined_with_foreign_coi if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -637,8 +579,6 @@ test_deny_us_only_combined_with_foreign_coi if {
 test_deny_eu_restricted_combined_with_nato_cosmic if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-deu-3",
             "clearance": "SECRET",
@@ -658,8 +598,6 @@ test_deny_eu_restricted_combined_with_nato_cosmic if {
 test_deny_noforn_without_us_only_coi if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -680,8 +618,6 @@ test_deny_noforn_without_us_only_coi if {
 test_allow_valid_noforn_us_only if {
     authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -706,8 +642,6 @@ test_allow_valid_noforn_us_only if {
 test_allow_resource_past_embargo if {
     authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -728,8 +662,6 @@ test_allow_resource_past_embargo if {
 test_deny_resource_under_embargo if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -750,8 +682,6 @@ test_deny_resource_under_embargo if {
 test_allow_within_clock_skew_tolerance if {
     authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -776,8 +706,6 @@ test_allow_within_clock_skew_tolerance if {
 test_allow_ztdf_valid_integrity if {
     authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -800,8 +728,6 @@ test_allow_ztdf_valid_integrity if {
 test_deny_ztdf_failed_integrity if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -824,8 +750,6 @@ test_deny_ztdf_failed_integrity if {
 test_deny_ztdf_missing_policy_hash if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -848,8 +772,6 @@ test_deny_ztdf_missing_policy_hash if {
 test_deny_ztdf_missing_payload_hash if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -876,14 +798,14 @@ test_deny_ztdf_missing_payload_hash if {
 test_allow_upload_releasable_to_uploader if {
     authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA"
         },
-        "action": {"type": "upload"},
+        "action": {
+            "operation": "upload"
+        },
         "resource": {
             "resourceId": "doc-001",
             "classification": "SECRET",
@@ -896,14 +818,14 @@ test_allow_upload_releasable_to_uploader if {
 test_deny_upload_not_releasable_to_uploader if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
             "countryOfAffiliation": "USA"
         },
-        "action": {"type": "upload"},
+        "action": {
+            "operation": "upload"
+        },
         "resource": {
             "resourceId": "doc-001",
             "classification": "SECRET",
@@ -920,8 +842,6 @@ test_deny_upload_not_releasable_to_uploader if {
 test_allow_unclassified_no_mfa if {
     authorization.allow with input as {
         "subject": {
-            "mfaVerified": false,
-            "aal": 1,
             "authenticated": true,
             "uniqueID": "testuser-usa-1",
             "clearance": "UNCLASSIFIED",
@@ -942,8 +862,6 @@ test_allow_unclassified_no_mfa if {
 test_allow_classified_with_aal2 if {
     authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -964,8 +882,6 @@ test_allow_classified_with_aal2 if {
 test_allow_classified_with_silver_acr if {
     authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -986,8 +902,6 @@ test_allow_classified_with_silver_acr if {
 test_deny_classified_without_mfa_factors if {
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -1012,8 +926,6 @@ test_deny_classified_without_mfa_factors if {
 test_kas_obligation_for_encrypted_resource if {
     count(authorization.obligations) > 0 with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -1032,8 +944,6 @@ test_kas_obligation_for_encrypted_resource if {
 test_no_kas_obligation_for_unencrypted_resource if {
     count(authorization.obligations) == 0 with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -1052,8 +962,6 @@ test_no_kas_obligation_for_unencrypted_resource if {
 test_kas_obligation_type if {
     oblig := authorization.obligations[_] with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -1079,8 +987,6 @@ test_fvey_coalition_access if {
     # GBR user accessing FVEY resource
     authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-gbr-3",
             "clearance": "SECRET",
@@ -1101,8 +1007,6 @@ test_nato_coalition_access if {
     # DEU user accessing NATO resource
     authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-deu-3",
             "clearance": "SECRET",
@@ -1123,8 +1027,6 @@ test_cross_coalition_denied if {
     # USA user trying to access EU-RESTRICTED without membership
     not authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -1144,8 +1046,6 @@ test_cross_coalition_denied if {
 test_decision_structure if {
     d := authorization.decision with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -1165,8 +1065,6 @@ test_decision_structure if {
 test_evaluation_details_present if {
     details := authorization.evaluation_details with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -1182,3 +1080,5 @@ test_evaluation_details_present if {
     details.checks.authenticated == true
     details.checks.clearance_sufficient == true
 }
+
+

@@ -1386,7 +1386,7 @@ _spoke_deploy_legacy() {
     local config_file="$spoke_dir/config.json"
     local current_status=""
     if [ -f "$config_file" ]; then
-        current_status=$(grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" | head -1 | cut -d'"' -f4 || echo "")
+        current_status=$(json_get_field "$config_file" "status" "")
     fi
 
     case "$current_status" in

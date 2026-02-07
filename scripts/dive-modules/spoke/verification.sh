@@ -53,8 +53,8 @@ spoke_verify() {
     local spoke_token=""
 
     if [ -f "$config_file" ]; then
-        hub_url=$(grep -o '"hubUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
-        spoke_id=$(grep -o '"spokeId"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
+        hub_url=$(json_get_field "$config_file" "hubUrl" "")
+        spoke_id=$(json_get_field "$config_file" "spokeId" "")
     fi
     # Default hub URL based on environment
     if [ "$ENVIRONMENT" = "local" ] || [ "$ENVIRONMENT" = "dev" ]; then

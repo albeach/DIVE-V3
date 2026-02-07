@@ -788,3 +788,4 @@ The simplified policy **omits** the following features from the full DIVE V3 pol
 - **External partner integration** with reduced complexity
 
 For production use, deploy the **full policy** (`fuel_inventory_abac_policy.rego`).
+

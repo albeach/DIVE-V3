@@ -17,17 +17,16 @@ import rego.v1
 # are running the same policy version.
 
 policy_version := {
-	"version": "2.2.0",
+	"version": "2.1.0",
 	"bundleId": "dive-v3-global-policies",
-	"timestamp": "2026-01-29T00:00:00Z",
-	"gitCommit": "federation-constraints-v1",
+	"timestamp": "2025-11-28T00:00:00Z",
+	"gitCommit": "phase4-option-a",
 	"modules": [
 		"dive.authorization",
 		"dive.federation",
 		"dive.object",
 		"dive.admin_authorization",
 		"dive.policy_version",
-		"dive.tenant.federation_constraints",
 	],
 	"compliance": [
 		"ACP-240",
@@ -41,22 +40,13 @@ policy_version := {
 		"policyDriftMonitor": true,
 		"originRealmTracking": true,
 		"spAgreementEnforcement": true,
-		"tenantFederationConstraints": true,
-		"bilateralEffectiveMin": true,
-		"hubSpokeProtection": true,
 	},
 	"compatibleWith": [
+		"2.0.0",
+		"2.0.5",
 		"2.1.0",
-		"2.2.0",
 	],
-	"breakingChanges": [
-		{
-			"version": "2.2.0",
-			"date": "2026-01-29",
-			"change": "Added federation_constraints policy package for tenant-controlled bilateral constraints",
-			"impact": "New authorization checks in authz entrypoint; backward compatible",
-		},
-	],
+	"breakingChanges": [],
 }
 
 # =============================================================================
@@ -146,4 +136,15 @@ compare_nums(a, b) := 0 if {
 compare_nums(a, b) := 1 if {
 	a > b
 }
+
+
+
+
+
+
+
+
+
+
+
 

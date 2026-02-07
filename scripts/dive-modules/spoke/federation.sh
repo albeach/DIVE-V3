@@ -49,9 +49,8 @@ spoke_heartbeat() {
         return 1
     fi
 
-    local spoke_id=$(grep -o '"spokeId"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
-    local hub_url=$(grep -o '"hubUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
-    hub_url="${hub_url:-https://hub.dive25.com}"
+    local spoke_id=$(json_get_field "$config_file" "spokeId" "")
+    local hub_url=$(json_get_field "$config_file" "hubUrl" "https://hub.dive25.com")
 
     log_step "Sending heartbeat to Hub: $hub_url"
 
@@ -86,9 +85,9 @@ spoke_heartbeat() {
             \"opalClientConnected\": $opal_healthy
         }" 2>&1)
 
-    if echo "$response" | grep -q '"success"[[:space:]]*:[[:space:]]*true'; then
+    if echo "$response" | grep -q '"success"[ \t]*:[ \t]*true'; then
         log_success "Heartbeat sent successfully"
-        local sync_status=$(echo "$response" | grep -o '"syncStatus"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+        local sync_status=$(echo "$response" | jq -r '.syncStatus // "unknown"' 2>/dev/null || echo "unknown")
         echo "  Sync Status: $sync_status"
     else
         log_error "Heartbeat failed"

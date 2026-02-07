@@ -538,6 +538,46 @@ spoke_secrets_sync_to_env() {
     fi
 
     # ==========================================================================
+    # CORS CONFIGURATION (Computed from instance config.json)
+    # ==========================================================================
+    # BEST PRACTICE FIX (2026-02-06): Dynamically compute CORS origins from instance endpoints
+    # No hardcoded URLs - derives from config.json to ensure consistency
+    # ==========================================================================
+    if ! grep -q "^ENABLE_FEDERATION_CORS=" "$env_file" 2>/dev/null; then
+        echo "" >> "$env_file"
+        echo "# CORS Configuration (Federation Mode)" >> "$env_file"
+        echo "# Allows cross-origin requests from all federated instances" >> "$env_file"
+        echo "# SECURITY: JWT authentication enforces security, not CORS" >> "$env_file"
+        echo "ENABLE_FEDERATION_CORS=true" >> "$env_file"
+        log_verbose "Enabled federation CORS mode"
+    fi
+
+    # Compute CORS_ALLOWED_ORIGINS from config.json (dynamic, not hardcoded)
+    if ! grep -q "^CORS_ALLOWED_ORIGINS=" "$env_file" 2>/dev/null; then
+        local config_file="$spoke_dir/config.json"
+        if [ -f "$config_file" ]; then
+            # Extract all endpoint URLs from config.json
+            local base_url=$(jq -r '.endpoints.baseUrl // "https://localhost:3000"' "$config_file")
+            local api_url=$(jq -r '.endpoints.apiUrl // "https://localhost:4000"' "$config_file")
+            local idp_url=$(jq -r '.endpoints.idpUrl // "https://localhost:8443"' "$config_file")
+            local idp_public_url=$(jq -r '.endpoints.idpPublicUrl // ""' "$config_file")
+
+            # Build CORS origins list (unique values only)
+            local cors_origins="$base_url,$api_url,$idp_url"
+            [ -n "$idp_public_url" ] && cors_origins="$cors_origins,$idp_public_url"
+
+            # Add Hub URLs for federation
+            cors_origins="$cors_origins,https://localhost:3000,https://localhost:4000,https://localhost:8443"
+
+            echo "# Computed from config.json endpoints (auto-generated)" >> "$env_file"
+            echo "CORS_ALLOWED_ORIGINS=${cors_origins}" >> "$env_file"
+            log_verbose "Generated CORS_ALLOWED_ORIGINS from config.json endpoints"
+        else
+            log_verbose "config.json not found - CORS_ALLOWED_ORIGINS not generated"
+        fi
+    fi
+
+    # ==========================================================================
     # DATABASE_URL (Required for Frontend PostgreSQL audit persistence)
     # ==========================================================================
     # CLARIFICATION (2026-01-28): This is the PostgreSQL database connection string

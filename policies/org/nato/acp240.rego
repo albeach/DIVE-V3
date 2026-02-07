@@ -21,7 +21,6 @@ import rego.v1
 
 import data.dive.base.clearance
 import data.dive.base.coi
-import data.dive.base.coi.hierarchy
 import data.dive.base.country
 import data.dive.base.time
 import data.dive.org.nato.classification
@@ -191,79 +190,37 @@ check_country_releasable if {
 } else := false
 
 # ============================================
-# ACP-240 Section 4.5: COI Check (with Hierarchy)
+# ACP-240 Section 4.5: COI (Community of Interest) Check
 # ============================================
 # Validates COI membership requirements.
-# UPDATED (2026-01-25): Now uses hierarchical COI logic where broader
-# COI memberships (NATO, FVEY) grant access to narrower bilateral agreements.
-#
-# Example: User with NATO tag can access FRA-US resources because
-# both France and USA are NATO members, making FRA-US a logical subset.
-#
-# Uses else-chain to return first matching error (avoids OPA conflict).
 
 # Uses else-chain to return first matching error (avoids OPA conflict).
 is_coi_violation := msg if {
-	# US-ONLY requires exact match (no hierarchy applies)
+	# US-ONLY requires exact match
 	"US-ONLY" in input.resource.COI
 	user_coi := object.get(input.subject, "acpCOI", [])
 	not user_coi == ["US-ONLY"]
 	msg := sprintf("Resource requires US-ONLY COI. User has COI: %v", [user_coi])
 } else := msg if {
-	# ALL operator with hierarchical access check
 	count(input.resource.COI) > 0
 	user_coi := object.get(input.subject, "acpCOI", [])
 	count(user_coi) > 0 # User has COI tags
 	operator := object.get(input.resource, "coiOperator", "ALL")
 	operator == "ALL"
-	not hierarchy.has_hierarchical_access_all(user_coi, input.resource.COI)
-
-	# Generate detailed error with hierarchy explanation
-	effective_cois := hierarchy.expand_user_cois(user_coi)
-	hierarchy_note := hierarchy.hierarchy_explanation(user_coi, input.resource.COI)
-
-	# Build message with hierarchy note if available
-	hierarchy_note != ""
-	msg := sprintf("COI operator=ALL: user COI %v (effective: %v) does not satisfy resource COI %v [hierarchy: %s]", [
+	not coi.has_access_all(user_coi, input.resource.COI)
+	msg := sprintf("COI operator=ALL: user COI %v does not satisfy resource COI %v", [
 		user_coi,
-		effective_cois,
-		input.resource.COI,
-		hierarchy_note,
-	])
-} else := msg if {
-	# ALL operator with hierarchical access check (no hierarchy note)
-	count(input.resource.COI) > 0
-	user_coi := object.get(input.subject, "acpCOI", [])
-	count(user_coi) > 0 # User has COI tags
-	operator := object.get(input.resource, "coiOperator", "ALL")
-	operator == "ALL"
-	not hierarchy.has_hierarchical_access_all(user_coi, input.resource.COI)
-
-	# Generate basic error (no hierarchy implications)
-	effective_cois := hierarchy.expand_user_cois(user_coi)
-	hierarchy_note := hierarchy.hierarchy_explanation(user_coi, input.resource.COI)
-	hierarchy_note == ""
-
-	msg := sprintf("COI operator=ALL: user COI %v (effective: %v) does not satisfy resource COI %v", [
-		user_coi,
-		effective_cois,
 		input.resource.COI,
 	])
 } else := msg if {
-	# ANY operator with hierarchical access check
 	count(input.resource.COI) > 0
 	user_coi := object.get(input.subject, "acpCOI", [])
 	count(user_coi) > 0
 	operator := object.get(input.resource, "coiOperator", "ALL")
 	operator == "ANY"
-	not hierarchy.has_hierarchical_access_any(user_coi, input.resource.COI)
-
-	# Generate detailed error with hierarchy explanation
-	effective_cois := hierarchy.expand_user_cois(user_coi)
-
-	msg := sprintf("COI operator=ANY: user COI %v (effective: %v) does not intersect resource COI %v", [
+	not coi.has_access_any(user_coi, input.resource.COI)
+	msg := sprintf("COI operator=ANY: user COI %v does not intersect resource COI %v", [
 		user_coi,
-		effective_cois,
 		input.resource.COI,
 	])
 }
@@ -338,14 +295,6 @@ parse_amr(amr_input) := parsed if {
 
 is_authentication_strength_insufficient := msg if {
 	input.resource.classification != "UNCLASSIFIED"
-
-	# Get required AAL for classification (static mapping)
-	# AAL1 = single-factor, AAL2 = 2+ factors, AAL3 = crypto + MFA
-	required_aal := get_required_aal_for_classification(input.resource.classification)
-
-	# Only enforce if required_aal > 1
-	required_aal > 1
-
 	input.context.acr
 	acr_str := sprintf("%v", [input.context.acr])
 	acr_lower := lower(acr_str)
@@ -359,36 +308,16 @@ is_authentication_strength_insufficient := msg if {
 	acr_str != "3"
 	# Fallback: Check AMR for 2+ factors
 	amr_factors := parse_amr(input.context.amr)
-	count(amr_factors) < required_aal
-	msg := sprintf("Classification %v requires AAL%v, but ACR='%v' and only %v factor(s)", [
+	count(amr_factors) < 2
+	msg := sprintf("Classification %v requires AAL2, but ACR='%v' and only %v factor(s)", [
 		input.resource.classification,
-		required_aal,
 		acr_str,
 		count(amr_factors),
 	])
 }
 
-# Get required AAL for classification
-# AAL1 = single-factor (UNCLASSIFIED, RESTRICTED)
-# AAL2 = 2+ factors (CONFIDENTIAL, SECRET, CONFIDENTIEL DÉFENSE, etc.)
-# AAL3 = crypto + MFA (TOP SECRET, TRÈS SECRET DÉFENSE, etc.)
-get_required_aal_for_classification(classification) := 1 if {
-	classification in ["UNCLASSIFIED", "RESTRICTED", "FOUO", "NON CLASSIFIÉ", "DIFFUSION RESTREINTE", "OFFICIAL", "OFFEN", "VS-NFD"]
-} else := 2 if {
-	classification in ["CONFIDENTIAL", "SECRET", "CONFIDENTIEL DÉFENSE", "SECRET DÉFENSE", "VS-VERTRAULICH", "GEHEIM", "OFFICIAL-SENSITIVE"]
-} else := 3 if {
-	classification in ["TOP SECRET", "TS/SCI", "TRÈS SECRET DÉFENSE", "STRENG GEHEIM", "TOP SECRET"]
-} else := 1  # Default to AAL1 for unknown classifications
-
 is_mfa_not_verified := msg if {
-	# Only check MFA for classifications that require AAL2+ (CONFIDENTIAL, SECRET, TOP_SECRET)
-	# RESTRICTED only requires AAL1 (single factor)
-	input.resource.classification in ["CONFIDENTIAL", "SECRET", "TOP_SECRET"]
-	
-	# Don't fail if authentication strength check already passed (handles AAL properly)
-	not check_authentication_strength_sufficient
-	
-	# Fallback check: verify AMR has 2+ factors
+	input.resource.classification != "UNCLASSIFIED"
 	input.context.amr
 	amr_factors := parse_amr(input.context.amr)
 	count(amr_factors) < 2

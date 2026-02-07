@@ -281,7 +281,7 @@ services:
       USA_IDP_URL: ${USA_IDP_URL:-https://keycloak:8443}
       USA_IDP_CLIENT_SECRET: ${USA_IDP_CLIENT_SECRET:-default-usa-idp-secret}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-DiveAdminSecure2025!}
-      TEST_USER_PASSWORD: ${TEST_USER_PASSWORD:-DiveTestSecure2025!}
+      TEST_USER_PASSWORD: ${TEST_USER_PASSWORD:-TestUser2025!Pilot}  # SSOT: Same as seed-hub-users.sh
       INSTANCE_CODE: ${INSTANCE:-USA}
       # OpenTelemetry integration (Keycloak 26.5.2)
       OTEL_TRACES_EXPORTER: "otlp"
