@@ -653,6 +653,7 @@ spoke_kas() {
         health)           spoke_kas_health "$@" ;;
         register)         spoke_kas_register "$@" ;;
         register-mongodb) spoke_kas_register_mongodb "$@" ;;
+        sync-from-hub)    spoke_kas_sync_from_hub "$@" ;;
         approve)          spoke_kas_approve "$@" ;;
         unregister)       spoke_kas_unregister "$@" ;;
         logs)             spoke_kas_logs "$@" ;;
@@ -664,12 +665,142 @@ spoke_kas() {
             echo "  health <code>           Detailed health check"
             echo "  register <code>         Register in file-based registry (legacy)"
             echo "  register-mongodb <code> Register in MongoDB (recommended)"
+            echo "  sync-from-hub <code>    Sync Hub KAS registry to spoke MongoDB"
             echo "  approve <kas-id>        Approve a pending KAS registration"
             echo "  unregister <code>       Remove from registry"
             echo "  logs <code> [-f]        View KAS logs"
             echo ""
             ;;
     esac
+}
+
+# =============================================================================
+# KAS FEDERATION SYNC FUNCTIONS
+# =============================================================================
+# CRITICAL FEATURE (2026-02-07): Cross-instance KAS registry synchronization
+# 
+# For proper federation, each instance needs to know about ALL trusted KAS
+# instances (both local and federated). This enables cross-instance encrypted
+# resource access.
+#
+# Architecture:
+# - Hub MongoDB kas_registry: Contains usa-kas + all spoke KAS instances
+# - Spoke MongoDB kas_registry: Contains spoke-kas + Hub KAS (synced from Hub)
+# =============================================================================
+
+##
+# Sync Hub KAS registry to Spoke MongoDB
+#
+# Queries Hub's /api/kas/registry and registers Hub's KAS instances
+# in the spoke's local MongoDB. This enables the spoke's KAS service
+# to route key requests to the Hub when accessing Hub encrypted resources.
+#
+# Arguments:
+#   $1 - Spoke instance code (e.g., FRA)
+#
+# Returns:
+#   0 - Success
+#   1 - Failure
+##
+spoke_kas_sync_from_hub() {
+    local instance_code="${1:-${INSTANCE:-}}"
+
+    if [ -z "$instance_code" ]; then
+        log_error "Instance code required"
+        echo "Usage: ./dive spoke kas sync-from-hub <CODE>"
+        return 1
+    fi
+
+    local code_lower=$(lower "$instance_code")
+    local code_upper=$(upper "$instance_code")
+
+    log_info "Syncing Hub KAS registry to $code_upper MongoDB..."
+
+    # Get Hub backend URL (localhost for local Docker)
+    local hub_api_url="https://localhost:4000/api/kas/registry"
+    local spoke_api_url="https://localhost:${SPOKE_BACKEND_PORT:-4010}/api/kas/register"
+
+    # Query Hub's KAS registry
+    log_verbose "Querying Hub KAS registry: $hub_api_url"
+    local hub_registry
+    hub_registry=$(curl -sk "$hub_api_url" 2>&1)
+    
+    if [ $? -ne 0 ]; then
+        log_error "Failed to query Hub KAS registry"
+        return 1
+    fi
+
+    # Extract KAS instances from Hub (should be usa-kas and any other registered spokes)
+    local kas_count=$(echo "$hub_registry" | jq -r '.kasServers | length' 2>/dev/null || echo "0")
+    
+    if [ "$kas_count" = "0" ]; then
+        log_warn "No KAS instances found in Hub registry"
+        return 0
+    fi
+
+    log_info "Found $kas_count KAS instance(s) in Hub registry"
+
+    # Register each Hub KAS instance in Spoke MongoDB
+    local registered_count=0
+    for i in $(seq 0 $((kas_count - 1))); do
+        local kas_id=$(echo "$hub_registry" | jq -r ".kasServers[$i].kasId" 2>/dev/null)
+        local kas_url=$(echo "$hub_registry" | jq -r ".kasServers[$i].kasUrl" 2>/dev/null)
+        local organization=$(echo "$hub_registry" | jq -r ".kasServers[$i].organization" 2>/dev/null)
+        local country_code=$(echo "$hub_registry" | jq -r ".kasServers[$i].countryCode" 2>/dev/null)
+
+        # Skip if this is the spoke's own KAS (already registered locally)
+        if [ "$kas_id" = "${code_lower}-kas" ]; then
+            log_verbose "Skipping own KAS: $kas_id"
+            continue
+        fi
+
+        log_verbose "Registering Hub KAS in Spoke: $kas_id ($organization)"
+
+        # Build registration payload (simplified - Hub instances are pre-validated)
+        local payload=$(cat << EOF
+{
+  "kasId": "$kas_id",
+  "organization": "$organization",
+  "countryCode": "$country_code",
+  "kasUrl": "$kas_url",
+  "internalKasUrl": "https://kas:8080",
+  "jwtIssuer": "https://keycloak:8443/realms/dive-v3-broker-usa",
+  "supportedCountries": ["$country_code"],
+  "supportedCOIs": ["NATO", "NATO-COSMIC", "FVEY"],
+  "capabilities": ["key-release", "policy-evaluation", "audit-logging", "ztdf-support"],
+  "contact": "kas-admin@${country_code,,}.dive25.com"
+}
+EOF
+)
+
+        # Register in Spoke MongoDB via backend API
+        local response
+        response=$(curl -sk -X POST "$spoke_api_url" \
+            -H "Content-Type: application/json" \
+            -d "$payload" 2>&1)
+
+        if echo "$response" | jq -e '.success == true' >/dev/null 2>&1; then
+            log_verbose "✓ Registered $kas_id in Spoke MongoDB"
+            ((registered_count++))
+            
+            # CRITICAL: Auto-approve the KAS instance (status: pending → active)
+            # This is safe because we're syncing from the Hub (trusted source)
+            local backend_container="dive-spoke-${code_lower}-backend"
+            if docker ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
+                docker exec dive-spoke-${code_lower}-mongodb mongosh \
+                    -u admin -p "${MONGO_PASSWORD:-}" --authenticationDatabase admin \
+                    "dive-v3-${code_lower}" --quiet \
+                    --eval "db.kas_registry.updateOne({kasId: '$kas_id'}, {\$set: {status: 'active', enabled: true}})" \
+                    >/dev/null 2>&1
+                log_verbose "✓ Auto-approved $kas_id (trusted Hub source)"
+            fi
+        else
+            log_verbose "⚠ Failed to register $kas_id (may already exist)"
+        fi
+    done
+
+    log_success "KAS federation sync complete: $registered_count instance(s) registered from Hub"
+    return 0
 }
 
 # Mark module as loaded
