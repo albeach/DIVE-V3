@@ -371,12 +371,15 @@ _validate_seeding_state() {
     local test_username="testuser-${code_lower}"
 
     # Try to get admin token and check for user (non-blocking)
+    local keycloak_password_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
+    local keycloak_password="${!keycloak_password_var:-admin}"
+    
     local user_check=$(docker exec "$kc_container" \
         /opt/keycloak/bin/kcadm.sh config credentials \
         --server http://localhost:8080 \
         --realm master \
         --user admin \
-        --password "${KEYCLOAK_ADMIN_PASSWORD_${code_upper}:-admin}" \
+        --password "$keycloak_password" \
         --config /tmp/.kcadm.config 2>/dev/null && \
         docker exec "$kc_container" \
         /opt/keycloak/bin/kcadm.sh get users \
