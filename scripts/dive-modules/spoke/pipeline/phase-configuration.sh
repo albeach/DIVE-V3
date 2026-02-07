@@ -872,6 +872,23 @@ spoke_config_register_in_registries() {
                         fi
                     fi
                 fi
+
+                # CRITICAL ADDITION (2026-02-07): Sync Hub KAS to Spoke MongoDB
+                # This enables cross-instance key release by registering Hub's KAS
+                # instances in the spoke's local kas_registry collection
+                log_step "Syncing Hub KAS registry to Spoke MongoDB"
+                if type spoke_kas_sync_from_hub &>/dev/null; then
+                    local sync_output
+                    if sync_output=$(spoke_kas_sync_from_hub "$code_upper" 2>&1); then
+                        log_success "✓ Hub KAS registry synced to Spoke"
+                        log_verbose "$sync_output"
+                    else
+                        log_warn "Hub KAS sync failed (non-blocking)"
+                        log_verbose "$sync_output"
+                    fi
+                else
+                    log_verbose "KAS sync function not available (spoke-kas.sh needs update)"
+                fi
             else
                 log_error "✗ KAS registration API succeeded but entry NOT found in Hub registry!"
                 log_error "This indicates a database consistency issue"
