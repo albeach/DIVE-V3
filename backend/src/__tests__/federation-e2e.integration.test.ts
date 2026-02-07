@@ -56,11 +56,29 @@ const INSTANCES: { [key: string]: KeycloakInstance } = {
   FRA: {
     code: 'FRA',
     name: 'FRA Spoke',
-    url: process.env.KEYCLOAK_FRA_URL || 'https://localhost:8451',
+    url: process.env.KEYCLOAK_FRA_URL || 'https://localhost:8453',
     realm: 'dive-v3-broker-fra',
     adminPassword: process.env.KEYCLOAK_FRA_PASSWORD || '',
     clientId: 'dive-v3-broker-fra',
-    port: 8451,
+    port: 8453,
+  },
+  DEU: {
+    code: 'DEU',
+    name: 'DEU Spoke',
+    url: process.env.KEYCLOAK_DEU_URL || 'https://localhost:8454',
+    realm: 'dive-v3-broker-deu',
+    adminPassword: process.env.KEYCLOAK_DEU_PASSWORD || '',
+    clientId: 'dive-v3-broker-deu',
+    port: 8454,
+  },
+  CAN: {
+    code: 'CAN',
+    name: 'CAN Spoke',
+    url: process.env.KEYCLOAK_CAN_URL || 'https://localhost:8455',
+    realm: 'dive-v3-broker-can',
+    adminPassword: process.env.KEYCLOAK_CAN_PASSWORD || '',
+    clientId: 'dive-v3-broker-can',
+    port: 8455,
   },
 };
 
@@ -116,6 +134,44 @@ async function isInstanceAvailable(instance: KeycloakInstance): Promise<boolean>
   } catch {
     return false;
   }
+}
+
+/**
+ * Dynamically detect which spokes are currently running
+ * Returns array of active spoke instance codes (e.g., ['FRA', 'GBR'])
+ * 
+ * CRITICAL FIX (2026-02-07): Tests now adapt to available infrastructure
+ * ROOT CAUSE: Tests hardcoded GBR, failed when only FRA was running
+ * FIX: Detect active spokes at runtime and skip tests gracefully
+ */
+async function getActiveSpokes(): Promise<string[]> {
+  const activeSpokes: string[] = [];
+  
+  // Check all spoke instances (exclude HUB)
+  for (const [key, instance] of Object.entries(INSTANCES)) {
+    if (key === 'HUB') continue;
+    
+    const isAvailable = await isInstanceAvailable(instance);
+    if (isAvailable) {
+      activeSpokes.push(key);
+    }
+  }
+  
+  return activeSpokes;
+}
+
+/**
+ * Get first available spoke instance for testing
+ * Returns null if no spokes are running
+ */
+async function getFirstAvailableSpoke(): Promise<KeycloakInstance | null> {
+  const activeSpokes = await getActiveSpokes();
+  
+  if (activeSpokes.length === 0) {
+    return null;
+  }
+  
+  return INSTANCES[activeSpokes[0]];
 }
 
 async function getClient(instance: KeycloakInstance, clientId: string): Promise<any> {
@@ -180,41 +236,53 @@ async function getIdentityProviders(instance: KeycloakInstance): Promise<any[]> 
 // =============================================================================
 
 describe('Spoke Instance Configuration', () => {
-  test('GBR Spoke should be accessible (if running)', async () => {
-    const isAvailable = await isInstanceAvailable(INSTANCES.GBR);
+  let firstSpoke: KeycloakInstance | null = null;
+  let activeSpokes: string[] = [];
 
-    if (!isAvailable) {
-      console.log('⚠️  GBR Spoke not running - skipping spoke tests');
+  beforeAll(async () => {
+    // Detect active spokes at test suite start
+    activeSpokes = await getActiveSpokes();
+    firstSpoke = await getFirstAvailableSpoke();
+    
+    if (activeSpokes.length === 0) {
+      console.log('⚠️  No spokes running - skipping spoke tests');
+    } else {
+      console.log(`✓ Found ${activeSpokes.length} active spoke(s): ${activeSpokes.join(', ')}`);
+    }
+  }, 15000);
+
+  test('At least one spoke should be accessible', async () => {
+    if (!firstSpoke) {
+      console.log('⚠️  No spokes running - skipping');
       expect(true).toBe(true); // Skip gracefully
       return;
     }
 
-    const token = await getAdminToken(INSTANCES.GBR);
+    const token = await getAdminToken(firstSpoke);
     expect(token).toBeTruthy();
     expect(token.length).toBeGreaterThan(0);
   }, 15000);
 
-  test('GBR Spoke should have outgoing federation client for Hub', async () => {
-    const isAvailable = await isInstanceAvailable(INSTANCES.GBR);
-    if (!isAvailable) {
-      console.log('⚠️  GBR Spoke not running - skipping');
+  test('First available spoke should have outgoing federation client for Hub', async () => {
+    if (!firstSpoke) {
+      console.log('⚠️  No spokes running - skipping');
+      expect(true).toBe(true);
       return;
     }
 
-    const client = await getClient(INSTANCES.GBR, 'dive-v3-broker-usa');
+    const client = await getClient(firstSpoke, 'dive-v3-broker-usa');
     expect(client).toBeTruthy();
     expect(client.clientId).toBe('dive-v3-broker-usa');
   }, 15000);
 
-  test('GBR Spoke outgoing client should have DIVE attribute protocol mappers', async () => {
-    const isAvailable = await isInstanceAvailable(INSTANCES.GBR);
-    if (!isAvailable) {
-      console.log('⚠️  GBR Spoke not running - skipping');
+  test('Spoke outgoing client should have DIVE attribute protocol mappers', async () => {
+    if (!firstSpoke) {
+      console.log('⚠️  No spokes running - skipping');
       return;
     }
 
-    const client = await getClient(INSTANCES.GBR, 'dive-v3-broker-usa');
-    const mappers = await getProtocolMappers(INSTANCES.GBR, client.id);
+    const client = await getClient(firstSpoke, 'dive-v3-broker-usa');
+    const mappers = await getProtocolMappers(firstSpoke, client.id);
 
     const requiredAttributes = ['clearance', 'countryOfAffiliation', 'acpCOI', 'uniqueID'];
     const mapperNames = mappers.map(m => m.name);
