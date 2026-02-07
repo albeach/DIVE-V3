@@ -316,7 +316,7 @@ spoke_verify_database_connectivity() {
     if docker ps --format '{{.Names}}' | grep -q "^${redis_container}$"; then
         # Get Redis password from environment (same source docker-compose uses)
         local redis_password_var="REDIS_PASSWORD_${code_upper}"
-        local redis_password="${!redis_password_var}"
+        local redis_password="${!redis_password_var:-}"
         
         # If not in environment, try .env file
         if [ -z "$redis_password" ]; then
