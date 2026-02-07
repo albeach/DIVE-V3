@@ -19,6 +19,45 @@ fi
 export SPOKE_VALIDATION_LOADED=1
 
 # =============================================================================
+# GUARDRAILS - Prevent Invalid Deployments
+# =============================================================================
+
+##
+# Validate that the instance can be deployed as a spoke
+# Blocks USA from being deployed as a spoke (should use Hub deployment)
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - Valid spoke instance
+#   1 - Invalid (USA should be Hub)
+##
+spoke_validate_instance_code() {
+    local instance_code="$1"
+    local code_upper=$(upper "$instance_code")
+    
+    # GUARDRAIL: USA is the Hub - it cannot be deployed as a spoke
+    if [ "$code_upper" = "USA" ] || [ "$code_upper" = "HUB" ]; then
+        log_error "╔════════════════════════════════════════════════════════════════╗"
+        log_error "║  DEPLOYMENT GUARDRAIL: USA Cannot Be Deployed as Spoke        ║"
+        log_error "╚════════════════════════════════════════════════════════════════╝"
+        log_error ""
+        log_error "USA is the HUB instance and must be deployed using Hub commands:"
+        log_error ""
+        log_error "  ✓ CORRECT:   ./dive hub up"
+        log_error "  ✓ CORRECT:   ./dive hub deploy"
+        log_error "  ✗ WRONG:     ./dive spoke deploy USA"
+        log_error ""
+        log_error "Spokes are partner nations (FRA, GBR, DEU, CAN, etc.)"
+        log_error ""
+        return 1
+    fi
+    
+    return 0
+}
+
+# =============================================================================
 # PHASE COMPLETION CHECKING (Using Orchestration DB)
 # =============================================================================
 

@@ -272,6 +272,7 @@ spoke_federation_setup() {
             # ENHANCED (2026-02-07): OIDC endpoint check is now optional
             # If IdPs exist and are enabled, SSO will work even if OIDC discovery
             # endpoints aren't immediately ready (Keycloak caches need ~60s to refresh)
+            log_verbose "DEBUG: Bidirectional federation confirmed, checking OIDC endpoints..."
             if _spoke_federation_verify_oidc_endpoints "$instance_code"; then
                 verification_passed=true
                 log_success "Bidirectional federation established and OIDC endpoints verified (attempt $i)"
@@ -281,7 +282,9 @@ spoke_federation_setup() {
                 log_warn "IdPs configured correctly (bidirectional:true) but OIDC discovery endpoints not yet ready"
                 log_warn "SSO will work once Keycloak caches refresh (~60s after deployment)"
                 log_info "To verify OIDC later: curl -sk https://localhost:8453/realms/dive-v3-broker-${code_lower}/.well-known/openid-configuration"
+                log_verbose "DEBUG: Setting verification_passed=true despite OIDC check failure"
                 verification_passed=true
+                log_verbose "DEBUG: Breaking from verification loop with verification_passed=$verification_passed"
                 break
             fi
         fi
