@@ -71,7 +71,54 @@ spoke_phase_preflight() {
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     # =============================================================================
-    # IDEMPOTENT DEPLOYMENT: Check if phase already complete
+    # IDEMPOTENT DEPLOYMENT: Check overall deployment state first
+    # =============================================================================
+    # Check if this is a retry of a completed deployment
+    local current_state
+    if type orch_db_get_state &>/dev/null; then
+        current_state=$(orch_db_get_state "$code_upper" 2>/dev/null || echo "UNKNOWN")
+        log_verbose "Current deployment state for $code_upper: $current_state"
+        
+        # If deployment is COMPLETE, validate ALL phases thoroughly
+        if [ "$current_state" = "COMPLETE" ]; then
+            log_info "Deployment marked COMPLETE - validating all phases"
+            local all_phases_valid=true
+            local failed_phase=""
+            
+            # Check all phases for completion AND validation
+            if type spoke_validate_phase_state &>/dev/null && type spoke_phase_is_complete &>/dev/null; then
+                for phase in PREFLIGHT INITIALIZATION DEPLOYMENT CONFIGURATION SEEDING VERIFICATION; do
+                    if ! spoke_phase_is_complete "$instance_code" "$phase" 2>/dev/null; then
+                        log_verbose "Phase $phase not marked complete in DB"
+                        all_phases_valid=false
+                        failed_phase="$phase"
+                        break
+                    fi
+                    if ! spoke_validate_phase_state "$instance_code" "$phase" 2>/dev/null; then
+                        log_verbose "Phase $phase validation failed"
+                        all_phases_valid=false
+                        failed_phase="$phase"
+                        break
+                    fi
+                done
+            else
+                log_warn "Validation functions not available - cannot verify deployment"
+                all_phases_valid=false
+            fi
+            
+            if [ "$all_phases_valid" = "true" ]; then
+                log_success "✅ Deployment complete and all phases validated"
+                log_info "All infrastructure verified, nothing to do"
+                return 0
+            else
+                log_info "Phase validation failed at: $failed_phase"
+                log_info "Will re-run from failed phase"
+            fi
+        fi
+    fi
+    
+    # =============================================================================
+    # IDEMPOTENT DEPLOYMENT: Check if THIS phase is complete
     # =============================================================================
     if type spoke_phase_is_complete &>/dev/null; then
         if spoke_phase_is_complete "$instance_code" "PREFLIGHT"; then
@@ -234,6 +281,7 @@ spoke_preflight_check_conflicts() {
 
     case "$current_state" in
         INITIALIZING|DEPLOYING|CONFIGURING|VERIFYING)
+            # These are truly in-progress states - block concurrent deployment
             log_error "Deployment already in progress for $code_upper (state: $current_state)"
             echo ""
             echo "  To force restart, clean the state first:"
@@ -248,41 +296,43 @@ spoke_preflight_check_conflicts() {
             return 1
             ;;
         FAILED)
-            log_warn "Previous deployment failed, will clean up before retry"
+            log_info "Previous deployment failed, cleaning up before retry"
             spoke_preflight_cleanup_failed_state "$instance_code"
             ;;
         COMPLETE)
-            log_info "Previous deployment completed successfully"
+            # This is OK - idempotent deployment will skip completed phases
+            # Containers are expected to be running
+            log_verbose "Previous deployment completed - will skip completed phases"
             ;;
         *)
-            log_verbose "No prior deployment state for $code_upper"
+            log_verbose "No prior deployment state for $code_upper (starting fresh)"
+            
+            # Only check for orphaned containers if no known state
+            # (COMPLETE and FAILED states handle their containers appropriately)
+            local running_containers
+            running_containers=$(docker ps -q --filter "name=dive-spoke-${code_lower}" 2>/dev/null | wc -l | tr -d ' ')
+            if [ "$running_containers" -gt 0 ]; then
+                log_warn "Found $running_containers orphaned containers for $code_upper (no active deployment state)"
+                log_info "Cleaning up orphaned containers before proceeding..."
+
+                # Stop and remove orphaned containers
+                if docker ps -q --filter "name=dive-spoke-${code_lower}" | xargs docker stop 2>/dev/null; then
+                    log_verbose "Stopped orphaned containers"
+                fi
+
+                if docker ps -aq --filter "name=dive-spoke-${code_lower}" | xargs docker rm 2>/dev/null; then
+                    log_verbose "Removed orphaned containers"
+                fi
+
+                # Clean up orphaned networks and volumes
+                if docker network ls --filter "name=dive-spoke-${code_lower}" -q | xargs docker network rm 2>/dev/null; then
+                    log_verbose "Removed orphaned networks"
+                fi
+
+                log_success "Cleaned up orphaned containers for $code_upper"
+            fi
             ;;
     esac
-
-    # Check for orphaned containers (running containers without active state)
-    # This handles cases where previous deployment failed but left containers running
-    local running_containers
-    running_containers=$(docker ps -q --filter "name=dive-spoke-${code_lower}" 2>/dev/null | wc -l | tr -d ' ')
-    if [ "$running_containers" -gt 0 ]; then
-        log_warn "Found $running_containers orphaned containers for $code_upper (no active deployment state)"
-        log_info "Cleaning up orphaned containers before proceeding..."
-
-        # Stop and remove orphaned containers
-        if docker ps -q --filter "name=dive-spoke-${code_lower}" | xargs docker stop 2>/dev/null; then
-            log_verbose "Stopped orphaned containers"
-        fi
-
-        if docker ps -aq --filter "name=dive-spoke-${code_lower}" | xargs docker rm 2>/dev/null; then
-            log_verbose "Removed orphaned containers"
-        fi
-
-        # Clean up orphaned networks and volumes
-        if docker network ls --filter "name=dive-spoke-${code_lower}" -q | xargs docker network rm 2>/dev/null; then
-            log_verbose "Removed orphaned networks"
-        fi
-
-        log_success "Cleaned up orphaned containers for $code_upper"
-    fi
 
     return 0
 }

@@ -1,7 +1,7 @@
 {
     "instance": "FRA",
     "status": "warning",
-    "timestamp": "2026-02-07T01:35:32Z",
+    "timestamp": "2026-02-07T02:19:56Z",
     "containers": {"running":9,"unhealthy":0,"stopped":0,"total":9},
     "checks": {
         "services": false,
