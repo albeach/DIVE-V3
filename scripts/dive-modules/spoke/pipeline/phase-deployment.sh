@@ -79,7 +79,10 @@ spoke_ensure_opal_key_configured() {
     # Update or add OPAL key
     if grep -q "^OPAL_AUTH_PUBLIC_KEY=" "$env_file"; then
         # Update existing entry
-        sed -i.bak "s|^OPAL_AUTH_PUBLIC_KEY=.*|OPAL_AUTH_PUBLIC_KEY=\"$opal_public_key\"|" "$env_file"
+        # CRITICAL FIX (2026-02-07): Escape special characters in SSH key to prevent sed injection
+        # SSH keys contain slashes and other characters that break sed's | delimiter
+        local escaped_key=$(echo "$opal_public_key" | sed 's/[\/&]/\\&/g')
+        sed -i.bak "s|^OPAL_AUTH_PUBLIC_KEY=.*|OPAL_AUTH_PUBLIC_KEY=\"$escaped_key\"|" "$env_file"
         rm -f "${env_file}.bak"
         log_success "Updated OPAL_AUTH_PUBLIC_KEY (auto-fix for existing spoke)"
     else
