@@ -297,6 +297,78 @@ async function startServer() {
       try {
         const { federationSyncService } = await import('./services/federation-sync.service');
         logger.info('Starting federation drift detection service');
+        
+        // CRITICAL FIX (2026-02-07): Clean stale IdPs on startup
+        // Ensures IdP selection screen only shows running spokes (MongoDB SSOT)
+        logger.info('Running startup IdP cleanup to sync with MongoDB SSOT');
+        const driftReport = await federationSyncService.detectDrift();
+        
+        // Find orphaned IdPs (Keycloak IdPs without MongoDB records)
+        const orphanedIdPs = driftReport.states.filter(s => 
+          s.driftType === 'orphaned_idp' && s.keycloak.enabled
+        );
+        
+        if (orphanedIdPs.length > 0) {
+          logger.warn('Found stale IdPs from previous deployments', {
+            count: orphanedIdPs.length,
+            instances: orphanedIdPs.map(s => s.instanceCode)
+          });
+          
+          // Generate and execute reconciliation actions (delete orphaned IdPs)
+          const actions = orphanedIdPs.flatMap(state => {
+            return [{
+              instanceCode: state.instanceCode,
+              action: 'remove_idp' as const,
+              reason: 'Orphaned IdP from previous deployment (not in MongoDB)',
+              dryRun: false,
+              timestamp: new Date()
+            }];
+          });
+          
+          // Execute deletion via Keycloak admin API
+          for (const action of actions) {
+            try {
+              const alias = `${action.instanceCode.toLowerCase()}-idp`;
+              const { default: axios } = await import('axios');
+              const https = await import('https');
+              
+              // Get admin token
+              const tokenResponse = await axios.post(
+                `${process.env.KEYCLOAK_URL}/realms/master/protocol/openid-connect/token`,
+                new URLSearchParams({
+                  grant_type: 'password',
+                  client_id: 'admin-cli',
+                  username: process.env.KEYCLOAK_ADMIN_USER || 'admin',
+                  password: process.env.KC_ADMIN_PASSWORD || process.env.KEYCLOAK_ADMIN_PASSWORD || ''
+                }),
+                {
+                  httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+                  headers: { 'Content-Type': 'application/x-www-form-urlencoded' }
+                }
+              );
+              
+              // Delete IdP
+              await axios.delete(
+                `${process.env.KEYCLOAK_URL}/admin/realms/${process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa'}/identity-provider/instances/${alias}`,
+                {
+                  httpsAgent: new https.Agent({ rejectUnauthorized: false }),
+                  headers: { Authorization: `Bearer ${tokenResponse.data.access_token}` }
+                }
+              );
+              
+              logger.info('Removed stale IdP from Keycloak', { alias, instanceCode: action.instanceCode });
+            } catch (error) {
+              logger.error('Failed to remove stale IdP', {
+                instanceCode: action.instanceCode,
+                error: error instanceof Error ? error.message : 'Unknown error'
+              });
+            }
+          }
+        } else {
+          logger.info('No stale IdPs found - Keycloak in sync with MongoDB');
+        }
+        
+        // Start periodic drift detection
         federationSyncService.startPeriodicCheck();
         logger.info('Federation drift detection active (5-minute intervals)');
       } catch (error) {
