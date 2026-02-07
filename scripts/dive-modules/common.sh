@@ -1013,96 +1013,19 @@ load_secrets() {
     esac
 }
 
-# Get the correct external ports for a spoke instance
-# DEPRECATED: Use get_instance_ports() instead - this function uses hardcoded offsets
-# which are inconsistent with the NATO database SSOT. Will be removed in v6.0.0.
-# Migration: Replace `eval $(_get_spoke_ports "$code")` with `eval $(get_instance_ports "$code")`
-_get_spoke_ports() {
-    # Emit deprecation warning (once per session to avoid log spam)
-    if [ -z "${_GET_SPOKE_PORTS_DEPRECATED_WARNED:-}" ]; then
-        log_warn "[DEPRECATED] _get_spoke_ports() is deprecated. Use get_instance_ports() instead." >&2
-        export _GET_SPOKE_PORTS_DEPRECATED_WARNED=1
-    fi
-
-    local code="$1"
-    local code_lc
-    code_lc=$(echo "$code" | tr '[:upper:]' '[:lower:]')
-
-    # Load NATO country data to get port offsets
-    if [ -z "${NATO_COUNTRIES_LOADED:-}" ]; then
-        source "$(dirname "${BASH_SOURCE[0]}")/../nato-countries.sh" 2>/dev/null || true
-        export NATO_COUNTRIES_LOADED=1
-    fi
-
-    # Calculate port offsets
-    # CRITICAL: MUST MATCH seed-hub-kas.ts and federation-bootstrap.service.ts
-    # These offsets determine SPOKE_KEYCLOAK_HTTPS_PORT = 8443 + offset
-    # which is used for trusted issuer URLs during spoke registration
-    local offset=0
-    case "$code_lc" in
-        usa) offset=0 ;;   # Hub: 8443
-        gbr) offset=20 ;;  # Spoke: 8463
-        fra) offset=10 ;;  # Spoke: 8453
-        deu) offset=30 ;;  # Spoke: 8473
-        can) offset=40 ;;  # Spoke: 8483
-        aus) offset=50 ;;  # Spoke: 8493
-        nzl) offset=60 ;;  # Spoke: 8503
-        ita) offset=70 ;;  # Spoke: 8513
-        esp) offset=80 ;;  # Spoke: 8523
-        nld) offset=90 ;;  # Spoke: 8533
-        bel) offset=100 ;; # Spoke: 8543
-        pol) offset=110 ;; # Spoke: 8553
-        nor) offset=120 ;; # Spoke: 8563
-        dnk) offset=130 ;; # Spoke: 8573
-        swe) offset=140 ;; # Spoke: 8583
-        fin) offset=150 ;; # Spoke: 8593
-        prt) offset=160 ;; # Spoke: 8603
-        grc) offset=170 ;; # Spoke: 8613
-        tur) offset=180 ;; # Spoke: 8623
-        cze) offset=190 ;; # Spoke: 8633
-        hun) offset=200 ;; # Spoke: 8643
-        rou) offset=210 ;; # Spoke: 8653
-        bgr) offset=220 ;; # Spoke: 8663
-        hrv) offset=230 ;; # Spoke: 8673
-        svk) offset=240 ;; # Spoke: 8683
-        svn) offset=250 ;; # Spoke: 8693
-        est) offset=260 ;; # Spoke: 8703
-        lva) offset=270 ;; # Spoke: 8713
-        ltu) offset=280 ;; # Spoke: 8723
-        lux) offset=290 ;; # Spoke: 8733
-        alb) offset=300 ;; # Spoke: 8743
-        mne) offset=310 ;; # Spoke: 8753
-        isl) offset=320 ;; # Spoke: 8763
-        *) offset=0 ;;      # USA and others at base ports
-    esac
-
-    # Export the calculated ports
-    export SPOKE_FRONTEND_PORT=$((3000 + offset))
-    export SPOKE_BACKEND_PORT=$((4000 + offset))
-    export SPOKE_KEYCLOAK_HTTPS_PORT=$((8443 + offset))
-    export SPOKE_KEYCLOAK_HTTP_PORT=$((8080 + offset))  # Keycloak HTTP management port
-    export SPOKE_OPA_PORT=$((8181 + offset))
-    export SPOKE_KAS_PORT=$((9000 + offset))  # Fixed: was 8080 (conflicted with Keycloak HTTP)
-    export SPOKE_POSTGRES_PORT=$((5432 + offset))
-    export SPOKE_MONGODB_PORT=$((27017 + offset))
-    export SPOKE_REDIS_PORT=$((6379 + offset))
-
-    # Output for eval
-    echo "SPOKE_FRONTEND_PORT=$SPOKE_FRONTEND_PORT"
-    echo "SPOKE_BACKEND_PORT=$SPOKE_BACKEND_PORT"
-    echo "SPOKE_KEYCLOAK_HTTPS_PORT=$SPOKE_KEYCLOAK_HTTPS_PORT"
-    echo "SPOKE_KEYCLOAK_HTTP_PORT=$SPOKE_KEYCLOAK_HTTP_PORT"  # Added HTTP port
-    echo "SPOKE_OPA_PORT=$SPOKE_OPA_PORT"
-    echo "SPOKE_KAS_PORT=$SPOKE_KAS_PORT"
-    echo "SPOKE_POSTGRES_PORT=$SPOKE_POSTGRES_PORT"
-    echo "SPOKE_MONGODB_PORT=$SPOKE_MONGODB_PORT"
-    echo "SPOKE_REDIS_PORT=$SPOKE_REDIS_PORT"
-}
-
-# DEPRECATED (2026-02-07): This function uses hardcoded port offsets and is out of sync
-# with the centralized NATO database. Use get_instance_ports() or get_any_country_ports() instead.
-# Kept for backward compatibility but should not be used for new code.
-apply_env_profile() {
+# =============================================================================
+# ENVIRONMENT PROFILE APPLICATION
+# =============================================================================
+# Sets environment-specific variables (URLs, CORS, etc.) based on ENVIRONMENT
+# Does NOT calculate ports - use get_instance_ports() for that.
+#
+# Arguments:
+#   Uses global $INSTANCE and $ENVIRONMENT variables
+#
+# Exports:
+#   COMPOSE_PROJECT_NAME, NEXTAUTH_URL, KEYCLOAK_ISSUER, CORS_ALLOWED_ORIGINS, etc.
+# =============================================================================
+apply_environment_config() {
     local inst_lc
     inst_lc=$(lower "$INSTANCE")
 
@@ -1141,11 +1064,11 @@ apply_env_profile() {
             export CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS:-https://${inst_lc}-app.dive25.com,https://${inst_lc}-api.dive25.com,https://${inst_lc}-idp.dive25.com}"
             ;;
         *)
-            log_warn "Unknown environment '$ENVIRONMENT' for env profile; skipping profile application"
+            log_warn "Unknown environment '$ENVIRONMENT' for env config; skipping config application"
             ;;
     esac
 
-    log_verbose "Applied env profile (${ENVIRONMENT}) for instance ${inst_lc}"
+    log_verbose "Applied environment config (${ENVIRONMENT}) for instance ${inst_lc}"
 }
 
 # =============================================================================

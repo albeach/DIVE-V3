@@ -81,7 +81,7 @@ cmd_up() {
             ensure_required_secrets_nonlocal || exit 1
             ;;
     esac
-    apply_env_profile
+    apply_environment_config
     if [ "$ENVIRONMENT" = "local" ] || [ "$ENVIRONMENT" = "dev" ]; then
         check_certs || exit 1
     else
