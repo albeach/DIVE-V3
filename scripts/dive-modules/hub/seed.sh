@@ -295,7 +295,7 @@ _hub_register_kas() {
             \"kasId\": \"${kas_id}\",
             \"organization\": \"${org_name}\",
             \"countryCode\": \"${instance_code}\",
-            \"kasUrl\": \"https://localhost:10000\",
+            \"kasUrl\": \"https://localhost:8085\",
             \"internalKasUrl\": \"${kas_url}\",
             \"authMethod\": \"jwt\",
             \"authConfig\": {

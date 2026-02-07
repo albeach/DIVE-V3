@@ -1,0 +1,104 @@
+- generic [ref=e5]:
+  - generic [ref=e6]:
+    - generic [ref=e7]:
+      - generic [ref=e8]:
+        - generic [ref=e10]: 🇫🇷
+        - generic [ref=e11]:
+          - generic [ref=e12]: Your Identity
+          - generic [ref=e13]: FRA
+      - generic [ref=e17]: →
+      - generic [ref=e18]:
+        - generic [ref=e20]: 🇺🇸
+        - generic [ref=e21]:
+          - generic [ref=e22]: Accessing
+          - generic [ref=e23]: USA
+    - group [ref=e24]:
+      - generic "Cross-Border Access · Tap to learn more" [ref=e25] [cursor=pointer]:
+        - img [ref=e26]
+        - generic [ref=e28]: Cross-Border Access · Tap to learn more
+        - img [ref=e29]
+  - generic [ref=e31]:
+    - generic [ref=e33]:
+      - generic [ref=e34]:
+        - generic [ref=e35]: 🇫🇷
+        - generic [ref=e36]:
+          - generic [ref=e37]: FRANCE
+          - generic [ref=e38]: Official Sign-In Portal
+      - generic [ref=e40]:
+        - generic [ref=e42]: ⏳
+        - heading "Session Expired" [level=1] [ref=e43]
+        - generic [ref=e44]:
+          - paragraph [ref=e45]:
+            - strong [ref=e46]: Session Expired
+          - paragraph [ref=e47]: Your session has expired. Please sign in again.
+        - link "Sign In Again" [ref=e49] [cursor=pointer]:
+          - /url: /realms/dive-v3-broker-fra/login-actions/authenticate?client_id=dive-v3-broker-usa
+        - group [ref=e50]:
+          - generic "Technical Reference" [ref=e51] [cursor=pointer]
+    - generic [ref=e53]:
+      - generic [ref=e54]:
+        - strong [ref=e55]: "🔍 Detection:"
+        - text: "clientId:"
+        - code [ref=e56]: dive-v3-broker-usa
+        - text: "sourceInstance:"
+        - code [ref=e57]: USA
+        - text: "hostInstance:"
+        - code [ref=e58]: FRA
+        - text: "isFederated:"
+        - code [ref=e59]: "true"
+        - text: "Match:"
+        - code [ref=e60]: "true"
+      - generic [ref=e61]:
+        - generic [ref=e62]:
+          - generic [ref=e63]:
+            - generic [ref=e64]: 🇫🇷
+            - generic [ref=e65]: FRA
+            - generic [ref=e66]: Identity
+          - img [ref=e68]
+          - generic [ref=e70]:
+            - generic [ref=e71]: 🇺🇸
+            - generic [ref=e72]: USA
+            - generic [ref=e73]: Application
+          - img [ref=e75]
+          - generic [ref=e77]:
+            - generic [ref=e78]: 🤝
+            - generic [ref=e79]: Coalition
+            - generic [ref=e80]: Resources
+        - paragraph [ref=e82]:
+          - text: Use your
+          - strong [ref=e83]: FRA
+          - text: "-approved identity"
+          - generic [ref=e84]: →
+          - text: Access
+          - strong [ref=e85]: USA
+          - text: application
+          - generic [ref=e86]: →
+          - text: Unlock shared coalition resources
+      - group [ref=e87]:
+        - generic "How does this work?" [ref=e88] [cursor=pointer]:
+          - text: How does this work?
+          - img [ref=e89]
+      - group [ref=e91]:
+        - generic "What information is shared?" [ref=e92] [cursor=pointer]:
+          - text: What information is shared?
+          - img [ref=e93]
+        - generic [ref=e95]:
+          - list [ref=e96]:
+            - listitem [ref=e97]:
+              - generic [ref=e98]: 🆔
+              - generic [ref=e99]: Your unique identifier
+            - listitem [ref=e100]:
+              - generic [ref=e101]: 🔐
+              - generic [ref=e102]: Your clearance level
+            - listitem [ref=e103]:
+              - generic [ref=e104]: 🌍
+              - generic [ref=e105]: Your country of affiliation
+            - listitem [ref=e106]:
+              - generic [ref=e107]: 🏷️
+              - generic [ref=e108]: Your community of interest tags
+          - paragraph [ref=e109]: These attributes are set by your organization and required for access decisions.
+      - group [ref=e110]:
+        - generic "Technical details" [ref=e111] [cursor=pointer]:
+          - text: Technical details
+          - img [ref=e112]
+      - button "Need help?" [ref=e115] [cursor=pointer]
