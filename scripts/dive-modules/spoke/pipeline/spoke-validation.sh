@@ -130,16 +130,20 @@ _validate_preflight_state() {
         return 1
     fi
 
-    # Check if secrets exist in .env file (more reliable than checking env vars)
+    # Check if secrets exist in .env file (instance-specific variable names)
     local env_file="$spoke_dir/.env"
     if [ -f "$env_file" ]; then
+        # Check for instance-specific secret variable names (e.g., POSTGRES_PASSWORD_FRA)
         local required_secrets=("POSTGRES_PASSWORD" "MONGO_PASSWORD" "REDIS_PASSWORD" "KEYCLOAK_ADMIN_PASSWORD")
         for secret in "${required_secrets[@]}"; do
-            if ! grep -q "^${secret}=" "$env_file" 2>/dev/null; then
-                log_warn "Secret not in .env file: $secret"
+            # Check both instance-specific (POSTGRES_PASSWORD_FRA) and generic (POSTGRES_PASSWORD) formats
+            local instance_specific="${secret}_${code_upper}"
+            if ! grep -qE "^(${secret}|${instance_specific})=" "$env_file" 2>/dev/null; then
+                log_warn "Secret not in .env file: ${secret} (checked both ${secret} and ${instance_specific})"
                 return 1
             fi
         done
+        log_verbose "All required secrets present in .env (instance-specific format)"
     else
         # No .env file yet - this is fine for first deployment
         log_verbose ".env file doesn't exist yet (first deployment)"
@@ -205,13 +209,29 @@ _validate_initialization_state() {
     fi
 
     # Validate critical env vars are set
-    local required_vars=("INSTANCE_CODE" "INSTANCE_NAME" "POSTGRES_PASSWORD")
+    # Note: INSTANCE_NAME is set in docker-compose.yml, not .env
+    # Only check for variables that should be in .env file
+    local required_vars=("INSTANCE_CODE")
     for var in "${required_vars[@]}"; do
         if ! grep -q "^${var}=" "$env_file" 2>/dev/null; then
             log_warn "Required env var missing from .env: $var"
             return 1
         fi
     done
+    
+    # Validate instance-specific secrets exist (flexible check for both formats)
+    local code_upper=$(upper "$instance_code")
+    local secret_found=false
+    for pattern in "POSTGRES_PASSWORD_${code_upper}" "POSTGRES_PASSWORD"; do
+        if grep -q "^${pattern}=" "$env_file" 2>/dev/null; then
+            secret_found=true
+            break
+        fi
+    done
+    if [ "$secret_found" = "false" ]; then
+        log_warn "No PostgreSQL password found in .env (checked instance-specific and generic formats)"
+        return 1
+    fi
 
     log_verbose "INITIALIZATION state valid"
     return 0
@@ -296,17 +316,22 @@ _validate_configuration_state() {
         return 1
     fi
 
-    # Check Terraform state exists
-    local tf_dir="${DIVE_ROOT}/terraform/spoke/${code_lower}"
-    if [ ! -d "$tf_dir" ]; then
-        log_warn "Terraform directory missing: $tf_dir"
-        return 1
+    # Check Terraform state exists (workspace-based path)
+    # Terraform workspaces store state in terraform.tfstate.d/<workspace>/
+    local tf_workspace_dir="${DIVE_ROOT}/terraform/spoke/terraform.tfstate.d/${code_lower}"
+    if [ ! -d "$tf_workspace_dir" ]; then
+        log_verbose "Terraform workspace directory missing: $tf_workspace_dir"
+        log_verbose "This is acceptable if Terraform hasn't been applied yet"
+        # Don't fail - workspace gets created on first terraform init
     fi
 
-    # Check if terraform state exists (indicates terraform was applied)
-    if [ ! -f "$tf_dir/terraform.tfstate" ]; then
-        log_verbose "Terraform state missing - configuration may not be applied yet"
-        # This is acceptable for modular deployments - don't fail
+    # Check if terraform state file exists (indicates terraform was applied successfully)
+    local tf_state_file="$tf_workspace_dir/terraform.tfstate"
+    if [ -f "$tf_state_file" ]; then
+        log_verbose "Terraform state found at: $tf_state_file"
+    else
+        log_verbose "Terraform state file missing - configuration may not be applied yet"
+        # This is acceptable for first deployment or if using remote backend
     fi
 
     # If Keycloak is running, verify realm exists (best-effort)
