@@ -261,7 +261,9 @@ spoke_federation_setup() {
 
         # CRITICAL FIX (2026-02-07): spoke_federation_verify returns exit code 1 even when bidirectional:true
         # We need to capture output regardless of exit code, then parse JSON properly with jq
-        verification_result=$(spoke_federation_verify "$instance_code" 2>/dev/null || true)
+        # FIX (2026-02-07 Part 2): spoke_federation_verify outputs log messages mixed with JSON
+        # Redirect stderr to /dev/null and extract only the JSON portion (lines between { and })
+        verification_result=$(spoke_federation_verify "$instance_code" 2>&1 | sed -n '/{/,/}/p')
 
         # Parse JSON properly instead of fragile grep pattern
         # spoke_federation_verify outputs "bidirectional": true (with space), not "bidirectional":true
