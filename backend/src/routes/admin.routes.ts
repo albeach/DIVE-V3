@@ -31,7 +31,7 @@ import {
     updateMFAConfigHandler,
     testMFAFlowHandler,
     getSessionsHandler,
-    revokeSessionHandler,
+    revokeSessionHandler as revokeIdPSessionHandler,
     revokeUserSessionsHandler,
     getSessionStatsHandler,
     getThemeHandler,
@@ -1104,7 +1104,7 @@ router.get('/idps/:alias/sessions', getSessionsHandler);
  *       404:
  *         description: Session not found
  */
-router.delete('/idps/:alias/sessions/:sessionId', revokeSessionHandler);
+router.delete('/idps/:alias/sessions/:sessionId', revokeIdPSessionHandler);
 
 /**
  * @openapi
