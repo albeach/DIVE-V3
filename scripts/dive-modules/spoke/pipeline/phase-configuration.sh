@@ -23,6 +23,20 @@ if type spoke_phase_configuration &>/dev/null; then
 fi
 # Module loaded marker will be set at end after functions defined
 
+# Load validation functions for idempotent deployments
+if [ -z "${SPOKE_VALIDATION_LOADED:-}" ]; then
+    if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-validation.sh" ]; then
+        source "$(dirname "${BASH_SOURCE[0]}")/spoke-validation.sh"
+    fi
+fi
+
+# Load checkpoint system
+if [ -z "${SPOKE_CHECKPOINT_LOADED:-}" ]; then
+    if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-checkpoint.sh" ]; then
+        source "$(dirname "${BASH_SOURCE[0]}")/spoke-checkpoint.sh"
+    fi
+fi
+
 # =============================================================================
 # LOAD SPOKE FEDERATION MODULE
 # =============================================================================
@@ -58,6 +72,29 @@ spoke_phase_configuration() {
 
     local code_upper=$(upper "$instance_code")
     local code_lower=$(lower "$instance_code")
+
+    # =============================================================================
+    # IDEMPOTENT DEPLOYMENT: Check if phase already complete
+    # =============================================================================
+    if type spoke_checkpoint_is_complete &>/dev/null; then
+        if spoke_checkpoint_is_complete "$instance_code" "CONFIGURATION"; then
+            # Validate state is actually good
+            if type spoke_validate_phase_state &>/dev/null; then
+                if spoke_validate_phase_state "$instance_code" "CONFIGURATION"; then
+                    log_info "✓ CONFIGURATION phase complete and validated, skipping"
+                    return 0
+                else
+                    log_warn "CONFIGURATION checkpoint exists but validation failed, re-running"
+                    spoke_checkpoint_clear_phase "$instance_code" "CONFIGURATION" 2>/dev/null || true
+                fi
+            else
+                log_info "✓ CONFIGURATION phase complete (validation not available)"
+                return 0
+            fi
+        fi
+    fi
+
+    log_info "→ Executing CONFIGURATION phase for $code_upper"
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     # =============================================================================
@@ -313,7 +350,13 @@ spoke_phase_configuration() {
     # Calculate and log phase duration
     local PHASE_END=$(date +%s)
     local PHASE_DURATION=$((PHASE_END - PHASE_START))
-    log_success "Configuration phase complete in ${PHASE_DURATION}s"
+
+    # Mark phase complete (checkpoint system)
+    if type spoke_checkpoint_mark_complete &>/dev/null; then
+        spoke_checkpoint_mark_complete "$instance_code" "CONFIGURATION" "$PHASE_DURATION" '{}' || true
+    fi
+
+    log_success "✅ CONFIGURATION phase complete in ${PHASE_DURATION}s"
     return 0
 }
 

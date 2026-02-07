@@ -40,6 +40,20 @@ if [ -z "${DIVE_SPOKE_PREFLIGHT_LOADED:-}" ]; then
     fi
 fi
 
+# Load validation functions for idempotent deployments
+if [ -z "${SPOKE_VALIDATION_LOADED:-}" ]; then
+    if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-validation.sh" ]; then
+        source "$(dirname "${BASH_SOURCE[0]}")/spoke-validation.sh"
+    fi
+fi
+
+# Load checkpoint system
+if [ -z "${SPOKE_CHECKPOINT_LOADED:-}" ]; then
+    if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-checkpoint.sh" ]; then
+        source "$(dirname "${BASH_SOURCE[0]}")/spoke-checkpoint.sh"
+    fi
+fi
+
 # =============================================================================
 # MAIN PREFLIGHT PHASE FUNCTION
 # =============================================================================
@@ -63,7 +77,28 @@ spoke_phase_preflight() {
     local code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
-    log_info "Preflight checks for $code_upper (mode: $pipeline_mode)"
+    # =============================================================================
+    # IDEMPOTENT DEPLOYMENT: Check if phase already complete
+    # =============================================================================
+    if type spoke_checkpoint_is_complete &>/dev/null; then
+        if spoke_checkpoint_is_complete "$instance_code" "PREFLIGHT"; then
+            # Validate state is actually good
+            if type spoke_validate_phase_state &>/dev/null; then
+                if spoke_validate_phase_state "$instance_code" "PREFLIGHT"; then
+                    log_info "✓ PREFLIGHT phase complete and validated, skipping"
+                    return 0
+                else
+                    log_warn "PREFLIGHT checkpoint exists but validation failed, re-running"
+                    spoke_checkpoint_clear_phase "$instance_code" "PREFLIGHT" 2>/dev/null || true
+                fi
+            else
+                log_info "✓ PREFLIGHT phase complete (validation not available)"
+                return 0
+            fi
+        fi
+    fi
+
+    log_info "→ Executing PREFLIGHT phase for $code_upper (mode: $pipeline_mode)"
 
     # Step 0: Validate deployment dependencies (comprehensive pre-flight checks)
     if type orch_validate_dependencies &>/dev/null; then
@@ -152,12 +187,17 @@ spoke_phase_preflight() {
         spoke_preflight_clean_database_volumes "$instance_code"
     fi
 
-    # Create preflight checkpoint
+    # Mark phase complete (checkpoint system)
+    if type spoke_checkpoint_mark_complete &>/dev/null; then
+        spoke_checkpoint_mark_complete "$instance_code" "PREFLIGHT" 0 '{}' || true
+    fi
+
+    # Legacy checkpoint system (backward compatibility)
     if type orch_create_checkpoint &>/dev/null; then
         orch_create_checkpoint "$instance_code" "PREFLIGHT" "Preflight phase completed"
     fi
 
-    log_success "Preflight checks passed"
+    log_success "✅ PREFLIGHT phase complete"
     return 0
 }
 

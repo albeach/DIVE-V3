@@ -19,6 +19,20 @@ fi
 
 # Mark as loaded (will be set at end after all functions defined)
 
+# Load validation functions for idempotent deployments
+if [ -z "${SPOKE_VALIDATION_LOADED:-}" ]; then
+    if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-validation.sh" ]; then
+        source "$(dirname "${BASH_SOURCE[0]}")/spoke-validation.sh"
+    fi
+fi
+
+# Load checkpoint system
+if [ -z "${SPOKE_CHECKPOINT_LOADED:-}" ]; then
+    if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-checkpoint.sh" ]; then
+        source "$(dirname "${BASH_SOURCE[0]}")/spoke-checkpoint.sh"
+    fi
+fi
+
 # Load secret management functions
 if [ -z "${SPOKE_SECRETS_LOADED:-}" ]; then
     if source "$(dirname "${BASH_SOURCE[0]}")/spoke-secrets.sh" 2>/dev/null; then
@@ -49,6 +63,29 @@ spoke_phase_seeding() {
 
     local code_upper=$(upper "$instance_code")
     local code_lower=$(lower "$instance_code")
+
+    # =============================================================================
+    # IDEMPOTENT DEPLOYMENT: Check if phase already complete
+    # =============================================================================
+    if type spoke_checkpoint_is_complete &>/dev/null; then
+        if spoke_checkpoint_is_complete "$instance_code" "SEEDING"; then
+            # Validate state is actually good
+            if type spoke_validate_phase_state &>/dev/null; then
+                if spoke_validate_phase_state "$instance_code" "SEEDING"; then
+                    log_info "✓ SEEDING phase complete and validated, skipping"
+                    return 0
+                else
+                    log_warn "SEEDING checkpoint exists but validation failed, re-running"
+                    spoke_checkpoint_clear_phase "$instance_code" "SEEDING" 2>/dev/null || true
+                fi
+            else
+                log_info "✓ SEEDING phase complete (validation not available)"
+                return 0
+            fi
+        fi
+    fi
+
+    log_info "→ Executing SEEDING phase for $code_upper"
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local backend_container="dive-spoke-${code_lower}-backend"
 
@@ -166,13 +203,18 @@ spoke_phase_seeding() {
         orch_create_checkpoint "$instance_code" "SEEDING" "Seeding phase completed"
     fi
 
+    # Mark phase complete (checkpoint system)
+    if type spoke_checkpoint_mark_complete &>/dev/null; then
+        spoke_checkpoint_mark_complete "$instance_code" "SEEDING" 0 '{}' || true
+    fi
+
     # HONEST reporting - distinguish between users (critical), encrypted vs plaintext resources
     if [ "$encrypted_count" -gt 0 ]; then
-        log_success "Seeding phase complete (users: ✅, ZTDF encrypted: ✅ $encrypted_count)"
+        log_success "✅ SEEDING phase complete (users: ✅, ZTDF encrypted: ✅ $encrypted_count)"
     elif [ "$total_count" -gt 0 ]; then
-        log_success "Seeding phase complete (users: ✅, plaintext: ⚠️  $total_count - not encrypted)"
+        log_success "✅ SEEDING phase complete (users: ✅, plaintext: ⚠️  $total_count - not encrypted)"
     else
-        log_success "Seeding phase complete (users: ✅, local resources: N/A - using Hub)"
+        log_success "✅ SEEDING phase complete (users: ✅, local resources: N/A - using Hub)"
     fi
 
     # Return failure if resource seeding failed (ACP-240 compliance)
