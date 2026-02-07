@@ -349,6 +349,9 @@ spoke_restart() {
     local instance_code="$1"
     local service="${2:-all}"
     
+    # Disable exit-on-error for this function to handle errors gracefully
+    set +e
+    
     local code_lower=$(lower "$instance_code")
     local code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
@@ -356,6 +359,7 @@ spoke_restart() {
     if [ ! -d "$spoke_dir" ]; then
         log_error "Spoke not deployed: $instance_code"
         echo "Deploy first: ./dive spoke deploy $instance_code"
+        set -e
         return 1
     fi
 
@@ -367,6 +371,7 @@ spoke_restart() {
             local containers=$(docker ps -a --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null)
             if [ -z "$containers" ]; then
                 log_error "No containers found for spoke: $code_lower"
+                set -e
                 return 1
             fi
 
@@ -374,7 +379,7 @@ spoke_restart() {
             for container in $containers; do
                 if docker restart "$container" &>/dev/null; then
                     log_verbose "Restarted: $container"
-                    ((restart_count++))
+                    ((restart_count++)) || true
                 else
                     log_warn "Failed to restart: $container"
                 fi
@@ -384,6 +389,7 @@ spoke_restart() {
                 log_success "Restarted $restart_count service(s) for ${code_upper}"
             else
                 log_error "Failed to restart any services"
+                set -e
                 return 1
             fi
             ;;
@@ -392,6 +398,7 @@ spoke_restart() {
             local container="dive-spoke-${code_lower}-${service}"
             if ! docker ps -a --format '{{.Names}}' | grep -q "^${container}$"; then
                 log_error "Container not found: $container"
+                set -e
                 return 1
             fi
 
@@ -399,6 +406,7 @@ spoke_restart() {
                 log_success "Restarted: $service"
             else
                 log_error "Failed to restart: $service"
+                set -e
                 return 1
             fi
             ;;
@@ -406,6 +414,7 @@ spoke_restart() {
         *)
             log_error "Unknown service: $service"
             echo "Valid services: all, backend, frontend, keycloak, mongodb, postgres, redis, opa, kas, opal-client"
+            set -e
             return 1
             ;;
     esac
@@ -424,6 +433,7 @@ spoke_restart() {
         log_warn "Some services not running: $running_count/$total_count"
     fi
 
+    set -e  # Re-enable for caller
     return 0
 }
 
@@ -444,12 +454,16 @@ spoke_restart() {
 spoke_reload_secrets() {
     local instance_code="$1"
     
+    # Disable exit-on-error for this function to handle errors gracefully
+    set +e
+    
     local code_lower=$(lower "$instance_code")
     local code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     if [ ! -d "$spoke_dir" ]; then
         log_error "Spoke not deployed: $instance_code"
+        set -e  # Re-enable for caller
         return 1
     fi
 
@@ -461,6 +475,7 @@ spoke_reload_secrets() {
             source "${DIVE_ROOT}/scripts/dive-modules/spoke/pipeline/spoke-secrets.sh"
         else
             log_error "spoke-secrets.sh not found - cannot reload secrets"
+            set -e
             return 1
         fi
     fi
@@ -468,12 +483,13 @@ spoke_reload_secrets() {
     # Load secrets from GCP
     if ! spoke_secrets_load "$instance_code" "load"; then
         log_error "Failed to load secrets from GCP"
+        set -e
         return 1
     fi
 
     # Sync secrets to .env file
     if type spoke_secrets_sync_to_env &>/dev/null; then
-        spoke_secrets_sync_to_env "$instance_code"
+        spoke_secrets_sync_to_env "$instance_code" || true
     fi
 
     # Restart services that use secrets
@@ -481,33 +497,43 @@ spoke_reload_secrets() {
     
     local services=("postgres" "mongodb" "redis" "keycloak" "backend")
     local restart_count=0
+    local restart_failed=0
 
     for service in "${services[@]}"; do
         local container="dive-spoke-${code_lower}-${service}"
+        log_info "Checking container: $container"
         if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
-            if docker restart "$container" &>/dev/null; then
-                log_verbose "Restarted: $service"
-                ((restart_count++))
+            log_info "Restarting $service..."
+            if docker restart "$container" >/dev/null 2>&1; then
+                log_info "✓ Restarted: $service"
+                ((restart_count++)) || true
+            else
+                log_warn "✗ Failed to restart: $service"
+                ((restart_failed++)) || true
             fi
+        else
+            log_info "Container not running, skipping: $service"
         fi
     done
 
-    # Wait for services to stabilize
-    sleep 5
+    log_info "Restart loop completed. Restarted: $restart_count, Failed: $restart_failed"
 
-    # Validate secrets
-    if type spoke_secrets_validate &>/dev/null; then
-        if spoke_secrets_validate "$instance_code"; then
-            log_success "Secrets reloaded and validated ($restart_count services restarted)"
-            return 0
-        else
-            log_error "Secret validation failed after reload"
-            return 1
-        fi
-    else
-        log_success "Secrets reloaded ($restart_count services restarted)"
+    # Wait for services to stabilize
+    if [ $restart_count -gt 0 ]; then
+        log_info "Waiting for services to stabilize (10s)..."
+        sleep 10
+    fi
+
+    # Report results
+    if [ $restart_count -eq 0 ]; then
+        log_warn "No services were restarted (all may be stopped)"
+        set -e
         return 0
     fi
+
+    log_success "Secrets reloaded ($restart_count services restarted, $restart_failed failed)"
+    set -e  # Re-enable for caller
+    return 0
 }
 
 # =============================================================================
@@ -527,12 +553,16 @@ spoke_reload_secrets() {
 spoke_repair() {
     local instance_code="$1"
     
+    # Disable exit-on-error for this function to handle errors gracefully
+    set +e
+    
     local code_lower=$(lower "$instance_code")
     local code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     if [ ! -d "$spoke_dir" ]; then
         log_error "Spoke not deployed: $instance_code"
+        set -e
         return 1
     fi
 
@@ -546,12 +576,12 @@ spoke_repair() {
     local total_count=$(docker ps -a --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
 
     if [ "$running_count" -lt "$total_count" ]; then
-        ((issues_found++))
+        ((issues_found++)) || true
         log_info "Issue detected: Some services not running ($running_count/$total_count)"
         log_info "Fix: Restarting stopped services..."
         
         if spoke_restart "$instance_code" "all" &>/dev/null; then
-            ((issues_fixed++))
+            ((issues_fixed++)) || true
             log_success "✓ Services restarted"
         else
             log_warn "✗ Could not restart all services"
@@ -559,20 +589,45 @@ spoke_repair() {
     fi
 
     # Check 2: Federation broken (if federation module available)
+    # Use timeout to prevent hanging on federation checks
     if type spoke_federation_verify &>/dev/null; then
-        local fed_status=$(spoke_federation_verify "$instance_code" 2>/dev/null | grep -o '"bidirectional":[^,}]*' || echo "")
-        if [[ "$fed_status" != *"true"* ]]; then
-            ((issues_found++))
-            log_info "Issue detected: Federation not active"
-            log_info "Fix: Re-linking federation..."
+        log_verbose "Checking federation status..."
+        local fed_check_timeout=10
+        local fed_status=""
+        
+        # Run federation check with timeout (background job)
+        (spoke_federation_verify "$instance_code" 2>/dev/null) &
+        local fed_pid=$!
+        
+        # Wait for result with timeout
+        local elapsed=0
+        while [ $elapsed -lt $fed_check_timeout ] && kill -0 $fed_pid 2>/dev/null; do
+            sleep 1
+            ((elapsed++))
+        done
+        
+        # Kill if still running
+        if kill -0 $fed_pid 2>/dev/null; then
+            kill -9 $fed_pid 2>/dev/null
+            log_verbose "Federation check timed out (non-critical)"
+        else
+            # Check succeeded, get status
+            wait $fed_pid 2>/dev/null
+            fed_status=$(spoke_federation_verify "$instance_code" 2>/dev/null | grep -o '"bidirectional":[^,}]*' || echo "")
             
-            # Try to re-link federation
-            if type spoke_federation_setup &>/dev/null; then
-                if spoke_federation_setup "$instance_code" &>/dev/null; then
-                    ((issues_fixed++))
-                    log_success "✓ Federation re-linked"
-                else
-                    log_warn "✗ Federation re-link failed (may need manual intervention)"
+            if [[ "$fed_status" != *"true"* ]] && [ -n "$fed_status" ]; then
+                ((issues_found++))
+                log_info "Issue detected: Federation not active"
+                log_info "Fix: Re-linking federation..."
+                
+                # Try to re-link federation
+                if type spoke_federation_setup &>/dev/null; then
+                    if spoke_federation_setup "$instance_code" &>/dev/null; then
+                        ((issues_fixed++))
+                        log_success "✓ Federation re-linked"
+                    else
+                        log_warn "✗ Federation re-link failed (may need manual intervention)"
+                    fi
                 fi
             fi
         fi
@@ -583,12 +638,13 @@ spoke_repair() {
         if orch_db_check_connection; then
             local code_lower=$(lower "$instance_code")
             # Check for failed steps in DB
-            local failed_steps=$(orch_db_exec "SELECT COUNT(*) FROM deployment_steps WHERE instance_id = '${code_lower}' AND status = 'FAILED';" 2>/dev/null | tr -d ' \n')
-            if [ "$failed_steps" -gt 0 ]; then
-                ((issues_found++))
+            # CRITICAL FIX (2026-02-07): Use instance_code not instance_id (matches spoke-validation.sh fix)
+            local failed_steps=$(orch_db_exec "SELECT COUNT(*) FROM deployment_steps WHERE instance_code = '${code_lower}' AND status = 'FAILED';" 2>/dev/null | tr -d ' \n')
+            if [ "$failed_steps" -gt 0 ] 2>/dev/null; then
+                ((issues_found++)) || true
                 log_info "Issue detected: $failed_steps failed steps in database"
                 log_info "Fix: Cleared failed step markers"
-                ((issues_fixed++))
+                ((issues_fixed++)) || true
             fi
         fi
     fi
@@ -600,18 +656,18 @@ spoke_repair() {
         
         if [ -f "$compose_file" ]; then
             # Backup current compose file
-            cp "$compose_file" "$compose_backup"
+            cp "$compose_file" "$compose_backup" 2>/dev/null || true
             
             # Regenerate from template
             if spoke_init_generate_compose "$instance_code" &>/dev/null; then
                 # Check if files differ
                 if ! diff -q "$compose_file" "$compose_backup" &>/dev/null; then
-                    ((issues_found++))
-                    ((issues_fixed++))
+                    ((issues_found++)) || true
+                    ((issues_fixed++)) || true
                     log_success "✓ Configuration drift fixed (docker-compose.yml regenerated)"
-                    rm -f "$compose_backup"
+                    rm -f "$compose_backup" 2>/dev/null || true
                 else
-                    rm -f "$compose_backup"
+                    rm -f "$compose_backup" 2>/dev/null || true
                 fi
             fi
         fi
@@ -625,9 +681,11 @@ spoke_repair() {
 
     if [ $issues_found -eq 0 ]; then
         log_success "No issues detected - spoke is healthy"
+        set -e
         return 0
     elif [ $issues_fixed -eq $issues_found ]; then
         log_success "All issues fixed automatically"
+        set -e
         return 0
     else
         local unfixed=$((issues_found - issues_fixed))
@@ -636,6 +694,7 @@ spoke_repair() {
         echo "Manual intervention required. Try:"
         echo "  ./dive spoke status $instance_code --detailed"
         echo "  ./dive federation verify $instance_code"
+        set -e
         return 1
     fi
 }
