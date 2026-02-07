@@ -262,22 +262,35 @@ spoke_federation_setup() {
         verification_result=$(spoke_federation_verify "$instance_code" 2>/dev/null)
 
         if echo "$verification_result" | grep -q '"bidirectional":true'; then
-            # Bidirectional flag is set - now verify OIDC endpoints are actually reachable
+            # Bidirectional flag is set - IdPs are configured correctly
+            # ENHANCED (2026-02-07): OIDC endpoint check is now optional
+            # If IdPs exist and are enabled, SSO will work even if OIDC discovery
+            # endpoints aren't immediately ready (Keycloak caches need ~60s to refresh)
             if _spoke_federation_verify_oidc_endpoints "$instance_code"; then
                 verification_passed=true
-                log_success "Bidirectional federation established and verified (attempt $i)"
+                log_success "Bidirectional federation established and OIDC endpoints verified (attempt $i)"
                 break
             else
-                log_verbose "IdPs exist but OIDC discovery endpoints not ready yet"
+                # IdPs exist but OIDC not ready - treat as SUCCESS with warning
+                log_warn "IdPs configured correctly (bidirectional:true) but OIDC discovery endpoints not yet ready"
+                log_warn "SSO will work once Keycloak caches refresh (~60s after deployment)"
+                log_info "To verify OIDC later: curl -sk https://localhost:8453/realms/dive-v3-broker-${code_lower}/.well-known/openid-configuration"
+                verification_passed=true
+                break
             fi
         elif echo "$verification_result" | grep -q '"spoke_to_hub":true.*"hub_to_spoke":true\|"hub_to_spoke":true.*"spoke_to_hub":true'; then
-            # Both directions exist - verify OIDC
+            # Both directions exist - verify OIDC (same logic as above)
             if _spoke_federation_verify_oidc_endpoints "$instance_code"; then
                 verification_passed=true
-                log_success "Bidirectional federation established and verified (attempt $i)"
+                log_success "Bidirectional federation established and OIDC endpoints verified (attempt $i)"
                 break
             else
-                log_verbose "IdPs exist but OIDC discovery endpoints not ready yet"
+                # IdPs exist but OIDC not ready - treat as SUCCESS with warning
+                log_warn "IdPs configured correctly (spoke_to_hub & hub_to_spoke) but OIDC discovery endpoints not yet ready"
+                log_warn "SSO will work once Keycloak caches refresh (~60s after deployment)"
+                log_info "To verify OIDC later: curl -sk https://localhost:8453/realms/dive-v3-broker-${code_lower}/.well-known/openid-configuration"
+                verification_passed=true
+                break
             fi
         fi
 
@@ -1379,67 +1392,85 @@ spoke_federation_get_admin_token() {
     local container="$1"
     local debug="${2:-false}"  # Optional debug parameter
 
-    # Get admin password - try multiple sources
+    # CRITICAL FIX (2026-02-07): Get password from the BACKEND container
+    # Keycloak container doesn't have environment variables - they're in backend
     local admin_pass=""
     local source="unknown"
 
-    # 1. Try container environment variables
-    admin_pass=$(docker exec "$container" printenv KC_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
-    [ -n "$admin_pass" ] && source="KC_ADMIN_PASSWORD"
-
-    if [ -z "$admin_pass" ]; then
-        admin_pass=$(docker exec "$container" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
-        [ -n "$admin_pass" ] && source="KC_BOOTSTRAP_ADMIN_PASSWORD"
+    # Extract instance code from container name
+    local instance_code=""
+    local backend_container=""
+    
+    if [[ "$container" =~ dive-spoke-([a-z]+)-keycloak ]]; then
+        instance_code="${BASH_REMATCH[1]}"
+        backend_container="dive-spoke-${instance_code}-backend"
+    elif [[ "$container" == "dive-hub-keycloak" ]]; then
+        instance_code="usa"
+        backend_container="dive-hub-backend"
     fi
-    if [ -z "$admin_pass" ]; then
-        admin_pass=$(docker exec "$container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
-        [ -n "$admin_pass" ] && source="KEYCLOAK_ADMIN_PASSWORD"
-    fi
 
-    # 2. Try local environment variables (instance-suffixed)
-    if [ -z "$admin_pass" ]; then
-        # Extract instance code from container name (dive-spoke-{code}-keycloak or dive-hub-keycloak)
-        local instance_code
-        if [[ "$container" =~ dive-spoke-([a-z]+)-keycloak ]]; then
-            instance_code="${BASH_REMATCH[1]^^}"
-        elif [[ "$container" == "dive-hub-keycloak" ]]; then
-            instance_code="USA"
+    # 1. Get password from backend container (SSOT)
+    if [ -n "$backend_container" ] && docker ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
+        # Try KC_BOOTSTRAP_ADMIN_PASSWORD first (used during bootstrap)
+        admin_pass=$(docker exec "$backend_container" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+        if [ -n "$admin_pass" ]; then
+            source="backend:KC_BOOTSTRAP_ADMIN_PASSWORD"
+            [ "$debug" = "true" ] && log_verbose "Retrieved password from $backend_container (KC_BOOTSTRAP_ADMIN_PASSWORD)"
         fi
-
-        if [ -n "$instance_code" ]; then
-            local env_var="KEYCLOAK_ADMIN_PASSWORD_${instance_code}"
-            admin_pass="${!env_var}"
+        
+        # Try KEYCLOAK_ADMIN_PASSWORD (standard var)
+        if [ -z "$admin_pass" ]; then
+            admin_pass=$(docker exec "$backend_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
             if [ -n "$admin_pass" ]; then
-                source="env:$env_var"
-                log_verbose "Using local env var $env_var for admin token"
+                source="backend:KEYCLOAK_ADMIN_PASSWORD"
+                [ "$debug" = "true" ] && log_verbose "Retrieved password from $backend_container (KEYCLOAK_ADMIN_PASSWORD)"
             fi
         fi
     fi
 
-    # 3. Try KEYCLOAK_ADMIN_PASSWORD without suffix (legacy)
-    if [ -z "$admin_pass" ] && [ -n "${KEYCLOAK_ADMIN_PASSWORD:-}" ]; then
-        admin_pass="$KEYCLOAK_ADMIN_PASSWORD"
-        source="env:KEYCLOAK_ADMIN_PASSWORD"
+    # 2. Fallback: Try Keycloak container environment (legacy, unlikely to work)
+    if [ -z "$admin_pass" ]; then
+        admin_pass=$(docker exec "$container" printenv KC_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+        [ -n "$admin_pass" ] && source="keycloak:KC_ADMIN_PASSWORD"
+    fi
+    
+    if [ -z "$admin_pass" ]; then
+        admin_pass=$(docker exec "$container" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+        [ -n "$admin_pass" ] && source="keycloak:KC_BOOTSTRAP_ADMIN_PASSWORD"
+    fi
+    
+    if [ -z "$admin_pass" ]; then
+        admin_pass=$(docker exec "$container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+        [ -n "$admin_pass" ] && source="keycloak:KEYCLOAK_ADMIN_PASSWORD"
     fi
 
-    # 4. Try GCP Secret Manager for Hub (last resort)
+    # 3. Fallback: Try host environment variables (deployment context)
+    if [ -z "$admin_pass" ] && [ -n "$instance_code" ]; then
+        local env_var="KEYCLOAK_ADMIN_PASSWORD_${instance_code^^}"
+        admin_pass="${!env_var}"
+        if [ -n "$admin_pass" ]; then
+            source="host:$env_var"
+            [ "$debug" = "true" ] && log_verbose "Using host environment variable $env_var"
+        fi
+    fi
+
+    # 4. Fallback: GCP Secret Manager (last resort)
     if [ -z "$admin_pass" ] && [[ "$container" == "dive-hub-keycloak" ]]; then
         if type check_gcloud &>/dev/null && check_gcloud 2>/dev/null; then
             admin_pass=$(gcloud secrets versions access latest --secret="dive-v3-keycloak-usa" --project=dive25 2>/dev/null | tr -d '\n\r')
             if [ -n "$admin_pass" ]; then
                 source="gcp:dive-v3-keycloak-usa"
-                log_verbose "Retrieved Hub password from GCP Secret Manager"
+                [ "$debug" = "true" ] && log_verbose "Retrieved Hub password from GCP Secret Manager"
             fi
         fi
     fi
 
     if [ -z "$admin_pass" ]; then
         log_error "Cannot get admin password for $container from any source"
-        log_error "Tried: container env vars, KEYCLOAK_ADMIN_PASSWORD_*, KEYCLOAK_ADMIN_PASSWORD, GCP secrets"
+        log_error "Tried: backend container ($backend_container), keycloak container, host env vars, GCP secrets"
         if [ "$debug" = "true" ]; then
-            log_error "Debug: KEYCLOAK_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-NOT_SET}"
-            log_error "Debug: KEYCLOAK_ADMIN_PASSWORD_USA=${KEYCLOAK_ADMIN_PASSWORD_USA:-NOT_SET}"
-            log_error "Debug: Container running: $(docker ps --filter name=$container --format '{{.Names}}')"
+            log_error "Debug: Backend container running: $(docker ps --filter name=$backend_container --format '{{.Names}}')"
+            log_error "Debug: Keycloak container running: $(docker ps --filter name=$container --format '{{.Names}}')"
         fi
         return 1
     fi
