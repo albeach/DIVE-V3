@@ -115,7 +115,7 @@ generate_secret() {
 export KEYCLOAK_CLIENT_SECRET="${KEYCLOAK_CLIENT_SECRET:-$(generate_secret)}"
 # NIST 800-63B compliant passwords (16+ chars, mixed case, digits, special)
 export ADMIN_PASSWORD="${ADMIN_PASSWORD:-DiveAdminSecure2025!}"
-export TEST_USER_PASSWORD="${TEST_USER_PASSWORD:-DiveTestSecure2025!}"
+export TEST_USER_PASSWORD="${TEST_USER_PASSWORD:-TestUser2025!Pilot}"  # SSOT: Same as seed-hub-users.sh and seed-spoke-users.sh
 export APP_URL="${APP_URL:-https://localhost:3000}"
 export API_URL="${API_URL:-https://localhost:4000}"
 export INSTANCE_CODE="${INSTANCE_CODE:-USA}"

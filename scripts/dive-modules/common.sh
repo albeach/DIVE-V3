@@ -1487,4 +1487,66 @@ is_production_mode() {
     [ "${DIVE_ENV:-}" = "production" ] || [ -n "${KUBERNETES_SERVICE_HOST:-}" ]
 }
 
+# =============================================================================
+# JSON PARSING UTILITIES
+# =============================================================================
+
+##
+# Extract JSON field value using jq (BEST PRACTICE for grep pattern fix)
+# Falls back to grep if jq unavailable
+#
+# CRITICAL FIX (2026-02-06): Replaces fragile grep patterns like:
+#   grep -o '"spokeId"[[:space:]]*:[[:space:]]*"[^"]*"'
+# which cause "brackets not balanced" errors on macOS BSD grep.
+#
+# Arguments:
+#   $1 - JSON file path
+#   $2 - Field name (supports dot notation: "endpoints.baseUrl")
+#   $3 - Default value (optional, defaults to empty string)
+#
+# Returns:
+#   Field value or default
+#
+# Examples:
+#   spoke_id=$(json_get_field "$config_file" "spokeId" "spoke-unknown")
+#   hub_url=$(json_get_field "$config_file" "hubUrl" "https://hub.dive25.com")
+#   base_url=$(json_get_field "$config_file" "endpoints.baseUrl" "https://localhost:3000")
+##
+json_get_field() {
+    local file="$1"
+    local field="$2"
+    local default="${3:-}"
+    
+    if [ ! -f "$file" ]; then
+        echo "$default"
+        return 1
+    fi
+    
+    # Prefer jq (correct JSON parsing)
+    if command -v jq &>/dev/null; then
+        local result
+        result=$(jq -r ".$field // empty" "$file" 2>/dev/null)
+        if [ -n "$result" ]; then
+            echo "$result"
+            return 0
+        else
+            echo "$default"
+            return 0
+        fi
+    fi
+    
+    # Fallback to grep (simpler pattern, avoids [[:space:]] bracket issues)
+    # Use [ \t] instead of [[:space:]] for portability
+    local simple_field="${field##*.}"  # Get last component for simple JSON
+    local pattern="\"${simple_field}\"[ \\t]*:[ \\t]*\"([^\"]*)\""
+    local value
+    value=$(grep -Eo "$pattern" "$file" 2>/dev/null | head -1 | sed 's/.*:[ \t]*"\(.*\)"/\1/')
+    
+    if [ -n "$value" ]; then
+        echo "$value"
+    else
+        echo "$default"
+    fi
+}
+
 

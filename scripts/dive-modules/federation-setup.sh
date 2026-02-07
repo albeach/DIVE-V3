@@ -1232,8 +1232,9 @@ ensure_protocol_mappers_on_hub_federation_client() {
         return 1
     fi
 
-    # Standard attributes to include in tokens (core DIVE V3 + AMR for MFA)
-    local standard_attrs=("clearance" "countryOfAffiliation" "acpCOI" "uniqueID" "amr")
+    # Standard attributes to include in tokens (core DIVE V3)
+    # NOTE: amr/acr handled by native Keycloak v26 session mappers (oidc-amr-mapper, oidc-acr-mapper)
+    local standard_attrs=("clearance" "countryOfAffiliation" "acpCOI" "uniqueID")
     local created=0
 
     for attr in "${standard_attrs[@]}"; do
@@ -1252,7 +1253,7 @@ ensure_protocol_mappers_on_hub_federation_client() {
 
         # Determine if multivalued
         local multivalued="false"
-        [[ "$attr" == "acpCOI" || "$attr" == "amr" ]] && multivalued="true"
+        [[ "$attr" == "acpCOI" ]] && multivalued="true"
 
         # Create mapper
         docker exec "$HUB_KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh create \
@@ -1430,7 +1431,8 @@ create_hub_idp_mappers() {
     local hub_token
     hub_token=$(get_hub_admin_token) || return 1
 
-    local mappers=("uniqueID" "clearance" "countryOfAffiliation" "acpCOI" "amr")
+    # Core DIVE attributes (amr/acr handled by native session mappers in Terraform)
+    local mappers=("uniqueID" "clearance" "countryOfAffiliation" "acpCOI")
     local created=0
 
     for mapper in "${mappers[@]}"; do
@@ -1498,8 +1500,9 @@ ensure_protocol_mappers_on_spoke_client() {
         return 1
     fi
 
-    # Define standard attribute mappings (core DIVE V3 + AMR for MFA)
-    local standard_attrs=("clearance" "countryOfAffiliation" "acpCOI" "uniqueID" "amr")
+    # Define standard attribute mappings (core DIVE V3)
+    # NOTE: amr/acr handled by native Keycloak v26 session mappers
+    local standard_attrs=("clearance" "countryOfAffiliation" "acpCOI" "uniqueID")
 
     # Define localized attribute mappings based on spoke country
     # Format: "source_attribute:claim_name"
@@ -1841,8 +1844,8 @@ setup_claims() {
     local keycloak_container="dive-spoke-${spoke_lower}-keycloak"
     local realm="dive-v3-broker-${spoke_lower}"
 
-    # Core DIVE V3 attributes + AMR for MFA propagation
-    local mappers=("clearance" "countryOfAffiliation" "uniqueID" "acpCOI" "amr")
+    # Core DIVE V3 attributes (amr/acr handled by native session mappers in Terraform)
+    local mappers=("clearance" "countryOfAffiliation" "uniqueID" "acpCOI")
     local created=0
 
     for mapper in "${mappers[@]}"; do

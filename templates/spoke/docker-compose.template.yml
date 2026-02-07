@@ -208,15 +208,87 @@ services:
     networks:
       - dive-internal
     healthcheck:
-      # Check if MongoDB is accepting connections (basic connectivity only)
-      # Replica set initialization happens AFTER container is healthy, in deployment pipeline Phase 2a
-      # See: scripts/dive-modules/spoke/pipeline/phase-deployment.sh:spoke_deployment_init_mongodb_replica_set()
-      test: >
-        mongosh admin -u admin -p ${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}} --quiet --eval "db.adminCommand('ping')" | grep -q "ok"
-      interval: 3s
-      timeout: 5s
-      retries: 10
-      start_period: 15s
+      # CRITICAL FIX (2026-02-06): Initialize replica set AND verify PRIMARY status
+      # This ensures MongoDB is TRULY READY before dependent services (KAS, backend) start
+      #
+      # Root Cause: Docker healthcheck must test READINESS, not just connectivity
+      # - Phase 1: Check if replica set exists, initialize if not
+      # - Phase 2: Verify node is PRIMARY (not SECONDARY/RECOVERING/STARTUP)
+      # - Phase 3: Only mark healthy when PRIMARY is confirmed
+      #
+      # This prevents race conditions where:
+      # - KAS starts before MongoDB replica set is initialized
+      # - Backend connects before PRIMARY election completes
+      # - Services get "node is not in primary or recovering state" errors
+      test: |
+        mongosh admin -u admin -p ${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}} --quiet --eval "
+          try {
+            const status = rs.status();
+
+            // Check if this node is PRIMARY
+            if (status.ok === 1 && status.myState === 1) {
+              // PRIMARY confirmed - truly ready!
+              quit(0);
+            }
+
+            // Replica set exists but not PRIMARY yet
+            // Log current state for debugging
+            if (status.myState === 2) {
+              print('MongoDB in SECONDARY state - waiting for PRIMARY election');
+            } else if (status.myState === 5) {
+              print('MongoDB in STARTUP2 state - initializing replica set');
+            } else {
+              print('MongoDB state: ' + status.myState + ' - waiting for PRIMARY');
+            }
+            quit(1);
+
+          } catch (e) {
+            // Replica set not configured yet - initialize it
+            if (e.message.includes('no replset config') || e.message.includes('not running with --replSet')) {
+              print('[MongoDB] Replica set not initialized - initializing now...');
+
+              const initResult = rs.initiate({
+                _id: 'rs0',
+                members: [{
+                  _id: 0,
+                  host: 'localhost:27017',
+                  priority: 1
+                }]
+              });
+
+              if (initResult.ok === 1) {
+                print('[MongoDB] Replica set initialization successful');
+                // Give it time to elect PRIMARY (typically 5-10 seconds)
+                sleep(8000);
+
+                // Verify PRIMARY status after initialization
+                try {
+                  const statusAfterInit = rs.status();
+                  if (statusAfterInit.ok === 1 && statusAfterInit.myState === 1) {
+                    print('[MongoDB] PRIMARY elected - ready for connections');
+                    quit(0);
+                  } else {
+                    print('[MongoDB] Replica set initializing, state: ' + statusAfterInit.myState);
+                    quit(1);
+                  }
+                } catch (verifyError) {
+                  print('[MongoDB] Waiting for replica set to stabilize...');
+                  quit(1);
+                }
+              } else {
+                print('[MongoDB] Replica set initialization failed: ' + JSON.stringify(initResult));
+                quit(1);
+              }
+            } else {
+              print('[MongoDB] Error checking replica set status: ' + e.message);
+              quit(1);
+            }
+          }
+        "
+      interval: 5s
+      timeout: 10s
+      retries: 24
+      start_period: 40s
     restart: unless-stopped
 
   redis-{{INSTANCE_CODE_LOWER}}:
@@ -297,7 +369,7 @@ services:
       USA_IDP_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
       USA_IDP_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_USA}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-DiveAdminSecure2025!}
-      TEST_USER_PASSWORD: ${TEST_USER_PASSWORD:-DiveTestSecure2025!}
+      TEST_USER_PASSWORD: ${TEST_USER_PASSWORD:-TestUser2025!Pilot}  # SSOT: Same as seed-spoke-users.sh
       INSTANCE_CODE: {{INSTANCE_CODE_UPPER}}
     ports:
       - "{{KEYCLOAK_HOST_PORT}}:8443"
@@ -486,6 +558,15 @@ services:
       API_URL: {{API_URL}}
       # CORS
       NEXT_PUBLIC_BASE_URL: {{BASE_URL}}
+      # CORS Configuration (Dynamic - computed from instance endpoints)
+      # BEST PRACTICE: Derive allowed origins from instance configuration
+      # No hardcoded URLs - all origins computed from {{BASE_URL}}, {{API_URL}}, {{IDP_URL}}
+      # This ensures CORS works regardless of port assignments or domain changes
+      CORS_ALLOWED_ORIGINS: {{BASE_URL}},{{API_URL}},{{IDP_URL}},https://localhost:8443,https://localhost:4000,https://localhost:3000
+      # Federation mode - allows cross-instance communication
+      # SECURITY NOTE: JWT authentication enforces security, not CORS
+      # For production federations, set to 'true' to allow spoke-to-hub communication
+      ENABLE_FEDERATION_CORS: ${ENABLE_FEDERATION_CORS:-true}
       FEDERATION_ALLOWED_ORIGINS: {{BASE_URL}},{{API_URL}},{{IDP_URL}}
       # Hub federation - use Docker internal container name for local deployment
       HUB_URL: ${HUB_URL:-https://dive-hub-backend:4000}

@@ -284,7 +284,7 @@ spoke_compose_get_spoke_id() {
     # Priority 2: Check config.json
     if [ -f "$target_dir/config.json" ]; then
         local existing_id
-        existing_id=$(grep -o '"spokeId"[[:space:]]*:[[:space:]]*"[^"]*"' "$target_dir/config.json" 2>/dev/null | head -1 | cut -d'"' -f4)
+        existing_id=$(json_get_field "$target_dir/config.json" "spokeId" "")
         if [ -n "$existing_id" ] && [[ ! "$existing_id" =~ ^spoke-.*-temp- ]] && [ "$existing_id" != "PENDING_REGISTRATION" ]; then
             echo "$existing_id"
             return
@@ -332,7 +332,7 @@ spoke_compose_get_instance_name() {
     local config_file="${DIVE_ROOT}/instances/$(lower "$code_upper")/config.json"
     if [ -f "$config_file" ]; then
         local name
-        name=$(grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | head -1 | cut -d'"' -f4)
+        name=$(json_get_field "$config_file" "name" "")
         if [ -n "$name" ]; then
             echo "$name"
             return

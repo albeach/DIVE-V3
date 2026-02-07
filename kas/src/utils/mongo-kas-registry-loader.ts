@@ -1,9 +1,9 @@
 /**
  * MongoDB-Backed KAS Registry Loader
- * 
+ *
  * Loads KAS registry from MongoDB federation_spokes collection (SSOT)
  * Replaces legacy JSON file-based registry
- * 
+ *
  * Reference: backend/src/models/federation-spoke.model.ts
  * Implements Phase 3: Federation with proper SSOT integration
  */
@@ -63,13 +63,13 @@ export class MongoKASRegistryLoader {
     private db: Db | null = null;
     private collection: Collection<IMongoSpokeRegistration> | null = null;
     private initialized = false;
-    
+
     /**
      * Initialize MongoDB connection
      */
     async initialize(): Promise<void> {
         if (this.initialized) return;
-        
+
         try {
             const mongoUrl = getMongoDBUrl();
             kasLogger.info('Initializing MongoDB KAS Registry Loader', {
@@ -81,10 +81,10 @@ export class MongoKASRegistryLoader {
             this.client = await MongoClient.connect(mongoUrl);
             this.db = this.client.db(DB_NAME);
             this.collection = this.db.collection<IMongoSpokeRegistration>(COLLECTION_NAME);
-            
+
             this.initialized = true;
             kasLogger.info('MongoDB KAS Registry Loader initialized');
-            
+
         } catch (error) {
             kasLogger.error('Failed to initialize MongoDB KAS Registry Loader', {
                 error: error instanceof Error ? error.message : 'Unknown error',
@@ -92,37 +92,41 @@ export class MongoKASRegistryLoader {
             throw error;
         }
     }
-    
+
     /**
      * Load all approved KAS instances from MongoDB
+     *
+     * NOTE: MongoDB replica set initialization now happens in healthcheck.
+     * By the time this function is called, MongoDB is guaranteed to be PRIMARY.
+     * No retry logic needed - if we reach here, MongoDB is ready.
      */
     async loadFromMongoDB(): Promise<number> {
         await this.ensureInitialized();
-        
+
         try {
             kasLogger.info('Loading KAS registry from MongoDB');
-            
+
             // Query for approved spokes only
             const spokes = await this.collection!
                 .find({ status: 'approved' })
                 .toArray();
-            
+
             kasLogger.info(`Found ${spokes.length} approved spokes in MongoDB`);
-            
+
             let loadedCount = 0;
-            
+
             for (const spoke of spokes) {
                 try {
                     const kasEntry = this.convertSpokeToKASEntry(spoke);
                     kasRegistry.register(kasEntry);
                     loadedCount++;
-                    
+
                     kasLogger.debug('Loaded KAS from MongoDB', {
                         kasId: kasEntry.kasId,
                         organization: kasEntry.organization,
                         instanceCode: spoke.instanceCode,
                     });
-                    
+
                 } catch (error) {
                     kasLogger.error('Failed to convert spoke to KAS entry', {
                         spokeId: spoke.spokeId,
@@ -130,14 +134,14 @@ export class MongoKASRegistryLoader {
                     });
                 }
             }
-            
+
             kasLogger.info('KAS registry loaded from MongoDB', {
                 totalSpokes: spokes.length,
                 loadedCount,
             });
-            
+
             return loadedCount;
-            
+
         } catch (error) {
             kasLogger.error('Failed to load KAS registry from MongoDB', {
                 error: error instanceof Error ? error.message : 'Unknown error',
@@ -145,23 +149,23 @@ export class MongoKASRegistryLoader {
             throw error;
         }
     }
-    
+
     /**
      * Convert MongoDB spoke registration to KAS registry entry
      */
     private convertSpokeToKASEntry(spoke: IMongoSpokeRegistration): IKASRegistryEntry {
         // Build KAS URL from spoke configuration
         const kasUrl = this.buildKASUrl(spoke);
-        
+
         // Map auth method (default to jwt)
         const authMethod = spoke.authMethod || 'jwt';
-        
+
         // Build auth config based on method
         const authConfig = this.buildAuthConfig(spoke, authMethod);
-        
+
         // Build policy translation rules (can be extended later)
         const policyTranslation = this.buildPolicyTranslation(spoke);
-        
+
         return {
             kasId: spoke.spokeId,
             organization: spoke.organization,
@@ -180,7 +184,7 @@ export class MongoKASRegistryLoader {
             },
         };
     }
-    
+
     /**
      * Build KAS URL from spoke configuration
      * Uses environment-specific URLs, not hardcoded .dive25.com domains
@@ -195,29 +199,29 @@ export class MongoKASRegistryLoader {
             // Replace /request-key with /rewrap for ACP-240 compliance
             return spoke.kasUrl.replace('/request-key', '/rewrap');
         }
-        
+
         // Otherwise, construct URL from environment-specific patterns
         const instanceCode = spoke.instanceCode.toLowerCase();
         const kasPort = spoke.kasPort || 8080;
-        
+
         // Check for environment-specific URL override
         const envUrl = process.env[`KAS_URL_${spoke.instanceCode.toUpperCase()}`];
         if (envUrl) {
             return envUrl.endsWith('/rewrap') ? envUrl : `${envUrl}/rewrap`;
         }
-        
+
         // Default URL pattern (environment-agnostic)
         // In production, these should be overridden by environment variables
         const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
         return `${protocol}://${instanceCode}-kas:${kasPort}/rewrap`;
     }
-    
+
     /**
      * Build authentication configuration
      */
     private buildAuthConfig(spoke: IMongoSpokeRegistration, authMethod: string): IKASRegistryEntry['authConfig'] {
         const config: IKASRegistryEntry['authConfig'] = {};
-        
+
         switch (authMethod) {
             case 'mtls':
                 // mTLS certificates from environment or spoke metadata
@@ -225,22 +229,22 @@ export class MongoKASRegistryLoader {
                 config.clientKey = process.env[`MTLS_CLIENT_KEY_${spoke.instanceCode.toUpperCase()}`];
                 config.caCert = process.env[`MTLS_CA_CERT_${spoke.instanceCode.toUpperCase()}`];
                 break;
-                
+
             case 'jwt':
                 // JWT issuer from Keycloak realm (environment-specific)
-                const keycloakBaseUrl = process.env[`KEYCLOAK_URL_${spoke.instanceCode.toUpperCase()}`] 
+                const keycloakBaseUrl = process.env[`KEYCLOAK_URL_${spoke.instanceCode.toUpperCase()}`]
                     || process.env.KEYCLOAK_URL;
                 if (keycloakBaseUrl) {
                     config.jwtIssuer = `${keycloakBaseUrl}/realms/dive-v3-broker`;
                 }
                 break;
-                
+
             case 'apikey':
                 // API key from environment
                 config.apiKey = process.env[`API_KEY_${spoke.instanceCode.toUpperCase()}`];
                 config.apiKeyHeader = 'X-Federation-API-Key';
                 break;
-                
+
             case 'oauth2':
                 // OAuth2 credentials from environment
                 config.oauth2ClientId = process.env[`OAUTH2_CLIENT_ID_${spoke.instanceCode.toUpperCase()}`];
@@ -248,10 +252,10 @@ export class MongoKASRegistryLoader {
                 config.oauth2TokenUrl = process.env[`OAUTH2_TOKEN_URL_${spoke.instanceCode.toUpperCase()}`];
                 break;
         }
-        
+
         return config;
     }
-    
+
     /**
      * Build policy translation rules
      * Can be extended to load from database if needed
@@ -264,7 +268,7 @@ export class MongoKASRegistryLoader {
             'CONFIDENTIAL': 'CONFIDENTIAL',
             'UNCLASSIFIED': 'UNCLASSIFIED',
         };
-        
+
         // Add country-specific mappings
         const instanceCode = spoke.instanceCode.toUpperCase();
         switch (instanceCode) {
@@ -275,7 +279,7 @@ export class MongoKASRegistryLoader {
                 clearanceMapping['DIFFUSION_RESTREINTE'] = 'CONFIDENTIAL';
                 clearanceMapping['NON_PROTEGE'] = 'UNCLASSIFIED';
                 break;
-                
+
             case 'DEU':
                 clearanceMapping['STRENG_GEHEIM'] = 'TOP_SECRET';
                 clearanceMapping['GEHEIM'] = 'SECRET';
@@ -283,18 +287,18 @@ export class MongoKASRegistryLoader {
                 clearanceMapping['VS_NUR_FUER_DEN_DIENSTGEBRAUCH'] = 'CONFIDENTIAL';
                 clearanceMapping['OFFEN'] = 'UNCLASSIFIED';
                 break;
-                
+
             case 'GBR':
                 clearanceMapping['OFFICIAL_SENSITIVE'] = 'CONFIDENTIAL';
                 clearanceMapping['OFFICIAL'] = 'UNCLASSIFIED';
                 break;
         }
-        
+
         return {
             clearanceMapping,
         };
     }
-    
+
     /**
      * Reload KAS registry from MongoDB (for updates)
      */
@@ -302,7 +306,7 @@ export class MongoKASRegistryLoader {
         kasLogger.info('Reloading KAS registry from MongoDB');
         return this.loadFromMongoDB();
     }
-    
+
     /**
      * Close MongoDB connection
      */
@@ -313,7 +317,7 @@ export class MongoKASRegistryLoader {
             kasLogger.info('MongoDB KAS Registry Loader closed');
         }
     }
-    
+
     /**
      * Ensure initialized
      */
@@ -331,35 +335,35 @@ export const mongoKASRegistryLoader = new MongoKASRegistryLoader();
 
 /**
  * Initialize KAS registry from MongoDB (SSOT)
- * 
+ *
  * IMPORTANT: This is the ONLY way to load KAS registry in production
  * JSON files are deprecated and NOT used
  */
 export async function initializeKASRegistryFromMongoDB(): Promise<number> {
     try {
         kasLogger.info('Initializing KAS registry from MongoDB (SSOT)');
-        
+
         await mongoKASRegistryLoader.initialize();
         const loadedCount = await mongoKASRegistryLoader.loadFromMongoDB();
-        
+
         kasLogger.info('KAS registry initialized from MongoDB', {
             loadedCount,
             source: 'MongoDB federation_spokes collection',
         });
-        
+
         return loadedCount;
-        
+
     } catch (error) {
         kasLogger.error('Failed to initialize KAS registry from MongoDB', {
             error: error instanceof Error ? error.message : 'Unknown error',
         });
-        
+
         // In development, fall back to empty registry with warning
         if (process.env.NODE_ENV === 'development') {
             kasLogger.warn('Development mode: KAS registry empty, federation will not work');
             return 0;
         }
-        
+
         throw error;
     }
 }

@@ -513,13 +513,22 @@ orch_acquire_deployment_lock() {
     # SPECIAL CASE: Hub (USA) deployment
     # Hub creates the orchestration database, so it can't use database locking initially
     if [ "$code_upper" = "USA" ]; then
-        if ! type -t orch_db_check_connection >/dev/null 2>&1 || ! orch_db_check_connection; then
-            log_verbose "Hub deployment - database not yet available, skipping database lock"
+        echo "DEBUG: Checking hub bootstrap mode for USA" >&2
+        if ! type -t orch_db_check_connection >/dev/null 2>&1; then
+            echo "DEBUG: orch_db_check_connection function not found - skipping DB lock" >&2
             ORCH_CONTEXT[lock_acquired]="true"
             ORCH_CONTEXT[lock_type]="hub-bootstrap"
-            log_success "Deployment lock acquired for $instance_code (hub-bootstrap mode)"
+            log_success "Deployment lock acquired for $instance_code (hub-bootstrap mode - function not available)"
             return 0
         fi
+        if ! orch_db_check_connection; then
+            echo "DEBUG: Database not connected - skipping DB lock" >&2
+            ORCH_CONTEXT[lock_acquired]="true"
+            ORCH_CONTEXT[lock_type]="hub-bootstrap"
+            log_success "Deployment lock acquired for $instance_code (hub-bootstrap mode - DB not available)"
+            return 0
+        fi
+        echo "DEBUG: Database IS connected - will try to acquire DB lock" >&2
     fi
 
     # PostgreSQL advisory locking (MANDATORY for non-Hub instances)

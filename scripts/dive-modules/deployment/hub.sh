@@ -81,6 +81,97 @@ HUB_DATA_DIR="${DIVE_ROOT}/data/hub"
 # These wrap the actual phase implementations for protected execution
 ##
 
+hub_phase_database_init() {
+    local instance_code="$1"
+    local pipeline_mode="$2"
+
+    log_info "Phase 0: PostgreSQL and Orchestration Database initialization"
+
+    # Start PostgreSQL container only
+    log_verbose "Starting PostgreSQL container..."
+    cd "$DIVE_ROOT" || return 1
+
+    if ! ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" up -d postgres >/dev/null 2>&1; then
+        log_error "Failed to start PostgreSQL container"
+        return 1
+    fi
+
+    # Wait for PostgreSQL to be ready
+    local max_wait=60
+    local elapsed=0
+    log_verbose "Waiting for PostgreSQL to be ready..."
+
+    while [ $elapsed -lt $max_wait ]; do
+        if ${DOCKER_CMD:-docker} exec dive-hub-postgres pg_isready -U postgres >/dev/null 2>&1; then
+            log_success "PostgreSQL is ready"
+            break
+        fi
+        sleep 2
+        ((elapsed += 2))
+    done
+
+    if [ $elapsed -ge $max_wait ]; then
+        log_error "PostgreSQL failed to become ready within ${max_wait}s"
+        return 1
+    fi
+
+    # Create and initialize orchestration database
+    log_verbose "Creating orchestration database..."
+    ${DOCKER_CMD:-docker} exec dive-hub-postgres psql -U postgres -c "CREATE DATABASE orchestration;" >/dev/null 2>&1 || true
+
+    # Apply orchestration schema
+    if [ -f "${DIVE_ROOT}/scripts/migrations/001_orchestration_state_db.sql" ]; then
+        log_verbose "Applying orchestration schema..."
+
+        local temp_migration="/tmp/orchestration_migration_$$.sql"
+        grep -v '^\\c orchestration' "${DIVE_ROOT}/scripts/migrations/001_orchestration_state_db.sql" > "${temp_migration}"
+
+        ${DOCKER_CMD:-docker} cp "${temp_migration}" dive-hub-postgres:/tmp/migration.sql
+        rm -f "${temp_migration}"
+
+        if ! ${DOCKER_CMD:-docker} exec dive-hub-postgres psql -U postgres -d orchestration -f /tmp/migration.sql >/dev/null 2>&1; then
+            log_error "Failed to apply orchestration schema"
+            ${DOCKER_CMD:-docker} exec dive-hub-postgres rm -f /tmp/migration.sql
+            return 1
+        fi
+
+        ${DOCKER_CMD:-docker} exec dive-hub-postgres rm -f /tmp/migration.sql
+
+        # Verify required tables exist
+        local required_tables=("deployment_states" "state_transitions" "deployment_steps"
+                               "deployment_locks" "circuit_breakers" "orchestration_errors"
+                               "orchestration_metrics" "checkpoints")
+        local missing_tables=0
+
+        for table in "${required_tables[@]}"; do
+            if ! ${DOCKER_CMD:-docker} exec dive-hub-postgres psql -U postgres -d orchestration -c "\d $table" >/dev/null 2>&1; then
+                log_error "Required table missing: $table"
+                missing_tables=$((missing_tables + 1))
+            fi
+        done
+
+        if [ $missing_tables -gt 0 ]; then
+            log_error "$missing_tables required tables missing"
+            return 1
+        fi
+
+        log_success "Orchestration database initialized (8 tables verified)"
+    else
+        log_error "Orchestration schema file not found"
+        return 1
+    fi
+
+    # Apply federation schema if available
+    if [ -f "${DIVE_ROOT}/scripts/sql/002_federation_schema.sql" ]; then
+        log_verbose "Applying federation schema..."
+        ${DOCKER_CMD:-docker} exec -i dive-hub-postgres psql -U postgres -d orchestration < "${DIVE_ROOT}/scripts/sql/002_federation_schema.sql" >/dev/null 2>&1 || \
+            log_verbose "Federation schema already exists"
+    fi
+
+    log_success "Phase 0 complete: Orchestration database ready for state tracking"
+    return 0
+}
+
 hub_phase_preflight() {
     local instance_code="$1"
     local pipeline_mode="$2"
@@ -102,18 +193,18 @@ hub_phase_mongodb_init() {
 hub_phase_build() {
     local instance_code="$1"
     local pipeline_mode="$2"
-    
+
     log_info "Building Docker images..."
-    
+
     cd "$DIVE_ROOT"
-    
+
     # Build images WITHOUT circuit breaker output capture
     # This is heavyweight I/O that must stream to stdout
     local build_log="${DIVE_ROOT}/logs/docker-builds/hub-build-$(date +%Y%m%d-%H%M%S).log"
     mkdir -p "$(dirname "$build_log")"
-    
+
     log_info "Build output: $build_log"
-    
+
     if ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" build 2>&1 | tee "$build_log"; then
         log_success "Docker images built successfully"
         return 0
@@ -127,22 +218,22 @@ hub_phase_build() {
 hub_phase_services() {
     local instance_code="$1"
     local pipeline_mode="$2"
-    
+
     # SERVICES phase now ONLY starts services (build happens in BUILD phase)
     log_info "Starting hub services..."
-    
+
     # DIVE_ROOT is set by the main dive script and should already be in environment
     # If not set, infer from script location
     if [ -z "$DIVE_ROOT" ]; then
         DIVE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
         export DIVE_ROOT
     fi
-    
+
     cd "$DIVE_ROOT" || {
         log_error "Failed to change to DIVE_ROOT=$DIVE_ROOT"
         return 1
     }
-    
+
     # Ensure dive-shared network exists
     if ! ${DOCKER_CMD:-docker} network inspect dive-shared >/dev/null 2>&1; then
         log_verbose "Creating dive-shared network..."
@@ -151,16 +242,16 @@ hub_phase_services() {
             return 1
         fi
     fi
-    
+
     # Load secrets
     if ! load_secrets; then
         log_error "Failed to load secrets"
         return 1
     fi
-    
+
     # Start services (parallel or sequential)
     local use_parallel="${PARALLEL_STARTUP_ENABLED:-true}"
-    
+
     if [ "$use_parallel" = "true" ] && type hub_parallel_startup &>/dev/null; then
         log_info "Using parallel service startup (dependency-aware)"
         if ! hub_parallel_startup; then
@@ -174,7 +265,7 @@ hub_phase_services() {
             return 1
         fi
     fi
-    
+
     log_success "Hub services started successfully"
     return 0
 }
@@ -182,7 +273,10 @@ hub_phase_services() {
 hub_phase_orchestration_db() {
     local instance_code="$1"
     local pipeline_mode="$2"
-    hub_init_orchestration_db
+    # Orchestration DB is now initialized in Phase 0
+    # This phase is kept for backward compatibility but does nothing
+    log_verbose "Orchestration database already initialized in Phase 0"
+    return 0
 }
 
 hub_phase_keycloak_config() {
@@ -420,36 +514,66 @@ _hub_pipeline_execute_internal() {
         orch_init_metrics "$instance_code"
     fi
 
-    # Initialize progress tracking
+    # Initialize progress tracking (11 phases: 0, 1, 2, 2.5, 2.8, 3, 4, 4.5, 4.75, 5, 5.5)
     if type progress_init &>/dev/null; then
-        progress_init "hub" "USA" 10
+        progress_init "hub" "USA" 11
     fi
 
-    # Set initial state
-    if type deployment_set_state &>/dev/null; then
-        deployment_set_state "$instance_code" "INITIALIZING" "" \
-            "{\"mode\":\"$pipeline_mode\",\"resume\":$resume_mode}"
+    # NOTE: Initial state is set AFTER Phase 0 (database must exist first)
+
+    # =========================================================================
+    # Phase 0: Database Infrastructure (NEW - orchestration DB first!)
+    # =========================================================================
+    local phase_start=$(date +%s)
+    if type progress_set_phase &>/dev/null; then
+        progress_set_phase 0 "Database infrastructure"
+    fi
+
+    if ! _hub_run_phase_with_circuit_breaker "$instance_code" "DATABASE_INIT" "hub_phase_database_init" "$pipeline_mode" "$resume_mode"; then
+        phase_result=1
+    fi
+
+    local phase_end=$(date +%s)
+    phase_times+=("Phase 0 (Database Init): $((phase_end - phase_start))s")
+
+    # Check failure threshold
+    if [ $phase_result -eq 0 ]; then
+        if ! _hub_check_threshold "$instance_code" "DATABASE_INIT"; then
+            phase_result=1
+        fi
+    fi
+
+    # =========================================================================
+    # Set Initial State (AFTER Phase 0 - database now exists!)
+    # =========================================================================
+    if [ $phase_result -eq 0 ]; then
+        if type deployment_set_state &>/dev/null; then
+            deployment_set_state "$instance_code" "INITIALIZING" "" \
+                "{\"mode\":\"$pipeline_mode\",\"resume\":$resume_mode,\"phase\":\"POST_DATABASE_INIT\"}"
+        fi
     fi
 
     # =========================================================================
     # Phase 1: Preflight
     # =========================================================================
-    local phase_start=$(date +%s)
-    if type progress_set_phase &>/dev/null; then
-        progress_set_phase 1 "Preflight checks"
-    fi
-
-    if ! _hub_run_phase_with_circuit_breaker "$instance_code" "PREFLIGHT" "hub_phase_preflight" "$pipeline_mode" "$resume_mode"; then
-        phase_result=1
-    fi
-
-    local phase_end=$(date +%s)
-    phase_times+=("Phase 1 (Preflight): $((phase_end - phase_start))s")
-
-    # Check failure threshold
     if [ $phase_result -eq 0 ]; then
-        if ! _hub_check_threshold "$instance_code" "PREFLIGHT"; then
+        phase_start=$(date +%s)
+        if type progress_set_phase &>/dev/null; then
+            progress_set_phase 1 "Preflight checks"
+        fi
+
+        if ! _hub_run_phase_with_circuit_breaker "$instance_code" "PREFLIGHT" "hub_phase_preflight" "$pipeline_mode" "$resume_mode"; then
             phase_result=1
+        fi
+
+        phase_end=$(date +%s)
+        phase_times+=("Phase 1 (Preflight): $((phase_end - phase_start))s")
+
+        # Check failure threshold
+        if [ $phase_result -eq 0 ]; then
+            if ! _hub_check_threshold "$instance_code" "PREFLIGHT"; then
+                phase_result=1
+            fi
         fi
     fi
 
@@ -511,9 +635,8 @@ _hub_pipeline_execute_internal() {
             progress_set_phase 2.8 "Building Docker images"
         fi
 
-        if type deployment_set_state &>/dev/null; then
-            deployment_set_state "$instance_code" "DEPLOYING" "" "{\"phase\":\"BUILD\"}"
-        fi
+        # NOTE: State remains INITIALIZING during build
+        # State will transition to DEPLOYING at Phase 3 (Services)
 
         # Build phase uses direct execution (no circuit breaker output capture)
         if ! hub_phase_build "$instance_code" "$pipeline_mode"; then
@@ -523,6 +646,11 @@ _hub_pipeline_execute_internal() {
 
         phase_end=$(date +%s)
         phase_times+=("Phase 2.8 (Build): $((phase_end - phase_start))s")
+
+        # Mark checkpoint manually (build phase doesn't use circuit breaker)
+        if [ $phase_result -eq 0 ] && type hub_checkpoint_mark_complete &>/dev/null; then
+            hub_checkpoint_mark_complete "BUILD" "$((phase_end - phase_start))"
+        fi
 
         if [ $phase_result -eq 0 ]; then
             if ! _hub_check_threshold "$instance_code" "BUILD"; then
@@ -541,6 +669,8 @@ _hub_pipeline_execute_internal() {
             progress_set_services 0 12
         fi
 
+        # State transition: INITIALIZING → DEPLOYING
+        # (Infrastructure ready, now deploying services)
         if type deployment_set_state &>/dev/null; then
             deployment_set_state "$instance_code" "DEPLOYING" "" "{\"phase\":\"SERVICES\"}"
         fi
@@ -564,37 +694,16 @@ _hub_pipeline_execute_internal() {
     fi
 
     # =========================================================================
-    # Phase 5: Orchestration Database
+    # Phase 4: Keycloak Configuration
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
         phase_start=$(date +%s)
         if type progress_set_phase &>/dev/null; then
-            progress_set_phase 5 "Orchestration database"
+            progress_set_phase 4 "Keycloak configuration"
         fi
 
-        if ! _hub_run_phase_with_circuit_breaker "$instance_code" "ORCHESTRATION_DB" "hub_phase_orchestration_db" "$pipeline_mode" "$resume_mode"; then
-            phase_result=1
-        fi
-
-        phase_end=$(date +%s)
-        phase_times+=("Phase 5 (Orch DB): $((phase_end - phase_start))s")
-
-        if [ $phase_result -eq 0 ]; then
-            if ! _hub_check_threshold "$instance_code" "ORCHESTRATION_DB"; then
-                phase_result=1
-            fi
-        fi
-    fi
-
-    # =========================================================================
-    # Phase 6: Keycloak Configuration
-    # =========================================================================
-    if [ $phase_result -eq 0 ]; then
-        phase_start=$(date +%s)
-        if type progress_set_phase &>/dev/null; then
-            progress_set_phase 6 "Keycloak configuration"
-        fi
-
+        # State transition: DEPLOYING → CONFIGURING
+        # (Services deployed, now configuring Keycloak realm)
         if type deployment_set_state &>/dev/null; then
             deployment_set_state "$instance_code" "CONFIGURING" "" "{\"phase\":\"KEYCLOAK_CONFIG\"}"
         fi
@@ -604,7 +713,7 @@ _hub_pipeline_execute_internal() {
         fi
 
         phase_end=$(date +%s)
-        phase_times+=("Phase 6 (Keycloak): $((phase_end - phase_start))s")
+        phase_times+=("Phase 4 (Keycloak): $((phase_end - phase_start))s")
 
         if [ $phase_result -eq 0 ]; then
             if ! _hub_check_threshold "$instance_code" "KEYCLOAK_CONFIG"; then
@@ -614,17 +723,23 @@ _hub_pipeline_execute_internal() {
     fi
 
     # =========================================================================
-    # Phase 6.5: Realm Verification
+    # Phase 4.5: Realm Verification
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
         phase_start=$(date +%s)
+
+        # State transition: CONFIGURING → VERIFYING
+        # (Keycloak realm configuration complete, now verifying it works)
+        if type deployment_set_state &>/dev/null; then
+            deployment_set_state "$instance_code" "VERIFYING" "" "{\"phase\":\"REALM_VERIFY\"}"
+        fi
 
         if ! _hub_run_phase_with_circuit_breaker "$instance_code" "REALM_VERIFY" "hub_phase_realm_verify" "$pipeline_mode" "$resume_mode"; then
             phase_result=1
         fi
 
         phase_end=$(date +%s)
-        phase_times+=("Phase 6.5 (Realm Verify): $((phase_end - phase_start))s")
+        phase_times+=("Phase 4.5 (Realm Verify): $((phase_end - phase_start))s")
 
         if [ $phase_result -eq 0 ]; then
             if ! _hub_check_threshold "$instance_code" "REALM_VERIFY"; then
@@ -634,7 +749,7 @@ _hub_pipeline_execute_internal() {
     fi
 
     # =========================================================================
-    # Phase 6.75: KAS Registration
+    # Phase 4.75: KAS Registration
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
         phase_start=$(date +%s)
@@ -644,16 +759,16 @@ _hub_pipeline_execute_internal() {
             log_warn "Hub KAS registration failed - KAS decryption may not work"
 
         phase_end=$(date +%s)
-        phase_times+=("Phase 6.75 (KAS Register): $((phase_end - phase_start))s")
+        phase_times+=("Phase 4.75 (KAS Register): $((phase_end - phase_start))s")
     fi
 
     # =========================================================================
-    # Phase 7: Seeding
+    # Phase 5: Seeding
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
         phase_start=$(date +%s)
         if type progress_set_phase &>/dev/null; then
-            progress_set_phase 7 "Database seeding"
+            progress_set_phase 5 "Database seeding"
         fi
 
         # Seeding is non-fatal
@@ -661,16 +776,16 @@ _hub_pipeline_execute_internal() {
             log_warn "Database seeding failed - can be done manually: ./dive hub seed"
 
         phase_end=$(date +%s)
-        phase_times+=("Phase 7 (Seeding): $((phase_end - phase_start))s")
+        phase_times+=("Phase 5 (Seeding): $((phase_end - phase_start))s")
     fi
 
     # =========================================================================
-    # Phase 7.5: KAS Initialization
+    # Phase 5.5: KAS Initialization
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
         phase_start=$(date +%s)
         if type progress_set_phase &>/dev/null; then
-            progress_set_phase 7.5 "KAS initialization"
+            progress_set_phase 5.5 "KAS initialization"
         fi
 
         # KAS init is non-fatal
@@ -678,7 +793,7 @@ _hub_pipeline_execute_internal() {
             log_warn "KAS initialization had issues"
 
         phase_end=$(date +%s)
-        phase_times+=("Phase 7.5 (KAS Init): $((phase_end - phase_start))s")
+        phase_times+=("Phase 5.5 (KAS Init): $((phase_end - phase_start))s")
     fi
 
     # =========================================================================
@@ -688,7 +803,8 @@ _hub_pipeline_execute_internal() {
     local duration=$((end_time - start_time))
 
     if [ $phase_result -eq 0 ]; then
-        # Mark complete
+        # State transition: VERIFYING → COMPLETE
+        # (All verification phases passed, deployment successful)
         if type deployment_set_state &>/dev/null; then
             deployment_set_state "$instance_code" "COMPLETE" "" \
                 "{\"duration_seconds\":$duration,\"mode\":\"$pipeline_mode\"}"

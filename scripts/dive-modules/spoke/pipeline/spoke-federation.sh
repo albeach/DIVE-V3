@@ -368,11 +368,13 @@ _spoke_federation_verify_oidc_endpoints() {
     local spoke_oidc_ok=false
     local hub_oidc_ok=false
 
-    # Get spoke Keycloak port from instance config
+    # Get spoke Keycloak port from instance config (FIXED: Use json_get_field and trim)
     local spoke_kc_port
     if [ -f "${DIVE_ROOT}/instances/${code_lower}/config.json" ]; then
-        spoke_kc_port=$(jq -r '.endpoints.idpPublicUrl // "https://localhost:8443"' \
-            "${DIVE_ROOT}/instances/${code_lower}/config.json" | grep -o ':[0-9]*' | tr -d ':')
+        local idp_url
+        idp_url=$(json_get_field "${DIVE_ROOT}/instances/${code_lower}/config.json" "endpoints.idpPublicUrl" "https://localhost:8443" | tr -d '\n\r')
+        # Extract port from URL
+        spoke_kc_port=$(echo "$idp_url" | grep -o ':[0-9]*' | tr -d ':\n\r')
     fi
     spoke_kc_port="${spoke_kc_port:-8443}"
 
@@ -380,7 +382,7 @@ _spoke_federation_verify_oidc_endpoints() {
     local spoke_discovery_url="https://localhost:${spoke_kc_port}/realms/${spoke_realm}/.well-known/openid-configuration"
     if curl -sk --max-time 5 "$spoke_discovery_url" 2>/dev/null | grep -q '"issuer"'; then
         spoke_oidc_ok=true
-        log_verbose "✓ Spoke OIDC discovery: ${spoke_realm}"
+        log_verbose "✓ Spoke OIDC discovery: ${spoke_realm} (port ${spoke_kc_port})"
     else
         log_verbose "✗ Spoke OIDC discovery not ready: $spoke_discovery_url"
     fi
@@ -398,6 +400,7 @@ _spoke_federation_verify_oidc_endpoints() {
     if [ "$spoke_oidc_ok" = true ] && [ "$hub_oidc_ok" = true ]; then
         return 0
     else
+        log_verbose "OIDC endpoint check: spoke=$spoke_oidc_ok, hub=$hub_oidc_ok"
         return 1
     fi
 }

@@ -1,13 +1,13 @@
 # =============================================================================
 # DIVE V3 - Hub Guardrails (Immutable Base Policies)
 # =============================================================================
-#
+# 
 # These policies are enforced by the Hub and CANNOT be overridden by spokes.
 # Spokes can ADD restrictions but cannot WEAKEN these guardrails.
 #
 # Pushed to all spokes via OPAL.
 # Signed by Hub's policy signing key.
-#
+# 
 # Version: 1.0.0
 # Last Updated: 2025-12-04
 # =============================================================================
@@ -21,14 +21,13 @@ import rego.v1
 # =============================================================================
 
 # Clearance hierarchy (cannot be modified)
-clearance_levels := ["UNCLASSIFIED", "RESTRICTED", "CONFIDENTIAL", "SECRET", "TOP_SECRET"]
+clearance_levels := ["UNCLASSIFIED", "CONFIDENTIAL", "SECRET", "TOP_SECRET"]
 
 clearance_rank := {
 	"UNCLASSIFIED": 0,
-	"RESTRICTED": 1,
-	"CONFIDENTIAL": 2,
-	"SECRET": 3,
-	"TOP_SECRET": 4,
+	"CONFIDENTIAL": 1,
+	"SECRET": 2,
+	"TOP_SECRET": 3,
 }
 
 # Classification that requires MFA (spokes can only make this stricter)
@@ -122,133 +121,6 @@ guardrail_violations contains violation if {
 		]),
 		"severity": "critical",
 	}
-}
-
-# =============================================================================
-# HUB↔SPOKE FEDERATION PROTECTION (Phase 2)
-# =============================================================================
-# CRITICAL GUARDRAILS: Prevent tenants from tampering with hub↔spoke constraints
-# These guardrails protect against backend RBAC bypass attempts.
-# Even if a spoke admin bypasses MongoDB write permissions, OPA will deny access.
-
-# Violation: Hub↔spoke federation constraint was modified by non-super_admin
-guardrail_violations contains violation if {
-	# Subject is from a spoke (has issuer, not local auth)
-	input.subject.issuer
-
-	# Extract subject's tenant from issuer
-	subject_tenant := _extract_tenant_from_issuer(input.subject.issuer)
-	subject_tenant != "HUB"
-	subject_tenant != "UNKNOWN"
-
-	# Resource is from hub or current tenant is hub
-	resource_tenant := object.get(input.context, "tenant", "USA")
-	resource_tenant == "HUB"
-
-	# Check federation constraint for subject→hub relationship
-	data.federation_constraints.federation_constraints[subject_tenant]
-	constraint := data.federation_constraints.federation_constraints[subject_tenant]["HUB"]
-	constraint.relationshipType == "hub_spoke"
-
-	# Verify modifier was NOT a super_admin
-	modifiedBy := object.get(constraint, "modifiedBy", "")
-	not _is_super_admin(modifiedBy)
-
-	violation := {
-		"code": "HUB_FEDERATION_TAMPERING",
-		"message": sprintf(
-			"Hub↔spoke federation constraint for %s was modified by non-super_admin: %s. This is a critical security violation.",
-			[subject_tenant, modifiedBy],
-		),
-		"severity": "critical",
-		"subject_tenant": subject_tenant,
-		"modifier": modifiedBy,
-		"constraint_type": "hub_spoke",
-	}
-}
-
-# Violation: Constraint claims hub_spoke but involves non-HUB tenant
-guardrail_violations contains violation if {
-	# Check all constraints for invalid hub_spoke relationships
-	data.federation_constraints.federation_constraints
-	some owner, partners in data.federation_constraints.federation_constraints
-	some partner, constraint in partners
-
-	# Constraint claims to be hub_spoke
-	constraint.relationshipType == "hub_spoke"
-
-	# But neither side is actually HUB
-	owner != "HUB"
-	partner != "HUB"
-
-	violation := {
-		"code": "INVALID_HUB_SPOKE_RELATIONSHIP",
-		"message": sprintf(
-			"Constraint %s→%s claims relationshipType='hub_spoke' but neither side is HUB",
-			[owner, partner],
-		),
-		"severity": "critical",
-		"owner": owner,
-		"partner": partner,
-	}
-}
-
-# Violation: HUB tenant involved but relationshipType is spoke_spoke
-guardrail_violations contains violation if {
-	data.federation_constraints.federation_constraints
-	some owner, partners in data.federation_constraints.federation_constraints
-	some partner, constraint in partners
-
-	# One side is HUB
-	_involves_hub_tenant(owner, partner)
-
-	# But relationshipType is spoke_spoke (should be hub_spoke)
-	constraint.relationshipType == "spoke_spoke"
-
-	violation := {
-		"code": "HUB_TENANT_WRONG_TYPE",
-		"message": sprintf(
-			"Constraint %s→%s involves HUB but has relationshipType='spoke_spoke' (should be 'hub_spoke')",
-			[owner, partner],
-		),
-		"severity": "critical",
-		"owner": owner,
-		"partner": partner,
-	}
-}
-
-# Helper: Extract tenant from issuer URL
-_extract_tenant_from_issuer(issuer) := tenant if {
-	# Example: https://keycloak-fra:8443/realms/dive-v3-broker-fra
-	regex.match(`/realms/dive-v3-broker-([a-z]{3})`, issuer)
-	matches := regex.find_all_string_submatch_n(`/realms/dive-v3-broker-([a-z]{3})`, issuer, -1)
-	count(matches) > 0
-	count(matches[0]) > 1
-	tenant_lower := matches[0][1]
-	tenant := upper(tenant_lower)
-} else := "UNKNOWN"
-
-# Helper: Check if user is super_admin
-_is_super_admin(modifiedBy) if {
-	contains(modifiedBy, "super_admin")
-}
-
-_is_super_admin(modifiedBy) if {
-	contains(modifiedBy, "super-admin")
-}
-
-_is_super_admin(modifiedBy) if {
-	# Email pattern: super_admin@dive.nato.int
-	regex.match(`super[_-]?admin@`, modifiedBy)
-}
-
-# Helper: Check if owner or partner is HUB
-_involves_hub_tenant(owner, partner) if {
-	owner == "HUB"
-}
-
-_involves_hub_tenant(owner, partner) if {
-	partner == "HUB"
 }
 
 # =============================================================================

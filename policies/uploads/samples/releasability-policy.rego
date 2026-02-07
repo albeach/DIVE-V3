@@ -45,3 +45,6 @@ obligations := [{
         "resourceId": input.resource.resourceId
     }
 }] if { allow }
+
+
+

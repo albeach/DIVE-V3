@@ -801,45 +801,85 @@ cmd_nuke() {
         *) ;;
     esac
 
-    # Port-based and anonymous cleanup ONLY when nuking "all" (otherwise we'd remove other targets)
-    if [ "$target_type" = "all" ]; then
-        log_verbose "  Stopping containers using DIVE ports..."
-        for port in 3033 4033 8476 3032 4032 8475 3034 4034 8477 8443 4000 3000; do
-            for c in $(docker ps --format '{{.ID}}\t{{.Names}}\t{{.Ports}}' 2>/dev/null | grep -E ":$port->|:$port/" | awk '{print $1}'); do
-                local container_name=$(docker inspect --format '{{.Name}}' "$c" 2>/dev/null | sed 's/^\///')
-                if echo "$container_name" | grep -qE "dive|spoke|hub"; then
-                    log_verbose "    Stopping container using port $port: $container_name"
-                    ${DOCKER_CMD:-docker} stop "$c" 2>/dev/null || true
-                    ${DOCKER_CMD:-docker} rm -f "$c" 2>/dev/null || true
-                    removed_containers=$((removed_containers + 1))
+    # Port-based cleanup for spoke or all (BEST PRACTICE: Force-stop containers holding ports)
+    if [ "$target_type" = "spoke" ] || [ "$target_type" = "all" ]; then
+        if [ "$target_type" = "spoke" ]; then
+            # Spoke-specific: Determine ports from config.json (NO HARDCODING)
+            local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
+            local config_file="${DIVE_ROOT}/instances/${instance_lower}/config.json"
+
+            local spoke_ports=()
+            if [ -f "$config_file" ] && command -v jq &>/dev/null; then
+                # Extract ports from endpoints dynamically
+                local frontend_port=$(jq -r '.endpoints.baseUrl // ""' "$config_file" | grep -oE ':[0-9]+' | tr -d ':')
+                local backend_port=$(jq -r '.endpoints.apiUrl // ""' "$config_file" | grep -oE ':[0-9]+' | tr -d ':')
+                local idp_port=$(jq -r '.endpoints.idpUrl // ""' "$config_file" | grep -oE ':[0-9]+' | tr -d ':')
+                local idp_public_port=$(jq -r '.endpoints.idpPublicUrl // ""' "$config_file" | grep -oE ':[0-9]+' | tr -d ':')
+                local kas_port=$(jq -r '.endpoints.kasUrl // ""' "$config_file" | grep -oE ':[0-9]+' | tr -d ':')
+
+                [ -n "$frontend_port" ] && spoke_ports+=("$frontend_port")
+                [ -n "$backend_port" ] && spoke_ports+=("$backend_port")
+                [ -n "$idp_port" ] && spoke_ports+=("$idp_port")
+                [ -n "$idp_public_port" ] && [ "$idp_public_port" != "$idp_port" ] && spoke_ports+=("$idp_public_port")
+                [ -n "$kas_port" ] && spoke_ports+=("$kas_port")
+            fi
+
+            if [ ${#spoke_ports[@]} -gt 0 ]; then
+                log_verbose "  Force-stopping containers using spoke ${target_instance^^} ports: ${spoke_ports[*]}..."
+                for port in "${spoke_ports[@]}"; do
+                    for c in $(docker ps --format '{{.ID}}\t{{.Names}}\t{{.Ports}}' 2>/dev/null | grep -E ":$port->|:$port/" | awk '{print $1}'); do
+                        local container_name=$(docker inspect --format '{{.Name}}' "$c" 2>/dev/null | sed 's/^\///')
+                        if echo "$container_name" | grep -qE "dive-spoke-${instance_lower}"; then
+                            log_verbose "    Force-stopping container on port $port: $container_name"
+                            ${DOCKER_CMD:-docker} stop "$c" 2>/dev/null || true
+                            ${DOCKER_CMD:-docker} rm -f "$c" 2>/dev/null || true
+                            removed_containers=$((removed_containers + 1))
+                        fi
+                    done
+                done
+            else
+                log_verbose "  No ports found in config.json - using pattern-based cleanup only"
+            fi
+        elif [ "$target_type" = "all" ]; then
+            # Original all-target logic remains unchanged
+            log_verbose "  Stopping containers using DIVE ports..."
+            for port in 3033 4033 8476 3032 4032 8475 3034 4034 8477 8443 4000 3000; do
+                for c in $(docker ps --format '{{.ID}}\t{{.Names}}\t{{.Ports}}' 2>/dev/null | grep -E ":$port->|:$port/" | awk '{print $1}'); do
+                    local container_name=$(docker inspect --format '{{.Name}}' "$c" 2>/dev/null | sed 's/^\///')
+                    if echo "$container_name" | grep -qE "dive|spoke|hub"; then
+                        log_verbose "    Stopping container using port $port: $container_name"
+                        ${DOCKER_CMD:-docker} stop "$c" 2>/dev/null || true
+                        ${DOCKER_CMD:-docker} rm -f "$c" 2>/dev/null || true
+                        removed_containers=$((removed_containers + 1))
+                    fi
+                done
+            done
+
+            log_verbose "  Removing anonymous DIVE-related containers..."
+            local anonymous_removed=0
+            for c in $(docker ps -aq 2>/dev/null); do
+                local name=$(docker inspect --format '{{.Name}}' "$c" 2>/dev/null | sed 's/^\///')
+                local image=$(docker inspect --format '{{.Config.Image}}' "$c" 2>/dev/null)
+                local project_label=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$c" 2>/dev/null)
+                local is_anonymous=false
+                if [ -z "$name" ] || [ "$name" = "$c" ] || [ "${#name}" -eq 64 ]; then
+                    is_anonymous=true
+                fi
+                if [ "$is_anonymous" = true ]; then
+                    local is_dive_related=false
+                    if echo "$image" | grep -qE "postgres|mongodb|redis|keycloak|opa|opal|dive|ghcr.io/opentdf|openpolicyagent|permitio"; then
+                        is_dive_related=true
+                    elif echo "$project_label" | grep -qE "^dive-"; then
+                        is_dive_related=true
+                    fi
+                    if [ "$is_dive_related" = true ]; then
+                        log_verbose "    Removing anonymous DIVE container: $c (image: $image)"
+                        ${DOCKER_CMD:-docker} rm -f "$c" 2>/dev/null && anonymous_removed=$((anonymous_removed + 1)) || true
+                    fi
                 fi
             done
-        done
-
-        log_verbose "  Removing anonymous DIVE-related containers..."
-        local anonymous_removed=0
-        for c in $(docker ps -aq 2>/dev/null); do
-            local name=$(docker inspect --format '{{.Name}}' "$c" 2>/dev/null | sed 's/^\///')
-            local image=$(docker inspect --format '{{.Config.Image}}' "$c" 2>/dev/null)
-            local project_label=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$c" 2>/dev/null)
-            local is_anonymous=false
-            if [ -z "$name" ] || [ "$name" = "$c" ] || [ "${#name}" -eq 64 ]; then
-                is_anonymous=true
-            fi
-            if [ "$is_anonymous" = true ]; then
-                local is_dive_related=false
-                if echo "$image" | grep -qE "postgres|mongodb|redis|keycloak|opa|opal|dive|ghcr.io/opentdf|openpolicyagent|permitio"; then
-                    is_dive_related=true
-                elif echo "$project_label" | grep -qE "^dive-"; then
-                    is_dive_related=true
-                fi
-                if [ "$is_dive_related" = true ]; then
-                    log_verbose "    Removing anonymous DIVE container: $c (image: $image)"
-                    ${DOCKER_CMD:-docker} rm -f "$c" 2>/dev/null && anonymous_removed=$((anonymous_removed + 1)) || true
-                fi
-            fi
-        done
-        [ "$anonymous_removed" -gt 0 ] && removed_containers=$((removed_containers + anonymous_removed)) && log_verbose "    Removed $anonymous_removed anonymous containers"
+            [ "$anonymous_removed" -gt 0 ] && removed_containers=$((removed_containers + anonymous_removed)) && log_verbose "    Removed $anonymous_removed anonymous containers"
+        fi
     fi
 
     log_verbose "  Removed $removed_containers containers total"
@@ -937,6 +977,21 @@ cmd_nuke() {
             ;;
         spoke)
             local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
+            # First, find ALL networks for this spoke (by name pattern - not just labeled ones)
+            for n in $(docker network ls --format '{{.Name}}' 2>/dev/null | grep -E "dive-spoke-${instance_lower}|dive_spoke_${instance_lower}"); do
+                # Disconnect ALL containers from this network (forcefully)
+                for container in $(docker network inspect "$n" --format='{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null); do
+                    log_verbose "    Disconnecting $container from network $n"
+                    ${DOCKER_CMD:-docker} network disconnect -f "$n" "$container" 2>/dev/null || true
+                done
+                # Now remove the network
+                if ${DOCKER_CMD:-docker} network rm "$n" 2>/dev/null; then
+                    removed_networks=$((removed_networks + 1))
+                    log_verbose "    ✓ Removed network: $n"
+                fi
+            done
+
+            # Also check by compose label
             for n in $(docker network ls -q --filter "label=com.docker.compose.project=dive-spoke-${instance_lower}" 2>/dev/null); do
                 for container in $(docker network inspect "$n" --format='{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null); do
                     ${DOCKER_CMD:-docker} network disconnect -f "$n" "$container" 2>/dev/null || true
@@ -1101,6 +1156,27 @@ cmd_nuke() {
             rm -f "${DIVE_ROOT}/terraform/spoke/terraform.tfstate"* 2>/dev/null || true
             rm -f "${DIVE_ROOT}/terraform/spoke/.terraform.lock.hcl" 2>/dev/null || true
             rm -f "${DIVE_ROOT}/terraform/spoke/spoke.auto.tfvars" 2>/dev/null || true
+
+            # BEST PRACTICE: Deep clean spoke-specific workspace state and locks
+            if [ "$target_type" = "spoke" ] && [ -n "$target_instance" ]; then
+                local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
+                if [ -d "${DIVE_ROOT}/terraform/spoke/terraform.tfstate.d/${instance_lower}" ]; then
+                    log_verbose "    Cleaning Terraform workspace for ${target_instance^^}..."
+                    # Always remove lock files (critical for re-deployment)
+                    rm -f "${DIVE_ROOT}/terraform/spoke/terraform.tfstate.d/${instance_lower}/.terraform.tfstate.lock.info" 2>/dev/null || true
+
+                    if [ "$deep_clean" = true ]; then
+                        # Deep clean: Remove entire workspace
+                        rm -rf "${DIVE_ROOT}/terraform/spoke/terraform.tfstate.d/${instance_lower}" 2>/dev/null || true
+                        log_verbose "      ✓ Deep clean: Workspace ${target_instance^^} removed"
+                    else
+                        # Standard clean: Just state file, keep workspace structure
+                        rm -f "${DIVE_ROOT}/terraform/spoke/terraform.tfstate.d/${instance_lower}/terraform.tfstate" 2>/dev/null || true
+                        log_verbose "      ✓ Workspace state cleaned (use --deep to remove workspace)"
+                    fi
+                fi
+            fi
+
             log_verbose "    ✓ Spoke Terraform state cleaned"
         fi
     fi
@@ -1133,15 +1209,44 @@ cmd_nuke() {
             # Preserve hub and shared directories
             if [[ "$dirname" != "hub" && "$dirname" != "shared" && "$dirname" != "usa" ]]; then
                 log_verbose "    Removing ${dirname}/..."
-                rm -rf "$spoke_dir"
+                # Clear macOS extended attributes and flags
+                xattr -rc "$spoke_dir" 2>/dev/null || true
+                chflags -R nouchg "$spoke_dir" 2>/dev/null || true
+                # Try Docker cleanup first (for root-owned files)
+                if command -v ${DOCKER_CMD:-docker} &> /dev/null; then
+                    ${DOCKER_CMD:-docker} run --rm -v "$spoke_dir:/target" alpine sh -c "rm -rf /target/* /target/.*" 2>/dev/null || true
+                fi
+                rm -rf "$spoke_dir" 2>/dev/null || true
             fi
         done
         log_verbose "  Spoke instance directories cleaned"
     elif [ "$target_type" = "spoke" ] && [ -n "$target_instance" ]; then
         local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
-        if [ -d "${DIVE_ROOT}/instances/${instance_lower}" ]; then
+        local spoke_instance_dir="${DIVE_ROOT}/instances/${instance_lower}"
+        if [ -d "$spoke_instance_dir" ]; then
             log_verbose "  Removing instance directory: ${instance_lower}/"
-            rm -rf "${DIVE_ROOT}/instances/${instance_lower}"
+
+            # Step 1: Clear macOS extended attributes and immutable flags
+            log_verbose "    Clearing macOS extended attributes and flags..."
+            xattr -rc "$spoke_instance_dir" 2>/dev/null || true
+            chflags -R nouchg "$spoke_instance_dir" 2>/dev/null || true
+            chmod -R u+w "$spoke_instance_dir" 2>/dev/null || true
+
+            # Step 2: Try Docker alpine container for root-owned files (if Docker available)
+            if command -v ${DOCKER_CMD:-docker} &> /dev/null; then
+                if ${DOCKER_CMD:-docker} info &> /dev/null 2>&1; then
+                    log_verbose "    Using Docker alpine to clean root-owned files..."
+                    ${DOCKER_CMD:-docker} run --rm -v "$spoke_instance_dir:/target" alpine sh -c "rm -rf /target/* /target/.*" 2>/dev/null || true
+                fi
+            fi
+
+            # Step 3: Direct removal (should work now)
+            if rm -rf "$spoke_instance_dir" 2>/dev/null; then
+                log_verbose "    ✓ Instance directory removed"
+            else
+                log_warn "Could not remove ${instance_lower}/ (macOS SIP or ACL restriction)"
+                log_info "Manual cleanup: sudo rm -rf $spoke_instance_dir"
+            fi
         fi
     fi
 
@@ -1292,11 +1397,14 @@ module_deploy_help() {
     echo "  --force, -f         Force destruction (skip confirmation)"
     echo "  --keep-images       Don't remove Docker images"
     echo "  --reset-spokes      Clear spoke registration data (with spoke: that spoke; with all: all)"
-    echo "  --deep              (all only) Remove ALL unused images + dangling volumes + TF caches"
+    echo "  --deep              Deep clean mode:"
+    echo "                        • For 'all': Remove ALL unused images + dangling volumes + TF caches"
+    echo "                        • For 'spoke': Remove Terraform workspace + force-stop port-using containers"
     echo ""
     echo -e "${BOLD}Examples:${NC}"
     echo "  ./dive nuke hub --confirm                    # Nuke Hub only (spokes untouched)"
-    echo "  ./dive nuke spoke FRA --confirm              # Nuke FRA spoke only"
+    echo "  ./dive nuke spoke FRA --confirm              # Nuke FRA spoke only (standard clean)"
+    echo "  ./dive nuke spoke FRA --confirm --deep       # Nuke FRA spoke (deep: remove workspace, force ports)"
     echo "  ./dive nuke all --confirm                    # Nuke everything"
     echo "  ./dive nuke all --confirm --deep             # Full clean including base images"
     echo "  ./dive nuke hub --confirm --keep-images      # Fast hub reset (keeps images)"

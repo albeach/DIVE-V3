@@ -116,7 +116,7 @@ orch_validate_dependencies() {
         log_verbose "✓ dive-shared network exists"
     fi
 
-    # 4. Check port conflicts
+    # 4. Check port conflicts (using jq for proper JSON parsing - best practice)
     log_verbose "Checking port availability..."
 
     # Use the actual port calculation function from common.sh (SSOT)
@@ -140,31 +140,34 @@ orch_validate_dependencies() {
         
         for port in $keycloak_port $backend_port $frontend_port; do
             # Check if port is in use
-            if netstat -an 2>/dev/null | grep -q "LISTEN.*[.:]${port}" || \
-               lsof -i ":${port}" >/dev/null 2>&1; then
+            if lsof -i ":${port}" -sTCP:LISTEN >/dev/null 2>&1; then
+                # Port is in use - check if it's our spoke instance
+                # Use docker inspect with jq for proper JSON parsing (best practice)
+                local owner_container=""
                 
-                # Check if it's being used by THIS spoke instance's containers
-                local port_owner=$(lsof -i ":${port}" -sTCP:LISTEN -t 2>/dev/null | head -1)
-                if [ -n "$port_owner" ]; then
-                    # Get the container using this port
-                    local container_name=$(docker ps --format '{{.Names}}' | grep "dive-spoke-${code_lower}" | while read container; do
-                        if docker port "$container" 2>/dev/null | grep -q ":${port}->"; then
-                            echo "$container"
-                            break
-                        fi
-                    done)
+                # Check all containers for this spoke instance
+                for container in $(docker ps --filter "name=dive-spoke-${code_lower}" --format '{{.Names}}'); do
+                    # Use docker inspect + jq to get host ports (proper JSON parsing)
+                    local container_ports=$(docker inspect "$container" --format '{{json .NetworkSettings.Ports}}' 2>/dev/null | \
+                        jq -r 'to_entries[] | .value[]? | .HostPort' 2>/dev/null || echo "")
                     
-                    if [ -n "$container_name" ]; then
-                        # Port is in use by our own spoke instance - this is OK for idempotent deployments
-                        log_verbose "✓ Port $port in use by our container: $container_name (OK for retry)"
-                    else
-                        # Port is in use by something else - this is a conflict
-                        log_error "✗ Port $port already in use"
-                        log_error "  Free the port or choose different instance"
-                        ((errors++))
-                        validation_failed=true
-                        ports_ok=false
+                    # Check if this container uses the port
+                    if echo "$container_ports" | grep -q "^${port}$"; then
+                        owner_container="$container"
+                        break
                     fi
+                done
+                
+                if [ -n "$owner_container" ]; then
+                    # Port is in use by our own spoke instance - this is OK for idempotent deployments
+                    log_verbose "✓ Port $port in use by our container: $owner_container (OK for retry)"
+                else
+                    # Port is in use by something else - this is a conflict
+                    log_error "✗ Port $port already in use"
+                    log_error "  Free the port or choose different instance"
+                    ((errors++))
+                    validation_failed=true
+                    ports_ok=false
                 fi
             fi
         done

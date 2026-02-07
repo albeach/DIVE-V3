@@ -28,6 +28,13 @@ if [ -z "${SPOKE_VALIDATION_LOADED:-}" ]; then
     fi
 fi
 
+# Load federation functions for federation verification
+if [ -z "${SPOKE_FEDERATION_LOADED:-}" ]; then
+    if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-federation.sh" ]; then
+        source "$(dirname "${BASH_SOURCE[0]}")/spoke-federation.sh"
+    fi
+fi
+
 # Load checkpoint system
 
 # =============================================================================

@@ -1,9 +1,0 @@
-{
-  "phase": "DEPLOYMENT",
-  "instance_code": "GBR",
-  "completed_at": "2026-02-04T13:05:57Z",
-  "hostname": "MacBook-Pro-3.local",
-  "user": "aubreybeach",
-  "duration_seconds": 99,
-  "metadata": {}
-}
