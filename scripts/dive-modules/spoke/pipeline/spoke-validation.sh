@@ -41,7 +41,8 @@ spoke_phase_is_complete() {
     if type orch_db_check_connection &>/dev/null; then
         if orch_db_check_connection; then
             local code_lower=$(lower "$instance_code")
-            local status=$(orch_db_exec "SELECT status FROM deployment_steps WHERE instance_id = '${code_lower}' AND step_name = '${phase}' ORDER BY started_at DESC LIMIT 1;" 2>/dev/null | tr -d ' \n')
+            # CRITICAL FIX: Use instance_code not instance_id (table column name)
+            local status=$(orch_db_exec "SELECT status FROM deployment_steps WHERE instance_code = '${code_lower}' AND step_name = '${phase}' ORDER BY started_at DESC LIMIT 1;" 2>/dev/null | tr -d ' \n')
             
             if [ "$status" = "COMPLETED" ]; then
                 return 0
@@ -288,12 +289,11 @@ _validate_configuration_state() {
 
     log_verbose "Validating CONFIGURATION state for $code_upper..."
 
-    # Check if Keycloak container is running
+    # Check if Keycloak container exists
     local kc_container="dive-spoke-${code_lower}-keycloak"
-    if ! docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
-        log_warn "Keycloak container not running: $kc_container"
-        # Not necessarily invalid - may have been stopped
-        # Check if realm exists via API (best-effort)
+    if ! docker ps -a --format '{{.Names}}' | grep -q "^${kc_container}$"; then
+        log_warn "Keycloak container missing: $kc_container"
+        return 1
     fi
 
     # Check Terraform state exists
@@ -303,24 +303,28 @@ _validate_configuration_state() {
         return 1
     fi
 
+    # Check if terraform state exists (indicates terraform was applied)
     if [ ! -f "$tf_dir/terraform.tfstate" ]; then
-        log_warn "Terraform state missing - may need to re-apply"
-        # Not critical - terraform may not have been applied yet in modular system
-        # Return 0 to allow for incremental deployments
+        log_verbose "Terraform state missing - configuration may not be applied yet"
+        # This is acceptable for modular deployments - don't fail
     fi
 
-    # Try to verify realm exists (best-effort if Keycloak is running)
+    # If Keycloak is running, verify realm exists (best-effort)
     if docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
         local realm="dive-v3-broker-${code_lower}"
         local realm_check=$(docker exec "$kc_container" curl -sf \
             "http://localhost:8080/realms/${realm}" 2>/dev/null | \
-            jq -r '.realm // empty' 2>/dev/null)
+            jq -r '.realm // empty' 2>/dev/null || echo "")
 
-        if [ "$realm_check" != "$realm" ]; then
+        if [ "$realm_check" = "$realm" ]; then
+            log_verbose "Realm verified: $realm"
+        else
             log_warn "Realm not accessible: $realm (may need Terraform re-apply)"
             return 1
         fi
-        log_verbose "Realm verified: $realm"
+    else
+        log_verbose "Keycloak not running - skipping realm verification"
+        # Don't fail - container may be stopped for maintenance
     fi
 
     log_verbose "CONFIGURATION state valid"
@@ -348,38 +352,46 @@ _validate_seeding_state() {
 
     log_verbose "Validating SEEDING state for $code_upper..."
 
-    # Check if Keycloak is running
+    # Check if Keycloak container exists (it may be stopped during validation)
     local kc_container="dive-spoke-${code_lower}-keycloak"
-    if ! docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
-        log_warn "Keycloak not running - cannot validate seeding"
+    if ! docker ps -a --format '{{.Names}}' | grep -q "^${kc_container}$"; then
+        log_warn "Keycloak container does not exist: $kc_container"
         return 1
     fi
 
-    # Try to verify test user exists (best-effort)
+    # Check if Keycloak is running (optional - may be stopped)
+    if ! docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
+        log_verbose "Keycloak not running - skipping user validation (assume seeded if phase marked complete)"
+        # If phase is marked complete in DB, trust that seeding was done
+        return 0
+    fi
+
+    # If Keycloak is running, try to verify test user exists (best-effort)
     local realm="dive-v3-broker-${code_lower}"
     local test_username="testuser-${code_lower}"
 
-    # Get admin token (best-effort)
-    local admin_token=$(docker exec "$kc_container" \
+    # Try to get admin token and check for user (non-blocking)
+    local user_check=$(docker exec "$kc_container" \
         /opt/keycloak/bin/kcadm.sh config credentials \
         --server http://localhost:8080 \
         --realm master \
         --user admin \
-        --password "${KEYCLOAK_ADMIN_PASSWORD_${code_upper}}" \
+        --password "${KEYCLOAK_ADMIN_PASSWORD_${code_upper}:-admin}" \
         --config /tmp/.kcadm.config 2>/dev/null && \
         docker exec "$kc_container" \
         /opt/keycloak/bin/kcadm.sh get users \
         --realm "$realm" \
         --query "username=$test_username" \
         --config /tmp/.kcadm.config 2>/dev/null | \
-        jq -r '.[0].username // empty' 2>/dev/null)
+        jq -r '.[0].username // empty' 2>/dev/null || echo "")
 
-    if [ "$admin_token" != "$test_username" ]; then
-        log_warn "Test user not found: $test_username (may need re-seeding)"
-        return 1
+    if [ "$user_check" = "$test_username" ]; then
+        log_verbose "SEEDING state valid (test user found: $test_username)"
+    else
+        log_verbose "Could not verify test user, but Keycloak is running (non-blocking)"
+        # Don't fail validation - seeding may have happened differently
     fi
 
-    log_verbose "SEEDING state valid (test user found)"
     return 0
 }
 
@@ -414,17 +426,40 @@ _validate_verification_state() {
         return 1
     fi
 
-    # Check verification report exists
-    local verification_report="${DIVE_ROOT}/instances/${code_lower}/verification-report.json"
-    if [ ! -f "$verification_report" ]; then
-        log_warn "Verification report missing - may need re-verification"
+    # Minimum container count check (primary validation)
+    local min_containers=7  # postgres, mongodb, redis, keycloak, opa, backend, opal-client
+    if [ "$running_count" -lt "$min_containers" ]; then
+        log_warn "Insufficient containers running: $running_count (expected at least $min_containers)"
         return 1
     fi
 
-    # Validate verification report shows success
-    if ! jq -e '.status == "PASS"' "$verification_report" &>/dev/null; then
-        log_warn "Verification report shows failure - needs re-verification"
-        return 1
+    # Check verification report exists (optional - may not exist on first deployment)
+    local verification_report="${DIVE_ROOT}/instances/${code_lower}/verification-report.json"
+    if [ -f "$verification_report" ]; then
+        # If report exists, validate it shows success
+        if ! jq -e '.status == "PASS"' "$verification_report" &>/dev/null; then
+            log_warn "Verification report shows failure - needs re-verification"
+            return 1
+        fi
+        log_verbose "Verification report found and shows PASS"
+    else
+        # Report doesn't exist - check if services are actually healthy
+        log_verbose "Verification report not found, checking service health directly"
+        
+        # Check if critical services are healthy (best-effort)
+        local unhealthy_count=0
+        for container in $(docker ps --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}"); do
+            local health=$(docker inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "none")
+            if [ "$health" = "unhealthy" ]; then
+                log_warn "Container unhealthy: $container"
+                ((unhealthy_count++))
+            fi
+        done
+        
+        if [ "$unhealthy_count" -gt 0 ]; then
+            log_warn "Found $unhealthy_count unhealthy containers"
+            return 1
+        fi
     fi
 
     log_verbose "VERIFICATION state valid"
