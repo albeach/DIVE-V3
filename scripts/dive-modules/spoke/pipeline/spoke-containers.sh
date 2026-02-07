@@ -398,20 +398,32 @@ spoke_containers_start() {
     compose_output=$($compose_cmd $compose_args 2>&1) || compose_exit_code=$?
 
     if [ $compose_exit_code -ne 0 ]; then
-        # Check if containers started despite errors
-        if docker ps --format '{{.Names}}' | grep -q "dive-spoke-${code_lower}-backend"; then
-            log_warn "Application containers started despite compose errors (health checks may be pending)"
-        else
-            log_error "Failed to start application containers"
-            echo "$compose_output" | tail -10
-            orch_record_error "$SPOKE_ERROR_COMPOSE_UP" "$ORCH_SEVERITY_CRITICAL" \
-                "Application startup failed" "containers" \
-                "$(spoke_error_get_remediation $SPOKE_ERROR_COMPOSE_UP $instance_code)"
-            return 1
-        fi
+        log_warn "Docker compose returned non-zero exit code: $compose_exit_code"
+        log_verbose "Compose output:\n$compose_output"
     fi
 
-    log_success "All containers started successfully in staged approach"
+    # CRITICAL FIX (2026-02-07): Verify ALL application services started
+    # ROOT CAUSE: Previous logic only checked backend, allowing KAS/frontend failures to go unnoticed
+    # FIX: Check for ALL expected services (backend, kas, frontend)
+    local expected_services=("dive-spoke-${code_lower}-backend" "dive-spoke-${code_lower}-kas" "dive-spoke-${code_lower}-frontend")
+    local missing_services=()
+    
+    for service in "${expected_services[@]}"; do
+        if ! docker ps --format '{{.Names}}' | grep -q "^${service}$"; then
+            missing_services+=("$service")
+        fi
+    done
+
+    if [ ${#missing_services[@]} -gt 0 ]; then
+        log_error "Application containers failed to start: ${missing_services[*]}"
+        echo "$compose_output" | tail -20
+        orch_record_error "$SPOKE_ERROR_COMPOSE_UP" "$ORCH_SEVERITY_CRITICAL" \
+            "Missing services: ${missing_services[*]}" "containers" \
+            "$(spoke_error_get_remediation $SPOKE_ERROR_COMPOSE_UP $instance_code)"
+        return 1
+    fi
+
+    log_success "All application containers started successfully (backend, kas, frontend)"
 
     # Start any containers stuck in "Created" state
     spoke_containers_start_created "$instance_code"
