@@ -1,9 +1,0 @@
-{
-  "phase": "DEPLOYMENT",
-  "instance_code": "FRA",
-  "completed_at": "2026-02-07T01:13:23Z",
-  "hostname": "MacBook-Pro-3.local",
-  "user": "aubreybeach",
-  "duration_seconds": 83,
-  "metadata": {}
-}
