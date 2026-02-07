@@ -1,10 +1,12 @@
 /**
  * MongoDB-Backed KAS Registry Loader
  *
- * Loads KAS registry from MongoDB federation_spokes collection (SSOT)
+ * Loads KAS registry from MongoDB kas_registry collection (SSOT)
  * Replaces legacy JSON file-based registry
  *
- * Reference: backend/src/models/federation-spoke.model.ts
+ * CRITICAL FIX (2026-02-07): Updated to use kas_registry collection
+ * ROOT CAUSE: Code expected federation_spokes, but deployment populates kas_registry
+ * Reference: backend/src/routes/kas.routes.ts POST /api/kas/register
  * Implements Phase 3: Federation with proper SSOT integration
  */
 
@@ -26,33 +28,44 @@ function getMongoDBUrl(): string {
 }
 
 const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
-const COLLECTION_NAME = 'federation_spokes';
+// CRITICAL FIX (2026-02-07): Use kas_registry collection, not federation_spokes
+// ROOT CAUSE: Deployment scripts populate kas_registry via /api/kas/register
+// FIX: Load from actual collection where data exists
+const COLLECTION_NAME = 'kas_registry';
 
 /**
- * Spoke Registration from MongoDB
- * (Subset of fields from ISpokeRegistration in backend)
+ * KAS Registry Entry from MongoDB
+ * Schema from deployment via /api/kas/register (backend/src/routes/kas.routes.ts)
+ * 
+ * CRITICAL FIX (2026-02-07): Updated to match actual kas_registry schema
+ * ROOT CAUSE: Interface expected federation_spokes schema, but data is in kas_registry
+ * FIX: Match actual MongoDB document structure
  */
-interface IMongoSpokeRegistration {
-    spokeId: string;
-    instanceCode: string;
-    organization: string;
-    kasUrl: string;
-    kasPort?: number;
-    status: 'pending' | 'approved' | 'rejected' | 'suspended';
+interface IMongoKASRegistryEntry {
+    kasId: string;                    // e.g., "fra-kas"
+    organization: string;              // e.g., "France"
+    countryCode: string;               // e.g., "FRA"
+    kasUrl: string;                    // External URL (environment-specific)
+    internalKasUrl?: string;           // Docker network URL (internal)
+    authMethod: 'mtls' | 'jwt' | 'apikey' | 'oauth2';
+    authConfig?: {
+        jwtIssuer?: string;
+        apiKey?: string;
+        clientCert?: string;
+        // ... other auth fields
+    };
     trustLevel: 'high' | 'medium' | 'low';
     supportedCountries: string[];
     supportedCOIs: string[];
-    authMethod?: 'mtls' | 'jwt' | 'apikey' | 'oauth2';
-    certificateFingerprint?: string;
-    publicKeyPem?: string;
+    enabled: boolean;
+    status: 'active' | 'inactive' | 'suspended';
     metadata?: {
         version?: string;
         capabilities?: string[];
         contact?: string;
-        lastVerified?: string;
+        registeredAt?: Date;
+        lastHeartbeat?: Date;
     };
-    registeredAt?: Date;
-    lastHeartbeat?: Date;
 }
 
 /**
@@ -61,7 +74,7 @@ interface IMongoSpokeRegistration {
 export class MongoKASRegistryLoader {
     private client: MongoClient | null = null;
     private db: Db | null = null;
-    private collection: Collection<IMongoSpokeRegistration> | null = null;
+    private collection: Collection<IMongoKASRegistryEntry> | null = null;
     private initialized = false;
 
     /**
@@ -80,7 +93,7 @@ export class MongoKASRegistryLoader {
 
             this.client = await MongoClient.connect(mongoUrl);
             this.db = this.client.db(DB_NAME);
-            this.collection = this.db.collection<IMongoSpokeRegistration>(COLLECTION_NAME);
+            this.collection = this.db.collection<IMongoKASRegistryEntry>(COLLECTION_NAME);
 
             this.initialized = true;
             kasLogger.info('MongoDB KAS Registry Loader initialized');
@@ -106,37 +119,42 @@ export class MongoKASRegistryLoader {
         try {
             kasLogger.info('Loading KAS registry from MongoDB');
 
-            // Query for approved spokes only
-            const spokes = await this.collection!
-                .find({ status: 'approved' })
+            // CRITICAL FIX (2026-02-07): Query for 'active' status and enabled, not 'approved'
+            // ROOT CAUSE: kas_registry uses 'active' status and 'enabled' flag
+            // FIX: Match actual data schema from deployment
+            const kasInstances = await this.collection!
+                .find({ 
+                    status: 'active',
+                    enabled: true 
+                })
                 .toArray();
 
-            kasLogger.info(`Found ${spokes.length} approved spokes in MongoDB`);
+            kasLogger.info(`Found ${kasInstances.length} active KAS instances in MongoDB`);
 
             let loadedCount = 0;
 
-            for (const spoke of spokes) {
+            for (const kasEntry of kasInstances) {
                 try {
-                    const kasEntry = this.convertSpokeToKASEntry(spoke);
-                    kasRegistry.register(kasEntry);
+                    const registryEntry = this.convertKASEntryToRegistryEntry(kasEntry);
+                    kasRegistry.register(registryEntry);
                     loadedCount++;
 
                     kasLogger.debug('Loaded KAS from MongoDB', {
-                        kasId: kasEntry.kasId,
-                        organization: kasEntry.organization,
-                        instanceCode: spoke.instanceCode,
+                        kasId: registryEntry.kasId,
+                        organization: registryEntry.organization,
+                        countryCode: kasEntry.countryCode,
                     });
 
                 } catch (error) {
-                    kasLogger.error('Failed to convert spoke to KAS entry', {
-                        spokeId: spoke.spokeId,
+                    kasLogger.error('Failed to convert KAS entry', {
+                        kasId: kasEntry.kasId,
                         error: error instanceof Error ? error.message : 'Unknown error',
                     });
                 }
             }
 
             kasLogger.info('KAS registry loaded from MongoDB', {
-                totalSpokes: spokes.length,
+                totalInstances: kasInstances.length,
                 loadedCount,
             });
 
@@ -151,116 +169,48 @@ export class MongoKASRegistryLoader {
     }
 
     /**
-     * Convert MongoDB spoke registration to KAS registry entry
+     * Convert MongoDB KAS registry entry to internal KAS registry format
+     * 
+     * CRITICAL FIX (2026-02-07): Updated to use kas_registry schema
+     * ROOT CAUSE: Function expected federation_spokes fields (spokeId, instanceCode)
+     * FIX: Use kas_registry fields (kasId, countryCode)
      */
-    private convertSpokeToKASEntry(spoke: IMongoSpokeRegistration): IKASRegistryEntry {
-        // Build KAS URL from spoke configuration
-        const kasUrl = this.buildKASUrl(spoke);
+    private convertKASEntryToRegistryEntry(kasEntry: IMongoKASRegistryEntry): IKASRegistryEntry {
+        // Use kasUrl as-is from registry (already includes /rewrap if needed)
+        const kasUrl = kasEntry.kasUrl || kasEntry.internalKasUrl || '';
 
-        // Map auth method (default to jwt)
-        const authMethod = spoke.authMethod || 'jwt';
+        // Auth config from registry (already structured correctly)
+        const authConfig = kasEntry.authConfig || {};
 
-        // Build auth config based on method
-        const authConfig = this.buildAuthConfig(spoke, authMethod);
-
-        // Build policy translation rules (can be extended later)
-        const policyTranslation = this.buildPolicyTranslation(spoke);
+        // Build policy translation rules
+        const policyTranslation = this.buildPolicyTranslation(kasEntry.countryCode);
 
         return {
-            kasId: spoke.spokeId,
-            organization: spoke.organization,
+            kasId: kasEntry.kasId,
+            organization: kasEntry.organization,
             kasUrl,
-            authMethod,
+            authMethod: kasEntry.authMethod,
             authConfig,
-            trustLevel: spoke.trustLevel,
-            supportedCountries: spoke.supportedCountries || [],
-            supportedCOIs: spoke.supportedCOIs || [],
+            trustLevel: kasEntry.trustLevel,
+            supportedCountries: kasEntry.supportedCountries || [],
+            supportedCOIs: kasEntry.supportedCOIs || [],
             policyTranslation,
             metadata: {
-                version: spoke.metadata?.version || '1.0.0',
-                capabilities: spoke.metadata?.capabilities || ['acp240'],
-                contact: spoke.metadata?.contact || '',
-                lastVerified: spoke.metadata?.lastVerified || spoke.lastHeartbeat?.toISOString() || new Date().toISOString(),
+                version: kasEntry.metadata?.version || '1.0.0',
+                capabilities: kasEntry.metadata?.capabilities || ['acp240'],
+                contact: kasEntry.metadata?.contact || '',
+                lastVerified: kasEntry.metadata?.lastHeartbeat?.toISOString() || new Date().toISOString(),
             },
         };
     }
 
     /**
-     * Build KAS URL from spoke configuration
-     * Uses environment-specific URLs, not hardcoded .dive25.com domains
-     */
-    private buildKASUrl(spoke: IMongoSpokeRegistration): string {
-        // If kasUrl is already specified, use it
-        if (spoke.kasUrl) {
-            // Ensure URL ends with /rewrap (ACP-240 endpoint)
-            if (!spoke.kasUrl.endsWith('/rewrap') && !spoke.kasUrl.endsWith('/request-key')) {
-                return `${spoke.kasUrl}/rewrap`;
-            }
-            // Replace /request-key with /rewrap for ACP-240 compliance
-            return spoke.kasUrl.replace('/request-key', '/rewrap');
-        }
-
-        // Otherwise, construct URL from environment-specific patterns
-        const instanceCode = spoke.instanceCode.toLowerCase();
-        const kasPort = spoke.kasPort || 8080;
-
-        // Check for environment-specific URL override
-        const envUrl = process.env[`KAS_URL_${spoke.instanceCode.toUpperCase()}`];
-        if (envUrl) {
-            return envUrl.endsWith('/rewrap') ? envUrl : `${envUrl}/rewrap`;
-        }
-
-        // Default URL pattern (environment-agnostic)
-        // In production, these should be overridden by environment variables
-        const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
-        return `${protocol}://${instanceCode}-kas:${kasPort}/rewrap`;
-    }
-
-    /**
-     * Build authentication configuration
-     */
-    private buildAuthConfig(spoke: IMongoSpokeRegistration, authMethod: string): IKASRegistryEntry['authConfig'] {
-        const config: IKASRegistryEntry['authConfig'] = {};
-
-        switch (authMethod) {
-            case 'mtls':
-                // mTLS certificates from environment or spoke metadata
-                config.clientCert = process.env[`MTLS_CLIENT_CERT_${spoke.instanceCode.toUpperCase()}`];
-                config.clientKey = process.env[`MTLS_CLIENT_KEY_${spoke.instanceCode.toUpperCase()}`];
-                config.caCert = process.env[`MTLS_CA_CERT_${spoke.instanceCode.toUpperCase()}`];
-                break;
-
-            case 'jwt':
-                // JWT issuer from Keycloak realm (environment-specific)
-                const keycloakBaseUrl = process.env[`KEYCLOAK_URL_${spoke.instanceCode.toUpperCase()}`]
-                    || process.env.KEYCLOAK_URL;
-                if (keycloakBaseUrl) {
-                    config.jwtIssuer = `${keycloakBaseUrl}/realms/dive-v3-broker`;
-                }
-                break;
-
-            case 'apikey':
-                // API key from environment
-                config.apiKey = process.env[`API_KEY_${spoke.instanceCode.toUpperCase()}`];
-                config.apiKeyHeader = 'X-Federation-API-Key';
-                break;
-
-            case 'oauth2':
-                // OAuth2 credentials from environment
-                config.oauth2ClientId = process.env[`OAUTH2_CLIENT_ID_${spoke.instanceCode.toUpperCase()}`];
-                config.oauth2ClientSecret = process.env[`OAUTH2_CLIENT_SECRET_${spoke.instanceCode.toUpperCase()}`];
-                config.oauth2TokenUrl = process.env[`OAUTH2_TOKEN_URL_${spoke.instanceCode.toUpperCase()}`];
-                break;
-        }
-
-        return config;
-    }
-
-    /**
      * Build policy translation rules
      * Can be extended to load from database if needed
+     * 
+     * UPDATED (2026-02-07): Takes countryCode directly instead of full spoke object
      */
-    private buildPolicyTranslation(spoke: IMongoSpokeRegistration): IKASRegistryEntry['policyTranslation'] {
+    private buildPolicyTranslation(countryCode: string): IKASRegistryEntry['policyTranslation'] {
         // Standard clearance mappings (can be customized per spoke)
         const clearanceMapping: Record<string, string> = {
             'TOP_SECRET': 'TOP_SECRET',
@@ -270,8 +220,7 @@ export class MongoKASRegistryLoader {
         };
 
         // Add country-specific mappings
-        const instanceCode = spoke.instanceCode.toUpperCase();
-        switch (instanceCode) {
+        switch (countryCode.toUpperCase()) {
             case 'FRA':
                 clearanceMapping['TRES_SECRET_DEFENSE'] = 'TOP_SECRET';
                 clearanceMapping['SECRET_DEFENSE'] = 'SECRET';
@@ -348,7 +297,7 @@ export async function initializeKASRegistryFromMongoDB(): Promise<number> {
 
         kasLogger.info('KAS registry initialized from MongoDB', {
             loadedCount,
-            source: 'MongoDB federation_spokes collection',
+            source: 'MongoDB kas_registry collection',
         });
 
         return loadedCount;
