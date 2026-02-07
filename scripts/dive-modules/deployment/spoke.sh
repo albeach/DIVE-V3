@@ -137,6 +137,34 @@ module_spoke() {
             _spoke_logs "$@"
             ;;
 
+        # === Repair Operations (delegate to operations.sh) ===
+        restart)
+            if type -t spoke_restart &>/dev/null; then
+                spoke_restart "$@"
+            else
+                log_error "spoke_restart not available - operations.sh not loaded"
+                return 1
+            fi
+            ;;
+
+        reload-secrets)
+            if type -t spoke_reload_secrets &>/dev/null; then
+                spoke_reload_secrets "$@"
+            else
+                log_error "spoke_reload_secrets not available - operations.sh not loaded"
+                return 1
+            fi
+            ;;
+
+        repair)
+            if type -t spoke_repair &>/dev/null; then
+                spoke_repair "$@"
+            else
+                log_error "spoke_repair not available - operations.sh not loaded"
+                return 1
+            fi
+            ;;
+
         # === Lock Management ===
         clean-locks)
             _spoke_clean_locks "$@"
@@ -259,26 +287,34 @@ _spoke_help() {
 Usage: ./dive spoke <command> [args]
 
 Commands:
-  deploy <CODE> [name]   Full spoke deployment using pipeline
-  init <CODE> [name]     Initialize spoke directory only
-  setup-wizard           Interactive spoke setup wizard
-  up <CODE>              Start spoke services
-  down <CODE>            Stop spoke services
-  status [CODE]          Show spoke status
-  verify <CODE>          Verify spoke deployment
-  logs <CODE> [service]  View spoke logs
-  clean-locks [CODE]     Clean stale deployment locks
+  deploy <CODE> [name]        Full spoke deployment using pipeline
+  init <CODE> [name]          Initialize spoke directory only
+  setup-wizard                Interactive spoke setup wizard
+  up <CODE>                   Start spoke services
+  down <CODE>                 Stop spoke services
+  status [CODE]               Show spoke status
+  verify <CODE>               Verify spoke deployment
+  logs <CODE> [service]       View spoke logs
+  clean-locks [CODE]          Clean stale deployment locks
+
+Repair Commands:
+  restart <CODE> [service]    Restart spoke services (all or specific)
+  reload-secrets <CODE>       Reload secrets from GCP and restart services
+  repair <CODE>               Auto-diagnose and fix common issues
 
 Deployment Options:
-  --force                Force deployment even if already deployed
-  --legacy               Use legacy deployment (skip pipeline)
-  --skip-federation      Skip federation setup
+  --force                     Force deployment even if already deployed
+  --legacy                    Use legacy deployment (skip pipeline)
+  --skip-federation           Skip federation setup
 
 Examples:
   ./dive spoke deploy ALB "Albania Defence"
   ./dive spoke status FRA
   ./dive spoke logs DEU keycloak
   ./dive spoke verify GBR
+  ./dive spoke restart FRA backend
+  ./dive spoke reload-secrets FRA
+  ./dive spoke repair FRA
 
 For more help: ./dive help spoke
 EOF
