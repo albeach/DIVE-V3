@@ -37,16 +37,59 @@ classification_mapping := {
 # ============================================
 # USA Trusted Issuers
 # ============================================
-# SSOT: Trusted issuers loaded from OPAL data (MongoDB)
-# Use dive.tenant.base.trusted_issuers which loads from data layer
-# No hardcoded issuers in tenant config (MongoDB is SSOT)
+# List of trusted identity providers for USA tenant.
+
+usa_trusted_issuers := {
+	"https://usa-idp.dive25.com/realms/dive-v3-broker": {
+		"name": "DIVE V3 USA Keycloak",
+		"country": "USA",
+		"trust_level": "HIGH",
+		"mfa_capable": true,
+	},
+	"https://login.disa.mil": {
+		"name": "DoD Identity Provider",
+		"country": "USA",
+		"trust_level": "HIGH",
+		"mfa_capable": true,
+	},
+	"https://sso.army.mil": {
+		"name": "US Army SSO",
+		"country": "USA",
+		"trust_level": "HIGH",
+		"mfa_capable": true,
+	},
+	"https://sso.navy.mil": {
+		"name": "US Navy SSO",
+		"country": "USA",
+		"trust_level": "HIGH",
+		"mfa_capable": true,
+	},
+	"https://sso.af.mil": {
+		"name": "US Air Force SSO",
+		"country": "USA",
+		"trust_level": "HIGH",
+		"mfa_capable": true,
+	},
+	"http://localhost:8443/realms/dive-v3-broker": {
+		"name": "Local Development",
+		"country": "USA",
+		"trust_level": "DEVELOPMENT",
+		"mfa_capable": true,
+	},
+	"https://localhost:8443/realms/dive-v3-broker": {
+		"name": "Local Development (HTTPS)",
+		"country": "USA",
+		"trust_level": "DEVELOPMENT",
+		"mfa_capable": true,
+	},
+}
 
 # ============================================
 # USA Federation Partners
 # ============================================
-# SSOT: Federation matrix loaded from OPAL data (MongoDB)
-# Use dive.tenant.base.federation_matrix which loads from data layer
-# No hardcoded federation partners in tenant config (MongoDB is SSOT)
+# Countries USA will federate with.
+
+federation_partners := {"FRA", "GBR", "DEU", "CAN", "AUS", "NZL"}
 
 # ============================================
 # USA Policy Settings
@@ -68,14 +111,13 @@ allow_industry := true
 # USA-Specific Rules
 # ============================================
 
-# Check if issuer is USA-trusted (uses data from dive.tenant.base)
+# Check if issuer is USA-trusted
 is_usa_trusted_issuer(issuer) if {
-	data.dive.tenant.base.is_trusted_issuer(issuer)
-	data.dive.tenant.base.issuer_metadata(issuer).tenant == "USA"
+	usa_trusted_issuers[issuer]
 }
 
-# Check if user is from federated partner (uses data from dive.tenant.base)
+# Check if user is from federated partner
 is_federated_partner(country) if {
-	data.dive.tenant.base.can_federate("USA", country)
+	country in federation_partners
 }
 

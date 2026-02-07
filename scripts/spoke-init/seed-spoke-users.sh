@@ -112,6 +112,57 @@ fi
 log_success "Realm $REALM_NAME exists"
 
 # =============================================================================
+# Configure User Profile (Keycloak 26+ CRITICAL)
+# =============================================================================
+# CRITICAL: DIVE attributes MUST have "view":["admin","user"] to be included
+# in tokens during federation. This is a Keycloak 26+ requirement.
+#
+# ROOT CAUSE FIX (Phase 4 Session 6): Without user view permission, attributes
+# like clearance, countryOfAffiliation, and acpCOI are NOT included in ID tokens,
+# causing federation attribute sync to fail.
+log_step "Configuring User Profile for DIVE attributes..."
+
+# Get current User Profile as JSON
+PROFILE_JSON=$(docker exec "$KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get users/profile -r "$REALM_NAME" 2>/dev/null)
+
+# Check if profile exists and has attributes
+if echo "$PROFILE_JSON" | grep -q '"attributes"'; then
+    log_info "User Profile exists - updating DIVE attribute permissions..."
+
+    # Create temp file with updated profile (using Python for JSON manipulation)
+    docker exec "$KEYCLOAK_CONTAINER" bash -c "cat > /tmp/update-profile.py << 'PYEOF'
+import json
+import sys
+
+profile = json.load(sys.stdin)
+# Core DIVE attributes (NOT amr/acr - those are native Keycloak v26 session claims)
+dive_attrs = ['clearance', 'countryOfAffiliation', 'acpCOI', 'uniqueID']
+
+for attr in profile.get('attributes', []):
+    if attr['name'] in dive_attrs:
+        attr['permissions'] = {
+            'view': ['admin', 'user'],
+            'edit': ['admin']
+        }
+
+print(json.dumps(profile))
+PYEOF
+"
+
+    # Update profile
+    echo "$PROFILE_JSON" | docker exec -i "$KEYCLOAK_CONTAINER" python3 /tmp/update-profile.py | \
+        docker exec -i "$KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh update users/profile -r "$REALM_NAME" -f - 2>/dev/null
+
+    if [ $? -eq 0 ]; then
+        log_success "User Profile updated - DIVE attributes now have user view permissions"
+    else
+        log_warn "Failed to update User Profile - federation may not sync attributes correctly"
+    fi
+else
+    log_warn "User Profile not found or empty - attributes may not be included in tokens"
+fi
+
+# =============================================================================
 # Create Test Users
 # =============================================================================
 log_step "Creating test users for $CODE_UPPER..."

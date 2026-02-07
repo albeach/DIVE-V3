@@ -292,7 +292,13 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
                 // Authorization URL must be the external URL (browser redirect)
                 url: `${process.env.NEXT_PUBLIC_KEYCLOAK_URL}/realms/${process.env.NEXT_PUBLIC_KEYCLOAK_REALM}/protocol/openid-connect/auth`,
                 params: {
-                    scope: "openid profile email",
+                    // CRITICAL FIX (2026-02-06): Include ALL DIVE custom scopes to ensure attributes are included
+                    // openid: REQUIRED for OIDC (includes auth_time)
+                    // profile: Standard user profile (name, given_name, family_name)
+                    // email: Standard email claim
+                    // uniqueID, clearance, countryOfAffiliation, acpCOI: DIVE custom scopes
+                    // user_acr, user_amr: Authentication context scopes (for MFA/AAL)
+                    scope: "openid profile email uniqueID clearance countryOfAffiliation acpCOI user_acr user_amr",
                 }
             },
             // Token and userinfo endpoints are called server-side, use internal KEYCLOAK_BASE_URL

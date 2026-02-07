@@ -335,8 +335,8 @@ spoke_generate_certs() {
     local instance_name=""
 
     if [ -f "$config_file" ]; then
-        spoke_id=$(grep -o '"spokeId"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4 || echo "")
-        instance_name=$(grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | head -1 | cut -d'"' -f4 || echo "$instance_code")
+        spoke_id=$(json_get_field "$config_file" "spokeId" "")
+        instance_name=$(json_get_field "$config_file" "name" "$instance_code")
     fi
 
     spoke_id="${spoke_id:-spoke-${code_lower}-unknown}"

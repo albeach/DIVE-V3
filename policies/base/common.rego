@@ -1,8 +1,30 @@
+package dive.base.common
 
-# OPAL Test - 2026-02-06 03:33:32.340056000
-# OPAL Test - Manual test at Fri Feb  6 03:33:49 EST 2026
+import rego.v1
 
-# OPAL Distribution Test - 2026-02-06 03:38:20
-# LIVE DEMO: Policy change at 2026-02-06 08:05:02
+# Common utility functions and constants for DIVE V3 policies
+# OPA v1.12.3 compatible with rego.v1 syntax
 
-# LIVE DEMO: Policy modified at 2026-02-06 08:06:00
+# Default deny - all policies start with explicit deny
+default allow := false
+
+# Common constants
+version := "5.0.0"
+
+# Test function to verify policy loading
+policy_loaded := true
+
+# Utility: Check if value exists in array
+array_contains(arr, val) if {
+	some i
+	arr[i] == val
+}
+
+# Utility: Check if any element from arr1 exists in arr2
+array_intersection(arr1, arr2) if {
+	some i, j
+	arr1[i] == arr2[j]
+}
+
+# Git integration test marker - OPAL GitHub tracking
+# Updated: 2026-02-06 09:25:00 - OPA v1.12.3 compatible with rego.v1

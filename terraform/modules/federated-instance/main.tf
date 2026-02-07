@@ -620,9 +620,9 @@ resource "keycloak_openid_user_session_note_protocol_mapper" "auth_time" {
   client_id = keycloak_openid_client.broker_client.id
   name      = "auth_time"
 
-  session_note        = "auth_time"
+  session_note        = "AUTH_TIME"
   claim_name          = "auth_time"
-  claim_value_type    = "String"
+  claim_value_type    = "long"
   add_to_id_token     = true
   add_to_access_token = true
 }
@@ -824,23 +824,35 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "federation_coi" {
   add_to_userinfo     = true
 }
 
-# AMR (Authentication Methods Reference) mapper for MFA verification
-# Critical for AAL2/AAL3 enforcement in OPA policies
-resource "keycloak_openid_user_attribute_protocol_mapper" "federation_amr" {
-  for_each = var.federation_partners
-
-  realm_id  = keycloak_realm.broker.id
-  client_id = keycloak_openid_client.incoming_federation[each.key].id
-  name      = "amr"
-
-  user_attribute      = "amr"
-  claim_name          = "amr"
-  claim_value_type    = "String"
-  multivalued         = true
-  add_to_id_token     = true
-  add_to_access_token = true
-  add_to_userinfo     = true
-}
+# ============================================================================
+# DEPRECATED (Feb 2026): Conflicting AMR Mapper - Removed
+# ============================================================================
+# REASON: This user-attribute mapper outputs to "amr" claim, conflicting with
+# the native oidc-amr-mapper in acr-amr-session-mappers.tf (lines 64-80).
+#
+# When multiple mappers output to the same claim, Keycloak picks one arbitrarily,
+# causing the native session-based AMR to be overridden by stale user attributes.
+#
+# CORRECT APPROACH:
+# - Native oidc-amr-mapper handles "amr" claim from session (lines 64-80 in acr-amr-session-mappers.tf)
+# - User attribute fallback handles "user_amr" claim (lines 83-98 in acr-amr-session-mappers.tf)
+#
+# This resource has been REMOVED to establish SSOT for ACR/AMR.
+# See: docs/TERRAFORM-ACR-AMR-CONFLICTS.md
+#
+# resource "keycloak_openid_user_attribute_protocol_mapper" "federation_amr" {
+#   for_each = var.federation_partners
+#   realm_id  = keycloak_realm.broker.id
+#   client_id = keycloak_openid_client.incoming_federation[each.key].id
+#   name      = "amr"
+#   user_attribute      = "amr"
+#   claim_name          = "amr"
+#   claim_value_type    = "String"
+#   multivalued         = true
+#   add_to_id_token     = true
+#   add_to_access_token = true
+#   add_to_userinfo     = true
+# }
 
 # ============================================================================
 # INCOMING FEDERATION CLIENT SCOPES
@@ -878,15 +890,12 @@ resource "keycloak_openid_client_default_scopes" "incoming_federation_defaults" 
     "acr",
     "basic",
     # DIVE custom scopes - TERRAFORM SSOT (matches dive-client-scopes.tf)
-    # All 9 scopes required for federation to work correctly:
-    # - Core identity: uniqueID, clearance, countryOfAffiliation, acpCOI
-    # - ACR/AMR for MFA: dive_acr, dive_amr, user_acr, user_amr
+    # Core identity: uniqueID, clearance, countryOfAffiliation, acpCOI
+    # Fallback for federation: user_acr, user_amr (NOT dive_acr/dive_amr - conflicts with native)
     keycloak_openid_client_scope.uniqueID.name,
     keycloak_openid_client_scope.clearance.name,
     keycloak_openid_client_scope.countryOfAffiliation.name,
     keycloak_openid_client_scope.acpCOI.name,
-    keycloak_openid_client_scope.dive_acr.name,
-    keycloak_openid_client_scope.dive_amr.name,
     keycloak_openid_client_scope.user_acr.name,
     keycloak_openid_client_scope.user_amr.name,
   ]
@@ -898,9 +907,7 @@ resource "keycloak_openid_client_default_scopes" "incoming_federation_defaults" 
     keycloak_openid_client_scope.clearance,
     keycloak_openid_client_scope.countryOfAffiliation,
     keycloak_openid_client_scope.acpCOI,
-    # ACR/AMR scopes for MFA enforcement
-    keycloak_openid_client_scope.dive_acr,
-    keycloak_openid_client_scope.dive_amr,
+    # Fallback scopes for federation (NOT dive_acr/dive_amr - removed due to conflicts)
     keycloak_openid_client_scope.user_acr,
     keycloak_openid_client_scope.user_amr,
     # Protocol mappers for core scopes
@@ -908,9 +915,7 @@ resource "keycloak_openid_client_default_scopes" "incoming_federation_defaults" 
     keycloak_openid_user_attribute_protocol_mapper.clearance_mapper,
     keycloak_openid_user_attribute_protocol_mapper.countryOfAffiliation_mapper,
     keycloak_openid_user_attribute_protocol_mapper.acpCOI_mapper,
-    # Protocol mappers for ACR/AMR scopes
-    keycloak_openid_user_attribute_protocol_mapper.dive_acr_mapper,
-    keycloak_openid_user_attribute_protocol_mapper.dive_amr_mapper,
+    # Protocol mappers for fallback scopes (NOT dive_acr/dive_amr - removed due to conflicts)
     keycloak_openid_user_attribute_protocol_mapper.user_acr_mapper,
     keycloak_openid_user_attribute_protocol_mapper.user_amr_mapper,
   ]

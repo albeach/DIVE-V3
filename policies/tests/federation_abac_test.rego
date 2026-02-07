@@ -16,8 +16,6 @@ import data.dive.federation
 test_allow_authenticated_user if {
     federation.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -40,8 +38,6 @@ test_allow_authenticated_user if {
 test_deny_unauthenticated_user if {
     not federation.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": false,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -63,8 +59,6 @@ test_deny_unauthenticated_user if {
 test_allow_aal1_for_unclassified if {
     federation.allow with input as {
         "subject": {
-            "mfaVerified": false,
-            "aal": 1,
             "authenticated": true,
             "uniqueID": "testuser-usa-1",
             "clearance": "UNCLASSIFIED",
@@ -87,8 +81,6 @@ test_allow_aal1_for_unclassified if {
 test_deny_aal1_for_confidential if {
     not federation.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-2",
             "clearance": "CONFIDENTIAL",
@@ -111,8 +103,6 @@ test_deny_aal1_for_confidential if {
 test_allow_aal2_for_secret if {
     federation.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -135,8 +125,6 @@ test_allow_aal2_for_secret if {
 test_deny_aal2_for_top_secret if {
     not federation.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-4",
             "clearance": "TOP_SECRET",
@@ -160,8 +148,6 @@ test_deny_aal2_for_top_secret if {
 test_allow_aal2_string_format if {
     federation.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -190,8 +176,6 @@ test_allow_fresh_token if {
     # currentTime = 2025-11-25T12:05:00Z is 5 mins later (within 15 min threshold)
     federation.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -218,8 +202,6 @@ test_deny_expired_token if {
     # Difference = 7200 seconds (2 hours) > 900 seconds (15 min threshold)
     not federation.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -247,8 +229,6 @@ test_deny_expired_token if {
 test_allow_trusted_issuer_usa if {
     federation.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -271,8 +251,6 @@ test_allow_trusted_issuer_usa if {
 test_allow_trusted_issuer_broker if {
     federation.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-fra-3",
             "clearance": "SECRET",
@@ -295,8 +273,6 @@ test_allow_trusted_issuer_broker if {
 test_deny_untrusted_issuer if {
     not federation.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-unknown",
             "clearance": "SECRET",
@@ -323,8 +299,6 @@ test_deny_untrusted_issuer if {
 test_allow_mfa_with_otp if {
     federation.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -347,8 +321,6 @@ test_allow_mfa_with_otp if {
 test_allow_mfa_with_hwtoken if {
     federation.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -371,8 +343,6 @@ test_allow_mfa_with_hwtoken if {
 test_deny_aal2_without_mfa_factor if {
     not federation.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -395,8 +365,6 @@ test_deny_aal2_without_mfa_factor if {
 test_deny_aal2_with_single_factor if {
     not federation.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -423,8 +391,6 @@ test_deny_aal2_with_single_factor if {
 test_deny_insufficient_clearance if {
     not federation.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-2",
             "clearance": "CONFIDENTIAL",
@@ -447,8 +413,6 @@ test_deny_insufficient_clearance if {
 test_deny_country_not_releasable if {
     not federation.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-deu-3",
             "clearance": "SECRET",
@@ -475,8 +439,6 @@ test_deny_country_not_releasable if {
 test_decision_structure_allow if {
     d := federation.decision with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -500,8 +462,6 @@ test_decision_structure_allow if {
 test_decision_structure_deny if {
     d := federation.decision with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": false,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -519,12 +479,12 @@ test_decision_structure_deny if {
 
 # =============================================================================
 # 10. CROSS-INSTANCE FEDERATED SEARCH TESTS
-# =============================================================================# Test: Allow federated search for authenticated user
+# =============================================================================
+
+# Test: Allow federated search for authenticated user
 test_allow_federated_search if {
     federation.allow_federated_search with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-fra-1",
             "clearance": "SECRET",
@@ -544,8 +504,6 @@ test_allow_federated_search if {
 test_deny_federated_search_unauthenticated if {
     not federation.allow_federated_search with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": false,
             "uniqueID": "testuser-fra-1"
         },
@@ -554,12 +512,12 @@ test_deny_federated_search_unauthenticated if {
             "federatedSearch": true
         }
     }
-}# Test: Allow federated resource from trusted origin
+}
+
+# Test: Allow federated resource from trusted origin
 test_allow_federated_resource_trusted_origin if {
     federation.allow_federated_resource with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-1",
             "clearance": "SECRET",
@@ -583,8 +541,6 @@ test_allow_federated_resource_trusted_origin if {
 test_allow_federated_resource_gbr_to_usa if {
     federation.allow_federated_resource with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-2",
             "clearance": "SECRET",
@@ -602,12 +558,12 @@ test_allow_federated_resource_gbr_to_usa if {
             "amr": ["pwd", "otp"]
         }
     }
-}# Test: Deny federated resource when user country not releasable
+}
+
+# Test: Deny federated resource when user country not releasable
 test_deny_federated_resource_not_releasable if {
     not federation.allow_federated_resource with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "clearance": "SECRET",
@@ -631,8 +587,6 @@ test_deny_federated_resource_not_releasable if {
 test_deny_federated_resource_insufficient_clearance if {
     not federation.allow_federated_resource with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-4",
             "clearance": "CONFIDENTIAL",  # Lower than required
@@ -656,8 +610,6 @@ test_deny_federated_resource_insufficient_clearance if {
 test_allow_local_resource_no_origin if {
     federation.allow_federated_resource with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-1",
             "clearance": "SECRET",
@@ -681,8 +633,6 @@ test_allow_local_resource_no_origin if {
 test_decision_includes_federated_fields if {
     d := federation.decision with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-fra-1",
             "clearance": "SECRET",
@@ -705,3 +655,4 @@ test_decision_includes_federated_fields if {
     d.federatedSearchAllowed == true
     d.federatedResourceAllowed == true
 }
+

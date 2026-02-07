@@ -5,31 +5,6 @@ package dive.tenant.base_test
 
 import rego.v1
 
-# Mock tenant configuration for testing
-mock_tenant_config := {
-    "USA": {
-        "issuer": "https://keycloak.usa.dive.local/realms/dive-v3-broker",
-        "enabled": true,
-        "federation_partners": ["FRA", "GBR", "DEU"]
-    },
-    "FRA": {
-        "issuer": "https://keycloak.fra.dive.local/realms/dive-v3-broker",
-        "enabled": true,
-        "federation_partners": ["USA", "GBR"]
-    },
-    "GBR": {
-        "issuer": "https://keycloak.gbr.dive.local/realms/dive-v3-broker",
-        "enabled": true,
-        "federation_partners": ["USA", "FRA", "DEU"]
-    },
-    "DEU": {
-        "issuer": "https://keycloak.deu.dive.local/realms/dive-v3-broker",
-        "enabled": true,
-        "federation_partners": ["USA", "GBR"]
-    }
-}
-
-
 import data.dive.tenant.base
 
 # ============================================

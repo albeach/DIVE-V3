@@ -1,11 +1,11 @@
 # Base Layer: Clearance Hierarchy
 # Package: dive.base.clearance
-#
+# 
 # This is the SINGLE SOURCE OF TRUTH for clearance level definitions.
 # All other policies must import this package for clearance comparisons.
 #
 # ACP-240 / NATO STANAG 4774 compliant clearance hierarchy.
-#
+# 
 # Version: 1.0.0
 # Last Updated: 2025-12-03
 

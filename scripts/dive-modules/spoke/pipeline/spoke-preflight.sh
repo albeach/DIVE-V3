@@ -274,6 +274,7 @@ preflight_check_secrets_available() {
 ##
 preflight_check_ports_available() {
     local instance_code="$1"
+    local code_lower=$(lower "$instance_code")
 
     # Get port allocation for this spoke (outputs shell exports, not JSON)
     eval "$(get_instance_ports "$instance_code" 2>/dev/null)" || {
@@ -309,7 +310,30 @@ preflight_check_ports_available() {
     for port in "${ports[@]}"; do
         if [ -n "$port" ] && [ "$port" != "null" ]; then
             if lsof -Pi ":$port" -sTCP:LISTEN -t >/dev/null 2>&1; then
-                conflicts+=("$port")
+                # Port is in use - check if it's our spoke instance (idempotent deployment support)
+                # Use docker inspect + jq for proper JSON parsing (best practice)
+                local owner_container=""
+                
+                # Check all containers for this spoke instance
+                for container in $(docker ps --filter "name=dive-spoke-${code_lower}" --format '{{.Names}}' 2>/dev/null); do
+                    # Use docker inspect + jq to get host ports (proper JSON parsing)
+                    local container_ports=$(docker inspect "$container" --format '{{json .NetworkSettings.Ports}}' 2>/dev/null | \
+                        jq -r 'to_entries[] | .value[]? | .HostPort' 2>/dev/null || echo "")
+                    
+                    # Check if this container uses the port
+                    if echo "$container_ports" | grep -q "^${port}$"; then
+                        owner_container="$container"
+                        break
+                    fi
+                done
+                
+                if [ -z "$owner_container" ]; then
+                    # Port in use by something else - this is a conflict
+                    conflicts+=("$port")
+                else
+                    # Port in use by our own container - OK for idempotent deployments
+                    log_verbose "Port $port in use by $owner_container (OK for retry)"
+                fi
             fi
         fi
     done

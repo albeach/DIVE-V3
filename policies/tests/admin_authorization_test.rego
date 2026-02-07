@@ -16,39 +16,39 @@ import data.dive.admin_authorization
 test_allow_super_admin_view_logs if {
     admin_authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "admin-usa",
             "roles": ["super_admin"]
         },
-        "action": {"type": "view_logs"}
+        "action": {
+            "operation": "view_logs"
+        }
     }
 }
 
 test_allow_super_admin_export_logs if {
     admin_authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "admin-usa",
             "roles": ["super_admin"]
         },
-        "action": {"type": "export_logs"}
+        "action": {
+            "operation": "export_logs"
+        }
     }
 }
 
 test_allow_super_admin_manage_users if {
     admin_authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "admin-usa",
             "roles": ["super_admin"]
         },
-        "action": {"type": "manage_users"}
+        "action": {
+            "operation": "manage_users"
+        }
     }
 }
 
@@ -59,13 +59,13 @@ test_allow_super_admin_manage_users if {
 test_deny_unauthenticated_admin if {
     not admin_authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": false,
             "uniqueID": "admin-usa",
             "roles": ["super_admin"]
         },
-        "action": {"type": "view_logs"}
+        "action": {
+            "operation": "view_logs"
+        }
     }
 }
 
@@ -75,7 +75,9 @@ test_deny_missing_authentication if {
             "uniqueID": "admin-usa",
             "roles": ["super_admin"]
         },
-        "action": {"type": "view_logs"}
+        "action": {
+            "operation": "view_logs"
+        }
     }
 }
 
@@ -86,26 +88,26 @@ test_deny_missing_authentication if {
 test_deny_non_admin_user if {
     not admin_authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "roles": ["user"]
         },
-        "action": {"type": "view_logs"}
+        "action": {
+            "operation": "view_logs"
+        }
     }
 }
 
 test_deny_empty_roles if {
     not admin_authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "roles": []
         },
-        "action": {"type": "view_logs"}
+        "action": {
+            "operation": "view_logs"
+        }
     }
 }
 
@@ -113,39 +115,39 @@ test_deny_empty_roles if {
 test_deny_null_roles if {
     not admin_authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "roles": null
         },
-        "action": {"type": "view_logs"}
+        "action": {
+            "operation": "view_logs"
+        }
     }
 }
 
 test_deny_admin_role_without_super_admin if {
     not admin_authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "moderator-usa",
             "roles": ["admin"]  # Not super_admin
         },
-        "action": {"type": "view_logs"}
+        "action": {
+            "operation": "view_logs"
+        }
     }
 }
 
 test_allow_multiple_roles_with_super_admin if {
     admin_authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "admin-usa",
             "roles": ["user", "admin", "super_admin"]
         },
-        "action": {"type": "view_logs"}
+        "action": {
+            "operation": "view_logs"
+        }
     }
 }
 
@@ -156,99 +158,97 @@ test_allow_multiple_roles_with_super_admin if {
 test_allow_approve_idp if {
     admin_authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "admin-usa",
             "roles": ["super_admin"]
         },
-        "action": {"type": "approve_idp"}
+        "action": {
+            "operation": "approve_idp"
+        }
     }
 }
 
 test_allow_reject_idp if {
     admin_authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "admin-usa",
             "roles": ["super_admin"]
         },
-        "action": {"type": "reject_idp"}
+        "action": {
+            "operation": "reject_idp"
+        }
     }
 }
 
 test_allow_create_idp if {
     admin_authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "admin-usa",
             "roles": ["super_admin"]
         },
-        "action": {"type": "create_idp"}
+        "action": {
+            "operation": "create_idp"
+        }
     }
 }
 
 test_allow_update_idp if {
     admin_authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "admin-usa",
             "roles": ["super_admin"]
         },
-        "action": {"type": "update_idp"}
+        "action": {
+            "operation": "update_idp"
+        }
     }
 }
 
 test_allow_delete_idp if {
     admin_authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "admin-usa",
             "roles": ["super_admin"]
         },
-        "action": {"type": "delete_idp"}
+        "action": {
+            "operation": "delete_idp"
+        }
     }
 }
 
 test_allow_view_violations if {
     admin_authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "admin-usa",
             "roles": ["super_admin"]
         },
-        "action": {"type": "view_violations"}
+        "action": {
+            "operation": "view_violations"
+        }
     }
 }
 
 test_allow_view_system_health if {
     admin_authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "admin-usa",
             "roles": ["super_admin"]
         },
-        "action": {"type": "view_system_health"}
+        "action": {
+            "operation": "view_system_health"
+        }
     }
 }
 
 test_deny_invalid_operation if {
     not admin_authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "admin-usa",
             "roles": ["super_admin"]
@@ -262,13 +262,13 @@ test_deny_invalid_operation if {
 test_deny_unknown_operation if {
     not admin_authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "admin-usa",
             "roles": ["super_admin"]
         },
-        "action": {"type": "hack_system"}
+        "action": {
+            "operation": "hack_system"
+        }
     }
 }
 
@@ -279,13 +279,13 @@ test_deny_unknown_operation if {
 test_decision_allow_structure if {
     d := admin_authorization.decision with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "admin-usa",
             "roles": ["super_admin"]
         },
-        "action": {"type": "view_logs"}
+        "action": {
+            "operation": "view_logs"
+        }
     }
     d.allow == true
     d.reason == "Admin access granted"
@@ -294,13 +294,13 @@ test_decision_allow_structure if {
 test_decision_deny_structure if {
     d := admin_authorization.decision with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": false,
             "uniqueID": "admin-usa",
             "roles": ["super_admin"]
         },
-        "action": {"type": "view_logs"}
+        "action": {
+            "operation": "view_logs"
+        }
     }
     d.allow == false
     contains(d.reason, "not authenticated")
@@ -313,13 +313,13 @@ test_decision_deny_structure if {
 test_evaluation_details_authenticated if {
     details := admin_authorization.evaluation_details with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "admin-usa",
             "roles": ["super_admin"]
         },
-        "action": {"type": "view_logs"}
+        "action": {
+            "operation": "view_logs"
+        }
     }
     details.authenticated == true
     details.has_super_admin_role == true
@@ -329,13 +329,13 @@ test_evaluation_details_authenticated if {
 test_evaluation_details_denied if {
     details := admin_authorization.evaluation_details with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "testuser-usa-3",
             "roles": ["user"]
         },
-        "action": {"type": "view_logs"}
+        "action": {
+            "operation": "view_logs"
+        }
     }
     details.authenticated == true
     details.has_super_admin_role == false
@@ -349,8 +349,6 @@ test_evaluation_details_denied if {
 test_deny_null_action if {
     not admin_authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "admin-usa",
             "roles": ["super_admin"]
@@ -364,8 +362,6 @@ test_deny_null_action if {
 test_deny_empty_operation if {
     not admin_authorization.allow with input as {
         "subject": {
-            "mfaVerified": true,
-            "aal": 2,
             "authenticated": true,
             "uniqueID": "admin-usa",
             "roles": ["super_admin"]
@@ -375,3 +371,4 @@ test_deny_empty_operation if {
         }
     }
 }
+
