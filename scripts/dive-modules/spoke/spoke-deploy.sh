@@ -112,6 +112,13 @@ spoke_deploy() {
         return 1
     fi
 
+    # GUARDRAIL: Prevent USA from being deployed as a spoke (2026-02-07)
+    if type spoke_validate_instance_code &>/dev/null; then
+        if ! spoke_validate_instance_code "$instance_code"; then
+            return 1
+        fi
+    fi
+
     # Normalize inputs
     local code_upper=$(upper "$instance_code")
     local code_lower=$(lower "$instance_code")
@@ -165,6 +172,13 @@ spoke_up() {
     local code_lower=$(lower "$instance_code")
     local code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+
+    # GUARDRAIL: Prevent USA from being deployed as a spoke (2026-02-07)
+    if type spoke_validate_instance_code &>/dev/null; then
+        if ! spoke_validate_instance_code "$instance_code"; then
+            return 1
+        fi
+    fi
 
     # Check if spoke is initialized
     if [ ! -f "$spoke_dir/docker-compose.yml" ]; then
