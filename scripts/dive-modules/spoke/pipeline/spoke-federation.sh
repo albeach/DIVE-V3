@@ -275,11 +275,28 @@ spoke_federation_setup() {
     if [ "$verification_passed" = "true" ]; then
         return 0
     else
-        log_warn "Federation verification incomplete after $max_verify_retries attempts"
-        log_warn "This is expected for eventual consistency - federation may work within 60 seconds"
-        log_info "Manual verification: ./dive federation verify $code_upper"
-        echo "$verification_result"
-        return 0  # Non-blocking - verification can fail temporarily due to eventual consistency
+        # CRITICAL FIX (2026-02-07): Federation is REQUIRED infrastructure - fail hard
+        # Previous "non-blocking" approach created checkpoint poison:
+        #   1. CONFIGURATION phase succeeds with incomplete federation → checkpoint saved
+        #   2. VERIFICATION phase fails → rollback
+        #   3. Re-deploy skips CONFIGURATION (checkpoint exists) → IdPs never created
+        #   4. VERIFICATION fails again → infinite loop
+        # SOLUTION: Fail during CONFIGURATION so checkpoint is never saved until federation works
+        log_error "Federation verification failed after $max_verify_retries attempts (~62s total)"
+        log_error "Impact: Spoke cannot function without bidirectional federation"
+        log_error "This indicates a real configuration problem, not just eventual consistency"
+        echo ""
+        if [ -n "$verification_result" ]; then
+            echo "$verification_result" | grep -E '"spoke_to_hub"|"hub_to_spoke"|"bidirectional"' || echo "$verification_result"
+        fi
+        echo ""
+        log_error "Troubleshooting:"
+        log_error "  1. Verify Hub is running: docker ps --filter name=dive-hub"
+        log_error "  2. Check Hub Keycloak: curl -k https://localhost:8443/realms/dive-v3-broker-usa/.well-known/openid-configuration"
+        log_error "  3. Check Spoke Keycloak: curl -k https://localhost:\${KEYCLOAK_PORT}/realms/dive-v3-broker-${code_lower}/.well-known/openid-configuration"
+        log_error "  4. Review Keycloak logs: docker logs dive-hub-keycloak && docker logs dive-spoke-${code_lower}-keycloak"
+        log_error "  5. Check admin passwords are set: echo \$KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
+        return 1  # CRITICAL: Fail hard so checkpoint is not saved
     fi
 }
 
