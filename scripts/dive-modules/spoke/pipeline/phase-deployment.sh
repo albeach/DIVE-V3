@@ -29,11 +29,6 @@ if [ -z "${SPOKE_VALIDATION_LOADED:-}" ]; then
 fi
 
 # Load checkpoint system
-if [ -z "${SPOKE_CHECKPOINT_LOADED:-}" ]; then
-    if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-checkpoint.sh" ]; then
-        source "$(dirname "${BASH_SOURCE[0]}")/spoke-checkpoint.sh"
-    fi
-fi
 
 # =============================================================================
 # MAIN DEPLOYMENT PHASE FUNCTION
@@ -109,8 +104,8 @@ spoke_phase_deployment() {
     # =============================================================================
     # IDEMPOTENT DEPLOYMENT: Check if phase already complete
     # =============================================================================
-    if type spoke_checkpoint_is_complete &>/dev/null; then
-        if spoke_checkpoint_is_complete "$instance_code" "DEPLOYMENT"; then
+    if type spoke_phase_is_complete &>/dev/null; then
+        if spoke_phase_is_complete "$instance_code" "DEPLOYMENT"; then
             # Validate state is actually good
             if type spoke_validate_phase_state &>/dev/null; then
                 if spoke_validate_phase_state "$instance_code" "DEPLOYMENT"; then
@@ -118,7 +113,7 @@ spoke_phase_deployment() {
                     return 0
                 else
                     log_warn "DEPLOYMENT checkpoint exists but validation failed, re-running"
-                    spoke_checkpoint_clear_phase "$instance_code" "DEPLOYMENT" 2>/dev/null || true
+                    spoke_phase_clear "$instance_code" "DEPLOYMENT" 2>/dev/null || true
                 fi
             else
                 log_info "✓ DEPLOYMENT phase complete (validation not available)"
@@ -209,8 +204,8 @@ spoke_phase_deployment() {
     local PHASE_DURATION=$((PHASE_END - PHASE_START))
 
     # Mark phase complete (checkpoint system)
-    if type spoke_checkpoint_mark_complete &>/dev/null; then
-        spoke_checkpoint_mark_complete "$instance_code" "DEPLOYMENT" "$PHASE_DURATION" '{}' || true
+    if type spoke_phase_mark_complete &>/dev/null; then
+        spoke_phase_mark_complete "$instance_code" "DEPLOYMENT" "$PHASE_DURATION" '{}' || true
     fi
 
     log_success "✅ DEPLOYMENT phase complete in ${PHASE_DURATION}s"

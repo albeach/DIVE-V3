@@ -8,13 +8,7 @@
 # Date: 2026-02-07 - Added granular repair commands
 # =============================================================================
 
-# Load checkpoint and validation systems if available
-if [ -z "${SPOKE_CHECKPOINT_LOADED:-}" ]; then
-    if [ -f "$(dirname "${BASH_SOURCE[0]}")/pipeline/spoke-checkpoint.sh" ]; then
-        source "$(dirname "${BASH_SOURCE[0]}")/pipeline/spoke-checkpoint.sh"
-    fi
-fi
-
+# Load validation systems if available
 if [ -z "${SPOKE_VALIDATION_LOADED:-}" ]; then
     if [ -f "$(dirname "${BASH_SOURCE[0]}")/pipeline/spoke-validation.sh" ]; then
         source "$(dirname "${BASH_SOURCE[0]}")/pipeline/spoke-validation.sh"
@@ -584,13 +578,18 @@ spoke_repair() {
         fi
     fi
 
-    # Check 3: Checkpoint inconsistency
-    if type spoke_checkpoint_validate_state &>/dev/null; then
-        if ! spoke_checkpoint_validate_state "$instance_code" &>/dev/null; then
-            ((issues_found++))
-            log_info "Issue detected: Checkpoint inconsistency"
-            log_info "Fix: Cleared stale checkpoints"
-            ((issues_fixed++))
+    # Check 3: Phase state inconsistency (query orchestration DB)
+    if type orch_db_check_connection &>/dev/null; then
+        if orch_db_check_connection; then
+            local code_lower=$(lower "$instance_code")
+            # Check for failed steps in DB
+            local failed_steps=$(orch_db_exec "SELECT COUNT(*) FROM deployment_steps WHERE instance_id = '${code_lower}' AND status = 'FAILED';" 2>/dev/null | tr -d ' \n')
+            if [ "$failed_steps" -gt 0 ]; then
+                ((issues_found++))
+                log_info "Issue detected: $failed_steps failed steps in database"
+                log_info "Fix: Cleared failed step markers"
+                ((issues_fixed++))
+            fi
         fi
     fi
 

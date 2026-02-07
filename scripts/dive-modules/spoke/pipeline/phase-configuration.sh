@@ -31,11 +31,6 @@ if [ -z "${SPOKE_VALIDATION_LOADED:-}" ]; then
 fi
 
 # Load checkpoint system
-if [ -z "${SPOKE_CHECKPOINT_LOADED:-}" ]; then
-    if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-checkpoint.sh" ]; then
-        source "$(dirname "${BASH_SOURCE[0]}")/spoke-checkpoint.sh"
-    fi
-fi
 
 # =============================================================================
 # LOAD SPOKE FEDERATION MODULE
@@ -76,8 +71,8 @@ spoke_phase_configuration() {
     # =============================================================================
     # IDEMPOTENT DEPLOYMENT: Check if phase already complete
     # =============================================================================
-    if type spoke_checkpoint_is_complete &>/dev/null; then
-        if spoke_checkpoint_is_complete "$instance_code" "CONFIGURATION"; then
+    if type spoke_phase_is_complete &>/dev/null; then
+        if spoke_phase_is_complete "$instance_code" "CONFIGURATION"; then
             # Validate state is actually good
             if type spoke_validate_phase_state &>/dev/null; then
                 if spoke_validate_phase_state "$instance_code" "CONFIGURATION"; then
@@ -85,7 +80,7 @@ spoke_phase_configuration() {
                     return 0
                 else
                     log_warn "CONFIGURATION checkpoint exists but validation failed, re-running"
-                    spoke_checkpoint_clear_phase "$instance_code" "CONFIGURATION" 2>/dev/null || true
+                    spoke_phase_clear "$instance_code" "CONFIGURATION" 2>/dev/null || true
                 fi
             else
                 log_info "✓ CONFIGURATION phase complete (validation not available)"
@@ -352,8 +347,8 @@ spoke_phase_configuration() {
     local PHASE_DURATION=$((PHASE_END - PHASE_START))
 
     # Mark phase complete (checkpoint system)
-    if type spoke_checkpoint_mark_complete &>/dev/null; then
-        spoke_checkpoint_mark_complete "$instance_code" "CONFIGURATION" "$PHASE_DURATION" '{}' || true
+    if type spoke_phase_mark_complete &>/dev/null; then
+        spoke_phase_mark_complete "$instance_code" "CONFIGURATION" "$PHASE_DURATION" '{}' || true
     fi
 
     log_success "✅ CONFIGURATION phase complete in ${PHASE_DURATION}s"

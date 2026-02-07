@@ -2,14 +2,14 @@
 # =============================================================================
 # DIVE V3 CLI - Spoke Pipeline State Validation Functions
 # =============================================================================
-# Provides validation functions to verify checkpoint state consistency
+# Provides validation functions to verify phase state consistency
 # with actual system state. Used for idempotent deployments.
 #
-# Functions validate that completed phases actually have the expected
-# infrastructure/configuration in place.
+# Integrates with existing orchestration DB (orchestration-state-db.sh)
+# to check if phases are complete and validate infrastructure state.
 # =============================================================================
-# Version: 1.0.0
-# Date: 2026-02-07
+# Version: 2.0.0
+# Date: 2026-02-07 - Refactored to use existing orchestration DB
 # =============================================================================
 
 # Prevent multiple sourcing
@@ -17,6 +17,84 @@ if [ -n "${SPOKE_VALIDATION_LOADED:-}" ]; then
     return 0
 fi
 export SPOKE_VALIDATION_LOADED=1
+
+# =============================================================================
+# PHASE COMPLETION CHECKING (Using Orchestration DB)
+# =============================================================================
+
+##
+# Check if a phase is complete (queries orchestration DB)
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Phase name (PREFLIGHT, INITIALIZATION, etc.)
+#
+# Returns:
+#   0 - Phase is complete
+#   1 - Phase is not complete or unknown
+##
+spoke_phase_is_complete() {
+    local instance_code="$1"
+    local phase="$2"
+    
+    # Query orchestration DB for step status
+    if type orch_db_check_connection &>/dev/null; then
+        if orch_db_check_connection; then
+            local code_lower=$(lower "$instance_code")
+            local status=$(orch_db_exec "SELECT status FROM deployment_steps WHERE instance_id = '${code_lower}' AND step_name = '${phase}' ORDER BY started_at DESC LIMIT 1;" 2>/dev/null | tr -d ' \n')
+            
+            if [ "$status" = "COMPLETED" ]; then
+                return 0
+            fi
+        fi
+    fi
+    
+    return 1
+}
+
+##
+# Mark a phase as complete (records in orchestration DB)
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Phase name
+#   $3 - Duration in seconds (optional)
+#
+# Returns:
+#   0 - Success
+#   1 - Failure
+##
+spoke_phase_mark_complete() {
+    local instance_code="$1"
+    local phase="$2"
+    local duration="${3:-0}"
+    
+    # Record in orchestration DB
+    if type orch_db_record_step &>/dev/null; then
+        orch_db_record_step "$instance_code" "$phase" "COMPLETED" "" 2>/dev/null || true
+    fi
+    
+    return 0
+}
+
+##
+# Clear a phase completion marker (for retry)
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Phase name
+##
+spoke_phase_clear() {
+    local instance_code="$1"
+    local phase="$2"
+    
+    # Mark as pending in orchestration DB to force re-run
+    if type orch_db_record_step &>/dev/null; then
+        orch_db_record_step "$instance_code" "$phase" "PENDING" "Validation failed, will re-run" 2>/dev/null || true
+    fi
+    
+    return 0
+}
 
 # =============================================================================
 # VALIDATION FUNCTIONS (One per Phase)
@@ -51,15 +129,20 @@ _validate_preflight_state() {
         return 1
     fi
 
-    # Check critical secrets are loaded
-    local required_secrets=("POSTGRES_PASSWORD" "MONGO_PASSWORD" "REDIS_PASSWORD" "KEYCLOAK_ADMIN_PASSWORD")
-    for secret in "${required_secrets[@]}"; do
-        local var_name="${secret}_${code_upper}"
-        if [ -z "${!var_name:-}" ]; then
-            log_warn "Secret not loaded: $var_name"
-            return 1
-        fi
-    done
+    # Check if secrets exist in .env file (more reliable than checking env vars)
+    local env_file="$spoke_dir/.env"
+    if [ -f "$env_file" ]; then
+        local required_secrets=("POSTGRES_PASSWORD" "MONGO_PASSWORD" "REDIS_PASSWORD" "KEYCLOAK_ADMIN_PASSWORD")
+        for secret in "${required_secrets[@]}"; do
+            if ! grep -q "^${secret}=" "$env_file" 2>/dev/null; then
+                log_warn "Secret not in .env file: $secret"
+                return 1
+            fi
+        done
+    else
+        # No .env file yet - this is fine for first deployment
+        log_verbose ".env file doesn't exist yet (first deployment)"
+    fi
 
     # Check federation network exists
     if ! docker network ls --format '{{.Name}}' | grep -q "^dive-shared$"; then
