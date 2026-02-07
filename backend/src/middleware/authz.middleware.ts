@@ -1071,17 +1071,13 @@ export async function authzMiddleware(req: Request, res: Response, next: NextFun
         // PHASE 6: Redis Decision Caching Integration
         // ============================================
         // Check decision cache BEFORE calling OPA
-        const cacheKey = decisionCacheService.generateKey(
-            user.uniqueID,
+        const cacheKey = decisionCacheService.generateCacheKey({
+            uniqueID: user.uniqueID,
             resourceId,
-            {
-                clearance: user.clearance,
-                country: user.countryOfAffiliation,
-                coi: user.acpCOI,
-                acr: opaInput.input.context.acr,
-                amr: opaInput.input.context.amr
-            }
-        );
+            clearance: user.clearance,
+            countryOfAffiliation: user.countryOfAffiliation,
+            tenant: user.tenant
+        });
 
         const cachedDecision = decisionCacheService.get(cacheKey);
         
@@ -1145,14 +1141,11 @@ export async function authzMiddleware(req: Request, res: Response, next: NextFun
                     decision: {
                         allow: false,
                         reason: opaResponse.result.reason,
-                        details: opaResponse.result.evaluation_details,
-                        cached: true
+                        evaluationDetails: opaResponse.result.evaluation_details,
                     },
+                    latencyMs: 0,
                     context: {
                         sourceIP: req.ip || 'unknown',
-                        userAgent: req.headers['user-agent'] || 'unknown',
-                        requestId: req.headers['x-request-id'] as string || `req-${Date.now()}`,
-                        timestamp: new Date().toISOString(),
                     },
                 });
 
@@ -1167,6 +1160,7 @@ export async function authzMiddleware(req: Request, res: Response, next: NextFun
             // Log successful cached decision
             decisionLogService.logDecision({
                 timestamp: new Date().toISOString(),
+                requestId: req.headers['x-request-id'] as string || `req-${Date.now()}`,
                 subject: {
                     uniqueID: user.uniqueID,
                     clearance: user.clearance || 'UNCLASSIFIED',
@@ -1179,17 +1173,14 @@ export async function authzMiddleware(req: Request, res: Response, next: NextFun
                     releasabilityTo: resourceAttributes.releasabilityTo,
                     COI: resourceAttributes.COI,
                 },
-                decision: {
-                    allow: true,
-                    reason: opaResponse.result.reason,
-                    policyVersion: 'current',
-                    evaluationTime: 0, // cached, no evaluation
-                    cached: true
+                action: {
+                    operation: 'READ',
                 },
+                decision: 'ALLOW',
+                reason: opaResponse.result.reason,
+                latency_ms: 0,
                 context: {
                     sourceIP: req.ip || 'unknown',
-                    userAgent: req.headers['user-agent'] || 'unknown',
-                    requestId: req.headers['x-request-id'] as string || `req-${Date.now()}`,
                 },
             });
 
@@ -1320,11 +1311,11 @@ export async function authzMiddleware(req: Request, res: Response, next: NextFun
                     allow: false,
                     reason: opaResponse.result.reason,
                 },
+                latencyMs: Date.now() - startTime,
                 context: {
                     requestId: req.headers['x-request-id'] as string || `req-${Date.now()}`,
-                    sourceIP: req.ip,
+                    sourceIP: req.ip || 'unknown',
                 },
-                latencyMs: Date.now() - startTime,
             });
 
             // Log decision to decisions collection for dashboard
@@ -1436,11 +1427,11 @@ export async function authzMiddleware(req: Request, res: Response, next: NextFun
                 allow: true,
                 reason: opaResponse.result.reason,
             },
+            latencyMs: Date.now() - startTime,
             context: {
                 requestId: req.headers['x-request-id'] as string || `req-${Date.now()}`,
-                sourceIP: req.ip,
+                sourceIP: req.ip || 'unknown',
             },
-            latencyMs: Date.now() - startTime,
         });
 
         // Log decision to decisions collection for dashboard

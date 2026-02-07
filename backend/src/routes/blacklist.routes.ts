@@ -109,7 +109,7 @@ router.post('/api/auth/blacklist-token', async (req: Request, res: Response, nex
             // PHASE 6: Invalidate Decision Cache on Logout
             // ============================================
             // Clear all cached authorization decisions for this user
-            const invalidatedCount = decisionCacheService.invalidate('user', uniqueID, 'user_logout');
+            const invalidatedCount = decisionCacheService.invalidateUser(uniqueID, 'user_logout');
             
             logger.info('Invalidated decision cache on logout', {
                 uniqueID,

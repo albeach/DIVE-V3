@@ -9,6 +9,7 @@ import { Request } from 'express';
 
 /**
  * Authenticated user payload extracted from JWT token
+ * SSOT for user authentication across all backend controllers/middleware
  */
 export interface IUserPayload {
     sub: string;
@@ -19,7 +20,18 @@ export interface IUserPayload {
     email?: string;
     preferred_username?: string;
     roles?: string[];
+    role?: string;  // Primary role for RBAC (role.middleware.ts)
+    tenant?: string;  // Tenant/instance isolation
+    auth_time?: number;  // Authentication timestamp
+    user_acr?: string;  // Authentication Context Class Reference (AAL testing)
+    user_amr?: string[];  // Authentication Methods Reference (AAL testing)
 }
+
+/**
+ * Alias for backward compatibility
+ * All files should use IUserPayload but IAuthenticatedUser is still used in many places
+ */
+export type IAuthenticatedUser = IUserPayload;
 
 /**
  * Extended Express Request with authenticated user info
