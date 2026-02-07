@@ -142,6 +142,11 @@ class FederationBootstrapService {
       const backendPort = parseInt(process.env.BACKEND_PORT || '4000');
       const keycloakPort = parseInt(process.env.KEYCLOAK_PORT || '8443');
 
+      // CRITICAL FIX (2026-02-07): Add apiUrl/internalApiUrl for federation discovery
+      // Federation discovery service requires apiUrl to include Hub in federation
+      const backendUrl = process.env.BACKEND_URL || `https://localhost:${backendPort}`;
+      const internalBackendUrl = process.env.BACKEND_INTERNAL_URL || `https://dive-hub-backend:${backendPort}`;
+
       await collection.insertOne({
         spokeId: `hub-${instanceCode.toLowerCase()}`,
         instanceCode: instanceCode.toUpperCase(),
@@ -151,8 +156,10 @@ class FederationBootstrapService {
         backendPort,
         keycloakPort,
         frontendUrl: process.env.NEXT_PUBLIC_BASE_URL || `https://localhost:${frontendPort}`,
-        backendUrl: process.env.BACKEND_URL || `https://localhost:${backendPort}`,
-        idpUrl: process.env.KEYCLOAK_BASE_URL || `https://localhost:${keycloakPort}`,
+        backendUrl,
+        apiUrl: backendUrl, // Required by federation-discovery.service.ts
+        internalApiUrl: internalBackendUrl, // Docker network URL for container-to-container
+        idpUrl: process.env.KEYCLOAK_INTERNAL_URL || `https://dive-hub-keycloak:${keycloakPort}`,
         idpPublicUrl: process.env.KEYCLOAK_BASE_URL || `https://localhost:${keycloakPort}`,
         createdAt: new Date(),
         updatedAt: new Date()
