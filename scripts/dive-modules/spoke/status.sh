@@ -15,18 +15,46 @@
 spoke_status() {
     ensure_dive_root
     local instance_code="${1:-}"
+    local detailed=false
+    
+    # Parse flags
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --detailed|-d)
+                detailed=true
+                shift
+                ;;
+            -*)
+                log_error "Unknown flag: $1"
+                return 1
+                ;;
+            *)
+                if [ -z "$instance_code" ]; then
+                    instance_code="$1"
+                fi
+                shift
+                ;;
+        esac
+    done
 
     if [ -z "$instance_code" ]; then
         log_error "Instance code required"
         echo ""
-        echo "Usage: ./dive spoke status CODE"
+        echo "Usage: ./dive spoke status CODE [--detailed]"
         echo ""
         echo "Examples:"
         echo "  ./dive spoke status FRA"
-        echo "  ./dive spoke status DEU"
+        echo "  ./dive spoke status FRA --detailed"
+        echo "  ./dive spoke status DEU -d"
         return 1
     fi
 
+    if [ "$detailed" = true ]; then
+        spoke_status_detailed "$instance_code"
+        return $?
+    fi
+
+    # Original simple status display
     local code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local config_file="$spoke_dir/config.json"
@@ -101,6 +129,171 @@ spoke_status() {
         echo "  Run: ./dive spoke generate-certs"
     fi
 
+    echo ""
+}
+
+# =============================================================================
+# DETAILED STATUS (New Enhanced Diagnostic Mode)
+# =============================================================================
+
+spoke_status_detailed() {
+    local instance_code="$1"
+    local code_lower=$(lower "$instance_code")
+    local code_upper=$(upper "$instance_code")
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+
+    print_header
+    echo -e "${BOLD}╔══════════════════════════════════════════════════╗${NC}"
+    echo -e "${BOLD}║    DIVE V3 Spoke Status (Detailed) - ${code_upper}         ║${NC}"
+    echo -e "${BOLD}╚══════════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    # Check if spoke exists
+    if [ ! -d "$spoke_dir" ]; then
+        echo -e "${RED}❌ Spoke not deployed: $code_upper${NC}"
+        echo ""
+        echo "Deploy first: ./dive spoke deploy $code_upper"
+        return 1
+    fi
+
+    # Section 1: Container Health
+    echo -e "${CYAN}┌─ Container Health${NC}"
+    local running_count=$(docker ps --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
+    local total_count=$(docker ps -a --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
+    
+    if [ "$running_count" -eq "$total_count" ] && [ "$total_count" -gt 0 ]; then
+        echo -e "${GREEN}✅ All containers running${NC} ($running_count/$total_count)"
+    elif [ "$running_count" -gt 0 ]; then
+        echo -e "${YELLOW}⚠️  Some containers stopped${NC} ($running_count/$total_count running)"
+        echo -e "${CYAN}│  Fix:${NC} ./dive spoke restart $code_upper"
+    else
+        echo -e "${RED}❌ No containers running${NC}"
+        echo -e "${CYAN}│  Fix:${NC} ./dive spoke deploy $code_upper"
+    fi
+
+    # Show per-service health
+    local services=("postgres" "mongodb" "redis" "keycloak" "opa" "opal-client" "backend" "kas" "frontend")
+    for service in "${services[@]}"; do
+        local container="dive-spoke-${code_lower}-${service}"
+        if docker ps -a --format '{{.Names}}' | grep -q "^${container}$"; then
+            local status=$(docker inspect --format='{{.State.Status}}' "$container" 2>/dev/null || echo "missing")
+            local health=$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo "none")
+            
+            if [ "$status" = "running" ]; then
+                if [ "$health" = "healthy" ] || [ "$health" = "none" ]; then
+                    printf "${CYAN}│${NC}   %-14s ${GREEN}✓ Running${NC}\n" "$service:"
+                else
+                    printf "${CYAN}│${NC}   %-14s ${YELLOW}⚠ $health${NC}\n" "$service:"
+                fi
+            else
+                printf "${CYAN}│${NC}   %-14s ${RED}✗ $status${NC}\n" "$service:"
+                echo -e "${CYAN}│     Fix:${NC} ./dive spoke restart $code_upper $service"
+            fi
+        fi
+    done
+    echo -e "${CYAN}└─${NC}"
+    echo ""
+
+    # Section 2: Federation Status
+    echo -e "${CYAN}┌─ Federation${NC}"
+    
+    # Check if federation module available
+    if type spoke_federation_verify &>/dev/null; then
+        set +e  # Don't let federation check kill the script
+        local fed_json=$(spoke_federation_verify "$code_upper" 2>/dev/null | head -20)
+        set -e
+        
+        if [ -n "$fed_json" ]; then
+            local bidirectional=$(echo "$fed_json" | grep -o '"bidirectional":[^,}]*' | cut -d: -f2 | tr -d ' ')
+            local spoke_to_hub=$(echo "$fed_json" | grep -o '"spoke_to_hub":[^,}]*' | cut -d: -f2 | tr -d ' ')
+            local hub_to_spoke=$(echo "$fed_json" | grep -o '"hub_to_spoke":[^,}]*' | cut -d: -f2 | tr -d ' ')
+            
+            if [ "$bidirectional" = "true" ]; then
+                echo -e "${GREEN}✅ Bidirectional federation active${NC}"
+                echo -e "${CYAN}│${NC}   Spoke → Hub: ${GREEN}✓${NC}"
+                echo -e "${CYAN}│${NC}   Hub → Spoke: ${GREEN}✓${NC}"
+            else
+                echo -e "${YELLOW}⚠️  Federation not bidirectional${NC}"
+                [ "$spoke_to_hub" = "true" ] && echo -e "${CYAN}│${NC}   Spoke → Hub: ${GREEN}✓${NC}" || echo -e "${CYAN}│${NC}   Spoke → Hub: ${RED}✗${NC}"
+                [ "$hub_to_spoke" = "true" ] && echo -e "${CYAN}│${NC}   Hub → Spoke: ${GREEN}✓${NC}" || echo -e "${CYAN}│${NC}   Hub → Spoke: ${RED}✗${NC}"
+                echo -e "${CYAN}│  Fix:${NC} ./dive spoke repair $code_upper"
+            fi
+        else
+            echo -e "${YELLOW}⚠️  Could not verify federation${NC}"
+            echo -e "${CYAN}│  Check:${NC} ./dive federation verify $code_upper"
+        fi
+    else
+        echo -e "${YELLOW}⚠️  Federation verification not available${NC}"
+    fi
+    echo -e "${CYAN}└─${NC}"
+    echo ""
+
+    # Section 3: Database Connectivity
+    echo -e "${CYAN}┌─ Databases${NC}"
+    
+    # PostgreSQL
+    if docker exec "dive-spoke-${code_lower}-postgres" pg_isready -U postgres &>/dev/null; then
+        echo -e "${CYAN}│${NC}   PostgreSQL:  ${GREEN}✓ Responding${NC}"
+    else
+        echo -e "${CYAN}│${NC}   PostgreSQL:  ${RED}✗ Not responding${NC}"
+        echo -e "${CYAN}│     Fix:${NC} ./dive spoke restart $code_upper postgres"
+    fi
+    
+    # MongoDB
+    if docker exec "dive-spoke-${code_lower}-mongodb" mongosh --quiet --eval "db.adminCommand('ping')" 2>/dev/null | grep -q "ok"; then
+        echo -e "${CYAN}│${NC}   MongoDB:     ${GREEN}✓ Responding${NC}"
+    else
+        echo -e "${CYAN}│${NC}   MongoDB:     ${RED}✗ Not responding${NC}"
+        echo -e "${CYAN}│     Fix:${NC} ./dive spoke restart $code_upper mongodb"
+    fi
+    
+    # Redis
+    if docker exec "dive-spoke-${code_lower}-redis" redis-cli ping 2>/dev/null | grep -q "PONG"; then
+        echo -e "${CYAN}│${NC}   Redis:       ${GREEN}✓ Responding${NC}"
+    else
+        echo -e "${CYAN}│${NC}   Redis:       ${YELLOW}⚠ May need auth${NC}"
+    fi
+    
+    echo -e "${CYAN}└─${NC}"
+    echo ""
+
+    # Section 4: Deployment State
+    echo -e "${CYAN}┌─ Deployment State${NC}"
+    if type orch_db_check_connection &>/dev/null && orch_db_check_connection 2>/dev/null; then
+        local last_deployment=$(orch_db_exec "SELECT state, timestamp FROM deployment_states WHERE instance_code = '${code_lower}' ORDER BY timestamp DESC LIMIT 1;" 2>/dev/null || echo "")
+        if [ -n "$last_deployment" ]; then
+            local deploy_state=$(echo "$last_deployment" | awk 'NR==3 {print $1}')
+            local deploy_time=$(echo "$last_deployment" | awk 'NR==3 {print $3}')
+            echo -e "${CYAN}│${NC}   Last deployment: ${deploy_state} (${deploy_time})"
+        else
+            echo -e "${CYAN}│${NC}   No deployment history found"
+        fi
+    else
+        echo -e "${CYAN}│${NC}   Orchestration DB not available"
+    fi
+    echo -e "${CYAN}└─${NC}"
+    echo ""
+
+    # Section 5: Overall Assessment
+    echo -e "${CYAN}┌─ System Health${NC}"
+    local health_score=0
+    local max_score=4
+    
+    [ "$running_count" -eq "$total_count" ] && ((health_score++)) || true
+    [ "$bidirectional" = "true" ] && ((health_score++)) || true
+    docker exec "dive-spoke-${code_lower}-postgres" pg_isready -U postgres &>/dev/null && ((health_score++)) || true
+    docker exec "dive-spoke-${code_lower}-mongodb" mongosh --quiet --eval "db.adminCommand('ping')" 2>/dev/null | grep -q "ok" && ((health_score++)) || true
+    
+    if [ "$health_score" -eq "$max_score" ]; then
+        echo -e "${GREEN}✅ Healthy${NC} ($health_score/$max_score checks passed)"
+    elif [ "$health_score" -ge 2 ]; then
+        echo -e "${YELLOW}⚠️  Degraded${NC} ($health_score/$max_score checks passed)"
+        echo -e "${CYAN}│  Try:${NC} ./dive spoke repair $code_upper"
+    else
+        echo -e "${RED}❌ Unhealthy${NC} ($health_score/$max_score checks passed)"
+        echo -e "${CYAN}│  Fix:${NC} ./dive spoke deploy $code_upper --force"
+    fi
+    echo -e "${CYAN}└─${NC}"
     echo ""
 }
 
