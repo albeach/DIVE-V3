@@ -555,13 +555,22 @@ spoke_verify_federation() {
                 echo "      $( [ "$spoke_to_hub" = "true" ] && echo "✅" || echo "❌" ) Spoke → Hub (usa-idp in $code_upper)"
                 echo "      $( [ "$hub_to_spoke" = "true" ] && echo "✅" || echo "❌" ) Hub → Spoke (${code_lower}-idp in USA)"
             fi
+        else
+            log_error "   Federation verification returned no status (function may have failed)"
+            log_error "   This usually means spoke_federation_verify() encountered an error"
         fi
 
         echo ""
+        log_error "   Root Cause Diagnostics:"
+        log_error "     • If CONFIGURATION phase was skipped (checkpoint), IdPs were never created"
+        log_error "     • Check if usa-idp exists in Spoke: docker exec dive-spoke-${code_lower}-keycloak /opt/keycloak/bin/kcadm.sh ..."
+        log_error "     • Check if ${code_lower}-idp exists in Hub: docker exec dive-hub-keycloak /opt/keycloak/bin/kcadm.sh ..."
+        echo ""
         log_error "   Troubleshooting:"
-        log_error "     1. Check federation status: ./dive federation status $code_upper"
-        log_error "     2. Check Keycloak logs: docker logs dive-spoke-${code_lower}-keycloak"
-        log_error "     3. Retry federation link: ./dive federation link $code_upper"
+        log_error "     1. Clear checkpoints: docker exec dive-hub-postgres psql -U postgres orchestration -c \"DELETE FROM checkpoints WHERE instance='$code_upper'\""
+        log_error "     2. Re-run deployment: ./dive spoke deploy $code_upper --force"
+        log_error "     3. Check federation status: ./dive federation status $code_upper"
+        log_error "     4. Manual federation link: ./dive federation link $code_upper"
         echo ""
 
         return 1  # HARD FAIL - federation is critical
