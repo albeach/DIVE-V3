@@ -47,13 +47,6 @@ if [ -z "${SPOKE_VALIDATION_LOADED:-}" ]; then
     fi
 fi
 
-# Load checkpoint system
-if [ -z "${SPOKE_CHECKPOINT_LOADED:-}" ]; then
-    if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-checkpoint.sh" ]; then
-        source "$(dirname "${BASH_SOURCE[0]}")/spoke-checkpoint.sh"
-    fi
-fi
-
 # =============================================================================
 # MAIN PREFLIGHT PHASE FUNCTION
 # =============================================================================
@@ -80,16 +73,16 @@ spoke_phase_preflight() {
     # =============================================================================
     # IDEMPOTENT DEPLOYMENT: Check if phase already complete
     # =============================================================================
-    if type spoke_checkpoint_is_complete &>/dev/null; then
-        if spoke_checkpoint_is_complete "$instance_code" "PREFLIGHT"; then
+    if type spoke_phase_is_complete &>/dev/null; then
+        if spoke_phase_is_complete "$instance_code" "PREFLIGHT"; then
             # Validate state is actually good
             if type spoke_validate_phase_state &>/dev/null; then
                 if spoke_validate_phase_state "$instance_code" "PREFLIGHT"; then
                     log_info "✓ PREFLIGHT phase complete and validated, skipping"
                     return 0
                 else
-                    log_warn "PREFLIGHT checkpoint exists but validation failed, re-running"
-                    spoke_checkpoint_clear_phase "$instance_code" "PREFLIGHT" 2>/dev/null || true
+                    log_warn "PREFLIGHT step complete but validation failed, re-running"
+                    spoke_phase_clear "$instance_code" "PREFLIGHT" 2>/dev/null || true
                 fi
             else
                 log_info "✓ PREFLIGHT phase complete (validation not available)"
@@ -187,9 +180,9 @@ spoke_phase_preflight() {
         spoke_preflight_clean_database_volumes "$instance_code"
     fi
 
-    # Mark phase complete (checkpoint system)
-    if type spoke_checkpoint_mark_complete &>/dev/null; then
-        spoke_checkpoint_mark_complete "$instance_code" "PREFLIGHT" 0 '{}' || true
+    # Mark phase complete (orchestration DB)
+    if type spoke_phase_mark_complete &>/dev/null; then
+        spoke_phase_mark_complete "$instance_code" "PREFLIGHT" 0 || true
     fi
 
     # Legacy checkpoint system (backward compatibility)

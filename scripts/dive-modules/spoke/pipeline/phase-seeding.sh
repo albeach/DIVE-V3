@@ -27,11 +27,6 @@ if [ -z "${SPOKE_VALIDATION_LOADED:-}" ]; then
 fi
 
 # Load checkpoint system
-if [ -z "${SPOKE_CHECKPOINT_LOADED:-}" ]; then
-    if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-checkpoint.sh" ]; then
-        source "$(dirname "${BASH_SOURCE[0]}")/spoke-checkpoint.sh"
-    fi
-fi
 
 # Load secret management functions
 if [ -z "${SPOKE_SECRETS_LOADED:-}" ]; then
@@ -67,8 +62,8 @@ spoke_phase_seeding() {
     # =============================================================================
     # IDEMPOTENT DEPLOYMENT: Check if phase already complete
     # =============================================================================
-    if type spoke_checkpoint_is_complete &>/dev/null; then
-        if spoke_checkpoint_is_complete "$instance_code" "SEEDING"; then
+    if type spoke_phase_is_complete &>/dev/null; then
+        if spoke_phase_is_complete "$instance_code" "SEEDING"; then
             # Validate state is actually good
             if type spoke_validate_phase_state &>/dev/null; then
                 if spoke_validate_phase_state "$instance_code" "SEEDING"; then
@@ -76,7 +71,7 @@ spoke_phase_seeding() {
                     return 0
                 else
                     log_warn "SEEDING checkpoint exists but validation failed, re-running"
-                    spoke_checkpoint_clear_phase "$instance_code" "SEEDING" 2>/dev/null || true
+                    spoke_phase_clear "$instance_code" "SEEDING" 2>/dev/null || true
                 fi
             else
                 log_info "✓ SEEDING phase complete (validation not available)"
@@ -204,8 +199,8 @@ spoke_phase_seeding() {
     fi
 
     # Mark phase complete (checkpoint system)
-    if type spoke_checkpoint_mark_complete &>/dev/null; then
-        spoke_checkpoint_mark_complete "$instance_code" "SEEDING" 0 '{}' || true
+    if type spoke_phase_mark_complete &>/dev/null; then
+        spoke_phase_mark_complete "$instance_code" "SEEDING" 0 '{}' || true
     fi
 
     # HONEST reporting - distinguish between users (critical), encrypted vs plaintext resources

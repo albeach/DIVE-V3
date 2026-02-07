@@ -136,14 +136,36 @@ orch_validate_dependencies() {
     # Only check ports if they were calculated
     if [ -n "$keycloak_port" ] && [ -n "$backend_port" ] && [ -n "$frontend_port" ]; then
         local ports_ok=true
+        local code_lower=$(lower "$instance_code")
+        
         for port in $keycloak_port $backend_port $frontend_port; do
+            # Check if port is in use
             if netstat -an 2>/dev/null | grep -q "LISTEN.*[.:]${port}" || \
                lsof -i ":${port}" >/dev/null 2>&1; then
-                log_error "✗ Port $port already in use"
-                log_error "  Free the port or choose different instance"
-                ((errors++))
-                validation_failed=true
-                ports_ok=false
+                
+                # Check if it's being used by THIS spoke instance's containers
+                local port_owner=$(lsof -i ":${port}" -sTCP:LISTEN -t 2>/dev/null | head -1)
+                if [ -n "$port_owner" ]; then
+                    # Get the container using this port
+                    local container_name=$(docker ps --format '{{.Names}}' | grep "dive-spoke-${code_lower}" | while read container; do
+                        if docker port "$container" 2>/dev/null | grep -q ":${port}->"; then
+                            echo "$container"
+                            break
+                        fi
+                    done)
+                    
+                    if [ -n "$container_name" ]; then
+                        # Port is in use by our own spoke instance - this is OK for idempotent deployments
+                        log_verbose "✓ Port $port in use by our container: $container_name (OK for retry)"
+                    else
+                        # Port is in use by something else - this is a conflict
+                        log_error "✗ Port $port already in use"
+                        log_error "  Free the port or choose different instance"
+                        ((errors++))
+                        validation_failed=true
+                        ports_ok=false
+                    fi
+                fi
             fi
         done
 

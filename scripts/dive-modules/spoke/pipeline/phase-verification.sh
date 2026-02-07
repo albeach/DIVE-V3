@@ -29,11 +29,6 @@ if [ -z "${SPOKE_VALIDATION_LOADED:-}" ]; then
 fi
 
 # Load checkpoint system
-if [ -z "${SPOKE_CHECKPOINT_LOADED:-}" ]; then
-    if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-checkpoint.sh" ]; then
-        source "$(dirname "${BASH_SOURCE[0]}")/spoke-checkpoint.sh"
-    fi
-fi
 
 # =============================================================================
 # MAIN VERIFICATION PHASE FUNCTION
@@ -63,9 +58,9 @@ spoke_phase_verification() {
     # =============================================================================
     # NOTE: VERIFICATION phase should usually run again to confirm current state
     # Only skip if explicitly marked complete AND recent (within last 5 minutes)
-    if type spoke_checkpoint_is_complete &>/dev/null; then
-        if spoke_checkpoint_is_complete "$instance_code" "VERIFICATION"; then
-            local checkpoint_age=$(spoke_checkpoint_get_timestamp "$instance_code" "VERIFICATION" 2>/dev/null || echo "")
+    if type spoke_phase_is_complete &>/dev/null; then
+        if spoke_phase_is_complete "$instance_code" "VERIFICATION"; then
+            local checkpoint_age=$(spoke_phase_get_timestamp "$instance_code" "VERIFICATION" 2>/dev/null || echo "")
             if [ -n "$checkpoint_age" ]; then
                 local now=$(date +%s)
                 local checkpoint_ts=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$checkpoint_age" +%s 2>/dev/null || echo "0")
@@ -147,8 +142,8 @@ spoke_phase_verification() {
 
     if [ "$verification_passed" = true ]; then
         # Mark phase complete (checkpoint system)
-        if type spoke_checkpoint_mark_complete &>/dev/null; then
-            spoke_checkpoint_mark_complete "$instance_code" "VERIFICATION" 0 '{}' || true
+        if type spoke_phase_mark_complete &>/dev/null; then
+            spoke_phase_mark_complete "$instance_code" "VERIFICATION" 0 '{}' || true
         fi
 
         log_success "✅ VERIFICATION phase complete - all checks passed"
