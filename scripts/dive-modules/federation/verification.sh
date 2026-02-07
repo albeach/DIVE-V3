@@ -142,16 +142,18 @@ federation_verify() {
     log_info "Check 6: Federation client on Spoke..."
     local spoke_token=$(get_spoke_admin_token "$instance_code" 2>/dev/null)
     if [ -n "$spoke_token" ]; then
+        # The spoke should have an incoming federation client named dive-v3-broker-usa
+        # This is the client the Hub uses to authenticate to the spoke
         local client_exists=$(curl -sf "${spoke_url}/admin/realms/${spoke_realm}/clients" \
             -H "Authorization: Bearer $spoke_token" \
-            --insecure 2>/dev/null | jq -r '.[] | select(.clientId=="dive-hub-federation") | .clientId')
+            --insecure 2>/dev/null | jq -r '.[] | select(.clientId=="dive-v3-broker-usa") | .clientId')
 
-        if [ "$client_exists" = "dive-hub-federation" ]; then
+        if [ "$client_exists" = "dive-v3-broker-usa" ]; then
             ((passed++)) || true
-            log_success "  Federation client exists on Spoke"
+            log_success "  Federation client (dive-v3-broker-usa) exists on Spoke"
         else
             ((failed++)) || true
-            log_error "  Federation client not found on Spoke"
+            log_error "  Federation client (dive-v3-broker-usa) not found on Spoke"
         fi
     else
         ((failed++)) || true

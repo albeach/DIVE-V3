@@ -323,9 +323,11 @@ federation_configure_mappers() {
     local spoke_realm="dive-v3-broker-${code_lower}"
 
     # Get client ID
+    # The spoke should have an incoming federation client named dive-v3-broker-usa
+    # This is the client the Hub uses to authenticate to the spoke
     local client_id=$(curl -sf "${spoke_url}/admin/realms/${spoke_realm}/clients" \
         -H "Authorization: Bearer $token" \
-        --insecure 2>/dev/null | jq -r '.[] | select(.clientId=="dive-hub-federation") | .id')
+        --insecure 2>/dev/null | jq -r '.[] | select(.clientId=="dive-v3-broker-usa") | .id')
 
     if [ -z "$client_id" ]; then
         log_warn "Federation client not found, skipping mapper configuration"
