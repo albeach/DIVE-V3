@@ -120,6 +120,9 @@ log_success "Realm $REALM_NAME exists"
 # ROOT CAUSE FIX (Phase 4 Session 6): Without user view permission, attributes
 # like clearance, countryOfAffiliation, and acpCOI are NOT included in ID tokens,
 # causing federation attribute sync to fail.
+#
+# ROOT CAUSE FIX (2026-02-07): Python doesn't exist in Keycloak 26 minimal container.
+# SOLUTION: Do JSON manipulation on HOST where jq is available, then pipe to container.
 log_step "Configuring User Profile for DIVE attributes..."
 
 # Get current User Profile as JSON
@@ -129,34 +132,47 @@ PROFILE_JSON=$(docker exec "$KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh get 
 if echo "$PROFILE_JSON" | grep -q '"attributes"'; then
     log_info "User Profile exists - updating DIVE attribute permissions..."
 
-    # Create temp file with updated profile (using Python for JSON manipulation)
-    docker exec "$KEYCLOAK_CONTAINER" bash -c "cat > /tmp/update-profile.py << 'PYEOF'
-import json
-import sys
-
-profile = json.load(sys.stdin)
-# Core DIVE attributes (NOT amr/acr - those are native Keycloak v26 session claims)
-dive_attrs = ['clearance', 'countryOfAffiliation', 'acpCOI', 'uniqueID']
-
-for attr in profile.get('attributes', []):
-    if attr['name'] in dive_attrs:
-        attr['permissions'] = {
-            'view': ['admin', 'user'],
-            'edit': ['admin']
-        }
-
-print(json.dumps(profile))
-PYEOF
-"
-
-    # Update profile
-    echo "$PROFILE_JSON" | docker exec -i "$KEYCLOAK_CONTAINER" python3 /tmp/update-profile.py | \
-        docker exec -i "$KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh update users/profile -r "$REALM_NAME" -f - 2>/dev/null
-
-    if [ $? -eq 0 ]; then
-        log_success "User Profile updated - DIVE attributes now have user view permissions"
+    # Check if jq is available on HOST (not in container)
+    if command -v jq &>/dev/null; then
+        log_info "Using jq for JSON manipulation (host-side)"
+        
+        # Manipulate JSON on HOST using jq, then pipe to container
+        # This works because jq runs locally, not in the minimal Keycloak container
+        # Core DIVE attributes that need user view permission for federation:
+        # clearance, countryOfAffiliation, acpCOI, uniqueID
+        # NOTE: amr/acr are native Keycloak v26 session claims, not user attributes
+        UPDATED_PROFILE=$(echo "$PROFILE_JSON" | jq '
+            .attributes |= map(
+                if .name == "clearance" or .name == "countryOfAffiliation" or .name == "acpCOI" or .name == "uniqueID" then
+                    .permissions = {"view": ["admin", "user"], "edit": ["admin"]}
+                else
+                    .
+                end
+            )
+        ')
+        
+        # Validate the updated profile is valid JSON
+        if echo "$UPDATED_PROFILE" | jq empty 2>/dev/null; then
+            # Update profile in Keycloak (temporarily disable set -e for non-critical update)
+            set +e
+            echo "$UPDATED_PROFILE" | docker exec -i "$KEYCLOAK_CONTAINER" /opt/keycloak/bin/kcadm.sh update users/profile -r "$REALM_NAME" -f - 2>/dev/null
+            UPDATE_STATUS=$?
+            set -e
+            
+            if [ $UPDATE_STATUS -eq 0 ]; then
+                log_success "User Profile updated - DIVE attributes have user view permissions"
+            else
+                log_warn "Failed to update User Profile (kcadm returned $UPDATE_STATUS)"
+                log_warn "Federation may not sync attributes correctly - check Admin Console"
+            fi
+        else
+            log_error "JSON manipulation produced invalid JSON - skipping profile update"
+            log_warn "User Profile permissions unchanged - federation may not work correctly"
+        fi
     else
-        log_warn "Failed to update User Profile - federation may not sync attributes correctly"
+        log_warn "jq not available on host - cannot update User Profile"
+        log_warn "Federation attribute sync may fail without user view permissions"
+        log_warn "To fix: Install jq or manually set permissions in Keycloak Admin Console"
     fi
 else
     log_warn "User Profile not found or empty - attributes may not be included in tokens"
