@@ -259,9 +259,15 @@ spoke_federation_setup() {
 
         log_info "Federation verification attempt $i/$max_verify_retries..."
 
-        verification_result=$(spoke_federation_verify "$instance_code" 2>/dev/null)
+        # CRITICAL FIX (2026-02-07): spoke_federation_verify returns exit code 1 even when bidirectional:true
+        # We need to capture output regardless of exit code, then parse JSON properly with jq
+        verification_result=$(spoke_federation_verify "$instance_code" 2>/dev/null || true)
 
-        if echo "$verification_result" | grep -q '"bidirectional":true'; then
+        # Parse JSON properly instead of fragile grep pattern
+        # spoke_federation_verify outputs "bidirectional": true (with space), not "bidirectional":true
+        local is_bidirectional=$(echo "$verification_result" | jq -r '.bidirectional // false' 2>/dev/null)
+
+        if [ "$is_bidirectional" = "true" ]; then
             # Bidirectional flag is set - IdPs are configured correctly
             # ENHANCED (2026-02-07): OIDC endpoint check is now optional
             # If IdPs exist and are enabled, SSO will work even if OIDC discovery
@@ -273,20 +279,6 @@ spoke_federation_setup() {
             else
                 # IdPs exist but OIDC not ready - treat as SUCCESS with warning
                 log_warn "IdPs configured correctly (bidirectional:true) but OIDC discovery endpoints not yet ready"
-                log_warn "SSO will work once Keycloak caches refresh (~60s after deployment)"
-                log_info "To verify OIDC later: curl -sk https://localhost:8453/realms/dive-v3-broker-${code_lower}/.well-known/openid-configuration"
-                verification_passed=true
-                break
-            fi
-        elif echo "$verification_result" | grep -q '"spoke_to_hub":true.*"hub_to_spoke":true\|"hub_to_spoke":true.*"spoke_to_hub":true'; then
-            # Both directions exist - verify OIDC (same logic as above)
-            if _spoke_federation_verify_oidc_endpoints "$instance_code"; then
-                verification_passed=true
-                log_success "Bidirectional federation established and OIDC endpoints verified (attempt $i)"
-                break
-            else
-                # IdPs exist but OIDC not ready - treat as SUCCESS with warning
-                log_warn "IdPs configured correctly (spoke_to_hub & hub_to_spoke) but OIDC discovery endpoints not yet ready"
                 log_warn "SSO will work once Keycloak caches refresh (~60s after deployment)"
                 log_info "To verify OIDC later: curl -sk https://localhost:8453/realms/dive-v3-broker-${code_lower}/.well-known/openid-configuration"
                 verification_passed=true
@@ -1358,12 +1350,14 @@ EOF
 
     if [ "$bidirectional" = "true" ]; then
         log_success "Bidirectional federation verified"
+        return 0  # FIXED (2026-02-07): Return success when bidirectional
     else
         # PHASE 1 FIX: Convert soft-fail to hard failure
         # Incomplete federation means spoke cannot function properly
         if [ "${SKIP_FEDERATION:-false}" = "true" ]; then
             log_warn "Federation incomplete: spoke→hub=$spoke_to_hub, hub→spoke=$hub_to_spoke"
             log_warn "Federation skipped - continuing deployment"
+            return 0  # Allow deployment to proceed when federation explicitly skipped
         else
             log_error "Federation incomplete: spoke→hub=$spoke_to_hub, hub→spoke=$hub_to_spoke"
             log_error "Impact: Spoke cannot perform bidirectional federated operations"
