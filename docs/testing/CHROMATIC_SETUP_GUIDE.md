@@ -82,19 +82,37 @@ Chromatic supports two different testing approaches:
 
 ---
 
+## GitHub Secrets Setup
+
+### Required (Phase 2)
+```
+Name: CHROMATIC_PROJECT_TOKEN
+Value: chpt_830b42947e40212
+Purpose: Storybook visual regression testing
+```
+
+### Optional (Future)
+```
+Name: CHROMATIC_PLAYWRIGHT_TOKEN
+Value: chpt_2fbb8e478dc089c
+Purpose: E2E visual screenshot comparison
+```
+
 ## Verification
 
-Once Storybook token is added to GitHub Secrets:
+Once tokens are added to GitHub Secrets:
 
 ```bash
-# Verify GitHub Secret exists
+# Verify GitHub Secrets exist
 # Go to: https://github.com/aubreybeach/DIVE-V3/settings/secrets/actions
-# You should see: CHROMATIC_PROJECT_TOKEN
+# You should see:
+#   - CHROMATIC_PROJECT_TOKEN (required)
+#   - CHROMATIC_PLAYWRIGHT_TOKEN (optional)
 
-# Test locally (Phase 2, Week 5)
+# Test Storybook integration (Phase 2, Week 5)
 cd frontend
 npm install --save-dev chromatic
-npx chromatic --project-token=<your-storybook-token>
+npx chromatic --project-token=chpt_830b42947e40212
 ```
 
 ---
