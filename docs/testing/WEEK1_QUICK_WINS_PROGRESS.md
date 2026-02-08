@@ -110,7 +110,7 @@ cd frontend && npm run test:performance
 
 ### ✅ 4. Create Chromatic Account (30 minutes)
 
-**Status**: READY FOR GITHUB SECRET - Final step  
+**Status**: COMPLETE ✅  
 **Time**: 30 minutes  
 **Impact**: Ready for visual regression testing (Phase 2, Week 5)
 
@@ -118,19 +118,19 @@ cd frontend && npm run test:performance
 1. ✅ Chromatic account created
 2. ✅ Playwright project created (token: `chpt_2fbb8e478dc089c`)
 3. ✅ Storybook project created (token: `chpt_830b42947e40212`)
+4. ✅ Storybook token added to GitHub Secrets as `CHROMATIC_PROJECT_TOKEN`
 
-**Final Action Required**:
-Add Storybook token to GitHub Secrets (2 minutes):
+**Optional Enhancement** (1 minute):
+Add Playwright token to GitHub Secrets for future E2E visual testing:
 1. Go to: `https://github.com/aubreybeach/DIVE-V3/settings/secrets/actions`
 2. Click "**New repository secret**"
-3. Name: `CHROMATIC_PROJECT_TOKEN`
-4. Value: `chpt_830b42947e40212`
+3. Name: `CHROMATIC_PLAYWRIGHT_TOKEN`
+4. Value: `chpt_2fbb8e478dc089c`
 5. Click "**Add secret**"
 
-**Verification**:
-Once added, the secret will appear in the list as `CHROMATIC_PROJECT_TOKEN` (value will be hidden)
-
-**Note**: Playwright token (`chpt_2fbb8e478dc089c`) can be saved for bonus E2E visual testing later
+**GitHub Secrets Summary**:
+- ✅ `CHROMATIC_PROJECT_TOKEN` = `chpt_830b42947e40212` (Storybook - required)
+- ⏳ `CHROMATIC_PLAYWRIGHT_TOKEN` = `chpt_2fbb8e478dc089c` (Playwright - optional)
 
 **Why Chromatic?**
 - Best Storybook integration (first-party tool)
@@ -155,15 +155,16 @@ Once added, the secret will appear in the list as `CHROMATIC_PROJECT_TOKEN` (val
 
 ## Summary
 
-**Completed**: 3.5 of 4 quick wins (88%)  
-**Time Invested**: ~2 hours 35 minutes  
-**Time Remaining**: 2 minutes (add GitHub Secret)  
+**Completed**: 4 of 4 quick wins (100%) ✅  
+**Time Invested**: ~2 hours 40 minutes  
+**Optional Enhancement**: 1 minute (add Playwright token)  
 **Impact**: 
 - ✅ Unblocked 35 test suites (music-metadata)
 - ✅ 40-50% faster E2E CI expected
 - ✅ Performance tests already in CI
 - ✅ Chromatic projects created (Playwright + Storybook)
-- ⏳ GitHub Secret addition (final step)
+- ✅ Storybook token in GitHub Secrets
+- ⏳ Playwright token (optional bonus)
 
 **Immediate Benefits**:
 - Faster developer feedback loop
