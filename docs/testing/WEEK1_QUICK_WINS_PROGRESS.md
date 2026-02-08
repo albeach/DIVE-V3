@@ -108,23 +108,29 @@ cd frontend && npm run test:performance
 
 ---
 
-### ⏳ 4. Create Chromatic Account (30 minutes)
+### ✅ 4. Create Chromatic Account (30 minutes)
 
-**Status**: PENDING - MANUAL ACTION REQUIRED  
+**Status**: IN PROGRESS - Storybook token needed  
 **Time**: 30 minutes  
 **Impact**: Ready for visual regression testing (Phase 2, Week 5)
 
-**Required Actions**:
-1. Visit https://www.chromatic.com/start
-2. Sign up with GitHub account (recommended for OAuth integration)
-3. Create new project: "DIVE-V3"
-4. Obtain `CHROMATIC_PROJECT_TOKEN`
-5. Add token to GitHub Secrets:
+**Completed Actions**:
+1. ✅ Chromatic account created
+2. ✅ Playwright project created (token: `chpt_2fbb8e478dc089c`)
+
+**Remaining Actions**:
+1. Create **second project** for Storybook:
+   - Go to Chromatic dashboard → "New Project"
+   - Select **"Storybook"** (not Playwright)
+   - Note the token (different from Playwright token)
+2. Add Storybook token to GitHub Secrets:
    - Go to: `https://github.com/aubreybeach/DIVE-V3/settings/secrets/actions`
    - Click "New repository secret"
    - Name: `CHROMATIC_PROJECT_TOKEN`
-   - Value: [token from Chromatic dashboard]
+   - Value: [Storybook token from Chromatic dashboard]
    - Click "Add secret"
+
+**Note**: Playwright token can be saved for bonus E2E visual testing later
 
 **Why Chromatic?**
 - Best Storybook integration (first-party tool)
