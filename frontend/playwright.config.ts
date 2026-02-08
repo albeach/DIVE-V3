@@ -32,15 +32,16 @@ export default defineConfig({
         // Zero Trust Architecture: ALWAYS use HTTPS
         // Local development: HTTPS with self-signed certs (mkcert)
         // CI/Remote: HTTPS with valid Cloudflare certs
-        // Note: localhost is acceptable in test configuration files
-        baseURL: process.env.BASE_URL || process.env.PLAYWRIGHT_BASE_URL || (process.env.CI ? 'https://dev-app.dive25.com' : 'https://localhost:3000'),
+        // Note: localhost/127.0.0.1 acceptable in test config (same pattern as playwright docs)
+        baseURL: process.env.BASE_URL || process.env.PLAYWRIGHT_BASE_URL || (process.env.GITHUB_ACTIONS ? 'https://dev-app.dive25.com' : 'https://localhost:3000'),
         trace: 'on-first-retry', // Collect trace on first retry
         screenshot: 'only-on-failure',
         video: 'retain-on-failure',
         actionTimeout: 15000,
         navigationTimeout: 30000,
-        // Local: Ignore self-signed certs (mkcert), Remote: Valid Cloudflare certs
-        ignoreHTTPSErrors: !process.env.CI,
+        // Local: Accept self-signed certs (mkcert), GitHub Actions: Require valid certs
+        // Uses GITHUB_ACTIONS instead of CI to avoid blocking local dev when CI=1 is set
+        ignoreHTTPSErrors: !process.env.GITHUB_ACTIONS,
     },
 
     // ✅ Test timeout increased from 15s to 30s for complex flows (Keycloak, OPA, DB operations)

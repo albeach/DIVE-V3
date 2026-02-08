@@ -128,23 +128,25 @@ export async function discoverAvailableIdPs(page: Page, hubUrl?: string): Promis
   try {
     console.log('[IdP Discovery] Starting discovery...');
     
-    // Use explicit hubUrl if provided, otherwise let page.goto use baseURL from config
-    // Note: localhost/127.0.0.1 fallback is acceptable in E2E test helpers (matches playwright.config.ts)
-    const baseUrl = hubUrl || page.context().baseURL || 'https://127.0.0.1:3000';
-    console.log(`[IdP Discovery] Target URL: ${baseUrl}`);
+    // Determine target URL
+    // Priority: explicit hubUrl > env vars > fallback to 127.0.0.1
+    // Note: 127.0.0.1/localhost acceptable in E2E test helpers (matches playwright.config.ts)
+    const targetUrl = hubUrl 
+      || process.env.PLAYWRIGHT_BASE_URL 
+      || process.env.BASE_URL 
+      || 'https://127.0.0.1:3000';
     
-    // Navigate to home page to discover IdPs
-    // Use '/' so it respects Playwright's baseURL configuration
-    const navigationTarget = hubUrl ? hubUrl : '/';
+    console.log(`[IdP Discovery] Target URL: ${targetUrl}`);
     
+    // Navigate directly to the URL (don't use '/' which relies on baseURL)
     try {
-      await page.goto(navigationTarget, { 
+      await page.goto(targetUrl, { 
         waitUntil: 'domcontentloaded', 
         timeout: 10000 
       });
-      console.log(`[IdP Discovery] ✅ Successfully loaded: ${navigationTarget}`);
+      console.log(`[IdP Discovery] ✅ Successfully loaded: ${targetUrl}`);
     } catch (navError) {
-      console.error(`[IdP Discovery] ❌ Failed to load ${navigationTarget}:`, navError instanceof Error ? navError.message : 'unknown error');
+      console.error(`[IdP Discovery] ❌ Failed to load ${targetUrl}:`, navError instanceof Error ? navError.message : 'unknown error');
       // Return empty discovery if page won't load
       return {
         spokes: new Map(),
@@ -166,8 +168,8 @@ export async function discoverAvailableIdPs(page: Page, hubUrl?: string): Promis
     // Hub is always available (we're testing from it)
     result.hub = {
       code: 'USA',
-      displayName: uniqueIdPs.find(name => /united states|usa|hub/i.test(name)) || 'United States',
-      url: baseUrl,
+      displayName: uniqueIdPs.find(name => /united states|usa|hub|local/i.test(name)) || 'United States',
+      url: targetUrl,
       available: true
     };
     
@@ -178,7 +180,7 @@ export async function discoverAvailableIdPs(page: Page, hubUrl?: string): Promis
         result.spokes.set(code, {
           code,
           displayName,
-          url: baseUrl, // All IdPs are accessed via hub
+          url: targetUrl, // All IdPs are accessed via hub
           available: true
         });
         result.count++;
