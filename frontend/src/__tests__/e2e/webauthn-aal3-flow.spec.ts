@@ -21,7 +21,7 @@ import { TEST_CONFIG } from './fixtures/test-config';
 import { loginAs, logout } from './helpers/auth';
 import { DashboardPage } from './pages/DashboardPage';
 
-test.describe('WebAuthn AAL3 Flow - TOP_SECRET Users', () => {
+test.describe('WebAuthn AAL3 Flow - TOP_SECRET Users', { tag: ['@critical', '@flaky'] }, () => {
     test.beforeEach(async ({ page }) => {
         console.log('\n🔐 Starting WebAuthn AAL3 test...');
     });

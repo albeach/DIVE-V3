@@ -819,8 +819,27 @@ export async function authenticateJWT(req: Request, res: Response, next: NextFun
 
         // Check if token is blacklisted (revoked via logout or admin action)
         // Use circuit breaker to fail open if Redis is unavailable
+        // ALSO: Extract custom claims from JWT token itself, as Keycloak's introspection
+        // endpoint only returns standard OAuth2 claims, not custom claims from protocol mappers
         const decodedToken = jwtService.decode(token, { complete: false }) as any;
         const jti = introspectionResult.jti || decodedToken?.jti;
+
+        // CRITICAL FIX (2026-02-08): Keycloak introspection endpoint doesn't include custom claims
+        // Extract them from the JWT token itself and merge with introspection result
+        // This ensures clearance, countryOfAffiliation, acpCOI, uniqueID are always available
+        if (decodedToken) {
+            introspectionResult.uniqueID = introspectionResult.uniqueID || decodedToken.uniqueID;
+            introspectionResult.clearance = introspectionResult.clearance || decodedToken.clearance;
+            introspectionResult.countryOfAffiliation = introspectionResult.countryOfAffiliation || decodedToken.countryOfAffiliation;
+            introspectionResult.acpCOI = introspectionResult.acpCOI || decodedToken.acpCOI;
+
+            logger.debug('Supplemented introspection result with JWT claims', {
+                uniqueID: introspectionResult.uniqueID,
+                clearance: introspectionResult.clearance,
+                countryOfAffiliation: introspectionResult.countryOfAffiliation,
+                source: 'JWT token (protocol mapper claims)',
+            });
+        }
 
         if (jti) {
             try {

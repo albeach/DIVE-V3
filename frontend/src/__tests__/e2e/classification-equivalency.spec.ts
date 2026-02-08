@@ -20,7 +20,7 @@ import { loginAs, logout } from './helpers/auth';
 import { DashboardPage } from './pages/DashboardPage';
 import { ResourcesPage } from './pages/ResourcesPage';
 
-test.describe('Classification Equivalency - Cross-Nation (Refactored)', () => {
+test.describe('Classification Equivalency - Cross-Nation (Refactored)', { tag: '@critical' }, () => {
     test.afterEach(async ({ page }) => {
         try {
             await logout(page);
