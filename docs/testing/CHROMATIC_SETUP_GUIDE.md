@@ -14,10 +14,10 @@
 - **Status**: Ready but not required for Phase 2
 - **Use Case**: Capture and compare screenshots during E2E tests
 
-### ⏳ Storybook Project (Needed)
-- **Token**: [To be created]
+### ✅ Storybook Project (Created)
+- **Token**: `chpt_830b42947e40212`
 - **Purpose**: Component visual regression testing (Phase 2, Weeks 5-8)
-- **Status**: Required for implementation
+- **Status**: Ready (pending GitHub Secret addition)
 - **Use Case**: 40 components × 3 viewports × multiple states = ~600 snapshots
 
 ---
@@ -78,7 +78,7 @@ Chromatic supports two different testing approaches:
 | Project Type | Token | Purpose | Priority | Phase |
 |--------------|-------|---------|----------|-------|
 | **Playwright** | `chpt_2fbb8e478dc089c` | E2E visual testing | Optional | Future |
-| **Storybook** | `[To be created]` | Component visual regression | Required | Phase 2 (Week 5) |
+| **Storybook** | `chpt_830b42947e40212` | Component visual regression | Required | Phase 2 (Week 5) |
 
 ---
 
@@ -169,11 +169,13 @@ When we begin Phase 2 Visual Regression Testing, we'll:
 
 1. ✅ Chromatic account created
 2. ✅ Playwright project created
-3. ⏳ **Create Storybook project** (5 minutes)
-4. ⏳ **Add token to GitHub Secrets** (2 minutes)
+3. ✅ Storybook project created
+4. ⏳ **Add token to GitHub Secrets** (2 minutes) - FINAL STEP
 5. ✅ Ready for Phase 2 implementation
 
-**Total Time**: ~7 minutes remaining
+**Token to Add**: `chpt_830b42947e40212`
+
+**Total Time**: ~2 minutes remaining
 
 ---
 
