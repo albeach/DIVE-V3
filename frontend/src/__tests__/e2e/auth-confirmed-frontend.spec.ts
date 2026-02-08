@@ -8,8 +8,8 @@
 
 import { test, expect } from '@playwright/test';
 import { loginAs, expectLoggedIn } from './helpers/auth';
-import { ResourcesPage } from '../page-objects/resources.page';
-import { ResourceFormPage } from '../page-objects/resource-form.page';
+import { ResourcesPage } from './page-objects/resources.page';
+import { ResourceFormPage } from './page-objects/resource-form.page';
 
 test.describe('DIVE V3 - Authentication Confirmed & Comprehensive Frontend', () => {
   let resourcesPage: ResourcesPage;
