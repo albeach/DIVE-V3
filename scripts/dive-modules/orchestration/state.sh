@@ -33,7 +33,7 @@ export ORCHESTRATION_STATE_DB_LOADED=1
 
 # Ensure common functions are loaded
 if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+    source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
     export DIVE_COMMON_LOADED=1
 fi
 
@@ -45,8 +45,8 @@ fi
 # The .dive-state/ directory is no longer used.
 
 # Load state recovery module for consistency validation
-if [ -f "$(dirname "${BASH_SOURCE[0]}")/orchestration-state-recovery.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/orchestration-state-recovery.sh"
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/state-recovery.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/state-recovery.sh"
 fi
 
 # =============================================================================

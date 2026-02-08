@@ -165,7 +165,7 @@ test_function_existence() {
     fi
 
     # Test: get_hub_admin_token exists
-    source "${DIVE_ROOT}/scripts/dive-modules/federation-setup.sh" 2>/dev/null
+    source "${DIVE_ROOT}/scripts/dive-modules/federation/setup.sh" 2>/dev/null
 
     ((TESTS_TOTAL++))
     if type -t get_hub_admin_token >/dev/null 2>&1; then

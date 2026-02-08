@@ -8,13 +8,13 @@
 
 # Ensure common functions are loaded
 if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+    source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
     export DIVE_COMMON_LOADED=1
 fi
 
 # Load orchestration framework for testing
-if [ -f "$(dirname "${BASH_SOURCE[0]}")/orchestration-framework.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/orchestration-framework.sh"
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/framework.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/framework.sh"
 fi
 
 # =============================================================================

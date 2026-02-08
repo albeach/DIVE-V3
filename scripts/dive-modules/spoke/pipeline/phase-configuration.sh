@@ -80,7 +80,9 @@ spoke_phase_configuration() {
                     return 0
                 else
                     log_warn "CONFIGURATION checkpoint exists but validation failed, re-running"
-                    spoke_phase_clear "$instance_code" "CONFIGURATION" 2>/dev/null || true
+                    if ! spoke_phase_clear "$instance_code" "CONFIGURATION"; then
+                        log_warn "Failed to clear CONFIGURATION checkpoint (stale state may persist)"
+                    fi
                 fi
             else
                 log_info "✓ CONFIGURATION phase complete (validation not available)"
@@ -1270,9 +1272,9 @@ spoke_config_setup_federation() {
         return $?
     fi
 
-    # Fallback: Use legacy federation functions
-    if [ -f "${DIVE_ROOT}/scripts/dive-modules/federation-setup.sh" ]; then
-        source "${DIVE_ROOT}/scripts/dive-modules/federation-setup.sh"
+    # Fallback: Use consolidated federation module
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/federation/setup.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/federation/setup.sh"
 
         if type configure_spoke_federation &>/dev/null; then
             configure_spoke_federation "$code_upper"
@@ -1392,8 +1394,8 @@ spoke_config_sync_federation_secrets() {
     fi
 
     # Load federation sync module
-    if [ -f "${DIVE_ROOT}/scripts/dive-modules/env-sync.sh" ]; then
-        source "${DIVE_ROOT}/scripts/dive-modules/env-sync.sh"
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/configuration/env-sync.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/configuration/env-sync.sh"
 
         if type sync_hub_to_spoke_secrets &>/dev/null; then
             if ! sync_hub_to_spoke_secrets "$(upper "$instance_code")" 2>/dev/null; then

@@ -3,7 +3,7 @@
 # DIVE V3 Orchestration Framework - Unit Test Suite
 # =============================================================================
 # Sprint 4: Testing Framework (TAP Format)
-# Test coverage for orchestration-framework.sh and orchestration-state-db.sh
+# Test coverage for orchestration/framework.sh and orchestration/state.sh
 # =============================================================================
 # Test Anything Protocol (TAP) format for CI/CD integration
 # Run with: bash tests/unit/orchestration-framework.test.sh
@@ -17,9 +17,9 @@ export DIVE_ROOT="${DIVE_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pw
 export DIVE_TEST_MODE=true
 
 # Load modules under test
-source "${DIVE_ROOT}/scripts/dive-modules/orchestration-framework.sh"
+source "${DIVE_ROOT}/scripts/dive-modules/orchestration/framework.sh"
 source "${DIVE_ROOT}/scripts/dive-modules/deployment-state.sh"
-source "${DIVE_ROOT}/scripts/dive-modules/orchestration-state-db.sh"
+source "${DIVE_ROOT}/scripts/dive-modules/orchestration/state.sh"
 
 # Test counters
 TEST_COUNT=0

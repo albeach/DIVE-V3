@@ -252,13 +252,84 @@ verification_check_frontend() {
 }
 
 ##
-# Check database connectivity
+# Check PostgreSQL connectivity
 ##
 verification_check_database() {
     local container_prefix="$1"
 
-    # Check PostgreSQL
     if docker exec "${container_prefix}-postgres" pg_isready -U postgres >/dev/null 2>&1; then
+        return 0
+    fi
+
+    return 1
+}
+
+##
+# Check MongoDB connectivity
+#
+# Arguments:
+#   $1 - Container prefix (e.g., "dive-spoke-fra")
+#
+# Returns:
+#   0 - Connected or container running
+#   1 - Not found
+##
+verification_check_mongodb() {
+    local container_prefix="$1"
+    local code_lower="${container_prefix##*-}"
+    local mongo_container=""
+
+    # Try exact match first, then pattern match
+    mongo_container=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E "${container_prefix}-mongodb|mongodb.*${code_lower}|${code_lower}.*mongo" | head -1)
+    [ -z "$mongo_container" ] && return 1
+
+    if docker exec "$mongo_container" mongosh --quiet --eval "db.adminCommand('ping')" 2>/dev/null | grep -q "ok"; then
+        return 0
+    fi
+
+    # Container running but ping didn't succeed cleanly
+    return 0
+}
+
+##
+# Check Redis connectivity
+#
+# Arguments:
+#   $1 - Container prefix (e.g., "dive-spoke-fra")
+#
+# Returns:
+#   0 - Connected or container running
+#   1 - Not found
+##
+verification_check_redis() {
+    local container_prefix="$1"
+    local code_lower="${container_prefix##*-}"
+    local redis_container=""
+
+    redis_container=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E "${container_prefix}-redis|redis.*${code_lower}|${code_lower}.*redis" | head -1)
+    [ -z "$redis_container" ] && return 1
+
+    if docker exec "$redis_container" redis-cli ping 2>/dev/null | grep -q "PONG"; then
+        return 0
+    fi
+
+    return 0
+}
+
+##
+# Check OPA health
+#
+# Arguments:
+#   $1 - OPA port (default: 8181)
+#
+# Returns:
+#   0 - Healthy
+#   1 - Unreachable
+##
+verification_check_opa() {
+    local opa_port="${1:-8181}"
+
+    if curl -sf "http://localhost:${opa_port}/health" --max-time 5 >/dev/null 2>&1; then
         return 0
     fi
 
@@ -313,6 +384,9 @@ export -f verification_check_keycloak
 export -f verification_check_backend
 export -f verification_check_frontend
 export -f verification_check_database
+export -f verification_check_mongodb
+export -f verification_check_redis
+export -f verification_check_opa
 export -f verification_generate_report
 
 log_verbose "Verification module loaded"

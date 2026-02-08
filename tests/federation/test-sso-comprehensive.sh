@@ -25,8 +25,8 @@ else
 fi
 
 # Source federation state database module
-if [ -f "${DIVE_ROOT}/scripts/dive-modules/federation-state-db.sh" ]; then
-    source "${DIVE_ROOT}/scripts/dive-modules/federation-state-db.sh"
+if [ -f "${DIVE_ROOT}/scripts/dive-modules/federation/health.sh" ]; then
+    source "${DIVE_ROOT}/scripts/dive-modules/federation/health.sh"
 fi
 
 # =============================================================================

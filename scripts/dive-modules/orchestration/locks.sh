@@ -32,8 +32,6 @@ fi
 # Load state module for database functions
 if [ -f "${ORCH_DIR}/state.sh" ]; then
     source "${ORCH_DIR}/state.sh"
-elif [ -f "${MODULES_DIR}/orchestration-state-db.sh" ]; then
-    source "${MODULES_DIR}/orchestration-state-db.sh"
 fi
 
 # =============================================================================
@@ -147,6 +145,13 @@ orch_check_lock() {
     " 2>/dev/null | xargs)
 
     [ "${is_locked:-0}" -gt 0 ]
+}
+
+##
+# Alias for orch_check_lock (more intuitive name)
+##
+orch_has_deployment_lock() {
+    orch_check_lock "$@"
 }
 
 ##
@@ -270,6 +275,7 @@ orch_list_locks() {
 export -f orch_acquire_lock
 export -f orch_release_lock
 export -f orch_check_lock
+export -f orch_has_deployment_lock
 export -f orch_cleanup_stale_locks
 export -f orch_force_unlock
 export -f orch_list_locks

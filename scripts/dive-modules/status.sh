@@ -1025,8 +1025,8 @@ cmd_diagnostics() {
 
     # Check GCP Secret Manager connectivity
     if command -v gcloud >/dev/null 2>&1; then
-        if gcloud secrets list --project=dive25 --limit=1 >/dev/null 2>&1; then
-            echo -e "  ${GREEN}✓${NC} GCP Secret Manager accessible (project: dive25)"
+        if gcloud secrets list --project="${GCP_PROJECT:-dive25}" --limit=1 >/dev/null 2>&1; then
+            echo -e "  ${GREEN}✓${NC} GCP Secret Manager accessible (project: ${GCP_PROJECT:-dive25})"
         else
             echo -e "  ${YELLOW}⚠${NC} GCP Secret Manager not accessible"
             echo -e "    ${GRAY}Fix:${NC} gcloud auth application-default login"

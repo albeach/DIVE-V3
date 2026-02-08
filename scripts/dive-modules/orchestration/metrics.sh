@@ -29,8 +29,6 @@ fi
 # Load state module for database
 if [ -f "${ORCH_DIR}/state.sh" ]; then
     source "${ORCH_DIR}/state.sh"
-elif [ -f "${MODULES_DIR}/orchestration-state-db.sh" ]; then
-    source "${MODULES_DIR}/orchestration-state-db.sh"
 fi
 
 # =============================================================================

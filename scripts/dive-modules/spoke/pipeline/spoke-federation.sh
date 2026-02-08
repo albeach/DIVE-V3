@@ -45,20 +45,18 @@ if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
 fi
 
 # =============================================================================
-# LOAD FEDERATION-LINK MODULE FOR BIDIRECTIONAL SETUP
+# LOAD CONSOLIDATED FEDERATION MODULE
 # =============================================================================
-# Load federation-link.sh to make _federation_link_direct() available
-# This is required for automated bidirectional federation
-if [ -z "${DIVE_FEDERATION_LINK_LOADED:-}" ]; then
-    # CRITICAL FIX (2026-01-18): Correct path - spoke-federation.sh is in spoke/pipeline/,
-    # federation-link.sh is in modules/ root, so need to go up TWO levels
-    _fed_link_path="${BASH_SOURCE[0]%/*}/../../federation-link.sh"
-    if [ -f "$_fed_link_path" ]; then
-        source "$_fed_link_path"
-    elif [ -f "${DIVE_ROOT}/scripts/dive-modules/federation-link.sh" ]; then
-        source "${DIVE_ROOT}/scripts/dive-modules/federation-link.sh"
+# Load federation/setup.sh for _federation_link_direct(), _get_federation_secret(),
+# _configure_idp_mappers(), and other federation functions.
+if [ -z "${DIVE_FEDERATION_SETUP_LOADED:-}" ]; then
+    _fed_setup_path="${BASH_SOURCE[0]%/*}/../../federation/setup.sh"
+    if [ -f "$_fed_setup_path" ]; then
+        source "$_fed_setup_path"
+    elif [ -f "${DIVE_ROOT}/scripts/dive-modules/federation/setup.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/federation/setup.sh"
     fi
-    unset _fed_link_path
+    unset _fed_setup_path
 fi
 
 # =============================================================================
@@ -69,17 +67,16 @@ fi
 if [ -z "${FEDERATION_STATE_DB_LOADED:-}" ]; then
     # CRITICAL FIX (2026-01-18): Path calculation - spoke-federation.sh is in spoke/pipeline/,
     # federation-state-db.sh is in modules/ root
-    # ${BASH_SOURCE[0]%/*} = scripts/dive-modules/spoke/pipeline
-    # ../../ goes up to scripts/dive-modules/
-    _fed_db_path="${BASH_SOURCE[0]%/*}/../../federation-state-db.sh"
-    if [ -f "$_fed_db_path" ]; then
-        source "$_fed_db_path"
-    elif [ -f "${DIVE_ROOT}/scripts/dive-modules/federation-state-db.sh" ]; then
-        source "${DIVE_ROOT}/scripts/dive-modules/federation-state-db.sh"
+    # Load federation health (includes fed_db_* functions)
+    _fed_health_path="${BASH_SOURCE[0]%/*}/../../federation/health.sh"
+    if [ -f "$_fed_health_path" ]; then
+        source "$_fed_health_path"
+    elif [ -f "${DIVE_ROOT}/scripts/dive-modules/federation/health.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/federation/health.sh"
     else
-        log_verbose "federation-state-db.sh not found - database state tracking unavailable"
+        log_verbose "federation/health.sh not found - database state tracking unavailable"
     fi
-    unset _fed_db_path
+    unset _fed_health_path
 fi
 
 # =============================================================================
@@ -565,7 +562,7 @@ spoke_federation_configure_upstream_idp() {
 
     # Get Hub admin token
     local hub_admin_pass
-    hub_admin_pass=$(gcloud secrets versions access latest --secret=dive-v3-keycloak-usa --project=dive25 2>/dev/null || \
+    hub_admin_pass=$(gcloud secrets versions access latest --secret=dive-v3-keycloak-usa --project="${GCP_PROJECT:-dive25}" 2>/dev/null || \
                     docker exec "$hub_kc_container" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null)
 
     if [ -n "$hub_admin_pass" ]; then
@@ -955,8 +952,8 @@ PYTHON_EOF
     fi
 
     # Export TF_VAR environment variables
-    export TF_VAR_keycloak_admin_password="${KEYCLOAK_ADMIN_PASSWORD_USA:-$(gcloud secrets versions access latest --secret=dive-v3-keycloak-usa --project=dive25 2>/dev/null)}"
-    export TF_VAR_client_secret="${KEYCLOAK_CLIENT_SECRET_USA:-$(gcloud secrets versions access latest --secret=dive-v3-keycloak-client-secret --project=dive25 2>/dev/null)}"
+    export TF_VAR_keycloak_admin_password="${KEYCLOAK_ADMIN_PASSWORD_USA:-$(gcloud secrets versions access latest --secret=dive-v3-keycloak-usa --project="${GCP_PROJECT:-dive25}" 2>/dev/null)}"
+    export TF_VAR_client_secret="${KEYCLOAK_CLIENT_SECRET_USA:-$(gcloud secrets versions access latest --secret=dive-v3-keycloak-client-secret --project="${GCP_PROJECT:-dive25}" 2>/dev/null)}"
     # Use test user passwords following Hub pattern
     export TF_VAR_test_user_password="${TEST_USER_PASSWORD:-${TF_VAR_keycloak_admin_password}}"
     export TF_VAR_admin_user_password="${ADMIN_PASSWORD:-${TF_VAR_keycloak_admin_password}}"
@@ -1102,9 +1099,9 @@ spoke_federation_create_bidirectional() {
         return 1
     fi
 
-    # Use federation-link.sh helper if available
+    # Use federation/setup.sh helper if available
     if type _federation_link_direct &>/dev/null; then
-        log_verbose "Using federation-link.sh helper for bidirectional setup"
+        log_verbose "Using federation/setup.sh helper for bidirectional setup"
         if _federation_link_direct "USA" "$code_upper"; then
             log_success "Created $code_lower-idp in Hub (bidirectional SSO ready)"
             # Update database state to ACTIVE (if database available)
@@ -1456,7 +1453,7 @@ spoke_federation_get_admin_token() {
     # 4. Fallback: GCP Secret Manager (last resort)
     if [ -z "$admin_pass" ] && [[ "$container" == "dive-hub-keycloak" ]]; then
         if type check_gcloud &>/dev/null && check_gcloud 2>/dev/null; then
-            admin_pass=$(gcloud secrets versions access latest --secret="dive-v3-keycloak-usa" --project=dive25 2>/dev/null | tr -d '\n\r')
+            admin_pass=$(gcloud secrets versions access latest --secret="dive-v3-keycloak-usa" --project="${GCP_PROJECT:-dive25}" 2>/dev/null | tr -d '\n\r')
             if [ -n "$admin_pass" ]; then
                 source="gcp:dive-v3-keycloak-usa"
                 [ "$debug" = "true" ] && log_verbose "Retrieved Hub password from GCP Secret Manager"

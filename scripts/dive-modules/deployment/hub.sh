@@ -28,15 +28,9 @@ if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     export DIVE_COMMON_LOADED=1
 fi
 
-# Load orchestration modules (load the main one first)
-if [ -f "${MODULES_DIR}/orchestration-framework.sh" ]; then
-    source "${MODULES_DIR}/orchestration-framework.sh"
-elif [ -f "${MODULES_DIR}/orchestration/framework.sh" ]; then
+# Load orchestration framework (includes state, errors, circuit-breaker, dependencies)
+if [ -f "${MODULES_DIR}/orchestration/framework.sh" ]; then
     source "${MODULES_DIR}/orchestration/framework.sh"
-fi
-
-if [ -f "${MODULES_DIR}/orchestration-state-db.sh" ]; then
-    source "${MODULES_DIR}/orchestration-state-db.sh"
 fi
 
 # Load deployment progress module (Phase 3 Sprint 2)
@@ -55,8 +49,8 @@ if [ -f "${DEPLOYMENT_DIR}/hub-checkpoint.sh" ]; then
 fi
 
 # Load error recovery module (circuit breakers, retry, failure threshold)
-if [ -f "${MODULES_DIR}/error-recovery.sh" ]; then
-    source "${MODULES_DIR}/error-recovery.sh"
+if [ -f "${MODULES_DIR}/orchestration/errors.sh" ]; then
+    source "${MODULES_DIR}/orchestration/errors.sh"
 fi
 
 # =============================================================================
@@ -270,14 +264,6 @@ hub_phase_services() {
     return 0
 }
 
-hub_phase_orchestration_db() {
-    local instance_code="$1"
-    local pipeline_mode="$2"
-    # Orchestration DB is now initialized in Phase 0
-    # This phase is kept for backward compatibility but does nothing
-    log_verbose "Orchestration database already initialized in Phase 0"
-    return 0
-}
 
 hub_phase_keycloak_config() {
     local instance_code="$1"

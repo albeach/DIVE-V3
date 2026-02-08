@@ -150,7 +150,7 @@ spoke_kas_status() {
 
     # Load KAS module for status function
     if [ -f "${DIVE_ROOT}/scripts/dive-modules/kas.sh" ]; then
-        source "${DIVE_ROOT}/scripts/dive-modules/kas.sh"
+        source "${DIVE_ROOT}/scripts/dive-modules/hub/kas.sh"
         kas_status "$code_lower"
     else
         log_error "KAS module not found"
@@ -172,7 +172,7 @@ spoke_kas_health() {
 
     # Load KAS module for health function
     if [ -f "${DIVE_ROOT}/scripts/dive-modules/kas.sh" ]; then
-        source "${DIVE_ROOT}/scripts/dive-modules/kas.sh"
+        source "${DIVE_ROOT}/scripts/dive-modules/hub/kas.sh"
         kas_health "$code_lower"
     else
         log_error "KAS module not found"
