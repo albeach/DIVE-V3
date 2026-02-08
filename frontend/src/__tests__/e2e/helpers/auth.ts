@@ -60,17 +60,30 @@ export async function loginAs(
       waitUntil: 'domcontentloaded' // More reliable than 'load' for SPAs
     });
 
-    // Step 2: Select IdP
-    console.log(`[AUTH] Step 2: Selecting IdP "${user.idp}"`);
+    // Step 2: Select IdP (flexible matching for variable displayNames)
+    console.log(`[AUTH] Step 2: Selecting IdP for ${user.countryCode} (searching: "${user.idp}", "${user.countryCode}")`);
 
-    // Look for IdP selector button (various patterns)
-    const idpButton = page.getByRole('button', { name: new RegExp(user.idp, 'i') })
-      .or(page.getByRole('link', { name: new RegExp(user.idp, 'i') }))
-      .or(page.locator(`button:has-text("${user.idp}")`))
+    // FLEXIBLE MATCHING: Handle variable displayName patterns from spoke deployments
+    // Users can deploy with: ./dive spoke deploy DEU "Custom Name"
+    // So displayName could be: "Germany", "DEU Instance", "Germany Defence", etc.
+    // Try multiple patterns in order of specificity:
+    const idpButton = page.getByRole('button', { name: new RegExp(user.idp, 'i') })           // "Germany"
+      .or(page.getByRole('button', { name: new RegExp(user.country, 'i') }))                  // "Germany"
+      .or(page.getByRole('button', { name: new RegExp(user.countryCode, 'i') }))              // "DEU"
+      .or(page.getByRole('button', { name: new RegExp(`${user.countryCode}.*Instance`, 'i') })) // "DEU Instance"
+      .or(page.getByRole('link', { name: new RegExp(user.countryCode, 'i') }))                // Link variant
+      .or(page.locator(`button:has-text("${user.countryCode}")`))                              // Partial match
       .first();
 
-    await idpButton.waitFor({ state: 'visible', timeout: TEST_CONFIG.TIMEOUTS.ACTION });
-    await idpButton.click({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
+    try {
+      await idpButton.waitFor({ state: 'visible', timeout: TEST_CONFIG.TIMEOUTS.ACTION });
+      await idpButton.click({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
+    } catch (error) {
+      // Enhanced error with available IdPs for debugging
+      const availableButtons = await page.locator('button').allTextContents();
+      console.error(`[AUTH] ❌ IdP button not found. Available buttons: ${availableButtons.slice(0, 10).join(', ')}`);
+      throw new Error(`IdP not found for ${user.countryCode}. Expected patterns: "${user.idp}", "${user.countryCode}"`);
+    }
 
     // Step 3: Wait for Keycloak redirect
     console.log('[AUTH] Step 3: Waiting for Keycloak redirect');
