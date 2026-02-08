@@ -32,8 +32,9 @@ export default defineConfig({
         // Zero Trust Architecture: ALWAYS use HTTPS
         // Local development: HTTPS with self-signed certs (mkcert)
         // CI/Remote: HTTPS with valid Cloudflare certs
-        // Note: localhost/127.0.0.1 acceptable in test config (same pattern as playwright docs)
-        baseURL: process.env.BASE_URL || process.env.PLAYWRIGHT_BASE_URL || (process.env.GITHUB_ACTIONS ? 'https://dev-app.dive25.com' : 'https://localhost:3000'),
+        // Note: 127.0.0.1 explicit IPv4 acceptable in test config (matches Docker binding)
+        //       This is intentional - tests must match where Docker binds services
+        baseURL: process.env.BASE_URL || process.env.PLAYWRIGHT_BASE_URL || (process.env.GITHUB_ACTIONS ? 'https://dev-app.dive25.com' : 'https://127.0.0.1:3000'),
         trace: 'on-first-retry', // Collect trace on first retry
         screenshot: 'only-on-failure',
         video: 'retain-on-failure',

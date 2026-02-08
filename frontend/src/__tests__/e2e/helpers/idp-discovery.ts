@@ -129,8 +129,8 @@ export async function discoverAvailableIdPs(page: Page, hubUrl?: string): Promis
     console.log('[IdP Discovery] Starting discovery...');
     
     // Determine target URL
-    // Priority: explicit hubUrl > env vars > fallback to 127.0.0.1
-    // Note: 127.0.0.1/localhost acceptable in E2E test helpers (matches playwright.config.ts)
+    // Priority: explicit hubUrl > env vars > fallback to 127.0.0.1 (Docker default)
+    // Note: Use 127.0.0.1 (IPv4) not localhost (may resolve to IPv6 ::1)
     const targetUrl = hubUrl 
       || process.env.PLAYWRIGHT_BASE_URL 
       || process.env.BASE_URL 
