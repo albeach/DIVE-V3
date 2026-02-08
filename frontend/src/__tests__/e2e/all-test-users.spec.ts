@@ -11,7 +11,7 @@
 
 import { test, expect } from '@playwright/test';
 import { TEST_USERS } from './fixtures/test-users';
-import { loginAs, expectLoggedIn } from '../helpers/auth';
+import { loginAs, expectLoggedIn } from './helpers/auth';
 
 test.describe('ALL Test Users - Comprehensive Authentication & Authorization Testing', () => {
 

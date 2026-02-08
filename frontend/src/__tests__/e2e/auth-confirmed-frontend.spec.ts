@@ -7,7 +7,7 @@
  */
 
 import { test, expect } from '@playwright/test';
-import { loginAs, expectLoggedIn } from '../helpers/auth';
+import { loginAs, expectLoggedIn } from './helpers/auth';
 import { ResourcesPage } from '../page-objects/resources.page';
 import { ResourceFormPage } from '../page-objects/resource-form.page';
 
