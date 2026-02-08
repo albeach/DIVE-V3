@@ -110,27 +110,27 @@ cd frontend && npm run test:performance
 
 ### ✅ 4. Create Chromatic Account (30 minutes)
 
-**Status**: IN PROGRESS - Storybook token needed  
+**Status**: READY FOR GITHUB SECRET - Final step  
 **Time**: 30 minutes  
 **Impact**: Ready for visual regression testing (Phase 2, Week 5)
 
 **Completed Actions**:
 1. ✅ Chromatic account created
 2. ✅ Playwright project created (token: `chpt_2fbb8e478dc089c`)
+3. ✅ Storybook project created (token: `chpt_830b42947e40212`)
 
-**Remaining Actions**:
-1. Create **second project** for Storybook:
-   - Go to Chromatic dashboard → "New Project"
-   - Select **"Storybook"** (not Playwright)
-   - Note the token (different from Playwright token)
-2. Add Storybook token to GitHub Secrets:
-   - Go to: `https://github.com/aubreybeach/DIVE-V3/settings/secrets/actions`
-   - Click "New repository secret"
-   - Name: `CHROMATIC_PROJECT_TOKEN`
-   - Value: [Storybook token from Chromatic dashboard]
-   - Click "Add secret"
+**Final Action Required**:
+Add Storybook token to GitHub Secrets (2 minutes):
+1. Go to: `https://github.com/aubreybeach/DIVE-V3/settings/secrets/actions`
+2. Click "**New repository secret**"
+3. Name: `CHROMATIC_PROJECT_TOKEN`
+4. Value: `chpt_830b42947e40212`
+5. Click "**Add secret**"
 
-**Note**: Playwright token can be saved for bonus E2E visual testing later
+**Verification**:
+Once added, the secret will appear in the list as `CHROMATIC_PROJECT_TOKEN` (value will be hidden)
+
+**Note**: Playwright token (`chpt_2fbb8e478dc089c`) can be saved for bonus E2E visual testing later
 
 **Why Chromatic?**
 - Best Storybook integration (first-party tool)
@@ -155,14 +155,15 @@ cd frontend && npm run test:performance
 
 ## Summary
 
-**Completed**: 3 of 4 quick wins (75%)  
-**Time Invested**: ~2 hours 5 minutes  
-**Time Remaining**: 30 minutes (manual Chromatic setup)  
+**Completed**: 3.5 of 4 quick wins (88%)  
+**Time Invested**: ~2 hours 35 minutes  
+**Time Remaining**: 2 minutes (add GitHub Secret)  
 **Impact**: 
 - ✅ Unblocked 35 test suites (music-metadata)
 - ✅ 40-50% faster E2E CI expected
 - ✅ Performance tests already in CI
-- ⏳ Visual regression testing ready for Phase 2
+- ✅ Chromatic projects created (Playwright + Storybook)
+- ⏳ GitHub Secret addition (final step)
 
 **Immediate Benefits**:
 - Faster developer feedback loop
