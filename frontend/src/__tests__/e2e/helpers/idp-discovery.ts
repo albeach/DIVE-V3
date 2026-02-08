@@ -43,15 +43,114 @@ export interface DiscoveredIdPs {
 /**
  * Discover available IdPs by querying the hub's federation API
  */
-export async function discoverAvailableIdPs(page: Page, hubUrl?: string): Promise<DiscoveredIdPs> {
-  // Use environment-provided base URL or default to test config
-  // Note: localhost fallback is acceptable in test helpers (matches playwright.config.ts pattern)
-  const baseUrl = hubUrl || process.env.PLAYWRIGHT_BASE_URL || process.env.BASE_URL || (process.env.CI ? 'https://dev-app.dive25.com' : 'https://localhost:3000');
+/**
+ * Check if a URL is accessible
+ * 
+ * @param page Playwright page object
+ * @param url URL to check
+ * @returns True if accessible, false otherwise
+ */
+async function isUrlAccessible(page: Page, url: string): Promise<boolean> {
   try {
-    console.log('[IdP Discovery] Starting discovery from hub:', baseUrl);
+    console.log(`[IdP Discovery] Checking URL accessibility: ${url}`);
+    const response = await page.goto(url, { 
+      waitUntil: 'domcontentloaded', 
+      timeout: 5000  // Short timeout for quick check
+    });
     
-    // Navigate to hub home page
-    await page.goto(baseUrl, { waitUntil: 'domcontentloaded', timeout: 10000 });
+    if (!response) {
+      console.log(`[IdP Discovery] ❌ No response from ${url}`);
+      return false;
+    }
+    
+    const status = response.status();
+    const accessible = status >= 200 && status < 400;
+    
+    if (accessible) {
+      console.log(`[IdP Discovery] ✅ URL accessible: ${url} (status: ${status})`);
+    } else {
+      console.log(`[IdP Discovery] ❌ URL not accessible: ${url} (status: ${status})`);
+    }
+    
+    return accessible;
+  } catch (error) {
+    console.log(`[IdP Discovery] ❌ URL unreachable: ${url} (${error instanceof Error ? error.message : 'unknown error'})`);
+    return false;
+  }
+}
+
+/**
+ * Get environment-appropriate base URL
+ * 
+ * Checks multiple URLs in order of preference:
+ * 1. Explicitly provided hubUrl parameter
+ * 2. PLAYWRIGHT_BASE_URL environment variable
+ * 3. BASE_URL environment variable
+ * 4. CI environment: dev-app.dive25.com
+ * 5. Local environment: https://localhost:3000
+ * 
+ * @param page Playwright page object
+ * @param hubUrl Optional explicit URL
+ * @returns First accessible URL, or null if none available
+ */
+async function getAccessibleBaseUrl(page: Page, hubUrl?: string): Promise<string | null> {
+  // Priority order of URLs to try
+  // Note: localhost/127.0.0.1 fallbacks are acceptable in E2E test helpers (same as playwright.config.ts)
+  const urlsToTry = [
+    hubUrl,
+    process.env.PLAYWRIGHT_BASE_URL,
+    process.env.BASE_URL,
+    // Try both 127.0.0.1 and localhost (localhost may resolve to IPv6 ::1)
+    // Docker binds to 127.0.0.1 by default, so try it first
+    'https://127.0.0.1:3000',  // Docker default bind
+    'https://localhost:3000',  // May resolve to ::1 (IPv6)
+    process.env.CI ? 'https://dev-app.dive25.com' : null,
+  ].filter((url): url is string => Boolean(url));
+  
+  console.log(`[IdP Discovery] Checking ${urlsToTry.length} potential URLs...`);
+  
+  for (const url of urlsToTry) {
+    if (await isUrlAccessible(page, url)) {
+      return url;
+    }
+  }
+  
+  console.error('[IdP Discovery] ❌ No accessible URLs found');
+  return null;
+}
+
+/**
+ * Discover available IdPs by querying the hub's federation API
+ * 
+ * Automatically checks URL accessibility and fails gracefully if environment is offline
+ */
+export async function discoverAvailableIdPs(page: Page, hubUrl?: string): Promise<DiscoveredIdPs> {
+  try {
+    console.log('[IdP Discovery] Starting discovery...');
+    
+    // Use explicit hubUrl if provided, otherwise let page.goto use baseURL from config
+    // Note: localhost/127.0.0.1 fallback is acceptable in E2E test helpers (matches playwright.config.ts)
+    const baseUrl = hubUrl || page.context().baseURL || 'https://127.0.0.1:3000';
+    console.log(`[IdP Discovery] Target URL: ${baseUrl}`);
+    
+    // Navigate to home page to discover IdPs
+    // Use '/' so it respects Playwright's baseURL configuration
+    const navigationTarget = hubUrl ? hubUrl : '/';
+    
+    try {
+      await page.goto(navigationTarget, { 
+        waitUntil: 'domcontentloaded', 
+        timeout: 10000 
+      });
+      console.log(`[IdP Discovery] ✅ Successfully loaded: ${navigationTarget}`);
+    } catch (navError) {
+      console.error(`[IdP Discovery] ❌ Failed to load ${navigationTarget}:`, navError instanceof Error ? navError.message : 'unknown error');
+      // Return empty discovery if page won't load
+      return {
+        spokes: new Map(),
+        count: 0
+      };
+    }
     
     // Extract IdP options from the login page
     const idpButtons = await page.locator('button[type="button"], a[href*="authorize"]').allTextContents();
