@@ -21,7 +21,7 @@ import { loginAs, logout } from './helpers/auth';
 import { DashboardPage } from './pages/DashboardPage';
 import { ResourcesPage } from './pages/ResourcesPage';
 
-test.describe('NATO Expansion: Login Flows (Refactored)', () => {
+test.describe('NATO Expansion: Login Flows (Refactored)', { tag: '@smoke' }, () => {
     test.afterEach(async ({ page }) => {
         try {
             await logout(page);

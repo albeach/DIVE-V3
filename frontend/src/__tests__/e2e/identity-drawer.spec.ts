@@ -19,7 +19,7 @@ import { TEST_CONFIG } from './fixtures/test-config';
 import { loginAs, logout } from './helpers/auth';
 import { DashboardPage } from './pages/DashboardPage';
 
-test.describe('Identity Drawer - Global Shortcut (Refactored)', () => {
+test.describe('Identity Drawer - Global Shortcut (Refactored)', { tag: ['@fast', '@smoke', '@critical'] }, () => {
     test.afterEach(async ({ page }) => {
         // Cleanup: logout after each test
         try {

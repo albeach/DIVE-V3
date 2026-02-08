@@ -45,7 +45,7 @@ const TIMEOUTS = {
 // Note: page.request inherits context settings from playwright.config.ts
 // including ignoreHTTPSErrors and baseURL, so no special handling needed
 
-test.describe('Session Lifecycle Tests - Production Ready', () => {
+test.describe('Session Lifecycle Tests - Production Ready', { tag: ['@fast', '@smoke'] }, () => {
     // Use test-level request context with proper HTTPS handling
     test.use({
         // Ensure API requests ignore self-signed certs (matching browser context)

@@ -299,7 +299,7 @@ function validateAttributes(
 // TEST SUITE: LOCAL USERS
 // =============================================================================
 
-test.describe('Local User Identity Attributes', () => {
+test.describe('Local User Identity Attributes', { tag: '@smoke' }, () => {
   for (const [testName, testUser] of Object.entries(TEST_USERS.HUB_USERS)) {
     test(`should have all attributes for local ${testName} user`, async ({ page }) => {
       test.setTimeout(60000);

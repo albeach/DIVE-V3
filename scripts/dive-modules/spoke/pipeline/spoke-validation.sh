@@ -398,16 +398,23 @@ _validate_configuration_state() {
 ##
 # Validate SEEDING phase state
 #
+# CRITICAL FIX (2026-02-08): Robust validation that actually checks data exists
+#
+# Previous issue: Validation returned success if Keycloak wasn't running,
+# creating circular logic where failed seedings were marked as "validated".
+# This caused deployments to skip seeding when resources/users didn't exist.
+#
 # Checks:
-#   - Test users exist in Keycloak
-#   - Resources exist in MongoDB (best-effort)
+#   1. MongoDB resource count (MANDATORY - must have resources OR explicitly 0)
+#   2. Keycloak user count (MANDATORY - must have test users)
+#   3. COI definitions initialized (MANDATORY - for ZTDF encryption)
 #
 # Arguments:
 #   $1 - Instance code
 #
 # Returns:
-#   0 - State valid
-#   1 - State invalid
+#   0 - State valid (data actually exists)
+#   1 - State invalid (needs re-seeding)
 ##
 _validate_seeding_state() {
     local instance_code="$1"
@@ -416,49 +423,133 @@ _validate_seeding_state() {
 
     log_verbose "Validating SEEDING state for $code_upper..."
 
-    # Check if Keycloak container exists (it may be stopped during validation)
-    local kc_container="dive-spoke-${code_lower}-keycloak"
-    if ! docker ps -a --format '{{.Names}}' | grep -q "^${kc_container}$"; then
-        log_warn "Keycloak container does not exist: $kc_container"
+    local validation_failed=false
+
+    # =================================================================
+    # Step 1: Validate MongoDB Resources (CRITICAL)
+    # =================================================================
+    local mongo_container="dive-spoke-${code_lower}-mongodb"
+    local mongo_password_var="MONGO_PASSWORD_${code_upper}"
+    local mongo_password="${!mongo_password_var}"
+
+    # Check if MongoDB container exists and is running
+    if ! docker ps --format '{{.Names}}' | grep -q "^${mongo_container}$"; then
+        log_warn "MongoDB not running - cannot validate resource count"
+        log_warn "SEEDING validation FAILED: MongoDB must be running to verify seeding"
         return 1
     fi
 
-    # Check if Keycloak is running (optional - may be stopped)
-    if ! docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
-        log_verbose "Keycloak not running - skipping user validation (assume seeded if phase marked complete)"
-        # If phase is marked complete in DB, trust that seeding was done
-        return 0
+    # Check if we have MongoDB password
+    if [ -z "$mongo_password" ]; then
+        log_warn "MongoDB password not available (MONGO_PASSWORD_${code_upper} not set)"
+        log_warn "Cannot validate seeding - password required"
+        return 1
     fi
 
-    # If Keycloak is running, try to verify test user exists (best-effort)
-    local realm="dive-v3-broker-${code_lower}"
-    local test_username="testuser-${code_lower}"
+    # Count total resources in MongoDB
+    local resource_count
+    resource_count=$(docker exec "$mongo_container" bash -c "
+        mongosh -u admin -p \"$mongo_password\" --authenticationDatabase admin dive-v3-${code_lower} --quiet --eval 'db.resources.countDocuments({})' 2>/dev/null
+    " 2>/dev/null | tail -1 | tr -d '\n\r' || echo "error")
 
-    # Try to get admin token and check for user (non-blocking)
+    # Validate we got a numeric result
+    if ! [[ "$resource_count" =~ ^[0-9]+$ ]]; then
+        log_warn "Failed to query MongoDB resource count (got: '$resource_count')"
+        log_warn "SEEDING validation FAILED: Cannot verify resources"
+        return 1
+    fi
+
+    # Check COI definitions (CRITICAL for ZTDF encryption)
+    local coi_count
+    coi_count=$(docker exec "$mongo_container" bash -c "
+        mongosh -u admin -p \"$mongo_password\" --authenticationDatabase admin dive-v3-${code_lower} --quiet --eval 'db.coi_definitions.countDocuments({})' 2>/dev/null
+    " 2>/dev/null | tail -1 | tr -d '\n\r' || echo "0")
+
+    if ! [[ "$coi_count" =~ ^[0-9]+$ ]]; then
+        coi_count=0
+    fi
+
+    if [ "$coi_count" -lt 19 ]; then
+        log_warn "COI definitions missing or incomplete: found $coi_count, expected 19"
+        log_warn "SEEDING validation FAILED: COI initialization required"
+        validation_failed=true
+    else
+        log_verbose "✓ COI definitions validated: $coi_count definitions"
+    fi
+
+    # Log resource validation result
+    if [ "$resource_count" -eq 0 ]; then
+        # Zero resources is acceptable if this spoke uses Hub resources via federation
+        log_verbose "ℹ No local resources (spoke will use Hub resources via federation)"
+        log_verbose "  This is NORMAL for spoke instances without KAS"
+    elif [ "$resource_count" -lt 100 ]; then
+        # Less than expected but some exist - could be a partial seeding
+        log_warn "Low resource count: $resource_count (expected 5000 for full seeding)"
+        log_warn "SEEDING validation FAILED: Incomplete resource seeding detected"
+        validation_failed=true
+    else
+        log_verbose "✓ MongoDB resources validated: $resource_count documents"
+    fi
+
+    # =================================================================
+    # Step 2: Validate Keycloak Users (CRITICAL)
+    # =================================================================
+    local kc_container="dive-spoke-${code_lower}-keycloak"
+
+    # Keycloak MUST be running to validate users
+    if ! docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
+        log_warn "Keycloak not running - cannot validate test users"
+        log_warn "SEEDING validation FAILED: Keycloak must be running to verify users"
+        return 1
+    fi
+
+    # Count users in the broker realm (should have at least 6: testuser-{1-5} + admin)
+    local realm="dive-v3-broker-${code_lower}"
     local keycloak_password_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
     local keycloak_password="${!keycloak_password_var:-admin}"
-    
-    local user_check=$(docker exec "$kc_container" \
-        /opt/keycloak/bin/kcadm.sh config credentials \
-        --server http://localhost:8080 \
-        --realm master \
-        --user admin \
-        --password "$keycloak_password" \
-        --config /tmp/.kcadm.config 2>/dev/null && \
-        docker exec "$kc_container" \
-        /opt/keycloak/bin/kcadm.sh get users \
-        --realm "$realm" \
-        --query "username=$test_username" \
-        --config /tmp/.kcadm.config 2>/dev/null | \
-        jq -r '.[0].username // empty' 2>/dev/null || echo "")
 
-    if [ "$user_check" = "$test_username" ]; then
-        log_verbose "SEEDING state valid (test user found: $test_username)"
-    else
-        log_verbose "Could not verify test user, but Keycloak is running (non-blocking)"
-        # Don't fail validation - seeding may have happened differently
+    # Get user count using kcadm.sh
+    local user_count
+    user_count=$(docker exec "$kc_container" bash -c "
+        /opt/keycloak/bin/kcadm.sh config credentials \
+            --server http://localhost:8080 \
+            --realm master \
+            --user admin \
+            --password \"$keycloak_password\" \
+            --config /tmp/.kcadm-validation.config 2>/dev/null && \
+        /opt/keycloak/bin/kcadm.sh get users \
+            --realm \"$realm\" \
+            --config /tmp/.kcadm-validation.config 2>/dev/null | \
+        jq '. | length' 2>/dev/null
+    " 2>/dev/null || echo "0")
+
+    # Validate we got a number
+    if ! [[ "$user_count" =~ ^[0-9]+$ ]]; then
+        log_warn "Failed to query Keycloak user count (got: '$user_count')"
+        log_warn "SEEDING validation FAILED: Cannot verify test users"
+        return 1
     fi
 
+    # Minimum 6 users expected: testuser-{code}-{1-5} + admin-{code}
+    if [ "$user_count" -lt 6 ]; then
+        log_warn "Insufficient users in Keycloak: found $user_count, expected at least 6"
+        log_warn "Expected users: testuser-${code_lower}-{1-5}, admin-${code_lower}"
+        log_warn "SEEDING validation FAILED: Test users missing"
+        validation_failed=true
+    else
+        log_verbose "✓ Keycloak users validated: $user_count users in realm $realm"
+    fi
+
+    # =================================================================
+    # Final Validation Decision
+    # =================================================================
+    if [ "$validation_failed" = "true" ]; then
+        log_warn "SEEDING validation FAILED - one or more checks did not pass"
+        log_warn "Seeding will be re-run to ensure complete data initialization"
+        return 1
+    fi
+
+    log_verbose "✓ SEEDING state valid (resources: $resource_count, users: $user_count, COIs: $coi_count)"
     return 0
 }
 
