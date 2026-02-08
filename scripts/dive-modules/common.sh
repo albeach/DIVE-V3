@@ -237,6 +237,17 @@ export DRY_RUN="${DRY_RUN:-false}"
 export VERBOSE="${VERBOSE:-false}"
 export QUIET="${QUIET:-false}"
 
+# Configurable timeouts (override via environment variables)
+export DIVE_TIMEOUT_KEYCLOAK_READY="${DIVE_TIMEOUT_KEYCLOAK_READY:-180}"
+export DIVE_TIMEOUT_CURL_DEFAULT="${DIVE_TIMEOUT_CURL_DEFAULT:-10}"
+export DIVE_TIMEOUT_CURL_QUICK="${DIVE_TIMEOUT_CURL_QUICK:-5}"
+export DIVE_TIMEOUT_POLL_INTERVAL="${DIVE_TIMEOUT_POLL_INTERVAL:-2}"
+export DIVE_TIMEOUT_FEDERATION_STABILIZE="${DIVE_TIMEOUT_FEDERATION_STABILIZE:-35}"
+export DIVE_TIMEOUT_OPAL_STABILIZE="${DIVE_TIMEOUT_OPAL_STABILIZE:-45}"
+
+# Configurable spoke list for federation operations
+export DIVE_SPOKE_LIST="${DIVE_SPOKE_LIST:-gbr fra deu can}"
+
 # Pilot Mode Configuration
 export PILOT_MODE="${DIVE_PILOT_MODE:-false}"
 
@@ -331,6 +342,8 @@ _get_spoke_keycloak_port() {
     echo "$SPOKE_KEYCLOAK_HTTPS_PORT"
 }
 
+# Preferred case conversion API (POSIX-compatible via tr).
+# Use these instead of bash-isms like ${var^^} or ${var,,} for consistency.
 upper() {
     echo "$1" | tr '[:lower:]' '[:upper:]'
 }
@@ -747,7 +760,7 @@ load_gcp_secrets() {
         # Default: Skip during clean slate hub deployment to avoid unnecessary GCP calls
         if [ "${LOAD_SPOKE_PASSWORDS:-false}" = "true" ] || [ "${FEDERATION_SETUP:-false}" = "true" ]; then
             log_verbose "Loading spoke Keycloak passwords for federation operations..."
-            for spoke in gbr fra deu can; do
+            for spoke in $DIVE_SPOKE_LIST; do
                 local spoke_uc=$(echo "$spoke" | tr '[:lower:]' '[:upper:]')
                 local spoke_password
                 if spoke_password=$(gcloud secrets versions access latest --secret="dive-v3-keycloak-${spoke}" --project="$project" 2>/dev/null); then
@@ -1107,7 +1120,7 @@ apply_environment_config() {
 
 get_instance_ports() {
     local code="$1"
-    local code_upper="${code^^}"
+    local code_upper=$(upper "$code")
     local port_offset=0
 
     # SSOT: Always load NATO database for port calculations
@@ -1202,7 +1215,7 @@ get_instance_ports() {
 ##
 wait_for_keycloak_admin_api_ready() {
     local container_name="${1:?container name required}"
-    local max_wait="${2:-180}"  # 3 minutes default
+    local max_wait="${2:-$DIVE_TIMEOUT_KEYCLOAK_READY}"
     local admin_password="${3:-}"
 
     log_verbose "Waiting for Keycloak admin API to be ready: $container_name (max ${max_wait}s)"
@@ -1257,7 +1270,7 @@ wait_for_keycloak_admin_api_ready() {
 
             # Try to get from GCP if still empty
             if [ -z "$admin_password" ] && command -v gcloud &>/dev/null; then
-                admin_password=$(gcloud secrets versions access latest --secret=dive-v3-keycloak-usa --project=dive25 2>/dev/null || echo "")
+                admin_password=$(gcloud secrets versions access latest --secret=dive-v3-keycloak-usa --project="${GCP_PROJECT:-dive25}" 2>/dev/null || echo "")
             fi
         else
             # Spoke: Get from GCP or environment
@@ -1269,7 +1282,7 @@ wait_for_keycloak_admin_api_ready() {
             if [ -z "$admin_password" ] && command -v gcloud &>/dev/null; then
                 admin_password=$(gcloud secrets versions access latest \
                     --secret="dive-v3-keycloak-admin-password-${instance_code}" \
-                    --project=dive25 2>/dev/null || echo "")
+                    --project="${GCP_PROJECT:-dive25}" 2>/dev/null || echo "")
             fi
         fi
     fi
@@ -1289,7 +1302,7 @@ wait_for_keycloak_admin_api_ready() {
     while [ $elapsed -lt $max_wait ]; do
         # Try to get admin token
         local auth_response
-        auth_response=$(docker exec "$container_name" curl -s --max-time 10 \
+        auth_response=$(docker exec "$container_name" curl -s --max-time "$DIVE_TIMEOUT_CURL_DEFAULT" \
             -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
             -d "grant_type=password" \
             -d "username=admin" \
@@ -1330,7 +1343,7 @@ wait_for_keycloak_admin_api_ready() {
 
     # Check 5: Master realm is accessible
     local realm_check
-    realm_check=$(docker exec "$container_name" curl -s --max-time 5 \
+    realm_check=$(docker exec "$container_name" curl -s --max-time "$DIVE_TIMEOUT_CURL_QUICK" \
         "http://localhost:8080/realms/master" 2>&1)
 
     if ! echo "$realm_check" | grep -q '"realm":"master"'; then
@@ -1382,7 +1395,7 @@ detect_docker_command() {
 }
 
 # Initialize Docker command (called once at module load)
-if [ -z "$DOCKER_CMD" ]; then
+if [ -z "${DOCKER_CMD:-}" ]; then
     if DOCKER_CMD=$(detect_docker_command); then
         export DOCKER_CMD
     else
@@ -1445,12 +1458,12 @@ json_get_field() {
     local file="$1"
     local field="$2"
     local default="${3:-}"
-    
+
     if [ ! -f "$file" ]; then
         echo "$default"
         return 1
     fi
-    
+
     # Prefer jq (correct JSON parsing)
     if command -v jq &>/dev/null; then
         local result
@@ -1463,14 +1476,15 @@ json_get_field() {
             return 0
         fi
     fi
-    
-    # Fallback to grep (simpler pattern, avoids [[:space:]] bracket issues)
-    # Use [ \t] instead of [[:space:]] for portability
+
+    # Fallback to grep - may fail on nested JSON or special characters.
+    # jq should always be available in DIVE environments.
+    log_verbose "json_get_field: jq not available, using grep fallback for $field (may be inaccurate)"
     local simple_field="${field##*.}"  # Get last component for simple JSON
     local pattern="\"${simple_field}\"[ \\t]*:[ \\t]*\"([^\"]*)\""
     local value
     value=$(grep -Eo "$pattern" "$file" 2>/dev/null | head -1 | sed 's/.*:[ \t]*"\(.*\)"/\1/')
-    
+
     if [ -n "$value" ]; then
         echo "$value"
     else
@@ -1478,4 +1492,6 @@ json_get_field() {
     fi
 }
 
+# Ensure DIVE_ROOT is set when common.sh is sourced
+ensure_dive_root
 

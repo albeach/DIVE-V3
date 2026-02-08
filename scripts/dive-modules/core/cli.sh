@@ -247,7 +247,7 @@ dispatch_command() {
 
         # Orchestration database
         orch-db)
-            source "${modules_dir}/orchestration-state-db.sh"
+            source "${modules_dir}/orchestration/state.sh"
             module_orch_db "$@"
             ;;
 

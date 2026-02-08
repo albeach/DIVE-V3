@@ -99,13 +99,13 @@ setup() {
     fi
 
     # Load orchestration framework
-    if [ -f "$PROJECT_ROOT/scripts/dive-modules/orchestration-framework.sh" ]; then
-        source "$PROJECT_ROOT/scripts/dive-modules/orchestration-framework.sh"
+    if [ -f "$PROJECT_ROOT/scripts/dive-modules/orchestration/framework.sh" ]; then
+        source "$PROJECT_ROOT/scripts/dive-modules/orchestration/framework.sh"
     fi
 
     # Load orchestration state database
-    if [ -f "$PROJECT_ROOT/scripts/dive-modules/orchestration-state-db.sh" ]; then
-        source "$PROJECT_ROOT/scripts/dive-modules/orchestration-state-db.sh"
+    if [ -f "$PROJECT_ROOT/scripts/dive-modules/orchestration/state.sh" ]; then
+        source "$PROJECT_ROOT/scripts/dive-modules/orchestration/state.sh"
     fi
 
     # Load NATO countries database

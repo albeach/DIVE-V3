@@ -116,7 +116,9 @@ spoke_phase_deployment() {
                     return 0
                 else
                     log_warn "DEPLOYMENT checkpoint exists but validation failed, re-running"
-                    spoke_phase_clear "$instance_code" "DEPLOYMENT" 2>/dev/null || true
+                    if ! spoke_phase_clear "$instance_code" "DEPLOYMENT"; then
+                        log_warn "Failed to clear DEPLOYMENT checkpoint (stale state may persist)"
+                    fi
                 fi
             else
                 log_info "✓ DEPLOYMENT phase complete (validation not available)"

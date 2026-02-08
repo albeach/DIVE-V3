@@ -31,13 +31,13 @@ if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
 fi
 
 # Load orchestration state database
-if [ -f "$(dirname "${BASH_SOURCE[0]}")/../orchestration-state-db.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/../orchestration-state-db.sh"
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../orchestration/state.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../orchestration/state.sh"
 fi
 
 # Load error recovery module (circuit breakers, retry, failure threshold)
-if [ -f "$(dirname "${BASH_SOURCE[0]}")/../error-recovery.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/../error-recovery.sh"
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../orchestration/errors.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../orchestration/errors.sh"
 fi
 
 # =============================================================================

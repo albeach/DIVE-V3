@@ -875,8 +875,8 @@ spoke_secrets_sync_federation() {
     log_verbose "Syncing federation secrets with Hub"
 
     # Load federation sync module if available
-    if [ -f "${DIVE_ROOT}/scripts/dive-modules/federation-setup.sh" ]; then
-        if source "${DIVE_ROOT}/scripts/dive-modules/federation-setup.sh" 2>/dev/null; then
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/federation/setup.sh" ]; then
+        if source "${DIVE_ROOT}/scripts/dive-modules/federation/setup.sh" 2>/dev/null; then
             if type sync_hub_to_spoke_secrets &>/dev/null; then
                 if ! sync_hub_to_spoke_secrets "$code_upper" 2>/dev/null; then
                     log_verbose "Hub-to-spoke secret sync failed (non-critical)"

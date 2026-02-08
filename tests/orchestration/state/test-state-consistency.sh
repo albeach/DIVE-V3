@@ -8,7 +8,7 @@
 # Duration: ~60 seconds
 # =============================================================================
 # Dependencies:
-# - orchestration-state-db.sh
+# - orchestration/state.sh
 # - orchestration-state-recovery.sh
 # - deployment-state.sh
 # =============================================================================
@@ -23,7 +23,7 @@ fi
 
 # Load modules
 source "${DIVE_ROOT}/scripts/dive-modules/common.sh"
-source "${DIVE_ROOT}/scripts/dive-modules/orchestration-state-db.sh"
+source "${DIVE_ROOT}/scripts/dive-modules/orchestration/state.sh"
 source "${DIVE_ROOT}/scripts/dive-modules/orchestration-state-recovery.sh"
 source "${DIVE_ROOT}/scripts/dive-modules/deployment-state.sh"
 

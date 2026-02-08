@@ -21,18 +21,13 @@ export ORCHESTRATION_STATE_RECOVERY_LOADED=1
 
 # Ensure common functions are loaded
 if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+    source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
     export DIVE_COMMON_LOADED=1
 fi
 
 # Load state database functions
-if [ -f "$(dirname "${BASH_SOURCE[0]}")/orchestration-state-db.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/orchestration-state-db.sh"
-fi
-
-# Load deployment state functions (file-based)
-if [ -f "$(dirname "${BASH_SOURCE[0]}")/deployment-state.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/deployment-state.sh"
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/state.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/state.sh"
 fi
 
 # =============================================================================

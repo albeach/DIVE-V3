@@ -29,8 +29,8 @@ if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
 fi
 
 # Load state module for database
-if [ -f "${MODULES_DIR}/orchestration-state-db.sh" ]; then
-    source "${MODULES_DIR}/orchestration-state-db.sh"
+if [ -f "${MODULES_DIR}/orchestration/state.sh" ]; then
+    source "${MODULES_DIR}/orchestration/state.sh"
 fi
 
 # =============================================================================
@@ -355,6 +355,384 @@ federation_mark_stale() {
 }
 
 # =============================================================================
+# FEDERATION STATE DATABASE (consolidated from federation-state-db.sh)
+# =============================================================================
+
+# Allow backward-compat guard check
+export FEDERATION_STATE_DB_LOADED=1
+
+FED_DB_MAX_RETRIES="${FED_DB_MAX_RETRIES:-3}"
+FED_DB_RETRY_DELAY="${FED_DB_RETRY_DELAY:-5}"
+
+fed_db_init_schema() {
+    log_info "Initializing federation database schema..."
+    if ! orch_db_check_connection; then
+        log_error "Database not available for federation schema initialization"
+        return 1
+    fi
+    local schema_file="${DIVE_ROOT}/scripts/sql/002_federation_schema.sql"
+    if [ ! -f "$schema_file" ]; then
+        log_error "Federation schema file not found: $schema_file"
+        return 1
+    fi
+    if fed_db_schema_exists; then
+        log_verbose "Federation schema already exists"
+        return 0
+    fi
+    local output_redirect=">/dev/null 2>&1"
+    [ "${VERBOSE:-false}" = "true" ] && output_redirect=""
+    if eval "docker exec -i dive-hub-postgres psql -U postgres -d orchestration < \"$schema_file\" $output_redirect"; then
+        log_success "Federation schema initialized"
+        return 0
+    else
+        log_error "Failed to initialize federation schema"
+        return 1
+    fi
+}
+
+fed_db_schema_exists() {
+    orch_db_check_connection || return 1
+    local table_count
+    table_count=$(orch_db_exec "SELECT COUNT(*) FROM information_schema.tables WHERE table_name IN ('federation_links', 'federation_health', 'federation_operations')" 2>/dev/null | xargs)
+    [ "$table_count" -eq 3 ]
+}
+
+fed_db_upsert_link() {
+    local source_code=$(lower "$1") target_code=$(lower "$2") direction="$3" idp_alias="$4"
+    local status="${5:-PENDING}" client_id="${6:-}" metadata="${7:-}"
+    orch_db_check_connection || { log_verbose "Database not available - federation link not persisted"; return 1; }
+    local metadata_sql="NULL"
+    if [ -n "$metadata" ] && [ "$metadata" != "null" ]; then
+        echo "$metadata" | jq empty >/dev/null 2>&1 && metadata_sql="'${metadata//\'/\'\'}'::jsonb"
+    fi
+    local client_id_sql="NULL"
+    [ -n "$client_id" ] && client_id_sql="'$client_id'"
+    local result
+    result=$(orch_db_exec "
+INSERT INTO federation_links (source_code, target_code, direction, idp_alias, status, client_id, metadata)
+VALUES ('$source_code', '$target_code', '$direction', '$idp_alias', '$status', $client_id_sql, $metadata_sql)
+ON CONFLICT (source_code, target_code, direction) DO UPDATE SET
+    idp_alias = EXCLUDED.idp_alias, status = EXCLUDED.status,
+    client_id = COALESCE(EXCLUDED.client_id, federation_links.client_id),
+    metadata = COALESCE(EXCLUDED.metadata, federation_links.metadata), updated_at = NOW()
+RETURNING id;" 2>/dev/null)
+    if [ -n "$result" ]; then
+        log_verbose "Federation link upserted: $source_code -> $target_code ($direction)"
+        return 0
+    else
+        log_error "Failed to upsert federation link: $source_code -> $target_code"
+        return 1
+    fi
+}
+
+fed_db_update_status() {
+    local source_code=$(lower "$1") target_code=$(lower "$2") direction="$3" status="$4"
+    local error_message="${5:-}" error_code="${6:-}"
+    orch_db_check_connection || { log_verbose "Database not available for federation status update"; return 1; }
+    if ! fed_db_schema_exists; then
+        fed_db_init_schema || return 1
+    fi
+    local escaped_error="${error_message//\'/\'\'}"
+    local error_clause=""
+    [ -n "$error_message" ] && error_clause=", error_message = '$escaped_error'"
+    [ -n "$error_code" ] && error_clause="$error_clause, last_error_code = '$error_code'"
+    local retry_clause=""
+    [ "$status" = "FAILED" ] && retry_clause=", retry_count = COALESCE(retry_count, 0) + 1"
+    [ "$status" = "ACTIVE" ] && retry_clause=", retry_count = 0, last_verified_at = NOW()"
+    local idp_alias="${source_code}-idp"
+    [ "$direction" = "HUB_TO_SPOKE" ] && idp_alias="${target_code}-idp"
+    [ "$direction" = "SPOKE_TO_HUB" ] && idp_alias="usa-idp"
+    local sql="
+INSERT INTO federation_links (source_code, target_code, direction, idp_alias, status, updated_at $([ -n "$error_message" ] && echo ", error_message") $([ -n "$error_code" ] && echo ", last_error_code"))
+VALUES ('$source_code', '$target_code', '$direction', '$idp_alias', '$status', NOW() $([ -n "$error_message" ] && echo ", '$escaped_error'") $([ -n "$error_code" ] && echo ", '$error_code'"))
+ON CONFLICT (source_code, target_code, direction) DO UPDATE SET
+    status = EXCLUDED.status, updated_at = NOW() $error_clause $retry_clause;"
+    if orch_db_exec "$sql" >/dev/null 2>&1; then
+        log_verbose "Federation link status updated: $source_code -> $target_code = $status"
+        return 0
+    else
+        log_verbose "Failed to update federation link status in orchestration DB (non-blocking)"
+        return 1
+    fi
+}
+
+fed_db_get_link() {
+    local source_code=$(lower "$1") target_code=$(lower "$2") direction="$3"
+    orch_db_check_connection || return 1
+    orch_db_exec "SELECT id, source_code, target_code, direction, idp_alias, status, retry_count, last_verified_at, error_message FROM federation_links WHERE source_code = '$source_code' AND target_code = '$target_code' AND direction = '$direction';" 2>/dev/null
+}
+
+fed_db_get_link_status() {
+    local source_code=$(lower "$1") target_code=$(lower "$2") direction="$3"
+    orch_db_check_connection || { echo "UNKNOWN"; return 1; }
+    local status
+    status=$(orch_db_exec "SELECT status FROM federation_links WHERE source_code = '$source_code' AND target_code = '$target_code' AND direction = '$direction';" 2>/dev/null | xargs)
+    echo "${status:-UNKNOWN}"
+}
+
+fed_db_list_links() {
+    local instance_code=$(lower "$1")
+    orch_db_check_connection || return 1
+    orch_db_exec "SELECT source_code, target_code, direction, idp_alias, status, last_verified_at FROM federation_links WHERE source_code = '$instance_code' OR target_code = '$instance_code' ORDER BY direction, target_code;" 2>/dev/null
+}
+
+fed_db_get_failed_links() {
+    local max_retries="${1:-$FED_DB_MAX_RETRIES}"
+    orch_db_check_connection || return 1
+    orch_db_exec "SELECT source_code, target_code, direction, idp_alias, retry_count, last_error_code, error_message FROM federation_links WHERE status = 'FAILED' AND retry_count < $max_retries ORDER BY updated_at ASC;" 2>/dev/null
+}
+
+fed_db_delete_link() {
+    local source_code=$(lower "$1") target_code=$(lower "$2") direction="$3"
+    orch_db_check_connection || return 1
+    if orch_db_exec "DELETE FROM federation_links WHERE source_code = '$source_code' AND target_code = '$target_code' AND direction = '$direction';" >/dev/null 2>&1; then
+        log_info "Federation link deleted: $source_code -> $target_code ($direction)"
+        return 0
+    else
+        return 1
+    fi
+}
+
+fed_db_record_health() {
+    local source_code=$(lower "$1") target_code=$(lower "$2") direction="$3"
+    local src_idp_exists="$4" src_idp_enabled="$5" tgt_idp_exists="$6" tgt_idp_enabled="$7"
+    local sso_passed="${8:-}" sso_latency="${9:-}" error_message="${10:-}"
+    orch_db_check_connection || return 1
+    src_idp_exists=$([ "$src_idp_exists" = "true" ] && echo "TRUE" || echo "FALSE")
+    src_idp_enabled=$([ "$src_idp_enabled" = "true" ] && echo "TRUE" || echo "FALSE")
+    tgt_idp_exists=$([ "$tgt_idp_exists" = "true" ] && echo "TRUE" || echo "FALSE")
+    tgt_idp_enabled=$([ "$tgt_idp_enabled" = "true" ] && echo "TRUE" || echo "FALSE")
+    local sso_passed_sql="NULL" sso_attempted="FALSE"
+    if [ -n "$sso_passed" ]; then
+        sso_attempted="TRUE"
+        sso_passed_sql=$([ "$sso_passed" = "true" ] && echo "TRUE" || echo "FALSE")
+    fi
+    local latency_sql="NULL"
+    [ -n "$sso_latency" ] && latency_sql="$sso_latency"
+    local escaped_error="${error_message//\'/\'\'}" error_sql="NULL"
+    [ -n "$error_message" ] && error_sql="'$escaped_error'"
+    if orch_db_exec "
+INSERT INTO federation_health (source_code, target_code, direction, source_idp_exists, source_idp_enabled, target_idp_exists, target_idp_enabled, sso_test_attempted, sso_test_passed, sso_latency_ms, error_message)
+VALUES ('$source_code', '$target_code', '$direction', $src_idp_exists, $src_idp_enabled, $tgt_idp_exists, $tgt_idp_enabled, $sso_attempted, $sso_passed_sql, $latency_sql, $error_sql);" >/dev/null 2>&1; then
+        [ "$sso_passed" = "true" ] && fed_db_update_status "$source_code" "$target_code" "$direction" "ACTIVE"
+        log_verbose "Health check recorded: $source_code -> $target_code"
+        return 0
+    else
+        return 1
+    fi
+}
+
+fed_db_get_latest_health() {
+    local source_code=$(lower "$1") target_code=$(lower "$2") direction="$3"
+    orch_db_check_connection || return 1
+    orch_db_exec "SELECT check_timestamp, source_idp_exists, source_idp_enabled, target_idp_exists, target_idp_enabled, sso_test_passed, sso_latency_ms, error_message FROM federation_health WHERE source_code = '$source_code' AND target_code = '$target_code' AND direction = '$direction' ORDER BY check_timestamp DESC LIMIT 1;" 2>/dev/null
+}
+
+fed_db_get_instance_status() {
+    local instance_code=$(lower "$1")
+    if ! orch_db_check_connection; then
+        echo '{"error": "database_unavailable"}'
+        return 1
+    fi
+    local hub_to_spoke_status spoke_to_hub_status
+    hub_to_spoke_status=$(orch_db_exec "SELECT status FROM federation_links WHERE source_code = 'usa' AND target_code = '$instance_code' AND direction = 'HUB_TO_SPOKE'" 2>/dev/null | xargs)
+    spoke_to_hub_status=$(orch_db_exec "SELECT status FROM federation_links WHERE source_code = '$instance_code' AND target_code = 'usa' AND direction = 'SPOKE_TO_HUB'" 2>/dev/null | xargs)
+    local bidirectional="false" overall_status="UNKNOWN"
+    if [ "$hub_to_spoke_status" = "ACTIVE" ] && [ "$spoke_to_hub_status" = "ACTIVE" ]; then
+        bidirectional="true"; overall_status="ACTIVE"
+    elif [ "$hub_to_spoke_status" = "ACTIVE" ] || [ "$spoke_to_hub_status" = "ACTIVE" ]; then
+        overall_status="PARTIAL"
+    elif [ "$hub_to_spoke_status" = "FAILED" ] || [ "$spoke_to_hub_status" = "FAILED" ]; then
+        overall_status="FAILED"
+    elif [ "$hub_to_spoke_status" = "PENDING" ] || [ "$spoke_to_hub_status" = "PENDING" ]; then
+        overall_status="PENDING"
+    fi
+    cat << EOF
+{"instance":"$instance_code","overall_status":"$overall_status","bidirectional":$bidirectional,"hub_to_spoke":"${hub_to_spoke_status:-NONE}","spoke_to_hub":"${spoke_to_hub_status:-NONE}","timestamp":"$(date -u +"%Y-%m-%dT%H:%M:%SZ")"}
+EOF
+}
+
+fed_db_list_all_links() {
+    orch_db_check_connection || return 1
+    orch_db_exec "SELECT source_code, target_code, direction, idp_alias, status, retry_count, last_verified_at, error_message FROM federation_links ORDER BY source_code, target_code, direction;" 2>/dev/null
+}
+
+fed_db_query_status_view() {
+    local instance_code="${1:-}"
+    orch_db_check_connection || return 1
+    local where_clause=""
+    if [ -n "$instance_code" ]; then
+        instance_code=$(lower "$instance_code")
+        where_clause="WHERE source_code = '$instance_code' OR target_code = '$instance_code'"
+    fi
+    orch_db_exec "SELECT * FROM federation_status $where_clause ORDER BY source_code, target_code;" 2>/dev/null
+}
+
+fed_db_get_pairs() {
+    orch_db_check_connection || return 1
+    orch_db_exec "SELECT * FROM federation_pairs ORDER BY spoke_code;" 2>/dev/null
+}
+
+fed_db_mark_for_retry() {
+    local source_code=$(lower "$1") target_code=$(lower "$2") direction="$3"
+    orch_db_check_connection || return 1
+    if orch_db_exec "UPDATE federation_links SET status = 'PENDING', error_message = NULL, updated_at = NOW() WHERE source_code = '$source_code' AND target_code = '$target_code' AND direction = '$direction' AND status = 'FAILED';" >/dev/null 2>&1; then
+        log_info "Federation link marked for retry: $source_code -> $target_code"
+        return 0
+    else
+        return 1
+    fi
+}
+
+fed_db_reset_failed() {
+    local instance_code=$(lower "$1")
+    orch_db_check_connection || return 1
+    local count
+    count=$(orch_db_exec "UPDATE federation_links SET status = 'PENDING', retry_count = 0, error_message = NULL, updated_at = NOW() WHERE (source_code = '$instance_code' OR target_code = '$instance_code') AND status = 'FAILED' RETURNING id;" 2>/dev/null | wc -l | xargs)
+    log_info "Reset $count failed federation links for $instance_code"
+    return 0
+}
+
+fed_db_record_operation() {
+    local source_code=$(lower "$1") target_code=$(lower "$2") direction="$3"
+    local op_type="$4" op_status="$5" triggered_by="${6:-system}" error_message="${7:-}" context="${8:-}"
+    orch_db_check_connection || return 1
+    local escaped_error="${error_message//\'/\'\'}" context_sql="NULL"
+    if [ -n "$context" ] && [ "$context" != "null" ]; then
+        echo "$context" | jq empty >/dev/null 2>&1 && context_sql="'${context//\'/\'\'}'::jsonb"
+    fi
+    orch_db_exec "INSERT INTO federation_operations (source_code, target_code, direction, operation_type, operation_status, triggered_by, error_message, context) VALUES ('$source_code', '$target_code', '$direction', '$op_type', '$op_status', '$triggered_by', '$escaped_error', $context_sql) RETURNING operation_id;" 2>/dev/null | xargs
+}
+
+fed_db_cleanup_health_history() {
+    local days="${1:-30}"
+    orch_db_check_connection || return 1
+    local count
+    count=$(orch_db_exec "DELETE FROM federation_health WHERE check_timestamp < NOW() - INTERVAL '$days days' RETURNING id;" 2>/dev/null | wc -l | xargs)
+    log_info "Cleaned up $count old health check records (older than $days days)"
+    echo "$count"
+}
+
+fed_db_cleanup_operations() {
+    local days="${1:-90}"
+    orch_db_check_connection || return 1
+    local count
+    count=$(orch_db_exec "DELETE FROM federation_operations WHERE started_at < NOW() - INTERVAL '$days days' AND operation_status IN ('COMPLETED', 'FAILED', 'CANCELLED') RETURNING id;" 2>/dev/null | wc -l | xargs)
+    log_info "Cleaned up $count old operation records (older than $days days)"
+    echo "$count"
+}
+
+# =============================================================================
+# FEDERATION STATE VERIFICATION (consolidated from federation-state.sh)
+# =============================================================================
+
+verify_federation_state() {
+    local spoke_code="${1:?Spoke code required}"
+    local code_lower=$(lower "$spoke_code")
+    local code_upper=$(upper "$spoke_code")
+
+    ensure_dive_root
+    log_step "Verifying federation state for $code_upper..."
+
+    local checks_passed=0 checks_failed=0
+    local issues=()
+
+    # Check 1: Hub IdP exists in spoke Keycloak
+    echo -n "  Hub IdP in Spoke:          "
+    local spoke_token=""
+    if type -t get_spoke_admin_token &>/dev/null; then
+        spoke_token=$(get_spoke_admin_token "$spoke_code" 2>/dev/null)
+    fi
+    local realm="dive-v3-broker-${code_lower}"
+    local kc_container="dive-spoke-${code_lower}-keycloak"
+
+    if [ -n "$spoke_token" ]; then
+        local hub_idp_check
+        hub_idp_check=$(docker exec "$kc_container" curl -sf \
+            -H "Authorization: Bearer $spoke_token" \
+            "http://localhost:8080/admin/realms/${realm}/identity-provider/instances/usa-idp" 2>/dev/null)
+        if echo "$hub_idp_check" | grep -q '"alias"'; then
+            echo -e "${GREEN}✓${NC}"; checks_passed=$((checks_passed + 1))
+        else
+            echo -e "${RED}✗${NC}"; checks_failed=$((checks_failed + 1))
+            issues+=("Hub IdP (usa-idp) missing in ${code_upper} Keycloak")
+        fi
+    else
+        echo -e "${RED}✗${NC} (cannot authenticate)"; checks_failed=$((checks_failed + 1))
+        issues+=("Cannot authenticate to ${code_upper} Keycloak")
+    fi
+
+    # Check 2: Spoke IdP exists in Hub Keycloak
+    echo -n "  Spoke IdP in Hub:          "
+    local hub_kc_container="${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}"
+    local hub_pass
+    hub_pass=$(docker exec "$hub_kc_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+    if [ -n "$hub_pass" ]; then
+        local hub_token
+        hub_token=$(docker exec "$hub_kc_container" curl -sf \
+            -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
+            -d "grant_type=password" -d "username=admin" -d "password=${hub_pass}" \
+            -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+        if [ -n "$hub_token" ]; then
+            local spoke_idp_check
+            spoke_idp_check=$(docker exec "$hub_kc_container" curl -sf \
+                -H "Authorization: Bearer $hub_token" \
+                "http://localhost:8080/admin/realms/${HUB_REALM:-dive-v3-broker-usa}/identity-provider/instances/${code_lower}-idp" 2>/dev/null)
+            if echo "$spoke_idp_check" | grep -q '"alias"'; then
+                echo -e "${GREEN}✓${NC}"; checks_passed=$((checks_passed + 1))
+            else
+                echo -e "${RED}✗${NC}"; checks_failed=$((checks_failed + 1))
+                issues+=("Spoke IdP (${code_lower}-idp) missing in Hub Keycloak")
+            fi
+        else
+            echo -e "${RED}✗${NC} (cannot authenticate)"; checks_failed=$((checks_failed + 1))
+            issues+=("Cannot authenticate to Hub Keycloak")
+        fi
+    else
+        echo -e "${RED}✗${NC} (password not found)"; checks_failed=$((checks_failed + 1))
+        issues+=("Hub Keycloak password not found")
+    fi
+
+    # Check 3: Client secrets match
+    if [ $checks_failed -eq 0 ]; then
+        echo -n "  Client secrets match:      "
+        echo -e "${GREEN}✓${NC} (assumed if IdPs exist)"; checks_passed=$((checks_passed + 1))
+    else
+        echo -n "  Client secrets match:      "
+        echo -e "${YELLOW}⚠${NC} (skipped - IdP checks failed)"
+    fi
+
+    # Check 4: Redirect URIs
+    echo -n "  Redirect URIs configured:  "
+    if [ -n "$spoke_token" ]; then
+        local client_check
+        client_check=$(docker exec "$kc_container" curl -sf \
+            -H "Authorization: Bearer $spoke_token" \
+            "http://localhost:8080/admin/realms/${realm}/clients?clientId=dive-v3-broker-${code_lower}" 2>/dev/null)
+        if echo "$client_check" | grep -q '"redirectUris"'; then
+            echo -e "${GREEN}✓${NC}"; checks_passed=$((checks_passed + 1))
+        else
+            echo -e "${YELLOW}⚠${NC}"; issues+=("Redirect URIs may not be configured")
+        fi
+    else
+        echo -e "${YELLOW}⚠${NC} (cannot verify)"
+    fi
+
+    echo ""
+    if [ $checks_failed -eq 0 ]; then
+        log_success "All federation checks passed ($checks_passed/$checks_passed)"
+        return 0
+    else
+        log_warn "Federation checks: $checks_passed passed, $checks_failed failed"
+        if [ ${#issues[@]} -gt 0 ]; then
+            echo "  Issues found:"
+            for issue in "${issues[@]}"; do echo "    - $issue"; done
+        fi
+        return 1
+    fi
+}
+
+# =============================================================================
 # MODULE EXPORTS
 # =============================================================================
 
@@ -367,5 +745,26 @@ export -f federation_get_link_state
 export -f federation_set_link_state
 export -f federation_find_stale
 export -f federation_mark_stale
+export -f fed_db_init_schema
+export -f fed_db_schema_exists
+export -f fed_db_upsert_link
+export -f fed_db_update_status
+export -f fed_db_get_link
+export -f fed_db_get_link_status
+export -f fed_db_list_links
+export -f fed_db_get_failed_links
+export -f fed_db_delete_link
+export -f fed_db_record_health
+export -f fed_db_get_latest_health
+export -f fed_db_get_instance_status
+export -f fed_db_list_all_links
+export -f fed_db_query_status_view
+export -f fed_db_get_pairs
+export -f fed_db_mark_for_retry
+export -f fed_db_reset_failed
+export -f fed_db_record_operation
+export -f fed_db_cleanup_health_history
+export -f fed_db_cleanup_operations
+export -f verify_federation_state
 
-log_verbose "Federation health module loaded"
+log_verbose "Federation health module loaded (includes federation-state-db + federation-state)"

@@ -28,8 +28,8 @@ fi
 
 # Load all orchestration modules
 source "${DIVE_ROOT}/scripts/dive-modules/common.sh"
-source "${DIVE_ROOT}/scripts/dive-modules/orchestration-framework.sh"
-source "${DIVE_ROOT}/scripts/dive-modules/orchestration-state-db.sh"
+source "${DIVE_ROOT}/scripts/dive-modules/orchestration/framework.sh"
+source "${DIVE_ROOT}/scripts/dive-modules/orchestration/state.sh"
 source "${DIVE_ROOT}/scripts/dive-modules/deployment-state.sh"
 source "${DIVE_ROOT}/scripts/dive-modules/error-analytics.sh"
 

@@ -32,7 +32,7 @@
 
 # Ensure common functions are loaded
 if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+    source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
     export DIVE_COMMON_LOADED=1
 fi
 
@@ -1179,7 +1179,7 @@ kas_security_audit() {
     local secrets=("dive-v3-kas-signing-key" "dive-v3-kas-encryption-key")
     for secret in "${secrets[@]}"; do
         echo -n "  $secret: "
-        if gcloud secrets describe "$secret" --project=dive25 >/dev/null 2>&1; then
+        if gcloud secrets describe "$secret" --project="${GCP_PROJECT:-dive25}" >/dev/null 2>&1; then
             log_success_inline "EXISTS"
         else
             log_error_inline "MISSING"

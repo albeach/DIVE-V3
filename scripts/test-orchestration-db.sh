@@ -25,7 +25,7 @@ echo ""
 # Load orchestration modules
 source "${DIVE_ROOT}/scripts/dive-modules/common.sh"
 source "${DIVE_ROOT}/scripts/dive-modules/deployment-state.sh"
-source "${DIVE_ROOT}/scripts/dive-modules/orchestration-state-db.sh"
+source "${DIVE_ROOT}/scripts/dive-modules/orchestration/state.sh"
 
 # Enable database backend
 export ORCH_DB_ENABLED=true

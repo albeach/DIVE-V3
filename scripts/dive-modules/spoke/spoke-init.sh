@@ -35,18 +35,6 @@ export DIVE_SPOKE_INIT_LOADED=1
 # Hub continues to use file-based registry (no changes to Hub deployment).
 # =============================================================================
 
-_auto_register_kas() {
-    local code_upper="$1"
-    local code_lower="$2"
-    local kas_port="$3"
-
-    # DEPRECATION NOTICE: File-based KAS registration removed in Phase 3
-    # KAS registration now happens via MongoDB during deployment configuration phase
-    log_verbose "KAS registration deferred to deployment phase (MongoDB-backed)"
-    log_verbose "  -> Will register ${code_lower}-kas in MongoDB kas_registry collection"
-
-    return 0
-}
 
 # =============================================================================
 # AUTO-REGISTER TRUSTED ISSUER
@@ -714,11 +702,6 @@ EOF
     chmod 644 "$spoke_dir/certs/spoke.csr"
 
     echo ""
-
-    # ==========================================================================
-    # AUTO-REGISTER KAS ENTRY (Best Practice: Configuration Automation)
-    # ==========================================================================
-    _auto_register_kas "$code_upper" "$code_lower" "$kas_port"
 
     # ==========================================================================
     # AUTO-REGISTER TRUSTED ISSUER (Best Practice: JWT Trust Automation)
