@@ -25,8 +25,9 @@ echo ""
 # Load modules (suppress errors)
 set +e
 source "$DIVE_ROOT/scripts/dive-modules/common.sh" >/dev/null 2>&1
-source "$DIVE_ROOT/scripts/dive-modules/orchestration-framework.sh" >/dev/null 2>&1
-source "$DIVE_ROOT/scripts/dive-modules/error-recovery.sh" >/dev/null 2>&1
+source "$DIVE_ROOT/scripts/dive-modules/orchestration/framework.sh" >/dev/null 2>&1
+source "$DIVE_ROOT/scripts/dive-modules/orchestration/errors.sh" >/dev/null 2>&1
+source "$DIVE_ROOT/scripts/dive-modules/orchestration/circuit-breaker.sh" >/dev/null 2>&1
 set -e
 
 # =============================================================================
@@ -192,8 +193,8 @@ echo -e "  ${GREEN}✓${NC} 5 test suite files"
 echo -e "  ${GREEN}✓${NC} 7 documentation files"
 echo ""
 echo -e "${BOLD}Modified Files (3):${NC}"
-[ -f "$DIVE_ROOT/scripts/dive-modules/orchestration-state-db.sh" ] && echo -e "  ${GREEN}✓${NC} orchestration-state-db.sh (DB-only mode)"
-[ -f "$DIVE_ROOT/scripts/dive-modules/orchestration-framework.sh" ] && echo -e "  ${GREEN}✓${NC} orchestration-framework.sh (parallel startup)"
+[ -f "$DIVE_ROOT/scripts/dive-modules/orchestration/state.sh" ] && echo -e "  ${GREEN}✓${NC} orchestration/state.sh (DB-only mode)"
+[ -f "$DIVE_ROOT/scripts/dive-modules/orchestration/framework.sh" ] && echo -e "  ${GREEN}✓${NC} orchestration/framework.sh (parallel startup)"
 [ -f "$DIVE_ROOT/scripts/dive-modules/error-recovery.sh" ] && echo -e "  ${GREEN}✓${NC} error-recovery.sh (circuit breaker persistence)"
 echo ""
 echo -e "${BOLD}Documentation (2,702 lines):${NC}"

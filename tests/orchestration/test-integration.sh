@@ -87,9 +87,10 @@ check_database_available() {
 
 source_modules() {
     source "$DIVE_ROOT/scripts/dive-modules/common.sh" 2>/dev/null || return 1
-    source "$DIVE_ROOT/scripts/dive-modules/orchestration-state-db.sh" 2>/dev/null || return 1
-    source "$DIVE_ROOT/scripts/dive-modules/orchestration-framework.sh" 2>/dev/null || return 1
-    source "$DIVE_ROOT/scripts/dive-modules/error-recovery.sh" 2>/dev/null || return 1
+    source "$DIVE_ROOT/scripts/dive-modules/orchestration/state.sh" 2>/dev/null || return 1
+    source "$DIVE_ROOT/scripts/dive-modules/orchestration/framework.sh" 2>/dev/null || return 1
+    source "$DIVE_ROOT/scripts/dive-modules/orchestration/errors.sh" 2>/dev/null || return 1
+    source "$DIVE_ROOT/scripts/dive-modules/orchestration/circuit-breaker.sh" 2>/dev/null || return 1
     return 0
 }
 

@@ -18,6 +18,19 @@
 #
 # CRITICAL: All secrets must come from Secret Manager
 # NO hardcoded secrets allowed per project rules
+#
+# Canonical GCP Secret Naming Convention:
+#   dive-v3-<type>-<instance>
+#   Examples:
+#     dive-v3-keycloak-usa         (Hub Keycloak admin password)
+#     dive-v3-postgres-fra         (Spoke PostgreSQL password)
+#     dive-v3-mongodb-deu          (Spoke MongoDB password)
+#     dive-v3-auth-secret-gbr      (Spoke JWT secret)
+#     dive-v3-keycloak-client-secret  (Shared, no instance suffix)
+#     dive-v3-redis-blacklist         (Shared, no instance suffix)
+#
+# Note: Some legacy code uses "dive-v3-keycloak-admin-password-<instance>"
+# but the canonical pattern is "dive-v3-keycloak-<instance>".
 # =============================================================================
 
 # Prevent multiple sourcing
@@ -627,6 +640,113 @@ secrets_list() {
 }
 
 # =============================================================================
+# SECRET SYNCHRONIZATION (consolidated from secret-sync.sh)
+# =============================================================================
+
+##
+# Update or add environment variable in .env file
+# Handles both macOS and Linux sed syntax
+#
+# Arguments:
+#   $1 - .env file path
+#   $2 - Variable name
+#   $3 - Variable value
+##
+_secrets_update_env_var() {
+    local env_file="$1"
+    local var_name="$2"
+    local var_value="$3"
+
+    if grep -q "^${var_name}=" "$env_file"; then
+        local tmpfile=$(mktemp)
+        sed "s|^${var_name}=.*|${var_name}=${var_value}|" "$env_file" > "$tmpfile" && mv "$tmpfile" "$env_file"
+    else
+        echo "${var_name}=${var_value}" >> "$env_file"
+    fi
+}
+
+##
+# Sync container secrets to .env file
+# Ensures .env file matches what containers are actually running with
+#
+# Arguments:
+#   $1 - Instance code (e.g., DEU, BGR, USA)
+#
+# Returns:
+#   0 - Success
+#   1 - Failed
+##
+sync_container_secrets_to_env() {
+    local instance_code="${1:?Instance code required}"
+    local code_lower=$(lower "$instance_code")
+    local code_upper=$(upper "$instance_code")
+
+    ensure_dive_root
+
+    local env_file
+    if [ "$code_upper" = "USA" ]; then
+        env_file="${DIVE_ROOT}/.env.hub"
+    else
+        env_file="${DIVE_ROOT}/instances/${code_lower}/.env"
+    fi
+
+    if [ ! -f "$env_file" ]; then
+        log_error ".env file not found: $env_file"
+        return 1
+    fi
+
+    log_step "Syncing ${code_upper} secrets: Container -> .env file"
+
+    cp "$env_file" "${env_file}.bak.$(date +%Y%m%d-%H%M%S)"
+
+    local container_prefix
+    if [ "$code_upper" = "USA" ]; then
+        container_prefix="dive-hub"
+    else
+        container_prefix="dive-spoke-${code_lower}"
+    fi
+
+    # Sync Keycloak admin password
+    local kc_container="${container_prefix}-keycloak"
+    if docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
+        local kc_password
+        kc_password=$(docker exec "$kc_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null)
+        if [ -n "$kc_password" ]; then
+            _secrets_update_env_var "$env_file" "KEYCLOAK_ADMIN_PASSWORD_${code_upper}" "$kc_password"
+            log_success "Synced KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
+        fi
+    fi
+
+    # Sync PostgreSQL password
+    local pg_container="${container_prefix}-postgres"
+    if docker ps --format '{{.Names}}' | grep -q "^${pg_container}$"; then
+        local pg_password
+        pg_password=$(docker exec "$pg_container" printenv POSTGRES_PASSWORD 2>/dev/null)
+        if [ -n "$pg_password" ]; then
+            _secrets_update_env_var "$env_file" "POSTGRES_PASSWORD_${code_upper}" "$pg_password"
+            log_success "Synced POSTGRES_PASSWORD_${code_upper}"
+        fi
+    fi
+
+    # Sync MongoDB password
+    local mongo_container="${container_prefix}-mongodb"
+    if docker ps --format '{{.Names}}' | grep -q "^${mongo_container}$"; then
+        local mongo_password
+        mongo_password=$(docker exec "$mongo_container" printenv MONGO_INITDB_ROOT_PASSWORD 2>/dev/null)
+        if [ -n "$mongo_password" ]; then
+            _secrets_update_env_var "$env_file" "MONGO_PASSWORD_${code_upper}" "$mongo_password"
+            log_success "Synced MONGO_PASSWORD_${code_upper}"
+        fi
+    fi
+
+    log_success ".env file updated with container secrets"
+    return 0
+}
+
+# Backward compatibility alias
+update_env_var() { _secrets_update_env_var "$@"; }
+
+# =============================================================================
 # MODULE DISPATCH
 # =============================================================================
 
@@ -644,6 +764,7 @@ module_secrets() {
         verify)         secrets_verify "$@" ;;
         load)           secrets_load_for_instance "$@" ;;
         export)         secrets_export "$@" ;;
+        sync)           sync_container_secrets_to_env "$@" ;;
         provider)
             if [ -n "$1" ]; then
                 export SECRETS_PROVIDER="$1"
@@ -673,6 +794,7 @@ module_secrets() {
             echo "  verify <CODE>         Verify secret access"
             echo "  load <CODE>           Load secrets into environment"
             echo "  export <CODE>         Export secrets as shell commands"
+            echo "  sync <CODE>           Sync container secrets to .env file"
             echo "  provider [gcp|aws]    Get/set secrets provider"
             echo "  get <name> [CODE]     Get specific secret"
             echo "  set <name> <value> [CODE]  Set specific secret"
@@ -715,6 +837,8 @@ export -f secrets_ensure
 export -f secrets_rotate
 export -f secrets_verify
 export -f secrets_list
+export -f sync_container_secrets_to_env
+export -f update_env_var
 export -f module_secrets
 
 log_verbose "Secrets module loaded (provider: $SECRETS_PROVIDER)"

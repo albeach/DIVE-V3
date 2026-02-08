@@ -5,7 +5,7 @@
 # Provides validation functions to verify phase state consistency
 # with actual system state. Used for idempotent deployments.
 #
-# Integrates with existing orchestration DB (orchestration-state-db.sh)
+# Integrates with existing orchestration DB (orchestration/state.sh)
 # to check if phases are complete and validate infrastructure state.
 # =============================================================================
 # Version: 2.0.0

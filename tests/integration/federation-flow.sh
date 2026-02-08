@@ -110,8 +110,8 @@ test_spoke_to_hub_sso() {
 test_secret_sync() {
     echo -n "Test 3: Secret synchronization          "
 
-    if [ -f "${DIVE_ROOT}/scripts/dive-modules/env-sync.sh" ]; then
-        source "${DIVE_ROOT}/scripts/dive-modules/env-sync.sh"
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/configuration/env-sync.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/configuration/env-sync.sh"
         if verify_secret_consistency "$TEST_CODE_LOWER" >/dev/null 2>&1; then
             echo -e "${GREEN}✓${NC}"
             tests_passed=$((tests_passed + 1))

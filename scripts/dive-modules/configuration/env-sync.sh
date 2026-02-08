@@ -6,8 +6,8 @@
 # =============================================================================
 
 # Source common utilities
-if [ -f "$(dirname "${BASH_SOURCE[0]}")/common.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../common.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
 fi
 
 ##

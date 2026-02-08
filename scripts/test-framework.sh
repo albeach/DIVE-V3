@@ -226,7 +226,7 @@ test_run_cli_unit_tests() {
         "spoke.sh"
         "db.sh"
         "env-sync.sh"
-        "orchestration-state-db.sh"
+        "orchestration/state.sh"
         "federation-state-db.sh"
     )
 

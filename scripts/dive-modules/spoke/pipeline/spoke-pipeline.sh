@@ -22,29 +22,14 @@ if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     export DIVE_COMMON_LOADED=1
 fi
 
-# Load orchestration framework
-if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../orchestration-framework.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/../../orchestration-framework.sh"
+# Load orchestration framework (includes state, errors, circuit-breaker, dependencies)
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../orchestration/framework.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../../orchestration/framework.sh"
 fi
 
-# Load orchestration state database
-if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../orchestration-state-db.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/../../orchestration-state-db.sh"
-fi
-
-# Load error recovery module
-if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../error-recovery.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/../../error-recovery.sh"
-fi
-
-# Load orchestration dependencies module (2026-01-16)
-if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../orchestration-dependencies.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/../../orchestration-dependencies.sh"
-fi
-
-# Load federation state database module (2026-01-16)
-if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../federation-state-db.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/../../federation-state-db.sh"
+# Load federation health module (includes fed_db_* functions)
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../federation/health.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../../federation/health.sh"
 fi
 
 # =============================================================================
@@ -425,14 +410,37 @@ spoke_pipeline_run_phase() {
         fi
     fi
 
-    # Execute phase function
+    # Execute phase function (with circuit breaker protection)
     local phase_function="spoke_phase_${phase_name,,}"  # Convert to lowercase
+    local circuit_name="spoke_phase_${phase_name,,}"
 
     if type "$phase_function" &>/dev/null; then
-        if "$phase_function" "$instance_code" "$pipeline_mode"; then
-            local phase_end=$(date +%s)
-            local phase_duration=$((phase_end - phase_start))
+        local phase_exit=0
 
+        # Initialize circuit breaker for this phase
+        if type orch_circuit_breaker_init &>/dev/null; then
+            orch_circuit_breaker_init "$circuit_name" "CLOSED"
+        fi
+
+        # Check if circuit is already open (fast-fail from prior failures)
+        if type orch_circuit_breaker_is_open &>/dev/null && orch_circuit_breaker_is_open "$circuit_name"; then
+            log_error "Phase $phase_name: Circuit breaker OPEN - fast fail (prior failures exceeded threshold)"
+            phase_exit=2
+        fi
+
+        # Execute through circuit breaker if available, otherwise direct
+        if [ $phase_exit -eq 0 ]; then
+            if type orch_circuit_breaker_execute &>/dev/null; then
+                orch_circuit_breaker_execute "$circuit_name" "$phase_function" "$instance_code" "$pipeline_mode" || phase_exit=$?
+            else
+                "$phase_function" "$instance_code" "$pipeline_mode" || phase_exit=$?
+            fi
+        fi
+
+        local phase_end=$(date +%s)
+        local phase_duration=$((phase_end - phase_start))
+
+        if [ $phase_exit -eq 0 ]; then
             log_success "Phase $phase_name completed in ${phase_duration}s"
 
             # Mark phase complete in checkpoint system
@@ -447,7 +455,11 @@ spoke_pipeline_run_phase() {
 
             return 0
         else
-            log_error "Phase $phase_name failed"
+            if [ $phase_exit -eq 2 ]; then
+                log_error "Phase $phase_name: Circuit breaker OPEN after ${phase_duration}s"
+            else
+                log_error "Phase $phase_name failed after ${phase_duration}s"
+            fi
 
             # Record error
             if type orch_record_error &>/dev/null; then
@@ -458,7 +470,7 @@ spoke_pipeline_run_phase() {
 
             # Record failed step
             if type orch_db_record_step &>/dev/null; then
-                orch_db_record_step "$instance_code" "$phase_name" "FAILED" "Phase execution returned error"
+                orch_db_record_step "$instance_code" "$phase_name" "FAILED" "Phase execution returned error (exit: $phase_exit)"
             fi
 
             # Attempt rollback if enabled

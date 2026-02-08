@@ -71,7 +71,9 @@ spoke_phase_seeding() {
                     return 0
                 else
                     log_warn "SEEDING checkpoint exists but validation failed, re-running"
-                    spoke_phase_clear "$instance_code" "SEEDING" 2>/dev/null || true
+                    if ! spoke_phase_clear "$instance_code" "SEEDING"; then
+                        log_warn "Failed to clear SEEDING checkpoint (stale state may persist)"
+                    fi
                 fi
             else
                 log_info "✓ SEEDING phase complete (validation not available)"

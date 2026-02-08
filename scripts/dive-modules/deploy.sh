@@ -211,20 +211,7 @@ cmd_deploy() {
 }
 
 cmd_reset() {
-    print_header
-    echo -e "${RED}⚠️  RESETTING TO CLEAN STATE...${NC}"
-    echo ""
-
-    if [ "$DRY_RUN" = true ]; then
-        log_dry "Step 1: ${DOCKER_CMD:-docker} compose down -v --remove-orphans"
-        log_dry "Step 2: check_certs"
-        log_dry "Step 3: load_secrets"
-        log_dry "Step 4: ${DOCKER_CMD:-docker} compose up -d"
-        log_dry "Step 5: sleep 60 && terraform apply"
-        return 0
-    fi
-
-    # Full deployment workflow
+    # reset/clean is an alias for deploy
     cmd_deploy local
 }
 
@@ -495,9 +482,9 @@ cmd_nuke() {
     cd "$DIVE_ROOT" || exit 1
 
     # Load naming utilities for precise targeting
-    if [ -f "${DIVE_ROOT}/scripts/dive-modules/naming.sh" ]; then
-        # shellcheck source=naming.sh disable=SC1091
-        source "${DIVE_ROOT}/scripts/dive-modules/naming.sh"
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/naming.sh" ]; then
+        # shellcheck source=utilities/naming.sh disable=SC1091
+        source "${DIVE_ROOT}/scripts/dive-modules/utilities/naming.sh"
     fi
 
     # =========================================================================
@@ -542,42 +529,44 @@ cmd_nuke() {
             ;;
     esac
 
-    # Discover containers
-    # CRITICAL FIX: Catch anonymous containers (no name or hash ID as name)
-    # Anonymous containers are created without --name flag or by compose in certain scenarios
+    # Discover containers using batch query (single docker call instead of per-container inspect)
     local dive_containers=""
     local container_count=0
     if [ -n "$container_patterns" ] || [ "$target_type" = "orphans" ]; then
-        local all_containers=$(docker ps -aq 2>/dev/null)
-        for c in $all_containers; do
-            local name=$(docker inspect --format '{{.Name}}' "$c" 2>/dev/null | sed 's/^\///')
-            local image=$(docker inspect --format '{{.Config.Image}}' "$c" 2>/dev/null)
-            local project_label=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$c" 2>/dev/null)
+        local container_listing
+        container_listing=$(docker ps -a --format '{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Labels}}\t{{.Status}}' 2>/dev/null)
+
+        while IFS=$'\t' read -r c_id c_name c_image c_labels c_status; do
+            [ -z "$c_id" ] && continue
+
+            # Extract compose project from labels inline
+            local project_label=""
+            if [[ "$c_labels" == *"com.docker.compose.project="* ]]; then
+                project_label="${c_labels##*com.docker.compose.project=}"
+                project_label="${project_label%%,*}"
+            fi
 
             # Check if container is anonymous (no name or name equals ID)
             local is_anonymous=false
-            if [ -z "$name" ] || [ "$name" = "$c" ] || [ "${#name}" -eq 64 ]; then
+            if [ -z "$c_name" ] || [ "$c_name" = "$c_id" ] || [ "${#c_name}" -eq 64 ]; then
                 is_anonymous=true
             fi
 
             if [ "$target_type" = "orphans" ]; then
-                local status=$(docker inspect --format '{{.State.Status}}' "$c" 2>/dev/null)
-                if [ "$status" != "running" ]; then
-                    dive_containers="$dive_containers $c"
+                if [[ "$c_status" != Up* ]]; then
+                    dive_containers="$dive_containers $c_id"
                 fi
             elif [ "$is_anonymous" = true ]; then
                 # Anonymous container - check if it's DIVE-related by image or label
-                if echo "$image" | grep -qE "postgres|mongodb|redis|keycloak|opa|opal|dive|ghcr.io/opentdf"; then
-                    # DIVE-related anonymous container - include it
-                    dive_containers="$dive_containers $c"
+                if echo "$c_image" | grep -qE "postgres|mongodb|redis|keycloak|opa|opal|dive|ghcr.io/opentdf"; then
+                    dive_containers="$dive_containers $c_id"
                 elif echo "$project_label" | grep -qE "^dive-"; then
-                    # Has DIVE compose project label - include it
-                    dive_containers="$dive_containers $c"
+                    dive_containers="$dive_containers $c_id"
                 fi
-            elif echo "$name" | grep -qE "$container_patterns"; then
-                dive_containers="$dive_containers $c"
+            elif echo "$c_name" | grep -qE "$container_patterns"; then
+                dive_containers="$dive_containers $c_id"
             fi
-        done
+        done <<< "$container_listing"
         container_count=$(echo $dive_containers | wc -w | tr -d ' ')
     fi
 
@@ -706,7 +695,9 @@ cmd_nuke() {
         # Stop only hub
         if [ -f "docker-compose.hub.yml" ]; then
             log_verbose "  Stopping hub"
-            ${DOCKER_CMD:-docker} compose -f docker-compose.hub.yml -p dive-hub down -v --remove-orphans --timeout 5 2>/dev/null || true
+            if ! ${DOCKER_CMD:-docker} compose -f docker-compose.hub.yml -p dive-hub down -v --remove-orphans --timeout 5 2>&1 | grep -v "^$"; then
+                log_warn "Hub compose down returned errors (continuing cleanup)"
+            fi
         fi
     elif [ "$target_type" = "spoke" ]; then
         # Stop only specific spoke
@@ -714,7 +705,9 @@ cmd_nuke() {
         local instance_dir="instances/${instance_lower}"
         if [ -f "${instance_dir}/docker-compose.yml" ]; then
             log_verbose "  Stopping spoke: ${target_instance^^}"
-            (cd "$instance_dir" && ${DOCKER_CMD:-docker} compose -p "dive-spoke-${instance_lower}" down -v --remove-orphans --timeout 5 2>/dev/null) || true
+            if ! (cd "$instance_dir" && ${DOCKER_CMD:-docker} compose -p "dive-spoke-${instance_lower}" down -v --remove-orphans --timeout 5 2>&1); then
+                log_warn "Spoke ${target_instance^^} compose down returned errors (continuing cleanup)"
+            fi
         fi
     elif [ "$target_type" = "all" ]; then
         # Stop all compose projects
@@ -724,9 +717,13 @@ cmd_nuke() {
                 local project_name=$(grep -m 1 '^name:' "$compose_file" 2>/dev/null | sed 's/name: *//' | tr -d ' "'"'"'')
                 if [ -n "$project_name" ]; then
                     log_verbose "  Stopping project: $project_name"
-                    ${DOCKER_CMD:-docker} compose -f "$compose_file" -p "$project_name" down -v --remove-orphans --timeout 5 2>/dev/null || true
+                    if ! ${DOCKER_CMD:-docker} compose -f "$compose_file" -p "$project_name" down -v --remove-orphans --timeout 5 2>&1 | grep -v "^$"; then
+                        log_warn "Compose down for $project_name returned errors (continuing cleanup)"
+                    fi
                 else
-                    ${DOCKER_CMD:-docker} compose -f "$compose_file" down -v --remove-orphans --timeout 5 2>/dev/null || true
+                    if ! ${DOCKER_CMD:-docker} compose -f "$compose_file" down -v --remove-orphans --timeout 5 2>&1 | grep -v "^$"; then
+                        log_warn "Compose down for $compose_file returned errors (continuing cleanup)"
+                    fi
                 fi
             fi
         done
@@ -739,7 +736,9 @@ cmd_nuke() {
                 local instance_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
                 log_verbose "  Stopping spoke: ${instance_code^^} (project: dive-spoke-${instance_lower})"
                 # Use explicit project name to match container labels
-                (cd "$instance_dir" && ${DOCKER_CMD:-docker} compose -p "dive-spoke-${instance_lower}" down -v --remove-orphans --timeout 5 2>/dev/null) || true
+                if ! (cd "$instance_dir" && ${DOCKER_CMD:-docker} compose -p "dive-spoke-${instance_lower}" down -v --remove-orphans --timeout 5 2>&1); then
+                    log_warn "Spoke ${instance_code^^} compose down returned errors (continuing cleanup)"
+                fi
                 # Force-stop any remaining containers for this instance
                 for c in $(docker ps -aq --filter "label=com.docker.compose.project=dive-spoke-${instance_lower}" 2>/dev/null); do
                     ${DOCKER_CMD:-docker} stop "$c" 2>/dev/null || true
@@ -841,43 +840,46 @@ cmd_nuke() {
                 log_verbose "  No ports found in config.json - using pattern-based cleanup only"
             fi
         elif [ "$target_type" = "all" ]; then
-            # Original all-target logic remains unchanged
+            # Batch: stop DIVE containers on known ports (single docker ps call)
             log_verbose "  Stopping containers using DIVE ports..."
-            for port in 3033 4033 8476 3032 4032 8475 3034 4034 8477 8443 4000 3000; do
-                for c in $(docker ps --format '{{.ID}}\t{{.Names}}\t{{.Ports}}' 2>/dev/null | grep -E ":$port->|:$port/" | awk '{print $1}'); do
-                    local container_name=$(docker inspect --format '{{.Name}}' "$c" 2>/dev/null | sed 's/^\///')
-                    if echo "$container_name" | grep -qE "dive|spoke|hub"; then
-                        log_verbose "    Stopping container using port $port: $container_name"
-                        ${DOCKER_CMD:-docker} stop "$c" 2>/dev/null || true
-                        ${DOCKER_CMD:-docker} rm -f "$c" 2>/dev/null || true
+            # Known DIVE ports: base (3000/4000/8443) + spoke offsets (32-34)
+            local port_pattern="${DIVE_NUKE_PORT_PATTERN:-:(3033|4033|8476|3032|4032|8475|3034|4034|8477|8443|4000|3000)->}"
+            while IFS=$'\t' read -r c_id c_name c_ports; do
+                [ -z "$c_id" ] && continue
+                if echo "$c_ports" | grep -qE "$port_pattern"; then
+                    if echo "$c_name" | grep -qE "dive|spoke|hub"; then
+                        log_verbose "    Stopping container: $c_name"
+                        ${DOCKER_CMD:-docker} stop "$c_id" 2>/dev/null || true
+                        ${DOCKER_CMD:-docker} rm -f "$c_id" 2>/dev/null || true
                         removed_containers=$((removed_containers + 1))
                     fi
-                done
-            done
+                fi
+            done <<< "$(docker ps --format '{{.ID}}\t{{.Names}}\t{{.Ports}}' 2>/dev/null)"
 
+            # Batch: remove anonymous DIVE-related containers (single docker ps call)
             log_verbose "  Removing anonymous DIVE-related containers..."
             local anonymous_removed=0
-            for c in $(docker ps -aq 2>/dev/null); do
-                local name=$(docker inspect --format '{{.Name}}' "$c" 2>/dev/null | sed 's/^\///')
-                local image=$(docker inspect --format '{{.Config.Image}}' "$c" 2>/dev/null)
-                local project_label=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$c" 2>/dev/null)
+            while IFS=$'\t' read -r c_id c_name c_image c_labels; do
+                [ -z "$c_id" ] && continue
                 local is_anonymous=false
-                if [ -z "$name" ] || [ "$name" = "$c" ] || [ "${#name}" -eq 64 ]; then
+                if [ -z "$c_name" ] || [ "$c_name" = "$c_id" ] || [ "${#c_name}" -eq 64 ]; then
                     is_anonymous=true
                 fi
                 if [ "$is_anonymous" = true ]; then
-                    local is_dive_related=false
-                    if echo "$image" | grep -qE "postgres|mongodb|redis|keycloak|opa|opal|dive|ghcr.io/opentdf|openpolicyagent|permitio"; then
-                        is_dive_related=true
-                    elif echo "$project_label" | grep -qE "^dive-"; then
-                        is_dive_related=true
+                    local project_label=""
+                    if [[ "$c_labels" == *"com.docker.compose.project="* ]]; then
+                        project_label="${c_labels##*com.docker.compose.project=}"
+                        project_label="${project_label%%,*}"
                     fi
-                    if [ "$is_dive_related" = true ]; then
-                        log_verbose "    Removing anonymous DIVE container: $c (image: $image)"
-                        ${DOCKER_CMD:-docker} rm -f "$c" 2>/dev/null && anonymous_removed=$((anonymous_removed + 1)) || true
+                    if echo "$c_image" | grep -qE "postgres|mongodb|redis|keycloak|opa|opal|dive|ghcr.io/opentdf|openpolicyagent|permitio"; then
+                        log_verbose "    Removing anonymous DIVE container: $c_id (image: $c_image)"
+                        ${DOCKER_CMD:-docker} rm -f "$c_id" 2>/dev/null && anonymous_removed=$((anonymous_removed + 1)) || true
+                    elif echo "$project_label" | grep -qE "^dive-"; then
+                        log_verbose "    Removing anonymous DIVE container: $c_id (project: $project_label)"
+                        ${DOCKER_CMD:-docker} rm -f "$c_id" 2>/dev/null && anonymous_removed=$((anonymous_removed + 1)) || true
                     fi
                 fi
-            done
+            done <<< "$(docker ps -a --format '{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Labels}}' 2>/dev/null)"
             [ "$anonymous_removed" -gt 0 ] && removed_containers=$((removed_containers + anonymous_removed)) && log_verbose "    Removed $anonymous_removed anonymous containers"
         fi
     fi
@@ -1297,12 +1299,12 @@ cmd_nuke() {
     local final_networks=""
 
     if [ -n "$container_patterns" ]; then
-        for c in $(docker ps -aq 2>/dev/null); do
-            local name=$(docker inspect --format '{{.Name}}' "$c" 2>/dev/null | sed 's/^\///')
-            if echo "$name" | grep -qE "$container_patterns"; then
-                final_containers="$final_containers $c"
+        while IFS=$'\t' read -r c_id c_name; do
+            [ -z "$c_id" ] && continue
+            if echo "$c_name" | grep -qE "$container_patterns"; then
+                final_containers="$final_containers $c_id"
             fi
-        done
+        done <<< "$(docker ps -a --format '{{.ID}}\t{{.Names}}' 2>/dev/null)"
         remaining_containers=$(echo $final_containers | wc -w | tr -d ' ')
     fi
 

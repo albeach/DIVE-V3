@@ -8,23 +8,23 @@
 
 # Ensure common functions are loaded
 if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/common.sh"
+    source "$(dirname "${BASH_SOURCE[0]}")/../common.sh"
     export DIVE_COMMON_LOADED=1
 fi
 
 # Load orchestration framework
-if [ -f "$(dirname "${BASH_SOURCE[0]}")/orchestration-framework.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/orchestration-framework.sh"
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../orchestration/framework.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../orchestration/framework.sh"
 fi
 
 # Load test framework
-if [ -f "$(dirname "${BASH_SOURCE[0]}")/orchestration-test-framework.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/orchestration-test-framework.sh"
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../orchestration/testing.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../orchestration/testing.sh"
 fi
 
 # Load spoke modules for testing
-if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke/spoke-init.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/spoke/spoke-init.sh"
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../spoke/spoke-init.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../spoke/spoke-init.sh"
 fi
 
 # =============================================================================

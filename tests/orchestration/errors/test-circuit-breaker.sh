@@ -16,8 +16,9 @@ if [ -z "$DIVE_ROOT" ]; then
 fi
 
 source "${DIVE_ROOT}/scripts/dive-modules/common.sh"
-source "${DIVE_ROOT}/scripts/dive-modules/error-recovery.sh"
-source "${DIVE_ROOT}/scripts/dive-modules/orchestration-state-db.sh"
+source "${DIVE_ROOT}/scripts/dive-modules/orchestration/errors.sh"
+source "${DIVE_ROOT}/scripts/dive-modules/orchestration/circuit-breaker.sh"
+source "${DIVE_ROOT}/scripts/dive-modules/orchestration/state.sh"
 
 TESTS_PASSED=0
 TESTS_FAILED=0

@@ -31,8 +31,8 @@ source "$DIVE_ROOT/scripts/dive-modules/common.sh" 2>/dev/null || {
     upper() { echo "$1" | tr '[:lower:]' '[:upper:]'; }
     lower() { echo "$1" | tr '[:upper:]' '[:lower:]'; }
 }
-source "$DIVE_ROOT/scripts/dive-modules/orchestration-state-db.sh" 2>/dev/null || true
-source "$DIVE_ROOT/scripts/dive-modules/federation-state-db.sh" 2>/dev/null || true
+source "$DIVE_ROOT/scripts/dive-modules/orchestration/state.sh" 2>/dev/null || true
+source "$DIVE_ROOT/scripts/dive-modules/federation/health.sh" 2>/dev/null || true
 set -u  # Re-enable strict unset checking
 
 # =============================================================================

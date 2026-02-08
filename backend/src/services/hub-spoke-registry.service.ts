@@ -2071,37 +2071,21 @@ federation_partners = {
     }
 
     try {
-      // Update the authorized_spokes data in OPA
-      const allApproved = await this.store.findByStatus('approved');
-      const authorizedSpokes: Record<string, {
-        instance_code: string;
-        scopes: string[];
-        trust_level: string;
-        max_classification: string;
-      }> = {};
+      // NOTE: Spokes data is already included in /api/opal/policy-data response
+      // No need for separate authorized_spokes topic - it was redundant and caused warnings
+      // The /api/opal/policy-data endpoint includes spokes list in federation.spokes[]
 
-      for (const s of allApproved) {
-        authorizedSpokes[s.spokeId] = {
-          instance_code: s.instanceCode,
-          scopes: s.allowedPolicyScopes,
-          trust_level: s.trustLevel,
-          max_classification: s.maxClassificationAllowed
-        };
-      }
+      // OPAL will automatically fetch updated policy-data via regular polling or CDC trigger
+      // If immediate update needed, the trusted_issuers CDC will trigger policy-data refresh
 
-      await opalClient.publishInlineData(
-        'authorized_spokes',
-        authorizedSpokes,
-        `Spoke ${event}: ${spoke.instanceCode}`
-      );
-
-      logger.info('OPAL notified of spoke change', {
+      logger.debug('Spoke status change will be reflected in next policy-data fetch', {
         event,
         spokeId: spoke.spokeId,
-        instanceCode: spoke.instanceCode
+        instanceCode: spoke.instanceCode,
+        hint: 'policy-data endpoint includes spokes list'
       });
     } catch (error) {
-      logger.error('Failed to notify OPAL of spoke change', {
+      logger.error('Failed to process spoke change notification', {
         error: error instanceof Error ? error.message : 'Unknown error',
         event,
         spokeId: spoke.spokeId

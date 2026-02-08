@@ -18,7 +18,8 @@ fi
 
 # Load modules
 source "${DIVE_ROOT}/scripts/dive-modules/common.sh"
-source "${DIVE_ROOT}/scripts/dive-modules/error-recovery.sh"
+source "${DIVE_ROOT}/scripts/dive-modules/orchestration/errors.sh"
+source "${DIVE_ROOT}/scripts/dive-modules/orchestration/circuit-breaker.sh"
 
 # Test configuration
 TESTS_PASSED=0
