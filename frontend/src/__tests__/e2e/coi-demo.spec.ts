@@ -23,7 +23,7 @@ const COI_MEMBERS = {
   "Gamma": []  // Program-specific
 };
 
-test.describe('COI Evaluation Demo - Full OPA Policy Results', () => {
+test.describe('COI Evaluation Demo - Full OPA Policy Results', { tag: '@smoke' }, () => {
 
   test('1. NATO COI Access - USA SECRET user accessing NATO SECRET resource', async ({ page }) => {
     const user = { clearance: "SECRET", countryOfAffiliation: "USA", acpCOI: ["NATO"] };

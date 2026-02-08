@@ -153,7 +153,8 @@ spoke_deploy() {
 #   1 - Failure
 ##
 spoke_up() {
-    local instance_code="${INSTANCE:-usa}"
+    # FIXED (2026-02-08): Accept instance code as $1, fall back to $INSTANCE, default to usa
+    local instance_code="${1:-${INSTANCE:-usa}}"
     local code_lower=$(lower "$instance_code")
     local code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"

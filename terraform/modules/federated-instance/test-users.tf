@@ -71,11 +71,53 @@ locals {
   # Get nation prefix for this instance (default to Atlantic)
   nation_prefix = lookup(local.nation_prefixes, var.instance_code, "Atlantic")
 
+  # Country-specific classification mappings
+  # CRITICAL ARCHITECTURAL FIX (2026-02-08):
+  # Users must store their ACTUAL national classification (e.g., "OFFEN")
+  # not the normalized NATO standard (e.g., "UNCLASSIFIED").
+  #
+  # The backend clearance-mapper.service.ts normalizes country-specific
+  # classifications to standard levels for policy evaluation (SSOT).
+  #
+  # Based on: backend/src/services/clearance-mapper.service.ts (CLEARANCE_EQUIVALENCY_TABLE)
+  national_clearances = {
+    # NATO English-speaking countries
+    USA = ["UNCLASSIFIED", "RESTRICTED", "CONFIDENTIAL", "SECRET", "TOP SECRET"]
+    CAN = ["UNCLASSIFIED", "RESTRICTED", "CONFIDENTIAL", "SECRET", "TOP SECRET"]
+    GBR = ["UNCLASSIFIED", "RESTRICTED", "CONFIDENTIAL", "SECRET", "TOP SECRET"]
+    NZL = ["UNCLASSIFIED", "RESTRICTED", "CONFIDENTIAL", "SECRET", "TOP SECRET"]
+
+    # Germany - Verschlusssache (VS) classification
+    DEU = ["OFFEN", "VS-NUR FÜR DEN DIENSTGEBRAUCH", "VS-VERTRAULICH", "GEHEIM", "STRENG GEHEIM"]
+
+    # France - Classification française
+    FRA = ["NON CLASSIFIÉ", "DIFFUSION RESTREINTE", "CONFIDENTIEL DÉFENSE", "SECRET DÉFENSE", "TRÈS SECRET DÉFENSE"]
+
+    # Italy - Classificazione italiana
+    ITA = ["NON CLASSIFICATO", "RISERVATO", "RISERVATISSIMO", "SEGRETO", "SEGRETISSIMO"]
+
+    # Spain - Clasificación española
+    ESP = ["NO CLASIFICADO", "DIFUSIÓN LIMITADA", "CONFIDENCIAL", "SECRETO", "ALTO SECRETO"]
+
+    # Poland - Klauzule tajności
+    POL = ["NIEJAWNE", "ZASTRZEŻONE", "POUFNE", "TAJNE", "ŚCIŚLE TAJNE"]
+
+    # Netherlands - Nederlandse rubricering
+    NLD = ["NIET-GERUBRICEERD", "DEPARTEMENTAAL VERTROUWELIJK", "CONFIDENTIEEL", "GEHEIM", "ZEER GEHEIM"]
+
+    # Estonia - Eesti salastusastmed
+    EST = ["AVALIK", "PIIRATUD", "KONFIDENTSIAALNE", "SALAJANE", "TÄIESTI SALAJANE"]
+  }
+
+  # Get country-specific clearances for this instance (fallback to NATO standard)
+  instance_clearances = lookup(local.national_clearances, var.instance_code,
+    ["UNCLASSIFIED", "RESTRICTED", "CONFIDENTIAL", "SECRET", "TOP SECRET"])
+
   # Clearance levels mapped to numbers (1=lowest, 5=highest)
-  # UPDATED: Added RESTRICTED as level 2, renumbered others
+  # UPDATED (2026-02-08): Use country-specific classifications
   clearance_levels = {
     "1" = {
-      clearance         = "UNCLASSIFIED"
+      clearance         = local.instance_clearances[0]  # UNCLASSIFIED equivalent
       coi               = []
       display_name      = "Level 1 - Unclassified"
       organization_type = "GOV"
@@ -83,7 +125,7 @@ locals {
       mfa_required      = false
     }
     "2" = {
-      clearance         = "RESTRICTED"
+      clearance         = local.instance_clearances[1]  # RESTRICTED equivalent
       coi               = []
       display_name      = "Level 2 - Restricted"
       organization_type = "GOV"
@@ -91,7 +133,7 @@ locals {
       mfa_required      = false
     }
     "3" = {
-      clearance         = "CONFIDENTIAL"
+      clearance         = local.instance_clearances[2]  # CONFIDENTIAL equivalent
       coi               = []
       display_name      = "Level 3 - Confidential"
       organization_type = "GOV"
@@ -99,7 +141,7 @@ locals {
       mfa_required      = true
     }
     "4" = {
-      clearance         = "SECRET"
+      clearance         = local.instance_clearances[3]  # SECRET equivalent
       coi               = ["NATO"]
       display_name      = "Level 4 - Secret"
       organization_type = "GOV"
@@ -107,7 +149,7 @@ locals {
       mfa_required      = true
     }
     "5" = {
-      clearance         = "TOP_SECRET"
+      clearance         = local.instance_clearances[4]  # TOP SECRET equivalent
       coi               = ["FVEY", "NATO-COSMIC"]
       display_name      = "Level 5 - Top Secret"
       organization_type = "GOV"
@@ -131,26 +173,27 @@ locals {
   # Industry partner test users (ACP-240 Section 4.2)
   # Real company names per country for realistic pilot demos
   # Each country has ONE endorsed industry partner
+  # UPDATED (2026-02-08): Use country-specific clearances
   industry_partners = {
     "USA" = {
       company_name  = "Booz Allen Hamilton"
       company_short = "bah"
       email_domain  = "bah.com"
-      clearance     = "SECRET"
+      clearance     = local.instance_clearances[3]  # SECRET equivalent
       coi           = ["NATO"]
     }
     "DEU" = {
       company_name  = "IABG"
       company_short = "iabg"
       email_domain  = "iabg.de"
-      clearance     = "SECRET"
+      clearance     = local.instance_clearances[3]  # SECRET equivalent (GEHEIM)
       coi           = ["NATO"]
     }
     "FRA" = {
       company_name  = "Thales"
       company_short = "thales"
       email_domain  = "thalesgroup.com"
-      clearance     = "SECRET"
+      clearance     = local.instance_clearances[3]  # SECRET equivalent (SECRET DÉFENSE)
       coi           = ["NATO"]
     }
   }

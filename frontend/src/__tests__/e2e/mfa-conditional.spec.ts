@@ -19,7 +19,7 @@ import { TEST_CONFIG } from './fixtures/test-config';
 import { loginAs, logout } from './helpers/auth';
 import { DashboardPage } from './pages/DashboardPage';
 
-test.describe('MFA Conditional Enforcement (Refactored)', () => {
+test.describe('MFA Conditional Enforcement (Refactored)', { tag: ['@critical', '@flaky'] }, () => {
     // Skip if MFA tests are disabled
     test.skip(!TEST_CONFIG.FEATURES.MFA_TESTS, 'MFA tests disabled in config');
 

@@ -340,7 +340,7 @@ resource "keycloak_user" "backend_service_account" {
   attributes = {
     uniqueID             = "service-account-backend"
     countryOfAffiliation = var.instance_code
-    clearance            = "TOP_SECRET"
+    clearance            = local.instance_clearances[4]  # TOP SECRET equivalent (country-specific)
     clearance_level      = "5"
     acpCOI               = jsonencode(["FVEY", "NATO-COSMIC"])
     organization         = "${var.instance_name} Backend Service"
@@ -1039,8 +1039,8 @@ resource "keycloak_user" "admin_user" {
   attributes = {
     uniqueID             = "admin-${lower(var.instance_code)}"
     countryOfAffiliation = var.instance_code
-    clearance            = "TOP_SECRET"
-    clearance_level      = "5" # Updated for 5-level system
+    clearance            = local.instance_clearances[4]  # TOP SECRET equivalent (country-specific)
+    clearance_level      = "5"                           # Updated for 5-level system
     # Keep admin aligned with L5 users for policy evaluation
     acpCOI           = jsonencode(["FVEY", "NATO-COSMIC"])
     organization     = "${var.instance_name} Admin"

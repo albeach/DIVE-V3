@@ -20,7 +20,7 @@ import { TEST_CONFIG } from './fixtures/test-config';
 import { loginAs, logout } from './helpers/auth';
 import { DashboardPage } from './pages/DashboardPage';
 
-test.describe('IdP Management - Admin Features (Refactored)', () => {
+test.describe('IdP Management - Admin Features (Refactored)', { tag: '@smoke' }, () => {
     test.beforeEach(async ({ page }) => {
         // Login as USA user (may need admin role verification)
         await loginAs(page, TEST_USERS.USA.SECRET);
