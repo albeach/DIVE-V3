@@ -157,6 +157,12 @@ case "$COMMAND" in
         module_secrets "$@"
         ;;
 
+    # Vault commands (vault/module.sh)
+    vault)
+        source "${MODULES_DIR}/vault/module.sh"
+        module_vault "$@"
+        ;;
+
     # Orchestration database commands (orchestration/state.sh)
     orchestration-db|orch-db|odb)
         source "${MODULES_DIR}/orchestration/state.sh"

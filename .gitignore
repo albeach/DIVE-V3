@@ -42,6 +42,10 @@ docs/archive/
 .env.development
 !.env.example
 
+# Vault sensitive files
+.vault-token
+.vault-init.txt
+
 .env.secrets
 .env.secrets.*
 !.env.secrets.example

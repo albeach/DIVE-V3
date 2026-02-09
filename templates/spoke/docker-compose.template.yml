@@ -512,6 +512,12 @@ services:
       # SECURITY: Trust mkcert CA instead of disabling TLS verification
       NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
       PORT: "4000"
+      # Secret management provider (vault or gcp)
+      SECRETS_PROVIDER: ${SECRETS_PROVIDER:-gcp}
+      VAULT_ADDR: ${VAULT_ADDR:-http://dive-hub-vault:8200}
+      VAULT_TOKEN: ${VAULT_TOKEN:-}
+      VAULT_ROLE_ID: ${VAULT_ROLE_ID:-}
+      VAULT_SECRET_ID: ${VAULT_SECRET_ID:-}
       # SSOT ARCHITECTURE (2026-01-22): Backend uses INSTANCE_CODE to query Hub for spokeId
       # No SPOKE_ID environment variable - Hub MongoDB is single source of truth
       INSTANCE_CODE: {{INSTANCE_CODE_UPPER}}

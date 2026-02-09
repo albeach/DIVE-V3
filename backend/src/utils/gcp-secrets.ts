@@ -1,27 +1,35 @@
 /**
- * DIVE V3 - GCP Secret Manager Utility
- * 
- * Provides secure access to secrets stored in GCP Secret Manager.
+ * DIVE V3 - Secret Manager Utility (GCP + Vault)
+ *
+ * Provides secure access to secrets stored in GCP Secret Manager or HashiCorp Vault.
+ *
+ * Provider Selection (SECRETS_PROVIDER env var):
+ *   vault  - Use HashiCorp Vault KV v2 (recommended)
+ *   gcp    - Use GCP Secret Manager (default/legacy)
+ *
  * GCP secrets are used BY DEFAULT when gcloud CLI is authenticated.
- * Falls back to environment variables only if GCP is unavailable.
- * 
+ * Falls back to environment variables only if provider is unavailable.
+ *
  * Secrets naming convention: dive-v3-<type>-<instance>
  * Example: dive-v3-mongodb-usa, dive-v3-mongodb-fra
- * 
+ *
  * Environment Variables:
+ *   SECRETS_PROVIDER=vault - Use HashiCorp Vault
  *   USE_GCP_SECRETS=false  - Explicitly disable GCP (uses env vars only)
  *   USE_GCP_SECRETS=true   - Force GCP (fails if unavailable)
  *   (not set)              - Auto-detect: use GCP if available, else env vars
- * 
- * Date: December 1, 2025
+ *
+ * Date: December 1, 2025 (Updated: February 2026 - Vault integration)
  */
 
 import { logger } from './logger';
+import * as vaultSecrets from './vault-secrets';
 
 // ============================================
 // CONFIGURATION
 // ============================================
 
+const SECRETS_PROVIDER = process.env.SECRETS_PROVIDER || 'gcp';
 const GCP_PROJECT_ID = process.env.GCP_PROJECT_ID || 'dive25';
 const SECRET_PREFIX = 'dive-v3';
 
@@ -209,53 +217,62 @@ export function getSecretName(type: SecretType, instanceCode?: string): string {
  */
 export async function getMongoDBPassword(instanceCode: string): Promise<string> {
     const secretName = getSecretName('mongodb', instanceCode);
-    
+
     // Check cache first
     const cached = getCachedSecret(secretName);
     if (cached) {
         return cached;
     }
-    
+
+    // Try Vault first when configured
+    if (SECRETS_PROVIDER === 'vault') {
+        const vaultSecret = await vaultSecrets.getMongoDBPassword(instanceCode);
+        if (vaultSecret) {
+            setCachedSecret(secretName, vaultSecret);
+            return vaultSecret;
+        }
+    }
+
     // Try GCP Secret Manager (unless explicitly disabled)
-    if (GCP_MODE !== 'disabled') {
+    if (GCP_MODE !== 'disabled' && SECRETS_PROVIDER !== 'vault') {
         const gcpSecret = await fetchFromGCPSecretManager(secretName);
         if (gcpSecret) {
             setCachedSecret(secretName, gcpSecret);
             return gcpSecret;
         }
-        
+
         // Try instance-agnostic secret
         const genericSecret = await fetchFromGCPSecretManager(`${SECRET_PREFIX}-mongodb`);
         if (genericSecret) {
             setCachedSecret(secretName, genericSecret);
             return genericSecret;
         }
-        
+
         // If GCP mode is 'force' and we didn't get a secret, that's an error
         if (GCP_MODE === 'force') {
             throw new Error(`GCP Secret Manager required but secret not found: ${secretName}. Ensure gcloud is authenticated and secret exists.`);
         }
     }
-    
+
     // Fall back to environment variables
-    const envPassword = process.env[`MONGO_PASSWORD_${instanceCode.toUpperCase()}`] 
-        || process.env.MONGO_INITDB_ROOT_PASSWORD 
+    const envPassword = process.env[`MONGO_PASSWORD_${instanceCode.toUpperCase()}`]
+        || process.env.MONGO_INITDB_ROOT_PASSWORD
         || process.env.MONGO_PASSWORD;
-    
+
     if (envPassword) {
         logger.info(`Using MongoDB password from environment variable for ${instanceCode}`);
         setCachedSecret(secretName, envPassword);
         return envPassword;
     }
-    
+
     // NO DEFAULT PASSWORD - this is a security risk
-    // Throw a clear error with instructions
     throw new Error(
         `MongoDB password not found for ${instanceCode}!\n` +
         `Options:\n` +
         `  1. Run: source ./scripts/sync-gcp-secrets.sh (loads from GCP)\n` +
         `  2. Set: export MONGO_PASSWORD=<password>\n` +
-        `  3. Ensure gcloud is authenticated: gcloud auth login`
+        `  3. Ensure gcloud is authenticated: gcloud auth login\n` +
+        `  4. Set SECRETS_PROVIDER=vault and ensure Vault is configured`
     );
 }
 
@@ -266,30 +283,39 @@ export async function getMongoDBPassword(instanceCode: string): Promise<string> 
  */
 export async function getKeycloakPassword(instanceCode?: string): Promise<string> {
     const secretName = getSecretName('keycloak', instanceCode);
-    
+
     const cached = getCachedSecret(secretName);
     if (cached) return cached;
-    
+
+    // Try Vault first when configured
+    if (SECRETS_PROVIDER === 'vault' && instanceCode) {
+        const vaultSecret = await vaultSecrets.getKeycloakPassword(instanceCode);
+        if (vaultSecret) {
+            setCachedSecret(secretName, vaultSecret);
+            return vaultSecret;
+        }
+    }
+
     // Try GCP Secret Manager (unless explicitly disabled)
-    if (GCP_MODE !== 'disabled') {
+    if (GCP_MODE !== 'disabled' && SECRETS_PROVIDER !== 'vault') {
         const gcpSecret = await fetchFromGCPSecretManager(secretName);
         if (gcpSecret) {
             setCachedSecret(secretName, gcpSecret);
             return gcpSecret;
         }
-        
+
         if (GCP_MODE === 'force') {
             throw new Error(`GCP Secret Manager required but secret not found: ${secretName}`);
         }
     }
-    
+
     const envPassword = process.env.KEYCLOAK_ADMIN_PASSWORD || process.env.KC_BOOTSTRAP_ADMIN_PASSWORD;
     if (envPassword) {
         logger.info('Using Keycloak password from environment variable');
         setCachedSecret(secretName, envPassword);
         return envPassword;
     }
-    
+
     throw new Error(
         `Keycloak password not found${instanceCode ? ` for ${instanceCode}` : ''}!\n` +
         `Run: source ./scripts/sync-gcp-secrets.sh or set KEYCLOAK_ADMIN_PASSWORD`
@@ -301,28 +327,37 @@ export async function getKeycloakPassword(instanceCode?: string): Promise<string
  */
 export async function getSecret(type: SecretType, instanceCode?: string): Promise<string | null> {
     const secretName = getSecretName(type, instanceCode);
-    
+
     const cached = getCachedSecret(secretName);
     if (cached) return cached;
-    
+
+    // Try Vault first when configured
+    if (SECRETS_PROVIDER === 'vault') {
+        const vaultSecret = await vaultSecrets.getSecret(type, instanceCode);
+        if (vaultSecret) {
+            setCachedSecret(secretName, vaultSecret);
+            return vaultSecret;
+        }
+    }
+
     // Try GCP Secret Manager (unless explicitly disabled)
-    if (GCP_MODE !== 'disabled') {
+    if (GCP_MODE !== 'disabled' && SECRETS_PROVIDER !== 'vault') {
         const gcpSecret = await fetchFromGCPSecretManager(secretName);
         if (gcpSecret) {
             setCachedSecret(secretName, gcpSecret);
             return gcpSecret;
         }
     }
-    
+
     // Try environment variable
     const envKey = `${type.toUpperCase().replace('-', '_')}${instanceCode ? `_${instanceCode.toUpperCase()}` : ''}`;
     const envValue = process.env[envKey];
-    
+
     if (envValue) {
         setCachedSecret(secretName, envValue);
         return envValue;
     }
-    
+
     return null;
 }
 
@@ -334,32 +369,41 @@ export async function getSecret(type: SecretType, instanceCode?: string): Promis
 export async function getFederationSecret(instance1: string, instance2: string): Promise<string | null> {
     const inst1 = instance1.toLowerCase();
     const inst2 = instance2.toLowerCase();
-    
+
     // Use alphabetical order for consistency (gbr-usa, not usa-gbr)
     const [first, second] = [inst1, inst2].sort();
     const fullSecretName = `${SECRET_PREFIX}-federation-${first}-${second}`;
-    
+
     const cached = getCachedSecret(fullSecretName);
     if (cached) return cached;
-    
+
+    // Try Vault first when configured
+    if (SECRETS_PROVIDER === 'vault') {
+        const vaultSecret = await vaultSecrets.getFederationSecret(instance1, instance2);
+        if (vaultSecret) {
+            setCachedSecret(fullSecretName, vaultSecret);
+            return vaultSecret;
+        }
+    }
+
     // Try GCP Secret Manager (unless explicitly disabled)
-    if (GCP_MODE !== 'disabled') {
+    if (GCP_MODE !== 'disabled' && SECRETS_PROVIDER !== 'vault') {
         const gcpSecret = await fetchFromGCPSecretManager(fullSecretName);
         if (gcpSecret) {
             setCachedSecret(fullSecretName, gcpSecret);
             return gcpSecret;
         }
     }
-    
+
     // Try environment variable (e.g., FEDERATION_GBR_USA)
     const envKey = `FEDERATION_${first.toUpperCase()}_${second.toUpperCase()}`;
     const envValue = process.env[envKey];
-    
+
     if (envValue) {
         setCachedSecret(fullSecretName, envValue);
         return envValue;
     }
-    
+
     return null;
 }
 
@@ -371,26 +415,35 @@ export async function getFederationSecret(instance1: string, instance2: string):
  */
 export async function getKASSigningKey(): Promise<string> {
     const secretName = `${SECRET_PREFIX}-kas-signing-key`;
-    
+
     // Check cache first
     const cached = getCachedSecret(secretName);
     if (cached) {
         return cached;
     }
-    
+
+    // Try Vault first when configured
+    if (SECRETS_PROVIDER === 'vault') {
+        const vaultSecret = await vaultSecrets.getKASSigningKey();
+        if (vaultSecret) {
+            setCachedSecret(secretName, vaultSecret);
+            return vaultSecret;
+        }
+    }
+
     // Try GCP Secret Manager
-    if (GCP_MODE !== 'disabled') {
+    if (GCP_MODE !== 'disabled' && SECRETS_PROVIDER !== 'vault') {
         const gcpSecret = await fetchFromGCPSecretManager(secretName);
         if (gcpSecret) {
             setCachedSecret(secretName, gcpSecret);
             return gcpSecret;
         }
-        
+
         if (GCP_MODE === 'force') {
             throw new Error(`GCP Secret Manager required but secret not found: ${secretName}`);
         }
     }
-    
+
     // Fall back to environment variable
     const envKey = process.env.KAS_SIGNING_KEY;
     if (envKey) {
@@ -398,8 +451,8 @@ export async function getKASSigningKey(): Promise<string> {
         setCachedSecret(secretName, envKey);
         return envKey;
     }
-    
-    throw new Error('KAS signing key not configured. Set KAS_SIGNING_KEY or create GCP secret.');
+
+    throw new Error('KAS signing key not configured. Set KAS_SIGNING_KEY or create GCP/Vault secret.');
 }
 
 /**
@@ -410,26 +463,35 @@ export async function getKASSigningKey(): Promise<string> {
  */
 export async function getKASEncryptionKey(): Promise<string> {
     const secretName = `${SECRET_PREFIX}-kas-encryption-key`;
-    
+
     // Check cache first
     const cached = getCachedSecret(secretName);
     if (cached) {
         return cached;
     }
-    
+
+    // Try Vault first when configured
+    if (SECRETS_PROVIDER === 'vault') {
+        const vaultSecret = await vaultSecrets.getKASEncryptionKey();
+        if (vaultSecret) {
+            setCachedSecret(secretName, vaultSecret);
+            return vaultSecret;
+        }
+    }
+
     // Try GCP Secret Manager
-    if (GCP_MODE !== 'disabled') {
+    if (GCP_MODE !== 'disabled' && SECRETS_PROVIDER !== 'vault') {
         const gcpSecret = await fetchFromGCPSecretManager(secretName);
         if (gcpSecret) {
             setCachedSecret(secretName, gcpSecret);
             return gcpSecret;
         }
-        
+
         if (GCP_MODE === 'force') {
             throw new Error(`GCP Secret Manager required but secret not found: ${secretName}`);
         }
     }
-    
+
     // Fall back to environment variable
     const envKey = process.env.KAS_ENCRYPTION_KEY;
     if (envKey) {
@@ -437,8 +499,8 @@ export async function getKASEncryptionKey(): Promise<string> {
         setCachedSecret(secretName, envKey);
         return envKey;
     }
-    
-    throw new Error('KAS encryption key not configured. Set KAS_ENCRYPTION_KEY or create GCP secret.');
+
+    throw new Error('KAS encryption key not configured. Set KAS_ENCRYPTION_KEY or create GCP/Vault secret.');
 }
 
 /**
@@ -481,11 +543,13 @@ export function clearSecretCache(): void {
 // INITIALIZATION LOGGING
 // ============================================
 
-logger.info('GCP Secret Manager configuration', { 
-    mode: GCP_MODE,
+logger.info('Secret Manager configuration', {
+    provider: SECRETS_PROVIDER,
+    gcpMode: GCP_MODE,
     projectId: GCP_PROJECT_ID,
     secretPrefix: SECRET_PREFIX,
-    description: GCP_MODE === 'force' ? 'GCP required - will fail without secrets' :
+    description: SECRETS_PROVIDER === 'vault' ? 'HashiCorp Vault (primary), env vars (fallback)' :
+                 GCP_MODE === 'force' ? 'GCP required - will fail without secrets' :
                  GCP_MODE === 'disabled' ? 'GCP disabled - using env vars only' :
                  'Auto-detect - GCP if available, else env vars'
 });

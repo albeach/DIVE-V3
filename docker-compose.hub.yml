@@ -95,8 +95,58 @@ volumes:
       dive.resource.type: "volume"
       dive.resource.service: "authzforce"
       dive.resource.purpose: "config"
+  vault_data:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "vault"
+      dive.resource.purpose: "data"
+  vault_config:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "vault"
+      dive.resource.purpose: "config"
+  vault_logs:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "vault"
+      dive.resource.purpose: "logs"
 
 services:
+  # ---------------------------------------------------------------------------
+  # HashiCorp Vault - Secret Management (replaces GCP Secret Manager)
+  # ---------------------------------------------------------------------------
+  vault:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "HashiCorp Vault secret management"
+    image: hashicorp/vault:1.21.0
+    container_name: ${COMPOSE_PROJECT_NAME}-vault
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK  # Prevent memory swapping (security)
+    env_file:
+      - .env.hub
+    environment:
+      VAULT_ADDR: "http://0.0.0.0:8200"
+      VAULT_API_ADDR: "http://dive-hub-vault:8200"
+      VAULT_CLUSTER_ADDR: "http://dive-hub-vault:8201"
+    volumes:
+      - vault_data:/vault/data
+      - vault_logs:/vault/logs
+      - ./vault_config:/vault/config:ro
+    ports:
+      - "127.0.0.1:8200:8200"  # API port (localhost only for security)
+    networks:
+      - hub-internal
+      - dive-shared  # CRITICAL: Allows spoke access
+    command: server
+    healthcheck:
+      test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   # ---------------------------------------------------------------------------
   # PostgreSQL - backing store for Keycloak / NextAuth
   # ---------------------------------------------------------------------------
@@ -381,6 +431,10 @@ services:
       NODE_ENV: development  # Development mode for better debugging
       LOG_LEVEL: warn  # Reduce log verbosity (info/warn/error)
       PORT: "4000"
+      # Secret management provider (vault or gcp)
+      SECRETS_PROVIDER: ${SECRETS_PROVIDER:-gcp}
+      VAULT_ADDR: ${VAULT_ADDR:-http://dive-hub-vault:8200}
+      VAULT_TOKEN: ${VAULT_TOKEN:-}
       # Heap limit only in NODE_OPTIONS (report flags must be in command - Node disallows them in NODE_OPTIONS)
       # --use-openssl-ca: Forces Node.js to load NODE_EXTRA_CA_CERTS (required for mkcert trust)
       NODE_OPTIONS: "--max-old-space-size=4096 --use-openssl-ca"
