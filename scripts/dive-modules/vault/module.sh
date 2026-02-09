@@ -69,7 +69,7 @@ module_vault_init() {
     local status_json
     status_json=$(vault status -format=json 2>/dev/null || true)
     local is_initialized
-    is_initialized=$(echo "$status_json" | grep -o '"initialized":[a-z]*' | cut -d: -f2)
+    is_initialized=$(echo "$status_json" | grep -o '"initialized": *[a-z]*' | sed 's/.*: *//')
 
     if [ "$is_initialized" = "true" ]; then
         log_warn "Vault cluster is already initialized"
@@ -163,7 +163,7 @@ module_vault_unseal() {
     fi
 
     local seal_sealed
-    seal_sealed=$(echo "$seal_status" | grep -o '"sealed":[a-z]*' | cut -d: -f2)
+    seal_sealed=$(echo "$seal_status" | grep -o '"sealed": *[a-z]*' | sed 's/.*: *//')
     if [ "$seal_sealed" = "true" ]; then
         log_error "Seal vault itself is sealed — Transit key unavailable"
         log_info "The seal vault should auto-unseal on restart. Try:"
@@ -1040,6 +1040,14 @@ module_vault_migrate() {
 # Test HA failover: stop leader, verify secret readable from follower, restart
 ##
 module_vault_test_ha_failover() {
+    # Load test framework
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh"
+    else
+        log_error "Testing framework not found"
+        return 1
+    fi
+
     test_suite_start "Vault HA Failover"
 
     if [ ! -f "$VAULT_TOKEN_FILE" ]; then
@@ -1051,24 +1059,24 @@ module_vault_test_ha_failover() {
     export VAULT_TOKEN
 
     # Test 1: Write a test secret
-    test_case_start "Write test secret"
+    test_start "Write test secret"
     local test_key="ha-failover-test-$(date +%s)"
     if vault kv put dive-v3/core/ha-test value="$test_key" >/dev/null 2>&1; then
-        test_case_pass "Test secret written"
+        test_pass
     else
-        test_case_fail "Failed to write test secret"
+        test_fail "Failed to write test secret"
         test_suite_end
         return 1
     fi
 
     # Test 2: Identify and stop leader
-    test_case_start "Stop leader node"
+    test_start "Stop leader node"
     local leader_container=""
     for port in 8200 8202 8204; do
         local is_self
         is_self=$(VAULT_ADDR="http://localhost:$port" VAULT_TOKEN="$VAULT_TOKEN" \
             vault read -format=json sys/leader 2>/dev/null | \
-            grep -o '"is_self":[a-z]*' | cut -d: -f2 || echo "false")
+            grep -o '"is_self": *[a-z]*' | sed 's/.*: *//' || echo "false")
         if [ "$is_self" = "true" ]; then
             case $port in
                 8200) leader_container="${COMPOSE_PROJECT_NAME:-dive-hub}-vault-1" ;;
@@ -1080,16 +1088,16 @@ module_vault_test_ha_failover() {
     done
 
     if [ -z "$leader_container" ]; then
-        test_case_fail "Could not identify leader"
+        test_fail "Could not identify leader"
         test_suite_end
         return 1
     fi
 
     docker stop "$leader_container" >/dev/null 2>&1
-    test_case_pass "Stopped leader: $leader_container"
+    test_pass
 
     # Test 3: Wait for re-election and verify read from follower
-    test_case_start "Read secret after leader loss"
+    test_start "Read secret after leader loss"
     sleep 10  # Wait for Raft re-election
 
     local read_success=false
@@ -1104,32 +1112,32 @@ module_vault_test_ha_failover() {
     done
 
     if [ "$read_success" = true ]; then
-        test_case_pass "Secret readable from surviving node"
+        test_pass
     else
-        test_case_fail "Could not read secret from any surviving node"
+        test_fail "Could not read secret from any surviving node"
     fi
 
     # Test 4: Restart stopped leader
-    test_case_start "Restart stopped node"
+    test_start "Restart stopped node"
     docker start "$leader_container" >/dev/null 2>&1
     sleep 10
 
     if docker ps --format '{{.Names}}' | grep -q "$leader_container"; then
-        test_case_pass "Node restarted: $leader_container"
+        test_pass
     else
-        test_case_fail "Node failed to restart"
+        test_fail "Node failed to restart"
     fi
 
     # Test 5: Verify cluster reforms (3 peers)
-    test_case_start "Verify 3-peer cluster"
+    test_start "Verify 3-peer cluster"
     local peer_count
     peer_count=$(vault operator raft list-peers -format=json 2>/dev/null | \
         grep -c '"node_id"' || echo "0")
 
     if [ "$peer_count" -ge 3 ]; then
-        test_case_pass "Cluster healthy with $peer_count peers"
+        test_pass
     else
-        test_case_warn "Only $peer_count peers (may still be rejoining)"
+        test_skip "Only $peer_count peers (may still be rejoining)"
     fi
 
     # Cleanup
@@ -1142,44 +1150,52 @@ module_vault_test_ha_failover() {
 # Test seal vault restart: verify cluster stays unsealed when seal vault restarts
 ##
 module_vault_test_seal_restart() {
+    # Load test framework
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh"
+    else
+        log_error "Testing framework not found"
+        return 1
+    fi
+
     test_suite_start "Vault Seal Restart Resilience"
 
     local seal_container="${COMPOSE_PROJECT_NAME:-dive-hub}-vault-seal"
 
     # Test 1: Stop seal vault
-    test_case_start "Stop seal vault"
+    test_start "Stop seal vault"
     docker stop "$seal_container" >/dev/null 2>&1
-    test_case_pass "Seal vault stopped"
+    test_pass
 
     # Test 2: Verify cluster nodes stay unsealed
-    test_case_start "Cluster stays unsealed without seal vault"
+    test_start "Cluster stays unsealed without seal vault"
     sleep 3
     if vault status 2>/dev/null | grep -q "Sealed.*false"; then
-        test_case_pass "Cluster nodes remain unsealed (cached key)"
+        test_pass
     else
-        test_case_fail "Cluster became sealed"
+        test_fail "Cluster became sealed"
     fi
 
     # Test 3: Restart seal vault
-    test_case_start "Restart seal vault"
+    test_start "Restart seal vault"
     docker start "$seal_container" >/dev/null 2>&1
     sleep 10
     if docker compose -f docker-compose.hub.yml ps vault-seal 2>/dev/null | grep -q "healthy"; then
-        test_case_pass "Seal vault healthy"
+        test_pass
     else
-        test_case_warn "Seal vault may still be starting"
+        test_skip "Seal vault may still be starting"
     fi
 
     # Test 4: Restart a cluster node — verify it auto-unseals
-    test_case_start "Restart vault-1, verify auto-unseal"
+    test_start "Restart vault-1, verify auto-unseal"
     local node_container="${COMPOSE_PROJECT_NAME:-dive-hub}-vault-1"
     docker restart "$node_container" >/dev/null 2>&1
     sleep 15
 
     if VAULT_ADDR="http://localhost:8200" vault status 2>/dev/null | grep -q "Sealed.*false"; then
-        test_case_pass "vault-1 auto-unsealed after restart"
+        test_pass
     else
-        test_case_fail "vault-1 did not auto-unseal"
+        test_fail "vault-1 did not auto-unseal"
     fi
 
     test_suite_end
@@ -1189,6 +1205,14 @@ module_vault_test_seal_restart() {
 # Test full cluster restart: stop everything, restart in order, verify data intact
 ##
 module_vault_test_full_restart() {
+    # Load test framework
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh"
+    else
+        log_error "Testing framework not found"
+        return 1
+    fi
+
     test_suite_start "Vault Full Cluster Restart"
 
     if [ ! -f "$VAULT_TOKEN_FILE" ]; then
@@ -1202,58 +1226,58 @@ module_vault_test_full_restart() {
     local seal_container="${COMPOSE_PROJECT_NAME:-dive-hub}-vault-seal"
 
     # Test 1: Write a canary secret
-    test_case_start "Write canary secret"
+    test_start "Write canary secret"
     local canary="full-restart-$(date +%s)"
     if vault kv put dive-v3/core/restart-test value="$canary" >/dev/null 2>&1; then
-        test_case_pass "Canary written"
+        test_pass
     else
-        test_case_fail "Failed to write canary"
+        test_fail "Failed to write canary"
         test_suite_end
         return 1
     fi
 
     # Test 2: Stop all 4 vault containers
-    test_case_start "Stop all vault containers"
+    test_start "Stop all vault containers"
     docker stop "${COMPOSE_PROJECT_NAME:-dive-hub}-vault-3" \
         "${COMPOSE_PROJECT_NAME:-dive-hub}-vault-2" \
         "${COMPOSE_PROJECT_NAME:-dive-hub}-vault-1" \
         "$seal_container" >/dev/null 2>&1
-    test_case_pass "All containers stopped"
+    test_pass
 
     # Test 3: Restart in correct order
-    test_case_start "Restart seal vault first"
+    test_start "Restart seal vault first"
     docker start "$seal_container" >/dev/null 2>&1
     sleep 10
     if docker ps --format '{{.Names}}' | grep -q "$seal_container"; then
-        test_case_pass "Seal vault started"
+        test_pass
     else
-        test_case_fail "Seal vault failed to start"
+        test_fail "Seal vault failed to start"
         test_suite_end
         return 1
     fi
 
-    test_case_start "Restart cluster nodes"
+    test_start "Restart cluster nodes"
     docker start "${COMPOSE_PROJECT_NAME:-dive-hub}-vault-1" \
         "${COMPOSE_PROJECT_NAME:-dive-hub}-vault-2" \
         "${COMPOSE_PROJECT_NAME:-dive-hub}-vault-3" >/dev/null 2>&1
     sleep 20  # Wait for auto-unseal + Raft election
 
     if vault status 2>/dev/null | grep -q "Sealed.*false"; then
-        test_case_pass "Cluster auto-unsealed and operational"
+        test_pass
     else
-        test_case_fail "Cluster did not auto-unseal"
+        test_fail "Cluster did not auto-unseal"
         test_suite_end
         return 1
     fi
 
     # Test 4: Verify canary secret
-    test_case_start "Verify canary secret after restart"
+    test_start "Verify canary secret after restart"
     local read_val
     read_val=$(vault kv get -field=value dive-v3/core/restart-test 2>/dev/null || true)
     if [ "$read_val" = "$canary" ]; then
-        test_case_pass "Data intact after full restart"
+        test_pass
     else
-        test_case_fail "Canary mismatch: expected '$canary', got '$read_val'"
+        test_fail "Canary mismatch: expected '$canary', got '$read_val'"
     fi
 
     # Cleanup

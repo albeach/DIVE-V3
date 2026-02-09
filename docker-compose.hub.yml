@@ -160,8 +160,7 @@ services:
     command:
       - -c
       - |
-        chown -R vault:vault /vault/data
-        chmod +x /vault/config/entrypoint.sh
+        chown -R vault:vault /vault/data /vault/transit
         exec su-exec vault /bin/sh /vault/config/entrypoint.sh
     healthcheck:
       test: ["CMD", "sh", "-c", "vault status -address=http://127.0.0.1:8200 2>/dev/null; test $? -ne 1"]
@@ -238,6 +237,7 @@ services:
       SKIP_CHOWN: "true"
     volumes:
       - vault_data_2:/vault/data
+      - vault_logs:/vault/logs
       - vault_transit_token:/vault/transit:ro
       - ./vault_config/node2:/vault/config:ro
     ports:
@@ -252,7 +252,7 @@ services:
     command:
       - -c
       - |
-        chown -R vault:vault /vault/data
+        chown -R vault:vault /vault/data /vault/logs
         if [ -f /vault/transit/.transit-token ]; then
           export VAULT_TRANSIT_SEAL_TOKEN=$(cat /vault/transit/.transit-token)
         fi
@@ -283,6 +283,7 @@ services:
       SKIP_CHOWN: "true"
     volumes:
       - vault_data_3:/vault/data
+      - vault_logs:/vault/logs
       - vault_transit_token:/vault/transit:ro
       - ./vault_config/node3:/vault/config:ro
     ports:
@@ -297,7 +298,7 @@ services:
     command:
       - -c
       - |
-        chown -R vault:vault /vault/data
+        chown -R vault:vault /vault/data /vault/logs
         if [ -f /vault/transit/.transit-token ]; then
           export VAULT_TRANSIT_SEAL_TOKEN=$(cat /vault/transit/.transit-token)
         fi

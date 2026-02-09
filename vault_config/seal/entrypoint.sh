@@ -27,12 +27,11 @@ log() {
 wait_for_vault() {
   local max_attempts=30
   local attempt=0
+  local exit_code=0
   while [ $attempt -lt $max_attempts ]; do
     # vault status returns: 0=unsealed, 1=error, 2=sealed (but responding)
-    if vault status -format=json >/dev/null 2>&1; then
-      return 0
-    fi
-    local exit_code=$?
+    vault status -format=json >/dev/null 2>&1 && return 0
+    exit_code=$?
     # Exit code 2 means sealed but responding — good enough
     if [ "$exit_code" = "2" ]; then
       return 0
@@ -49,10 +48,14 @@ initialize_vault() {
   local init_output
   init_output=$(vault operator init -key-shares=1 -key-threshold=1 -format=json)
 
+  # Collapse multi-line JSON to single line for sed parsing
+  local init_oneline
+  init_oneline=$(echo "$init_output" | tr -d '\n')
+
   local unseal_key
-  unseal_key=$(echo "$init_output" | sed -n 's/.*"unseal_keys_b64":\["\([^"]*\)".*/\1/p')
+  unseal_key=$(echo "$init_oneline" | sed -n 's/.*"unseal_keys_b64": *\[ *"\([^"]*\)".*/\1/p')
   local root_token
-  root_token=$(echo "$init_output" | sed -n 's/.*"root_token":"\([^"]*\)".*/\1/p')
+  root_token=$(echo "$init_oneline" | sed -n 's/.*"root_token": *"\([^"]*\)".*/\1/p')
 
   if [ -z "$unseal_key" ] || [ -z "$root_token" ]; then
     log "ERROR: Failed to parse init output"
@@ -104,8 +107,11 @@ setup_transit() {
 
     local token_output
     token_output=$(vault token create -policy=autounseal -orphan -period=768h -format=json)
+    # Collapse multi-line JSON to single line for sed parsing
+    local token_oneline
+    token_oneline=$(echo "$token_output" | tr -d '\n')
     local transit_token
-    transit_token=$(echo "$token_output" | sed -n 's/.*"client_token":"\([^"]*\)".*/\1/p')
+    transit_token=$(echo "$token_oneline" | sed -n 's/.*"client_token": *"\([^"]*\)".*/\1/p')
 
     echo "$transit_token" > "$TRANSIT_TOKEN_FILE"
     chmod 600 "$TRANSIT_TOKEN_FILE"
@@ -130,8 +136,8 @@ wait_for_vault
 
 # Determine state
 vault_status=$(vault status -format=json 2>/dev/null || true)
-is_initialized=$(echo "$vault_status" | sed -n 's/.*"initialized":\(true\|false\).*/\1/p')
-is_sealed=$(echo "$vault_status" | sed -n 's/.*"sealed":\(true\|false\).*/\1/p')
+is_initialized=$(echo "$vault_status" | sed -n 's/.*"initialized": *\(true\|false\).*/\1/p')
+is_sealed=$(echo "$vault_status" | sed -n 's/.*"sealed": *\(true\|false\).*/\1/p')
 
 if [ "$is_initialized" = "false" ]; then
   # First run: initialize + unseal + setup Transit
