@@ -62,6 +62,7 @@ async function checkVaultAvailability(): Promise<boolean> {
         const response = await fetch(`${VAULT_ADDR}/v1/sys/health`, {
             headers: { 'X-Vault-Token': VAULT_TOKEN },
             signal: AbortSignal.timeout(5000),
+            redirect: 'follow', // HA: follow standby → leader 307 redirects
         });
 
         vaultAvailable = response.ok;
@@ -104,6 +105,7 @@ export async function fetchFromVault(
         const response = await fetch(apiPath, {
             headers: { 'X-Vault-Token': VAULT_TOKEN },
             signal: AbortSignal.timeout(10000),
+            redirect: 'follow', // HA: follow standby → leader 307 redirects
         });
 
         if (!response.ok) {

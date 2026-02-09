@@ -95,16 +95,31 @@ volumes:
       dive.resource.type: "volume"
       dive.resource.service: "authzforce"
       dive.resource.purpose: "config"
-  vault_data:
+  vault_seal_data:
     labels:
       dive.resource.type: "volume"
-      dive.resource.service: "vault"
+      dive.resource.service: "vault-seal"
       dive.resource.purpose: "data"
-  vault_config:
+  vault_data_1:
     labels:
       dive.resource.type: "volume"
-      dive.resource.service: "vault"
-      dive.resource.purpose: "config"
+      dive.resource.service: "vault-1"
+      dive.resource.purpose: "data"
+  vault_data_2:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "vault-2"
+      dive.resource.purpose: "data"
+  vault_data_3:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "vault-3"
+      dive.resource.purpose: "data"
+  vault_transit_token:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "vault-seal"
+      dive.resource.purpose: "transit-token-share"
   vault_logs:
     labels:
       dive.resource.type: "volume"
@@ -113,45 +128,187 @@ volumes:
 
 services:
   # ---------------------------------------------------------------------------
-  # HashiCorp Vault - Secret Management (replaces GCP Secret Manager)
+  # HashiCorp Vault HA Cluster — Transit Auto-Unseal + 3-Node Raft
   # ---------------------------------------------------------------------------
-  vault:
+  # Architecture:
+  #   vault-seal  → Lightweight file-backed vault, hosts Transit engine
+  #   vault-1/2/3 → 3-node Raft cluster, auto-unseal via Transit
+  #   vault-1 has network alias "dive-hub-vault" for backward compatibility
+  # ---------------------------------------------------------------------------
+
+  # Seal Vault — Transit engine for auto-unseal (no application secrets)
+  vault-seal:
     labels:
-      dive.service.class: "core"
-      dive.service.description: "HashiCorp Vault secret management"
+      dive.service.class: "infrastructure"
+      dive.service.description: "Vault Transit seal for auto-unseal"
     image: hashicorp/vault:1.21.0
-    container_name: ${COMPOSE_PROJECT_NAME}-vault
+    container_name: ${COMPOSE_PROJECT_NAME}-vault-seal
     restart: unless-stopped
     cap_add:
-      - IPC_LOCK  # Prevent memory swapping (security)
+      - IPC_LOCK
+    environment:
+      VAULT_ADDR: "http://127.0.0.1:8200"
+    volumes:
+      - vault_seal_data:/vault/data
+      - vault_transit_token:/vault/transit  # Shared: cluster nodes read token from here
+      - ./vault_config/seal:/vault/config:ro
+    ports:
+      - "127.0.0.1:8210:8200"  # Debug/admin access only
+    networks:
+      - hub-internal
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        chown -R vault:vault /vault/data /vault/transit
+        exec su-exec vault /bin/sh /vault/config/entrypoint.sh
+    healthcheck:
+      test: ["CMD", "sh", "-c", "vault status -address=http://127.0.0.1:8200 2>/dev/null; test $? -ne 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  # Vault Node 1 — Primary entry point (alias: dive-hub-vault)
+  vault-1:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Vault HA node 1 (primary entry)"
+    image: hashicorp/vault:1.21.0
+    container_name: ${COMPOSE_PROJECT_NAME}-vault-1
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
     env_file:
       - .env.hub
     environment:
       VAULT_ADDR: "http://0.0.0.0:8200"
-      VAULT_API_ADDR: "http://dive-hub-vault:8200"
-      VAULT_CLUSTER_ADDR: "http://dive-hub-vault:8201"
-      SKIP_CHOWN: "true"  # Config is read-only mount, skip chown attempt
+      VAULT_API_ADDR: "http://vault-1:8200"
+      VAULT_CLUSTER_ADDR: "http://vault-1:8201"
+      SKIP_CHOWN: "true"
     volumes:
-      - vault_data:/vault/data
+      - vault_data_1:/vault/data
       - vault_logs:/vault/logs
-      - ./vault_config:/vault/config:ro
+      - vault_transit_token:/vault/transit:ro  # Read transit token from seal vault
+      - ./vault_config/node1:/vault/config:ro
     ports:
-      - "127.0.0.1:8200:8200"  # API port (localhost only for security)
+      - "127.0.0.1:8200:8200"  # Primary API port (backward compatible)
     networks:
-      - hub-internal
-      - dive-shared  # CRITICAL: Allows spoke access
+      hub-internal:
+      dive-shared:
+        aliases:
+          - dive-hub-vault  # Backward-compatible DNS for all existing clients
+    depends_on:
+      vault-seal:
+        condition: service_healthy
     entrypoint: /bin/sh
     command:
       - -c
       - |
         chown -R vault:vault /vault/data /vault/logs
+        # Read Transit auto-unseal token from shared volume
+        if [ -f /vault/transit/.transit-token ]; then
+          export VAULT_TRANSIT_SEAL_TOKEN=$(cat /vault/transit/.transit-token)
+        fi
         exec su-exec vault vault server -config=/vault/config
     healthcheck:
-      test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
+      test: ["CMD", "sh", "-c", "vault status -address=http://127.0.0.1:8200 2>/dev/null; test $? -ne 1"]
       interval: 10s
       timeout: 5s
       retries: 3
-      start_period: 10s
+      start_period: 15s
+
+  # Vault Node 2 — HA follower
+  vault-2:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Vault HA node 2 (follower)"
+    image: hashicorp/vault:1.21.0
+    container_name: ${COMPOSE_PROJECT_NAME}-vault-2
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    env_file:
+      - .env.hub
+    environment:
+      VAULT_ADDR: "http://0.0.0.0:8200"
+      VAULT_API_ADDR: "http://vault-2:8200"
+      VAULT_CLUSTER_ADDR: "http://vault-2:8201"
+      SKIP_CHOWN: "true"
+    volumes:
+      - vault_data_2:/vault/data
+      - vault_logs:/vault/logs
+      - vault_transit_token:/vault/transit:ro
+      - ./vault_config/node2:/vault/config:ro
+    ports:
+      - "127.0.0.1:8202:8200"  # Debug access
+    networks:
+      - hub-internal
+      - dive-shared
+    depends_on:
+      vault-seal:
+        condition: service_healthy
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        chown -R vault:vault /vault/data /vault/logs
+        if [ -f /vault/transit/.transit-token ]; then
+          export VAULT_TRANSIT_SEAL_TOKEN=$(cat /vault/transit/.transit-token)
+        fi
+        exec su-exec vault vault server -config=/vault/config
+    healthcheck:
+      test: ["CMD", "sh", "-c", "vault status -address=http://127.0.0.1:8200 2>/dev/null; test $? -ne 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # Vault Node 3 — HA follower
+  vault-3:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "Vault HA node 3 (follower)"
+    image: hashicorp/vault:1.21.0
+    container_name: ${COMPOSE_PROJECT_NAME}-vault-3
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    env_file:
+      - .env.hub
+    environment:
+      VAULT_ADDR: "http://0.0.0.0:8200"
+      VAULT_API_ADDR: "http://vault-3:8200"
+      VAULT_CLUSTER_ADDR: "http://vault-3:8201"
+      SKIP_CHOWN: "true"
+    volumes:
+      - vault_data_3:/vault/data
+      - vault_logs:/vault/logs
+      - vault_transit_token:/vault/transit:ro
+      - ./vault_config/node3:/vault/config:ro
+    ports:
+      - "127.0.0.1:8204:8200"  # Debug access
+    networks:
+      - hub-internal
+      - dive-shared
+    depends_on:
+      vault-seal:
+        condition: service_healthy
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        chown -R vault:vault /vault/data /vault/logs
+        if [ -f /vault/transit/.transit-token ]; then
+          export VAULT_TRANSIT_SEAL_TOKEN=$(cat /vault/transit/.transit-token)
+        fi
+        exec su-exec vault vault server -config=/vault/config
+    healthcheck:
+      test: ["CMD", "sh", "-c", "vault status -address=http://127.0.0.1:8200 2>/dev/null; test $? -ne 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
 
   # ---------------------------------------------------------------------------
   # PostgreSQL - backing store for Keycloak / NextAuth
