@@ -2521,12 +2521,12 @@ hub_configure_keycloak() {
             fi
 
             # Export Terraform variables
-            export TF_VAR_keycloak_admin_password="${KC_ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD_USA:-${KEYCLOAK_ADMIN_PASSWORD}}}"
-            export TF_VAR_client_secret="${KEYCLOAK_CLIENT_SECRET}"
-            export TF_VAR_test_user_password="${TEST_USER_PASSWORD:-${KC_ADMIN_PASSWORD}}"
-            export TF_VAR_admin_user_password="${ADMIN_PASSWORD:-${KC_ADMIN_PASSWORD}}"
+            export TF_VAR_keycloak_admin_password="${KC_ADMIN_PASSWORD_USA:-${KEYCLOAK_ADMIN_PASSWORD_USA:-${KEYCLOAK_ADMIN_PASSWORD:-}}}"
+            export TF_VAR_client_secret="${KEYCLOAK_CLIENT_SECRET_USA:-${KEYCLOAK_CLIENT_SECRET:-}}"
+            export TF_VAR_test_user_password="${TEST_USER_PASSWORD:-${KC_ADMIN_PASSWORD_USA:-${KEYCLOAK_ADMIN_PASSWORD:-}}}"
+            export TF_VAR_admin_user_password="${ADMIN_PASSWORD:-${KC_ADMIN_PASSWORD_USA:-${KEYCLOAK_ADMIN_PASSWORD:-}}}"
             export KEYCLOAK_USER="admin"
-            export KEYCLOAK_PASSWORD="${KC_ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD_USA}}"
+            export KEYCLOAK_PASSWORD="${KC_ADMIN_PASSWORD_USA:-${KEYCLOAK_ADMIN_PASSWORD_USA:-}}"
 
             # Verify variables set
             if [ -z "$TF_VAR_keycloak_admin_password" ] || [ -z "$TF_VAR_client_secret" ]; then
