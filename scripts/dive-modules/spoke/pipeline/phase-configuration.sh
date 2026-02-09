@@ -212,24 +212,30 @@ spoke_phase_configuration() {
         fi
     fi
 
-    # Step 2: Federation setup (CRITICAL - required for SSO)
-    if ! spoke_config_setup_federation "$instance_code" "$pipeline_mode"; then
-        log_error "CRITICAL: Federation setup failed - SSO will not work"
-        log_error "To retry: ./dive federation link $code_upper"
-        return 1
-    fi
-
-    # NOTE: Federation client scopes are now configured in Terraform
-    # terraform/modules/federated-instance/main.tf: keycloak_openid_client_default_scopes.incoming_federation_defaults
-    # This ensures dive-v3-broker-usa clients have uniqueID, countryOfAffiliation, clearance, acpCOI scopes
-
-    # Step 2.5: Register in Federation and KAS registries (CRITICAL - required for heartbeat)
+    # Step 2: Register in Federation and KAS registries (CRITICAL - required for heartbeat)
+    # NOTE (2026-02-09): Moved BEFORE federation setup to eliminate race condition.
+    # Hub API auto-approval triggers createBidirectionalFederation() which creates IdP links.
+    # Running this first avoids conflict with CLI federation setup (Step 2.5) creating
+    # the same links and causing invalid_grant errors from Keycloak processing overlap.
     if [ "$pipeline_mode" = "deploy" ]; then
         if ! spoke_config_register_in_registries "$instance_code"; then
             log_error "CRITICAL: Registry registration failed - spoke heartbeat will not work"
             log_error "To retry: ./dive spoke register $code_upper"
             return 1
         fi
+    fi
+
+    # NOTE: Federation client scopes are now configured in Terraform
+    # terraform/modules/federated-instance/main.tf: keycloak_openid_client_default_scopes.incoming_federation_defaults
+    # This ensures dive-v3-broker-usa clients have uniqueID, countryOfAffiliation, clearance, acpCOI scopes
+
+    # Step 2.5: Federation setup (CRITICAL - required for SSO)
+    # This runs AFTER registration so Hub API has already attempted bidirectional IdP creation.
+    # spoke_federation_setup() is idempotent and will skip links that already exist.
+    if ! spoke_config_setup_federation "$instance_code" "$pipeline_mode"; then
+        log_error "CRITICAL: Federation setup failed - SSO will not work"
+        log_error "To retry: ./dive federation link $code_upper"
+        return 1
     fi
 
     # ==========================================================================

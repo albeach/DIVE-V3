@@ -473,9 +473,29 @@ spoke_pipeline_run_phase() {
                 orch_db_record_step "$instance_code" "$phase_name" "FAILED" "Phase execution returned error (exit: $phase_exit)"
             fi
 
-            # Attempt rollback if enabled
+            # FIX (2026-02-09): Only rollback on early-phase failures where containers
+            # and Terraform are inconsistent. For CONFIGURATION/SEEDING/VERIFICATION
+            # failures, the infrastructure is intact — destructive rollback just wastes
+            # 5-10 minutes forcing a complete re-deploy from scratch.
             if [ "${SPOKE_PIPELINE_AUTO_ROLLBACK:-true}" = "true" ]; then
-                spoke_pipeline_rollback "$instance_code" "$phase_name"
+                case "$phase_name" in
+                    PREFLIGHT|INITIALIZATION|DEPLOYMENT)
+                        # Early phases: infrastructure may be in bad state, full rollback
+                        spoke_pipeline_rollback "$instance_code" "$phase_name"
+                        ;;
+                    CONFIGURATION|SEEDING|VERIFICATION)
+                        # Late phases: containers/Terraform are fine, just log and let user retry
+                        log_warn "Skipping destructive rollback for $phase_name failure"
+                        log_warn "Infrastructure is intact — retry with: ./dive spoke deploy $instance_code"
+                        # Clear only the failed phase checkpoint so it re-runs on retry
+                        if type spoke_phase_clear &>/dev/null; then
+                            spoke_phase_clear "$instance_code" "$phase_name" 2>/dev/null || true
+                        fi
+                        ;;
+                    *)
+                        spoke_pipeline_rollback "$instance_code" "$phase_name"
+                        ;;
+                esac
             fi
 
             return 1
