@@ -43,12 +43,21 @@ export default defineConfig({
         // Local: Accept self-signed certs (mkcert), GitHub Actions: Require valid certs
         // Uses GITHUB_ACTIONS instead of CI to avoid blocking local dev when CI=1 is set
         ignoreHTTPSErrors: !process.env.GITHUB_ACTIONS,
-        // Browser flags to handle self-signed certificates
+        // Browser flags to handle self-signed certificates and cookie policies
         launchOptions: {
             args: [
                 '--ignore-certificate-errors',
                 '--allow-insecure-localhost',
+                // CRITICAL FIX (2026-02-09): Allow PKCE cookies to survive OAuth redirects
+                '--disable-features=CookiesWithoutSameSiteMustBeSecure',
+                '--disable-features=SameSiteByDefaultCookies',
+                // Prevent third-party cookie blocking that affects OAuth flows
+                '--disable-blink-features=AutomationControlled',
             ]
+        },
+        // Ensure cookies persist across navigations (PKCE flow requirement)
+        contextOptions: {
+            serviceWorkers: 'allow',
         },
     },
 
