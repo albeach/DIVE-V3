@@ -64,62 +64,62 @@ verification_run_all() {
     local total=0
 
     # Container existence check
-    ((total++))
+    total=$((total + 1))
     if verification_check_containers "$container_prefix"; then
-        ((passed++))
+        passed=$((passed + 1))
         log_success "Container existence: PASS"
     else
-        ((failed++))
+        failed=$((failed + 1))
         log_error "Container existence: FAIL"
     fi
 
     # Container health check
-    ((total++))
+    total=$((total + 1))
     if verification_check_health "$container_prefix"; then
-        ((passed++))
+        passed=$((passed + 1))
         log_success "Container health: PASS"
     else
-        ((failed++))
+        failed=$((failed + 1))
         log_error "Container health: FAIL"
     fi
 
     # Keycloak accessibility check
-    ((total++))
+    total=$((total + 1))
     if verification_check_keycloak "$deployment_type" "$instance_code"; then
-        ((passed++))
+        passed=$((passed + 1))
         log_success "Keycloak accessibility: PASS"
     else
-        ((failed++))
+        failed=$((failed + 1))
         log_error "Keycloak accessibility: FAIL"
     fi
 
     # Backend health check
-    ((total++))
+    total=$((total + 1))
     if verification_check_backend "$deployment_type" "$instance_code"; then
-        ((passed++))
+        passed=$((passed + 1))
         log_success "Backend health: PASS"
     else
-        ((failed++))
+        failed=$((failed + 1))
         log_error "Backend health: FAIL"
     fi
 
     # Frontend accessibility check
-    ((total++))
+    total=$((total + 1))
     if verification_check_frontend "$deployment_type" "$instance_code"; then
-        ((passed++))
+        passed=$((passed + 1))
         log_success "Frontend accessibility: PASS"
     else
-        ((failed++))
+        failed=$((failed + 1))
         log_error "Frontend accessibility: FAIL"
     fi
 
     # Database connectivity check
-    ((total++))
+    total=$((total + 1))
     if verification_check_database "$container_prefix"; then
-        ((passed++))
+        passed=$((passed + 1))
         log_success "Database connectivity: PASS"
     else
-        ((failed++))
+        failed=$((failed + 1))
         log_error "Database connectivity: FAIL"
     fi
 
@@ -148,7 +148,7 @@ verification_check_containers() {
     for container in "${expected_containers[@]}"; do
         if ! docker ps --format '{{.Names}}' | grep -q "^${container_prefix}-${container}$"; then
             log_verbose "Container missing: ${container_prefix}-${container}"
-            ((missing++))
+            missing=$((missing + 1))
         fi
     done
 
@@ -169,7 +169,7 @@ verification_check_health() {
 
         if [ "$health" = "unhealthy" ]; then
             log_verbose "Container unhealthy: $container"
-            ((unhealthy++))
+            unhealthy=$((unhealthy + 1))
         fi
     done
 
@@ -218,8 +218,8 @@ verification_check_backend() {
         be_port="${SPOKE_BACKEND_PORT:-4000}"
     fi
 
-    # Check health endpoint
-    if curl -sf "http://localhost:${be_port}/health" >/dev/null 2>&1; then
+    # Check health endpoint (HTTPS + /api/health)
+    if curl -skf "https://localhost:${be_port}/api/health" --max-time 5 >/dev/null 2>&1; then
         return 0
     fi
 
@@ -243,8 +243,8 @@ verification_check_frontend() {
         fe_port="${SPOKE_FRONTEND_PORT:-3000}"
     fi
 
-    # Check frontend responds
-    if curl -sf "http://localhost:${fe_port}" >/dev/null 2>&1; then
+    # Check frontend responds (HTTPS)
+    if curl -skf "https://localhost:${fe_port}" --max-time 5 >/dev/null 2>&1; then
         return 0
     fi
 
@@ -329,7 +329,7 @@ verification_check_redis() {
 verification_check_opa() {
     local opa_port="${1:-8181}"
 
-    if curl -sf "http://localhost:${opa_port}/health" --max-time 5 >/dev/null 2>&1; then
+    if curl -skf "https://localhost:${opa_port}/health" --max-time 5 >/dev/null 2>&1; then
         return 0
     fi
 
