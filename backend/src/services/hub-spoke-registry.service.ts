@@ -805,33 +805,31 @@ class HubSpokeRegistryService extends EventEmitter {
       } catch (error) {
         const errorMessage = error instanceof Error ? error.message : 'Unknown error';
 
-        // BIDIRECTIONAL FEDERATION IS REQUIRED - any failure is critical
-        logger.error('CRITICAL: Bidirectional federation failed - suspending spoke', {
+        // FIX (2026-02-09): Don't suspend on federation failure during auto-approval.
+        // Root cause: CLI spoke pipeline runs its own federation setup (spoke_federation_setup)
+        // which may race with this Hub API call, causing transient invalid_grant errors.
+        // The CLI will create/verify federation links as a follow-up step.
+        // Suspending here revokes all tokens and blocks the entire deployment.
+        logger.warn('Bidirectional federation failed during auto-approval (non-fatal)', {
           spokeId,
           instanceCode: spoke.instanceCode,
           error: errorMessage,
-          impact: 'Cross-border SSO will NOT work in both directions',
+          impact: 'CLI pipeline will handle federation setup as fallback',
+          previousBehavior: 'Would have suspended spoke - now continues with approved status',
         });
 
-        // Suspend the spoke since bidirectional federation failed
-        await this.suspendSpoke(spokeId, `Bidirectional federation failed: ${errorMessage}`);
+        // Keep spoke in approved status — CLI federation setup will handle IdP creation
+        // Store warning in metadata for observability
+        spoke.federationIdPAlias = undefined; // Mark as not yet linked
+        await this.store.save(spoke);
 
-        // FIXED (Dec 2025): Re-fetch spoke to get updated status after suspension
-        // This fixes race condition where local variable still shows 'approved'
-        const suspendedSpoke = await this.store.findById(spokeId);
-        if (suspendedSpoke) {
-          // Update local variable to reflect true DB state
-          Object.assign(spoke, suspendedSpoke);
-        }
-
-        // Create error with accurate status information
-        const statusError = new Error(
-          `Spoke approval failed: Bidirectional federation is REQUIRED. ` +
-          `Spoke status is now '${spoke.status}'. Error: ${errorMessage}`
-        );
-        // Attach spoke to error for caller to access
-        (statusError as any).spoke = spoke;
-        throw statusError;
+        // DO NOT throw — let registration succeed so spoke gets token and SPOKE_ID
+        // The CLI's spoke_federation_setup() will create the IdP links next
+        logger.info('Spoke remains approved despite federation error — CLI will complete setup', {
+          spokeId,
+          instanceCode: spoke.instanceCode,
+          status: spoke.status,
+        });
       }
     }
 
