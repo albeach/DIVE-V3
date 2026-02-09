@@ -354,6 +354,19 @@ module_vault_setup() {
         fi
     done
 
+    # Enable audit logging
+    log_info "Enabling audit logging..."
+
+    if vault audit list 2>/dev/null | grep -q "file/"; then
+        log_verbose "  ✓ File audit device already enabled"
+    else
+        if vault audit enable file file_path=/vault/logs/audit.log >/dev/null 2>&1; then
+            log_success "  ✓ Enabled file audit logging (/vault/logs/audit.log)"
+        else
+            log_warn "  ✗ Failed to enable audit logging (non-fatal)"
+        fi
+    fi
+
     log_success "Vault configuration complete!"
     log_info ""
     log_info "==================================================================="
@@ -363,6 +376,94 @@ module_vault_setup() {
     log_info "2. Test hub:           export SECRETS_PROVIDER=vault && ./dive hub deploy"
     log_info "3. Test spoke:         export SECRETS_PROVIDER=vault && ./dive spoke deploy deu"
     log_info "==================================================================="
+}
+
+##
+# Create a Raft snapshot backup
+# Usage: ./dive vault snapshot [output-path]
+##
+module_vault_snapshot() {
+    local output_path="${1:-}"
+
+    if ! vault_is_running; then
+        return 1
+    fi
+
+    # Load token
+    if [ -f "$VAULT_TOKEN_FILE" ]; then
+        VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
+        export VAULT_TOKEN
+    else
+        log_error "Vault token not found - run: ./dive vault init"
+        return 1
+    fi
+
+    # Check if unsealed
+    if ! vault status 2>/dev/null | grep -q "Sealed.*false"; then
+        log_error "Vault is sealed - run: ./dive vault unseal"
+        return 1
+    fi
+
+    # Default output path with timestamp
+    if [ -z "$output_path" ]; then
+        local backup_dir="${DIVE_ROOT}/backups/vault"
+        mkdir -p "$backup_dir"
+        output_path="${backup_dir}/vault-snapshot-$(date +%Y%m%d-%H%M%S).snap"
+    fi
+
+    log_info "Creating Vault Raft snapshot..."
+    log_info "  Output: $output_path"
+
+    if vault operator raft snapshot save "$output_path" 2>/dev/null; then
+        local size
+        size=$(du -h "$output_path" | awk '{print $1}')
+        log_success "Snapshot created: $output_path ($size)"
+    else
+        log_error "Failed to create Vault snapshot"
+        return 1
+    fi
+}
+
+##
+# Restore a Raft snapshot
+# Usage: ./dive vault restore <snapshot-path>
+##
+module_vault_restore() {
+    local snapshot_path="${1:-}"
+
+    if [ -z "$snapshot_path" ]; then
+        log_error "Usage: ./dive vault restore <snapshot-path>"
+        return 1
+    fi
+
+    if [ ! -f "$snapshot_path" ]; then
+        log_error "Snapshot file not found: $snapshot_path"
+        return 1
+    fi
+
+    if ! vault_is_running; then
+        return 1
+    fi
+
+    # Load token
+    if [ -f "$VAULT_TOKEN_FILE" ]; then
+        VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
+        export VAULT_TOKEN
+    else
+        log_error "Vault token not found"
+        return 1
+    fi
+
+    log_warn "Restoring Vault from snapshot: $snapshot_path"
+    log_warn "This will REPLACE all current Vault data!"
+
+    if vault operator raft snapshot restore "$snapshot_path" 2>/dev/null; then
+        log_success "Snapshot restored successfully"
+        log_info "Vault will need to be unsealed: ./dive vault unseal"
+    else
+        log_error "Failed to restore Vault snapshot"
+        return 1
+    fi
 }
 
 ##
@@ -384,21 +485,34 @@ module_vault() {
         setup)
             module_vault_setup
             ;;
+        snapshot)
+            shift
+            module_vault_snapshot "$@"
+            ;;
+        restore)
+            shift
+            module_vault_restore "$@"
+            ;;
         help|--help|-h)
             echo "Usage: ./dive vault <command>"
             echo ""
             echo "Commands:"
-            echo "  init       Initialize Vault (one-time operation)"
-            echo "  unseal     Unseal Vault after restart"
-            echo "  status     Check Vault health and seal status"
-            echo "  setup      Configure mount points, policies, and AppRoles"
-            echo "  help       Show this help message"
+            echo "  init                Initialize Vault (one-time operation)"
+            echo "  unseal              Unseal Vault after restart"
+            echo "  status              Check Vault health and seal status"
+            echo "  setup               Configure mount points, policies, and AppRoles"
+            echo "  snapshot [path]     Create Raft snapshot backup"
+            echo "  restore <path>      Restore from Raft snapshot"
+            echo "  help                Show this help message"
             echo ""
             echo "Examples:"
-            echo "  ./dive vault init       # First-time setup"
-            echo "  ./dive vault unseal     # After container restart"
-            echo "  ./dive vault status     # Check current state"
-            echo "  ./dive vault setup      # Configure Vault"
+            echo "  ./dive vault init                          # First-time setup"
+            echo "  ./dive vault unseal                        # After container restart"
+            echo "  ./dive vault status                        # Check current state"
+            echo "  ./dive vault setup                         # Configure Vault"
+            echo "  ./dive vault snapshot                      # Backup to backups/vault/"
+            echo "  ./dive vault snapshot /tmp/vault.snap      # Backup to specific path"
+            echo "  ./dive vault restore /tmp/vault.snap       # Restore from snapshot"
             ;;
         *)
             log_error "Unknown vault command: $subcommand"
