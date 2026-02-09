@@ -12,6 +12,7 @@ storage "raft" {
 
 seal "transit" {
   address         = "http://vault-seal:8200"
+  token           = "env://VAULT_TRANSIT_SEAL_TOKEN"
   disable_renewal = "false"
   key_name        = "autounseal"
   mount_path      = "transit/"
