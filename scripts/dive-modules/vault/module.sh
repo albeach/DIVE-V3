@@ -826,6 +826,199 @@ module_vault_provision() {
 export -f vault_spoke_is_provisioned
 
 ##
+# Test secret rotation lifecycle (non-destructive)
+#
+# Validates:
+#   1. Read current secret from Vault
+#   2. Write new value
+#   3. Read back and verify
+#   4. Restore original value
+#   5. Verify spoke still healthy
+#
+# Usage: ./dive vault test-rotation [CODE]
+##
+module_vault_test_rotation() {
+    local target_code="${1:-DEU}"
+    local code_lower=$(echo "$target_code" | tr '[:upper:]' '[:lower:]')
+
+    # Load test framework
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh"
+    else
+        log_error "Testing framework not found"
+        return 1
+    fi
+
+    # Ensure Vault is running and unsealed
+    if ! vault_is_running; then return 1; fi
+    if [ -f "$VAULT_TOKEN_FILE" ]; then
+        VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
+        export VAULT_TOKEN
+    fi
+
+    test_suite_start "Secret Rotation Test (${target_code})"
+
+    # Step 1: Read current Redis password from Vault
+    test_start "Read current secret from Vault"
+    local secret_path="dive-v3/core/${code_lower}/redis"
+    local original_value
+    original_value=$(vault kv get -field=password "$secret_path" 2>/dev/null)
+    if [ -n "$original_value" ]; then
+        test_pass
+    else
+        test_fail "Cannot read $secret_path"
+        test_suite_end
+        return 1
+    fi
+
+    # Step 2: Write new test value
+    test_start "Write rotated secret to Vault"
+    local test_value="rotation-test-$(date +%s)"
+    if vault kv put "$secret_path" password="$test_value" >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "Cannot write to $secret_path"
+        test_suite_end
+        return 1
+    fi
+
+    # Step 3: Read back and verify
+    test_start "Readback matches rotated value"
+    local readback
+    readback=$(vault kv get -field=password "$secret_path" 2>/dev/null)
+    if [ "$readback" = "$test_value" ]; then
+        test_pass
+    else
+        test_fail "Readback mismatch (expected: $test_value, got: $readback)"
+    fi
+
+    # Step 4: Restore original value (non-destructive)
+    test_start "Restore original secret"
+    if vault kv put "$secret_path" password="$original_value" >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "Cannot restore original value"
+    fi
+
+    # Step 5: Verify restore
+    test_start "Restored value matches original"
+    local restored
+    restored=$(vault kv get -field=password "$secret_path" 2>/dev/null)
+    if [ "$restored" = "$original_value" ]; then
+        test_pass
+    else
+        test_fail "Restore mismatch"
+    fi
+
+    # Step 6: Spoke health check (verify nothing broken)
+    test_start "${target_code}: Spoke still healthy after rotation"
+    if type -t spoke_verify &>/dev/null; then
+        if spoke_verify "$target_code" >/dev/null 2>&1; then
+            test_pass
+        else
+            test_fail "Spoke verification failed"
+        fi
+    else
+        test_skip "spoke_verify not available"
+    fi
+
+    test_suite_end
+}
+
+##
+# Test Vault backup/restore lifecycle
+#
+# Validates:
+#   1. Create Raft snapshot
+#   2. Snapshot file exists
+#   3. Snapshot is non-empty
+#   4. Secrets still readable after snapshot
+#   5. List all snapshots
+#
+# Usage: ./dive vault test-backup
+##
+module_vault_test_backup() {
+    # Load test framework
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh"
+    else
+        log_error "Testing framework not found"
+        return 1
+    fi
+
+    # Ensure Vault is running and unsealed
+    if ! vault_is_running; then return 1; fi
+    if [ -f "$VAULT_TOKEN_FILE" ]; then
+        VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
+        export VAULT_TOKEN
+    fi
+
+    test_suite_start "Vault Backup/Restore Validation"
+
+    # Step 1: Create Raft snapshot
+    test_start "Create Raft snapshot"
+    local backup_dir="${DIVE_ROOT}/backups/vault"
+    local snapshot_path="${backup_dir}/vault-test-$(date +%Y%m%d-%H%M%S).snap"
+    mkdir -p "$backup_dir"
+    if vault operator raft snapshot save "$snapshot_path" 2>/dev/null; then
+        test_pass
+    else
+        test_fail "Snapshot creation failed"
+        test_suite_end
+        return 1
+    fi
+
+    # Step 2: Snapshot file exists
+    test_start "Snapshot file exists"
+    if [ -f "$snapshot_path" ]; then
+        test_pass
+    else
+        test_fail "File not found: $snapshot_path"
+    fi
+
+    # Step 3: Snapshot is non-empty
+    test_start "Snapshot is non-empty"
+    local snap_size
+    snap_size=$(du -h "$snapshot_path" 2>/dev/null | awk '{print $1}')
+    local snap_bytes
+    snap_bytes=$(wc -c < "$snapshot_path" 2>/dev/null | tr -d ' ')
+    if [ "${snap_bytes:-0}" -gt 0 ] 2>/dev/null; then
+        test_pass
+    else
+        test_fail "Snapshot is empty"
+    fi
+
+    # Step 4: Secrets still readable after snapshot
+    test_start "Secrets readable after snapshot"
+    local test_read
+    test_read=$(vault kv get -field=password "dive-v3/core/usa/postgres" 2>/dev/null)
+    if [ -n "$test_read" ]; then
+        test_pass
+    else
+        test_fail "Cannot read dive-v3/core/usa/postgres"
+    fi
+
+    # Step 5: List all snapshots
+    test_start "Backup directory has snapshots"
+    local snap_count=0
+    if [ -d "$backup_dir" ]; then
+        snap_count=$(ls -1 "$backup_dir"/*.snap 2>/dev/null | wc -l | tr -d ' ')
+    fi
+    if [ "${snap_count:-0}" -gt 0 ] 2>/dev/null; then
+        test_pass
+    else
+        test_fail "No snapshots found in $backup_dir"
+    fi
+
+    # Summary info
+    echo ""
+    echo "  Snapshot: $snapshot_path ($snap_size)"
+    echo "  Total backups: $snap_count"
+
+    test_suite_end
+}
+
+##
 # Main module dispatcher
 ##
 module_vault() {
@@ -859,6 +1052,13 @@ module_vault() {
             shift
             module_vault_provision "$@"
             ;;
+        test-rotation|rotation-test)
+            shift
+            module_vault_test_rotation "$@"
+            ;;
+        test-backup|backup-test)
+            module_vault_test_backup
+            ;;
         help|--help|-h)
             echo "Usage: ./dive vault <command>"
             echo ""
@@ -871,6 +1071,8 @@ module_vault() {
             echo "  provision <CODE>    Provision a spoke: policy, AppRole, secrets, .env"
             echo "  snapshot [path]     Create Raft snapshot backup"
             echo "  restore <path>      Restore from Raft snapshot"
+            echo "  test-rotation [CODE] Test secret rotation lifecycle (non-destructive)"
+            echo "  test-backup         Validate Raft snapshot backup"
             echo "  help                Show this help message"
             echo ""
             echo "Workflow:"
@@ -887,6 +1089,8 @@ module_vault() {
             echo "  ./dive vault snapshot                      # Backup to backups/vault/"
             echo "  ./dive vault snapshot /tmp/vault.snap      # Backup to specific path"
             echo "  ./dive vault restore /tmp/vault.snap       # Restore from snapshot"
+            echo "  ./dive vault test-rotation DEU             # Test secret rotation"
+            echo "  ./dive vault test-backup                   # Validate backup"
             ;;
         *)
             log_error "Unknown vault command: $subcommand"
