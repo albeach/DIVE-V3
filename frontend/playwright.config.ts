@@ -43,6 +43,13 @@ export default defineConfig({
         // Local: Accept self-signed certs (mkcert), GitHub Actions: Require valid certs
         // Uses GITHUB_ACTIONS instead of CI to avoid blocking local dev when CI=1 is set
         ignoreHTTPSErrors: !process.env.GITHUB_ACTIONS,
+        // Browser flags to handle self-signed certificates
+        launchOptions: {
+            args: [
+                '--ignore-certificate-errors',
+                '--allow-insecure-localhost',
+            ]
+        },
     },
 
     // ✅ Test timeout increased from 15s to 30s for complex flows (Keycloak, OPA, DB operations)

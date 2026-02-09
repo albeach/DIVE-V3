@@ -145,6 +145,20 @@ export async function discoverAvailableIdPs(page: Page, hubUrl?: string): Promis
         timeout: 10000 
       });
       console.log(`[IdP Discovery] ✅ Successfully loaded: ${targetUrl}`);
+      
+      // Wait for React hydration and buttons to appear
+      // Try multiple strategies to ensure buttons are loaded
+      try {
+        await page.waitForSelector('button', { timeout: 5000 });
+        console.log('[IdP Discovery] ✅ Buttons are visible');
+      } catch (e) {
+        console.log('[IdP Discovery] ⚠️ No buttons found yet, waiting for network idle...');
+        await page.waitForLoadState('networkidle', { timeout: 5000 });
+      }
+      
+      // Give React a moment to hydrate
+      await page.waitForTimeout(1000);
+      
     } catch (navError) {
       console.error(`[IdP Discovery] ❌ Failed to load ${targetUrl}:`, navError instanceof Error ? navError.message : 'unknown error');
       // Return empty discovery if page won't load
@@ -155,8 +169,28 @@ export async function discoverAvailableIdPs(page: Page, hubUrl?: string): Promis
     }
     
     // Extract IdP options from the login page
-    const idpButtons = await page.locator('button[type="button"], a[href*="authorize"]').allTextContents();
-    const uniqueIdPs = [...new Set(idpButtons.filter(text => text.trim().length > 0))];
+    // Look for buttons that contain IdP names or patterns
+    const allButtons = await page.locator('button').allTextContents();
+    
+    console.log('[IdP Discovery] All buttons found:', allButtons);
+    
+    // Filter for IdP-related buttons (exclude empty, icons, and UI buttons)
+    const idpButtons = allButtons.filter(text => {
+      const normalized = text.trim().toLowerCase();
+      // Include buttons that:
+      // 1. Contain country names
+      // 2. Contain "instance" keyword
+      // 3. Contain "login as" pattern
+      // 4. Are long enough to be IdP names (> 3 chars)
+      return normalized.length > 3 && (
+        normalized.includes('instance') ||
+        normalized.includes('login as') ||
+        normalized.includes('authenticate') ||
+        /united states|usa|france|germany|deu|fra|gbr|can|local/i.test(text)
+      );
+    });
+    
+    const uniqueIdPs = [...new Set(idpButtons)];
     
     console.log('[IdP Discovery] Found IdP options:', uniqueIdPs);
     
@@ -166,9 +200,10 @@ export async function discoverAvailableIdPs(page: Page, hubUrl?: string): Promis
     };
     
     // Hub is always available (we're testing from it)
+    const hubButton = uniqueIdPs.find(name => /united states|usa|hub|local|login as/i.test(name));
     result.hub = {
       code: 'USA',
-      displayName: uniqueIdPs.find(name => /united states|usa|hub|local/i.test(name)) || 'United States',
+      displayName: hubButton || 'United States',
       url: targetUrl,
       available: true
     };
