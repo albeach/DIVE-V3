@@ -222,7 +222,7 @@ vault_is_authenticated() {
     fi
 
     # Test token validity
-    curl -sf -H "X-Vault-Token: $VAULT_TOKEN" \
+    curl -sfL -H "X-Vault-Token: $VAULT_TOKEN" \
         "${VAULT_ADDR}/v1/sys/health" >/dev/null 2>&1
 }
 
@@ -276,7 +276,7 @@ vault_get_secret() {
     local api_path="${VAULT_ADDR}/v1/${full_path}"
 
     local response
-    response=$(curl -sf -H "X-Vault-Token: $VAULT_TOKEN" "$api_path")
+    response=$(curl -sfL -H "X-Vault-Token: $VAULT_TOKEN" "$api_path")
 
     if [ -n "$response" ]; then
         echo "$response" | jq -r ".data.data.${field} // empty"
@@ -305,7 +305,7 @@ vault_set_secret() {
     local full_path="dive-v3/${category}/data/${path}"
     local api_path="${VAULT_ADDR}/v1/${full_path}"
 
-    curl -sf -X POST \
+    curl -sfL -X POST \
         -H "X-Vault-Token: $VAULT_TOKEN" \
         -d "{\"data\":$value}" \
         "${api_path}" >/dev/null 2>&1
@@ -896,7 +896,7 @@ secrets_list() {
             for mount in "${mounts[@]}"; do
                 echo "--- ${mount}/ ---"
                 local api_path="${VAULT_ADDR}/v1/${mount}/metadata"
-                curl -sf -H "X-Vault-Token: $VAULT_TOKEN" \
+                curl -sfL -H "X-Vault-Token: $VAULT_TOKEN" \
                     "${api_path}?list=true" 2>/dev/null | \
                     jq -r '.data.keys[]? // empty' 2>/dev/null || echo "  (empty or inaccessible)"
                 echo ""
