@@ -253,16 +253,7 @@ module_vault_setup() {
         log_warn "  ✗ Failed to create policy: dive-v3-hub"
     fi
 
-    # Create spoke policies (uses configurable DIVE_SPOKE_LIST)
-    local spokes=(${DIVE_SPOKE_LIST:-gbr fra deu can})
-    for spoke in "${spokes[@]}"; do
-        if vault policy write "dive-v3-spoke-${spoke}" \
-            "${DIVE_ROOT}/vault_config/policies/spoke-${spoke}.hcl" >/dev/null 2>&1; then
-            log_success "  ✓ Created policy: dive-v3-spoke-${spoke}"
-        else
-            log_warn "  ✗ Failed to create policy: dive-v3-spoke-${spoke}"
-        fi
-    done
+    # Spoke policies are created dynamically via: ./dive vault provision <CODE>
 
     log_info "Enabling AppRole authentication..."
 
@@ -278,52 +269,7 @@ module_vault_setup() {
         fi
     fi
 
-    log_info "Creating AppRoles for spokes..."
-
-    # Create AppRoles for each spoke
-    for spoke in "${spokes[@]}"; do
-        if vault write "auth/approle/role/spoke-${spoke}" \
-            token_policies="dive-v3-spoke-${spoke}" \
-            token_ttl=1h \
-            token_max_ttl=24h \
-            secret_id_ttl=0 >/dev/null 2>&1; then
-            log_success "  ✓ Created AppRole: spoke-${spoke}"
-
-            # Generate role_id and secret_id for this spoke
-            local role_id
-            local secret_id
-
-            role_id=$(vault read -field=role_id "auth/approle/role/spoke-${spoke}/role-id" 2>/dev/null)
-            secret_id=$(vault write -field=secret_id -f "auth/approle/role/spoke-${spoke}/secret-id" 2>/dev/null)
-
-            if [ -n "$role_id" ] && [ -n "$secret_id" ]; then
-                # Save to spoke .env file if it exists
-                local env_file="${DIVE_ROOT}/instances/${spoke}/.env"
-                if [ -f "$env_file" ]; then
-                    # Update or append VAULT_ROLE_ID and VAULT_SECRET_ID
-                    if grep -q "^VAULT_ROLE_ID=" "$env_file"; then
-                        sed -i.bak "s|^VAULT_ROLE_ID=.*|VAULT_ROLE_ID=${role_id}|" "$env_file"
-                    else
-                        echo "VAULT_ROLE_ID=${role_id}" >> "$env_file"
-                    fi
-
-                    if grep -q "^VAULT_SECRET_ID=" "$env_file"; then
-                        sed -i.bak "s|^VAULT_SECRET_ID=.*|VAULT_SECRET_ID=${secret_id}|" "$env_file"
-                    else
-                        echo "VAULT_SECRET_ID=${secret_id}" >> "$env_file"
-                    fi
-
-                    log_verbose "    → Credentials saved to: $env_file"
-                else
-                    log_warn "    → Spoke .env file not found: $env_file"
-                    log_info "    → Role ID: $role_id"
-                    log_info "    → Secret ID: [hidden - stored in memory]"
-                fi
-            fi
-        else
-            log_warn "  ✗ Failed to create AppRole: spoke-${spoke}"
-        fi
-    done
+    # Spoke AppRoles are created dynamically via: ./dive vault provision <CODE>
 
     # Enable audit logging
     log_info "Enabling audit logging..."
@@ -343,10 +289,10 @@ module_vault_setup() {
     log_info "==================================================================="
     log_info "Next steps:"
     log_info "==================================================================="
-    log_info "1. Seed secrets:       ./dive vault seed"
-    log_info "   (or migrate GCP):   ./scripts/migrate-secrets-gcp-to-vault.sh"
-    log_info "2. Deploy hub:         ./dive hub deploy"
-    log_info "3. Deploy spoke:       ./dive spoke deploy deu"
+    log_info "1. Seed hub secrets:     ./dive vault seed"
+    log_info "2. Deploy hub:           ./dive hub deploy"
+    log_info "3. Provision spoke:      ./dive vault provision <CODE>"
+    log_info "4. Deploy spoke:         ./dive spoke deploy <CODE>"
     log_info "==================================================================="
 }
 
@@ -444,7 +390,7 @@ module_vault_restore() {
 # Usage: ./dive vault seed
 ##
 module_vault_seed() {
-    log_info "Seeding Vault with fresh secrets for all instances..."
+    log_info "Seeding Vault with hub (USA) and shared secrets..."
 
     if ! vault_is_running; then
         return 1
@@ -468,8 +414,8 @@ module_vault_seed() {
     # Source secrets module for vault_set_secret()
     source "${DIVE_ROOT}/scripts/dive-modules/configuration/secrets.sh"
 
-    # All instances: hub (usa) + spokes
-    local all_instances=("usa" ${DIVE_SPOKE_LIST:-gbr fra deu can})
+    # Hub only — spoke secrets are provisioned via: ./dive vault provision <CODE>
+    local all_instances=("usa")
     local total_seeded=0
     local total_failed=0
 
@@ -544,29 +490,10 @@ module_vault_seed() {
     done
 
     # ==========================================================================
-    # Federation secrets (bidirectional pairs, alphabetically sorted)
+    # Federation secrets — skipped at seed time (created during vault provision)
     # ==========================================================================
-    log_info "Seeding federation secrets..."
-
     local -a pairs=()
-    for i in "${all_instances[@]}"; do
-        for j in "${all_instances[@]}"; do
-            if [[ "$i" < "$j" ]]; then
-                pairs+=("${i}-${j}")
-            fi
-        done
-    done
-
-    for pair in "${pairs[@]}"; do
-        local fed_secret=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
-        if vault_set_secret "federation" "$pair" "{\"client-secret\":\"${fed_secret}\"}"; then
-            total_seeded=$((total_seeded + 1))
-            log_verbose "  Seeded: dive-v3/federation/${pair}"
-        else
-            total_failed=$((total_failed + 1))
-            log_error "  Failed: dive-v3/federation/${pair}"
-        fi
-    done
+    log_verbose "Federation pairs are generated during spoke provisioning"
 
     # ==========================================================================
     # Sync key secrets to .env files for Docker Compose interpolation
@@ -605,33 +532,7 @@ module_vault_seed() {
         log_warn "Hub .env.hub not found - Docker Compose will need Vault env vars"
     fi
 
-    # Sync spoke secrets to instance .env files
-    local spokes=(${DIVE_SPOKE_LIST:-gbr fra deu can})
-    for spoke in "${spokes[@]}"; do
-        local spoke_env="${DIVE_ROOT}/instances/${spoke}/.env"
-        if [ -f "$spoke_env" ]; then
-            local code_upper=$(upper "$spoke")
-            local spoke_pg=$(vault_get_secret "core" "${spoke}/postgres" "password")
-            local spoke_mongo=$(vault_get_secret "core" "${spoke}/mongodb" "password")
-            local spoke_redis=$(vault_get_secret "core" "${spoke}/redis" "password")
-            local spoke_kc=$(vault_get_secret "core" "${spoke}/keycloak-admin" "password")
-            local spoke_auth=$(vault_get_secret "auth" "${spoke}/nextauth" "secret")
-
-            _vault_update_env "$spoke_env" "POSTGRES_PASSWORD_${code_upper}" "$spoke_pg"
-            _vault_update_env "$spoke_env" "MONGO_PASSWORD_${code_upper}" "$spoke_mongo"
-            _vault_update_env "$spoke_env" "REDIS_PASSWORD_${code_upper}" "$spoke_redis"
-            _vault_update_env "$spoke_env" "KEYCLOAK_ADMIN_PASSWORD_${code_upper}" "$spoke_kc"
-            _vault_update_env "$spoke_env" "AUTH_SECRET_${code_upper}" "$spoke_auth"
-            _vault_update_env "$spoke_env" "KEYCLOAK_CLIENT_SECRET_${code_upper}" "$shared_client"
-            _vault_update_env "$spoke_env" "KEYCLOAK_CLIENT_SECRET_USA" "$shared_client"
-            _vault_update_env "$spoke_env" "REDIS_PASSWORD_BLACKLIST" "$shared_blacklist"
-            _vault_update_env "$spoke_env" "OPAL_AUTH_MASTER_TOKEN" "$opal_token"
-
-            log_success "Spoke ${code_upper} .env synced"
-        else
-            log_verbose "Spoke .env not found: $spoke_env (will be created during spoke init)"
-        fi
-    done
+    # Spoke .env files are synced during: ./dive vault provision <CODE>
 
     # ==========================================================================
     # Summary
@@ -644,9 +545,9 @@ module_vault_seed() {
     if [ $total_failed -gt 0 ]; then
         log_error "  Failed:  $total_failed secrets"
     fi
-    log_info "  Instances: ${all_instances[*]}"
+    log_info "  Instances: usa (hub only)"
     log_info "  Shared:    keycloak-client, redis-blacklist, opal-master-token, kas-signing, kas-encryption"
-    log_info "  Federation: ${#pairs[@]} bidirectional pairs"
+    log_info "  Next:      ./dive vault provision <CODE> to add spokes"
     log_info "==================================================================="
 
     if [ $total_failed -gt 0 ]; then
@@ -674,6 +575,255 @@ _vault_update_env() {
         echo "${var_name}=${var_value}" >> "$env_file"
     fi
 }
+
+##
+# Check if a spoke has been provisioned in Vault (policy + AppRole + secrets)
+# Usage: vault_spoke_is_provisioned <code>
+# Returns 0 if provisioned, 1 if not
+##
+vault_spoke_is_provisioned() {
+    local code=$(lower "${1:?spoke code required}")
+
+    # Check AppRole exists
+    if ! vault read "auth/approle/role/spoke-${code}" >/dev/null 2>&1; then
+        return 1
+    fi
+
+    # Check at least one secret exists
+    if ! vault_get_secret "core" "${code}/postgres" "password" >/dev/null 2>&1; then
+        return 1
+    fi
+
+    return 0
+}
+
+##
+# Provision a single spoke in Vault: policy, AppRole, secrets, .env sync
+# Usage: ./dive vault provision <CODE>
+##
+module_vault_provision() {
+    local spoke_code="${1:-}"
+
+    if [ -z "$spoke_code" ]; then
+        log_error "Usage: ./dive vault provision <CODE>"
+        log_info "Example: ./dive vault provision FRA"
+        return 1
+    fi
+
+    local code=$(lower "$spoke_code")
+    local code_upper=$(upper "$spoke_code")
+
+    # Reject hub instance
+    if [ "$code" = "usa" ]; then
+        log_error "Cannot provision USA as a spoke — it is the hub instance"
+        log_info "Hub secrets are managed via: ./dive vault seed"
+        return 1
+    fi
+
+    log_info "Provisioning spoke ${code_upper} in Vault..."
+
+    if ! vault_is_running; then
+        return 1
+    fi
+
+    # Load token
+    if [ -f "$VAULT_TOKEN_FILE" ]; then
+        VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
+        export VAULT_TOKEN
+    else
+        log_error "Vault token not found - run: ./dive vault init"
+        return 1
+    fi
+
+    # Check if unsealed
+    if ! vault status 2>/dev/null | grep -q "Sealed.*false"; then
+        log_error "Vault is sealed - run: ./dive vault unseal"
+        return 1
+    fi
+
+    # Source secrets module for vault_set_secret()/vault_get_secret()
+    source "${DIVE_ROOT}/scripts/dive-modules/configuration/secrets.sh"
+
+    local total_seeded=0
+    local total_failed=0
+
+    # ==========================================================================
+    # Step 1: Generate policy from template
+    # ==========================================================================
+    log_info "Creating Vault policy for ${code_upper}..."
+
+    local template="${DIVE_ROOT}/vault_config/policies/spoke-template.hcl"
+    if [ ! -f "$template" ]; then
+        log_error "Policy template not found: $template"
+        return 1
+    fi
+
+    if sed "s/{{SPOKE_CODE}}/${code}/g" "$template" | vault policy write "dive-v3-spoke-${code}" - >/dev/null 2>&1; then
+        log_success "  Created policy: dive-v3-spoke-${code}"
+    else
+        log_error "  Failed to create policy: dive-v3-spoke-${code}"
+        return 1
+    fi
+
+    # ==========================================================================
+    # Step 2: Create AppRole
+    # ==========================================================================
+    log_info "Creating AppRole for ${code_upper}..."
+
+    if vault write "auth/approle/role/spoke-${code}" \
+        token_policies="dive-v3-spoke-${code}" \
+        token_ttl=1h \
+        token_max_ttl=24h \
+        secret_id_ttl=0 >/dev/null 2>&1; then
+        log_success "  Created AppRole: spoke-${code}"
+    else
+        log_error "  Failed to create AppRole: spoke-${code}"
+        return 1
+    fi
+
+    # Extract role_id and secret_id
+    local role_id secret_id
+    role_id=$(vault read -field=role_id "auth/approle/role/spoke-${code}/role-id" 2>/dev/null)
+    secret_id=$(vault write -field=secret_id -f "auth/approle/role/spoke-${code}/secret-id" 2>/dev/null)
+
+    if [ -z "$role_id" ] || [ -z "$secret_id" ]; then
+        log_error "  Failed to generate AppRole credentials"
+        return 1
+    fi
+
+    log_success "  AppRole credentials generated"
+
+    # ==========================================================================
+    # Step 3: Seed instance-specific secrets
+    # ==========================================================================
+    log_info "Seeding secrets for ${code_upper}..."
+
+    local postgres_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+    local mongodb_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+    local redis_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+    local keycloak_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+    local nextauth_secret=$(openssl rand -base64 32)
+
+    local secrets_data=(
+        "core:${code}/postgres:{\"password\":\"${postgres_pw}\"}"
+        "core:${code}/mongodb:{\"password\":\"${mongodb_pw}\"}"
+        "core:${code}/redis:{\"password\":\"${redis_pw}\"}"
+        "core:${code}/keycloak-admin:{\"password\":\"${keycloak_pw}\"}"
+        "auth:${code}/nextauth:{\"secret\":\"${nextauth_secret}\"}"
+    )
+
+    for entry in "${secrets_data[@]}"; do
+        local category="${entry%%:*}"
+        local rest="${entry#*:}"
+        local path="${rest%%:\{*}"
+        local value="{${rest#*:\{}"
+
+        if vault_set_secret "$category" "$path" "$value"; then
+            total_seeded=$((total_seeded + 1))
+        else
+            total_failed=$((total_failed + 1))
+            log_error "  Failed: dive-v3/${category}/${path}"
+        fi
+    done
+
+    # ==========================================================================
+    # Step 4: Generate federation pair secrets with existing instances
+    # ==========================================================================
+    log_info "Generating federation pair secrets..."
+
+    # Discover existing instances by listing Vault core paths
+    local existing_instances=()
+    local vault_list
+    vault_list=$(vault kv list -format=json dive-v3/core/ 2>/dev/null || echo "[]")
+    while IFS= read -r inst; do
+        inst="${inst%/}"  # Strip trailing slash
+        [ -n "$inst" ] && [ "$inst" != "shared" ] && existing_instances+=("$inst")
+    done < <(echo "$vault_list" | grep '"' | tr -d '", ')
+
+    for other in "${existing_instances[@]}"; do
+        [ "$other" = "$code" ] && continue  # Skip self
+        # Alphabetical sort for consistent pair naming
+        local pair
+        if [[ "$code" < "$other" ]]; then
+            pair="${code}-${other}"
+        else
+            pair="${other}-${code}"
+        fi
+        # Only create if pair doesn't already exist
+        if ! vault_get_secret "federation" "$pair" "client-secret" >/dev/null 2>&1; then
+            local fed_secret=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+            if vault_set_secret "federation" "$pair" "{\"client-secret\":\"${fed_secret}\"}"; then
+                total_seeded=$((total_seeded + 1))
+                log_verbose "  Seeded: dive-v3/federation/${pair}"
+            else
+                total_failed=$((total_failed + 1))
+            fi
+        else
+            log_verbose "  Exists: dive-v3/federation/${pair}"
+        fi
+    done
+
+    # ==========================================================================
+    # Step 5: Sync to spoke .env file
+    # ==========================================================================
+    log_info "Syncing secrets to instance .env..."
+
+    local spoke_dir="${DIVE_ROOT}/instances/${code}"
+    local spoke_env="${spoke_dir}/.env"
+    mkdir -p "$spoke_dir"
+
+    # Read shared secrets from Vault
+    local shared_client=$(vault_get_secret "auth" "shared/keycloak-client" "secret" 2>/dev/null || true)
+    local shared_blacklist=$(vault_get_secret "core" "shared/redis-blacklist" "password" 2>/dev/null || true)
+    local opal_token=$(vault_get_secret "opal" "master-token" "token" 2>/dev/null || true)
+
+    # Create or update spoke .env
+    [ ! -f "$spoke_env" ] && touch "$spoke_env"
+
+    _vault_update_env "$spoke_env" "VAULT_ROLE_ID" "$role_id"
+    _vault_update_env "$spoke_env" "VAULT_SECRET_ID" "$secret_id"
+    _vault_update_env "$spoke_env" "POSTGRES_PASSWORD_${code_upper}" "$postgres_pw"
+    _vault_update_env "$spoke_env" "MONGO_PASSWORD_${code_upper}" "$mongodb_pw"
+    _vault_update_env "$spoke_env" "REDIS_PASSWORD_${code_upper}" "$redis_pw"
+    _vault_update_env "$spoke_env" "KEYCLOAK_ADMIN_PASSWORD_${code_upper}" "$keycloak_pw"
+    _vault_update_env "$spoke_env" "AUTH_SECRET_${code_upper}" "$nextauth_secret"
+    _vault_update_env "$spoke_env" "KEYCLOAK_CLIENT_SECRET_${code_upper}" "$shared_client"
+    _vault_update_env "$spoke_env" "KEYCLOAK_CLIENT_SECRET_USA" "$shared_client"
+    _vault_update_env "$spoke_env" "REDIS_PASSWORD_BLACKLIST" "$shared_blacklist"
+    _vault_update_env "$spoke_env" "OPAL_AUTH_MASTER_TOKEN" "$opal_token"
+
+    log_success "Spoke .env synced: $spoke_env"
+
+    # ==========================================================================
+    # Step 6: Verify
+    # ==========================================================================
+    local verify_pw
+    verify_pw=$(vault_get_secret "core" "${code}/postgres" "password" 2>/dev/null)
+    if [ "$verify_pw" = "$postgres_pw" ]; then
+        log_success "Verification passed: secrets readable by hub token"
+    else
+        log_warn "Verification: could not read back secret (may be a policy issue)"
+    fi
+
+    # ==========================================================================
+    # Summary
+    # ==========================================================================
+    echo ""
+    log_info "==================================================================="
+    log_info "  Spoke ${code_upper} Provisioned in Vault"
+    log_info "==================================================================="
+    log_info "  Secrets seeded: $total_seeded"
+    [ $total_failed -gt 0 ] && log_error "  Failed: $total_failed"
+    log_info "  Policy:    dive-v3-spoke-${code}"
+    log_info "  AppRole:   spoke-${code}"
+    log_info "  Env file:  $spoke_env"
+    log_info "  Next:      ./dive spoke deploy ${code_upper}"
+    log_info "==================================================================="
+
+    [ $total_failed -gt 0 ] && return 1
+    return 0
+}
+export -f vault_spoke_is_provisioned
 
 ##
 # Main module dispatcher
@@ -705,6 +855,10 @@ module_vault() {
             shift
             module_vault_restore "$@"
             ;;
+        provision)
+            shift
+            module_vault_provision "$@"
+            ;;
         help|--help|-h)
             echo "Usage: ./dive vault <command>"
             echo ""
@@ -712,18 +866,24 @@ module_vault() {
             echo "  init                Initialize Vault (one-time operation)"
             echo "  unseal              Unseal Vault after restart"
             echo "  status              Check Vault health and seal status"
-            echo "  setup               Configure mount points, policies, and AppRoles"
-            echo "  seed                Generate and store fresh secrets for all instances"
+            echo "  setup               Configure mount points and hub policy"
+            echo "  seed                Generate and store hub (USA) + shared secrets"
+            echo "  provision <CODE>    Provision a spoke: policy, AppRole, secrets, .env"
             echo "  snapshot [path]     Create Raft snapshot backup"
             echo "  restore <path>      Restore from Raft snapshot"
             echo "  help                Show this help message"
             echo ""
-            echo "Examples:"
-            echo "  ./dive vault init                          # First-time setup"
-            echo "  ./dive vault unseal                        # After container restart"
+            echo "Workflow:"
+            echo "  ./dive vault init                          # 1. First-time setup"
+            echo "  ./dive vault unseal                        # 2. Unseal after restart"
+            echo "  ./dive vault setup                         # 3. Configure mount points"
+            echo "  ./dive vault seed                          # 4. Seed hub + shared secrets"
+            echo "  ./dive hub deploy                          # 5. Deploy hub"
+            echo "  ./dive vault provision FRA                 # 6. Provision a spoke"
+            echo "  ./dive spoke deploy FRA                    # 7. Deploy the spoke"
+            echo ""
+            echo "Other:"
             echo "  ./dive vault status                        # Check current state"
-            echo "  ./dive vault setup                         # Configure Vault"
-            echo "  ./dive vault seed                          # Generate fresh secrets"
             echo "  ./dive vault snapshot                      # Backup to backups/vault/"
             echo "  ./dive vault snapshot /tmp/vault.snap      # Backup to specific path"
             echo "  ./dive vault restore /tmp/vault.snap       # Restore from snapshot"
