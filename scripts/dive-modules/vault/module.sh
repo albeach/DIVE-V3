@@ -600,6 +600,180 @@ vault_spoke_is_provisioned() {
 }
 
 ##
+# One-time setup of Vault PKI certificate authority hierarchy
+# Creates: Root CA (pki/), Intermediate CA (pki_int/), hub-services role
+# Usage: ./dive vault pki-setup
+##
+module_vault_pki_setup() {
+    log_info "Setting up Vault PKI certificate authority..."
+
+    if ! vault_is_running; then return 1; fi
+
+    # Load token
+    if [ -f "$VAULT_TOKEN_FILE" ]; then
+        VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
+        export VAULT_TOKEN
+    else
+        log_error "Vault token not found - run: ./dive vault init"
+        return 1
+    fi
+
+    # Check if unsealed
+    if ! vault status 2>/dev/null | grep -q "Sealed.*false"; then
+        log_error "Vault is sealed - check seal vault: ./dive vault seal-status"
+        return 1
+    fi
+
+    # Step 1: Enable Root CA PKI engine
+    log_info "Step 1/6: Enabling Root CA PKI engine (pki/)..."
+    if vault secrets list 2>/dev/null | grep -q "^pki/"; then
+        log_verbose "  Root CA PKI engine already enabled"
+    else
+        if vault secrets enable -path=pki pki >/dev/null 2>&1; then
+            vault secrets tune -max-lease-ttl=87600h pki >/dev/null 2>&1
+            log_success "  Enabled Root CA PKI engine (10yr max TTL)"
+        else
+            log_error "Failed to enable Root CA PKI engine"
+            return 1
+        fi
+    fi
+
+    # Step 2: Generate Root CA (idempotent — check if CA already exists)
+    log_info "Step 2/6: Generating Root CA certificate..."
+    local root_ca_pem
+    root_ca_pem=$(vault read -field=certificate pki/cert/ca 2>/dev/null || true)
+    if [ -n "$root_ca_pem" ] && echo "$root_ca_pem" | grep -q "BEGIN CERTIFICATE"; then
+        log_verbose "  Root CA already exists"
+    else
+        if vault write -format=json pki/root/generate/internal \
+            common_name="DIVE V3 Root CA" \
+            organization="DIVE Federation" \
+            ttl=87600h \
+            key_type=rsa \
+            key_bits=4096 >/dev/null 2>&1; then
+            log_success "  Root CA generated (CN=DIVE V3 Root CA, 10yr TTL)"
+        else
+            log_error "Failed to generate Root CA"
+            return 1
+        fi
+    fi
+
+    # Step 3: Configure Root CA URLs
+    log_info "Step 3/6: Configuring Root CA URLs..."
+    vault write pki/config/urls \
+        issuing_certificates="${VAULT_ADDR}/v1/pki/ca" \
+        crl_distribution_points="${VAULT_ADDR}/v1/pki/crl" >/dev/null 2>&1
+    log_success "  Root CA URLs configured"
+
+    # Step 4: Enable Intermediate CA PKI engine
+    log_info "Step 4/6: Enabling Intermediate CA PKI engine (pki_int/)..."
+    if vault secrets list 2>/dev/null | grep -q "^pki_int/"; then
+        log_verbose "  Intermediate CA PKI engine already enabled"
+    else
+        if vault secrets enable -path=pki_int pki >/dev/null 2>&1; then
+            vault secrets tune -max-lease-ttl=26280h pki_int >/dev/null 2>&1
+            log_success "  Enabled Intermediate CA PKI engine (3yr max TTL)"
+        else
+            log_error "Failed to enable Intermediate CA PKI engine"
+            return 1
+        fi
+    fi
+
+    # Step 5: Generate Intermediate CA, sign with Root, import
+    log_info "Step 5/6: Generating and signing Intermediate CA..."
+    local int_ca_pem
+    int_ca_pem=$(vault read -field=certificate pki_int/cert/ca 2>/dev/null || true)
+    if [ -n "$int_ca_pem" ] && echo "$int_ca_pem" | grep -q "BEGIN CERTIFICATE"; then
+        log_verbose "  Intermediate CA already exists"
+    else
+        # Generate CSR
+        local csr
+        csr=$(vault write -field=csr pki_int/intermediate/generate/internal \
+            common_name="DIVE V3 Intermediate CA" \
+            organization="DIVE Federation" \
+            key_type=rsa \
+            key_bits=4096 2>/dev/null)
+
+        if [ -z "$csr" ]; then
+            log_error "Failed to generate Intermediate CA CSR"
+            return 1
+        fi
+
+        # Sign CSR with Root CA
+        local signed_cert
+        signed_cert=$(vault write -field=certificate pki/root/sign-intermediate \
+            csr="$csr" \
+            format=pem_bundle \
+            ttl=26280h 2>/dev/null)
+
+        if [ -z "$signed_cert" ]; then
+            log_error "Failed to sign Intermediate CA with Root CA"
+            return 1
+        fi
+
+        # Import signed cert back into intermediate
+        if vault write pki_int/intermediate/set-signed \
+            certificate="$signed_cert" >/dev/null 2>&1; then
+            log_success "  Intermediate CA generated and signed by Root CA (3yr TTL)"
+        else
+            log_error "Failed to import signed Intermediate CA"
+            return 1
+        fi
+    fi
+
+    # Step 6: Create hub-services PKI role + configure URLs
+    log_info "Step 6/6: Creating PKI roles and applying policies..."
+
+    # Configure Intermediate CA URLs
+    vault write pki_int/config/urls \
+        issuing_certificates="${VAULT_ADDR}/v1/pki_int/ca" \
+        crl_distribution_points="${VAULT_ADDR}/v1/pki_int/crl" >/dev/null 2>&1
+
+    # Create hub-services role (allow_any_name=true for Docker container hostnames)
+    if vault write pki_int/roles/hub-services \
+        allow_any_name=true \
+        allow_ip_sans=true \
+        allow_localhost=true \
+        max_ttl=2160h \
+        key_type=rsa \
+        key_bits=2048 \
+        require_cn=false >/dev/null 2>&1; then
+        log_success "  Created PKI role: hub-services (90-day max TTL)"
+    else
+        log_error "Failed to create hub-services PKI role"
+        return 1
+    fi
+
+    # Apply PKI-specific hub policy
+    if [ -f "${DIVE_ROOT}/vault_config/policies/pki-hub.hcl" ]; then
+        vault policy write dive-v3-pki-hub "${DIVE_ROOT}/vault_config/policies/pki-hub.hcl" >/dev/null 2>&1
+        log_success "  Applied policy: dive-v3-pki-hub"
+    fi
+
+    # Re-apply hub policy (now includes PKI paths)
+    if [ -f "${DIVE_ROOT}/vault_config/policies/hub.hcl" ]; then
+        vault policy write dive-v3-hub "${DIVE_ROOT}/vault_config/policies/hub.hcl" >/dev/null 2>&1
+        log_success "  Updated policy: dive-v3-hub (with PKI paths)"
+    fi
+
+    echo ""
+    log_success "Vault PKI setup complete!"
+    log_info ""
+    log_info "==================================================================="
+    log_info "PKI Hierarchy:"
+    log_info "  Root CA:         pki/     (CN=DIVE V3 Root CA, 10yr TTL)"
+    log_info "  Intermediate CA: pki_int/ (CN=DIVE V3 Intermediate CA, 3yr TTL)"
+    log_info "  Hub role:        hub-services (90-day cert TTL)"
+    log_info ""
+    log_info "Next steps:"
+    log_info "  1. Set CERT_PROVIDER=vault in .env.hub"
+    log_info "  2. Deploy hub:        ./dive hub deploy"
+    log_info "  3. Provision spoke:   ./dive vault provision <CODE>"
+    log_info "     (auto-creates spoke PKI role)"
+    log_info "==================================================================="
+}
+
+##
 # Provision a single spoke in Vault: policy, AppRole, secrets, .env sync
 # Usage: ./dive vault provision <CODE>
 ##
@@ -694,6 +868,49 @@ module_vault_provision() {
     fi
 
     log_success "  AppRole credentials generated"
+
+    # ==========================================================================
+    # Step 2b: Create spoke PKI role (if PKI is enabled)
+    # ==========================================================================
+    if vault secrets list 2>/dev/null | grep -q "^pki_int/"; then
+        log_info "Creating PKI role for ${code_upper}..."
+
+        # Create spoke-specific PKI role (allow_any_name=true for Docker container hostnames)
+        if vault write "pki_int/roles/spoke-${code}-services" \
+            allow_any_name=true \
+            allow_ip_sans=true \
+            allow_localhost=true \
+            max_ttl=2160h \
+            key_type=rsa \
+            key_bits=2048 \
+            require_cn=false >/dev/null 2>&1; then
+            log_success "  Created PKI role: spoke-${code}-services"
+        else
+            log_warn "  Failed to create PKI role (non-fatal, cert issuance may fail)"
+        fi
+
+        # Create PKI-specific spoke policy from template
+        local pki_template="${DIVE_ROOT}/vault_config/policies/pki-spoke-template.hcl"
+        if [ -f "$pki_template" ]; then
+            if sed "s/{{SPOKE_CODE}}/${code}/g" "$pki_template" | \
+                vault policy write "dive-v3-pki-spoke-${code}" - >/dev/null 2>&1; then
+                log_success "  Applied policy: dive-v3-pki-spoke-${code}"
+            else
+                log_warn "  Failed to create PKI policy (non-fatal)"
+            fi
+
+            # Update AppRole to include PKI policy
+            vault write "auth/approle/role/spoke-${code}" \
+                token_policies="dive-v3-spoke-${code},dive-v3-pki-spoke-${code}" \
+                token_ttl=1h \
+                token_max_ttl=24h \
+                secret_id_ttl=0 >/dev/null 2>&1 && \
+                log_success "  Updated AppRole with PKI policy" || \
+                log_warn "  Failed to update AppRole with PKI policy (non-fatal)"
+        fi
+    else
+        log_verbose "PKI not enabled — skipping spoke PKI role (use: ./dive vault pki-setup)"
+    fi
 
     # ==========================================================================
     # Step 3: Seed instance-specific secrets
@@ -1289,6 +1506,107 @@ module_vault_test_full_restart() {
 }
 
 ##
+# Test Vault PKI certificate lifecycle
+# Validates Root CA, Intermediate CA, cert issuance, SANs, chain verification
+# Usage: ./dive vault test-pki
+##
+module_vault_test_pki() {
+    # Load test framework
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh"
+    else
+        log_error "Testing framework not found"
+        return 1
+    fi
+
+    source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+
+    test_suite_start "Vault PKI Certificate Automation"
+
+    if [ -f "$VAULT_TOKEN_FILE" ]; then
+        VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
+        export VAULT_TOKEN
+    fi
+
+    # Test 1: Root CA exists
+    test_start "Root CA exists in pki/"
+    local root_ca_pem
+    root_ca_pem=$(vault read -field=certificate pki/cert/ca 2>/dev/null || true)
+    if [ -n "$root_ca_pem" ] && echo "$root_ca_pem" | grep -q "BEGIN CERTIFICATE"; then
+        test_pass
+    else
+        test_fail "No Root CA found in pki/"
+    fi
+
+    # Test 2: Intermediate CA exists
+    test_start "Intermediate CA exists in pki_int/"
+    local int_ca_pem
+    int_ca_pem=$(vault read -field=certificate pki_int/cert/ca 2>/dev/null || true)
+    if [ -n "$int_ca_pem" ] && echo "$int_ca_pem" | grep -q "BEGIN CERTIFICATE"; then
+        test_pass
+    else
+        test_fail "No Intermediate CA found in pki_int/"
+    fi
+
+    # Test 3: Issue hub certificate
+    test_start "Issue hub certificate via hub-services role"
+    local test_dir
+    test_dir=$(mktemp -d)
+    if _vault_pki_issue_cert "hub-services" "test-hub-pki" \
+        "localhost dive-hub-keycloak dive-hub-backend" "127.0.0.1,::1" \
+        "$test_dir" "1h"; then
+        test_pass
+    else
+        test_fail "Hub cert issuance failed"
+        rm -rf "$test_dir"
+        test_suite_end
+        return 1
+    fi
+
+    # Test 4: Certificate files present
+    test_start "Certificate files present (certificate.pem, key.pem, ca/rootCA.pem)"
+    if [ -f "$test_dir/certificate.pem" ] && [ -f "$test_dir/key.pem" ] && [ -f "$test_dir/ca/rootCA.pem" ]; then
+        test_pass
+    else
+        test_fail "Missing certificate files in $test_dir"
+    fi
+
+    # Test 5: Certificate has expected SANs
+    test_start "Certificate has expected SANs"
+    if openssl x509 -in "$test_dir/certificate.pem" -noout -text 2>/dev/null | grep -q "dive-hub-keycloak"; then
+        test_pass
+    else
+        test_fail "SAN 'dive-hub-keycloak' not found in certificate"
+    fi
+
+    # Test 6: CA chain validates certificate
+    test_start "CA chain validates certificate"
+    if openssl verify -CAfile "$test_dir/ca/rootCA.pem" "$test_dir/certificate.pem" 2>/dev/null | grep -q "OK"; then
+        test_pass
+    else
+        test_fail "Certificate verification failed against CA chain"
+    fi
+
+    # Test 7: Java truststore generation
+    test_start "Java truststore generation"
+    if command -v keytool &>/dev/null; then
+        if _generate_truststore_from_ca "$test_dir/ca/rootCA.pem" "$test_dir" && \
+           [ -f "$test_dir/truststore.p12" ]; then
+            test_pass
+        else
+            test_fail "truststore.p12 not created"
+        fi
+    else
+        test_skip "keytool not available"
+    fi
+
+    # Cleanup
+    rm -rf "$test_dir"
+
+    test_suite_end
+}
+
+##
 # Main module dispatcher
 ##
 module_vault() {
@@ -1352,6 +1670,12 @@ module_vault() {
         test-full-restart)
             module_vault_test_full_restart
             ;;
+        pki-setup)
+            module_vault_pki_setup
+            ;;
+        test-pki)
+            module_vault_test_pki
+            ;;
         help|--help|-h)
             echo "Usage: ./dive vault <command>"
             echo ""
@@ -1361,6 +1685,7 @@ module_vault() {
             echo "  setup               Configure mount points and hub policy"
             echo "  seed                Generate and store hub (USA) + shared secrets"
             echo "  provision <CODE>    Provision a spoke: policy, AppRole, secrets, .env"
+            echo "  pki-setup           Setup PKI Root CA + Intermediate CA (one-time)"
             echo "  snapshot [path]     Create Raft snapshot backup"
             echo "  restore <path>      Restore from Raft snapshot"
             echo ""
@@ -1378,6 +1703,7 @@ module_vault() {
             echo "  test-ha-failover    Test leader failover + recovery"
             echo "  test-seal-restart   Test seal vault restart resilience"
             echo "  test-full-restart   Test full cluster restart"
+            echo "  test-pki            Test PKI certificate issuance lifecycle"
             echo ""
             echo "Workflow:"
             echo "  # Seal vault auto-starts and auto-unseals (no user action needed)"
