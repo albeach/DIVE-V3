@@ -928,6 +928,20 @@ activate_gcp_service_account() {
 }
 
 load_secrets() {
+    # Vault provider: load secrets from Vault, skip GCP/AWS entirely
+    if [ "${SECRETS_PROVIDER:-}" = "vault" ]; then
+        log_info "Loading secrets from HashiCorp Vault..."
+        if [ -z "${DIVE_CONFIGURATION_SECRETS_LOADED:-}" ]; then
+            source "${DIVE_ROOT}/scripts/dive-modules/configuration/secrets.sh"
+        fi
+        if secrets_load_for_instance "${INSTANCE:-USA}"; then
+            log_success "Secrets loaded from Vault"
+            return 0
+        fi
+        log_warn "Vault secret loading failed - falling back to environment variables"
+        # Fall through to allow ALLOW_INSECURE_LOCAL_DEVELOPMENT to work
+    fi
+
     case "$ENVIRONMENT" in
         local|dev)
             # ENHANCED: Automatically try service account before user auth
