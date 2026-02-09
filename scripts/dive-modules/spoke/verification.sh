@@ -104,15 +104,15 @@ spoke_verify() {
     local running_count=0
     for service in "${expected_services[@]}"; do
         if docker ps --format '{{.Names}}' 2>/dev/null | grep -qE "${code_lower}.*${service}|${service}.*${code_lower}"; then
-            ((running_count++))
+            running_count=$((running_count + 1))
         fi
     done
     if [ $running_count -ge 5 ]; then
         echo -e "${GREEN}PASS ${running_count}/8 running${NC}"
-        ((checks_passed++))
+        checks_passed=$((checks_passed + 1))
     else
         echo -e "${RED}FAIL ${running_count}/8 running${NC}"
-        ((checks_failed++))
+        checks_failed=$((checks_failed + 1))
     fi
 
     # ------------------------------------------------------------------
@@ -121,10 +121,10 @@ spoke_verify() {
     printf "  %-35s" "2. Keycloak Health:"
     if verification_check_keycloak "spoke" "$code_upper" 2>/dev/null; then
         echo -e "${GREEN}PASS Healthy${NC}"
-        ((checks_passed++))
+        checks_passed=$((checks_passed + 1))
     else
         echo -e "${RED}FAIL Unhealthy${NC}"
-        ((checks_failed++))
+        checks_failed=$((checks_failed + 1))
     fi
 
     # ------------------------------------------------------------------
@@ -133,10 +133,10 @@ spoke_verify() {
     printf "  %-35s" "3. Backend API Health:"
     if verification_check_backend "spoke" "$code_upper" 2>/dev/null; then
         echo -e "${GREEN}PASS Healthy${NC}"
-        ((checks_passed++))
+        checks_passed=$((checks_passed + 1))
     else
         echo -e "${RED}FAIL Unhealthy${NC}"
-        ((checks_failed++))
+        checks_failed=$((checks_failed + 1))
     fi
 
     # ------------------------------------------------------------------
@@ -145,10 +145,10 @@ spoke_verify() {
     printf "  %-35s" "4. MongoDB Connection:"
     if verification_check_mongodb "$container_prefix" 2>/dev/null; then
         echo -e "${GREEN}PASS Connected${NC}"
-        ((checks_passed++))
+        checks_passed=$((checks_passed + 1))
     else
         echo -e "${RED}FAIL Not Found${NC}"
-        ((checks_failed++))
+        checks_failed=$((checks_failed + 1))
     fi
 
     # ------------------------------------------------------------------
@@ -157,10 +157,10 @@ spoke_verify() {
     printf "  %-35s" "5. Redis Connection:"
     if verification_check_redis "$container_prefix" 2>/dev/null; then
         echo -e "${GREEN}PASS Connected${NC}"
-        ((checks_passed++))
+        checks_passed=$((checks_passed + 1))
     else
         echo -e "${RED}FAIL Not Found${NC}"
-        ((checks_failed++))
+        checks_failed=$((checks_failed + 1))
     fi
 
     # ------------------------------------------------------------------
@@ -169,10 +169,10 @@ spoke_verify() {
     printf "  %-35s" "6. OPA Health:"
     if verification_check_opa "$opa_port" 2>/dev/null; then
         echo -e "${GREEN}PASS Healthy${NC}"
-        ((checks_passed++))
+        checks_passed=$((checks_passed + 1))
     else
         echo -e "${RED}FAIL Unhealthy${NC}"
-        ((checks_failed++))
+        checks_failed=$((checks_failed + 1))
     fi
 
     # ------------------------------------------------------------------
@@ -184,17 +184,17 @@ spoke_verify() {
         local opal_logs=$(docker logs "$opal_container" 2>&1 | tail -50)
         if echo "$opal_logs" | grep -q "Connected to PubSub server"; then
             echo -e "${GREEN}PASS Connected${NC}"
-            ((checks_passed++))
+            checks_passed=$((checks_passed + 1))
         elif echo "$opal_logs" | grep -q "403\|Forbidden"; then
             echo -e "${RED}FAIL Auth Failed${NC}"
-            ((checks_failed++))
+            checks_failed=$((checks_failed + 1))
         else
             echo -e "${YELLOW}WARN Connecting...${NC}"
-            ((checks_passed++))
+            checks_passed=$((checks_passed + 1))
         fi
     else
         echo -e "${YELLOW}WARN Not Started${NC}"
-        ((checks_passed++))
+        checks_passed=$((checks_passed + 1))
     fi
 
     # ------------------------------------------------------------------
@@ -203,13 +203,13 @@ spoke_verify() {
     printf "  %-35s" "8. Hub Connectivity:"
     if curl -kfs "${hub_url}/health" --max-time 10 >/dev/null 2>&1; then
         echo -e "${GREEN}PASS Reachable${NC}"
-        ((checks_passed++))
+        checks_passed=$((checks_passed + 1))
     elif curl -kfs "${hub_url}/api/federation/health" --max-time 10 >/dev/null 2>&1; then
         echo -e "${GREEN}PASS Reachable${NC}"
-        ((checks_passed++))
+        checks_passed=$((checks_passed + 1))
     else
         echo -e "${YELLOW}WARN Unreachable (${hub_url})${NC}"
-        ((checks_failed++))
+        checks_failed=$((checks_failed + 1))
     fi
 
     # ------------------------------------------------------------------
@@ -219,10 +219,10 @@ spoke_verify() {
     local policy_count=$(curl -sf "http://localhost:${opa_port}/v1/policies" --max-time 5 2>/dev/null | grep -o '"id"' | wc -l | tr -d ' ')
     if [ "$policy_count" -gt 0 ]; then
         echo -e "${GREEN}PASS Loaded ($policy_count policies)${NC}"
-        ((checks_passed++))
+        checks_passed=$((checks_passed + 1))
     else
         echo -e "${YELLOW}WARN Not Loaded${NC}"
-        ((checks_passed++))
+        checks_passed=$((checks_passed + 1))
     fi
 
     # ------------------------------------------------------------------
@@ -241,22 +241,22 @@ spoke_verify() {
                 if [ "$exp" -gt "$now" ]; then
                     local days_left=$(( (exp - now) / 86400 ))
                     echo -e "${GREEN}PASS Valid (${days_left} days left)${NC}"
-                    ((checks_passed++))
+                    checks_passed=$((checks_passed + 1))
                 else
                     echo -e "${RED}FAIL Expired${NC}"
-                    ((checks_failed++))
+                    checks_failed=$((checks_failed + 1))
                 fi
             else
                 echo -e "${GREEN}PASS Token present${NC}"
-                ((checks_passed++))
+                checks_passed=$((checks_passed + 1))
             fi
         else
             echo -e "${GREEN}PASS Token present${NC}"
-            ((checks_passed++))
+            checks_passed=$((checks_passed + 1))
         fi
     else
         echo -e "${YELLOW}WARN No token configured${NC}"
-        ((checks_passed++))
+        checks_passed=$((checks_passed + 1))
     fi
 
     # ------------------------------------------------------------------
@@ -273,14 +273,14 @@ spoke_verify() {
 
         if echo "$heartbeat_response" | grep -q '"success"[[:space:]]*:[[:space:]]*true\|"ack"\|heartbeat'; then
             echo -e "${GREEN}PASS Successful${NC}"
-            ((checks_passed++))
+            checks_passed=$((checks_passed + 1))
         else
             echo -e "${YELLOW}WARN No response${NC}"
-            ((checks_passed++))
+            checks_passed=$((checks_passed + 1))
         fi
     else
         echo -e "${YELLOW}WARN Skipped (no token/id)${NC}"
-        ((checks_passed++))
+        checks_passed=$((checks_passed + 1))
     fi
 
     # ------------------------------------------------------------------
@@ -298,21 +298,21 @@ spoke_verify() {
 
         if [ $days_left -gt 30 ]; then
             echo -e "${GREEN}PASS Valid (${days_left} days left)${NC}"
-            ((checks_passed++))
+            checks_passed=$((checks_passed + 1))
         elif [ $days_left -gt 0 ]; then
             echo -e "${YELLOW}WARN Expires soon (${days_left} days)${NC}"
-            ((checks_passed++))
+            checks_passed=$((checks_passed + 1))
         else
             echo -e "${RED}FAIL Expired or invalid${NC}"
-            ((checks_failed++))
+            checks_failed=$((checks_failed + 1))
         fi
     else
         if curl -kfs --max-time 5 "https://localhost:${be_port}/health" >/dev/null 2>&1; then
             echo -e "${GREEN}PASS TLS working${NC}"
-            ((checks_passed++))
+            checks_passed=$((checks_passed + 1))
         else
             echo -e "${YELLOW}WARN No cert file${NC}"
-            ((checks_passed++))
+            checks_passed=$((checks_passed + 1))
         fi
     fi
 
