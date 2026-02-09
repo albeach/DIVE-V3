@@ -108,6 +108,21 @@ spoke_deploy() {
         fi
     fi
 
+    # GUARDRAIL: Require Vault provisioning before spoke deployment
+    if [ "${SECRETS_PROVIDER:-}" = "vault" ]; then
+        # Load vault module if not already available
+        if ! type vault_spoke_is_provisioned &>/dev/null; then
+            source "$(dirname "${BASH_SOURCE[0]}")/../vault/module.sh" 2>/dev/null || true
+        fi
+        if type vault_spoke_is_provisioned &>/dev/null; then
+            if ! vault_spoke_is_provisioned "$(lower "$instance_code")"; then
+                log_error "Spoke $(upper "$instance_code") not provisioned in Vault"
+                log_info "Run: ./dive vault provision $(upper "$instance_code")"
+                return 1
+            fi
+        fi
+    fi
+
     # Normalize inputs
     local code_upper=$(upper "$instance_code")
     local code_lower=$(lower "$instance_code")
