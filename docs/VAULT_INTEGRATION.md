@@ -2,7 +2,7 @@
 
 ## Overview
 
-DIVE V3 uses HashiCorp Vault 1.21 as the primary secret management provider, replacing GCP Secret Manager. Vault runs as a container on the hub stack and provides centralized secret storage for all hub and spoke instances.
+DIVE V3 uses HashiCorp Vault 1.21 as the default secret management provider. Vault runs as a container on the hub stack and provides centralized secret storage for all hub and spoke instances. No cloud provider account is required.
 
 ## Architecture
 
@@ -25,7 +25,7 @@ DIVE V3 uses HashiCorp Vault 1.21 as the primary secret management provider, rep
      └────────────┘  └────────────┘  └────────────┘
 ```
 
-**Provider Selection:** Set `SECRETS_PROVIDER=vault` in `.env.hub` and spoke `.env` files.
+**Provider Selection:** Vault is the default (`SECRETS_PROVIDER=vault`). Set `SECRETS_PROVIDER=gcp` only if using legacy GCP Secret Manager.
 
 ## Quick Start
 
@@ -42,13 +42,7 @@ docker compose -f docker-compose.hub.yml up -d vault
 # 4. Configure mount points and policies
 ./dive vault setup
 
-# 5. Migrate secrets from GCP
-./scripts/migrate-secrets-gcp-to-vault.sh
-
-# 6. Enable Vault provider
-echo "SECRETS_PROVIDER=vault" >> .env.hub
-
-# 7. Deploy with Vault
+# 5. Deploy
 ./dive hub deploy
 ./dive spoke deploy deu
 ```
@@ -107,13 +101,13 @@ Each spoke has scoped access:
 
 Vault seals itself on restart and must be unsealed with 3 of 5 unseal keys.
 
-**Automatic unseal:**
+**Unseal via CLI:**
 ```bash
 ./dive vault unseal
-# Fetches unseal keys from GCP Secret Manager and applies them
+# Reads unseal keys from .vault-init.txt and applies them
 ```
 
-**Manual unseal (if GCP unavailable):**
+**Manual unseal:**
 ```bash
 # Keys are in .vault-init.txt (created during init)
 vault operator unseal <key-1>
@@ -149,7 +143,7 @@ export SECRETS_PROVIDER=gcp
 
 | Variable | Default | Description |
 |---|---|---|
-| `SECRETS_PROVIDER` | `gcp` | Secret provider: `vault`, `gcp`, or `aws` |
+| `SECRETS_PROVIDER` | `vault` | Secret provider: `vault`, `gcp`, or `aws` |
 | `VAULT_ADDR` | `http://dive-hub-vault:8200` | Vault API address |
 | `VAULT_TOKEN` | (none) | Vault authentication token |
 | `VAULT_ROLE_ID` | (none) | AppRole role ID (spokes) |

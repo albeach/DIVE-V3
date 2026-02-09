@@ -1,23 +1,23 @@
 /**
- * DIVE V3 - Secret Manager Utility (GCP + Vault)
+ * DIVE V3 - Secret Manager Utility (Vault + GCP fallback)
  *
- * Provides secure access to secrets stored in GCP Secret Manager or HashiCorp Vault.
+ * Provides secure access to secrets stored in HashiCorp Vault or GCP Secret Manager.
  *
  * Provider Selection (SECRETS_PROVIDER env var):
- *   vault  - Use HashiCorp Vault KV v2 (recommended)
- *   gcp    - Use GCP Secret Manager (default/legacy)
+ *   vault  - Use HashiCorp Vault KV v2 (default, recommended)
+ *   gcp    - Use GCP Secret Manager (legacy fallback)
  *
- * GCP secrets are used BY DEFAULT when gcloud CLI is authenticated.
- * Falls back to environment variables only if provider is unavailable.
+ * Vault is used BY DEFAULT. Falls back to environment variables if unavailable.
+ * GCP Secret Manager is available as an optional legacy provider.
  *
  * Secrets naming convention: dive-v3-<type>-<instance>
  * Example: dive-v3-mongodb-usa, dive-v3-mongodb-fra
  *
  * Environment Variables:
- *   SECRETS_PROVIDER=vault - Use HashiCorp Vault
+ *   SECRETS_PROVIDER=vault - Use HashiCorp Vault (default)
+ *   SECRETS_PROVIDER=gcp   - Use GCP Secret Manager (legacy)
  *   USE_GCP_SECRETS=false  - Explicitly disable GCP (uses env vars only)
  *   USE_GCP_SECRETS=true   - Force GCP (fails if unavailable)
- *   (not set)              - Auto-detect: use GCP if available, else env vars
  *
  * Date: December 1, 2025 (Updated: February 2026 - Vault integration)
  */
@@ -29,7 +29,7 @@ import * as vaultSecrets from './vault-secrets';
 // CONFIGURATION
 // ============================================
 
-const SECRETS_PROVIDER = process.env.SECRETS_PROVIDER || 'gcp';
+const SECRETS_PROVIDER = process.env.SECRETS_PROVIDER || 'vault';
 const GCP_PROJECT_ID = process.env.GCP_PROJECT_ID || 'dive25';
 const SECRET_PREFIX = 'dive-v3';
 
