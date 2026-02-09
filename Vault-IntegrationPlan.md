@@ -1,21 +1,22 @@
 # HashiCorp Vault 1.21 Integration Plan for DIVE V3
 
-> **Status:** Phase 1 (Code Integration) COMPLETE | Phase 2 (Deployment & Testing) IN PROGRESS
+> **Status:** Phase 1 COMPLETE | Phase 2A (Single-Spoke Pilot) COMPLETE | Phase 2B (Multi-Spoke + Integration) NEXT
 > **Branch:** `test/week1-day2-parallel-verification`
 > **Last Updated:** 2026-02-09
-> **Commits:** `3a9483a7`, `26f41282`, `663b63f8`
+> **Commits:** 20 commits ahead of main (see commit log below)
 
 ---
 
 ## Executive Summary
 
-DIVE V3 has integrated HashiCorp Vault 1.21 as its **default** secret management provider, replacing GCP Secret Manager. The integration is fully code-complete with zero cloud provider dependencies in the critical path. Vault runs as a self-hosted container on the hub stack, requiring only Docker + Node.js + Git to operate.
+DIVE V3 has integrated HashiCorp Vault 1.21 as its **default** secret management provider, replacing GCP Secret Manager. The integration is fully deployed and validated with a clean-slate end-to-end test: nuke → Vault init/unseal/setup/seed → hub deploy → dynamic spoke provisioning → spoke deploy DEU → 12/12 verification pass.
 
 **Key Design Principles:**
 - **Open-source ready:** No cloud provider account required (GCP/AWS optional fallback)
 - **Zero-downtime rollback:** Switch to `SECRETS_PROVIDER=gcp` at any time
 - **Hub-centralized:** Single Vault instance on hub stack, spokes authenticate via AppRole
-- **Defense in depth:** Per-spoke scoped policies, audit logging, Raft snapshot backups
+- **Dynamic provisioning:** No hardcoded spoke list — each spoke provisioned on demand via `./dive vault provision <CODE>`
+- **Defense in depth:** Per-spoke scoped policies (template-generated), audit logging, Raft snapshot backups
 
 ---
 
@@ -40,6 +41,15 @@ DIVE V3 has integrated HashiCorp Vault 1.21 as its **default** secret management
      └────────────┘  └────────────┘  └────────────┘
 ```
 
+### Deployment Flow (Dynamic Provisioning)
+
+```
+nuke → vault start → init → unseal → setup (hub-only) → seed (hub+shared)
+     → hub deploy → vault provision <CODE> → spoke deploy <CODE> → spoke verify <CODE>
+```
+
+No spokes are assumed. Each spoke is explicitly provisioned before deployment.
+
 ### Secret Path Hierarchy (KV v2)
 
 | Mount | Purpose | Example Path |
@@ -54,10 +64,41 @@ DIVE V3 has integrated HashiCorp Vault 1.21 as its **default** secret management
 | Role | Scope | Authentication |
 |---|---|---|
 | Hub | Full admin: all `dive-v3/*` paths | Root token (`.vault-token`) |
-| Spoke DEU | R/W own secrets, R/O shared + federation + OPAL | AppRole (`VAULT_ROLE_ID` + `VAULT_SECRET_ID`) |
-| Spoke GBR | R/W own secrets, R/O shared + federation + OPAL | AppRole |
-| Spoke FRA | R/W own secrets, R/O shared + federation + OPAL | AppRole |
-| Spoke CAN | R/W own secrets, R/O shared + federation + OPAL | AppRole |
+| Spoke (any) | R/W own secrets, R/O shared + federation + OPAL | AppRole (`VAULT_ROLE_ID` + `VAULT_SECRET_ID`) |
+
+Spoke policies are generated dynamically from `vault_config/policies/spoke-template.hcl` — no static per-spoke HCL files.
+
+---
+
+## Commit Log (Branch: test/week1-day2-parallel-verification)
+
+### Phase 1: Code Integration (3 commits)
+| Commit | Description |
+|---|---|
+| `3a9483a7` | feat(vault): Integrate HashiCorp Vault 1.21 as multi-provider secret backend |
+| `26f41282` | feat(vault): Add audit logging, snapshot/restore CLI, and update README |
+| `663b63f8` | refactor(vault): Remove GCP dependency from critical path for open-source readiness |
+
+### Phase 2A: Deployment Pipeline Fixes (17 commits)
+| Commit | Description |
+|---|---|
+| `826b9b72` | docs(vault): Rewrite integration plan with SMART goals and handoff prompt |
+| `4d445b5e` | fix(secrets): Route all provider functions through Vault when SECRETS_PROVIDER=vault |
+| `d3380a46` | fix(common): Add Vault provider support to load_secrets() |
+| `635b7a89` | feat(vault): Add seed command and use configurable DIVE_SPOKE_LIST |
+| `31c17b9c` | fix(vault): Fix Raft storage permission denied on fresh Docker volumes |
+| `3e9a5bcb` | fix(vault): Resolve CLI-to-Vault connectivity for deployment pipeline |
+| `4f41cabe` | fix(secrets): Export all secret vars and fix MONGO_PASSWORD alias |
+| `c70e384d` | refactor(secrets): Normalize all secret vars to _\<COUNTRY_CODE\> suffix |
+| `895b8e7d` | fix(hub): Update Terraform vars to use _USA suffixed secret names |
+| `6f296afe` | fix(spoke): Resolve Hub Keycloak password by _USA suffix, use localhost not 127.0.0.1 |
+| `c7fcf8c7` | refactor(vault): Replace static spoke HCL policies with dynamic template |
+| `49c8403f` | feat(vault): Add dynamic spoke provisioning, make setup/seed hub-only |
+| `24680ed9` | refactor(common): Remove hardcoded DIVE_SPOKE_LIST, add dynamic spoke discovery |
+| `022554a3` | feat(spoke): Add Vault provisioning guard to spoke deploy |
+| `9e690533` | refactor(federation): Externalize locale mappings to config file |
+| `af6b22d2` | fix(spoke): Fix arithmetic exit code crash in 12-point verification |
+| `a6d5b768` | fix(verify): Port SSOT alignment, HTTPS enforcement, endpoint corrections |
 
 ---
 
@@ -65,278 +106,169 @@ DIVE V3 has integrated HashiCorp Vault 1.21 as its **default** secret management
 
 ### Phase 1: Code Integration — COMPLETE
 
-Three commits landed on `test/week1-day2-parallel-verification`:
-
-#### Commit 1: `3a9483a7` — Core Integration (17 files, +2,015/-85 lines)
 - Vault container service in `docker-compose.hub.yml` (IPC_LOCK, Raft volumes, healthcheck)
-- CLI module: `./dive vault init|unseal|status|setup` (414 lines)
-- Bash secrets layer: `vault_get_secret()`, `vault_set_secret()`, `vault_approle_login()` (+274 lines in secrets.sh)
-- Spoke secrets: `spoke_secrets_load_from_vault()`, `spoke_secrets_upload_to_vault()` (+249 lines)
+- CLI module: `./dive vault init|unseal|status|setup|seed|provision|snapshot|restore` (902 lines)
+- Bash secrets layer: `vault_get_secret()`, `vault_set_secret()`, `vault_approle_login()` in secrets.sh (1,129 lines)
+- Spoke secrets: `spoke_secrets_load_from_vault()`, `spoke_secrets_upload_to_vault()` in spoke-secrets.sh (1,240 lines)
 - TypeScript client: `backend/src/utils/vault-secrets.ts` (208 lines, KV v2, availability caching)
 - Provider routing in `gcp-secrets.ts`: all 6 public functions check `SECRETS_PROVIDER=vault` first
-- HCL policies: 1 hub + 4 spoke AppRole policies
+- Dynamic HCL policy template: `vault_config/policies/spoke-template.hcl` (replaces 4 static files)
+- Dynamic spoke discovery: `dive_get_provisioned_spokes()` in common.sh (Vault AppRole + fallback)
+- Config-driven locale mappings: `config/locale-mappings.conf` (8 NATO countries)
 - GCP-to-Vault migration script (294 lines, dry-run support)
-- Operational runbook: `docs/VAULT_INTEGRATION.md` (232 lines)
+- Operational runbook: `docs/VAULT_INTEGRATION.md`
 
-#### Commit 2: `26f41282` — Operations Hardening (4 files, +178/-25 lines)
-- `./dive vault snapshot [path]` — Raft snapshot backup
-- `./dive vault restore <path>` — Raft snapshot restore
-- Audit logging enabled in `module_vault_setup()`
-- README updated with Vault setup instructions and production checklist
+### Phase 2A: Single-Spoke Pilot — COMPLETE
 
-#### Commit 3: `663b63f8` — Open-Source Pivot (8 files, +47/-111 lines)
-- Removed ALL GCP dependency from `vault init` and `vault unseal` (unseal keys stored locally only)
-- Changed default `SECRETS_PROVIDER` from `gcp` to `vault` in 7 locations
-- Removed GCP Cloud KMS auto-unseal comment block from config.hcl
-- Removed Google Cloud SDK from README prerequisites
-- Updated docs to reflect zero-cloud-dependency architecture
+**Validated via clean-slate deployment test (2026-02-09):**
 
-### Files Created/Modified
-
-| File | Lines | Status |
+| Step | Command | Result |
 |---|---|---|
-| `scripts/dive-modules/vault/module.sh` | 494 | NEW — CLI commands |
-| `scripts/dive-modules/configuration/secrets.sh` | 1,078 | MODIFIED — +274 lines Vault provider |
-| `scripts/dive-modules/spoke/pipeline/spoke-secrets.sh` | 1,223 | MODIFIED — +249 lines Vault loading |
-| `backend/src/utils/vault-secrets.ts` | 208 | NEW — TypeScript KV v2 client |
-| `backend/src/utils/gcp-secrets.ts` | 555 | MODIFIED — provider routing |
-| `scripts/migrate-secrets-gcp-to-vault.sh` | 294 | NEW — migration tool |
-| `docs/VAULT_INTEGRATION.md` | 240 | NEW — operational runbook |
-| `vault_config/config.hcl` | 24 | NEW — server configuration |
-| `vault_config/policies/hub.hcl` | 18 | NEW — hub access policy |
-| `vault_config/policies/spoke-{deu,gbr,fra,can}.hcl` | 34 ea. | NEW — spoke access policies |
-| `docker-compose.hub.yml` | — | MODIFIED — Vault service + env vars |
-| `templates/spoke/docker-compose.template.yml` | — | MODIFIED — Vault env vars |
-| `dive` | — | MODIFIED — vault command dispatch |
-| `.gitignore` | — | MODIFIED — .vault-token, .vault-init.txt |
-| `README.md` | — | MODIFIED — Vault setup, removed GCP prereq |
-| **Total** | **4,116** | **17 files (10 new, 7 modified)** |
+| 1. Nuke | `./dive nuke all --confirm --keep-images` | Clean |
+| 2. Vault Start | `docker compose -f docker-compose.hub.yml up -d vault` | Healthy |
+| 3. Vault Init | `./dive vault init` | 5 keys + root token |
+| 4. Vault Unseal | `./dive vault unseal` | 3 keys applied |
+| 5. Vault Setup | `./dive vault setup` | 4 KV mounts, hub policy, AppRole, audit |
+| 6. Vault Seed | `./dive vault seed` | 10 secrets (5 USA + 5 shared) |
+| 7. Hub Deploy | `./dive hub deploy` | 236s, 352 Terraform resources, 10 services healthy |
+| 8. Provision DEU | `./dive vault provision DEU` | Policy + AppRole + 6 secrets + .env sync |
+| 9. Deploy DEU | `./dive spoke deploy DEU` | 592s, 9/9 services healthy |
+| 10. Verify DEU | `./dive spoke verify DEU` | **12/12 checks PASS** |
+
+**12-Point Verification Results (DEU):**
+1. Docker Containers: PASS 8/8 running
+2. Keycloak Health: PASS Healthy
+3. Backend API Health: PASS Healthy
+4. MongoDB Connection: PASS Connected
+5. Redis Connection: PASS Connected
+6. OPA Health: PASS Healthy
+7. OPAL Client: WARN Connecting (counts as pass)
+8. Hub Connectivity: PASS Reachable
+9. Policy Bundle: PASS Loaded (34 policies)
+10. Token Validity: PASS Token present
+11. Hub Heartbeat: WARN No response (counts as pass)
+12. TLS Certificates: PASS Valid (819 days left)
+
+### Phase 2B: Multi-Spoke + Integration Testing — NOT STARTED
+
+See detailed plan below.
 
 ---
 
-## Phase 2: Deployment & Testing — IN PROGRESS
+## Phase 2B: Multi-Spoke Deployment & Integration Testing
 
-### 2.1 Vault Container Startup
+### 2B.1 Deploy Remaining Spokes
 
-**Goal:** Vault container running and healthy on hub stack.
-**Measurable:** `docker ps | grep dive-hub-vault` shows healthy status.
-**Timeline:** 15 minutes.
-
-```bash
-# Start Vault container
-docker compose -f docker-compose.hub.yml up -d vault
-
-# Verify container health
-docker ps --filter "name=dive-hub-vault" --format "{{.Status}}"
-# Expected: Up X seconds (healthy)
-```
-
-**Success Criteria:**
-- [ ] Vault container running with `(healthy)` status
-- [ ] Port 8200 accessible: `curl -s http://127.0.0.1:8200/v1/sys/health`
-- [ ] Vault UI accessible at `http://localhost:8200/ui`
-
-### 2.2 Vault Initialization
-
-**Goal:** Vault initialized with unseal keys and root token stored locally.
-**Measurable:** `.vault-init.txt` and `.vault-token` files exist with correct permissions (600).
-**Timeline:** 5 minutes.
+**Goal:** Provision and deploy GBR, FRA, CAN spokes alongside existing DEU.
+**Measurable:** 12/12 verification pass for each spoke.
+**Timeline:** 45 minutes (15 min per spoke).
 
 ```bash
-# Initialize Vault (one-time)
-./dive vault init
-
-# Verify files created
-ls -la .vault-init.txt .vault-token
-# Expected: -rw------- (600 permissions)
-
-# Unseal Vault
-./dive vault unseal
-
-# Check status
-./dive vault status
-# Expected: "Vault is unsealed and ready" + "Vault token is valid"
-```
-
-**Success Criteria:**
-- [ ] `.vault-init.txt` contains 5 unseal keys and root token
-- [ ] `.vault-token` contains valid root token
-- [ ] `vault status` shows `Sealed: false`
-- [ ] File permissions are 600 (owner-only read/write)
-
-### 2.3 Vault Configuration
-
-**Goal:** All mount points, policies, AppRoles, and audit logging configured.
-**Measurable:** 4 KV v2 mounts, 5 policies, 4 AppRoles, 1 audit device.
-**Timeline:** 10 minutes.
-
-```bash
-# Configure mount points, policies, AppRoles, audit logging
-./dive vault setup
-
-# Verify mount points
-vault secrets list | grep "dive-v3"
-# Expected: dive-v3/core/, dive-v3/auth/, dive-v3/federation/, dive-v3/opal/
-
-# Verify policies
-vault policy list | grep "dive-v3"
-# Expected: dive-v3-hub, dive-v3-spoke-deu, dive-v3-spoke-gbr, dive-v3-spoke-fra, dive-v3-spoke-can
-
-# Verify AppRoles
-vault list auth/approle/role
-# Expected: spoke-deu, spoke-gbr, spoke-fra, spoke-can
-
-# Verify audit logging
-vault audit list
-# Expected: file/ (file audit device)
-```
-
-**Success Criteria:**
-- [ ] 4 KV v2 mount points enabled
-- [ ] 5 HCL policies created (1 hub + 4 spokes)
-- [ ] 4 AppRoles created with scoped token policies
-- [ ] AppRole credentials saved to spoke `.env` files
-- [ ] File audit device enabled
-
-### 2.4 Secret Seeding
-
-**Goal:** All required secrets populated in Vault for hub and spoke deployment.
-**Measurable:** Every `vault kv get` for required paths returns a valid value.
-**Timeline:** 20 minutes.
-
-For a fresh deployment (no GCP migration needed), seed secrets directly:
-
-```bash
-# Generate and store secrets for each instance
-for instance in usa deu gbr fra can; do
-  vault kv put "dive-v3/core/${instance}/postgres" password="$(openssl rand -base64 32 | tr -d '/+=')"
-  vault kv put "dive-v3/core/${instance}/mongodb" password="$(openssl rand -base64 32 | tr -d '/+=')"
-  vault kv put "dive-v3/core/${instance}/redis" password="$(openssl rand -base64 32 | tr -d '/+=')"
-  vault kv put "dive-v3/core/${instance}/keycloak-admin" password="$(openssl rand -base64 32 | tr -d '/+=')"
-  vault kv put "dive-v3/auth/${instance}/nextauth" secret="$(openssl rand -base64 32 | tr -d '/+=')"
+for spoke in gbr fra can; do
+    ./dive vault provision $spoke
+    ./dive spoke deploy $spoke
+    ./dive spoke verify $spoke
 done
-
-# Shared secrets
-vault kv put "dive-v3/auth/shared/keycloak-client" secret="$(openssl rand -base64 32 | tr -d '/+=')"
-vault kv put "dive-v3/core/shared/redis-blacklist" password="$(openssl rand -base64 32 | tr -d '/+=')"
-vault kv put "dive-v3/opal/master-token" token="$(openssl rand -base64 32 | tr -d '/+=')"
-```
-
-For migration from existing GCP secrets:
-```bash
-DRY_RUN=true ./scripts/migrate-secrets-gcp-to-vault.sh   # Preview
-./scripts/migrate-secrets-gcp-to-vault.sh                  # Execute
 ```
 
 **Success Criteria:**
-- [ ] All instance secrets (5 × 5 = 25) stored in Vault
-- [ ] All shared secrets (3) stored in Vault
-- [ ] `vault kv get dive-v3/core/usa/postgres` returns a password
-- [ ] `vault kv get dive-v3/opal/master-token` returns a token
+- [x] DEU: 12/12 verification pass
+- [ ] GBR: 12/12 verification pass
+- [ ] FRA: 12/12 verification pass
+- [ ] CAN: 12/12 verification pass
+- [ ] All 4 spokes + hub running simultaneously (10 hub + 36 spoke = 46 containers)
 
-### 2.5 Hub Deployment with Vault
+### 2B.2 Federation Integration Testing
 
-**Goal:** Hub deploys successfully using Vault-sourced secrets.
-**Measurable:** All hub services healthy, zero GCP API calls in logs.
+**Goal:** Cross-instance federation token exchange and OPAL sync working.
+**Measurable:** Federation health endpoints respond, OPAL data synced to all spokes.
 **Timeline:** 30 minutes.
 
 ```bash
-# Deploy hub
-./dive hub deploy
-
-# Verify
-docker logs dive-hub-vault 2>&1 | grep -i "seal" | tail -5
-docker logs dive-hub-backend 2>&1 | grep -i "connected\|started" | tail -5
-docker logs dive-hub-keycloak 2>&1 | grep -i "started" | tail -5
-```
-
-**Success Criteria:**
-- [ ] Vault container healthy throughout deployment
-- [ ] Backend connects to PostgreSQL using Vault-sourced password
-- [ ] Keycloak starts with Vault-sourced admin password
-- [ ] No GCP Secret Manager API calls in any service logs
-- [ ] `./dive hub verify` passes all checks
-
-### 2.6 Spoke Deployment with Vault
-
-**Goal:** All spokes deploy using AppRole authentication and Vault-sourced secrets.
-**Measurable:** 12-point verification passes for each spoke.
-**Timeline:** 1 hour (15 min per spoke).
-
-```bash
-# Deploy each spoke
+# Check federation health on each spoke
 for spoke in deu gbr fra can; do
-  ./dive spoke deploy $spoke
-  ./dive spoke verify $spoke
+    echo "=== $spoke ==="
+    curl -ks "https://localhost:40$(get_country_offset $(echo $spoke | tr a-z A-Z))/api/federation/health"
+done
+
+# Verify OPAL data synced to spoke OPA instances
+for spoke in deu gbr fra can; do
+    echo "=== $spoke OPA ==="
+    eval "$(get_instance_ports $(echo $spoke | tr a-z A-Z))"
+    curl -ks "https://localhost:${SPOKE_OPA_PORT}/v1/data" | python3 -m json.tool | head -20
 done
 ```
 
-**Success Criteria (per spoke):**
-- [ ] Docker containers running (all 9 services)
-- [ ] PostgreSQL connectivity via Vault-sourced password
-- [ ] MongoDB replica set initialized
-- [ ] Redis connectivity
-- [ ] Keycloak admin API accessible
-- [ ] OPA policy loaded
-- [ ] Backend health endpoint responding
-- [ ] Frontend accessible
-- [ ] Federation trust established with hub
-- [ ] OPAL policy sync working
-- [ ] KAS service running
-- [ ] Certificate validity confirmed
+**Success Criteria:**
+- [ ] Federation health endpoint returns `{"status":"healthy"}` on all spokes
+- [ ] Each spoke OPA has `federation_matrix` and `trusted_issuers` data
+- [ ] Hub federation registry shows all 4 spokes as `approved`
 
-### 2.7 Integration Testing
+### 2B.3 Cross-Instance Token Revocation
 
-**Goal:** Cross-instance federation, OPAL sync, and token revocation working end-to-end.
-**Measurable:** All federation and revocation tests pass.
-**Timeline:** 1 hour.
+**Goal:** Token blacklisting works across the federation.
+**Measurable:** Token revoked on one instance is rejected on all others.
+**Timeline:** 30 minutes.
+
+**Manual Test Procedure:**
+1. Login on USA frontend (`https://localhost:3000`)
+2. Copy the JWT from cookies/local storage
+3. Verify token works on DEU backend: `curl -kH "Authorization: Bearer <token>" https://localhost:4011/api/documents`
+4. Logout on USA
+5. Verify same token is NOW rejected on DEU backend (should get 401)
+6. Verify token appears in Redis blacklist: `docker exec dive-hub-redis redis-cli KEYS "blacklist:*"`
+
+**Success Criteria:**
+- [ ] Login/logout cycle works on hub frontend
+- [ ] Revoked tokens rejected within 60 seconds across all instances
+- [ ] Redis blacklist entries visible
+
+### 2B.4 Secret Rotation Test
+
+**Goal:** Validate that changing a secret in Vault and restarting the service picks up the new value.
+**Measurable:** Service reconnects with new credentials after restart.
+**Timeline:** 15 minutes.
 
 ```bash
-# Federation tests
-./dive test federation usa deu
-./dive test federation usa gbr
+# Change DEU Redis password in Vault
+vault kv put dive-v3/core/deu/redis password="new-test-password-$(date +%s)"
 
-# Verify OPAL sync (spoke OPA has hub policies)
-docker exec dive-spoke-deu-opa curl -s localhost:8181/v1/data | jq '.result | keys'
+# Restart DEU Redis + Backend to pick up new password
+docker restart dive-spoke-deu-redis dive-spoke-deu-backend
 
-# Token revocation test (manual)
-# 1. Login on USA frontend
-# 2. Logout on DEU
-# 3. Verify token appears in Redis blacklist
-# 4. Verify USA rejects the token
+# Verify backend reconnects
+sleep 15
+curl -ks "https://localhost:4011/api/health"
+# Expected: {"status":"healthy"} with Redis connected
 ```
 
 **Success Criteria:**
-- [ ] Federation token exchange works between hub and all spokes
-- [ ] OPAL data syncs to all spoke OPA instances
-- [ ] Cross-instance token revocation via Redis blacklist works
-- [ ] Secret rotation test: change password in Vault → restart service → reconnects
+- [ ] Service reconnects with new Vault-sourced password after restart
+- [ ] `./dive spoke verify DEU` still passes 12/12
 
-### 2.8 Backup Verification
+### 2B.5 Backup & Restore Validation
 
 **Goal:** Raft snapshot backup and restore procedure validated.
-**Measurable:** Snapshot creates, Vault restores from snapshot, secrets intact.
+**Measurable:** Snapshot creates, Vault restores from snapshot, all secrets intact.
 **Timeline:** 15 minutes.
 
 ```bash
 # Create snapshot
 ./dive vault snapshot
-# Expected: backups/vault/vault-snapshot-YYYYMMDD-HHMMSS.snap
 
-# Verify snapshot file exists and has reasonable size
+# Verify snapshot file
 ls -la backups/vault/
 
-# (Optional) Test restore procedure
-./dive vault restore backups/vault/<snapshot-file>.snap
-./dive vault unseal
-./dive vault status
-vault kv get dive-v3/core/usa/postgres  # Verify secrets intact
+# (Optional) Full restore test:
+# ./dive vault restore backups/vault/<snapshot>.snap
+# ./dive vault unseal
+# vault kv get dive-v3/core/usa/postgres
 ```
 
 **Success Criteria:**
 - [ ] Snapshot file created in `backups/vault/`
 - [ ] Snapshot file size > 0 bytes
-- [ ] Restore procedure documented and tested (optional for pilot)
+- [ ] (Optional) Restore procedure validated
 
 ---
 
@@ -344,48 +276,56 @@ vault kv get dive-v3/core/usa/postgres  # Verify secrets intact
 
 These items are explicitly deferred. They add value but are not required for the pilot/POC.
 
-### 3.1 Vault PKI Engine for TLS Certificates
-**What:** Replace mkcert self-signed certificates with Vault-issued certificates.
-**Why deferred:** Current mkcert approach works for development; PKI adds operational complexity.
-**Prerequisite:** Phase 2 complete, Vault stable for 2+ weeks.
-**Effort:** 3-5 days.
+| ID | Feature | Prerequisite | Effort |
+|---|---|---|---|
+| 3.1 | Vault PKI for TLS Certificates | Phase 2 complete, Vault stable 2+ weeks | 3-5 days |
+| 3.2 | Dynamic Database Credentials (1h TTL) | Phase 2 complete, services support refresh | 3-5 days |
+| 3.3 | Vault Agent Sidecar | 3.2 implemented | 2-3 days |
+| 3.4 | High Availability Cluster (3-node Raft) | Production decision | 2-3 days |
+| 3.5 | Auto-Unseal (Cloud KMS or Transit) | 3.4 or cloud provider decision | 1 day |
+| 3.6 | Vault Namespaces (multi-env) | Multi-environment deployment | 1-2 days |
+| 3.7 | GCP Legacy Code Removal | Vault stable 30+ days | 1-2 days |
 
-### 3.2 Dynamic Database Credentials
-**What:** PostgreSQL and MongoDB credentials with 1-hour TTL auto-rotation.
-**Why deferred:** Static credentials work for pilot; dynamic credentials require Vault database engine configuration per instance.
-**Prerequisite:** Phase 2 complete, all services support credential refresh.
-**Effort:** 3-5 days.
+---
 
-### 3.3 Vault Agent Sidecar
-**What:** Vault Agent runs alongside each service container, handling token renewal and secret templating.
-**Why deferred:** Current env-var injection works; Agent adds container complexity.
-**Prerequisite:** Dynamic credentials (3.2) implemented.
-**Effort:** 2-3 days.
+## Key Technical Decisions Made
 
-### 3.4 High Availability Cluster
-**What:** 3-node Vault cluster with Raft consensus for production HA.
-**Why deferred:** Single-node sufficient for pilot; HA requires infrastructure investment.
-**Prerequisite:** Production deployment decision.
-**Effort:** 2-3 days.
+### Dynamic Spoke Provisioning (replaces static spoke list)
+- **Before:** `DIVE_SPOKE_LIST="gbr fra deu can"` hardcoded, 4 static HCL policy files
+- **After:** `DIVE_SPOKE_LIST=""` (empty default), single template HCL, `./dive vault provision <CODE>` creates policy+AppRole+secrets on demand
+- **Discovery:** `dive_get_provisioned_spokes()` queries Vault AppRoles, falls back to `instances/*/` scan
 
-### 3.5 Auto-Unseal
-**What:** Automatic unseal using cloud KMS (GCP, AWS, or Azure) or Transit engine.
-**Why deferred:** Manual unseal acceptable for pilot; auto-unseal requires cloud provider or separate Vault.
-**Prerequisite:** HA cluster (3.4) or cloud provider decision.
-**Effort:** 1 day.
+### Secret Variable Normalization
+- **Before:** Mixed naming (`POSTGRES_PASSWORD`, `KC_ADMIN_PASSWORD`, etc.)
+- **After:** All secrets use `_<COUNTRY_CODE>` suffix (`POSTGRES_PASSWORD_USA`, `POSTGRES_PASSWORD_DEU`, etc.)
+- **Rationale:** Prevents cross-instance secret collision when multiple instances share environment
 
-### 3.6 Vault Namespaces
-**What:** Logical isolation between environments (dev/staging/prod) within single Vault instance.
-**Why deferred:** Single environment for pilot.
-**Prerequisite:** Multi-environment deployment.
-**Effort:** 1-2 days.
+### Port Calculation SSOT
+- **SSOT:** `get_country_ports()` in `scripts/nato-countries.sh` (32 NATO countries + partner nations)
+- **Consumer:** `get_instance_ports()` in `common.sh` MUST match formulas exactly
+- **Key formulas:** OPA = `8181 + offset*10`, Keycloak HTTP = `8080 + offset`, Backend = `4000 + offset`
+- **Critical:** The docker-compose generator uses nato-countries.sh; verification uses common.sh — divergence = verification failure
 
-### 3.7 GCP Legacy Code Removal
-**What:** Remove GCP Secret Manager code from secrets.sh, gcp-secrets.ts, and spoke-secrets.sh.
-**Why deferred:** GCP code is inactive by default (`SECRETS_PROVIDER=vault`) but provides rollback safety net.
-**Prerequisite:** Vault stable for 30+ days, no rollback needed.
-**Effort:** 1-2 days.
-**Impact:** ~89 files reference GCP; full removal requires careful audit.
+### Verification HTTPS Enforcement
+- All services (Backend, OPA, Frontend, Keycloak) speak HTTPS in this stack
+- All `curl` checks in verification primitives use `-sk` flags (silent + insecure for self-signed)
+- Backend health endpoint: `/api/health` (not `/health`)
+
+---
+
+## Bugs Fixed During Integration
+
+| Bug | Root Cause | Fix |
+|---|---|---|
+| Vault CLI can't connect | Used `127.0.0.1` instead of `localhost` (Docker networking) | Changed to `localhost` in module.sh + secrets.sh |
+| Hub Keycloak password not found | Spoke pipeline looked for `KC_ADMIN_PASSWORD` without `_USA` suffix | Added `_USA` suffix fallback chain |
+| Raft permission denied | Fresh Docker volumes have wrong ownership | Added `chown -R vault:vault /vault` to entrypoint |
+| Secret vars not exported | `source .env` doesn't export; subshells lose vars | Added explicit `export` to all secret loading |
+| Spoke verify crashes at check 1 | `((running_count++))` returns exit code 1 when var=0 under `set -e` | Changed to `var=$((var + 1))` |
+| OPA port mismatch | `get_instance_ports()` had `9100+offset` vs SSOT `8181+offset*10` | Aligned formulas |
+| Backend check fails | Verification used `http://` and `/health` | Changed to `https://` and `/api/health` |
+| spoke_id empty | Read from `config.json:spokeId` (empty) instead of `.env:SPOKE_ID` | Read from `.env` |
+| hub_url unreachable | config.json has Docker-internal hostname | Override with `localhost` in local/dev mode |
 
 ---
 
@@ -406,7 +346,6 @@ export SECRETS_PROVIDER=gcp
 
 For fresh deployments without GCP history, rollback means reverting to environment variable secrets:
 ```bash
-# Set SECRETS_PROVIDER to empty/unset to use env vars directly
 unset SECRETS_PROVIDER
 # Secrets must be provided via .env files or docker-compose environment
 ```
@@ -418,11 +357,11 @@ unset SECRETS_PROVIDER
 | Risk | Likelihood | Impact | Mitigation |
 |---|---|---|---|
 | Vault sealed after container restart | High | High — all services lose secret access | Document unseal SOP; store `.vault-init.txt` securely; consider auto-unseal (Phase 3.5) |
-| Vault container crashes | Medium | High — spoke services cannot start | Docker `restart: unless-stopped`; monitor container health; Raft snapshots for data recovery |
-| Secret not found in Vault | Low | Medium — specific service fails to start | Seed script validates all paths; spoke verification catches missing secrets |
-| Network partition (spoke cannot reach Vault) | Low | Medium — spoke deployment fails | `dive-shared` Docker network; `curl` pre-flight check in spoke pipeline |
+| Vault container crashes | Medium | High — spoke services cannot start | Docker `restart: unless-stopped`; Raft snapshots for recovery |
+| Secret not found in Vault | Low | Medium — specific service fails to start | `vault provision` validates paths; spoke verification catches missing secrets |
+| Network partition (spoke cannot reach Vault) | Low | Medium — spoke deployment fails | `dive-shared` Docker network; preflight Check 0 validates Vault provisioning |
 | Unseal keys lost | Very Low | Critical — Vault data unrecoverable | `.vault-init.txt` with 600 permissions; recommend secure off-host backup |
-| AppRole secret_id compromised | Very Low | Medium — attacker gets spoke-scoped access | token_ttl=1h limits exposure; regenerate secret_id via `./dive vault setup` |
+| AppRole secret_id compromised | Very Low | Medium — attacker gets spoke-scoped access | token_ttl=1h; regenerate via `./dive vault provision` |
 
 ---
 
@@ -433,7 +372,14 @@ unset SECRETS_PROVIDER
 ./dive vault init                     # One-time initialization
 ./dive vault unseal                   # Unseal after restart
 ./dive vault status                   # Health check
-./dive vault setup                    # Configure policies + AppRoles
+./dive vault setup                    # Configure mount points + hub policy
+./dive vault seed                     # Generate hub (USA) + shared secrets
+./dive vault provision DEU            # Provision a spoke: policy, AppRole, secrets, .env
+
+# Deployment
+./dive hub deploy                     # Deploy hub stack
+./dive spoke deploy DEU               # Deploy spoke (requires prior vault provision)
+./dive spoke verify DEU               # 12-point verification
 
 # Operations
 ./dive vault snapshot                 # Backup to backups/vault/
@@ -443,104 +389,139 @@ unset SECRETS_PROVIDER
 # Secrets (via vault CLI directly)
 vault kv get dive-v3/core/deu/postgres          # Read a secret
 vault kv put dive-v3/core/deu/postgres password="new"  # Write a secret
-vault kv list dive-v3/core/deu/                 # List secrets
-
-# Migration (from GCP)
-DRY_RUN=true ./scripts/migrate-secrets-gcp-to-vault.sh
-./scripts/migrate-secrets-gcp-to-vault.sh --instance deu
+vault kv list dive-v3/core/                     # List instance paths
 ```
+
+---
+
+## File Reference (Current State)
+
+| File | Lines | Purpose |
+|---|---|---|
+| `scripts/dive-modules/vault/module.sh` | 902 | CLI commands (init, unseal, setup, seed, provision, snapshot, restore) |
+| `scripts/dive-modules/configuration/secrets.sh` | 1,129 | Bash Vault provider (get/set/auth/approle) |
+| `scripts/dive-modules/spoke/pipeline/spoke-secrets.sh` | 1,240 | Spoke Vault loading + upload |
+| `scripts/dive-modules/common.sh` | 1,576 | Shared utilities, port SSOT, spoke discovery |
+| `scripts/dive-modules/spoke/verification.sh` | 337 | 12-point spoke verification |
+| `scripts/dive-modules/deployment/verification.sh` | 392 | Shared verification primitives |
+| `scripts/dive-modules/spoke/spoke-deploy.sh` | 200 | Spoke deploy with Vault guard |
+| `scripts/dive-modules/spoke/pipeline/spoke-preflight.sh` | 490 | Preflight with Vault provisioning check |
+| `backend/src/utils/vault-secrets.ts` | 208 | TypeScript Vault KV v2 client |
+| `backend/src/utils/gcp-secrets.ts` | 555 | Provider routing (Vault → GCP fallback) |
+| `vault_config/config.hcl` | 24 | Vault server configuration (Raft, listener, UI) |
+| `vault_config/policies/hub.hcl` | 18 | Hub access policy |
+| `vault_config/policies/spoke-template.hcl` | 7 | Dynamic spoke policy template |
+| `config/locale-mappings.conf` | 8 | NATO locale attribute mappings |
+| `scripts/nato-countries.sh` | ~640 | Port SSOT (NATO_PORT_OFFSETS, get_country_ports) |
+| `docker-compose.hub.yml` | — | Vault service definition |
+| `templates/spoke/docker-compose.template.yml` | — | Spoke template with Vault env vars |
+| `scripts/migrate-secrets-gcp-to-vault.sh` | 294 | GCP → Vault migration tool |
+| `docs/VAULT_INTEGRATION.md` | 240 | Operational runbook |
 
 ---
 
 ## Success Criteria Summary
 
-### Phase 2 Exit Criteria (Deployment & Testing)
-- [ ] Vault container running and unsealed on hub stack
-- [ ] All mount points, policies, AppRoles configured
-- [ ] All secrets seeded (25 instance + 3 shared = 28 total)
-- [ ] Hub deployment passes verification with `SECRETS_PROVIDER=vault`
-- [ ] All spoke deployments pass 12-point verification
+### Phase 2A Exit Criteria — COMPLETE
+- [x] Vault container running and unsealed on hub stack
+- [x] All mount points, policies configured (hub-only setup)
+- [x] Hub secrets seeded (5 USA + 5 shared = 10)
+- [x] Hub deployment passes with `SECRETS_PROVIDER=vault` (10 services healthy)
+- [x] Dynamic spoke provisioning works (`./dive vault provision DEU`)
+- [x] Spoke DEU deployment passes 12-point verification (12/12)
+- [x] Vault audit log recording access patterns
+- [x] No static spoke list dependencies
+
+### Phase 2B Exit Criteria — NOT STARTED
+- [ ] All 4 spokes (DEU, GBR, FRA, CAN) pass 12/12 verification
 - [ ] Federation token exchange works across all instances
 - [ ] OPAL policy sync verified on all spokes
 - [ ] Cross-instance token revocation working
+- [ ] Secret rotation validated (change in Vault → restart → reconnect)
 - [ ] Raft snapshot backup created and verified
-- [ ] Zero GCP Secret Manager API calls in service logs
-- [ ] Vault audit log recording access patterns
 
 ### Overall Integration Success
-- [ ] Phase 1 code complete (DONE — 3 commits, 17 files, +2,240 lines)
-- [ ] Phase 2 deployment validated
-- [ ] No cloud provider account required for fresh deployment
-- [ ] Rollback procedure documented and tested
-- [ ] Operational runbook published (`docs/VAULT_INTEGRATION.md`)
+- [x] Phase 1 code complete (20 commits, 30+ files)
+- [x] Phase 2A single-spoke pilot validated
+- [ ] Phase 2B multi-spoke deployment validated
+- [x] No cloud provider account required for fresh deployment
+- [x] Rollback procedure documented
+- [x] Operational runbook published
 
 ---
 
 ## New Session Handoff Prompt
 
-Use this prompt to continue Vault integration work in a new chat session:
+Use this prompt to continue work in a new chat session:
 
 ```
-I'm continuing work on DIVE V3's HashiCorp Vault 1.21 integration. Here's the context:
+I'm continuing work on DIVE V3's HashiCorp Vault 1.21 integration.
 
-## What's Done (Phase 1 — Code Complete)
-- Branch: test/week1-day2-parallel-verification
-- 3 commits: 3a9483a7, 26f41282, 663b63f8 (17 files, +2,240 lines)
-- Vault is the DEFAULT secret provider (SECRETS_PROVIDER=vault everywhere)
-- Zero cloud dependency — no GCP/AWS required
-- Key files:
-  - scripts/dive-modules/vault/module.sh (494 lines) — CLI: init, unseal, status, setup, snapshot, restore
-  - scripts/dive-modules/configuration/secrets.sh (1,078 lines) — vault_get_secret/set_secret/approle_login
-  - scripts/dive-modules/spoke/pipeline/spoke-secrets.sh (1,223 lines) — spoke_secrets_load_from_vault
-  - backend/src/utils/vault-secrets.ts (208 lines) — TypeScript KV v2 client
-  - backend/src/utils/gcp-secrets.ts (555 lines) — provider routing (checks Vault first)
-  - vault_config/ — config.hcl + 5 HCL policies (hub + 4 spokes)
-  - scripts/migrate-secrets-gcp-to-vault.sh (294 lines) — GCP→Vault migration
-  - docs/VAULT_INTEGRATION.md (240 lines) — operational runbook
+## Current State (2026-02-09)
+- Branch: test/week1-day2-parallel-verification (20 commits ahead of main)
+- Phase 2A (Single-Spoke Pilot) is COMPLETE and validated
+- Hub + DEU spoke currently running (20 healthy containers)
+- Vault is initialized, unsealed, and serving secrets
+- DEU spoke passes 12/12 verification checks
 
-## What's Next (Phase 2 — Deployment & Testing)
-Follow the Phase 2 checklist in Vault-IntegrationPlan.md:
-1. Start Vault container: docker compose -f docker-compose.hub.yml up -d vault
-2. Initialize: ./dive vault init
-3. Unseal: ./dive vault unseal
-4. Configure: ./dive vault setup
-5. Seed secrets (generate fresh or migrate from GCP)
-6. Deploy hub: ./dive hub deploy
-7. Deploy spokes: ./dive spoke deploy deu (repeat for gbr, fra, can)
-8. Run integration tests (federation, OPAL sync, token revocation)
-9. Create Raft snapshot backup
+## What Was Completed in Previous Sessions
 
-## Deferred (Phase 3 — Future)
-- Vault PKI for TLS certs
-- Dynamic DB credentials (1h TTL)
-- Vault Agent sidecar
-- HA cluster (3-node)
-- Auto-unseal
-- GCP legacy code removal
+### Phase 1: Code Integration (3 commits)
+- Vault container on hub stack (docker-compose.hub.yml, Raft storage, healthcheck)
+- CLI: ./dive vault init|unseal|status|setup|seed|provision|snapshot|restore (902 lines)
+- Bash: vault_get_secret(), vault_set_secret(), vault_approle_login() (secrets.sh, 1,129 lines)
+- Spoke: spoke_secrets_load_from_vault() (spoke-secrets.sh, 1,240 lines)
+- TypeScript: vault-secrets.ts KV v2 client (208 lines)
+- Provider routing: gcp-secrets.ts checks SECRETS_PROVIDER=vault first
 
-## Key Constraint
-This is a pilot/POC, self-funded, intended for open-source. No GCP dependency
-in the critical path. Keep infrastructure lightweight.
+### Phase 2A: Deployment Pipeline (17 commits)
+- Fixed Raft permissions, CLI connectivity, secret var naming (_<COUNTRY_CODE> suffix)
+- Normalized Hub Keycloak password resolution (_USA suffix fallback)
+- Replaced 4 static HCL policies with single spoke-template.hcl
+- Added ./dive vault provision <CODE> (dynamic per-spoke: policy+AppRole+secrets+.env)
+- Removed hardcoded DIVE_SPOKE_LIST, added dive_get_provisioned_spokes() discovery
+- Added Vault provisioning guard in spoke-deploy.sh and spoke-preflight.sh
+- Externalized locale mappings to config/locale-mappings.conf
+- Fixed port SSOT divergence (OPA: 8181+offset*10, KC HTTP: 8080+offset)
+- Fixed all verification: HTTP→HTTPS, /health→/api/health, spoke_id from .env
+- Fixed ((var++)) crash with set -e (exit code 1 when var=0)
+- Clean-slate test: nuke → vault init/unseal/setup/seed → hub deploy → vault provision DEU → spoke deploy DEU → 12/12 verify PASS
 
-Please proceed with Phase 2 deployment testing.
+## What's Next: Phase 2B (Multi-Spoke + Integration Testing)
+
+Read Vault-IntegrationPlan.md for full details. Summary:
+
+1. Deploy remaining spokes (GBR, FRA, CAN):
+   ./dive vault provision gbr && ./dive spoke deploy gbr && ./dive spoke verify gbr
+   (repeat for fra, can)
+
+2. Federation integration testing:
+   - Federation health endpoints on all spokes
+   - OPAL data sync to all spoke OPA instances
+   - Hub federation registry shows all spokes approved
+
+3. Cross-instance token revocation:
+   - Login on USA, use token on DEU, logout on USA, verify DEU rejects token
+
+4. Secret rotation test:
+   - Change password in Vault → restart service → verify reconnects
+
+5. Raft snapshot backup validation
+
+## Key Files
+- scripts/dive-modules/vault/module.sh (902 lines) — all vault CLI commands
+- scripts/dive-modules/configuration/secrets.sh (1,129 lines) — provider routing
+- scripts/dive-modules/spoke/verification.sh (337 lines) — 12-point check
+- scripts/dive-modules/deployment/verification.sh (392 lines) — shared primitives
+- scripts/dive-modules/common.sh (1,576 lines) — get_instance_ports(), port SSOT
+- scripts/nato-countries.sh (~640 lines) — get_country_ports(), NATO_PORT_OFFSETS
+- vault_config/policies/spoke-template.hcl — dynamic policy template
+
+## Known Constraints
+- Vault must be manually unsealed after container restart (auto-unseal deferred to Phase 3.5)
+- OPAL sync needs >105s during initial deployment (first data pull is slow)
+- Hub heartbeat check (verify check 11) returns WARN (spoke-hub heartbeat API not implemented yet)
+- Self-funded pilot, open-source, zero cloud provider dependency
+
+Please proceed with Phase 2B: deploy GBR, FRA, CAN spokes and run integration tests.
 ```
-
----
-
-## File Reference
-
-| File | Purpose |
-|---|---|
-| `docker-compose.hub.yml` | Vault service definition (container, volumes, healthcheck) |
-| `vault_config/config.hcl` | Vault server configuration (Raft, listener, UI) |
-| `vault_config/policies/*.hcl` | Access control policies (hub + 4 spokes) |
-| `scripts/dive-modules/vault/module.sh` | CLI commands (init, unseal, setup, snapshot, restore) |
-| `scripts/dive-modules/configuration/secrets.sh` | Bash Vault provider (get/set/auth) |
-| `scripts/dive-modules/spoke/pipeline/spoke-secrets.sh` | Spoke Vault loading + upload |
-| `backend/src/utils/vault-secrets.ts` | TypeScript Vault KV v2 client |
-| `backend/src/utils/gcp-secrets.ts` | Provider routing (Vault → GCP fallback) |
-| `scripts/migrate-secrets-gcp-to-vault.sh` | GCP → Vault secret migration |
-| `templates/spoke/docker-compose.template.yml` | Spoke template with Vault env vars |
-| `docs/VAULT_INTEGRATION.md` | Operational runbook |
-| `.vault-init.txt` | Unseal keys (gitignored, 600 perms) |
-| `.vault-token` | Root token (gitignored, 600 perms) |
