@@ -24,7 +24,12 @@ DIVE_ROOT="${DIVE_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 
 source "${DIVE_ROOT}/scripts/dive-modules/common.sh"
 
-VAULT_ADDR="${VAULT_ADDR:-http://127.0.0.1:8200}"
+# CLI runs on host — prefer VAULT_CLI_ADDR (host-accessible) over VAULT_ADDR (Docker-internal)
+if [ -z "${VAULT_CLI_ADDR:-}" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
+    _vault_cli_addr=$(grep '^VAULT_CLI_ADDR=' "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2-)
+    [ -n "$_vault_cli_addr" ] && VAULT_CLI_ADDR="$_vault_cli_addr"
+fi
+VAULT_ADDR="${VAULT_CLI_ADDR:-${VAULT_ADDR:-http://127.0.0.1:8200}}"
 VAULT_TOKEN_FILE="${DIVE_ROOT}/.vault-token"
 VAULT_INIT_FILE="${DIVE_ROOT}/.vault-init.txt"
 
