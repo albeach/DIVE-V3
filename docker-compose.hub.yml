@@ -463,9 +463,9 @@ services:
       REDIS_PASSWORD: ${REDIS_PASSWORD_USA}
       REDIS_URL: redis://:${REDIS_PASSWORD_USA}@redis:6379
       # Shared blacklist Redis
-      # Phase 2: Token Blacklist (local development uses dive-hub-redis)
-      # For production, use shared-token-store for cross-instance revocation
-      BLACKLIST_REDIS_URL: redis://:${REDIS_PASSWORD_BLACKLIST}@dive-hub-redis:6379
+      # Local dev: same Redis instance as main (REDIS_PASSWORD_USA)
+      # Production: use separate shared-token-store for cross-instance revocation
+      BLACKLIST_REDIS_URL: redis://:${REDIS_PASSWORD_USA}@dive-hub-redis:6379
       # NOTE: Spoke Keycloak admin passwords come from spoke registration, NOT environment
       # The spoke provides its password during registration, stored in MongoDB
       NEXT_PUBLIC_BASE_URL: https://localhost:3000

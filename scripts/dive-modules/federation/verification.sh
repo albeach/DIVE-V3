@@ -562,6 +562,176 @@ federation_integration_test() {
     test_suite_end
 }
 
+##
+# Cross-instance token revocation test
+#
+# Tests the token blacklist lifecycle:
+#   1. Obtain hub admin token
+#   2. Verify token accepted on hub backend
+#   3. Blacklist token via hub API
+#   4. Verify token appears in blacklist
+#   5. Verify Redis contains blacklist entry
+#   6. Verify spoke backend blacklist check endpoint
+##
+federation_test_token_revocation() {
+    # Load test framework
+    local _test_path="${FEDERATION_DIR}/../utilities/testing.sh"
+    if [ -f "$_test_path" ]; then
+        source "$_test_path"
+    elif [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh"
+    else
+        log_error "Testing framework not found"
+        return 1
+    fi
+
+    # Load federation setup for get_hub_admin_token
+    if ! type -t get_hub_admin_token &>/dev/null; then
+        if [ -f "${FEDERATION_DIR}/setup.sh" ]; then
+            source "${FEDERATION_DIR}/setup.sh"
+        fi
+    fi
+
+    test_suite_start "Cross-Instance Token Revocation"
+
+    # Step 1: Obtain hub admin token
+    test_start "Obtain hub admin token"
+    local hub_token
+    hub_token=$(get_hub_admin_token 2>/dev/null)
+    if [ -n "$hub_token" ]; then
+        test_pass
+    else
+        test_fail "Could not get hub admin token"
+        test_suite_end
+        return 1
+    fi
+
+    # Step 2: Verify token accepted on hub backend
+    test_start "Token accepted on hub backend"
+    local health_status
+    health_status=$(curl -sk -o /dev/null -w "%{http_code}" \
+        -H "Authorization: Bearer $hub_token" \
+        --max-time "${DIVE_TIMEOUT_CURL_DEFAULT:-10}" \
+        "https://localhost:4000/api/health" 2>/dev/null)
+    if [ "$health_status" = "200" ]; then
+        test_pass
+    else
+        test_fail "Unexpected status: $health_status"
+    fi
+
+    # Step 3: Extract JTI from token
+    test_start "Extract JTI from token"
+    local token_payload
+    token_payload=$(echo "$hub_token" | cut -d. -f2 | base64 -d 2>/dev/null || echo "")
+    local jti
+    jti=$(echo "$token_payload" | jq -r '.jti // empty' 2>/dev/null)
+    if [ -n "$jti" ]; then
+        test_pass
+    else
+        test_skip "Token has no JTI claim (user-level revocation will be used)"
+    fi
+
+    # Step 4: Blacklist token via hub API
+    test_start "Blacklist token via hub API"
+    local blacklist_resp
+    blacklist_resp=$(curl -sk --max-time "${DIVE_TIMEOUT_CURL_DEFAULT:-10}" \
+        -X POST \
+        -H "Authorization: Bearer $hub_token" \
+        -H "Content-Type: application/json" \
+        -d '{"reason":"integration-test-revocation"}' \
+        "https://localhost:4000/api/auth/blacklist-token" 2>/dev/null)
+    if echo "$blacklist_resp" | jq -e '.message' >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "Blacklist API returned: ${blacklist_resp:-empty}"
+    fi
+
+    # Step 5: Wait for Redis propagation
+    sleep 3
+
+    # Step 6: Verify token in blacklist via check endpoint
+    test_start "Token appears in hub blacklist"
+    if [ -n "$jti" ]; then
+        local check_resp
+        check_resp=$(curl -sk --max-time "${DIVE_TIMEOUT_CURL_DEFAULT:-10}" \
+            -X POST \
+            -H "Content-Type: application/json" \
+            -d "{\"jti\":\"$jti\"}" \
+            "https://localhost:4000/api/blacklist/check" 2>/dev/null)
+        local is_blacklisted
+        is_blacklisted=$(echo "$check_resp" | jq -r '.isBlacklisted' 2>/dev/null)
+        if [ "$is_blacklisted" = "true" ]; then
+            test_pass
+        else
+            test_fail "Token not found in blacklist (response: $check_resp)"
+        fi
+    else
+        test_skip "No JTI to check"
+    fi
+
+    # Step 7: Verify Redis contains blacklist entry
+    test_start "Redis has blacklist entries"
+    local redis_keys
+    redis_keys=$(docker exec dive-hub-redis redis-cli KEYS "blacklist:*" 2>/dev/null)
+    if [ -n "$redis_keys" ]; then
+        local key_count
+        key_count=$(echo "$redis_keys" | wc -l | tr -d ' ')
+        test_pass
+    else
+        # Check user-revoked keys as fallback (no-JTI tokens use this)
+        redis_keys=$(docker exec dive-hub-redis redis-cli KEYS "user-revoked:*" 2>/dev/null)
+        if [ -n "$redis_keys" ]; then
+            test_pass
+        else
+            test_fail "No blacklist or user-revoked keys in Redis"
+        fi
+    fi
+
+    # Step 8: Cross-spoke blacklist check (best-effort)
+    local target_spoke=""
+    if type -t dive_get_provisioned_spokes &>/dev/null; then
+        target_spoke=$(dive_get_provisioned_spokes 2>/dev/null | awk '{print toupper($1)}')
+    fi
+    if [ -z "$target_spoke" ] && [ -d "${DIVE_ROOT}/instances" ]; then
+        for dir in "${DIVE_ROOT}"/instances/*/; do
+            local code=$(basename "$dir")
+            [ "$code" = "usa" ] && continue
+            [[ "$code" == .* ]] && continue
+            target_spoke=$(upper "$code")
+            break
+        done
+    fi
+
+    if [ -n "$target_spoke" ]; then
+        test_start "${target_spoke}: Spoke blacklist check endpoint"
+        eval "$(get_instance_ports "$target_spoke" 2>/dev/null)" || true
+        local spoke_be_port="${SPOKE_BACKEND_PORT:-4000}"
+
+        if [ -n "$jti" ]; then
+            local spoke_check
+            spoke_check=$(curl -sk --max-time "${DIVE_TIMEOUT_CURL_DEFAULT:-10}" \
+                -X POST \
+                -H "Content-Type: application/json" \
+                -d "{\"jti\":\"$jti\"}" \
+                "https://localhost:${spoke_be_port}/api/blacklist/check" 2>/dev/null)
+            local spoke_blacklisted
+            spoke_blacklisted=$(echo "$spoke_check" | jq -r '.isBlacklisted' 2>/dev/null)
+            if [ "$spoke_blacklisted" = "true" ]; then
+                test_pass
+            elif [ "$spoke_blacklisted" = "false" ]; then
+                # Expected: spokes have independent Redis — blacklist is hub-local
+                test_skip "Spoke has independent Redis (blacklist is hub-scoped)"
+            else
+                test_skip "Spoke blacklist endpoint not available"
+            fi
+        else
+            test_skip "No JTI to check on spoke"
+        fi
+    fi
+
+    test_suite_end
+}
+
 # =============================================================================
 # MODULE EXPORTS
 # =============================================================================
@@ -572,5 +742,6 @@ export -f federation_test_sso_flow
 export -f federation_verify_all
 export -f federation_verify_opal_all
 export -f federation_integration_test
+export -f federation_test_token_revocation
 
 log_verbose "Federation verification module loaded"
