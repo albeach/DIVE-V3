@@ -276,13 +276,14 @@ dive_get_provisioned_spokes() {
         spokes=$(echo "$roles" | grep '"spoke-' | sed 's/.*"spoke-\([^"]*\)".*/\1/' | tr '\n' ' ' | sed 's/ $//')
     fi
 
-    # Fallback: scan instances/ directories for .env with VAULT_ROLE_ID
+    # Fallback: scan instances/ for any deployed spoke (has .env or docker-compose.yml)
     if [ -z "$spokes" ] && [ -d "${DIVE_ROOT}/instances" ]; then
         for dir in "${DIVE_ROOT}/instances"/*/; do
             [ -d "$dir" ] || continue
             local code=$(basename "$dir")
             [ "$code" = "usa" ] && continue
-            if [ -f "${dir}.env" ] && grep -q "^VAULT_ROLE_ID=" "${dir}.env" 2>/dev/null; then
+            [[ "$code" == .* ]] && continue
+            if [ -f "${dir}.env" ] || [ -f "${dir}docker-compose.yml" ]; then
                 spokes="${spokes:+$spokes }${code}"
             fi
         done
