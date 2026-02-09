@@ -928,8 +928,28 @@ activate_gcp_service_account() {
 }
 
 load_secrets() {
+    # Source .env.hub to pick up SECRETS_PROVIDER and Vault config
+    if [ -z "${SECRETS_PROVIDER:-}" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
+        local _line
+        while IFS= read -r _line; do
+            case "$_line" in
+                SECRETS_PROVIDER=*|VAULT_ADDR=*|VAULT_CLI_ADDR=*|VAULT_TOKEN=*)
+                    export "$_line" ;;
+            esac
+        done < "${DIVE_ROOT}/.env.hub"
+    fi
+
     # Vault provider: load secrets from Vault, skip GCP/AWS entirely
     if [ "${SECRETS_PROVIDER:-}" = "vault" ]; then
+        # CLI scripts run on host — use VAULT_CLI_ADDR (host-accessible) over VAULT_ADDR (Docker-internal)
+        if [ -n "${VAULT_CLI_ADDR:-}" ]; then
+            export VAULT_ADDR="$VAULT_CLI_ADDR"
+        fi
+        # Load token from .vault-token if not already set
+        if [ -z "${VAULT_TOKEN:-}" ] && [ -f "${DIVE_ROOT}/.vault-token" ]; then
+            export VAULT_TOKEN=$(cat "${DIVE_ROOT}/.vault-token")
+        fi
+
         log_info "Loading secrets from HashiCorp Vault..."
         if [ -z "${DIVE_CONFIGURATION_SECRETS_LOADED:-}" ]; then
             source "${DIVE_ROOT}/scripts/dive-modules/configuration/secrets.sh"
