@@ -245,8 +245,52 @@ export DIVE_TIMEOUT_POLL_INTERVAL="${DIVE_TIMEOUT_POLL_INTERVAL:-2}"
 export DIVE_TIMEOUT_FEDERATION_STABILIZE="${DIVE_TIMEOUT_FEDERATION_STABILIZE:-35}"
 export DIVE_TIMEOUT_OPAL_STABILIZE="${DIVE_TIMEOUT_OPAL_STABILIZE:-45}"
 
-# Configurable spoke list for federation operations
-export DIVE_SPOKE_LIST="${DIVE_SPOKE_LIST:-gbr fra deu can}"
+# Spoke list — no default; spokes are provisioned on demand via: ./dive vault provision <CODE>
+export DIVE_SPOKE_LIST="${DIVE_SPOKE_LIST:-}"
+
+##
+# Discover provisioned spokes dynamically
+# Priority: 1) DIVE_SPOKE_LIST env var  2) Vault AppRoles  3) instances/ directories
+# Results cached in _DIVE_PROVISIONED_SPOKES for the session
+##
+dive_get_provisioned_spokes() {
+    # Return cached result if available
+    if [ -n "${_DIVE_PROVISIONED_SPOKES:-}" ]; then
+        echo "$_DIVE_PROVISIONED_SPOKES"
+        return 0
+    fi
+
+    # If DIVE_SPOKE_LIST is explicitly set, use it
+    if [ -n "${DIVE_SPOKE_LIST:-}" ]; then
+        _DIVE_PROVISIONED_SPOKES="$DIVE_SPOKE_LIST"
+        echo "$_DIVE_PROVISIONED_SPOKES"
+        return 0
+    fi
+
+    local spokes=""
+
+    # Try Vault AppRole listing
+    if command -v vault >/dev/null 2>&1 && vault status >/dev/null 2>&1; then
+        local roles
+        roles=$(vault list -format=json auth/approle/role/ 2>/dev/null || echo "[]")
+        spokes=$(echo "$roles" | grep '"spoke-' | sed 's/.*"spoke-\([^"]*\)".*/\1/' | tr '\n' ' ' | sed 's/ $//')
+    fi
+
+    # Fallback: scan instances/ directories for .env with VAULT_ROLE_ID
+    if [ -z "$spokes" ] && [ -d "${DIVE_ROOT}/instances" ]; then
+        for dir in "${DIVE_ROOT}/instances"/*/; do
+            [ -d "$dir" ] || continue
+            local code=$(basename "$dir")
+            [ "$code" = "usa" ] && continue
+            if [ -f "${dir}.env" ] && grep -q "^VAULT_ROLE_ID=" "${dir}.env" 2>/dev/null; then
+                spokes="${spokes:+$spokes }${code}"
+            fi
+        done
+    fi
+
+    _DIVE_PROVISIONED_SPOKES="$spokes"
+    echo "$_DIVE_PROVISIONED_SPOKES"
+}
 
 # Pilot Mode Configuration
 export PILOT_MODE="${DIVE_PILOT_MODE:-false}"
@@ -759,8 +803,14 @@ load_gcp_secrets() {
         # OR if we're in a context where federation is being set up (detected via function call context)
         # Default: Skip during clean slate hub deployment to avoid unnecessary GCP calls
         if [ "${LOAD_SPOKE_PASSWORDS:-false}" = "true" ] || [ "${FEDERATION_SETUP:-false}" = "true" ]; then
-            log_verbose "Loading spoke Keycloak passwords for federation operations..."
-            for spoke in $DIVE_SPOKE_LIST; do
+            local provisioned_spokes
+            provisioned_spokes=$(dive_get_provisioned_spokes)
+            if [ -z "$provisioned_spokes" ]; then
+                log_verbose "No provisioned spokes found — skipping spoke password loading"
+            else
+                log_verbose "Loading spoke Keycloak passwords for federation operations..."
+            fi
+            for spoke in $provisioned_spokes; do
                 local spoke_uc=$(echo "$spoke" | tr '[:lower:]' '[:upper:]')
                 local spoke_password
                 if spoke_password=$(gcloud secrets versions access latest --secret="dive-v3-keycloak-${spoke}" --project="$project" 2>/dev/null); then
