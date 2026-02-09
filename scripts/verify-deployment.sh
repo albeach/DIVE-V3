@@ -17,8 +17,8 @@ if [ -f "${DIVE_ROOT}/scripts/dive-modules/common.sh" ]; then
 fi
 
 # Source verification modules
-if [ -f "${DIVE_ROOT}/scripts/dive-modules/federation-state.sh" ]; then
-    source "${DIVE_ROOT}/scripts/dive-modules/federation-state.sh"
+if [ -f "${DIVE_ROOT}/scripts/dive-modules/federation/health.sh" ]; then
+    source "${DIVE_ROOT}/scripts/dive-modules/federation/health.sh"
 fi
 
 INSTANCE_CODE="${1:-}"
@@ -99,8 +99,8 @@ fi
 
 # Check 4: Client secrets synchronized
 echo -n "4. Secret synchronization:  "
-if [ -f "${DIVE_ROOT}/scripts/dive-modules/env-sync.sh" ]; then
-    source "${DIVE_ROOT}/scripts/dive-modules/env-sync.sh"
+if [ -f "${DIVE_ROOT}/scripts/dive-modules/configuration/env-sync.sh" ]; then
+    source "${DIVE_ROOT}/scripts/dive-modules/configuration/env-sync.sh"
     if verify_secret_consistency "$CODE_LOWER" >/dev/null 2>&1; then
         echo -e "${GREEN}✓${NC}"
         checks_passed=$((checks_passed + 1))

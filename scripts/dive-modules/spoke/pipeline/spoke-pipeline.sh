@@ -22,29 +22,14 @@ if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     export DIVE_COMMON_LOADED=1
 fi
 
-# Load orchestration framework
-if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../orchestration-framework.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/../../orchestration-framework.sh"
+# Load orchestration framework (includes state, errors, circuit-breaker, dependencies)
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../orchestration/framework.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../../orchestration/framework.sh"
 fi
 
-# Load orchestration state database
-if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../orchestration-state-db.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/../../orchestration-state-db.sh"
-fi
-
-# Load error recovery module
-if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../error-recovery.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/../../error-recovery.sh"
-fi
-
-# Load orchestration dependencies module (2026-01-16)
-if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../orchestration-dependencies.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/../../orchestration-dependencies.sh"
-fi
-
-# Load federation state database module (2026-01-16)
-if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../federation-state-db.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/../../federation-state-db.sh"
+# Load federation health module (includes fed_db_* functions)
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../federation/health.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../../federation/health.sh"
 fi
 
 # =============================================================================
@@ -425,14 +410,37 @@ spoke_pipeline_run_phase() {
         fi
     fi
 
-    # Execute phase function
+    # Execute phase function (with circuit breaker protection)
     local phase_function="spoke_phase_${phase_name,,}"  # Convert to lowercase
+    local circuit_name="spoke_phase_${phase_name,,}"
 
     if type "$phase_function" &>/dev/null; then
-        if "$phase_function" "$instance_code" "$pipeline_mode"; then
-            local phase_end=$(date +%s)
-            local phase_duration=$((phase_end - phase_start))
+        local phase_exit=0
 
+        # Initialize circuit breaker for this phase
+        if type orch_circuit_breaker_init &>/dev/null; then
+            orch_circuit_breaker_init "$circuit_name" "CLOSED"
+        fi
+
+        # Check if circuit is already open (fast-fail from prior failures)
+        if type orch_circuit_breaker_is_open &>/dev/null && orch_circuit_breaker_is_open "$circuit_name"; then
+            log_error "Phase $phase_name: Circuit breaker OPEN - fast fail (prior failures exceeded threshold)"
+            phase_exit=2
+        fi
+
+        # Execute through circuit breaker if available, otherwise direct
+        if [ $phase_exit -eq 0 ]; then
+            if type orch_circuit_breaker_execute &>/dev/null; then
+                orch_circuit_breaker_execute "$circuit_name" "$phase_function" "$instance_code" "$pipeline_mode" || phase_exit=$?
+            else
+                "$phase_function" "$instance_code" "$pipeline_mode" || phase_exit=$?
+            fi
+        fi
+
+        local phase_end=$(date +%s)
+        local phase_duration=$((phase_end - phase_start))
+
+        if [ $phase_exit -eq 0 ]; then
             log_success "Phase $phase_name completed in ${phase_duration}s"
 
             # Mark phase complete in checkpoint system
@@ -447,7 +455,11 @@ spoke_pipeline_run_phase() {
 
             return 0
         else
-            log_error "Phase $phase_name failed"
+            if [ $phase_exit -eq 2 ]; then
+                log_error "Phase $phase_name: Circuit breaker OPEN after ${phase_duration}s"
+            else
+                log_error "Phase $phase_name failed after ${phase_duration}s"
+            fi
 
             # Record error
             if type orch_record_error &>/dev/null; then
@@ -458,12 +470,32 @@ spoke_pipeline_run_phase() {
 
             # Record failed step
             if type orch_db_record_step &>/dev/null; then
-                orch_db_record_step "$instance_code" "$phase_name" "FAILED" "Phase execution returned error"
+                orch_db_record_step "$instance_code" "$phase_name" "FAILED" "Phase execution returned error (exit: $phase_exit)"
             fi
 
-            # Attempt rollback if enabled
+            # FIX (2026-02-09): Only rollback on early-phase failures where containers
+            # and Terraform are inconsistent. For CONFIGURATION/SEEDING/VERIFICATION
+            # failures, the infrastructure is intact — destructive rollback just wastes
+            # 5-10 minutes forcing a complete re-deploy from scratch.
             if [ "${SPOKE_PIPELINE_AUTO_ROLLBACK:-true}" = "true" ]; then
-                spoke_pipeline_rollback "$instance_code" "$phase_name"
+                case "$phase_name" in
+                    PREFLIGHT|INITIALIZATION|DEPLOYMENT)
+                        # Early phases: infrastructure may be in bad state, full rollback
+                        spoke_pipeline_rollback "$instance_code" "$phase_name"
+                        ;;
+                    CONFIGURATION|SEEDING|VERIFICATION)
+                        # Late phases: containers/Terraform are fine, just log and let user retry
+                        log_warn "Skipping destructive rollback for $phase_name failure"
+                        log_warn "Infrastructure is intact — retry with: ./dive spoke deploy $instance_code"
+                        # Clear only the failed phase checkpoint so it re-runs on retry
+                        if type spoke_phase_clear &>/dev/null; then
+                            spoke_phase_clear "$instance_code" "$phase_name" 2>/dev/null || true
+                        fi
+                        ;;
+                    *)
+                        spoke_pipeline_rollback "$instance_code" "$phase_name"
+                        ;;
+                esac
             fi
 
             return 1
@@ -494,6 +526,46 @@ spoke_pipeline_rollback() {
 
     log_warn "Attempting rollback for $instance_code after $failed_phase failure"
 
+    # ==========================================================================
+    # ROOT CAUSE FIX (2026-02-08): Clean Terraform state AND checkpoints during rollback
+    # ==========================================================================
+    # PRINCIPLE: Infrastructure state must match infrastructure reality.
+    # When we destroy containers (Keycloak), we must destroy Terraform state.
+    # When we destroy Terraform state, we must clear phase checkpoints that depend on it.
+    # Otherwise next deployment skips CONFIGURATION phase, doesn't apply Terraform,
+    # and protocol mappers are missing → no clearance claims in JWT tokens.
+    # ==========================================================================
+    log_step "Cleaning Terraform state and dependent checkpoints"
+
+    local tf_spoke_dir="${DIVE_ROOT}/terraform/spoke"
+    if [ -d "$tf_spoke_dir" ]; then
+        (
+            cd "$tf_spoke_dir"
+
+            # Delete workspace entirely (cleanest approach)
+            if terraform workspace list 2>/dev/null | grep -qw "$code_lower"; then
+                terraform workspace select default >/dev/null 2>&1
+                terraform workspace delete -force "$code_lower" >/dev/null 2>&1
+                log_success "✓ Terraform workspace deleted: $code_lower"
+
+                # Clear CONFIGURATION checkpoint so it re-runs on retry
+                if type spoke_phase_clear &>/dev/null; then
+                    spoke_phase_clear "$instance_code" "CONFIGURATION" 2>/dev/null || true
+                    log_success "✓ CONFIGURATION checkpoint cleared"
+                fi
+
+                # Also clear any downstream checkpoints (SEEDING, VERIFICATION)
+                if type spoke_phase_clear &>/dev/null; then
+                    spoke_phase_clear "$instance_code" "SEEDING" 2>/dev/null || true
+                    spoke_phase_clear "$instance_code" "VERIFICATION" 2>/dev/null || true
+                    log_verbose "Cleared downstream checkpoints (SEEDING, VERIFICATION)"
+                fi
+            else
+                log_verbose "Terraform workspace does not exist: $code_lower"
+            fi
+        )
+    fi
+
     # CRITICAL: Always stop containers on failure
     # Don't rely on checkpoint restoration - just stop everything for clean state
     log_step "Stopping containers to prevent partial deployment state"
@@ -514,10 +586,10 @@ spoke_pipeline_rollback() {
     # Update database state to FAILED
     if type orch_db_set_state &>/dev/null; then
         orch_db_set_state "$instance_code" "FAILED" "Deployment failed at phase: $failed_phase" \
-            "{\"failed_phase\":\"$failed_phase\",\"rollback_executed\":true}"
+            "{\"failed_phase\":\"$failed_phase\",\"rollback_executed\":true,\"terraform_cleaned\":true}"
     fi
 
-    log_warn "Rollback complete - containers stopped, state marked FAILED"
+    log_warn "Rollback complete - containers stopped, Terraform state cleaned"
     log_info "To retry: ./dive spoke deploy $instance_code"
 }
 

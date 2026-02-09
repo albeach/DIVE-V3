@@ -44,12 +44,15 @@ resource "keycloak_openid_client_scope" "uniqueID" {
 resource "keycloak_openid_client_scope" "clearance" {
   realm_id               = keycloak_realm.broker.id
   name                   = "clearance"
-  description            = "DIVE security clearance level"
+  description            = "DIVE security clearance level (country-specific)"
   include_in_token_scope = true
   consent_screen_text    = "Security clearance level"
 
   gui_order = 2
 }
+
+# NOTE (2026-02-09): clearanceNormalized scope removed - backend handles normalization
+# Backend clearance-mapper.service.ts normalizes clearances in real-time for policy evaluation
 
 resource "keycloak_openid_client_scope" "countryOfAffiliation" {
   realm_id               = keycloak_realm.broker.id
@@ -58,7 +61,7 @@ resource "keycloak_openid_client_scope" "countryOfAffiliation" {
   include_in_token_scope = true
   consent_screen_text    = "Country of affiliation"
 
-  gui_order = 3
+  gui_order = 4
 }
 
 resource "keycloak_openid_client_scope" "acpCOI" {
@@ -68,7 +71,7 @@ resource "keycloak_openid_client_scope" "acpCOI" {
   include_in_token_scope = true
   consent_screen_text    = "Communities of Interest"
 
-  gui_order = 4
+  gui_order = 5
 }
 
 # ============================================================================
@@ -131,7 +134,7 @@ resource "keycloak_openid_client_scope" "user_amr" {
   include_in_token_scope = true
   consent_screen_text    = "User authentication methods"
 
-  gui_order = 7
+  gui_order = 6
 }
 
 resource "keycloak_openid_client_scope" "user_acr" {
@@ -141,7 +144,7 @@ resource "keycloak_openid_client_scope" "user_acr" {
   include_in_token_scope = true
   consent_screen_text    = "User authentication context"
 
-  gui_order = 8
+  gui_order = 7
 }
 
 # =============================================================================
@@ -188,6 +191,9 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "clearance_mapper" {
   multivalued          = false
   aggregate_attributes = true
 }
+
+# NOTE (2026-02-09): clearanceNormalized mapper removed - backend provides normalized claim
+# Backend includes normalized clearance in token enrichment flow
 
 resource "keycloak_openid_user_attribute_protocol_mapper" "countryOfAffiliation_mapper" {
   realm_id        = keycloak_realm.broker.id

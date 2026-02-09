@@ -75,13 +75,17 @@ setup_test_env() {
         exit 1
     }
 
-    source "$DIVE_ROOT/scripts/dive-modules/orchestration-state-db.sh" 2>/dev/null || {
-        echo "ERROR: Cannot load orchestration-state-db.sh"
+    source "$DIVE_ROOT/scripts/dive-modules/orchestration/state.sh" 2>/dev/null || {
+        echo "ERROR: Cannot load orchestration/state.sh"
         exit 1
     }
 
-    source "$DIVE_ROOT/scripts/dive-modules/error-recovery.sh" 2>/dev/null || {
-        echo "ERROR: Cannot load error-recovery.sh"
+    source "$DIVE_ROOT/scripts/dive-modules/orchestration/errors.sh" 2>/dev/null || {
+        echo "ERROR: Cannot load orchestration/errors.sh"
+        exit 1
+    }
+    source "$DIVE_ROOT/scripts/dive-modules/orchestration/circuit-breaker.sh" 2>/dev/null || {
+        echo "ERROR: Cannot load orchestration/circuit-breaker.sh"
         exit 1
     }
 }

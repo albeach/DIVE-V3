@@ -123,6 +123,22 @@ const DATA_PATH_TO_URL: Record<string, { url: string; topics: string[] }> = {
     url: `${BACKEND_BASE_URL}/api/opal/policy-data`,
     topics: ['policy_data']
   },
+  // Additional OPAL data sources (FIX 2026-02-07: Eliminate "No URL mapping" warnings)
+  'kas_registry': {
+    url: `${BACKEND_BASE_URL}/api/kas/registry`,
+    topics: ['kas_registry', 'policy_data']
+  },
+  'coi_definitions': {
+    url: `${BACKEND_BASE_URL}/api/opal/coi-definitions`,
+    topics: ['coi_definitions', 'policy_data']
+  },
+  'federation_constraints': {
+    url: `${BACKEND_BASE_URL}/api/opal/federation-constraints`,
+    topics: ['federation_constraints', 'policy_data']
+  },
+  // NOTE: authorized_spokes data is already included in /api/opal/policy-data response
+  // No separate data source needed - spokes list is part of federation.spokes
+  // If dedicated endpoint needed: add public /api/opal/spokes endpoint (no auth required)
   // Note: coi_members data is included in /policy-data response
   // If dedicated endpoint needed, add: 'coi_members': { url: '.../coi-members', topics: [...] }
 };

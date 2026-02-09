@@ -11,7 +11,7 @@
 
 import { test, expect } from '@playwright/test';
 
-test.describe('Integration: Federation vs Object', () => {
+test.describe('Integration: Federation vs Object', { tag: '@critical' }, () => {
     test.beforeEach(async ({ page }) => {
         // Use relative path - Playwright prepends baseURL from config
         await page.goto('/integration/federation-vs-object');

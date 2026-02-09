@@ -48,6 +48,7 @@ _load_spoke_modules() {
     [ -f "${SPOKE_DIR}/operations.sh" ] && source "${SPOKE_DIR}/operations.sh"
     [ -f "${SPOKE_DIR}/maintenance.sh" ] && source "${SPOKE_DIR}/maintenance.sh"
     [ -f "${SPOKE_DIR}/status.sh" ] && source "${SPOKE_DIR}/status.sh"
+    [ -f "${SPOKE_DIR}/verification.sh" ] && source "${SPOKE_DIR}/verification.sh"
 
     # Pipeline modules are loaded by spoke-deploy.sh
 }
@@ -120,7 +121,8 @@ module_spoke() {
             if type -t spoke_status &>/dev/null; then
                 spoke_status "$@"
             else
-                _fallback_spoke_status "$@"
+                log_error "spoke_status not available - status.sh module failed to load"
+                return 1
             fi
             ;;
 
@@ -128,7 +130,17 @@ module_spoke() {
             if type -t spoke_verify &>/dev/null; then
                 spoke_verify "$@"
             else
-                _fallback_spoke_verify "$@"
+                log_error "spoke_verify not available - verification.sh module failed to load"
+                return 1
+            fi
+            ;;
+
+        verify-all)
+            if type -t spoke_verify_all &>/dev/null; then
+                spoke_verify_all "$@"
+            else
+                log_error "spoke_verify_all not available - verification.sh module failed to load"
+                return 1
             fi
             ;;
 
@@ -175,73 +187,6 @@ module_spoke() {
             _spoke_help
             ;;
     esac
-}
-
-# =============================================================================
-# FALLBACK FUNCTIONS (used only if main implementation not available)
-# =============================================================================
-
-_fallback_spoke_status() {
-    local instance_code="${1:-}"
-
-    if [ -z "$instance_code" ]; then
-        echo "=== All Spokes ==="
-        for spoke_dir in "${DIVE_ROOT}/instances"/*/; do
-            [ -d "$spoke_dir" ] || continue
-            local code=$(basename "$spoke_dir")
-            [ "$code" = "hub" ] && continue
-            local containers=$(docker ps --filter "name=dive-spoke-${code}" --format '{{.Names}}' 2>/dev/null | wc -l)
-            local healthy=$(docker ps --filter "name=dive-spoke-${code}" --filter "health=healthy" --format '{{.Names}}' 2>/dev/null | wc -l)
-            printf "  %-10s %d containers, %d healthy\n" "$(upper "$code")" "$containers" "$healthy"
-        done
-    else
-        local code_lower=$(lower "$instance_code")
-        echo "=== Spoke $(upper "$instance_code") Status ==="
-        docker ps --filter "name=dive-spoke-${code_lower}" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" 2>/dev/null
-    fi
-}
-
-_fallback_spoke_verify() {
-    local instance_code="${1:?Instance code required}"
-    local code_lower=$(lower "$instance_code")
-
-    log_info "Verifying spoke $(upper "$instance_code")..."
-
-    local checks_passed=0
-    local checks_total=4
-
-    # Check containers exist
-    local containers=$(docker ps --filter "name=dive-spoke-${code_lower}" --format '{{.Names}}' 2>/dev/null | wc -l)
-    if [ "$containers" -gt 0 ]; then
-        ((checks_passed++))
-        log_verbose "Container check: $containers running"
-    fi
-
-    # Check Keycloak health
-    local kc_status=$(docker inspect "dive-spoke-${code_lower}-keycloak" --format='{{.State.Health.Status}}' 2>/dev/null || echo "not_found")
-    if [ "$kc_status" = "healthy" ]; then
-        ((checks_passed++))
-        log_verbose "Keycloak health: OK"
-    else
-        log_verbose "Keycloak health: $kc_status"
-    fi
-
-    # Check PostgreSQL health
-    local pg_status=$(docker inspect "dive-spoke-${code_lower}-postgres" --format='{{.State.Health.Status}}' 2>/dev/null || echo "not_found")
-    if [ "$pg_status" = "healthy" ]; then
-        ((checks_passed++))
-        log_verbose "PostgreSQL health: OK"
-    fi
-
-    # Check MongoDB health
-    local mongo_status=$(docker inspect "dive-spoke-${code_lower}-mongodb" --format='{{.State.Health.Status}}' 2>/dev/null || echo "not_found")
-    if [ "$mongo_status" = "healthy" ]; then
-        ((checks_passed++))
-        log_verbose "MongoDB health: OK"
-    fi
-
-    echo "Verification: $checks_passed/$checks_total checks passed"
-    [ "$checks_passed" -ge 3 ]
 }
 
 _spoke_logs() {
@@ -294,6 +239,7 @@ Commands:
   down <CODE>                 Stop spoke services
   status [CODE]               Show spoke status
   verify <CODE>               Verify spoke deployment
+  verify-all                  Verify all provisioned spokes
   logs <CODE> [service]       View spoke logs
   clean-locks [CODE]          Clean stale deployment locks
 

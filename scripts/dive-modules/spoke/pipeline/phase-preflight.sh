@@ -21,9 +21,9 @@ if type spoke_phase_preflight &>/dev/null; then
 fi
 # Module loaded marker will be set at end after functions defined
 
-# Load orchestration dependencies module
-if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../orchestration-dependencies.sh" ]; then
-    source "$(dirname "${BASH_SOURCE[0]}")/../../orchestration-dependencies.sh"
+# Load orchestration framework (includes dependency validation)
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../../orchestration/framework.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../../orchestration/framework.sh"
 fi
 
 # Load secret management functions (needed for secret loading in preflight)
@@ -129,7 +129,9 @@ spoke_phase_preflight() {
                     return 0
                 else
                     log_warn "PREFLIGHT step complete but validation failed, re-running"
-                    spoke_phase_clear "$instance_code" "PREFLIGHT" 2>/dev/null || true
+                    if ! spoke_phase_clear "$instance_code" "PREFLIGHT"; then
+                        log_warn "Failed to clear PREFLIGHT checkpoint (stale state may persist)"
+                    fi
                 fi
             else
                 log_info "✓ PREFLIGHT phase complete (validation not available)"
@@ -281,19 +283,35 @@ spoke_preflight_check_conflicts() {
 
     case "$current_state" in
         INITIALIZING|DEPLOYING|CONFIGURING|VERIFYING)
-            # These are truly in-progress states - block concurrent deployment
-            log_error "Deployment already in progress for $code_upper (state: $current_state)"
-            echo ""
-            echo "  To force restart, clean the state first:"
-            echo "  ./dive orch-db rollback $code_upper"
-            echo ""
-
-            if type orch_record_error &>/dev/null; then
-                orch_record_error "$SPOKE_ERROR_INSTANCE_CONFLICT" "$ORCH_SEVERITY_CRITICAL" \
-                    "Instance $code_upper deployment already in progress" "preflight" \
-                    "$(spoke_error_get_remediation $SPOKE_ERROR_INSTANCE_CONFLICT $instance_code)"
+            # RESILIENCE FIX (2026-02-07): Check if this is a stale/stuck state
+            # If no deployment lock exists, the state is stale and should be cleaned up
+            local has_lock=false
+            if type orch_has_deployment_lock &>/dev/null; then
+                if orch_has_deployment_lock "$code_upper" 2>/dev/null; then
+                    has_lock=true
+                fi
             fi
-            return 1
+            
+            if [ "$has_lock" = "true" ]; then
+                # Active deployment lock exists - truly in progress
+                log_error "Deployment already in progress for $code_upper (state: $current_state)"
+                echo ""
+                echo "  To force restart, clean the state first:"
+                echo "  ./dive orch-db rollback $code_upper"
+                echo ""
+
+                if type orch_record_error &>/dev/null; then
+                    orch_record_error "$SPOKE_ERROR_INSTANCE_CONFLICT" "$ORCH_SEVERITY_CRITICAL" \
+                        "Instance $code_upper deployment already in progress" "preflight" \
+                        "$(spoke_error_get_remediation $SPOKE_ERROR_INSTANCE_CONFLICT $instance_code)"
+                fi
+                return 1
+            else
+                # No lock but state shows in-progress = stale/crashed deployment
+                log_warn "Detected stale deployment state '$current_state' (no active lock)"
+                log_info "Auto-recovering: cleaning up stale state before retry"
+                spoke_preflight_cleanup_failed_state "$instance_code"
+            fi
             ;;
         FAILED)
             log_info "Previous deployment failed, cleaning up before retry"

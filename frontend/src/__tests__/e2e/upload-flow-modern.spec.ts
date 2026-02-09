@@ -53,7 +53,7 @@ async function createTestFile(page: Page, fileName: string = 'test-document.txt'
   });
 }
 
-test.describe('Upload Page - Modern UI', () => {
+test.describe('Upload Page - Modern UI', { tag: '@critical' }, () => {
   test.beforeEach(async ({ page }) => {
     // Skip authentication for these tests - mock the session
     await page.addInitScript(() => {

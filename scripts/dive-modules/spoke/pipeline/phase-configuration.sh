@@ -80,7 +80,9 @@ spoke_phase_configuration() {
                     return 0
                 else
                     log_warn "CONFIGURATION checkpoint exists but validation failed, re-running"
-                    spoke_phase_clear "$instance_code" "CONFIGURATION" 2>/dev/null || true
+                    if ! spoke_phase_clear "$instance_code" "CONFIGURATION"; then
+                        log_warn "Failed to clear CONFIGURATION checkpoint (stale state may persist)"
+                    fi
                 fi
             else
                 log_info "✓ CONFIGURATION phase complete (validation not available)"
@@ -121,13 +123,18 @@ spoke_phase_configuration() {
             log_warn "Fix: Ensure .env.hub exists and contains FEDERATION_ADMIN_KEY"
         fi
 
-        # Also export Hub Keycloak admin password for wait_for_keycloak_admin_api_ready()
-        # FIX (2026-01-27): The readiness check needs this to authenticate with Hub Keycloak
-        KEYCLOAK_ADMIN_PASSWORD=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
-        if [ -n "$KEYCLOAK_ADMIN_PASSWORD" ]; then
-            export KEYCLOAK_ADMIN_PASSWORD
-            export KC_BOOTSTRAP_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD"  # Alias for wait function
-            log_verbose "✓ Hub Keycloak admin password loaded"
+        # Export Hub (USA) Keycloak admin password for wait_for_keycloak_admin_api_ready()
+        # KEYCLOAK_ADMIN_PASSWORD may contain spoke password — always resolve Hub via _USA
+        local _hub_kc_pass="${KC_ADMIN_PASSWORD_USA:-${KEYCLOAK_ADMIN_PASSWORD_USA:-}}"
+        if [ -z "$_hub_kc_pass" ]; then
+            _hub_kc_pass=$(grep "^KC_ADMIN_PASSWORD_USA=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+            [ -z "$_hub_kc_pass" ] && _hub_kc_pass=$(grep "^KEYCLOAK_ADMIN_PASSWORD_USA=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+        fi
+        if [ -n "$_hub_kc_pass" ]; then
+            export KC_ADMIN_PASSWORD_USA="$_hub_kc_pass"
+            export KC_BOOTSTRAP_ADMIN_PASSWORD="$_hub_kc_pass"
+            export KEYCLOAK_ADMIN_PASSWORD="$_hub_kc_pass"
+            log_verbose "Hub Keycloak admin password resolved (USA)"
         fi
     fi
 
@@ -205,24 +212,30 @@ spoke_phase_configuration() {
         fi
     fi
 
-    # Step 2: Federation setup (CRITICAL - required for SSO)
-    if ! spoke_config_setup_federation "$instance_code" "$pipeline_mode"; then
-        log_error "CRITICAL: Federation setup failed - SSO will not work"
-        log_error "To retry: ./dive federation link $code_upper"
-        return 1
-    fi
-
-    # NOTE: Federation client scopes are now configured in Terraform
-    # terraform/modules/federated-instance/main.tf: keycloak_openid_client_default_scopes.incoming_federation_defaults
-    # This ensures dive-v3-broker-usa clients have uniqueID, countryOfAffiliation, clearance, acpCOI scopes
-
-    # Step 2.5: Register in Federation and KAS registries (CRITICAL - required for heartbeat)
+    # Step 2: Register in Federation and KAS registries (CRITICAL - required for heartbeat)
+    # NOTE (2026-02-09): Moved BEFORE federation setup to eliminate race condition.
+    # Hub API auto-approval triggers createBidirectionalFederation() which creates IdP links.
+    # Running this first avoids conflict with CLI federation setup (Step 2.5) creating
+    # the same links and causing invalid_grant errors from Keycloak processing overlap.
     if [ "$pipeline_mode" = "deploy" ]; then
         if ! spoke_config_register_in_registries "$instance_code"; then
             log_error "CRITICAL: Registry registration failed - spoke heartbeat will not work"
             log_error "To retry: ./dive spoke register $code_upper"
             return 1
         fi
+    fi
+
+    # NOTE: Federation client scopes are now configured in Terraform
+    # terraform/modules/federated-instance/main.tf: keycloak_openid_client_default_scopes.incoming_federation_defaults
+    # This ensures dive-v3-broker-usa clients have uniqueID, countryOfAffiliation, clearance, acpCOI scopes
+
+    # Step 2.5: Federation setup (CRITICAL - required for SSO)
+    # This runs AFTER registration so Hub API has already attempted bidirectional IdP creation.
+    # spoke_federation_setup() is idempotent and will skip links that already exist.
+    if ! spoke_config_setup_federation "$instance_code" "$pipeline_mode"; then
+        log_error "CRITICAL: Federation setup failed - SSO will not work"
+        log_error "To retry: ./dive federation link $code_upper"
+        return 1
     fi
 
     # ==========================================================================
@@ -1270,9 +1283,9 @@ spoke_config_setup_federation() {
         return $?
     fi
 
-    # Fallback: Use legacy federation functions
-    if [ -f "${DIVE_ROOT}/scripts/dive-modules/federation-setup.sh" ]; then
-        source "${DIVE_ROOT}/scripts/dive-modules/federation-setup.sh"
+    # Fallback: Use consolidated federation module
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/federation/setup.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/federation/setup.sh"
 
         if type configure_spoke_federation &>/dev/null; then
             configure_spoke_federation "$code_upper"
@@ -1392,8 +1405,8 @@ spoke_config_sync_federation_secrets() {
     fi
 
     # Load federation sync module
-    if [ -f "${DIVE_ROOT}/scripts/dive-modules/env-sync.sh" ]; then
-        source "${DIVE_ROOT}/scripts/dive-modules/env-sync.sh"
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/configuration/env-sync.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/configuration/env-sync.sh"
 
         if type sync_hub_to_spoke_secrets &>/dev/null; then
             if ! sync_hub_to_spoke_secrets "$(upper "$instance_code")" 2>/dev/null; then
@@ -1536,8 +1549,23 @@ spoke_config_update_redirect_uris() {
         return 1
     fi
 
-    # Get ports
-    local frontend_port="${SPOKE_FRONTEND_PORT:-13000}"
+    # ==========================================================================
+    # ROOT CAUSE FIX (2026-02-09): Get actual port from config.json
+    # ==========================================================================
+    # Previous code used hardcoded default port 13000 which overwrote Terraform's
+    # correct configuration, causing "Invalid parameter: redirect_uri" errors.
+    # Now we get the actual port from config.json which is the SSOT.
+    # ==========================================================================
+    local config_file="${DIVE_ROOT}/instances/${code_lower}/config.json"
+    local frontend_port=$(jq -r '.ports.frontend // 3000' "$config_file" 2>/dev/null)
+
+    if [ -z "$frontend_port" ] || [ "$frontend_port" = "null" ]; then
+        log_warn "Could not determine frontend port from config.json, skipping redirect URI update"
+        log_info "Terraform-configured redirect URIs will be used (recommended)"
+        return 0
+    fi
+
+    log_verbose "Using frontend port from config.json: $frontend_port"
 
     # Build redirect URIs
     local redirect_uris='["http://localhost:'$frontend_port'/*","https://localhost:'$frontend_port'/*","http://host.docker.internal:'$frontend_port'/*","https://'$code_lower'.dive25.com/*"]'

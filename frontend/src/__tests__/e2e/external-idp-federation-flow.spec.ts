@@ -19,7 +19,7 @@ import { loginAs, logout } from './helpers/auth';
 import { DashboardPage } from './pages/DashboardPage';
 import { ResourcesPage } from './pages/ResourcesPage';
 
-test.describe('External IdP Federation - Spain (Refactored)', () => {
+test.describe('External IdP Federation - Spain (Refactored)', { tag: ['@critical', '@flaky'] }, () => {
     test.afterEach(async ({ page }) => {
         try {
             await logout(page);

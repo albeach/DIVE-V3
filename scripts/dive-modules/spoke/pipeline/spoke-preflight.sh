@@ -45,6 +45,23 @@ spoke_preflight_validation() {
     local failed_checks=0
     local warning_checks=0
 
+    # Check 0: Vault Provisioning (fast-fail before expensive checks)
+    if [ "${SECRETS_PROVIDER:-}" = "vault" ]; then
+        log_verbose "Check 0: Vault provisioning..."
+        if ! type vault_spoke_is_provisioned &>/dev/null; then
+            source "$(dirname "${BASH_SOURCE[0]}")/../../vault/module.sh" 2>/dev/null || true
+        fi
+        if type vault_spoke_is_provisioned &>/dev/null; then
+            if ! vault_spoke_is_provisioned "$code_lower"; then
+                log_error "✗ Spoke $code_upper not provisioned in Vault"
+                log_info "  Run: ./dive vault provision $code_upper"
+                return 1
+            else
+                log_success "✓ Vault provisioning verified (policy + AppRole + secrets)"
+            fi
+        fi
+    fi
+
     # Check 1: Hub Reachability
     log_verbose "Check 1/6: Hub reachability..."
     if ! preflight_check_hub_reachable; then

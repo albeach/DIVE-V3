@@ -235,7 +235,7 @@ test_rollback_functionality() {
     test_start "Rollback stops all containers"
     
     # Load orchestration framework
-    source "${DIVE_ROOT}/scripts/dive-modules/orchestration-framework.sh"
+    source "${DIVE_ROOT}/scripts/dive-modules/orchestration/framework.sh"
     
     if orch_rollback_complete "$TEST_SPOKE_CODE" "" "" >/dev/null 2>&1; then
         test_pass
@@ -275,7 +275,7 @@ test_clean_slate_rollback() {
     # Execute clean slate rollback
     test_start "Clean slate rollback removes instance directory"
     
-    source "${DIVE_ROOT}/scripts/dive-modules/orchestration-framework.sh"
+    source "${DIVE_ROOT}/scripts/dive-modules/orchestration/framework.sh"
     orch_rollback_complete "$TEST_SPOKE_CODE" "" "clean-slate" >/dev/null 2>&1
     
     # Verify instance directory removed
@@ -318,8 +318,8 @@ test_state_consistency() {
     run_with_timeout $TEST_TIMEOUT "${DIVE_ROOT}/dive" spoke deploy "$TEST_SPOKE_CODE" "$TEST_SPOKE_NAME" >/dev/null 2>&1
     
     # Load orchestration framework
-    source "${DIVE_ROOT}/scripts/dive-modules/orchestration-framework.sh"
-    source "${DIVE_ROOT}/scripts/dive-modules/orchestration-state-db.sh"
+    source "${DIVE_ROOT}/scripts/dive-modules/orchestration/framework.sh"
+    source "${DIVE_ROOT}/scripts/dive-modules/orchestration/state.sh"
     
     # Test 1: Determine actual state
     test_start "Can determine actual deployment state"

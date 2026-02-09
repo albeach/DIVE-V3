@@ -26,8 +26,8 @@ source "$DIVE_ROOT/scripts/dive-modules/common.sh" 2>/dev/null || {
     exit 1
 }
 
-source "$DIVE_ROOT/scripts/dive-modules/orchestration-state-db.sh" 2>/dev/null || {
-    echo "ERROR: Cannot load orchestration-state-db.sh"
+source "$DIVE_ROOT/scripts/dive-modules/orchestration/state.sh" 2>/dev/null || {
+    echo "ERROR: Cannot load orchestration/state.sh"
     exit 1
 }
 

@@ -15,7 +15,7 @@ const INSTANCES = [
   { code: 'rou', url: 'https://localhost:3025', name: 'Romania' },
 ];
 
-test.describe('Authentication Discovery', () => {
+test.describe('Authentication Discovery', { tag: '@fast' }, () => {
   INSTANCES.forEach(instance => {
     test(`discover auth options on ${instance.name}`, async ({ page }) => {
       console.log(`\n🔍 DISCOVERING AUTH OPTIONS FOR ${instance.name.toUpperCase()} (${instance.code})`);

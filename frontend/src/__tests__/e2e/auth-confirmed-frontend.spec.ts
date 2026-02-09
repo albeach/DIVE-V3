@@ -4,16 +4,34 @@
  * This test suite confirms authentication works and then tests comprehensive
  * frontend functionality including resource management, authorization UI,
  * federation workflows, and form validations.
+ * 
+ * Uses dynamic IdP discovery to skip tests for non-deployed instances.
  */
 
 import { test, expect } from '@playwright/test';
-import { loginAs, expectLoggedIn } from '../helpers/auth';
-import { ResourcesPage } from '../page-objects/resources.page';
-import { ResourceFormPage } from '../page-objects/resource-form.page';
+import { loginAs, expectLoggedIn, getDiscoveredIdPs } from './helpers/auth';
+import { ResourcesPage } from './page-objects/resources.page';
+import { ResourceFormPage } from './page-objects/resource-form.page';
+import { isIdPAvailable, type DiscoveredIdPs } from './helpers/idp-discovery';
+import { TEST_USERS } from './fixtures/test-users';
 
-test.describe('DIVE V3 - Authentication Confirmed & Comprehensive Frontend', () => {
+// Global discovery cache
+let discoveredIdPs: DiscoveredIdPs | null = null;
+
+test.describe('DIVE V3 - Authentication Confirmed & Comprehensive Frontend', { tag: ['@fast', '@smoke', '@critical'] }, () => {
   let resourcesPage: ResourcesPage;
   let resourceFormPage: ResourceFormPage;
+
+  // Discover available IdPs before running tests
+  test.beforeAll(async ({ browser }) => {
+    const page = await browser.newPage();
+    discoveredIdPs = await getDiscoveredIdPs(page);
+    await page.close();
+    
+    console.log('[AUTH TESTS] IdP Discovery Complete:');
+    console.log(`  Hub: ${discoveredIdPs.hub?.code} available`);
+    console.log(`  Spokes: ${discoveredIdPs.count} deployed`);
+  });
 
   test.beforeEach(async ({ page }) => {
     resourcesPage = new ResourcesPage(page);
@@ -22,36 +40,40 @@ test.describe('DIVE V3 - Authentication Confirmed & Comprehensive Frontend', () 
 
   test.describe('🔐 Authentication Confirmation', () => {
     test('✅ HUB: should authenticate UNCLASSIFIED USA user successfully', async ({ page }) => {
-      await loginAs(page, {
-        username: 'testuser-usa-1',
-        password: 'TestUser2025!Pilot',
-        idp: 'United States',
-        clearance: 'UNCLASSIFIED'
-      } as any);
-      await expectLoggedIn(page, { username: 'testuser-usa-1' } as any);
+      await loginAs(page, TEST_USERS.USA.UNCLASS);
+      await expectLoggedIn(page, TEST_USERS.USA.UNCLASS);
     });
 
     test('✅ HUB: should authenticate SECRET USA user with OTP', async ({ page }) => {
-      await loginAs(page, {
-        username: 'testuser-usa-3',
-        password: 'TestUser2025!Pilot',
-        idp: 'United States',
-        clearance: 'SECRET',
-        mfaRequired: true,
-        mfaType: 'otp'
-      } as any, { otpCode: '123456' });
-      await expectLoggedIn(page, { username: 'testuser-usa-3' } as any);
+      await loginAs(page, TEST_USERS.USA.SECRET, { otpCode: '123456' });
+      await expectLoggedIn(page, TEST_USERS.USA.SECRET);
     });
 
     test('✅ ALB: should authenticate Albania UNCLASSIFIED user', async ({ page }) => {
-      await page.goto('https://localhost:3001');
-      await page.waitForSelector('button:has-text("Login as Albania User")', { timeout: 10000 });
-      await page.click('button:has-text("Login as Albania User")');
-      await page.waitForURL(/.*localhost:8444.*/, { timeout: 10000 });
+      test.skip(!discoveredIdPs || !await isIdPAvailable(discoveredIdPs, 'ALB'), 'ALB spoke not deployed');
+      
+      // ALB would be accessed via hub with dynamic discovery (no hardcoded port)
+      await page.goto('/');
+      
+      // Use discovery to find ALB button
+      const albDisplayName = discoveredIdPs?.spokes.get('ALB')?.displayName;
+      if (!albDisplayName) {
+        test.skip(true, 'ALB not found in discovery');
+      }
+      
+      await page.waitForSelector(`button:has-text("${albDisplayName}")`, { timeout: 10000 });
+      await page.click(`button:has-text("${albDisplayName}")`);
+      
+      // Wait for Keycloak redirect
+      await page.waitForURL(/.*keycloak.*/, { timeout: 10000 });
+      
+      // Fill credentials
       await page.fill('#username', 'testuser-alb-1');
       await page.fill('#password', 'TestUser2025!Pilot');
       await page.click('#kc-login');
-      await page.waitForURL(/.*localhost:3001.*/, { timeout: 15000 });
+      
+      // Wait for redirect back
+      await page.waitForURL(/.*\//, { timeout: 15000 });
       await expectLoggedIn(page, { username: 'testuser-alb-1' } as any);
     });
   });
@@ -59,12 +81,8 @@ test.describe('DIVE V3 - Authentication Confirmed & Comprehensive Frontend', () 
   test.describe('📋 Resource Management - Complete Workflow', () => {
     test('should navigate resources page after authentication', async ({ page }) => {
       // Login first
-      await loginAs(page, {
-        username: 'testuser-usa-1',
-        password: 'TestUser2025!Pilot',
-        idp: 'United States'
-      } as any);
-      await expectLoggedIn(page, { username: 'testuser-usa-1' } as any);
+      await loginAs(page, TEST_USERS.USA.UNCLASS);
+      await expectLoggedIn(page, TEST_USERS.USA.UNCLASS);
 
       // Navigate to resources
       await resourcesPage.goto();
@@ -76,11 +94,7 @@ test.describe('DIVE V3 - Authentication Confirmed & Comprehensive Frontend', () 
     });
 
     test('should display resource listing correctly', async ({ page }) => {
-      await loginAs(page, {
-        username: 'testuser-usa-1',
-        password: 'TestUser2025!Pilot',
-        idp: 'United States'
-      } as any);
+      await loginAs(page, TEST_USERS.USA.UNCLASS);
 
       await resourcesPage.goto();
       await resourcesPage.waitForResourcesToLoad();
@@ -103,11 +117,7 @@ test.describe('DIVE V3 - Authentication Confirmed & Comprehensive Frontend', () 
     });
 
     test('should filter resources by classification', async ({ page }) => {
-      await loginAs(page, {
-        username: 'testuser-usa-3',
-        password: 'TestUser2025!Pilot',
-        idp: 'United States'
-      } as any, { otpCode: '123456' });
+      await loginAs(page, TEST_USERS.USA.SECRET, { otpCode: '123456' });
 
       await resourcesPage.goto();
       await resourcesPage.waitForResourcesToLoad();
@@ -123,11 +133,7 @@ test.describe('DIVE V3 - Authentication Confirmed & Comprehensive Frontend', () 
     });
 
     test('should search for resources', async ({ page }) => {
-      await loginAs(page, {
-        username: 'testuser-usa-1',
-        password: 'TestUser2025!Pilot',
-        idp: 'United States'
-      } as any);
+      await loginAs(page, TEST_USERS.USA.UNCLASS);
 
       await resourcesPage.goto();
       await resourcesPage.waitForResourcesToLoad();
@@ -142,11 +148,7 @@ test.describe('DIVE V3 - Authentication Confirmed & Comprehensive Frontend', () 
     });
 
     test('should handle empty search results', async ({ page }) => {
-      await loginAs(page, {
-        username: 'testuser-usa-1',
-        password: 'TestUser2025!Pilot',
-        idp: 'United States'
-      } as any);
+      await loginAs(page, TEST_USERS.USA.UNCLASS);
 
       await resourcesPage.goto();
       await resourcesPage.waitForResourcesToLoad();
@@ -162,11 +164,7 @@ test.describe('DIVE V3 - Authentication Confirmed & Comprehensive Frontend', () 
 
   test.describe('📝 Resource Creation - Form Validation', () => {
     test('should access create resource form', async ({ page }) => {
-      await loginAs(page, {
-        username: 'testuser-usa-3',
-        password: 'TestUser2025!Pilot',
-        idp: 'United States'
-      } as any, { otpCode: '123456' });
+      await loginAs(page, TEST_USERS.USA.SECRET, { otpCode: '123456' });
 
       await resourcesPage.goto();
 
@@ -181,11 +179,7 @@ test.describe('DIVE V3 - Authentication Confirmed & Comprehensive Frontend', () 
     });
 
     test('should validate required fields on create form', async ({ page }) => {
-      await loginAs(page, {
-        username: 'testuser-usa-3',
-        password: 'TestUser2025!Pilot',
-        idp: 'United States'
-      } as any, { otpCode: '123456' });
+      await loginAs(page, TEST_USERS.USA.SECRET, { otpCode: '123456' });
 
       await page.goto('/resources/new');
 
@@ -204,11 +198,7 @@ test.describe('DIVE V3 - Authentication Confirmed & Comprehensive Frontend', () 
     });
 
     test('should create resource with valid data', async ({ page }) => {
-      await loginAs(page, {
-        username: 'testuser-usa-3',
-        password: 'TestUser2025!Pilot',
-        idp: 'United States'
-      } as any, { otpCode: '123456' });
+      await loginAs(page, TEST_USERS.USA.SECRET, { otpCode: '123456' });
 
       await page.goto('/resources/new');
 
@@ -232,11 +222,7 @@ test.describe('DIVE V3 - Authentication Confirmed & Comprehensive Frontend', () 
     });
 
     test('should enforce classification restrictions', async ({ page }) => {
-      await loginAs(page, {
-        username: 'testuser-usa-2',
-        password: 'TestUser2025!Pilot',
-        idp: 'United States'
-      } as any, { otpCode: '123456' }); // CONFIDENTIAL user
+      await loginAs(page, TEST_USERS.USA.CONFIDENTIAL, { otpCode: '123456' });
 
       await page.goto('/resources/new');
 
@@ -252,11 +238,7 @@ test.describe('DIVE V3 - Authentication Confirmed & Comprehensive Frontend', () 
 
   test.describe('👁️ Resource Viewing - Authorization Checks', () => {
     test('should view resource details', async ({ page }) => {
-      await loginAs(page, {
-        username: 'testuser-usa-1',
-        password: 'TestUser2025!Pilot',
-        idp: 'United States'
-      } as any);
+      await loginAs(page, TEST_USERS.USA.UNCLASS);
 
       await resourcesPage.goto();
       await resourcesPage.waitForResourcesToLoad();
@@ -279,11 +261,7 @@ test.describe('DIVE V3 - Authentication Confirmed & Comprehensive Frontend', () 
     });
 
     test('should show access denied for restricted resources', async ({ page }) => {
-      await loginAs(page, {
-        username: 'testuser-usa-2',
-        password: 'TestUser2025!Pilot',
-        idp: 'United States'
-      } as any, { otpCode: '123456' }); // CONFIDENTIAL user
+      await loginAs(page, TEST_USERS.USA.CONFIDENTIAL, { otpCode: '123456' });
 
       // Try to access a SECRET resource directly
       await page.goto('/resources/secret-resource-123');
@@ -302,11 +280,7 @@ test.describe('DIVE V3 - Authentication Confirmed & Comprehensive Frontend', () 
 
   test.describe('🔒 Authorization UI Elements', () => {
     test('should show clearance-based filtering options', async ({ page }) => {
-      await loginAs(page, {
-        username: 'testuser-usa-3',
-        password: 'TestUser2025!Pilot',
-        idp: 'United States'
-      } as any, { otpCode: '123456' });
+      await loginAs(page, TEST_USERS.USA.SECRET, { otpCode: '123456' });
 
       await resourcesPage.goto();
 
@@ -318,11 +292,7 @@ test.describe('DIVE V3 - Authentication Confirmed & Comprehensive Frontend', () 
     });
 
     test('should indicate COI-based access controls', async ({ page }) => {
-      await loginAs(page, {
-        username: 'testuser-usa-1',
-        password: 'TestUser2025!Pilot',
-        idp: 'United States'
-      } as any);
+      await loginAs(page, TEST_USERS.USA.UNCLASS);
 
       await resourcesPage.goto();
 
@@ -338,11 +308,7 @@ test.describe('DIVE V3 - Authentication Confirmed & Comprehensive Frontend', () 
 
   test.describe('🌐 Federation Workflows', () => {
     test('should show federation options when available', async ({ page }) => {
-      await loginAs(page, {
-        username: 'testuser-usa-1',
-        password: 'TestUser2025!Pilot',
-        idp: 'United States'
-      } as any);
+      await loginAs(page, TEST_USERS.USA.UNCLASS);
 
       // Check for federation UI elements
       const federationElements = page.locator('[data-testid*="federat"], button, a').filter({
@@ -358,18 +324,14 @@ test.describe('DIVE V3 - Authentication Confirmed & Comprehensive Frontend', () 
     });
 
     test('should maintain session across navigation', async ({ page }) => {
-      await loginAs(page, {
-        username: 'testuser-usa-1',
-        password: 'TestUser2025!Pilot',
-        idp: 'United States'
-      } as any);
+      await loginAs(page, TEST_USERS.USA.UNCLASS);
 
       // Navigate to different sections
       await page.goto('/dashboard');
-      await expectLoggedIn(page, { username: 'testuser-usa-1' } as any);
+      await expectLoggedIn(page, TEST_USERS.USA.UNCLASS);
 
       await page.goto('/resources');
-      await expectLoggedIn(page, { username: 'testuser-usa-1' } as any);
+      await expectLoggedIn(page, TEST_USERS.USA.UNCLASS);
 
       console.log('✅ Session maintained across navigation');
     });
@@ -377,11 +339,7 @@ test.describe('DIVE V3 - Authentication Confirmed & Comprehensive Frontend', () 
 
   test.describe('⚡ Performance & Usability', () => {
     test('should load resources within acceptable time', async ({ page }) => {
-      await loginAs(page, {
-        username: 'testuser-usa-1',
-        password: 'TestUser2025!Pilot',
-        idp: 'United States'
-      } as any);
+      await loginAs(page, TEST_USERS.USA.UNCLASS);
 
       const startTime = Date.now();
       await resourcesPage.goto();
@@ -393,11 +351,7 @@ test.describe('DIVE V3 - Authentication Confirmed & Comprehensive Frontend', () 
     });
 
     test('should handle rapid navigation', async ({ page }) => {
-      await loginAs(page, {
-        username: 'testuser-usa-1',
-        password: 'TestUser2025!Pilot',
-        idp: 'United States'
-      } as any);
+      await loginAs(page, TEST_USERS.USA.UNCLASS);
 
       // Rapid navigation between pages
       await page.goto('/resources');
@@ -407,18 +361,14 @@ test.describe('DIVE V3 - Authentication Confirmed & Comprehensive Frontend', () 
       await page.goForward();
 
       // Should maintain authentication
-      await expectLoggedIn(page, { username: 'testuser-usa-1' } as any);
+      await expectLoggedIn(page, TEST_USERS.USA.UNCLASS);
       console.log('✅ Rapid navigation handled correctly');
     });
   });
 
   test.describe('🚨 Error Handling', () => {
     test('should handle invalid URLs gracefully', async ({ page }) => {
-      await loginAs(page, {
-        username: 'testuser-usa-1',
-        password: 'TestUser2025!Pilot',
-        idp: 'United States'
-      } as any);
+      await loginAs(page, TEST_USERS.USA.UNCLASS);
 
       await page.goto('/non-existent-page-12345');
 
@@ -430,11 +380,7 @@ test.describe('DIVE V3 - Authentication Confirmed & Comprehensive Frontend', () 
     });
 
     test('should handle network errors during form submission', async ({ page }) => {
-      await loginAs(page, {
-        username: 'testuser-usa-3',
-        password: 'TestUser2025!Pilot',
-        idp: 'United States'
-      } as any, { otpCode: '123456' });
+      await loginAs(page, TEST_USERS.USA.SECRET, { otpCode: '123456' });
 
       await page.goto('/resources/new');
 

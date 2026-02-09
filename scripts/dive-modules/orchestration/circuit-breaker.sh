@@ -29,8 +29,6 @@ fi
 # Load state module for database
 if [ -f "${ORCH_DIR}/state.sh" ]; then
     source "${ORCH_DIR}/state.sh"
-elif [ -f "${MODULES_DIR}/orchestration-state-db.sh" ]; then
-    source "${MODULES_DIR}/orchestration-state-db.sh"
 fi
 
 # =============================================================================
@@ -121,11 +119,12 @@ orch_circuit_breaker_execute() {
     
     # ARCHITECTURE DECISION: Stream vs Capture
     # - BUILD operations: Generate gigabytes → MUST stream
-    # - SERVICE operations: Start containers, long health checks → MUST stream  
+    # - SERVICE operations: Start containers, long health checks → MUST stream
+    # - PHASE operations: Load modules, need function context, produce logs → MUST stream
     # - Quick operations: Can capture for error reporting
     case "$operation_name" in
-        *_build|*_BUILD|hub_phase_build|*_SERVICES|*_services|hub_phase_services)
-            # Stream directly - no output capture
+        *_build|*_BUILD|hub_phase_build|*_SERVICES|*_services|hub_phase_services|*_phase_*|*_PHASE_*)
+            # Stream directly - no output capture (preserves function context & real-time logs)
             "${command[@]}"
             exit_code=$?
             ;;
@@ -150,7 +149,7 @@ orch_circuit_breaker_execute() {
                 state = 'CLOSED',
                 last_state_change = CASE WHEN state != 'CLOSED' THEN NOW() ELSE last_state_change END
             WHERE operation_name='$operation_name'
-        " >/dev/null 2>&1
+        " </dev/null >/dev/null 2>&1
 
         return 0
     else
@@ -241,6 +240,34 @@ orch_circuit_breaker_init() {
     local initial_state="${2:-CLOSED}"
 
     if type orch_db_check_connection &>/dev/null && orch_db_check_connection; then
+        # RESILIENCE FIX (2026-02-07): Check if circuit is stuck in OPEN state
+        # If cooldown period has expired, auto-recover to CLOSED
+        local circuit_data=$(orch_db_exec "
+            SELECT state, 
+                   COALESCE(EXTRACT(EPOCH FROM (NOW() - last_failure_time))::integer, 999999) as elapsed
+            FROM circuit_breakers
+            WHERE operation_name='$operation_name'
+        " 2>/dev/null | tr -d ' ')
+        
+        if [ -n "$circuit_data" ]; then
+            local state=$(echo "$circuit_data" | cut -d'|' -f1)
+            local elapsed=$(echo "$circuit_data" | cut -d'|' -f2)
+            
+            if [ "$state" = "OPEN" ] && [ "${elapsed:-0}" -ge "$CIRCUIT_COOLDOWN_PERIOD" ]; then
+                log_info "Auto-recovering stuck circuit '$operation_name' (cooldown expired: ${elapsed}s)"
+                orch_db_exec "
+                    UPDATE circuit_breakers
+                    SET state = 'CLOSED',
+                        failure_count = 0,
+                        last_state_change = NOW()
+                    WHERE operation_name='$operation_name'
+                " >/dev/null 2>&1
+                log_success "Circuit breaker auto-recovered: $operation_name → CLOSED"
+                return 0
+            fi
+        fi
+        
+        # Insert if doesn't exist (DO NOTHING if already exists)
         orch_db_exec "
             INSERT INTO circuit_breakers (operation_name, state, failure_count, success_count, last_state_change)
             VALUES ('$operation_name', '$initial_state', 0, 0, NOW())
