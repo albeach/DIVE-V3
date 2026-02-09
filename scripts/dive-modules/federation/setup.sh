@@ -1223,6 +1223,13 @@ module_federation() {
             federation_verify "$@"
             ;;
         status)         federation_status "$@" ;;
+        test|integration-test)
+            # Load verification module for test functions
+            if [ -f "${FEDERATION_DIR}/verification.sh" ]; then
+                source "${FEDERATION_DIR}/verification.sh"
+            fi
+            federation_integration_test "$@"
+            ;;
         list-idps)
             local hub_token=$(get_hub_admin_token 2>/dev/null)
             if [ -n "$hub_token" ]; then
@@ -1240,6 +1247,7 @@ module_federation() {
             echo "  link <CODE>       Link Spoke to Hub federation"
             echo "  unlink <CODE>     Remove federation link"
             echo "  verify <CODE>     Verify federation health"
+            echo "  test              Run federation integration tests"
             echo "  status            Show overall federation status"
             echo "  list-idps         List configured IdPs on Hub"
             ;;

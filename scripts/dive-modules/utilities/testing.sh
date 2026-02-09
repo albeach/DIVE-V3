@@ -87,7 +87,7 @@ test_suite_end() {
 test_start() {
     local test_name="$1"
     CURRENT_TEST="$test_name"
-    ((TEST_TOTAL++))
+    TEST_TOTAL=$((TEST_TOTAL + 1))
 
     printf "  %-50s " "$test_name"
 }
@@ -96,7 +96,7 @@ test_start() {
 # Mark test as passed
 ##
 test_pass() {
-    ((TEST_PASSED++))
+    TEST_PASSED=$((TEST_PASSED + 1))
     echo "✓ PASS"
 }
 
@@ -108,7 +108,7 @@ test_pass() {
 ##
 test_fail() {
     local reason="${1:-}"
-    ((TEST_FAILED++))
+    TEST_FAILED=$((TEST_FAILED + 1))
     echo "✗ FAIL"
     [ -n "$reason" ] && echo "    Reason: $reason"
 }
@@ -121,7 +121,7 @@ test_fail() {
 ##
 test_skip() {
     local reason="${1:-}"
-    ((TEST_SKIPPED++))
+    TEST_SKIPPED=$((TEST_SKIPPED + 1))
     echo "○ SKIP"
     [ -n "$reason" ] && echo "    Reason: $reason"
 }
