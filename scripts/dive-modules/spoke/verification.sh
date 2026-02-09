@@ -61,16 +61,18 @@ spoke_verify() {
 
     if [ -f "$config_file" ]; then
         hub_url=$(json_get_field "$config_file" "hubUrl" "")
-        spoke_id=$(json_get_field "$config_file" "spokeId" "")
     fi
+    # In local/dev mode, always use localhost (config.json has Docker-internal hostname)
     if [ "$ENVIRONMENT" = "local" ] || [ "$ENVIRONMENT" = "dev" ]; then
-        hub_url="${hub_url:-https://localhost:4000}"
+        hub_url="https://localhost:4000"
     else
         hub_url="${hub_url:-https://usa-api.dive25.com}"
     fi
 
+    # Read spoke_id and spoke_token from .env (populated during deployment)
     if [ -f "$env_file" ]; then
-        spoke_token=$(grep -o '^SPOKE_OPAL_TOKEN=.*' "$env_file" 2>/dev/null | cut -d= -f2- | tr -d '"' || echo "")
+        spoke_id=$(grep -o '^SPOKE_ID=.*' "$env_file" 2>/dev/null | cut -d= -f2- | tr -d '"' || echo "")
+        spoke_token=$(grep -o '^SPOKE_TOKEN=.*' "$env_file" 2>/dev/null | cut -d= -f2- | tr -d '"' || echo "")
     fi
 
     # Resolve spoke ports dynamically
@@ -201,7 +203,7 @@ spoke_verify() {
     # Check 8: Hub Connectivity (unique to spoke verify)
     # ------------------------------------------------------------------
     printf "  %-35s" "8. Hub Connectivity:"
-    if curl -kfs "${hub_url}/health" --max-time 10 >/dev/null 2>&1; then
+    if curl -kfs "${hub_url}/api/health" --max-time 10 >/dev/null 2>&1; then
         echo -e "${GREEN}PASS Reachable${NC}"
         checks_passed=$((checks_passed + 1))
     elif curl -kfs "${hub_url}/api/federation/health" --max-time 10 >/dev/null 2>&1; then
@@ -216,7 +218,7 @@ spoke_verify() {
     # Check 9: Policy Bundle (unique to spoke verify)
     # ------------------------------------------------------------------
     printf "  %-35s" "9. Policy Bundle:"
-    local policy_count=$(curl -sf "http://localhost:${opa_port}/v1/policies" --max-time 5 2>/dev/null | grep -o '"id"' | wc -l | tr -d ' ')
+    local policy_count=$(curl -skf "https://localhost:${opa_port}/v1/policies" --max-time 5 2>/dev/null | grep -o '"id"' | wc -l | tr -d ' ')
     if [ "$policy_count" -gt 0 ]; then
         echo -e "${GREEN}PASS Loaded ($policy_count policies)${NC}"
         checks_passed=$((checks_passed + 1))
@@ -307,7 +309,7 @@ spoke_verify() {
             checks_failed=$((checks_failed + 1))
         fi
     else
-        if curl -kfs --max-time 5 "https://localhost:${be_port}/health" >/dev/null 2>&1; then
+        if curl -kfs --max-time 5 "https://localhost:${be_port}/api/health" >/dev/null 2>&1; then
             echo -e "${GREEN}PASS TLS working${NC}"
             checks_passed=$((checks_passed + 1))
         else

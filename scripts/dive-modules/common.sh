@@ -1255,21 +1255,16 @@ get_instance_ports() {
 
     # Export calculated ports (can be sourced or eval'd)
     # Port scheme ensures no conflicts for 100+ simultaneous spokes
-    # FIXED: Changed OPA from 8181+(offset*10) to 9100+offset to avoid conflicts
-    # FIXED (Jan 2026): Changed Keycloak HTTP from 8080+offset to 8100+offset
-    #                   to avoid conflict with Hub KAS at 8085
-    # CRITICAL FIX (2026-02-07): Changed KAS from 10000+offset to 9000+offset
-    #                            to match SSOT in nato-countries.sh (line 260)
-    #                            Bug caused FRA KAS to register as :10010 instead of :9010
+    # SSOT: Formulas MUST match get_country_ports() in nato-countries.sh
     echo "export SPOKE_PORT_OFFSET=$port_offset"
     echo "export SPOKE_FRONTEND_PORT=$((3000 + port_offset))"
     echo "export SPOKE_BACKEND_PORT=$((4000 + port_offset))"
     echo "export SPOKE_KEYCLOAK_HTTPS_PORT=$((8443 + port_offset))"
-    echo "export SPOKE_KEYCLOAK_HTTP_PORT=$((8100 + port_offset))"
+    echo "export SPOKE_KEYCLOAK_HTTP_PORT=$((8080 + port_offset))"
     echo "export SPOKE_POSTGRES_PORT=$((5432 + port_offset))"
     echo "export SPOKE_MONGODB_PORT=$((27017 + port_offset))"
     echo "export SPOKE_REDIS_PORT=$((6379 + port_offset))"
-    echo "export SPOKE_OPA_PORT=$((9100 + port_offset))"
+    echo "export SPOKE_OPA_PORT=$((8181 + port_offset * 10))"
     echo "export SPOKE_KAS_PORT=$((9000 + port_offset))"
 }
 
