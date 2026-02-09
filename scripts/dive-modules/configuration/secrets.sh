@@ -221,9 +221,9 @@ vault_is_authenticated() {
         export VAULT_TOKEN
     fi
 
-    # Test token validity
+    # Test token validity (standbyok=true for HA clusters where node may be standby)
     curl -sfL -H "X-Vault-Token: $VAULT_TOKEN" \
-        "${VAULT_ADDR}/v1/sys/health" >/dev/null 2>&1
+        "${VAULT_ADDR}/v1/sys/health?standbyok=true" >/dev/null 2>&1
 }
 
 ##
