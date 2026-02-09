@@ -397,8 +397,8 @@ if [[ "$USE_TERRAFORM_SSOT" == "true" ]]; then
     log_step "Applying Keycloak configuration via Terraform (SSOT)..."
 
     # Source the terraform wrapper module
-    if [[ -f "${PROJECT_ROOT}/scripts/dive-modules/terraform-apply.sh" ]]; then
-        source "${PROJECT_ROOT}/scripts/dive-modules/terraform-apply.sh"
+    if [[ -f "${PROJECT_ROOT}/scripts/dive-modules/configuration/terraform-apply.sh" ]]; then
+        source "${PROJECT_ROOT}/scripts/dive-modules/configuration/terraform-apply.sh"
 
         # Export required environment variables for Terraform
         export KEYCLOAK_ADMIN_PASSWORD="$ADMIN_PASSWORD"
@@ -892,8 +892,8 @@ else
     log_step "Creating IdP claim mappers for ${USA_IDP_ALIAS}..."
 
     # Source resilient mapper utilities
-    if [ -f "${PROJECT_ROOT}/scripts/dive-modules/keycloak-mappers.sh" ]; then
-        source "${PROJECT_ROOT}/scripts/dive-modules/keycloak-mappers.sh"
+    if [ -f "${PROJECT_ROOT}/scripts/dive-modules/configuration/keycloak-mappers.sh" ]; then
+        source "${PROJECT_ROOT}/scripts/dive-modules/configuration/keycloak-mappers.sh"
     fi
 
     # Create mappers for clearance, countryOfAffiliation, uniqueID, acpCOI

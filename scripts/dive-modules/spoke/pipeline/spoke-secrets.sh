@@ -32,6 +32,23 @@ if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     export DIVE_COMMON_LOADED=1
 fi
 
+# Ensure SECRETS_PROVIDER is set (may be in .env.hub, not shell env)
+if [ -z "${SECRETS_PROVIDER:-}" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
+    _line=""
+    while IFS= read -r _line; do
+        case "$_line" in
+            SECRETS_PROVIDER=*|VAULT_CLI_ADDR=*|VAULT_ADDR=*)
+                export "$_line" ;;
+        esac
+    done < "${DIVE_ROOT}/.env.hub"
+fi
+SECRETS_PROVIDER="${SECRETS_PROVIDER:-gcp}"
+
+# Source secrets module for vault functions when using Vault provider
+if [ "$SECRETS_PROVIDER" = "vault" ] && [ -z "${DIVE_CONFIGURATION_SECRETS_LOADED:-}" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../../configuration/secrets.sh"
+fi
+
 # =============================================================================
 # CONSTANTS
 # =============================================================================
@@ -83,20 +100,31 @@ spoke_secrets_load() {
     local code_upper=$(upper "$instance_code")
     local code_lower=$(lower "$instance_code")
 
-    log_step "Loading secrets for $code_upper (SSOT: GCP Secret Manager)"
+    local ssot_name="GCP Secret Manager"
+    [ "$SECRETS_PROVIDER" = "vault" ] && ssot_name="HashiCorp Vault"
+
+    log_step "Loading secrets for $code_upper (SSOT: $ssot_name)"
 
     case "$mode" in
         load)
-            # Try GCP first (SSOT)
-            if spoke_secrets_load_from_gcp "$instance_code"; then
-                log_success "Loaded secrets from GCP Secret Manager"
-                spoke_secrets_sync_to_env "$instance_code"
-                return 0
+            # Try primary provider first (Vault or GCP)
+            if [ "$SECRETS_PROVIDER" = "vault" ]; then
+                if spoke_secrets_load_from_vault "$instance_code"; then
+                    log_success "Loaded secrets from HashiCorp Vault"
+                    spoke_secrets_sync_to_env "$instance_code"
+                    return 0
+                fi
+            else
+                if spoke_secrets_load_from_gcp "$instance_code"; then
+                    log_success "Loaded secrets from GCP Secret Manager"
+                    spoke_secrets_sync_to_env "$instance_code"
+                    return 0
+                fi
             fi
 
             # Fallback to .env
             if spoke_secrets_load_from_env "$instance_code"; then
-                log_warn "Using .env secrets (GCP unavailable) - may be stale"
+                log_warn "Using .env secrets ($ssot_name unavailable) - may be stale"
                 return 0
             fi
 
@@ -112,8 +140,10 @@ spoke_secrets_load() {
             if spoke_secrets_generate "$instance_code"; then
                 log_success "Generated new secrets for $code_upper"
 
-                # Upload to GCP if available
-                if check_gcloud 2>/dev/null; then
+                # Upload to primary provider if available
+                if [ "$SECRETS_PROVIDER" = "vault" ]; then
+                    spoke_secrets_upload_to_vault "$instance_code"
+                elif check_gcloud 2>/dev/null; then
                     spoke_secrets_upload_to_gcp "$instance_code"
                 fi
 
@@ -262,7 +292,7 @@ spoke_secrets_load_from_gcp() {
     for base_secret in "${SPOKE_REQUIRED_SECRETS[@]}"; do
         local env_var_name="${base_secret}_${code_upper}"
         if [ -n "${!env_var_name:-}" ]; then
-            local value="${!env_var_name}"
+            local value="${!env_var_name:-}"
             export "${base_secret}=${value}"
         fi
     done
@@ -370,6 +400,224 @@ spoke_secrets_upload_to_gcp() {
 }
 
 # =============================================================================
+# HASHICORP VAULT INTEGRATION
+# =============================================================================
+
+##
+# Map environment variable name to Vault path
+# Arguments:
+#   $1 - Environment variable name (e.g., POSTGRES_PASSWORD)
+#   $2 - Instance code (e.g., deu)
+# Returns:
+#   Vault category and path as "category:path:field"
+##
+_map_env_to_vault_path() {
+    local env_var="$1"
+    local instance_code="$2"
+
+    case "$env_var" in
+        POSTGRES_PASSWORD)     echo "core:${instance_code}/postgres:password" ;;
+        MONGO_PASSWORD)        echo "core:${instance_code}/mongodb:password" ;;
+        REDIS_PASSWORD)        echo "core:${instance_code}/redis:password" ;;
+        KEYCLOAK_ADMIN_PASSWORD) echo "core:${instance_code}/keycloak-admin:password" ;;
+        KEYCLOAK_CLIENT_SECRET)  echo "auth:${instance_code}/keycloak-client:secret" ;;
+        AUTH_SECRET)           echo "auth:${instance_code}/nextauth:secret" ;;
+        JWT_SECRET)            echo "auth:${instance_code}/jwt:secret" ;;
+        NEXTAUTH_SECRET)       echo "auth:${instance_code}/nextauth-explicit:secret" ;;
+        OPAL_TOKEN)            echo "opal:master-token:token" ;;
+        *)                     echo "" ;;
+    esac
+}
+
+##
+# Load secrets from HashiCorp Vault
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - Success
+#   1 - Failure
+##
+spoke_secrets_load_from_vault() {
+    local instance_code="$1"
+    local code_upper=$(upper "$instance_code")
+    local code_lower=$(lower "$instance_code")
+
+    # Authenticate with AppRole if credentials available
+    if [ -n "${VAULT_ROLE_ID:-}" ] && [ -n "${VAULT_SECRET_ID:-}" ]; then
+        vault_approle_login "$VAULT_ROLE_ID" "$VAULT_SECRET_ID" || true
+    fi
+
+    # Check Vault availability
+    if ! vault_is_authenticated; then
+        log_verbose "Vault not available for secret loading"
+        return 1
+    fi
+
+    local secrets_loaded=0
+    local secrets_failed=0
+    local failed_secrets=()
+
+    log_verbose "Loading secrets from Vault"
+
+    # Load each required secret
+    for base_secret in "${SPOKE_REQUIRED_SECRETS[@]}"; do
+        local vault_mapping=$(_map_env_to_vault_path "$base_secret" "$code_lower")
+        local env_var_name="${base_secret}_${code_upper}"
+
+        if [ -z "$vault_mapping" ]; then
+            secrets_failed=$((secrets_failed + 1))
+            failed_secrets+=("$base_secret")
+            continue
+        fi
+
+        # Parse category:path:field
+        local category="${vault_mapping%%:*}"
+        local rest="${vault_mapping#*:}"
+        local path="${rest%%:*}"
+        local field="${rest#*:}"
+
+        local secret_value
+        secret_value=$(vault_get_secret "$category" "$path" "$field" 2>/dev/null)
+
+        if [ -n "$secret_value" ]; then
+            export "${env_var_name}=${secret_value}"
+            secrets_loaded=$((secrets_loaded + 1))
+            log_verbose "Loaded $env_var_name from Vault ($category/$path)"
+        else
+            # Try shared path fallback
+            local shared_path="shared/${path##*/}"
+            secret_value=$(vault_get_secret "$category" "$shared_path" "$field" 2>/dev/null)
+
+            if [ -n "$secret_value" ]; then
+                export "${env_var_name}=${secret_value}"
+                secrets_loaded=$((secrets_loaded + 1))
+                log_verbose "Loaded $env_var_name from shared Vault path"
+            else
+                secrets_failed=$((secrets_failed + 1))
+                failed_secrets+=("$base_secret")
+                log_verbose "Vault secret not found: $category/$path"
+            fi
+        fi
+    done
+
+    # Load optional secrets (don't fail if missing)
+    for base_secret in "${SPOKE_OPTIONAL_SECRETS[@]}"; do
+        local vault_mapping=$(_map_env_to_vault_path "$base_secret" "$code_lower")
+        local env_var_name="${base_secret}_${code_upper}"
+
+        if [ -z "$vault_mapping" ]; then
+            continue
+        fi
+
+        local category="${vault_mapping%%:*}"
+        local rest="${vault_mapping#*:}"
+        local path="${rest%%:*}"
+        local field="${rest#*:}"
+
+        local secret_value
+        secret_value=$(vault_get_secret "$category" "$path" "$field" 2>/dev/null)
+
+        if [ -n "$secret_value" ]; then
+            export "${env_var_name}=${secret_value}"
+            log_verbose "Loaded optional $env_var_name from Vault"
+        fi
+    done
+
+    # Set base variable names (without instance suffix) for compatibility
+    for base_secret in "${SPOKE_REQUIRED_SECRETS[@]}"; do
+        local env_var_name="${base_secret}_${code_upper}"
+        if [ -n "${!env_var_name:-}" ]; then
+            local value="${!env_var_name:-}"
+            export "${base_secret}=${value}"
+        fi
+    done
+
+    if [ $secrets_loaded -ge ${#SPOKE_REQUIRED_SECRETS[@]} ]; then
+        log_info "Loaded $secrets_loaded secrets from Vault"
+
+        # Load USA client secret for federation (spokes only)
+        if [ "$code_upper" != "USA" ]; then
+            log_verbose "Loading USA client secret for federation..."
+
+            local usa_client_secret
+            usa_client_secret=$(vault_get_secret "auth" "usa/keycloak-client" "secret" 2>/dev/null)
+
+            # Fallback to shared
+            if [ -z "$usa_client_secret" ]; then
+                usa_client_secret=$(vault_get_secret "auth" "shared/keycloak-client" "secret" 2>/dev/null)
+            fi
+
+            if [ -n "$usa_client_secret" ]; then
+                export "KEYCLOAK_CLIENT_SECRET_USA=${usa_client_secret}"
+                log_verbose "Loaded KEYCLOAK_CLIENT_SECRET_USA for federation"
+            else
+                log_warn "Could not load USA client secret - spoke→hub federation may not work"
+            fi
+        fi
+
+        return 0
+    else
+        log_warn "Only loaded $secrets_loaded/${#SPOKE_REQUIRED_SECRETS[@]} required secrets from Vault"
+
+        if [ ${#failed_secrets[@]} -gt 0 ]; then
+            log_warn "Missing Vault secrets: ${failed_secrets[*]}"
+            log_verbose "Ensure secrets are migrated with: ./scripts/migrate-secrets-gcp-to-vault.sh"
+        fi
+
+        return 1
+    fi
+}
+
+##
+# Upload secrets to HashiCorp Vault
+#
+# Arguments:
+#   $1 - Instance code
+#
+# Returns:
+#   0 - Success
+#   1 - Failure
+##
+spoke_secrets_upload_to_vault() {
+    local instance_code="$1"
+    local code_upper=$(upper "$instance_code")
+    local code_lower=$(lower "$instance_code")
+
+    if ! vault_is_authenticated; then
+        log_warn "Vault not available for secret upload"
+        return 1
+    fi
+
+    log_info "Uploading secrets to HashiCorp Vault"
+
+    for base_secret in "${SPOKE_REQUIRED_SECRETS[@]}"; do
+        local env_var_name="${base_secret}_${code_upper}"
+        local secret_value="${!env_var_name}"
+
+        if [ -n "$secret_value" ]; then
+            local vault_mapping=$(_map_env_to_vault_path "$base_secret" "$code_lower")
+            if [ -z "$vault_mapping" ]; then
+                continue
+            fi
+
+            local category="${vault_mapping%%:*}"
+            local rest="${vault_mapping#*:}"
+            local path="${rest%%:*}"
+            local field="${rest#*:}"
+
+            local json_value="{\"${field}\":\"${secret_value}\"}"
+            vault_set_secret "$category" "$path" "$json_value"
+            log_verbose "Uploaded $base_secret to Vault ($category/$path)"
+        fi
+    done
+
+    log_success "Secrets uploaded to Vault"
+    return 0
+}
+
+# =============================================================================
 # LOCAL .ENV FILE INTEGRATION
 # =============================================================================
 
@@ -407,7 +655,7 @@ spoke_secrets_load_from_env() {
 
     for base_secret in "${SPOKE_REQUIRED_SECRETS[@]}"; do
         local env_var_name="${base_secret}_${code_upper}"
-        local value="${!env_var_name}"
+        local value="${!env_var_name:-}"
 
         if [ -z "$value" ]; then
             # Try without instance suffix
@@ -460,7 +708,7 @@ spoke_secrets_sync_to_env() {
     # Update or add each secret
     for base_secret in "${SPOKE_REQUIRED_SECRETS[@]}"; do
         local env_var_name="${base_secret}_${code_upper}"
-        local value="${!env_var_name}"
+        local value="${!env_var_name:-}"
 
         if [ -n "$value" ]; then
             if [ -f "$env_file" ] && grep -q "^${env_var_name}=" "$env_file"; then
@@ -672,7 +920,7 @@ spoke_secrets_validate() {
 
     for base_secret in "${SPOKE_REQUIRED_SECRETS[@]}"; do
         local env_var_name="${base_secret}_${code_upper}"
-        local value="${!env_var_name}"
+        local value="${!env_var_name:-}"
 
         # Check if set
         if [ -z "$value" ]; then
@@ -875,8 +1123,8 @@ spoke_secrets_sync_federation() {
     log_verbose "Syncing federation secrets with Hub"
 
     # Load federation sync module if available
-    if [ -f "${DIVE_ROOT}/scripts/dive-modules/federation-setup.sh" ]; then
-        if source "${DIVE_ROOT}/scripts/dive-modules/federation-setup.sh" 2>/dev/null; then
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/federation/setup.sh" ]; then
+        if source "${DIVE_ROOT}/scripts/dive-modules/federation/setup.sh" 2>/dev/null; then
             if type sync_hub_to_spoke_secrets &>/dev/null; then
                 if ! sync_hub_to_spoke_secrets "$code_upper" 2>/dev/null; then
                     log_verbose "Hub-to-spoke secret sync failed (non-critical)"
@@ -960,7 +1208,7 @@ spoke_secrets_generate_report() {
 
         for base_secret in "${SPOKE_REQUIRED_SECRETS[@]}"; do
             local env_var_name="${base_secret}_${code_upper}"
-            local value="${!env_var_name}"
+            local value="${!env_var_name:-}"
 
             if [ -n "$value" ]; then
                 local masked="${value:0:4}****${value: -4}"
@@ -975,7 +1223,7 @@ spoke_secrets_generate_report() {
 
         for base_secret in "${SPOKE_OPTIONAL_SECRETS[@]}"; do
             local env_var_name="${base_secret}_${code_upper}"
-            local value="${!env_var_name}"
+            local value="${!env_var_name:-}"
 
             if [ -n "$value" ]; then
                 echo "  $env_var_name: SET (length: ${#value})"

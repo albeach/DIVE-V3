@@ -1,4 +1,0 @@
-federation_configure_mappers() {
-    # DEPRECATED: dive-hub-federation client no longer used
-    return 0
-}

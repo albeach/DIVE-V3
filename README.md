@@ -2,7 +2,7 @@
 
 **Version:** 3.0  
 **Status:** Production Ready  
-**Last Updated:** February 6, 2026
+**Last Updated:** February 9, 2026
 
 ---
 
@@ -46,7 +46,8 @@ DIVE V3 is a coalition-friendly Identity, Credential, and Access Management (ICA
 **Infrastructure:**
 - Docker Compose
 - Terraform (Keycloak IaC)
-- Google Cloud Platform (Secrets management)
+- HashiCorp Vault 1.21 (Secrets management, primary)
+- Google Cloud Platform (Secrets management, legacy fallback)
 
 **Monitoring:**
 - Grafana (Dashboards)
@@ -153,7 +154,6 @@ import { PresenceIndicator } from '@/components/admin/shared';
 
 - Docker & Docker Compose
 - Node.js 20+
-- Google Cloud SDK (for secrets)
 - Git
 
 ### Installation
@@ -175,21 +175,27 @@ cd DIVE-V3
 
 ### Configuration
 
-DIVE V3 uses GCP Secret Manager for all sensitive configuration. Required secrets:
+DIVE V3 uses HashiCorp Vault for secrets management. No cloud provider account required.
 
 ```bash
-# Create secrets
-gcloud secrets create dive-v3-postgres-password-usa --project=dive25
-gcloud secrets create dive-v3-mongo-password-usa --project=dive25
-gcloud secrets create dive-v3-keycloak-admin-password-usa --project=dive25
-# ... (see .cursorrules for complete list)
+# 1. Start Vault container
+docker compose -f docker-compose.hub.yml up -d vault
 
-# Enable GCP secrets
-export USE_GCP_SECRETS=true
-export GCP_PROJECT_ID=dive25
+# 2. Initialize and unseal Vault (one-time)
+./dive vault init
+./dive vault unseal
+
+# 3. Configure mount points and policies
+./dive vault setup
+
+# 4. Deploy
+./dive hub deploy
+./dive spoke deploy deu
 ```
 
-**⚠️ CRITICAL:** Never hardcode secrets! Always use GCP Secret Manager. See `.cursorrules` for complete secrets management guidelines.
+See [Vault Integration Guide](./docs/VAULT_INTEGRATION.md) for full documentation.
+
+**⚠️ CRITICAL:** Never hardcode secrets! Always use Vault for secret storage.
 
 ---
 
@@ -357,7 +363,7 @@ docker-compose up -d
 
 ### Production Checklist
 
-- [ ] All secrets stored in GCP Secret Manager
+- [ ] All secrets stored in HashiCorp Vault (or GCP Secret Manager)
 - [ ] SSL/TLS certificates configured
 - [ ] Monitoring and logging enabled
 - [ ] OPA policies tested and deployed
@@ -591,11 +597,11 @@ A: See [Federation Implementation Runbook](./docs/FEDERATION-IMPLEMENTATION-RUNB
 **Q: How do I modify OPA policies?**  
 A: Edit `.rego` files in `policies/` directory. Run `opa test` to validate. See [OPA Policy Editor Quick Reference](./docs/opa-policy-editor-quick-reference.md).
 
-**Q: Where are secrets stored?**  
-A: All secrets are stored in GCP Secret Manager. Never hardcode secrets in code or config files. See `.cursorrules` for complete guidelines.
+**Q: Where are secrets stored?**
+A: Secrets are stored in HashiCorp Vault (primary, `SECRETS_PROVIDER=vault`) or GCP Secret Manager (legacy fallback). Never hardcode secrets in code or config files. See [Vault Integration Guide](./docs/VAULT_INTEGRATION.md) and `.cursorrules` for complete guidelines.
 
 ---
 
 **DIVE V3** - Demonstrating modern, accessible, and secure coalition identity management.
 
-*Last Updated: February 6, 2026*
+*Last Updated: February 9, 2026*

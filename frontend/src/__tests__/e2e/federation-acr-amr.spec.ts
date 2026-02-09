@@ -109,7 +109,7 @@ async function getSessionData(page: Page): Promise<{
 }
 
 // Skip if no spokes are running
-test.describe('Federation ACR/AMR Verification', () => {
+test.describe('Federation ACR/AMR Verification', { tag: '@critical' }, () => {
     test.setTimeout(TEST_TIMEOUT);
 
     test.beforeEach(async ({ page }) => {

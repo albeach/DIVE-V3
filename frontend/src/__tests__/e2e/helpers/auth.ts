@@ -3,6 +3,7 @@
  *
  * Handles NextAuth v5 + Keycloak authentication flows
  * Supports:
+ * - Dynamic IdP discovery (adapts to deployed spokes)
  * - Basic login (UNCLASSIFIED - no MFA)
  * - OTP login (CONFIDENTIAL/SECRET - TOTP required)
  * - WebAuthn login (TOP_SECRET - passkey required)
@@ -21,6 +22,46 @@
 import { Page, expect } from '@playwright/test';
 import { TestUser } from '../fixtures/test-users';
 import { TEST_CONFIG } from '../fixtures/test-config';
+import { discoverAvailableIdPs, isIdPAvailable, getIdPDisplayName, type DiscoveredIdPs } from './idp-discovery';
+
+/**
+ * Global IdP discovery cache
+ * Populated on first use to avoid repeated discovery overhead
+ */
+let globalIdPs: DiscoveredIdPs | null = null;
+
+/**
+ * Ensure IdPs have been discovered (lazy initialization)
+ * 
+ * @param page Playwright page object
+ * @returns Discovered IdPs
+ */
+async function ensureDiscovery(page: Page): Promise<DiscoveredIdPs> {
+  if (!globalIdPs) {
+    console.log('[AUTH] Performing IdP discovery...');
+    globalIdPs = await discoverAvailableIdPs(page);
+    console.log(`[AUTH] ✅ Discovery complete: Hub + ${globalIdPs.count} spokes`);
+  }
+  return globalIdPs;
+}
+
+/**
+ * Get discovered IdPs (for tests that need to check availability)
+ * 
+ * @param page Playwright page object
+ * @returns Discovered IdPs
+ */
+export async function getDiscoveredIdPs(page: Page): Promise<DiscoveredIdPs> {
+  return await ensureDiscovery(page);
+}
+
+/**
+ * Reset IdP discovery cache (for testing or when environment changes)
+ */
+export function resetIdPDiscovery(): void {
+  globalIdPs = null;
+  console.log('[AUTH] IdP discovery cache cleared');
+}
 
 /**
  * Login as a test user
@@ -53,6 +94,14 @@ export async function loginAs(
   console.log(`[AUTH] Logging in as ${user.username} (${user.clearance}, ${user.countryCode})`);
 
   try {
+    // Step 0: Ensure IdPs are discovered
+    const idps = await ensureDiscovery(page);
+    
+    // Check if IdP is available
+    if (!await isIdPAvailable(idps, user.countryCode)) {
+      throw new Error(`IdP not available: ${user.countryCode} spoke not deployed`);
+    }
+
     // Step 1: Navigate to home page
     console.log('[AUTH] Step 1: Navigating to home page');
     await page.goto('/', {
@@ -60,17 +109,26 @@ export async function loginAs(
       waitUntil: 'domcontentloaded' // More reliable than 'load' for SPAs
     });
 
-    // Step 2: Select IdP
-    console.log(`[AUTH] Step 2: Selecting IdP "${user.idp}"`);
+    // Step 2: Select IdP using discovered displayName
+    const displayName = getIdPDisplayName(idps, user.countryCode);
+    console.log(`[AUTH] Step 2: Selecting IdP for ${user.countryCode} (discovered: "${displayName}")`);
 
-    // Look for IdP selector button (various patterns)
-    const idpButton = page.getByRole('button', { name: new RegExp(user.idp, 'i') })
-      .or(page.getByRole('link', { name: new RegExp(user.idp, 'i') }))
-      .or(page.locator(`button:has-text("${user.idp}")`))
+    // Use discovered displayName with flexible matching as fallback
+    const idpButton = page.getByRole('button', { name: new RegExp(displayName!, 'i') })
+      .or(page.getByRole('button', { name: new RegExp(user.countryCode, 'i') }))
+      .or(page.getByRole('link', { name: new RegExp(user.countryCode, 'i') }))
+      .or(page.locator(`button:has-text("${user.countryCode}")`))
       .first();
 
-    await idpButton.waitFor({ state: 'visible', timeout: TEST_CONFIG.TIMEOUTS.ACTION });
-    await idpButton.click({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
+    try {
+      await idpButton.waitFor({ state: 'visible', timeout: TEST_CONFIG.TIMEOUTS.ACTION });
+      await idpButton.click({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
+    } catch (error) {
+      // Enhanced error with available IdPs for debugging
+      const availableButtons = await page.locator('button').allTextContents();
+      console.error(`[AUTH] ❌ IdP button not found. Available buttons: ${availableButtons.slice(0, 10).join(', ')}`);
+      throw new Error(`IdP button not found for ${user.countryCode} (expected: "${displayName}")`);
+    }
 
     // Step 3: Wait for Keycloak redirect
     console.log('[AUTH] Step 3: Waiting for Keycloak redirect');

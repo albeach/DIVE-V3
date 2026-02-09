@@ -237,6 +237,62 @@ export DRY_RUN="${DRY_RUN:-false}"
 export VERBOSE="${VERBOSE:-false}"
 export QUIET="${QUIET:-false}"
 
+# Configurable timeouts (override via environment variables)
+export DIVE_TIMEOUT_KEYCLOAK_READY="${DIVE_TIMEOUT_KEYCLOAK_READY:-180}"
+export DIVE_TIMEOUT_CURL_DEFAULT="${DIVE_TIMEOUT_CURL_DEFAULT:-10}"
+export DIVE_TIMEOUT_CURL_QUICK="${DIVE_TIMEOUT_CURL_QUICK:-5}"
+export DIVE_TIMEOUT_POLL_INTERVAL="${DIVE_TIMEOUT_POLL_INTERVAL:-2}"
+export DIVE_TIMEOUT_FEDERATION_STABILIZE="${DIVE_TIMEOUT_FEDERATION_STABILIZE:-35}"
+export DIVE_TIMEOUT_OPAL_STABILIZE="${DIVE_TIMEOUT_OPAL_STABILIZE:-45}"
+
+# Spoke list — no default; spokes are provisioned on demand via: ./dive vault provision <CODE>
+export DIVE_SPOKE_LIST="${DIVE_SPOKE_LIST:-}"
+
+##
+# Discover provisioned spokes dynamically
+# Priority: 1) DIVE_SPOKE_LIST env var  2) Vault AppRoles  3) instances/ directories
+# Results cached in _DIVE_PROVISIONED_SPOKES for the session
+##
+dive_get_provisioned_spokes() {
+    # Return cached result if available
+    if [ -n "${_DIVE_PROVISIONED_SPOKES:-}" ]; then
+        echo "$_DIVE_PROVISIONED_SPOKES"
+        return 0
+    fi
+
+    # If DIVE_SPOKE_LIST is explicitly set, use it
+    if [ -n "${DIVE_SPOKE_LIST:-}" ]; then
+        _DIVE_PROVISIONED_SPOKES="$DIVE_SPOKE_LIST"
+        echo "$_DIVE_PROVISIONED_SPOKES"
+        return 0
+    fi
+
+    local spokes=""
+
+    # Try Vault AppRole listing
+    if command -v vault >/dev/null 2>&1 && vault status >/dev/null 2>&1; then
+        local roles
+        roles=$(vault list -format=json auth/approle/role/ 2>/dev/null || echo "[]")
+        spokes=$(echo "$roles" | grep '"spoke-' | sed 's/.*"spoke-\([^"]*\)".*/\1/' | tr '\n' ' ' | sed 's/ $//')
+    fi
+
+    # Fallback: scan instances/ for any deployed spoke (has .env or docker-compose.yml)
+    if [ -z "$spokes" ] && [ -d "${DIVE_ROOT}/instances" ]; then
+        for dir in "${DIVE_ROOT}/instances"/*/; do
+            [ -d "$dir" ] || continue
+            local code=$(basename "$dir")
+            [ "$code" = "usa" ] && continue
+            [[ "$code" == .* ]] && continue
+            if [ -f "${dir}.env" ] || [ -f "${dir}docker-compose.yml" ]; then
+                spokes="${spokes:+$spokes }${code}"
+            fi
+        done
+    fi
+
+    _DIVE_PROVISIONED_SPOKES="$spokes"
+    echo "$_DIVE_PROVISIONED_SPOKES"
+}
+
 # Pilot Mode Configuration
 export PILOT_MODE="${DIVE_PILOT_MODE:-false}"
 
@@ -331,6 +387,8 @@ _get_spoke_keycloak_port() {
     echo "$SPOKE_KEYCLOAK_HTTPS_PORT"
 }
 
+# Preferred case conversion API (POSIX-compatible via tr).
+# Use these instead of bash-isms like ${var^^} or ${var,,} for consistency.
 upper() {
     echo "$1" | tr '[:lower:]' '[:upper:]'
 }
@@ -746,8 +804,14 @@ load_gcp_secrets() {
         # OR if we're in a context where federation is being set up (detected via function call context)
         # Default: Skip during clean slate hub deployment to avoid unnecessary GCP calls
         if [ "${LOAD_SPOKE_PASSWORDS:-false}" = "true" ] || [ "${FEDERATION_SETUP:-false}" = "true" ]; then
-            log_verbose "Loading spoke Keycloak passwords for federation operations..."
-            for spoke in gbr fra deu can; do
+            local provisioned_spokes
+            provisioned_spokes=$(dive_get_provisioned_spokes)
+            if [ -z "$provisioned_spokes" ]; then
+                log_verbose "No provisioned spokes found — skipping spoke password loading"
+            else
+                log_verbose "Loading spoke Keycloak passwords for federation operations..."
+            fi
+            for spoke in $provisioned_spokes; do
                 local spoke_uc=$(echo "$spoke" | tr '[:lower:]' '[:upper:]')
                 local spoke_password
                 if spoke_password=$(gcloud secrets versions access latest --secret="dive-v3-keycloak-${spoke}" --project="$project" 2>/dev/null); then
@@ -915,6 +979,40 @@ activate_gcp_service_account() {
 }
 
 load_secrets() {
+    # Source .env.hub to pick up SECRETS_PROVIDER and Vault config
+    if [ -z "${SECRETS_PROVIDER:-}" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
+        local _line
+        while IFS= read -r _line; do
+            case "$_line" in
+                SECRETS_PROVIDER=*|VAULT_ADDR=*|VAULT_CLI_ADDR=*|VAULT_TOKEN=*)
+                    export "$_line" ;;
+            esac
+        done < "${DIVE_ROOT}/.env.hub"
+    fi
+
+    # Vault provider: load secrets from Vault, skip GCP/AWS entirely
+    if [ "${SECRETS_PROVIDER:-}" = "vault" ]; then
+        # CLI scripts run on host — use VAULT_CLI_ADDR (host-accessible) over VAULT_ADDR (Docker-internal)
+        if [ -n "${VAULT_CLI_ADDR:-}" ]; then
+            export VAULT_ADDR="$VAULT_CLI_ADDR"
+        fi
+        # Load token from .vault-token if not already set
+        if [ -z "${VAULT_TOKEN:-}" ] && [ -f "${DIVE_ROOT}/.vault-token" ]; then
+            export VAULT_TOKEN=$(cat "${DIVE_ROOT}/.vault-token")
+        fi
+
+        log_info "Loading secrets from HashiCorp Vault..."
+        if [ -z "${DIVE_CONFIGURATION_SECRETS_LOADED:-}" ]; then
+            source "${DIVE_ROOT}/scripts/dive-modules/configuration/secrets.sh"
+        fi
+        if secrets_load_for_instance "${INSTANCE:-USA}"; then
+            log_success "Secrets loaded from Vault"
+            return 0
+        fi
+        log_warn "Vault secret loading failed - falling back to environment variables"
+        # Fall through to allow ALLOW_INSECURE_LOCAL_DEVELOPMENT to work
+    fi
+
     case "$ENVIRONMENT" in
         local|dev)
             # ENHANCED: Automatically try service account before user auth
@@ -1107,7 +1205,7 @@ apply_environment_config() {
 
 get_instance_ports() {
     local code="$1"
-    local code_upper="${code^^}"
+    local code_upper=$(upper "$code")
     local port_offset=0
 
     # SSOT: Always load NATO database for port calculations
@@ -1158,21 +1256,16 @@ get_instance_ports() {
 
     # Export calculated ports (can be sourced or eval'd)
     # Port scheme ensures no conflicts for 100+ simultaneous spokes
-    # FIXED: Changed OPA from 8181+(offset*10) to 9100+offset to avoid conflicts
-    # FIXED (Jan 2026): Changed Keycloak HTTP from 8080+offset to 8100+offset
-    #                   to avoid conflict with Hub KAS at 8085
-    # CRITICAL FIX (2026-02-07): Changed KAS from 10000+offset to 9000+offset
-    #                            to match SSOT in nato-countries.sh (line 260)
-    #                            Bug caused FRA KAS to register as :10010 instead of :9010
+    # SSOT: Formulas MUST match get_country_ports() in nato-countries.sh
     echo "export SPOKE_PORT_OFFSET=$port_offset"
     echo "export SPOKE_FRONTEND_PORT=$((3000 + port_offset))"
     echo "export SPOKE_BACKEND_PORT=$((4000 + port_offset))"
     echo "export SPOKE_KEYCLOAK_HTTPS_PORT=$((8443 + port_offset))"
-    echo "export SPOKE_KEYCLOAK_HTTP_PORT=$((8100 + port_offset))"
+    echo "export SPOKE_KEYCLOAK_HTTP_PORT=$((8080 + port_offset))"
     echo "export SPOKE_POSTGRES_PORT=$((5432 + port_offset))"
     echo "export SPOKE_MONGODB_PORT=$((27017 + port_offset))"
     echo "export SPOKE_REDIS_PORT=$((6379 + port_offset))"
-    echo "export SPOKE_OPA_PORT=$((9100 + port_offset))"
+    echo "export SPOKE_OPA_PORT=$((8181 + port_offset * 10))"
     echo "export SPOKE_KAS_PORT=$((9000 + port_offset))"
 }
 
@@ -1202,7 +1295,7 @@ get_instance_ports() {
 ##
 wait_for_keycloak_admin_api_ready() {
     local container_name="${1:?container name required}"
-    local max_wait="${2:-180}"  # 3 minutes default
+    local max_wait="${2:-$DIVE_TIMEOUT_KEYCLOAK_READY}"
     local admin_password="${3:-}"
 
     log_verbose "Waiting for Keycloak admin API to be ready: $container_name (max ${max_wait}s)"
@@ -1252,12 +1345,12 @@ wait_for_keycloak_admin_api_ready() {
     # Get admin password if not provided
     if [ -z "$admin_password" ]; then
         if [ "$instance_type" = "hub" ]; then
-            # Hub: Try KC_BOOTSTRAP_ADMIN_PASSWORD, then KEYCLOAK_ADMIN_PASSWORD
-            admin_password="${KC_BOOTSTRAP_ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD:-}}"
+            # Hub: Try suffixed _USA variants first (normalized), then unsuffixed (backward compat)
+            admin_password="${KC_ADMIN_PASSWORD_USA:-${KC_BOOTSTRAP_ADMIN_PASSWORD_USA:-${KEYCLOAK_ADMIN_PASSWORD_USA:-${KC_BOOTSTRAP_ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD:-}}}}}"
 
             # Try to get from GCP if still empty
             if [ -z "$admin_password" ] && command -v gcloud &>/dev/null; then
-                admin_password=$(gcloud secrets versions access latest --secret=dive-v3-keycloak-usa --project=dive25 2>/dev/null || echo "")
+                admin_password=$(gcloud secrets versions access latest --secret=dive-v3-keycloak-usa --project="${GCP_PROJECT:-dive25}" 2>/dev/null || echo "")
             fi
         else
             # Spoke: Get from GCP or environment
@@ -1269,7 +1362,7 @@ wait_for_keycloak_admin_api_ready() {
             if [ -z "$admin_password" ] && command -v gcloud &>/dev/null; then
                 admin_password=$(gcloud secrets versions access latest \
                     --secret="dive-v3-keycloak-admin-password-${instance_code}" \
-                    --project=dive25 2>/dev/null || echo "")
+                    --project="${GCP_PROJECT:-dive25}" 2>/dev/null || echo "")
             fi
         fi
     fi
@@ -1289,7 +1382,7 @@ wait_for_keycloak_admin_api_ready() {
     while [ $elapsed -lt $max_wait ]; do
         # Try to get admin token
         local auth_response
-        auth_response=$(docker exec "$container_name" curl -s --max-time 10 \
+        auth_response=$(docker exec "$container_name" curl -s --max-time "$DIVE_TIMEOUT_CURL_DEFAULT" \
             -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
             -d "grant_type=password" \
             -d "username=admin" \
@@ -1330,7 +1423,7 @@ wait_for_keycloak_admin_api_ready() {
 
     # Check 5: Master realm is accessible
     local realm_check
-    realm_check=$(docker exec "$container_name" curl -s --max-time 5 \
+    realm_check=$(docker exec "$container_name" curl -s --max-time "$DIVE_TIMEOUT_CURL_QUICK" \
         "http://localhost:8080/realms/master" 2>&1)
 
     if ! echo "$realm_check" | grep -q '"realm":"master"'; then
@@ -1382,7 +1475,7 @@ detect_docker_command() {
 }
 
 # Initialize Docker command (called once at module load)
-if [ -z "$DOCKER_CMD" ]; then
+if [ -z "${DOCKER_CMD:-}" ]; then
     if DOCKER_CMD=$(detect_docker_command); then
         export DOCKER_CMD
     else
@@ -1445,12 +1538,12 @@ json_get_field() {
     local file="$1"
     local field="$2"
     local default="${3:-}"
-    
+
     if [ ! -f "$file" ]; then
         echo "$default"
         return 1
     fi
-    
+
     # Prefer jq (correct JSON parsing)
     if command -v jq &>/dev/null; then
         local result
@@ -1463,14 +1556,15 @@ json_get_field() {
             return 0
         fi
     fi
-    
-    # Fallback to grep (simpler pattern, avoids [[:space:]] bracket issues)
-    # Use [ \t] instead of [[:space:]] for portability
+
+    # Fallback to grep - may fail on nested JSON or special characters.
+    # jq should always be available in DIVE environments.
+    log_verbose "json_get_field: jq not available, using grep fallback for $field (may be inaccurate)"
     local simple_field="${field##*.}"  # Get last component for simple JSON
     local pattern="\"${simple_field}\"[ \\t]*:[ \\t]*\"([^\"]*)\""
     local value
     value=$(grep -Eo "$pattern" "$file" 2>/dev/null | head -1 | sed 's/.*:[ \t]*"\(.*\)"/\1/')
-    
+
     if [ -n "$value" ]; then
         echo "$value"
     else
@@ -1478,4 +1572,6 @@ json_get_field() {
     fi
 }
 
+# Ensure DIVE_ROOT is set when common.sh is sourced
+ensure_dive_root
 

@@ -187,8 +187,8 @@ test_cli_env_sync_module() {
     fi
 
     # Try to source the module
-    if ! source "${DIVE_ROOT}/scripts/dive-modules/env-sync.sh" 2>/dev/null; then
-        log_error "Failed to source env-sync.sh"
+    if ! source "${DIVE_ROOT}/scripts/dive-modules/configuration/env-sync.sh" 2>/dev/null; then
+        log_error "Failed to source configuration/env-sync.sh"
         return 1
     fi
 
@@ -196,20 +196,20 @@ test_cli_env_sync_module() {
 }
 
 ##
-# Test orchestration-state-db.sh module
+# Test orchestration/state.sh module
 #
 test_cli_orchestration_state_db_module() {
-    log_verbose "Testing orchestration-state-db.sh module..."
+    log_verbose "Testing orchestration/state.sh module..."
 
     # Source the module and check for syntax errors
-    if ! bash -n "${DIVE_ROOT}/scripts/dive-modules/orchestration-state-db.sh" 2>/dev/null; then
-        log_error "Syntax error in orchestration-state-db.sh"
+    if ! bash -n "${DIVE_ROOT}/scripts/dive-modules/orchestration/state.sh" 2>/dev/null; then
+        log_error "Syntax error in orchestration/state.sh"
         return 1
     fi
 
     # Try to source the module (may have readonly variable issues, that's ok)
-    if ! source "${DIVE_ROOT}/scripts/dive-modules/orchestration-state-db.sh" 2>/dev/null; then
-        log_warn "Failed to source orchestration-state-db.sh (may be readonly variable issue)"
+    if ! source "${DIVE_ROOT}/scripts/dive-modules/orchestration/state.sh" 2>/dev/null; then
+        log_warn "Failed to source orchestration/state.sh (may be readonly variable issue)"
     fi
 
     return 0
@@ -228,8 +228,8 @@ test_cli_federation_state_db_module() {
     fi
 
     # Try to source the module
-    if ! source "${DIVE_ROOT}/scripts/dive-modules/federation-state-db.sh" 2>/dev/null; then
-        log_error "Failed to source federation-state-db.sh"
+    if ! source "${DIVE_ROOT}/scripts/dive-modules/federation/health.sh" 2>/dev/null; then
+        log_error "Failed to source federation/health.sh"
         return 1
     fi
 

@@ -360,7 +360,7 @@ handle_error_with_recovery() {
 
     # Record error
     if type orch_record_error &>/dev/null; then
-        orch_record_error "$instance_code" "$error_code" "$error_message" "$error_severity" "$error_context"
+        orch_record_error "$error_code" "$error_severity" "$error_message" "$instance_code" "" "$error_context"
     fi
 
     # Classify error

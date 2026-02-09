@@ -7,7 +7,7 @@ DIVE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export DIVE_ROOT
 
 source "${DIVE_ROOT}/scripts/dive-modules/common.sh"
-source "${DIVE_ROOT}/scripts/dive-modules/orchestration-state-db.sh"
+source "${DIVE_ROOT}/scripts/dive-modules/orchestration/state.sh"
 
 export ORCH_DB_ENABLED=true
 export ORCH_DB_DUAL_WRITE=true

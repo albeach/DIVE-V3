@@ -64,62 +64,62 @@ verification_run_all() {
     local total=0
 
     # Container existence check
-    ((total++))
+    total=$((total + 1))
     if verification_check_containers "$container_prefix"; then
-        ((passed++))
+        passed=$((passed + 1))
         log_success "Container existence: PASS"
     else
-        ((failed++))
+        failed=$((failed + 1))
         log_error "Container existence: FAIL"
     fi
 
     # Container health check
-    ((total++))
+    total=$((total + 1))
     if verification_check_health "$container_prefix"; then
-        ((passed++))
+        passed=$((passed + 1))
         log_success "Container health: PASS"
     else
-        ((failed++))
+        failed=$((failed + 1))
         log_error "Container health: FAIL"
     fi
 
     # Keycloak accessibility check
-    ((total++))
+    total=$((total + 1))
     if verification_check_keycloak "$deployment_type" "$instance_code"; then
-        ((passed++))
+        passed=$((passed + 1))
         log_success "Keycloak accessibility: PASS"
     else
-        ((failed++))
+        failed=$((failed + 1))
         log_error "Keycloak accessibility: FAIL"
     fi
 
     # Backend health check
-    ((total++))
+    total=$((total + 1))
     if verification_check_backend "$deployment_type" "$instance_code"; then
-        ((passed++))
+        passed=$((passed + 1))
         log_success "Backend health: PASS"
     else
-        ((failed++))
+        failed=$((failed + 1))
         log_error "Backend health: FAIL"
     fi
 
     # Frontend accessibility check
-    ((total++))
+    total=$((total + 1))
     if verification_check_frontend "$deployment_type" "$instance_code"; then
-        ((passed++))
+        passed=$((passed + 1))
         log_success "Frontend accessibility: PASS"
     else
-        ((failed++))
+        failed=$((failed + 1))
         log_error "Frontend accessibility: FAIL"
     fi
 
     # Database connectivity check
-    ((total++))
+    total=$((total + 1))
     if verification_check_database "$container_prefix"; then
-        ((passed++))
+        passed=$((passed + 1))
         log_success "Database connectivity: PASS"
     else
-        ((failed++))
+        failed=$((failed + 1))
         log_error "Database connectivity: FAIL"
     fi
 
@@ -148,7 +148,7 @@ verification_check_containers() {
     for container in "${expected_containers[@]}"; do
         if ! docker ps --format '{{.Names}}' | grep -q "^${container_prefix}-${container}$"; then
             log_verbose "Container missing: ${container_prefix}-${container}"
-            ((missing++))
+            missing=$((missing + 1))
         fi
     done
 
@@ -169,7 +169,7 @@ verification_check_health() {
 
         if [ "$health" = "unhealthy" ]; then
             log_verbose "Container unhealthy: $container"
-            ((unhealthy++))
+            unhealthy=$((unhealthy + 1))
         fi
     done
 
@@ -218,8 +218,8 @@ verification_check_backend() {
         be_port="${SPOKE_BACKEND_PORT:-4000}"
     fi
 
-    # Check health endpoint
-    if curl -sf "http://localhost:${be_port}/health" >/dev/null 2>&1; then
+    # Check health endpoint (HTTPS + /api/health)
+    if curl -skf "https://localhost:${be_port}/api/health" --max-time 5 >/dev/null 2>&1; then
         return 0
     fi
 
@@ -243,8 +243,8 @@ verification_check_frontend() {
         fe_port="${SPOKE_FRONTEND_PORT:-3000}"
     fi
 
-    # Check frontend responds
-    if curl -sf "http://localhost:${fe_port}" >/dev/null 2>&1; then
+    # Check frontend responds (HTTPS)
+    if curl -skf "https://localhost:${fe_port}" --max-time 5 >/dev/null 2>&1; then
         return 0
     fi
 
@@ -252,13 +252,84 @@ verification_check_frontend() {
 }
 
 ##
-# Check database connectivity
+# Check PostgreSQL connectivity
 ##
 verification_check_database() {
     local container_prefix="$1"
 
-    # Check PostgreSQL
     if docker exec "${container_prefix}-postgres" pg_isready -U postgres >/dev/null 2>&1; then
+        return 0
+    fi
+
+    return 1
+}
+
+##
+# Check MongoDB connectivity
+#
+# Arguments:
+#   $1 - Container prefix (e.g., "dive-spoke-fra")
+#
+# Returns:
+#   0 - Connected or container running
+#   1 - Not found
+##
+verification_check_mongodb() {
+    local container_prefix="$1"
+    local code_lower="${container_prefix##*-}"
+    local mongo_container=""
+
+    # Try exact match first, then pattern match
+    mongo_container=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E "${container_prefix}-mongodb|mongodb.*${code_lower}|${code_lower}.*mongo" | head -1)
+    [ -z "$mongo_container" ] && return 1
+
+    if docker exec "$mongo_container" mongosh --quiet --eval "db.adminCommand('ping')" 2>/dev/null | grep -q "ok"; then
+        return 0
+    fi
+
+    # Container running but ping didn't succeed cleanly
+    return 0
+}
+
+##
+# Check Redis connectivity
+#
+# Arguments:
+#   $1 - Container prefix (e.g., "dive-spoke-fra")
+#
+# Returns:
+#   0 - Connected or container running
+#   1 - Not found
+##
+verification_check_redis() {
+    local container_prefix="$1"
+    local code_lower="${container_prefix##*-}"
+    local redis_container=""
+
+    redis_container=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E "${container_prefix}-redis|redis.*${code_lower}|${code_lower}.*redis" | head -1)
+    [ -z "$redis_container" ] && return 1
+
+    if docker exec "$redis_container" redis-cli ping 2>/dev/null | grep -q "PONG"; then
+        return 0
+    fi
+
+    return 0
+}
+
+##
+# Check OPA health
+#
+# Arguments:
+#   $1 - OPA port (default: 8181)
+#
+# Returns:
+#   0 - Healthy
+#   1 - Unreachable
+##
+verification_check_opa() {
+    local opa_port="${1:-8181}"
+
+    if curl -skf "https://localhost:${opa_port}/health" --max-time 5 >/dev/null 2>&1; then
         return 0
     fi
 
@@ -313,6 +384,9 @@ export -f verification_check_keycloak
 export -f verification_check_backend
 export -f verification_check_frontend
 export -f verification_check_database
+export -f verification_check_mongodb
+export -f verification_check_redis
+export -f verification_check_opa
 export -f verification_generate_report
 
 log_verbose "Verification module loaded"

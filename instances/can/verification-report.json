@@ -1,0 +1,18 @@
+{
+    "instance": "CAN",
+    "status": "warning",
+    "timestamp": "2026-02-09T19:43:41Z",
+    "containers": {"running":9,"unhealthy":0,"stopped":0,"total":9},
+    "checks": {
+        "services": false,
+        "databases": true,
+        "keycloak": true,
+        "federation": false,
+        "api": true
+    },
+    "endpoints": {
+        "frontend": "https://localhost:3004",
+        "backend": "https://localhost:4004",
+        "keycloak": "https://localhost:8447"
+    }
+}

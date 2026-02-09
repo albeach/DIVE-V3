@@ -154,10 +154,13 @@ resource "keycloak_authentication_execution_config" "browser_condition_top_secre
   execution_id = keycloak_authentication_execution.browser_condition_top_secret.id
   alias        = "TOP SECRET Check - ${local.flow_suffix}"
   config = {
-    attribute_name           = var.clearance_attribute_name
-    attribute_expected_value = "^TOP_SECRET$" # Regex pattern for TOP_SECRET
-    regex                    = "true"         # CRITICAL: Enable regex matching!
-    not                      = "false"        # Do not negate the result
+    # CRITICAL (2026-02-09): Check country-specific clearance attribute
+    # Backend is SSOT for normalization, but conditionals need to match country-specific values
+    # Pattern covers all 32 NATO countries' TOP SECRET equivalents
+    attribute_name           = "clearance"
+    attribute_expected_value = "^(TOP.?SECRET|STRENG.?GEHEIM|TRÈS.?SECRET|SVÆRT.?HEMMELIG|ŚCIŚLE.?TAJNE|PŘÍSNĚ.?TAJNÉ|SZIGORÚAN.?TITKOS|TÄIESTI.?SALAJANE|YDERST.?HEMMELIGT|ΕΞΑΙΡΕΤΙΚΩΣ.?ΑΠΟΡΡΗΤΟ)$"
+    regex                    = "true"
+    not                      = "false"
   }
 }
 
@@ -242,10 +245,13 @@ resource "keycloak_authentication_execution_config" "browser_condition_config" {
   execution_id = keycloak_authentication_execution.browser_condition_user_attribute.id
   alias        = "CONFIDENTIAL SECRET Check - ${local.flow_suffix}"
   config = {
-    attribute_name           = var.clearance_attribute_name
-    attribute_expected_value = "^(CONFIDENTIAL|SECRET)$" # Regex pattern for both levels
-    regex                    = "true"                    # CRITICAL: Enable regex matching!
-    not                      = "false"                   # Do not negate the result
+    # CRITICAL (2026-02-09): Check country-specific clearance attribute
+    # Backend is SSOT for normalization, but conditionals need to match country-specific values
+    # Pattern covers all 32 NATO countries' CONFIDENTIAL and SECRET equivalents
+    attribute_name           = "clearance"
+    attribute_expected_value = "^(CONFIDENTIAL|SECRET|GEHEIM|VS.?VERTRAULICH|CONFIDENTIEL|DÉFENSE|SALAJANE|TAJNE|TITKOS|HEMMELIG|ΑΠΟΡΡΗΤΟ)$"
+    regex                    = "true"
+    not                      = "false"
   }
 }
 

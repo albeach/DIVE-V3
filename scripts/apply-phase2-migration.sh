@@ -148,8 +148,8 @@ log_success "All tables verified (${#expected_tables[@]}/${#expected_tables[@]})
 # Test basic lock operations
 log_step "Testing deployment lock operations..."
 
-source "${DIVE_ROOT}/scripts/dive-modules/orchestration-framework.sh"
-source "${DIVE_ROOT}/scripts/dive-modules/orchestration-state-db.sh"
+source "${DIVE_ROOT}/scripts/dive-modules/orchestration/framework.sh"
+source "${DIVE_ROOT}/scripts/dive-modules/orchestration/state.sh"
 
 if orch_acquire_deployment_lock "test" 5; then
     log_success "✅ Lock acquisition works"

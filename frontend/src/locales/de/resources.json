@@ -129,9 +129,9 @@
     "federated": "Föderiert"
   },
   "classifications": {
-    "unclassified": "NICHT KLASSIFIZIERT",
-    "restricted": "EINGESCHRÄNKT",
-    "confidential": "VERTRAULICH",
+    "unclassified": "OFFEN",
+    "restricted": "VS-NFD",
+    "confidential": "VS-VERTRAULICH",
     "secret": "GEHEIM",
     "topSecret": "STRENG GEHEIM"
   },

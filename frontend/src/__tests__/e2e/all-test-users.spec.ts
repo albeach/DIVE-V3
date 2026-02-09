@@ -3,17 +3,37 @@
  *
  * Tests every available test user across all countries and clearance levels:
  * - USA: UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET
- * - FRA: UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET
- * - DEU: UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET
- * - GBR: UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET
+ * - FRA: UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET (if deployed)
+ * - DEU: UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET (if deployed)
+ * - GBR: UNCLASSIFIED, CONFIDENTIAL, SECRET, TOP_SECRET (if deployed)
  * - INDUSTRY: BAH (UNCLASSIFIED contractor)
+ * 
+ * Uses dynamic IdP discovery to skip tests for non-deployed instances.
  */
 
 import { test, expect } from '@playwright/test';
 import { TEST_USERS } from './fixtures/test-users';
-import { loginAs, expectLoggedIn } from '../helpers/auth';
+import { loginAs, expectLoggedIn, getDiscoveredIdPs } from './helpers/auth';
+import { isIdPAvailable, type DiscoveredIdPs } from './helpers/idp-discovery';
 
-test.describe('ALL Test Users - Comprehensive Authentication & Authorization Testing', () => {
+// Global discovery cache
+let discoveredIdPs: DiscoveredIdPs | null = null;
+
+test.describe('ALL Test Users - Comprehensive Authentication & Authorization Testing', { tag: '@smoke' }, () => {
+
+  // Discover available IdPs before running tests
+  test.beforeAll(async ({ browser }) => {
+    const page = await browser.newPage();
+    discoveredIdPs = await getDiscoveredIdPs(page);
+    await page.close();
+    
+    console.log('[TEST SUITE] IdP Discovery Complete:');
+    console.log(`  Hub: ${discoveredIdPs.hub?.code} available`);
+    console.log(`  Spokes: ${discoveredIdPs.count} deployed`);
+    for (const [code, idp] of discoveredIdPs.spokes.entries()) {
+      console.log(`    ${code}: ${idp.displayName}`);
+    }
+  });
 
   test.describe('🇺🇸 USA Test Users', () => {
     test('USA UNCLASSIFIED user authentication', async ({ page }) => {
@@ -50,24 +70,28 @@ test.describe('ALL Test Users - Comprehensive Authentication & Authorization Tes
 
   test.describe('🇫🇷 FRA Test Users (France)', () => {
     test('FRA UNCLASSIFIED user authentication', async ({ page }) => {
+      test.skip(!discoveredIdPs || !await isIdPAvailable(discoveredIdPs, 'FRA'), 'FRA spoke not deployed');
       await loginAs(page, TEST_USERS.FRA.UNCLASS);
       await expectLoggedIn(page, TEST_USERS.FRA.UNCLASS);
       console.log('✅ FRA UNCLASSIFIED user authenticated successfully');
     });
 
     test('FRA CONFIDENTIAL user with OTP', async ({ page }) => {
+      test.skip(!discoveredIdPs || !await isIdPAvailable(discoveredIdPs, 'FRA'), 'FRA spoke not deployed');
       await loginAs(page, TEST_USERS.FRA.CONFIDENTIAL, { otpCode: '123456' });
       await expectLoggedIn(page, TEST_USERS.FRA.CONFIDENTIAL);
       console.log('✅ FRA CONFIDENTIAL user with OTP authenticated successfully');
     });
 
     test('FRA SECRET user with OTP', async ({ page }) => {
+      test.skip(!discoveredIdPs || !await isIdPAvailable(discoveredIdPs, 'FRA'), 'FRA spoke not deployed');
       await loginAs(page, TEST_USERS.FRA.SECRET, { otpCode: '123456' });
       await expectLoggedIn(page, TEST_USERS.FRA.SECRET);
       console.log('✅ FRA SECRET user with OTP authenticated successfully');
     });
 
     test('FRA TOP_SECRET user authentication', async ({ page }) => {
+      test.skip(!discoveredIdPs || !await isIdPAvailable(discoveredIdPs, 'FRA'), 'FRA spoke not deployed');
       await loginAs(page, TEST_USERS.FRA.TOP_SECRET);
       await expectLoggedIn(page, TEST_USERS.FRA.TOP_SECRET);
       console.log('✅ FRA TOP_SECRET user authenticated successfully');
@@ -76,24 +100,28 @@ test.describe('ALL Test Users - Comprehensive Authentication & Authorization Tes
 
   test.describe('🇩🇪 DEU Test Users (Germany)', () => {
     test('DEU UNCLASSIFIED user authentication', async ({ page }) => {
+      test.skip(!discoveredIdPs || !await isIdPAvailable(discoveredIdPs, 'DEU'), 'DEU spoke not deployed');
       await loginAs(page, TEST_USERS.DEU.UNCLASS);
       await expectLoggedIn(page, TEST_USERS.DEU.UNCLASS);
       console.log('✅ DEU UNCLASSIFIED user authenticated successfully');
     });
 
     test('DEU CONFIDENTIAL user with OTP', async ({ page }) => {
+      test.skip(!discoveredIdPs || !await isIdPAvailable(discoveredIdPs, 'DEU'), 'DEU spoke not deployed');
       await loginAs(page, TEST_USERS.DEU.CONFIDENTIAL, { otpCode: '123456' });
       await expectLoggedIn(page, TEST_USERS.DEU.CONFIDENTIAL);
       console.log('✅ DEU CONFIDENTIAL user with OTP authenticated successfully');
     });
 
     test('DEU SECRET user with OTP', async ({ page }) => {
+      test.skip(!discoveredIdPs || !await isIdPAvailable(discoveredIdPs, 'DEU'), 'DEU spoke not deployed');
       await loginAs(page, TEST_USERS.DEU.SECRET, { otpCode: '123456' });
       await expectLoggedIn(page, TEST_USERS.DEU.SECRET);
       console.log('✅ DEU SECRET user with OTP authenticated successfully');
     });
 
     test('DEU TOP_SECRET user authentication', async ({ page }) => {
+      test.skip(!discoveredIdPs || !await isIdPAvailable(discoveredIdPs, 'DEU'), 'DEU spoke not deployed');
       await loginAs(page, TEST_USERS.DEU.TOP_SECRET);
       await expectLoggedIn(page, TEST_USERS.DEU.TOP_SECRET);
       console.log('✅ DEU TOP_SECRET user authenticated successfully');
@@ -102,24 +130,28 @@ test.describe('ALL Test Users - Comprehensive Authentication & Authorization Tes
 
   test.describe('🇬🇧 GBR Test Users (United Kingdom)', () => {
     test('GBR UNCLASSIFIED user authentication', async ({ page }) => {
+      test.skip(!discoveredIdPs || !await isIdPAvailable(discoveredIdPs, 'GBR'), 'GBR spoke not deployed');
       await loginAs(page, TEST_USERS.GBR.UNCLASS);
       await expectLoggedIn(page, TEST_USERS.GBR.UNCLASS);
       console.log('✅ GBR UNCLASSIFIED user authenticated successfully');
     });
 
     test('GBR CONFIDENTIAL user with OTP', async ({ page }) => {
+      test.skip(!discoveredIdPs || !await isIdPAvailable(discoveredIdPs, 'GBR'), 'GBR spoke not deployed');
       await loginAs(page, TEST_USERS.GBR.CONFIDENTIAL, { otpCode: '123456' });
       await expectLoggedIn(page, TEST_USERS.GBR.CONFIDENTIAL);
       console.log('✅ GBR CONFIDENTIAL user with OTP authenticated successfully');
     });
 
     test('GBR SECRET user with OTP', async ({ page }) => {
+      test.skip(!discoveredIdPs || !await isIdPAvailable(discoveredIdPs, 'GBR'), 'GBR spoke not deployed');
       await loginAs(page, TEST_USERS.GBR.SECRET, { otpCode: '123456' });
       await expectLoggedIn(page, TEST_USERS.GBR.SECRET);
       console.log('✅ GBR SECRET user with OTP authenticated successfully');
     });
 
     test('GBR TOP_SECRET user with FVEY access', async ({ page }) => {
+      test.skip(!discoveredIdPs || !await isIdPAvailable(discoveredIdPs, 'GBR'), 'GBR spoke not deployed');
       await loginAs(page, TEST_USERS.GBR.TOP_SECRET);
       await expectLoggedIn(page, TEST_USERS.GBR.TOP_SECRET);
       console.log('✅ GBR TOP_SECRET user with FVEY access authenticated successfully');

@@ -139,11 +139,27 @@ if echo "$PROFILE_JSON" | grep -q '"attributes"'; then
         # Manipulate JSON on HOST using jq, then pipe to container
         # This works because jq runs locally, not in the minimal Keycloak container
         # Core DIVE attributes that need user view permission for federation:
-        # clearance, countryOfAffiliation, acpCOI, uniqueID
+        # clearance, clearanceNormalized, countryOfAffiliation, acpCOI, uniqueID
         # NOTE: amr/acr are native Keycloak v26 session claims, not user attributes
+
+        # CRITICAL (2026-02-09): Add clearanceNormalized attribute if it doesn't exist
         UPDATED_PROFILE=$(echo "$PROFILE_JSON" | jq '
+            # First, ensure clearanceNormalized attribute exists
+            if (.attributes | map(.name) | contains(["clearanceNormalized"]) | not) then
+                .attributes += [{
+                    "name": "clearanceNormalized",
+                    "displayName": "${clearanceNormalized}",
+                    "required": false,
+                    "permissions": {"view": ["admin", "user"], "edit": ["admin"]},
+                    "validators": {},
+                    "annotations": {}
+                }]
+            else
+                .
+            end |
+            # Then update permissions for all DIVE attributes
             .attributes |= map(
-                if .name == "clearance" or .name == "countryOfAffiliation" or .name == "acpCOI" or .name == "uniqueID" then
+                if .name == "clearance" or .name == "clearanceNormalized" or .name == "countryOfAffiliation" or .name == "acpCOI" or .name == "uniqueID" then
                     .permissions = {"view": ["admin", "user"], "edit": ["admin"]}
                 else
                     .
@@ -179,6 +195,128 @@ else
 fi
 
 # =============================================================================
+# Clearance Mapping Functions
+# =============================================================================
+
+##
+# Map NATO standard clearance to country-specific classification
+#
+# CRITICAL ARCHITECTURAL FIX (2026-02-08):
+# Users should store their ACTUAL national classification (e.g., "OFFEN")
+# not the normalized NATO standard (e.g., "UNCLASSIFIED").
+#
+# The backend clearance-mapper.service.ts normalizes country-specific
+# classifications to standard levels for policy evaluation (SSOT).
+#
+# This ensures:
+# - Authenticity: Users have their actual national classification
+# - Auditability: Logs show real classifications from user's country
+# - Flexibility: Different countries use different classification systems
+# - SSOT: Backend service is single source of truth for normalization
+#
+# Based on: backend/src/services/clearance-mapper.service.ts (CLEARANCE_EQUIVALENCY_TABLE)
+#
+# Arguments:
+#   $1 - NATO standard clearance (UNCLASSIFIED, RESTRICTED, CONFIDENTIAL, SECRET, TOP_SECRET)
+#   $2 - Country code (ISO 3166-1 alpha-3)
+#
+# Returns:
+#   Country-specific classification label
+##
+map_clearance_to_national() {
+    local nato_level="$1"
+    local country="$2"
+
+    case "$country" in
+        USA|CAN|GBR|NZL)
+            # NATO English-speaking countries use NATO standard
+            case "$nato_level" in
+                UNCLASSIFIED) echo "UNCLASSIFIED" ;;
+                RESTRICTED) echo "RESTRICTED" ;;
+                CONFIDENTIAL) echo "CONFIDENTIAL" ;;
+                SECRET) echo "SECRET" ;;
+                TOP_SECRET) echo "TOP SECRET" ;;
+            esac
+            ;;
+        DEU)
+            # Germany - Verschlusssache (VS) classification system
+            case "$nato_level" in
+                UNCLASSIFIED) echo "OFFEN" ;;
+                RESTRICTED) echo "VS-NUR FÜR DEN DIENSTGEBRAUCH" ;;
+                CONFIDENTIAL) echo "VS-VERTRAULICH" ;;
+                SECRET) echo "GEHEIM" ;;
+                TOP_SECRET) echo "STRENG GEHEIM" ;;
+            esac
+            ;;
+        FRA)
+            # France - Classification française
+            case "$nato_level" in
+                UNCLASSIFIED) echo "NON CLASSIFIÉ" ;;
+                RESTRICTED) echo "DIFFUSION RESTREINTE" ;;
+                CONFIDENTIAL) echo "CONFIDENTIEL DÉFENSE" ;;
+                SECRET) echo "SECRET DÉFENSE" ;;
+                TOP_SECRET) echo "TRÈS SECRET DÉFENSE" ;;
+            esac
+            ;;
+        ITA)
+            # Italy - Classificazione italiana
+            case "$nato_level" in
+                UNCLASSIFIED) echo "NON CLASSIFICATO" ;;
+                RESTRICTED) echo "RISERVATO" ;;
+                CONFIDENTIAL) echo "RISERVATISSIMO" ;;
+                SECRET) echo "SEGRETO" ;;
+                TOP_SECRET) echo "SEGRETISSIMO" ;;
+            esac
+            ;;
+        ESP)
+            # Spain - Clasificación española
+            case "$nato_level" in
+                UNCLASSIFIED) echo "NO CLASIFICADO" ;;
+                RESTRICTED) echo "DIFUSIÓN LIMITADA" ;;
+                CONFIDENTIAL) echo "CONFIDENCIAL" ;;
+                SECRET) echo "SECRETO" ;;
+                TOP_SECRET) echo "ALTO SECRETO" ;;
+            esac
+            ;;
+        POL)
+            # Poland - Klauzule tajności
+            case "$nato_level" in
+                UNCLASSIFIED) echo "NIEJAWNE" ;;
+                RESTRICTED) echo "ZASTRZEŻONE" ;;
+                CONFIDENTIAL) echo "POUFNE" ;;
+                SECRET) echo "TAJNE" ;;
+                TOP_SECRET) echo "ŚCIŚLE TAJNE" ;;
+            esac
+            ;;
+        NLD)
+            # Netherlands - Nederlandse rubricering
+            case "$nato_level" in
+                UNCLASSIFIED) echo "NIET-GERUBRICEERD" ;;
+                RESTRICTED) echo "DEPARTEMENTAAL VERTROUWELIJK" ;;
+                CONFIDENTIAL) echo "CONFIDENTIEEL" ;;
+                SECRET) echo "GEHEIM" ;;
+                TOP_SECRET) echo "ZEER GEHEIM" ;;
+            esac
+            ;;
+        EST)
+            # Estonia - Eesti salastusastmed
+            case "$nato_level" in
+                UNCLASSIFIED) echo "AVALIK" ;;
+                RESTRICTED) echo "PIIRATUD" ;;
+                CONFIDENTIAL) echo "KONFIDENTSIAALNE" ;;
+                SECRET) echo "SALAJANE" ;;
+                TOP_SECRET) echo "TÄIESTI SALAJANE" ;;
+            esac
+            ;;
+        *)
+            # Fallback: Use NATO standard for unknown/industry partners
+            log_warn "Unknown country $country, using NATO standard clearance: $nato_level"
+            echo "$nato_level"
+            ;;
+    esac
+}
+
+# =============================================================================
 # Create Test Users
 # =============================================================================
 log_step "Creating test users for $CODE_UPPER..."
@@ -189,10 +327,11 @@ create_user() {
     local email="$2"
     local first_name="$3"
     local last_name="$4"
-    local clearance="$5"  # NATO standard clearance (stored in Keycloak)
+    local clearance="$5"  # Country-specific classification (e.g., "OFFEN" for DEU)
     local coi="${6:-}"
     local password="${7:-$TEST_USER_PASSWORD}"
     local is_admin="${8:-false}"  # CRITICAL: Admin flag for role assignment
+    # NOTE (2026-02-09): Removed nato_clearance - backend is SSOT for normalization
 
     log_info "Creating: $username ($clearance)${is_admin:+ [ADMIN]}"
 
@@ -208,6 +347,8 @@ create_user() {
 
     # Create user with attributes
     # uniqueID should be just the username (per DIVE spec)
+    # NOTE (2026-02-09): Only country-specific clearance stored
+    # Backend clearance-mapper.service.ts normalizes for policy evaluation (SSOT)
     local user_json=$(cat <<EOF
 {
     "username": "$username",
@@ -288,15 +429,31 @@ EOF
 # Create Users for this Spoke
 # =============================================================================
 
+# Map NATO standard clearances to country-specific classifications
+# CRITICAL: Users must have their actual national classification for SSOT compliance
+CLEARANCE_L1=$(map_clearance_to_national "UNCLASSIFIED" "$CODE_UPPER")
+CLEARANCE_L2=$(map_clearance_to_national "RESTRICTED" "$CODE_UPPER")
+CLEARANCE_L3=$(map_clearance_to_national "CONFIDENTIAL" "$CODE_UPPER")
+CLEARANCE_L4=$(map_clearance_to_national "SECRET" "$CODE_UPPER")
+CLEARANCE_L5=$(map_clearance_to_national "TOP_SECRET" "$CODE_UPPER")
+
+log_info "Using country-specific clearances for $CODE_UPPER:"
+log_info "  L1: $CLEARANCE_L1"
+log_info "  L2: $CLEARANCE_L2"
+log_info "  L3: $CLEARANCE_L3"
+log_info "  L4: $CLEARANCE_L4"
+log_info "  L5: $CLEARANCE_L5"
+
 # Standard test users (5 users with varying clearances)
-create_user "testuser-${CODE_LOWER}-1" "testuser-${CODE_LOWER}-1@${CODE_LOWER}.dive25.mil" "Test" "User 1" "UNCLASSIFIED" "" "$TEST_USER_PASSWORD"
-create_user "testuser-${CODE_LOWER}-2" "testuser-${CODE_LOWER}-2@${CODE_LOWER}.dive25.mil" "Test" "User 2" "RESTRICTED" "" "$TEST_USER_PASSWORD"
-create_user "testuser-${CODE_LOWER}-3" "testuser-${CODE_LOWER}-3@${CODE_LOWER}.dive25.mil" "Test" "User 3" "CONFIDENTIAL" "" "$TEST_USER_PASSWORD"
-create_user "testuser-${CODE_LOWER}-4" "testuser-${CODE_LOWER}-4@${CODE_LOWER}.dive25.mil" "Test" "User 4" "SECRET" "NATO" "$TEST_USER_PASSWORD"
-create_user "testuser-${CODE_LOWER}-5" "testuser-${CODE_LOWER}-5@${CODE_LOWER}.dive25.mil" "Test" "User 5" "TOP_SECRET" "NATO,FVEY" "$TEST_USER_PASSWORD"
+# NOTE (2026-02-09): Only country-specific clearance - backend normalizes for policy (SSOT)
+create_user "testuser-${CODE_LOWER}-1" "testuser-${CODE_LOWER}-1@${CODE_LOWER}.dive25.mil" "Test" "User 1" "$CLEARANCE_L1" "" "$TEST_USER_PASSWORD"
+create_user "testuser-${CODE_LOWER}-2" "testuser-${CODE_LOWER}-2@${CODE_LOWER}.dive25.mil" "Test" "User 2" "$CLEARANCE_L2" "" "$TEST_USER_PASSWORD"
+create_user "testuser-${CODE_LOWER}-3" "testuser-${CODE_LOWER}-3@${CODE_LOWER}.dive25.mil" "Test" "User 3" "$CLEARANCE_L3" "NATO" "$TEST_USER_PASSWORD"
+create_user "testuser-${CODE_LOWER}-4" "testuser-${CODE_LOWER}-4@${CODE_LOWER}.dive25.mil" "Test" "User 4" "$CLEARANCE_L4" "NATO" "$TEST_USER_PASSWORD"
+create_user "testuser-${CODE_LOWER}-5" "testuser-${CODE_LOWER}-5@${CODE_LOWER}.dive25.mil" "Test" "User 5" "$CLEARANCE_L5" "NATO,FVEY" "$TEST_USER_PASSWORD"
 
 # Admin user (uses ADMIN_USER_PASSWORD for consistency with Hub admin-usa)
-create_user "admin-${CODE_LOWER}" "admin-${CODE_LOWER}@${CODE_LOWER}.dive25.mil" "Admin" "User" "TOP_SECRET" "NATO,FVEY" "$ADMIN_USER_PASSWORD" "true"
+create_user "admin-${CODE_LOWER}" "admin-${CODE_LOWER}@${CODE_LOWER}.dive25.mil" "Admin" "User" "$CLEARANCE_L5" "NATO,FVEY" "$ADMIN_USER_PASSWORD" "true"
 
 # =============================================================================
 # Summary

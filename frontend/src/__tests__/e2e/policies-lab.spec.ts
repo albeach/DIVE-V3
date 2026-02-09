@@ -50,7 +50,7 @@ obligations := [
 ] if { allow }
 `;
 
-test.describe('Policies Lab - Basic Navigation (Refactored)', () => {
+test.describe('Policies Lab - Basic Navigation (Refactored)', { tag: ['@smoke', '@critical'] }, () => {
     test.beforeEach(async ({ page }) => {
         await loginAs(page, TEST_USERS.USA.SECRET);
     });
