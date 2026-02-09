@@ -782,6 +782,8 @@ module_vault_provision() {
     # Create or update spoke .env
     [ ! -f "$spoke_env" ] && touch "$spoke_env"
 
+    _vault_update_env "$spoke_env" "SECRETS_PROVIDER" "vault"
+    _vault_update_env "$spoke_env" "VAULT_ADDR" "http://dive-hub-vault:8200"
     _vault_update_env "$spoke_env" "VAULT_ROLE_ID" "$role_id"
     _vault_update_env "$spoke_env" "VAULT_SECRET_ID" "$secret_id"
     _vault_update_env "$spoke_env" "POSTGRES_PASSWORD_${code_upper}" "$postgres_pw"
