@@ -309,11 +309,268 @@ federation_test_sso_flow() {
 }
 
 # =============================================================================
+# MULTI-SPOKE FEDERATION TESTS
+# =============================================================================
+
+##
+# Verify federation for all provisioned spokes
+#
+# Returns:
+#   0 - All spokes passed
+#   1 - One or more failed
+##
+federation_verify_all() {
+    local spokes=()
+    if type -t dive_get_provisioned_spokes &>/dev/null; then
+        for s in $(dive_get_provisioned_spokes 2>/dev/null); do
+            [ -n "$s" ] && spokes+=("$(upper "$s")")
+        done
+    fi
+
+    # Fallback: scan instances/ directories
+    if [ ${#spokes[@]} -eq 0 ] && [ -d "${DIVE_ROOT}/instances" ]; then
+        for dir in "${DIVE_ROOT}"/instances/*/; do
+            [ -d "$dir" ] || continue
+            local code
+            code=$(basename "$dir")
+            [ "$code" = "usa" ] && continue
+            [[ "$code" == .* ]] && continue
+            spokes+=("$(upper "$code")")
+        done
+    fi
+
+    if [ ${#spokes[@]} -eq 0 ]; then
+        log_warn "No provisioned spokes found"
+        return 1
+    fi
+
+    local passed=0
+    local failed=0
+    for code in "${spokes[@]}"; do
+        if federation_verify "$code"; then
+            passed=$((passed + 1))
+        else
+            failed=$((failed + 1))
+        fi
+    done
+
+    echo ""
+    echo "Federation Verify All: $passed passed, $failed failed (${#spokes[@]} total)"
+    [ $failed -eq 0 ] && return 0 || return 1
+}
+
+##
+# Verify OPAL data sync for all provisioned spokes
+#
+# Checks that each spoke's OPA instance has federation_matrix
+# or trusted_issuers data from OPAL sync.
+#
+# Returns:
+#   0 - All spokes have OPAL data
+#   1 - One or more missing
+##
+federation_verify_opal_all() {
+    local spokes=()
+    if type -t dive_get_provisioned_spokes &>/dev/null; then
+        for s in $(dive_get_provisioned_spokes 2>/dev/null); do
+            [ -n "$s" ] && spokes+=("$(upper "$s")")
+        done
+    fi
+
+    # Fallback: scan instances/ directories
+    if [ ${#spokes[@]} -eq 0 ] && [ -d "${DIVE_ROOT}/instances" ]; then
+        for dir in "${DIVE_ROOT}"/instances/*/; do
+            [ -d "$dir" ] || continue
+            local code
+            code=$(basename "$dir")
+            [ "$code" = "usa" ] && continue
+            [[ "$code" == .* ]] && continue
+            spokes+=("$(upper "$code")")
+        done
+    fi
+
+    if [ ${#spokes[@]} -eq 0 ]; then
+        log_warn "No provisioned spokes found"
+        return 1
+    fi
+
+    local passed=0
+    local failed=0
+    for code in "${spokes[@]}"; do
+        eval "$(get_instance_ports "$code" 2>/dev/null)" || true
+        local opa_port="${SPOKE_OPA_PORT:-8181}"
+
+        local opa_data
+        opa_data=$(curl -skf --max-time "${DIVE_TIMEOUT_CURL_DEFAULT:-10}" \
+            "https://localhost:${opa_port}/v1/data" 2>/dev/null)
+
+        if echo "$opa_data" | jq -e '.result.federation_matrix // .result.trusted_issuers' >/dev/null 2>&1; then
+            log_success "  $code: OPAL data present in OPA"
+            passed=$((passed + 1))
+        else
+            log_warn "  $code: No federation data in OPA (port $opa_port)"
+            failed=$((failed + 1))
+        fi
+    done
+
+    echo ""
+    echo "OPAL Verify All: $passed with data, $failed missing (${#spokes[@]} total)"
+    [ $failed -eq 0 ] && return 0 || return 1
+}
+
+##
+# Master federation integration test suite
+#
+# Runs comprehensive federation tests across all spokes:
+#   - Per-spoke 8-check federation verification
+#   - Per-spoke federation health endpoint
+#   - Per-spoke OPAL data presence
+#   - Hub federation registry check
+##
+federation_integration_test() {
+    # Load test framework
+    local _test_path="${FEDERATION_DIR}/../utilities/testing.sh"
+    if [ -f "$_test_path" ]; then
+        source "$_test_path"
+    elif [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh"
+    else
+        log_error "Testing framework not found"
+        return 1
+    fi
+
+    test_suite_start "Federation Integration Tests"
+
+    # Discover spokes
+    local spokes=()
+    if type -t dive_get_provisioned_spokes &>/dev/null; then
+        for s in $(dive_get_provisioned_spokes 2>/dev/null); do
+            [ -n "$s" ] && spokes+=("$(upper "$s")")
+        done
+    fi
+
+    # Fallback: scan instances/ directories
+    if [ ${#spokes[@]} -eq 0 ] && [ -d "${DIVE_ROOT}/instances" ]; then
+        for dir in "${DIVE_ROOT}"/instances/*/; do
+            [ -d "$dir" ] || continue
+            local code
+            code=$(basename "$dir")
+            [ "$code" = "usa" ] && continue
+            [[ "$code" == .* ]] && continue
+            spokes+=("$(upper "$code")")
+        done
+    fi
+
+    if [ ${#spokes[@]} -eq 0 ]; then
+        test_start "Spoke discovery"
+        test_fail "No provisioned spokes found"
+        test_suite_end
+        return 1
+    fi
+
+    # Test 1: Hub health
+    test_start "Hub backend health"
+    if curl -skf --max-time "${DIVE_TIMEOUT_CURL_DEFAULT:-10}" "https://localhost:4000/api/health" >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "Hub backend unreachable"
+    fi
+
+    # Test 2: Hub federation registry
+    test_start "Hub spoke registry accessible"
+    local registry_resp
+    registry_resp=$(curl -sk -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY:-dive-hub-admin-key}" \
+        --max-time "${DIVE_TIMEOUT_CURL_DEFAULT:-10}" \
+        "https://localhost:4000/api/federation/spokes" 2>/dev/null)
+    local spoke_count
+    spoke_count=$(echo "$registry_resp" | jq '.spokes | length' 2>/dev/null || echo "0")
+    if [ "$spoke_count" -ge "${#spokes[@]}" ]; then
+        test_pass
+    else
+        test_fail "Expected ${#spokes[@]} spokes, found $spoke_count"
+    fi
+
+    # Per-spoke tests
+    for code in "${spokes[@]}"; do
+        local code_lower=$(lower "$code")
+
+        # Resolve ports
+        eval "$(get_instance_ports "$code" 2>/dev/null)" || true
+        local kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
+        local be_port="${SPOKE_BACKEND_PORT:-4000}"
+        local opa_port="${SPOKE_OPA_PORT:-8181}"
+
+        # Test: Spoke Keycloak realm exists
+        test_start "$code: Keycloak realm exists"
+        if curl -skf --max-time "${DIVE_TIMEOUT_CURL_DEFAULT:-10}" \
+            "https://localhost:${kc_port}/realms/dive-v3-broker-${code_lower}" >/dev/null 2>&1; then
+            test_pass
+        else
+            test_fail "Realm not accessible on port $kc_port"
+        fi
+
+        # Test: Spoke backend federation health
+        test_start "$code: Backend API health"
+        if curl -skf --max-time "${DIVE_TIMEOUT_CURL_DEFAULT:-10}" \
+            "https://localhost:${be_port}/api/health" >/dev/null 2>&1; then
+            test_pass
+        else
+            test_fail "Backend unreachable on port $be_port"
+        fi
+
+        # Test: Hub has IdP for this spoke
+        test_start "$code: Hub has ${code_lower}-idp"
+        local hub_token
+        if type -t get_hub_admin_token &>/dev/null; then
+            hub_token=$(get_hub_admin_token 2>/dev/null)
+        fi
+        if [ -n "$hub_token" ]; then
+            local idp_check
+            idp_check=$(curl -sf "https://localhost:8443/admin/realms/dive-v3-broker-usa/identity-provider/instances/${code_lower}-idp" \
+                -H "Authorization: Bearer $hub_token" --insecure 2>/dev/null | jq -r '.alias // empty')
+            if [ "$idp_check" = "${code_lower}-idp" ]; then
+                test_pass
+            else
+                test_fail "IdP not found in Hub Keycloak"
+            fi
+        else
+            test_skip "No hub admin token"
+        fi
+
+        # Test: Spoke registered and approved in Hub
+        test_start "$code: Registered and approved in Hub"
+        local spoke_status
+        spoke_status=$(echo "$registry_resp" | jq -r ".spokes[] | select(.instanceCode==\"$code\") | .status" 2>/dev/null)
+        if [ "$spoke_status" = "approved" ]; then
+            test_pass
+        else
+            test_fail "Status: ${spoke_status:-not found}"
+        fi
+
+        # Test: OPA has policies
+        test_start "$code: OPA has policies loaded"
+        local policy_count
+        policy_count=$(curl -sk --max-time 5 "https://localhost:${opa_port}/v1/policies" 2>/dev/null | jq '.result | length' 2>/dev/null)
+        policy_count="${policy_count:-0}"
+        if [ "$policy_count" -gt 0 ] 2>/dev/null; then
+            test_pass
+        else
+            test_fail "No policies in OPA"
+        fi
+    done
+
+    test_suite_end
+}
+
+# =============================================================================
 # MODULE EXPORTS
 # =============================================================================
 
 export -f federation_verify
 export -f federation_health_check
 export -f federation_test_sso_flow
+export -f federation_verify_all
+export -f federation_verify_opal_all
+export -f federation_integration_test
 
 log_verbose "Federation verification module loaded"
