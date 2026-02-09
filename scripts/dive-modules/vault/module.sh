@@ -248,8 +248,8 @@ module_vault_setup() {
         log_warn "  ✗ Failed to create policy: dive-v3-hub"
     fi
 
-    # Create spoke policies
-    local spokes=("deu" "gbr" "fra" "can")
+    # Create spoke policies (uses configurable DIVE_SPOKE_LIST)
+    local spokes=(${DIVE_SPOKE_LIST:-gbr fra deu can})
     for spoke in "${spokes[@]}"; do
         if vault policy write "dive-v3-spoke-${spoke}" \
             "${DIVE_ROOT}/vault_config/policies/spoke-${spoke}.hcl" >/dev/null 2>&1; then
@@ -338,9 +338,10 @@ module_vault_setup() {
     log_info "==================================================================="
     log_info "Next steps:"
     log_info "==================================================================="
-    log_info "1. Migrate secrets:    ./scripts/migrate-secrets-gcp-to-vault.sh"
-    log_info "2. Test hub:           export SECRETS_PROVIDER=vault && ./dive hub deploy"
-    log_info "3. Test spoke:         export SECRETS_PROVIDER=vault && ./dive spoke deploy deu"
+    log_info "1. Seed secrets:       ./dive vault seed"
+    log_info "   (or migrate GCP):   ./scripts/migrate-secrets-gcp-to-vault.sh"
+    log_info "2. Deploy hub:         ./dive hub deploy"
+    log_info "3. Deploy spoke:       ./dive spoke deploy deu"
     log_info "==================================================================="
 }
 
@@ -433,6 +434,246 @@ module_vault_restore() {
 }
 
 ##
+# Seed Vault with fresh secrets for all instances
+# Generates cryptographically random secrets and stores in Vault KV v2
+# Usage: ./dive vault seed
+##
+module_vault_seed() {
+    log_info "Seeding Vault with fresh secrets for all instances..."
+
+    if ! vault_is_running; then
+        return 1
+    fi
+
+    # Load token
+    if [ -f "$VAULT_TOKEN_FILE" ]; then
+        VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
+        export VAULT_TOKEN
+    else
+        log_error "Vault token not found - run: ./dive vault init"
+        return 1
+    fi
+
+    # Check if unsealed
+    if ! vault status 2>/dev/null | grep -q "Sealed.*false"; then
+        log_error "Vault is sealed - run: ./dive vault unseal"
+        return 1
+    fi
+
+    # Source secrets module for vault_set_secret()
+    source "${DIVE_ROOT}/scripts/dive-modules/configuration/secrets.sh"
+
+    # All instances: hub (usa) + spokes
+    local all_instances=("usa" ${DIVE_SPOKE_LIST:-gbr fra deu can})
+    local total_seeded=0
+    local total_failed=0
+
+    # ==========================================================================
+    # Instance-specific secrets (per instance)
+    # ==========================================================================
+    for instance in "${all_instances[@]}"; do
+        log_info "Seeding secrets for $(upper "$instance")..."
+
+        local postgres_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+        local mongodb_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+        local redis_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+        local keycloak_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+        local nextauth_secret=$(openssl rand -base64 32)
+
+        local secrets_data=(
+            "core:${instance}/postgres:{\"password\":\"${postgres_pw}\"}"
+            "core:${instance}/mongodb:{\"password\":\"${mongodb_pw}\"}"
+            "core:${instance}/redis:{\"password\":\"${redis_pw}\"}"
+            "core:${instance}/keycloak-admin:{\"password\":\"${keycloak_pw}\"}"
+            "auth:${instance}/nextauth:{\"secret\":\"${nextauth_secret}\"}"
+        )
+
+        for entry in "${secrets_data[@]}"; do
+            local category="${entry%%:*}"
+            local rest="${entry#*:}"
+            local path="${rest%%:\{*}"
+            local value="{${rest#*:\{}"
+
+            if vault_set_secret "$category" "$path" "$value"; then
+                total_seeded=$((total_seeded + 1))
+                log_verbose "  Seeded: dive-v3/${category}/${path}"
+            else
+                total_failed=$((total_failed + 1))
+                log_error "  Failed: dive-v3/${category}/${path}"
+            fi
+        done
+    done
+
+    # ==========================================================================
+    # Shared secrets (not instance-specific)
+    # ==========================================================================
+    log_info "Seeding shared secrets..."
+
+    local keycloak_client_secret=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+    local redis_blacklist_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+    local opal_master_token=$(openssl rand -hex 32)
+    local kas_signing_key=$(openssl rand -base64 32)
+    local kas_encryption_key=$(openssl rand -base64 32)
+
+    local shared_secrets=(
+        "auth:shared/keycloak-client:{\"secret\":\"${keycloak_client_secret}\"}"
+        "core:shared/redis-blacklist:{\"password\":\"${redis_blacklist_pw}\"}"
+        "opal:master-token:{\"token\":\"${opal_master_token}\"}"
+        "auth:shared/kas-signing:{\"key\":\"${kas_signing_key}\"}"
+        "auth:shared/kas-encryption:{\"key\":\"${kas_encryption_key}\"}"
+    )
+
+    for entry in "${shared_secrets[@]}"; do
+        local category="${entry%%:*}"
+        local rest="${entry#*:}"
+        local path="${rest%%:\{*}"
+        local value="{${rest#*:\{}"
+
+        if vault_set_secret "$category" "$path" "$value"; then
+            total_seeded=$((total_seeded + 1))
+            log_verbose "  Seeded: dive-v3/${category}/${path}"
+        else
+            total_failed=$((total_failed + 1))
+            log_error "  Failed: dive-v3/${category}/${path}"
+        fi
+    done
+
+    # ==========================================================================
+    # Federation secrets (bidirectional pairs, alphabetically sorted)
+    # ==========================================================================
+    log_info "Seeding federation secrets..."
+
+    local -a pairs=()
+    for i in "${all_instances[@]}"; do
+        for j in "${all_instances[@]}"; do
+            if [[ "$i" < "$j" ]]; then
+                pairs+=("${i}-${j}")
+            fi
+        done
+    done
+
+    for pair in "${pairs[@]}"; do
+        local fed_secret=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+        if vault_set_secret "federation" "$pair" "{\"client-secret\":\"${fed_secret}\"}"; then
+            total_seeded=$((total_seeded + 1))
+            log_verbose "  Seeded: dive-v3/federation/${pair}"
+        else
+            total_failed=$((total_failed + 1))
+            log_error "  Failed: dive-v3/federation/${pair}"
+        fi
+    done
+
+    # ==========================================================================
+    # Sync key secrets to .env files for Docker Compose interpolation
+    # ==========================================================================
+    log_info "Syncing secrets to .env files for Docker Compose..."
+
+    # Sync hub secrets to .env.hub
+    local hub_env="${DIVE_ROOT}/.env.hub"
+    if [ -f "$hub_env" ]; then
+        local usa_pg=$(vault_get_secret "core" "usa/postgres" "password")
+        local usa_mongo=$(vault_get_secret "core" "usa/mongodb" "password")
+        local usa_redis=$(vault_get_secret "core" "usa/redis" "password")
+        local usa_kc=$(vault_get_secret "core" "usa/keycloak-admin" "password")
+        local shared_client=$(vault_get_secret "auth" "shared/keycloak-client" "secret")
+        local shared_blacklist=$(vault_get_secret "core" "shared/redis-blacklist" "password")
+        local opal_token=$(vault_get_secret "opal" "master-token" "token")
+        local usa_auth=$(vault_get_secret "auth" "usa/nextauth" "secret")
+
+        _vault_update_env "$hub_env" "POSTGRES_PASSWORD_USA" "$usa_pg"
+        _vault_update_env "$hub_env" "POSTGRES_PASSWORD" "$usa_pg"
+        _vault_update_env "$hub_env" "KC_ADMIN_PASSWORD" "$usa_kc"
+        _vault_update_env "$hub_env" "KC_BOOTSTRAP_ADMIN_PASSWORD_USA" "$usa_kc"
+        _vault_update_env "$hub_env" "KEYCLOAK_ADMIN_PASSWORD" "$usa_kc"
+        _vault_update_env "$hub_env" "KEYCLOAK_ADMIN_PASSWORD_USA" "$usa_kc"
+        _vault_update_env "$hub_env" "MONGO_PASSWORD_USA" "$usa_mongo"
+        _vault_update_env "$hub_env" "MONGO_PASSWORD" "$usa_mongo"
+        _vault_update_env "$hub_env" "REDIS_PASSWORD_USA" "$usa_redis"
+        _vault_update_env "$hub_env" "REDIS_PASSWORD_BLACKLIST" "$shared_blacklist"
+        _vault_update_env "$hub_env" "KEYCLOAK_CLIENT_SECRET" "$shared_client"
+        _vault_update_env "$hub_env" "KEYCLOAK_CLIENT_SECRET_USA" "$shared_client"
+        _vault_update_env "$hub_env" "AUTH_SECRET" "$usa_auth"
+        _vault_update_env "$hub_env" "AUTH_SECRET_USA" "$usa_auth"
+        _vault_update_env "$hub_env" "NEXTAUTH_SECRET" "$usa_auth"
+        _vault_update_env "$hub_env" "JWT_SECRET" "$usa_auth"
+        _vault_update_env "$hub_env" "OPAL_AUTH_MASTER_TOKEN" "$opal_token"
+
+        log_success "Hub .env.hub synced with Vault secrets"
+    else
+        log_warn "Hub .env.hub not found - Docker Compose will need Vault env vars"
+    fi
+
+    # Sync spoke secrets to instance .env files
+    local spokes=(${DIVE_SPOKE_LIST:-gbr fra deu can})
+    for spoke in "${spokes[@]}"; do
+        local spoke_env="${DIVE_ROOT}/instances/${spoke}/.env"
+        if [ -f "$spoke_env" ]; then
+            local code_upper=$(upper "$spoke")
+            local spoke_pg=$(vault_get_secret "core" "${spoke}/postgres" "password")
+            local spoke_mongo=$(vault_get_secret "core" "${spoke}/mongodb" "password")
+            local spoke_redis=$(vault_get_secret "core" "${spoke}/redis" "password")
+            local spoke_kc=$(vault_get_secret "core" "${spoke}/keycloak-admin" "password")
+            local spoke_auth=$(vault_get_secret "auth" "${spoke}/nextauth" "secret")
+
+            _vault_update_env "$spoke_env" "POSTGRES_PASSWORD_${code_upper}" "$spoke_pg"
+            _vault_update_env "$spoke_env" "MONGO_PASSWORD_${code_upper}" "$spoke_mongo"
+            _vault_update_env "$spoke_env" "REDIS_PASSWORD_${code_upper}" "$spoke_redis"
+            _vault_update_env "$spoke_env" "KEYCLOAK_ADMIN_PASSWORD_${code_upper}" "$spoke_kc"
+            _vault_update_env "$spoke_env" "AUTH_SECRET_${code_upper}" "$spoke_auth"
+            _vault_update_env "$spoke_env" "KEYCLOAK_CLIENT_SECRET_${code_upper}" "$shared_client"
+            _vault_update_env "$spoke_env" "KEYCLOAK_CLIENT_SECRET_USA" "$shared_client"
+            _vault_update_env "$spoke_env" "REDIS_PASSWORD_BLACKLIST" "$shared_blacklist"
+            _vault_update_env "$spoke_env" "OPAL_AUTH_MASTER_TOKEN" "$opal_token"
+
+            log_success "Spoke ${code_upper} .env synced"
+        else
+            log_verbose "Spoke .env not found: $spoke_env (will be created during spoke init)"
+        fi
+    done
+
+    # ==========================================================================
+    # Summary
+    # ==========================================================================
+    echo ""
+    log_info "==================================================================="
+    log_info "  Vault Secret Seeding Summary"
+    log_info "==================================================================="
+    log_info "  Seeded:  $total_seeded secrets"
+    if [ $total_failed -gt 0 ]; then
+        log_error "  Failed:  $total_failed secrets"
+    fi
+    log_info "  Instances: ${all_instances[*]}"
+    log_info "  Shared:    keycloak-client, redis-blacklist, opal-master-token, kas-signing, kas-encryption"
+    log_info "  Federation: ${#pairs[@]} bidirectional pairs"
+    log_info "==================================================================="
+
+    if [ $total_failed -gt 0 ]; then
+        return 1
+    fi
+    return 0
+}
+
+##
+# Helper: update or append an env var in a .env file
+##
+_vault_update_env() {
+    local env_file="$1"
+    local var_name="$2"
+    local var_value="$3"
+
+    if [ -z "$var_value" ]; then
+        return 0
+    fi
+
+    if grep -q "^${var_name}=" "$env_file" 2>/dev/null; then
+        local tmpfile=$(mktemp)
+        sed "s|^${var_name}=.*|${var_name}=${var_value}|" "$env_file" > "$tmpfile" && mv "$tmpfile" "$env_file"
+    else
+        echo "${var_name}=${var_value}" >> "$env_file"
+    fi
+}
+
+##
 # Main module dispatcher
 ##
 module_vault() {
@@ -451,6 +692,9 @@ module_vault() {
         setup)
             module_vault_setup
             ;;
+        seed)
+            module_vault_seed
+            ;;
         snapshot)
             shift
             module_vault_snapshot "$@"
@@ -467,6 +711,7 @@ module_vault() {
             echo "  unseal              Unseal Vault after restart"
             echo "  status              Check Vault health and seal status"
             echo "  setup               Configure mount points, policies, and AppRoles"
+            echo "  seed                Generate and store fresh secrets for all instances"
             echo "  snapshot [path]     Create Raft snapshot backup"
             echo "  restore <path>      Restore from Raft snapshot"
             echo "  help                Show this help message"
@@ -476,6 +721,7 @@ module_vault() {
             echo "  ./dive vault unseal                        # After container restart"
             echo "  ./dive vault status                        # Check current state"
             echo "  ./dive vault setup                         # Configure Vault"
+            echo "  ./dive vault seed                          # Generate fresh secrets"
             echo "  ./dive vault snapshot                      # Backup to backups/vault/"
             echo "  ./dive vault snapshot /tmp/vault.snap      # Backup to specific path"
             echo "  ./dive vault restore /tmp/vault.snap       # Restore from snapshot"
