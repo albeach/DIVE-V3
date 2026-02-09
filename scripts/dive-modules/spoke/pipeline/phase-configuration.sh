@@ -1538,8 +1538,23 @@ spoke_config_update_redirect_uris() {
         return 1
     fi
 
-    # Get ports
-    local frontend_port="${SPOKE_FRONTEND_PORT:-13000}"
+    # ==========================================================================
+    # ROOT CAUSE FIX (2026-02-09): Get actual port from config.json
+    # ==========================================================================
+    # Previous code used hardcoded default port 13000 which overwrote Terraform's
+    # correct configuration, causing "Invalid parameter: redirect_uri" errors.
+    # Now we get the actual port from config.json which is the SSOT.
+    # ==========================================================================
+    local config_file="${DIVE_ROOT}/instances/${code_lower}/config.json"
+    local frontend_port=$(jq -r '.ports.frontend // 3000' "$config_file" 2>/dev/null)
+
+    if [ -z "$frontend_port" ] || [ "$frontend_port" = "null" ]; then
+        log_warn "Could not determine frontend port from config.json, skipping redirect URI update"
+        log_info "Terraform-configured redirect URIs will be used (recommended)"
+        return 0
+    fi
+
+    log_verbose "Using frontend port from config.json: $frontend_port"
 
     # Build redirect URIs
     local redirect_uris='["http://localhost:'$frontend_port'/*","https://localhost:'$frontend_port'/*","http://host.docker.internal:'$frontend_port'/*","https://'$code_lower'.dive25.com/*"]'

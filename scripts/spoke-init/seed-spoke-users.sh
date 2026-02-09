@@ -139,11 +139,27 @@ if echo "$PROFILE_JSON" | grep -q '"attributes"'; then
         # Manipulate JSON on HOST using jq, then pipe to container
         # This works because jq runs locally, not in the minimal Keycloak container
         # Core DIVE attributes that need user view permission for federation:
-        # clearance, countryOfAffiliation, acpCOI, uniqueID
+        # clearance, clearanceNormalized, countryOfAffiliation, acpCOI, uniqueID
         # NOTE: amr/acr are native Keycloak v26 session claims, not user attributes
+
+        # CRITICAL (2026-02-09): Add clearanceNormalized attribute if it doesn't exist
         UPDATED_PROFILE=$(echo "$PROFILE_JSON" | jq '
+            # First, ensure clearanceNormalized attribute exists
+            if (.attributes | map(.name) | contains(["clearanceNormalized"]) | not) then
+                .attributes += [{
+                    "name": "clearanceNormalized",
+                    "displayName": "${clearanceNormalized}",
+                    "required": false,
+                    "permissions": {"view": ["admin", "user"], "edit": ["admin"]},
+                    "validators": {},
+                    "annotations": {}
+                }]
+            else
+                .
+            end |
+            # Then update permissions for all DIVE attributes
             .attributes |= map(
-                if .name == "clearance" or .name == "countryOfAffiliation" or .name == "acpCOI" or .name == "uniqueID" then
+                if .name == "clearance" or .name == "clearanceNormalized" or .name == "countryOfAffiliation" or .name == "acpCOI" or .name == "uniqueID" then
                     .permissions = {"view": ["admin", "user"], "edit": ["admin"]}
                 else
                     .
@@ -315,6 +331,7 @@ create_user() {
     local coi="${6:-}"
     local password="${7:-$TEST_USER_PASSWORD}"
     local is_admin="${8:-false}"  # CRITICAL: Admin flag for role assignment
+    # NOTE (2026-02-09): Removed nato_clearance - backend is SSOT for normalization
 
     log_info "Creating: $username ($clearance)${is_admin:+ [ADMIN]}"
 
@@ -330,6 +347,8 @@ create_user() {
 
     # Create user with attributes
     # uniqueID should be just the username (per DIVE spec)
+    # NOTE (2026-02-09): Only country-specific clearance stored
+    # Backend clearance-mapper.service.ts normalizes for policy evaluation (SSOT)
     local user_json=$(cat <<EOF
 {
     "username": "$username",
@@ -426,9 +445,10 @@ log_info "  L4: $CLEARANCE_L4"
 log_info "  L5: $CLEARANCE_L5"
 
 # Standard test users (5 users with varying clearances)
+# NOTE (2026-02-09): Only country-specific clearance - backend normalizes for policy (SSOT)
 create_user "testuser-${CODE_LOWER}-1" "testuser-${CODE_LOWER}-1@${CODE_LOWER}.dive25.mil" "Test" "User 1" "$CLEARANCE_L1" "" "$TEST_USER_PASSWORD"
 create_user "testuser-${CODE_LOWER}-2" "testuser-${CODE_LOWER}-2@${CODE_LOWER}.dive25.mil" "Test" "User 2" "$CLEARANCE_L2" "" "$TEST_USER_PASSWORD"
-create_user "testuser-${CODE_LOWER}-3" "testuser-${CODE_LOWER}-3@${CODE_LOWER}.dive25.mil" "Test" "User 3" "$CLEARANCE_L3" "" "$TEST_USER_PASSWORD"
+create_user "testuser-${CODE_LOWER}-3" "testuser-${CODE_LOWER}-3@${CODE_LOWER}.dive25.mil" "Test" "User 3" "$CLEARANCE_L3" "NATO" "$TEST_USER_PASSWORD"
 create_user "testuser-${CODE_LOWER}-4" "testuser-${CODE_LOWER}-4@${CODE_LOWER}.dive25.mil" "Test" "User 4" "$CLEARANCE_L4" "NATO" "$TEST_USER_PASSWORD"
 create_user "testuser-${CODE_LOWER}-5" "testuser-${CODE_LOWER}-5@${CODE_LOWER}.dive25.mil" "Test" "User 5" "$CLEARANCE_L5" "NATO,FVEY" "$TEST_USER_PASSWORD"
 

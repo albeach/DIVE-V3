@@ -506,6 +506,46 @@ spoke_pipeline_rollback() {
 
     log_warn "Attempting rollback for $instance_code after $failed_phase failure"
 
+    # ==========================================================================
+    # ROOT CAUSE FIX (2026-02-08): Clean Terraform state AND checkpoints during rollback
+    # ==========================================================================
+    # PRINCIPLE: Infrastructure state must match infrastructure reality.
+    # When we destroy containers (Keycloak), we must destroy Terraform state.
+    # When we destroy Terraform state, we must clear phase checkpoints that depend on it.
+    # Otherwise next deployment skips CONFIGURATION phase, doesn't apply Terraform,
+    # and protocol mappers are missing → no clearance claims in JWT tokens.
+    # ==========================================================================
+    log_step "Cleaning Terraform state and dependent checkpoints"
+
+    local tf_spoke_dir="${DIVE_ROOT}/terraform/spoke"
+    if [ -d "$tf_spoke_dir" ]; then
+        (
+            cd "$tf_spoke_dir"
+
+            # Delete workspace entirely (cleanest approach)
+            if terraform workspace list 2>/dev/null | grep -qw "$code_lower"; then
+                terraform workspace select default >/dev/null 2>&1
+                terraform workspace delete -force "$code_lower" >/dev/null 2>&1
+                log_success "✓ Terraform workspace deleted: $code_lower"
+
+                # Clear CONFIGURATION checkpoint so it re-runs on retry
+                if type spoke_phase_clear &>/dev/null; then
+                    spoke_phase_clear "$instance_code" "CONFIGURATION" 2>/dev/null || true
+                    log_success "✓ CONFIGURATION checkpoint cleared"
+                fi
+
+                # Also clear any downstream checkpoints (SEEDING, VERIFICATION)
+                if type spoke_phase_clear &>/dev/null; then
+                    spoke_phase_clear "$instance_code" "SEEDING" 2>/dev/null || true
+                    spoke_phase_clear "$instance_code" "VERIFICATION" 2>/dev/null || true
+                    log_verbose "Cleared downstream checkpoints (SEEDING, VERIFICATION)"
+                fi
+            else
+                log_verbose "Terraform workspace does not exist: $code_lower"
+            fi
+        )
+    fi
+
     # CRITICAL: Always stop containers on failure
     # Don't rely on checkpoint restoration - just stop everything for clean state
     log_step "Stopping containers to prevent partial deployment state"
@@ -526,10 +566,10 @@ spoke_pipeline_rollback() {
     # Update database state to FAILED
     if type orch_db_set_state &>/dev/null; then
         orch_db_set_state "$instance_code" "FAILED" "Deployment failed at phase: $failed_phase" \
-            "{\"failed_phase\":\"$failed_phase\",\"rollback_executed\":true}"
+            "{\"failed_phase\":\"$failed_phase\",\"rollback_executed\":true,\"terraform_cleaned\":true}"
     fi
 
-    log_warn "Rollback complete - containers stopped, state marked FAILED"
+    log_warn "Rollback complete - containers stopped, Terraform state cleaned"
     log_info "To retry: ./dive spoke deploy $instance_code"
 }
 
