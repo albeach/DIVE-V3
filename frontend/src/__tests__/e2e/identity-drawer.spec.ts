@@ -11,15 +11,35 @@
  * - ✅ Proper cleanup (logout)
  * - ✅ Explicit waits (no arbitrary timeouts)
  * - ✅ Tests with multiple user types
+ * - ✅ Dynamic IdP discovery with graceful skipping
  */
 
 import { test, expect } from '@playwright/test';
 import { TEST_USERS } from './fixtures/test-users';
 import { TEST_CONFIG } from './fixtures/test-config';
-import { loginAs, logout } from './helpers/auth';
+import { loginAs, logout, getDiscoveredIdPs } from './helpers/auth';
 import { DashboardPage } from './pages/DashboardPage';
+import { isIdPAvailable, type DiscoveredIdPs } from './helpers/idp-discovery';
+
+// Global discovery cache
+let discoveredIdPs: DiscoveredIdPs | null = null;
 
 test.describe('Identity Drawer - Global Shortcut (Refactored)', { tag: ['@fast', '@smoke', '@critical'] }, () => {
+    
+    // Discover available IdPs before running tests
+    test.beforeAll(async ({ browser }) => {
+        const page = await browser.newPage();
+        discoveredIdPs = await getDiscoveredIdPs(page);
+        await page.close();
+        
+        console.log('[TEST SUITE] IdP Discovery Complete:');
+        console.log(`  Hub: ${discoveredIdPs.hub?.code} available`);
+        console.log(`  Spokes: ${discoveredIdPs.count} deployed`);
+        for (const [code, idp] of discoveredIdPs.spokes.entries()) {
+            console.log(`    ${code}: ${idp.displayName}`);
+        }
+    });
+    
     test.afterEach(async ({ page }) => {
         // Cleanup: logout after each test
         try {
@@ -30,8 +50,9 @@ test.describe('Identity Drawer - Global Shortcut (Refactored)', { tag: ['@fast',
     });
 
     test('Cmd+I opens the identity drawer for USA SECRET user', async ({ page }) => {
+        // Skip if OTP is required but we can't handle it
         test.step('Login as USA SECRET user', async () => {
-            await loginAs(page, TEST_USERS.USA.SECRET);
+            await loginAs(page, TEST_USERS.USA.SECRET, { otpCode: '123456' });
         });
 
         test.step('Navigate to dashboard', async () => {
@@ -111,8 +132,11 @@ test.describe('Identity Drawer - Global Shortcut (Refactored)', { tag: ['@fast',
     });
 
     test('Cmd+I works for France SECRET user', async ({ page }) => {
+        // Skip if FRA spoke not deployed
+        test.skip(!discoveredIdPs || !await isIdPAvailable(discoveredIdPs, 'FRA'), 'FRA spoke not deployed');
+        
         test.step('Login as France SECRET user', async () => {
-            await loginAs(page, TEST_USERS.FRA.SECRET);
+            await loginAs(page, TEST_USERS.FRA.SECRET, { otpCode: '123456' });
         });
 
         test.step('Navigate to dashboard', async () => {
@@ -147,7 +171,7 @@ test.describe('Identity Drawer - Global Shortcut (Refactored)', { tag: ['@fast',
 
     test('Identity drawer shows correct COI badges', async ({ page }) => {
         test.step('Login as USA TOP_SECRET user', async () => {
-            // TOP_SECRET user has multiple COIs: NATO-COSMIC, FVEY, CAN-US
+            // TOP_SECRET user has multiple COIs: FVEY, NATO-COSMIC
             await loginAs(page, TEST_USERS.USA.TOP_SECRET);
         });
 
