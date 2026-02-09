@@ -1230,6 +1230,12 @@ module_federation() {
             fi
             federation_integration_test "$@"
             ;;
+        token-revocation|revocation-test)
+            if [ -f "${FEDERATION_DIR}/verification.sh" ]; then
+                source "${FEDERATION_DIR}/verification.sh"
+            fi
+            federation_test_token_revocation "$@"
+            ;;
         list-idps)
             local hub_token=$(get_hub_admin_token 2>/dev/null)
             if [ -n "$hub_token" ]; then
@@ -1248,6 +1254,7 @@ module_federation() {
             echo "  unlink <CODE>     Remove federation link"
             echo "  verify <CODE>     Verify federation health"
             echo "  test              Run federation integration tests"
+            echo "  token-revocation  Test cross-instance token revocation"
             echo "  status            Show overall federation status"
             echo "  list-idps         List configured IdPs on Hub"
             ;;
