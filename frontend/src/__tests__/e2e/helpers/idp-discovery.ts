@@ -142,22 +142,22 @@ export async function discoverAvailableIdPs(page: Page, hubUrl?: string): Promis
     try {
       await page.goto(targetUrl, { 
         waitUntil: 'domcontentloaded', 
-        timeout: 10000 
+        timeout: 15000  // Increased from 10s to 15s
       });
       console.log(`[IdP Discovery] ✅ Successfully loaded: ${targetUrl}`);
       
       // Wait for React hydration and buttons to appear
       // Try multiple strategies to ensure buttons are loaded
       try {
-        await page.waitForSelector('button', { timeout: 5000 });
+        await page.waitForSelector('button', { timeout: 10000 });  // Increased from 5s to 10s
         console.log('[IdP Discovery] ✅ Buttons are visible');
       } catch (e) {
         console.log('[IdP Discovery] ⚠️ No buttons found yet, waiting for network idle...');
-        await page.waitForLoadState('networkidle', { timeout: 5000 });
+        await page.waitForLoadState('networkidle', { timeout: 10000 });  // Increased from 5s to 10s
       }
       
-      // Give React a moment to hydrate
-      await page.waitForTimeout(1000);
+      // Give React extra time to hydrate
+      await page.waitForTimeout(2000);  // Increased from 1s to 2s
       
     } catch (navError) {
       console.error(`[IdP Discovery] ❌ Failed to load ${targetUrl}:`, navError instanceof Error ? navError.message : 'unknown error');
@@ -173,26 +173,67 @@ export async function discoverAvailableIdPs(page: Page, hubUrl?: string): Promis
     const allButtons = await page.locator('button').allTextContents();
     
     console.log('[IdP Discovery] All buttons found:', allButtons);
+    console.log('[IdP Discovery] Total buttons:', allButtons.length);
     
     // Filter for IdP-related buttons (exclude empty, icons, and UI buttons)
-    const idpButtons = allButtons.filter(text => {
-      const normalized = text.trim().toLowerCase();
-      // Include buttons that:
-      // 1. Contain country names
-      // 2. Contain "instance" keyword
-      // 3. Contain "login as" pattern
-      // 4. Are long enough to be IdP names (> 3 chars)
-      return normalized.length > 3 && (
-        normalized.includes('instance') ||
-        normalized.includes('login as') ||
-        normalized.includes('authenticate') ||
-        /united states|usa|france|germany|deu|fra|gbr|can|local/i.test(text)
-      );
-    });
+    // Extract clean button text by splitting on common patterns
+    const idpButtons = allButtons
+      .map((text, index) => {
+        console.log(`[IdP Discovery] Processing button ${index}: "${text.substring(0, 50)}..."`);
+        
+        // Clean up concatenated button text
+        // Pattern: "Login as United States UserAuthenticate..." -> "United States"
+        // Pattern: "DEU InstanceOIDC✓ Online" -> "DEU Instance"
+        
+        // Try to extract country/instance name from various patterns
+        let cleaned = text.trim();
+        
+        // Pattern 1: "Login as <Country>" -> extract <Country>
+        const loginAsMatch = cleaned.match(/Login as ([A-Za-z\s]+?)(?:User|Authenticate|$)/i);
+        if (loginAsMatch) {
+          const result = loginAsMatch[1].trim();
+          console.log(`  → Matched "Login as" pattern: "${result}"`);
+          return result;
+        }
+        
+        // Pattern 2: "<CODE> Instance" -> keep as is
+        const instanceMatch = cleaned.match(/^([A-Z]{3})\s*Instance/i);
+        if (instanceMatch) {
+          const result = `${instanceMatch[1]} Instance`;
+          console.log(`  → Matched "Instance" pattern: "${result}"`);
+          return result;
+        }
+        
+        // Pattern 3: Extract first meaningful part before emojis or special chars
+        const cleanMatch = cleaned.match(/^([A-Za-z\s]+?)(?:[🏠⚡✓]|User|Authenticate|OIDC|SAML)/);
+        if (cleanMatch) {
+          const result = cleanMatch[1].trim();
+          console.log(`  → Matched "clean" pattern: "${result}"`);
+          return result;
+        }
+        
+        console.log(`  → No match, returning as-is: "${cleaned.substring(0, 30)}..."`);
+        return cleaned;
+      })
+      .filter(text => {
+        const normalized = text.trim().toLowerCase();
+        // Include buttons that:
+        // 1. Contain country names
+        // 2. Contain "instance" keyword
+        // 3. Are long enough to be IdP names (> 3 chars)
+        const isMatch = normalized.length > 3 && (
+          normalized.includes('instance') ||
+          /united states|usa|france|germany|deu|fra|gbr|can|local/i.test(text)
+        );
+        if (isMatch) {
+          console.log(`[IdP Discovery] ✅ Kept IdP button: "${text}"`);
+        }
+        return isMatch;
+      });
     
     const uniqueIdPs = [...new Set(idpButtons)];
     
-    console.log('[IdP Discovery] Found IdP options:', uniqueIdPs);
+    console.log('[IdP Discovery] Found IdP options (cleaned):', uniqueIdPs);
     
     const result: DiscoveredIdPs = {
       spokes: new Map(),
@@ -200,7 +241,7 @@ export async function discoverAvailableIdPs(page: Page, hubUrl?: string): Promis
     };
     
     // Hub is always available (we're testing from it)
-    const hubButton = uniqueIdPs.find(name => /united states|usa|hub|local|login as/i.test(name));
+    const hubButton = uniqueIdPs.find(name => /united states|usa|hub|local/i.test(name));
     result.hub = {
       code: 'USA',
       displayName: hubButton || 'United States',
