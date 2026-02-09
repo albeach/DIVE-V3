@@ -822,6 +822,19 @@ spoke_init_prepare_certificates() {
     # Without this, Keycloak crashes on startup with "No such file or directory"
     mkdir -p "$spoke_dir/certs/ca" "$spoke_dir/truststores"
 
+    # Vault PKI path: if CERT_PROVIDER=vault, issue from Vault and return early
+    if type use_vault_pki &>/dev/null && use_vault_pki; then
+        log_info "CERT_PROVIDER=vault — using Vault PKI for spoke certificates"
+        if [ -f "${DIVE_ROOT}/scripts/dive-modules/certificates.sh" ]; then
+            source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+        fi
+        if type generate_spoke_certificate_vault &>/dev/null && generate_spoke_certificate_vault "$code_lower"; then
+            log_success "Federation certificates prepared via Vault PKI"
+            return 0
+        fi
+        log_warn "Vault PKI failed — falling back to mkcert"
+    fi
+
     # Check if certificates already exist
     if [ -f "$spoke_dir/certs/certificate.pem" ] && [ -f "$spoke_dir/certs/key.pem" ]; then
         # CRITICAL: Validate certificate has required SANs for federation

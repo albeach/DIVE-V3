@@ -561,6 +561,18 @@ check_certs() {
     # SSOT: Use certificates.sh module for all certificate operations
     # This matches the spoke pipeline approach for consistency
 
+    # Vault PKI path: if CERT_PROVIDER=vault, issue from Vault and return early
+    if type use_vault_pki &>/dev/null && use_vault_pki; then
+        log_info "CERT_PROVIDER=vault — using Vault PKI for hub certificates"
+        if [ -f "${DIVE_ROOT}/scripts/dive-modules/certificates.sh" ]; then
+            source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+        fi
+        if type generate_hub_certificate_vault &>/dev/null && generate_hub_certificate_vault; then
+            return 0
+        fi
+        log_warn "Vault PKI failed — falling back to mkcert"
+    fi
+
     # Ensure mkcert is installed and CA present
     if ! command -v mkcert >/dev/null 2>&1; then
         log_error "mkcert not installed. Install mkcert and trust the local CA."
@@ -986,7 +998,7 @@ load_secrets() {
         local _line
         while IFS= read -r _line; do
             case "$_line" in
-                SECRETS_PROVIDER=*|VAULT_ADDR=*|VAULT_CLI_ADDR=*|VAULT_TOKEN=*)
+                SECRETS_PROVIDER=*|VAULT_ADDR=*|VAULT_CLI_ADDR=*|VAULT_TOKEN=*|CERT_PROVIDER=*)
                     export "$_line" ;;
             esac
         done < "${DIVE_ROOT}/.env.hub"

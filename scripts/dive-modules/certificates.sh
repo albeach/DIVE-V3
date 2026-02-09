@@ -690,6 +690,338 @@ prepare_federation_certificates() {
 }
 
 # =============================================================================
+# VAULT PKI CERTIFICATE PROVIDER
+# =============================================================================
+# Alternative to mkcert: issue certificates from Vault PKI Intermediate CA.
+# Activated by setting CERT_PROVIDER=vault in .env.hub
+# All output files use identical names/paths as mkcert — zero service changes.
+# =============================================================================
+
+##
+# Check if Vault PKI should be used for certificate generation
+#
+# Returns:
+#   0 - Use Vault PKI (CERT_PROVIDER=vault)
+#   1 - Use mkcert (default)
+##
+use_vault_pki() {
+    local provider="${CERT_PROVIDER:-}"
+
+    # Check .env.hub if not set in environment
+    if [ -z "$provider" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
+        provider=$(grep '^CERT_PROVIDER=' "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2- || true)
+    fi
+
+    [ "$provider" = "vault" ]
+}
+
+##
+# Issue a certificate from Vault PKI Intermediate CA
+#
+# Arguments:
+#   $1 - PKI role name (e.g., "hub-services", "spoke-fra-services")
+#   $2 - Common Name (e.g., "dive-hub-services", "dive-spoke-fra-services")
+#   $3 - Space-separated list of DNS SANs
+#   $4 - Comma-separated list of IP SANs (default: "127.0.0.1,::1")
+#   $5 - Target directory for certificate files
+#   $6 - TTL (default: "2160h" = 90 days)
+#
+# Writes:
+#   $5/certificate.pem  - Server certificate
+#   $5/key.pem          - Private key
+#   $5/ca/rootCA.pem    - Full CA chain (intermediate + root)
+#   $5/rootCA.pem       - Copy of CA chain
+#
+# Returns:
+#   0 - Success
+#   1 - Vault not available or issuance failed
+##
+_vault_pki_issue_cert() {
+    local role_name="$1"
+    local common_name="$2"
+    local dns_sans="$3"
+    local ip_sans="${4:-127.0.0.1,::1}"
+    local target_dir="$5"
+    local ttl="${6:-2160h}"
+
+    # Resolve Vault address (prefer CLI addr on host, Docker addr in container)
+    local vault_addr="${VAULT_CLI_ADDR:-${VAULT_ADDR:-http://localhost:8200}}"
+    local vault_token="${VAULT_TOKEN:-}"
+
+    # Load token if not set
+    if [ -z "$vault_token" ] && [ -f "${DIVE_ROOT}/.vault-token" ]; then
+        vault_token=$(cat "${DIVE_ROOT}/.vault-token")
+    fi
+
+    if [ -z "$vault_token" ]; then
+        log_error "Vault PKI: No token available"
+        return 1
+    fi
+
+    # Convert space-separated DNS SANs to comma-separated
+    local dns_csv
+    dns_csv=$(echo "$dns_sans" | tr ' ' ',')
+
+    log_verbose "Vault PKI: Issuing cert via role=$role_name, ttl=$ttl"
+    log_verbose "  DNS SANs: $dns_csv"
+    log_verbose "  IP SANs:  $ip_sans"
+
+    # Issue certificate via Vault PKI API (curl + jq, not vault CLI)
+    local response
+    response=$(curl -sL -X POST \
+        -H "X-Vault-Token: $vault_token" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"common_name\": \"$common_name\",
+            \"alt_names\": \"$dns_csv\",
+            \"ip_sans\": \"$ip_sans\",
+            \"ttl\": \"$ttl\",
+            \"format\": \"pem\"
+        }" \
+        "${vault_addr}/v1/pki_int/issue/${role_name}" 2>/dev/null)
+
+    if [ -z "$response" ]; then
+        log_error "Vault PKI: Empty response from ${vault_addr}/v1/pki_int/issue/${role_name}"
+        return 1
+    fi
+
+    # Check for errors in response
+    local errors
+    errors=$(printf '%s\n' "$response" | jq -r '.errors // empty' 2>/dev/null)
+    if [ -n "$errors" ] && [ "$errors" != "null" ] && [ "$errors" != "" ]; then
+        log_error "Vault PKI: Issuance failed: $errors"
+        return 1
+    fi
+
+    # Extract certificate, key, and CA chain from JSON response
+    local certificate private_key issuing_ca ca_chain
+    certificate=$(printf '%s\n' "$response" | jq -r '.data.certificate // empty')
+    private_key=$(printf '%s\n' "$response" | jq -r '.data.private_key // empty')
+    issuing_ca=$(printf '%s\n' "$response" | jq -r '.data.issuing_ca // empty')
+    ca_chain=$(printf '%s\n' "$response" | jq -r 'if .data.ca_chain then .data.ca_chain | join("\n") else empty end' 2>/dev/null || true)
+
+    if [ -z "$certificate" ] || [ -z "$private_key" ]; then
+        log_error "Vault PKI: Missing certificate or private key in response"
+        return 1
+    fi
+
+    # Write files to target directory (same names as mkcert output)
+    mkdir -p "$target_dir" "$target_dir/ca"
+
+    printf '%s\n' "$certificate" > "$target_dir/certificate.pem"
+    printf '%s\n' "$private_key" > "$target_dir/key.pem"
+
+    # CA chain: issuing CA + any additional chain certs (intermediate + root)
+    {
+        printf '%s\n' "$issuing_ca"
+        if [ -n "$ca_chain" ] && [ "$ca_chain" != "null" ]; then
+            printf '%s\n' "$ca_chain"
+        fi
+    } > "$target_dir/ca/rootCA.pem"
+
+    # Copy CA to alternate location expected by some services
+    cp "$target_dir/ca/rootCA.pem" "$target_dir/rootCA.pem" 2>/dev/null || true
+
+    # Set permissions (matching mkcert convention)
+    chmod 600 "$target_dir/key.pem"
+    chmod 644 "$target_dir/certificate.pem"
+    chmod 644 "$target_dir/ca/rootCA.pem"
+    chmod 644 "$target_dir/rootCA.pem" 2>/dev/null || true
+
+    log_success "Vault PKI: Certificate issued (role=$role_name, ttl=$ttl)"
+    return 0
+}
+
+##
+# Generate Java PKCS12 truststore from a CA PEM file
+# Shared between Vault PKI and mkcert certificate paths.
+#
+# Arguments:
+#   $1 - Path to CA PEM file (root or chain)
+#   $2 - Target directory for truststore.p12
+#
+# Returns:
+#   0 - Success
+#   1 - keytool not found or generation failed
+##
+_generate_truststore_from_ca() {
+    local ca_pem="$1"
+    local target_dir="$2"
+    local truststore_file="$target_dir/truststore.p12"
+
+    if ! command -v keytool &>/dev/null; then
+        log_warn "keytool not found — Java truststore not generated"
+        return 1
+    fi
+
+    if [ ! -f "$ca_pem" ]; then
+        log_warn "CA PEM not found at $ca_pem"
+        return 1
+    fi
+
+    rm -f "$truststore_file"
+
+    if keytool -importcert -noprompt -trustcacerts \
+        -alias dive-v3-ca \
+        -file "$ca_pem" \
+        -keystore "$truststore_file" \
+        -storepass changeit \
+        -storetype PKCS12 2>/dev/null; then
+        chmod 644 "$truststore_file"
+        log_verbose "Generated Java truststore: $truststore_file"
+        return 0
+    else
+        log_error "Failed to generate Java truststore"
+        return 1
+    fi
+}
+
+##
+# Generate hub certificate from Vault PKI
+#
+# Issues a certificate via the hub-services role with all hub service
+# container names as SANs. Drop-in replacement for mkcert hub cert.
+#
+# Returns:
+#   0 - Success
+#   1 - Failed
+##
+generate_hub_certificate_vault() {
+    ensure_dive_root
+    local cert_dir="${DIVE_ROOT}/instances/hub/certs"
+
+    log_step "Generating hub certificate from Vault PKI..."
+
+    # Check if valid certificates already exist (skip if not expired)
+    if [ -f "$cert_dir/certificate.pem" ] && [ -f "$cert_dir/key.pem" ]; then
+        local expiry_check
+        expiry_check=$(openssl x509 -in "$cert_dir/certificate.pem" -checkend 86400 2>/dev/null && echo "valid" || echo "expiring")
+        if [ "$expiry_check" = "valid" ]; then
+            # Verify it was issued by Vault (not mkcert)
+            if openssl x509 -in "$cert_dir/certificate.pem" -noout -issuer 2>/dev/null | grep -q "DIVE V3"; then
+                log_info "Hub certificate exists and is valid (Vault PKI) — skipping regeneration"
+                return 0
+            fi
+        fi
+    fi
+
+    mkdir -p "$cert_dir"
+
+    # Hub DNS SANs (explicit list — same as check_certs() in common.sh)
+    local dns_sans="localhost host.docker.internal"
+    dns_sans="$dns_sans dive-hub-keycloak dive-hub-backend dive-hub-frontend"
+    dns_sans="$dns_sans dive-hub-opa dive-hub-opal-server dive-hub-kas"
+    dns_sans="$dns_sans dive-hub-mongodb dive-hub-postgres dive-hub-redis"
+    dns_sans="$dns_sans dive-hub-redis-blacklist dive-hub-authzforce"
+    dns_sans="$dns_sans keycloak backend frontend opa opal-server kas"
+    dns_sans="$dns_sans mongodb postgres redis redis-blacklist authzforce"
+    dns_sans="$dns_sans hub.dive.local hub.dive25.com"
+    dns_sans="$dns_sans usa-idp.dive25.com usa-api.dive25.com usa-app.dive25.com"
+
+    local ip_sans="127.0.0.1,::1"
+
+    if _vault_pki_issue_cert "hub-services" "dive-hub-services" "$dns_sans" "$ip_sans" "$cert_dir" "2160h"; then
+        log_success "Hub certificate issued from Vault PKI"
+
+        # Copy CA to truststore locations (matching mkcert convention)
+        local truststore_dir="${DIVE_ROOT}/instances/hub/truststores"
+        local mkcert_compat_dir="${DIVE_ROOT}/certs/mkcert"
+        mkdir -p "$truststore_dir" "$mkcert_compat_dir"
+        cp "$cert_dir/ca/rootCA.pem" "$truststore_dir/mkcert-rootCA.pem" 2>/dev/null || true
+        cp "$cert_dir/ca/rootCA.pem" "$mkcert_compat_dir/rootCA.pem" 2>/dev/null || true
+        cp "$cert_dir/ca/rootCA.pem" "$cert_dir/mkcert-rootCA.pem" 2>/dev/null || true
+
+        # Generate Java truststore for Keycloak federation
+        _generate_truststore_from_ca "$cert_dir/ca/rootCA.pem" "$cert_dir"
+
+        return 0
+    else
+        log_error "Hub certificate issuance from Vault PKI failed"
+        return 1
+    fi
+}
+
+##
+# Generate spoke certificate from Vault PKI
+#
+# Issues a certificate via the spoke-{code}-services role with spoke
+# and hub service container names as SANs. Drop-in replacement for mkcert.
+#
+# Arguments:
+#   $1 - Spoke code (e.g., fra, deu, gbr)
+#
+# Returns:
+#   0 - Success
+#   1 - Failed
+##
+generate_spoke_certificate_vault() {
+    local spoke_code="${1:?Spoke code required}"
+    local code_lower
+    code_lower=$(lower "$spoke_code")
+
+    ensure_dive_root
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    local cert_dir="$spoke_dir/certs"
+
+    if [ ! -d "$spoke_dir" ]; then
+        log_error "Spoke directory not found: $spoke_dir"
+        return 1
+    fi
+
+    log_step "Generating spoke certificate for $(upper "$spoke_code") from Vault PKI..."
+
+    mkdir -p "$cert_dir" "$cert_dir/ca"
+
+    # Spoke DNS SANs (same as generate_spoke_certificate() — explicit, no wildcards)
+    local dns_sans="localhost host.docker.internal"
+
+    # Spoke container names: dive-spoke-{code}-{service}
+    local services="keycloak backend frontend opa opal-client mongodb postgres redis kas"
+    local svc
+    for svc in $services; do
+        dns_sans="$dns_sans dive-spoke-${code_lower}-${svc}"
+    done
+
+    # Alternate patterns: {service}-{code}
+    for svc in $services; do
+        dns_sans="$dns_sans ${svc}-${code_lower}"
+    done
+
+    # Docker compose pattern
+    dns_sans="$dns_sans ${code_lower}-keycloak-${code_lower}-1"
+
+    # Spoke public DNS names
+    dns_sans="$dns_sans ${code_lower}-idp.dive25.com ${code_lower}-api.dive25.com ${code_lower}-app.dive25.com"
+
+    # Hub container names (for spoke -> hub SSL trust)
+    dns_sans="$dns_sans dive-hub-keycloak dive-hub-backend dive-hub-frontend"
+    dns_sans="$dns_sans dive-hub-opa dive-hub-opal-server"
+    dns_sans="$dns_sans hub-keycloak keycloak backend frontend opa opal-server"
+    dns_sans="$dns_sans hub.dive25.com usa-idp.dive25.com usa-api.dive25.com usa-app.dive25.com"
+
+    local ip_sans="127.0.0.1,::1"
+    local role_name="spoke-${code_lower}-services"
+
+    if _vault_pki_issue_cert "$role_name" "dive-spoke-${code_lower}-services" \
+        "$dns_sans" "$ip_sans" "$cert_dir" "2160h"; then
+        log_success "Spoke certificate issued from Vault PKI for $(upper "$spoke_code")"
+
+        # Copy CA to truststore locations (matching mkcert convention)
+        local truststore_dir="$spoke_dir/truststores"
+        mkdir -p "$truststore_dir"
+        cp "$cert_dir/ca/rootCA.pem" "$truststore_dir/mkcert-rootCA.pem" 2>/dev/null || true
+
+        # Generate Java truststore for Keycloak federation
+        _generate_truststore_from_ca "$cert_dir/ca/rootCA.pem" "$cert_dir"
+
+        return 0
+    else
+        log_error "Spoke certificate issuance from Vault PKI failed for $(upper "$spoke_code")"
+        return 1
+    fi
+}
+
+# =============================================================================
 # VERIFICATION
 # =============================================================================
 
