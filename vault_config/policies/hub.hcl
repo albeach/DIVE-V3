@@ -16,3 +16,12 @@ path "sys/mounts/*" {
 path "auth/*" {
   capabilities = ["create", "read", "update", "delete", "list"]
 }
+
+# PKI certificate authority management
+path "pki/*" {
+  capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+}
+
+path "pki_int/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
