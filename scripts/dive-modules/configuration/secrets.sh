@@ -80,11 +80,25 @@ if [ "$SECRETS_PROVIDER" = "auto" ] || [ -z "$SECRETS_PROVIDER" ]; then
     fi
 fi
 
-# Update provider-specific flags
+# Update provider-specific flags and configure provider environment
 case "$SECRETS_PROVIDER" in
     vault)
         USE_AWS_SECRETS="false"
         USE_GCP_SECRETS="false"
+        # Resolve Vault address for CLI (host-side) access
+        if [ -z "${VAULT_CLI_ADDR:-}" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
+            VAULT_CLI_ADDR=$(grep '^VAULT_CLI_ADDR=' "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2-)
+        fi
+        if [ -n "${VAULT_CLI_ADDR:-}" ]; then
+            export VAULT_ADDR="$VAULT_CLI_ADDR"
+        fi
+        VAULT_ADDR="${VAULT_ADDR:-http://127.0.0.1:8200}"
+        export VAULT_ADDR
+        # Load token from .vault-token if not already set
+        if [ -z "${VAULT_TOKEN:-}" ] && [ -f "${DIVE_ROOT}/.vault-token" ]; then
+            VAULT_TOKEN=$(cat "${DIVE_ROOT}/.vault-token")
+            export VAULT_TOKEN
+        fi
         ;;
     aws)
         USE_AWS_SECRETS="true"
@@ -419,31 +433,33 @@ get_secret() {
         vault)
             # Map legacy secret names to Vault paths
             local category path field
+            # Vault paths are lowercase (usa/, deu/, etc.)
+            local vault_instance=$(lower "${instance_code:-shared}")
 
             case "$secret_name" in
                 keycloak-admin-password|keycloak)
                     category="core"
-                    path="${instance_code:-shared}/keycloak-admin"
+                    path="${vault_instance}/keycloak-admin"
                     field="password"
                     ;;
                 postgres-password|postgres)
                     category="core"
-                    path="${instance_code:-shared}/postgres"
+                    path="${vault_instance}/postgres"
                     field="password"
                     ;;
                 mongo-password|mongodb)
                     category="core"
-                    path="${instance_code:-shared}/mongodb"
+                    path="${vault_instance}/mongodb"
                     field="password"
                     ;;
                 redis-password|redis)
                     category="core"
-                    path="${instance_code:-shared}/redis"
+                    path="${vault_instance}/redis"
                     field="password"
                     ;;
                 auth-secret)
                     category="auth"
-                    path="${instance_code:-shared}/nextauth"
+                    path="${vault_instance}/nextauth"
                     field="secret"
                     ;;
                 keycloak-client-secret)
@@ -490,15 +506,16 @@ set_secret() {
         vault)
             # Map legacy secret names to Vault paths (same as get_secret)
             local category path
+            local vault_instance=$(lower "${instance_code:-shared}")
 
             case "$secret_name" in
                 keycloak-admin-password|keycloak|postgres-password|postgres|mongo-password|mongodb|redis-password|redis)
                     category="core"
-                    path="${instance_code:-shared}/${secret_name%-*}"  # Extract base name
+                    path="${vault_instance}/${secret_name%-*}"  # Extract base name
                     ;;
                 auth-secret)
                     category="auth"
-                    path="${instance_code:-shared}/nextauth"
+                    path="${vault_instance}/nextauth"
                     ;;
                 keycloak-client-secret)
                     category="auth"
