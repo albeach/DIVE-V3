@@ -913,77 +913,21 @@ _ensure_federation_client_mappers() {
     local standard_attrs=("clearance" "countryOfAffiliation" "acpCOI" "uniqueID")
 
     # Country-specific localized attribute mappings (source_attribute:claim_name)
-    # Based on backend/src/services/clearance-mapper.service.ts (SSOT)
+    # Driven by config/locale-mappings.conf — add new countries there, no code changes needed
     local localized_attrs=()
-    local realm_code="${realm##*-}"
-    case "$realm_code" in
-        fra)
-            localized_attrs=(
-                "pays_affiliation:countryOfAffiliation"
-                "niveau_habilitation:clearance"
-                "communaute_interet:acpCOI"
-                "identifiant_unique:uniqueID"
-            )
-            ;;
-        deu)
-            localized_attrs=(
-                "zugehoerigkeitsland:countryOfAffiliation"
-                "sicherheitsfreigabe:clearance"
-                "interessengemeinschaft:acpCOI"
-                "eindeutige_kennung:uniqueID"
-            )
-            ;;
-        pol)
-            localized_attrs=(
-                "panstwo_przynaleznosci:countryOfAffiliation"
-                "poziom_bezpieczenstwa:clearance"
-                "spolecznosc_interesow:acpCOI"
-                "unikalny_identyfikator:uniqueID"
-            )
-            ;;
-        gbr)
-            localized_attrs=(
-                "country_of_affiliation:countryOfAffiliation"
-                "security_clearance:clearance"
-                "community_of_interest:acpCOI"
-                "unique_identifier:uniqueID"
-            )
-            ;;
-        ita)
-            localized_attrs=(
-                "paese_affiliazione:countryOfAffiliation"
-                "livello_sicurezza:clearance"
-                "comunita_interesse:acpCOI"
-                "identificativo_unico:uniqueID"
-            )
-            ;;
-        esp)
-            localized_attrs=(
-                "pais_afiliacion:countryOfAffiliation"
-                "nivel_seguridad:clearance"
-                "comunidad_interes:acpCOI"
-                "identificador_unico:uniqueID"
-            )
-            ;;
-        nld)
-            localized_attrs=(
-                "land_affiliatie:countryOfAffiliation"
-                "veiligheidsmachtiging:clearance"
-                "gemeenschap_belang:acpCOI"
-                "uniek_identificatienummer:uniqueID"
-            )
-            ;;
-        can)
-            localized_attrs=(
-                "pays_affiliation:countryOfAffiliation"
-                "habilitation_securite:clearance"
-                "communaute_interet:acpCOI"
-                "identifiant_unique:uniqueID"
-            )
-            ;;
-        usa) localized_attrs=() ;;
-        *)   localized_attrs=() ;;
-    esac
+    local realm_code=$(upper "${realm##*-}")
+    local locale_config="${DIVE_ROOT}/config/locale-mappings.conf"
+    if [ -f "$locale_config" ]; then
+        local mapping_line
+        mapping_line=$(grep "^${realm_code}|" "$locale_config" 2>/dev/null || true)
+        if [ -n "$mapping_line" ]; then
+            # Parse pipe-delimited fields: CODE|src:claim|src:claim|...
+            IFS='|' read -ra fields <<< "$mapping_line"
+            for ((i=1; i<${#fields[@]}; i++)); do
+                [ -n "${fields[$i]}" ] && localized_attrs+=("${fields[$i]}")
+            done
+        fi
+    fi
 
     local mapper_count=0
 
