@@ -670,21 +670,28 @@ federation_test_token_revocation() {
     fi
 
     # Step 7: Verify Redis contains blacklist entry
-    test_start "Redis has blacklist entries"
-    local redis_keys
-    redis_keys=$(docker exec dive-hub-redis redis-cli KEYS "blacklist:*" 2>/dev/null)
-    if [ -n "$redis_keys" ]; then
-        local key_count
-        key_count=$(echo "$redis_keys" | wc -l | tr -d ' ')
-        test_pass
-    else
-        # Check user-revoked keys as fallback (no-JTI tokens use this)
-        redis_keys=$(docker exec dive-hub-redis redis-cli KEYS "user-revoked:*" 2>/dev/null)
+    # Token store is in shared stack (shared-token-store container)
+    test_start "Token store has blacklist entries"
+    local blacklist_pass
+    # SSOT: shared stack .env configures the token store password
+    blacklist_pass=$(grep -o 'REDIS_PASSWORD_BLACKLIST=.*' "${DIVE_ROOT}/docker/instances/shared/.env" 2>/dev/null | cut -d= -f2)
+    blacklist_pass="${blacklist_pass:-$(grep -o 'REDIS_PASSWORD_BLACKLIST=.*' "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2)}"
+    if docker ps --format '{{.Names}}' | grep -q "shared-token-store"; then
+        local redis_keys
+        redis_keys=$(docker exec shared-token-store redis-cli -a "${blacklist_pass}" KEYS "blacklist:*" 2>/dev/null | grep -v Warning)
         if [ -n "$redis_keys" ]; then
             test_pass
         else
-            test_fail "No blacklist or user-revoked keys in Redis"
+            # Check user-revoked keys as fallback (no-JTI tokens use this)
+            redis_keys=$(docker exec shared-token-store redis-cli -a "${blacklist_pass}" KEYS "user-revoked:*" 2>/dev/null | grep -v Warning)
+            if [ -n "$redis_keys" ]; then
+                test_pass
+            else
+                test_fail "No blacklist or user-revoked keys in token store"
+            fi
         fi
+    else
+        test_skip "Shared token store not running (optional)"
     fi
 
     # Step 8: Cross-spoke blacklist check (best-effort)
