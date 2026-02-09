@@ -34,6 +34,9 @@ const USER_REVOKE_CHANNEL = 'dive-v3:user-revoked';
 
 // Instance identifier for logging
 const INSTANCE_ID = process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || process.env.NEXT_PUBLIC_INSTANCE || 'unknown';
+const BLACKLIST_REDIS_REQUIRED = ['1', 'true', 'yes', 'on'].includes(
+    (process.env.BLACKLIST_REDIS_REQUIRED || '').toLowerCase()
+);
 
 /**
  * Get the blacklist Redis URL
@@ -359,10 +362,12 @@ export const areUserTokensRevoked = async (uniqueID: string): Promise<boolean> =
         logger.error('Failed to check user token revocation', {
             instance: INSTANCE_ID,
             uniqueID,
-            error: error instanceof Error ? error.message : 'Unknown error'
+            error: error instanceof Error ? error.message : 'Unknown error',
+            blacklistRedisRequired: BLACKLIST_REDIS_REQUIRED
         });
-        // Fail-closed: If Redis is down, treat as revoked to be safe
-        return true;
+        // Best-practice default: optional blacklist should fail-open for availability.
+        // Set BLACKLIST_REDIS_REQUIRED=true to enforce fail-closed behavior.
+        return BLACKLIST_REDIS_REQUIRED;
     }
 };
 
