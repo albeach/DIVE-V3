@@ -92,7 +92,7 @@ case "$SECRETS_PROVIDER" in
         if [ -n "${VAULT_CLI_ADDR:-}" ]; then
             export VAULT_ADDR="$VAULT_CLI_ADDR"
         fi
-        VAULT_ADDR="${VAULT_ADDR:-http://127.0.0.1:8200}"
+        VAULT_ADDR="${VAULT_ADDR:-http://localhost:8200}"
         export VAULT_ADDR
         # Load token from .vault-token if not already set
         if [ -z "${VAULT_TOKEN:-}" ] && [ -f "${DIVE_ROOT}/.vault-token" ]; then
