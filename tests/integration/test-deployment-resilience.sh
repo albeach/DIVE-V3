@@ -372,7 +372,7 @@ test_idempotent_schema_migration() {
     fi
 
     # Run schema init twice (should succeed both times)
-    source "${DIVE_ROOT}/scripts/dive-modules/orchestration-state-db.sh"
+    source "${DIVE_ROOT}/scripts/dive-modules/orchestration/state.sh"
 
     if ! orch_db_init_schema 2>&1; then
         echo "First schema init failed"
@@ -587,7 +587,7 @@ test_database_advisory_locks() {
         return 2
     fi
 
-    source "${DIVE_ROOT}/scripts/dive-modules/orchestration-state-db.sh"
+    source "${DIVE_ROOT}/scripts/dive-modules/orchestration/state.sh"
 
     # Test acquiring lock
     if ! orch_db_acquire_lock "test-lock" 0; then
@@ -610,7 +610,7 @@ test_database_state_persistence() {
         return 2
     fi
 
-    source "${DIVE_ROOT}/scripts/dive-modules/orchestration-state-db.sh"
+    source "${DIVE_ROOT}/scripts/dive-modules/orchestration/state.sh"
 
     # Set a test state
     local test_instance="teststate"

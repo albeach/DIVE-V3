@@ -16,7 +16,7 @@
 
 # Prevent multiple sourcing - but verify arrays are actually loaded
 # The variable might be exported from parent shell without the arrays
-if [ -n "$ISO_COUNTRIES_LOADED" ] && [ "${#CUSTOM_TEST_CODES[@]}" -gt 0 ]; then
+if [ -n "${ISO_COUNTRIES_LOADED:-}" ] && [ "${#CUSTOM_TEST_CODES[@]}" -gt 0 ]; then
     return 0
 fi
 export ISO_COUNTRIES_LOADED=1

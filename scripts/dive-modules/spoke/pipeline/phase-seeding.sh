@@ -71,7 +71,9 @@ spoke_phase_seeding() {
                     return 0
                 else
                     log_warn "SEEDING checkpoint exists but validation failed, re-running"
-                    spoke_phase_clear "$instance_code" "SEEDING" 2>/dev/null || true
+                    if ! spoke_phase_clear "$instance_code" "SEEDING"; then
+                        log_warn "Failed to clear SEEDING checkpoint (stale state may persist)"
+                    fi
                 fi
             else
                 log_info "✓ SEEDING phase complete (validation not available)"
@@ -193,32 +195,134 @@ spoke_phase_seeding() {
         echo "  • Local ZTDF resources require KAS registration (optional)"
     fi
 
-    # Create seeding checkpoint
-    if type orch_create_checkpoint &>/dev/null; then
-        orch_create_checkpoint "$instance_code" "SEEDING" "Seeding phase completed"
-    fi
+    # =================================================================
+    # CRITICAL FIX (2026-02-08): Only create checkpoint on actual success
+    # =================================================================
+    # Previous issue: Checkpoint was created unconditionally, allowing failed
+    # seedings to be marked "complete" in DB. This caused redeployments to
+    # skip seeding even when resources/users weren't actually created.
+    #
+    # ROOT CAUSE FIX (2026-02-08): Trust seeding script exit codes
+    # If spoke_seed_users() and spoke_seed_resources() return 0, seeding succeeded.
+    # User verification is informational only - authentication can fail for non-functional reasons.
+    # =================================================================
+    local seeding_success=true  # Trust that seeding scripts succeeded (they returned 0)
 
-    # Mark phase complete (checkpoint system)
-    if type spoke_phase_mark_complete &>/dev/null; then
-        spoke_phase_mark_complete "$instance_code" "SEEDING" 0 '{}' || true
+    # Determine if seeding was actually successful based on what was created
+    if [ "$resource_seeding_failed" = "true" ]; then
+        # Resource seeding explicitly failed - don't create checkpoint
+        log_warn "⚠️  Seeding checkpoint NOT created (resource seeding failed)"
+        log_warn "   Next deployment will retry seeding to ensure data exists"
+    else
+        # Seeding didn't explicitly fail - check if we have the minimum required data
+        # Note: 0 resources is acceptable (federated-only spoke), but we need users
+
+        # Verify users were created (check Keycloak)
+        local kc_container="dive-spoke-${code_lower}-keycloak"
+        local user_verification_passed=false
+
+        if docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
+            # Try to verify at least one test user exists
+            local realm="dive-v3-broker-${code_lower}"
+            local test_username="testuser-${code_lower}-1"
+
+            # ==========================================================================
+            # ROOT CAUSE FIX (2026-02-08): Load admin password from .env file
+            # ==========================================================================
+            # The password is stored in instances/{code}/.env file, not as environment variable.
+            # Without correct password, kcadm authentication fails and verification incorrectly
+            # reports "user not found" even when users exist.
+            # ==========================================================================
+            local keycloak_password=""
+            local env_file="${DIVE_ROOT}/instances/${code_lower}/.env"
+
+            if [ -f "$env_file" ]; then
+                # Try instance-specific password first
+                keycloak_password=$(grep "^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=" "$env_file" | cut -d'=' -f2- | tr -d '"' | tr -d "'" | head -1)
+
+                # Fallback to generic password
+                if [ -z "$keycloak_password" ]; then
+                    keycloak_password=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" "$env_file" | cut -d'=' -f2- | tr -d '"' | tr -d "'" | head -1)
+                fi
+            fi
+
+            # Last resort: try environment variable (for backwards compatibility)
+            if [ -z "$keycloak_password" ]; then
+                local keycloak_password_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
+                keycloak_password="${!keycloak_password_var:-}"
+            fi
+
+            if [ -z "$keycloak_password" ]; then
+                log_warn "Could not determine Keycloak admin password - skipping user verification"
+                user_verification_passed=true  # Don't fail deployment due to verification issue
+            else
+                local user_exists=$(docker exec "$kc_container" bash -c "
+                /opt/keycloak/bin/kcadm.sh config credentials \
+                    --server http://localhost:8080 \
+                    --realm master \
+                    --user admin \
+                    --password \"$keycloak_password\" \
+                    --config /tmp/.kcadm-seeding.config 2>/dev/null && \
+                /opt/keycloak/bin/kcadm.sh get users \
+                    --realm \"$realm\" \
+                    --query \"username=$test_username\" \
+                    --config /tmp/.kcadm-seeding.config 2>/dev/null | \
+                jq -r '.[0].username // empty' 2>/dev/null
+            " 2>/dev/null || echo "")
+
+                if [ "$user_exists" = "$test_username" ]; then
+                    user_verification_passed=true
+                    log_verbose "✓ User verification passed (found $test_username)"
+                else
+                    log_warn "User verification failed (could not find $test_username)"
+                fi
+            fi
+        else
+            log_warn "Keycloak not running - cannot verify users, assuming success"
+            user_verification_passed=true  # Assume success if we can't verify
+        fi
+
+        # Mark as success if user verification passed
+        if [ "$user_verification_passed" = "true" ]; then
+            seeding_success=true
+
+            # Create seeding checkpoint
+            if type orch_create_checkpoint &>/dev/null; then
+                orch_create_checkpoint "$instance_code" "SEEDING" "Seeding phase completed successfully"
+            fi
+
+            # Mark phase complete (checkpoint system)
+            if type spoke_phase_mark_complete &>/dev/null; then
+                spoke_phase_mark_complete "$instance_code" "SEEDING" 0 '{}' || true
+            fi
+
+            log_verbose "✓ Seeding checkpoint created (validation will verify data on next deployment)"
+        else
+            log_warn "⚠️  Seeding checkpoint NOT created (user verification failed)"
+            log_warn "   Next deployment will retry seeding"
+        fi
     fi
 
     # HONEST reporting - distinguish between users (critical), encrypted vs plaintext resources
-    if [ "$encrypted_count" -gt 0 ]; then
-        log_success "✅ SEEDING phase complete (users: ✅, ZTDF encrypted: ✅ $encrypted_count)"
-    elif [ "$total_count" -gt 0 ]; then
-        log_success "✅ SEEDING phase complete (users: ✅, plaintext: ⚠️  $total_count - not encrypted)"
+    if [ "$seeding_success" = "true" ]; then
+        if [ "$encrypted_count" -gt 0 ]; then
+            log_success "✅ SEEDING phase complete (users: ✅, ZTDF encrypted: ✅ $encrypted_count)"
+        elif [ "$total_count" -gt 0 ]; then
+            log_success "✅ SEEDING phase complete (users: ✅, plaintext: ⚠️  $total_count - not encrypted)"
+        else
+            log_success "✅ SEEDING phase complete (users: ✅, local resources: N/A - using Hub)"
+        fi
+        return 0
     else
-        log_success "✅ SEEDING phase complete (users: ✅, local resources: N/A - using Hub)"
+        # Seeding failed or couldn't be verified
+        log_error "❌ SEEDING phase incomplete (seeding will retry on next deployment)"
+        if [ "$resource_seeding_failed" = "true" ]; then
+            log_error "   Reason: Resource seeding failed"
+        else
+            log_error "   Reason: User verification failed"
+        fi
+        return 1
     fi
-
-    # Return failure if resource seeding failed (ACP-240 compliance)
-    if [ "$resource_seeding_failed" = "true" ]; then
-        log_warn "Seeding phase completed with resource seeding failure flagged"
-        return 0  # Non-blocking for now, but flag is logged for operator awareness
-    fi
-
-    return 0
 }
 
 # =============================================================================

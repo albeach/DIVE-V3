@@ -82,9 +82,7 @@ test_modules_use_ssot() {
 
     local modules=(
         "spoke.sh"
-        "federation-setup.sh"
-        "spoke-verification.sh"
-        "federation-link.sh"
+        "federation/setup.sh"
         "spoke-kas.sh"
         "federation-test.sh"
     )
@@ -186,7 +184,7 @@ test_admin_token_retry() {
     echo -e "${CYAN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
     echo ""
 
-    local fed_setup="${DIVE_ROOT}/scripts/dive-modules/federation-setup.sh"
+    local fed_setup="${DIVE_ROOT}/scripts/dive-modules/federation/setup.sh"
 
     # Check get_hub_admin_token has retry
     ((TESTS_TOTAL++))

@@ -1,14 +1,33 @@
 /**
  * Key Test Users Validation
  *
- * Tests the most important test users across different countries and clearance levels
+ * Tests the most important test users across different countries and clearance levels.
+ * Uses dynamic IdP discovery to skip tests for non-deployed instances.
  */
 
 import { test, expect } from '@playwright/test';
 import { TEST_USERS } from './fixtures/test-users';
-import { loginAs, expectLoggedIn } from '../helpers/auth';
+import { loginAs, expectLoggedIn, getDiscoveredIdPs } from './helpers/auth';
+import { isIdPAvailable, type DiscoveredIdPs } from './helpers/idp-discovery';
+
+// Global discovery cache
+let discoveredIdPs: DiscoveredIdPs | null = null;
 
 test.describe('Key Test Users - Multi-Country Authentication', () => {
+
+  // Discover available IdPs before running tests
+  test.beforeAll(async ({ browser }) => {
+    const page = await browser.newPage();
+    discoveredIdPs = await getDiscoveredIdPs(page);
+    await page.close();
+    
+    console.log('[KEY USERS] IdP Discovery Complete:');
+    console.log(`  Hub: ${discoveredIdPs.hub?.code} available`);
+    console.log(`  Spokes: ${discoveredIdPs.count} deployed`);
+    for (const [code, idp] of discoveredIdPs.spokes.entries()) {
+      console.log(`    ${code}: ${idp.displayName}`);
+    }
+  });
 
   test.describe('🇺🇸 USA Users (Known Working)', () => {
     test('USA UNCLASSIFIED - Basic auth', async ({ page }) => {
@@ -26,12 +45,14 @@ test.describe('Key Test Users - Multi-Country Authentication', () => {
 
   test.describe('🇫🇷 FRA Users (France)', () => {
     test('FRA UNCLASSIFIED - NATO ally', async ({ page }) => {
+      test.skip(!discoveredIdPs || !await isIdPAvailable(discoveredIdPs, 'FRA'), 'FRA spoke not deployed');
       await loginAs(page, TEST_USERS.FRA.UNCLASS);
       await expectLoggedIn(page, TEST_USERS.FRA.UNCLASS);
       console.log('✅ FRA UNCLASSIFIED authenticated');
     });
 
     test('FRA SECRET - NATO COI', async ({ page }) => {
+      test.skip(!discoveredIdPs || !await isIdPAvailable(discoveredIdPs, 'FRA'), 'FRA spoke not deployed');
       await loginAs(page, TEST_USERS.FRA.SECRET, { otpCode: '123456' });
       await expectLoggedIn(page, TEST_USERS.FRA.SECRET);
       console.log('✅ FRA SECRET with NATO COI authenticated');
@@ -40,12 +61,14 @@ test.describe('Key Test Users - Multi-Country Authentication', () => {
 
   test.describe('🇩🇪 DEU Users (Germany)', () => {
     test('DEU UNCLASSIFIED - EU member', async ({ page }) => {
+      test.skip(!discoveredIdPs || !await isIdPAvailable(discoveredIdPs, 'DEU'), 'DEU spoke not deployed');
       await loginAs(page, TEST_USERS.DEU.UNCLASS);
       await expectLoggedIn(page, TEST_USERS.DEU.UNCLASS);
       console.log('✅ DEU UNCLASSIFIED authenticated');
     });
 
     test('DEU SECRET - NATO COI', async ({ page }) => {
+      test.skip(!discoveredIdPs || !await isIdPAvailable(discoveredIdPs, 'DEU'), 'DEU spoke not deployed');
       await loginAs(page, TEST_USERS.DEU.SECRET, { otpCode: '123456' });
       await expectLoggedIn(page, TEST_USERS.DEU.SECRET);
       console.log('✅ DEU SECRET with NATO COI authenticated');
@@ -54,18 +77,21 @@ test.describe('Key Test Users - Multi-Country Authentication', () => {
 
   test.describe('🇬🇧 GBR Users (United Kingdom)', () => {
     test('GBR UNCLASSIFIED - FVEY member', async ({ page }) => {
+      test.skip(!discoveredIdPs || !await isIdPAvailable(discoveredIdPs, 'GBR'), 'GBR spoke not deployed');
       await loginAs(page, TEST_USERS.GBR.UNCLASS);
       await expectLoggedIn(page, TEST_USERS.GBR.UNCLASS);
       console.log('✅ GBR UNCLASSIFIED authenticated');
     });
 
     test('GBR SECRET - NATO + FVEY COI', async ({ page }) => {
+      test.skip(!discoveredIdPs || !await isIdPAvailable(discoveredIdPs, 'GBR'), 'GBR spoke not deployed');
       await loginAs(page, TEST_USERS.GBR.SECRET, { otpCode: '123456' });
       await expectLoggedIn(page, TEST_USERS.GBR.SECRET);
       console.log('✅ GBR SECRET with NATO+FVEY COI authenticated');
     });
 
     test('GBR TOP_SECRET - Full FVEY access', async ({ page }) => {
+      test.skip(!discoveredIdPs || !await isIdPAvailable(discoveredIdPs, 'GBR'), 'GBR spoke not deployed');
       await loginAs(page, TEST_USERS.GBR.TOP_SECRET);
       await expectLoggedIn(page, TEST_USERS.GBR.TOP_SECRET);
       console.log('✅ GBR TOP_SECRET with FVEY+NATO-COSMIC authenticated');

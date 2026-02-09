@@ -29,6 +29,20 @@ if [ -z "${SPOKE_VALIDATION_LOADED:-}" ]; then
     fi
 fi
 
+# Load compose generator (CRITICAL - needed for docker-compose.yml generation)
+if [ -z "${SPOKE_COMPOSE_GENERATOR_LOADED:-}" ]; then
+    if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-compose-generator.sh" ]; then
+        source "$(dirname "${BASH_SOURCE[0]}")/spoke-compose-generator.sh"
+    fi
+fi
+
+# Load error codes (needed for error reporting)
+if [ -z "${SPOKE_ERROR_CODES_LOADED:-}" ]; then
+    if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-error-codes.sh" ]; then
+        source "$(dirname "${BASH_SOURCE[0]}")/spoke-error-codes.sh"
+    fi
+fi
+
 # Load checkpoint system
 
 # =============================================================================
@@ -66,7 +80,9 @@ spoke_phase_initialization() {
                     return 0
                 else
                     log_warn "INITIALIZATION checkpoint exists but validation failed, re-running"
-                    spoke_phase_clear "$instance_code" "INITIALIZATION" 2>/dev/null || true
+                    if ! spoke_phase_clear "$instance_code" "INITIALIZATION"; then
+                        log_warn "Failed to clear INITIALIZATION checkpoint (stale state may persist)"
+                    fi
                 fi
             else
                 log_info "✓ INITIALIZATION phase complete (validation not available)"
@@ -488,9 +504,9 @@ EOF
                     opal_token=$(echo "$token_response" | jq -r '.token // empty' 2>/dev/null)
                 fi
 
+                local env_file="$spoke_dir/.env"
                 if [ -n "$opal_token" ] && [[ "$opal_token" =~ ^eyJ ]]; then
                     # Update .env file with the token
-                    local env_file="$spoke_dir/.env"
                     if [ -f "$env_file" ]; then
                         sed -i.bak "s|^SPOKE_OPAL_TOKEN=.*|SPOKE_OPAL_TOKEN=$opal_token|" "$env_file"
                         rm -f "$env_file.bak"
@@ -748,9 +764,16 @@ spoke_init_generate_compose() {
     fi
 
     # No generator available
-    orch_record_error "$SPOKE_ERROR_COMPOSE_GENERATE" "$ORCH_SEVERITY_CRITICAL" \
-        "Docker compose generator not available" "initialization" \
-        "$(spoke_error_get_remediation $SPOKE_ERROR_COMPOSE_GENERATE $instance_code)"
+    if type orch_record_error &>/dev/null; then
+        local remediation="Check spoke-compose-generator module is loaded"
+        local error_code="${SPOKE_ERROR_COMPOSE_GENERATE:-1030}"
+        if type spoke_error_get_remediation &>/dev/null; then
+            remediation=$(spoke_error_get_remediation "$error_code" "$instance_code")
+        fi
+        orch_record_error "$error_code" "${ORCH_SEVERITY_CRITICAL:-1}" \
+            "Docker compose generator not available" "initialization" \
+            "$remediation"
+    fi
     return 1
 }
 

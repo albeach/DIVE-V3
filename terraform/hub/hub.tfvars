@@ -146,6 +146,26 @@ gbr = {
     client_secret         = ""  # Loaded from GCP: dive-v3-federation-gbr-usa
     disable_trust_manager = true
   }
+deu = {
+    instance_code         = "DEU"
+    instance_name         = "DEU Instance"
+    idp_url               = "https://localhost:8454"
+    idp_internal_url      = "https://dive-spoke-deu-keycloak:8443"
+    frontend_url          = "https://localhost:3011"
+    enabled               = true
+    client_secret         = ""  # Loaded from GCP: dive-v3-federation-deu-usa
+    disable_trust_manager = true
+  }
+can = {
+    instance_code         = "CAN"
+    instance_name         = "CAN Instance"
+    idp_url               = "https://localhost:8447"
+    idp_internal_url      = "https://dive-spoke-can-keycloak:8443"
+    frontend_url          = "https://localhost:3004"
+    enabled               = true
+    client_secret         = ""  # Loaded from GCP: dive-v3-federation-can-usa
+    disable_trust_manager = true
+  }
 }
 
 # =============================================================================

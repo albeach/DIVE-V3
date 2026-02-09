@@ -143,7 +143,7 @@ const COI_TEST_SCENARIOS = [
   }
 ];
 
-test.describe('COI (Community of Interest) Comprehensive Testing', () => {
+test.describe('COI (Community of Interest) Comprehensive Testing', { tag: '@critical' }, () => {
   test.describe('COI Definition Validation', () => {
     test('All COI definitions are properly structured', async () => {
       // Validate COI structure

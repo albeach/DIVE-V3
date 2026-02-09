@@ -188,14 +188,23 @@ resource "keycloak_openid_client" "broker_client" {
       "https://localhost:3000/*",
       "https://localhost:4000/*", # Backend API callbacks
       "https://localhost:8443/*", # Keycloak callbacks
+      # CRITICAL FIX (2026-02-09): Add 127.0.0.1 variants for PKCE cookie compatibility
+      # PKCE cookies are set with domain=127.0.0.1, so redirect_uri must match
+      # Without this, NextAuth PKCE verification fails with "pkceCodeVerifier cookie was missing"
+      "https://127.0.0.1:3000/*",
+      "https://127.0.0.1:4000/*",
+      "https://127.0.0.1:8443/*",
     ],
     # Port-offset URLs for local development (if specified)
     var.local_frontend_port != null ? [
       "https://localhost:${var.local_frontend_port}/*",
       "https://localhost:${var.local_frontend_port}/api/auth/callback/keycloak",
+      "https://127.0.0.1:${var.local_frontend_port}/*",
+      "https://127.0.0.1:${var.local_frontend_port}/api/auth/callback/keycloak",
     ] : [],
     var.local_keycloak_port != null ? [
       "https://localhost:${var.local_keycloak_port}/*",
+      "https://127.0.0.1:${var.local_keycloak_port}/*",
     ] : []
   )
   web_origins = concat(
@@ -205,9 +214,19 @@ resource "keycloak_openid_client" "broker_client" {
       "https://localhost:3000",
       "https://localhost:4000",
       "https://localhost:8443",
+      # CRITICAL FIX (2026-02-09): Add 127.0.0.1 variants for PKCE cookie compatibility
+      "https://127.0.0.1:3000",
+      "https://127.0.0.1:4000",
+      "https://127.0.0.1:8443",
     ],
-    var.local_frontend_port != null ? ["https://localhost:${var.local_frontend_port}"] : [],
-    var.local_keycloak_port != null ? ["https://localhost:${var.local_keycloak_port}"] : []
+    var.local_frontend_port != null ? [
+      "https://localhost:${var.local_frontend_port}",
+      "https://127.0.0.1:${var.local_frontend_port}"
+    ] : [],
+    var.local_keycloak_port != null ? [
+      "https://localhost:${var.local_keycloak_port}",
+      "https://127.0.0.1:${var.local_keycloak_port}"
+    ] : []
   )
 
   # Logout configuration - CRITICAL for proper Single Logout (SLO)
@@ -340,7 +359,7 @@ resource "keycloak_user" "backend_service_account" {
   attributes = {
     uniqueID             = "service-account-backend"
     countryOfAffiliation = var.instance_code
-    clearance            = "TOP_SECRET"
+    clearance            = local.instance_clearances[4]  # TOP SECRET equivalent (country-specific)
     clearance_level      = "5"
     acpCOI               = jsonencode(["FVEY", "NATO-COSMIC"])
     organization         = "${var.instance_name} Backend Service"
@@ -1039,8 +1058,8 @@ resource "keycloak_user" "admin_user" {
   attributes = {
     uniqueID             = "admin-${lower(var.instance_code)}"
     countryOfAffiliation = var.instance_code
-    clearance            = "TOP_SECRET"
-    clearance_level      = "5" # Updated for 5-level system
+    clearance            = local.instance_clearances[4]  # TOP SECRET equivalent (country-specific)
+    clearance_level      = "5"                           # Updated for 5-level system
     # Keep admin aligned with L5 users for policy evaluation
     acpCOI           = jsonencode(["FVEY", "NATO-COSMIC"])
     organization     = "${var.instance_name} Admin"

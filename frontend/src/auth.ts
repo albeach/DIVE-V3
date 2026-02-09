@@ -863,7 +863,10 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             name: `authjs.pkce.code_verifier`,
             options: {
                 httpOnly: true,
-                sameSite: isLocalhost ? 'lax' : (isCloudflareTunnel ? 'none' : 'lax'),
+                // CRITICAL FIX (2026-02-09): Use 'lax' for localhost to allow OAuth redirects
+                // 'lax' permits cookies on top-level GET requests (OAuth callback from Keycloak)
+                // 'strict' would block cookies during redirect, causing PKCE verification failure
+                sameSite: 'lax', // Always 'lax' for OAuth flow compatibility
                 path: '/',
                 secure: AUTH_COOKIE_SECURE,
                 ...(AUTH_COOKIE_DOMAIN ? { domain: AUTH_COOKIE_DOMAIN } : {}),

@@ -216,8 +216,8 @@ run_quick_validation() {
     # Check 2: Core modules exist
     echo -e "\n  ${BOLD}Core Modules:${NC}"
     local modules=(
-        "scripts/dive-modules/orchestration-state-db.sh"
-        "scripts/dive-modules/orchestration-framework.sh"
+        "scripts/dive-modules/orchestration/state.sh"
+        "scripts/dive-modules/orchestration/framework.sh"
         "scripts/dive-modules/error-recovery.sh"
         "scripts/dive-modules/common.sh"
     )
@@ -396,9 +396,9 @@ EOF
 
         <h2>Files Created/Modified</h2>
         <ul>
-            <li><strong>Phase 2:</strong> orchestration-state-db.sh, orch-db-cli.sh</li>
+            <li><strong>Phase 2:</strong> orchestration/state.sh, orch-db-cli.sh</li>
             <li><strong>Phase 3:</strong> error-recovery.sh (enhanced)</li>
-            <li><strong>Phase 4:</strong> orchestration-framework.sh (enhanced)</li>
+            <li><strong>Phase 4:</strong> orchestration/framework.sh (enhanced)</li>
             <li><strong>Phase 5:</strong> federation-sync.service.ts, federation-sync.routes.ts</li>
             <li><strong>Phase 6:</strong> run-all-tests.sh, validation scripts</li>
         </ul>

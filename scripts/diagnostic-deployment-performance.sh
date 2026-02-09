@@ -136,15 +136,15 @@ diagnostic_check_network() {
 diagnostic_analyze_orchestration() {
     log_diagnostic "=== Orchestration Framework Analysis ==="
 
-    local orch_file="${DIVE_ROOT}/scripts/dive-modules/orchestration-framework.sh"
+    local orch_file="${DIVE_ROOT}/scripts/dive-modules/orchestration/framework.sh"
 
     if [ ! -f "$orch_file" ]; then
-        log_diagnostic "❌ orchestration-framework.sh not found"
+        log_diagnostic "❌ orchestration/framework.sh not found"
         return 1
     fi
 
     local line_count=$(wc -l < "$orch_file" | xargs)
-    log_diagnostic "📄 orchestration-framework.sh: $line_count lines"
+    log_diagnostic "📄 orchestration/framework.sh: $line_count lines"
 
     if [ "$line_count" -gt 1500 ]; then
         log_diagnostic "⚠️  Orchestration framework is very large (${line_count} lines)"
@@ -170,8 +170,8 @@ diagnostic_analyze_orchestration() {
 diagnostic_check_service_timeouts() {
     log_diagnostic "=== Service Timeout Configuration Analysis ==="
 
-    # Extract service timeouts from orchestration-framework.sh
-    local orch_file="${DIVE_ROOT}/scripts/dive-modules/orchestration-framework.sh"
+    # Extract service timeouts from orchestration/framework.sh
+    local orch_file="${DIVE_ROOT}/scripts/dive-modules/orchestration/framework.sh"
 
     log_diagnostic "📊 Configured Service Timeouts:"
 
@@ -342,8 +342,8 @@ REPORT_EOF2
 
     # Extract orchestration issues
     if grep -q "Orchestration framework is very large" "$DIAGNOSTIC_LOG"; then
-        local lines=$(grep "orchestration-framework.sh:" "$DIAGNOSTIC_LOG" | sed 's/.* //')
-        echo "- 📄 Monolithic orchestration-framework.sh ($lines)" >> "$DIAGNOSTIC_REPORT"
+        local lines=$(grep "orchestration/framework.sh:" "$DIAGNOSTIC_LOG" | sed 's/.* //')
+        echo "- 📄 Monolithic orchestration/framework.sh ($lines)" >> "$DIAGNOSTIC_REPORT"
         echo "  - Recommendation: Split into modules (<500 lines each)" >> "$DIAGNOSTIC_REPORT"
     fi
 
@@ -403,7 +403,7 @@ REPORT_EOF7
 ## Recommendations
 
 ### High Priority
-1. **Split orchestration-framework.sh** into modules (<500 lines each)
+1. **Split orchestration/framework.sh** into modules (<500 lines each)
    - Modularize by concern: init, deploy, validate, cleanup
    - Easier to maintain and test
 

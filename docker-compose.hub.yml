@@ -22,7 +22,7 @@
 #   1. PARSE PHASE: Loads .env (default filename) OR --env-file for ${VAR} interpolation
 #   2. CONTAINER PHASE: Loads service-level env_file: entries into container environment
 #
-#   CRITICAL: ${MONGO_PASSWORD} in this file needs to exist in PARSE PHASE:
+#   CRITICAL: ${MONGO_PASSWORD_USA} in this file needs to exist in PARSE PHASE:
 #   - Option A (Recommended): ln -sf .env.hub .env
 #   - Option B: Always use --env-file .env.hub flag
 #   - Option C: Export vars to shell: export $(cat .env.hub | xargs)
@@ -95,8 +95,64 @@ volumes:
       dive.resource.type: "volume"
       dive.resource.service: "authzforce"
       dive.resource.purpose: "config"
+  vault_data:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "vault"
+      dive.resource.purpose: "data"
+  vault_config:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "vault"
+      dive.resource.purpose: "config"
+  vault_logs:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "vault"
+      dive.resource.purpose: "logs"
 
 services:
+  # ---------------------------------------------------------------------------
+  # HashiCorp Vault - Secret Management (replaces GCP Secret Manager)
+  # ---------------------------------------------------------------------------
+  vault:
+    labels:
+      dive.service.class: "core"
+      dive.service.description: "HashiCorp Vault secret management"
+    image: hashicorp/vault:1.21.0
+    container_name: ${COMPOSE_PROJECT_NAME}-vault
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK  # Prevent memory swapping (security)
+    env_file:
+      - .env.hub
+    environment:
+      VAULT_ADDR: "http://0.0.0.0:8200"
+      VAULT_API_ADDR: "http://dive-hub-vault:8200"
+      VAULT_CLUSTER_ADDR: "http://dive-hub-vault:8201"
+      SKIP_CHOWN: "true"  # Config is read-only mount, skip chown attempt
+    volumes:
+      - vault_data:/vault/data
+      - vault_logs:/vault/logs
+      - ./vault_config:/vault/config:ro
+    ports:
+      - "127.0.0.1:8200:8200"  # API port (localhost only for security)
+    networks:
+      - hub-internal
+      - dive-shared  # CRITICAL: Allows spoke access
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        chown -R vault:vault /vault/data /vault/logs
+        exec su-exec vault vault server -config=/vault/config
+    healthcheck:
+      test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   # ---------------------------------------------------------------------------
   # PostgreSQL - backing store for Keycloak / NextAuth
   # ---------------------------------------------------------------------------
@@ -111,7 +167,7 @@ services:
       - .env.hub
     environment:
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_USA}
       POSTGRES_DB: keycloak_db
     volumes:
       - postgres_data:/var/lib/postgresql  # Mount parent dir to prevent anonymous volume
@@ -151,7 +207,7 @@ services:
       - .env.hub
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD_USA}
       MONGO_INITDB_DATABASE: dive-v3
     volumes:
       - mongodb_data:/data/db
@@ -167,7 +223,7 @@ services:
       # Check if MongoDB is accepting connections (basic connectivity only)
       # Replica set initialization happens in Phase 4a of deployment
       test: >
-        mongosh admin -u admin -p ${MONGO_PASSWORD} --quiet --eval "db.adminCommand('ping')" | grep -q "ok"
+        mongosh admin -u admin -p ${MONGO_PASSWORD_USA} --quiet --eval "db.adminCommand('ping')" | grep -q "ok"
       interval: 3s
       timeout: 5s
       retries: 15
@@ -251,7 +307,7 @@ services:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak_db
       KC_DB_USERNAME: postgres
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD_USA}
       KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:-localhost}
       KC_HOSTNAME_STRICT: "false"
       KC_PROXY_HEADERS: xforwarded
@@ -268,14 +324,14 @@ services:
       KC_HEALTH_ENABLED: "true"
       KC_FEATURES: scripts
       KC_ADMIN: admin
-      KC_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+      KC_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD_USA}
       # Initial admin user creation (Keycloak 26.5.2)
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
-      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD_USA}
       # Bootstrap realm for Terraform provider authentication
       SKIP_REALM_IMPORT: "true"  # Terraform SSOT: Start empty, configure via Terraform
       # Legacy realm import variables (kept for compatibility, but not used)
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:?KEYCLOAK_CLIENT_SECRET required}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_USA:?KEYCLOAK_CLIENT_SECRET_USA required}
       APP_URL: ${NEXT_PUBLIC_BASE_URL:-https://localhost:3000}
       API_URL: ${NEXT_PUBLIC_API_URL:-https://localhost:4000}
       USA_IDP_URL: ${USA_IDP_URL:-https://keycloak:8443}
@@ -381,6 +437,10 @@ services:
       NODE_ENV: development  # Development mode for better debugging
       LOG_LEVEL: warn  # Reduce log verbosity (info/warn/error)
       PORT: "4000"
+      # Secret management provider (vault or gcp)
+      SECRETS_PROVIDER: ${SECRETS_PROVIDER:-vault}
+      VAULT_ADDR: ${VAULT_ADDR:-http://dive-hub-vault:8200}
+      VAULT_TOKEN: ${VAULT_TOKEN:-}
       # Heap limit only in NODE_OPTIONS (report flags must be in command - Node disallows them in NODE_OPTIONS)
       # --use-openssl-ca: Forces Node.js to load NODE_EXTRA_CA_CERTS (required for mkcert trust)
       NODE_OPTIONS: "--max-old-space-size=4096 --use-openssl-ca"
@@ -388,23 +448,24 @@ services:
       INSTANCE_NAME: "United States"
       INSTANCE_REALM: USA
       IS_HUB: "true"
-      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb:27017?authSource=admin&directConnection=true
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_USA}@mongodb:27017?authSource=admin&directConnection=true
       MONGODB_DATABASE: dive-v3-hub
       OPA_URL: https://opa:8181
       KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker-usa
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-broker-usa}
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_USA}
       KEYCLOAK_JWKS_URI: https://keycloak:8443/realms/dive-v3-broker-usa/protocol/openid-connect/certs
       KEYCLOAK_ADMIN_USERNAME: admin
-      KC_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD}
+      KC_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD_USA}
+      KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD_USA}
       # Redis configuration
       REDIS_PASSWORD: ${REDIS_PASSWORD_USA}
       REDIS_URL: redis://:${REDIS_PASSWORD_USA}@redis:6379
-      # Shared blacklist Redis
-      # Phase 2: Token Blacklist (local development uses dive-hub-redis)
-      # For production, use shared-token-store for cross-instance revocation
-      BLACKLIST_REDIS_URL: redis://:${REDIS_PASSWORD_BLACKLIST}@dive-hub-redis:6379
+      # Shared token revocation store (cross-instance)
+      # Requires shared stack: cd docker/instances/shared && docker compose up -d
+      # Optional: blacklist features degrade gracefully when unavailable
+      BLACKLIST_REDIS_URL: redis://:${REDIS_PASSWORD_BLACKLIST}@shared-token-store:6379
       # NOTE: Spoke Keycloak admin passwords come from spoke registration, NOT environment
       # The spoke provides its password during registration, stored in MongoDB
       NEXT_PUBLIC_BASE_URL: https://localhost:3000
@@ -590,7 +651,7 @@ services:
       # SECURITY: Trust mkcert CA instead of disabling TLS verification
       NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
       OPA_URL: https://opa:8181
-      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongodb:27017?authSource=admin&replicaSet=rs0&directConnection=true
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_USA}@mongodb:27017?authSource=admin&replicaSet=rs0&directConnection=true
       MONGODB_DATABASE: dive-v3-hub
       REDIS_URL: redis://:${REDIS_PASSWORD_USA}@redis:6379
       LOG_LEVEL: debug
@@ -655,12 +716,12 @@ services:
       KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-https://localhost:8443/realms/dive-v3-broker-usa}
       NEXTAUTH_URL: ${NEXTAUTH_URL:-https://localhost:3000}
       NEXT_PUBLIC_EXTERNAL_DOMAINS: "${NEXT_PUBLIC_EXTERNAL_DOMAINS:-https://localhost:3000,https://localhost:4000,https://localhost:8443}"
-      AUTH_SECRET: ${AUTH_SECRET:-default-auth-secret-change-me}
-      NEXTAUTH_SECRET: ${AUTH_SECRET:-default-auth-secret-change-me}
+      AUTH_SECRET: ${AUTH_SECRET_USA:-default-auth-secret-change-me}
+      NEXTAUTH_SECRET: ${AUTH_SECRET_USA:-default-auth-secret-change-me}
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-broker-usa}
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_USA}
       AUTH_KEYCLOAK_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-broker-usa}
-      AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET}
+      AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET_USA}
       AUTH_KEYCLOAK_ISSUER: ${AUTH_KEYCLOAK_ISSUER:-https://localhost:8443/realms/dive-v3-broker-usa}
       AUTH_TRUST_HOST: "true"
       # TLS Certificate Paths
@@ -672,7 +733,7 @@ services:
       # See: docs/TLS_BEST_PRACTICES_2026.md
       NODE_OPTIONS: "--use-openssl-ca"
       NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem  # Legacy https module support
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/dive_v3_app
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD_USA}@postgres:5432/dive_v3_app
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
     depends_on:

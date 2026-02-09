@@ -29,8 +29,8 @@ if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
 fi
 
 # Load state module
-if [ -f "${MODULES_DIR}/orchestration-state-db.sh" ]; then
-    source "${MODULES_DIR}/orchestration-state-db.sh"
+if [ -f "${MODULES_DIR}/orchestration/state.sh" ]; then
+    source "${MODULES_DIR}/orchestration/state.sh"
 fi
 
 # =============================================================================

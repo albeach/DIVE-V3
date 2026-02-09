@@ -15,7 +15,7 @@
     "apiUrl": "https://localhost:4010",
     "idpUrl": "https://dive-spoke-fra-keycloak:8443",
     "idpPublicUrl": "https://localhost:8453",
-    "kasUrl": "https://localhost:10010"
+    "kasUrl": "https://localhost:9010"
   },
   "certificates": {
     "certificatePath": "/Users/aubreybeach/Documents/GitHub/DIVE-V3/DIVE-V3/instances/fra/certs/spoke.crt",
@@ -44,8 +44,8 @@
   },
   "metadata": {
     "version": "1.0.0",
-    "createdAt": "2026-02-07T03:50:00Z",
-    "lastModified": "2026-02-07T03:50:00Z",
+    "createdAt": "2026-02-09T19:24:04Z",
+    "lastModified": "2026-02-09T19:24:04Z",
     "configHash": ""
   }
 }

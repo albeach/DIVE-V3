@@ -10,7 +10,7 @@ import { test, expect, Page } from '@playwright/test';
 // Test configuration
 const BASE_URL = process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000';
 
-test.describe('Multimedia Playback', () => {
+test.describe('Multimedia Playback', { tag: '@slow' }, () => {
   test.beforeEach(async ({ page }) => {
     // Navigate to resources page (authenticated)
     // Note: In real tests, you'd handle authentication

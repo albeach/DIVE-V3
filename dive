@@ -70,7 +70,7 @@ while [[ $# -gt 0 ]]; do
             shift
             ;;
         -h|--help)
-            source "${MODULES_DIR}/help.sh"
+            source "${MODULES_DIR}/utilities/help.sh"
             cmd_help
             exit 0
             ;;
@@ -151,15 +151,21 @@ case "$COMMAND" in
         module_terraform "$@"
         ;;
 
-    # Secrets commands (secrets.sh)
+    # Secrets commands (configuration/secrets.sh)
     secrets)
-        source "${MODULES_DIR}/secrets.sh"
+        source "${MODULES_DIR}/configuration/secrets.sh"
         module_secrets "$@"
         ;;
 
-    # Orchestration database commands (orchestration-state-db.sh)
+    # Vault commands (vault/module.sh)
+    vault)
+        source "${MODULES_DIR}/vault/module.sh"
+        module_vault "$@"
+        ;;
+
+    # Orchestration database commands (orchestration/state.sh)
     orchestration-db|orch-db|odb)
-        source "${MODULES_DIR}/orchestration-state-db.sh"
+        source "${MODULES_DIR}/orchestration/state.sh"
         case "${1:-help}" in
             migrate|migrate-state)
                 shift
@@ -203,15 +209,15 @@ case "$COMMAND" in
         esac
         ;;
 
-    # Pilot VM commands (pilot.sh)
+    # Pilot VM commands (utilities/pilot.sh)
     pilot)
-        source "${MODULES_DIR}/pilot.sh"
+        source "${MODULES_DIR}/utilities/pilot.sh"
         module_pilot "$@"
         ;;
 
-    # Federation commands (federation.sh)
+    # Federation commands (federation/setup.sh)
     federation|fed)
-        source "${MODULES_DIR}/federation.sh"
+        source "${MODULES_DIR}/federation/setup.sh"
         module_federation "$@"
         ;;
 
@@ -227,15 +233,15 @@ case "$COMMAND" in
         module_spoke "$@"
         ;;
 
-    # SP Client commands (sp.sh)
+    # SP Client commands (utilities/sp.sh)
     sp)
-        source "${MODULES_DIR}/sp.sh"
+        source "${MODULES_DIR}/utilities/sp.sh"
         module_sp "$@"
         ;;
 
-    # Policy commands (policy.sh)
+    # Policy commands (utilities/policy.sh)
     policy)
-        source "${MODULES_DIR}/policy.sh"
+        source "${MODULES_DIR}/utilities/policy.sh"
         module_policy "$@"
         ;;
 
@@ -245,16 +251,16 @@ case "$COMMAND" in
         module_certificates "$@"
         ;;
 
-    # Naming conventions (naming.sh)
+    # Naming conventions (utilities/naming.sh)
     naming)
-        source "${MODULES_DIR}/naming.sh"
+        source "${MODULES_DIR}/utilities/naming.sh"
         module_naming "$@"
         ;;
 
-    # Federation setup commands (federation-setup.sh)
+    # Federation setup commands (now handled by federation/setup.sh)
     federation-setup|fed-setup)
-        source "${MODULES_DIR}/federation-setup.sh"
-        module_federation_setup "$@"
+        source "${MODULES_DIR}/federation/setup.sh"
+        module_federation "$@"
         ;;
 
     # Test commands (test.sh) - Phase 4: Testing & Validation
@@ -263,11 +269,11 @@ case "$COMMAND" in
         shift || true
         case "$TEST_TARGET" in
             orchestration|orch)
-                source "${MODULES_DIR}/orchestration-test-framework.sh"
+                source "${MODULES_DIR}/orchestration/testing.sh"
                 orch_test_run_category "$@"
                 ;;
             multi-instance|multi)
-                source "${MODULES_DIR}/multi-instance-test.sh"
+                source "${MODULES_DIR}/utilities/multi-instance-test.sh"
                 case "${1:-help}" in
                     concurrent)
                         multi_test_concurrent_all
@@ -295,23 +301,23 @@ case "$COMMAND" in
                 esac
                 ;;
             all)
-                source "${MODULES_DIR}/orchestration-test-framework.sh"
+                source "${MODULES_DIR}/orchestration/testing.sh"
                 orch_test_run_all
                 ;;
             unit)
-                source "${MODULES_DIR}/orchestration-test-framework.sh"
+                source "${MODULES_DIR}/orchestration/testing.sh"
                 orch_test_run_category "unit"
                 ;;
             integration)
-                source "${MODULES_DIR}/orchestration-test-framework.sh"
+                source "${MODULES_DIR}/orchestration/testing.sh"
                 orch_test_run_category "integration"
                 ;;
             resilience)
-                source "${MODULES_DIR}/orchestration-test-framework.sh"
+                source "${MODULES_DIR}/orchestration/testing.sh"
                 orch_test_run_category "resilience"
                 ;;
             performance)
-                source "${MODULES_DIR}/orchestration-test-framework.sh"
+                source "${MODULES_DIR}/orchestration/testing.sh"
                 orch_test_run_category "performance"
                 ;;
             comprehensive|full|suite)
@@ -446,16 +452,9 @@ case "$COMMAND" in
                 fi
                 ;;
             session-resilience|session|token)
-                # Run session token resilience fix deployment
-                log_info "Deploying Session Token Resilience Fix..."
-
-                if [ -n "$INSTANCE" ]; then
-                    # Deploy to specific instance
-                    bash "${DIVE_ROOT}/scripts/dive-modules/deploy-session-resilience-fix.sh" "$(echo "$INSTANCE" | tr '[:lower:]' '[:upper:]')"
-                else
-                    # Deploy to all instances
-                    bash "${DIVE_ROOT}/scripts/dive-modules/deploy-session-resilience-fix.sh" --all
-                fi
+                # REMOVED: deploy-session-resilience-fix.sh was a one-time hotfix (deleted Phase 5)
+                log_error "Session resilience fix has been applied and the deployment script removed."
+                log_info "If you need to re-apply, check git history for deploy-session-resilience-fix.sh"
                 ;;
             diagnose-session|session-diagnose)
                 # Run session diagnostics
@@ -495,21 +494,21 @@ case "$COMMAND" in
         esac
         ;;
 
-    # Redis commands (redis.sh)
+    # Redis commands (hub/redis.sh)
     redis)
-        source "${MODULES_DIR}/redis.sh"
+        source "${MODULES_DIR}/hub/redis.sh"
         module_redis "$@"
         ;;
 
-    # KAS commands (kas.sh)
+    # KAS commands (hub/kas.sh)
     kas)
-        source "${MODULES_DIR}/kas.sh"
+        source "${MODULES_DIR}/hub/kas.sh"
         module_kas "$@"
         ;;
 
     # Help
     help|--help|-h)
-        source "${MODULES_DIR}/help.sh"
+        source "${MODULES_DIR}/utilities/help.sh"
         cmd_help
         ;;
 
