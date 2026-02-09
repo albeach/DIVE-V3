@@ -81,13 +81,20 @@ if [ "$SECRETS_PROVIDER" = "auto" ] || [ -z "$SECRETS_PROVIDER" ]; then
 fi
 
 # Update provider-specific flags
-if [ "$SECRETS_PROVIDER" = "aws" ]; then
-    USE_AWS_SECRETS="true"
-    USE_GCP_SECRETS="false"
-else
-    USE_GCP_SECRETS="true"
-    USE_AWS_SECRETS="false"
-fi
+case "$SECRETS_PROVIDER" in
+    vault)
+        USE_AWS_SECRETS="false"
+        USE_GCP_SECRETS="false"
+        ;;
+    aws)
+        USE_AWS_SECRETS="true"
+        USE_GCP_SECRETS="false"
+        ;;
+    gcp|*)
+        USE_GCP_SECRETS="true"
+        USE_AWS_SECRETS="false"
+        ;;
+esac
 
 # =============================================================================
 # AWS SECRETS MANAGER FUNCTIONS
@@ -557,11 +564,11 @@ secret_exists() {
 # Check if authenticated (routes to correct provider)
 ##
 is_authenticated() {
-    if [ "$SECRETS_PROVIDER" = "aws" ]; then
-        aws_is_authenticated
-    else
-        gcp_is_authenticated
-    fi
+    case "$SECRETS_PROVIDER" in
+        vault) vault_is_authenticated ;;
+        aws)   aws_is_authenticated ;;
+        gcp|*) gcp_is_authenticated ;;
+    esac
 }
 
 # =============================================================================
@@ -576,11 +583,7 @@ is_authenticated() {
 ##
 get_keycloak_admin_password() {
     local instance_code="$1"
-    if [ "$SECRETS_PROVIDER" = "aws" ]; then
-        aws_get_secret "keycloak-admin-password" "$instance_code"
-    else
-        gcp_get_secret "keycloak" "$instance_code"
-    fi
+    get_secret "keycloak" "$instance_code"
 }
 
 ##
@@ -591,11 +594,7 @@ get_keycloak_admin_password() {
 ##
 get_postgres_password() {
     local instance_code="$1"
-    if [ "$SECRETS_PROVIDER" = "aws" ]; then
-        aws_get_secret "postgres-password" "$instance_code"
-    else
-        gcp_get_secret "postgres" "$instance_code"
-    fi
+    get_secret "postgres" "$instance_code"
 }
 
 ##
@@ -606,11 +605,7 @@ get_postgres_password() {
 ##
 get_mongodb_password() {
     local instance_code="$1"
-    if [ "$SECRETS_PROVIDER" = "aws" ]; then
-        aws_get_secret "mongo-password" "$instance_code"
-    else
-        gcp_get_secret "mongodb" "$instance_code"
-    fi
+    get_secret "mongodb" "$instance_code"
 }
 
 ##
@@ -621,22 +616,14 @@ get_mongodb_password() {
 ##
 get_auth_secret() {
     local instance_code="$1"
-    if [ "$SECRETS_PROVIDER" = "aws" ]; then
-        aws_get_secret "auth-secret" "$instance_code"
-    else
-        gcp_get_secret "auth-secret" "$instance_code"
-    fi
+    get_secret "auth-secret" "$instance_code"
 }
 
 ##
 # Get Keycloak client secret
 ##
 get_keycloak_client_secret() {
-    if [ "$SECRETS_PROVIDER" = "aws" ]; then
-        aws_get_secret "keycloak-client-secret"
-    else
-        gcp_get_secret "keycloak-client-secret"
-    fi
+    get_secret "keycloak-client-secret"
 }
 
 ##
@@ -739,12 +726,12 @@ secrets_ensure() {
 
     # Define secret names based on provider
     local secrets
-    if [ "$SECRETS_PROVIDER" = "aws" ]; then
-        secrets=("keycloak-admin-password" "postgres-password" "mongo-password" "auth-secret")
-    else
-        secrets=("keycloak" "postgres" "mongodb" "auth-secret")
-    fi
-    
+    case "$SECRETS_PROVIDER" in
+        aws)   secrets=("keycloak-admin-password" "postgres-password" "mongo-password" "auth-secret") ;;
+        vault) secrets=("keycloak" "postgres" "mongodb" "auth-secret") ;;
+        gcp|*) secrets=("keycloak" "postgres" "mongodb" "auth-secret") ;;
+    esac
+
     local created=0
 
     for secret in "${secrets[@]}"; do
@@ -788,11 +775,11 @@ secrets_rotate() {
 
     local secrets
     if [ "$secret_type" = "all" ]; then
-        if [ "$SECRETS_PROVIDER" = "aws" ]; then
-            secrets=("keycloak-admin-password" "postgres-password" "mongo-password" "auth-secret")
-        else
-            secrets=("keycloak" "postgres" "mongodb" "auth-secret")
-        fi
+        case "$SECRETS_PROVIDER" in
+            aws)   secrets=("keycloak-admin-password" "postgres-password" "mongo-password" "auth-secret") ;;
+            vault) secrets=("keycloak" "postgres" "mongodb" "auth-secret") ;;
+            gcp|*) secrets=("keycloak" "postgres" "mongodb" "auth-secret") ;;
+        esac
     else
         secrets=("$secret_type")
     fi
@@ -824,12 +811,12 @@ secrets_verify() {
     log_info "Verifying secrets for $instance_code (provider: $SECRETS_PROVIDER)..."
 
     local secrets
-    if [ "$SECRETS_PROVIDER" = "aws" ]; then
-        secrets=("keycloak-admin-password" "postgres-password" "mongo-password" "auth-secret")
-    else
-        secrets=("keycloak" "postgres" "mongodb" "auth-secret")
-    fi
-    
+    case "$SECRETS_PROVIDER" in
+        aws)   secrets=("keycloak-admin-password" "postgres-password" "mongo-password" "auth-secret") ;;
+        vault) secrets=("keycloak" "postgres" "mongodb" "auth-secret") ;;
+        gcp|*) secrets=("keycloak" "postgres" "mongodb" "auth-secret") ;;
+    esac
+
     local accessible=0
     local total=${#secrets[@]}
 
@@ -858,19 +845,35 @@ secrets_list() {
         return 1
     fi
 
-    if [ "$SECRETS_PROVIDER" = "aws" ]; then
-        echo "=== DIVE Secrets in AWS (region: $AWS_REGION) ==="
-        echo ""
-        aws secretsmanager list-secrets \
-            --region "$AWS_REGION" \
-            --query "SecretList[?starts_with(Name, '${SECRET_PREFIX}')].{Name:Name,LastChanged:LastChangedDate}" \
-            --output table
-    else
-        echo "=== DIVE Secrets in GCP (project: $GCP_PROJECT_ID) ==="
-        echo ""
-        gcloud secrets list --project="$GCP_PROJECT_ID" --filter="name:${SECRET_PREFIX}" \
-            --format="table(name,createTime,replication.automatic.customerManagedEncryption)"
-    fi
+    case "$SECRETS_PROVIDER" in
+        vault)
+            echo "=== DIVE Secrets in Vault ($VAULT_ADDR) ==="
+            echo ""
+            local mounts=("dive-v3/core" "dive-v3/auth" "dive-v3/federation" "dive-v3/opal")
+            for mount in "${mounts[@]}"; do
+                echo "--- ${mount}/ ---"
+                local api_path="${VAULT_ADDR}/v1/${mount}/metadata"
+                curl -sf -H "X-Vault-Token: $VAULT_TOKEN" \
+                    "${api_path}?list=true" 2>/dev/null | \
+                    jq -r '.data.keys[]? // empty' 2>/dev/null || echo "  (empty or inaccessible)"
+                echo ""
+            done
+            ;;
+        aws)
+            echo "=== DIVE Secrets in AWS (region: $AWS_REGION) ==="
+            echo ""
+            aws secretsmanager list-secrets \
+                --region "$AWS_REGION" \
+                --query "SecretList[?starts_with(Name, '${SECRET_PREFIX}')].{Name:Name,LastChanged:LastChangedDate}" \
+                --output table
+            ;;
+        gcp|*)
+            echo "=== DIVE Secrets in GCP (project: $GCP_PROJECT_ID) ==="
+            echo ""
+            gcloud secrets list --project="$GCP_PROJECT_ID" --filter="name:${SECRET_PREFIX}" \
+                --format="table(name,createTime,replication.automatic.customerManagedEncryption)"
+            ;;
+    esac
 }
 
 # =============================================================================
@@ -1029,14 +1032,14 @@ module_secrets() {
             echo "  load <CODE>           Load secrets into environment"
             echo "  export <CODE>         Export secrets as shell commands"
             echo "  sync <CODE>           Sync container secrets to .env file"
-            echo "  provider [gcp|aws]    Get/set secrets provider"
+            echo "  provider [vault|gcp|aws]  Get/set secrets provider"
             echo "  get <name> [CODE]     Get specific secret"
             echo "  set <name> <value> [CODE]  Set specific secret"
             echo ""
             echo "Current provider: $SECRETS_PROVIDER"
             echo ""
             echo "Environment Variables:"
-            echo "  SECRETS_PROVIDER      Provider to use (gcp, aws, auto)"
+            echo "  SECRETS_PROVIDER      Provider to use (vault, gcp, aws, auto)"
             echo "  GCP_PROJECT_ID        GCP project ID (default: dive25)"
             echo "  AWS_REGION            AWS region (default: us-east-1)"
             ;;
@@ -1047,6 +1050,11 @@ module_secrets() {
 # MODULE EXPORTS
 # =============================================================================
 
+export -f vault_is_authenticated
+export -f vault_approle_login
+export -f vault_get_secret
+export -f vault_set_secret
+export -f vault_secret_exists
 export -f aws_is_authenticated
 export -f aws_get_secret
 export -f aws_set_secret
