@@ -671,22 +671,26 @@ secrets_load_for_instance() {
     local instance_code="$1"
     local code_lower=$(lower "$instance_code")
 
-    log_info "Loading secrets for $instance_code (provider: $SECRETS_PROVIDER)..."
+    log_info "Loading secrets for ${code_lower} (provider: $SECRETS_PROVIDER)..."
 
     if ! is_authenticated; then
-        if [ "$SECRETS_PROVIDER" = "aws" ]; then
-            log_error "AWS not authenticated - configure AWS CLI credentials"
-        else
-            log_error "GCP not authenticated - run: gcloud auth application-default login"
-        fi
+        case "$SECRETS_PROVIDER" in
+            vault) log_error "Vault not authenticated - check .vault-token and VAULT_ADDR" ;;
+            aws)   log_error "AWS not authenticated - configure AWS CLI credentials" ;;
+            gcp|*) log_error "GCP not authenticated - run: gcloud auth application-default login" ;;
+        esac
         return 1
     fi
 
-    # Load secrets into environment
+    # Load secrets into environment (export both canonical and legacy names)
     export KEYCLOAK_ADMIN_PASSWORD=$(get_keycloak_admin_password "$instance_code")
     export POSTGRES_PASSWORD=$(get_postgres_password "$instance_code")
-    export MONGODB_PASSWORD=$(get_mongodb_password "$instance_code")
+    export MONGO_PASSWORD=$(get_mongodb_password "$instance_code")
+    export MONGODB_PASSWORD="$MONGO_PASSWORD"
     export AUTH_SECRET=$(get_auth_secret "$instance_code")
+    export KEYCLOAK_CLIENT_SECRET=$(get_keycloak_client_secret)
+    export REDIS_PASSWORD=$(get_secret "redis" "$instance_code" 2>/dev/null || true)
+    export OPAL_AUTH_MASTER_TOKEN=$(get_secret "opal-master-token" 2>/dev/null || true)
 
     # Validate loaded
     if [ -z "$KEYCLOAK_ADMIN_PASSWORD" ]; then
