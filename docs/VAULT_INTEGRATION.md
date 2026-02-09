@@ -60,7 +60,9 @@ echo "SECRETS_PROVIDER=vault" >> .env.hub
 | `./dive vault init` | Initialize Vault (creates unseal keys, backs up to GCP) |
 | `./dive vault unseal` | Unseal Vault after container restart |
 | `./dive vault status` | Check Vault health and seal status |
-| `./dive vault setup` | Configure mount points, policies, and AppRoles |
+| `./dive vault setup` | Configure mount points, policies, AppRoles, and audit logging |
+| `./dive vault snapshot [path]` | Create Raft snapshot backup |
+| `./dive vault restore <path>` | Restore from Raft snapshot |
 
 ## Secret Path Hierarchy
 
@@ -195,11 +197,23 @@ vault write auth/approle/login role_id="$VAULT_ROLE_ID" secret_id="$VAULT_SECRET
 
 ### Create Snapshot
 ```bash
+# Using DIVE CLI (recommended - saves to backups/vault/)
+./dive vault snapshot
+
+# Custom output path
+./dive vault snapshot /tmp/vault-backup.snap
+
+# Using vault CLI directly
 vault operator raft snapshot save /tmp/vault-backup-$(date +%Y%m%d).snap
 ```
 
 ### Restore Snapshot
 ```bash
+# Using DIVE CLI
+./dive vault restore /tmp/vault-backup.snap
+./dive vault unseal  # Re-unseal after restore
+
+# Using vault CLI directly
 vault operator raft snapshot restore /tmp/vault-backup-20260209.snap
 ./dive vault unseal  # Re-unseal after restore
 ```
