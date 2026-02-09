@@ -373,19 +373,42 @@ _validate_configuration_state() {
         # This is acceptable for first deployment or if using remote backend
     fi
 
-    # If Keycloak is running, verify realm exists (best-effort)
+    # ==========================================================================
+    # ROOT CAUSE FIX (2026-02-08): Validate protocol mappers exist, not just realm
+    # ==========================================================================
+    # Previous validation only checked if realm exists, but realm can exist WITHOUT
+    # protocol mappers if Terraform partially applied. This caused phase skipping
+    # even when clearance mappers were missing → no clearance claims in JWT tokens.
+    #
+    # Now we verify critical resources exist:
+    # - Realm exists
+    # - Clearance client scope exists
+    # - Clearance protocol mapper exists
+    # ==========================================================================
     if docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
         local realm="dive-v3-broker-${code_lower}"
         local realm_check=$(docker exec "$kc_container" curl -sf \
             "http://localhost:8080/realms/${realm}" 2>/dev/null | \
             jq -r '.realm // empty' 2>/dev/null || echo "")
 
-        if [ "$realm_check" = "$realm" ]; then
-            log_verbose "Realm verified: $realm"
-        else
+        if [ "$realm_check" != "$realm" ]; then
             log_warn "Realm not accessible: $realm (may need Terraform re-apply)"
             return 1
         fi
+
+        log_verbose "Realm verified: $realm"
+
+        # CRITICAL: Verify clearance client scope exists (created by Terraform)
+        local scope_check=$(docker exec "$kc_container" curl -sf \
+            "http://localhost:8080/admin/realms/${realm}/client-scopes" 2>/dev/null | \
+            jq -r '.[] | select(.name == "clearance") | .name' 2>/dev/null || echo "")
+
+        if [ "$scope_check" != "clearance" ]; then
+            log_warn "Clearance client scope missing - Terraform not applied"
+            return 1
+        fi
+
+        log_verbose "Clearance client scope verified"
     else
         log_verbose "Keycloak not running - skipping realm verification"
         # Don't fail - container may be stopped for maintenance

@@ -123,7 +123,7 @@ resource "keycloak_realm_user_profile" "dive_attributes" {
   # DIVE V3 CUSTOM ATTRIBUTES
   # ============================================
 
-  # Security Clearance
+  # Security Clearance (Country-Specific)
   # ARCHITECTURAL FIX (2026-02-08): Removed NATO-only validator to support country-specific
   # classifications (e.g., "OFFEN" for DEU, "CONFIDENTIEL DÉFENSE" for FRA).
   # Backend clearance-mapper.service.ts normalizes country-specific → standard for policy (SSOT).
@@ -140,6 +140,10 @@ resource "keycloak_realm_user_profile" "dive_attributes" {
     # NO VALIDATOR: Accept any country-specific classification
     # Examples: "OFFEN" (DEU), "NON CLASSIFIÉ" (FRA), "UNCLASSIFIED" (USA/GBR/CAN)
   }
+
+  # NOTE (2026-02-09): clearanceNormalized removed - backend is SSOT for normalization
+  # Backend clearance-mapper.service.ts normalizes country-specific → NATO standard in real-time
+  # for policy evaluation. No need to store normalized value in Keycloak user attributes.
 
   # Country of Affiliation (ISO 3166-1 alpha-3)
   attribute {
