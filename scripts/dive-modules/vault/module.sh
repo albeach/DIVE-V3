@@ -1,0 +1,414 @@
+#!/usr/bin/env bash
+# =============================================================================
+# DIVE V3 - Vault CLI Module
+# =============================================================================
+# Purpose: HashiCorp Vault initialization, unsealing, and management commands
+# Usage:
+#   ./dive vault init      # One-time Vault initialization
+#   ./dive vault unseal    # Unseal Vault after restart
+#   ./dive vault status    # Check Vault health
+#   ./dive vault setup     # Configure mount points and policies
+#
+# Notes:
+#   - Vault must be running (docker compose -f docker-compose.hub.yml up vault)
+#   - Unseal keys are backed up to GCP Secret Manager (bootstrap irony)
+#   - Root token stored in .vault-token (gitignored)
+# =============================================================================
+
+set -euo pipefail
+
+# Source common utilities
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DIVE_ROOT="${DIVE_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
+
+source "${DIVE_ROOT}/scripts/dive-modules/common.sh"
+
+VAULT_ADDR="${VAULT_ADDR:-http://127.0.0.1:8200}"
+VAULT_TOKEN_FILE="${DIVE_ROOT}/.vault-token"
+VAULT_INIT_FILE="${DIVE_ROOT}/.vault-init.txt"
+
+export VAULT_ADDR
+
+##
+# Check if Vault is running
+##
+vault_is_running() {
+    if ! docker ps --format '{{.Names}}' | grep -q "dive-hub-vault"; then
+        log_error "Vault container is not running"
+        log_info "Start Vault with: docker compose -f docker-compose.hub.yml up -d vault"
+        return 1
+    fi
+    return 0
+}
+
+##
+# Initialize Vault (one-time operation)
+# Creates unseal keys and root token, backs up to GCP
+##
+module_vault_init() {
+    log_info "Initializing HashiCorp Vault..."
+
+    if ! vault_is_running; then
+        return 1
+    fi
+
+    # Check if already initialized
+    if vault status >/dev/null 2>&1; then
+        log_warn "Vault is already initialized"
+        if [ -f "$VAULT_INIT_FILE" ]; then
+            log_info "Initialization data exists at: $VAULT_INIT_FILE"
+        fi
+        return 0
+    fi
+
+    # Initialize Vault with 5 key shares, 3 threshold
+    log_info "Initializing Vault with 5 key shares (threshold: 3)..."
+    vault operator init -key-shares=5 -key-threshold=3 > "$VAULT_INIT_FILE"
+
+    if [ ! -f "$VAULT_INIT_FILE" ]; then
+        log_error "Failed to initialize Vault"
+        return 1
+    fi
+
+    chmod 600 "$VAULT_INIT_FILE"
+
+    # Extract unseal keys and root token
+    log_info "Extracting unseal keys and root token..."
+
+    local unseal_keys=($(grep 'Unseal Key' "$VAULT_INIT_FILE" | awk '{print $4}'))
+    VAULT_TOKEN=$(grep 'Initial Root Token' "$VAULT_INIT_FILE" | awk '{print $4}')
+
+    if [ -z "$VAULT_TOKEN" ]; then
+        log_error "Failed to extract root token from initialization output"
+        return 1
+    fi
+
+    # Save root token to file
+    echo "$VAULT_TOKEN" > "$VAULT_TOKEN_FILE"
+    chmod 600 "$VAULT_TOKEN_FILE"
+    export VAULT_TOKEN
+
+    log_success "Vault initialized successfully"
+    log_info "Root token saved to: $VAULT_TOKEN_FILE"
+    log_info "Initialization data saved to: $VAULT_INIT_FILE"
+
+    # Backup unseal keys to GCP Secret Manager (bootstrap irony for disaster recovery)
+    log_info "Backing up unseal keys to GCP Secret Manager..."
+
+    local backup_success=true
+    for i in "${!unseal_keys[@]}"; do
+        local key_num=$((i+1))
+        local secret_name="dive-v3-vault-unseal-key-${key_num}"
+
+        if echo "${unseal_keys[$i]}" | gcloud secrets create "$secret_name" \
+            --data-file=- \
+            --project="${GCP_PROJECT:-dive25}" \
+            --labels="managed-by=dive-cli,created-by=vault-init,purpose=unseal-key" \
+            2>/dev/null; then
+            log_verbose "  ✓ Backed up unseal key $key_num to GCP: $secret_name"
+        elif gcloud secrets versions add "$secret_name" --data-file=- \
+            --project="${GCP_PROJECT:-dive25}" \
+            <<< "${unseal_keys[$i]}" 2>/dev/null; then
+            log_verbose "  ✓ Updated unseal key $key_num in GCP: $secret_name"
+        else
+            log_warn "  ✗ Failed to backup unseal key $key_num to GCP"
+            backup_success=false
+        fi
+    done
+
+    if [ "$backup_success" = true ]; then
+        log_success "Unseal keys backed up to GCP Secret Manager"
+    else
+        log_warn "Some unseal keys failed to backup to GCP (non-fatal)"
+    fi
+
+    log_info ""
+    log_info "==================================================================="
+    log_info "IMPORTANT: Next steps"
+    log_info "==================================================================="
+    log_info "1. Unseal Vault:       ./dive vault unseal"
+    log_info "2. Configure Vault:    ./dive vault setup"
+    log_info "3. Migrate secrets:    ./scripts/migrate-secrets-gcp-to-vault.sh"
+    log_info ""
+    log_warn "Keep $VAULT_INIT_FILE in a secure location!"
+    log_info "==================================================================="
+}
+
+##
+# Unseal Vault using keys from GCP Secret Manager
+##
+module_vault_unseal() {
+    log_info "Unsealing Vault..."
+
+    if ! vault_is_running; then
+        return 1
+    fi
+
+    # Check if already unsealed
+    if vault status 2>/dev/null | grep -q "Sealed.*false"; then
+        log_success "Vault is already unsealed"
+        return 0
+    fi
+
+    log_info "Fetching unseal keys from GCP Secret Manager..."
+
+    local unseal_keys=()
+    for i in {1..3}; do
+        local secret_name="dive-v3-vault-unseal-key-$i"
+        local key
+
+        key=$(gcloud secrets versions access latest \
+            --secret="$secret_name" \
+            --project="${GCP_PROJECT:-dive25}" 2>/dev/null)
+
+        if [ -z "$key" ]; then
+            log_error "Failed to fetch unseal key $i from GCP: $secret_name"
+            log_info "Fallback: Check $VAULT_INIT_FILE for unseal keys"
+            return 1
+        fi
+
+        unseal_keys+=("$key")
+    done
+
+    log_info "Unsealing Vault (3 keys required)..."
+
+    for i in "${!unseal_keys[@]}"; do
+        local key_num=$((i+1))
+        if vault operator unseal "${unseal_keys[$i]}" >/dev/null 2>&1; then
+            log_verbose "  ✓ Unseal key $key_num applied"
+        else
+            log_error "Failed to apply unseal key $key_num"
+            return 1
+        fi
+    done
+
+    # Verify unsealed
+    if vault status 2>/dev/null | grep -q "Sealed.*false"; then
+        log_success "Vault unsealed successfully"
+    else
+        log_error "Vault unsealing failed"
+        return 1
+    fi
+}
+
+##
+# Check Vault status
+##
+module_vault_status() {
+    log_info "Checking Vault status..."
+
+    if ! vault_is_running; then
+        return 1
+    fi
+
+    # Load token if available
+    if [ -f "$VAULT_TOKEN_FILE" ]; then
+        VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
+        export VAULT_TOKEN
+    fi
+
+    echo ""
+    vault status
+    echo ""
+
+    # Check seal status
+    if vault status 2>/dev/null | grep -q "Sealed.*false"; then
+        log_success "Vault is unsealed and ready"
+    else
+        log_warn "Vault is sealed - run: ./dive vault unseal"
+    fi
+
+    # Check if authenticated
+    if [ -n "$VAULT_TOKEN" ]; then
+        if vault token lookup >/dev/null 2>&1; then
+            log_success "Vault token is valid"
+        else
+            log_warn "Vault token is invalid or expired"
+        fi
+    else
+        log_warn "No Vault token found - run: ./dive vault init"
+    fi
+}
+
+##
+# Setup Vault mount points and policies
+##
+module_vault_setup() {
+    log_info "Configuring Vault mount points and policies..."
+
+    if ! vault_is_running; then
+        return 1
+    fi
+
+    # Load token
+    if [ -f "$VAULT_TOKEN_FILE" ]; then
+        VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
+        export VAULT_TOKEN
+    else
+        log_error "Vault token not found - run: ./dive vault init"
+        return 1
+    fi
+
+    # Check if unsealed
+    if ! vault status 2>/dev/null | grep -q "Sealed.*false"; then
+        log_error "Vault is sealed - run: ./dive vault unseal"
+        return 1
+    fi
+
+    log_info "Enabling KV v2 secret engines..."
+
+    # Enable KV v2 engines
+    local mount_points=("dive-v3/core" "dive-v3/auth" "dive-v3/federation" "dive-v3/opal")
+
+    for mount in "${mount_points[@]}"; do
+        if vault secrets list | grep -q "^${mount}/"; then
+            log_verbose "  ✓ Mount point already enabled: $mount"
+        else
+            if vault secrets enable -path="$mount" kv-v2 >/dev/null 2>&1; then
+                log_success "  ✓ Enabled KV v2 mount: $mount"
+            else
+                log_error "Failed to enable mount: $mount"
+                return 1
+            fi
+        fi
+    done
+
+    log_info "Creating Vault policies..."
+
+    # Create hub policy
+    if vault policy write dive-v3-hub "${DIVE_ROOT}/vault_config/policies/hub.hcl" >/dev/null 2>&1; then
+        log_success "  ✓ Created policy: dive-v3-hub"
+    else
+        log_warn "  ✗ Failed to create policy: dive-v3-hub"
+    fi
+
+    # Create spoke policies
+    local spokes=("deu" "gbr" "fra" "can")
+    for spoke in "${spokes[@]}"; do
+        if vault policy write "dive-v3-spoke-${spoke}" \
+            "${DIVE_ROOT}/vault_config/policies/spoke-${spoke}.hcl" >/dev/null 2>&1; then
+            log_success "  ✓ Created policy: dive-v3-spoke-${spoke}"
+        else
+            log_warn "  ✗ Failed to create policy: dive-v3-spoke-${spoke}"
+        fi
+    done
+
+    log_info "Enabling AppRole authentication..."
+
+    # Enable AppRole auth method
+    if vault auth list | grep -q "^approle/"; then
+        log_verbose "  ✓ AppRole auth method already enabled"
+    else
+        if vault auth enable approle >/dev/null 2>&1; then
+            log_success "  ✓ Enabled AppRole authentication"
+        else
+            log_error "Failed to enable AppRole auth"
+            return 1
+        fi
+    fi
+
+    log_info "Creating AppRoles for spokes..."
+
+    # Create AppRoles for each spoke
+    for spoke in "${spokes[@]}"; do
+        if vault write "auth/approle/role/spoke-${spoke}" \
+            token_policies="dive-v3-spoke-${spoke}" \
+            token_ttl=1h \
+            token_max_ttl=24h \
+            secret_id_ttl=0 >/dev/null 2>&1; then
+            log_success "  ✓ Created AppRole: spoke-${spoke}"
+
+            # Generate role_id and secret_id for this spoke
+            local role_id
+            local secret_id
+
+            role_id=$(vault read -field=role_id "auth/approle/role/spoke-${spoke}/role-id" 2>/dev/null)
+            secret_id=$(vault write -field=secret_id -f "auth/approle/role/spoke-${spoke}/secret-id" 2>/dev/null)
+
+            if [ -n "$role_id" ] && [ -n "$secret_id" ]; then
+                # Save to spoke .env file if it exists
+                local env_file="${DIVE_ROOT}/instances/${spoke}/.env"
+                if [ -f "$env_file" ]; then
+                    # Update or append VAULT_ROLE_ID and VAULT_SECRET_ID
+                    if grep -q "^VAULT_ROLE_ID=" "$env_file"; then
+                        sed -i.bak "s|^VAULT_ROLE_ID=.*|VAULT_ROLE_ID=${role_id}|" "$env_file"
+                    else
+                        echo "VAULT_ROLE_ID=${role_id}" >> "$env_file"
+                    fi
+
+                    if grep -q "^VAULT_SECRET_ID=" "$env_file"; then
+                        sed -i.bak "s|^VAULT_SECRET_ID=.*|VAULT_SECRET_ID=${secret_id}|" "$env_file"
+                    else
+                        echo "VAULT_SECRET_ID=${secret_id}" >> "$env_file"
+                    fi
+
+                    log_verbose "    → Credentials saved to: $env_file"
+                else
+                    log_warn "    → Spoke .env file not found: $env_file"
+                    log_info "    → Role ID: $role_id"
+                    log_info "    → Secret ID: [hidden - stored in memory]"
+                fi
+            fi
+        else
+            log_warn "  ✗ Failed to create AppRole: spoke-${spoke}"
+        fi
+    done
+
+    log_success "Vault configuration complete!"
+    log_info ""
+    log_info "==================================================================="
+    log_info "Next steps:"
+    log_info "==================================================================="
+    log_info "1. Migrate secrets:    ./scripts/migrate-secrets-gcp-to-vault.sh"
+    log_info "2. Test hub:           export SECRETS_PROVIDER=vault && ./dive hub deploy"
+    log_info "3. Test spoke:         export SECRETS_PROVIDER=vault && ./dive spoke deploy deu"
+    log_info "==================================================================="
+}
+
+##
+# Main module dispatcher
+##
+module_vault() {
+    local subcommand="${1:-help}"
+
+    case "$subcommand" in
+        init)
+            module_vault_init
+            ;;
+        unseal)
+            module_vault_unseal
+            ;;
+        status)
+            module_vault_status
+            ;;
+        setup)
+            module_vault_setup
+            ;;
+        help|--help|-h)
+            echo "Usage: ./dive vault <command>"
+            echo ""
+            echo "Commands:"
+            echo "  init       Initialize Vault (one-time operation)"
+            echo "  unseal     Unseal Vault after restart"
+            echo "  status     Check Vault health and seal status"
+            echo "  setup      Configure mount points, policies, and AppRoles"
+            echo "  help       Show this help message"
+            echo ""
+            echo "Examples:"
+            echo "  ./dive vault init       # First-time setup"
+            echo "  ./dive vault unseal     # After container restart"
+            echo "  ./dive vault status     # Check current state"
+            echo "  ./dive vault setup      # Configure Vault"
+            ;;
+        *)
+            log_error "Unknown vault command: $subcommand"
+            log_info "Run './dive vault help' for usage"
+            return 1
+            ;;
+    esac
+}
+
+# If script is executed directly (not sourced), run main function
+if [ "${BASH_SOURCE[0]}" -ef "$0" ]; then
+    module_vault "$@"
+fi
