@@ -130,6 +130,7 @@ services:
       VAULT_ADDR: "http://0.0.0.0:8200"
       VAULT_API_ADDR: "http://dive-hub-vault:8200"
       VAULT_CLUSTER_ADDR: "http://dive-hub-vault:8201"
+      SKIP_CHOWN: "true"  # Config is read-only mount, skip chown attempt
     volumes:
       - vault_data:/vault/data
       - vault_logs:/vault/logs
@@ -139,7 +140,12 @@ services:
     networks:
       - hub-internal
       - dive-shared  # CRITICAL: Allows spoke access
-    command: server
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - |
+        chown -R vault:vault /vault/data /vault/logs
+        exec su-exec vault vault server -config=/vault/config
     healthcheck:
       test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
       interval: 10s
