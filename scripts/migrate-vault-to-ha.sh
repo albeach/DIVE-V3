@@ -85,17 +85,13 @@ export VAULT_ADDR
 
 # Check current Vault is running and unsealed
 log_info "Checking current Vault state..."
-if ! vault status >/dev/null 2>&1; then
-    status_exit=$?
-    if [ "$status_exit" -eq 2 ]; then
-        fail "Vault is sealed. Unseal it first with the old keys."
-    else
-        fail "Vault is not running or not reachable at $VAULT_ADDR"
-    fi
-fi
+vault_status_exit=0
+vault status >/dev/null 2>&1 || vault_status_exit=$?
 
-if vault status 2>/dev/null | grep -q "Sealed.*true"; then
-    fail "Vault is sealed. Unseal it before migrating."
+if [ "$vault_status_exit" -eq 1 ]; then
+    fail "Vault is not running or not reachable at $VAULT_ADDR"
+elif [ "$vault_status_exit" -eq 2 ]; then
+    fail "Vault is sealed. Unseal it first with the old keys."
 fi
 
 log_success "Current Vault is running and unsealed"
@@ -168,18 +164,27 @@ log_success "Transit token available in shared volume"
 # =============================================================================
 # Step 4: Copy vault_data volume to vault_data_1
 # =============================================================================
-step "4" "Copying Vault data volume (vault_data → vault_data_1)"
+step "4" "Copying Vault data volume to HA node 1"
 
-# Use a temporary container to copy data between volumes
-log_info "Creating temporary copy container..."
-docker volume create vault_data_1 2>/dev/null || true
+# Docker Compose prefixes volume names with the project name
+VOLUME_PREFIX="${COMPOSE_PROJECT_NAME:-dive-hub}"
+SOURCE_VOLUME="${VOLUME_PREFIX}_vault_data"
+DEST_VOLUME="${VOLUME_PREFIX}_vault_data_1"
+
+# Verify source volume exists
+if ! docker volume inspect "$SOURCE_VOLUME" >/dev/null 2>&1; then
+    fail "Source volume '$SOURCE_VOLUME' does not exist. Check COMPOSE_PROJECT_NAME."
+fi
+
+log_info "Copying ${SOURCE_VOLUME} → ${DEST_VOLUME}..."
+docker volume create "$DEST_VOLUME" 2>/dev/null || true
 
 docker run --rm \
-    -v vault_data:/source:ro \
-    -v vault_data_1:/dest \
-    alpine sh -c "cp -a /source/. /dest/"
+    -v "${SOURCE_VOLUME}:/source:ro" \
+    -v "${DEST_VOLUME}:/dest" \
+    alpine:3.21 sh -c "cp -a /source/. /dest/"
 
-log_success "Volume data copied to vault_data_1"
+log_success "Volume data copied to ${DEST_VOLUME}"
 
 # =============================================================================
 # Step 5: Start vault-1 with Transit seal config (migration mode)
@@ -196,8 +201,8 @@ VAULT_ADDR="http://localhost:8200"
 export VAULT_ADDR
 
 v1_status=$(vault status -format=json 2>/dev/null || true)
-v1_sealed=$(echo "$v1_status" | grep -o '"sealed":[a-z]*' | cut -d: -f2)
-v1_migration=$(echo "$v1_status" | grep -o '"migration":[a-z]*' | cut -d: -f2 || echo "false")
+v1_sealed=$(echo "$v1_status" | grep -o '"sealed": *[a-z]*' | sed 's/.*: *//')
+v1_migration=$(echo "$v1_status" | grep -o '"migration": *[a-z]*' | sed 's/.*: *//' || echo "false")
 
 if [ "$v1_sealed" = "true" ] || [ "$v1_migration" = "true" ]; then
     log_info "Vault-1 is in seal migration mode — applying old Shamir keys..."

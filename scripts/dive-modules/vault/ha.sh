@@ -41,7 +41,7 @@ vault_ha_status() {
         seal_status=$(VAULT_ADDR="$VAULT_SEAL_CLI_ADDR" vault status -format=json 2>/dev/null || true)
         if [ -n "$seal_status" ]; then
             local seal_sealed
-            seal_sealed=$(echo "$seal_status" | grep -o '"sealed":[a-z]*' | cut -d: -f2)
+            seal_sealed=$(echo "$seal_status" | grep -o '"sealed": *[a-z]*' | sed 's/.*: *//')
             if [ "$seal_sealed" = "false" ]; then
                 echo -e "${_HA_GREEN}HEALTHY${_HA_NC} (unsealed, Transit ready)"
             else
@@ -81,9 +81,9 @@ vault_ha_status() {
         fi
 
         local sealed
-        sealed=$(echo "$status_json" | grep -o '"sealed":[a-z]*' | cut -d: -f2)
-        local ha_enabled
-        ha_enabled=$(echo "$status_json" | grep -o '"cluster_name":"[^"]*"' | cut -d'"' -f4)
+        sealed=$(echo "$status_json" | grep -o '"sealed": *[a-z]*' | sed 's/.*: *//')
+        local cluster_name
+        cluster_name=$(echo "$status_json" | grep -o '"cluster_name": *"[^"]*"' | sed 's/.*: *"//;s/"//')
 
         if [ "$sealed" = "true" ]; then
             echo -e "${_HA_RED}SEALED${_HA_NC}"
@@ -98,7 +98,7 @@ vault_ha_status() {
                 vault read -format=json sys/leader 2>/dev/null || true)
             if [ -n "$leader_check" ]; then
                 local is_self
-                is_self=$(echo "$leader_check" | grep -o '"is_self":[a-z]*' | cut -d: -f2)
+                is_self=$(echo "$leader_check" | grep -o '"is_self": *[a-z]*' | sed 's/.*: *//')
                 if [ "$is_self" = "true" ]; then
                     is_leader="leader"
                     leader_addr="$addr"
@@ -112,7 +112,7 @@ vault_ha_status() {
 
         case "$is_leader" in
             leader)
-                echo -e "${_HA_GREEN}LEADER${_HA_NC} (unsealed, cluster: ${ha_enabled:-unknown})"
+                echo -e "${_HA_GREEN}LEADER${_HA_NC} (unsealed, cluster: ${cluster_name:-unknown})"
                 ;;
             follower)
                 echo -e "${_HA_CYAN}FOLLOWER${_HA_NC} (unsealed, standby)"
@@ -133,7 +133,7 @@ vault_ha_status() {
             vault operator raft list-peers -format=json 2>/dev/null || true)
 
         if [ -n "$peers" ]; then
-            echo "$peers" | grep -o '"node_id":"[^"]*"' | while read -r line; do
+            echo "$peers" | grep -o '"node_id": *"[^"]*"' | while read -r line; do
                 local node_id
                 node_id=$(echo "$line" | cut -d'"' -f4)
                 echo "    - $node_id"
@@ -172,13 +172,33 @@ vault_ha_step_down() {
     VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
     export VAULT_TOKEN
 
-    if vault operator step-down 2>/dev/null; then
+    # Find the current leader node
+    local leader_addr=""
+    for addr in "${VAULT_NODE_ADDRS[@]}"; do
+        local is_self
+        is_self=$(VAULT_ADDR="$addr" VAULT_TOKEN="$VAULT_TOKEN" \
+            vault read -format=json sys/leader 2>/dev/null | \
+            grep -o '"is_self": *[a-z]*' | sed 's/.*: *//' || echo "false")
+        if [ "$is_self" = "true" ]; then
+            leader_addr="$addr"
+            break
+        fi
+    done
+
+    if [ -z "$leader_addr" ]; then
+        log_error "Could not identify current leader"
+        return 1
+    fi
+
+    log_info "Leader found at $leader_addr — requesting step-down..."
+
+    if VAULT_ADDR="$leader_addr" vault operator step-down 2>/dev/null; then
         log_success "Leader step-down complete — re-election in progress"
         sleep 3
         log_info "New cluster state:"
         vault_ha_status
     else
-        log_error "Step-down failed (is this node the leader?)"
+        log_error "Step-down failed at $leader_addr"
         return 1
     fi
 }
@@ -240,9 +260,9 @@ vault_ha_seal_status() {
     seal_status=$(VAULT_ADDR="$VAULT_SEAL_CLI_ADDR" vault status -format=json 2>/dev/null || true)
     if [ -n "$seal_status" ]; then
         local sealed
-        sealed=$(echo "$seal_status" | grep -o '"sealed":[a-z]*' | cut -d: -f2)
+        sealed=$(echo "$seal_status" | grep -o '"sealed": *[a-z]*' | sed 's/.*: *//')
         local initialized
-        initialized=$(echo "$seal_status" | grep -o '"initialized":[a-z]*' | cut -d: -f2)
+        initialized=$(echo "$seal_status" | grep -o '"initialized": *[a-z]*' | sed 's/.*: *//')
         echo "Initialized=$initialized, Sealed=$sealed"
     else
         echo -e "${_HA_RED}NOT RESPONDING${_HA_NC}"
