@@ -513,7 +513,7 @@ services:
       NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
       PORT: "4000"
       # Secret management provider (vault or gcp)
-      SECRETS_PROVIDER: ${SECRETS_PROVIDER:-gcp}
+      SECRETS_PROVIDER: ${SECRETS_PROVIDER:-vault}
       VAULT_ADDR: ${VAULT_ADDR:-http://dive-hub-vault:8200}
       VAULT_TOKEN: ${VAULT_TOKEN:-}
       VAULT_ROLE_ID: ${VAULT_ROLE_ID:-}

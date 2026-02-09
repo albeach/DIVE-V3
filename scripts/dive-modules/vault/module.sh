@@ -11,8 +11,9 @@
 #
 # Notes:
 #   - Vault must be running (docker compose -f docker-compose.hub.yml up vault)
-#   - Unseal keys are backed up to GCP Secret Manager (bootstrap irony)
+#   - Unseal keys stored locally in .vault-init.txt (chmod 600)
 #   - Root token stored in .vault-token (gitignored)
+#   - No cloud dependencies required (GCP backup optional)
 # =============================================================================
 
 set -euo pipefail
@@ -43,7 +44,7 @@ vault_is_running() {
 
 ##
 # Initialize Vault (one-time operation)
-# Creates unseal keys and root token, backs up to GCP
+# Creates unseal keys and root token, stored locally
 ##
 module_vault_init() {
     log_info "Initializing HashiCorp Vault..."
@@ -72,10 +73,9 @@ module_vault_init() {
 
     chmod 600 "$VAULT_INIT_FILE"
 
-    # Extract unseal keys and root token
-    log_info "Extracting unseal keys and root token..."
+    # Extract root token
+    log_info "Extracting root token..."
 
-    local unseal_keys=($(grep 'Unseal Key' "$VAULT_INIT_FILE" | awk '{print $4}'))
     VAULT_TOKEN=$(grep 'Initial Root Token' "$VAULT_INIT_FILE" | awk '{print $4}')
 
     if [ -z "$VAULT_TOKEN" ]; then
@@ -90,37 +90,7 @@ module_vault_init() {
 
     log_success "Vault initialized successfully"
     log_info "Root token saved to: $VAULT_TOKEN_FILE"
-    log_info "Initialization data saved to: $VAULT_INIT_FILE"
-
-    # Backup unseal keys to GCP Secret Manager (bootstrap irony for disaster recovery)
-    log_info "Backing up unseal keys to GCP Secret Manager..."
-
-    local backup_success=true
-    for i in "${!unseal_keys[@]}"; do
-        local key_num=$((i+1))
-        local secret_name="dive-v3-vault-unseal-key-${key_num}"
-
-        if echo "${unseal_keys[$i]}" | gcloud secrets create "$secret_name" \
-            --data-file=- \
-            --project="${GCP_PROJECT:-dive25}" \
-            --labels="managed-by=dive-cli,created-by=vault-init,purpose=unseal-key" \
-            2>/dev/null; then
-            log_verbose "  ✓ Backed up unseal key $key_num to GCP: $secret_name"
-        elif gcloud secrets versions add "$secret_name" --data-file=- \
-            --project="${GCP_PROJECT:-dive25}" \
-            <<< "${unseal_keys[$i]}" 2>/dev/null; then
-            log_verbose "  ✓ Updated unseal key $key_num in GCP: $secret_name"
-        else
-            log_warn "  ✗ Failed to backup unseal key $key_num to GCP"
-            backup_success=false
-        fi
-    done
-
-    if [ "$backup_success" = true ]; then
-        log_success "Unseal keys backed up to GCP Secret Manager"
-    else
-        log_warn "Some unseal keys failed to backup to GCP (non-fatal)"
-    fi
+    log_info "Unseal keys saved to: $VAULT_INIT_FILE"
 
     log_info ""
     log_info "==================================================================="
@@ -128,14 +98,14 @@ module_vault_init() {
     log_info "==================================================================="
     log_info "1. Unseal Vault:       ./dive vault unseal"
     log_info "2. Configure Vault:    ./dive vault setup"
-    log_info "3. Migrate secrets:    ./scripts/migrate-secrets-gcp-to-vault.sh"
     log_info ""
     log_warn "Keep $VAULT_INIT_FILE in a secure location!"
+    log_warn "Anyone with these keys can unseal your Vault."
     log_info "==================================================================="
 }
 
 ##
-# Unseal Vault using keys from GCP Secret Manager
+# Unseal Vault using keys from local init file
 ##
 module_vault_unseal() {
     log_info "Unsealing Vault..."
@@ -150,29 +120,25 @@ module_vault_unseal() {
         return 0
     fi
 
-    log_info "Fetching unseal keys from GCP Secret Manager..."
+    # Read unseal keys from local init file
+    if [ ! -f "$VAULT_INIT_FILE" ]; then
+        log_error "Vault init file not found: $VAULT_INIT_FILE"
+        log_info "Run './dive vault init' first, or provide the init file"
+        return 1
+    fi
 
-    local unseal_keys=()
-    for i in {1..3}; do
-        local secret_name="dive-v3-vault-unseal-key-$i"
-        local key
+    log_info "Reading unseal keys from $VAULT_INIT_FILE..."
 
-        key=$(gcloud secrets versions access latest \
-            --secret="$secret_name" \
-            --project="${GCP_PROJECT:-dive25}" 2>/dev/null)
+    local unseal_keys=($(grep 'Unseal Key' "$VAULT_INIT_FILE" | awk '{print $4}'))
 
-        if [ -z "$key" ]; then
-            log_error "Failed to fetch unseal key $i from GCP: $secret_name"
-            log_info "Fallback: Check $VAULT_INIT_FILE for unseal keys"
-            return 1
-        fi
+    if [ ${#unseal_keys[@]} -lt 3 ]; then
+        log_error "Need at least 3 unseal keys, found ${#unseal_keys[@]}"
+        return 1
+    fi
 
-        unseal_keys+=("$key")
-    done
+    log_info "Unsealing Vault (applying 3 of ${#unseal_keys[@]} keys)..."
 
-    log_info "Unsealing Vault (3 keys required)..."
-
-    for i in "${!unseal_keys[@]}"; do
+    for i in 0 1 2; do
         local key_num=$((i+1))
         if vault operator unseal "${unseal_keys[$i]}" >/dev/null 2>&1; then
             log_verbose "  ✓ Unseal key $key_num applied"
