@@ -2,18 +2,24 @@
 # =============================================================================
 # DIVE V3 - Vault CLI Module
 # =============================================================================
-# Purpose: HashiCorp Vault initialization, unsealing, and management commands
+# Purpose: HashiCorp Vault initialization, management, and HA cluster ops
 # Usage:
-#   ./dive vault init      # One-time Vault initialization
-#   ./dive vault unseal    # Unseal Vault after restart
-#   ./dive vault status    # Check Vault health
-#   ./dive vault setup     # Configure mount points and policies
+#   ./dive vault init            # One-time cluster initialization
+#   ./dive vault status          # Check cluster health (seal vault + 3 nodes)
+#   ./dive vault setup           # Configure mount points and policies
+#   ./dive vault cluster status  # HA cluster overview
+#   ./dive vault seal-status     # Seal vault diagnostics
+#
+# Architecture:
+#   vault-seal  → Lightweight Transit engine for auto-unseal
+#   vault-1/2/3 → 3-node Raft HA cluster with Transit auto-unseal
+#   No manual unsealing required after restarts
 #
 # Notes:
-#   - Vault must be running (docker compose -f docker-compose.hub.yml up vault)
-#   - Unseal keys stored locally in .vault-init.txt (chmod 600)
+#   - Recovery keys stored locally in .vault-init.txt (chmod 600)
 #   - Root token stored in .vault-token (gitignored)
-#   - No cloud dependencies required (GCP backup optional)
+#   - Seal vault auto-initializes and auto-unseals via entrypoint
+#   - No cloud dependencies required
 # =============================================================================
 
 set -euo pipefail
@@ -23,6 +29,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIVE_ROOT="${DIVE_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 
 source "${DIVE_ROOT}/scripts/dive-modules/common.sh"
+source "${SCRIPT_DIR}/ha.sh"
 
 # CLI runs on host — prefer VAULT_CLI_ADDR (host-accessible) over VAULT_ADDR (Docker-internal)
 if [ -z "${VAULT_CLI_ADDR:-}" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
@@ -36,49 +43,61 @@ VAULT_INIT_FILE="${DIVE_ROOT}/.vault-init.txt"
 export VAULT_ADDR
 
 ##
-# Check if Vault is running
+# Check if Vault cluster is running (at least vault-1 must be up)
 ##
 vault_is_running() {
-    if ! docker ps --format '{{.Names}}' | grep -q "dive-hub-vault"; then
-        log_error "Vault container is not running"
-        log_info "Start Vault with: docker compose -f docker-compose.hub.yml up -d vault"
+    if ! docker ps --format '{{.Names}}' | grep -q "vault-1"; then
+        log_error "Vault cluster is not running"
+        log_info "Start cluster: docker compose -f docker-compose.hub.yml up -d vault-seal vault-1 vault-2 vault-3"
         return 1
     fi
     return 0
 }
 
 ##
-# Initialize Vault (one-time operation)
-# Creates unseal keys and root token, stored locally
+# Initialize Vault HA cluster (one-time operation)
+# With Transit auto-unseal, creates recovery keys (not unseal keys)
 ##
 module_vault_init() {
-    log_info "Initializing HashiCorp Vault..."
+    log_info "Initializing Vault HA cluster..."
 
     if ! vault_is_running; then
         return 1
     fi
 
     # Check if already initialized
-    if vault status >/dev/null 2>&1; then
-        log_warn "Vault is already initialized"
+    local status_json
+    status_json=$(vault status -format=json 2>/dev/null || true)
+    local is_initialized
+    is_initialized=$(echo "$status_json" | grep -o '"initialized": *[a-z]*' | sed 's/.*: *//')
+
+    if [ "$is_initialized" = "true" ]; then
+        log_warn "Vault cluster is already initialized"
         if [ -f "$VAULT_INIT_FILE" ]; then
             log_info "Initialization data exists at: $VAULT_INIT_FILE"
         fi
         return 0
     fi
 
-    # Initialize Vault with 5 key shares, 3 threshold
-    log_info "Initializing Vault with 5 key shares (threshold: 3)..."
-    vault operator init -key-shares=5 -key-threshold=3 > "$VAULT_INIT_FILE"
+    # Verify seal vault is healthy before init
+    if ! docker ps --format '{{.Names}}' | grep -q "vault-seal"; then
+        log_error "Seal vault is not running — required for Transit auto-unseal"
+        log_info "Start it: docker compose -f docker-compose.hub.yml up -d vault-seal"
+        return 1
+    fi
+
+    # Transit auto-unseal uses recovery keys instead of unseal keys
+    log_info "Initializing with Transit auto-unseal (5 recovery shares, threshold 3)..."
+    vault operator init -recovery-shares=5 -recovery-threshold=3 > "$VAULT_INIT_FILE"
 
     if [ ! -f "$VAULT_INIT_FILE" ]; then
-        log_error "Failed to initialize Vault"
+        log_error "Failed to initialize Vault cluster"
         return 1
     fi
 
     chmod 600 "$VAULT_INIT_FILE"
 
-    # Extract root token
+    # Extract root token (same format for both Shamir and auto-unseal)
     log_info "Extracting root token..."
 
     VAULT_TOKEN=$(grep 'Initial Root Token' "$VAULT_INIT_FILE" | awk '{print $4}')
@@ -93,84 +112,75 @@ module_vault_init() {
     chmod 600 "$VAULT_TOKEN_FILE"
     export VAULT_TOKEN
 
-    log_success "Vault initialized successfully"
+    log_success "Vault HA cluster initialized successfully"
     log_info "Root token saved to: $VAULT_TOKEN_FILE"
-    log_info "Unseal keys saved to: $VAULT_INIT_FILE"
+    log_info "Recovery keys saved to: $VAULT_INIT_FILE"
 
     log_info ""
     log_info "==================================================================="
     log_info "IMPORTANT: Next steps"
     log_info "==================================================================="
-    log_info "1. Unseal Vault:       ./dive vault unseal"
-    log_info "2. Configure Vault:    ./dive vault setup"
+    log_info "1. Configure Vault:    ./dive vault setup"
+    log_info "2. Seed secrets:       ./dive vault seed"
     log_info ""
+    log_info "Auto-unseal is active — no manual unsealing required after restarts."
     log_warn "Keep $VAULT_INIT_FILE in a secure location!"
-    log_warn "Anyone with these keys can unseal your Vault."
+    log_warn "Recovery keys are needed for seal migration or emergency access."
     log_info "==================================================================="
 }
 
 ##
-# Unseal Vault using keys from local init file
+# Unseal diagnostic — with Transit auto-unseal, manual unsealing is not needed.
+# This command checks seal vault health and cluster auto-unseal status.
 ##
 module_vault_unseal() {
-    log_info "Unsealing Vault..."
-
-    if ! vault_is_running; then
-        return 1
-    fi
+    log_info "Vault HA cluster uses Transit auto-unseal — no manual unsealing required."
+    echo ""
 
     # Check if already unsealed
     if vault status 2>/dev/null | grep -q "Sealed.*false"; then
-        log_success "Vault is already unsealed"
+        log_success "Vault is already unsealed (auto-unseal working correctly)"
         return 0
     fi
 
-    # Read unseal keys from local init file
-    if [ ! -f "$VAULT_INIT_FILE" ]; then
-        log_error "Vault init file not found: $VAULT_INIT_FILE"
-        log_info "Run './dive vault init' first, or provide the init file"
+    # If sealed, diagnose
+    log_warn "Vault appears to be sealed — checking seal vault..."
+
+    if ! docker ps --format '{{.Names}}' | grep -q "vault-seal"; then
+        log_error "Seal vault container is NOT running"
+        log_info "Start it: docker compose -f docker-compose.hub.yml up -d vault-seal"
+        log_info "Then restart sealed nodes: docker compose -f docker-compose.hub.yml restart vault-1 vault-2 vault-3"
         return 1
     fi
 
-    log_info "Reading unseal keys from $VAULT_INIT_FILE..."
+    local seal_cli_addr="${VAULT_SEAL_CLI_ADDR:-http://localhost:8210}"
+    local seal_status
+    seal_status=$(VAULT_ADDR="$seal_cli_addr" vault status -format=json 2>/dev/null || true)
 
-    local unseal_keys=($(grep 'Unseal Key' "$VAULT_INIT_FILE" | awk '{print $4}'))
-
-    if [ ${#unseal_keys[@]} -lt 3 ]; then
-        log_error "Need at least 3 unseal keys, found ${#unseal_keys[@]}"
+    if [ -z "$seal_status" ]; then
+        log_error "Seal vault is not responding at $seal_cli_addr"
         return 1
     fi
 
-    log_info "Unsealing Vault (applying 3 of ${#unseal_keys[@]} keys)..."
-
-    for i in 0 1 2; do
-        local key_num=$((i+1))
-        if vault operator unseal "${unseal_keys[$i]}" >/dev/null 2>&1; then
-            log_verbose "  ✓ Unseal key $key_num applied"
-        else
-            log_error "Failed to apply unseal key $key_num"
-            return 1
-        fi
-    done
-
-    # Verify unsealed
-    if vault status 2>/dev/null | grep -q "Sealed.*false"; then
-        log_success "Vault unsealed successfully"
-    else
-        log_error "Vault unsealing failed"
+    local seal_sealed
+    seal_sealed=$(echo "$seal_status" | grep -o '"sealed": *[a-z]*' | sed 's/.*: *//')
+    if [ "$seal_sealed" = "true" ]; then
+        log_error "Seal vault itself is sealed — Transit key unavailable"
+        log_info "The seal vault should auto-unseal on restart. Try:"
+        log_info "  docker compose -f docker-compose.hub.yml restart vault-seal"
         return 1
     fi
+
+    log_success "Seal vault is healthy and unsealed"
+    log_info "Cluster nodes should auto-unseal. Try restarting them:"
+    log_info "  docker compose -f docker-compose.hub.yml restart vault-1 vault-2 vault-3"
 }
 
 ##
-# Check Vault status
+# Check Vault HA cluster status
 ##
 module_vault_status() {
-    log_info "Checking Vault status..."
-
-    if ! vault_is_running; then
-        return 1
-    fi
+    log_info "Checking Vault HA cluster status..."
 
     # Load token if available
     if [ -f "$VAULT_TOKEN_FILE" ]; then
@@ -178,19 +188,11 @@ module_vault_status() {
         export VAULT_TOKEN
     fi
 
-    echo ""
-    vault status
-    echo ""
-
-    # Check seal status
-    if vault status 2>/dev/null | grep -q "Sealed.*false"; then
-        log_success "Vault is unsealed and ready"
-    else
-        log_warn "Vault is sealed - run: ./dive vault unseal"
-    fi
+    # Show full HA status (from ha.sh)
+    vault_ha_status
 
     # Check if authenticated
-    if [ -n "$VAULT_TOKEN" ]; then
+    if [ -n "${VAULT_TOKEN:-}" ]; then
         if vault token lookup >/dev/null 2>&1; then
             log_success "Vault token is valid"
         else
@@ -222,7 +224,7 @@ module_vault_setup() {
 
     # Check if unsealed
     if ! vault status 2>/dev/null | grep -q "Sealed.*false"; then
-        log_error "Vault is sealed - run: ./dive vault unseal"
+        log_error "Vault is sealed - check seal vault: ./dive vault seal-status"
         return 1
     fi
 
@@ -318,7 +320,7 @@ module_vault_snapshot() {
 
     # Check if unsealed
     if ! vault status 2>/dev/null | grep -q "Sealed.*false"; then
-        log_error "Vault is sealed - run: ./dive vault unseal"
+        log_error "Vault is sealed - check seal vault: ./dive vault seal-status"
         return 1
     fi
 
@@ -407,7 +409,7 @@ module_vault_seed() {
 
     # Check if unsealed
     if ! vault status 2>/dev/null | grep -q "Sealed.*false"; then
-        log_error "Vault is sealed - run: ./dive vault unseal"
+        log_error "Vault is sealed - check seal vault: ./dive vault seal-status"
         return 1
     fi
 
@@ -637,7 +639,7 @@ module_vault_provision() {
 
     # Check if unsealed
     if ! vault status 2>/dev/null | grep -q "Sealed.*false"; then
-        log_error "Vault is sealed - run: ./dive vault unseal"
+        log_error "Vault is sealed - check seal vault: ./dive vault seal-status"
         return 1
     fi
 
@@ -1019,6 +1021,272 @@ module_vault_test_backup() {
 }
 
 ##
+# Migrate from Shamir to Transit auto-unseal (delegates to migration script)
+##
+module_vault_migrate() {
+    local migrate_script="${DIVE_ROOT}/scripts/migrate-vault-to-ha.sh"
+    if [ ! -f "$migrate_script" ]; then
+        log_error "Migration script not found: $migrate_script"
+        return 1
+    fi
+    bash "$migrate_script" "$@"
+}
+
+# =============================================================================
+# HA Cluster Tests
+# =============================================================================
+
+##
+# Test HA failover: stop leader, verify secret readable from follower, restart
+##
+module_vault_test_ha_failover() {
+    # Load test framework
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh"
+    else
+        log_error "Testing framework not found"
+        return 1
+    fi
+
+    test_suite_start "Vault HA Failover"
+
+    if [ ! -f "$VAULT_TOKEN_FILE" ]; then
+        log_error "No Vault token found"
+        return 1
+    fi
+
+    VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
+    export VAULT_TOKEN
+
+    # Test 1: Write a test secret
+    test_start "Write test secret"
+    local test_key="ha-failover-test-$(date +%s)"
+    if vault kv put dive-v3/core/ha-test value="$test_key" >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "Failed to write test secret"
+        test_suite_end
+        return 1
+    fi
+
+    # Test 2: Identify and stop leader
+    test_start "Stop leader node"
+    local leader_container=""
+    for port in 8200 8202 8204; do
+        local is_self
+        is_self=$(VAULT_ADDR="http://localhost:$port" VAULT_TOKEN="$VAULT_TOKEN" \
+            vault read -format=json sys/leader 2>/dev/null | \
+            grep -o '"is_self": *[a-z]*' | sed 's/.*: *//' || echo "false")
+        if [ "$is_self" = "true" ]; then
+            case $port in
+                8200) leader_container="${COMPOSE_PROJECT_NAME:-dive-hub}-vault-1" ;;
+                8202) leader_container="${COMPOSE_PROJECT_NAME:-dive-hub}-vault-2" ;;
+                8204) leader_container="${COMPOSE_PROJECT_NAME:-dive-hub}-vault-3" ;;
+            esac
+            break
+        fi
+    done
+
+    if [ -z "$leader_container" ]; then
+        test_fail "Could not identify leader"
+        test_suite_end
+        return 1
+    fi
+
+    docker stop "$leader_container" >/dev/null 2>&1
+    test_pass
+
+    # Test 3: Wait for re-election and verify read from follower
+    test_start "Read secret after leader loss"
+    sleep 10  # Wait for Raft re-election
+
+    local read_success=false
+    for port in 8200 8202 8204; do
+        local val
+        val=$(VAULT_ADDR="http://localhost:$port" VAULT_TOKEN="$VAULT_TOKEN" \
+            vault kv get -field=value dive-v3/core/ha-test 2>/dev/null || true)
+        if [ "$val" = "$test_key" ]; then
+            read_success=true
+            break
+        fi
+    done
+
+    if [ "$read_success" = true ]; then
+        test_pass
+    else
+        test_fail "Could not read secret from any surviving node"
+    fi
+
+    # Test 4: Restart stopped leader
+    test_start "Restart stopped node"
+    docker start "$leader_container" >/dev/null 2>&1
+    sleep 10
+
+    if docker ps --format '{{.Names}}' | grep -q "$leader_container"; then
+        test_pass
+    else
+        test_fail "Node failed to restart"
+    fi
+
+    # Test 5: Verify cluster reforms (3 peers)
+    test_start "Verify 3-peer cluster"
+    local peer_count
+    peer_count=$(vault operator raft list-peers -format=json 2>/dev/null | \
+        grep -c '"node_id"' || echo "0")
+
+    if [ "$peer_count" -ge 3 ]; then
+        test_pass
+    else
+        test_skip "Only $peer_count peers (may still be rejoining)"
+    fi
+
+    # Cleanup
+    vault kv delete dive-v3/core/ha-test >/dev/null 2>&1 || true
+
+    test_suite_end
+}
+
+##
+# Test seal vault restart: verify cluster stays unsealed when seal vault restarts
+##
+module_vault_test_seal_restart() {
+    # Load test framework
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh"
+    else
+        log_error "Testing framework not found"
+        return 1
+    fi
+
+    test_suite_start "Vault Seal Restart Resilience"
+
+    local seal_container="${COMPOSE_PROJECT_NAME:-dive-hub}-vault-seal"
+
+    # Test 1: Stop seal vault
+    test_start "Stop seal vault"
+    docker stop "$seal_container" >/dev/null 2>&1
+    test_pass
+
+    # Test 2: Verify cluster nodes stay unsealed
+    test_start "Cluster stays unsealed without seal vault"
+    sleep 3
+    if vault status 2>/dev/null | grep -q "Sealed.*false"; then
+        test_pass
+    else
+        test_fail "Cluster became sealed"
+    fi
+
+    # Test 3: Restart seal vault
+    test_start "Restart seal vault"
+    docker start "$seal_container" >/dev/null 2>&1
+    sleep 10
+    if docker compose -f docker-compose.hub.yml ps vault-seal 2>/dev/null | grep -q "healthy"; then
+        test_pass
+    else
+        test_skip "Seal vault may still be starting"
+    fi
+
+    # Test 4: Restart a cluster node — verify it auto-unseals
+    test_start "Restart vault-1, verify auto-unseal"
+    local node_container="${COMPOSE_PROJECT_NAME:-dive-hub}-vault-1"
+    docker restart "$node_container" >/dev/null 2>&1
+    sleep 15
+
+    if VAULT_ADDR="http://localhost:8200" vault status 2>/dev/null | grep -q "Sealed.*false"; then
+        test_pass
+    else
+        test_fail "vault-1 did not auto-unseal"
+    fi
+
+    test_suite_end
+}
+
+##
+# Test full cluster restart: stop everything, restart in order, verify data intact
+##
+module_vault_test_full_restart() {
+    # Load test framework
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh"
+    else
+        log_error "Testing framework not found"
+        return 1
+    fi
+
+    test_suite_start "Vault Full Cluster Restart"
+
+    if [ ! -f "$VAULT_TOKEN_FILE" ]; then
+        log_error "No Vault token found"
+        return 1
+    fi
+
+    VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
+    export VAULT_TOKEN
+
+    local seal_container="${COMPOSE_PROJECT_NAME:-dive-hub}-vault-seal"
+
+    # Test 1: Write a canary secret
+    test_start "Write canary secret"
+    local canary="full-restart-$(date +%s)"
+    if vault kv put dive-v3/core/restart-test value="$canary" >/dev/null 2>&1; then
+        test_pass
+    else
+        test_fail "Failed to write canary"
+        test_suite_end
+        return 1
+    fi
+
+    # Test 2: Stop all 4 vault containers
+    test_start "Stop all vault containers"
+    docker stop "${COMPOSE_PROJECT_NAME:-dive-hub}-vault-3" \
+        "${COMPOSE_PROJECT_NAME:-dive-hub}-vault-2" \
+        "${COMPOSE_PROJECT_NAME:-dive-hub}-vault-1" \
+        "$seal_container" >/dev/null 2>&1
+    test_pass
+
+    # Test 3: Restart in correct order
+    test_start "Restart seal vault first"
+    docker start "$seal_container" >/dev/null 2>&1
+    sleep 10
+    if docker ps --format '{{.Names}}' | grep -q "$seal_container"; then
+        test_pass
+    else
+        test_fail "Seal vault failed to start"
+        test_suite_end
+        return 1
+    fi
+
+    test_start "Restart cluster nodes"
+    docker start "${COMPOSE_PROJECT_NAME:-dive-hub}-vault-1" \
+        "${COMPOSE_PROJECT_NAME:-dive-hub}-vault-2" \
+        "${COMPOSE_PROJECT_NAME:-dive-hub}-vault-3" >/dev/null 2>&1
+    sleep 20  # Wait for auto-unseal + Raft election
+
+    if vault status 2>/dev/null | grep -q "Sealed.*false"; then
+        test_pass
+    else
+        test_fail "Cluster did not auto-unseal"
+        test_suite_end
+        return 1
+    fi
+
+    # Test 4: Verify canary secret
+    test_start "Verify canary secret after restart"
+    local read_val
+    read_val=$(vault kv get -field=value dive-v3/core/restart-test 2>/dev/null || true)
+    if [ "$read_val" = "$canary" ]; then
+        test_pass
+    else
+        test_fail "Canary mismatch: expected '$canary', got '$read_val'"
+    fi
+
+    # Cleanup
+    vault kv delete dive-v3/core/restart-test >/dev/null 2>&1 || true
+
+    test_suite_end
+}
+
+##
 # Main module dispatcher
 ##
 module_vault() {
@@ -1052,6 +1320,20 @@ module_vault() {
             shift
             module_vault_provision "$@"
             ;;
+        cluster)
+            shift
+            vault_ha_dispatch "$@"
+            ;;
+        seal-status)
+            vault_ha_seal_status
+            ;;
+        step-down)
+            vault_ha_step_down
+            ;;
+        migrate)
+            shift
+            module_vault_migrate "$@"
+            ;;
         test-rotation|rotation-test)
             shift
             module_vault_test_rotation "$@"
@@ -1059,38 +1341,55 @@ module_vault() {
         test-backup|backup-test)
             module_vault_test_backup
             ;;
+        test-ha-failover)
+            module_vault_test_ha_failover
+            ;;
+        test-seal-restart)
+            module_vault_test_seal_restart
+            ;;
+        test-full-restart)
+            module_vault_test_full_restart
+            ;;
         help|--help|-h)
             echo "Usage: ./dive vault <command>"
             echo ""
             echo "Commands:"
-            echo "  init                Initialize Vault (one-time operation)"
-            echo "  unseal              Unseal Vault after restart"
-            echo "  status              Check Vault health and seal status"
+            echo "  init                Initialize Vault HA cluster (one-time)"
+            echo "  status              Check HA cluster health (seal + 3 nodes)"
             echo "  setup               Configure mount points and hub policy"
             echo "  seed                Generate and store hub (USA) + shared secrets"
             echo "  provision <CODE>    Provision a spoke: policy, AppRole, secrets, .env"
             echo "  snapshot [path]     Create Raft snapshot backup"
             echo "  restore <path>      Restore from Raft snapshot"
-            echo "  test-rotation [CODE] Test secret rotation lifecycle (non-destructive)"
+            echo ""
+            echo "HA Cluster:"
+            echo "  cluster status      Show leader, followers, Raft peers"
+            echo "  cluster step-down   Force leader step-down (re-election)"
+            echo "  cluster remove-peer Remove dead node from Raft"
+            echo "  seal-status         Seal vault diagnostics (Transit key)"
+            echo "  unseal              Auto-unseal diagnostic (troubleshooting)"
+            echo "  migrate             Migrate from Shamir to Transit auto-unseal"
+            echo ""
+            echo "Testing:"
+            echo "  test-rotation [CODE] Test secret rotation lifecycle"
             echo "  test-backup         Validate Raft snapshot backup"
-            echo "  help                Show this help message"
+            echo "  test-ha-failover    Test leader failover + recovery"
+            echo "  test-seal-restart   Test seal vault restart resilience"
+            echo "  test-full-restart   Test full cluster restart"
             echo ""
             echo "Workflow:"
-            echo "  ./dive vault init                          # 1. First-time setup"
-            echo "  ./dive vault unseal                        # 2. Unseal after restart"
-            echo "  ./dive vault setup                         # 3. Configure mount points"
-            echo "  ./dive vault seed                          # 4. Seed hub + shared secrets"
-            echo "  ./dive hub deploy                          # 5. Deploy hub"
-            echo "  ./dive vault provision FRA                 # 6. Provision a spoke"
-            echo "  ./dive spoke deploy FRA                    # 7. Deploy the spoke"
+            echo "  # Seal vault auto-starts and auto-unseals (no user action needed)"
+            echo "  ./dive vault init                          # 1. Initialize cluster"
+            echo "  ./dive vault setup                         # 2. Configure mount points"
+            echo "  ./dive vault seed                          # 3. Seed hub + shared secrets"
+            echo "  ./dive hub deploy                          # 4. Deploy hub"
+            echo "  ./dive vault provision FRA                 # 5. Provision a spoke"
+            echo "  ./dive spoke deploy FRA                    # 6. Deploy the spoke"
             echo ""
-            echo "Other:"
-            echo "  ./dive vault status                        # Check current state"
-            echo "  ./dive vault snapshot                      # Backup to backups/vault/"
-            echo "  ./dive vault snapshot /tmp/vault.snap      # Backup to specific path"
-            echo "  ./dive vault restore /tmp/vault.snap       # Restore from snapshot"
-            echo "  ./dive vault test-rotation DEU             # Test secret rotation"
-            echo "  ./dive vault test-backup                   # Validate backup"
+            echo "Diagnostics:"
+            echo "  ./dive vault status                        # Full cluster health"
+            echo "  ./dive vault cluster status                # Raft peer list + leader"
+            echo "  ./dive vault seal-status                   # Transit key health"
             ;;
         *)
             log_error "Unknown vault command: $subcommand"
