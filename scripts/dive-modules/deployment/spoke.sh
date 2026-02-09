@@ -135,6 +135,15 @@ module_spoke() {
             fi
             ;;
 
+        verify-all)
+            if type -t spoke_verify_all &>/dev/null; then
+                spoke_verify_all "$@"
+            else
+                log_error "spoke_verify_all not available - verification.sh module failed to load"
+                return 1
+            fi
+            ;;
+
         # === Logs ===
         logs)
             _spoke_logs "$@"
@@ -230,6 +239,7 @@ Commands:
   down <CODE>                 Stop spoke services
   status [CODE]               Show spoke status
   verify <CODE>               Verify spoke deployment
+  verify-all                  Verify all provisioned spokes
   logs <CODE> [service]       View spoke logs
   clean-locks [CODE]          Clean stale deployment locks
 

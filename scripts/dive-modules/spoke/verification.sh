@@ -335,3 +335,85 @@ spoke_verify() {
         return 1
     fi
 }
+
+##
+# Verify all provisioned spokes (12-point check for each)
+#
+# Discovers spokes via dive_get_provisioned_spokes() with
+# instances/*/ directory fallback.
+#
+# Returns:
+#   0 - All spokes passed
+#   1 - One or more spokes failed
+##
+spoke_verify_all() {
+    ensure_dive_root
+
+    print_header
+    echo -e "${BOLD}Multi-Spoke Verification${NC}"
+    echo ""
+
+    # Discover provisioned spokes
+    local spokes=()
+    if type -t dive_get_provisioned_spokes &>/dev/null; then
+        local spoke_list
+        spoke_list=$(dive_get_provisioned_spokes 2>/dev/null)
+        if [ -n "$spoke_list" ]; then
+            # dive_get_provisioned_spokes returns space-separated codes
+            for s in $spoke_list; do
+                [ -n "$s" ] && spokes+=("$(upper "$s")")
+            done
+        fi
+    fi
+
+    # Fallback: scan instances/ directories
+    if [ ${#spokes[@]} -eq 0 ]; then
+        for dir in "${DIVE_ROOT}"/instances/*/; do
+            [ -d "$dir" ] || continue
+            local code
+            code=$(basename "$dir")
+            # Skip hub (usa) and hidden directories
+            [ "$code" = "usa" ] && continue
+            [[ "$code" == .* ]] && continue
+            spokes+=("$(upper "$code")")
+        done
+    fi
+
+    if [ ${#spokes[@]} -eq 0 ]; then
+        log_warn "No provisioned spokes found"
+        return 1
+    fi
+
+    echo -e "${CYAN}Found ${#spokes[@]} spoke(s): ${spokes[*]}${NC}"
+    echo ""
+
+    local total=${#spokes[@]}
+    local passed=0
+    local failed=0
+    local failed_list=()
+
+    for spoke_code in "${spokes[@]}"; do
+        echo -e "${BOLD}━━━ Verifying $spoke_code ━━━${NC}"
+        if spoke_verify "$spoke_code"; then
+            passed=$((passed + 1))
+        else
+            failed=$((failed + 1))
+            failed_list+=("$spoke_code")
+        fi
+        echo ""
+    done
+
+    # Summary
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "${BOLD}Multi-Spoke Verification Summary${NC}"
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo -e "  Total:  $total"
+    echo -e "  Passed: ${GREEN}$passed${NC}"
+    echo -e "  Failed: ${RED}$failed${NC}"
+    if [ ${#failed_list[@]} -gt 0 ]; then
+        echo -e "  Failed: ${RED}${failed_list[*]}${NC}"
+    fi
+    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+    [ $failed -eq 0 ] && return 0 || return 1
+}
