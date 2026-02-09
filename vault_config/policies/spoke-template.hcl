@@ -1,12 +1,13 @@
-# Vault Policy for DIVE V3 Spoke: DEU
+# Vault Policy for DIVE V3 Spoke: {{SPOKE_CODE}}
+# Generated dynamically from template by: ./dive vault provision <CODE>
 # Instance-specific read/write + shared secrets read-only
 
 # Own instance secrets (read/write)
-path "dive-v3/core/data/deu/*" {
+path "dive-v3/core/data/{{SPOKE_CODE}}/*" {
   capabilities = ["read", "update", "list"]
 }
 
-path "dive-v3/auth/data/deu/*" {
+path "dive-v3/auth/data/{{SPOKE_CODE}}/*" {
   capabilities = ["read", "update", "list"]
 }
 
@@ -20,11 +21,11 @@ path "dive-v3/auth/data/shared/*" {
 }
 
 # Federation secrets involving this spoke
-path "dive-v3/federation/data/deu-*" {
+path "dive-v3/federation/data/{{SPOKE_CODE}}-*" {
   capabilities = ["read", "list"]
 }
 
-path "dive-v3/federation/data/*-deu" {
+path "dive-v3/federation/data/*-{{SPOKE_CODE}}" {
   capabilities = ["read", "list"]
 }
 
