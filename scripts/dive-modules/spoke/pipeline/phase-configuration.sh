@@ -123,13 +123,18 @@ spoke_phase_configuration() {
             log_warn "Fix: Ensure .env.hub exists and contains FEDERATION_ADMIN_KEY"
         fi
 
-        # Also export Hub Keycloak admin password for wait_for_keycloak_admin_api_ready()
-        # FIX (2026-01-27): The readiness check needs this to authenticate with Hub Keycloak
-        KEYCLOAK_ADMIN_PASSWORD=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
-        if [ -n "$KEYCLOAK_ADMIN_PASSWORD" ]; then
-            export KEYCLOAK_ADMIN_PASSWORD
-            export KC_BOOTSTRAP_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD"  # Alias for wait function
-            log_verbose "✓ Hub Keycloak admin password loaded"
+        # Export Hub (USA) Keycloak admin password for wait_for_keycloak_admin_api_ready()
+        # KEYCLOAK_ADMIN_PASSWORD may contain spoke password — always resolve Hub via _USA
+        local _hub_kc_pass="${KC_ADMIN_PASSWORD_USA:-${KEYCLOAK_ADMIN_PASSWORD_USA:-}}"
+        if [ -z "$_hub_kc_pass" ]; then
+            _hub_kc_pass=$(grep "^KC_ADMIN_PASSWORD_USA=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+            [ -z "$_hub_kc_pass" ] && _hub_kc_pass=$(grep "^KEYCLOAK_ADMIN_PASSWORD_USA=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+        fi
+        if [ -n "$_hub_kc_pass" ]; then
+            export KC_ADMIN_PASSWORD_USA="$_hub_kc_pass"
+            export KC_BOOTSTRAP_ADMIN_PASSWORD="$_hub_kc_pass"
+            export KEYCLOAK_ADMIN_PASSWORD="$_hub_kc_pass"
+            log_verbose "Hub Keycloak admin password resolved (USA)"
         fi
     fi
 

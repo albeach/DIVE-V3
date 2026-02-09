@@ -504,9 +504,9 @@ EOF
                     opal_token=$(echo "$token_response" | jq -r '.token // empty' 2>/dev/null)
                 fi
 
+                local env_file="$spoke_dir/.env"
                 if [ -n "$opal_token" ] && [[ "$opal_token" =~ ^eyJ ]]; then
                     # Update .env file with the token
-                    local env_file="$spoke_dir/.env"
                     if [ -f "$env_file" ]; then
                         sed -i.bak "s|^SPOKE_OPAL_TOKEN=.*|SPOKE_OPAL_TOKEN=$opal_token|" "$env_file"
                         rm -f "$env_file.bak"

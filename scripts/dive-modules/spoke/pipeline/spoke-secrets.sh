@@ -32,6 +32,23 @@ if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     export DIVE_COMMON_LOADED=1
 fi
 
+# Ensure SECRETS_PROVIDER is set (may be in .env.hub, not shell env)
+if [ -z "${SECRETS_PROVIDER:-}" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
+    _line=""
+    while IFS= read -r _line; do
+        case "$_line" in
+            SECRETS_PROVIDER=*|VAULT_CLI_ADDR=*|VAULT_ADDR=*)
+                export "$_line" ;;
+        esac
+    done < "${DIVE_ROOT}/.env.hub"
+fi
+SECRETS_PROVIDER="${SECRETS_PROVIDER:-gcp}"
+
+# Source secrets module for vault functions when using Vault provider
+if [ "$SECRETS_PROVIDER" = "vault" ] && [ -z "${DIVE_CONFIGURATION_SECRETS_LOADED:-}" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../../configuration/secrets.sh"
+fi
+
 # =============================================================================
 # CONSTANTS
 # =============================================================================
@@ -275,7 +292,7 @@ spoke_secrets_load_from_gcp() {
     for base_secret in "${SPOKE_REQUIRED_SECRETS[@]}"; do
         local env_var_name="${base_secret}_${code_upper}"
         if [ -n "${!env_var_name:-}" ]; then
-            local value="${!env_var_name}"
+            local value="${!env_var_name:-}"
             export "${base_secret}=${value}"
         fi
     done
@@ -512,7 +529,7 @@ spoke_secrets_load_from_vault() {
     for base_secret in "${SPOKE_REQUIRED_SECRETS[@]}"; do
         local env_var_name="${base_secret}_${code_upper}"
         if [ -n "${!env_var_name:-}" ]; then
-            local value="${!env_var_name}"
+            local value="${!env_var_name:-}"
             export "${base_secret}=${value}"
         fi
     done
@@ -638,7 +655,7 @@ spoke_secrets_load_from_env() {
 
     for base_secret in "${SPOKE_REQUIRED_SECRETS[@]}"; do
         local env_var_name="${base_secret}_${code_upper}"
-        local value="${!env_var_name}"
+        local value="${!env_var_name:-}"
 
         if [ -z "$value" ]; then
             # Try without instance suffix
@@ -691,7 +708,7 @@ spoke_secrets_sync_to_env() {
     # Update or add each secret
     for base_secret in "${SPOKE_REQUIRED_SECRETS[@]}"; do
         local env_var_name="${base_secret}_${code_upper}"
-        local value="${!env_var_name}"
+        local value="${!env_var_name:-}"
 
         if [ -n "$value" ]; then
             if [ -f "$env_file" ] && grep -q "^${env_var_name}=" "$env_file"; then
@@ -903,7 +920,7 @@ spoke_secrets_validate() {
 
     for base_secret in "${SPOKE_REQUIRED_SECRETS[@]}"; do
         local env_var_name="${base_secret}_${code_upper}"
-        local value="${!env_var_name}"
+        local value="${!env_var_name:-}"
 
         # Check if set
         if [ -z "$value" ]; then
@@ -1191,7 +1208,7 @@ spoke_secrets_generate_report() {
 
         for base_secret in "${SPOKE_REQUIRED_SECRETS[@]}"; do
             local env_var_name="${base_secret}_${code_upper}"
-            local value="${!env_var_name}"
+            local value="${!env_var_name:-}"
 
             if [ -n "$value" ]; then
                 local masked="${value:0:4}****${value: -4}"
@@ -1206,7 +1223,7 @@ spoke_secrets_generate_report() {
 
         for base_secret in "${SPOKE_OPTIONAL_SECRETS[@]}"; do
             local env_var_name="${base_secret}_${code_upper}"
-            local value="${!env_var_name}"
+            local value="${!env_var_name:-}"
 
             if [ -n "$value" ]; then
                 echo "  $env_var_name: SET (length: ${#value})"

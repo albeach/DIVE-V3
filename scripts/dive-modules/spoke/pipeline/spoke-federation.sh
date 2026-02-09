@@ -118,18 +118,22 @@ spoke_federation_setup() {
     log_step "Setting up federation for $code_upper"
 
     # ==========================================================================
-    # CRITICAL: Load Hub environment for Keycloak password (FIX 2026-01-27)
+    # CRITICAL: Load Hub (USA) Keycloak admin password for readiness checks
     # ==========================================================================
-    # The wait_for_keycloak_admin_api_ready() function needs Hub admin password
-    # but it's only in .env.hub (loaded by Docker Compose, not by bash scripts)
-    if [ -f "${DIVE_ROOT}/.env.hub" ]; then
-        # Export Hub Keycloak admin password for readiness checks
-        KEYCLOAK_ADMIN_PASSWORD=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
-        if [ -n "$KEYCLOAK_ADMIN_PASSWORD" ]; then
-            export KEYCLOAK_ADMIN_PASSWORD
-            export KC_BOOTSTRAP_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD"  # Alias
-            log_verbose "✓ Hub Keycloak admin password loaded for readiness checks"
-        fi
+    # KEYCLOAK_ADMIN_PASSWORD (unsuffixed) may contain the SPOKE password from
+    # secrets_load_for_instance(). Always resolve Hub password explicitly via _USA.
+    local _hub_kc_pass="${KC_ADMIN_PASSWORD_USA:-${KC_BOOTSTRAP_ADMIN_PASSWORD_USA:-${KEYCLOAK_ADMIN_PASSWORD_USA:-}}}"
+    if [ -z "$_hub_kc_pass" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
+        _hub_kc_pass=$(grep "^KC_ADMIN_PASSWORD_USA=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+        [ -z "$_hub_kc_pass" ] && _hub_kc_pass=$(grep "^KEYCLOAK_ADMIN_PASSWORD_USA=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+    fi
+    if [ -n "$_hub_kc_pass" ]; then
+        export KC_ADMIN_PASSWORD_USA="$_hub_kc_pass"
+        export KC_BOOTSTRAP_ADMIN_PASSWORD="$_hub_kc_pass"
+        export KEYCLOAK_ADMIN_PASSWORD="$_hub_kc_pass"
+        log_verbose "Hub Keycloak admin password resolved (USA)"
+    else
+        log_warn "Hub Keycloak admin password not found — federation readiness check may fail"
     fi
 
     # ==========================================================================
