@@ -432,7 +432,7 @@ services:
       LOG_LEVEL: warn  # Reduce log verbosity (info/warn/error)
       PORT: "4000"
       # Secret management provider (vault or gcp)
-      SECRETS_PROVIDER: ${SECRETS_PROVIDER:-gcp}
+      SECRETS_PROVIDER: ${SECRETS_PROVIDER:-vault}
       VAULT_ADDR: ${VAULT_ADDR:-http://dive-hub-vault:8200}
       VAULT_TOKEN: ${VAULT_TOKEN:-}
       # Heap limit only in NODE_OPTIONS (report flags must be in command - Node disallows them in NODE_OPTIONS)

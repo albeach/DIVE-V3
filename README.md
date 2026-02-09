@@ -154,7 +154,6 @@ import { PresenceIndicator } from '@/components/admin/shared';
 
 - Docker & Docker Compose
 - Node.js 20+
-- Google Cloud SDK (for GCP secrets fallback)
 - Git
 
 ### Installation
@@ -176,9 +175,7 @@ cd DIVE-V3
 
 ### Configuration
 
-DIVE V3 uses HashiCorp Vault for secrets management (`SECRETS_PROVIDER=vault`), with GCP Secret Manager as a legacy fallback.
-
-**Vault Setup (recommended):**
+DIVE V3 uses HashiCorp Vault for secrets management. No cloud provider account required.
 
 ```bash
 # 1. Start Vault container
@@ -191,26 +188,14 @@ docker compose -f docker-compose.hub.yml up -d vault
 # 3. Configure mount points and policies
 ./dive vault setup
 
-# 4. Migrate existing secrets from GCP (if applicable)
-DRY_RUN=true ./scripts/migrate-secrets-gcp-to-vault.sh   # Preview
-./scripts/migrate-secrets-gcp-to-vault.sh                 # Migrate
-
-# 5. Enable Vault provider
-echo "SECRETS_PROVIDER=vault" >> .env.hub
-```
-
-**GCP Fallback (legacy):**
-
-```bash
-# If not using Vault, enable GCP secrets
-export SECRETS_PROVIDER=gcp
-export USE_GCP_SECRETS=true
-export GCP_PROJECT_ID=dive25
+# 4. Deploy
+./dive hub deploy
+./dive spoke deploy deu
 ```
 
 See [Vault Integration Guide](./docs/VAULT_INTEGRATION.md) for full documentation.
 
-**⚠️ CRITICAL:** Never hardcode secrets! Use Vault or GCP Secret Manager. See `.cursorrules` for complete secrets management guidelines.
+**⚠️ CRITICAL:** Never hardcode secrets! Always use Vault for secret storage.
 
 ---
 

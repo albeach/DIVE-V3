@@ -22,12 +22,3 @@ disable_mlock = true
 # Audit logging - file-based audit trail for all Vault operations
 # Enabled via CLI: vault audit enable file file_path=/vault/logs/audit.log
 # The log directory is mounted as a Docker volume for persistence
-
-# Auto-unseal with GCP Cloud KMS (optional for production)
-# Uncomment and configure for production deployments
-# seal "gcpckms" {
-#   project     = "dive25"
-#   region      = "us-central1"
-#   key_ring    = "dive-v3-vault"
-#   crypto_key  = "unseal-key"
-# }

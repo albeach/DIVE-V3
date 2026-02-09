@@ -53,8 +53,8 @@ fi
 # CONFIGURATION
 # =============================================================================
 
-# Provider selection: gcp or aws
-SECRETS_PROVIDER="${SECRETS_PROVIDER:-gcp}"
+# Provider selection: vault (default), gcp, or aws
+SECRETS_PROVIDER="${SECRETS_PROVIDER:-vault}"
 
 # GCP Configuration
 GCP_PROJECT_ID="${GCP_PROJECT_ID:-dive25}"
