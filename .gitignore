@@ -192,6 +192,7 @@ instances/rou/
 instances/*/.initialized
 instances/*/.localized
 instances/*/.hub-registered
+instances/*/.secret-hash
 instances/*/.env
 instances/*/.env.*
 instances/*/docker-compose.yml
