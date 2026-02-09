@@ -658,8 +658,14 @@ spoke_init_generate_env() {
         opal_public_key=""
     fi
 
-    # Backup existing file if present
+    # Preserve Vault credentials from provisioning (set by: ./dive vault provision)
+    local _saved_vault_role_id="" _saved_vault_secret_id=""
+    local _saved_secrets_provider="" _saved_vault_addr=""
     if [ -f "$env_file" ]; then
+        _saved_vault_role_id=$(grep '^VAULT_ROLE_ID=' "$env_file" 2>/dev/null | cut -d= -f2-)
+        _saved_vault_secret_id=$(grep '^VAULT_SECRET_ID=' "$env_file" 2>/dev/null | cut -d= -f2-)
+        _saved_secrets_provider=$(grep '^SECRETS_PROVIDER=' "$env_file" 2>/dev/null | cut -d= -f2-)
+        _saved_vault_addr=$(grep '^VAULT_ADDR=' "$env_file" 2>/dev/null | cut -d= -f2-)
         if cp "$env_file" "${env_file}.bak.$(date +%Y%m%d-%H%M%S)" 2>/dev/null; then
             log_verbose "Backed up existing .env, regenerating complete template"
         fi
@@ -711,6 +717,19 @@ TUNNEL_TOKEN=
 # - dive-v3-redis-blacklist             (Redis password)
 # =============================================================================
 EOF
+
+    # Restore Vault credentials if they were preserved from provisioning
+    if [ -n "$_saved_secrets_provider" ]; then
+        {
+            echo ""
+            echo "# Vault HA Integration (preserved from: ./dive vault provision)"
+            echo "SECRETS_PROVIDER=${_saved_secrets_provider}"
+            [ -n "$_saved_vault_addr" ] && echo "VAULT_ADDR=${_saved_vault_addr}"
+            [ -n "$_saved_vault_role_id" ] && echo "VAULT_ROLE_ID=${_saved_vault_role_id}"
+            [ -n "$_saved_vault_secret_id" ] && echo "VAULT_SECRET_ID=${_saved_vault_secret_id}"
+        } >> "$env_file"
+        log_verbose "Restored Vault credentials in .env"
+    fi
 
     log_verbose "Generated .env file: $env_file"
 }
