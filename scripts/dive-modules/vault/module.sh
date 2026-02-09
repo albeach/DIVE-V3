@@ -585,22 +585,19 @@ module_vault_seed() {
         local opal_token=$(vault_get_secret "opal" "master-token" "token")
         local usa_auth=$(vault_get_secret "auth" "usa/nextauth" "secret")
 
+        # Instance-scoped secrets (all with _USA suffix)
         _vault_update_env "$hub_env" "POSTGRES_PASSWORD_USA" "$usa_pg"
-        _vault_update_env "$hub_env" "POSTGRES_PASSWORD" "$usa_pg"
-        _vault_update_env "$hub_env" "KC_ADMIN_PASSWORD" "$usa_kc"
+        _vault_update_env "$hub_env" "KC_ADMIN_PASSWORD_USA" "$usa_kc"
         _vault_update_env "$hub_env" "KC_BOOTSTRAP_ADMIN_PASSWORD_USA" "$usa_kc"
-        _vault_update_env "$hub_env" "KEYCLOAK_ADMIN_PASSWORD" "$usa_kc"
         _vault_update_env "$hub_env" "KEYCLOAK_ADMIN_PASSWORD_USA" "$usa_kc"
         _vault_update_env "$hub_env" "MONGO_PASSWORD_USA" "$usa_mongo"
-        _vault_update_env "$hub_env" "MONGO_PASSWORD" "$usa_mongo"
         _vault_update_env "$hub_env" "REDIS_PASSWORD_USA" "$usa_redis"
-        _vault_update_env "$hub_env" "REDIS_PASSWORD_BLACKLIST" "$shared_blacklist"
-        _vault_update_env "$hub_env" "KEYCLOAK_CLIENT_SECRET" "$shared_client"
-        _vault_update_env "$hub_env" "KEYCLOAK_CLIENT_SECRET_USA" "$shared_client"
-        _vault_update_env "$hub_env" "AUTH_SECRET" "$usa_auth"
         _vault_update_env "$hub_env" "AUTH_SECRET_USA" "$usa_auth"
-        _vault_update_env "$hub_env" "NEXTAUTH_SECRET" "$usa_auth"
-        _vault_update_env "$hub_env" "JWT_SECRET" "$usa_auth"
+        _vault_update_env "$hub_env" "NEXTAUTH_SECRET_USA" "$usa_auth"
+        _vault_update_env "$hub_env" "JWT_SECRET_USA" "$usa_auth"
+        _vault_update_env "$hub_env" "KEYCLOAK_CLIENT_SECRET_USA" "$shared_client"
+        # Shared secrets (no suffix)
+        _vault_update_env "$hub_env" "REDIS_PASSWORD_BLACKLIST" "$shared_blacklist"
         _vault_update_env "$hub_env" "OPAL_AUTH_MASTER_TOKEN" "$opal_token"
 
         log_success "Hub .env.hub synced with Vault secrets"

@@ -682,24 +682,46 @@ secrets_load_for_instance() {
         return 1
     fi
 
-    # Load secrets into environment (export both canonical and legacy names)
-    export KEYCLOAK_ADMIN_PASSWORD=$(get_keycloak_admin_password "$instance_code")
-    export POSTGRES_PASSWORD=$(get_postgres_password "$instance_code")
-    export MONGO_PASSWORD=$(get_mongodb_password "$instance_code")
-    export MONGODB_PASSWORD="$MONGO_PASSWORD"
-    export AUTH_SECRET=$(get_auth_secret "$instance_code")
-    export KEYCLOAK_CLIENT_SECRET=$(get_keycloak_client_secret)
-    export REDIS_PASSWORD=$(get_secret "redis" "$instance_code" 2>/dev/null || true)
-    export OPAL_AUTH_MASTER_TOKEN=$(get_secret "opal-master-token" 2>/dev/null || true)
+    # Load secrets into environment with consistent _<COUNTRY_CODE> suffix
+    local code_upper=$(upper "$instance_code")
+    local _kc_pass _pg_pass _mg_pass _rd_pass _auth _kc_client _opal
 
-    # Validate loaded
-    if [ -z "$KEYCLOAK_ADMIN_PASSWORD" ]; then
+    _kc_pass=$(get_keycloak_admin_password "$instance_code")
+    _pg_pass=$(get_postgres_password "$instance_code")
+    _mg_pass=$(get_mongodb_password "$instance_code")
+    _rd_pass=$(get_secret "redis" "$instance_code" 2>/dev/null || true)
+    _auth=$(get_auth_secret "$instance_code")
+    _kc_client=$(get_keycloak_client_secret)
+    _opal=$(get_secret "opal-master-token" 2>/dev/null || true)
+
+    # Validate before exporting
+    if [ -z "$_kc_pass" ]; then
         log_error "Failed to load Keycloak password - secrets may not be configured"
         log_error "Run: ./dive secrets ensure $instance_code"
         return 1
     fi
 
-    log_success "Secrets loaded for $instance_code"
+    # Export with country-code suffix (canonical)
+    export "KEYCLOAK_ADMIN_PASSWORD_${code_upper}=$_kc_pass"
+    export "KC_ADMIN_PASSWORD_${code_upper}=$_kc_pass"
+    export "KC_BOOTSTRAP_ADMIN_PASSWORD_${code_upper}=$_kc_pass"
+    export "POSTGRES_PASSWORD_${code_upper}=$_pg_pass"
+    export "MONGO_PASSWORD_${code_upper}=$_mg_pass"
+    export "REDIS_PASSWORD_${code_upper}=$_rd_pass"
+    export "AUTH_SECRET_${code_upper}=$_auth"
+    export "NEXTAUTH_SECRET_${code_upper}=$_auth"
+    export "KEYCLOAK_CLIENT_SECRET_${code_upper}=$_kc_client"
+
+    # Export without suffix (backward compatibility for scripts using MONGO_PASSWORD, etc.)
+    export KEYCLOAK_ADMIN_PASSWORD="$_kc_pass"
+    export POSTGRES_PASSWORD="$_pg_pass"
+    export MONGO_PASSWORD="$_mg_pass"
+    export AUTH_SECRET="$_auth"
+    export KEYCLOAK_CLIENT_SECRET="$_kc_client"
+    export REDIS_PASSWORD="$_rd_pass"
+    export OPAL_AUTH_MASTER_TOKEN="$_opal"
+
+    log_success "Secrets loaded for $code_upper"
     return 0
 }
 
