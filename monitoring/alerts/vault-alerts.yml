@@ -118,3 +118,47 @@ groups:
         annotations:
           summary: "High Vault lease expiry rate"
           description: "Leases are expiring at {{ $value }}/s. Services may be failing to renew credentials."
+
+      # -----------------------------------------------------------------------
+      # LEASE RENEWAL — Warning: lease count dropping without renewals
+      # -----------------------------------------------------------------------
+      - alert: VaultLeaseRenewalFailed
+        expr: delta(vault_expire_num_leases[10m]) < -5 and rate(vault_expire_lease_renew_count[10m]) == 0
+        for: 10m
+        labels:
+          severity: warning
+          service: vault
+        annotations:
+          summary: "Vault lease renewal may be failing"
+          description: "Lease count dropped by {{ $value }} in 10m with zero renewal requests. Services may not be renewing credentials."
+
+  - name: vault_rotation_alerts
+    interval: 300s
+    rules:
+      # -----------------------------------------------------------------------
+      # CERT EXPIRY — Warning: PKI cert expiring within 7 days
+      # Metric source: textfile collector (monitoring/textfile/vault_rotation.prom)
+      # -----------------------------------------------------------------------
+      - alert: VaultCertExpiringWithin7d
+        expr: vault_pki_cert_expiry_days < 7
+        for: 5m
+        labels:
+          severity: warning
+          service: vault-pki
+        annotations:
+          summary: "Vault PKI certificate expiring soon"
+          description: "Certificate for {{ $labels.instance }} expires in {{ $value }} days. Run: ./dive vault rotation-check"
+
+      # -----------------------------------------------------------------------
+      # STATIC ROLE STALE — Warning: PG rotation not happening (>48h)
+      # Metric source: textfile collector (monitoring/textfile/vault_rotation.prom)
+      # -----------------------------------------------------------------------
+      - alert: VaultStaticRoleStale
+        expr: time() - vault_static_role_last_rotation_timestamp > 172800
+        for: 10m
+        labels:
+          severity: warning
+          service: vault-db
+        annotations:
+          summary: "Vault static DB role rotation is stale"
+          description: "Role {{ $labels.role }} has not rotated in >48h. Expected 24h rotation. Run: ./dive vault rotation-check"
