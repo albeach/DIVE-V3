@@ -38,6 +38,31 @@ scrape_configs:
       - targets: ['localhost:9090']
 
   # ---------------------------------------------------------------------------
+  # VAULT HA CLUSTER (4 nodes: seal + 3-node Raft)
+  # ---------------------------------------------------------------------------
+  # Vault 1.21 built-in Prometheus metrics via /v1/sys/metrics
+  # unauthenticated_metrics_access=true in listener config (localhost-only)
+
+  - job_name: 'vault-cluster'
+    metrics_path: '/v1/sys/metrics'
+    params:
+      format: ['prometheus']
+    static_configs:
+      - targets:
+          - 'host.docker.internal:8200'
+          - 'host.docker.internal:8202'
+          - 'host.docker.internal:8204'
+        labels:
+          service: 'vault'
+          cluster: 'hub'
+      - targets:
+          - 'host.docker.internal:8210'
+        labels:
+          service: 'vault-seal'
+          cluster: 'hub'
+    scrape_interval: 15s
+
+  # ---------------------------------------------------------------------------
   # USA INSTANCE (Ports: 3000, 4000, 8080, 8181, 8443, 9000)
   # ---------------------------------------------------------------------------
 
