@@ -199,7 +199,7 @@ hub_phase_build() {
 
     log_info "Build output: $build_log"
 
-    if ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" build 2>&1 | tee "$build_log"; then
+    if ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" --profile "$(_vault_get_profile)" build 2>&1 | tee "$build_log"; then
         log_success "Docker images built successfully"
         return 0
     else
@@ -1655,7 +1655,7 @@ hub_up() {
     echo "DEBUG [hub_up]: Building Docker images..." >&2
     log_info "Building Docker images (if needed)..."
     local build_log="/tmp/hub-docker-build-$(date +%s).log"
-    if ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" build > "$build_log" 2>&1; then
+    if ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" --profile "$(_vault_get_profile)" build > "$build_log" 2>&1; then
         log_success "Docker images built successfully"
         echo "DEBUG [hub_up]: Docker images built" >&2
     else
@@ -1752,7 +1752,7 @@ hub_up() {
     else
         # Fallback: Traditional sequential startup
         log_verbose "Using traditional sequential startup (PARALLEL_STARTUP_ENABLED=false)"
-        ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" up -d
+        ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" --profile "$(_vault_get_profile)" up -d
 
         log_success "Hub services started (sequential mode)"
     fi
@@ -1780,7 +1780,7 @@ hub_down() {
         fi
     fi
 
-    ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" down
+    ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" --profile "$(_vault_get_profile)" down
 
     log_success "Hub services stopped"
     return 0
@@ -1966,6 +1966,40 @@ circuit_breaker_reset() {
 ##
 hub_parallel_startup() {
     log_info "Starting hub services with dependency-aware parallel orchestration"
+
+    # START VAULT SERVICES FIRST (profile-based, before main service loop)
+    local vault_profile
+    vault_profile=$(_vault_get_profile)
+    log_info "Starting Vault services (profile: ${vault_profile})..."
+
+    if ! ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" --profile "$vault_profile" up -d 2>&1; then
+        log_error "Failed to start Vault services with profile: ${vault_profile}"
+        return 1
+    fi
+
+    # Wait for Vault to be healthy before proceeding
+    local vault_container="${COMPOSE_PROJECT_NAME:-dive-hub}-vault-1"
+    local vault_timeout=30
+    if [ "$vault_profile" = "vault-dev" ]; then
+        vault_container="${COMPOSE_PROJECT_NAME:-dive-hub}-vault-dev"
+        vault_timeout=10
+    fi
+
+    local vault_wait=0
+    while [ $vault_wait -lt $vault_timeout ]; do
+        local health
+        health=$(${DOCKER_CMD:-docker} inspect "$vault_container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+        if [ "$health" = "healthy" ]; then
+            log_success "Vault healthy (${vault_wait}s)"
+            break
+        fi
+        sleep 2
+        vault_wait=$((vault_wait + 2))
+    done
+
+    if [ $vault_wait -ge $vault_timeout ]; then
+        log_warn "Vault did not become healthy within ${vault_timeout}s (non-blocking)"
+    fi
 
     # DYNAMIC SERVICE CLASSIFICATION (from docker-compose.hub.yml labels)
     # Uses yq to directly query service labels - more reliable than helper functions

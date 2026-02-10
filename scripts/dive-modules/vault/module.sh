@@ -44,23 +44,47 @@ VAULT_INIT_FILE="${DIVE_ROOT}/.vault-init.txt"
 
 export VAULT_ADDR
 
+# Dev mode: use well-known root token
+if _vault_is_dev_mode; then
+    VAULT_TOKEN="${VAULT_TOKEN:-root}"
+    export VAULT_TOKEN
+fi
+
 ##
-# Check if Vault cluster is running (at least vault-1 must be up)
+# Check if Vault is running (dev: vault-dev, HA: vault-1)
 ##
 vault_is_running() {
-    if ! docker ps --format '{{.Names}}' | grep -q "vault-1"; then
-        log_error "Vault cluster is not running"
-        log_info "Start cluster: docker compose -f docker-compose.hub.yml up -d vault-seal vault-1 vault-2 vault-3"
-        return 1
+    if _vault_is_dev_mode; then
+        if ! docker ps --format '{{.Names}}' | grep -q "vault-dev"; then
+            log_error "Vault dev container is not running"
+            log_info "Start it: docker compose -f docker-compose.hub.yml --profile vault-dev up -d"
+            return 1
+        fi
+    else
+        if ! docker ps --format '{{.Names}}' | grep -q "vault-1"; then
+            log_error "Vault cluster is not running"
+            log_info "Start cluster: docker compose -f docker-compose.hub.yml --profile vault-ha up -d"
+            return 1
+        fi
     fi
     return 0
 }
 
 ##
-# Initialize Vault HA cluster (one-time operation)
-# With Transit auto-unseal, creates recovery keys (not unseal keys)
+# Initialize Vault (dev: write root token, HA: recovery key ceremony)
 ##
 module_vault_init() {
+    # Dev mode: already initialized with well-known root token
+    if _vault_is_dev_mode; then
+        log_info "Vault running in dev mode — already initialized with root token"
+        echo "root" > "$VAULT_TOKEN_FILE"
+        chmod 600 "$VAULT_TOKEN_FILE"
+        VAULT_TOKEN="root"
+        export VAULT_TOKEN
+        log_success "Vault dev mode ready (token: root)"
+        return 0
+    fi
+
     log_info "Initializing Vault HA cluster..."
 
     if ! vault_is_running; then
@@ -136,6 +160,11 @@ module_vault_init() {
 # This command checks seal vault health and cluster auto-unseal status.
 ##
 module_vault_unseal() {
+    if _vault_is_dev_mode; then
+        log_info "Vault dev mode — always unsealed, no action needed"
+        return 0
+    fi
+
     log_info "Vault HA cluster uses Transit auto-unseal — no manual unsealing required."
     echo ""
 
@@ -182,16 +211,25 @@ module_vault_unseal() {
 # Check Vault HA cluster status
 ##
 module_vault_status() {
-    log_info "Checking Vault HA cluster status..."
-
     # Load token if available
     if [ -f "$VAULT_TOKEN_FILE" ]; then
         VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
         export VAULT_TOKEN
     fi
 
-    # Show full HA status (from ha.sh)
-    vault_ha_status
+    if _vault_is_dev_mode; then
+        log_info "Vault Mode: DEV (single node, in-memory)"
+        log_info "Vault Address: ${VAULT_ADDR}"
+        if vault status 2>/dev/null | grep -q "Sealed.*false"; then
+            log_success "Vault is unsealed and ready"
+        else
+            log_error "Vault is not responding"
+            return 1
+        fi
+    else
+        log_info "Checking Vault HA cluster status..."
+        vault_ha_status
+    fi
 
     # Check if authenticated
     if [ -n "${VAULT_TOKEN:-}" ]; then
@@ -288,6 +326,15 @@ module_vault_setup() {
         fi
     fi
 
+    # Production: audit is MANDATORY
+    if is_production_mode; then
+        if ! vault audit list 2>/dev/null | grep -q "file/"; then
+            log_error "PRODUCTION: Audit logging MUST be enabled but is not"
+            return 1
+        fi
+        log_success "Production audit enforcement: PASS"
+    fi
+
     log_success "Vault configuration complete!"
     log_info ""
     log_info "==================================================================="
@@ -305,6 +352,11 @@ module_vault_setup() {
 # Usage: ./dive vault snapshot [output-path]
 ##
 module_vault_snapshot() {
+    if _vault_is_dev_mode; then
+        log_warn "Vault dev mode uses in-memory storage — snapshots not applicable"
+        return 0
+    fi
+
     local output_path="${1:-}"
 
     if ! vault_is_running; then
@@ -361,6 +413,11 @@ module_vault_snapshot() {
 # Usage: ./dive vault restore <snapshot-path>
 ##
 module_vault_restore() {
+    if _vault_is_dev_mode; then
+        log_warn "Vault dev mode uses in-memory storage — restore not applicable"
+        return 0
+    fi
+
     local snapshot_path="${1:-}"
 
     if [ -z "$snapshot_path" ]; then
@@ -1194,6 +1251,10 @@ module_vault_test_rotation() {
 # Usage: ./dive vault test-backup
 ##
 module_vault_test_backup() {
+    if _vault_is_dev_mode; then
+        log_info "Skipping backup test in dev mode (no Raft storage)"
+        return 0
+    fi
     # Load test framework
     if [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh" ]; then
         source "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh"
@@ -1301,6 +1362,10 @@ module_vault_migrate() {
 # Test HA failover: stop leader, verify secret readable from follower, restart
 ##
 module_vault_test_ha_failover() {
+    if _vault_is_dev_mode; then
+        log_info "Skipping HA failover test in dev mode (single node)"
+        return 0
+    fi
     # Load test framework
     if [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh" ]; then
         source "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh"
@@ -1411,6 +1476,10 @@ module_vault_test_ha_failover() {
 # Test seal vault restart: verify cluster stays unsealed when seal vault restarts
 ##
 module_vault_test_seal_restart() {
+    if _vault_is_dev_mode; then
+        log_info "Skipping seal restart test in dev mode (no seal vault)"
+        return 0
+    fi
     # Load test framework
     if [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh" ]; then
         source "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh"
@@ -1466,6 +1535,10 @@ module_vault_test_seal_restart() {
 # Test full cluster restart: stop everything, restart in order, verify data intact
 ##
 module_vault_test_full_restart() {
+    if _vault_is_dev_mode; then
+        log_info "Skipping full restart test in dev mode (single node)"
+        return 0
+    fi
     # Load test framework
     if [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh" ]; then
         source "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh"
@@ -1757,6 +1830,125 @@ module_vault_test_monitoring() {
 }
 
 ##
+# Show current Vault environment configuration
+##
+module_vault_env() {
+    local vault_profile
+    vault_profile=$(_vault_get_profile)
+    local is_dev="no"
+    _vault_is_dev_mode && is_dev="yes"
+
+    echo ""
+    echo "==================================================================="
+    echo "  Vault Environment Configuration"
+    echo "==================================================================="
+    echo ""
+    echo "  DIVE_ENV:          ${DIVE_ENV:-local} (default: local)"
+    echo "  Vault Profile:     ${vault_profile}"
+    echo "  Dev Mode:          ${is_dev}"
+    echo "  VAULT_ADDR:        ${VAULT_ADDR}"
+    echo "  VAULT_CLI_ADDR:    ${VAULT_CLI_ADDR:-not set}"
+    echo "  SECRETS_PROVIDER:  ${SECRETS_PROVIDER:-not set}"
+    echo ""
+
+    if [ "$is_dev" = "yes" ]; then
+        echo "  Topology:          Single node (in-memory)"
+        echo "  Root Token:        root"
+        echo "  TLS:               Disabled"
+        echo "  Audit:             Optional"
+        echo "  Data Persistence:  None (re-seeded each deploy)"
+    else
+        echo "  Topology:          4-node HA (seal + 3 Raft)"
+        echo "  Auto-Unseal:       Transit (via vault-seal)"
+        if is_production_mode; then
+            echo "  TLS:               Mandatory"
+            echo "  Audit:             Mandatory"
+        else
+            echo "  TLS:               Optional"
+            echo "  Audit:             Optional"
+        fi
+        echo "  Data Persistence:  Raft volumes"
+    fi
+    echo ""
+    echo "==================================================================="
+}
+
+##
+# Test multi-environment Vault configuration
+##
+module_vault_test_env() {
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh"
+    fi
+
+    local vault_profile
+    vault_profile=$(_vault_get_profile)
+
+    test_suite_start "Vault Multi-Environment Configuration"
+
+    # Test 1: Profile function returns expected value
+    test_start "Profile detection for DIVE_ENV=${DIVE_ENV:-local}"
+    if [ -n "$vault_profile" ]; then
+        test_pass "profile=$vault_profile"
+    else
+        test_fail "No profile returned"
+    fi
+
+    # Test 2: Vault is running (correct container type)
+    test_start "Vault container running (profile: $vault_profile)"
+    if vault_is_running; then
+        test_pass
+    else
+        test_fail "Vault not running"
+    fi
+
+    # Test 3: Vault is unsealed
+    test_start "Vault is unsealed"
+    if vault status 2>/dev/null | grep -q "Sealed.*false"; then
+        test_pass
+    else
+        test_fail "Vault is sealed or not responding"
+    fi
+
+    # Test 4: Can read/write secrets
+    test_start "Secret read/write functional"
+    if vault kv put dive-v3/core/env-test value="test-$(date +%s)" >/dev/null 2>&1; then
+        vault kv delete dive-v3/core/env-test >/dev/null 2>&1
+        test_pass
+    else
+        test_fail "Cannot write secrets"
+    fi
+
+    # Test 5+: Mode-specific checks
+    if _vault_is_dev_mode; then
+        test_start "Dev mode: root token works"
+        if VAULT_TOKEN=root vault status >/dev/null 2>&1; then
+            test_pass
+        else
+            test_fail "Root token 'root' not accepted"
+        fi
+    else
+        test_start "HA mode: 3 Raft peers"
+        local peers
+        peers=$(vault operator raft list-peers -format=json 2>/dev/null | grep -c '"node_id"' || echo "0")
+        if [ "$peers" -ge 3 ]; then
+            test_pass "$peers peers"
+        else
+            test_fail "Only $peers Raft peers (expected 3)"
+        fi
+
+        test_start "HA mode: Seal vault healthy"
+        if docker ps --format '{{.Names}}' | grep -q "vault-seal"; then
+            test_pass
+        else
+            test_fail "Seal vault not running"
+        fi
+    fi
+
+    test_suite_end
+}
+
+##
 # Main module dispatcher
 ##
 module_vault() {
@@ -1848,25 +2040,32 @@ module_vault() {
         test-monitoring)
             module_vault_test_monitoring
             ;;
+        test-env)
+            module_vault_test_env
+            ;;
+        env|environment)
+            module_vault_env
+            ;;
         help|--help|-h)
             echo "Usage: ./dive vault <command>"
             echo ""
             echo "Commands:"
-            echo "  init                Initialize Vault HA cluster (one-time)"
-            echo "  status              Check HA cluster health (seal + 3 nodes)"
+            echo "  init                Initialize Vault (dev: auto, HA: recovery keys)"
+            echo "  status              Check Vault health (dev or HA cluster)"
             echo "  setup               Configure mount points and hub policy"
             echo "  seed                Generate and store hub (USA) + shared secrets"
             echo "  provision <CODE>    Provision a spoke: policy, AppRole, secrets, .env"
+            echo "  env                 Show current Vault environment (dev/staging/prod)"
             echo "  pki-setup           Setup PKI Root CA + Intermediate CA (one-time)"
             echo "  db-setup            Setup database secrets engine (one-time)"
             echo "  db-status           Show database engine status and roles"
-            echo "  snapshot [path]     Create Raft snapshot backup"
-            echo "  restore <path>      Restore from Raft snapshot"
-            echo "  backup-run          Create snapshot + prune old (${VAULT_BACKUP_RETENTION_DAYS}-day retention)"
+            echo "  snapshot [path]     Create Raft snapshot backup (HA only)"
+            echo "  restore <path>      Restore from Raft snapshot (HA only)"
+            echo "  backup-run          Create snapshot + prune old (${VAULT_BACKUP_RETENTION_DAYS:-7}-day retention)"
             echo "  backup-list         List all snapshots with size/date"
             echo "  backup-schedule     Enable/disable daily automated backups"
             echo ""
-            echo "HA Cluster:"
+            echo "HA Cluster (DIVE_ENV=staging/production):"
             echo "  cluster status      Show leader, followers, Raft peers"
             echo "  cluster step-down   Force leader step-down (re-election)"
             echo "  cluster remove-peer Remove dead node from Raft"
@@ -1875,28 +2074,25 @@ module_vault() {
             echo "  migrate             Migrate from Shamir to Transit auto-unseal"
             echo ""
             echo "Testing:"
+            echo "  test-env            Test multi-environment configuration"
             echo "  test-rotation [CODE] Test secret rotation lifecycle"
-            echo "  test-backup         Validate Raft snapshot backup"
-            echo "  test-ha-failover    Test leader failover + recovery"
-            echo "  test-seal-restart   Test seal vault restart resilience"
-            echo "  test-full-restart   Test full cluster restart"
+            echo "  test-backup         Validate Raft snapshot backup (HA only)"
+            echo "  test-ha-failover    Test leader failover + recovery (HA only)"
+            echo "  test-seal-restart   Test seal vault restart resilience (HA only)"
+            echo "  test-full-restart   Test full cluster restart (HA only)"
             echo "  test-pki            Test PKI certificate issuance lifecycle"
             echo "  test-monitoring     Test monitoring infrastructure (7-point)"
             echo "  db-test             Test database credential generation"
             echo ""
+            echo "Environment: DIVE_ENV=${DIVE_ENV:-local} (profile: $(_vault_get_profile))"
+            echo ""
             echo "Workflow:"
-            echo "  # Seal vault auto-starts and auto-unseals (no user action needed)"
-            echo "  ./dive vault init                          # 1. Initialize cluster"
+            echo "  ./dive vault init                          # 1. Initialize"
             echo "  ./dive vault setup                         # 2. Configure mount points"
             echo "  ./dive vault seed                          # 3. Seed hub + shared secrets"
             echo "  ./dive hub deploy                          # 4. Deploy hub"
             echo "  ./dive vault provision FRA                 # 5. Provision a spoke"
             echo "  ./dive spoke deploy FRA                    # 6. Deploy the spoke"
-            echo ""
-            echo "Diagnostics:"
-            echo "  ./dive vault status                        # Full cluster health"
-            echo "  ./dive vault cluster status                # Raft peer list + leader"
-            echo "  ./dive vault seal-status                   # Transit key health"
             ;;
         *)
             log_error "Unknown vault command: $subcommand"
