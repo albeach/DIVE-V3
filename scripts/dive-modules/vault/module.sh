@@ -30,6 +30,7 @@ DIVE_ROOT="${DIVE_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 
 source "${DIVE_ROOT}/scripts/dive-modules/common.sh"
 source "${SCRIPT_DIR}/ha.sh"
+source "${SCRIPT_DIR}/db-engine.sh"
 
 # CLI runs on host — prefer VAULT_CLI_ADDR (host-accessible) over VAULT_ADDR (Docker-internal)
 if [ -z "${VAULT_CLI_ADDR:-}" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
@@ -913,6 +914,29 @@ module_vault_provision() {
     fi
 
     # ==========================================================================
+    # Step 2c: Create spoke database roles (if database engine is enabled)
+    # ==========================================================================
+    if vault secrets list 2>/dev/null | grep -q "^database/"; then
+        _vault_db_provision_spoke "$code"
+
+        # Add database policy to AppRole
+        local current_policies
+        current_policies=$(vault read -field=token_policies "auth/approle/role/spoke-${code}" 2>/dev/null || true)
+        if [ -n "$current_policies" ]; then
+            # Build policy list from current + db policy
+            local db_policy="dive-v3-db-spoke-${code}"
+
+            # Create spoke-specific DB policy from template concept
+            # Spokes use the same spoke-template.hcl which now includes database paths
+            # No separate db-spoke-template needed since spoke-template.hcl covers it
+
+            log_verbose "  Database paths included in spoke policy via spoke-template.hcl"
+        fi
+    else
+        log_verbose "Database engine not enabled — skipping spoke DB roles (use: ./dive vault db-setup)"
+    fi
+
+    # ==========================================================================
     # Step 3: Seed instance-specific secrets
     # ==========================================================================
     log_info "Seeding secrets for ${code_upper}..."
@@ -1676,6 +1700,15 @@ module_vault() {
         test-pki)
             module_vault_test_pki
             ;;
+        db-setup)
+            module_vault_db_setup
+            ;;
+        db-status)
+            module_vault_db_status
+            ;;
+        db-test)
+            module_vault_db_test
+            ;;
         help|--help|-h)
             echo "Usage: ./dive vault <command>"
             echo ""
@@ -1686,6 +1719,8 @@ module_vault() {
             echo "  seed                Generate and store hub (USA) + shared secrets"
             echo "  provision <CODE>    Provision a spoke: policy, AppRole, secrets, .env"
             echo "  pki-setup           Setup PKI Root CA + Intermediate CA (one-time)"
+            echo "  db-setup            Setup database secrets engine (one-time)"
+            echo "  db-status           Show database engine status and roles"
             echo "  snapshot [path]     Create Raft snapshot backup"
             echo "  restore <path>      Restore from Raft snapshot"
             echo ""
@@ -1704,6 +1739,7 @@ module_vault() {
             echo "  test-seal-restart   Test seal vault restart resilience"
             echo "  test-full-restart   Test full cluster restart"
             echo "  test-pki            Test PKI certificate issuance lifecycle"
+            echo "  db-test             Test database credential generation"
             echo ""
             echo "Workflow:"
             echo "  # Seal vault auto-starts and auto-unseals (no user action needed)"

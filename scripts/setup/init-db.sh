@@ -29,3 +29,12 @@ if [ -f "/scripts/postgres-init/02-init-orchestration.sql" ]; then
 else
     echo "⚠ Orchestration schema file not found, skipping"
 fi
+
+# Create service-specific database users (for Vault static role management)
+echo "Creating service-specific database users..."
+if [ -f "/scripts/postgres-init/03-create-service-users.sql" ]; then
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" < /scripts/postgres-init/03-create-service-users.sql
+    echo "✓ Service users created (keycloak_user, nextauth_user)"
+else
+    echo "⚠ Service users SQL not found, skipping"
+fi

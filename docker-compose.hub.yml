@@ -463,8 +463,8 @@ services:
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak_db
-      KC_DB_USERNAME: postgres
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD_USA}
+      KC_DB_USERNAME: ${KC_DB_USERNAME:-postgres}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD:-${POSTGRES_PASSWORD_USA}}
       KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:-localhost}
       KC_HOSTNAME_STRICT: "false"
       KC_PROXY_HEADERS: xforwarded
@@ -598,6 +598,8 @@ services:
       SECRETS_PROVIDER: ${SECRETS_PROVIDER:-vault}
       VAULT_ADDR: ${VAULT_ADDR:-http://dive-hub-vault:8200}
       VAULT_TOKEN: ${VAULT_TOKEN:-}
+      # Vault database secrets engine role (dynamic MongoDB credentials)
+      VAULT_DB_ROLE: ${VAULT_DB_ROLE:-}
       # Heap limit only in NODE_OPTIONS (report flags must be in command - Node disallows them in NODE_OPTIONS)
       # --use-openssl-ca: Forces Node.js to load NODE_EXTRA_CA_CERTS (required for mkcert trust)
       NODE_OPTIONS: "--max-old-space-size=4096 --use-openssl-ca"
@@ -606,6 +608,7 @@ services:
       INSTANCE_REALM: USA
       IS_HUB: "true"
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_USA}@mongodb:27017?authSource=admin&directConnection=true
+      MONGODB_HOST: mongodb:27017
       MONGODB_DATABASE: dive-v3-hub
       OPA_URL: https://opa:8181
       KEYCLOAK_URL: https://keycloak:8443
@@ -809,7 +812,13 @@ services:
       NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
       OPA_URL: https://opa:8181
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_USA}@mongodb:27017?authSource=admin&replicaSet=rs0&directConnection=true
+      MONGODB_HOST: mongodb:27017
       MONGODB_DATABASE: dive-v3-hub
+      # Secret management provider (vault or gcp)
+      SECRETS_PROVIDER: ${SECRETS_PROVIDER:-vault}
+      VAULT_ADDR: ${VAULT_ADDR:-http://dive-hub-vault:8200}
+      VAULT_TOKEN: ${VAULT_TOKEN:-}
+      VAULT_DB_ROLE: ${VAULT_DB_ROLE_KAS:-}
       REDIS_URL: redis://:${REDIS_PASSWORD_USA}@redis:6379
       LOG_LEVEL: debug
       KEYCLOAK_URL: https://keycloak:8443
@@ -890,7 +899,7 @@ services:
       # See: docs/TLS_BEST_PRACTICES_2026.md
       NODE_OPTIONS: "--use-openssl-ca"
       NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem  # Legacy https module support
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD_USA}@postgres:5432/dive_v3_app
+      DATABASE_URL: ${FRONTEND_DATABASE_URL:-postgresql://postgres:${POSTGRES_PASSWORD_USA}@postgres:5432/dive_v3_app}
     ports:
       - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
     depends_on:

@@ -47,3 +47,26 @@ path "pki/cert/ca" {
 path "pki_int/cert/ca_chain" {
   capabilities = ["read"]
 }
+
+# Database dynamic credentials (own spoke only)
+path "database/creds/backend-{{SPOKE_CODE}}-rw" {
+  capabilities = ["read"]
+}
+
+path "database/creds/kas-{{SPOKE_CODE}}-ro" {
+  capabilities = ["read"]
+}
+
+# Database static credentials (own spoke only)
+path "database/static-creds/keycloak-{{SPOKE_CODE}}" {
+  capabilities = ["read"]
+}
+
+path "database/static-creds/nextauth-{{SPOKE_CODE}}" {
+  capabilities = ["read"]
+}
+
+# Lease renewal (for dynamic database credentials)
+path "sys/leases/renew" {
+  capabilities = ["update"]
+}
