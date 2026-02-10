@@ -32,6 +32,7 @@ source "${DIVE_ROOT}/scripts/dive-modules/common.sh"
 source "${SCRIPT_DIR}/ha.sh"
 source "${SCRIPT_DIR}/db-engine.sh"
 source "${SCRIPT_DIR}/backup.sh"
+source "${SCRIPT_DIR}/rotation.sh"
 
 # CLI runs on host — prefer VAULT_CLI_ADDR (host-accessible) over VAULT_ADDR (Docker-internal)
 if [ -z "${VAULT_CLI_ADDR:-}" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
@@ -2046,6 +2047,28 @@ module_vault() {
         env|environment)
             module_vault_env
             ;;
+        rotate)
+            shift
+            module_vault_rotate "$@"
+            ;;
+        rotation-status)
+            module_vault_rotation_status
+            ;;
+        rotation-check)
+            module_vault_rotation_check
+            ;;
+        test-rotation-full)
+            shift
+            module_vault_test_rotation_full "$@"
+            ;;
+        trust-ca)
+            source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+            install_vault_ca_to_system_truststore
+            ;;
+        untrust-ca)
+            source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+            remove_vault_ca_from_system_truststore
+            ;;
         help|--help|-h)
             echo "Usage: ./dive vault <command>"
             echo ""
@@ -2056,6 +2079,8 @@ module_vault() {
             echo "  seed                Generate and store hub (USA) + shared secrets"
             echo "  provision <CODE>    Provision a spoke: policy, AppRole, secrets, .env"
             echo "  env                 Show current Vault environment (dev/staging/prod)"
+            echo "  trust-ca            Install Vault Root CA in system trust store"
+            echo "  untrust-ca          Remove Vault Root CA from system trust store"
             echo "  pki-setup           Setup PKI Root CA + Intermediate CA (one-time)"
             echo "  db-setup            Setup database secrets engine (one-time)"
             echo "  db-status           Show database engine status and roles"
@@ -2064,6 +2089,12 @@ module_vault() {
             echo "  backup-run          Create snapshot + prune old (${VAULT_BACKUP_RETENTION_DAYS:-7}-day retention)"
             echo "  backup-list         List all snapshots with size/date"
             echo "  backup-schedule     Enable/disable daily automated backups"
+            echo ""
+            echo "Rotation:"
+            echo "  rotate [category]   Rotate KV v2 secrets (core|auth|opal|federation|all)"
+            echo "                      Options: --dry-run, --instance CODE"
+            echo "  rotation-status     Dashboard: KV versions, DB TTLs, cert expiry"
+            echo "  rotation-check      Health check: sync DB creds, auto-renew PKI certs"
             echo ""
             echo "HA Cluster (DIVE_ENV=staging/production):"
             echo "  cluster status      Show leader, followers, Raft peers"
@@ -2076,6 +2107,7 @@ module_vault() {
             echo "Testing:"
             echo "  test-env            Test multi-environment configuration"
             echo "  test-rotation [CODE] Test secret rotation lifecycle"
+            echo "  test-rotation-full [CODE] Full rotation test (7 checks)"
             echo "  test-backup         Validate Raft snapshot backup (HA only)"
             echo "  test-ha-failover    Test leader failover + recovery (HA only)"
             echo "  test-seal-restart   Test seal vault restart resilience (HA only)"
