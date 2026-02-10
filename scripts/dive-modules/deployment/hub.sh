@@ -1970,6 +1970,17 @@ hub_parallel_startup() {
     # START VAULT SERVICES FIRST (profile-based, before main service loop)
     local vault_profile
     vault_profile=$(_vault_get_profile)
+
+    # Production TLS: generate Vault node certs before starting containers
+    if is_production_mode && [ "$vault_profile" = "vault-ha" ]; then
+        log_info "Production mode: generating Vault node TLS certificates..."
+        source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+        if ! generate_vault_node_certs; then
+            log_error "Failed to generate Vault node certs — cannot start TLS-enabled cluster"
+            return 1
+        fi
+    fi
+
     log_info "Starting Vault services (profile: ${vault_profile})..."
 
     if ! ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" --profile "$vault_profile" up -d 2>&1; then

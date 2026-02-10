@@ -1950,6 +1950,182 @@ module_vault_test_env() {
 }
 
 ##
+# Rotate Vault audit log to prevent unbounded disk growth.
+# Archives the current audit.log if it exceeds the configured max size,
+# truncates the active log, and prunes old archives.
+#
+# Integrated into backup schedule for automated maintenance.
+# Usage: ./dive vault audit-rotate
+##
+module_vault_audit_rotate() {
+    if _vault_is_dev_mode; then
+        log_info "Vault dev mode — no audit log to rotate"
+        return 0
+    fi
+
+    local max_size_mb="${VAULT_AUDIT_LOG_MAX_SIZE_MB:-100}"
+    local retention_days="${VAULT_AUDIT_LOG_RETENTION_DAYS:-30}"
+    local container="${COMPOSE_PROJECT_NAME:-dive-hub}-vault-1"
+
+    # Check if audit log exists
+    local log_size_bytes
+    log_size_bytes=$(docker exec "$container" stat -c %s /vault/logs/audit.log 2>/dev/null || echo "0")
+
+    if [ "$log_size_bytes" = "0" ]; then
+        log_info "Audit log is empty or not found — nothing to rotate"
+        return 0
+    fi
+
+    local log_size_mb=$(( log_size_bytes / 1048576 ))
+    log_info "Vault audit log: ${log_size_mb}MB (threshold: ${max_size_mb}MB)"
+
+    if [ "$log_size_mb" -lt "$max_size_mb" ]; then
+        log_info "Below threshold — no rotation needed"
+        return 0
+    fi
+
+    # Archive the current log
+    local archive_name="audit-$(date +%Y%m%d-%H%M%S).log.gz"
+    log_info "Archiving audit log as ${archive_name}..."
+
+    if docker exec "$container" sh -c "gzip -c /vault/logs/audit.log > /vault/logs/${archive_name}"; then
+        # Truncate the active log (don't delete — Vault has a file handle on it)
+        docker exec "$container" sh -c ": > /vault/logs/audit.log"
+        log_success "Audit log archived and truncated"
+    else
+        log_error "Failed to archive audit log"
+        return 1
+    fi
+
+    # Prune old archives
+    local pruned=0
+    while IFS= read -r old_archive; do
+        [ -z "$old_archive" ] && continue
+        docker exec "$container" rm -f "/vault/logs/$old_archive"
+        pruned=$((pruned + 1))
+    done < <(docker exec "$container" find /vault/logs -name "audit-*.log.gz" -mtime "+${retention_days}" -exec basename {} \; 2>/dev/null)
+
+    if [ "$pruned" -gt 0 ]; then
+        log_info "Pruned ${pruned} archive(s) older than ${retention_days} days"
+    fi
+
+    log_success "Audit log rotation complete"
+}
+
+##
+# Disaster Recovery test — validates snapshot + restore workflow.
+# Non-destructive: writes a canary secret, snapshots, deletes it,
+# restores from snapshot, verifies the canary is restored.
+#
+# Usage: ./dive vault dr-test
+##
+module_vault_dr_test() {
+    if _vault_is_dev_mode; then
+        log_warn "Vault dev mode uses in-memory storage — DR test not applicable"
+        return 0
+    fi
+
+    if ! vault_is_running; then
+        return 1
+    fi
+
+    # Load token
+    if [ -f "$VAULT_TOKEN_FILE" ]; then
+        VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
+        export VAULT_TOKEN
+    else
+        log_error "Vault token not found — run: ./dive vault init"
+        return 1
+    fi
+
+    echo ""
+    log_info "=== Vault Disaster Recovery Test ==="
+    echo ""
+
+    local canary_value
+    canary_value="dr-test-$(date +%s)-$$"
+    local test_passed=true
+
+    # Step 1: Write canary secret
+    log_info "[1/5] Writing canary secret..."
+    if vault kv put dive-v3/core/dr-test canary="$canary_value" >/dev/null 2>&1; then
+        log_success "  Canary written: ${canary_value}"
+    else
+        log_error "  Failed to write canary secret"
+        return 1
+    fi
+
+    # Step 2: Create snapshot
+    log_info "[2/5] Creating Raft snapshot..."
+    local snap_dir="${DIVE_ROOT}/backups/vault"
+    mkdir -p "$snap_dir"
+    local snap_path="${snap_dir}/dr-test-$(date +%Y%m%d-%H%M%S).snap"
+
+    if ! module_vault_snapshot "$snap_path"; then
+        log_error "  Snapshot creation failed"
+        vault kv delete dive-v3/core/dr-test >/dev/null 2>&1
+        return 1
+    fi
+
+    # Step 3: Simulate data loss — delete canary
+    log_info "[3/5] Simulating data loss (deleting canary)..."
+    if vault kv delete dive-v3/core/dr-test >/dev/null 2>&1; then
+        log_success "  Canary deleted — simulating data loss"
+    else
+        log_warn "  Could not delete canary (may already be gone)"
+    fi
+
+    # Verify canary is gone
+    if vault kv get dive-v3/core/dr-test >/dev/null 2>&1; then
+        log_warn "  Canary still readable after delete (soft-delete) — proceeding"
+    fi
+
+    # Step 4: Restore from snapshot
+    log_info "[4/5] Restoring from snapshot..."
+    local restore_ok=false
+    for _restore_port in 8200 8202 8204; do
+        if VAULT_ADDR="http://localhost:${_restore_port}" vault operator raft snapshot restore -force "$snap_path" 2>/dev/null; then
+            restore_ok=true
+            break
+        fi
+    done
+
+    if [ "$restore_ok" = true ]; then
+        log_success "  Snapshot restored"
+        # Brief pause for Raft to re-elect leader after restore
+        sleep 5
+    else
+        log_error "  Failed to restore snapshot"
+        test_passed=false
+    fi
+
+    # Step 5: Verify canary is restored
+    log_info "[5/5] Verifying canary secret..."
+    local restored_value
+    restored_value=$(vault kv get -field=canary dive-v3/core/dr-test 2>/dev/null || echo "")
+
+    if [ "$restored_value" = "$canary_value" ]; then
+        log_success "  Canary verified: ${restored_value}"
+    else
+        log_error "  Canary mismatch: expected '${canary_value}', got '${restored_value}'"
+        test_passed=false
+    fi
+
+    # Cleanup
+    vault kv delete dive-v3/core/dr-test >/dev/null 2>&1
+    rm -f "$snap_path"
+
+    echo ""
+    if [ "$test_passed" = true ]; then
+        log_success "=== DR Test PASSED: snapshot + restore verified ==="
+    else
+        log_error "=== DR Test FAILED ==="
+        return 1
+    fi
+    echo ""
+}
+
+##
 # Main module dispatcher
 ##
 module_vault() {
@@ -2069,6 +2245,16 @@ module_vault() {
             source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
             remove_vault_ca_from_system_truststore
             ;;
+        tls-setup)
+            source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+            generate_vault_node_certs
+            ;;
+        audit-rotate)
+            module_vault_audit_rotate
+            ;;
+        dr-test)
+            module_vault_dr_test
+            ;;
         help|--help|-h)
             echo "Usage: ./dive vault <command>"
             echo ""
@@ -2081,6 +2267,7 @@ module_vault() {
             echo "  env                 Show current Vault environment (dev/staging/prod)"
             echo "  trust-ca            Install Vault Root CA in system trust store"
             echo "  untrust-ca          Remove Vault Root CA from system trust store"
+            echo "  tls-setup           Generate TLS certs for Vault HA nodes (production)"
             echo "  pki-setup           Setup PKI Root CA + Intermediate CA (one-time)"
             echo "  db-setup            Setup database secrets engine (one-time)"
             echo "  db-status           Show database engine status and roles"
@@ -2089,6 +2276,8 @@ module_vault() {
             echo "  backup-run          Create snapshot + prune old (${VAULT_BACKUP_RETENTION_DAYS:-7}-day retention)"
             echo "  backup-list         List all snapshots with size/date"
             echo "  backup-schedule     Enable/disable daily automated backups"
+            echo "  audit-rotate        Rotate audit log (archive + truncate if >100MB)"
+            echo "  dr-test             Disaster recovery test (snapshot + restore verify)"
             echo ""
             echo "Rotation:"
             echo "  rotate [category]   Rotate KV v2 secrets (core|auth|opal|federation|all)"
