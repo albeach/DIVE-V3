@@ -147,6 +147,18 @@ services:
     restart: unless-stopped
     cap_add:
       - IPC_LOCK
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+        reservations:
+          cpus: "0.10"
+          memory: 128M
     environment:
       VAULT_ADDR: "http://127.0.0.1:8200"
     volumes:
@@ -181,18 +193,31 @@ services:
     restart: unless-stopped
     cap_add:
       - IPC_LOCK
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
     env_file:
       - .env.hub
     environment:
-      VAULT_ADDR: "http://0.0.0.0:8200"
-      VAULT_API_ADDR: "http://vault-1:8200"
-      VAULT_CLUSTER_ADDR: "http://vault-1:8201"
+      VAULT_ADDR: "${VAULT_SCHEME:-http}://0.0.0.0:8200"
+      VAULT_API_ADDR: "${VAULT_SCHEME:-http}://vault-1:8200"
+      VAULT_CLUSTER_ADDR: "${VAULT_SCHEME:-http}://vault-1:8201"
       SKIP_CHOWN: "true"
     volumes:
       - vault_data_1:/vault/data
       - vault_logs:/vault/logs
       - vault_transit_token:/vault/transit:ro  # Read transit token from seal vault
       - ./${VAULT_CONFIG_BASE:-vault_config}/node1:/vault/config:ro
+      - ./certs/vault/node1:/vault/certs:ro    # TLS certs (production: VAULT_SCHEME=https)
     ports:
       - "127.0.0.1:8200:8200"  # Primary API port (backward compatible)
     networks:
@@ -214,7 +239,7 @@ services:
         fi
         exec su-exec vault vault server -config=/vault/config
     healthcheck:
-      test: ["CMD", "sh", "-c", "vault status -address=http://127.0.0.1:8200 2>/dev/null; test $? -ne 1"]
+      test: ["CMD", "sh", "-c", "VAULT_SKIP_VERIFY=1 vault status -address=${VAULT_SCHEME:-http}://127.0.0.1:8200 2>/dev/null; test $? -ne 1"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -231,18 +256,31 @@ services:
     restart: unless-stopped
     cap_add:
       - IPC_LOCK
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
     env_file:
       - .env.hub
     environment:
-      VAULT_ADDR: "http://0.0.0.0:8200"
-      VAULT_API_ADDR: "http://vault-2:8200"
-      VAULT_CLUSTER_ADDR: "http://vault-2:8201"
+      VAULT_ADDR: "${VAULT_SCHEME:-http}://0.0.0.0:8200"
+      VAULT_API_ADDR: "${VAULT_SCHEME:-http}://vault-2:8200"
+      VAULT_CLUSTER_ADDR: "${VAULT_SCHEME:-http}://vault-2:8201"
       SKIP_CHOWN: "true"
     volumes:
       - vault_data_2:/vault/data
       - vault_logs:/vault/logs
       - vault_transit_token:/vault/transit:ro
       - ./${VAULT_CONFIG_BASE:-vault_config}/node2:/vault/config:ro
+      - ./certs/vault/node2:/vault/certs:ro    # TLS certs (production)
     ports:
       - "127.0.0.1:8202:8200"  # Debug access
     networks:
@@ -261,7 +299,7 @@ services:
         fi
         exec su-exec vault vault server -config=/vault/config
     healthcheck:
-      test: ["CMD", "sh", "-c", "vault status -address=http://127.0.0.1:8200 2>/dev/null; test $? -ne 1"]
+      test: ["CMD", "sh", "-c", "VAULT_SKIP_VERIFY=1 vault status -address=${VAULT_SCHEME:-http}://127.0.0.1:8200 2>/dev/null; test $? -ne 1"]
       interval: 10s
       timeout: 5s
       retries: 3
@@ -278,18 +316,31 @@ services:
     restart: unless-stopped
     cap_add:
       - IPC_LOCK
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
     env_file:
       - .env.hub
     environment:
-      VAULT_ADDR: "http://0.0.0.0:8200"
-      VAULT_API_ADDR: "http://vault-3:8200"
-      VAULT_CLUSTER_ADDR: "http://vault-3:8201"
+      VAULT_ADDR: "${VAULT_SCHEME:-http}://0.0.0.0:8200"
+      VAULT_API_ADDR: "${VAULT_SCHEME:-http}://vault-3:8200"
+      VAULT_CLUSTER_ADDR: "${VAULT_SCHEME:-http}://vault-3:8201"
       SKIP_CHOWN: "true"
     volumes:
       - vault_data_3:/vault/data
       - vault_logs:/vault/logs
       - vault_transit_token:/vault/transit:ro
       - ./${VAULT_CONFIG_BASE:-vault_config}/node3:/vault/config:ro
+      - ./certs/vault/node3:/vault/certs:ro    # TLS certs (production)
     ports:
       - "127.0.0.1:8204:8200"  # Debug access
     networks:
@@ -308,7 +359,7 @@ services:
         fi
         exec su-exec vault vault server -config=/vault/config
     healthcheck:
-      test: ["CMD", "sh", "-c", "vault status -address=http://127.0.0.1:8200 2>/dev/null; test $? -ne 1"]
+      test: ["CMD", "sh", "-c", "VAULT_SKIP_VERIFY=1 vault status -address=${VAULT_SCHEME:-http}://127.0.0.1:8200 2>/dev/null; test $? -ne 1"]
       interval: 10s
       timeout: 5s
       retries: 3

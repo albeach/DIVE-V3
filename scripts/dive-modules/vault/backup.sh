@@ -39,7 +39,12 @@ module_vault_backup_run() {
         return 1
     fi
 
-    # Step 2: Prune snapshots older than retention period
+    # Step 2: Rotate audit log if oversized (piggyback on backup schedule)
+    if type module_vault_audit_rotate &>/dev/null; then
+        module_vault_audit_rotate
+    fi
+
+    # Step 3: Prune snapshots older than retention period
     local pruned=0
     while IFS= read -r old_snap; do
         [ -z "$old_snap" ] && continue

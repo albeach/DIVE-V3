@@ -1535,6 +1535,134 @@ remove_vault_ca_from_system_truststore() {
 }
 
 # =============================================================================
+# VAULT NODE TLS CERTIFICATES
+# =============================================================================
+
+##
+# Generate TLS certificates for Vault HA cluster nodes.
+# Uses mkcert (avoids chicken-and-egg: Vault PKI needs a running Vault).
+# Output: certs/vault/node{1,2,3}/{certificate.pem, key.pem, ca.pem}
+# Idempotent: skips nodes whose certs have >30 days remaining.
+#
+# Usage: ./dive certs vault-tls-setup  OR  ./dive vault tls-setup
+##
+generate_vault_node_certs() {
+    ensure_dive_root
+
+    if ! check_mkcert_ready; then
+        log_error "mkcert required for Vault node TLS certificates"
+        return 1
+    fi
+
+    local vault_certs_dir="${DIVE_ROOT}/certs/vault"
+    local mkcert_ca
+    mkcert_ca="$(mkcert -CAROOT)/rootCA.pem"
+
+    if [ ! -f "$mkcert_ca" ]; then
+        log_error "mkcert Root CA not found at ${mkcert_ca}"
+        return 1
+    fi
+
+    log_info "Generating TLS certificates for Vault HA cluster nodes..."
+
+    local node nodes=("node1" "node2" "node3")
+    local generated=0 skipped=0
+
+    for node in "${nodes[@]}"; do
+        local node_dir="${vault_certs_dir}/${node}"
+        local cert_file="${node_dir}/certificate.pem"
+
+        # Idempotent: skip if cert exists and has >30 days remaining
+        if [ -f "$cert_file" ]; then
+            local days_left
+            days_left=$(_cert_days_remaining "$cert_file")
+            if [ "$days_left" -gt 30 ] 2>/dev/null; then
+                log_verbose "Vault ${node} cert valid for ${days_left} days — skipping"
+                skipped=$((skipped + 1))
+                continue
+            fi
+            log_info "Vault ${node} cert expires in ${days_left} days — regenerating"
+        fi
+
+        mkdir -p "$node_dir"
+
+        # Build SANs for this node
+        local sans
+        sans=$(_vault_node_cert_sans "$node")
+
+        # Generate cert with mkcert (skip trust store updates)
+        # shellcheck disable=SC2086
+        if TRUST_STORES="" mkcert -key-file "$node_dir/key.pem" \
+                  -cert-file "$node_dir/certificate.pem" \
+                  $sans 2>/dev/null; then
+            chmod 600 "$node_dir/key.pem"
+            chmod 644 "$node_dir/certificate.pem"
+
+            # Copy mkcert Root CA for retry_join TLS verification
+            cp "$mkcert_ca" "$node_dir/ca.pem"
+            chmod 644 "$node_dir/ca.pem"
+
+            generated=$((generated + 1))
+            log_success "Vault ${node}: certificate generated (SANs: ${sans})"
+        else
+            log_error "Failed to generate certificate for Vault ${node}"
+            return 1
+        fi
+    done
+
+    echo ""
+    log_success "Vault node TLS certificates: ${generated} generated, ${skipped} skipped (valid)"
+    echo "  Output: ${vault_certs_dir}/node{1,2,3}/"
+    echo ""
+    return 0
+}
+
+##
+# Return DNS SANs + IP SANs for a Vault node.
+# Node 1 includes the dive-hub-vault alias (primary entry point).
+#
+# Arguments:
+#   $1 - Node name: node1, node2, or node3
+##
+_vault_node_cert_sans() {
+    local node="${1:?Node name required}"
+
+    case "$node" in
+        node1) echo "vault-1 dive-hub-vault localhost 127.0.0.1 ::1" ;;
+        node2) echo "vault-2 localhost 127.0.0.1 ::1" ;;
+        node3) echo "vault-3 localhost 127.0.0.1 ::1" ;;
+        *)     log_error "Unknown vault node: $node"; return 1 ;;
+    esac
+}
+
+##
+# Calculate days until a certificate expires.
+# Compatible with macOS (LibreSSL) and Linux (OpenSSL).
+#
+# Arguments:
+#   $1 - Path to PEM certificate file
+##
+_cert_days_remaining() {
+    local cert_file="${1:?Certificate path required}"
+    local expiry_epoch now_epoch
+
+    expiry_epoch=$(openssl x509 -in "$cert_file" -noout -enddate 2>/dev/null \
+        | sed 's/notAfter=//' \
+        | xargs -I{} date -j -f "%b %d %T %Y %Z" "{}" "+%s" 2>/dev/null \
+        || openssl x509 -in "$cert_file" -noout -enddate 2>/dev/null \
+        | sed 's/notAfter=//' \
+        | xargs -I{} date -d "{}" "+%s" 2>/dev/null)
+
+    now_epoch=$(date +%s)
+
+    if [ -n "$expiry_epoch" ] && [ -n "$now_epoch" ]; then
+        echo $(( (expiry_epoch - now_epoch) / 86400 ))
+    else
+        echo "0"
+    fi
+}
+
+# =============================================================================
 # MODULE DISPATCH
 # =============================================================================
 
@@ -1570,6 +1698,9 @@ module_certificates() {
         untrust-ca)
             remove_vault_ca_from_system_truststore
             ;;
+        vault-tls-setup)
+            generate_vault_node_certs
+            ;;
         verify)
             verify_federation_certificates "$@"
             ;;
@@ -1597,6 +1728,7 @@ module_certificates_help() {
     echo "  ${CYAN}sync-ca${NC}                     Sync local mkcert CA to all instances"
     echo "  ${CYAN}trust-ca${NC}                    Install Vault Root CA in system trust store"
     echo "  ${CYAN}untrust-ca${NC}                  Remove Vault Root CA from system trust store"
+    echo "  ${CYAN}vault-tls-setup${NC}             Generate TLS certs for Vault HA nodes"
     echo "  ${CYAN}verify${NC} [spoke]              Verify certificate configuration"
     echo "  ${CYAN}verify-all${NC}                  Verify certificates for all spokes"
     echo "  ${CYAN}check${NC}                       Check mkcert prerequisites"
