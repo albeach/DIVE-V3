@@ -828,6 +828,19 @@ _vault_pki_issue_cert() {
     chmod 644 "$target_dir/ca/rootCA.pem"
     chmod 644 "$target_dir/rootCA.pem" 2>/dev/null || true
 
+    # Generate fullchain.pem (leaf cert + CA chain) for nginx/reverse proxy
+    {
+        printf '%s\n' "$certificate"
+        printf '%s\n' "$issuing_ca"
+        if [ -n "$ca_chain" ] && [ "$ca_chain" != "null" ]; then
+            printf '%s\n' "$ca_chain"
+        fi
+    } > "$target_dir/fullchain.pem"
+    chmod 644 "$target_dir/fullchain.pem"
+
+    # Create privkey.pem symlink for nginx compatibility
+    ln -sf key.pem "$target_dir/privkey.pem" 2>/dev/null || cp "$target_dir/key.pem" "$target_dir/privkey.pem"
+
     log_success "Vault PKI: Certificate issued (role=$role_name, ttl=$ttl)"
     return 0
 }
@@ -1358,6 +1371,170 @@ sync_mkcert_ca_to_all() {
 }
 
 # =============================================================================
+# SYSTEM TRUST STORE MANAGEMENT
+# =============================================================================
+
+##
+# Print Firefox HSTS cache clearing instructions
+##
+_print_firefox_hsts_clear_instructions() {
+    echo ""
+    echo "Firefox HSTS Cache Clearing:"
+    echo ""
+    echo "  Option A (quick): Clear site data"
+    echo "    1. Press Cmd+Shift+Delete (macOS) or Ctrl+Shift+Delete (Linux)"
+    echo "    2. Select 'Everything' for time range"
+    echo "    3. Check 'Site Preferences' and 'Cache', click 'Clear Now'"
+    echo ""
+    echo "  Option B (targeted): Delete HSTS entry for localhost"
+    echo "    1. Close Firefox completely"
+    echo "    2. Open about:support > Profile Directory"
+    echo "    3. Edit SiteSecurityServiceState.txt"
+    echo "    4. Delete any line containing 'localhost'"
+    echo "    5. Restart Firefox"
+    echo ""
+    echo "  Option C (enable enterprise roots): Trust system CA in Firefox"
+    echo "    1. Open about:config in Firefox"
+    echo "    2. Set security.enterprise_roots.enabled = true"
+    echo "    3. Restart Firefox"
+    echo ""
+}
+
+##
+# Install Vault Root CA in the system trust store
+#
+# Enables browsers and system tools to trust Vault PKI certificates.
+# macOS: Uses 'security add-trusted-cert' for the system keychain
+# Linux: Copies to /usr/local/share/ca-certificates/ + update-ca-certificates
+#
+# Usage: ./dive certs trust-ca  OR  ./dive vault trust-ca
+##
+install_vault_ca_to_system_truststore() {
+    ensure_dive_root
+
+    # Prefer standalone root.crt (Root CA only, not the chain)
+    local root_ca="${DIVE_ROOT}/certs/mkcert/root.crt"
+
+    # Fallback: export Root CA from Vault API if root.crt missing
+    if [ ! -f "$root_ca" ]; then
+        log_warn "root.crt not found at ${root_ca}"
+        log_info "Attempting to export Root CA from Vault PKI..."
+
+        local vault_addr="${VAULT_CLI_ADDR:-${VAULT_ADDR:-http://localhost:8200}}"
+        local vault_token="${VAULT_TOKEN:-}"
+        if [ -z "$vault_token" ] && [ -f "${DIVE_ROOT}/.vault-token" ]; then
+            vault_token=$(cat "${DIVE_ROOT}/.vault-token")
+        fi
+
+        if [ -n "$vault_token" ]; then
+            local ca_pem
+            ca_pem=$(curl -sL -H "X-Vault-Token: $vault_token" \
+                "${vault_addr}/v1/pki/ca/pem" 2>/dev/null)
+            if [ -n "$ca_pem" ] && echo "$ca_pem" | grep -q "BEGIN CERTIFICATE"; then
+                mkdir -p "$(dirname "$root_ca")"
+                printf '%s\n' "$ca_pem" > "$root_ca"
+                chmod 644 "$root_ca"
+                log_success "Exported Root CA from Vault to ${root_ca}"
+            else
+                log_error "Could not export Root CA from Vault"
+                return 1
+            fi
+        else
+            log_error "No Vault token and no root.crt file found"
+            return 1
+        fi
+    fi
+
+    # Display cert info
+    local subject issuer
+    subject=$(openssl x509 -in "$root_ca" -noout -subject 2>/dev/null | sed 's/subject=//')
+    issuer=$(openssl x509 -in "$root_ca" -noout -issuer 2>/dev/null | sed 's/issuer=//')
+
+    echo ""
+    log_info "Installing Vault Root CA to System Trust Store"
+    echo ""
+    echo "  Root CA:  ${root_ca}"
+    echo "  Subject:  ${subject}"
+    echo "  Issuer:   ${issuer}"
+    echo ""
+
+    local os_type
+    os_type=$(uname -s)
+
+    case "$os_type" in
+        Darwin)
+            log_info "Installing to macOS system keychain (requires sudo)..."
+            if sudo security add-trusted-cert -d -r trustRoot \
+                -k /Library/Keychains/System.keychain "$root_ca"; then
+                log_success "Root CA installed in macOS system keychain"
+                echo ""
+                echo "  Chrome/Safari: Trusted immediately (restart browser)"
+                echo "  Firefox:       Set security.enterprise_roots.enabled=true in about:config"
+                echo "                 Or import manually: Preferences > Privacy > Certificates > Import"
+                _print_firefox_hsts_clear_instructions
+                return 0
+            else
+                log_error "Failed to install Root CA (sudo required)"
+                return 2
+            fi
+            ;;
+        Linux)
+            log_info "Installing to Linux system CA store (requires sudo)..."
+            local ca_dest="/usr/local/share/ca-certificates/dive-v3-root-ca.crt"
+            if sudo cp "$root_ca" "$ca_dest" && sudo update-ca-certificates; then
+                log_success "Root CA installed in Linux system CA store"
+                echo ""
+                echo "  System tools (curl, wget): Trusted immediately"
+                echo "  Chrome/Chromium: Trusted immediately (restart browser)"
+                echo "  Firefox: Set security.enterprise_roots.enabled=true in about:config"
+                _print_firefox_hsts_clear_instructions
+                return 0
+            else
+                log_error "Failed to install Root CA"
+                return 2
+            fi
+            ;;
+        *)
+            log_error "Unsupported OS: ${os_type}"
+            log_info "Manually import ${root_ca} into your system trust store"
+            return 2
+            ;;
+    esac
+}
+
+##
+# Remove Vault Root CA from system trust store
+##
+remove_vault_ca_from_system_truststore() {
+    local os_type
+    os_type=$(uname -s)
+
+    case "$os_type" in
+        Darwin)
+            log_info "Removing DIVE V3 Root CA from macOS keychain..."
+            if sudo security delete-certificate -c "DIVE V3 Root CA" \
+                /Library/Keychains/System.keychain 2>/dev/null; then
+                log_success "Root CA removed from macOS system keychain"
+            else
+                log_warn "Root CA not found in system keychain (may already be removed)"
+            fi
+            ;;
+        Linux)
+            local ca_dest="/usr/local/share/ca-certificates/dive-v3-root-ca.crt"
+            if [ -f "$ca_dest" ]; then
+                sudo rm -f "$ca_dest" && sudo update-ca-certificates
+                log_success "Root CA removed from Linux CA store"
+            else
+                log_warn "Root CA not found in CA store"
+            fi
+            ;;
+        *)
+            log_error "Unsupported OS: $(uname -s)"
+            ;;
+    esac
+}
+
+# =============================================================================
 # MODULE DISPATCH
 # =============================================================================
 
@@ -1387,6 +1564,12 @@ module_certificates() {
         sync-ca)
             sync_mkcert_ca_to_all
             ;;
+        trust-ca)
+            install_vault_ca_to_system_truststore
+            ;;
+        untrust-ca)
+            remove_vault_ca_from_system_truststore
+            ;;
         verify)
             verify_federation_certificates "$@"
             ;;
@@ -1412,6 +1595,8 @@ module_certificates_help() {
     echo "  ${CYAN}install-spoke-ca${NC} <spoke>    Install mkcert CA in spoke truststore"
     echo "  ${CYAN}generate-spoke${NC} <spoke>      Generate spoke certificate"
     echo "  ${CYAN}sync-ca${NC}                     Sync local mkcert CA to all instances"
+    echo "  ${CYAN}trust-ca${NC}                    Install Vault Root CA in system trust store"
+    echo "  ${CYAN}untrust-ca${NC}                  Remove Vault Root CA from system trust store"
     echo "  ${CYAN}verify${NC} [spoke]              Verify certificate configuration"
     echo "  ${CYAN}verify-all${NC}                  Verify certificates for all spokes"
     echo "  ${CYAN}check${NC}                       Check mkcert prerequisites"
