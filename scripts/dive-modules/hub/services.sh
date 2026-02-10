@@ -86,7 +86,7 @@ hub_down() {
         return 0
     fi
 
-    docker compose -f "$HUB_COMPOSE_FILE" down
+    docker compose -f "$HUB_COMPOSE_FILE" --profile "$(_vault_get_profile)" down
     log_success "Hub services stopped"
 }
 

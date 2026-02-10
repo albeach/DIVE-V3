@@ -141,6 +141,7 @@ services:
     labels:
       dive.service.class: "infrastructure"
       dive.service.description: "Vault Transit seal for auto-unseal"
+    profiles: ["vault-ha"]
     image: hashicorp/vault:1.21.0
     container_name: ${COMPOSE_PROJECT_NAME}-vault-seal
     restart: unless-stopped
@@ -174,6 +175,7 @@ services:
     labels:
       dive.service.class: "core"
       dive.service.description: "Vault HA node 1 (primary entry)"
+    profiles: ["vault-ha"]
     image: hashicorp/vault:1.21.0
     container_name: ${COMPOSE_PROJECT_NAME}-vault-1
     restart: unless-stopped
@@ -190,7 +192,7 @@ services:
       - vault_data_1:/vault/data
       - vault_logs:/vault/logs
       - vault_transit_token:/vault/transit:ro  # Read transit token from seal vault
-      - ./vault_config/node1:/vault/config:ro
+      - ./${VAULT_CONFIG_BASE:-vault_config}/node1:/vault/config:ro
     ports:
       - "127.0.0.1:8200:8200"  # Primary API port (backward compatible)
     networks:
@@ -223,6 +225,7 @@ services:
     labels:
       dive.service.class: "core"
       dive.service.description: "Vault HA node 2 (follower)"
+    profiles: ["vault-ha"]
     image: hashicorp/vault:1.21.0
     container_name: ${COMPOSE_PROJECT_NAME}-vault-2
     restart: unless-stopped
@@ -239,7 +242,7 @@ services:
       - vault_data_2:/vault/data
       - vault_logs:/vault/logs
       - vault_transit_token:/vault/transit:ro
-      - ./vault_config/node2:/vault/config:ro
+      - ./${VAULT_CONFIG_BASE:-vault_config}/node2:/vault/config:ro
     ports:
       - "127.0.0.1:8202:8200"  # Debug access
     networks:
@@ -269,6 +272,7 @@ services:
     labels:
       dive.service.class: "core"
       dive.service.description: "Vault HA node 3 (follower)"
+    profiles: ["vault-ha"]
     image: hashicorp/vault:1.21.0
     container_name: ${COMPOSE_PROJECT_NAME}-vault-3
     restart: unless-stopped
@@ -285,7 +289,7 @@ services:
       - vault_data_3:/vault/data
       - vault_logs:/vault/logs
       - vault_transit_token:/vault/transit:ro
-      - ./vault_config/node3:/vault/config:ro
+      - ./${VAULT_CONFIG_BASE:-vault_config}/node3:/vault/config:ro
     ports:
       - "127.0.0.1:8204:8200"  # Debug access
     networks:
@@ -309,6 +313,39 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+
+  # Vault Dev Mode — single node, in-memory, instant startup (<10s)
+  # Activated via DIVE_ENV=dev (profile: vault-dev)
+  # Uses same DNS alias as vault-1 so all clients work unchanged
+  vault-dev:
+    labels:
+      dive.service.class: "infrastructure"
+      dive.service.description: "Vault dev mode (single node, in-memory, root token)"
+    profiles: ["vault-dev"]
+    image: hashicorp/vault:1.21.0
+    container_name: ${COMPOSE_PROJECT_NAME}-vault-dev
+    restart: unless-stopped
+    cap_add:
+      - IPC_LOCK
+    environment:
+      VAULT_DEV_ROOT_TOKEN_ID: "root"
+      VAULT_DEV_LISTEN_ADDRESS: "0.0.0.0:8200"
+      VAULT_ADDR: "http://0.0.0.0:8200"
+      VAULT_LOG_LEVEL: "WARN"
+    command: ["server", "-dev"]
+    ports:
+      - "127.0.0.1:8200:8200"
+    networks:
+      hub-internal:
+      dive-shared:
+        aliases:
+          - dive-hub-vault
+    healthcheck:
+      test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
+      interval: 3s
+      timeout: 2s
+      retries: 3
+      start_period: 3s
 
   # ---------------------------------------------------------------------------
   # PostgreSQL - backing store for Keycloak / NextAuth

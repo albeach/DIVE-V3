@@ -28,6 +28,12 @@ _HA_NC='\033[0m'
 # Show HA cluster status: seal vault + all 3 nodes + Raft peers
 ##
 vault_ha_status() {
+    if _vault_is_dev_mode; then
+        log_info "Vault is running in DEV mode (no HA cluster)"
+        log_info "Use './dive vault status' for dev mode status"
+        return 0
+    fi
+
     echo ""
     echo "═══════════════════════════════════════════════════════════════"
     echo "  Vault HA Cluster Status"
@@ -162,6 +168,10 @@ vault_ha_status() {
 # Force leader step-down (triggers re-election)
 ##
 vault_ha_step_down() {
+    if _vault_is_dev_mode; then
+        log_info "Step-down not applicable in dev mode (single node)"
+        return 0
+    fi
     log_info "Forcing Vault leader step-down..."
 
     if [ ! -f "$VAULT_TOKEN_FILE" ]; then
@@ -207,6 +217,10 @@ vault_ha_step_down() {
 # Remove a dead peer from the Raft cluster
 ##
 vault_ha_remove_peer() {
+    if _vault_is_dev_mode; then
+        log_info "Remove-peer not applicable in dev mode (single node)"
+        return 0
+    fi
     local node_id="${1:-}"
 
     if [ -z "$node_id" ]; then
@@ -237,6 +251,10 @@ vault_ha_remove_peer() {
 # Show seal vault health and Transit key info
 ##
 vault_ha_seal_status() {
+    if _vault_is_dev_mode; then
+        log_info "Seal status not applicable in dev mode (no seal vault)"
+        return 0
+    fi
     echo ""
     echo "═══════════════════════════════════════════════════════════════"
     echo "  Seal Vault Diagnostics"

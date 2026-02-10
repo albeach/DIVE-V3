@@ -1523,6 +1523,31 @@ is_production_mode() {
     [ "${DIVE_ENV:-}" = "production" ] || [ -n "${KUBERNETES_SERVICE_HOST:-}" ]
 }
 
+##
+# Get the Docker Compose Vault profile for the current environment.
+# Returns "vault-dev" for dev/development, "vault-ha" for everything else.
+##
+_vault_get_profile() {
+    case "${DIVE_ENV:-local}" in
+        dev|development)
+            echo "vault-dev"
+            ;;
+        *)
+            echo "vault-ha"
+            ;;
+    esac
+}
+export -f _vault_get_profile
+
+##
+# Check if current environment uses Vault dev mode (single node, root token).
+# Returns 0 for dev mode, 1 for HA mode.
+##
+_vault_is_dev_mode() {
+    [ "$(_vault_get_profile)" = "vault-dev" ]
+}
+export -f _vault_is_dev_mode
+
 # =============================================================================
 # JSON PARSING UTILITIES
 # =============================================================================
