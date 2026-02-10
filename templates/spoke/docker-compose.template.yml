@@ -331,8 +331,8 @@ services:
     environment:
       KC_DB: postgres
       KC_DB_URL: jdbc:postgresql://postgres-{{INSTANCE_CODE_LOWER}}:5432/keycloak
-      KC_DB_USERNAME: keycloak
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD_{{INSTANCE_CODE_UPPER}}}
+      KC_DB_USERNAME: ${KC_DB_USERNAME:-keycloak}
+      KC_DB_PASSWORD: ${KC_DB_PASSWORD:-${POSTGRES_PASSWORD_{{INSTANCE_CODE_UPPER}}}}
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_{{INSTANCE_CODE_UPPER}}}
       KC_HOSTNAME: {{IDP_HOSTNAME}}
@@ -518,6 +518,8 @@ services:
       VAULT_TOKEN: ${VAULT_TOKEN:-}
       VAULT_ROLE_ID: ${VAULT_ROLE_ID:-}
       VAULT_SECRET_ID: ${VAULT_SECRET_ID:-}
+      # Vault database secrets engine role (dynamic MongoDB credentials)
+      VAULT_DB_ROLE: ${VAULT_DB_ROLE:-}
       # SSOT ARCHITECTURE (2026-01-22): Backend uses INSTANCE_CODE to query Hub for spokeId
       # No SPOKE_ID environment variable - Hub MongoDB is single source of truth
       INSTANCE_CODE: {{INSTANCE_CODE_UPPER}}
@@ -528,6 +530,7 @@ services:
       # MongoDB
       MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/dive-v3-{{INSTANCE_CODE_LOWER}}?authSource=admin&directConnection=true
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/?authSource=admin&directConnection=true
+      MONGODB_HOST: mongodb-{{INSTANCE_CODE_LOWER}}:27017
       MONGODB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
       # Local Redis for session cache (authenticated)
       REDIS_URL: redis://:${REDIS_PASSWORD_{{INSTANCE_CODE_UPPER}}:-}@redis-{{INSTANCE_CODE_LOWER}}:6379
@@ -650,7 +653,13 @@ services:
       # OPA - Use standalone OPA for policy decisions (HTTPS)
       OPA_URL: https://opa-{{INSTANCE_CODE_LOWER}}:8181
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/?authSource=admin&directConnection=true
+      MONGODB_HOST: mongodb-{{INSTANCE_CODE_LOWER}}:27017
       MONGODB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
+      # Secret management provider (vault or gcp)
+      SECRETS_PROVIDER: ${SECRETS_PROVIDER:-vault}
+      VAULT_ADDR: ${VAULT_ADDR:-http://dive-hub-vault:8200}
+      VAULT_TOKEN: ${VAULT_TOKEN:-}
+      VAULT_DB_ROLE: ${VAULT_DB_ROLE_KAS:-}
       REDIS_URL: redis://:${REDIS_PASSWORD_{{INSTANCE_CODE_UPPER}}}@redis-{{INSTANCE_CODE_LOWER}}:6379
       LOG_LEVEL: info
       KEYCLOAK_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
@@ -714,7 +723,7 @@ services:
       NEXTAUTH_URL: {{BASE_URL}}
       NEXTAUTH_SECRET: ${AUTH_SECRET_{{INSTANCE_CODE_UPPER}}}
       # Database for NextAuth sessions
-      DATABASE_URL: postgres://keycloak:${POSTGRES_PASSWORD_{{INSTANCE_CODE_UPPER}}}@postgres-{{INSTANCE_CODE_LOWER}}:5432/keycloak
+      DATABASE_URL: ${FRONTEND_DATABASE_URL:-postgres://keycloak:${POSTGRES_PASSWORD_{{INSTANCE_CODE_UPPER}}}@postgres-{{INSTANCE_CODE_LOWER}}:5432/keycloak}
       # Keycloak OAuth config (internal Docker network URL for SSR/API calls)
       KEYCLOAK_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
       KEYCLOAK_REALM: dive-v3-broker-{{INSTANCE_CODE_LOWER}}

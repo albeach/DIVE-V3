@@ -25,3 +25,13 @@ path "pki/*" {
 path "pki_int/*" {
   capabilities = ["create", "read", "update", "delete", "list"]
 }
+
+# Database secrets engine management
+path "database/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}
+
+# Lease management (for dynamic database credentials)
+path "sys/leases/*" {
+  capabilities = ["create", "read", "update", "delete", "list"]
+}

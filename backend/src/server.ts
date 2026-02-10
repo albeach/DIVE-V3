@@ -201,6 +201,30 @@ app.use(errorHandler);
 // ============================================
 async function startServer() {
   // ============================================
+  // VAULT DYNAMIC DATABASE CREDENTIALS (pre-connect)
+  // ============================================
+  // MUST run BEFORE any service connects to MongoDB.
+  // Sets process.env.MONGODB_URL with ephemeral Vault credentials,
+  // so all services that call getMongoDBUrl() automatically use them.
+  if (process.env.SECRETS_PROVIDER === 'vault' && process.env.VAULT_DB_ROLE) {
+    try {
+      const { getMongoDBCredentials } = await import('./utils/vault-db-credentials');
+      const result = await getMongoDBCredentials();
+      if (result.isVaultManaged) {
+        process.env.MONGODB_URL = result.url;
+        logger.info('Vault dynamic MongoDB credentials active', {
+          leaseId: result.leaseId,
+          leaseDuration: result.leaseDuration,
+        });
+      }
+    } catch (error) {
+      logger.warn('Vault database credentials unavailable, using static MONGODB_URL', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+    }
+  }
+
+  // ============================================
   // PHASE 0: Pre-startup Bootstrap (CRITICAL)
   // ============================================
   // MUST run BEFORE server starts listening to ensure:
