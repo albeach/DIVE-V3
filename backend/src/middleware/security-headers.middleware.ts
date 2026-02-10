@@ -87,11 +87,12 @@ export const securityHeaders = helmet({
     },
 
     // HTTP Strict Transport Security (HSTS)
-    // Forces browsers to use HTTPS for all future requests
+    // Production: 1 year, includeSubDomains, preload
+    // Development: 5 minutes, no sub-domains (avoids browser lockout with self-signed certs)
     hsts: {
-        maxAge: 31536000, // 1 year in seconds
-        includeSubDomains: true, // Apply to all subdomains
-        preload: true, // Enable HSTS preloading
+        maxAge: process.env.NODE_ENV === 'production' ? 31536000 : 300,
+        includeSubDomains: process.env.NODE_ENV === 'production',
+        preload: process.env.NODE_ENV === 'production',
     },
 
     // X-Frame-Options: DENY

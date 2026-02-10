@@ -90,7 +90,7 @@ resource "keycloak_realm" "broker" {
       content_security_policy   = "frame-src 'self'; frame-ancestors 'self'; object-src 'none';"
       x_content_type_options    = "nosniff"
       x_xss_protection          = "1; mode=block"
-      strict_transport_security = "max-age=31536000; includeSubDomains"
+      strict_transport_security = "max-age=31536000; includeSubDomains; preload"
     }
     brute_force_detection {
       permanent_lockout                = false
