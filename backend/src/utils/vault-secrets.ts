@@ -208,3 +208,107 @@ export function resetVaultCache(): void {
     vaultAvailable = null;
     logger.info('Vault availability cache reset');
 }
+
+// ============================================
+// DATABASE DYNAMIC CREDENTIALS
+// ============================================
+
+export interface VaultDatabaseCredential {
+    username: string;
+    password: string;
+    leaseId: string;
+    leaseDuration: number;
+    renewable: boolean;
+}
+
+/**
+ * Fetch dynamic database credentials from Vault database secrets engine
+ *
+ * @param roleName - Database role name (e.g., "backend-hub-rw", "kas-hub-ro")
+ * @returns Credential object with username, password, and lease info, or null if unavailable
+ */
+export async function fetchDatabaseCredentials(
+    roleName: string
+): Promise<VaultDatabaseCredential | null> {
+    if (!(await checkVaultAvailability())) {
+        return null;
+    }
+
+    try {
+        const response = await fetch(`${VAULT_ADDR}/v1/database/creds/${roleName}`, {
+            headers: { 'X-Vault-Token': VAULT_TOKEN },
+            signal: AbortSignal.timeout(10000),
+            redirect: 'follow',
+        });
+
+        if (!response.ok) {
+            logger.error(`Vault database creds failed: ${response.status} for role ${roleName}`);
+            return null;
+        }
+
+        const data = await response.json() as {
+            lease_id: string;
+            renewable: boolean;
+            lease_duration: number;
+            data: { username: string; password: string };
+        };
+
+        logger.info(`Fetched dynamic database credentials for role: ${roleName}`, {
+            username: data.data.username,
+            leaseId: data.lease_id,
+            leaseDuration: data.lease_duration,
+            renewable: data.renewable,
+        });
+
+        return {
+            username: data.data.username,
+            password: data.data.password,
+            leaseId: data.lease_id,
+            leaseDuration: data.lease_duration,
+            renewable: data.renewable,
+        };
+    } catch (error) {
+        logger.error(`Failed to fetch database credentials for role: ${roleName}`, { error });
+        return null;
+    }
+}
+
+/**
+ * Renew a Vault lease (for dynamic database credentials)
+ *
+ * @param leaseId - The lease ID to renew
+ * @param increment - TTL increment in seconds (default: 43200 = 12h)
+ * @returns true if renewal succeeded
+ */
+export async function renewLease(
+    leaseId: string,
+    increment: number = 43200
+): Promise<boolean> {
+    if (!(await checkVaultAvailability())) {
+        return false;
+    }
+
+    try {
+        const response = await fetch(`${VAULT_ADDR}/v1/sys/leases/renew`, {
+            method: 'POST',
+            headers: {
+                'X-Vault-Token': VAULT_TOKEN,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ lease_id: leaseId, increment }),
+            signal: AbortSignal.timeout(10000),
+            redirect: 'follow',
+        });
+
+        if (response.ok) {
+            logger.info(`Renewed lease: ${leaseId}`);
+            return true;
+        }
+
+        logger.warn(`Lease renewal failed: ${response.status} for ${leaseId}`);
+        return false;
+    } catch (error) {
+        logger.error(`Failed to renew lease: ${leaseId}`, { error });
+        return false;
+    }
+}
