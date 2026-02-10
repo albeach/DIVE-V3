@@ -31,6 +31,7 @@ DIVE_ROOT="${DIVE_ROOT:-$(cd "${SCRIPT_DIR}/../../.." && pwd)}"
 source "${DIVE_ROOT}/scripts/dive-modules/common.sh"
 source "${SCRIPT_DIR}/ha.sh"
 source "${SCRIPT_DIR}/db-engine.sh"
+source "${SCRIPT_DIR}/backup.sh"
 
 # CLI runs on host — prefer VAULT_CLI_ADDR (host-accessible) over VAULT_ADDR (Docker-internal)
 if [ -z "${VAULT_CLI_ADDR:-}" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
@@ -335,7 +336,17 @@ module_vault_snapshot() {
     log_info "Creating Vault Raft snapshot..."
     log_info "  Output: $output_path"
 
-    if vault operator raft snapshot save "$output_path" 2>/dev/null; then
+    # Standby nodes redirect to leader using Docker-internal hostname (unreachable from host).
+    # Try each cluster port directly — the leader port succeeds without redirect.
+    local snap_saved=false
+    for _snap_port in 8200 8202 8204; do
+        if VAULT_ADDR="http://localhost:${_snap_port}" vault operator raft snapshot save "$output_path" 2>/dev/null; then
+            snap_saved=true
+            break
+        fi
+    done
+
+    if [ "$snap_saved" = true ]; then
         local size
         size=$(du -h "$output_path" | awk '{print $1}')
         log_success "Snapshot created: $output_path ($size)"
@@ -1200,12 +1211,19 @@ module_vault_test_backup() {
 
     test_suite_start "Vault Backup/Restore Validation"
 
-    # Step 1: Create Raft snapshot
+    # Step 1: Create Raft snapshot (try each port — standby redirects to Docker hostname)
     test_start "Create Raft snapshot"
     local backup_dir="${DIVE_ROOT}/backups/vault"
     local snapshot_path="${backup_dir}/vault-test-$(date +%Y%m%d-%H%M%S).snap"
     mkdir -p "$backup_dir"
-    if vault operator raft snapshot save "$snapshot_path" 2>/dev/null; then
+    local _snap_ok=false
+    for _p in 8200 8202 8204; do
+        if VAULT_ADDR="http://localhost:${_p}" vault operator raft snapshot save "$snapshot_path" 2>/dev/null; then
+            _snap_ok=true
+            break
+        fi
+    done
+    if [ "$_snap_ok" = true ]; then
         test_pass
     else
         test_fail "Snapshot creation failed"
@@ -1631,6 +1649,114 @@ module_vault_test_pki() {
 }
 
 ##
+# Test Vault monitoring infrastructure
+# Validates: telemetry endpoint, key metrics, all nodes, Prometheus config, snapshot
+# Usage: ./dive vault test-monitoring
+##
+module_vault_test_monitoring() {
+    # Load test framework
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/utilities/testing.sh"
+    else
+        log_error "Testing framework not found"
+        return 1
+    fi
+
+    if [ -f "$VAULT_TOKEN_FILE" ]; then
+        VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
+        export VAULT_TOKEN
+    fi
+
+    test_suite_start "Vault Monitoring Infrastructure"
+
+    # Test 1: Metrics endpoint returns 200
+    test_start "Vault metrics endpoint responds (vault-1)"
+    local metrics_response
+    metrics_response=$(curl -sf "http://localhost:8200/v1/sys/metrics?format=prometheus" 2>/dev/null || true)
+    if [ -n "$metrics_response" ]; then
+        test_pass
+    else
+        test_fail "No response from http://localhost:8200/v1/sys/metrics?format=prometheus"
+    fi
+
+    # Test 2: Key metric present (vault_core_unsealed)
+    test_start "Key metric vault_core_unsealed present"
+    if echo "$metrics_response" | grep -q "vault_core_unsealed"; then
+        test_pass
+    else
+        test_fail "vault_core_unsealed not found in metrics output"
+    fi
+
+    # Test 3: All 4 nodes respond on metrics endpoint
+    test_start "All 4 Vault nodes expose metrics"
+    local nodes_ok=0
+    local node_ports=(8200 8202 8204 8210)
+    for port in "${node_ports[@]}"; do
+        if curl -sf "http://localhost:${port}/v1/sys/metrics?format=prometheus" >/dev/null 2>&1; then
+            nodes_ok=$((nodes_ok + 1))
+        fi
+    done
+    if [ "$nodes_ok" -eq 4 ]; then
+        test_pass
+    else
+        test_fail "Only ${nodes_ok}/4 nodes responding on metrics endpoint"
+    fi
+
+    # Test 4: Prometheus config has vault-cluster job
+    test_start "Prometheus config has vault-cluster scrape job"
+    local prom_config="${DIVE_ROOT}/monitoring/prometheus.yml"
+    if [ -f "$prom_config" ] && grep -q "vault-cluster" "$prom_config"; then
+        test_pass
+    else
+        test_fail "vault-cluster job not found in $prom_config"
+    fi
+
+    # Test 5: Alert rules file exists and has vault rules
+    test_start "Vault alert rules configured"
+    local alerts_file="${DIVE_ROOT}/monitoring/alerts/vault-alerts.yml"
+    if [ -f "$alerts_file" ] && grep -q "VaultNodeSealed" "$alerts_file"; then
+        test_pass
+    else
+        test_fail "Vault alert rules not found at $alerts_file"
+    fi
+
+    # Test 6: Grafana dashboard exists
+    test_start "Vault Grafana dashboard exists"
+    local dashboard_file="${DIVE_ROOT}/monitoring/dashboards/vault-cluster.json"
+    if [ -f "$dashboard_file" ] && grep -q "vault-ha-cluster" "$dashboard_file"; then
+        test_pass
+    else
+        test_fail "Vault dashboard not found at $dashboard_file"
+    fi
+
+    # Test 7: Snapshot command works (try each port — standby nodes redirect to Docker-internal leader hostname)
+    test_start "Vault snapshot command succeeds"
+    local test_snap="${DIVE_ROOT}/backups/vault/vault-monitoring-test-$(date +%s).snap"
+    mkdir -p "$(dirname "$test_snap")"
+    local snap_ok=false
+    for snap_port in 8200 8202 8204; do
+        if VAULT_ADDR="http://localhost:${snap_port}" vault operator raft snapshot save "$test_snap" 2>/dev/null; then
+            snap_ok=true
+            break
+        fi
+    done
+    if [ "$snap_ok" = true ]; then
+        local snap_size
+        snap_size=$(wc -c < "$test_snap" 2>/dev/null | tr -d ' ')
+        if [ "${snap_size:-0}" -gt 0 ] 2>/dev/null; then
+            test_pass
+        else
+            test_fail "Snapshot file is empty"
+        fi
+        rm -f "$test_snap"
+    else
+        test_fail "vault operator raft snapshot save failed on all ports"
+    fi
+
+    test_suite_end
+}
+
+##
 # Main module dispatcher
 ##
 module_vault() {
@@ -1709,6 +1835,19 @@ module_vault() {
         db-test)
             module_vault_db_test
             ;;
+        backup-run)
+            module_vault_backup_run
+            ;;
+        backup-list)
+            module_vault_backup_list
+            ;;
+        backup-schedule)
+            shift
+            module_vault_backup_schedule "$@"
+            ;;
+        test-monitoring)
+            module_vault_test_monitoring
+            ;;
         help|--help|-h)
             echo "Usage: ./dive vault <command>"
             echo ""
@@ -1723,6 +1862,9 @@ module_vault() {
             echo "  db-status           Show database engine status and roles"
             echo "  snapshot [path]     Create Raft snapshot backup"
             echo "  restore <path>      Restore from Raft snapshot"
+            echo "  backup-run          Create snapshot + prune old (${VAULT_BACKUP_RETENTION_DAYS}-day retention)"
+            echo "  backup-list         List all snapshots with size/date"
+            echo "  backup-schedule     Enable/disable daily automated backups"
             echo ""
             echo "HA Cluster:"
             echo "  cluster status      Show leader, followers, Raft peers"
@@ -1739,6 +1881,7 @@ module_vault() {
             echo "  test-seal-restart   Test seal vault restart resilience"
             echo "  test-full-restart   Test full cluster restart"
             echo "  test-pki            Test PKI certificate issuance lifecycle"
+            echo "  test-monitoring     Test monitoring infrastructure (7-point)"
             echo "  db-test             Test database credential generation"
             echo ""
             echo "Workflow:"
