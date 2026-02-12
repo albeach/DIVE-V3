@@ -3,10 +3,14 @@ storage "raft" {
   node_id = "vault-3"
 
   retry_join {
-    leader_api_addr = "http://vault-1:8200"
+    leader_api_addr         = "https://vault-1:8200"
+    leader_ca_cert_file     = "/vault/certs/ca.pem"
+    leader_tls_servername   = "vault-1"
   }
   retry_join {
-    leader_api_addr = "http://vault-2:8200"
+    leader_api_addr         = "https://vault-2:8200"
+    leader_ca_cert_file     = "/vault/certs/ca.pem"
+    leader_tls_servername   = "vault-2"
   }
 }
 
@@ -20,8 +24,9 @@ seal "transit" {
 }
 
 listener "tcp" {
-  address     = "0.0.0.0:8200"
-  tls_disable = 1
+  address       = "0.0.0.0:8200"
+  tls_cert_file = "/vault/certs/certificate.pem"
+  tls_key_file  = "/vault/certs/key.pem"
 
   telemetry {
     unauthenticated_metrics_access = true
@@ -33,8 +38,8 @@ telemetry {
   disable_hostname         = true
 }
 
-api_addr      = "http://vault-3:8200"
-cluster_addr  = "http://vault-3:8201"
+api_addr      = "https://vault-3:8200"
+cluster_addr  = "https://vault-3:8201"
 ui            = true
 log_level     = "INFO"
 disable_mlock = true

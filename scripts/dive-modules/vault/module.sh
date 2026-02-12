@@ -39,11 +39,23 @@ if [ -z "${VAULT_CLI_ADDR:-}" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
     _vault_cli_addr=$(grep '^VAULT_CLI_ADDR=' "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2-)
     [ -n "$_vault_cli_addr" ] && VAULT_CLI_ADDR="$_vault_cli_addr"
 fi
-VAULT_ADDR="${VAULT_CLI_ADDR:-${VAULT_ADDR:-http://localhost:8200}}"
+VAULT_ADDR="${VAULT_CLI_ADDR:-${VAULT_ADDR:-https://localhost:8200}}"
 VAULT_TOKEN_FILE="${DIVE_ROOT}/.vault-token"
 VAULT_INIT_FILE="${DIVE_ROOT}/.vault-init.txt"
 
 export VAULT_ADDR
+
+# Auto-detect VAULT_CACERT for CLI TLS verification (if not already set)
+if [ -z "${VAULT_CACERT:-}" ] && [[ "$VAULT_ADDR" == https://* ]]; then
+    _auto_cacert="${DIVE_ROOT}/certs/vault/node1/ca.pem"
+    if [ -f "$_auto_cacert" ]; then
+        export VAULT_CACERT="$_auto_cacert"
+    fi
+    unset _auto_cacert
+fi
+
+# Scheme for per-node CLI calls (derived from VAULT_ADDR)
+_VAULT_CLI_SCHEME="${VAULT_ADDR%%://*}"
 
 # Dev mode: use well-known root token
 if _vault_is_dev_mode; then
@@ -312,6 +324,38 @@ module_vault_setup() {
         fi
     fi
 
+    # Create AppRole for Hub (usa) - best practice authentication
+    log_info "Creating AppRole for Hub..."
+    if vault write auth/approle/role/hub \
+        token_policies="dive-v3-hub" \
+        token_ttl=24h \
+        token_max_ttl=72h \
+        secret_id_ttl=72h \
+        secret_id_num_uses=0 >/dev/null 2>&1; then
+
+        # Get role_id
+        local hub_role_id
+        hub_role_id=$(vault read -field=role_id auth/approle/role/hub/role-id 2>/dev/null)
+
+        # Generate secret_id
+        local hub_secret_id
+        hub_secret_id=$(vault write -field=secret_id -f auth/approle/role/hub/secret-id 2>/dev/null)
+
+        if [ -n "$hub_role_id" ] && [ -n "$hub_secret_id" ]; then
+            # Source secrets module for _vault_update_env
+            source "${DIVE_ROOT}/scripts/dive-modules/configuration/secrets.sh" 2>/dev/null || true
+
+            # Update .env.hub with AppRole credentials
+            _vault_update_env "${DIVE_ROOT}/.env.hub" "VAULT_ROLE_ID" "$hub_role_id"
+            _vault_update_env "${DIVE_ROOT}/.env.hub" "VAULT_SECRET_ID" "$hub_secret_id"
+            log_success "  ✓ Created AppRole: hub (credentials written to .env.hub)"
+        else
+            log_warn "  ✗ Failed to get Hub AppRole credentials"
+        fi
+    else
+        log_warn "  ✗ Failed to create AppRole: hub"
+    fi
+
     # Spoke AppRoles are created dynamically via: ./dive vault provision <CODE>
 
     # Enable audit logging
@@ -393,7 +437,7 @@ module_vault_snapshot() {
     # Try each cluster port directly — the leader port succeeds without redirect.
     local snap_saved=false
     for _snap_port in 8200 8202 8204; do
-        if VAULT_ADDR="http://localhost:${_snap_port}" vault operator raft snapshot save "$output_path" 2>/dev/null; then
+        if VAULT_ADDR="${_VAULT_CLI_SCHEME}://localhost:${_snap_port}" vault operator raft snapshot save "$output_path" 2>/dev/null; then
             snap_saved=true
             break
         fi
@@ -456,6 +500,299 @@ module_vault_restore() {
     fi
 }
 
+# =============================================================================
+# PKI BACKUP & RESTORE (Phase 6: Disaster Recovery)
+# =============================================================================
+
+##
+# Backup PKI state: export CA certs + take Raft snapshot.
+#
+# Exports:
+#   - Root CA cert (public — key stays in Vault)
+#   - Intermediate CA cert (public — key stays in Vault)
+#   - Vault Raft snapshot (includes PKI engine state with private keys)
+#
+# Usage: ./dive vault backup-pki
+##
+module_vault_backup_pki() {
+    if _vault_is_dev_mode; then
+        log_warn "Vault dev mode — PKI backup not applicable"
+        return 0
+    fi
+
+    if ! vault_is_running; then return 1; fi
+
+    if [ -f "$VAULT_TOKEN_FILE" ]; then
+        VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
+        export VAULT_TOKEN
+    else
+        log_error "Vault token not found — run: ./dive vault init"
+        return 1
+    fi
+
+    local timestamp
+    timestamp=$(date +%Y%m%d-%H%M%S)
+    local backup_dir="${DIVE_ROOT}/backups/pki"
+    mkdir -p "$backup_dir"
+
+    echo ""
+    log_info "==================================================================="
+    log_info "  Vault PKI Backup"
+    log_info "==================================================================="
+
+    local errors=0
+
+    # Export Root CA cert
+    log_info "Step 1/3: Exporting Root CA certificate..."
+    local root_ca_file="${backup_dir}/root-ca-${timestamp}.pem"
+    local root_cert
+    root_cert=$(vault read -field=certificate pki/cert/ca 2>/dev/null || true)
+    if [ -n "$root_cert" ]; then
+        echo "$root_cert" > "$root_ca_file"
+        log_success "  Root CA cert: $root_ca_file"
+    else
+        log_warn "  Root CA not available (PKI may not be configured)"
+        errors=$((errors + 1))
+    fi
+
+    # Export Intermediate CA cert
+    log_info "Step 2/3: Exporting Intermediate CA certificate..."
+    local int_ca_file="${backup_dir}/intermediate-ca-${timestamp}.pem"
+    local int_cert
+    int_cert=$(vault read -field=certificate pki_int/cert/ca 2>/dev/null || true)
+    if [ -n "$int_cert" ]; then
+        echo "$int_cert" > "$int_ca_file"
+        log_success "  Intermediate CA cert: $int_ca_file"
+    else
+        log_warn "  Intermediate CA not available"
+        errors=$((errors + 1))
+    fi
+
+    # Raft snapshot (includes PKI engine state with private keys)
+    log_info "Step 3/3: Creating Vault Raft snapshot..."
+    local snap_file="${backup_dir}/vault-pki-snapshot-${timestamp}.snap"
+    if module_vault_snapshot "$snap_file"; then
+        log_success "  Snapshot: $snap_file"
+    else
+        log_error "  Raft snapshot failed"
+        errors=$((errors + 1))
+    fi
+
+    echo ""
+    log_info "==================================================================="
+    log_info "  PKI Backup Summary"
+    log_info "==================================================================="
+    log_info "  Backup directory: $backup_dir"
+    [ -f "$root_ca_file" ] && log_info "  Root CA cert:       $(du -h "$root_ca_file" | awk '{print $1}')"
+    [ -f "$int_ca_file" ] && log_info "  Intermediate cert:  $(du -h "$int_ca_file" | awk '{print $1}')"
+    [ -f "$snap_file" ] && log_info "  Raft snapshot:      $(du -h "$snap_file" | awk '{print $1}')"
+    [ $errors -gt 0 ] && log_warn "  Warnings: $errors"
+    log_info "==================================================================="
+
+    return 0
+}
+
+##
+# Restore PKI from a Vault Raft snapshot, then re-issue all service certificates.
+#
+# Steps:
+#   1. Restore Raft snapshot (replaces all Vault data)
+#   2. Wait for Vault to become healthy
+#   3. Verify CA chain integrity
+#   4. Re-issue all service certificates (hub + spokes)
+#   5. Distribute new CRL
+#
+# Usage: ./dive vault restore-pki <snapshot-path>
+##
+module_vault_restore_pki() {
+    local snapshot_path="${1:-}"
+
+    if [ -z "$snapshot_path" ]; then
+        log_error "Usage: ./dive vault restore-pki <snapshot-path>"
+        log_info "Example: ./dive vault restore-pki backups/pki/vault-pki-snapshot-20260210.snap"
+        return 1
+    fi
+
+    if [ ! -f "$snapshot_path" ]; then
+        log_error "Snapshot not found: $snapshot_path"
+        return 1
+    fi
+
+    echo ""
+    log_warn "================================================================="
+    log_warn "  VAULT PKI RESTORE"
+    log_warn "  This will REPLACE all Vault data and re-issue ALL certificates."
+    log_warn "  Snapshot: $snapshot_path"
+    log_warn "================================================================="
+    echo ""
+    read -rp "Type 'RESTORE' to confirm: " confirm
+    if [ "$confirm" != "RESTORE" ]; then
+        log_info "Aborted"
+        return 0
+    fi
+
+    # Step 1: Restore snapshot
+    log_info "Step 1/5: Restoring Raft snapshot..."
+    if ! module_vault_restore "$snapshot_path"; then
+        log_error "Snapshot restore failed"
+        return 1
+    fi
+
+    # Step 2: Wait for Vault to become healthy
+    log_info "Step 2/5: Waiting for Vault to become healthy..."
+    local retries=30
+    while [ $retries -gt 0 ]; do
+        if vault status 2>/dev/null | grep -q "Sealed.*false"; then
+            log_success "  Vault is unsealed and healthy"
+            break
+        fi
+        sleep 2
+        retries=$((retries - 1))
+    done
+    if [ $retries -eq 0 ]; then
+        log_error "  Vault did not become healthy after restore"
+        return 1
+    fi
+
+    # Step 3: Verify CA chain
+    log_info "Step 3/5: Verifying CA chain integrity..."
+    local root_cert int_cert
+    root_cert=$(vault read -field=certificate pki/cert/ca 2>/dev/null || true)
+    int_cert=$(vault read -field=certificate pki_int/cert/ca 2>/dev/null || true)
+
+    if [ -n "$root_cert" ] && [ -n "$int_cert" ]; then
+        log_success "  Root CA and Intermediate CA accessible"
+    else
+        log_error "  CA chain verification failed — PKI engines may be missing"
+        return 1
+    fi
+
+    # Step 4: Re-issue all certificates
+    log_info "Step 4/5: Re-issuing all service certificates..."
+    source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+
+    if type cert_emergency_rotate &>/dev/null; then
+        cert_emergency_rotate "all" "--force"
+    else
+        log_error "  cert_emergency_rotate not available"
+        return 1
+    fi
+
+    # Step 5: Distribute CRL
+    log_info "Step 5/5: Distributing updated CRL..."
+    if type _distribute_crl &>/dev/null; then
+        _distribute_crl
+    fi
+
+    echo ""
+    log_success "PKI restore complete — all certificates re-issued"
+    return 0
+}
+
+##
+# Rekey the Intermediate CA: generate new CSR, sign with Root, re-issue all certs.
+#
+# WARNING: This is a disruptive operation — requires --confirm flag.
+# All service certificates must be re-issued after rekeying.
+#
+# Usage: ./dive vault rekey-intermediate --confirm
+##
+module_vault_rekey_intermediate() {
+    local confirmed=false
+    for arg in "$@"; do
+        [ "$arg" = "--confirm" ] && confirmed=true
+    done
+
+    if [ "$confirmed" != true ]; then
+        echo ""
+        log_error "Usage: ./dive vault rekey-intermediate --confirm"
+        echo ""
+        log_warn "This operation will:"
+        log_warn "  1. Generate a new Intermediate CA key pair"
+        log_warn "  2. Sign it with the existing Root CA"
+        log_warn "  3. Re-issue ALL service certificates (hub + spokes)"
+        log_warn "  4. Restart ALL services"
+        echo ""
+        log_warn "ALL services will be briefly unavailable."
+        log_info "Add --confirm to proceed."
+        return 1
+    fi
+
+    if ! vault_is_running; then return 1; fi
+
+    if [ -f "$VAULT_TOKEN_FILE" ]; then
+        VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
+        export VAULT_TOKEN
+    else
+        log_error "Vault token not found — run: ./dive vault init"
+        return 1
+    fi
+
+    echo ""
+    log_info "==================================================================="
+    log_info "  INTERMEDIATE CA REKEY"
+    log_info "==================================================================="
+
+    # Step 1: Backup current state
+    log_info "Step 1/5: Backing up current PKI state..."
+    module_vault_backup_pki || log_warn "Backup failed (continuing — ensure you have a recent backup)"
+
+    # Step 2: Generate new Intermediate CA
+    log_info "Step 2/5: Generating new Intermediate CA key pair..."
+    local csr
+    csr=$(vault write -field=csr pki_int/intermediate/generate/internal \
+        common_name="DIVE V3 Intermediate CA (rekeyed $(date +%Y%m%d))" \
+        key_type=rsa \
+        key_bits=4096 2>/dev/null)
+
+    if [ -z "$csr" ]; then
+        log_error "  Failed to generate Intermediate CA CSR"
+        return 1
+    fi
+    log_success "  New Intermediate CA CSR generated"
+
+    # Step 3: Sign with Root CA
+    log_info "Step 3/5: Signing with Root CA..."
+    local signed_cert
+    signed_cert=$(vault write -field=certificate pki/root/sign-intermediate \
+        csr="$csr" \
+        format=pem_bundle \
+        ttl=43800h 2>/dev/null)
+
+    if [ -z "$signed_cert" ]; then
+        log_error "  Failed to sign Intermediate CA"
+        return 1
+    fi
+    log_success "  Intermediate CA signed by Root CA"
+
+    # Step 4: Import signed certificate
+    log_info "Step 4/5: Importing signed Intermediate CA..."
+    if vault write pki_int/intermediate/set-signed certificate="$signed_cert" >/dev/null 2>&1; then
+        log_success "  Intermediate CA imported"
+    else
+        log_error "  Failed to import signed Intermediate CA"
+        return 1
+    fi
+
+    # Step 5: Emergency rotate all certificates
+    log_info "Step 5/5: Re-issuing all service certificates..."
+    source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+
+    if type cert_emergency_rotate &>/dev/null; then
+        cert_emergency_rotate "all" "--force"
+    else
+        log_error "  Emergency rotation not available"
+        return 1
+    fi
+
+    echo ""
+    log_info "==================================================================="
+    log_success "  Intermediate CA rekeyed and all certificates re-issued"
+    log_info "==================================================================="
+
+    return 0
+}
+
 ##
 # Seed Vault with fresh secrets for all instances
 # Generates cryptographically random secrets and stores in Vault KV v2
@@ -468,19 +805,62 @@ module_vault_seed() {
         return 1
     fi
 
-    # Load token
-    if [ -f "$VAULT_TOKEN_FILE" ]; then
-        VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
-        export VAULT_TOKEN
-    else
-        log_error "Vault token not found - run: ./dive vault init"
-        return 1
-    fi
-
-    # Check if unsealed
+    # Check if unsealed FIRST (before attempting any authentication)
     if ! vault status 2>/dev/null | grep -q "Sealed.*false"; then
         log_error "Vault is sealed - check seal vault: ./dive vault seal-status"
         return 1
+    fi
+
+    # Load token - prefer AppRole (best practice), fallback to root token
+    # BEST PRACTICE (2026-02-11): Use AppRole authentication for Hub
+    if [ -f "${DIVE_ROOT}/.env.hub" ]; then
+        # Extract AppRole credentials using grep (safe - doesn't execute corrupted env files)
+        # CRITICAL FIX: Don't source .env.hub - it may contain error messages from previous runs
+        local vault_role_id=$(grep "^VAULT_ROLE_ID=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2-)
+        local vault_secret_id=$(grep "^VAULT_SECRET_ID=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2-)
+
+        if [ -n "$vault_role_id" ] && [ -n "$vault_secret_id" ]; then
+            # Authenticate with AppRole
+            local vault_login_response
+            vault_login_response=$(vault write -format=json auth/approle/login \
+                role_id="$vault_role_id" \
+                secret_id="$vault_secret_id" 2>&1)
+
+            if echo "$vault_login_response" | grep -q '"client_token"'; then
+                VAULT_TOKEN=$(echo "$vault_login_response" | grep -o '"client_token":"[^"]*' | cut -d'"' -f4)
+                export VAULT_TOKEN
+                log_verbose "Authenticated to Vault with Hub AppRole"
+            else
+                log_warn "AppRole authentication failed, falling back to root token"
+                # Fallback to root token
+                if [ -f "$VAULT_TOKEN_FILE" ]; then
+                    VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
+                    export VAULT_TOKEN
+                else
+                    log_error "Vault token not found - run: ./dive vault init"
+                    return 1
+                fi
+            fi
+        else
+            # No AppRole credentials, use root token (first-time setup)
+            if [ -f "$VAULT_TOKEN_FILE" ]; then
+                VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
+                export VAULT_TOKEN
+                log_verbose "Using root token (AppRole not yet configured)"
+            else
+                log_error "Vault token not found - run: ./dive vault init"
+                return 1
+            fi
+        fi
+    else
+        # .env.hub doesn't exist, use root token
+        if [ -f "$VAULT_TOKEN_FILE" ]; then
+            VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
+            export VAULT_TOKEN
+        else
+            log_error "Vault token not found - run: ./dive vault init"
+            return 1
+        fi
     fi
 
     # Source secrets module for vault_set_secret()
@@ -492,22 +872,91 @@ module_vault_seed() {
     local total_failed=0
 
     # ==========================================================================
-    # Instance-specific secrets (per instance)
+    # Instance-specific secrets (per instance) - IDEMPOTENT
+    # ==========================================================================
+    # CRITICAL FIX (2026-02-11): Check if secrets exist before generating new ones
+    # Ensures hub can be re-seeded without breaking existing deployments
     # ==========================================================================
     for instance in "${all_instances[@]}"; do
         log_info "Seeding secrets for $(upper "$instance")..."
 
-        local postgres_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
-        local mongodb_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
-        local redis_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
-        local keycloak_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
-        local nextauth_secret=$(openssl rand -base64 32)
+        # PostgreSQL password
+        local postgres_pw
+        if vault_get_secret "core" "${instance}/postgres" "password" >/dev/null 2>&1; then
+            postgres_pw=$(vault_get_secret "core" "${instance}/postgres" "password")
+            log_verbose "  ✓ Using existing PostgreSQL password"
+        else
+            postgres_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+            log_info "  ↻ Generated new PostgreSQL password"
+        fi
+
+        # MongoDB password
+        local mongodb_pw
+        if vault_get_secret "core" "${instance}/mongodb" "password" >/dev/null 2>&1; then
+            mongodb_pw=$(vault_get_secret "core" "${instance}/mongodb" "password")
+            log_verbose "  ✓ Using existing MongoDB password"
+        else
+            mongodb_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+            log_info "  ↻ Generated new MongoDB password"
+        fi
+
+        # Redis password
+        local redis_pw
+        if vault_get_secret "core" "${instance}/redis" "password" >/dev/null 2>&1; then
+            redis_pw=$(vault_get_secret "core" "${instance}/redis" "password")
+            log_verbose "  ✓ Using existing Redis password"
+        else
+            redis_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+            log_info "  ↻ Generated new Redis password"
+        fi
+
+        # Keycloak admin password
+        local keycloak_pw
+        if vault_get_secret "core" "${instance}/keycloak-admin" "password" >/dev/null 2>&1; then
+            keycloak_pw=$(vault_get_secret "core" "${instance}/keycloak-admin" "password")
+            log_verbose "  ✓ Using existing Keycloak admin password"
+        else
+            keycloak_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+            log_info "  ↻ Generated new Keycloak admin password"
+        fi
+
+        # NextAuth secret
+        local nextauth_secret
+        if vault_get_secret "auth" "${instance}/nextauth" "secret" >/dev/null 2>&1; then
+            nextauth_secret=$(vault_get_secret "auth" "${instance}/nextauth" "secret")
+            log_verbose "  ✓ Using existing NextAuth secret"
+        else
+            nextauth_secret=$(openssl rand -base64 32)
+            log_info "  ↻ Generated new NextAuth secret"
+        fi
+
+        # Keycloak database password
+        local keycloak_db_pw
+        if vault_get_secret "core" "${instance}/keycloak-db" "password" >/dev/null 2>&1; then
+            keycloak_db_pw=$(vault_get_secret "core" "${instance}/keycloak-db" "password")
+            log_verbose "  ✓ Using existing Keycloak DB password"
+        else
+            keycloak_db_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+            log_info "  ↻ Generated new Keycloak DB password"
+        fi
+
+        # NextAuth database password
+        local nextauth_db_pw
+        if vault_get_secret "core" "${instance}/nextauth-db" "password" >/dev/null 2>&1; then
+            nextauth_db_pw=$(vault_get_secret "core" "${instance}/nextauth-db" "password")
+            log_verbose "  ✓ Using existing NextAuth DB password"
+        else
+            nextauth_db_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+            log_info "  ↻ Generated new NextAuth DB password"
+        fi
 
         local secrets_data=(
             "core:${instance}/postgres:{\"password\":\"${postgres_pw}\"}"
             "core:${instance}/mongodb:{\"password\":\"${mongodb_pw}\"}"
             "core:${instance}/redis:{\"password\":\"${redis_pw}\"}"
             "core:${instance}/keycloak-admin:{\"password\":\"${keycloak_pw}\"}"
+            "core:${instance}/keycloak-db:{\"password\":\"${keycloak_db_pw}\"}"
+            "core:${instance}/nextauth-db:{\"password\":\"${nextauth_db_pw}\"}"
             "auth:${instance}/nextauth:{\"secret\":\"${nextauth_secret}\"}"
         )
 
@@ -579,6 +1028,8 @@ module_vault_seed() {
         local usa_mongo=$(vault_get_secret "core" "usa/mongodb" "password")
         local usa_redis=$(vault_get_secret "core" "usa/redis" "password")
         local usa_kc=$(vault_get_secret "core" "usa/keycloak-admin" "password")
+        local usa_kc_db=$(vault_get_secret "core" "usa/keycloak-db" "password")
+        local usa_na_db=$(vault_get_secret "core" "usa/nextauth-db" "password")
         local shared_client=$(vault_get_secret "auth" "shared/keycloak-client" "secret")
         local shared_blacklist=$(vault_get_secret "core" "shared/redis-blacklist" "password")
         local opal_token=$(vault_get_secret "opal" "master-token" "token")
@@ -595,9 +1046,28 @@ module_vault_seed() {
         _vault_update_env "$hub_env" "NEXTAUTH_SECRET_USA" "$usa_auth"
         _vault_update_env "$hub_env" "JWT_SECRET_USA" "$usa_auth"
         _vault_update_env "$hub_env" "KEYCLOAK_CLIENT_SECRET_USA" "$shared_client"
+        # Service-level DB credentials (used by PG init and Keycloak/Frontend)
+        _vault_update_env "$hub_env" "KC_DB_USERNAME" "keycloak_user"
+        _vault_update_env "$hub_env" "KC_DB_PASSWORD" "$usa_kc_db"
+        _vault_update_env "$hub_env" "FRONTEND_DATABASE_URL" "postgresql://nextauth_user:${usa_na_db}@postgres:5432/dive_v3_app?sslmode=require"
         # Shared secrets (no suffix)
         _vault_update_env "$hub_env" "REDIS_PASSWORD_BLACKLIST" "$shared_blacklist"
         _vault_update_env "$hub_env" "OPAL_AUTH_MASTER_TOKEN" "$opal_token"
+
+        # Full sync to instances/usa/.env (spoke federation reads USA secrets from here)
+        local usa_env="${DIVE_ROOT}/instances/usa/.env"
+        if [ -f "$usa_env" ]; then
+            _vault_update_env "$usa_env" "POSTGRES_PASSWORD_USA" "$usa_pg"
+            _vault_update_env "$usa_env" "MONGO_PASSWORD_USA" "$usa_mongo"
+            _vault_update_env "$usa_env" "REDIS_PASSWORD_USA" "$usa_redis"
+            _vault_update_env "$usa_env" "KEYCLOAK_ADMIN_PASSWORD_USA" "$usa_kc"
+            _vault_update_env "$usa_env" "KC_BOOTSTRAP_ADMIN_PASSWORD_USA" "$usa_kc"
+            _vault_update_env "$usa_env" "KEYCLOAK_CLIENT_SECRET_USA" "$shared_client"
+            _vault_update_env "$usa_env" "AUTH_SECRET_USA" "$usa_auth"
+            _vault_update_env "$usa_env" "REDIS_PASSWORD_BLACKLIST" "$shared_blacklist"
+            _vault_update_env "$usa_env" "OPAL_AUTH_MASTER_TOKEN" "$opal_token"
+            log_verbose "instances/usa/.env fully synced with hub secrets"
+        fi
 
         log_success "Hub .env.hub synced with Vault secrets"
     else
@@ -728,12 +1198,13 @@ module_vault_pki_setup() {
         fi
     fi
 
-    # Step 3: Configure Root CA URLs
+    # Step 3: Configure Root CA URLs (including OCSP responder)
     log_info "Step 3/6: Configuring Root CA URLs..."
     vault write pki/config/urls \
         issuing_certificates="${VAULT_ADDR}/v1/pki/ca" \
-        crl_distribution_points="${VAULT_ADDR}/v1/pki/crl" >/dev/null 2>&1
-    log_success "  Root CA URLs configured"
+        crl_distribution_points="${VAULT_ADDR}/v1/pki/crl" \
+        ocsp_servers="${VAULT_ADDR}/v1/pki/ocsp" >/dev/null 2>&1
+    log_success "  Root CA URLs configured (CA + CRL + OCSP)"
 
     # Step 4: Enable Intermediate CA PKI engine
     log_info "Step 4/6: Enabling Intermediate CA PKI engine (pki_int/)..."
@@ -794,21 +1265,42 @@ module_vault_pki_setup() {
     # Step 6: Create hub-services PKI role + configure URLs
     log_info "Step 6/6: Creating PKI roles and applying policies..."
 
-    # Configure Intermediate CA URLs
+    # Configure Intermediate CA URLs (including OCSP responder)
     vault write pki_int/config/urls \
         issuing_certificates="${VAULT_ADDR}/v1/pki_int/ca" \
-        crl_distribution_points="${VAULT_ADDR}/v1/pki_int/crl" >/dev/null 2>&1
+        crl_distribution_points="${VAULT_ADDR}/v1/pki_int/crl" \
+        ocsp_servers="${VAULT_ADDR}/v1/pki_int/ocsp" >/dev/null 2>&1
 
-    # Create hub-services role (allow_any_name=true for Docker container hostnames)
+    # Build hub allowed_domains from SSOT (certificates.sh)
+    # Load certificates.sh if _hub_service_sans_csv is not already available
+    if ! type _hub_service_sans_csv &>/dev/null; then
+        if [ -f "${DIVE_ROOT}/scripts/dive-modules/certificates.sh" ]; then
+            source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+        fi
+    fi
+
+    local hub_allowed_domains
+    if type _hub_service_sans_csv &>/dev/null; then
+        hub_allowed_domains=$(_hub_service_sans_csv)
+    else
+        log_error "Cannot load hub SAN SSOT from certificates.sh"
+        return 1
+    fi
+
+    # Create hub-services role with explicit allowed_domains (no allow_any_name)
     if vault write pki_int/roles/hub-services \
-        allow_any_name=true \
+        allowed_domains="$hub_allowed_domains" \
+        allow_bare_domains=true \
+        allow_subdomains=false \
+        allow_any_name=false \
+        enforce_hostnames=true \
         allow_ip_sans=true \
         allow_localhost=true \
         max_ttl=2160h \
         key_type=rsa \
         key_bits=2048 \
         require_cn=false >/dev/null 2>&1; then
-        log_success "  Created PKI role: hub-services (90-day max TTL)"
+        log_success "  Created PKI role: hub-services (90-day max TTL, constrained domains)"
     else
         log_error "Failed to create hub-services PKI role"
         return 1
@@ -828,6 +1320,16 @@ module_vault_pki_setup() {
 
     echo ""
     log_success "Vault PKI setup complete!"
+
+    # Auto-rotate bootstrap node certs to Vault PKI (if running in production)
+    if is_production_mode; then
+        source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+        if type _vault_node_certs_are_bootstrap &>/dev/null && _vault_node_certs_are_bootstrap; then
+            log_info "Bootstrap certs detected — rotating Vault node TLS to PKI..."
+            _rotate_vault_node_certs_to_pki || log_warn "Vault node cert rotation deferred"
+        fi
+    fi
+
     log_info ""
     log_info "==================================================================="
     log_info "PKI Hierarchy:"
@@ -920,7 +1422,8 @@ module_vault_provision() {
         token_policies="dive-v3-spoke-${code}" \
         token_ttl=1h \
         token_max_ttl=24h \
-        secret_id_ttl=0 >/dev/null 2>&1; then
+        secret_id_ttl=72h \
+        secret_id_num_uses=0 >/dev/null 2>&1; then
         log_success "  Created AppRole: spoke-${code}"
     else
         log_error "  Failed to create AppRole: spoke-${code}"
@@ -945,18 +1448,52 @@ module_vault_provision() {
     if vault secrets list 2>/dev/null | grep -q "^pki_int/"; then
         log_info "Creating PKI role for ${code_upper}..."
 
-        # Create spoke-specific PKI role (allow_any_name=true for Docker container hostnames)
-        if vault write "pki_int/roles/spoke-${code}-services" \
-            allow_any_name=true \
-            allow_ip_sans=true \
-            allow_localhost=true \
-            max_ttl=2160h \
-            key_type=rsa \
-            key_bits=2048 \
-            require_cn=false >/dev/null 2>&1; then
-            log_success "  Created PKI role: spoke-${code}-services"
+        # Build spoke allowed_domains from SSOT (certificates.sh)
+        if ! type _spoke_service_sans_csv &>/dev/null; then
+            if [ -f "${DIVE_ROOT}/scripts/dive-modules/certificates.sh" ]; then
+                source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+            fi
+        fi
+
+        local spoke_allowed_domains=""
+        if type _spoke_service_sans_csv &>/dev/null; then
+            spoke_allowed_domains=$(_spoke_service_sans_csv "$code")
         else
-            log_warn "  Failed to create PKI role (non-fatal, cert issuance may fail)"
+            log_warn "Cannot load spoke SAN SSOT — falling back to allow_any_name"
+        fi
+
+        # Create spoke-specific PKI role with explicit allowed_domains
+        if [ -n "$spoke_allowed_domains" ]; then
+            if vault write "pki_int/roles/spoke-${code}-services" \
+                allowed_domains="$spoke_allowed_domains" \
+                allow_bare_domains=true \
+                allow_subdomains=false \
+                allow_any_name=false \
+                enforce_hostnames=true \
+                allow_ip_sans=true \
+                allow_localhost=true \
+                max_ttl=2160h \
+                key_type=rsa \
+                key_bits=2048 \
+                require_cn=false >/dev/null 2>&1; then
+                log_success "  Created PKI role: spoke-${code}-services (constrained domains)"
+            else
+                log_warn "  Failed to create PKI role (non-fatal, cert issuance may fail)"
+            fi
+        else
+            # Fallback: allow_any_name if SSOT unavailable (should not happen in normal flow)
+            if vault write "pki_int/roles/spoke-${code}-services" \
+                allow_any_name=true \
+                allow_ip_sans=true \
+                allow_localhost=true \
+                max_ttl=2160h \
+                key_type=rsa \
+                key_bits=2048 \
+                require_cn=false >/dev/null 2>&1; then
+                log_warn "  Created PKI role: spoke-${code}-services (UNCONSTRAINED — SSOT unavailable)"
+            else
+                log_warn "  Failed to create PKI role (non-fatal, cert issuance may fail)"
+            fi
         fi
 
         # Create PKI-specific spoke policy from template
@@ -974,7 +1511,8 @@ module_vault_provision() {
                 token_policies="dive-v3-spoke-${code},dive-v3-pki-spoke-${code}" \
                 token_ttl=1h \
                 token_max_ttl=24h \
-                secret_id_ttl=0 >/dev/null 2>&1 && \
+                secret_id_ttl=72h \
+                secret_id_num_uses=0 >/dev/null 2>&1 && \
                 log_success "  Updated AppRole with PKI policy" || \
                 log_warn "  Failed to update AppRole with PKI policy (non-fatal)"
         fi
@@ -1006,15 +1544,63 @@ module_vault_provision() {
     fi
 
     # ==========================================================================
-    # Step 3: Seed instance-specific secrets
+    # Step 3: Seed instance-specific secrets (IDEMPOTENT)
+    # ==========================================================================
+    # CRITICAL FIX (2026-02-11): Check if secrets exist before generating new ones
+    # Previous issue: Always generated new passwords, breaking deployments when re-run
+    # New behavior: Use existing secrets if present, only generate if missing
     # ==========================================================================
     log_info "Seeding secrets for ${code_upper}..."
 
-    local postgres_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
-    local mongodb_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
-    local redis_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
-    local keycloak_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
-    local nextauth_secret=$(openssl rand -base64 32)
+    # PostgreSQL password - check if exists
+    local postgres_pw
+    if vault_get_secret "core" "${code}/postgres" "password" >/dev/null 2>&1; then
+        postgres_pw=$(vault_get_secret "core" "${code}/postgres" "password")
+        log_verbose "  ✓ Using existing PostgreSQL password"
+    else
+        postgres_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+        log_info "  ↻ Generated new PostgreSQL password"
+    fi
+
+    # MongoDB password - check if exists
+    local mongodb_pw
+    if vault_get_secret "core" "${code}/mongodb" "password" >/dev/null 2>&1; then
+        mongodb_pw=$(vault_get_secret "core" "${code}/mongodb" "password")
+        log_verbose "  ✓ Using existing MongoDB password"
+    else
+        mongodb_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+        log_info "  ↻ Generated new MongoDB password"
+    fi
+
+    # Redis password - check if exists
+    local redis_pw
+    if vault_get_secret "core" "${code}/redis" "password" >/dev/null 2>&1; then
+        redis_pw=$(vault_get_secret "core" "${code}/redis" "password")
+        log_verbose "  ✓ Using existing Redis password"
+    else
+        redis_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+        log_info "  ↻ Generated new Redis password"
+    fi
+
+    # Keycloak admin password - check if exists
+    local keycloak_pw
+    if vault_get_secret "core" "${code}/keycloak-admin" "password" >/dev/null 2>&1; then
+        keycloak_pw=$(vault_get_secret "core" "${code}/keycloak-admin" "password")
+        log_verbose "  ✓ Using existing Keycloak admin password"
+    else
+        keycloak_pw=$(openssl rand -base64 32 | tr -d '/+=' | cut -c1-24)
+        log_info "  ↻ Generated new Keycloak admin password"
+    fi
+
+    # NextAuth secret - check if exists
+    local nextauth_secret
+    if vault_get_secret "auth" "${code}/nextauth" "secret" >/dev/null 2>&1; then
+        nextauth_secret=$(vault_get_secret "auth" "${code}/nextauth" "secret")
+        log_verbose "  ✓ Using existing NextAuth secret"
+    else
+        nextauth_secret=$(openssl rand -base64 32)
+        log_info "  ↻ Generated new NextAuth secret"
+    fi
 
     local secrets_data=(
         "core:${code}/postgres:{\"password\":\"${postgres_pw}\"}"
@@ -1093,7 +1679,7 @@ module_vault_provision() {
     [ ! -f "$spoke_env" ] && touch "$spoke_env"
 
     _vault_update_env "$spoke_env" "SECRETS_PROVIDER" "vault"
-    _vault_update_env "$spoke_env" "VAULT_ADDR" "http://dive-hub-vault:8200"
+    _vault_update_env "$spoke_env" "VAULT_ADDR" "https://dive-hub-vault:8200"
     _vault_update_env "$spoke_env" "VAULT_ROLE_ID" "$role_id"
     _vault_update_env "$spoke_env" "VAULT_SECRET_ID" "$secret_id"
     _vault_update_env "$spoke_env" "POSTGRES_PASSWORD_${code_upper}" "$postgres_pw"
@@ -1138,6 +1724,421 @@ module_vault_provision() {
     return 0
 }
 export -f vault_spoke_is_provisioned
+
+# =============================================================================
+# APPROLE SECRETID ROTATION (Phase 4: Credential Lifecycle)
+# =============================================================================
+
+##
+# Refresh a spoke's AppRole SecretID.
+#
+# Generates a new SecretID, updates the spoke's .env file, and destroys the old one.
+# Used for credential rotation when SecretIDs have TTL (72h).
+#
+# Arguments:
+#   $1 - Spoke code (e.g., "deu" or "DEU")
+#
+# Returns:
+#   0 - Success (new SecretID issued and .env updated)
+#   1 - Failure
+##
+_vault_refresh_secret_id() {
+    local spoke_code="${1:?spoke code required}"
+    local code
+    code=$(lower "$spoke_code")
+    local code_upper
+    code_upper=$(upper "$spoke_code")
+    local role_name="spoke-${code}"
+
+    # Verify AppRole exists
+    if ! vault read "auth/approle/role/${role_name}" >/dev/null 2>&1; then
+        log_error "AppRole ${role_name} not found — run: ./dive vault provision ${code_upper}"
+        return 1
+    fi
+
+    # Read old SecretID from .env (for destruction after replacement)
+    local spoke_env="${DIVE_ROOT}/instances/${code}/.env"
+    local old_secret_id=""
+    if [ -f "$spoke_env" ]; then
+        old_secret_id=$(grep "^VAULT_SECRET_ID=" "$spoke_env" 2>/dev/null | cut -d= -f2-)
+    fi
+
+    # Generate new SecretID
+    local new_secret_id
+    new_secret_id=$(vault write -field=secret_id -f "auth/approle/role/${role_name}/secret-id" 2>/dev/null)
+    if [ -z "$new_secret_id" ]; then
+        log_error "  Failed to generate new SecretID for ${role_name}"
+        return 1
+    fi
+
+    # Get new SecretID accessor for metadata lookup
+    local new_accessor
+    new_accessor=$(vault write -field=secret_id_accessor -f "auth/approle/role/${role_name}/secret-id" 2>/dev/null || true)
+
+    # Update spoke .env
+    if [ -f "$spoke_env" ]; then
+        _vault_update_env "$spoke_env" "VAULT_SECRET_ID" "$new_secret_id"
+        log_success "  Updated ${spoke_env}"
+    else
+        log_warn "  Spoke .env not found: ${spoke_env} (SecretID generated but not persisted)"
+    fi
+
+    # Destroy old SecretID (invalidate immediately)
+    if [ -n "$old_secret_id" ] && [ "$old_secret_id" != "$new_secret_id" ]; then
+        if vault write "auth/approle/role/${role_name}/secret-id/destroy" \
+            secret_id="$old_secret_id" >/dev/null 2>&1; then
+            log_verbose "  Destroyed old SecretID for ${role_name}"
+        else
+            log_verbose "  Old SecretID already expired or invalid (non-fatal)"
+        fi
+    fi
+
+    _vault_rotation_audit "INFO" "SECRETID_REFRESHED: spoke=${code}"
+    return 0
+}
+
+##
+# Check the age/TTL of a spoke's current SecretID.
+#
+# Returns via stdout: seconds remaining until expiry (0 if expired or unknown).
+# Returns exit code 0 always (callers check the value).
+#
+# Arguments:
+#   $1 - Spoke code
+##
+_vault_secret_id_ttl_remaining() {
+    local spoke_code="${1:?spoke code required}"
+    local code
+    code=$(lower "$spoke_code")
+    local role_name="spoke-${code}"
+
+    # Read current SecretID from .env
+    local spoke_env="${DIVE_ROOT}/instances/${code}/.env"
+    local current_secret_id=""
+    if [ -f "$spoke_env" ]; then
+        current_secret_id=$(grep "^VAULT_SECRET_ID=" "$spoke_env" 2>/dev/null | cut -d= -f2-)
+    fi
+
+    if [ -z "$current_secret_id" ]; then
+        echo "0"
+        return 0
+    fi
+
+    # Lookup SecretID metadata
+    local lookup_json
+    lookup_json=$(vault write -format=json "auth/approle/role/${role_name}/secret-id/lookup" \
+        secret_id="$current_secret_id" 2>/dev/null || true)
+
+    if [ -z "$lookup_json" ]; then
+        echo "0"
+        return 0
+    fi
+
+    # Extract expiration_time (RFC3339) and calculate remaining seconds
+    local expiration_time
+    expiration_time=$(echo "$lookup_json" | jq -r '.data.expiration_time // empty' 2>/dev/null)
+
+    if [ -z "$expiration_time" ] || [ "$expiration_time" = "0001-01-01T00:00:00Z" ]; then
+        # No expiry set (secret_id_ttl=0) — return large value
+        echo "999999"
+        return 0
+    fi
+
+    local expiry_epoch now_epoch
+    if date -j >/dev/null 2>&1; then
+        # macOS
+        expiry_epoch=$(date -j -f "%Y-%m-%dT%H:%M:%S" "${expiration_time%%.*}" "+%s" 2>/dev/null || echo "0")
+    else
+        # Linux
+        expiry_epoch=$(date -d "$expiration_time" "+%s" 2>/dev/null || echo "0")
+    fi
+    now_epoch=$(date "+%s")
+
+    if [ "$expiry_epoch" -eq 0 ]; then
+        echo "0"
+        return 0
+    fi
+
+    local remaining=$((expiry_epoch - now_epoch))
+    [ "$remaining" -lt 0 ] && remaining=0
+    echo "$remaining"
+}
+
+##
+# Migrate existing spoke AppRoles to use secret_id_ttl=72h.
+#
+# Iterates all provisioned spokes and updates the AppRole config.
+# Does NOT regenerate SecretIDs — existing ones keep their original (infinite) TTL.
+# Use `./dive vault refresh-credentials all` after migration to issue new TTL-bound SecretIDs.
+#
+# Arguments: none
+##
+_vault_migrate_secret_id_ttl() {
+    log_info "Migrating AppRole SecretID TTL to 72h..."
+
+    local spokes
+    spokes=$(_vault_discover_instances)
+    local migrated=0 failed=0
+
+    while IFS= read -r instance; do
+        [ -z "$instance" ] && continue
+        local role_name="spoke-${instance}"
+
+        # Read current policies to preserve them
+        local current_policies
+        current_policies=$(vault read -field=token_policies "auth/approle/role/${role_name}" 2>/dev/null || true)
+        if [ -z "$current_policies" ]; then
+            log_verbose "  ${role_name}: not found (skipping)"
+            continue
+        fi
+
+        if vault write "auth/approle/role/${role_name}" \
+            token_policies="$current_policies" \
+            token_ttl=1h \
+            token_max_ttl=24h \
+            secret_id_ttl=72h \
+            secret_id_num_uses=0 >/dev/null 2>&1; then
+            log_success "  Migrated: ${role_name} (secret_id_ttl=72h)"
+            migrated=$((migrated + 1))
+        else
+            log_error "  Failed: ${role_name}"
+            failed=$((failed + 1))
+        fi
+    done <<< "$spokes"
+
+    echo ""
+    log_info "Migration complete: ${migrated} migrated, ${failed} failed"
+    [ $failed -gt 0 ] && return 1
+    return 0
+}
+
+##
+# CLI: Refresh AppRole SecretIDs for one or all spokes.
+#
+# Usage:
+#   ./dive vault refresh-credentials <CODE>        # Single spoke
+#   ./dive vault refresh-credentials all            # All spokes
+#   ./dive vault refresh-credentials all --migrate  # Migrate TTL + refresh all
+#
+# Generates new SecretIDs, updates .env files, and destroys old SecretIDs.
+##
+module_vault_refresh_credentials() {
+    local target="${1:-}"
+    local do_migrate=false
+
+    if [ -z "$target" ]; then
+        log_error "Usage: ./dive vault refresh-credentials <CODE|all> [--migrate]"
+        return 1
+    fi
+    shift
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --migrate) do_migrate=true; shift ;;
+            *) log_error "Unknown option: $1"; return 1 ;;
+        esac
+    done
+
+    if ! vault_is_running; then return 1; fi
+
+    if [ -f "$VAULT_TOKEN_FILE" ]; then
+        VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
+        export VAULT_TOKEN
+    else
+        log_error "Vault token not found — run: ./dive vault init"
+        return 1
+    fi
+
+    if ! vault status 2>/dev/null | grep -q "Sealed.*false"; then
+        log_error "Vault is sealed"
+        return 1
+    fi
+
+    # Run migration first if requested
+    if [ "$do_migrate" = true ]; then
+        _vault_migrate_secret_id_ttl || return 1
+        echo ""
+    fi
+
+    echo ""
+    log_info "==================================================================="
+    log_info "  AppRole SecretID Refresh"
+    log_info "==================================================================="
+
+    local refreshed=0 failed=0
+
+    if [ "$target" = "all" ]; then
+        local spokes
+        spokes=$(_vault_discover_instances)
+        while IFS= read -r instance; do
+            [ -z "$instance" ] && continue
+            local code_upper
+            code_upper=$(upper "$instance")
+            log_info "Refreshing SecretID for ${code_upper}..."
+
+            # Check current TTL remaining
+            local ttl_remaining
+            ttl_remaining=$(_vault_secret_id_ttl_remaining "$instance")
+
+            if _vault_refresh_secret_id "$instance"; then
+                refreshed=$((refreshed + 1))
+                log_success "  ${code_upper}: refreshed (old TTL: ${ttl_remaining}s remaining)"
+            else
+                failed=$((failed + 1))
+                log_error "  ${code_upper}: failed"
+            fi
+        done <<< "$spokes"
+    else
+        local code
+        code=$(lower "$target")
+        local code_upper
+        code_upper=$(upper "$target")
+        log_info "Refreshing SecretID for ${code_upper}..."
+
+        local ttl_remaining
+        ttl_remaining=$(_vault_secret_id_ttl_remaining "$code")
+
+        if _vault_refresh_secret_id "$code"; then
+            refreshed=1
+            log_success "  ${code_upper}: refreshed (old TTL: ${ttl_remaining}s remaining)"
+        else
+            failed=1
+            log_error "  ${code_upper}: failed"
+        fi
+    fi
+
+    echo ""
+    log_info "==================================================================="
+    log_info "  Refreshed: $refreshed  |  Failed: $failed"
+    log_info "==================================================================="
+
+    [ $failed -gt 0 ] && return 1
+    return 0
+}
+
+##
+# Deprovision a spoke from Vault: revoke certificate, delete policy, AppRole, and PKI role.
+#
+# This is the reverse of module_vault_provision(). It:
+#   1. Revokes the spoke's current Vault-issued certificate
+#   2. Triggers CRL rebuild
+#   3. Deletes the spoke's AppRole
+#   4. Deletes the spoke's Vault policies
+#   5. Deletes the spoke's PKI role
+#
+# Does NOT delete secrets from KV store (preserving audit trail).
+# Does NOT remove Docker containers (use ./dive nuke spoke <CODE> for that).
+#
+# Usage: ./dive vault deprovision <CODE>
+##
+module_vault_deprovision() {
+    local spoke_code="${1:-}"
+
+    if [ -z "$spoke_code" ]; then
+        log_error "Usage: ./dive vault deprovision <CODE>"
+        log_info "Example: ./dive vault deprovision FRA"
+        return 1
+    fi
+
+    local code
+    code=$(lower "$spoke_code")
+    local code_upper
+    code_upper=$(upper "$spoke_code")
+
+    if [ "$code" = "usa" ]; then
+        log_error "Cannot deprovision USA — it is the hub instance"
+        return 1
+    fi
+
+    log_info "Deprovisioning spoke ${code_upper} from Vault..."
+
+    if ! vault_is_running; then
+        return 1
+    fi
+
+    if [ -f "$VAULT_TOKEN_FILE" ]; then
+        VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
+        export VAULT_TOKEN
+    else
+        log_error "Vault token not found — run: ./dive vault init"
+        return 1
+    fi
+
+    if ! vault status 2>/dev/null | grep -q "Sealed.*false"; then
+        log_error "Vault is sealed"
+        return 1
+    fi
+
+    local errors=0
+
+    # Step 1: Revoke spoke certificate (if Vault PKI was used)
+    log_info "Step 1/5: Revoking spoke certificate..."
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/certificates.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+    fi
+    if type revoke_spoke_certificates &>/dev/null; then
+        revoke_spoke_certificates "$code" || {
+            log_warn "  Certificate revocation failed (continuing deprovision)"
+            errors=$((errors + 1))
+        }
+    else
+        log_verbose "  revoke_spoke_certificates not available — skipping"
+    fi
+
+    # Step 2: Delete AppRole
+    log_info "Step 2/5: Removing AppRole..."
+    if vault delete "auth/approle/role/spoke-${code}" >/dev/null 2>&1; then
+        log_success "  Deleted AppRole: spoke-${code}"
+    else
+        log_warn "  AppRole spoke-${code} not found or already deleted"
+    fi
+
+    # Step 3: Delete spoke policies
+    log_info "Step 3/5: Removing Vault policies..."
+    if vault policy delete "dive-v3-spoke-${code}" >/dev/null 2>&1; then
+        log_success "  Deleted policy: dive-v3-spoke-${code}"
+    else
+        log_warn "  Policy dive-v3-spoke-${code} not found"
+    fi
+    if vault policy delete "dive-v3-pki-spoke-${code}" >/dev/null 2>&1; then
+        log_success "  Deleted policy: dive-v3-pki-spoke-${code}"
+    else
+        log_verbose "  PKI policy dive-v3-pki-spoke-${code} not found"
+    fi
+
+    # Step 4: Delete PKI role
+    log_info "Step 4/5: Removing PKI role..."
+    if vault secrets list 2>/dev/null | grep -q "^pki_int/"; then
+        if vault delete "pki_int/roles/spoke-${code}-services" >/dev/null 2>&1; then
+            log_success "  Deleted PKI role: spoke-${code}-services"
+        else
+            log_warn "  PKI role spoke-${code}-services not found"
+        fi
+    else
+        log_verbose "  PKI engine not enabled — skipping role cleanup"
+    fi
+
+    # Step 5: Summary
+    log_info "Step 5/5: Deprovision summary..."
+    echo ""
+    log_info "==================================================================="
+    log_info "  Spoke ${code_upper} Deprovisioned from Vault"
+    log_info "==================================================================="
+    log_info "  Certificate:  revoked (CRL updated)"
+    log_info "  AppRole:      deleted"
+    log_info "  Policies:     deleted"
+    log_info "  PKI role:     deleted"
+    log_info "  KV secrets:   preserved (audit trail)"
+    if [ $errors -gt 0 ]; then
+        log_warn "  Warnings:     $errors (check output above)"
+    fi
+    log_info ""
+    log_info "  To also remove Docker containers:"
+    log_info "    ./dive nuke spoke ${code_upper}"
+    log_info "==================================================================="
+
+    return 0
+}
 
 ##
 # Test secret rotation lifecycle (non-destructive)
@@ -1280,7 +2281,7 @@ module_vault_test_backup() {
     mkdir -p "$backup_dir"
     local _snap_ok=false
     for _p in 8200 8202 8204; do
-        if VAULT_ADDR="http://localhost:${_p}" vault operator raft snapshot save "$snapshot_path" 2>/dev/null; then
+        if VAULT_ADDR="${_VAULT_CLI_SCHEME}://localhost:${_p}" vault operator raft snapshot save "$snapshot_path" 2>/dev/null; then
             _snap_ok=true
             break
         fi
@@ -1401,7 +2402,7 @@ module_vault_test_ha_failover() {
     local leader_container=""
     for port in 8200 8202 8204; do
         local is_self
-        is_self=$(VAULT_ADDR="http://localhost:$port" VAULT_TOKEN="$VAULT_TOKEN" \
+        is_self=$(VAULT_ADDR="${_VAULT_CLI_SCHEME}://localhost:$port" VAULT_TOKEN="$VAULT_TOKEN" \
             vault read -format=json sys/leader 2>/dev/null | \
             grep -o '"is_self": *[a-z]*' | sed 's/.*: *//' || echo "false")
         if [ "$is_self" = "true" ]; then
@@ -1430,7 +2431,7 @@ module_vault_test_ha_failover() {
     local read_success=false
     for port in 8200 8202 8204; do
         local val
-        val=$(VAULT_ADDR="http://localhost:$port" VAULT_TOKEN="$VAULT_TOKEN" \
+        val=$(VAULT_ADDR="${_VAULT_CLI_SCHEME}://localhost:$port" VAULT_TOKEN="$VAULT_TOKEN" \
             vault kv get -field=value dive-v3/core/ha-test 2>/dev/null || true)
         if [ "$val" = "$test_key" ]; then
             read_success=true
@@ -1523,7 +2524,7 @@ module_vault_test_seal_restart() {
     docker restart "$node_container" >/dev/null 2>&1
     sleep 15
 
-    if VAULT_ADDR="http://localhost:8200" vault status 2>/dev/null | grep -q "Sealed.*false"; then
+    if VAULT_ADDR="${_VAULT_CLI_SCHEME}://localhost:8200" vault status 2>/dev/null | grep -q "Sealed.*false"; then
         test_pass
     else
         test_fail "vault-1 did not auto-unseal"
@@ -1809,7 +2810,7 @@ module_vault_test_monitoring() {
     mkdir -p "$(dirname "$test_snap")"
     local snap_ok=false
     for snap_port in 8200 8202 8204; do
-        if VAULT_ADDR="http://localhost:${snap_port}" vault operator raft snapshot save "$test_snap" 2>/dev/null; then
+        if VAULT_ADDR="${_VAULT_CLI_SCHEME}://localhost:${snap_port}" vault operator raft snapshot save "$test_snap" 2>/dev/null; then
             snap_ok=true
             break
         fi
@@ -2084,7 +3085,7 @@ module_vault_dr_test() {
     log_info "[4/5] Restoring from snapshot..."
     local restore_ok=false
     for _restore_port in 8200 8202 8204; do
-        if VAULT_ADDR="http://localhost:${_restore_port}" vault operator raft snapshot restore -force "$snap_path" 2>/dev/null; then
+        if VAULT_ADDR="${_VAULT_CLI_SCHEME}://localhost:${_restore_port}" vault operator raft snapshot restore -force "$snap_path" 2>/dev/null; then
             restore_ok=true
             break
         fi
@@ -2158,6 +3159,10 @@ module_vault() {
         provision)
             shift
             module_vault_provision "$@"
+            ;;
+        deprovision)
+            shift
+            module_vault_deprovision "$@"
             ;;
         cluster)
             shift
@@ -2249,11 +3254,43 @@ module_vault() {
             source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
             generate_vault_node_certs
             ;;
+        rotate-node-certs)
+            source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+            _rotate_vault_node_certs_to_pki
+            ;;
         audit-rotate)
             module_vault_audit_rotate
             ;;
         dr-test)
             module_vault_dr_test
+            ;;
+        backup-pki)
+            module_vault_backup_pki
+            ;;
+        restore-pki)
+            shift
+            module_vault_restore_pki "$@"
+            ;;
+        rekey-intermediate)
+            shift
+            module_vault_rekey_intermediate "$@"
+            ;;
+        crl-status)
+            source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+            show_crl_status
+            ;;
+        crl-rotate)
+            source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+            rotate_crl
+            ;;
+        refresh-credentials)
+            shift
+            module_vault_refresh_credentials "$@"
+            ;;
+        revoke-spoke)
+            shift
+            source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+            revoke_spoke_certificates "$@"
             ;;
         help|--help|-h)
             echo "Usage: ./dive vault <command>"
@@ -2264,10 +3301,14 @@ module_vault() {
             echo "  setup               Configure mount points and hub policy"
             echo "  seed                Generate and store hub (USA) + shared secrets"
             echo "  provision <CODE>    Provision a spoke: policy, AppRole, secrets, .env"
+            echo "  deprovision <CODE>  Deprovision a spoke: revoke cert, remove AppRole/policy/role"
+            echo "  refresh-credentials <CODE|all>  Refresh AppRole SecretID (72h TTL)"
+            echo "                      Options: --migrate (apply 72h TTL to existing roles)"
             echo "  env                 Show current Vault environment (dev/staging/prod)"
             echo "  trust-ca            Install Vault Root CA in system trust store"
             echo "  untrust-ca          Remove Vault Root CA from system trust store"
             echo "  tls-setup           Generate TLS certs for Vault HA nodes (production)"
+            echo "  rotate-node-certs   Rotate Vault node certs from bootstrap to Vault PKI"
             echo "  pki-setup           Setup PKI Root CA + Intermediate CA (one-time)"
             echo "  db-setup            Setup database secrets engine (one-time)"
             echo "  db-status           Show database engine status and roles"
@@ -2278,6 +3319,12 @@ module_vault() {
             echo "  backup-schedule     Enable/disable daily automated backups"
             echo "  audit-rotate        Rotate audit log (archive + truncate if >100MB)"
             echo "  dr-test             Disaster recovery test (snapshot + restore verify)"
+            echo "  backup-pki          Export CA certs + Raft snapshot for PKI DR"
+            echo "  restore-pki <snap>  Restore PKI from snapshot + re-issue all certs"
+            echo "  rekey-intermediate  Rekey Intermediate CA (DISRUPTIVE — needs --confirm)"
+            echo "  crl-status          Show CRL status and certificate inventory"
+            echo "  crl-rotate          Force CRL rebuild on Intermediate CA"
+            echo "  revoke-spoke <CODE> Revoke a spoke's certificate via Vault PKI"
             echo ""
             echo "Rotation:"
             echo "  rotate [category]   Rotate KV v2 secrets (core|auth|opal|federation|all)"

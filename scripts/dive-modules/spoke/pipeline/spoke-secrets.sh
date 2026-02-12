@@ -638,6 +638,12 @@ spoke_secrets_load_from_env() {
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local env_file="$spoke_dir/.env"
 
+    # USA/hub secrets: prefer .env.hub (SSOT) over instances/usa/.env
+    if [ "$code_upper" = "USA" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
+        env_file="${DIVE_ROOT}/.env.hub"
+        log_verbose "USA instance: using .env.hub as secrets source"
+    fi
+
     if [ ! -f "$env_file" ]; then
         log_verbose "No .env file found at: $env_file"
         return 1
@@ -835,12 +841,12 @@ spoke_secrets_sync_to_env() {
     # ==========================================================================
     if ! grep -q "^DATABASE_URL=" "$env_file" 2>/dev/null; then
         local postgres_pass_var="POSTGRES_PASSWORD_${code_upper}"
-        local postgres_pass="${!postgres_pass_var}"
+        local postgres_pass="${!postgres_pass_var:-}"
 
         if [ -n "$postgres_pass" ]; then
             echo "" >> "$env_file"
             echo "# PostgreSQL Database URL for Frontend NextAuth (audit persistence)" >> "$env_file"
-            echo "DATABASE_URL=postgresql://postgres:${postgres_pass}@postgres-${code_lower}:5432/dive_v3" >> "$env_file"
+            echo "DATABASE_URL=postgresql://postgres:${postgres_pass}@postgres-${code_lower}:5432/dive_v3?sslmode=require" >> "$env_file"
             log_verbose "Generated DATABASE_URL for Frontend NextAuth (PostgreSQL)"
         else
             log_warn "Cannot generate DATABASE_URL - POSTGRES_PASSWORD_${code_upper} not available"

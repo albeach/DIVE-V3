@@ -1449,7 +1449,9 @@ async function getMongoDBConnection(config: IInstanceConfig, instanceCode: strin
             // Use database from MONGODB_DATABASE env var (runtime SSOT), not URL path or config
             // CRITICAL FIX (2026-01-25): Add directConnection=true for single-node replica sets
             // Without this, MongoClient tries topology discovery using 'localhost' which fails inside Docker
-            const uri = `mongodb://${host}:${port || 27017}/${database}?directConnection=true`;
+            // Preserve TLS and other connection options from original MONGODB_URL
+            const tlsParam = envMongoUrl.includes('tls=true') ? '&tls=true' : '';
+            const uri = `mongodb://${host}:${port || 27017}/${database}?directConnection=true${tlsParam}`;
             console.log(`   Using MONGODB_URL from environment`);
             console.log(`   Database: ${database} (from MONGODB_DATABASE env var)`);
             console.log(`   MongoDB URI: ${uri}&authSource=admin`);
@@ -1471,7 +1473,9 @@ async function getMongoDBConnection(config: IInstanceConfig, instanceCode: strin
 
     // URI without credentials - auth passed separately to MongoClient
     // Add directConnection=true for single-node replica sets
-    const uri = `mongodb://${host}:${port}/${database}?directConnection=true`;
+    // Add tls=true when MongoDB is configured with --tlsMode requireTLS
+    const tlsParam = (process.env.MONGODB_URL || '').includes('tls=true') ? '&tls=true' : '';
+    const uri = `mongodb://${host}:${port}/${database}?directConnection=true${tlsParam}`;
 
     // Debug logging
     console.log(`   MongoDB URI: ${uri}&authSource=admin`);
@@ -3081,8 +3085,8 @@ async function main() {
     // Build COI templates from MongoDB (SSOT)
     console.log('🔧 Building COI templates from MongoDB...');
 
-    // Use Hub MongoDB URL from environment
-    const mongoUrl = process.env.MONGODB_URL || `mongodb://admin:${await getMongoDBPassword('USA')}@localhost:27017/dive-v3-hub?authSource=admin`;
+    // Use Hub MongoDB URL from environment (includes tls=true when MongoDB requires TLS)
+    const mongoUrl = process.env.MONGODB_URL || `mongodb://admin:${await getMongoDBPassword('USA')}@localhost:27017/dive-v3-hub?authSource=admin&tls=true`;
     const dbName = process.env.MONGODB_DATABASE || 'dive-v3-hub';
 
     const client = new MongoClient(mongoUrl);

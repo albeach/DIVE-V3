@@ -283,7 +283,7 @@ verification_check_mongodb() {
     mongo_container=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E "${container_prefix}-mongodb|mongodb.*${code_lower}|${code_lower}.*mongo" | head -1)
     [ -z "$mongo_container" ] && return 1
 
-    if docker exec "$mongo_container" mongosh --quiet --eval "db.adminCommand('ping')" 2>/dev/null | grep -q "ok"; then
+    if docker exec "$mongo_container" mongosh --tls --tlsAllowInvalidCertificates --quiet --eval "db.adminCommand('ping')" 2>/dev/null | grep -q "ok"; then
         return 0
     fi
 

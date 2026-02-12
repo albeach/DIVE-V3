@@ -23,9 +23,13 @@ services:
     container_name: shared-exporter-hub-cache
     restart: unless-stopped
     environment:
-      REDIS_ADDR: dive-hub-redis:6379
+      REDIS_ADDR: rediss://dive-hub-redis:6379
       REDIS_PASSWORD: ${REDIS_PASSWORD_USA:?REDIS_PASSWORD_USA is required}
       REDIS_EXPORTER_LOG_FORMAT: json
+      REDIS_EXPORTER_TLS_CA_CERT_FILE: /certs/ca/rootCA.pem
+      REDIS_EXPORTER_SKIP_TLS_VERIFICATION: "false"
+    volumes:
+      - ../../../instances/hub/certs:/certs:ro
     ports:
       - "9121:9121"
     networks:
@@ -47,6 +51,12 @@ services:
     command: >
       redis-server
       --requirepass ${REDIS_PASSWORD_BLACKLIST}
+      --tls-port 6379
+      --port 0
+      --tls-cert-file /certs/fullchain.pem
+      --tls-key-file /certs/key.pem
+      --tls-ca-cert-file /certs/ca/rootCA.pem
+      --tls-auth-clients no
       --appendonly yes
       --appendfsync everysec
       --maxmemory 256mb
@@ -59,10 +69,11 @@ services:
       --save 60 10000
     volumes:
       - token_store_data:/data
+      - ../../../instances/hub/certs:/certs:ro
     networks:
       - dive-shared
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD_BLACKLIST}", "ping"]
+      test: ["CMD", "redis-cli", "--tls", "--cacert", "/certs/ca/rootCA.pem", "-a", "${REDIS_PASSWORD_BLACKLIST}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -79,9 +90,13 @@ services:
     container_name: shared-exporter-token-store
     restart: unless-stopped
     environment:
-      REDIS_ADDR: token-store:6379
+      REDIS_ADDR: rediss://token-store:6379
       REDIS_PASSWORD: ${REDIS_PASSWORD_BLACKLIST:?REDIS_PASSWORD_BLACKLIST is required}
       REDIS_EXPORTER_LOG_FORMAT: json
+      REDIS_EXPORTER_TLS_CA_CERT_FILE: /certs/ca/rootCA.pem
+      REDIS_EXPORTER_SKIP_TLS_VERIFICATION: "false"
+    volumes:
+      - ../../../instances/hub/certs:/certs:ro
     ports:
       - "9122:9121"
     networks:

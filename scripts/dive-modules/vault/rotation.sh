@@ -391,6 +391,22 @@ _vault_rotation_write_metrics() {
                 echo "vault_static_role_last_rotation_timestamp{role=\"${role}\"} ${epoch}"
             fi
         done
+
+        # AppRole SecretID TTL remaining (seconds)
+        echo ""
+        echo "# HELP dive_vault_secret_id_ttl_remaining_seconds Seconds until AppRole SecretID expires"
+        echo "# TYPE dive_vault_secret_id_ttl_remaining_seconds gauge"
+
+        if type _vault_secret_id_ttl_remaining &>/dev/null; then
+            local all_instances
+            all_instances=$(_vault_discover_instances)
+            while IFS= read -r si_instance; do
+                [ -z "$si_instance" ] && continue
+                local si_ttl
+                si_ttl=$(_vault_secret_id_ttl_remaining "$si_instance")
+                echo "dive_vault_secret_id_ttl_remaining_seconds{spoke=\"${si_instance}\"} ${si_ttl}"
+            done <<< "$all_instances"
+        fi
     } > "$prom_file"
 
     log_verbose "Metrics written to ${prom_file}"
@@ -739,6 +755,12 @@ module_vault_rotation_check() {
     echo ""
     log_info "Writing Prometheus metrics..."
     _vault_rotation_write_metrics
+
+    # Export certificate-specific metrics (Phase 5)
+    if type _cert_metrics_export &>/dev/null; then
+        _cert_metrics_export
+        log_verbose "Certificate metrics exported"
+    fi
 
     # Summary
     echo ""

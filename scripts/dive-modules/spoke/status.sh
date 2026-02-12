@@ -240,7 +240,7 @@ spoke_status_detailed() {
     fi
     
     # MongoDB
-    if docker exec "dive-spoke-${code_lower}-mongodb" mongosh --quiet --eval "db.adminCommand('ping')" 2>/dev/null | grep -q "ok"; then
+    if docker exec "dive-spoke-${code_lower}-mongodb" mongosh --tls --tlsAllowInvalidCertificates --quiet --eval "db.adminCommand('ping')" 2>/dev/null | grep -q "ok"; then
         echo -e "${CYAN}│${NC}   MongoDB:     ${GREEN}✓ Responding${NC}"
     else
         echo -e "${CYAN}│${NC}   MongoDB:     ${RED}✗ Not responding${NC}"
@@ -282,7 +282,7 @@ spoke_status_detailed() {
     [ "$running_count" -eq "$total_count" ] && ((health_score++)) || true
     [ "$bidirectional" = "true" ] && ((health_score++)) || true
     docker exec "dive-spoke-${code_lower}-postgres" pg_isready -U postgres &>/dev/null && ((health_score++)) || true
-    docker exec "dive-spoke-${code_lower}-mongodb" mongosh --quiet --eval "db.adminCommand('ping')" 2>/dev/null | grep -q "ok" && ((health_score++)) || true
+    docker exec "dive-spoke-${code_lower}-mongodb" mongosh --tls --tlsAllowInvalidCertificates --quiet --eval "db.adminCommand('ping')" 2>/dev/null | grep -q "ok" && ((health_score++)) || true
     
     if [ "$health_score" -eq "$max_score" ]; then
         echo -e "${GREEN}✅ Healthy${NC} ($health_score/$max_score checks passed)"
@@ -383,7 +383,7 @@ spoke_health() {
 
     # Check MongoDB
     printf "  %-14s " "MongoDB:"
-    if docker exec "dive-spoke-${code_lower}-mongodb" mongosh --quiet --eval "db.adminCommand('ping')" 2>/dev/null | grep -q "ok"; then
+    if docker exec "dive-spoke-${code_lower}-mongodb" mongosh --tls --tlsAllowInvalidCertificates --quiet --eval "db.adminCommand('ping')" 2>/dev/null | grep -q "ok"; then
         echo -e "${GREEN}✓ Healthy${NC}"
     else
         echo -e "${YELLOW}⚠ Not Running${NC}"

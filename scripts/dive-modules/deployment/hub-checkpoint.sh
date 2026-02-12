@@ -47,17 +47,19 @@ readonly HUB_CHECKPOINT_DIR="${HUB_CHECKPOINT_BASE}/.phases"
 
 # Valid hub phases (in execution order)
 readonly HUB_VALID_PHASES=(
-    "DATABASE_INIT"      # Phase 0: PostgreSQL + Orchestration DB
-    "PREFLIGHT"          # Phase 1
-    "INITIALIZATION"     # Phase 2
-    "MONGODB_INIT"       # Phase 2.5
-    "BUILD"              # Phase 2.8
-    "SERVICES"           # Phase 3
-    "KEYCLOAK_CONFIG"    # Phase 4
-    "REALM_VERIFY"       # Phase 4.5
-    "KAS_REGISTER"       # Phase 4.75
-    "SEEDING"            # Phase 5
-    "KAS_INIT"           # Phase 5.5
+    "VAULT_BOOTSTRAP"    # Phase 1: Vault start, init, setup, seed
+    "DATABASE_INIT"      # Phase 2: PostgreSQL + Orchestration DB
+    "PREFLIGHT"          # Phase 3
+    "INITIALIZATION"     # Phase 4
+    "MONGODB_INIT"       # Phase 5
+    "BUILD"              # Phase 6
+    "SERVICES"           # Phase 7
+    "VAULT_DB_ENGINE"    # Phase 8: Dynamic credentials + service restart
+    "KEYCLOAK_CONFIG"    # Phase 9
+    "REALM_VERIFY"       # Phase 10
+    "KAS_REGISTER"       # Phase 11
+    "SEEDING"            # Phase 12
+    "KAS_INIT"           # Phase 13
     "COMPLETE"           # Final
 )
 

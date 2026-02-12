@@ -48,6 +48,15 @@ path "pki_int/cert/ca_chain" {
   capabilities = ["read"]
 }
 
+# CRL read (for certificate validation — spokes cannot revoke)
+path "pki_int/crl" {
+  capabilities = ["read"]
+}
+
+path "pki_int/crl/pem" {
+  capabilities = ["read"]
+}
+
 # Database dynamic credentials (own spoke only)
 path "database/creds/backend-{{SPOKE_CODE}}-rw" {
   capabilities = ["read"]
