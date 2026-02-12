@@ -102,20 +102,68 @@ spoke_phase_verification() {
 
     local verification_passed=true
 
-    # Step 1: Service health checks
-    if ! spoke_verify_service_health "$instance_code"; then
-        verification_passed=false
-    fi
+    # CRITICAL FIX (2026-02-11): Add retry logic with exponential backoff for transient failures
+    # Previous issue: Single verification failures caused deployment to fail even for transient issues
 
-    # Step 2: Database connectivity
-    if ! spoke_verify_database_connectivity "$instance_code"; then
-        log_warn "Database connectivity issues detected"
-    fi
+    # Step 1: Service health checks (with retry)
+    log_step "Verifying service health (with retry for transient failures)..."
+    local health_attempts=0
+    local health_max_attempts=3
+    local health_delay=5
+    while [ $health_attempts -lt $health_max_attempts ]; do
+        if spoke_verify_service_health "$instance_code"; then
+            break
+        fi
+        health_attempts=$((health_attempts + 1))
+        if [ $health_attempts -lt $health_max_attempts ]; then
+            log_warn "Service health check failed (attempt $health_attempts/$health_max_attempts), retrying in ${health_delay}s..."
+            sleep $health_delay
+            health_delay=$((health_delay * 2))  # Exponential backoff
+        else
+            log_error "Service health check failed after $health_max_attempts attempts"
+            verification_passed=false
+        fi
+    done
 
-    # Step 3: Keycloak health
-    if ! spoke_verify_keycloak_health "$instance_code"; then
-        log_warn "Keycloak health check failed"
-    fi
+    # Step 2: Database connectivity (with retry)
+    log_step "Verifying database connectivity (with retry for transient failures)..."
+    local db_attempts=0
+    local db_max_attempts=3
+    local db_delay=3
+    while [ $db_attempts -lt $db_max_attempts ]; do
+        if spoke_verify_database_connectivity "$instance_code"; then
+            break
+        fi
+        db_attempts=$((db_attempts + 1))
+        if [ $db_attempts -lt $db_max_attempts ]; then
+            log_warn "Database connectivity check failed (attempt $db_attempts/$db_max_attempts), retrying in ${db_delay}s..."
+            sleep $db_delay
+            db_delay=$((db_delay * 2))  # Exponential backoff
+        else
+            log_warn "Database connectivity issues persist after $db_max_attempts attempts"
+            # Non-blocking - databases might be slow to start
+        fi
+    done
+
+    # Step 3: Keycloak health (with retry)
+    log_step "Verifying Keycloak health (with retry for transient failures)..."
+    local kc_attempts=0
+    local kc_max_attempts=3
+    local kc_delay=3
+    while [ $kc_attempts -lt $kc_max_attempts ]; do
+        if spoke_verify_keycloak_health "$instance_code"; then
+            break
+        fi
+        kc_attempts=$((kc_attempts + 1))
+        if [ $kc_attempts -lt $kc_max_attempts ]; then
+            log_warn "Keycloak health check failed (attempt $kc_attempts/$kc_max_attempts), retrying in ${kc_delay}s..."
+            sleep $kc_delay
+            kc_delay=$((kc_delay * 2))  # Exponential backoff
+        else
+            log_warn "Keycloak health issues persist after $kc_max_attempts attempts"
+            # Non-blocking - Keycloak might be slow to start
+        fi
+    done
 
     # Step 4: Federation verification (deploy mode) - BLOCKING (2026-02-06 FIX)
     # BEST PRACTICE: Wait for realistic stabilization time, then verify
@@ -299,9 +347,13 @@ spoke_verify_database_connectivity() {
         local mongo_pass_var="MONGO_PASSWORD_$(upper "$instance_code")"
         local mongo_pass="${!mongo_pass_var:-}"
         if [ -n "$mongo_pass" ]; then
-            mongo_test=$(docker exec "$mongo_container" mongosh admin -u admin -p "$mongo_pass" --quiet --eval "db.runCommand({ ping: 1 })" 2>&1 || echo "failed")
+            # SECURITY FIX: Use environment variable instead of command-line argument
+            # to prevent password exposure in ps aux output
+            mongo_test=$(docker exec -e MONGOSH_PASSWORD="$mongo_pass" "$mongo_container" \
+                mongosh admin -u admin --authenticationDatabase admin --tls --tlsAllowInvalidCertificates --quiet \
+                --eval "db.runCommand({ ping: 1 })" 2>&1 || echo "failed")
         else
-            mongo_test=$(docker exec "$mongo_container" mongosh --eval "db.runCommand({ ping: 1 })" --quiet 2>&1 || echo "failed")
+            mongo_test=$(docker exec "$mongo_container" mongosh --tls --tlsAllowInvalidCertificates --eval "db.runCommand({ ping: 1 })" --quiet 2>&1 || echo "failed")
         fi
 
         if echo "$mongo_test" | grep -q "ok"; then
@@ -796,28 +848,32 @@ spoke_verify_opal_sync() {
     if _spoke_verify_opal_sync_check "$instance_code" "$max_retries" "$retry_delay" "$sync_start_time" "$stabilization_time"; then
         return 0  # Success
     else
-        # CHANGED (2026-02-08): Make OPAL sync verification a WARNING, not FAILURE
-        # Reason: OPAL sync works correctly but may take longer than timeout during initial deployment
-        # Federation and policy distribution still work - this is just a timing issue
+        # CRITICAL FIX (2026-02-11): Make OPAL sync verification BLOCKING
+        # Previous issue: Returned success on timeout, hiding policy propagation failures
+        # Impact: Policy data not synced but deployment marked complete, causing 403 errors
         local stabilization_total=$((stabilization_time + max_retries * retry_delay))
-        log_warn "⚠️  ⚠️  OPAL sync verification timed out after ${stabilization_total}s"
-        log_warn "   This is expected during initial deployment - OPAL continues syncing in background"
-        echo ""
-        log_info "   OPAL sync status:"
-        log_info "     • Spoke registered in MongoDB: ✓"
-        log_info "     • Bidirectional federation configured: ✓"
-        log_info "     • OPAL client active: ✓"
-        log_info "     • Policy data will propagate within 2-5 minutes"
-        echo ""
-        log_info "   To verify OPAL sync manually after deployment:"
-        log_info "     curl -sk https://localhost:4000/api/opal/trusted-issuers | jq '.trusted_issuers | keys'"
-        log_info "     curl -sk https://localhost:4000/api/opal/federation-matrix | jq '.federation_matrix'"
-        echo ""
-        log_info "   To force immediate sync (optional):"
-        log_info "     curl -X POST https://localhost:4000/api/opal/cdc/force-sync"
-        echo ""
+        log_error "❌ OPAL sync verification FAILED after ${stabilization_total}s"
+        log_error "   Policy data has NOT propagated from MongoDB → OPAL → OPA"
+        log_error ""
+        log_error "   Impact:"
+        log_error "     • Spoke users will get 403 'issuer not trusted' errors accessing Hub resources"
+        log_error "     • Cross-instance resource access will fail"
+        log_error "     • ABAC policy enforcement will use stale data"
+        log_error ""
+        log_error "   Root Cause:"
+        log_error "     • OPAL client not running or not connected to Hub OPAL server"
+        log_error "     • MongoDB CDC events not being processed"
+        log_error "     • Network connectivity issues between Hub and Spoke"
+        log_error ""
+        log_error "   Troubleshooting:"
+        log_error "     1. Check OPAL client status: docker ps | grep opal-client"
+        log_error "     2. Check OPAL client logs: docker logs dive-spoke-${instance_code}-opal-client"
+        log_error "     3. Verify Hub OPAL server: docker logs dive-hub-opal-server"
+        log_error "     4. Manual verification: curl -sk https://localhost:4000/api/opal/trusted-issuers | jq '.trusted_issuers | keys'"
+        log_error "     5. Force sync: curl -X POST https://localhost:4000/api/opal/cdc/force-sync"
+        log_error ""
 
-        return 0  # SOFT FAIL - Return success but log warning (OPAL works, just slower than expected)
+        return 1  # HARD FAIL - Policy data not synced is a deployment-blocking issue
     fi
 }
 

@@ -238,7 +238,7 @@ export VERBOSE="${VERBOSE:-false}"
 export QUIET="${QUIET:-false}"
 
 # Configurable timeouts (override via environment variables)
-export DIVE_TIMEOUT_KEYCLOAK_READY="${DIVE_TIMEOUT_KEYCLOAK_READY:-180}"
+export DIVE_TIMEOUT_KEYCLOAK_READY="${DIVE_TIMEOUT_KEYCLOAK_READY:-30}"  # Reduced from 180s - containers already healthy by federation phase
 export DIVE_TIMEOUT_CURL_DEFAULT="${DIVE_TIMEOUT_CURL_DEFAULT:-10}"
 export DIVE_TIMEOUT_CURL_QUICK="${DIVE_TIMEOUT_CURL_QUICK:-5}"
 export DIVE_TIMEOUT_POLL_INTERVAL="${DIVE_TIMEOUT_POLL_INTERVAL:-2}"
@@ -631,21 +631,31 @@ check_certs() {
 
     mkdir -p "$cert_dir"
 
-    # Hub certificate SANs - same approach as spoke pipeline
-    local hostnames="localhost 127.0.0.1 ::1 host.docker.internal"
+    # Hub certificate SANs — delegate to SSOT in certificates.sh
+    # Load certificates.sh if _hub_service_sans is not already available
+    if ! type _hub_service_sans &>/dev/null; then
+        if [ -f "${DIVE_ROOT}/scripts/dive-modules/certificates.sh" ]; then
+            source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+        fi
+    fi
 
-    # Hub container names (SSOT naming convention)
-    hostnames="$hostnames dive-hub-keycloak dive-hub-backend dive-hub-frontend"
-    hostnames="$hostnames dive-hub-opa dive-hub-opal-server dive-hub-kas"
-    hostnames="$hostnames dive-hub-mongodb dive-hub-postgres dive-hub-redis"
-    hostnames="$hostnames dive-hub-redis-blacklist dive-hub-authzforce"
-
-    # Service aliases (used in compose networks)
-    hostnames="$hostnames keycloak backend frontend opa opal-server kas"
-    hostnames="$hostnames mongodb postgres redis redis-blacklist authzforce"
-
-    # External access
-    hostnames="$hostnames *.dive25.com usa-idp.dive25.com usa-api.dive25.com usa-app.dive25.com"
+    local hostnames
+    if type _hub_service_sans &>/dev/null; then
+        # SSOT path: DNS SANs from certificates.sh + IP literals for mkcert
+        hostnames="$(_hub_service_sans) 127.0.0.1 ::1"
+        # mkcert also supports wildcard for future-proofing
+        hostnames="$hostnames *.dive25.com"
+    else
+        # Fallback: inline list (kept in sync manually if certificates.sh unavailable)
+        hostnames="localhost 127.0.0.1 ::1 host.docker.internal"
+        hostnames="$hostnames dive-hub-keycloak dive-hub-backend dive-hub-frontend"
+        hostnames="$hostnames dive-hub-opa dive-hub-opal-server dive-hub-kas"
+        hostnames="$hostnames dive-hub-mongodb dive-hub-postgres dive-hub-redis"
+        hostnames="$hostnames dive-hub-redis-blacklist dive-hub-authzforce"
+        hostnames="$hostnames keycloak backend frontend opa opal-server kas"
+        hostnames="$hostnames mongodb postgres redis redis-blacklist authzforce"
+        hostnames="$hostnames *.dive25.com usa-idp.dive25.com usa-api.dive25.com usa-app.dive25.com"
+    fi
 
     # Generate certificate
     # shellcheck disable=SC2086
@@ -1336,22 +1346,31 @@ wait_for_keycloak_admin_api_ready() {
     local elapsed=0
     local healthy=false
 
-    while [ $elapsed -lt $max_wait ]; do
-        local health_status=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null || echo "unknown")
+    # PERFORMANCE FIX (2026-02-11): Skip wait loop if already healthy
+    # By CONFIGURATION phase, containers are already healthy from DEPLOYMENT phase
+    local health_status=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null || echo "unknown")
+    if [ "$health_status" = "healthy" ]; then
+        healthy=true
+        log_verbose "Container already healthy (0s)"
+    else
+        # Original wait loop for containers that aren't healthy yet
+        while [ $elapsed -lt $max_wait ]; do
+            health_status=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null || echo "unknown")
 
-        if [ "$health_status" = "healthy" ]; then
-            healthy=true
-            log_verbose "Container healthy after ${elapsed}s"
-            break
-        fi
+            if [ "$health_status" = "healthy" ]; then
+                healthy=true
+                log_verbose "Container healthy after ${elapsed}s"
+                break
+            fi
 
-        sleep 2
-        elapsed=$(( $(date +%s) - start_time ))
+            sleep 2
+            elapsed=$(( $(date +%s) - start_time ))
 
-        if [ $((elapsed % 10)) -eq 0 ]; then
-            log_verbose "Waiting for container health... ${elapsed}s elapsed (status: $health_status)"
-        fi
-    done
+            if [ $((elapsed % 10)) -eq 0 ]; then
+                log_verbose "Waiting for container health... ${elapsed}s elapsed (status: $health_status)"
+            fi
+        done
+    fi
 
     if [ "$healthy" = "false" ]; then
         log_error "Container did not become healthy within ${max_wait}s"

@@ -91,79 +91,19 @@ federation_partners = {
   # EMPTY per MongoDB SSOT architecture (2026-01-22)
   # Federation partners are managed dynamically:
   #   1. Spoke deploys → registers with Hub → MongoDB entry created
-  #   2. Hub deployment → queries MongoDB → generates hub.auto.tfvars  
+  #   2. Hub deployment → queries MongoDB → generates hub.auto.tfvars
   #   3. Terraform reads hub.auto.tfvars (overrides this empty map)
   #
   # For initial Hub deployment (no spokes yet), this must be empty.
   # After spoke registration, Hub can re-apply Terraform with hub.auto.tfvars.
-est = {
-    instance_code         = "EST"
-    instance_name         = "EST Instance"
-    idp_url               = "https://localhost:8451"
-    idp_internal_url      = "https://dive-spoke-est-keycloak:8443"
-    frontend_url          = "https://localhost:3008"
-    enabled               = true
-    client_secret         = ""  # Loaded from GCP: dive-v3-federation-est-usa
-    disable_trust_manager = true
-  }
 fra = {
     instance_code         = "FRA"
-    instance_name         = "France Defence"
+    instance_name         = "FRA Instance"
     idp_url               = "https://localhost:8453"
     idp_internal_url      = "https://dive-spoke-fra-keycloak:8443"
     frontend_url          = "https://localhost:3010"
     enabled               = true
     client_secret         = ""  # Loaded from GCP: dive-v3-federation-fra-usa
-    disable_trust_manager = true
-  }
-nzl = {
-    instance_code         = "NZL"
-    instance_name         = "NZL Instance"
-    idp_url               = "https://localhost:8476"
-    idp_internal_url      = "https://dive-spoke-nzl-keycloak:8443"
-    frontend_url          = "https://localhost:3033"
-    enabled               = true
-    client_secret         = ""  # Loaded from GCP: dive-v3-federation-nzl-usa
-    disable_trust_manager = true
-  }
-svk = {
-    instance_code         = "SVK"
-    instance_name         = "SVK Instance"
-    idp_url               = "https://localhost:8469"
-    idp_internal_url      = "https://dive-spoke-svk-keycloak:8443"
-    frontend_url          = "https://localhost:3026"
-    enabled               = true
-    client_secret         = ""  # Loaded from GCP: dive-v3-federation-svk-usa
-    disable_trust_manager = true
-  }
-gbr = {
-    instance_code         = "GBR"
-    instance_name         = "GBR Instance"
-    idp_url               = "https://localhost:8474"
-    idp_internal_url      = "https://dive-spoke-gbr-keycloak:8443"
-    frontend_url          = "https://localhost:3031"
-    enabled               = true
-    client_secret         = ""  # Loaded from GCP: dive-v3-federation-gbr-usa
-    disable_trust_manager = true
-  }
-deu = {
-    instance_code         = "DEU"
-    instance_name         = "DEU Instance"
-    idp_url               = "https://localhost:8454"
-    idp_internal_url      = "https://dive-spoke-deu-keycloak:8443"
-    frontend_url          = "https://localhost:3011"
-    enabled               = true
-    client_secret         = ""  # Loaded from GCP: dive-v3-federation-deu-usa
-    disable_trust_manager = true
-  }
-can = {
-    instance_code         = "CAN"
-    instance_name         = "CAN Instance"
-    idp_url               = "https://localhost:8447"
-    idp_internal_url      = "https://dive-spoke-can-keycloak:8443"
-    frontend_url          = "https://localhost:3004"
-    enabled               = true
-    client_secret         = ""  # Loaded from GCP: dive-v3-federation-can-usa
     disable_trust_manager = true
   }
 }

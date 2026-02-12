@@ -30,11 +30,20 @@ else
     echo "⚠ Orchestration schema file not found, skipping"
 fi
 
-# Create service-specific database users (for Vault static role management)
+# Create service-specific database users with Vault-managed passwords
 echo "Creating service-specific database users..."
-if [ -f "/scripts/postgres-init/03-create-service-users.sql" ]; then
-    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "$POSTGRES_DB" < /scripts/postgres-init/03-create-service-users.sql
+if [ -f "/scripts/postgres-init/03-create-service-users.sh" ]; then
+    bash /scripts/postgres-init/03-create-service-users.sh
     echo "✓ Service users created (keycloak_user, nextauth_user)"
 else
-    echo "⚠ Service users SQL not found, skipping"
+    echo "⚠ Service users script not found, skipping"
+fi
+
+# Apply WebAuthn userHandle fix for Keycloak 26 bug
+if [ -f "/scripts/postgres-init/04-fix-webauthn-userhandle.sql" ]; then
+    echo "Applying WebAuthn userHandle fix..."
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "postgres" < /scripts/postgres-init/04-fix-webauthn-userhandle.sql
+    echo "✓ WebAuthn userHandle fix applied"
+else
+    echo "⚠ WebAuthn fix script not found, skipping"
 fi

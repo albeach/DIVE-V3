@@ -79,7 +79,7 @@ hub_phase_database_init() {
     local instance_code="$1"
     local pipeline_mode="$2"
 
-    log_info "Phase 0: PostgreSQL and Orchestration Database initialization"
+    log_info "Phase 2: PostgreSQL and Orchestration Database initialization"
 
     # Start PostgreSQL container only
     log_verbose "Starting PostgreSQL container..."
@@ -100,8 +100,8 @@ hub_phase_database_init() {
             log_success "PostgreSQL is ready"
             break
         fi
-        sleep 2
-        ((elapsed += 2))
+        sleep 1  # OPTIMIZATION: Faster polling for responsiveness
+        ((elapsed += 1))
     done
 
     if [ $elapsed -ge $max_wait ]; then
@@ -162,7 +162,7 @@ hub_phase_database_init() {
             log_verbose "Federation schema already exists"
     fi
 
-    log_success "Phase 0 complete: Orchestration database ready for state tracking"
+    log_success "Phase 2 complete: Orchestration database ready for state tracking"
     return 0
 }
 
@@ -176,6 +176,220 @@ hub_phase_initialization() {
     local instance_code="$1"
     local pipeline_mode="$2"
     hub_init
+}
+
+hub_phase_vault_bootstrap() {
+    local instance_code="$1"
+    local pipeline_mode="$2"
+
+    log_info "Vault bootstrap: ensuring Vault cluster is running and configured"
+
+    cd "$DIVE_ROOT" || {
+        log_error "Failed to change to DIVE_ROOT=$DIVE_ROOT"
+        return 1
+    }
+
+    # Ensure vault CLI is in PATH (macOS: /usr/local/bin, Homebrew ARM: /opt/homebrew/bin)
+    if ! command -v vault &>/dev/null; then
+        for _vp in /usr/local/bin /opt/homebrew/bin; do
+            if [ -x "${_vp}/vault" ]; then
+                export PATH="${_vp}:$PATH"
+                break
+            fi
+        done
+        if ! command -v vault &>/dev/null; then
+            log_error "Vault CLI not found — install: brew install hashicorp/tap/vault"
+            return 1
+        fi
+    fi
+
+    # -------------------------------------------------------------------------
+    # Step 1: Generate Vault node TLS certificates
+    # -------------------------------------------------------------------------
+    local vault_profile
+    vault_profile=$(_vault_get_profile)
+
+    if [ "$vault_profile" = "vault-ha" ]; then
+        log_info "Generating Vault node TLS certificates..."
+        source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+        if ! generate_vault_node_certs; then
+            log_error "Failed to generate Vault node certs — cannot start TLS-enabled cluster"
+            return 1
+        fi
+    fi
+
+    # -------------------------------------------------------------------------
+    # Step 2: Start Vault containers
+    # -------------------------------------------------------------------------
+    # Ensure dive-shared network exists (compose declares it as external: true)
+    if ! ${DOCKER_CMD:-docker} network inspect dive-shared >/dev/null 2>&1; then
+        ${DOCKER_CMD:-docker} network create dive-shared 2>/dev/null || true
+    fi
+
+    log_info "Starting Vault services (profile: ${vault_profile})..."
+
+    # Start ONLY Vault-specific services — not all services in the compose file.
+    # `docker compose --profile X up -d` starts all non-profiled services too,
+    # which would prematurely start MongoDB/Redis/Postgres before they're configured.
+    if [ "$vault_profile" = "vault-ha" ]; then
+        # Start vault-seal FIRST and wait for healthy before starting cluster nodes.
+        # vault-1/2/3 depend on vault-seal for Transit auto-unseal — if started
+        # simultaneously, compose may fail the dependency check before vault-seal
+        # finishes its initialization (transit engine + token creation).
+        log_info "Starting vault-seal (Transit auto-unseal engine)..."
+        if ! ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" --profile "$vault_profile" up -d vault-seal 2>&1; then
+            log_error "Failed to start vault-seal"
+            return 1
+        fi
+
+        # Wait for vault-seal to be healthy
+        local seal_container="${COMPOSE_PROJECT_NAME:-dive-hub}-vault-seal"
+        local seal_wait=0
+        log_info "Waiting for vault-seal to become healthy..."
+        while [ $seal_wait -lt 30 ]; do
+            local seal_health
+            seal_health=$(${DOCKER_CMD:-docker} inspect "$seal_container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+            if [ "$seal_health" = "healthy" ]; then
+                log_success "vault-seal healthy (${seal_wait}s)"
+                break
+            fi
+            sleep 1  # OPTIMIZATION: Faster polling for responsiveness
+            seal_wait=$((seal_wait + 1))
+        done
+
+        if [ $seal_wait -ge 30 ]; then
+            log_error "vault-seal did not become healthy within 30s"
+            log_info "Check logs: docker logs ${seal_container}"
+            return 1
+        fi
+
+        # Now start cluster nodes (vault-seal is healthy, dependency satisfied)
+        log_info "Starting Vault cluster nodes (vault-1, vault-2, vault-3)..."
+        if ! ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" --profile "$vault_profile" up -d vault-1 vault-2 vault-3 2>&1; then
+            log_error "Failed to start Vault cluster nodes"
+            return 1
+        fi
+    else
+        if ! ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" --profile "$vault_profile" up -d vault-dev 2>&1; then
+            log_error "Failed to start vault-dev"
+            return 1
+        fi
+    fi
+
+    # Wait for Vault to be healthy
+    local vault_container="${COMPOSE_PROJECT_NAME:-dive-hub}-vault-1"
+    local vault_timeout=60
+    if [ "$vault_profile" = "vault-dev" ]; then
+        vault_container="${COMPOSE_PROJECT_NAME:-dive-hub}-vault-dev"
+        vault_timeout=15
+    fi
+
+    log_info "Waiting for Vault to become healthy (timeout: ${vault_timeout}s)..."
+    local vault_wait=0
+    while [ $vault_wait -lt $vault_timeout ]; do
+        local health
+        health=$(${DOCKER_CMD:-docker} inspect "$vault_container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+        if [ "$health" = "healthy" ]; then
+            log_success "Vault healthy (${vault_wait}s)"
+            break
+        fi
+        sleep 1  # OPTIMIZATION: Faster polling for responsiveness
+        vault_wait=$((vault_wait + 1))
+    done
+
+    if [ $vault_wait -ge $vault_timeout ]; then
+        log_error "Vault did not become healthy within ${vault_timeout}s"
+        log_info "Check logs: docker logs ${vault_container}"
+        return 1
+    fi
+
+    # -------------------------------------------------------------------------
+    # Step 3: Initialize Vault if not yet initialized
+    # -------------------------------------------------------------------------
+    # Source vault module for init/setup/seed functions
+    source "${DIVE_ROOT}/scripts/dive-modules/vault/module.sh"
+
+    # Load token if it exists
+    if [ -f "$VAULT_TOKEN_FILE" ]; then
+        VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
+        export VAULT_TOKEN
+    fi
+
+    local status_json
+    status_json=$(vault status -format=json 2>/dev/null || true)
+    local is_initialized
+    is_initialized=$(echo "$status_json" | grep -o '"initialized": *[a-z]*' | sed 's/.*: *//')
+
+    if [ "$is_initialized" != "true" ]; then
+        log_info "Vault not initialized — running vault init..."
+        if ! module_vault_init; then
+            log_error "Vault initialization failed"
+            return 1
+        fi
+        log_success "Vault initialized"
+    else
+        log_verbose "Vault already initialized"
+        # Ensure we have the token
+        if [ -z "${VAULT_TOKEN:-}" ] && [ -f "$VAULT_TOKEN_FILE" ]; then
+            VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
+            export VAULT_TOKEN
+        fi
+    fi
+
+    # Verify unsealed
+    if ! vault status 2>/dev/null | grep -q "Sealed.*false"; then
+        log_error "Vault is sealed after init — Transit auto-unseal may have failed"
+        log_info "Check seal vault: docker logs ${COMPOSE_PROJECT_NAME:-dive-hub}-vault-seal"
+        return 1
+    fi
+
+    # -------------------------------------------------------------------------
+    # Step 4: Setup mount points and policies if not configured
+    # -------------------------------------------------------------------------
+    if ! vault secrets list 2>/dev/null | grep -q "^dive-v3/core/"; then
+        log_info "Vault not configured — running vault setup..."
+        if ! module_vault_setup; then
+            log_error "Vault setup failed"
+            return 1
+        fi
+        log_success "Vault setup complete"
+    else
+        log_verbose "Vault mount points already configured"
+    fi
+
+    # -------------------------------------------------------------------------
+    # Step 5: Seed secrets if not yet seeded
+    # -------------------------------------------------------------------------
+    if ! vault kv get dive-v3/core/usa/postgres >/dev/null 2>&1; then
+        log_info "Vault secrets not seeded — running vault seed..."
+        if ! module_vault_seed; then
+            log_error "Vault seed failed"
+            return 1
+        fi
+        log_success "Vault secrets seeded"
+    else
+        log_verbose "Vault secrets already seeded"
+    fi
+
+    # -------------------------------------------------------------------------
+    # Step 6: Rotate bootstrap certs to Vault PKI if available
+    # -------------------------------------------------------------------------
+    if [ "$vault_profile" = "vault-ha" ]; then
+        if type _vault_node_certs_are_bootstrap &>/dev/null && _vault_node_certs_are_bootstrap; then
+            log_info "Bootstrap certs detected — attempting rotation to Vault PKI..."
+            if _rotate_vault_node_certs_to_pki; then
+                log_success "Vault node certs rotated to Vault PKI"
+            else
+                log_verbose "Vault PKI rotation deferred (PKI not yet initialized)"
+            fi
+        fi
+    fi
+
+    # Mark Vault as bootstrapped for Phase 7 (Services) to skip redundant startup
+    export HUB_VAULT_BOOTSTRAPPED=true
+
+    log_success "Vault bootstrap complete — cluster ready for secret operations"
+    return 0
 }
 
 hub_phase_mongodb_init() {
@@ -260,10 +474,84 @@ hub_phase_services() {
         fi
     fi
 
+    # Provision Hub OPAL client token (after services are up)
+    _hub_provision_opal_client_token
+
     log_success "Hub services started successfully"
     return 0
 }
 
+# ============================================================================
+# Hub OPAL Client Token Provisioning & Startup
+# ============================================================================
+# After all services are up (OPAL server healthy), generate a real JWT client
+# token and start the hub's OPAL client with it. The OPAL client is in the
+# "opal" profile so it does NOT start during parallel startup — it starts
+# here with a real token, eliminating the placeholder token pattern entirely.
+# ============================================================================
+_hub_provision_opal_client_token() {
+    log_info "Provisioning Hub OPAL client token..."
+
+    local master_token
+    master_token=$(grep "^OPAL_AUTH_MASTER_TOKEN=" "$DIVE_ROOT/.env.hub" 2>/dev/null | cut -d= -f2)
+
+    if [ -z "$master_token" ]; then
+        log_warn "OPAL_AUTH_MASTER_TOKEN not found — skipping OPAL client"
+        return 0
+    fi
+
+    local opal_url="https://localhost:${OPAL_PORT:-7002}"
+    local max_attempts=10
+
+    for attempt in $(seq 1 $max_attempts); do
+        local token
+        token=$(curl -sk --max-time 5 \
+            -X POST "${opal_url}/token" \
+            -H "Authorization: Bearer ${master_token}" \
+            -H "Content-Type: application/json" \
+            -d '{"type": "client"}' 2>/dev/null | jq -r '.token // empty')
+
+        if [ -n "$token" ]; then
+            # Store in .env.hub
+            if grep -q "^HUB_OPAL_TOKEN=" "$DIVE_ROOT/.env.hub" 2>/dev/null; then
+                sed -i '' "s|^HUB_OPAL_TOKEN=.*|HUB_OPAL_TOKEN=${token}|" "$DIVE_ROOT/.env.hub"
+            else
+                echo "HUB_OPAL_TOKEN=${token}" >> "$DIVE_ROOT/.env.hub"
+            fi
+
+            # Start OPAL client with real token (profile: opal)
+            log_info "Starting OPAL client with real token..."
+            ${DOCKER_CMD:-docker} compose --profile opal -f "$HUB_COMPOSE_FILE" up -d opal-client
+
+            # Wait for OPAL client to become healthy
+            local opal_container="${COMPOSE_PROJECT_NAME:-dive-hub}-opal-client"
+            local opal_timeout=60
+            local opal_elapsed=0
+            while [ $opal_elapsed -lt $opal_timeout ]; do
+                local health
+                health=$(${DOCKER_CMD:-docker} inspect "$opal_container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "not_found")
+                if [ "$health" = "healthy" ]; then
+                    log_success "Hub OPAL client started and healthy"
+                    return 0
+                elif [ "$health" = "not_found" ]; then
+                    log_error "OPAL client container not found"
+                    return 1
+                fi
+                sleep 3
+                opal_elapsed=$((opal_elapsed + 3))
+            done
+
+            log_warn "OPAL client started but not yet healthy after ${opal_timeout}s (non-blocking)"
+            return 0
+        fi
+
+        log_verbose "OPAL token attempt $attempt/$max_attempts..."
+        sleep 2
+    done
+
+    log_warn "Could not provision OPAL client token (OPAL server may not be ready)"
+    return 0  # Non-fatal
+}
 
 hub_phase_keycloak_config() {
     local instance_code="$1"
@@ -305,6 +593,69 @@ hub_phase_kas_init() {
     _hub_init_kas
 }
 
+hub_phase_vault_db_engine() {
+    local instance_code="$1"
+    local pipeline_mode="$2"
+
+    # Skip if Vault not bootstrapped or secrets provider isn't vault
+    local secrets_provider
+    secrets_provider=$(grep '^SECRETS_PROVIDER=' "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2- || echo "")
+    if [ "$secrets_provider" != "vault" ]; then
+        log_verbose "SECRETS_PROVIDER is not 'vault' — skipping database engine setup"
+        return 0
+    fi
+
+    if [ "${HUB_VAULT_BOOTSTRAPPED:-false}" != "true" ]; then
+        log_verbose "Vault not bootstrapped — skipping database engine setup"
+        return 0
+    fi
+
+    log_info "Configuring Vault database secrets engine..."
+
+    # Ensure vault module (includes db-engine.sh) is loaded
+    if ! type module_vault_db_setup &>/dev/null; then
+        source "${DIVE_ROOT}/scripts/dive-modules/vault/module.sh"
+    fi
+
+    if ! module_vault_db_setup; then
+        log_warn "Vault database engine setup failed — backend will use static credentials"
+        return 0  # Non-fatal: graceful degradation
+    fi
+
+    # Ensure VAULT_DB_ROLE is set in .env.hub for backend
+    if ! grep -q '^VAULT_DB_ROLE=' "${DIVE_ROOT}/.env.hub" 2>/dev/null; then
+        _vault_update_env "${DIVE_ROOT}/.env.hub" "VAULT_DB_ROLE" "backend-hub-rw"
+        _vault_update_env "${DIVE_ROOT}/.env.hub" "VAULT_DB_ROLE_KAS" "kas-hub-ro"
+    fi
+
+    # Recreate services that need updated credentials:
+    # - backend: dynamic MongoDB credentials (VAULT_DB_ROLE)
+    # - keycloak: rotated PG password (KC_DB_PASSWORD via static role)
+    # - frontend: rotated PG password (nextauth_user via FRONTEND_DATABASE_URL)
+    # NOTE: `up -d --force-recreate` re-reads .env.hub; `restart` does not.
+    log_info "Recreating services with updated Vault credentials..."
+    if ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" --env-file "${DIVE_ROOT}/.env.hub" up -d --force-recreate --no-build backend keycloak frontend >/dev/null 2>&1; then
+        # Wait for Keycloak to become healthy (longest startup)
+        local kc_wait=0
+        local kc_max=90
+        while [ $kc_wait -lt $kc_max ]; do
+            local kc_health
+            kc_health=$(${DOCKER_CMD:-docker} inspect dive-hub-keycloak --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+            if [ "$kc_health" = "healthy" ]; then
+                log_success "Services recreated with Vault credentials (${kc_wait}s)"
+                return 0
+            fi
+            sleep 1
+            kc_wait=$((kc_wait + 1))
+        done
+        log_warn "Keycloak health timeout (${kc_max}s) — check: docker logs dive-hub-keycloak"
+    else
+        log_warn "Service recreation failed — some credentials may be stale"
+    fi
+
+    return 0  # Non-fatal
+}
+
 ##
 # Internal MongoDB replica set initialization
 # Extracted from hub_deploy() for circuit breaker wrapping
@@ -329,11 +680,11 @@ _hub_init_mongodb_replica_set() {
     local mongo_max_wait=60
     while [ $mongo_wait -lt $mongo_max_wait ]; do
         if ${DOCKER_CMD:-docker} ps --filter "name=dive-hub-mongodb" --filter "health=healthy" --format "{{.Names}}" | grep -q "dive-hub-mongodb"; then
-            log_verbose "MongoDB container is healthy"
+            log_verbose "MongoDB container is healthy (${mongo_wait}s)"
             break
         fi
-        sleep 2
-        mongo_wait=$((mongo_wait + 2))
+        sleep 1  # OPTIMIZATION: Reduced from 2s to 1s for faster detection
+        mongo_wait=$((mongo_wait + 1))
     done
 
     if [ $mongo_wait -ge $mongo_max_wait ]; then
@@ -354,9 +705,9 @@ _hub_init_mongodb_replica_set() {
     log_success "MongoDB replica set initialized and PRIMARY"
     export HUB_MONGODB_RS_INITIALIZED=true
 
-    # Stability buffer for replica set discovery
-    log_verbose "Waiting 3s for MongoDB replica set discovery to stabilize..."
-    sleep 3
+    # OPTIMIZATION: Remove fixed 3s sleep - healthcheck already ensures PRIMARY status
+    # If additional stabilization needed, callers can implement their own polling
+    log_verbose "MongoDB replica set ready (no artificial delay - healthcheck ensures PRIMARY)"
 
     return 0
 }
@@ -500,37 +851,58 @@ _hub_pipeline_execute_internal() {
         orch_init_metrics "$instance_code"
     fi
 
-    # Initialize progress tracking (11 phases: 0, 1, 2, 2.5, 2.8, 3, 4, 4.5, 4.75, 5, 5.5)
+    # Initialize progress tracking (13 phases: 1-13)
     if type progress_init &>/dev/null; then
-        progress_init "hub" "USA" 11
+        progress_init "hub" "USA" 13
     fi
 
-    # NOTE: Initial state is set AFTER Phase 0 (database must exist first)
-
     # =========================================================================
-    # Phase 0: Database Infrastructure (NEW - orchestration DB first!)
+    # Phase 1: Vault Bootstrap (start, init, setup, seed)
     # =========================================================================
+    # Vault MUST be first — all other phases depend on secrets from Vault
     local phase_start=$(date +%s)
     if type progress_set_phase &>/dev/null; then
-        progress_set_phase 0 "Database infrastructure"
+        progress_set_phase 1 "Vault bootstrap"
     fi
 
-    if ! _hub_run_phase_with_circuit_breaker "$instance_code" "DATABASE_INIT" "hub_phase_database_init" "$pipeline_mode" "$resume_mode"; then
+    if ! _hub_run_phase_with_circuit_breaker "$instance_code" "VAULT_BOOTSTRAP" "hub_phase_vault_bootstrap" "$pipeline_mode" "$resume_mode"; then
         phase_result=1
     fi
 
     local phase_end=$(date +%s)
-    phase_times+=("Phase 0 (Database Init): $((phase_end - phase_start))s")
+    phase_times+=("Phase 1 (Vault Bootstrap): $((phase_end - phase_start))s")
 
-    # Check failure threshold
     if [ $phase_result -eq 0 ]; then
-        if ! _hub_check_threshold "$instance_code" "DATABASE_INIT"; then
+        if ! _hub_check_threshold "$instance_code" "VAULT_BOOTSTRAP"; then
             phase_result=1
         fi
     fi
 
     # =========================================================================
-    # Set Initial State (AFTER Phase 0 - database now exists!)
+    # Phase 2: Database Infrastructure (PostgreSQL + orchestration DB)
+    # =========================================================================
+    if [ $phase_result -eq 0 ]; then
+        phase_start=$(date +%s)
+        if type progress_set_phase &>/dev/null; then
+            progress_set_phase 2 "Database infrastructure"
+        fi
+
+        if ! _hub_run_phase_with_circuit_breaker "$instance_code" "DATABASE_INIT" "hub_phase_database_init" "$pipeline_mode" "$resume_mode"; then
+            phase_result=1
+        fi
+
+        phase_end=$(date +%s)
+        phase_times+=("Phase 2 (Database Init): $((phase_end - phase_start))s")
+
+        if [ $phase_result -eq 0 ]; then
+            if ! _hub_check_threshold "$instance_code" "DATABASE_INIT"; then
+                phase_result=1
+            fi
+        fi
+    fi
+
+    # =========================================================================
+    # Set Initial State (AFTER Phase 2 - database now exists!)
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
         if type deployment_set_state &>/dev/null; then
@@ -540,12 +912,12 @@ _hub_pipeline_execute_internal() {
     fi
 
     # =========================================================================
-    # Phase 1: Preflight
+    # Phase 3: Preflight
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
         phase_start=$(date +%s)
         if type progress_set_phase &>/dev/null; then
-            progress_set_phase 1 "Preflight checks"
+            progress_set_phase 3 "Preflight checks"
         fi
 
         if ! _hub_run_phase_with_circuit_breaker "$instance_code" "PREFLIGHT" "hub_phase_preflight" "$pipeline_mode" "$resume_mode"; then
@@ -553,9 +925,8 @@ _hub_pipeline_execute_internal() {
         fi
 
         phase_end=$(date +%s)
-        phase_times+=("Phase 1 (Preflight): $((phase_end - phase_start))s")
+        phase_times+=("Phase 3 (Preflight): $((phase_end - phase_start))s")
 
-        # Check failure threshold
         if [ $phase_result -eq 0 ]; then
             if ! _hub_check_threshold "$instance_code" "PREFLIGHT"; then
                 phase_result=1
@@ -564,12 +935,12 @@ _hub_pipeline_execute_internal() {
     fi
 
     # =========================================================================
-    # Phase 2: Initialization
+    # Phase 4: Initialization
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
         phase_start=$(date +%s)
         if type progress_set_phase &>/dev/null; then
-            progress_set_phase 2 "Initialization"
+            progress_set_phase 4 "Initialization"
         fi
 
         if ! _hub_run_phase_with_circuit_breaker "$instance_code" "INITIALIZATION" "hub_phase_initialization" "$pipeline_mode" "$resume_mode"; then
@@ -577,7 +948,7 @@ _hub_pipeline_execute_internal() {
         fi
 
         phase_end=$(date +%s)
-        phase_times+=("Phase 2 (Initialization): $((phase_end - phase_start))s")
+        phase_times+=("Phase 4 (Initialization): $((phase_end - phase_start))s")
 
         if [ $phase_result -eq 0 ]; then
             if ! _hub_check_threshold "$instance_code" "INITIALIZATION"; then
@@ -587,12 +958,12 @@ _hub_pipeline_execute_internal() {
     fi
 
     # =========================================================================
-    # Phase 2.5: MongoDB Replica Set
+    # Phase 5: MongoDB Replica Set
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
         phase_start=$(date +%s)
         if type progress_set_phase &>/dev/null; then
-            progress_set_phase 2.5 "MongoDB replica set"
+            progress_set_phase 5 "MongoDB replica set"
         fi
 
         if ! _hub_run_phase_with_circuit_breaker "$instance_code" "MONGODB_INIT" "hub_phase_mongodb_init" "$pipeline_mode" "$resume_mode"; then
@@ -600,7 +971,7 @@ _hub_pipeline_execute_internal() {
         fi
 
         phase_end=$(date +%s)
-        phase_times+=("Phase 2.5 (MongoDB): $((phase_end - phase_start))s")
+        phase_times+=("Phase 5 (MongoDB): $((phase_end - phase_start))s")
 
         if [ $phase_result -eq 0 ]; then
             if ! _hub_check_threshold "$instance_code" "MONGODB_INIT"; then
@@ -610,7 +981,7 @@ _hub_pipeline_execute_internal() {
     fi
 
     # =========================================================================
-    # Phase 2.8: Docker Image Build (NEW - Separation of Concerns)
+    # Phase 6: Docker Image Build (Separation of Concerns)
     # =========================================================================
     # ARCHITECTURE: Heavyweight I/O operations should NOT be wrapped in
     # circuit breakers that capture output. Docker builds stream gigabytes
@@ -618,11 +989,11 @@ _hub_pipeline_execute_internal() {
     if [ $phase_result -eq 0 ]; then
         phase_start=$(date +%s)
         if type progress_set_phase &>/dev/null; then
-            progress_set_phase 2.8 "Building Docker images"
+            progress_set_phase 6 "Building Docker images"
         fi
 
         # NOTE: State remains INITIALIZING during build
-        # State will transition to DEPLOYING at Phase 3 (Services)
+        # State will transition to DEPLOYING at Phase 7 (Services)
 
         # Build phase uses direct execution (no circuit breaker output capture)
         if ! hub_phase_build "$instance_code" "$pipeline_mode"; then
@@ -631,7 +1002,7 @@ _hub_pipeline_execute_internal() {
         fi
 
         phase_end=$(date +%s)
-        phase_times+=("Phase 2.8 (Build): $((phase_end - phase_start))s")
+        phase_times+=("Phase 6 (Build): $((phase_end - phase_start))s")
 
         # Mark checkpoint manually (build phase doesn't use circuit breaker)
         if [ $phase_result -eq 0 ] && type hub_checkpoint_mark_complete &>/dev/null; then
@@ -646,12 +1017,12 @@ _hub_pipeline_execute_internal() {
     fi
 
     # =========================================================================
-    # Phase 3: Services
+    # Phase 7: Services
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
         phase_start=$(date +%s)
         if type progress_set_phase &>/dev/null; then
-            progress_set_phase 3 "Starting services"
+            progress_set_phase 7 "Starting services"
             progress_set_services 0 12
         fi
 
@@ -670,7 +1041,7 @@ _hub_pipeline_execute_internal() {
         fi
 
         phase_end=$(date +%s)
-        phase_times+=("Phase 3 (Services): $((phase_end - phase_start))s")
+        phase_times+=("Phase 7 (Services): $((phase_end - phase_start))s")
 
         if [ $phase_result -eq 0 ]; then
             if ! _hub_check_threshold "$instance_code" "SERVICES"; then
@@ -680,12 +1051,29 @@ _hub_pipeline_execute_internal() {
     fi
 
     # =========================================================================
-    # Phase 4: Keycloak Configuration
+    # Phase 8: Vault Database Engine (dynamic credentials)
+    # =========================================================================
+    # Non-fatal: if this fails, backend falls back to static credentials
+    if [ $phase_result -eq 0 ]; then
+        phase_start=$(date +%s)
+        if type progress_set_phase &>/dev/null; then
+            progress_set_phase 8 "Vault database engine"
+        fi
+
+        _hub_run_phase_with_circuit_breaker "$instance_code" "VAULT_DB_ENGINE" "hub_phase_vault_db_engine" "$pipeline_mode" "$resume_mode" || \
+            log_warn "Vault database engine setup failed — backend will use static credentials"
+
+        phase_end=$(date +%s)
+        phase_times+=("Phase 8 (Vault DB Engine): $((phase_end - phase_start))s")
+    fi
+
+    # =========================================================================
+    # Phase 9: Keycloak Configuration
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
         phase_start=$(date +%s)
         if type progress_set_phase &>/dev/null; then
-            progress_set_phase 4 "Keycloak configuration"
+            progress_set_phase 9 "Keycloak configuration"
         fi
 
         # State transition: DEPLOYING → CONFIGURING
@@ -699,7 +1087,7 @@ _hub_pipeline_execute_internal() {
         fi
 
         phase_end=$(date +%s)
-        phase_times+=("Phase 4 (Keycloak): $((phase_end - phase_start))s")
+        phase_times+=("Phase 9 (Keycloak): $((phase_end - phase_start))s")
 
         if [ $phase_result -eq 0 ]; then
             if ! _hub_check_threshold "$instance_code" "KEYCLOAK_CONFIG"; then
@@ -709,7 +1097,7 @@ _hub_pipeline_execute_internal() {
     fi
 
     # =========================================================================
-    # Phase 4.5: Realm Verification
+    # Phase 10: Realm Verification
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
         phase_start=$(date +%s)
@@ -725,7 +1113,7 @@ _hub_pipeline_execute_internal() {
         fi
 
         phase_end=$(date +%s)
-        phase_times+=("Phase 4.5 (Realm Verify): $((phase_end - phase_start))s")
+        phase_times+=("Phase 10 (Realm Verify): $((phase_end - phase_start))s")
 
         if [ $phase_result -eq 0 ]; then
             if ! _hub_check_threshold "$instance_code" "REALM_VERIFY"; then
@@ -735,7 +1123,7 @@ _hub_pipeline_execute_internal() {
     fi
 
     # =========================================================================
-    # Phase 4.75: KAS Registration
+    # Phase 11: KAS Registration
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
         phase_start=$(date +%s)
@@ -745,16 +1133,16 @@ _hub_pipeline_execute_internal() {
             log_warn "Hub KAS registration failed - KAS decryption may not work"
 
         phase_end=$(date +%s)
-        phase_times+=("Phase 4.75 (KAS Register): $((phase_end - phase_start))s")
+        phase_times+=("Phase 11 (KAS Register): $((phase_end - phase_start))s")
     fi
 
     # =========================================================================
-    # Phase 5: Seeding
+    # Phase 12: Seeding
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
         phase_start=$(date +%s)
         if type progress_set_phase &>/dev/null; then
-            progress_set_phase 5 "Database seeding"
+            progress_set_phase 12 "Database seeding"
         fi
 
         # Seeding is non-fatal
@@ -762,16 +1150,16 @@ _hub_pipeline_execute_internal() {
             log_warn "Database seeding failed - can be done manually: ./dive hub seed"
 
         phase_end=$(date +%s)
-        phase_times+=("Phase 5 (Seeding): $((phase_end - phase_start))s")
+        phase_times+=("Phase 12 (Seeding): $((phase_end - phase_start))s")
     fi
 
     # =========================================================================
-    # Phase 5.5: KAS Initialization
+    # Phase 13: KAS Initialization
     # =========================================================================
     if [ $phase_result -eq 0 ]; then
         phase_start=$(date +%s)
         if type progress_set_phase &>/dev/null; then
-            progress_set_phase 5.5 "KAS initialization"
+            progress_set_phase 13 "KAS initialization"
         fi
 
         # KAS init is non-fatal
@@ -779,7 +1167,7 @@ _hub_pipeline_execute_internal() {
             log_warn "KAS initialization had issues"
 
         phase_end=$(date +%s)
-        phase_times+=("Phase 5.5 (KAS Init): $((phase_end - phase_start))s")
+        phase_times+=("Phase 13 (KAS Init): $((phase_end - phase_start))s")
     fi
 
     # =========================================================================
@@ -981,16 +1369,12 @@ _hub_print_performance_summary() {
 
 ##
 # Full hub deployment workflow
-# Phase 3 Sprint 1: Enhanced with timeout enforcement and parallel startup
-# Phase 3 Sprint 2: Enhanced with real-time progress display
-# Phase 3 Sprint 3: Enhanced with circuit breaker and checkpoint support
+# Uses orchestrated pipeline with circuit breakers and checkpoints
 #
 # Arguments:
 #   --resume    Resume from last checkpoint
-#   --legacy    Use legacy deployment (skip orchestration pipeline)
 ##
 hub_deploy() {
-    local use_pipeline="${HUB_USE_PIPELINE:-true}"
     local resume_mode=false
 
     # Parse arguments
@@ -1000,438 +1384,26 @@ hub_deploy() {
                 resume_mode=true
                 shift
                 ;;
-            --legacy)
-                use_pipeline=false
-                shift
-                ;;
             *)
                 shift
                 ;;
         esac
     done
 
-    # Use new orchestrated pipeline if available
-    if [ "$use_pipeline" = "true" ] && type hub_pipeline_execute &>/dev/null; then
-        local mode="deploy"
-        if [ "$resume_mode" = "true" ]; then
-            mode="resume"
-        fi
-        hub_pipeline_execute "$mode"
-        return $?
-    fi
-
-    # Legacy deployment path (fallback)
-    log_step "Starting Hub deployment (legacy mode)..."
-
-    local start_time=$(date +%s)
-    local phase_times=()
-
-    # Load deployment timeouts
-    if [ -f "${DIVE_ROOT}/config/deployment-timeouts.env" ]; then
-        source "${DIVE_ROOT}/config/deployment-timeouts.env"
-    fi
-
-    # Get deployment timeout (default: 600s = 10 min)
-    local deployment_timeout=${TIMEOUT_HUB_DEPLOY:-600}
-    log_verbose "Deployment timeout: ${deployment_timeout}s"
-
-    # Initialize real-time progress tracking (Sprint 2)
-    if type progress_init &>/dev/null; then
-        progress_init "hub" "USA" 7
-    fi
-
-    # Start timeout monitor in background
-    (
-        local elapsed=0
-        local check_interval=10
-        local warned_50=false
-        local warned_75=false
-        local warned_90=false
-
-        while [ $elapsed -lt $deployment_timeout ]; do
-            sleep $check_interval
-            elapsed=$((elapsed + check_interval))
-
-            local percent=$((elapsed * 100 / deployment_timeout))
-
-            # Timeout warnings
-            if [ $percent -ge 90 ] && [ "$warned_90" = "false" ]; then
-                log_warn "Deployment timeout warning: 90% elapsed (${elapsed}/${deployment_timeout}s)"
-                warned_90=true
-            elif [ $percent -ge 75 ] && [ "$warned_75" = "false" ]; then
-                log_warn "Deployment timeout warning: 75% elapsed (${elapsed}/${deployment_timeout}s)"
-                warned_75=true
-            elif [ $percent -ge 50 ] && [ "$warned_50" = "false" ]; then
-                log_info "Deployment progress: 50% of timeout elapsed (${elapsed}/${deployment_timeout}s)"
-                warned_50=true
-            fi
-        done
-
-        # Timeout reached
-        log_error "DEPLOYMENT TIMEOUT: Exceeded ${deployment_timeout}s"
-        log_error "Deployment is taking too long - likely stuck or failed"
-        log_error "Check logs: ./dive logs"
-        log_error "To increase timeout: TIMEOUT_HUB_DEPLOY=900 ./dive hub deploy"
-
-        # Kill the deployment process group
-        # Note: This won't work perfectly but will trigger failure
-        exit 1
-    ) &
-
-    local timeout_monitor_pid=$!
-
-    # Ensure cleanup on exit
-    trap "kill $timeout_monitor_pid 2>/dev/null || true; progress_cleanup" EXIT
-
-    # Initialize request context
-    if type init_request_context &>/dev/null; then
-        init_request_context "hub-deployment" "deploy"
-    fi
-
-    # Phase 1: Preflight checks
-    local phase_start=$(date +%s)
-    if type progress_set_phase &>/dev/null; then
-        progress_set_phase 1 "Preflight checks"
-    fi
-    log_info "Phase 1: Preflight checks"
-    if ! hub_preflight; then
-        log_error "Preflight checks failed"
-        if type progress_fail &>/dev/null; then
-            progress_fail "Preflight checks failed"
-        fi
-        kill $timeout_monitor_pid 2>/dev/null || true
-        return 1
-    fi
-    local phase_end=$(date +%s)
-    local phase1_duration=$((phase_end - phase_start))
-    phase_times+=("Phase 1 (Preflight): ${phase1_duration}s")
-    log_verbose "Phase 1 completed in ${phase1_duration}s"
-
-    # Phase 2: Initialize
-    phase_start=$(date +%s)
-    if type progress_set_phase &>/dev/null; then
-        progress_set_phase 2 "Initialization"
-    fi
-    log_info "Phase 2: Initialization"
-    if ! hub_init; then
-        log_error "Initialization failed"
-        if type progress_fail &>/dev/null; then
-            progress_fail "Initialization failed"
-        fi
-        kill $timeout_monitor_pid 2>/dev/null || true
-        return 1
-    fi
-    phase_end=$(date +%s)
-    local phase2_duration=$((phase_end - phase_start))
-    phase_times+=("Phase 2 (Initialization): ${phase2_duration}s")
-    log_verbose "Phase 2 completed in ${phase2_duration}s"
-
-    # Phase 2.5: Initialize MongoDB replica set (CRITICAL - must run BEFORE parallel startup)
-    # This was previously Phase 4a, but needs to run before backend starts
-    # Backend requires MongoDB replica set for change streams (OPAL)
-    phase_start=$(date +%s)
-    if type progress_set_phase &>/dev/null; then
-        progress_set_phase 2.5 "MongoDB replica set"
-    fi
-    log_info "Phase 2.5: Starting MongoDB and initializing replica set"
-
-    # CRITICAL: Load secrets before MongoDB operations
-    # Needed for MONGO_PASSWORD environment variable
-    if ! load_secrets; then
-        log_error "CRITICAL: Failed to load secrets - cannot initialize MongoDB"
-        kill $timeout_monitor_pid 2>/dev/null || true
+    # Execute orchestrated pipeline
+    if ! type hub_pipeline_execute &>/dev/null; then
+        log_error "Hub pipeline not available - module not loaded"
+        log_error "This is a critical error - cannot deploy without pipeline"
         return 1
     fi
 
-    # Start MongoDB first (Level 0 service, but we need it early)
-    log_verbose "Starting MongoDB container..."
-    if ! ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" up -d mongodb >/dev/null 2>&1; then
-        log_error "CRITICAL: Failed to start MongoDB container"
-        kill $timeout_monitor_pid 2>/dev/null || true
-        return 1
+    local mode="deploy"
+    if [ "$resume_mode" = "true" ]; then
+        mode="resume"
     fi
 
-    # Wait for MongoDB container to be healthy
-    log_verbose "Waiting for MongoDB container to be healthy..."
-    local mongo_wait=0
-    local mongo_max_wait=60
-    while [ $mongo_wait -lt $mongo_max_wait ]; do
-        if ${DOCKER_CMD:-docker} ps --filter "name=dive-hub-mongodb" --filter "health=healthy" --format "{{.Names}}" | grep -q "dive-hub-mongodb"; then
-            log_verbose "MongoDB container is healthy"
-            break
-        fi
-        sleep 2
-        mongo_wait=$((mongo_wait + 2))
-    done
-
-    if [ $mongo_wait -ge $mongo_max_wait ]; then
-        log_warn "MongoDB container not healthy after ${mongo_max_wait}s, attempting replica set init anyway..."
-    fi
-
-    # Now initialize replica set
-    if [ ! -f "${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh" ]; then
-        log_error "CRITICAL: MongoDB initialization script not found"
-        kill $timeout_monitor_pid 2>/dev/null || true
-        return 1
-    fi
-
-    if ! bash "${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh" dive-hub-mongodb admin "$MONGO_PASSWORD"; then
-        log_error "CRITICAL: MongoDB replica set initialization FAILED"
-        log_error "This will cause 'not primary' errors and backend startup failure"
-        kill $timeout_monitor_pid 2>/dev/null || true
-        return 1
-    fi
-    log_success "MongoDB replica set initialized and PRIMARY"
-
-    # Set flag to prevent duplicate initialization in hub_up()
-    export HUB_MONGODB_RS_INITIALIZED=true
-
-    # CRITICAL: Add stability buffer to allow replica set discovery to propagate
-    # MongoDB drivers cache replica set topology - need time for connection pools to refresh
-    log_verbose "Waiting 3s for MongoDB replica set discovery to stabilize..."
-    sleep 3
-
-    phase_end=$(date +%s)
-    local phase2_5_duration=$((phase_end - phase_start))
-    phase_times+=("Phase 2.5 (MongoDB Replica Set): ${phase2_5_duration}s")
-    log_verbose "Phase 2.5 completed in ${phase2_5_duration}s"
-
-    # Phase 3: Start services (now uses parallel startup)
-    phase_start=$(date +%s)
-    if type progress_set_phase &>/dev/null; then
-        progress_set_phase 3 "Starting services"
-        progress_set_services 0 12  # Hub has 12 services total
-    fi
-    log_info "Phase 3: Starting services (parallel mode)"
-    if ! hub_up; then
-        log_error "Service startup failed"
-        if type progress_fail &>/dev/null; then
-            progress_fail "Service startup failed"
-        fi
-        kill $timeout_monitor_pid 2>/dev/null || true
-        return 1
-    fi
-    # Update to show all services started
-    if type progress_set_services &>/dev/null; then
-        progress_set_services 12 12
-    fi
-    phase_end=$(date +%s)
-    local phase3_duration=$((phase_end - phase_start))
-    phase_times+=("Phase 3 (Services): ${phase3_duration}s")
-    log_success "Phase 3 completed in ${phase3_duration}s"
-
-    # Phase 4c: Verify backend can connect (may need retry due to initialization timing)
-    phase_start=$(date +%s)
-    log_info "Phase 4c: Verifying backend connectivity"
-    # Backend will use retry logic from mongodb-connection.ts
-    # Just wait for backend to become healthy
-    phase_end=$(date +%s)
-    local phase4c_duration=$((phase_end - phase_start))
-    phase_times+=("Phase 4c (Backend Verify): ${phase4c_duration}s")
-    log_verbose "Phase 4c completed in ${phase4c_duration}s"
-
-    # Initialize orchestration database
-    phase_start=$(date +%s)
-    if type progress_set_phase &>/dev/null; then
-        progress_set_phase 5 "Orchestration database"
-    fi
-    log_info "Phase 5: Orchestration database initialization"
-    hub_init_orchestration_db
-    phase_end=$(date +%s)
-    local phase5_duration=$((phase_end - phase_start))
-    phase_times+=("Phase 5 (Orch DB): ${phase5_duration}s")
-    log_verbose "Phase 5 completed in ${phase5_duration}s"
-
-    # Configure Keycloak
-    phase_start=$(date +%s)
-    if type progress_set_phase &>/dev/null; then
-        progress_set_phase 6 "Keycloak configuration"
-    fi
-    log_info "Phase 6: Keycloak configuration"
-    if ! hub_configure_keycloak; then
-        log_error "CRITICAL: Keycloak configuration FAILED"
-        log_error "Hub is unusable without realm configuration"
-        log_error "Fix Keycloak issues and redeploy"
-        if type progress_fail &>/dev/null; then
-            progress_fail "Keycloak configuration failed"
-        fi
-        kill $timeout_monitor_pid 2>/dev/null || true
-        return 1
-    fi
-    phase_end=$(date +%s)
-    local phase6_duration=$((phase_end - phase_start))
-    phase_times+=("Phase 6 (Keycloak): ${phase6_duration}s")
-    log_verbose "Phase 6 completed in ${phase6_duration}s"
-
-    # Verify realm exists after configuration
-    phase_start=$(date +%s)
-    log_info "Phase 6.5: Verifying realm creation"
-    if ! hub_verify_realm; then
-        log_error "CRITICAL: Realm verification FAILED"
-        log_error "Keycloak configuration completed but realm doesn't exist"
-        log_error "This indicates Terraform or Keycloak state issues"
-        if type progress_fail &>/dev/null; then
-            progress_fail "Realm verification failed"
-        fi
-        kill $timeout_monitor_pid 2>/dev/null || true
-        return 1
-    fi
-    phase_end=$(date +%s)
-    local phase6_5_duration=$((phase_end - phase_start))
-    phase_times+=("Phase 6.5 (Realm Verify): ${phase6_5_duration}s")
-    log_verbose "Phase 6.5 completed in ${phase6_5_duration}s"
-
-    # Phase 6.75: Register Hub KAS in federation registry
-    phase_start=$(date +%s)
-    log_info "Phase 6.75: Registering Hub KAS"
-
-    # Load hub seed module for KAS registration function
-    if [ -f "${MODULES_DIR}/hub/seed.sh" ]; then
-        source "${MODULES_DIR}/hub/seed.sh"
-
-        # Call KAS registration (non-fatal if it fails)
-        if ! _hub_register_kas; then
-            log_warn "Hub KAS registration failed - KAS decryption may not work"
-            log_warn "Manually register: docker exec dive-hub-backend npm run seed:hub-kas"
-        fi
-    else
-        log_warn "Hub seed module not found - skipping KAS registration"
-        log_warn "KAS decryption may not work until registered manually"
-    fi
-
-    phase_end=$(date +%s)
-    local phase6_75_duration=$((phase_end - phase_start))
-    phase_times+=("Phase 6.75 (KAS Register): ${phase6_75_duration}s")
-    log_verbose "Phase 6.75 completed in ${phase6_75_duration}s"
-
-    # Phase 7: Seed database with test users and resources
-    phase_start=$(date +%s)
-    if type progress_set_phase &>/dev/null; then
-        progress_set_phase 7 "Database seeding"
-    fi
-    log_info "Phase 7: Database seeding"
-    if ! hub_seed 5000; then
-        log_error "Database seeding failed"
-        log_warn "Hub infrastructure deployed but requires manual seeding"
-        log_warn "Run: ./dive hub seed"
-        # Don't fail deployment - seeding can be done manually
-    fi
-    phase_end=$(date +%s)
-    local phase7_duration=$((phase_end - phase_start))
-    phase_times+=("Phase 7 (Seeding): ${phase7_duration}s")
-    log_verbose "Phase 7 completed in ${phase7_duration}s"
-
-    # Phase 7.5: Initialize and verify Key Access Service (KAS)
-    phase_start=$(date +%s)
-    if type progress_set_phase &>/dev/null; then
-        progress_set_phase 7.5 "Initializing KAS"
-    fi
-    log_info "Phase 7.5: Initializing Key Access Service (KAS)"
-
-    if docker ps --format '{{.Names}}' | grep -q "${HUB_COMPOSE_PROJECT}-kas"; then
-        log_info "Waiting for KAS to be healthy..."
-        local kas_wait=0
-        local kas_max_wait=60
-
-        while [ $kas_wait -lt $kas_max_wait ]; do
-            local kas_health=$(docker inspect "${HUB_COMPOSE_PROJECT}-kas" \
-                --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
-
-            if [ "$kas_health" = "healthy" ]; then
-                log_success "✓ KAS is healthy"
-                break
-            fi
-
-            sleep 2
-            ((kas_wait += 2))
-        done
-
-        if [ $kas_wait -ge $kas_max_wait ]; then
-            log_warn "KAS health check timeout after ${kas_max_wait}s"
-            log_warn "Check logs: docker logs ${HUB_COMPOSE_PROJECT}-kas"
-        else
-            # Verify health endpoint directly
-            local kas_port="${KAS_HOST_PORT:-8085}"
-            if curl -sf -k "https://localhost:${kas_port}/health" >/dev/null 2>&1; then
-                log_success "✓ KAS health endpoint responding on port ${kas_port}"
-            else
-                log_warn "KAS health endpoint not accessible on port ${kas_port}"
-            fi
-        fi
-    else
-        log_info "KAS container not found - skipping (optional service)"
-    fi
-
-    phase_end=$(date +%s)
-    local phase7_5_duration=$((phase_end - phase_start))
-    phase_times+=("Phase 7.5 (KAS Init): ${phase7_5_duration}s")
-    log_verbose "Phase 7.5 completed in ${phase7_5_duration}s"
-
-    # Stop timeout monitor (success)
-    kill $timeout_monitor_pid 2>/dev/null || true
-    trap - EXIT
-
-    # Mark progress as complete (Sprint 2)
-    if type progress_complete &>/dev/null; then
-        progress_complete
-    fi
-
-    local end_time=$(date +%s)
-    local duration=$((end_time - start_time))
-
-    # Record metrics
-    if type metrics_record_deployment_duration &>/dev/null; then
-        metrics_record_deployment_duration "HUB" "hub" "full" "$duration"
-    fi
-
-    # Display performance summary
-    echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Deployment Performance Summary"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    for timing in "${phase_times[@]}"; do
-        echo "  $timing"
-    done
-    echo "  ──────────────────────────────────────────────────"
-    echo "  Total Duration: ${duration}s"
-
-    # Performance analysis
-    if [ $duration -lt 180 ]; then
-        echo "  Performance: ✅ EXCELLENT (< 3 minutes)"
-    elif [ $duration -lt 300 ]; then
-        echo "  Performance: ⚠️  ACCEPTABLE (3-5 minutes)"
-    else
-        echo "  Performance: ❌ SLOW (> 5 minutes)"
-        echo ""
-        echo "  Performance issues detected. Slowest phases:"
-        # Sort and show top 3 slowest phases
-        printf '%s\n' "${phase_times[@]}" | sort -t: -k2 -nr | head -3 | while read -r line; do
-            echo "    • $line"
-        done
-    fi
-
-    # Timeout utilization
-    local timeout_percent=$((duration * 100 / deployment_timeout))
-    echo "  Timeout Utilization: ${timeout_percent}% of ${deployment_timeout}s"
-
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-    log_success "Hub deployment complete in ${duration}s"
-
-    # Show access info
-    echo ""
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Hub is ready!"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "  Keycloak:  https://localhost:8443"
-    echo "  Backend:   http://localhost:4000"
-    echo "  Frontend:  http://localhost:3000"
-    echo ""
-    echo "Next steps:"
-    echo "  ./dive spoke deploy ALB    # Deploy Albania spoke"
-    echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-
-    return 0
+    hub_pipeline_execute "$mode"
+    return $?
 }
 
 ##
@@ -1439,6 +1411,17 @@ hub_deploy() {
 ##
 hub_preflight() {
     log_verbose "Running hub preflight checks..."
+
+    # Detect stale instances/usa/.env (passwords from a previous deploy cycle)
+    if [ -f "${DIVE_ROOT}/instances/usa/.env" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
+        local env_hub_pw usa_env_pw
+        env_hub_pw=$(grep "^KEYCLOAK_ADMIN_PASSWORD_USA=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2-)
+        usa_env_pw=$(grep "^KEYCLOAK_ADMIN_PASSWORD_USA=" "${DIVE_ROOT}/instances/usa/.env" 2>/dev/null | cut -d= -f2-)
+        if [ -n "$env_hub_pw" ] && [ -n "$usa_env_pw" ] && [ "$env_hub_pw" != "$usa_env_pw" ]; then
+            log_warn "instances/usa/.env has stale secrets — removing (will be regenerated)"
+            rm -f "${DIVE_ROOT}/instances/usa/.env"
+        fi
+    fi
 
     # Use detected Docker command from common.sh
     local docker_cmd="${DOCKER_CMD:-docker}"
@@ -1561,10 +1544,12 @@ hub_init() {
     local mkcert_ca_dir="${DIVE_ROOT}/certs/mkcert"
 
     if [ ! -f "${cert_dir}/certificate.pem" ]; then
-        log_verbose "Generating hub certificates..."
-        if command -v mkcert >/dev/null 2>&1; then
+        if use_vault_pki 2>/dev/null && type generate_hub_certificate_vault &>/dev/null; then
+            log_verbose "Generating hub certificates from Vault PKI..."
+            generate_hub_certificate_vault
+        elif command -v mkcert >/dev/null 2>&1; then
+            log_verbose "Generating hub certificates with mkcert..."
             cd "$cert_dir"
-            # Generate certificate with all Docker service names as SANs
             mkcert -cert-file certificate.pem -key-file key.pem \
                 localhost "*.localhost" 127.0.0.1 \
                 hub.dive.local \
@@ -1575,6 +1560,7 @@ hub_init() {
             log_verbose "Certificates generated with mkcert (includes all Docker service names)"
         else
             # Fallback to openssl
+            log_verbose "Generating hub certificates with openssl..."
             openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
                 -keyout "${cert_dir}/key.pem" \
                 -out "${cert_dir}/certificate.pem" \
@@ -1587,14 +1573,12 @@ hub_init() {
         chmod 644 "${cert_dir}/key.pem" 2>/dev/null || true
     fi
 
-    # Copy mkcert root CA to shared location for docker-compose volume mounts
-    # Services expect: ./certs/mkcert:/app/certs/ca:ro
+    # Build CA bundle for docker-compose volume mounts
+    # Services expect: ./certs/mkcert:/app/certs/ca:ro → NODE_EXTRA_CA_CERTS=/app/certs/ca/rootCA.pem
+    # The bundle includes ALL trusted CAs so both hub (Vault PKI) and spoke (mkcert) services work.
     mkdir -p "${mkcert_ca_dir}"
-    if [ -f "${cert_dir}/mkcert-rootCA.pem" ]; then
-        cp "${cert_dir}/mkcert-rootCA.pem" "${mkcert_ca_dir}/rootCA.pem"
-        chmod 644 "${mkcert_ca_dir}/rootCA.pem"
-        log_verbose "mkcert CA copied to ${mkcert_ca_dir}/rootCA.pem"
-    fi
+    _rebuild_ca_bundle "${mkcert_ca_dir}/rootCA.pem"
+    log_verbose "CA bundle built at ${mkcert_ca_dir}/rootCA.pem"
 
     # Initialize hub config if not exists
     if [ ! -f "${HUB_DATA_DIR}/config/hub.json" ]; then
@@ -1684,9 +1668,9 @@ hub_up() {
         # This must be done for quick-start (hub up) mode as well
         # Backend and OPAL require MongoDB replica set for change streams
 
-        # Guard: Skip if already initialized in Phase 2.5 (hub deploy)
+        # Guard: Skip if already initialized in Phase 5 (hub deploy)
         if [ "${HUB_MONGODB_RS_INITIALIZED:-false}" = "true" ]; then
-            log_verbose "MongoDB replica set already initialized in Phase 2.5, skipping"
+            log_verbose "MongoDB replica set already initialized in Phase 5, skipping"
         else
             log_step "Initializing MongoDB replica set..."
 
@@ -1709,7 +1693,7 @@ hub_up() {
 
         # Check if replica set is already initialized
         local is_initialized=false
-        if docker exec dive-hub-mongodb mongosh admin -u admin -p "$MONGO_PASSWORD" --quiet --eval 'rs.status().myState' 2>/dev/null | grep -q "^1$"; then
+        if docker exec dive-hub-mongodb mongosh admin -u admin -p "$MONGO_PASSWORD" --tls --tlsAllowInvalidCertificates --quiet --eval 'rs.status().myState' 2>/dev/null | grep -q "^1$"; then
             log_verbose "MongoDB replica set already initialized and PRIMARY"
             is_initialized=true
         fi
@@ -1967,49 +1951,16 @@ circuit_breaker_reset() {
 hub_parallel_startup() {
     log_info "Starting hub services with dependency-aware parallel orchestration"
 
-    # START VAULT SERVICES FIRST (profile-based, before main service loop)
-    local vault_profile
-    vault_profile=$(_vault_get_profile)
-
-    # Production TLS: generate Vault node certs before starting containers
-    if is_production_mode && [ "$vault_profile" = "vault-ha" ]; then
-        log_info "Production mode: generating Vault node TLS certificates..."
-        source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
-        if ! generate_vault_node_certs; then
-            log_error "Failed to generate Vault node certs — cannot start TLS-enabled cluster"
-            return 1
-        fi
-    fi
-
-    log_info "Starting Vault services (profile: ${vault_profile})..."
-
-    if ! ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" --profile "$vault_profile" up -d 2>&1; then
-        log_error "Failed to start Vault services with profile: ${vault_profile}"
-        return 1
-    fi
-
-    # Wait for Vault to be healthy before proceeding
-    local vault_container="${COMPOSE_PROJECT_NAME:-dive-hub}-vault-1"
-    local vault_timeout=30
-    if [ "$vault_profile" = "vault-dev" ]; then
-        vault_container="${COMPOSE_PROJECT_NAME:-dive-hub}-vault-dev"
-        vault_timeout=10
-    fi
-
-    local vault_wait=0
-    while [ $vault_wait -lt $vault_timeout ]; do
-        local health
-        health=$(${DOCKER_CMD:-docker} inspect "$vault_container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
-        if [ "$health" = "healthy" ]; then
-            log_success "Vault healthy (${vault_wait}s)"
-            break
-        fi
-        sleep 2
-        vault_wait=$((vault_wait + 2))
-    done
-
-    if [ $vault_wait -ge $vault_timeout ]; then
-        log_warn "Vault did not become healthy within ${vault_timeout}s (non-blocking)"
+    # Vault startup handled by Phase 1 (VAULT_BOOTSTRAP) — skip if already done
+    if [ "${HUB_VAULT_BOOTSTRAPPED:-false}" != "true" ]; then
+        # Fallback: start Vault if Phase 1 was skipped (e.g., resume mode)
+        local vault_profile
+        vault_profile=$(_vault_get_profile)
+        log_info "Starting Vault services (profile: ${vault_profile})..."
+        ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" --profile "$vault_profile" up -d 2>&1 || true
+        sleep 5
+    else
+        log_verbose "Vault already bootstrapped in Phase 1 — skipping startup"
     fi
 
     # DYNAMIC SERVICE CLASSIFICATION (from docker-compose.hub.yml labels)
@@ -2274,6 +2225,7 @@ hub_parallel_startup() {
         local level_core_failed=0
         for pid in "${pids[@]}"; do
             local service="${service_pid_map[$pid]}"
+            local container="${COMPOSE_PROJECT_NAME:-dive-hub}-${service}"
 
             if wait $pid; then
                 ((total_started++))
@@ -2433,8 +2385,8 @@ hub_init_orchestration_db() {
         if ${DOCKER_CMD:-docker} exec dive-hub-postgres pg_isready -U postgres >/dev/null 2>&1; then
             break
         fi
-        sleep 2
-        ((elapsed += 2))
+        sleep 1  # OPTIMIZATION: Faster polling for responsiveness
+        ((elapsed += 1))
     done
 
     # Create orchestration database

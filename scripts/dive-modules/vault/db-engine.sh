@@ -110,7 +110,7 @@ module_vault_db_setup() {
     if vault write database/config/postgres-hub \
         plugin_name=postgresql-database-plugin \
         allowed_roles="keycloak-hub,nextauth-hub" \
-        connection_url="postgresql://{{username}}:{{password}}@postgres:5432/postgres?sslmode=disable" \
+        connection_url="postgresql://{{username}}:{{password}}@postgres:5432/postgres?sslmode=require" \
         username="postgres" \
         password="${pg_password}" >/dev/null 2>&1; then
         log_success "  Configured: database/config/postgres-hub"
@@ -129,7 +129,7 @@ module_vault_db_setup() {
     if vault write database/config/mongodb-hub \
         plugin_name=mongodb-database-plugin \
         allowed_roles="backend-hub-rw,kas-hub-ro" \
-        connection_url="mongodb://{{username}}:{{password}}@mongodb:27017/admin?ssl=false&directConnection=true" \
+        connection_url="mongodb://{{username}}:{{password}}@mongodb:27017/admin?tls=true&tlsInsecure=true&directConnection=true" \
         username="admin" \
         password="${mongo_password}" >/dev/null 2>&1; then
         log_success "  Configured: database/config/mongodb-hub"
@@ -173,27 +173,27 @@ module_vault_db_setup() {
     step=$((step + 1))
     log_info "Step ${step}/6: Create MongoDB dynamic roles..."
 
-    # backend-hub-rw: readWrite on dive-v3 database
+    # backend-hub-rw: readWrite on dive-v3-hub database
     if vault write database/roles/backend-hub-rw \
         db_name=mongodb-hub \
-        creation_statements='{"db":"admin","roles":[{"role":"readWrite","db":"dive-v3"}]}' \
+        creation_statements='{"db":"admin","roles":[{"role":"readWrite","db":"dive-v3-hub"}]}' \
         revocation_statements='{"db":"admin"}' \
         default_ttl=12h \
         max_ttl=24h >/dev/null 2>&1; then
-        log_success "  Created dynamic role: backend-hub-rw (readWrite on dive-v3, 12h TTL)"
+        log_success "  Created dynamic role: backend-hub-rw (readWrite on dive-v3-hub, 12h TTL)"
     else
         log_error "  Failed to create backend-hub-rw role"
         return 1
     fi
 
-    # kas-hub-ro: read on dive-v3 database
+    # kas-hub-ro: read on dive-v3-hub database
     if vault write database/roles/kas-hub-ro \
         db_name=mongodb-hub \
-        creation_statements='{"db":"admin","roles":[{"role":"read","db":"dive-v3"}]}' \
+        creation_statements='{"db":"admin","roles":[{"role":"read","db":"dive-v3-hub"}]}' \
         revocation_statements='{"db":"admin"}' \
         default_ttl=12h \
         max_ttl=24h >/dev/null 2>&1; then
-        log_success "  Created dynamic role: kas-hub-ro (read on dive-v3, 12h TTL)"
+        log_success "  Created dynamic role: kas-hub-ro (read on dive-v3-hub, 12h TTL)"
     else
         log_error "  Failed to create kas-hub-ro role"
         return 1
@@ -234,11 +234,7 @@ module_vault_db_setup() {
     log_info "==================================================================="
     log_info "  PostgreSQL static roles: keycloak-hub, nextauth-hub (24h rotation)"
     log_info "  MongoDB dynamic roles:   backend-hub-rw, kas-hub-ro (12h TTL)"
-    log_info "  Next steps:"
-    log_info "    1. Add VAULT_DB_ROLE=backend-hub-rw to .env.hub"
-    log_info "    2. Add VAULT_DB_ROLE_KAS=kas-hub-ro to .env.hub"
-    log_info "    3. ./dive hub deploy"
-    log_info "    4. ./dive vault db-test"
+    log_info "  Verify: ./dive vault db-status | ./dive vault db-test"
     log_info "==================================================================="
 }
 
@@ -267,7 +263,7 @@ _vault_db_sync_pg_creds_to_env() {
     local na_password
     na_password=$(vault read -field=password database/static-creds/nextauth-hub 2>/dev/null || true)
     if [ -n "$na_password" ]; then
-        _vault_update_env "$env_file" "FRONTEND_DATABASE_URL" "postgresql://nextauth_user:${na_password}@postgres:5432/dive_v3_app"
+        _vault_update_env "$env_file" "FRONTEND_DATABASE_URL" "postgresql://nextauth_user:${na_password}@postgres:5432/dive_v3_app?sslmode=require"
         log_success "  Synced nextauth_user credentials to .env.hub"
     else
         log_verbose "  nextauth-hub static role not ready yet (password not available)"
@@ -486,7 +482,7 @@ _vault_db_provision_spoke() {
     if vault write "database/config/postgres-${code}" \
         plugin_name=postgresql-database-plugin \
         allowed_roles="keycloak-${code},nextauth-${code}" \
-        connection_url="postgresql://{{username}}:{{password}}@postgres-${code}:5432/postgres?sslmode=disable" \
+        connection_url="postgresql://{{username}}:{{password}}@postgres-${code}:5432/postgres?sslmode=require" \
         username="postgres" \
         password="${pg_password}" >/dev/null 2>&1; then
         log_success "  Configured: database/config/postgres-${code}"
@@ -499,7 +495,7 @@ _vault_db_provision_spoke() {
     if vault write "database/config/mongodb-${code}" \
         plugin_name=mongodb-database-plugin \
         allowed_roles="backend-${code}-rw,kas-${code}-ro" \
-        connection_url="mongodb://{{username}}:{{password}}@mongodb-${code}:27017/admin?ssl=false&directConnection=true" \
+        connection_url="mongodb://{{username}}:{{password}}@mongodb-${code}:27017/admin?ssl=true&directConnection=true" \
         username="admin" \
         password="${mongo_password}" >/dev/null 2>&1; then
         log_success "  Configured: database/config/mongodb-${code}"

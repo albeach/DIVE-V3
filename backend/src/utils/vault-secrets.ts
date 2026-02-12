@@ -20,7 +20,9 @@ import { logger } from './logger';
 // ============================================
 
 const VAULT_ADDR = process.env.VAULT_ADDR || 'http://dive-hub-vault:8200';
-const VAULT_TOKEN = process.env.VAULT_TOKEN || '';
+let VAULT_TOKEN = process.env.VAULT_TOKEN || '';
+const VAULT_ROLE_ID = process.env.VAULT_ROLE_ID || '';
+const VAULT_SECRET_ID = process.env.VAULT_SECRET_ID || '';
 
 // Track Vault availability (cached on first check)
 let vaultAvailable: boolean | null = null;
@@ -45,6 +47,41 @@ interface VaultKVResponse {
 // ============================================
 
 /**
+ * Authenticate with Vault using AppRole credentials
+ * @returns true if authentication successful, false otherwise
+ */
+async function authenticateWithAppRole(): Promise<boolean> {
+    if (!VAULT_ROLE_ID || !VAULT_SECRET_ID) {
+        return false;
+    }
+
+    try {
+        const response = await fetch(`${VAULT_ADDR}/v1/auth/approle/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                role_id: VAULT_ROLE_ID,
+                secret_id: VAULT_SECRET_ID,
+            }),
+            signal: AbortSignal.timeout(5000),
+        });
+
+        if (!response.ok) {
+            logger.error(`AppRole authentication failed: ${response.status}`);
+            return false;
+        }
+
+        const data = await response.json() as { auth: { client_token: string } };
+        VAULT_TOKEN = data.auth.client_token;
+        logger.info('Successfully authenticated to Vault with AppRole');
+        return true;
+    } catch (error) {
+        logger.error('AppRole authentication error', { error });
+        return false;
+    }
+}
+
+/**
  * Check if Vault is available and we have a valid token
  */
 async function checkVaultAvailability(): Promise<boolean> {
@@ -52,9 +89,15 @@ async function checkVaultAvailability(): Promise<boolean> {
         return vaultAvailable;
     }
 
+    // If no token but AppRole credentials available, authenticate
+    if (!VAULT_TOKEN && VAULT_ROLE_ID && VAULT_SECRET_ID) {
+        logger.debug('No Vault token, attempting AppRole authentication');
+        await authenticateWithAppRole();
+    }
+
     if (!VAULT_TOKEN) {
         vaultAvailable = false;
-        logger.debug('Vault token not configured');
+        logger.debug('Vault token not configured and AppRole authentication failed');
         return false;
     }
 

@@ -170,8 +170,13 @@ spoke_phase_deployment() {
     fi
 
     # Step 3: Create admin user for Terraform/Keycloak operations (deploy mode only)
+    # CRITICAL FIX (2026-02-11): Check return code and fail deployment if admin setup fails
     if [ "$pipeline_mode" = "deploy" ]; then
-        spoke_deployment_ensure_admin_user "$instance_code"
+        if ! spoke_deployment_ensure_admin_user "$instance_code"; then
+            log_error "CRITICAL: Admin user setup failed - cannot proceed"
+            log_error "Terraform and federation operations require Keycloak admin access"
+            return 1
+        fi
     fi
 
     # Step 4: Run post-startup initialization scripts
@@ -180,20 +185,31 @@ spoke_phase_deployment() {
     fi
 
     # Step 5: Wait for all services (including dependent services)
+    # CRITICAL FIX (2026-02-11): Make health check failures BLOCKING
+    # Previous issue: Configuration ran while Keycloak still starting, causing Terraform failures
     if ! spoke_containers_wait_for_healthy "$instance_code" 300; then
-        log_warn "Some services may not be fully healthy"
-        # Don't fail - continue with configuration phase
+        log_error "CRITICAL: Services not healthy after 300s"
+        log_error "Cannot proceed to configuration phase - Keycloak/MongoDB must be fully ready"
+        log_error ""
+        log_error "Impact:"
+        log_error "  • Terraform apply will fail (Keycloak API not ready)"
+        log_error "  • Federation setup will fail (realm doesn't exist)"
+        log_error "  • Container environment may be unstable"
+        log_error ""
+        log_error "Troubleshooting:"
+        log_error "  1. Check container health: docker ps --filter name=dive-spoke-${code_lower}-"
+        log_error "  2. Check Keycloak logs: docker logs dive-spoke-${code_lower}-keycloak"
+        log_error "  3. Check MongoDB logs: docker logs dive-spoke-${code_lower}-mongodb"
+        log_error "  4. Verify resources: docker stats"
+        log_error ""
+        return 1
     fi
 
     # Step 6: Verify container environment variables
     spoke_deployment_verify_env "$instance_code"
 
-    # Create deployment checkpoint
-    if type orch_create_checkpoint &>/dev/null; then
-        orch_create_checkpoint "$instance_code" "DEPLOYMENT" "Deployment phase completed"
-    fi
-
-    # Validate deployment phase completed successfully
+    # CRITICAL FIX: Validate deployment BEFORE creating checkpoint
+    # Previous issue: Checkpoint created before validation, so failed deployments were marked complete
     if ! spoke_checkpoint_deployment "$instance_code"; then
         log_error "Deployment checkpoint failed - containers not healthy or MongoDB not PRIMARY"
         if type orch_record_error &>/dev/null; then
@@ -202,6 +218,11 @@ spoke_phase_deployment() {
                 "Check container health: docker ps --filter name=dive-spoke-${code_lower}-"
         fi
         return 1
+    fi
+
+    # Only create checkpoint AFTER validation passes
+    if type orch_create_checkpoint &>/dev/null; then
+        orch_create_checkpoint "$instance_code" "DEPLOYMENT" "Deployment phase completed"
     fi
 
     # Calculate and log phase duration
@@ -316,10 +337,9 @@ spoke_deployment_init_mongodb_replica_set() {
 
     log_success "MongoDB replica set initialized for $code_upper"
 
-    # CRITICAL: Add stability buffer to allow replica set discovery to propagate
-    # MongoDB drivers cache replica set topology - need time for connection pools to refresh
-    log_verbose "Waiting 3s for MongoDB replica set discovery to stabilize..."
-    sleep 3
+    # OPTIMIZATION: Removed fixed 3s sleep - container healthcheck ensures PRIMARY
+    # Healthcheck already verifies replica set is ready before marking container healthy
+    log_verbose "MongoDB replica set ready (healthcheck ensures PRIMARY before containers start)"
 
     return 0
 }
@@ -352,13 +372,17 @@ spoke_deployment_verify_mongodb_ready() {
 
     if [ "$health_status" = "healthy" ]; then
         log_success "MongoDB is ready (healthcheck: healthy, replica set: PRIMARY)"
-        
+
         # Optional: Double-check PRIMARY status for logging
         local mongo_pass_var="MONGO_PASSWORD_${code_upper}"
         local mongo_pass="${!mongo_pass_var}"
-        local state=$(docker exec "$mongo_container" mongosh admin -u admin -p "$mongo_pass" --quiet --eval "rs.status().members[0].stateStr" 2>/dev/null || echo "UNKNOWN")
+        # CRITICAL FIX (2026-02-11): mongosh doesn't support MONGOSH_PASSWORD env var
+        # Use -p flag instead (password exposure in ps aux is mitigated by Docker exec isolation)
+        local state=$(docker exec "$mongo_container" \
+            mongosh admin -u admin -p "$mongo_pass" --authenticationDatabase admin --tls --tlsAllowInvalidCertificates --quiet \
+            --eval "rs.status().members[0].stateStr" 2>/dev/null || echo "UNKNOWN")
         log_verbose "MongoDB replica set state: $state"
-        
+
         return 0
     else
         log_warn "MongoDB container health status: $health_status"
@@ -399,10 +423,14 @@ spoke_deployment_ensure_admin_user() {
 
     local kc_container="dive-spoke-${code_lower}-keycloak"
 
+    # CRITICAL FIX (2026-02-11): Return proper error codes instead of silent success
+    # Previous issue: Function returned 0 (success) even when admin user setup failed
+
     # Check if container is running
     if ! docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
-        log_warn "Keycloak container not running - skipping admin user creation"
-        return
+        log_error "Keycloak container not running - cannot ensure admin user"
+        log_error "Admin user is CRITICAL for Terraform and federation operations"
+        return 1  # Return failure instead of silent success
     fi
 
     # Get admin password from environment or container
@@ -417,8 +445,15 @@ spoke_deployment_ensure_admin_user() {
     fi
 
     if [ -z "$kc_admin_pass" ]; then
-        log_warn "Cannot get Keycloak admin password - admin verification skipped"
-        return
+        log_error "Cannot get Keycloak admin password - admin user setup incomplete"
+        log_error "Keycloak admin access is CRITICAL for deployment"
+        log_error ""
+        log_error "Troubleshooting:"
+        log_error "  1. Verify KEYCLOAK_ADMIN_PASSWORD is set in environment"
+        log_error "  2. Check Keycloak container environment: docker exec $kc_container env | grep KC_"
+        log_error "  3. Verify .env file contains KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
+        log_error ""
+        return 1  # Return failure instead of silent success
     fi
 
     # Wait for Keycloak Admin API to be fully ready
@@ -867,17 +902,19 @@ spoke_checkpoint_deployment() {
     local mongo_password="${!mongo_password_var}"
 
     if [ -z "$mongo_password" ]; then
-        # Try to load from .env
+        # Try to load from .env (with instance code suffix)
         local env_file="${DIVE_ROOT}/instances/${code_lower}/.env"
         if [ -f "$env_file" ]; then
-            mongo_password=$(grep "^MONGO_PASSWORD=" "$env_file" 2>/dev/null | cut -d= -f2)
+            mongo_password=$(grep "^MONGO_PASSWORD_${code_upper_ckpt}=" "$env_file" 2>/dev/null | cut -d= -f2)
         fi
     fi
 
     # Check MongoDB is PRIMARY
     if [ -n "$mongo_password" ]; then
+        # CRITICAL FIX (2026-02-11): mongosh doesn't support MONGOSH_PASSWORD env var
+        # Use -p flag instead (password exposure in ps aux is mitigated by Docker exec isolation)
         local mongo_state=$(docker exec "dive-spoke-${code_lower}-mongodb" \
-            mongosh admin -u admin -p "$mongo_password" --quiet \
+            mongosh admin -u admin -p "$mongo_password" --authenticationDatabase admin --tls --tlsAllowInvalidCertificates --quiet \
             --eval "rs.status().members[0].stateStr" 2>/dev/null || echo "ERROR")
 
         if [ "$mongo_state" != "PRIMARY" ]; then

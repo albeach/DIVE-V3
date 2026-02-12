@@ -1,0 +1,17 @@
+# DIVE V3 Certificate Metrics
+# Generated: 2026-02-10T21:02:20Z
+
+# HELP dive_cert_expiry_seconds Seconds until service certificate expires
+# TYPE dive_cert_expiry_seconds gauge
+dive_cert_expiry_seconds{instance="hub",issuer="vault-pki"} 7689600
+dive_cert_expiry_seconds{instance="deu",issuer="mkcert"} 70761600
+
+# HELP dive_cert_is_vault_pki Whether certificate was issued by Vault PKI (1) or mkcert (0)
+# TYPE dive_cert_is_vault_pki gauge
+dive_cert_is_vault_pki{instance="hub"} 1
+dive_cert_is_vault_pki{instance="deu"} 0
+
+# HELP dive_pki_root_ca_expiry_seconds Seconds until Root CA certificate expires
+# TYPE dive_pki_root_ca_expiry_seconds gauge
+# HELP dive_pki_intermediate_ca_expiry_seconds Seconds until Intermediate CA certificate expires
+# TYPE dive_pki_intermediate_ca_expiry_seconds gauge
