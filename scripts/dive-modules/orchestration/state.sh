@@ -37,12 +37,7 @@ if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     export DIVE_COMMON_LOADED=1
 fi
 
-# NOTE: File-based state (deployment-state.sh) has been REMOVED as part of
-# the database-only state management refactoring (ADR-001).
-# All state is now stored in PostgreSQL. See:
-#   - docs/architecture/adr/ADR-001-state-management-consolidation.md
-#
-# The .dive-state/ directory is no longer used.
+# PostgreSQL-only state management (ADR-001). File-based state removed.
 
 # Load state recovery module for consistency validation
 if [ -f "$(dirname "${BASH_SOURCE[0]}")/state-recovery.sh" ]; then
@@ -68,22 +63,9 @@ ORCH_DB_ENABLED="${ORCH_DB_ENABLED:-true}"
 
 # =============================================================================
 # ADR-001: State Management Consolidation (2026-01-22)
+# PostgreSQL SSOT - no file-based fallbacks, fail-fast on DB unavailable
 # =============================================================================
-# PostgreSQL is the SOLE state store. No file-based fallbacks.
-#   - No file writes (eliminates dual-write complexity)
-#   - Fail-fast if database unavailable (no silent degradation)
-#   - No backward compatibility with file-based state
-#
-# BREAKING CHANGE: File-based state has been REMOVED
-#   - .dive-state/ directory is no longer used
-#   - deployment-state.sh is DEPRECATED and no longer loaded
-#   - ORCH_DB_DUAL_WRITE is no longer supported
-#
-# This is a non-reversible change to establish clear SSOT.
-# =============================================================================
-ORCH_DB_ONLY_MODE="true"   # MANDATORY: Database-only mode (cannot be disabled)
-# REMOVED: ORCH_DB_DUAL_WRITE - dual-write mode no longer supported
-# REMOVED: ORCH_DB_SOURCE_OF_TRUTH - database is always SSOT
+ORCH_DB_ONLY_MODE="true"   # Database-only mode (always enabled)
 
 # =============================================================================
 # DATABASE CONNECTION HELPERS

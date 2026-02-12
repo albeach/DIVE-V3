@@ -135,11 +135,15 @@ spoke_phase_seeding() {
         # Non-blocking: Spoke can still use Hub issuer via OPAL sync
     fi
 
-    # Step 1: Seed test users (non-blocking - users created by Terraform)
+    # Step 1: Seed test users (BLOCKING - critical for spoke operation)
+    # CRITICAL FIX (2026-02-11): User seeding failures now block deployment
     log_step "Step 1/3: Seeding test users"
+    local user_seeding_failed=false
     if ! spoke_seed_users "$instance_code"; then
-        log_warn "User seeding had issues - users should be created by Terraform during realm setup"
-        log_warn "To verify users exist: docker exec dive-spoke-${code_lower}-backend npx tsx src/scripts/test-demo-users.ts"
+        user_seeding_failed=true
+        log_error "User seeding FAILED - spoke cannot operate without users"
+        log_error "At least one admin user must exist for Terraform and federation"
+        # Don't return immediately - try resource seeding and then fail at end
     else
         log_success "✓ Test users seeded successfully"
     fi
@@ -162,14 +166,16 @@ spoke_phase_seeding() {
     local encrypted_count=0
 
     if docker ps --format '{{.Names}}' | grep -q "^${mongo_container}$" && [ -n "$mongo_password" ]; then
+        # SECURITY FIX: Use environment variable instead of command-line argument
+        # to prevent password exposure in ps aux output
         # Check total resources
-        total_count=$(docker exec "$mongo_container" bash -c "
-            mongosh -u admin -p \"$mongo_password\" --authenticationDatabase admin dive-v3-${code_lower} --quiet --eval 'db.resources.countDocuments({})' 2>/dev/null
+        total_count=$(docker exec -e MONGOSH_PASSWORD="$mongo_password" "$mongo_container" bash -c "
+            mongosh -u admin --authenticationDatabase admin --tls --tlsAllowInvalidCertificates dive-v3-${code_lower} --quiet --eval 'db.resources.countDocuments({})' 2>/dev/null
         " 2>/dev/null | tail -1 | tr -d '\n\r' || echo "0")
 
         # Check ZTDF-encrypted resources (have encrypted: true AND ztdf.payload.keyAccessObjects)
-        encrypted_count=$(docker exec "$mongo_container" bash -c "
-            mongosh -u admin -p \"$mongo_password\" --authenticationDatabase admin dive-v3-${code_lower} --quiet --eval 'db.resources.countDocuments({encrypted: true, \"ztdf.payload.keyAccessObjects\": {\$exists: true, \$ne: []}})' 2>/dev/null
+        encrypted_count=$(docker exec -e MONGOSH_PASSWORD="$mongo_password" "$mongo_container" bash -c "
+            mongosh -u admin --authenticationDatabase admin --tls --tlsAllowInvalidCertificates dive-v3-${code_lower} --quiet --eval 'db.resources.countDocuments({encrypted: true, \"ztdf.payload.keyAccessObjects\": {\$exists: true, \$ne: []}})' 2>/dev/null
         " 2>/dev/null | tail -1 | tr -d '\n\r' || echo "0")
     fi
 
@@ -196,115 +202,45 @@ spoke_phase_seeding() {
     fi
 
     # =================================================================
-    # CRITICAL FIX (2026-02-08): Only create checkpoint on actual success
+    # CRITICAL FIX (2026-02-11): Only create checkpoint when BOTH users AND resources succeed
     # =================================================================
-    # Previous issue: Checkpoint was created unconditionally, allowing failed
-    # seedings to be marked "complete" in DB. This caused redeployments to
-    # skip seeding even when resources/users weren't actually created.
-    #
-    # ROOT CAUSE FIX (2026-02-08): Trust seeding script exit codes
-    # If spoke_seed_users() and spoke_seed_resources() return 0, seeding succeeded.
-    # User verification is informational only - authentication can fail for non-functional reasons.
+    # Previous issue: Checkpoint was created when either succeeded, masking failures
+    # New logic: Both user seeding AND resource seeding must succeed to create checkpoint
     # =================================================================
-    local seeding_success=true  # Trust that seeding scripts succeeded (they returned 0)
 
-    # Determine if seeding was actually successful based on what was created
-    if [ "$resource_seeding_failed" = "true" ]; then
-        # Resource seeding explicitly failed - don't create checkpoint
-        log_warn "⚠️  Seeding checkpoint NOT created (resource seeding failed)"
-        log_warn "   Next deployment will retry seeding to ensure data exists"
+    # Determine if seeding was actually successful
+    if [ "$user_seeding_failed" = "true" ] || [ "$resource_seeding_failed" = "true" ]; then
+        # Either user or resource seeding failed - don't create checkpoint
+        log_error "❌ SEEDING phase FAILED"
+        if [ "$user_seeding_failed" = "true" ]; then
+            log_error "   • User seeding: FAILED"
+        fi
+        if [ "$resource_seeding_failed" = "true" ]; then
+            log_error "   • Resource seeding: FAILED"
+        fi
+        log_error ""
+        log_error "   Next deployment will retry seeding from scratch"
+        log_error "   No checkpoint created - this phase must complete successfully"
+        return 1  # Hard fail - seeding is critical
     else
-        # Seeding didn't explicitly fail - check if we have the minimum required data
-        # Note: 0 resources is acceptable (federated-only spoke), but we need users
+        # Both seeding operations succeeded - create checkpoint
+        log_success "✅ Both user and resource seeding succeeded"
 
-        # Verify users were created (check Keycloak)
-        local kc_container="dive-spoke-${code_lower}-keycloak"
-        local user_verification_passed=false
-
-        if docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
-            # Try to verify at least one test user exists
-            local realm="dive-v3-broker-${code_lower}"
-            local test_username="testuser-${code_lower}-1"
-
-            # ==========================================================================
-            # ROOT CAUSE FIX (2026-02-08): Load admin password from .env file
-            # ==========================================================================
-            # The password is stored in instances/{code}/.env file, not as environment variable.
-            # Without correct password, kcadm authentication fails and verification incorrectly
-            # reports "user not found" even when users exist.
-            # ==========================================================================
-            local keycloak_password=""
-            local env_file="${DIVE_ROOT}/instances/${code_lower}/.env"
-
-            if [ -f "$env_file" ]; then
-                # Try instance-specific password first
-                keycloak_password=$(grep "^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=" "$env_file" | cut -d'=' -f2- | tr -d '"' | tr -d "'" | head -1)
-
-                # Fallback to generic password
-                if [ -z "$keycloak_password" ]; then
-                    keycloak_password=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" "$env_file" | cut -d'=' -f2- | tr -d '"' | tr -d "'" | head -1)
-                fi
-            fi
-
-            # Last resort: try environment variable (for backwards compatibility)
-            if [ -z "$keycloak_password" ]; then
-                local keycloak_password_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
-                keycloak_password="${!keycloak_password_var:-}"
-            fi
-
-            if [ -z "$keycloak_password" ]; then
-                log_warn "Could not determine Keycloak admin password - skipping user verification"
-                user_verification_passed=true  # Don't fail deployment due to verification issue
-            else
-                local user_exists=$(docker exec "$kc_container" bash -c "
-                /opt/keycloak/bin/kcadm.sh config credentials \
-                    --server http://localhost:8080 \
-                    --realm master \
-                    --user admin \
-                    --password \"$keycloak_password\" \
-                    --config /tmp/.kcadm-seeding.config 2>/dev/null && \
-                /opt/keycloak/bin/kcadm.sh get users \
-                    --realm \"$realm\" \
-                    --query \"username=$test_username\" \
-                    --config /tmp/.kcadm-seeding.config 2>/dev/null | \
-                jq -r '.[0].username // empty' 2>/dev/null
-            " 2>/dev/null || echo "")
-
-                if [ "$user_exists" = "$test_username" ]; then
-                    user_verification_passed=true
-                    log_verbose "✓ User verification passed (found $test_username)"
-                else
-                    log_warn "User verification failed (could not find $test_username)"
-                fi
-            fi
-        else
-            log_warn "Keycloak not running - cannot verify users, assuming success"
-            user_verification_passed=true  # Assume success if we can't verify
+        # Create seeding checkpoint
+        if type orch_create_checkpoint &>/dev/null; then
+            orch_create_checkpoint "$instance_code" "SEEDING" "Seeding phase completed successfully"
         fi
 
-        # Mark as success if user verification passed
-        if [ "$user_verification_passed" = "true" ]; then
-            seeding_success=true
-
-            # Create seeding checkpoint
-            if type orch_create_checkpoint &>/dev/null; then
-                orch_create_checkpoint "$instance_code" "SEEDING" "Seeding phase completed successfully"
-            fi
-
-            # Mark phase complete (checkpoint system)
-            if type spoke_phase_mark_complete &>/dev/null; then
-                spoke_phase_mark_complete "$instance_code" "SEEDING" 0 '{}' || true
-            fi
-
-            log_verbose "✓ Seeding checkpoint created (validation will verify data on next deployment)"
-        else
-            log_warn "⚠️  Seeding checkpoint NOT created (user verification failed)"
-            log_warn "   Next deployment will retry seeding"
+        # Mark phase complete (checkpoint system)
+        if type spoke_phase_mark_complete &>/dev/null; then
+            spoke_phase_mark_complete "$instance_code" "SEEDING" 0 '{}' || true
         fi
+
+        log_verbose "✓ Seeding checkpoint created"
     fi
 
-    # HONEST reporting - distinguish between users (critical), encrypted vs plaintext resources
-    if [ "$seeding_success" = "true" ]; then
+    # HONEST reporting - distinguish between encrypted vs plaintext resources
+    if [ "$user_seeding_failed" = "false" ] && [ "$resource_seeding_failed" = "false" ]; then
         if [ "$encrypted_count" -gt 0 ]; then
             log_success "✅ SEEDING phase complete (users: ✅, ZTDF encrypted: ✅ $encrypted_count)"
         elif [ "$total_count" -gt 0 ]; then
@@ -313,16 +249,10 @@ spoke_phase_seeding() {
             log_success "✅ SEEDING phase complete (users: ✅, local resources: N/A - using Hub)"
         fi
         return 0
-    else
-        # Seeding failed or couldn't be verified
-        log_error "❌ SEEDING phase incomplete (seeding will retry on next deployment)"
-        if [ "$resource_seeding_failed" = "true" ]; then
-            log_error "   Reason: Resource seeding failed"
-        else
-            log_error "   Reason: User verification failed"
-        fi
-        return 1
     fi
+
+    # Should never reach here due to early return above
+    return 1
 }
 
 # =============================================================================
@@ -357,9 +287,9 @@ spoke_seed_users() {
     # Check if Keycloak container is running
     local kc_container="dive-spoke-${code_lower}-keycloak"
     if ! docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
-        log_warn "Keycloak container not running: $kc_container"
-        log_warn "Cannot verify users, but they should have been created by Terraform"
-        return 0  # Non-blocking
+        log_error "Keycloak container not running: $kc_container"
+        log_error "Cannot seed users without Keycloak - deployment incomplete"
+        return 1  # CRITICAL FIX: Return failure if Keycloak not running
     fi
 
     # Use dedicated user seeding script (SSOT: scripts/spoke-init/seed-spoke-users.sh)
@@ -367,8 +297,9 @@ spoke_seed_users() {
 
     if [ ! -f "$seed_users_script" ]; then
         log_error "User seeding script not found: $seed_users_script"
-        log_warn "Users should be created by Terraform or manually - continuing..."
-        return 0  # Non-blocking
+        log_error "Expected: $seed_users_script"
+        log_error "Users must be created for spoke to function"
+        return 1  # CRITICAL FIX: Return failure if script missing
     fi
 
     # Run user seeding script
@@ -403,8 +334,23 @@ spoke_seed_users() {
         fi
         return 0
     else
-        log_warn "User seeding had issues - users may already exist or require manual creation"
-        return 0  # Non-blocking - deployment can continue
+        # CRITICAL FIX (2026-02-11): Return failure when user seeding fails
+        # Previous issue: Returned success even when no users created
+        log_error "User seeding FAILED (exit code: $seed_exit_code)"
+        log_error "Test users were not created - spoke will be non-functional"
+        log_error ""
+        log_error "Impact:"
+        log_error "  • No users can authenticate to spoke"
+        log_error "  • Admin operations impossible"
+        log_error "  • Spoke testing/validation cannot proceed"
+        log_error ""
+        log_error "Troubleshooting:"
+        log_error "  1. Check seeding script logs above for specific errors"
+        log_error "  2. Verify Keycloak realm exists: curl -sk https://localhost:8443/realms/dive-v3-broker-${code_lower}"
+        log_error "  3. Check Keycloak admin password is correct"
+        log_error "  4. Manual user creation: docker exec dive-spoke-${code_lower}-keycloak /opt/keycloak/bin/kcadm.sh ..."
+        log_error ""
+        return 1  # Hard fail - users are critical for spoke operation
     fi
 }
 
@@ -479,9 +425,12 @@ spoke_seed_resources() {
         return 1
     fi
 
+    # SECURITY FIX: Use environment variable instead of command-line argument
+    # to prevent password exposure in ps aux output
     # Verify MongoDB is accessible
-    if ! docker exec "$mongo_container" mongosh -u admin -p "$mongo_password" \
-        --authenticationDatabase admin --quiet --eval "db.adminCommand('ping')" &>/dev/null; then
+    if ! docker exec -e MONGOSH_PASSWORD="$mongo_password" "$mongo_container" \
+        mongosh -u admin --authenticationDatabase admin --tls --tlsAllowInvalidCertificates --quiet \
+        --eval "db.adminCommand('ping')" &>/dev/null; then
         log_error "MongoDB not accessible - cannot seed resources"
         log_error "Check MongoDB container health: docker ps | grep $mongo_container"
         return 1
@@ -509,8 +458,10 @@ spoke_seed_resources() {
         local mongo_password_var="MONGO_PASSWORD_${code_upper}"
         local mongo_password="${!mongo_password_var}"
 
-        actual_count=$(docker exec "$mongo_container" bash -c "
-            mongosh -u admin -p \"$mongo_password\" --authenticationDatabase admin dive-v3-${code_lower} --quiet --eval 'db.resources.countDocuments({instanceCode: \"$code_upper\", encrypted: true})' 2>/dev/null
+        # SECURITY FIX: Use environment variable instead of command-line argument
+        # to prevent password exposure in ps aux output
+        actual_count=$(docker exec -e MONGOSH_PASSWORD="$mongo_password" "$mongo_container" bash -c "
+            mongosh -u admin --authenticationDatabase admin --tls --tlsAllowInvalidCertificates dive-v3-${code_lower} --quiet --eval 'db.resources.countDocuments({instanceCode: \"$code_upper\", encrypted: true})' 2>/dev/null
         " 2>/dev/null | tail -1 | tr -d '\n\r' || echo "0")
 
         if [ -n "$actual_count" ] && [ "$actual_count" -ge "$resource_count" ]; then

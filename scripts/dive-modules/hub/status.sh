@@ -354,7 +354,7 @@ hub_verify() {
 
     # Check 4: MongoDB connection
     printf "  %-50s" "4. MongoDB Connection:"
-    if docker exec dive-hub-mongodb mongosh --quiet --eval "db.adminCommand('ping')" 2>/dev/null | grep -q "ok"; then
+    if docker exec dive-hub-mongodb mongosh --tls --tlsAllowInvalidCertificates --quiet --eval "db.adminCommand('ping')" 2>/dev/null | grep -q "ok"; then
         echo -e "${GREEN}✓ Connected${NC}"
         ((checks_passed++))
     else

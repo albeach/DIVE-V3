@@ -370,17 +370,23 @@ cmd_rollback() {
 }
 
 # =============================================================================
-# NUKE COMMAND (FULLY IDEMPOTENT - ENHANCED FOR 100% CLEANUP)
+# NUKE HELPER FUNCTIONS (Modular Architecture)
 # =============================================================================
 
-cmd_nuke() {
-    local confirm_flag=false
-    local force_flag=false
-    local keep_images=false
-    local reset_spokes=false
-    local deep_clean=false
-    local target_type="all"  # New: all, hub, spoke, volumes, networks, orphans
-    local target_instance=""  # New: specific spoke instance code
+##
+# Parse nuke command arguments
+# Sets global variables: confirm_flag, force_flag, keep_images, reset_spokes,
+#                        deep_clean, target_type, target_instance
+# Returns: 0 on success, 1 on validation error
+##
+_nuke_parse_arguments() {
+    confirm_flag=false
+    force_flag=false
+    keep_images=false
+    reset_spokes=false
+    deep_clean=false
+    target_type="all"  # New: all, hub, spoke, volumes, networks, orphans
+    target_instance=""  # New: specific spoke instance code
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
@@ -446,55 +452,56 @@ cmd_nuke() {
         return 1
     fi
 
-    # SAFETY: Require explicit confirmation for destructive operations
-    if [ "$confirm_flag" != true ]; then
-        log_error "NUKE requires explicit confirmation. Use --confirm or --yes"
-        echo ""
-        echo "  Safe usage:"
-        echo "    ./dive nuke hub --confirm                    # Nuke Hub only"
-        echo "    ./dive nuke spoke ALB --confirm              # Nuke specific spoke"
-        echo "    ./dive nuke all --confirm                    # Nuke everything"
-        echo ""
-        echo "  Options:"
-        echo "    --keep-images                                # Keep Docker images (faster redeployment)"
-        echo "    --deep or --deep-clean                       # FULL CLEAN SLATE: removes all images, builder cache,"
-        echo "                                                 # and Terraform state (recommended for debugging)"
-        echo "    --reset-spokes                               # Clear spoke federation registrations"
-        echo ""
-        echo "  What gets cleaned (nuke all):"
-        echo "    - All DIVE containers, volumes, networks"
-        echo "    - Instance directories (instances/gbr/, etc.)"
-        echo "    - Checkpoint directory (.dive-checkpoint/)"
-        echo "    - Orchestration database (.dive-orch.db)"
-        echo "    - State directory (.dive-state/)"
-        echo "    - Terraform state for hub/spoke"
-        echo "    + With --deep: ALL Docker images, builder cache, ALL Terraform caches"
-        echo ""
-        echo "  Examples:"
-        echo "    ./dive nuke all --confirm                   # Standard nuke (keeps images)"
-        echo "    ./dive nuke all --confirm --deep            # FULL CLEAN SLATE (recommended)"
-        echo "    ./dive nuke hub --confirm --keep-images     # Fast hub reset (keeps images)"
-        echo ""
-        return 1
-    fi
+    return 0
+}
 
-    ensure_dive_root
-    cd "$DIVE_ROOT" || exit 1
+##
+# Show nuke help/usage information
+# No parameters, just prints help text
+##
+_nuke_show_help() {
+    log_error "NUKE requires explicit confirmation. Use --confirm or --yes"
+    echo ""
+    echo "  Safe usage:"
+    echo "    ./dive nuke hub --confirm                    # Nuke Hub only"
+    echo "    ./dive nuke spoke ALB --confirm              # Nuke specific spoke"
+    echo "    ./dive nuke all --confirm                    # Nuke everything"
+    echo ""
+    echo "  Options:"
+    echo "    --keep-images                                # Keep Docker images (faster redeployment)"
+    echo "    --deep or --deep-clean                       # FULL CLEAN SLATE: removes all images, builder cache,"
+    echo "                                                 # and Terraform state (recommended for debugging)"
+    echo "    --reset-spokes                               # Clear spoke federation registrations"
+    echo ""
+    echo "  What gets cleaned (nuke all):"
+    echo "    - All DIVE containers, volumes, networks"
+    echo "    - Instance directories (instances/gbr/, etc.)"
+    echo "    - Checkpoint directory (.dive-checkpoint/)"
+    echo "    - Orchestration database (.dive-orch.db)"
+    echo "    - State directory (.dive-state/)"
+    echo "    - Terraform state for hub/spoke"
+    echo "    + With --deep: ALL Docker images, builder cache, ALL Terraform caches"
+    echo ""
+    echo "  Examples:"
+    echo "    ./dive nuke all --confirm                   # Standard nuke (keeps images)"
+    echo "    ./dive nuke all --confirm --deep            # FULL CLEAN SLATE (recommended)"
+    echo "    ./dive nuke hub --confirm --keep-images     # Fast hub reset (keeps images)"
+    echo ""
+}
 
-    # Load naming utilities for precise targeting
-    if [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/naming.sh" ]; then
-        # shellcheck source=utilities/naming.sh disable=SC1091
-        source "${DIVE_ROOT}/scripts/dive-modules/utilities/naming.sh"
-    fi
-
-    # =========================================================================
-    # TARGETED RESOURCE DISCOVERY
-    # =========================================================================
-
-    local container_patterns=""
-    local volume_patterns=""
-    local network_patterns=""
-    local scope_description=""
+##
+# Discover nuke target resources based on target_type
+# Uses global variables: target_type, target_instance, keep_images
+# Sets global variables: dive_containers, dive_volumes, dive_networks,
+#                        container_count, volume_count, network_count,
+#                        dangling_count, image_count, scope_description,
+#                        container_patterns, volume_patterns, network_patterns
+##
+_nuke_discover_resources() {
+    container_patterns=""
+    volume_patterns=""
+    network_patterns=""
+    scope_description=""
 
     case "$target_type" in
         hub)
@@ -530,8 +537,8 @@ cmd_nuke() {
     esac
 
     # Discover containers using batch query (single docker call instead of per-container inspect)
-    local dive_containers=""
-    local container_count=0
+    dive_containers=""
+    container_count=0
     if [ -n "$container_patterns" ] || [ "$target_type" = "orphans" ]; then
         local container_listing
         container_listing=$(docker ps -a --format '{{.ID}}\t{{.Names}}\t{{.Image}}\t{{.Labels}}\t{{.Status}}' 2>/dev/null)
@@ -571,8 +578,8 @@ cmd_nuke() {
     fi
 
     # Discover volumes
-    local dive_volumes=""
-    local volume_count=0
+    dive_volumes=""
+    volume_count=0
     if [ -n "$volume_patterns" ] || [ "$target_type" = "volumes" ] || [ "$target_type" = "all" ] || [ "$target_type" = "orphans" ]; then
         local all_volumes=$(docker volume ls -q 2>/dev/null)
         for v in $all_volumes; do
@@ -589,8 +596,8 @@ cmd_nuke() {
     fi
 
     # Discover networks
-    local dive_networks=""
-    local network_count=0
+    dive_networks=""
+    network_count=0
     if [ -n "$network_patterns" ] || [ "$target_type" = "networks" ] || [ "$target_type" = "all" ]; then
         local all_networks=$(docker network ls --format '{{.Name}}' 2>/dev/null)
         for n in $all_networks; do
@@ -606,17 +613,24 @@ cmd_nuke() {
     fi
 
     # Dangling volumes (for orphans type or all)
-    local dangling_count=0
+    dangling_count=0
     if [ "$target_type" = "orphans" ] || [ "$target_type" = "all" ]; then
         dangling_count=$(docker volume ls -qf dangling=true 2>/dev/null | wc -l | tr -d ' ')
     fi
 
     # Images
-    local image_count=0
+    image_count=0
     if [ "$keep_images" = false ] && [ "$target_type" = "all" ]; then
         image_count=$(docker images --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | grep -E "dive|ghcr.io/opentdf" | wc -l | tr -d ' ')
     fi
+}
 
+##
+# Show nuke operation summary
+# Uses global variables from _nuke_discover_resources
+# Displays what will be removed before confirmation
+##
+_nuke_show_summary() {
     echo ""
     echo -e "${RED}╔══════════════════════════════════════════════════════════════════════╗${NC}"
     if [ "$target_type" = "all" ]; then
@@ -649,48 +663,54 @@ cmd_nuke() {
         echo -e "    ${YELLOW}--deep mode: Will also remove ALL dangling resources${NC}"
     fi
     echo ""
+}
 
-    if [ "$DRY_RUN" = true ]; then
-        log_dry "Target: ${target_type}"
-        log_dry "Phase 1: Stop compose projects"
-        [ "$container_count" -gt 0 ] && log_dry "Phase 2: Force-remove ${container_count} containers"
-        [ "$volume_count" -gt 0 ] && log_dry "Phase 3: Force-remove ${volume_count} named volumes"
-        [ "$dangling_count" -gt 0 ] && log_dry "Phase 3b: Remove ${dangling_count} dangling volumes"
-        [ "$network_count" -gt 0 ] && log_dry "Phase 4: Force-remove ${network_count} networks"
-        [ "$image_count" -gt 0 ] && log_dry "Phase 5: Remove ${image_count} images"
-        if [ "$target_type" = "all" ]; then
-            log_dry "Phase 6: ${DOCKER_CMD:-docker} system prune -f --volumes"
-            log_dry "Phase 7: Cleanup checkpoint directory"
-        fi
+##
+# Handle dry-run mode summary
+# Uses global variables: container_count, volume_count, etc.
+##
+_nuke_dry_run() {
+    log_dry "Target: ${target_type}"
+    log_dry "Phase 1: Stop compose projects"
+    [ "$container_count" -gt 0 ] && log_dry "Phase 2: Force-remove ${container_count} containers"
+    [ "$volume_count" -gt 0 ] && log_dry "Phase 3: Force-remove ${volume_count} named volumes"
+    [ "$dangling_count" -gt 0 ] && log_dry "Phase 3b: Remove ${dangling_count} dangling volumes"
+    [ "$network_count" -gt 0 ] && log_dry "Phase 4: Force-remove ${network_count} networks"
+    [ "$image_count" -gt 0 ] && log_dry "Phase 5: Remove ${image_count} images"
+    if [ "$target_type" = "all" ]; then
+        log_dry "Phase 6: ${DOCKER_CMD:-docker} system prune -f --volumes"
+        log_dry "Phase 7: Cleanup checkpoint directory"
+    fi
+}
+
+##
+# Prompt user for final confirmation
+# Uses global variables: confirm_flag, target_type, scope_description
+# Returns: 0 if confirmed, 1 if cancelled
+##
+_nuke_confirm_destruction() {
+    # Skip if already confirmed via flag
+    if [ "$confirm_flag" = true ]; then
         return 0
     fi
 
-    # Require confirmation unless --confirm or --force was passed
-    if [ "$confirm_flag" != true ]; then
-        echo -e "${YELLOW}This action cannot be undone.${NC}"
-        if [ "$target_type" = "all" ]; then
-            read -r -p "Type 'yes' to confirm complete destruction: " user_confirm
-        else
-            read -r -p "Type 'yes' to confirm removal of ${scope_description}: " user_confirm
-        fi
-        if [ "$user_confirm" != "yes" ]; then
-            log_info "Nuke cancelled"
-            return 1
-        fi
-    fi
-
+    echo -e "${YELLOW}This action cannot be undone.${NC}"
     if [ "$target_type" = "all" ]; then
-        log_warn "NUKING EVERYTHING..."
+        read -r -p "Type 'yes' to confirm complete destruction: " user_confirm
     else
-        log_warn "Removing ${scope_description}..."
+        read -r -p "Type 'yes' to confirm removal of ${scope_description}: " user_confirm
     fi
-    echo ""
+    if [ "$user_confirm" != "yes" ]; then
+        return 1
+    fi
+    return 0
+}
 
-    # =========================================================================
-    # PHASE 2: STOP TARGETED COMPOSE PROJECTS
-    # =========================================================================
-    log_step "Phase 1: Stopping Docker Compose projects..."
-
+##
+# Stop targeted Docker Compose projects
+# Uses global variables: target_type, target_instance
+##
+_nuke_stop_compose_projects() {
     if [ "$target_type" = "hub" ]; then
         # Stop only hub
         if [ -f "docker-compose.hub.yml" ]; then
@@ -750,12 +770,14 @@ cmd_nuke() {
         # For volumes/networks/orphans, no compose stop needed
         log_verbose "  Skipping compose stop (target_type: ${target_type})"
     fi
+}
 
-    # =========================================================================
-    # PHASE 2: FORCE REMOVE CONTAINERS (SCOPED BY target_type)
-    # =========================================================================
-    log_step "Phase 2/7: Force-removing DIVE containers (${scope_description})..."
-
+##
+# Remove discovered containers
+# Uses global variables: dive_containers, target_type, target_instance
+# Returns: Number of containers removed
+##
+_nuke_remove_containers() {
     local removed_containers=0
     for c in $dive_containers; do
         if ${DOCKER_CMD:-docker} rm -f "$c" 2>/dev/null; then
@@ -884,13 +906,15 @@ cmd_nuke() {
         fi
     fi
 
-    log_verbose "  Removed $removed_containers containers total"
+    echo "$removed_containers"
+}
 
-    # =========================================================================
-    # PHASE 3: FORCE REMOVE VOLUMES (SCOPED BY target_type)
-    # =========================================================================
-    log_step "Phase 3/7: Force-removing DIVE volumes (${scope_description})..."
-
+##
+# Remove discovered volumes
+# Uses global variables: dive_volumes, deep_clean, target_type
+# Returns: Number of volumes removed
+##
+_nuke_remove_volumes() {
     local removed_volumes=0
 
     for v in $dive_volumes; do
@@ -950,13 +974,16 @@ cmd_nuke() {
             fi
         done
     fi
-    log_verbose "  Removed $removed_volumes volumes"
 
-    # =========================================================================
-    # PHASE 4: FORCE REMOVE NETWORKS (SCOPED BY target_type)
-    # =========================================================================
-    log_step "Phase 4/7: Force-removing DIVE networks (${scope_description})..."
+    echo "$removed_volumes"
+}
 
+##
+# Remove discovered networks
+# Uses global variables: dive_networks, target_type, target_instance
+# Returns: Number of networks removed
+##
+_nuke_remove_networks() {
     local removed_networks=0
     for n in $dive_networks; do
         for container in $(docker network inspect "$n" --format='{{range .Containers}}{{.Name}} {{end}}' 2>/dev/null); do
@@ -1029,76 +1056,73 @@ cmd_nuke() {
         *) ;;
     esac
 
-    log_verbose "  Removed $removed_networks networks"
+    echo "$removed_networks"
+}
 
-    # =========================================================================
-    # PHASE 6: REMOVE IMAGES
-    # =========================================================================
-    if [ "$keep_images" = false ]; then
-        log_step "Phase 5/7: Removing DIVE images..."
-        local removed_images=0
+##
+# Remove Docker images
+# Uses global variables: keep_images, target_type, target_instance
+# Returns: Number of images removed
+##
+_nuke_remove_images() {
+    local removed_images=0
 
-        # Remove by name pattern (respect target_type)
-        case "$target_type" in
-            spoke)
-                # For spoke targeting, only remove images for that spoke
-                local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
-                for img in $(docker images --format '{{.ID}} {{.Repository}}' 2>/dev/null | grep "dive-spoke-${instance_lower}" | awk '{print $1}'); do
+    # Remove by name pattern (respect target_type)
+    case "$target_type" in
+        spoke)
+            # For spoke targeting, only remove images for that spoke
+            local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
+            for img in $(docker images --format '{{.ID}} {{.Repository}}' 2>/dev/null | grep "dive-spoke-${instance_lower}" | awk '{print $1}'); do
+                if ${DOCKER_CMD:-docker} image rm -f "$img" 2>/dev/null; then
+                    removed_images=$((removed_images + 1))
+                fi
+            done
+            ;;
+        hub)
+            # For hub targeting, only remove hub images
+            for img in $(docker images --format '{{.ID}} {{.Repository}}' 2>/dev/null | grep "dive-hub" | awk '{print $1}'); do
+                if ${DOCKER_CMD:-docker} image rm -f "$img" 2>/dev/null; then
+                    removed_images=$((removed_images + 1))
+                fi
+            done
+            ;;
+        all)
+            # For all targeting, remove all DIVE images
+            for pattern in "dive" "ghcr.io/opentdf"; do
+                for img in $(docker images --format '{{.ID}} {{.Repository}}' 2>/dev/null | grep "$pattern" | awk '{print $1}'); do
                     if ${DOCKER_CMD:-docker} image rm -f "$img" 2>/dev/null; then
                         removed_images=$((removed_images + 1))
                     fi
                 done
-                ;;
-            hub)
-                # For hub targeting, only remove hub images
-                for img in $(docker images --format '{{.ID}} {{.Repository}}' 2>/dev/null | grep "dive-hub" | awk '{print $1}'); do
-                    if ${DOCKER_CMD:-docker} image rm -f "$img" 2>/dev/null; then
-                        removed_images=$((removed_images + 1))
-                    fi
-                done
-                ;;
-            all)
-                # For all targeting, remove all DIVE images
-                for pattern in "dive" "ghcr.io/opentdf"; do
-                    for img in $(docker images --format '{{.ID}} {{.Repository}}' 2>/dev/null | grep "$pattern" | awk '{print $1}'); do
-                        if ${DOCKER_CMD:-docker} image rm -f "$img" 2>/dev/null; then
-                            removed_images=$((removed_images + 1))
-                        fi
-                    done
-                done
-                ;;
-        esac
+            done
+            ;;
+    esac
 
-        # Remove dangling images
-        ${DOCKER_CMD:-docker} image prune -f 2>/dev/null || true
-        log_verbose "  Removed $removed_images images"
+    # Remove dangling images
+    ${DOCKER_CMD:-docker} image prune -f 2>/dev/null || true
+    log_verbose "  Removed $removed_images images"
+}
+
+##
+# System prune for full cleanup
+# Uses global variables: target_type, deep_clean
+##
+_nuke_system_prune() {
+    if [ "$deep_clean" = true ]; then
+        log_verbose "  Deep clean: Removing ALL unused images including base images..."
+        ${DOCKER_CMD:-docker} system prune -af --volumes 2>/dev/null || true
+        log_verbose "  Deep clean complete (all unused images removed)"
     else
-        log_step "Phase 5/7: Skipping images (--keep-images)"
+        ${DOCKER_CMD:-docker} system prune -f --volumes 2>/dev/null || true
+        log_verbose "  Standard prune complete (use --deep to remove base images like mongo, postgres, redis)"
     fi
+}
 
-    # =========================================================================
-    # PHASE 6: SYSTEM PRUNE (only when nuking "all" — surgical nuke skips system-wide prune)
-    # =========================================================================
-    if [ "$target_type" = "all" ]; then
-        log_step "Phase 6/7: Final system prune..."
-        if [ "$deep_clean" = true ]; then
-            log_verbose "  Deep clean: Removing ALL unused images including base images..."
-            ${DOCKER_CMD:-docker} system prune -af --volumes 2>/dev/null || true
-            log_verbose "  Deep clean complete (all unused images removed)"
-        else
-            ${DOCKER_CMD:-docker} system prune -f --volumes 2>/dev/null || true
-            log_verbose "  Standard prune complete (use --deep to remove base images like mongo, postgres, redis)"
-        fi
-    else
-        log_step "Phase 6/7: Skipping system prune (target is ${target_type} only)"
-        log_verbose "  System prune only runs for './dive nuke all --confirm'"
-    fi
-
-    # =========================================================================
-    # PHASE 7: CLEANUP LOCAL STATE (SCOPED BY target_type)
-    # =========================================================================
-    log_step "Phase 7/7: Cleaning local state..."
-
+##
+# Clean local state files and directories
+# Uses global variables: target_type, reset_spokes, target_instance, deep_clean
+##
+_nuke_cleanup_state() {
     # Checkpoint directory: only remove when nuking "all" (surgical nuke preserves checkpoints for hub/spoke)
     if [ "$target_type" = "all" ]; then
         rm -rf "${CHECKPOINT_DIR}"
@@ -1284,13 +1308,15 @@ cmd_nuke() {
 
         log_verbose "  Clean slate complete"
     fi
+}
 
-    # =========================================================================
-    # VERIFICATION (scoped: only check resources we targeted)
-    # =========================================================================
-    echo ""
-    log_step "Verifying clean state for ${scope_description}..."
-
+##
+# Verify nuke completion
+# Uses global variables: container_patterns, volume_patterns, network_patterns,
+#                        scope_description
+# Checks for remaining resources and reports success/warnings
+##
+_nuke_verify_clean() {
     local remaining_containers=0
     local remaining_volumes=0
     local remaining_networks=0
@@ -1350,6 +1376,96 @@ cmd_nuke() {
             echo "  Re-run the same nuke command or use: ./dive nuke all --confirm"
         fi
     fi
+}
+
+# =============================================================================
+# NUKE COMMAND (FULLY IDEMPOTENT - ENHANCED FOR 100% CLEANUP)
+# =============================================================================
+
+cmd_nuke() {
+    # Parse arguments and validate
+    _nuke_parse_arguments "$@" || return 1
+
+    # Show help if no confirmation flag
+    if [ "$confirm_flag" != true ]; then
+        _nuke_show_help
+        return 1
+    fi
+
+    # Setup environment
+    ensure_dive_root
+    cd "$DIVE_ROOT" || exit 1
+
+    # Load naming utilities if available
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/naming.sh" ]; then
+        # shellcheck source=utilities/naming.sh disable=SC1091
+        source "${DIVE_ROOT}/scripts/dive-modules/utilities/naming.sh"
+    fi
+
+    # Discover target resources
+    _nuke_discover_resources
+
+    # Show what will be removed
+    _nuke_show_summary
+
+    # Handle dry-run mode
+    if [ "$DRY_RUN" = true ]; then
+        _nuke_dry_run
+        return 0
+    fi
+
+    # Get final user confirmation
+    if ! _nuke_confirm_destruction; then
+        log_info "Nuke cancelled"
+        return 1
+    fi
+
+    # Display starting message
+    if [ "$target_type" = "all" ]; then
+        log_warn "NUKING EVERYTHING..."
+    else
+        log_warn "Removing ${scope_description}..."
+    fi
+    echo ""
+
+    # Execute nuke phases
+    log_step "Phase 1: Stopping Docker Compose projects..."
+    _nuke_stop_compose_projects
+
+    log_step "Phase 2/7: Force-removing DIVE containers (${scope_description})..."
+    local removed_containers=$(_nuke_remove_containers)
+    log_verbose "  Removed $removed_containers containers total"
+
+    log_step "Phase 3/7: Force-removing DIVE volumes (${scope_description})..."
+    local removed_volumes=$(_nuke_remove_volumes)
+    log_verbose "  Removed $removed_volumes volumes"
+
+    log_step "Phase 4/7: Force-removing DIVE networks (${scope_description})..."
+    local removed_networks=$(_nuke_remove_networks)
+    log_verbose "  Removed $removed_networks networks"
+
+    if [ "$keep_images" = false ]; then
+        log_step "Phase 5/7: Removing DIVE images..."
+        _nuke_remove_images
+    else
+        log_step "Phase 5/7: Skipping images (--keep-images)"
+    fi
+
+    if [ "$target_type" = "all" ]; then
+        log_step "Phase 6/7: Final system prune..."
+        _nuke_system_prune
+    else
+        log_step "Phase 6/7: Skipping system prune (target is ${target_type} only)"
+        log_verbose "  System prune only runs for './dive nuke all --confirm'"
+    fi
+
+    log_step "Phase 7/7: Cleaning local state..."
+    _nuke_cleanup_state
+
+    # Verify cleanup
+    echo ""
+    log_step "Verifying clean state for ${scope_description}..."
+    _nuke_verify_clean
 }
 
 # =============================================================================

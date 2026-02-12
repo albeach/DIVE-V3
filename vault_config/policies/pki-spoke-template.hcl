@@ -1,6 +1,6 @@
 # Vault PKI Policy for DIVE V3 Spoke: {{SPOKE_CODE}}
 # Generated dynamically from template by: ./dive vault provision <CODE>
-# Allows: Issue own certificates only, read CA chain
+# Allows: Issue own certificates only, read CA chain + CRL
 
 # Issue certificates using spoke-specific role only
 path "pki_int/issue/spoke-{{SPOKE_CODE}}-services" {
@@ -13,5 +13,14 @@ path "pki/cert/ca" {
 }
 
 path "pki_int/cert/ca_chain" {
+  capabilities = ["read"]
+}
+
+# Read CRL for certificate validation (spokes cannot revoke — hub only)
+path "pki_int/crl" {
+  capabilities = ["read"]
+}
+
+path "pki_int/crl/pem" {
   capabilities = ["read"]
 }

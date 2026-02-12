@@ -163,12 +163,29 @@ services:
       dive.service.description: "PostgreSQL database for Keycloak user/realm storage"
     image: postgres:18.1-alpine3.23
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-postgres
+    # TLS: Copy certs with correct ownership (PG Alpine runs as uid 70)
+    entrypoint:
+      - sh
+      - -c
+      - |
+        mkdir -p /var/lib/postgresql/certs &&
+        cp /certs/fullchain.pem /var/lib/postgresql/certs/server.crt &&
+        cp /certs/key.pem /var/lib/postgresql/certs/server.key &&
+        cp /certs/ca/rootCA.pem /var/lib/postgresql/certs/ca.crt &&
+        chown 70:70 /var/lib/postgresql/certs/server.key &&
+        chmod 600 /var/lib/postgresql/certs/server.key &&
+        exec docker-entrypoint.sh postgres \
+          -c ssl=on \
+          -c ssl_cert_file=/var/lib/postgresql/certs/server.crt \
+          -c ssl_key_file=/var/lib/postgresql/certs/server.key \
+          -c ssl_ca_file=/var/lib/postgresql/certs/ca.crt
     environment:
       POSTGRES_USER: keycloak
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_{{INSTANCE_CODE_UPPER}}}
       POSTGRES_DB: keycloak
     volumes:
       - postgres_data:/var/lib/postgresql  # Mount parent dir to prevent anonymous volume
+      - ./certs:/certs:ro
     networks:
       - dive-internal
     healthcheck:
@@ -186,13 +203,26 @@ services:
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-mongodb
     # Use official docker-entrypoint with custom command for replica set + keyFile
     # KeyFile permissions fixed via init script before MongoDB starts
-    command: >
-      bash -c "
+    command:
+      - bash
+      - -c
+      - |
         cp /data/keyfile/mongo-keyfile /tmp/mongo-keyfile &&
         chmod 600 /tmp/mongo-keyfile &&
         chown 999:999 /tmp/mongo-keyfile &&
-        exec docker-entrypoint.sh mongod --replSet rs0 --keyFile /tmp/mongo-keyfile
-      "
+        cat /certs/certificate.pem /certs/key.pem > /tmp/mongodb.pem &&
+        cp /certs/ca/rootCA.pem /tmp/ca.pem &&
+        chown 999:999 /tmp/mongodb.pem /tmp/ca.pem &&
+        chmod 600 /tmp/mongodb.pem &&
+        chmod 644 /tmp/ca.pem &&
+        exec docker-entrypoint.sh mongod \
+          --replSet rs0 \
+          --keyFile /tmp/mongo-keyfile \
+          --bind_ip_all \
+          --tlsMode requireTLS \
+          --tlsCertificateKeyFile /tmp/mongodb.pem \
+          --tlsCAFile /tmp/ca.pem \
+          --tlsAllowConnectionsWithoutCertificates
     environment:
       MONGO_INITDB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
       MONGO_INITDB_ROOT_USERNAME: admin
@@ -202,6 +232,7 @@ services:
       - mongodb_config:/data/configdb  # Prevent anonymous volume creation
       # Mount replica set keyFile (generated during spoke deployment)
       - ./mongo-keyfile:/data/keyfile/mongo-keyfile:ro
+      - ./certs:/certs:ro
       # NOTE: Replica set initialization happens POST-START via deployment script
       # docker-entrypoint-initdb.d/ runs BEFORE --replSet is applied, so it cannot work
       # See: scripts/init-mongo-replica-set-post-start.sh (called by spoke deployment pipeline)
@@ -221,7 +252,7 @@ services:
       # - Backend connects before PRIMARY election completes
       # - Services get "node is not in primary or recovering state" errors
       test: |
-        mongosh admin -u admin -p ${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}} --quiet --eval "
+        mongosh admin -u admin -p ${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}} --tls --tlsAllowInvalidCertificates --quiet --eval "
           try {
             const status = rs.status();
 
@@ -300,15 +331,22 @@ services:
     command: >
       redis-server
       --requirepass ${REDIS_PASSWORD_{{INSTANCE_CODE_UPPER}}:-}
+      --tls-port 6379
+      --port 0
+      --tls-cert-file /certs/fullchain.pem
+      --tls-key-file /certs/key.pem
+      --tls-ca-cert-file /certs/ca/rootCA.pem
+      --tls-auth-clients no
       --appendonly yes
       --maxmemory 256mb
       --maxmemory-policy allkeys-lru
     volumes:
       - redis_data:/data
+      - ./certs:/certs:ro
     networks:
       - dive-internal
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD_{{INSTANCE_CODE_UPPER}}:-}", "ping"]
+      test: ["CMD", "redis-cli", "--tls", "--cacert", "/certs/ca/rootCA.pem", "-a", "${REDIS_PASSWORD_{{INSTANCE_CODE_UPPER}}:-}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -330,7 +368,7 @@ services:
     command: ["start-dev", "--spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true", "--features=scripts"]
     environment:
       KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres-{{INSTANCE_CODE_LOWER}}:5432/keycloak
+      KC_DB_URL: jdbc:postgresql://postgres-{{INSTANCE_CODE_LOWER}}:5432/keycloak?sslmode=verify-full&sslrootcert=/opt/keycloak/certs/ca/rootCA.pem
       KC_DB_USERNAME: ${KC_DB_USERNAME:-keycloak}
       KC_DB_PASSWORD: ${KC_DB_PASSWORD:-${POSTGRES_PASSWORD_{{INSTANCE_CODE_UPPER}}}}
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
@@ -339,7 +377,7 @@ services:
       KC_HOSTNAME_STRICT: "false"
       KC_PROXY_HEADERS: xforwarded
       KC_HTTP_ENABLED: "true"
-      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/certificate.pem
+      KC_HTTPS_CERTIFICATE_FILE: /opt/keycloak/certs/fullchain.pem
       KC_HTTPS_CERTIFICATE_KEY_FILE: /opt/keycloak/certs/key.pem
       KC_HTTPS_PORT: "8443"
       # X.509 Client Certificate Authentication (request mode - allows but not requires)
@@ -408,7 +446,7 @@ services:
     image: openpolicyagent/opa:1.12.3
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-opa
     platform: linux/amd64
-    command: run --server --addr :8181 --set=decision_logs.console=true --set=data_api_enabled=true --set=policies_api_enabled=true --tls-cert-file=/certs/certificate.pem --tls-private-key-file=/certs/key.pem
+    command: run --server --addr :8181 --set=decision_logs.console=true --set=data_api_enabled=true --set=policies_api_enabled=true --tls-cert-file=/certs/fullchain.pem --tls-private-key-file=/certs/key.pem
     ports:
       - "{{OPA_HOST_PORT}}:8181"
     volumes:
@@ -514,7 +552,7 @@ services:
       PORT: "4000"
       # Secret management provider (vault or gcp)
       SECRETS_PROVIDER: ${SECRETS_PROVIDER:-vault}
-      VAULT_ADDR: ${VAULT_ADDR:-http://dive-hub-vault:8200}
+      VAULT_ADDR: ${VAULT_ADDR:-https://dive-hub-vault:8200}
       VAULT_TOKEN: ${VAULT_TOKEN:-}
       VAULT_ROLE_ID: ${VAULT_ROLE_ID:-}
       VAULT_SECRET_ID: ${VAULT_SECRET_ID:-}
@@ -528,12 +566,12 @@ services:
       SPOKE_MODE: "true"
       IS_HUB: "false"
       # MongoDB
-      MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/dive-v3-{{INSTANCE_CODE_LOWER}}?authSource=admin&directConnection=true
-      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/?authSource=admin&directConnection=true
+      MONGODB_URI: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/dive-v3-{{INSTANCE_CODE_LOWER}}?authSource=admin&directConnection=true&tls=true
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/?authSource=admin&directConnection=true&tls=true
       MONGODB_HOST: mongodb-{{INSTANCE_CODE_LOWER}}:27017
       MONGODB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
       # Local Redis for session cache (authenticated)
-      REDIS_URL: redis://:${REDIS_PASSWORD_{{INSTANCE_CODE_UPPER}}:-}@redis-{{INSTANCE_CODE_LOWER}}:6379
+      REDIS_URL: rediss://:${REDIS_PASSWORD_{{INSTANCE_CODE_UPPER}}:-}@redis-{{INSTANCE_CODE_LOWER}}:6379
       # ==========================================================================
       # SHARED BLACKLIST REDIS (ACP-240 Cross-Instance Token Revocation)
       # ==========================================================================
@@ -546,7 +584,7 @@ services:
       # - REDIS_PASSWORD_BLACKLIST must be set in spoke's .env (from GCP secret)
       # - For remote Hub: Update dive-hub-redis-blacklist to Hub's actual hostname
       # ==========================================================================
-      BLACKLIST_REDIS_URL: redis://:${REDIS_PASSWORD_BLACKLIST}@dive-hub-redis:6379
+      BLACKLIST_REDIS_URL: rediss://:${REDIS_PASSWORD_BLACKLIST}@dive-hub-redis:6379
       # Keycloak (internal Docker network URL for backend API calls)
       KEYCLOAK_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
       KEYCLOAK_REALM: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
@@ -646,21 +684,21 @@ services:
       HTTPS_ENABLED: "true"
       CERT_PATH: /opt/app/certs
       KEY_FILE: key.pem
-      CERT_FILE: certificate.pem
+      CERT_FILE: fullchain.pem
       BACKEND_URL: https://backend-{{INSTANCE_CODE_LOWER}}:4000
       # SECURITY: Trust mkcert CA instead of disabling TLS verification
       NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
       # OPA - Use standalone OPA for policy decisions (HTTPS)
       OPA_URL: https://opa-{{INSTANCE_CODE_LOWER}}:8181
-      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/?authSource=admin&directConnection=true
+      MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/?authSource=admin&directConnection=true&tls=true
       MONGODB_HOST: mongodb-{{INSTANCE_CODE_LOWER}}:27017
       MONGODB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
       # Secret management provider (vault or gcp)
       SECRETS_PROVIDER: ${SECRETS_PROVIDER:-vault}
-      VAULT_ADDR: ${VAULT_ADDR:-http://dive-hub-vault:8200}
+      VAULT_ADDR: ${VAULT_ADDR:-https://dive-hub-vault:8200}
       VAULT_TOKEN: ${VAULT_TOKEN:-}
       VAULT_DB_ROLE: ${VAULT_DB_ROLE_KAS:-}
-      REDIS_URL: redis://:${REDIS_PASSWORD_{{INSTANCE_CODE_UPPER}}}@redis-{{INSTANCE_CODE_LOWER}}:6379
+      REDIS_URL: rediss://:${REDIS_PASSWORD_{{INSTANCE_CODE_UPPER}}}@redis-{{INSTANCE_CODE_LOWER}}:6379
       LOG_LEVEL: info
       KEYCLOAK_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
       KEYCLOAK_REALM: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
@@ -681,7 +719,7 @@ services:
       - dive-shared  # For federation with hub and other spokes
     volumes:
       - ./certs:/opt/app/certs:ro
-      - ../../certs/mkcert:/app/certs/ca:ro  # mkcert root CA for TLS trust
+      - ./certs/ca:/app/certs/ca:ro  # CA bundle for TLS trust (mkcert + Vault PKI)
       - ../../kas/src:/app/src
       - kas_logs:/app/logs
       - ../../config:/app/config:ro
@@ -723,7 +761,7 @@ services:
       NEXTAUTH_URL: {{BASE_URL}}
       NEXTAUTH_SECRET: ${AUTH_SECRET_{{INSTANCE_CODE_UPPER}}}
       # Database for NextAuth sessions
-      DATABASE_URL: ${FRONTEND_DATABASE_URL:-postgres://keycloak:${POSTGRES_PASSWORD_{{INSTANCE_CODE_UPPER}}}@postgres-{{INSTANCE_CODE_LOWER}}:5432/keycloak}
+      DATABASE_URL: ${FRONTEND_DATABASE_URL:-postgres://keycloak:${POSTGRES_PASSWORD_{{INSTANCE_CODE_UPPER}}}@postgres-{{INSTANCE_CODE_LOWER}}:5432/keycloak?sslmode=require}
       # Keycloak OAuth config (internal Docker network URL for SSR/API calls)
       KEYCLOAK_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
       KEYCLOAK_REALM: dive-v3-broker-{{INSTANCE_CODE_LOWER}}

@@ -140,6 +140,29 @@ spoke_phase_initialization() {
         return 1
     fi
 
+    # Step 3b: Check AppRole SecretID freshness (auto-refresh if near expiry)
+    if type _vault_secret_id_ttl_remaining &>/dev/null; then
+        local secret_id_ttl
+        secret_id_ttl=$(_vault_secret_id_ttl_remaining "$code_lower")
+        if [ "$secret_id_ttl" -gt 0 ] && [ "$secret_id_ttl" -lt 86400 ]; then
+            # Within 24h of expiry — auto-refresh
+            log_warn "SecretID for ${code_upper} expires in $((secret_id_ttl / 3600))h — refreshing"
+            if type _vault_refresh_secret_id &>/dev/null; then
+                if _vault_refresh_secret_id "$code_lower"; then
+                    log_success "SecretID refreshed for ${code_upper}"
+                else
+                    log_warn "SecretID refresh failed (continuing with current credentials)"
+                fi
+            else
+                log_verbose "SecretID refresh not available (vault/module.sh not loaded)"
+            fi
+        elif [ "$secret_id_ttl" -eq 0 ]; then
+            log_warn "SecretID for ${code_upper} may be expired or missing"
+        else
+            log_verbose "SecretID for ${code_upper}: ${secret_id_ttl}s remaining (healthy)"
+        fi
+    fi
+
     # Step 4: Certificate generation/validation
     if ! spoke_init_prepare_certificates "$instance_code"; then
         log_warn "Certificate preparation had issues (continuing)"
@@ -671,6 +694,20 @@ spoke_init_generate_env() {
         fi
     fi
 
+    # CRITICAL FIX (2026-02-11): Preserve secrets from Vault provision
+    # Extract all secret values from existing .env before regenerating
+    local _saved_postgres_pw="" _saved_mongo_pw="" _saved_redis_pw=""
+    local _saved_keycloak_pw="" _saved_auth_secret="" _saved_client_secret=""
+    if [ -f "$env_file" ] && grep -q "^SECRETS_PROVIDER=vault" "$env_file"; then
+        log_verbose "Preserving Vault secrets from existing .env"
+        _saved_postgres_pw=$(grep "^POSTGRES_PASSWORD_${code_upper}=" "$env_file" 2>/dev/null | cut -d= -f2-)
+        _saved_mongo_pw=$(grep "^MONGO_PASSWORD_${code_upper}=" "$env_file" 2>/dev/null | cut -d= -f2-)
+        _saved_redis_pw=$(grep "^REDIS_PASSWORD_${code_upper}=" "$env_file" 2>/dev/null | cut -d= -f2-)
+        _saved_keycloak_pw=$(grep "^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=" "$env_file" 2>/dev/null | cut -d= -f2-)
+        _saved_auth_secret=$(grep "^AUTH_SECRET_${code_upper}=" "$env_file" 2>/dev/null | cut -d= -f2-)
+        _saved_client_secret=$(grep "^KEYCLOAK_CLIENT_SECRET_${code_upper}=" "$env_file" 2>/dev/null | cut -d= -f2-)
+    fi
+
     # Create .env file
     # NOTE: NO SPOKE_ID - backend queries Hub at startup (SSOT architecture)
     cat > "$env_file" << EOF
@@ -729,6 +766,17 @@ EOF
             [ -n "$_saved_vault_secret_id" ] && echo "VAULT_SECRET_ID=${_saved_vault_secret_id}"
         } >> "$env_file"
         log_verbose "Restored Vault credentials in .env"
+
+        # Restore secret values if they were preserved
+        if [ -n "$_saved_postgres_pw" ]; then
+            _vault_update_env "$env_file" "POSTGRES_PASSWORD_${code_upper}" "$_saved_postgres_pw"
+            _vault_update_env "$env_file" "MONGO_PASSWORD_${code_upper}" "$_saved_mongo_pw"
+            _vault_update_env "$env_file" "REDIS_PASSWORD_${code_upper}" "$_saved_redis_pw"
+            _vault_update_env "$env_file" "KEYCLOAK_ADMIN_PASSWORD_${code_upper}" "$_saved_keycloak_pw"
+            _vault_update_env "$env_file" "AUTH_SECRET_${code_upper}" "$_saved_auth_secret"
+            _vault_update_env "$env_file" "KEYCLOAK_CLIENT_SECRET_${code_upper}" "$_saved_client_secret"
+            log_verbose "Restored Vault secrets to regenerated .env"
+        fi
     fi
 
     log_verbose "Generated .env file: $env_file"
@@ -844,16 +892,19 @@ spoke_init_prepare_certificates() {
         if openssl x509 -in "$spoke_dir/certs/certificate.pem" -text -noout 2>/dev/null | grep -q "$required_san"; then
             log_info "TLS certificates exist and have required SANs - skipping generation"
 
-            # CRITICAL FIX (2026-01-27): Ensure mkcert rootCA.pem is synced even when skipping cert generation
-            # This fixes Keycloak crash: "Failed to initialize truststore, could not merge: /opt/keycloak/certs/ca/rootCA.pem"
-            if command -v mkcert &>/dev/null; then
+            # Build CA bundle with ALL trusted CAs (mkcert + Vault PKI)
+            # This ensures spoke services trust both spoke (mkcert) and hub (Vault PKI) certs
+            if type _rebuild_spoke_ca_bundle &>/dev/null; then
+                _rebuild_spoke_ca_bundle "$code_lower"
+                log_verbose "Spoke CA bundle rebuilt (mkcert + Vault PKI)"
+            elif command -v mkcert &>/dev/null; then
                 local mkcert_ca="$(mkcert -CAROOT)/rootCA.pem"
                 if [ -f "$mkcert_ca" ]; then
                     cp "$mkcert_ca" "$spoke_dir/certs/rootCA.pem" 2>/dev/null || true
                     cp "$mkcert_ca" "$spoke_dir/certs/ca/rootCA.pem" 2>/dev/null || true
                     cp "$mkcert_ca" "$spoke_dir/truststores/mkcert-rootCA.pem" 2>/dev/null || true
                     chmod 644 "$spoke_dir/certs/rootCA.pem" "$spoke_dir/certs/ca/rootCA.pem" 2>/dev/null || true
-                    log_verbose "mkcert rootCA.pem synced"
+                    log_verbose "mkcert rootCA.pem synced (fallback)"
                 fi
             fi
 
@@ -885,22 +936,12 @@ spoke_init_prepare_certificates() {
             if generate_spoke_certificate "$code_lower"; then
                 log_success "Federation certificates prepared via SSOT"
 
-                # Sync mkcert root CA (required for TLS trust)
-                if type install_mkcert_ca_in_spoke &>/dev/null; then
-                    install_mkcert_ca_in_spoke "$code_lower" 2>/dev/null || {
-                        # Manual fallback if function unavailable
-                        if command -v mkcert &>/dev/null; then
-                            local mkcert_ca="$(mkcert -CAROOT)/rootCA.pem"
-                            if [ -f "$mkcert_ca" ]; then
-                                mkdir -p "$spoke_dir/certs/ca" "$spoke_dir/truststores"
-                                cp "$mkcert_ca" "$spoke_dir/certs/rootCA.pem"
-                                cp "$mkcert_ca" "$spoke_dir/certs/ca/rootCA.pem"
-                                cp "$mkcert_ca" "$spoke_dir/truststores/mkcert-rootCA.pem"
-                                chmod 644 "$spoke_dir/certs/rootCA.pem" "$spoke_dir/certs/ca/rootCA.pem"
-                                log_success "Synced mkcert CA"
-                            fi
-                        fi
-                    }
+                # Build CA bundle with ALL trusted CAs (mkcert + Vault PKI)
+                if type _rebuild_spoke_ca_bundle &>/dev/null; then
+                    _rebuild_spoke_ca_bundle "$code_lower"
+                    log_verbose "Spoke CA bundle rebuilt (mkcert + Vault PKI)"
+                elif type install_mkcert_ca_in_spoke &>/dev/null; then
+                    install_mkcert_ca_in_spoke "$code_lower" 2>/dev/null || true
                 fi
 
                 # ==========================================================================

@@ -83,7 +83,7 @@ export async function getMongoDBCredentials(
         const mongoHost = process.env.MONGODB_HOST || 'mongodb:27017';
         const mongoDb = process.env.MONGODB_DATABASE || 'dive-v3';
 
-        const url = `mongodb://${encodedUser}:${encodedPass}@${mongoHost}/${mongoDb}?authSource=admin&directConnection=true`;
+        const url = `mongodb://${encodedUser}:${encodedPass}@${mongoHost}/${mongoDb}?authSource=admin&directConnection=true&tls=true`;
 
         logger.info('Vault dynamic MongoDB credentials acquired', {
             role: effectiveRole,

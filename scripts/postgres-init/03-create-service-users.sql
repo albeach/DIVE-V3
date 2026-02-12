@@ -35,6 +35,14 @@ REVOKE CONNECT ON DATABASE dive_v3_app FROM PUBLIC;
 -- Grant keycloak_user scoped access to keycloak_db only
 GRANT ALL PRIVILEGES ON DATABASE keycloak_db TO keycloak_user;
 
+-- PostgreSQL 15+: public schema is no longer writable by non-owners
+-- Grant schema-level privileges so Keycloak can create tables (Liquibase migrations)
+\connect keycloak_db
+GRANT ALL ON SCHEMA public TO keycloak_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO keycloak_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO keycloak_user;
+\connect keycloak_db
+
 -- NextAuth user (dive_v3_app only)
 DO $$
 BEGIN
@@ -49,3 +57,16 @@ $$;
 
 -- Grant nextauth_user scoped access to dive_v3_app only
 GRANT ALL PRIVILEGES ON DATABASE dive_v3_app TO nextauth_user;
+
+-- PostgreSQL 15+: grant schema privileges for NextAuth migrations
+\connect dive_v3_app
+GRANT ALL ON SCHEMA public TO nextauth_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO nextauth_user;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON SEQUENCES TO nextauth_user;
+
+-- CRITICAL FIX (2026-02-11): Grant permissions on EXISTING tables
+-- ALTER DEFAULT PRIVILEGES only affects future tables, not existing ones
+-- The Drizzle migrations create tables as 'postgres' user before this script runs
+GRANT ALL ON ALL TABLES IN SCHEMA public TO nextauth_user;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO nextauth_user;
+\connect keycloak_db

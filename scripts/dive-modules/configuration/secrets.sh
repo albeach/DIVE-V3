@@ -92,7 +92,7 @@ case "$SECRETS_PROVIDER" in
         if [ -n "${VAULT_CLI_ADDR:-}" ]; then
             export VAULT_ADDR="$VAULT_CLI_ADDR"
         fi
-        VAULT_ADDR="${VAULT_ADDR:-http://localhost:8200}"
+        VAULT_ADDR="${VAULT_ADDR:-https://localhost:8200}"
         export VAULT_ADDR
         # Load token from .vault-token if not already set
         if [ -z "${VAULT_TOKEN:-}" ] && [ -f "${DIVE_ROOT}/.vault-token" ]; then
@@ -202,7 +202,7 @@ aws_secret_exists() {
 # HASHICORP VAULT FUNCTIONS
 # =============================================================================
 
-VAULT_ADDR="${VAULT_ADDR:-http://dive-hub-vault:8200}"
+VAULT_ADDR="${VAULT_ADDR:-https://dive-hub-vault:8200}"
 VAULT_TOKEN="${VAULT_TOKEN:-}"
 
 ##

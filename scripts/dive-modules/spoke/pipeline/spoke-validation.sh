@@ -472,7 +472,7 @@ _validate_seeding_state() {
     # Count total resources in MongoDB
     local resource_count
     resource_count=$(docker exec "$mongo_container" bash -c "
-        mongosh -u admin -p \"$mongo_password\" --authenticationDatabase admin dive-v3-${code_lower} --quiet --eval 'db.resources.countDocuments({})' 2>/dev/null
+        mongosh -u admin -p \"$mongo_password\" --authenticationDatabase admin --tls --tlsAllowInvalidCertificates dive-v3-${code_lower} --quiet --eval 'db.resources.countDocuments({})' 2>/dev/null
     " 2>/dev/null | tail -1 | tr -d '\n\r' || echo "error")
 
     # Validate we got a numeric result
@@ -485,7 +485,7 @@ _validate_seeding_state() {
     # Check COI definitions (CRITICAL for ZTDF encryption)
     local coi_count
     coi_count=$(docker exec "$mongo_container" bash -c "
-        mongosh -u admin -p \"$mongo_password\" --authenticationDatabase admin dive-v3-${code_lower} --quiet --eval 'db.coi_definitions.countDocuments({})' 2>/dev/null
+        mongosh -u admin -p \"$mongo_password\" --authenticationDatabase admin --tls --tlsAllowInvalidCertificates dive-v3-${code_lower} --quiet --eval 'db.coi_definitions.countDocuments({})' 2>/dev/null
     " 2>/dev/null | tail -1 | tr -d '\n\r' || echo "0")
 
     if ! [[ "$coi_count" =~ ^[0-9]+$ ]]; then

@@ -231,7 +231,13 @@ spoke_phase_configuration() {
 
     # Step 2.5: Federation setup (CRITICAL - required for SSO)
     # This runs AFTER registration so Hub API has already attempted bidirectional IdP creation.
-    # spoke_federation_setup() is idempotent and will skip links that already exist.
+    # CRITICAL FIX (2026-02-11): Add delay to ensure Hub API completes IdP creation before CLI attempts
+    # Previous issue: Both Hub API and CLI creating IdPs simultaneously caused Keycloak conflicts
+    log_step "Waiting for Hub federation API to complete IdP creation..."
+    sleep 5  # Give Hub API time to complete bidirectional federation setup
+
+    # spoke_federation_setup() is idempotent and will skip links that already exist
+    # It checks if IdPs exist before attempting creation to avoid race conditions
     if ! spoke_config_setup_federation "$instance_code" "$pipeline_mode"; then
         log_error "CRITICAL: Federation setup failed - SSO will not work"
         log_error "To retry: ./dive federation link $code_upper"
@@ -339,12 +345,8 @@ spoke_phase_configuration() {
         return 1
     fi
 
-    # Create configuration checkpoint
-    if type orch_create_checkpoint &>/dev/null; then
-        orch_create_checkpoint "$instance_code" "CONFIGURATION" "Configuration phase completed"
-    fi
-
-    # Validate configuration phase completed successfully
+    # CRITICAL FIX: Validate configuration BEFORE creating checkpoint
+    # Previous issue: Checkpoint created before validation, so failed configurations were marked complete
     if ! spoke_checkpoint_configuration "$instance_code"; then
         log_error "Configuration checkpoint failed - realm not accessible"
         if type orch_record_error &>/dev/null; then
@@ -353,6 +355,11 @@ spoke_phase_configuration() {
                 "Verify realm exists: curl -sk https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT}/realms/dive-v3-broker-${code_lower}"
         fi
         return 1
+    fi
+
+    # Only create checkpoint AFTER validation passes
+    if type orch_create_checkpoint &>/dev/null; then
+        orch_create_checkpoint "$instance_code" "CONFIGURATION" "Configuration phase completed"
     fi
 
     # Calculate and log phase duration
@@ -1588,20 +1595,9 @@ spoke_config_update_redirect_uris() {
 # =============================================================================
 
 ##
-# Get Keycloak admin token
-#
-# DEPRECATED (2026-01-18): This function is now defined in spoke-federation.sh
-# with enhanced error handling, GCP Secret Manager fallback, and debug logging.
-# This duplicate has been removed to prevent function overwriting.
-#
-# The spoke-federation.sh version handles multiple password sources:
-#   1. Container environment variables (KC_ADMIN_PASSWORD, etc.)
-#   2. Local environment variables (KEYCLOAK_ADMIN_PASSWORD_*)
-#   3. GCP Secret Manager (dive-v3-keycloak-usa)
-#
+# DEPRECATED (2026-01-18): Keycloak admin token function moved to spoke-federation.sh
 # Use: spoke_federation_get_admin_token "container-name" "debug-mode"
 ##
-# REMOVED: Duplicate function definition
 # Use the enhanced version from spoke-federation.sh instead
 
 # =============================================================================

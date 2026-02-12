@@ -92,20 +92,25 @@ class OPALMetricsService {
     if (this.initialized) return;
 
     try {
-      // Connect to Redis (same as OPAL server uses)
-      const redisHost = process.env.REDIS_HOST || 'redis';
-      const redisPort = parseInt(process.env.REDIS_PORT || '6379', 10);
-      const redisPassword = process.env.REDIS_PASSWORD || '';
+      // Connect to Redis using REDIS_URL (supports TLS via rediss:// protocol)
+      const redisUrl = process.env.REDIS_URL;
 
-      this.redis = new Redis({
-        host: redisHost,
-        port: redisPort,
-        password: redisPassword,
-        retryStrategy: (times) => {
+      const redisOpts: Record<string, unknown> = {
+        retryStrategy: (times: number) => {
           if (times > 3) return null;
           return Math.min(times * 1000, 3000);
         },
-      });
+        tls: redisUrl?.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined,
+      };
+
+      this.redis = redisUrl
+        ? new Redis(redisUrl, redisOpts)
+        : new Redis({
+            host: process.env.REDIS_HOST || 'redis',
+            port: parseInt(process.env.REDIS_PORT || '6379', 10),
+            password: process.env.REDIS_PASSWORD || '',
+            ...redisOpts,
+          });
 
       this.redis.on('error', (err) => {
         logger.error('OPAL Metrics Redis error', { error: err.message });
@@ -113,9 +118,10 @@ class OPALMetricsService {
 
       // Connect to MongoDB for transaction storage
       const mongoUrl = process.env.MONGODB_URL || 'mongodb://localhost:27017';
+      const mongoDbName = process.env.MONGODB_DATABASE || 'dive-v3';
       this.mongoClient = new MongoClient(mongoUrl);
       await this.mongoClient.connect();
-      this.db = this.mongoClient.db('dive-v3');
+      this.db = this.mongoClient.db(mongoDbName);
       this.transactionsCollection = this.db.collection<IOPALTransaction>('opal_transactions');
 
       // Create indexes
@@ -125,8 +131,8 @@ class OPALMetricsService {
 
       this.initialized = true;
       logger.info('OPAL Metrics Service initialized', {
-        redis: `${redisHost}:${redisPort}`,
-        mongo: mongoUrl,
+        redis: redisUrl ? redisUrl.replace(/\/\/:[^@]*@/, '//***@') : `${process.env.REDIS_HOST || 'redis'}:${process.env.REDIS_PORT || '6379'}`,
+        mongo: mongoDbName,
       });
     } catch (error) {
       logger.error('Failed to initialize OPAL Metrics Service', {

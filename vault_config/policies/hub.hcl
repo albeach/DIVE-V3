@@ -17,13 +17,50 @@ path "auth/*" {
   capabilities = ["create", "read", "update", "delete", "list"]
 }
 
-# PKI certificate authority management
-path "pki/*" {
-  capabilities = ["create", "read", "update", "delete", "list", "sudo"]
+# PKI certificate authority (read-only — setup uses root token)
+path "pki/cert/ca" {
+  capabilities = ["read"]
 }
 
-path "pki_int/*" {
-  capabilities = ["create", "read", "update", "delete", "list"]
+path "pki/crl" {
+  capabilities = ["read"]
+}
+
+# PKI Intermediate CA (certificate issuance + revocation)
+path "pki_int/issue/*" {
+  capabilities = ["create", "update"]
+}
+
+path "pki_int/cert/*" {
+  capabilities = ["read"]
+}
+
+path "pki_int/cert/ca_chain" {
+  capabilities = ["read"]
+}
+
+path "pki_int/certs" {
+  capabilities = ["list"]
+}
+
+path "pki_int/crl" {
+  capabilities = ["read"]
+}
+
+path "pki_int/crl/rotate" {
+  capabilities = ["create", "update"]
+}
+
+path "pki_int/revoke" {
+  capabilities = ["create", "update"]
+}
+
+path "pki_int/roles/*" {
+  capabilities = ["create", "read", "update", "list"]
+}
+
+path "pki_int/config/urls" {
+  capabilities = ["create", "read", "update"]
 }
 
 # Database secrets engine management

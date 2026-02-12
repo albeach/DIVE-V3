@@ -63,7 +63,7 @@ hub_up() {
     fi
 
     # Start services (environment variables take precedence over .env.hub)
-    docker compose -f "$HUB_COMPOSE_FILE" up -d --build || {
+    docker compose -f "$HUB_COMPOSE_FILE" --env-file .env.hub up -d --build || {
         log_error "Failed to start hub services"
         return 1
     }
@@ -82,11 +82,11 @@ hub_down() {
 
     log_step "Stopping DIVE Hub services..."
     if [ "$DRY_RUN" = true ]; then
-        log_dry "docker compose -f ${HUB_COMPOSE_FILE} down"
+        log_dry "docker compose -f ${HUB_COMPOSE_FILE} --env-file .env.hub down"
         return 0
     fi
 
-    docker compose -f "$HUB_COMPOSE_FILE" --profile "$(_vault_get_profile)" down
+    docker compose -f "$HUB_COMPOSE_FILE" --env-file .env.hub --profile "$(_vault_get_profile)" down
     log_success "Hub services stopped"
 }
 

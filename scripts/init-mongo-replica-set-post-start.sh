@@ -34,7 +34,7 @@ echo "🔧 Initializing MongoDB replica set in $CONTAINER_NAME"
 echo ""
 
 # Initialize replica set using admin credentials
-${DOCKER_CMD:-docker} exec "$CONTAINER_NAME" mongosh admin -u "$ADMIN_USER" -p "$ADMIN_PASSWORD" --quiet --eval "
+${DOCKER_CMD:-docker} exec "$CONTAINER_NAME" mongosh admin -u "$ADMIN_USER" -p "$ADMIN_PASSWORD" --tls --tlsAllowInvalidCertificates --quiet --eval "
 try {
   // Check current replica set status
   try {
@@ -159,7 +159,7 @@ else
     echo "Troubleshooting:"
     echo "  1. Check MongoDB logs: ${DOCKER_CMD:-docker} logs dive-hub-mongodb"
     echo "  2. Verify keyFile exists: ${DOCKER_CMD:-docker} exec dive-hub-mongodb ls -la /tmp/mongo-keyfile"
-    echo "  3. Check replica set status: ${DOCKER_CMD:-docker} exec dive-hub-mongodb mongosh admin -u admin -p PASSWORD --eval 'rs.status()'"
+    echo "  3. Check replica set status: ${DOCKER_CMD:-docker} exec dive-hub-mongodb mongosh admin -u admin -p PASSWORD --tls --tlsAllowInvalidCertificates --eval 'rs.status()'"
     echo ""
     exit 1
 fi

@@ -21,6 +21,88 @@ import { logger } from './utils/logger';
 const PORT = parseInt(process.env.PORT || '4000', 10);
 const certPath = process.env.SSL_CERT_PATH || '/opt/keycloak/certs';
 
+/**
+ * Fetch dynamic MongoDB credentials from Vault database secrets engine.
+ * Updates process.env.MONGODB_URL so all MongoDB connections use ephemeral credentials.
+ * Retries up to 5 times with 2s backoff (Vault may not be reachable immediately
+ * after container recreation during Phase 8).
+ * Falls back gracefully to static MONGODB_URL if Vault is unavailable.
+ */
+async function initializeVaultCredentials() {
+  if (process.env.SECRETS_PROVIDER !== 'vault' || !process.env.VAULT_DB_ROLE) {
+    return;
+  }
+
+  const vaultAddr = process.env.VAULT_ADDR || 'https://dive-hub-vault:8200';
+  const roleId = process.env.VAULT_ROLE_ID || '';
+  const secretId = process.env.VAULT_SECRET_ID || '';
+  const dbRole = process.env.VAULT_DB_ROLE || '';
+
+  if (!roleId || !secretId) {
+    logger.warn('Vault AppRole credentials not configured, using static MONGODB_URL');
+    return;
+  }
+
+  const maxRetries = 5;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      // Step 1: Authenticate with AppRole
+      const authResp = await fetch(`${vaultAddr}/v1/auth/approle/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role_id: roleId, secret_id: secretId }),
+        signal: AbortSignal.timeout(5000),
+      });
+      if (!authResp.ok) throw new Error(`AppRole auth: ${authResp.status}`);
+      const authData = await authResp.json() as { auth: { client_token: string } };
+      const token = authData.auth.client_token;
+
+      // Step 2: Fetch dynamic credentials
+      const credResp = await fetch(`${vaultAddr}/v1/database/creds/${dbRole}`, {
+        headers: { 'X-Vault-Token': token },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!credResp.ok) throw new Error(`DB creds: ${credResp.status}`);
+      const credData = await credResp.json() as {
+        data: { username: string; password: string };
+        lease_id: string;
+        lease_duration: number;
+        renewable: boolean;
+      };
+
+      // Step 3: Build MongoDB URL and activate
+      const mongoHost = process.env.MONGODB_HOST || 'mongodb:27017';
+      const mongoDb = process.env.MONGODB_DATABASE || 'dive-v3';
+      const encodedUser = encodeURIComponent(credData.data.username);
+      const encodedPass = encodeURIComponent(credData.data.password);
+      process.env.MONGODB_URL = `mongodb://${encodedUser}:${encodedPass}@${mongoHost}/${mongoDb}?authSource=admin&directConnection=true&tls=true`;
+
+      logger.info('Vault dynamic MongoDB credentials activated', {
+        role: dbRole,
+        username: credData.data.username,
+        leaseId: credData.lease_id,
+        leaseDuration: credData.lease_duration,
+      });
+
+      // Step 4: Start lease renewal
+      const { startLeaseRenewal } = await import('./utils/vault-db-credentials');
+      if (credData.renewable && credData.lease_duration > 0) {
+        startLeaseRenewal(credData.lease_id, credData.lease_duration);
+      }
+      return;
+    } catch (error) {
+      if (attempt < maxRetries) {
+        await new Promise(r => setTimeout(r, 2000));
+        continue;
+      }
+      logger.warn('Vault database credentials unavailable, using static MONGODB_URL', {
+        error: error instanceof Error ? error.message : 'Unknown error',
+        attempts: maxRetries,
+      });
+    }
+  }
+}
+
 // Load SSL certificates (shared with Keycloak and Frontend)
 const httpsOptions = {
   key: fs.readFileSync(path.join(certPath, 'key.pem')),
@@ -31,6 +113,8 @@ const httpsOptions = {
 const server = https.createServer(httpsOptions, app);
 
 server.listen(PORT, async () => {
+  // Initialize Vault credentials BEFORE any services start
+  await initializeVaultCredentials();
   console.log(`✅ Backend HTTPS server running on https://localhost:${PORT}`);
   console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log(`   SSL Certificates: ${certPath}`);
