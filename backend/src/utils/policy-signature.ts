@@ -49,16 +49,16 @@ export interface ISignatureVerificationResult {
 function canonicalizePolicyForSigning(policy: IZTDFPolicy): string {
     // Create copy without signature
     const policyForSigning = { ...policy };
-    delete (policyForSigning as any).policySignature;
+    delete (policyForSigning as Record<string, unknown>).policySignature;
 
     // Recursive function to sort keys in nested objects
-    function sortKeysRecursive(obj: any): any {
+    function sortKeysRecursive(obj: unknown): unknown {
         if (Array.isArray(obj)) {
             return obj.map(sortKeysRecursive);
         } else if (obj !== null && typeof obj === 'object') {
-            const sorted: any = {};
+            const sorted: Record<string, unknown> = {};
             Object.keys(obj).sort().forEach(key => {
-                sorted[key] = sortKeysRecursive(obj[key]);
+                sorted[key] = sortKeysRecursive((obj as Record<string, unknown>)[key]);
             });
             return sorted;
         }

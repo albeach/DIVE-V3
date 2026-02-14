@@ -11,6 +11,7 @@
  */
 
 import type KcAdminClient from '@keycloak/keycloak-admin-client';
+import type UserRepresentation from '@keycloak/keycloak-admin-client/lib/defs/userRepresentation';
 import { logger } from '../utils/logger';
 import type { AdminServiceContext } from './admin-idp-testing';
 
@@ -77,9 +78,9 @@ export async function listUsersCore(
   max: number = 100,
   first: number = 0,
   search: string = ''
-): Promise<{ users: any[], total: number }> {
+): Promise<{ users: UserRepresentation[], total: number }> {
   try {
-    const query: any = { max, first };
+    const query: { max: number; first: number; search?: string } = { max, first };
     if (search) {
       query.search = search;
     }
@@ -99,7 +100,7 @@ export async function listUsersCore(
 /**
  * Get user by ID.
  */
-export async function getUserByIdCore(ctx: AdminServiceContext, userId: string): Promise<any> {
+export async function getUserByIdCore(ctx: AdminServiceContext, userId: string): Promise<UserRepresentation> {
   try {
     const user = await ctx.client.users.findOne({ id: userId });
     if (!user) {
@@ -118,19 +119,19 @@ export async function getUserByIdCore(ctx: AdminServiceContext, userId: string):
 /**
  * Create User.
  */
-export async function createUserCore(ctx: AdminServiceContext, userData: any): Promise<string> {
+export async function createUserCore(ctx: AdminServiceContext, userData: Record<string, unknown>): Promise<string> {
   try {
     const user = await ctx.client.users.create({
-      username: userData.username,
-      email: userData.email,
+      username: userData.username as string,
+      email: userData.email as string | undefined,
       enabled: userData.enabled !== false,
       emailVerified: userData.emailVerified !== false,
-      firstName: userData.firstName,
-      lastName: userData.lastName,
-      attributes: userData.attributes,
+      firstName: userData.firstName as string | undefined,
+      lastName: userData.lastName as string | undefined,
+      attributes: userData.attributes as Record<string, string[]> | undefined,
       credentials: userData.password ? [{
         type: 'password',
-        value: userData.password,
+        value: userData.password as string,
         temporary: userData.temporaryPassword !== false
       }] : undefined
     });
@@ -149,15 +150,15 @@ export async function createUserCore(ctx: AdminServiceContext, userData: any): P
 /**
  * Update User.
  */
-export async function updateUserCore(ctx: AdminServiceContext, userId: string, userData: any): Promise<void> {
+export async function updateUserCore(ctx: AdminServiceContext, userId: string, userData: Record<string, unknown>): Promise<void> {
   try {
     await ctx.client.users.update({ id: userId }, {
-      email: userData.email,
-      enabled: userData.enabled,
-      firstName: userData.firstName,
-      lastName: userData.lastName,
-      attributes: userData.attributes,
-      emailVerified: userData.emailVerified
+      email: userData.email as string | undefined,
+      enabled: userData.enabled as boolean | undefined,
+      firstName: userData.firstName as string | undefined,
+      lastName: userData.lastName as string | undefined,
+      attributes: userData.attributes as Record<string, string[]> | undefined,
+      emailVerified: userData.emailVerified as boolean | undefined
     });
 
     logger.info('Updated user', { userId });
@@ -221,7 +222,7 @@ export async function getUserByUsernameCore(
   ctx: AdminServiceContext,
   realmName: string,
   username: string
-): Promise<any> {
+): Promise<UserRepresentation | null> {
   try {
     // Temporarily switch to target realm
     const originalRealm = ctx.client.realmName;

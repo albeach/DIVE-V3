@@ -201,7 +201,7 @@ class FederationAuditStore {
             compliantWith: entry.compliantWith || ['ACP-240', 'ADatP-5663']
         };
 
-        const result = await this.collection!.insertOne(document as any);
+        const result = await this.collection!.insertOne(document as IFederationAuditEntry & { _id?: ObjectId });
 
         logger.info('Federation audit entry created', {
             eventType: entry.eventType,
@@ -219,7 +219,7 @@ class FederationAuditStore {
     async query(options: IAuditQueryOptions = {}): Promise<IFederationAuditEntry[]> {
         await this.ensureInitialized();
 
-        const filter: any = {};
+        const filter: Record<string, unknown> = {};
 
         if (options.eventTypes?.length) {
             filter.eventType = { $in: options.eventTypes };
@@ -242,13 +242,14 @@ class FederationAuditStore {
         }
 
         if (options.startTime || options.endTime) {
-            filter.timestamp = {};
+            const ts: Record<string, Date> = {};
             if (options.startTime) {
-                filter.timestamp.$gte = options.startTime;
+                ts.$gte = options.startTime;
             }
             if (options.endTime) {
-                filter.timestamp.$lte = options.endTime;
+                ts.$lte = options.endTime;
             }
+            filter.timestamp = ts;
         }
 
         const cursor = this.collection!

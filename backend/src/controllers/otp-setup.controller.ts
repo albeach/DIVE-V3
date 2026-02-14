@@ -140,10 +140,10 @@ export const initiateOTPSetup = async (
             message: 'OTP setup initiated. Scan QR code with your authenticator app.'
         });
 
-    } catch (error: any) {
+    } catch (error) {
         logger.error('OTP setup initiation failed', {
             requestId,
-            error: error.response?.data || error.message
+            error: error instanceof Error ? error.message : 'Unknown error'
         });
 
         res.status(500).json({
@@ -275,10 +275,10 @@ export const verifyAndEnableOTP = async (
                 userId
             });
 
-        } catch (credError: any) {
+        } catch (credError) {
             logger.error('Failed to store TOTP configuration', {
                 requestId,
-                error: credError.response?.data || credError.message
+                error: credError instanceof Error ? credError.message : 'Unknown error'
             });
             throw new Error('Failed to configure OTP credential in Keycloak');
         }
@@ -320,10 +320,10 @@ export const verifyAndEnableOTP = async (
             message: 'OTP configured successfully. You can now log in with your authenticator app.'
         });
 
-    } catch (error: any) {
+    } catch (error) {
         logger.error('OTP verification failed', {
             requestId,
-            error: error.response?.data || error.message
+            error: error instanceof Error ? error.message : 'Unknown error'
         });
 
         res.status(500).json({

@@ -103,7 +103,7 @@ export const upload = multer({
  * Middleware to handle Multer errors
  */
 export const handleUploadErrors = (
-    err: any,
+    err: Error & { code?: string; field?: string },
     req: Request,
     res: Response,
     next: NextFunction

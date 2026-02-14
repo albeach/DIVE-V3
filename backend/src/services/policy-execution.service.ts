@@ -176,7 +176,7 @@ export async function evaluateRego(
             }
         };
 
-    } catch (error: any) {
+    } catch (error) {
         const latency_ms = Date.now() - startTime;
 
         // Handle timeout
@@ -264,7 +264,7 @@ export async function evaluateXACML(
 
         return normalizedDecision;
 
-    } catch (error: any) {
+    } catch (error) {
         const latency_ms = Date.now() - startTime;
 
         // Handle timeout
@@ -324,7 +324,7 @@ export async function evaluatePolicy(
 
         return result;
 
-    } catch (error: any) {
+    } catch (error) {
         logger.error('Policy evaluation error', {
             policyId: context.policyId,
             policyType: context.policyType,

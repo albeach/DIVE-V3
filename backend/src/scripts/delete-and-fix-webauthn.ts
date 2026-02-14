@@ -64,7 +64,7 @@ async function deleteWebAuthnCredential(username: string) {
     );
     adminToken = adminTokenResponse.data.access_token;
     console.log('✅ Authenticated\n');
-  } catch (error: any) {
+  } catch (error) {
     console.error('❌ Authentication failed!');
     console.error('   Please provide admin password:');
     console.error(`   KEYCLOAK_ADMIN_PASSWORD=your-password npm run delete-webauthn -- --username ${username}\n`);
@@ -128,7 +128,7 @@ async function deleteWebAuthnCredential(username: string) {
       );
       console.log(`  ✅ Deleted: ${cred.userLabel || 'Unlabeled'} (${cred.id})`);
       deletedCount++;
-    } catch (error: any) {
+    } catch (error) {
       console.error(`  ❌ Failed to delete ${cred.id}: ${error.message}`);
     }
   }

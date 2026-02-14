@@ -151,7 +151,7 @@ export interface IPolicyAssertion {
     type: string;
 
     /** Assertion value */
-    value: any;
+    value: unknown;
 
     /** Optional condition expression */
     condition?: string;

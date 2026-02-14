@@ -146,13 +146,13 @@ export function validateAudience(tokenAud: string | string[], expectedAud: strin
 /**
  * Extract client credentials from request
  */
-export function extractClientCredentials(req: any): { 
-  clientId?: string; 
+export function extractClientCredentials(req: { headers: Record<string, string | string[] | undefined>; body: Record<string, unknown> }): {
+  clientId?: string;
   clientSecret?: string;
-  method: 'basic' | 'post' | 'none' 
+  method: 'basic' | 'post' | 'none'
 } {
   // Try Basic Auth first
-  const authHeader = req.headers.authorization;
+  const authHeader = typeof req.headers.authorization === 'string' ? req.headers.authorization : undefined;
   if (authHeader && authHeader.startsWith('Basic ')) {
     const creds = parseBasicAuth(authHeader);
     if (creds) {
@@ -163,15 +163,15 @@ export function extractClientCredentials(req: any): {
       };
     }
   }
-  
+
   // Try POST body
   if (req.body.client_id) {
     return {
-      clientId: req.body.client_id,
-      clientSecret: req.body.client_secret,
+      clientId: req.body.client_id as string,
+      clientSecret: req.body.client_secret as string,
       method: 'post'
     };
   }
-  
+
   return { method: 'none' };
 }

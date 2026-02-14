@@ -79,7 +79,7 @@ export async function validateSPToken(token: string): Promise<ISPContext | null>
     
     // Look up SP by issuer
     const allSPs = await spService.listSPs({ status: 'ACTIVE' });
-    const sp = allSPs.sps.find((s: any) => s.jwksUri && payload.iss === s.clientId);
+    const sp = allSPs.sps.find((s: { jwksUri?: string; clientId: string }) => s.jwksUri && payload.iss === s.clientId);
     
     if (!sp || !sp.jwksUri) {
       logger.warn('No SP found for issuer', { issuer: payload.iss });
@@ -88,13 +88,13 @@ export async function validateSPToken(token: string): Promise<ISPContext | null>
     
     // Get JWKS from SP
     const jwks = await getJWKS(sp.jwksUri);
-    const key = jwks.keys.find((k: any) => k.kid === kid);
+    const key = jwks.keys.find((k: { kid?: string }) => k.kid === kid);
     
     if (!key) {
       logger.warn('No matching key found in SP JWKS', {
         kid,
         spId: sp.spId,
-        availableKids: jwks.keys.map((k: any) => k.kid)
+        availableKids: jwks.keys.map((k: { kid?: string }) => k.kid)
       });
       return null;
     }

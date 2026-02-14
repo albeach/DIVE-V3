@@ -214,11 +214,11 @@ export class OTPEnrollmentController {
                 message: 'OTP verified successfully. Please log in again with your username, password, and OTP code to complete enrollment.'
             });
 
-        } catch (error: any) {
+        } catch (error) {
             logger.error({
                 message: 'Error during OTP enrollment finalization',
-                error: error.message,
-                stack: error.stack,
+                error: error instanceof Error ? error.message : 'Unknown error',
+                stack: error instanceof Error ? error.stack : undefined,
                 requestId,
                 service: 'dive-v3-backend'
             });

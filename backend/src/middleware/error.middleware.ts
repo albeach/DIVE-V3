@@ -3,7 +3,8 @@ import { logger } from '../utils/logger';
 
 export interface ApiError extends Error {
     statusCode?: number;
-    details?: any;
+    details?: Record<string, unknown>;
+    reason?: string;
 }
 
 export const errorHandler = (
@@ -14,7 +15,7 @@ export const errorHandler = (
 ): void => {
     const requestId = req.headers['x-request-id'] as string;
     const statusCode = err.statusCode || 500;
-    const reason = (err as any).reason || (err.details && (err.details as any).reason) || err.message || 'Error';
+    const reason = err.reason || (err.details?.reason as string) || err.message || 'Error';
 
   // Log error
   logger.error('Request error', {
@@ -48,9 +49,9 @@ export class UnauthorizedError extends Error implements ApiError {
 
 export class ForbiddenError extends Error implements ApiError {
     statusCode = 403;
-    details?: any;
+    details?: Record<string, unknown>;
 
-    constructor(message: string = 'Forbidden', details?: any) {
+    constructor(message: string = 'Forbidden', details?: Record<string, unknown>) {
         super(message);
         this.name = 'ForbiddenError';
         this.details = details;
@@ -67,9 +68,9 @@ export class NotFoundError extends Error implements ApiError {
 
 export class ValidationError extends Error implements ApiError {
     statusCode = 400;
-    details?: any;
+    details?: Record<string, unknown>;
 
-    constructor(message: string = 'Validation Error', details?: any) {
+    constructor(message: string = 'Validation Error', details?: Record<string, unknown>) {
         super(message);
         this.name = 'ValidationError';
         this.details = details;

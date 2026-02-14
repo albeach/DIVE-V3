@@ -61,7 +61,7 @@ export interface ICoiHierarchyAuditLog {
       rule: string;
       ruleType: 'time_window' | 'context' | 'classification' | 'operation';
       result: boolean;
-      details?: any;
+      details?: Record<string, unknown>;
     }>;
   };
 
@@ -111,8 +111,8 @@ export interface IHierarchyConfigAuditLog {
 
   changes?: {
     field: string;
-    oldValue: any;
-    newValue: any;
+    oldValue: unknown;
+    newValue: unknown;
   }[];
 
   actor: {
@@ -209,7 +209,7 @@ export class MongoCoiHierarchyAuditStore {
       expiresAt: new Date(Date.now() + TTL_SECONDS * 1000)
     };
 
-    await this.collection!.insertOne(doc as any);
+    await this.collection!.insertOne(doc as ICoiHierarchyAuditLog & IHierarchyConfigAuditLog);
 
     logger.debug('COI hierarchy decision logged', {
       requestId: log.requestId,
@@ -232,7 +232,7 @@ export class MongoCoiHierarchyAuditStore {
       expiresAt: new Date(Date.now() + TTL_SECONDS * 1000)
     };
 
-    await this.collection!.insertOne(doc as any);
+    await this.collection!.insertOne(doc as ICoiHierarchyAuditLog & IHierarchyConfigAuditLog);
 
     logger.info('COI hierarchy config change logged', {
       changeType: log.changeType,
@@ -251,7 +251,7 @@ export class MongoCoiHierarchyAuditStore {
   async query(query: IHierarchyAuditQuery): Promise<ICoiHierarchyAuditLog[]> {
     await this.ensureInitialized();
 
-    const filter: any = {};
+    const filter: Record<string, unknown> = {};
 
     if (query.requestId) filter.requestId = query.requestId;
     if (query.uniqueID) filter['subject.uniqueID'] = query.uniqueID;
@@ -260,9 +260,10 @@ export class MongoCoiHierarchyAuditStore {
     if (query.granted !== undefined) filter['hierarchyDecision.granted'] = query.granted;
 
     if (query.startTime || query.endTime) {
-      filter.timestamp = {};
-      if (query.startTime) filter.timestamp.$gte = query.startTime;
-      if (query.endTime) filter.timestamp.$lte = query.endTime;
+      const ts: Record<string, Date> = {};
+      if (query.startTime) ts.$gte = query.startTime;
+      if (query.endTime) ts.$lte = query.endTime;
+      filter.timestamp = ts;
     }
 
     const cursor = this.collection!
@@ -309,14 +310,15 @@ export class MongoCoiHierarchyAuditStore {
   /**
    * Get hierarchy usage statistics
    */
-  async getHierarchyStats(startTime?: Date, endTime?: Date): Promise<any> {
+  async getHierarchyStats(startTime?: Date, endTime?: Date): Promise<Record<string, unknown>> {
     await this.ensureInitialized();
 
-    const match: any = { eventType: { $in: ['hierarchy_access', 'hierarchy_denied'] } };
+    const match: Record<string, unknown> = { eventType: { $in: ['hierarchy_access', 'hierarchy_denied'] } };
     if (startTime || endTime) {
-      match.timestamp = {};
-      if (startTime) match.timestamp.$gte = startTime;
-      if (endTime) match.timestamp.$lte = endTime;
+      const ts: Record<string, Date> = {};
+      if (startTime) ts.$gte = startTime;
+      if (endTime) ts.$lte = endTime;
+      match.timestamp = ts;
     }
 
     const stats = await this.collection!.aggregate([

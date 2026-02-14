@@ -43,7 +43,7 @@ export function computeSHA384(data: string | Buffer): string {
  * Compute hash of JSON object (canonical)
  * Sorts keys to ensure deterministic hashing
  */
-export function computeObjectHash(obj: any): string {
+export function computeObjectHash(obj: Record<string, unknown>): string {
     const canonical = JSON.stringify(obj, Object.keys(obj).sort());
     return computeSHA384(canonical);
 }
@@ -136,7 +136,7 @@ export async function validateZTDFIntegrity(
 
         // For GridFS storage, use provided encryptedDataOverride, otherwise use inline data
         const chunksData = encryptedDataOverride || encryptedChunks
-            .map((chunk: any) => chunk.encryptedData)
+            .map((chunk: IEncryptedPayloadChunk) => chunk.encryptedData)
             .join('');
 
         const computedHash = computeSHA384(chunksData);
@@ -161,7 +161,7 @@ export async function validateZTDFIntegrity(
     // ============================================
     // Handle both chunked and non-chunked payloads
     const encryptedChunks = ztdf.payload.encryptedChunks || [];
-    encryptedChunks.forEach((chunk: any, index: number) => {
+    encryptedChunks.forEach((chunk: IEncryptedPayloadChunk, index: number) => {
         if (chunk.integrityHash) {
             // For GridFS storage, use provided encryptedDataOverride for first chunk
             const chunkData = (encryptedDataOverride && index === 0)
@@ -329,7 +329,7 @@ export function createSecurityLabel(params: {
             const { mapToNATOLevel } = require('./classification-equivalency');
             const natoLevel = mapToNATOLevel(
                 params.originalClassification,
-                params.originalCountry as any
+                params.originalCountry
             );
 
             if (natoLevel) {
@@ -360,7 +360,7 @@ export function createSecurityLabel(params: {
  */
 export function createZTDFPolicy(params: {
     securityLabel: ISTANAG4774Label;
-    policyAssertions?: Array<{ type: string; value: any; condition?: string }>;
+    policyAssertions?: Array<{ type: string; value: unknown; condition?: string }>;
 }): IZTDFPolicy {
     const policy: IZTDFPolicy = {
         securityLabel: params.securityLabel,

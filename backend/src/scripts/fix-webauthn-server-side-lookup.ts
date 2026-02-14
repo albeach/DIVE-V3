@@ -64,7 +64,7 @@ async function diagnoseWebAuthnLookup(username: string) {
         );
         adminToken = adminTokenResponse.data.access_token;
         console.log('✅ Authenticated\n');
-    } catch (error: any) {
+    } catch (error) {
         console.error('❌ Authentication failed!');
         process.exit(1);
     }

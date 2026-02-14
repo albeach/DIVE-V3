@@ -232,7 +232,7 @@ class IdPValidationService {
       });
 
       return result;
-    } catch (error: any) {
+    } catch (error) {
       const duration = Date.now() - startTime;
       logger.error('TLS validation failed', { url, error: error.message, durationMs: duration });
 
@@ -437,7 +437,7 @@ class IdPValidationService {
       });
 
       return result;
-    } catch (error: any) {
+    } catch (error) {
       const duration = Date.now() - startTime;
       logger.error('OIDC algorithms validation error', {
         jwksUrl,
@@ -580,7 +580,7 @@ class IdPValidationService {
       });
 
       return result;
-    } catch (error: any) {
+    } catch (error) {
       const duration = Date.now() - startTime;
       result.latency_ms = duration;
       result.reachable = false;

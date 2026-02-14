@@ -6,7 +6,7 @@
  */
 
 import { logger } from '../utils/logger';
-import { MongoClient, Db, Collection } from 'mongodb';
+import { MongoClient, Db, Collection, Document } from 'mongodb';
 
 // BEST PRACTICE: Read MongoDB URL at connection time, not module load time
 // This allows globalSetup to configure MongoDB Memory Server before services connect
@@ -40,10 +40,10 @@ interface IAuditLogEntry {
     resourceId: string;
     outcome: 'ALLOW' | 'DENY';
     reason: string;
-    subjectAttributes?: any;
-    resourceAttributes?: any;
-    policyEvaluation?: any;
-    context?: any;
+    subjectAttributes?: Record<string, unknown>;
+    resourceAttributes?: Record<string, unknown>;
+    policyEvaluation?: Record<string, unknown>;
+    context?: Record<string, unknown>;
     latencyMs?: number;
 }
 
@@ -106,7 +106,7 @@ class AuditLogService {
             const collection = await this.getCollection();
 
             // Build MongoDB filter
-            const filter: any = {};
+            const filter: Document = {};
 
             if (query.eventType) {
                 filter['acp240EventType'] = query.eventType;
@@ -146,7 +146,7 @@ class AuditLogService {
                 .toArray();
 
             return {
-                logs: logs.map((log: any) => ({
+                logs: logs.map((log) => ({
                     timestamp: log.timestamp,
                     eventType: log.acp240EventType,
                     requestId: log.requestId,
@@ -237,8 +237,8 @@ class AuditLogService {
                 .toArray();
 
             const eventsByType: Record<string, number> = {};
-            eventsByTypeResult.forEach((item: any) => {
-                eventsByType[item._id] = item.count;
+            eventsByTypeResult.forEach((item) => {
+                eventsByType[item._id as string] = item.count as number;
             });
 
             // Denied vs successful access
@@ -262,9 +262,9 @@ class AuditLogService {
                 ])
                 .toArray();
 
-            const topDeniedResources = topDeniedResult.map((item: any) => ({
-                resourceId: item._id,
-                count: item.count
+            const topDeniedResources = topDeniedResult.map((item) => ({
+                resourceId: item._id as string,
+                count: item.count as number
             }));
 
             // Top users
@@ -277,9 +277,9 @@ class AuditLogService {
                 ])
                 .toArray();
 
-            const topUsers = topUsersResult.map((item: any) => ({
-                subject: item._id,
-                count: item.count
+            const topUsers = topUsersResult.map((item) => ({
+                subject: item._id as string,
+                count: item.count as number
             }));
 
             // Violation trend (by day)
@@ -296,9 +296,9 @@ class AuditLogService {
                 ])
                 .toArray();
 
-            const violationTrend = violationTrendResult.map((item: any) => ({
-                date: item._id,
-                count: item.count
+            const violationTrend = violationTrendResult.map((item) => ({
+                date: item._id as string,
+                count: item.count as number
             }));
 
             return {

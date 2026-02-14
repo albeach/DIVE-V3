@@ -18,7 +18,7 @@
 
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { Request } from 'express';
+import { Request, Response, NextFunction } from 'express';
 
 export type Locale = 'en' | 'fr' | 'de' | 'es' | 'it' | 'nl' | 'pl';
 
@@ -26,12 +26,12 @@ export const supportedLocales: Locale[] = ['en', 'fr', 'de', 'es', 'it', 'nl', '
 export const defaultLocale: Locale = 'en';
 
 // Translation cache
-const translationsCache: Map<string, any> = new Map();
+const translationsCache: Map<string, Record<string, unknown>> = new Map();
 
 /**
  * Load translations for a specific locale and namespace
  */
-function loadTranslations(locale: Locale, namespace: string = 'errors'): any {
+function loadTranslations(locale: Locale, namespace: string = 'errors'): Record<string, unknown> {
   const cacheKey = `${locale}:${namespace}`;
 
   if (translationsCache.has(cacheKey)) {
@@ -60,15 +60,15 @@ function loadTranslations(locale: Locale, namespace: string = 'errors'): any {
  * Get value from nested object using dot notation
  * Example: "errors.authentication.unauthorized" -> translations.errors.authentication.unauthorized
  */
-function getNestedValue(obj: any, path: string): string | undefined {
-  return path.split('.').reduce((current, key) => current?.[key], obj);
+function getNestedValue(obj: Record<string, unknown>, path: string): string | undefined {
+  return path.split('.').reduce<unknown>((current, key) => (current as Record<string, unknown>)?.[key], obj) as string | undefined;
 }
 
 /**
  * Replace placeholders in translation string
  * Example: "Hello {{name}}" with {name: "John"} -> "Hello John"
  */
-function interpolate(str: string, params: Record<string, any> = {}): string {
+function interpolate(str: string, params: Record<string, unknown> = {}): string {
   return str.replace(/\{\{(\w+)\}\}/g, (match, key) => {
     return params[key] !== undefined ? String(params[key]) : match;
   });
@@ -85,7 +85,7 @@ function interpolate(str: string, params: Record<string, any> = {}): string {
  */
 export function t(
   key: string,
-  params: Record<string, any> = {},
+  params: Record<string, unknown> = {},
   locale: Locale = defaultLocale,
   namespace: string = 'errors'
 ): string {
@@ -168,7 +168,7 @@ export function getLocaleFromRequest(req: Request): Locale {
  * const message = t('errors.notFound', {}, req.locale);
  * ```
  */
-export function localeMiddleware(req: Request, res: any, next: any) {
-  (req as any).locale = getLocaleFromRequest(req);
+export function localeMiddleware(req: Request, res: Response, next: NextFunction) {
+  (req as Request & { locale?: Locale }).locale = getLocaleFromRequest(req);
   next();
 }

@@ -21,7 +21,7 @@ import { hubSpokeRegistry } from '../services/hub-spoke-registry.service';
 const httpsAgent = new https.Agent({
     rejectUnauthorized: process.env.NODE_ENV !== 'development'
 });
-const federationAxios = (axios as any).create ? (axios as any).create({ httpsAgent }) : (axios as any);
+const federationAxios = axios.create({ httpsAgent });
 
 // ============================================
 // Configuration
@@ -188,9 +188,8 @@ async function getAllFederationInstances(): Promise<FederationInstance[]> {
                     const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
                     let apiUrl: string;
 
-                    if (isDevelopment && (spoke as any).internalApiUrl) {
-                        // Use stored internalApiUrl if available
-                        apiUrl = (spoke as any).internalApiUrl;
+                    if (isDevelopment && (spoke as unknown as Record<string, unknown>).internalApiUrl) {
+                        apiUrl = (spoke as unknown as Record<string, unknown>).internalApiUrl as string;
                     } else if (isDevelopment) {
                         // Build Docker internal URL: dive-spoke-{code}-backend:4000
                         const codeLower = spoke.instanceCode.toLowerCase();
@@ -301,7 +300,7 @@ export const federatedSearchHandler = async (
 ): Promise<void> => {
     const requestId = req.headers['x-request-id'] as string || `fed-${Date.now()}`;
     const startTime = Date.now();
-    const user = (req as any).user;
+    const user = (req as Request & { user?: Record<string, unknown> }).user;
 
     try {
         // Parse search query
@@ -525,7 +524,7 @@ async function executeLocalSearch(query: FederatedSearchQuery): Promise<{ resour
         const db = client.db(getMongoDBName());
 
         // Build query for counting
-        const countQuery: any = {};
+        const countQuery: Record<string, unknown> = {};
         if (query.classification) {
             countQuery['ztdf.policy.securityLabel.classification'] = query.classification;
         }
@@ -558,29 +557,31 @@ async function executeLocalSearch(query: FederatedSearchQuery): Promise<{ resour
 
         const mappedResources = resources.map(r => {
             // Handle both ZTDF and legacy resources
-            const ztdf = (r as any).ztdf;
+            const doc = r as unknown as Record<string, unknown>;
+            const ztdf = doc.ztdf as { policy?: { securityLabel?: Record<string, unknown> } } | undefined;
             if (ztdf) {
+                const sl = ztdf.policy?.securityLabel || {};
                 return {
                     resourceId: r.resourceId,
                     title: r.title,
-                    classification: ztdf.policy.securityLabel.classification,
-                    releasabilityTo: ztdf.policy.securityLabel.releasabilityTo,
-                    COI: ztdf.policy.securityLabel.COI || [],
+                    classification: sl.classification as string,
+                    releasabilityTo: (sl.releasabilityTo || []) as string[],
+                    COI: (sl.COI || []) as string[],
                     encrypted: true,
-                    creationDate: ztdf.policy.securityLabel.creationDate,
-                    displayMarking: ztdf.policy.securityLabel.displayMarking,
-                    originRealm: (r as any).originRealm || INSTANCE_REALM
+                    creationDate: sl.creationDate as string | undefined,
+                    displayMarking: sl.displayMarking as string | undefined,
+                    originRealm: (doc.originRealm as string) || INSTANCE_REALM
                 };
             } else {
                 return {
                     resourceId: r.resourceId,
                     title: r.title,
-                    classification: (r as any).classification || 'UNCLASSIFIED',
-                    releasabilityTo: (r as any).releasabilityTo || [],
-                    COI: (r as any).COI || [],
-                    encrypted: (r as any).encrypted || false,
-                    creationDate: (r as any).creationDate,
-                    originRealm: (r as any).originRealm || INSTANCE_REALM
+                    classification: (doc.classification as string) || 'UNCLASSIFIED',
+                    releasabilityTo: (doc.releasabilityTo as string[]) || [],
+                    COI: (doc.COI as string[]) || [],
+                    encrypted: (doc.encrypted as boolean) || false,
+                    creationDate: doc.creationDate as string | undefined,
+                    originRealm: (doc.originRealm as string) || INSTANCE_REALM
                 };
             }
         });
@@ -637,7 +638,7 @@ async function executeRemoteSearch(
             }
         );
 
-        const resources = (response.data.resources || []).map((r: any) => ({
+        const resources = (response.data.resources || []).map((r: Record<string, unknown>) => ({
             ...r,
             originRealm: r.originRealm || instance.code,
             _federated: true
@@ -759,12 +760,12 @@ export const federatedStatusHandler = async (
                         available: true,
                         latencyMs: Date.now() - checkStart
                     };
-                } catch (error: any) {
+                } catch (error) {
                     logger.warn('Health check failed for instance', {
                         instance: instance.code,
                         apiUrl: instance.apiUrl,
-                        error: error.message,
-                        code: error.code,
+                        error: error instanceof Error ? error.message : 'Unknown error',
+                        code: (error as Record<string, unknown>).code,
                         latencyMs: Date.now() - checkStart
                     });
                     return {

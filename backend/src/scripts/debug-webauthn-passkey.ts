@@ -72,7 +72,7 @@ async function debugWebAuthn(username: string) {
     );
     adminToken = adminTokenResponse.data.access_token;
     console.log('✅ Authenticated\n');
-  } catch (error: any) {
+  } catch (error) {
     if (error.response?.status === 401) {
       console.error('❌ Authentication failed!');
       console.error('   Please provide the correct admin password:');

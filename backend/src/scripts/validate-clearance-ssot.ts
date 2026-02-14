@@ -138,7 +138,7 @@ try {
     } else {
         fail('OPA data.json is stale — run: cd backend && npx tsx src/scripts/generate-opa-clearance-data.ts');
     }
-} catch (e: any) {
+} catch (e) {
     fail(`Cannot read OPA JSON at ${opaJsonPath}: ${e.message}`);
 }
 
@@ -172,7 +172,7 @@ try {
     } else {
         fail('National JSON is stale — run: cd backend && npx tsx src/scripts/generate-national-clearance-json.ts');
     }
-} catch (e: any) {
+} catch (e) {
     fail(`Cannot read national JSON at ${nationalJsonPath}: ${e.message}`);
 }
 
@@ -239,7 +239,7 @@ try {
     } else {
         fail(`Clearance hierarchy is not strictly ordered: ${JSON.stringify(ranks)}`);
     }
-} catch (e: any) {
+} catch (e) {
     fail(`Cannot import clearance-normalization.service: ${e.message}`);
 }
 
@@ -253,7 +253,7 @@ try {
     } else {
         fail(`OPA classification.rego NATO_RESTRICTED rank = ${restrictedMatch?.[1] ?? 'not found'} (expected 1)`);
     }
-} catch (e: any) {
+} catch (e) {
     fail(`Cannot read classification.rego: ${e.message}`);
 }
 

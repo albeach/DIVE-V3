@@ -80,7 +80,7 @@ export const otpSetupHandler = async (
                 username,
                 realmName
             });
-        } catch (authError: any) {
+        } catch (authError) {
             logger.warn('Invalid credentials for OTP setup', {
                 requestId,
                 username,

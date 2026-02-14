@@ -181,7 +181,7 @@ class OIDCDiscoveryService {
       });
 
       return result;
-    } catch (error: any) {
+    } catch (error) {
       const duration = Date.now() - startTime;
       logger.error('OIDC discovery validation failed', {
         issuer,
@@ -255,7 +255,7 @@ class OIDCDiscoveryService {
       });
 
       return jwksInfo;
-    } catch (error: any) {
+    } catch (error) {
       logger.error('JWKS validation failed', { jwksUri, error: error.message });
       return jwksInfo;
     }
