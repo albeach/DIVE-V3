@@ -45,7 +45,7 @@ services:
   # Pub/Sub: Real-time revocation propagation to all instances
   # ---------------------------------------------------------------------------
   token-store:
-    image: redis:7-alpine
+    image: redis:7.2-alpine
     container_name: shared-token-store
     restart: unless-stopped
     command: >
