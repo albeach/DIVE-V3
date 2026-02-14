@@ -3,20 +3,10 @@
 # ============================================
 # Multi-Level AAL Enforcement: AAL1/AAL2/AAL3 Using ONLY Native Keycloak Features
 #
-# CRITICAL FIX #2 (Dec 1, 2025):
-# - Changed `negate = "true"` to `check_result = "not-executed"` for conditional-sub-flow-executed!
-# - The "negate" parameter doesn't exist for this authenticator - it was being silently ignored!
-# - Valid check_result values: "executed" or "not-executed"
-# - This was causing the Force OTP Enrollment subflow to never trigger.
-#
-# CRITICAL FIX #1 (Dec 1, 2025):
-# - Added `regex = "true"` to conditional-user-attribute configs!
-# - Without this flag, Keycloak does EXACT STRING matching, not regex matching.
-# - This was the root cause of MFA not triggering for SECRET/CONFIDENTIAL users.
-# - Also corrected property name: `attribute_expected_value` (not `attribute_value`)
-#
-# PREVIOUS FIX (Nov 29, 2025):
-# - Implements the "Conditional 2FA sub-flow with OTP default" pattern from Keycloak docs
+# Key implementation notes:
+# - conditional-user-attribute requires `regex = "true"` for pattern matching (default is exact string)
+# - conditional-sub-flow-executed uses `check_result = "not-executed"` (NOT `negate = "true"` which is ignored)
+# - Implements "Conditional 2FA sub-flow with OTP default" pattern from Keycloak docs
 # - Reference: https://www.keycloak.org/docs/latest/server_admin/index.html#twofa-conditional-workflow-examples
 #
 # KEY INSIGHT: The `auth-otp-form` authenticator ONLY validates existing OTP credentials.
@@ -53,9 +43,8 @@
 # - AAL3 (password+WebAuthn): acr="3", amr=["pwd","hwk"]
 
 locals {
-  # CRITICAL FIX (Jan 2026): Keycloak flow aliases CANNOT contain parentheses, brackets, or special chars
+  # Keycloak flow aliases cannot contain parentheses, brackets, or special chars
   # Sanitize the display name to create a valid flow alias
-  # Remove parentheses, brackets, and other special characters that Keycloak's API rejects
   sanitized_display_name = replace(replace(replace(replace(var.realm_display_name, "(", ""), ")", ""), "[", ""), "]", "")
   # Also replace spaces with underscores for cleaner aliases
   flow_suffix = replace(local.sanitized_display_name, " ", "-")
@@ -367,9 +356,8 @@ resource "keycloak_authentication_execution_config" "browser_condition_subflow_n
   alias        = "2FA Not Executed Check - ${local.flow_suffix}"
   config = {
     flow_to_check = keycloak_authentication_subflow.browser_2fa_options.alias
-    # CRITICAL FIX: Use check_result="not-executed" instead of negate="true"
-    # The "negate" parameter doesn't exist for conditional-sub-flow-executed!
-    # Valid values: "executed" (true when subflow succeeded) or "not-executed" (true when subflow didn't run)
+    # check_result="not-executed" triggers when 2FA Options didn't run (user has no 2FA configured)
+    # Note: "negate" parameter does NOT exist for conditional-sub-flow-executed
     check_result = "not-executed" # Trigger if 2FA Options was NOT executed
   }
 }

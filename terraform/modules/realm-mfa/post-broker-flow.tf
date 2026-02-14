@@ -61,9 +61,8 @@ resource "keycloak_authentication_execution" "post_broker_auto_link" {
 # ============================================
 # Step 3A: Conditional AAL3 (TOP_SECRET → WebAuthn)
 # ============================================
-# CRITICAL FIX (Nov 10, 2025):
-# Add WebAuthn enforcement for TOP_SECRET users after broker login
-# This ensures TOP_SECRET users get AAL3 (hardware key) authentication
+# WebAuthn enforcement for TOP_SECRET users after broker login
+# Ensures TOP_SECRET users get AAL3 (hardware key) authentication
 
 resource "keycloak_authentication_subflow" "post_broker_conditional_webauthn" {
   realm_id          = var.realm_id
