@@ -341,7 +341,7 @@ jobs:
       
       - name: Upload Deployment Logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: deployment-logs-${{ github.sha }}
           path: |
@@ -428,7 +428,7 @@ jobs:
       
       - name: Upload Rollback Logs
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: rollback-logs-${{ github.sha }}
           path: |
