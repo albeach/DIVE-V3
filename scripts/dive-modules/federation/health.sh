@@ -437,7 +437,7 @@ fed_db_update_status() {
     [ -n "$error_message" ] && error_clause=", error_message = '$escaped_error'"
     [ -n "$error_code" ] && error_clause="$error_clause, last_error_code = '$error_code'"
     local retry_clause=""
-    [ "$status" = "FAILED" ] && retry_clause=", retry_count = COALESCE(retry_count, 0) + 1"
+    [ "$status" = "FAILED" ] && retry_clause=", retry_count = COALESCE(federation_links.retry_count, 0) + 1"
     [ "$status" = "ACTIVE" ] && retry_clause=", retry_count = 0, last_verified_at = NOW()"
     local idp_alias="${source_code}-idp"
     [ "$direction" = "HUB_TO_SPOKE" ] && idp_alias="${target_code}-idp"

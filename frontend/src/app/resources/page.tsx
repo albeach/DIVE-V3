@@ -152,81 +152,78 @@ export default function ResourcesPage() {
     setSort,
     sentinelRef,
     timing,
+    stats: apiStats,
   } = useInfiniteScroll<IResourceCardData>({
     initialFilters: {
       instances: federatedMode ? selectedInstances : undefined,
     },
     initialSort: { field: 'title', order: 'asc' },
     pageSize: 50,
-    // Only request facets from API for local search (federated search endpoint doesn't support facets)
-    includeFacets: !federatedMode,
+    // Request facets from API for both local and federated search
+    includeFacets: true,
     federated: federatedMode,
     autoLoad: true,
     // KEY FIX: Only enable fetching when session is authenticated
     enabled: isSessionReady,
   });
 
-  // Use API-provided facets when available (local search), otherwise calculate from loaded resources (federated search)
+  // Use API-provided facets when available (both local and federated), fallback to client-side calculation
   const facets = useMemo(() => {
-    // For local search, use API-provided facets which are accurate for all matching documents
-    if (!federatedMode && apiFacets) {
+    // Prefer API-provided facets — accurate totals from full ABAC-filtered dataset
+    if (apiFacets) {
       return apiFacets;
     }
 
-    // For federated search or when API facets aren't available, calculate from currently loaded resources
+    // Fallback: calculate from currently loaded resources when API facets aren't available yet
     const facetCounts = {
       classifications: {} as Record<string, number>,
       countries: {} as Record<string, number>,
       cois: {} as Record<string, number>,
       encryptionStatus: {} as Record<string, number>,
       instances: {} as Record<string, number>,
+      fileTypes: {} as Record<string, number>,
     };
 
-    // Count facets from currently loaded resources (these are already filtered by API)
     resources.forEach(resource => {
-      // Classification facet
       if (resource.classification) {
         facetCounts.classifications[resource.classification] =
           (facetCounts.classifications[resource.classification] || 0) + 1;
       }
 
-      // Releasable To facet (countries)
       if (resource.releasabilityTo && Array.isArray(resource.releasabilityTo)) {
         resource.releasabilityTo.forEach(country => {
           facetCounts.countries[country] = (facetCounts.countries[country] || 0) + 1;
         });
       }
 
-      // Communities of Interest facet
       if (resource.COI && Array.isArray(resource.COI)) {
         resource.COI.forEach(coi => {
           facetCounts.cois[coi] = (facetCounts.cois[coi] || 0) + 1;
         });
       }
 
-      // Encryption status facet
       const encryptionStatus = resource.encrypted ? 'encrypted' : 'unencrypted';
       facetCounts.encryptionStatus[encryptionStatus] =
         (facetCounts.encryptionStatus[encryptionStatus] || 0) + 1;
 
-      // Instance facet (from originRealm or source instance)
       const instance = resource.originRealm || (resource as any).sourceInstance;
       if (instance) {
         facetCounts.instances[instance] = (facetCounts.instances[instance] || 0) + 1;
       }
+
+      const fileCategory = (resource as any).fileCategory || 'text';
+      facetCounts.fileTypes[fileCategory] = (facetCounts.fileTypes[fileCategory] || 0) + 1;
     });
 
-    // Convert to the expected facet format
-    // For federated search, mark as approximate since we only have counts from loaded results
-    const approximate = federatedMode;
     return {
-      classifications: Object.entries(facetCounts.classifications).map(([value, count]) => ({ value, count, approximate })),
-      countries: Object.entries(facetCounts.countries).map(([value, count]) => ({ value, count, approximate })),
-      cois: Object.entries(facetCounts.cois).map(([value, count]) => ({ value, count, approximate })),
-      encryptionStatus: Object.entries(facetCounts.encryptionStatus).map(([value, count]) => ({ value, count, approximate })),
-      instances: Object.entries(facetCounts.instances).map(([value, count]) => ({ value, count, approximate })),
+      classifications: Object.entries(facetCounts.classifications).map(([value, count]) => ({ value, count, approximate: true })),
+      countries: Object.entries(facetCounts.countries).map(([value, count]) => ({ value, count, approximate: true })),
+      cois: Object.entries(facetCounts.cois).map(([value, count]) => ({ value, count, approximate: true })),
+      encryptionStatus: Object.entries(facetCounts.encryptionStatus).map(([value, count]) => ({ value, count, approximate: true })),
+      instances: Object.entries(facetCounts.instances).map(([value, count]) => ({ value, count, approximate: true })),
+      fileTypes: Object.entries(facetCounts.fileTypes).map(([value, count]) => ({ value, count, approximate: true })),
     };
-  }, [federatedMode, apiFacets, resources]);
+  }, [apiFacets, resources]);
 
   // Keyboard Navigation
   const [navState, navActions] = useKeyboardNavigation({
@@ -445,37 +442,33 @@ export default function ResourcesPage() {
     return breakdown;
   }, [facets]);
 
-  // Calculate average document age from loaded resources
+  // Average document age: prefer API-provided stats (computed over full ABAC-filtered dataset)
   const averageDocAge = useMemo(() => {
+    if (apiStats?.avgDocAgeDays != null) {
+      return apiStats.avgDocAgeDays;
+    }
+    // Fallback: calculate from loaded resources
     if (resources.length === 0) return undefined;
-
     const now = new Date();
     const ages = resources
       .filter(r => r.creationDate)
       .map(r => (now.getTime() - new Date(r.creationDate!).getTime()) / (1000 * 60 * 60 * 24));
-
     if (ages.length === 0) return undefined;
     return ages.reduce((sum, age) => sum + age, 0) / ages.length;
-  }, [resources]);
+  }, [apiStats, resources]);
 
-  // Calculate access rate (percentage of documents user can access)
-  // For federated search, this is approximate based on loaded documents
-  // For local search, this could be more accurate if we had total counts
+  // ZTDF Encrypted count from facets (accurate total, not just loaded results)
+  const encryptedCount = useMemo(() => {
+    return facets?.encryptionStatus?.find(e => e.value === 'encrypted')?.count || 0;
+  }, [facets]);
+
+  // Access rate: percentage of ZTDF-encrypted documents (security compliance metric)
+  // totalCount is already ABAC-filtered, so user access rate is always 100%
+  // Instead, show encryption coverage which is more operationally useful
   const accessRate = useMemo(() => {
     if (totalCount === 0) return undefined;
-
-    // In federated mode, we show what percentage of loaded docs user can access
-    // In local mode, resources array represents accessible documents
-    if (federatedMode) {
-      // This is approximate since we don't know total inaccessible docs
-      const accessibleLoaded = resources.length;
-      const estimatedTotal = totalCount;
-      return estimatedTotal > 0 ? (accessibleLoaded / estimatedTotal) * 100 : undefined;
-    } else {
-      // For local search, assume all returned documents are accessible
-      return totalCount > 0 ? 100 : undefined;
-    }
-  }, [resources.length, totalCount, federatedMode]);
+    return totalCount > 0 ? (encryptedCount / totalCount) * 100 : undefined;
+  }, [encryptedCount, totalCount]);
 
   // Calculate top COIs from facets
   const topCOIs = useMemo(() => {
@@ -645,7 +638,7 @@ export default function ResourcesPage() {
       ) : (
         <BentoDashboard
           totalDocuments={totalCount}
-          encryptedCount={resources.filter(r => r.encrypted).length}
+          encryptedCount={encryptedCount}
           classificationBreakdown={classificationBreakdown}
           activeInstances={federatedMode ? selectedInstances : [CURRENT_INSTANCE]}
           federatedMode={federatedMode}

@@ -138,13 +138,11 @@ const OPA_URL = process.env.OPA_URL || 'https://localhost:8181';
 const OPA_DECISION_ENDPOINT = `${OPA_URL}/v1/data/dive/authz`;
 
 // Local fallback evaluation (used in tests when OPA is unavailable)
-const CLEARANCE_LEVEL: Record<string, number> = {
-    UNCLASSIFIED: 0,
-    RESTRICTED: 1,
-    CONFIDENTIAL: 2,
-    SECRET: 3,
-    TOP_SECRET: 4,
-};
+// Derived from CLEARANCE_EQUIVALENCY_TABLE SSOT via clearance-normalization.service.ts
+import { getClearanceLevel as _getClearanceRank, StandardClearance } from '../services/clearance-normalization.service';
+const CLEARANCE_LEVEL: Record<string, number> = Object.fromEntries(
+    Object.values(StandardClearance).map(level => [level, _getClearanceRank(level)])
+);
 
 const localEvaluateOPA = (input: IOPAInput): IOPADecision => {
     const subject = input.input.subject;
@@ -907,7 +905,7 @@ export async function authenticateJWT(req: Request, res: Response, next: NextFun
         // CRITICAL FIX (2026-01-20): Include ACR/AMR/auth_time for MFA enforcement!
         // CRITICAL FIX (2026-01-29): Include roles for admin authorization!
         (req as any).user = {
-            uniqueID: introspectionResult.uniqueID,
+            uniqueID: introspectionResult.uniqueID || introspectionResult.preferred_username || introspectionResult.sub,
             clearance: introspectionResult.clearance,
             countryOfAffiliation: introspectionResult.countryOfAffiliation,
             acpCOI: introspectionResult.acpCOI,

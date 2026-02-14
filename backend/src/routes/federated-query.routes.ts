@@ -84,20 +84,26 @@ router.post('/federated-query', authenticateJWT, async (req: Request, res: Respo
         }
 
         // Build search options
+        // Accept filters at top level (canonical) OR nested in filters.* (proxy compat)
+        const rawClassification = req.body.classification || req.body.filters?.classification;
+        const rawReleasableTo = req.body.releasableTo || req.body.filters?.releasableTo;
+        const rawCoi = req.body.coi || req.body.filters?.coi;
+        const rawLimit = req.body.limit || req.body.pagination?.limit;
+
         const searchOptions: IFederatedSearchOptions = {
             query: req.body.query,
-            classification: req.body.classification ?
-                (Array.isArray(req.body.classification) ? req.body.classification : [req.body.classification]) :
+            classification: rawClassification ?
+                (Array.isArray(rawClassification) ? rawClassification : [rawClassification]) :
                 undefined,
-            releasableTo: req.body.releasableTo ?
-                (Array.isArray(req.body.releasableTo) ? req.body.releasableTo : [req.body.releasableTo]) :
+            releasableTo: rawReleasableTo ?
+                (Array.isArray(rawReleasableTo) ? rawReleasableTo : [rawReleasableTo]) :
                 undefined,
-            coi: req.body.coi ?
-                (Array.isArray(req.body.coi) ? req.body.coi : [req.body.coi]) :
+            coi: rawCoi ?
+                (Array.isArray(rawCoi) ? rawCoi : [rawCoi]) :
                 undefined,
-            encrypted: req.body.encrypted,
+            encrypted: req.body.encrypted ?? req.body.filters?.encrypted,
             instances: req.body.instances,
-            limit: parseInt(req.body.limit || '100'),
+            limit: parseInt(rawLimit || '100'),
             offset: parseInt(req.body.offset || '0'),
             // Forward auth header for API-based federation to remote instances
             authHeader: req.headers.authorization
@@ -119,8 +125,17 @@ router.post('/federated-query', authenticateJWT, async (req: Request, res: Respo
             searchOptions: {
                 query: searchOptions.query,
                 classification: searchOptions.classification,
+                releasableTo: searchOptions.releasableTo,
+                coi: searchOptions.coi,
                 instances: searchOptions.instances,
                 limit: searchOptions.limit
+            },
+            rawBody: {
+                hasTopLevelFilters: !!(req.body.classification || req.body.releasableTo || req.body.coi),
+                hasNestedFilters: !!req.body.filters,
+                hasTopLevelLimit: !!req.body.limit,
+                hasNestedLimit: !!req.body.pagination?.limit,
+                instanceCount: req.body.instances?.length || 0
             }
         });
 

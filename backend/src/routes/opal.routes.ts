@@ -1716,6 +1716,85 @@ router.get('/coi-definitions', async (_req: Request, res: Response): Promise<voi
 });
 
 /**
+ * GET /api/opal/classification-equivalency
+ * Serve classification equivalency mappings for OPA data distribution.
+ * Maps national classification terms to NATO standard levels.
+ * Public endpoint (used by OPAL server with datasource token).
+ */
+router.get('/classification-equivalency', async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const { CLEARANCE_EQUIVALENCY_TABLE } = await import('../services/clearance-mapper.service');
+
+    const DIVE_TO_NATO: Record<string, string> = {
+      UNCLASSIFIED: 'NATO_UNCLASSIFIED',
+      RESTRICTED: 'NATO_RESTRICTED',
+      CONFIDENTIAL: 'NATO_CONFIDENTIAL',
+      SECRET: 'NATO_SECRET',
+      TOP_SECRET: 'COSMIC_TOP_SECRET',
+    };
+
+    const ENGLISH_FALLBACK: Record<string, string> = {
+      UNCLASSIFIED: 'NATO_UNCLASSIFIED',
+      RESTRICTED: 'NATO_RESTRICTED',
+      CONFIDENTIAL: 'NATO_CONFIDENTIAL',
+      SECRET: 'NATO_SECRET',
+      TOP_SECRET: 'COSMIC_TOP_SECRET',
+      'TOP SECRET': 'COSMIC_TOP_SECRET',
+    };
+
+    const ENGLISH_COUNTRIES = new Set(['USA', 'GBR', 'CAN', 'AUS', 'NZL']);
+
+    const equivalency: Record<string, Record<string, string>> = {};
+
+    for (const entry of CLEARANCE_EQUIVALENCY_TABLE) {
+      const natoLevel = DIVE_TO_NATO[entry.standardLevel];
+      if (!natoLevel) continue;
+      for (const [country, variants] of Object.entries(entry.nationalEquivalents)) {
+        if (country === 'INDUSTRY') continue;
+        if (!equivalency[country]) equivalency[country] = {};
+        for (const variant of variants) {
+          equivalency[country][variant] = natoLevel;
+        }
+      }
+    }
+
+    // Add English fallbacks for non-English countries
+    for (const country of Object.keys(equivalency)) {
+      if (ENGLISH_COUNTRIES.has(country)) continue;
+      for (const [term, natoLevel] of Object.entries(ENGLISH_FALLBACK)) {
+        if (!equivalency[country][term]) {
+          equivalency[country][term] = natoLevel;
+        }
+      }
+    }
+
+    // Add NATO's own classification terms
+    equivalency['NATO'] = {
+      'NATO UNCLASSIFIED': 'NATO_UNCLASSIFIED',
+      'NATO RESTRICTED': 'NATO_RESTRICTED',
+      'NATO CONFIDENTIAL': 'NATO_CONFIDENTIAL',
+      'NATO SECRET': 'NATO_SECRET',
+      'COSMIC TOP SECRET': 'COSMIC_TOP_SECRET',
+    };
+
+    res.json({
+      success: true,
+      classification_equivalency: equivalency,
+      count: Object.keys(equivalency).length,
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    logger.error('Failed to get classification equivalency', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+    });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to retrieve classification equivalency',
+    });
+  }
+});
+
+/**
  * @openapi
  * /api/opal/tenant-configs/{code}:
  *   put:

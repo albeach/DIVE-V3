@@ -73,7 +73,8 @@
         "opal:sync": "tsx src/scripts/opal-publisher.ts -- --sync",
         "opal:watch": "tsx src/scripts/opal-publisher.ts -- --watch",
         "opal:health": "tsx src/scripts/opal-publisher.ts -- --health",
-        "cleanup-logs": "tsx src/scripts/cleanup-logs.ts"
+        "cleanup-logs": "tsx src/scripts/cleanup-logs.ts",
+        "validate:clearance-ssot": "tsx src/scripts/validate-clearance-ssot.ts"
     },
     "keywords": [
         "dive",

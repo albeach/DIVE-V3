@@ -142,27 +142,27 @@ spoke_federation_setup() {
     # Keycloak containers may report healthy but admin API not fully initialized.
     # Wait for both Hub and Spoke Keycloak before attempting federation setup.
     # ==========================================================================
-    log_verbose "Verifying Keycloak admin APIs are ready..."
+    log_info "Verifying Keycloak admin APIs are ready..."
 
-    # Wait for Hub Keycloak admin API
+    # Wait for Hub Keycloak admin API (short timeout — already healthy from DEPLOYMENT phase)
     if type wait_for_keycloak_admin_api_ready &>/dev/null; then
-        if ! wait_for_keycloak_admin_api_ready "dive-hub-keycloak" 120; then
+        if ! wait_for_keycloak_admin_api_ready "dive-hub-keycloak" 30; then
             log_error "Hub Keycloak admin API not ready - cannot proceed with federation"
             return 1
         fi
-        log_verbose "✓ Hub Keycloak admin API ready"
+        log_info "✓ Hub Keycloak admin API ready"
     else
         log_warn "wait_for_keycloak_admin_api_ready not available - skipping readiness check"
     fi
 
-    # Wait for Spoke Keycloak admin API
+    # Wait for Spoke Keycloak admin API (short timeout — already healthy from DEPLOYMENT phase)
     local spoke_kc_container="dive-spoke-${code_lower}-keycloak"
     if type wait_for_keycloak_admin_api_ready &>/dev/null; then
-        if ! wait_for_keycloak_admin_api_ready "$spoke_kc_container" 120; then
+        if ! wait_for_keycloak_admin_api_ready "$spoke_kc_container" 30; then
             log_error "Spoke Keycloak admin API not ready - cannot proceed with federation"
             return 1
         fi
-        log_verbose "✓ Spoke Keycloak admin API ready"
+        log_info "✓ Spoke Keycloak admin API ready"
     fi
 
     # ==========================================================================
@@ -550,7 +550,7 @@ spoke_federation_configure_upstream_idp() {
     # - issuer: External URL (must match what's in the tokens)
     # ==========================================================================
     local hub_public_url="https://localhost:8443"
-    local hub_internal_url="https://keycloak:8443"
+    local hub_internal_url="https://dive-hub-keycloak:8443"
 
     # ==========================================================================
     # GET CLIENT SECRET FROM HUB (CRITICAL FIX)
@@ -947,12 +947,17 @@ PYTHON_EOF
     local hub_tf_dir="${DIVE_ROOT}/terraform/hub"
     cd "$hub_tf_dir" || return 1
 
-    # Load Hub secrets
+    # Load Hub secrets from .env.hub (SSOT for hub deployment config)
+    # NOTE: Do NOT use spoke_secrets_load "USA" here — the spoke's Vault AppRole
+    # is scoped to its own instance (e.g., FRA) and cannot read USA secrets.
     export INSTANCE="usa"
-    if type spoke_secrets_load &>/dev/null; then
-        if ! spoke_secrets_load "USA" 2>/dev/null; then
-            log_verbose "Could not load USA secrets (may already be loaded)"
-        fi
+    if [ -f "${DIVE_ROOT}/.env.hub" ]; then
+        log_verbose "Loading USA secrets from Hub SSOT (.env.hub)"
+        set -a
+        source "${DIVE_ROOT}/.env.hub"
+        set +a
+    else
+        log_warn "Hub .env.hub not found — Hub Terraform may fail"
     fi
 
     # Export TF_VAR environment variables

@@ -47,7 +47,6 @@ const EMAIL_DOMAIN_COUNTRY_MAP: Record<string, string> = {
     // ============================================
     // United States - Government/Military
     // ============================================
-    'mil': 'USA',
     'army.mil': 'USA',
     'navy.mil': 'USA',
     'af.mil': 'USA',
@@ -202,6 +201,12 @@ const DEFAULT_COI_BY_COUNTRY: Record<string, string[]> = {
 };
 
 /**
+ * DIVE test domain pattern: <country>.dive25.mil
+ * Extract country code from test email domains
+ */
+const DIVE_TEST_DOMAIN_REGEX = /^([a-z]{3})\.dive25\.mil$/;
+
+/**
  * Infer countryOfAffiliation from email address
  * @param email User's email address
  * @returns ISO 3166-1 alpha-3 country code or 'USA' (default)
@@ -218,6 +223,12 @@ function inferCountryFromEmail(email: string): { country: string; confidence: 'h
     if (!domain) {
         logger.warn('enrichment', 'No domain in email for country inference', { email: emailLower });
         return { country: 'USA', confidence: 'low' };
+    }
+
+    // Check DIVE test domain pattern first: <country>.dive25.mil
+    const testMatch = domain.match(DIVE_TEST_DOMAIN_REGEX);
+    if (testMatch) {
+        return { country: testMatch[1].toUpperCase(), confidence: 'high' };
     }
 
     // Check exact match first
@@ -259,11 +270,11 @@ export async function enrichmentMiddleware(
             // User object already exists - use it directly
             const user = (req as any).user;
             payload = {
-                uniqueID: user.uniqueID,
+                uniqueID: user.uniqueID || user.sub || user.preferred_username,
                 clearance: user.clearance,
                 countryOfAffiliation: user.countryOfAffiliation,
                 acpCOI: user.acpCOI,
-                email: user.email || `${user.uniqueID}@local.example`
+                email: user.email || `${user.uniqueID || user.sub || 'unknown'}@local.example`
             };
 
             logger.debug('enrichment', 'Using existing authenticated user', {
@@ -353,6 +364,33 @@ export async function enrichmentMiddleware(
 
         let enriched = false;
         const enrichments: string[] = [];
+
+        // Enrichment 0: uniqueID missing (critical for OPA policy evaluation)
+        if (!payload.uniqueID || payload.uniqueID === '') {
+            // For federated users, Keycloak may not include custom uniqueID claim
+            // Fall back to standard OIDC claims from the original user object
+            const user = (req as any).user;
+            const fallbackId = user?.preferred_username || user?.sub || payload.email?.split('@')[0];
+            if (fallbackId) {
+                payload.uniqueID = fallbackId;
+                enriched = true;
+                enrichments.push(`uniqueID=${fallbackId} (fallback from token claims)`);
+
+                logger.info('enrichment', 'Enriched missing uniqueID from token claims', {
+                    requestId,
+                    uniqueID: payload.uniqueID,
+                    source: user?.preferred_username ? 'preferred_username' : user?.sub ? 'sub' : 'email'
+                });
+            } else {
+                logger.error('enrichment', 'Cannot resolve uniqueID: no fallback available', { requestId });
+                res.status(403).json({
+                    error: 'Forbidden',
+                    message: 'Missing required attribute: uniqueID',
+                    details: { reason: 'No uniqueID, preferred_username, sub, or email available in token' }
+                });
+                return;
+            }
+        }
 
         // Enrichment 1: countryOfAffiliation missing
         if (!payload.countryOfAffiliation || payload.countryOfAffiliation === '') {
@@ -530,6 +568,15 @@ export async function enrichmentMiddleware(
             // Attach enriched payload to request for downstream middleware
             (req as any).enrichedUser = payload;
             (req as any).wasEnriched = true;
+            // CRITICAL: Update req.user so authzMiddleware uses enriched attributes
+            if ((req as any).user) {
+                Object.assign((req as any).user, {
+                    uniqueID: payload.uniqueID,
+                    clearance: payload.clearance,
+                    countryOfAffiliation: payload.countryOfAffiliation,
+                    acpCOI: payload.acpCOI,
+                });
+            }
         } else {
             // No enrichment needed
             logger.debug('enrichment', 'No enrichment needed', {

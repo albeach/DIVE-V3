@@ -81,35 +81,24 @@ function buildReverseMappingsFromAPI(apiData: any): Map<string, Record<Clearance
 }
 
 /**
- * Fallback mappings if API is unavailable
- * Uses SHORT FORMS commonly displayed in UI (not full official names)
+ * Fallback mappings if API is unavailable.
+ * Returns NATO standard 5-level English hierarchy for any country.
+ * The backend API (/api/admin/clearance/mappings) provides the full
+ * national mappings from MongoDB SSOT — this is only used when the
+ * API is unreachable (e.g., SSR cold start, network error).
  */
+const ENGLISH_FALLBACK: Record<ClearanceLevel, string> = {
+  UNCLASSIFIED: 'UNCLASSIFIED',
+  RESTRICTED: 'RESTRICTED',
+  CONFIDENTIAL: 'CONFIDENTIAL',
+  SECRET: 'SECRET',
+  TOP_SECRET: 'TOP SECRET'
+};
+
 function getFallbackMappings(): Map<string, Record<ClearanceLevel, string>> {
-  const fallback = new Map<string, Record<ClearanceLevel, string>>();
-
-  // FRA (France) - Short forms used in UI
-  fallback.set('FRA', {
-    UNCLASSIFIED: 'NON CLASSIFIÉ',
-    RESTRICTED: 'RESTREINT',           // Short form of "DIFFUSION RESTREINTE"
-    CONFIDENTIAL: 'CONFIDENTIEL',       // Short form of "CONFIDENTIEL DÉFENSE"
-    SECRET: 'SECRET',                   // Short form of "SECRET DÉFENSE"
-    TOP_SECRET: 'TRÈS SECRET'           // Short form of "TRÈS SECRET DÉFENSE"
-  });
-
-  // USA, GBR, CAN use English
-  const english: Record<ClearanceLevel, string> = {
-    UNCLASSIFIED: 'UNCLASSIFIED',
-    RESTRICTED: 'RESTRICTED',
-    CONFIDENTIAL: 'CONFIDENTIAL',
-    SECRET: 'SECRET',
-    TOP_SECRET: 'TOP SECRET'
-  };
-
-  fallback.set('USA', english);
-  fallback.set('GBR', english);
-  fallback.set('CAN', english);
-
-  return fallback;
+  // Return empty map — getLocalizedClearance will use ENGLISH_FALLBACK
+  // for any country not in the map
+  return new Map();
 }
 
 /**
@@ -146,23 +135,17 @@ export function getLocalizedClearance(
   if (clearanceMappingsCache) {
     const countryMapping = clearanceMappingsCache.get(code);
     if (countryMapping) {
-      return countryMapping[normalizedValue] || normalizedValue;
+      return countryMapping[normalizedValue] || ENGLISH_FALLBACK[normalizedValue] || normalizedValue;
     }
   }
 
-  // If no cache yet, use fallback (mappings will load in background for next time)
+  // If no cache yet, trigger async fetch for next time (non-blocking)
   if (!clearanceMappingsCache) {
-    // Trigger async fetch for next time (non-blocking)
     fetchClearanceMappings().catch(console.error);
-
-    // Use fallback for this render
-    const fallback = getFallbackMappings();
-    const countryMapping = fallback.get(code);
-    return countryMapping?.[normalizedValue] || normalizedValue;
   }
 
-  // Country not found - return normalized value
-  return normalizedValue;
+  // Use English fallback until API data is available
+  return ENGLISH_FALLBACK[normalizedValue] || normalizedValue;
 }
 
 /**

@@ -1277,6 +1277,44 @@ _nuke_cleanup_state() {
     fi
 
     # =========================================================================
+    # VAULT-DERIVED CERTIFICATE CLEANUP
+    # =========================================================================
+    # When Vault is nuked (volumes destroyed), the PKI hierarchy is gone.
+    # All derived cert artifacts must be invalidated so the next deploy
+    # regenerates them from the new PKI. This is the SSOT principle:
+    # destroy the source → invalidate all derivatives.
+    if [ "$target_type" = "hub" ] || [ "$target_type" = "all" ]; then
+        log_verbose "  Cleaning Vault-derived certificate artifacts..."
+
+        # Vault PKI CA chain (issuance artifact written by _vault_pki_issue_cert)
+        rm -rf "${DIVE_ROOT}/certs/vault-pki" 2>/dev/null || true
+
+        # Combined CA trust bundle (derived from Vault PKI + mkcert)
+        rm -rf "${DIVE_ROOT}/certs/ca-bundle" 2>/dev/null || true
+
+        # Hub instance certs (issued by Vault PKI)
+        rm -rf "${DIVE_ROOT}/instances/hub/certs" 2>/dev/null || true
+
+        # Vault bootstrap CA (used for Vault node TLS before PKI exists)
+        rm -rf "${DIVE_ROOT}/certs/vault-bootstrap-ca" 2>/dev/null || true
+
+        # Vault token files (tokens reference destroyed Vault instance)
+        rm -f "${DIVE_ROOT}/.vault-token" 2>/dev/null || true
+        rm -f "${DIVE_ROOT}/.vault-init.txt" 2>/dev/null || true
+
+        log_verbose "    ✓ Vault-derived certs, CA bundle, and tokens cleaned"
+    fi
+
+    if [ "$target_type" = "spoke" ] && [ -n "$target_instance" ]; then
+        local cert_instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
+        local spoke_cert_dir="${DIVE_ROOT}/instances/${cert_instance_lower}/certs"
+        if [ -d "$spoke_cert_dir" ]; then
+            rm -rf "$spoke_cert_dir" 2>/dev/null || true
+            log_verbose "    ✓ Spoke ${target_instance^^} certs cleaned"
+        fi
+    fi
+
+    # =========================================================================
     # CLEAN SLATE: Additional cleanup for full reset (target_type=all)
     # =========================================================================
     if [ "$target_type" = "all" ]; then

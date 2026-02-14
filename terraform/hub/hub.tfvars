@@ -106,6 +106,16 @@ fra = {
     client_secret         = ""  # Loaded from GCP: dive-v3-federation-fra-usa
     disable_trust_manager = true
   }
+alb = {
+    instance_code         = "ALB"
+    instance_name         = "ALB Instance"
+    idp_url               = "https://localhost:8444"
+    idp_internal_url      = "https://dive-spoke-alb-keycloak:8443"
+    frontend_url          = "https://localhost:3001"
+    enabled               = true
+    client_secret         = ""  # Loaded from GCP: dive-v3-federation-alb-usa
+    disable_trust_manager = true
+  }
 }
 
 # =============================================================================

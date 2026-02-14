@@ -29,31 +29,15 @@ import {
     LucideIcon
 } from 'lucide-react';
 
-// National classification mappings (ACP-240 Section 4.3)
-export const NATIONAL_CLASSIFICATIONS: Record<string, Record<string, string>> = {
-    'USA': { 'UNCLASSIFIED': 'UNCLASSIFIED', 'RESTRICTED': 'RESTRICTED', 'CONFIDENTIAL': 'CONFIDENTIAL', 'SECRET': 'SECRET', 'TOP_SECRET': 'TOP SECRET' },
-    'GBR': { 'UNCLASSIFIED': 'OFFICIAL', 'RESTRICTED': 'OFFICIAL-SENSITIVE', 'CONFIDENTIAL': 'CONFIDENTIAL', 'SECRET': 'SECRET', 'TOP_SECRET': 'TOP SECRET' },
-    'FRA': {
-        'UNCLASSIFIED': 'NON CLASSIFIÉ',
-        'RESTRICTED': 'RESTREINT',
-        'CONFIDENTIAL': 'CONFIDENTIEL',
-        'SECRET': 'SECRET',
-        'TOP_SECRET': 'TRÈS SECRET'
-    },
-    'CAN': { 'UNCLASSIFIED': 'UNCLASSIFIED', 'RESTRICTED': 'PROTECTED A', 'CONFIDENTIAL': 'CONFIDENTIAL', 'SECRET': 'SECRET', 'TOP_SECRET': 'TOP SECRET' },
-    'DEU': { 'UNCLASSIFIED': 'OFFEN', 'RESTRICTED': 'VS-NFD', 'CONFIDENTIAL': 'VS-VERTRAULICH', 'SECRET': 'GEHEIM', 'TOP_SECRET': 'STRENG GEHEIM' },
-    'AUS': { 'UNCLASSIFIED': 'UNCLASSIFIED', 'RESTRICTED': 'RESTRICTED', 'CONFIDENTIAL': 'CONFIDENTIAL', 'SECRET': 'SECRET', 'TOP_SECRET': 'TOP SECRET' },
-    'NZL': { 'UNCLASSIFIED': 'UNCLASSIFIED', 'RESTRICTED': 'RESTRICTED', 'CONFIDENTIAL': 'CONFIDENTIAL', 'SECRET': 'SECRET', 'TOP_SECRET': 'TOP SECRET' },
-    'ESP': { 'UNCLASSIFIED': 'NO CLASIFICADO', 'RESTRICTED': 'DIFUSIÓN LIMITADA', 'CONFIDENTIAL': 'CONFIDENCIAL', 'SECRET': 'SECRETO', 'TOP_SECRET': 'ALTO SECRETO' },
-    'ITA': { 'UNCLASSIFIED': 'NON CLASSIFICATO', 'RESTRICTED': 'USO UFFICIALE', 'CONFIDENTIAL': 'CONFIDENZIALE', 'SECRET': 'SEGRETO', 'TOP_SECRET': 'SEGRETISSIMO' },
-    'POL': { 'UNCLASSIFIED': 'NIEJAWNE', 'RESTRICTED': 'UŻYTEK SŁUŻBOWY', 'CONFIDENTIAL': 'POUFNE', 'SECRET': 'TAJNE', 'TOP_SECRET': 'ŚCIŚLE TAJNE' }
-};
+// National classification lookups — delegates to clearance-localization.ts
+// which fetches from backend MongoDB SSOT via /api/admin/clearance/mappings
+import { getLocalizedClearance } from '@/utils/clearance-localization';
 
-// Helper to get national classification label
+// Helper to get national classification label (SSOT-backed)
 export function getNationalClearance(natoLevel: string | null | undefined, country: string | null | undefined): string {
     if (!natoLevel) return 'UNCLASS';
     if (!country) return natoLevel;
-    return NATIONAL_CLASSIFICATIONS[country]?.[natoLevel] || natoLevel;
+    return getLocalizedClearance(natoLevel, country);
 }
 
 // Helper to get COUNTRY name from code

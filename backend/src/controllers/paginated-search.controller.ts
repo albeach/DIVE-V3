@@ -82,6 +82,13 @@ interface IFacetItem {
   count: number;
 }
 
+interface IDocumentStats {
+  avgDocAgeDays: number | null;
+  newestDocDate: string | null;
+  oldestDocDate: string | null;
+  totalWithDates: number;
+}
+
 interface IPaginatedSearchResponse {
   results: any[];
   facets?: {
@@ -90,8 +97,9 @@ interface IPaginatedSearchResponse {
     cois: IFacetItem[];
     instances: IFacetItem[];
     encryptionStatus: IFacetItem[];
-    fileTypes: IFacetItem[];  // File type facets
+    fileTypes: IFacetItem[];
   };
+  stats?: IDocumentStats;
   pagination: {
     nextCursor: string | null;
     prevCursor: string | null;
@@ -617,6 +625,7 @@ export const paginatedSearchHandler = async (
     // Execute Facet Aggregation (if requested)
     // ========================================
     let facets: IPaginatedSearchResponse['facets'] | undefined;
+    let stats: IDocumentStats | undefined;
     let facetMs = 0;
 
     if (includeFacets) {
@@ -779,6 +788,37 @@ export const paginatedSearchHandler = async (
             ],
             totalCount: [
               { $count: 'count' }
+            ],
+            documentStats: [
+              // creationDate lives in ztdf.policy.securityLabel.creationDate (string) or top-level creationDate
+              {
+                $addFields: {
+                  _rawDate: { $ifNull: ['$ztdf.policy.securityLabel.creationDate', '$creationDate'] }
+                }
+              },
+              { $match: { _rawDate: { $exists: true, $ne: null } } },
+              {
+                $addFields: {
+                  _parsedDate: { $dateFromString: { dateString: '$_rawDate', onError: null } }
+                }
+              },
+              { $match: { _parsedDate: { $ne: null } } },
+              {
+                $group: {
+                  _id: null,
+                  avgAgeDays: {
+                    $avg: {
+                      $divide: [
+                        { $subtract: ['$$NOW', '$_parsedDate'] },
+                        86400000
+                      ]
+                    }
+                  },
+                  newestDoc: { $max: '$_parsedDate' },
+                  oldestDoc: { $min: '$_parsedDate' },
+                  count: { $sum: 1 }
+                }
+              }
             ]
           }
         }
@@ -816,6 +856,17 @@ export const paginatedSearchHandler = async (
             count: f.count
           })),
         };
+
+        // Extract document stats
+        const ds = fr.documentStats?.[0];
+        if (ds) {
+          stats = {
+            avgDocAgeDays: ds.avgAgeDays != null ? Math.round(ds.avgAgeDays * 10) / 10 : null,
+            newestDocDate: ds.newestDoc ? new Date(ds.newestDoc).toISOString() : null,
+            oldestDocDate: ds.oldestDoc ? new Date(ds.oldestDoc).toISOString() : null,
+            totalWithDates: ds.count || 0,
+          };
+        }
       }
     }
 
@@ -906,6 +957,7 @@ export const paginatedSearchHandler = async (
     const response: IPaginatedSearchResponse = {
       results: transformedResults,
       facets,
+      stats,
       pagination: {
         nextCursor,
         prevCursor: null, // Could implement backward pagination if needed

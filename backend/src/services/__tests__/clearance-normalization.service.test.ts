@@ -279,8 +279,8 @@ describe('ClearanceNormalizationService', () => {
             expect(hasCountryMappings('FRA')).toBe(true);
         });
 
-        it('should return false for USA (empty mappings)', () => {
-            expect(hasCountryMappings('USA')).toBe(false);
+        it('should return true for USA (has mappings via SSOT)', () => {
+            expect(hasCountryMappings('USA')).toBe(true);
         });
 
         it('should return false for unknown country', () => {
@@ -319,20 +319,20 @@ describe('ClearanceNormalizationService', () => {
             expect(getClearanceLevel(StandardClearance.UNCLASSIFIED)).toBe(0);
         });
 
-        it('should return 0.5 for RESTRICTED (separate level above UNCLASSIFIED)', () => {
-            expect(getClearanceLevel(StandardClearance.RESTRICTED)).toBe(0.5);
+        it('should return 1 for RESTRICTED (integer hierarchy)', () => {
+            expect(getClearanceLevel(StandardClearance.RESTRICTED)).toBe(1);
         });
 
-        it('should return 1 for CONFIDENTIAL', () => {
-            expect(getClearanceLevel(StandardClearance.CONFIDENTIAL)).toBe(1);
+        it('should return 2 for CONFIDENTIAL', () => {
+            expect(getClearanceLevel(StandardClearance.CONFIDENTIAL)).toBe(2);
         });
 
-        it('should return 2 for SECRET', () => {
-            expect(getClearanceLevel(StandardClearance.SECRET)).toBe(2);
+        it('should return 3 for SECRET', () => {
+            expect(getClearanceLevel(StandardClearance.SECRET)).toBe(3);
         });
 
-        it('should return 3 for TOP_SECRET', () => {
-            expect(getClearanceLevel(StandardClearance.TOP_SECRET)).toBe(3);
+        it('should return 4 for TOP_SECRET', () => {
+            expect(getClearanceLevel(StandardClearance.TOP_SECRET)).toBe(4);
         });
 
         it('should confirm RESTRICTED > UNCLASSIFIED', () => {

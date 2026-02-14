@@ -95,6 +95,24 @@ spoke_phase_configuration() {
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     # =============================================================================
+    # PRE-FLIGHT: Verify Hub is accessible before attempting configuration
+    # =============================================================================
+    log_step "Verifying Hub connectivity..."
+    local hub_backend_url=""
+    for url in "https://localhost:4000/api/health" "https://dive-hub-backend:4000/api/health"; do
+        if curl -sk --max-time 5 "$url" 2>/dev/null | grep -q "ok\|healthy"; then
+            hub_backend_url="$url"
+            break
+        fi
+    done
+    if [ -z "$hub_backend_url" ]; then
+        log_error "Hub backend not accessible — hub must be running before spoke deployment"
+        log_error "Fix: ./dive hub deploy"
+        return 1
+    fi
+    log_success "Hub accessible at $hub_backend_url"
+
+    # =============================================================================
     # PERFORMANCE TRACKING: Phase timing metrics
     # =============================================================================
     local PHASE_START=$(date +%s)

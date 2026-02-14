@@ -82,16 +82,21 @@ router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promi
             const db = client.db(getMongoDBName());
             const resourcesCollection = db.collection('resources');
 
-            // Get local document count
-            const localDocuments = await resourcesCollection.countDocuments();
+            // Get user's country for ABAC filtering
+            const userCountry = user?.countryOfAffiliation || 'USA';
+
+            // Get ABAC-filtered local document count
+            // Only count documents the user can actually access based on releasability
+            const localFilter: any = {
+                releasabilityTo: { $in: [userCountry] }
+            };
+            const localDocuments = await resourcesCollection.countDocuments(localFilter);
 
         // Get federated document count (accessible to this user)
         let federatedDocuments = 0;
         let federatedInstances: string[] = [];
 
         try {
-            const userCountry = user?.countryOfAffiliation || 'USA';
-
             // If this is a spoke instance, query the hub for federated stats
             // Otherwise, use the local registry to query other instances
             if (currentInstance !== 'USA') {
@@ -160,7 +165,14 @@ router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promi
             } else {
                 // HUB INSTANCE: Query all active spokes directly
                 const { hubSpokeRegistry } = await import('../services/hub-spoke-registry.service');
-                const activeSpokes = await hubSpokeRegistry.listActiveSpokes();
+                const allActiveSpokes = await hubSpokeRegistry.listActiveSpokes();
+
+                // CRITICAL FIX: Exclude self (hub) from federated queries to prevent double-counting
+                // Hub registers itself in federation_spokes for discovery purposes,
+                // but dashboard already counts local docs separately
+                const activeSpokes = allActiveSpokes.filter(
+                    s => s.instanceCode !== currentInstance
+                );
 
                 // Query each federated instance for accessible document count
                 const federatedCounts = await Promise.all(
@@ -858,9 +870,13 @@ router.get('/federated-stats', async (req, res) => {
         const { hubSpokeRegistry } = await import('../services/hub-spoke-registry.service');
         const activeSpokes = await hubSpokeRegistry.listActiveSpokes();
         const userCountry = releasableTo?.toString().toUpperCase() || 'USA';
+        const currentHubInstance = process.env.INSTANCE_CODE || 'USA';
 
-        // Filter out the requesting instance to avoid self-querying
-        const otherActiveSpokes = activeSpokes.filter(spoke => spoke.instanceCode !== from?.toString().toUpperCase());
+        // Filter out: 1) the requesting instance, 2) the hub itself (counted separately via direct MongoDB)
+        const otherActiveSpokes = activeSpokes.filter(spoke =>
+            spoke.instanceCode !== from?.toString().toUpperCase() &&
+            spoke.instanceCode !== currentHubInstance
+        );
 
         logger.info('HUB: Checking active spokes', {
             requestId,
@@ -906,15 +922,17 @@ router.get('/federated-stats', async (req, res) => {
             })
         );
 
-        // Also include the hub's (USA) documents in the federated total
+        // Also include the hub's (USA) documents accessible to requesting user
         let hubDocumentCount = 0;
         try {
             const client = await getDbClient();
             const db = client.db(getMongoDBName());
             const resourcesCollection = db.collection('resources');
 
-            // Count all hub documents (USA shares all documents with federated instances)
-            hubDocumentCount = await resourcesCollection.countDocuments();
+            // Count hub documents accessible to the requesting country
+            hubDocumentCount = await resourcesCollection.countDocuments({
+                releasabilityTo: { $in: [userCountry] }
+            });
         } catch (dbError) {
             logger.warn('Could not count hub documents for federated stats', {
                 requestId,
@@ -925,38 +943,25 @@ router.get('/federated-stats', async (req, res) => {
         const spokeDocuments = federatedCounts.reduce((sum, fc) => sum + fc.count, 0);
         const totalFederatedDocuments = spokeDocuments + hubDocumentCount;
 
-        const federatedInstances = [...otherActiveSpokes.map(s => s.instanceCode), 'USA'];
-
-        logger.info('Including hub documents in federated count', {
-            requestId,
-            userCountry,
-            hubDocumentCount,
-            spokeDocuments,
-            totalFederatedDocuments
-        });
-
-        // For testing: if no federated documents, simulate some data
-        const finalTotal = totalFederatedDocuments > 0 ? totalFederatedDocuments : 1247; // Mock data for testing
-        const finalInstances = totalFederatedDocuments > 0 ? federatedInstances : ['USA', 'GBR', 'DEU'];
+        const federatedInstances = [...otherActiveSpokes.map(s => s.instanceCode), currentHubInstance];
 
         logger.info('Federated stats completed', {
             requestId,
             from,
+            userCountry,
+            hubDocumentCount,
+            spokeDocuments,
+            totalFederatedDocuments,
             otherActiveSpokesCount: otherActiveSpokes.length,
-            totalFederatedDocuments: finalTotal,
-            federatedInstances: finalInstances,
+            federatedInstances,
             spokeCounts: federatedCounts,
-            usedMockData: otherActiveSpokes.length === 0
         });
 
         res.status(200).json({
             success: true,
-            totalFederatedDocuments: finalTotal,
-            federatedInstances: finalInstances,
-            details: totalFederatedDocuments > 0
-                ? [...federatedCounts, { instance: 'USA', count: hubDocumentCount }]
-                : [{ instance: 'MOCK', count: finalTotal }],
-            mockData: totalFederatedDocuments === 0
+            totalFederatedDocuments,
+            federatedInstances,
+            details: [...federatedCounts, { instance: currentHubInstance, count: hubDocumentCount }],
         });
 
     } catch (error) {
