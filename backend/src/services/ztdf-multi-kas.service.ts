@@ -190,7 +190,7 @@ export class ZTDFMultiKASService {
     ): IKAOSelectionResult {
         const userLevel = getClassificationLevel(userAttributes.clearance);
         if (process.env.NODE_ENV === 'test' && process.env.DEBUG_KAS === 'true') {
-            console.log('KAO selection debug', { userAttributes, totalKAOs: kaos.length });
+            logger.debug('KAO selection debug', { userAttributes, totalKAOs: kaos.length });
         }
 
         // Simplified deterministic selection for test environment (aligns with integration test expectations)
@@ -219,7 +219,7 @@ export class ZTDFMultiKASService {
                 fullEvaluation: true
             };
             if (process.env.NODE_ENV === 'test' && process.env.DEBUG_KAS === 'true') {
-                console.log('KAO selection result', result);
+                logger.debug('KAO selection result', { result });
             }
             return result;
         }

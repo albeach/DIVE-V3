@@ -115,10 +115,12 @@ const server = https.createServer(httpsOptions, app);
 server.listen(PORT, async () => {
   // Initialize Vault credentials BEFORE any services start
   await initializeVaultCredentials();
-  console.log(`✅ Backend HTTPS server running on https://localhost:${PORT}`);
-  console.log(`   Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`   SSL Certificates: ${certPath}`);
-  console.log(`   Docker internal: https://backend:${PORT}`);
+  logger.info('Backend HTTPS server running', {
+    url: `https://localhost:${PORT}`,
+    environment: process.env.NODE_ENV || 'development',
+    sslCertificates: certPath,
+    dockerInternal: `https://backend:${PORT}`,
+  });
 
   // ============================================
   // PHASE 1 FIX: Federation Cascade Bootstrap
@@ -230,9 +232,9 @@ server.listen(PORT, async () => {
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  console.log('SIGTERM signal received: closing HTTPS server');
+  logger.info('SIGTERM signal received: closing HTTPS server');
   server.close(() => {
-    console.log('HTTPS server closed');
+    logger.info('HTTPS server closed');
   });
 });
 
