@@ -10,7 +10,7 @@ import rego.v1
 default allow := false
 default decision := {
     "allow": false,
-    "reason": "Default deny",
+    "reason": "Access denied by default — authorization check not evaluated",
     "correlationId": "",
     "originRealm": "FRA",
     "evaluationDetails": {}
@@ -117,9 +117,9 @@ clearance_satisfied(subject_clearance, resource_classification) := result if {
         "pass": subject_level >= resource_level,
         "subjectLevel": subject_clearance,
         "requiredLevel": resource_classification,
-        "details": sprintf("Subject clearance %s %s resource classification %s", 
-            [subject_clearance, 
-             conditional_string(subject_level >= resource_level, "meets", "below"),
+        "details": sprintf("Your clearance (%s) %s the required %s classification",
+            [subject_clearance,
+             conditional_string(subject_level >= resource_level, "meets", "is below"),
              resource_classification])
     }
 }
@@ -132,7 +132,7 @@ releasability_satisfied(subject_country, resource_releasability) := result if {
         "pass": false,
         "subjectCountry": subject_country,
         "allowedCountries": resource_releasability,
-        "details": "Resource not releasable (empty releasability list)"
+        "details": "This resource is not approved for release to any country (empty releasability list)"
     }
 } else := result if {
     # Check if subject's country is in the list
@@ -142,9 +142,9 @@ releasability_satisfied(subject_country, resource_releasability) := result if {
         "pass": is_allowed,
         "subjectCountry": subject_country,
         "allowedCountries": resource_releasability,
-        "details": sprintf("Country %s %s in releasabilityTo list", 
-            [subject_country, 
-             conditional_string(is_allowed, "is", "not")])
+        "details": sprintf("Your country (%s) %s in the approved release list",
+            [subject_country,
+             conditional_string(is_allowed, "is included", "is not included")])
     }
 }
 
@@ -156,7 +156,7 @@ coi_satisfied(subject_coi, resource_coi) := result if {
         "pass": true,
         "subjectCOI": subject_coi,
         "requiredCOI": resource_coi,
-        "details": "No COI requirement on resource"
+        "details": "No community of interest requirement on this resource"
     }
 } else := result if {
     # Check for intersection between subject and resource COIs
@@ -168,10 +168,10 @@ coi_satisfied(subject_coi, resource_coi) := result if {
         "subjectCOI": subject_coi,
         "requiredCOI": resource_coi,
         "matchedCOI": intersection,
-        "details": sprintf("COI match: %s", 
-            [conditional_string(has_match, 
-                sprintf("found %v", [intersection]), 
-                "none found")])
+        "details": sprintf("Community match: %s",
+            [conditional_string(has_match,
+                sprintf("matched communities: %v", [intersection]),
+                "no matching communities found")])
     }
 }
 
@@ -182,14 +182,14 @@ build_reason(clearance_check, releasability_check, coi_check) := reason if {
     all_pass == coi_check.pass
     all_pass == true
     
-    reason := "All authorization requirements satisfied"
+    reason := "Access granted — all authorization requirements are satisfied"
 } else := reason if {
     failures := [check.details |
         check := [clearance_check, releasability_check, coi_check][_]
         not check.pass
     ]
     
-    reason := sprintf("Authorization denied: %s", [concat("; ", failures)])
+    reason := sprintf("Access denied: %s", [concat("; ", failures)])
 }
 
 # Audit obligations - using rule assignment for OPA compatibility
@@ -257,14 +257,14 @@ data_residency_check(resource) := result if {
         "pass": is_french_ip,
         "sourceIP": source_ip,
         "requirement": "FR-ONLY",
-        "details": sprintf("French data residency %s", 
-            [conditional_string(is_french_ip, "satisfied", "violated")])
+        "details": sprintf("French data residency requirement %s",
+            [conditional_string(is_french_ip, "is satisfied", "is violated — access must originate from French infrastructure")])
     }
 } else := {
     "pass": true,
     "sourceIP": object.get(input.context, "sourceIP", "unknown"),
     "requirement": "none",
-    "details": "No data residency requirement"
+    "details": "No data residency requirement applies to this resource"
 }
 
 # Check if IP is in French ranges (simplified CIDR check for demo)

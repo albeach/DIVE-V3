@@ -109,15 +109,16 @@ resource "keycloak_authentication_execution" "post_broker_webauthn_form" {
   ]
 }
 
-# ACR/AMR Config for Post-Broker WebAuthn (AAL3)
-# CRITICAL FIX (December 2025): Ensures ACR/AMR claims are set for federated users
+# ACR/AMR config for Post-Broker WebAuthn (AAL3) (FIXED 2026-02-14):
+# Uses "default.reference.value" (not "reference") per Keycloak 26.5 AmrUtils.java
 resource "keycloak_authentication_execution_config" "post_broker_webauthn_acr" {
   realm_id     = var.realm_id
   execution_id = keycloak_authentication_execution.post_broker_webauthn_form.id
   alias        = "Post Broker WebAuthn ACR AMR - ${local.flow_suffix}"
   config = {
-    acr_level = "3"   # AAL3 for hardware key
-    reference = "hwk" # AMR reference: hardware key per RFC 8176
+    acr_level                  = "3"     # AAL3 for hardware key
+    "default.reference.value"  = "hwk"   # AMR reference: hardware key (RFC-8176)
+    "default.reference.maxAge" = "36000" # 10 hours — matches SSO session timeout
   }
 }
 
@@ -170,15 +171,16 @@ resource "keycloak_authentication_execution" "post_broker_otp_form" {
   ]
 }
 
-# ACR/AMR Config for Post-Broker OTP (AAL2)
-# CRITICAL FIX (December 2025): Ensures ACR/AMR claims are set for federated users
+# ACR/AMR config for Post-Broker OTP (AAL2) (FIXED 2026-02-14):
+# Uses "default.reference.value" (not "reference") per Keycloak 26.5 AmrUtils.java
 resource "keycloak_authentication_execution_config" "post_broker_otp_acr" {
   realm_id     = var.realm_id
   execution_id = keycloak_authentication_execution.post_broker_otp_form.id
   alias        = "Post Broker OTP ACR AMR - ${local.flow_suffix}"
   config = {
-    acr_level = "1"   # AAL2 when OTP succeeds
-    reference = "otp" # AMR reference (RFC-8176 compliant)
+    acr_level                  = "2"     # AAL2 when OTP succeeds
+    "default.reference.value"  = "otp"   # AMR reference for OTP (RFC-8176)
+    "default.reference.maxAge" = "36000" # 10 hours — matches SSO session timeout
   }
 }
 

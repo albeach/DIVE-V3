@@ -46,6 +46,7 @@ base_input := {
 	},
 	"context": {
 		"currentTime": "2025-11-26T12:00:00Z",
+		"acr": "2",
 	},
 }
 
@@ -441,7 +442,7 @@ test_comprehensive_gov_all_checks_pass if {
 			"releasableToIndustry": false,
 		},
 		"action": {"operation": "read"},
-		"context": {"currentTime": "2025-11-26T12:00:00Z"},
+		"context": {"currentTime": "2025-11-26T12:00:00Z", "acr": "2"},
 	}
 	authorization.allow with input as test_input
 	details := authorization.evaluation_details with input as test_input
@@ -471,7 +472,7 @@ test_comprehensive_industry_blocked_despite_other_checks if {
 			"releasableToIndustry": false, # But gov-only
 		},
 		"action": {"operation": "read"},
-		"context": {"currentTime": "2025-11-26T12:00:00Z"},
+		"context": {"currentTime": "2025-11-26T12:00:00Z", "acr": "2"},
 	}
 	not authorization.allow with input as test_input
 	reason := authorization.reason with input as test_input

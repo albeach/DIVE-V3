@@ -30,7 +30,7 @@ test_federation_no_issuer_allowed if {
 			"classification": "SECRET",
 			"releasabilityTo": ["USA"],
 		},
-		"context": {"currentTime": "2025-12-03T12:00:00Z"},
+		"context": {"currentTime": "2025-12-03T12:00:00Z", "acr": "2"},
 	}
 	result == true
 }
@@ -81,10 +81,10 @@ test_decision_structure_complete if {
 			"classification": "SECRET",
 			"releasabilityTo": ["USA"],
 		},
-		"context": {"currentTime": "2025-12-03T12:00:00Z"},
+		"context": {"currentTime": "2025-12-03T12:00:00Z", "acr": "2"},
 	}
 	result.allow == true
-	result.reason == "Access granted - all conditions satisfied"
+	result.reason == "Access granted — all authorization conditions are satisfied"
 	is_array(result.obligations)
 	is_object(result.evaluation_details)
 }
@@ -105,7 +105,7 @@ test_decision_denial_structure if {
 			"classification": "TOP_SECRET",
 			"releasabilityTo": ["USA"],
 		},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result.allow == false
 	contains(result.reason, "clearance")
@@ -131,7 +131,7 @@ test_evaluation_details_checks if {
 			"classification": "SECRET",
 			"releasabilityTo": ["USA"],
 		},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result.checks.authenticated == true
 	result.checks.clearance_sufficient == true
@@ -155,7 +155,7 @@ test_evaluation_details_subject if {
 			"classification": "SECRET",
 			"releasabilityTo": ["USA"],
 		},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result.subject.uniqueID == "test@mil"
 	result.subject.clearance == "SECRET"
@@ -179,7 +179,7 @@ test_evaluation_details_resource if {
 			"releasabilityTo": ["USA"],
 			"encrypted": true,
 		},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result.resource.resourceId == "doc-001"
 	result.resource.classification == "SECRET"
@@ -202,7 +202,7 @@ test_evaluation_details_acp240_compliance if {
 			"classification": "SECRET",
 			"releasabilityTo": ["USA"],
 		},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result.acp240_compliance.fail_closed_enforcement == true
 	result.acp240_compliance.aal2_enforced == true
@@ -230,7 +230,7 @@ test_obligations_empty_unencrypted if {
 			"releasabilityTo": ["USA"],
 			"encrypted": false,
 		},
-		"context": {"currentTime": "2025-12-03T12:00:00Z"},
+		"context": {"currentTime": "2025-12-03T12:00:00Z", "acr": "2"},
 	}
 	count(result) == 0
 }
@@ -252,7 +252,7 @@ test_obligations_kas_encrypted if {
 			"releasabilityTo": ["USA"],
 			"encrypted": true,
 		},
-		"context": {"currentTime": "2025-12-03T12:00:00Z"},
+		"context": {"currentTime": "2025-12-03T12:00:00Z", "acr": "2"},
 	}
 	count(result) > 0
 }
@@ -277,9 +277,9 @@ test_reason_allow if {
 			"classification": "SECRET",
 			"releasabilityTo": ["USA"],
 		},
-		"context": {"currentTime": "2025-12-03T12:00:00Z"},
+		"context": {"currentTime": "2025-12-03T12:00:00Z", "acr": "2"},
 	}
-	result == "Access granted - all conditions satisfied"
+	result == "Access granted — all authorization conditions are satisfied"
 }
 
 test_reason_deny_authentication if {
@@ -290,9 +290,9 @@ test_reason_deny_authentication if {
 		},
 		"action": {},
 		"resource": {},
-		"context": {},
+		"context": {"acr": "2"},
 	}
-	contains(result, "authenticated")
+	contains(result, "Authentication required")
 }
 
 test_reason_deny_clearance if {
@@ -311,7 +311,7 @@ test_reason_deny_clearance if {
 			"classification": "TOP_SECRET",
 			"releasabilityTo": ["USA"],
 		},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	contains(result, "clearance")
 }
@@ -332,7 +332,7 @@ test_reason_deny_releasability if {
 			"classification": "SECRET",
 			"releasabilityTo": ["USA"],
 		},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	contains(result, "eleasab")
 }
@@ -346,7 +346,7 @@ test_is_not_authenticated_alias if {
 		"subject": {"authenticated": false},
 		"action": {},
 		"resource": {},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result != ""
 }
@@ -356,7 +356,7 @@ test_is_insufficient_clearance_alias if {
 		"subject": {"clearance": "UNCLASSIFIED"},
 		"action": {},
 		"resource": {"classification": "TOP_SECRET"},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result != ""
 }
@@ -366,7 +366,7 @@ test_is_not_releasable_to_country_alias if {
 		"subject": {"countryOfAffiliation": "DEU"},
 		"action": {},
 		"resource": {"releasabilityTo": ["USA"]},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result != ""
 }
@@ -378,7 +378,7 @@ test_is_industry_access_blocked_alias if {
 		"subject": {"organizationType": "INDUSTRY"},
 		"action": {},
 		"resource": {"releasableToIndustry": false},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result != ""
 }
@@ -392,7 +392,7 @@ test_federation_trusted_no_issuer if {
 		"subject": {},
 		"action": {},
 		"resource": {},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result == true
 }

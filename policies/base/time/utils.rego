@@ -124,7 +124,7 @@ seconds_until_available(creation_date, current_time) := remaining if {
 
 token_expired_msg(auth_time_unix, current_time) := msg if {
 	elapsed := seconds_since_auth(auth_time_unix, current_time)
-	msg := sprintf("Token expired: %d seconds since authentication (max %d)", [
+	msg := sprintf("Your session has expired — it has been %d seconds since authentication (maximum allowed: %d seconds). Please re-authenticate", [
 		elapsed,
 		token_lifetime_seconds,
 	])
@@ -132,7 +132,7 @@ token_expired_msg(auth_time_unix, current_time) := msg if {
 
 embargo_msg(creation_date, current_time) := msg if {
 	remaining := seconds_until_available(creation_date, current_time)
-	msg := sprintf("Resource under embargo until %s (available in %d seconds)", [
+	msg := sprintf("This resource is embargoed until %s and cannot be accessed yet (available in %d seconds)", [
 		creation_date,
 		remaining,
 	])

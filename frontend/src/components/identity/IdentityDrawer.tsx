@@ -13,6 +13,7 @@ interface IdentityUser {
   acpCOI?: string[] | null;
   acr?: string | null;
   amr?: string[] | null;
+  user_amr?: string[] | null;
   auth_time?: number | null;
 }
 
@@ -36,28 +37,18 @@ export function IdentityDrawer({ open, onClose, user }: { open: boolean; onClose
   const authTime: string | null = user?.auth_time ? new Date(user.auth_time * 1000).toLocaleString() : (decoded?.auth_time ? new Date(decoded.auth_time * 1000).toLocaleString() : null);
   const acr: string | null = user?.acr || decoded?.acr || null;
 
-  // Derive AMR from ACR since native Keycloak authenticators don't set AUTH_METHODS_REF session note
-  // Our authentication flow has a 1:1 mapping: ACR=1→pwd, ACR=2→pwd+otp, ACR=3→pwd+hwk
-  const deriveAmrFromAcr = (acrValue: string | null): string[] => {
-    if (!acrValue) return [];
-    const acrNum = parseInt(acrValue, 10);
-    if (acrNum >= 3) return ["pwd", "hwk"]; // TOP_SECRET: password + hardware key (WebAuthn)
-    if (acrNum >= 2) return ["pwd", "otp"]; // SECRET/CONFIDENTIAL: password + OTP
-    if (acrNum >= 1) return ["pwd"];         // UNCLASSIFIED: password only
-    return [];
-  };
-
-  // Get raw AMR from token, or derive from ACR if empty
-  const rawAmr = Array.isArray(user?.amr) && user!.amr.length > 0
-    ? user!.amr
-    : (Array.isArray(decoded?.amr) && decoded!.amr.length > 0 ? decoded!.amr : null);
-  const derivedAmr = rawAmr || deriveAmrFromAcr(acr);
-  const amr: string | null = derivedAmr.length > 0 ? derivedAmr.join(" + ") : null;
+  // AMR from token: prefer user_amr (federated) > amr (local) > decoded JWT
+  const amrArray: string[] = (() => {
+    const userAmr = Array.isArray(user?.user_amr) && user!.user_amr.length > 0 ? user!.user_amr : null;
+    const sessionAmr = Array.isArray(user?.amr) && user!.amr.length > 0 ? user!.amr : null;
+    const decodedAmr = Array.isArray(decoded?.amr) && decoded!.amr.length > 0 ? decoded!.amr : null;
+    return userAmr || sessionAmr || decodedAmr || [];
+  })();
+  const amr: string | null = amrArray.length > 0 ? amrArray.join(" + ") : null;
   const missingClaims: string[] = [];
   if (!authTime) missingClaims.push('auth_time');
   if (!acr) missingClaims.push('acr');
-  // AMR is derived from ACR if not present in token, so only mark as missing if derivation failed
-  if (!amr || amr === 'N/A') missingClaims.push('amr (derived)');
+  if (!amr) missingClaims.push('amr');
 
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true">
@@ -106,7 +97,7 @@ export function IdentityDrawer({ open, onClose, user }: { open: boolean; onClose
             )}
             <Claim label="auth_time" value={authTime || "N/A"} />
             <Claim label="acr (AAL)" value={acr?.toUpperCase() || "N/A"} />
-            <Claim label={rawAmr ? "amr" : "amr (derived)"} value={amr || "N/A"} />
+            <Claim label="amr" value={amr || "N/A"} />
           </div>
 
           {/* Privacy note */}

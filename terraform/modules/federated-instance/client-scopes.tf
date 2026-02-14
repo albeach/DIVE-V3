@@ -108,8 +108,9 @@ resource "keycloak_openid_client_scope" "acpCOI" {
 # REASON: The mapper for this scope outputs to "amr" claim, conflicting with
 # the native oidc-amr-mapper in main.tf (line 642).
 #
-# Native oidc-amr-mapper reads AUTH_METHODS_REF from session notes,
-# while this user-attribute mapper reads stale user.amr attribute.
+# Native oidc-amr-mapper reads AUTHENTICATORS_COMPLETED user session note
+# + "default.reference.value" from execution configs. This user-attribute
+# mapper reads stale user.amr attribute — hence removed.
 #
 # CORRECT APPROACH:
 # - Native oidc-amr-mapper handles "amr" claim (main.tf:642-656)
@@ -262,8 +263,8 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "acpCOI_mapper" {
 # DEPRECATED (Feb 2026): dive_amr_mapper - Removed
 # ============================================================================
 # REASON: Outputs to "amr" claim, conflicting with native oidc-amr-mapper
-# in main.tf (line 642). Native mapper reads AUTH_METHODS_REF from session,
-# while this reads stale user.amr attribute.
+# in main.tf (line 642). Native mapper reads AUTHENTICATORS_COMPLETED user
+# session note, while this reads stale user.amr attribute.
 #
 # Result: Session-based AMR overridden by stale user attribute, breaking MFA.
 #

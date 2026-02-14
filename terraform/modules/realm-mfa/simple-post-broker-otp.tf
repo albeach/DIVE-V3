@@ -48,16 +48,17 @@ resource "keycloak_authentication_execution" "simple_post_broker_otp_form" {
 # ============================================
 # ACR/AMR Config for Simple Post-Broker OTP (AAL2)
 # ============================================
-# CRITICAL FIX (December 2025):
-# Without this config, OTP authentication in post-broker flows
-# won't set ACR/AMR claims properly in the token.
+# ACR/AMR config for Simple Post-Broker OTP (AAL2) (FIXED 2026-02-14):
+# Uses "default.reference.value" (not "reference") per Keycloak 26.5 AmrUtils.java.
+# Without "default.reference.maxAge", AMR expires immediately (default=0).
 resource "keycloak_authentication_execution_config" "simple_post_broker_otp_acr" {
   realm_id     = var.realm_id
   execution_id = keycloak_authentication_execution.simple_post_broker_otp_form.id
   alias        = "Simple Post-Broker OTP ACR AMR - ${local.flow_suffix}"
   config = {
-    acr_level = "1"   # AAL2 when OTP succeeds
-    reference = "otp" # AMR reference (RFC-8176 compliant)
+    acr_level                  = "2"     # AAL2 when OTP succeeds
+    "default.reference.value"  = "otp"   # AMR reference for OTP (RFC-8176)
+    "default.reference.maxAge" = "36000" # 10 hours — matches SSO session timeout
   }
 }
 

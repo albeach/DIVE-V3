@@ -144,12 +144,12 @@ test_country_not_in_union if {
 
 test_mutual_exclusivity_us_only_nato if {
 	msg := coi.mutual_exclusivity_violation(["US-ONLY", "NATO"])
-	contains(msg, "Mutually exclusive")
+	contains(msg, "cannot be combined")
 }
 
 test_mutual_exclusivity_us_only_fvey if {
 	msg := coi.mutual_exclusivity_violation(["US-ONLY", "FVEY"])
-	contains(msg, "Mutually exclusive")
+	contains(msg, "cannot be combined")
 }
 
 test_no_mutual_exclusivity_valid_combo if {
@@ -162,7 +162,7 @@ test_no_mutual_exclusivity_valid_combo if {
 
 test_subset_superset_violation_any if {
 	msg := coi.subset_superset_violation(["CAN-US", "FVEY"], "ANY")
-	contains(msg, "Subset+superset")
+	contains(msg, "subset/superset")
 }
 
 test_no_subset_superset_all_mode if {

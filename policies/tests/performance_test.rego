@@ -39,7 +39,7 @@ test_batch_usa_users_varied_resources if {
             "classification": "SECRET",
             "releasabilityTo": ["USA"]
         },
-        "context": {"requestId": "batch-001", "currentTime": "2025-12-03T12:00:00Z"}
+        "context": {"requestId": "batch-001", "currentTime": "2025-12-03T12:00:00Z", "acr": "2"}
     }
     
     # User 2: CONFIDENTIAL access to CONFIDENTIAL resource
@@ -56,7 +56,7 @@ test_batch_usa_users_varied_resources if {
             "classification": "CONFIDENTIAL",
             "releasabilityTo": ["USA", "GBR"]
         },
-        "context": {"requestId": "batch-002", "currentTime": "2025-12-03T12:00:00Z"}
+        "context": {"requestId": "batch-002", "currentTime": "2025-12-03T12:00:00Z", "acr": "2"}
     }
 }
 
@@ -78,7 +78,7 @@ test_batch_coalition_users if {
             "releasabilityTo": ["USA", "GBR", "CAN", "AUS", "NZL"],
             "COI": ["FVEY"]
         },
-        "context": {"requestId": "batch-coalition-usa"}
+        "context": {"requestId": "batch-coalition-usa", "acr": "2"}
     }
     
     # GBR user accessing same FVEY resource
@@ -97,7 +97,7 @@ test_batch_coalition_users if {
             "releasabilityTo": ["USA", "GBR", "CAN", "AUS", "NZL"],
             "COI": ["FVEY"]
         },
-        "context": {"requestId": "batch-coalition-gbr"}
+        "context": {"requestId": "batch-coalition-gbr", "acr": "2"}
     }
 }
 
@@ -161,11 +161,11 @@ test_cache_repeated_access if {
     }
     
     # First access
-    authorization.allow with input as object.union(base_input, {"context": {"requestId": "cache-1"}})
+    authorization.allow with input as object.union(base_input, {"context": {"requestId": "cache-1", "acr": "2"}})
     # Second access (would be cached)
-    authorization.allow with input as object.union(base_input, {"context": {"requestId": "cache-2"}})
+    authorization.allow with input as object.union(base_input, {"context": {"requestId": "cache-2", "acr": "2"}})
     # Third access (would be cached)
-    authorization.allow with input as object.union(base_input, {"context": {"requestId": "cache-3"}})
+    authorization.allow with input as object.union(base_input, {"context": {"requestId": "cache-3", "acr": "2"}})
 }
 
 # Test same user accessing multiple resources
@@ -186,9 +186,10 @@ test_cache_user_session if {
             "resourceId": "session-doc-001",
             "classification": "SECRET",
             "releasabilityTo": ["USA", "GBR"]
-        }
+        },
+        "context": {"acr": "2"}
     }
-    
+
     # Access resource 2
     authorization.allow with input as {
         "subject": user,
@@ -197,9 +198,10 @@ test_cache_user_session if {
             "resourceId": "session-doc-002",
             "classification": "CONFIDENTIAL",
             "releasabilityTo": ["USA"]
-        }
+        },
+        "context": {"acr": "2"}
     }
-    
+
     # Access resource 3
     authorization.allow with input as {
         "subject": user,
@@ -208,7 +210,8 @@ test_cache_user_session if {
             "resourceId": "session-doc-003",
             "classification": "TOP_SECRET",
             "releasabilityTo": ["USA"]
-        }
+        },
+        "context": {"acr": "2"}
     }
 }
 
@@ -249,7 +252,8 @@ test_throughput_minimal_attributes if {
             "resourceId": "minimal-doc-001",
             "classification": "SECRET",
             "releasabilityTo": ["USA"]
-        }
+        },
+        "context": {"acr": "2"}
     }
 }
 
@@ -266,9 +270,10 @@ test_throughput_action_types if {
             "resourceId": "action-doc-001",
             "classification": "SECRET",
             "releasabilityTo": ["USA"]
-        }
+        },
+        "context": {"acr": "2"}
     }
-    
+
     # Read action
     authorization.allow with input as object.union(base, {"action": {"type": "read"}})
     
@@ -298,7 +303,8 @@ test_tenant_usa_isolation if {
         },
         "context": {
             "tenant": "USA",
-            "requestId": "tenant-usa-001"
+            "requestId": "tenant-usa-001",
+            "acr": "2"
         }
     }
 }
@@ -320,7 +326,8 @@ test_tenant_fra_isolation if {
         },
         "context": {
             "tenant": "FRA",
-            "requestId": "tenant-fra-001"
+            "requestId": "tenant-fra-001",
+            "acr": "2"
         }
     }
 }
@@ -342,7 +349,8 @@ test_tenant_gbr_isolation if {
         },
         "context": {
             "tenant": "GBR",
-            "requestId": "tenant-gbr-001"
+            "requestId": "tenant-gbr-001",
+            "acr": "2"
         }
     }
 }
@@ -364,7 +372,8 @@ test_tenant_deu_isolation if {
         },
         "context": {
             "tenant": "DEU",
-            "requestId": "tenant-deu-001"
+            "requestId": "tenant-deu-001",
+            "acr": "2"
         }
     }
 }
@@ -404,7 +413,8 @@ test_classification_confidential_perf if {
             "resourceId": "class-conf-001",
             "classification": "CONFIDENTIAL",
             "releasabilityTo": ["USA"]
-        }
+        },
+        "context": {"acr": "2"}
     }
 }
 
@@ -421,7 +431,8 @@ test_classification_secret_perf if {
             "resourceId": "class-secret-001",
             "classification": "SECRET",
             "releasabilityTo": ["USA"]
-        }
+        },
+        "context": {"acr": "2"}
     }
 }
 
@@ -438,7 +449,8 @@ test_classification_top_secret_perf if {
             "resourceId": "class-ts-001",
             "classification": "TOP_SECRET",
             "releasabilityTo": ["USA"]
-        }
+        },
+        "context": {"acr": "2"}
     }
 }
 
@@ -462,7 +474,8 @@ test_coi_fvey_access_perf if {
             "classification": "SECRET",
             "releasabilityTo": ["USA", "GBR", "CAN", "AUS", "NZL"],
             "COI": ["FVEY"]
-        }
+        },
+        "context": {"acr": "2"}
     }
 }
 
@@ -482,7 +495,8 @@ test_coi_nato_access_perf if {
             "classification": "SECRET",
             "releasabilityTo": ["USA", "GBR", "FRA", "DEU", "CAN", "ITA", "ESP", "NLD", "BEL", "NOR"],
             "COI": ["NATO-COSMIC"]
-        }
+        },
+        "context": {"acr": "2"}
     }
 }
 
@@ -502,7 +516,8 @@ test_coi_multiple_perf if {
             "classification": "SECRET",
             "releasabilityTo": ["USA"],
             "COI": ["FVEY"]
-        }
+        },
+        "context": {"acr": "2"}
     }
 }
 
@@ -527,7 +542,8 @@ test_edge_empty_coi_perf if {
             "classification": "SECRET",
             "releasabilityTo": ["USA"],
             "COI": []
-        }
+        },
+        "context": {"acr": "2"}
     }
 }
 
@@ -545,7 +561,8 @@ test_edge_large_releasability_perf if {
             "resourceId": "edge-large-001",
             "classification": "SECRET",
             "releasabilityTo": ["USA", "GBR", "CAN", "AUS", "NZL", "FRA", "DEU", "ITA", "ESP", "NLD", "BEL", "NOR", "DNK", "POL"]
-        }
+        },
+        "context": {"acr": "2"}
     }
 }
 
@@ -563,7 +580,8 @@ test_edge_nato_keyword_perf if {
             "resourceId": "edge-nato-001",
             "classification": "SECRET",
             "releasabilityTo": ["USA", "GBR", "FRA", "DEU", "CAN", "ITA", "ESP"]
-        }
+        },
+        "context": {"acr": "2"}
     }
 }
 
@@ -586,7 +604,8 @@ test_scale_stateless_decision if {
             "resourceId": "scale-stateless-001",
             "classification": "SECRET",
             "releasabilityTo": ["USA"]
-        }
+        },
+        "context": {"acr": "2"}
     }
 }
 
@@ -607,7 +626,8 @@ test_scale_traceable_decision if {
         },
         "context": {
             "requestId": "trace-123-456-789",
-            "sourceIP": "10.0.0.1"
+            "sourceIP": "10.0.0.1",
+            "acr": "2"
         }
     }
 }

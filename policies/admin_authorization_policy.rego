@@ -42,19 +42,19 @@ allowed_admin_operations := {
 # Check if subject is not authenticated
 is_not_authenticated := msg if {
 	not input.subject.authenticated
-	msg := "Subject is not authenticated"
+	msg := "You are not authenticated — you must be logged in to perform administrative operations"
 }
 
 # Check if subject does not have super_admin role
 is_not_super_admin := msg if {
 	not "super_admin" in input.subject.roles
-	msg := "Subject does not have super_admin role"
+	msg := "Access denied: This operation requires the super_admin role, which is not assigned to your account"
 }
 
 # Check if operation is not allowed
 is_invalid_operation := msg if {
 	not input.action.operation in allowed_admin_operations
-	msg := sprintf("Operation '%s' is not a valid admin operation", [input.action.operation])
+	msg := sprintf("Invalid operation: '%s' is not a recognized administrative operation", [input.action.operation])
 }
 
 # ============================================

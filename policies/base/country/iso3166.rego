@@ -151,12 +151,12 @@ is_dive_core(code) if {
 # ============================================
 
 invalid_country_msg(code) := msg if {
-	msg := sprintf("Invalid country code: %s (must be ISO 3166-1 alpha-3)", [code])
+	msg := sprintf("Invalid country code '%s'. Must be a valid 3-letter country code (e.g., USA, GBR, FRA)", [code])
 }
 
 invalid_countries_msg(codes) := msg if {
 	invalid := invalid_countries(codes)
 	count(invalid) > 0
-	msg := sprintf("Invalid country codes: %v", [invalid])
+	msg := sprintf("Invalid country codes found: %v. All codes must be valid 3-letter country codes", [invalid])
 }
 

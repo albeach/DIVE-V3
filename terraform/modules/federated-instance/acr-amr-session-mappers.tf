@@ -31,13 +31,11 @@
 # clients must include ACR/AMR in the tokens they issue.
 #
 # BEST PRACTICE ARCHITECTURE:
-# 1. Native oidc-amr-mapper (PRIMARY) - reads from AUTH_METHODS_REF session note
-#    The dive-amr-enrichment event listener sets this on every login.
-# 2. Native oidc-acr-mapper (PRIMARY) - reads from authentication context
+# 1. Native oidc-amr-mapper (PRIMARY) - reads AUTHENTICATORS_COMPLETED user session
+#    note, looks up "default.reference.value" from each execution config, enforces
+#    "default.reference.maxAge" time-based validity (see AmrUtils.java)
+# 2. Native oidc-acr-mapper (PRIMARY) - reads from AcrStore (separate mechanism)
 # 3. User-attribute mapper (FALLBACK) - for user_amr claim from stored attributes
-#
-# The native oidc-amr-mapper properly parses the AUTH_METHODS_REF JSON array
-# and outputs it as a proper JWT array claim.
 
 # ACR from native session mapper (PRIMARY)
 resource "keycloak_generic_protocol_mapper" "incoming_federation_acr" {
@@ -59,8 +57,8 @@ resource "keycloak_generic_protocol_mapper" "incoming_federation_acr" {
 }
 
 # AMR from native session mapper (PRIMARY)
-# Reads from AUTH_METHODS_REF session note set by dive-amr-enrichment event listener
-# This is the BEST PRACTICE approach - native mapper properly handles the JSON array
+# Reads AUTHENTICATORS_COMPLETED user session note → looks up "default.reference.value"
+# from execution configs → enforces "default.reference.maxAge" time-based validity
 resource "keycloak_generic_protocol_mapper" "incoming_federation_amr" {
   for_each = var.federation_partners
 

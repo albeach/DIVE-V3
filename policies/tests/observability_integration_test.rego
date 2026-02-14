@@ -64,7 +64,8 @@ test_latency_sensitive_decision if {
             "COI": ["NATO"]
         },
         "context": {
-            "currentTime": "2025-12-03T10:00:00Z"
+            "currentTime": "2025-12-03T10:00:00Z",
+            "acr": "2"
         }
     }
     result == true
@@ -96,7 +97,8 @@ test_cache_determinism_allow if {
             "COI": ["FVEY"]
         },
         "context": {
-            "currentTime": "2025-12-03T10:00:00Z"
+            "currentTime": "2025-12-03T10:00:00Z",
+            "acr": "2"
         }
     }
     result1 := authz.allow with input as test_input
@@ -125,7 +127,8 @@ test_cache_determinism_deny if {
             "COI": ["US-ONLY"]
         },
         "context": {
-            "currentTime": "2025-12-03T10:00:00Z"
+            "currentTime": "2025-12-03T10:00:00Z",
+            "acr": "2"
         }
     }
     result1 := authz.allow with input as test_input
@@ -161,6 +164,7 @@ test_federation_usa_to_fra if {
         },
         "context": {
             "currentTime": "2025-12-03T10:00:00Z",
+            "acr": "2",
             "federated": true,
             "sourceTenant": "USA",
             "targetTenant": "FRA"
@@ -192,6 +196,7 @@ test_federation_gbr_to_deu if {
         },
         "context": {
             "currentTime": "2025-12-03T10:00:00Z",
+            "acr": "2",
             "federated": true,
             "sourceTenant": "GBR",
             "targetTenant": "DEU"
@@ -222,7 +227,8 @@ test_federation_denied_releasability if {
             "COI": ["US-ONLY"]
         },
         "context": {
-            "currentTime": "2025-12-03T10:00:00Z"
+            "currentTime": "2025-12-03T10:00:00Z",
+            "acr": "2"
         }
     }
     result == false
@@ -255,7 +261,9 @@ test_acp240_compliant_decision if {
         },
         "context": {
             "currentTime": "2025-12-03T10:00:00Z",
-            "requestId": "acp240-test-001"
+            "requestId": "acp240-test-001",
+            "acr": "3",
+            "amr": ["pwd", "hwk"]
         }
     }
     result == true
@@ -284,7 +292,8 @@ test_embargo_audit_compliance if {
             "creationDate": "2026-01-01T00:00:00Z"
         },
         "context": {
-            "currentTime": "2025-12-03T10:00:00Z"
+            "currentTime": "2025-12-03T10:00:00Z",
+            "acr": "2"
         }
     }
     result == false
@@ -316,7 +325,8 @@ test_denial_reason_clearance if {
             "COI": []
         },
         "context": {
-            "currentTime": "2025-12-03T10:00:00Z"
+            "currentTime": "2025-12-03T10:00:00Z",
+            "acr": "2"
         }
     }
     result == false
@@ -344,7 +354,8 @@ test_denial_reason_releasability if {
             "COI": []
         },
         "context": {
-            "currentTime": "2025-12-03T10:00:00Z"
+            "currentTime": "2025-12-03T10:00:00Z",
+            "acr": "2"
         }
     }
     result == false
@@ -372,7 +383,8 @@ test_denial_reason_coi if {
             "COI": ["US-ONLY"]
         },
         "context": {
-            "currentTime": "2025-12-03T10:00:00Z"
+            "currentTime": "2025-12-03T10:00:00Z",
+            "acr": "2"
         }
     }
     result == false
@@ -395,7 +407,8 @@ test_denial_reason_auth if {
             "COI": []
         },
         "context": {
-            "currentTime": "2025-12-03T10:00:00Z"
+            "currentTime": "2025-12-03T10:00:00Z",
+            "acr": "2"
         }
     }
     result == false
@@ -428,7 +441,8 @@ test_kas_obligation_encrypted if {
             "encrypted": true
         },
         "context": {
-            "currentTime": "2025-12-03T10:00:00Z"
+            "currentTime": "2025-12-03T10:00:00Z",
+            "acr": "2"
         }
     }
     decision.allow == true
@@ -458,7 +472,8 @@ test_no_kas_obligation_unencrypted if {
             "encrypted": false
         },
         "context": {
-            "currentTime": "2025-12-03T10:00:00Z"
+            "currentTime": "2025-12-03T10:00:00Z",
+            "acr": "2"
         }
     }
     decision.allow == true
@@ -490,7 +505,8 @@ test_empty_resource_coi if {
             "COI": []
         },
         "context": {
-            "currentTime": "2025-12-03T10:00:00Z"
+            "currentTime": "2025-12-03T10:00:00Z",
+            "acr": "2"
         }
     }
     result == true
@@ -518,7 +534,8 @@ test_multiple_coi_memberships if {
             "COI": ["FVEY"]
         },
         "context": {
-            "currentTime": "2025-12-03T10:00:00Z"
+            "currentTime": "2025-12-03T10:00:00Z",
+            "acr": "2"
         }
     }
     result == true
@@ -546,7 +563,8 @@ test_classification_boundary if {
             "COI": []
         },
         "context": {
-            "currentTime": "2025-12-03T10:00:00Z"
+            "currentTime": "2025-12-03T10:00:00Z",
+            "acr": "2"
         }
     }
     result == true

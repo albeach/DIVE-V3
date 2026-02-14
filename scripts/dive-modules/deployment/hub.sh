@@ -2758,7 +2758,116 @@ hub_configure_keycloak() {
         }
     fi
 
+    # CRITICAL FIX (2026-02-14): Verify oidc-amr-mapper exists on broker client
+    # The Terraform keycloak_generic_protocol_mapper resource for oidc-amr-mapper
+    # has a provider bug where it records state but the mapper doesn't persist in
+    # Keycloak. This post-Terraform step verifies and creates it if missing.
+    _hub_ensure_amr_mapper_exists
+
     log_success "Keycloak configuration complete"
+    return 0
+}
+
+##
+# Ensure the oidc-amr-mapper exists on the broker client
+# Works around Terraform provider bug with keycloak_generic_protocol_mapper
+##
+_hub_ensure_amr_mapper_exists() {
+    local realm="dive-v3-broker-usa"
+    local client_id="dive-v3-broker-usa"
+    local keycloak_url="https://localhost:8443"
+    local admin_pass="${KC_ADMIN_PASSWORD_USA:-${KEYCLOAK_ADMIN_PASSWORD_USA:-}}"
+
+    if [ -z "$admin_pass" ]; then
+        log_warn "No admin password available — skipping AMR mapper verification"
+        return 0
+    fi
+
+    # Get admin token
+    local admin_token
+    admin_token=$(curl -sk "${keycloak_url}/realms/master/protocol/openid-connect/token" \
+        -d "client_id=admin-cli" \
+        -d "username=admin" \
+        -d "password=${admin_pass}" \
+        -d "grant_type=password" 2>/dev/null | jq -r '.access_token // empty')
+
+    if [ -z "$admin_token" ]; then
+        log_warn "Could not get admin token — skipping AMR mapper verification"
+        return 0
+    fi
+
+    # Get broker client UUID
+    local client_uuid
+    client_uuid=$(curl -sk "${keycloak_url}/admin/realms/${realm}/clients?clientId=${client_id}" \
+        -H "Authorization: Bearer $admin_token" 2>/dev/null | jq -r '.[0].id // empty')
+
+    if [ -z "$client_uuid" ]; then
+        log_warn "Could not find broker client UUID — skipping AMR mapper verification"
+        return 0
+    fi
+
+    # Check if oidc-amr-mapper exists
+    local amr_mapper_exists
+    amr_mapper_exists=$(curl -sk "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
+        -H "Authorization: Bearer $admin_token" 2>/dev/null | \
+        jq -r '[.[] | select(.protocolMapper == "oidc-amr-mapper")] | length')
+
+    if [ "${amr_mapper_exists:-0}" -gt 0 ]; then
+        log_verbose "oidc-amr-mapper already exists on broker client"
+        return 0
+    fi
+
+    log_warn "oidc-amr-mapper MISSING from broker client — creating via admin API"
+    log_warn "This is a workaround for a Terraform provider bug (keycloak_generic_protocol_mapper)"
+
+    # Create the missing oidc-amr-mapper
+    local mapper_json='{"name":"amr (native session)","protocol":"openid-connect","protocolMapper":"oidc-amr-mapper","config":{"id.token.claim":"true","access.token.claim":"true","introspection.token.claim":"true","userinfo.token.claim":"true","claim.name":"amr"}}'
+
+    local http_code
+    http_code=$(curl -sk -X POST "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
+        -H "Authorization: Bearer $admin_token" \
+        -H "Content-Type: application/json" \
+        -d "$mapper_json" \
+        -o /dev/null -w "%{http_code}")
+
+    if [ "$http_code" = "201" ]; then
+        log_success "Created oidc-amr-mapper on broker client"
+    else
+        log_warn "Failed to create oidc-amr-mapper (HTTP $http_code) — MFA enforcement may not work"
+    fi
+
+    # Also ensure amr (user attribute fallback) exists for federated users
+    local amr_fallback_exists
+    amr_fallback_exists=$(curl -sk "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
+        -H "Authorization: Bearer $admin_token" 2>/dev/null | \
+        jq -r '[.[] | select(.config["claim.name"] == "user_amr")] | length')
+
+    if [ "${amr_fallback_exists:-0}" -eq 0 ]; then
+        log_warn "user_amr fallback mapper missing — creating"
+        local fallback_json='{"name":"amr (user attribute fallback)","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","config":{"introspection.token.claim":"true","userinfo.token.claim":"true","multivalued":"true","user.attribute":"amr","id.token.claim":"true","access.token.claim":"true","claim.name":"user_amr","jsonType.label":"String"}}'
+        curl -sk -X POST "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
+            -H "Authorization: Bearer $admin_token" \
+            -H "Content-Type: application/json" \
+            -d "$fallback_json" \
+            -o /dev/null -w "" 2>/dev/null
+    fi
+
+    # Also ensure acr (user attribute fallback) exists
+    local acr_fallback_exists
+    acr_fallback_exists=$(curl -sk "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
+        -H "Authorization: Bearer $admin_token" 2>/dev/null | \
+        jq -r '[.[] | select(.config["claim.name"] == "user_acr")] | length')
+
+    if [ "${acr_fallback_exists:-0}" -eq 0 ]; then
+        log_warn "user_acr fallback mapper missing — creating"
+        local acr_fallback_json='{"name":"acr (user attribute fallback)","protocol":"openid-connect","protocolMapper":"oidc-usermodel-attribute-mapper","config":{"introspection.token.claim":"true","userinfo.token.claim":"true","multivalued":"false","user.attribute":"acr","id.token.claim":"true","access.token.claim":"true","claim.name":"user_acr","jsonType.label":"String"}}'
+        curl -sk -X POST "${keycloak_url}/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" \
+            -H "Authorization: Bearer $admin_token" \
+            -H "Content-Type: application/json" \
+            -d "$acr_fallback_json" \
+            -o /dev/null -w "" 2>/dev/null
+    fi
+
     return 0
 }
 

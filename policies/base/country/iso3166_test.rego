@@ -315,7 +315,7 @@ test_invalid_country_msg if {
 	msg := country.invalid_country_msg("XXX")
 	contains(msg, "XXX")
 	contains(msg, "Invalid country code")
-	contains(msg, "ISO 3166-1 alpha-3")
+	contains(msg, "3-letter country code")
 }
 
 test_invalid_countries_msg_single if {

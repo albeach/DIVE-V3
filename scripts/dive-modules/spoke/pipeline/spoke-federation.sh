@@ -631,7 +631,7 @@ spoke_federation_configure_upstream_idp() {
     "trustEmail": true,
     "storeToken": true,
     "linkOnly": false,
-    "firstBrokerLoginFlowAlias": "",
+    "firstBrokerLoginFlowAlias": "first broker login",
     "updateProfileFirstLoginMode": "off",
     "postBrokerLoginFlowAlias": "",
     "config": {
@@ -646,6 +646,7 @@ spoke_federation_configure_upstream_idp() {
         "validateSignature": "false",
         "useJwksUrl": "true",
         "clientAuthMethod": "client_secret_post",
+        "defaultScope": "openid profile email clearance countryOfAffiliation uniqueID acpCOI user_acr user_amr",
         "syncMode": "FORCE"
     }
 }
@@ -1183,7 +1184,7 @@ spoke_federation_create_bidirectional() {
         \"trustEmail\": true,
         \"storeToken\": true,
         \"linkOnly\": false,
-        \"firstBrokerLoginFlowAlias\": \"\",
+        \"firstBrokerLoginFlowAlias\": \"first broker login\",
         \"updateProfileFirstLoginMode\": \"off\",
         \"postBrokerLoginFlowAlias\": \"\",
         \"config\": {
@@ -1197,6 +1198,7 @@ spoke_federation_create_bidirectional() {
             \"validateSignature\": \"false\",
             \"useJwksUrl\": \"true\",
             \"jwksUrl\": \"${source_internal_url}/realms/${source_realm}/protocol/openid-connect/certs\",
+            \"defaultScope\": \"openid profile email clearance countryOfAffiliation uniqueID acpCOI user_acr user_amr\",
             \"syncMode\": \"FORCE\",
             \"clientAuthMethod\": \"client_secret_post\"
         }
