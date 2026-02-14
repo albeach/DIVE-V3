@@ -12,6 +12,7 @@
 
 import compression from 'compression';
 import { Request, Response, NextFunction } from 'express';
+import { logger } from '../utils/logger';
 
 /**
  * MongoDB Connection Pool Configuration
@@ -186,7 +187,7 @@ export function performanceHeadersMiddleware(req: Request, res: Response, next: 
 
         // Warn if response took longer than 1 second
         if (duration > 1000) {
-            console.warn(`Slow request: ${req.method} ${req.path} took ${duration}ms`);
+            logger.warn('Slow request detected', { method: req.method, path: req.path, durationMs: duration });
         }
 
         // Call original end method

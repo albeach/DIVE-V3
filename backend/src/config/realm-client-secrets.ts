@@ -13,6 +13,8 @@
  * each Keycloak realm has its own unique client secret for dive-v3-broker-client
  */
 
+import { logger } from '../utils/logger';
+
 interface RealmClientSecrets {
     [realmName: string]: string;
 }
@@ -50,7 +52,7 @@ export function getClientSecretForRealm(realmName: string): string {
   if (!secret) {
     // Phase 2.3: If realm not found, default to broker secret for federation
     // This handles cases where IdP brokers authenticate via broker realm
-    console.warn(`No specific client secret for realm ${realmName}, using broker secret`);
+    logger.warn('No specific client secret for realm, using broker secret', { realmName });
     return REALM_CLIENT_SECRETS['dive-v3-broker'] || process.env.KEYCLOAK_CLIENT_SECRET || '';
   }
   

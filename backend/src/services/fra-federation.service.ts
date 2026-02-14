@@ -9,6 +9,7 @@ import axios from 'axios';
 import { v4 as uuidv4 } from 'uuid';
 import { MongoClient, Db, Collection } from 'mongodb';
 import jwt from 'jsonwebtoken';
+import { logger } from '../utils/logger';
 
 interface FederationResource {
   resourceId: string;
@@ -102,7 +103,7 @@ export class FRAFederationService {
     const startTime = Date.now();
     const correlationId = `sync-fra-usa-${uuidv4()}`;
 
-    console.log(`[${correlationId}] Starting federation sync with USA`);
+    logger.info('Starting federation sync with USA', { correlationId });
 
     const result: SyncResult = {
       correlationId,
@@ -141,11 +142,11 @@ export class FRAFederationService {
       // Log sync result
       await this.syncLogCollection.insertOne(result);
 
-      console.log(`[${correlationId}] Sync complete: ${result.resourcesSynced} synced, ${result.resourcesUpdated} updated, ${result.resourcesConflicted} conflicts`);
+      logger.info('Sync complete', { correlationId, resourcesSynced: result.resourcesSynced, resourcesUpdated: result.resourcesUpdated, resourcesConflicted: result.resourcesConflicted });
 
       return result;
     } catch (error) {
-      console.error(`[${correlationId}] Sync error:`, error);
+      logger.error('Sync error', { correlationId, error: error instanceof Error ? error.message : String(error) });
       result.duration = Date.now() - startTime;
       throw error;
     }
@@ -185,7 +186,7 @@ export class FRAFederationService {
 
       return response.data;
     } catch (error) {
-      console.error(`Failed to push resources: ${error.message}`);
+      logger.error('Failed to push resources', { error: error instanceof Error ? error.message : String(error) });
       return { synced: 0, updated: 0, conflicted: 0, conflicts: [] };
     }
   }
@@ -214,7 +215,7 @@ export class FRAFederationService {
 
       return response.data.resources || [];
     } catch (error) {
-      console.error(`Failed to pull resources: ${error.message}`);
+      logger.error('Failed to pull resources', { error: error instanceof Error ? error.message : String(error) });
       return [];
     }
   }
@@ -231,7 +232,7 @@ export class FRAFederationService {
     for (const resource of resources) {
       // Check if FRA is in releasability list
       if (!resource.releasabilityTo.includes('FRA')) {
-        console.log(`Resource ${resource.resourceId} not releasable to FRA`);
+        logger.debug('Resource not releasable to FRA', { resourceId: resource.resourceId });
         continue;
       }
 
@@ -375,17 +376,16 @@ export class FRAFederationService {
    * Start automated sync scheduler
    */
   startSyncScheduler(): void {
-    console.log(`Starting federation sync scheduler (interval: ${this.SYNC_INTERVAL / 1000}s)`);
+    logger.info('Starting federation sync scheduler', { intervalSeconds: this.SYNC_INTERVAL / 1000 });
 
     setInterval(async () => {
       try {
         await this.syncWithUSA();
       } catch (error) {
         // Log with structured context for observability
-        console.error('Scheduled sync failed:', {
+        logger.error('Scheduled sync failed', {
           error: error instanceof Error ? error.message : 'Unknown error',
           stack: error instanceof Error ? error.stack : undefined,
-          timestamp: new Date().toISOString(),
           component: 'FRAFederationService',
           operation: 'scheduledSync'
         });
@@ -394,10 +394,9 @@ export class FRAFederationService {
 
     // Run initial sync with proper error handling
     this.syncWithUSA().catch((error) => {
-      console.error('Initial sync failed:', {
+      logger.error('Initial sync failed', {
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined,
-        timestamp: new Date().toISOString(),
         component: 'FRAFederationService',
         operation: 'initialSync'
       });

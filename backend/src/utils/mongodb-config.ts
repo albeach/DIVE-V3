@@ -18,6 +18,8 @@
  * ```
  */
 
+import { logger } from './logger';
+
 /**
  * Get MongoDB connection URL
  *
@@ -109,7 +111,8 @@ export function logMongoDBConnection(context: string): void {
     const url = getMongoDBUrl();
     const maskedUrl = url.replace(/\/\/.*:.*@/, '//***:***@');
 
-    console.log(`MongoDB connection (${context}):`, {
+    logger.info('MongoDB connection', {
+        context,
         url: maskedUrl,
         database: getMongoDBName(),
         environment: process.env.NODE_ENV

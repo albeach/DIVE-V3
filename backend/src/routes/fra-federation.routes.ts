@@ -7,16 +7,16 @@
 import { Router, Request, Response } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { FRAFederationService } from '../services/fra-federation.service';
+import { logger } from '../utils/logger';
 
 const router = Router();
 const federationService = new FRAFederationService();
 
 // Initialize service on startup with proper error handling
 federationService.initialize().catch((error) => {
-  console.error('FRA Federation Service initialization failed:', {
+  logger.error('FRA Federation Service initialization failed', {
     error: error instanceof Error ? error.message : 'Unknown error',
     stack: error instanceof Error ? error.stack : undefined,
-    timestamp: new Date().toISOString(),
     component: 'FRAFederationRoutes',
     operation: 'initialize',
     severity: 'HIGH',
@@ -46,7 +46,7 @@ router.get('/resources', async (req: Request, res: Response) => {
   const { releasableTo, excludeOrigin, classification, limit = 100 } = req.query;
 
   try {
-    console.log(`[${correlationId}] Fetching federation resources`);
+    logger.info('Fetching federation resources', { correlationId });
 
     // Get eligible resources
     let resources = await federationService.getFederationResources();
@@ -81,7 +81,7 @@ router.get('/resources', async (req: Request, res: Response) => {
       resources
     });
   } catch (error) {
-    console.error(`[${correlationId}] Error fetching resources:`, error);
+    logger.error('Error fetching federation resources', { correlationId, error });
     res.status(500).json({
       correlationId,
       error: 'Failed to fetch federation resources',
@@ -100,7 +100,7 @@ router.post('/resources', async (req: Request, res: Response): Promise<void> => 
   const { resources } = req.body;
 
   try {
-    console.log(`[${correlationId}] Receiving ${resources?.length || 0} resources from ${originRealm}`);
+    logger.info('Receiving federation resources', { correlationId, count: resources?.length || 0, originRealm });
 
     if (!resources || !Array.isArray(resources)) {
       res.status(400).json({
@@ -127,7 +127,7 @@ router.post('/resources', async (req: Request, res: Response): Promise<void> => 
       }
     });
   } catch (error) {
-    console.error(`[${correlationId}] Error importing resources:`, error);
+    logger.error('Error importing federation resources', { correlationId, error });
     res.status(500).json({
       correlationId,
       error: 'Failed to import resources',
@@ -145,7 +145,7 @@ router.post('/sync', async (req: Request, res: Response): Promise<void> => {
   const { targetRealm = 'USA' } = req.body;
 
   try {
-    console.log(`[${correlationId}] Triggering sync with ${targetRealm}`);
+    logger.info('Triggering federation sync', { correlationId, targetRealm });
 
     if (targetRealm !== 'USA') {
       res.status(400).json({
@@ -163,7 +163,7 @@ router.post('/sync', async (req: Request, res: Response): Promise<void> => {
       correlationId
     });
   } catch (error) {
-    console.error(`[${correlationId}] Sync error:`, error);
+    logger.error('Federation sync error', { correlationId, error });
     res.status(500).json({
       correlationId,
       error: 'Sync failed',
@@ -190,7 +190,7 @@ router.get('/sync/history', async (req: Request, res: Response) => {
       syncHistory: history
     });
   } catch (error) {
-    console.error(`[${correlationId}] Error fetching sync history:`, error);
+    logger.error('Error fetching sync history', { correlationId, error });
     res.status(500).json({
       correlationId,
       error: 'Failed to fetch sync history',
@@ -215,7 +215,7 @@ router.get('/conflicts', async (req: Request, res: Response) => {
       ...report
     });
   } catch (error) {
-    console.error(`[${correlationId}] Error fetching conflict report:`, error);
+    logger.error('Error fetching conflict report', { correlationId, error });
     res.status(500).json({
       correlationId,
       error: 'Failed to fetch conflict report',
@@ -234,7 +234,7 @@ router.post('/decisions', async (req: Request, res: Response): Promise<void> => 
   const { decisions } = req.body;
 
   try {
-    console.log(`[${correlationId}] Receiving ${decisions?.length || 0} decisions from ${originRealm}`);
+    logger.info('Receiving federation decisions', { correlationId, count: decisions?.length || 0, originRealm });
 
     if (!decisions || !Array.isArray(decisions)) {
       res.status(400).json({
@@ -263,7 +263,7 @@ router.post('/decisions', async (req: Request, res: Response): Promise<void> => 
       status: 'stored'
     });
   } catch (error) {
-    console.error(`[${correlationId}] Error storing decisions:`, error);
+    logger.error('Error storing federation decisions', { correlationId, error });
     res.status(500).json({
       correlationId,
       error: 'Failed to store decisions',
@@ -304,7 +304,7 @@ router.get('/status', async (req: Request, res: Response) => {
       ]
     });
   } catch (error) {
-    console.error(`[${correlationId}] Error fetching status:`, error);
+    logger.error('Error fetching federation status', { correlationId, error });
     res.status(500).json({
       correlationId,
       error: 'Failed to fetch status',
@@ -321,7 +321,7 @@ router.post('/scheduler/start', async (req: Request, res: Response) => {
   const correlationId = req.headers['x-correlation-id'] as string;
 
   try {
-    console.log(`[${correlationId}] Starting federation sync scheduler`);
+    logger.info('Starting federation sync scheduler', { correlationId });
 
     federationService.startSyncScheduler();
 
@@ -332,7 +332,7 @@ router.post('/scheduler/start', async (req: Request, res: Response) => {
       syncInterval: process.env.FEDERATION_SYNC_INTERVAL || '300'
     });
   } catch (error) {
-    console.error(`[${correlationId}] Error starting scheduler:`, error);
+    logger.error('Error starting federation sync scheduler', { correlationId, error });
     res.status(500).json({
       correlationId,
       error: 'Failed to start scheduler',
