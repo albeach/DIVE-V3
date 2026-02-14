@@ -26,6 +26,7 @@ test_allow_authenticated_usa_user if {
 		},
 		"context": {
 			"currentTime": "2025-12-03T10:00:00Z",
+			"acr": "2",
 		},
 	}
 }
@@ -43,7 +44,7 @@ test_deny_unauthenticated_user if {
 			"classification": "SECRET",
 			"releasabilityTo": ["USA"],
 		},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 }
 
@@ -60,7 +61,7 @@ test_deny_insufficient_clearance if {
 			"classification": "SECRET",
 			"releasabilityTo": ["USA"],
 		},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 }
 
@@ -77,7 +78,7 @@ test_deny_country_not_in_releasability if {
 			"classification": "SECRET",
 			"releasabilityTo": ["USA", "GBR"],
 		},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 }
 
@@ -98,10 +99,10 @@ test_decision_structure_allow if {
 			"classification": "SECRET",
 			"releasabilityTo": ["USA"],
 		},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	decision.allow == true
-	decision.reason == "Access granted - all conditions satisfied"
+	decision.reason == "Access granted — all authorization conditions are satisfied"
 	is_array(decision.obligations)
 }
 
@@ -118,10 +119,10 @@ test_decision_structure_deny if {
 			"classification": "SECRET",
 			"releasabilityTo": ["USA"],
 		},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	decision.allow == false
-	contains(decision.reason, "not authenticated")
+	contains(decision.reason, "Authentication required")
 }
 
 # ============================================
@@ -141,7 +142,7 @@ test_evaluation_details_structure if {
 			"classification": "SECRET",
 			"releasabilityTo": ["USA"],
 		},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	# Check checks section
 	details.checks.authenticated == true
@@ -171,7 +172,7 @@ test_allow_local_auth_no_issuer if {
 			"classification": "SECRET",
 			"releasabilityTo": ["USA"],
 		},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 }
 
@@ -191,6 +192,7 @@ test_allow_trusted_issuer if {
 		},
 		"context": {
 			"tenant": "USA",
+			"acr": "2",
 		},
 	}
 }
@@ -211,6 +213,7 @@ test_allow_federated_fra_user_on_usa_resource if {
 		},
 		"context": {
 			"tenant": "USA",
+			"acr": "2",
 		},
 	}
 }
@@ -229,7 +232,7 @@ test_deny_untrusted_issuer if {
 			"classification": "SECRET",
 			"releasabilityTo": ["USA"],
 		},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 }
 
@@ -251,7 +254,7 @@ test_kas_obligation_for_encrypted_resource if {
 			"releasabilityTo": ["USA"],
 			"encrypted": true,
 		},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	count(obligations) > 0
 	obligations[0].type == "kas"
@@ -271,7 +274,7 @@ test_no_obligation_for_unencrypted_resource if {
 			"releasabilityTo": ["USA"],
 			"encrypted": false,
 		},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	count(obligations) == 0
 }
@@ -297,7 +300,7 @@ test_cross_nation_equivalency_fra_to_usa if {
 			"originalCountry": "USA",
 			"releasabilityTo": ["USA", "FRA"],
 		},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 }
 
@@ -307,7 +310,7 @@ test_cross_nation_equivalency_fra_to_usa if {
 
 test_backward_compat_is_not_authenticated if {
 	msg := authz.is_not_authenticated with input.subject.authenticated as false
-	contains(msg, "not authenticated")
+	contains(msg, "Authentication required")
 }
 
 test_backward_compat_is_insufficient_clearance if {
@@ -320,6 +323,6 @@ test_backward_compat_is_insufficient_clearance if {
 			"classification": "SECRET",
 		},
 	}
-	contains(msg, "Insufficient clearance")
+	contains(msg, "Access denied")
 }
 

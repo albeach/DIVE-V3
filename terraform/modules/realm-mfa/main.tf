@@ -112,17 +112,19 @@ resource "keycloak_authentication_execution" "browser_forms" {
   priority          = 10 # Password form FIRST
 }
 
-# CRITICAL FIX (Jan 2, 2026): Add reference="pwd" for AMR claim population!
-# Keycloak's oidc-amr-mapper reads the "reference" config from each authenticator.
-# Without this, AMR will be empty because auth-username-password-form doesn't
-# automatically set a reference value (contrary to prior documentation assumptions).
+# AMR config for password execution (FIXED 2026-02-14):
+# Keycloak 26.5's AmrProtocolMapper reads AUTHENTICATORS_COMPLETED user session note,
+# then looks up each execution's config for "default.reference.value" (NOT "reference").
+# Without "default.reference.maxAge", AMR expires immediately (default=0).
+# See: AmrUtils.java, AmrProtocolMapper.java in Keycloak source.
 resource "keycloak_authentication_execution_config" "browser_password_acr" {
   realm_id     = var.realm_id
   execution_id = keycloak_authentication_execution.browser_forms.id
   alias        = "Password ACR AMR - ${local.flow_suffix}"
   config = {
-    acr_level = "1"   # AAL1 for password-only authentication
-    reference = "pwd" # AMR reference for password (RFC-8176 compliant)
+    acr_level                  = "1"     # AAL1 for password-only authentication
+    "default.reference.value"  = "pwd"   # AMR reference for password (RFC-8176)
+    "default.reference.maxAge" = "36000" # 10 hours — matches SSO session timeout
   }
 }
 
@@ -203,15 +205,16 @@ resource "keycloak_authentication_execution" "browser_webauthn_form" {
   ]
 }
 
-# Configure ACR and AMR for WebAuthn (AAL3) - CRITICAL FIX Jan 2026
-# This was missing! Without this config, WebAuthn wouldn't set ACR level properly
+# ACR/AMR config for WebAuthn execution (FIXED 2026-02-14):
+# Uses "default.reference.value" (not "reference") per Keycloak 26.5 AmrUtils.java
 resource "keycloak_authentication_execution_config" "browser_webauthn_acr" {
   realm_id     = var.realm_id
   execution_id = keycloak_authentication_execution.browser_webauthn_form.id
   alias        = "WebAuthn ACR AMR - ${local.flow_suffix}"
   config = {
-    acr_level = "3"   # AAL3 for TOP_SECRET + WebAuthn
-    reference = "hwk" # AMR reference for hardware key (RFC-8176 compliant)
+    acr_level                  = "3"     # AAL3 for TOP_SECRET + WebAuthn
+    "default.reference.value"  = "hwk"   # AMR reference for hardware key (RFC-8176)
+    "default.reference.maxAge" = "36000" # 10 hours — matches SSO session timeout
   }
 }
 
@@ -320,14 +323,16 @@ resource "keycloak_authentication_execution" "browser_otp_form_existing" {
   depends_on = [keycloak_authentication_execution.browser_condition_user_configured]
 }
 
-# Configure ACR and AMR for OTP (AAL2)
+# ACR/AMR config for existing OTP execution (FIXED 2026-02-14):
+# Uses "default.reference.value" (not "reference") per Keycloak 26.5 AmrUtils.java
 resource "keycloak_authentication_execution_config" "browser_otp_existing_acr" {
   realm_id     = var.realm_id
   execution_id = keycloak_authentication_execution.browser_otp_form_existing.id
   alias        = "OTP Existing ACR AMR - ${local.flow_suffix}"
   config = {
-    acr_level = "2"   # FIXED: AAL2 = acr level 2 (was incorrectly set to 1)
-    reference = "otp" # AMR reference (RFC-8176 compliant)
+    acr_level                  = "2"     # AAL2 for CONFIDENTIAL/SECRET + OTP
+    "default.reference.value"  = "otp"   # AMR reference for OTP (RFC-8176)
+    "default.reference.maxAge" = "36000" # 10 hours — matches SSO session timeout
   }
 }
 
@@ -384,14 +389,16 @@ resource "keycloak_authentication_execution" "browser_otp_form_enrollment" {
   ]
 }
 
-# Configure ACR and AMR for OTP enrollment (AAL2)
+# ACR/AMR config for OTP enrollment execution (FIXED 2026-02-14):
+# Uses "default.reference.value" (not "reference") per Keycloak 26.5 AmrUtils.java
 resource "keycloak_authentication_execution_config" "browser_otp_enrollment_acr" {
   realm_id     = var.realm_id
   execution_id = keycloak_authentication_execution.browser_otp_form_enrollment.id
   alias        = "OTP Enrollment ACR AMR - ${local.flow_suffix}"
   config = {
-    acr_level = "2"   # FIXED: AAL2 = acr level 2 (was incorrectly set to 1)
-    reference = "otp" # AMR reference (RFC-8176 compliant)
+    acr_level                  = "2"     # AAL2 for OTP enrollment
+    "default.reference.value"  = "otp"   # AMR reference for OTP (RFC-8176)
+    "default.reference.maxAge" = "36000" # 10 hours — matches SSO session timeout
   }
 }
 

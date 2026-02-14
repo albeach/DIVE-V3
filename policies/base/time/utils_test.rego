@@ -182,7 +182,7 @@ test_token_expired_msg if {
 	auth_time := 1764763200
 	current := "2025-12-03T12:30:00Z"  # 30 minutes later
 	msg := time.token_expired_msg(auth_time, current)
-	contains(msg, "Token expired")
+	contains(msg, "session has expired")
 	contains(msg, "seconds since authentication")
 }
 
@@ -190,7 +190,7 @@ test_embargo_msg if {
 	creation := "2025-12-03T13:00:00Z"
 	current := "2025-12-03T12:00:00Z"
 	msg := time.embargo_msg(creation, current)
-	contains(msg, "Resource under embargo")
+	contains(msg, "embargoed")
 	contains(msg, "available in")
 }
 

@@ -19,7 +19,7 @@ import rego.v1
 
 default allow := false
 
-default decision_reason := "Authorization check not evaluated"
+default decision_reason := "Authorization check has not been evaluated"
 
 # ============================================
 # Main Authorization Rule
@@ -44,7 +44,7 @@ allow if {
 # Authentication Check
 is_not_authenticated := msg if {
 	not input.subject.authenticated
-	msg := "Subject is not authenticated"
+	msg := "Authentication required — you must be logged in to access this resource"
 }
 
 # AAL Enforcement (ADatP-5663 §5.1.2, NIST SP 800-63B)
@@ -54,7 +54,7 @@ is_insufficient_aal := msg if {
 	required_aal := get_required_aal(input.resource.classification)
 	user_aal := parse_aal(input.context.acr)
 	user_aal < required_aal
-	msg := sprintf("Insufficient AAL: user AAL%v < required AAL%v for %s", [user_aal, required_aal, input.resource.classification])
+	msg := sprintf("Stronger authentication required: Your assurance level (AAL%v) is below the required level (AAL%v) for %s-classified resources", [user_aal, required_aal, input.resource.classification])
 }
 
 # AAL mapping function
@@ -75,7 +75,7 @@ is_token_expired := msg if {
 	auth_time_unix := input.subject.auth_time
 	lifetime_seconds := current_time_unix - auth_time_unix
 	lifetime_seconds > 900  # 15 minutes (ADatP-5663 token lifetime)
-	msg := sprintf("Token expired: %v seconds since authentication (max 900)", [lifetime_seconds])
+	msg := sprintf("Your session has expired — it has been %v seconds since authentication (maximum allowed: 900 seconds). Please re-authenticate", [lifetime_seconds])
 }
 
 # Helper: Convert ISO 8601 to Unix seconds
@@ -105,7 +105,7 @@ trusted_issuers := {
 is_issuer_not_trusted := msg if {
 	issuer := input.subject.issuer
 	not issuer in trusted_issuers
-	msg := sprintf("Issuer %s not in trusted federation", [issuer])
+	msg := sprintf("Access denied: Your identity provider (%s) is not in the trusted federation", [issuer])
 }
 
 # MFA Verification (ADatP-5663 §5.1.2)
@@ -117,7 +117,7 @@ is_mfa_not_verified := msg if {
 	amr := input.context.amr
 	# AAL2 requires at least 2 factors
 	count(amr) < 2
-	msg := sprintf("AAL2 claimed but only %v auth factors provided", [count(amr)])
+	msg := sprintf("Multi-factor authentication verification failed: AAL2 requires at least 2 authentication factors, but only %v were provided", [count(amr)])
 }
 
 is_mfa_not_verified := msg if {
@@ -129,7 +129,7 @@ is_mfa_not_verified := msg if {
 	not "otp" in amr
 	not "hwtoken" in amr
 	not "sms" in amr
-	msg := "AAL2 claimed but no MFA factor (otp/hwtoken/sms) in amr"
+	msg := "Multi-factor authentication verification failed: AAL2 requires a second factor (authenticator app, security key, or SMS) but none was detected"
 }
 
 # ============================================
@@ -150,24 +150,24 @@ is_insufficient_clearance := msg if {
 	user_level := clearance_map[input.subject.clearance]
 	resource_level := clearance_map[input.resource.classification]
 	user_level < resource_level
-	msg := sprintf("Insufficient clearance: %s < %s", [input.subject.clearance, input.resource.classification])
+	msg := sprintf("Access denied: Your clearance (%s) is below the required %s classification for this resource", [input.subject.clearance, input.resource.classification])
 }
 
 is_insufficient_clearance := msg if {
 	not input.subject.clearance
-	msg := "Missing clearance attribute"
+	msg := "Your account is missing a security clearance level. Contact your administrator"
 }
 
 # Releasability check
 is_not_releasable_to_country := msg if {
 	count(input.resource.releasabilityTo) == 0
-	msg := "Resource has empty releasabilityTo (denies all)"
+	msg := "This resource is not approved for release to any country"
 }
 
 is_not_releasable_to_country := msg if {
 	count(input.resource.releasabilityTo) > 0
 	not input.subject.countryOfAffiliation in input.resource.releasabilityTo
-	msg := sprintf("Country %s not in releasabilityTo: %v", [input.subject.countryOfAffiliation, input.resource.releasabilityTo])
+	msg := sprintf("This resource is not releasable to your country (%s). Approved countries: %v", [input.subject.countryOfAffiliation, input.resource.releasabilityTo])
 }
 
 # COI check
@@ -177,7 +177,7 @@ is_coi_violation := msg if {
 	resource_coi := {c | some c in input.resource.COI}
 	intersection := user_coi & resource_coi
 	count(intersection) == 0
-	msg := sprintf("No COI intersection: user %v, resource %v", [input.subject.acpCOI, input.resource.COI])
+	msg := sprintf("Community of Interest mismatch: None of your communities (%v) match the required communities (%v)", [input.subject.acpCOI, input.resource.COI])
 }
 
 # ============================================
@@ -305,7 +305,7 @@ decision := d if {
 	}
 }
 
-decision_reason := "All federation and ABAC conditions satisfied" if {
+decision_reason := "Access granted — all federation and authorization conditions are satisfied" if {
 	allow
 }
 

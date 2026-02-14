@@ -182,7 +182,7 @@ mutual_exclusivity_violation(cois) := msg if {
 	some pair in mutually_exclusive_cois
 	pair[0] in cois
 	pair[1] in cois
-	msg := sprintf("Mutually exclusive COIs: %s and %s cannot be combined", [pair[0], pair[1]])
+	msg := sprintf("Invalid resource marking: %s and %s communities cannot be combined as they are mutually exclusive", [pair[0], pair[1]])
 }
 
 # Check for subset/superset with ANY operator
@@ -191,7 +191,7 @@ subset_superset_violation(cois, operator) := msg if {
 	some pair in subset_superset_pairs
 	pair[0] in cois
 	pair[1] in cois
-	msg := sprintf("Subset+superset COIs %v invalid with ANY semantics", [pair])
+	msg := sprintf("Invalid resource marking: %v are subset/superset communities — using both with ANY operator would unintentionally widen access", [pair])
 }
 
 # ============================================
@@ -199,7 +199,7 @@ subset_superset_violation(cois, operator) := msg if {
 # ============================================
 
 coi_access_denied_msg(user_cois, resource_cois, operator) := msg if {
-	msg := sprintf("COI access denied: user COIs %v do not satisfy resource COIs %v (operator: %s)", [
+	msg := sprintf("Community of Interest access denied: Your memberships %v do not satisfy the required communities %v (matching mode: %s)", [
 		user_cois,
 		resource_cois,
 		operator,
@@ -207,6 +207,6 @@ coi_access_denied_msg(user_cois, resource_cois, operator) := msg if {
 }
 
 unknown_coi_msg(coi) := msg if {
-	msg := sprintf("Unknown COI: %s", [coi])
+	msg := sprintf("Unknown COI: '%s' is not a recognized Community of Interest", [coi])
 }
 

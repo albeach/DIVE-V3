@@ -38,7 +38,7 @@ test_v1_allow_basic if {
 			"releasabilityTo": ["USA"],
 			"COI": [],
 		},
-		"context": {"currentTime": "2025-12-03T12:00:00Z"},
+		"context": {"currentTime": "2025-12-03T12:00:00Z", "acr": "2"},
 	}
 	result == true
 }
@@ -57,7 +57,7 @@ test_v1_deny_unauthenticated if {
 			"classification": "SECRET",
 			"releasabilityTo": ["USA"],
 		},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result == false
 }
@@ -82,10 +82,10 @@ test_v1_decision_structure if {
 			"classification": "SECRET",
 			"releasabilityTo": ["USA"],
 		},
-		"context": {"currentTime": "2025-12-03T12:00:00Z"},
+		"context": {"currentTime": "2025-12-03T12:00:00Z", "acr": "2"},
 	}
 	result.allow == true
-	result.reason == "Access granted - all conditions satisfied"
+	result.reason == "Access granted — all authorization conditions are satisfied"
 }
 
 test_v1_decision_denial_reason if {
@@ -104,7 +104,7 @@ test_v1_decision_denial_reason if {
 			"classification": "TOP_SECRET",
 			"releasabilityTo": ["USA"],
 		},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result.allow == false
 	contains(result.reason, "clearance")
@@ -130,9 +130,9 @@ test_v1_reason_allow if {
 			"classification": "SECRET",
 			"releasabilityTo": ["USA"],
 		},
-		"context": {"currentTime": "2025-12-03T12:00:00Z"},
+		"context": {"currentTime": "2025-12-03T12:00:00Z", "acr": "2"},
 	}
-	result == "Access granted - all conditions satisfied"
+	result == "Access granted — all authorization conditions are satisfied"
 }
 
 # ============================================
@@ -156,7 +156,7 @@ test_v1_obligations_empty_unencrypted if {
 			"releasabilityTo": ["USA"],
 			"encrypted": false,
 		},
-		"context": {"currentTime": "2025-12-03T12:00:00Z"},
+		"context": {"currentTime": "2025-12-03T12:00:00Z", "acr": "2"},
 	}
 	count(result) == 0
 }
@@ -178,7 +178,7 @@ test_v1_obligations_kas_encrypted if {
 			"releasabilityTo": ["USA"],
 			"encrypted": true,
 		},
-		"context": {"currentTime": "2025-12-03T12:00:00Z"},
+		"context": {"currentTime": "2025-12-03T12:00:00Z", "acr": "2"},
 	}
 	count(result) > 0
 }
@@ -203,7 +203,7 @@ test_v1_evaluation_details if {
 			"classification": "SECRET",
 			"releasabilityTo": ["USA"],
 		},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result.checks.authenticated == true
 	result.checks.clearance_sufficient == true
@@ -219,7 +219,7 @@ test_v1_is_not_authenticated_exposed if {
 		"subject": {"authenticated": false},
 		"action": {},
 		"resource": {},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result != ""
 }
@@ -229,7 +229,7 @@ test_v1_is_insufficient_clearance_exposed if {
 		"subject": {"clearance": "UNCLASSIFIED"},
 		"action": {},
 		"resource": {"classification": "TOP_SECRET"},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result != ""
 }
@@ -239,7 +239,7 @@ test_v1_is_not_releasable_to_country_exposed if {
 		"subject": {"countryOfAffiliation": "FRA"},
 		"action": {},
 		"resource": {"releasabilityTo": ["USA"]},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result != ""
 }
@@ -255,7 +255,7 @@ test_v1_check_authenticated_helper if {
 		"subject": {"authenticated": true},
 		"action": {},
 		"resource": {},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result == true
 }
@@ -265,7 +265,7 @@ test_v1_check_clearance_sufficient_helper if {
 		"subject": {"clearance": "TOP_SECRET"},
 		"action": {},
 		"resource": {"classification": "SECRET"},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result == true
 }
@@ -275,7 +275,7 @@ test_v1_check_country_releasable_helper if {
 		"subject": {"countryOfAffiliation": "USA"},
 		"action": {},
 		"resource": {"releasabilityTo": ["USA", "GBR"]},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result == true
 }
@@ -285,7 +285,7 @@ test_v1_check_coi_satisfied_helper if {
 		"subject": {"acpCOI": ["FVEY"]},
 		"action": {},
 		"resource": {"COI": ["FVEY"]},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result == true
 }
@@ -295,7 +295,7 @@ test_v1_check_embargo_passed_helper if {
 		"subject": {},
 		"action": {},
 		"resource": {},
-		"context": {"currentTime": "2025-12-03T12:00:00Z"},
+		"context": {"currentTime": "2025-12-03T12:00:00Z", "acr": "2"},
 	}
 	result == true
 }
@@ -316,7 +316,7 @@ test_v1_resolved_org_type_default if {
 		"subject": {},
 		"action": {},
 		"resource": {},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result == "GOV"
 }
@@ -326,7 +326,7 @@ test_v1_resolved_org_type_explicit if {
 		"subject": {"organizationType": "MIL"},
 		"action": {},
 		"resource": {},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result == "MIL"
 }
@@ -350,7 +350,7 @@ test_v1_aal_level_from_subject if {
 		"subject": {"aal": 2},
 		"action": {},
 		"resource": {},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result >= 2
 }
@@ -364,7 +364,7 @@ test_v1_ztdf_enabled_true if {
 		"subject": {},
 		"action": {},
 		"resource": {"encrypted": true, "ztdf": true},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result == true
 }
@@ -374,7 +374,7 @@ test_v1_ztdf_enabled_false if {
 		"subject": {},
 		"action": {},
 		"resource": {"encrypted": false},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result == false
 }
@@ -400,7 +400,7 @@ test_v1_equivalency_applied_rule_exists if {
 		},
 		"action": {},
 		"resource": {"classification": "SECRET"},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	is_boolean(result)
 }
@@ -452,7 +452,7 @@ test_v1_get_equivalency_level if {
 		"subject": {},
 		"action": {},
 		"resource": {},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	is_string(result)
 }
@@ -462,7 +462,7 @@ test_v1_classification_equivalent_same_country if {
 		"subject": {},
 		"action": {},
 		"resource": {},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 }
 
@@ -475,7 +475,7 @@ test_v1_kas_obligations_empty if {
 		"subject": {},
 		"action": {},
 		"resource": {"encrypted": false},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	count(result) == 0
 }
@@ -485,7 +485,7 @@ test_v1_kas_obligations_with_encrypted if {
 		"subject": {"authenticated": true},
 		"action": {},
 		"resource": {"resourceId": "doc-001", "encrypted": true, "ztdf": true},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	is_set(result)
 }
@@ -521,7 +521,7 @@ test_v1_resolved_industry_allowed_true if {
 		"subject": {},
 		"action": {},
 		"resource": {"releasableToIndustry": true},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result == true
 }
@@ -531,7 +531,7 @@ test_v1_resolved_industry_allowed_false if {
 		"subject": {},
 		"action": {},
 		"resource": {"releasableToIndustry": false},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result == false
 }
@@ -541,7 +541,7 @@ test_v1_is_industry_access_blocked if {
 		"subject": {"organizationType": "INDUSTRY"},
 		"action": {},
 		"resource": {"releasableToIndustry": false},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result != ""
 }
@@ -555,7 +555,7 @@ test_v1_check_mfa_verified_true if {
 		"subject": {"mfaVerified": true},
 		"action": {},
 		"resource": {},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result == true
 }
@@ -566,7 +566,7 @@ test_v1_check_mfa_verified_unclassified if {
 		"subject": {"mfaVerified": false, "clearance": "UNCLASSIFIED"},
 		"action": {},
 		"resource": {"classification": "UNCLASSIFIED"},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result == true
 }
@@ -580,7 +580,7 @@ test_v1_check_authentication_strength_sufficient if {
 		"subject": {"aal": 2},
 		"action": {},
 		"resource": {"classification": "SECRET"},
-		"context": {},
+		"context": {"acr": "2"},
 	}
 	result == true
 }

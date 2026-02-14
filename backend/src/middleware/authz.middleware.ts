@@ -280,19 +280,28 @@ const getEffectiveAcr = (user: any): string => {
 };
 
 /**
- * Get effective AMR value for OPA policy evaluation
- * Uses user_amr (from user attributes) when user_acr indicates higher AAL
- * This allows AAL testing without requiring actual MFA registration
+ * Get effective AMR value for OPA policy evaluation.
+ *
+ * Priority: user_amr (federated) > session amr (local) > empty.
+ *
+ * Keycloak 26.5 AMR mechanism (via AmrProtocolMapper):
+ * - Reads AUTHENTICATORS_COMPLETED user session note (persistent)
+ * - Looks up each execution's "default.reference.value" config
+ * - Enforces "default.reference.maxAge" (defaults to 0 = immediate expiry)
+ *
+ * For federated users, the hub's native AMR is always empty (hub only sees
+ * the IdP broker execution). The spoke's AMR is forwarded via user_amr
+ * attribute mapper.
  */
 const getEffectiveAmr = (user: any): string[] => {
-    const sessionAmr = Array.isArray(user.amr) ? user.amr : ['pwd'];
-    const userAmr = Array.isArray(user.user_amr) ? user.user_amr : null;
+    const sessionAmr = Array.isArray(user.amr) && user.amr.length > 0 ? user.amr : null;
+    const userAmr = Array.isArray(user.user_amr) && user.user_amr.length > 0 ? user.user_amr : null;
     const sessionAcr = user.acr ? String(user.acr) : '0';
     const userAcr = user.user_acr ? String(user.user_acr) : null;
 
-    // If user_acr is set and higher, use user_amr for consistency
+    // For federated users: use user_amr when user_acr indicates higher AAL
     if (userAcr && parseInt(userAcr, 10) > parseInt(sessionAcr, 10) && userAmr) {
-        logger.debug('Using user_amr for AAL testing', {
+        logger.debug('Using user_amr (federated)', {
             sessionAmr,
             userAmr,
             uniqueID: user.uniqueID,
@@ -300,7 +309,13 @@ const getEffectiveAmr = (user: any): string[] => {
         return userAmr;
     }
 
-    return sessionAmr;
+    // For local users: use session AMR from oidc-amr-mapper
+    if (sessionAmr) {
+        return sessionAmr;
+    }
+
+    // AMR genuinely empty — return empty array (OPA will use ACR fallback)
+    return [];
 };
 
 /**
@@ -825,16 +840,46 @@ export async function authenticateJWT(req: Request, res: Response, next: NextFun
         // CRITICAL FIX (2026-02-08): Keycloak introspection endpoint doesn't include custom claims
         // Extract them from the JWT token itself and merge with introspection result
         // This ensures clearance, countryOfAffiliation, acpCOI, uniqueID are always available
+        // CRITICAL FIX (2026-02-13): Also extract ACR/AMR/auth_time for MFA enforcement!
+        // Without this, local users who complete MFA still show amr=undefined → defaults to ['pwd']
         if (decodedToken) {
             introspectionResult.uniqueID = introspectionResult.uniqueID || decodedToken.uniqueID;
             introspectionResult.clearance = introspectionResult.clearance || decodedToken.clearance;
             introspectionResult.countryOfAffiliation = introspectionResult.countryOfAffiliation || decodedToken.countryOfAffiliation;
             introspectionResult.acpCOI = introspectionResult.acpCOI || decodedToken.acpCOI;
 
+            // ACR/AMR/auth_time: Critical for MFA enforcement in OPA policies
+            // The native oidc-amr-mapper and oidc-acr-mapper always include these in the JWT,
+            // but Keycloak's introspection endpoint may not return them
+            //
+            // CRITICAL FIX (2026-02-14): Keycloak's oidc-amr-mapper outputs amr:[] when
+            // AUTHENTICATORS_COMPLETED user session note has no valid entries (e.g., missing
+            // "default.reference.value" config or expired "default.reference.maxAge").
+            // An empty array is truthy in JS, so `[] || decodedToken.amr` keeps [].
+            // We treat empty arrays as "not present" for proper fallback in getEffectiveAmr().
+            const introspectedAmr = introspectionResult.amr;
+            const hasValidIntrospectedAmr = Array.isArray(introspectedAmr) && introspectedAmr.length > 0;
+            const jwtAmr = decodedToken.amr;
+            const hasValidJwtAmr = Array.isArray(jwtAmr) && jwtAmr.length > 0;
+
+            introspectionResult.acr = introspectionResult.acr || decodedToken.acr;
+            introspectionResult.amr = hasValidIntrospectedAmr ? introspectedAmr
+                : hasValidJwtAmr ? jwtAmr
+                : undefined; // Let getEffectiveAmr() handle the fallback
+            introspectionResult.auth_time = introspectionResult.auth_time || decodedToken.auth_time;
+            // user_acr/user_amr: Federated user attribute-based claims
+            const introspectedUserAmr = (introspectionResult as any).user_amr;
+            const hasValidUserAmr = Array.isArray(introspectedUserAmr) && introspectedUserAmr.length > 0;
+            (introspectionResult as any).user_acr = (introspectionResult as any).user_acr || decodedToken.user_acr;
+            (introspectionResult as any).user_amr = hasValidUserAmr ? introspectedUserAmr
+                : (Array.isArray(decodedToken.user_amr) && decodedToken.user_amr.length > 0 ? decodedToken.user_amr : undefined);
+
             logger.debug('Supplemented introspection result with JWT claims', {
                 uniqueID: introspectionResult.uniqueID,
                 clearance: introspectionResult.clearance,
                 countryOfAffiliation: introspectionResult.countryOfAffiliation,
+                acr: introspectionResult.acr,
+                amr: introspectionResult.amr,
                 source: 'JWT token (protocol mapper claims)',
             });
         }

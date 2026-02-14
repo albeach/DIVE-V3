@@ -211,7 +211,7 @@ classifications_for_country(country) := classifications if {
 # ============================================
 
 unrecognized_classification_msg(classification, country) := msg if {
-	msg := sprintf("Unrecognized classification '%s' for country %s", [
+	msg := sprintf("Unrecognized classification '%s' for country %s — this classification cannot be mapped to a standard level", [
 		classification,
 		country,
 	])
@@ -220,7 +220,7 @@ unrecognized_classification_msg(classification, country) := msg if {
 insufficient_clearance_msg(user_clearance, user_country, resource_classification, resource_country) := msg if {
 	user_nato := get_nato_level(user_clearance, user_country)
 	resource_nato := get_nato_level(resource_classification, resource_country)
-	msg := sprintf("Insufficient clearance: %s (%s) < %s (%s) [NATO: %s < %s]", [
+	msg := sprintf("Access denied: Your clearance %s (%s) is below the required %s (%s) classification [equivalent NATO levels: %s < %s]", [
 		user_clearance,
 		user_country,
 		resource_classification,

@@ -653,8 +653,8 @@ resource "keycloak_openid_user_session_note_protocol_mapper" "auth_time" {
 # It derived AMR from ACR, but this caused issues with federated users
 # because the event listener's transaction timing meant ACR was stale.
 #
-# BEST PRACTICE: Use native oidc-amr-mapper which reads AUTH_METHODS_REF
-# from the session notes. The event listener sets this correctly.
+# BEST PRACTICE: Use native oidc-amr-mapper which reads AUTHENTICATORS_COMPLETED
+# user session note + "default.reference.value" from execution configs.
 #
 # For federated users, the user attribute fallback (user_amr) is used,
 # which reads from user.amr attribute populated by the IdP mapper.
