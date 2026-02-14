@@ -188,9 +188,8 @@ resource "keycloak_openid_client" "broker_client" {
       "https://localhost:3000/*",
       "https://localhost:4000/*", # Backend API callbacks
       "https://localhost:8443/*", # Keycloak callbacks
-      # CRITICAL FIX (2026-02-09): Add 127.0.0.1 variants for PKCE cookie compatibility
-      # PKCE cookies are set with domain=127.0.0.1, so redirect_uri must match
-      # Without this, NextAuth PKCE verification fails with "pkceCodeVerifier cookie was missing"
+      # 127.0.0.1 variants required for PKCE cookie compatibility
+      # (PKCE cookies set with domain=127.0.0.1 must match redirect_uri)
       "https://127.0.0.1:3000/*",
       "https://127.0.0.1:4000/*",
       "https://127.0.0.1:8443/*",
@@ -234,22 +233,8 @@ resource "keycloak_openid_client" "broker_client" {
   # SECURITY: HTTPS only - no HTTP allowed
   frontchannel_logout_enabled = true
   frontchannel_logout_url     = "${var.app_url}/api/auth/logout-callback"
-  # CRITICAL FIX (2026-01-24): Add trailing slash variants for post-logout redirects
-  # Keycloak requires EXACT match of redirect_uri parameter, including trailing slashes
-  #
-  # Issue: NextAuth may send https://localhost:3000/ (with slash) but we only configured
-  # https://localhost:3000 (without slash), causing LOGOUT_ERROR: invalid_redirect_uri
-  #
-  # BEST PRACTICE SOLUTION:
-  # Use variables (var.app_url, var.api_url, var.idp_url) with pattern matching
-  # This works for ANY deployment (localhost, Cloudflare, production domains)
-  #
-  # Patterns included:
-  # - Base URL without slash: ${var.app_url}
-  # - Base URL with slash: ${var.app_url}/
-  # - Wildcard paths: ${var.app_url}/*
-  #
-  # NO hardcoded URLs - fully flexible for all environments
+  # Post-logout redirect URIs include both with and without trailing slashes
+  # Keycloak requires EXACT match, so both variants are needed
   valid_post_logout_redirect_uris = concat(
     [
       # Frontend URLs (app_url) - handles NextAuth redirects
@@ -646,18 +631,9 @@ resource "keycloak_openid_user_session_note_protocol_mapper" "auth_time" {
   add_to_access_token = true
 }
 
-# AMR Mapper - Using native oidc-amr-mapper (BEST PRACTICE)
-# ============================================
-# CRITICAL FIX (January 2026):
-# The custom dive-amr-protocol-mapper has been DEPRECATED.
-# It derived AMR from ACR, but this caused issues with federated users
-# because the event listener's transaction timing meant ACR was stale.
-#
-# BEST PRACTICE: Use native oidc-amr-mapper which reads AUTHENTICATORS_COMPLETED
-# user session note + "default.reference.value" from execution configs.
-#
-# For federated users, the user attribute fallback (user_amr) is used,
-# which reads from user.amr attribute populated by the IdP mapper.
+# AMR Mapper - Native oidc-amr-mapper reads AUTHENTICATORS_COMPLETED session note
+# + "default.reference.value" from execution configs.
+# For federated users, user_amr attribute fallback is populated by the IdP mapper.
 resource "keycloak_generic_protocol_mapper" "amr_mapper" {
   realm_id        = keycloak_realm.broker.id
   client_id       = keycloak_openid_client.broker_client.id
@@ -844,56 +820,10 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "federation_coi" {
 }
 
 # ============================================================================
-# DEPRECATED (Feb 2026): Conflicting AMR Mapper - Removed
-# ============================================================================
-# REASON: This user-attribute mapper outputs to "amr" claim, conflicting with
-# the native oidc-amr-mapper in acr-amr-session-mappers.tf (lines 64-80).
-#
-# When multiple mappers output to the same claim, Keycloak picks one arbitrarily,
-# causing the native session-based AMR to be overridden by stale user attributes.
-#
-# CORRECT APPROACH:
-# - Native oidc-amr-mapper handles "amr" claim from session (lines 64-80 in acr-amr-session-mappers.tf)
-# - User attribute fallback handles "user_amr" claim (lines 83-98 in acr-amr-session-mappers.tf)
-#
-# This resource has been REMOVED to establish SSOT for ACR/AMR.
-# See: docs/TERRAFORM-ACR-AMR-CONFLICTS.md
-#
-# resource "keycloak_openid_user_attribute_protocol_mapper" "federation_amr" {
-#   for_each = var.federation_partners
-#   realm_id  = keycloak_realm.broker.id
-#   client_id = keycloak_openid_client.incoming_federation[each.key].id
-#   name      = "amr"
-#   user_attribute      = "amr"
-#   claim_name          = "amr"
-#   claim_value_type    = "String"
-#   multivalued         = true
-#   add_to_id_token     = true
-#   add_to_access_token = true
-#   add_to_userinfo     = true
-# }
-
-# ============================================================================
 # INCOMING FEDERATION CLIENT SCOPES
 # ============================================================================
-# CRITICAL FIX (2026-01-18): Add default client scopes to incoming federation clients
-# Without these scopes, tokens sent to partner won't include DIVE attribute claims
-# Result: Partner's IdP mappers have no claims to import, federated users get empty attributes
-#
-# Root Cause: Protocol mappers alone don't add claims to tokens - they must be in active scopes!
-# The client_scopes must be assigned as defaults for claims to be included.
-#
-# This fixes the issue where users logging in via spoke IdP to Hub had:
-#   - uniqueID: UUID (instead of username)
-#   - countryOfAffiliation: USA (instead of FRA/DEU/GBR)
-#   - clearance: UNCLASSIFIED (instead of actual clearance)
-#
-# With this fix, when USA federates to FRA:
-#   1. FRA has client "dive-v3-broker-usa" with protocol mappers ✅
-#   2. These mappers are now in default scopes ✅ (THIS FIX)
-#   3. Tokens to USA include uniqueID, countryOfAffiliation, clearance ✅
-#   4. USA's IdP mappers import these claims ✅
-#   5. Federated user has correct attributes ✅
+# Default client scopes for incoming federation clients ensure tokens include DIVE claims.
+# Without these, protocol mappers alone don't add claims — they must be in active scopes.
 
 resource "keycloak_openid_client_default_scopes" "incoming_federation_defaults" {
   for_each = var.federation_partners
