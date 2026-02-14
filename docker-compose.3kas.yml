@@ -339,7 +339,7 @@ services:
   # Redis Cache (Phase 4.2.2)
   # ============================================
   redis-kas-cache:
-    image: redis:7-alpine
+    image: redis:7.2-alpine
     container_name: redis-kas-cache
     hostname: redis-kas-cache
     command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru --requirepass DiveRedisTest2025!

@@ -57,7 +57,7 @@ services:
   # Redis - Session/Cache Store
   # ---------------------------------------------------------------------------
   redis-base:
-    image: redis:7-alpine
+    image: redis:7.2-alpine
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
