@@ -521,7 +521,7 @@ services:
     labels:
       dive.service.class: "core"
       dive.service.description: "Redis cache for session state and policy decisions"
-    image: redis:7-alpine
+    image: redis:7.2-alpine
     container_name: ${COMPOSE_PROJECT_NAME}-redis
     restart: unless-stopped
     env_file:

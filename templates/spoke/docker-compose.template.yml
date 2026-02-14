@@ -27,7 +27,7 @@
 # - No more "dive-spoke-pol-keycloak-pol-1" (now "dive-spoke-pol-keycloak")
 #
 # VERSION ALIGNMENT in 2.7.0:
-# - Fixed Redis version: redis:alpine → redis:7-alpine (matches Hub)
+# - Fixed Redis version: redis:alpine → redis:7.2-alpine (matches Hub)
 # - Fixed OPA version: openpolicyagent/opa:0.68.0 → openpolicyagent/opa:1.12.1 (latest stable)
 # - Ensures Hub and Spoke use identical base image versions
 # - See DOCKER_IMAGE_VERSION_SSOT.md for complete version matrix
@@ -326,7 +326,7 @@ services:
     labels:
       dive.service.class: "core"
       dive.service.description: "Redis cache for session state and policy decisions"
-    image: redis:7-alpine
+    image: redis:7.2-alpine
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-redis
     command: >
       redis-server
