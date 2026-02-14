@@ -105,10 +105,10 @@ curl -sk -X PUT "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/profile" \
         {"name":"email","displayName":"${email}","validations":{"email":{},"length":{"max":255}},"permissions":{"view":["admin","user"],"edit":["admin","user"]},"multivalued":false},
         {"name":"firstName","displayName":"${firstName}","validations":{"length":{"max":255},"person-name-prohibited-characters":{}},"permissions":{"view":["admin","user"],"edit":["admin","user"]},"multivalued":false},
         {"name":"lastName","displayName":"${lastName}","validations":{"length":{"max":255},"person-name-prohibited-characters":{}},"permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":false},
-        {"name":"clearance","displayName":"Security Clearance","permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":false},
-        {"name":"countryOfAffiliation","displayName":"Country of Affiliation","permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":false},
-        {"name":"uniqueID","displayName":"Unique Identifier","permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":false},
-        {"name":"acpCOI","displayName":"Community of Interest","permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":true}
+        {"name":"clearance","displayName":"Security Clearance","group":"dive-attributes","validations":{"multivalued":{"max":"1"}},"permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":false},
+        {"name":"countryOfAffiliation","displayName":"Country of Affiliation","group":"dive-attributes","validations":{"multivalued":{"max":"1"},"length":{"max":"3","min":"3","ignore.empty.value":true}},"permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":false},
+        {"name":"uniqueID","displayName":"Unique Identifier","group":"dive-attributes","validations":{"multivalued":{"max":"1"},"length":{"max":"255","min":"3","ignore.empty.value":true}},"permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":false},
+        {"name":"acpCOI","displayName":"Community of Interest","group":"dive-attributes","annotations":{"inputType":"multiselect"},"validations":{"length":{"max":"50","min":"0","ignore.empty.value":true}},"permissions":{"view":["admin","user"],"edit":["admin"]},"multivalued":true}
       ],
       "groups":[
         {"name":"user-metadata","displayHeader":"User metadata","displayDescription":"Attributes, which refer to user metadata"},

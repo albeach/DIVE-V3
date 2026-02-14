@@ -94,9 +94,18 @@ spoke_phase_seeding() {
         return 0
     fi
 
-    # Step 0: Initialize COI Definitions (SSOT - CRITICAL)
+    # Step 0: Initialize Clearance Equivalency SSOT (foundational data)
+    log_step "Step 0/4: Initializing clearance equivalency mappings"
+    log_info "Seeding clearance_equivalency collection (32 NATO nations, 5 levels)..."
+    if docker exec "$backend_container" npx tsx src/scripts/initialize-clearance-equivalency.ts 2>&1 | tail -10; then
+        log_success "✓ Clearance equivalency SSOT initialized"
+    else
+        log_warn "⚠ Clearance equivalency initialization failed (non-fatal — static fallback active)"
+    fi
+
+    # Step 0.5: Initialize COI Definitions (SSOT - CRITICAL)
     # MUST run BEFORE resource seeding to ensure all 19 COIs available
-    log_step "Step 0/3: Initializing COI Definitions (SSOT)"
+    log_step "Step 0.5/4: Initializing COI Definitions (SSOT)"
     log_info "Initializing 19 COI definitions (matches Hub SSOT)..."
     if ! docker exec "$backend_container" npx tsx src/scripts/initialize-coi-keys.ts --replace 2>&1 | tail -10; then
         log_error "COI initialization FAILED"
@@ -105,13 +114,13 @@ spoke_phase_seeding() {
     fi
     log_success "✓ 19 COI definitions initialized (SSOT matches Hub)"
 
-    # Step 0.5: Register Spoke Trusted Issuer (SSOT - CRITICAL for local authentication)
+    # Step 1: Register Spoke Trusted Issuer (SSOT - CRITICAL for local authentication)
     # Spoke must register its own Keycloak realm as a trusted issuer in spoke MongoDB
     # This enables:
     #   - /api/idps/public to return spoke's IdP
     #   - Resources page to show spoke as trusted issuer
     #   - Spoke users to authenticate via spoke's Keycloak
-    log_step "Step 0.5/3: Registering spoke trusted issuer"
+    log_step "Step 1/4: Registering spoke trusted issuer"
     log_info "Registering $code_upper Keycloak realm in local MongoDB..."
 
     local issuer_seed_output
@@ -135,9 +144,9 @@ spoke_phase_seeding() {
         # Non-blocking: Spoke can still use Hub issuer via OPAL sync
     fi
 
-    # Step 1: Seed test users (BLOCKING - critical for spoke operation)
+    # Step 2: Seed test users (BLOCKING - critical for spoke operation)
     # CRITICAL FIX (2026-02-11): User seeding failures now block deployment
-    log_step "Step 1/3: Seeding test users"
+    log_step "Step 2/4: Seeding test users"
     local user_seeding_failed=false
     if ! spoke_seed_users "$instance_code"; then
         user_seeding_failed=true
@@ -148,8 +157,8 @@ spoke_phase_seeding() {
         log_success "✓ Test users seeded successfully"
     fi
 
-    # Step 2: Seed ZTDF resources (MANDATORY - no plaintext fallback)
-    log_step "Step 2/3: Seeding ZTDF encrypted resources (MANDATORY)"
+    # Step 3: Seed ZTDF resources (MANDATORY - no plaintext fallback)
+    log_step "Step 3/4: Seeding ZTDF encrypted resources (MANDATORY)"
     local resource_seeding_failed=false
     if ! spoke_seed_resources "$instance_code" 5000; then
         resource_seeding_failed=true
@@ -170,12 +179,12 @@ spoke_phase_seeding() {
         # to prevent password exposure in ps aux output
         # Check total resources
         total_count=$(docker exec -e MONGOSH_PASSWORD="$mongo_password" "$mongo_container" bash -c "
-            mongosh -u admin --authenticationDatabase admin --tls --tlsAllowInvalidCertificates dive-v3-${code_lower} --quiet --eval 'db.resources.countDocuments({})' 2>/dev/null
+            mongosh -u admin -p \"\$MONGOSH_PASSWORD\" --authenticationDatabase admin --tls --tlsAllowInvalidCertificates dive-v3-${code_lower} --quiet --eval 'db.resources.countDocuments({})' 2>/dev/null
         " 2>/dev/null | tail -1 | tr -d '\n\r' || echo "0")
 
         # Check ZTDF-encrypted resources (have encrypted: true AND ztdf.payload.keyAccessObjects)
         encrypted_count=$(docker exec -e MONGOSH_PASSWORD="$mongo_password" "$mongo_container" bash -c "
-            mongosh -u admin --authenticationDatabase admin --tls --tlsAllowInvalidCertificates dive-v3-${code_lower} --quiet --eval 'db.resources.countDocuments({encrypted: true, \"ztdf.payload.keyAccessObjects\": {\$exists: true, \$ne: []}})' 2>/dev/null
+            mongosh -u admin -p \"\$MONGOSH_PASSWORD\" --authenticationDatabase admin --tls --tlsAllowInvalidCertificates dive-v3-${code_lower} --quiet --eval 'db.resources.countDocuments({encrypted: true, \"ztdf.payload.keyAccessObjects\": {\$exists: true, \$ne: []}})' 2>/dev/null
         " 2>/dev/null | tail -1 | tr -d '\n\r' || echo "0")
     fi
 
@@ -428,9 +437,8 @@ spoke_seed_resources() {
     # SECURITY FIX: Use environment variable instead of command-line argument
     # to prevent password exposure in ps aux output
     # Verify MongoDB is accessible
-    if ! docker exec -e MONGOSH_PASSWORD="$mongo_password" "$mongo_container" \
-        mongosh -u admin --authenticationDatabase admin --tls --tlsAllowInvalidCertificates --quiet \
-        --eval "db.adminCommand('ping')" &>/dev/null; then
+    if ! docker exec -e MONGOSH_PASSWORD="$mongo_password" "$mongo_container" bash -c \
+        'mongosh -u admin -p "$MONGOSH_PASSWORD" --authenticationDatabase admin --tls --tlsAllowInvalidCertificates --quiet --eval "db.adminCommand(\"ping\")"' &>/dev/null; then
         log_error "MongoDB not accessible - cannot seed resources"
         log_error "Check MongoDB container health: docker ps | grep $mongo_container"
         return 1
@@ -461,7 +469,7 @@ spoke_seed_resources() {
         # SECURITY FIX: Use environment variable instead of command-line argument
         # to prevent password exposure in ps aux output
         actual_count=$(docker exec -e MONGOSH_PASSWORD="$mongo_password" "$mongo_container" bash -c "
-            mongosh -u admin --authenticationDatabase admin --tls --tlsAllowInvalidCertificates dive-v3-${code_lower} --quiet --eval 'db.resources.countDocuments({instanceCode: \"$code_upper\", encrypted: true})' 2>/dev/null
+            mongosh -u admin -p \"\$MONGOSH_PASSWORD\" --authenticationDatabase admin --tls --tlsAllowInvalidCertificates dive-v3-${code_lower} --quiet --eval 'db.resources.countDocuments({instanceCode: \"$code_upper\", encrypted: true})' 2>/dev/null
         " 2>/dev/null | tail -1 | tr -d '\n\r' || echo "0")
 
         if [ -n "$actual_count" ] && [ "$actual_count" -ge "$resource_count" ]; then

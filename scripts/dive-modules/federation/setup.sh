@@ -208,7 +208,7 @@ federation_link() {
     "logoutUrl": "${spoke_url}/realms/${spoke_realm}/protocol/openid-connect/logout",
     "clientId": "dive-v3-broker-usa",
     "clientSecret": "${HUB_REALM}",
-    "defaultScope": "openid profile email",
+    "defaultScope": "openid profile email clearance countryOfAffiliation uniqueID acpCOI user_acr user_amr",
     "syncMode": "FORCE",
     "validateSignature": "true",
     "useJwksUrl": "true",
@@ -447,7 +447,55 @@ _get_keycloak_admin_password_ssot() {
     local container_name="$1"
     local instance_code="${2,,}"  # lowercase
 
-    # Try GCP Secret Manager first (SSOT)
+    # Priority 1: Running container environment (SSOT for current deployment)
+    # The container was started with the password from .env — this is the ground truth
+    local container_password
+    container_password=$(docker exec "$container_name" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+    if [ -n "$container_password" ]; then
+        echo "$container_password"
+        return 0
+    fi
+
+    container_password=$(docker exec "$container_name" printenv KC_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+    if [ -n "$container_password" ]; then
+        echo "$container_password"
+        return 0
+    fi
+
+    container_password=$(docker exec "$container_name" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+    if [ -n "$container_password" ]; then
+        echo "$container_password"
+        return 0
+    fi
+
+    # Priority 2: Local .env file (deployment config for this instance)
+    local env_file
+    if [ "$instance_code" = "usa" ]; then
+        env_file="${DIVE_ROOT}/.env.hub"
+    else
+        env_file="${DIVE_ROOT}/instances/${instance_code}/.env"
+    fi
+
+    if [ -f "$env_file" ]; then
+        local env_password
+        local instance_upper="${instance_code^^}"
+
+        # Try KC_ADMIN_PASSWORD_INSTANCE first (docker-compose convention)
+        env_password=$(grep "^KC_ADMIN_PASSWORD_${instance_upper}=" "$env_file" | cut -d'=' -f2- | tr -d '\n\r"' | sed 's/#.*//')
+
+        # Try KEYCLOAK_ADMIN_PASSWORD_INSTANCE (legacy convention)
+        [ -z "$env_password" ] && env_password=$(grep "^KEYCLOAK_ADMIN_PASSWORD_${instance_upper}=" "$env_file" | cut -d'=' -f2- | tr -d '\n\r"' | sed 's/#.*//')
+
+        # Try generic KEYCLOAK_ADMIN_PASSWORD
+        [ -z "$env_password" ] && env_password=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" "$env_file" | cut -d'=' -f2- | tr -d '\n\r"' | sed 's/#.*//')
+
+        if [ -n "$env_password" ]; then
+            echo "$env_password"
+            return 0
+        fi
+    fi
+
+    # Priority 3: GCP Secret Manager (external, may be stale after nuke+redeploy)
     if check_gcloud; then
         local gcp_secret_name="dive-v3-keycloak-admin-password-${instance_code}"
         local gcp_password
@@ -460,7 +508,7 @@ _get_keycloak_admin_password_ssot() {
             return 0
         fi
 
-        # Fallback: Try legacy naming for backwards compatibility
+        # Fallback: Try legacy naming
         gcp_secret_name="dive-v3-keycloak-${instance_code}"
         gcp_password=$(gcloud secrets versions access latest \
             --secret="$gcp_secret_name" \
@@ -468,49 +516,6 @@ _get_keycloak_admin_password_ssot() {
 
         if [ -n "$gcp_password" ]; then
             echo "$gcp_password"
-            return 0
-        fi
-    fi
-
-    # Try container environment (KC_BOOTSTRAP_ADMIN_PASSWORD for Keycloak 26.4.2+)
-    local container_password
-    container_password=$(docker exec "$container_name" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
-
-    if [ -n "$container_password" ]; then
-        echo "$container_password"
-        return 0
-    fi
-
-    # Try container environment (KEYCLOAK_ADMIN_PASSWORD for older versions)
-    container_password=$(docker exec "$container_name" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
-
-    if [ -n "$container_password" ]; then
-        echo "$container_password"
-        return 0
-    fi
-
-    # Try local .env file as last resort
-    local env_file
-    if [ "$instance_code" = "usa" ]; then
-        env_file="${DIVE_ROOT}/.env.hub"
-    else
-        env_file="${DIVE_ROOT}/instances/${instance_code}/.env"
-    fi
-
-    if [ -f "$env_file" ]; then
-        local env_password
-        local instance_upper="${instance_code^^}"
-
-        # Try instance-suffixed variable first (new pipeline convention)
-        env_password=$(grep "^KEYCLOAK_ADMIN_PASSWORD_${instance_upper}=" "$env_file" | cut -d'=' -f2- | tr -d '\n\r"' | sed 's/#.*//')
-
-        # Fallback to generic variable for backward compatibility
-        if [ -z "$env_password" ]; then
-            env_password=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" "$env_file" | cut -d'=' -f2- | tr -d '\n\r"' | sed 's/#.*//')
-        fi
-
-        if [ -n "$env_password" ]; then
-            echo "$env_password"
             return 0
         fi
     fi
@@ -557,6 +562,7 @@ _federation_link_direct() {
     fi
 
     # Get admin token for target
+    log_info "Resolving $target_upper Keycloak admin password..."
     local target_pass
     target_pass=$(_get_keycloak_admin_password_ssot "$target_kc_container" "$target_lower")
 
@@ -565,16 +571,17 @@ _federation_link_direct() {
         return 1
     fi
 
-    log_info "Using Keycloak password from GCP Secret Manager (SSOT)"
+    log_info "✓ $target_upper password resolved (${#target_pass} chars)"
 
-    # Wait for Keycloak admin API readiness before authentication
-    log_verbose "Ensuring $target_upper Keycloak admin API is ready..."
-    if ! wait_for_keycloak_admin_api_ready "$target_kc_container" 180 "$target_pass"; then
+    # Quick readiness check (Keycloaks already verified upstream, use short timeout)
+    log_info "Verifying $target_upper Keycloak admin API..."
+    if ! wait_for_keycloak_admin_api_ready "$target_kc_container" 30 "$target_pass"; then
         log_error "Keycloak admin API not ready: $target_kc_container"
         return 1
     fi
 
     # Authenticate with target Keycloak
+    log_info "Authenticating with $target_upper Keycloak..."
     local token=$(docker exec "$target_kc_container" curl -sf --max-time 10 \
         -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
         -d "grant_type=password" -d "username=admin" -d "password=${target_pass}" \
@@ -584,6 +591,7 @@ _federation_link_direct() {
         log_error "Failed to authenticate with $target_upper Keycloak"
         return 1
     fi
+    log_info "✓ Authenticated with $target_upper Keycloak"
 
     # Federation client ID format
     local federation_client_id="dive-v3-broker-${target_lower}"
@@ -598,6 +606,7 @@ _federation_link_direct() {
     fi
 
     # Get source Keycloak password using SSOT helper
+    log_info "Resolving $source_upper Keycloak admin password..."
     local source_pass
     source_pass=$(_get_keycloak_admin_password_ssot "$source_kc_container" "$source_lower")
 
@@ -606,17 +615,18 @@ _federation_link_direct() {
         return 1
     fi
 
-    log_verbose "Retrieved password for $source_upper Keycloak (${#source_pass} chars)"
+    log_info "✓ $source_upper password resolved (${#source_pass} chars)"
 
-    # Wait for SOURCE Keycloak readiness too
-    log_verbose "Ensuring $source_upper Keycloak admin API is ready..."
-    if ! wait_for_keycloak_admin_api_ready "$source_kc_container" 180 "$source_pass"; then
+    # Quick readiness check (Keycloaks already verified upstream, use short timeout)
+    log_info "Verifying $source_upper Keycloak admin API..."
+    if ! wait_for_keycloak_admin_api_ready "$source_kc_container" 30 "$source_pass"; then
         log_error "Source Keycloak admin API not ready: $source_kc_container"
         return 1
     fi
-    log_verbose "Source $source_upper Keycloak admin API ready"
+    log_info "✓ $source_upper Keycloak admin API ready"
 
     # Authenticate with source Keycloak
+    log_info "Authenticating with source $source_upper Keycloak..."
     local auth_response
     auth_response=$(docker exec "$source_kc_container" curl -s --max-time 10 \
         -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
@@ -739,7 +749,7 @@ _federation_link_direct() {
         \"trustEmail\": true,
         \"storeToken\": true,
         \"linkOnly\": false,
-        \"firstBrokerLoginFlowAlias\": \"\",
+        \"firstBrokerLoginFlowAlias\": \"first broker login\",
         \"updateProfileFirstLoginMode\": \"off\",
         \"postBrokerLoginFlowAlias\": \"\",
         \"config\": {
@@ -753,6 +763,7 @@ _federation_link_direct() {
             \"validateSignature\": \"false\",
             \"useJwksUrl\": \"true\",
             \"jwksUrl\": \"${source_internal_url}/realms/${source_realm}/protocol/openid-connect/certs\",
+            \"defaultScope\": \"openid profile email clearance countryOfAffiliation uniqueID acpCOI user_acr user_amr\",
             \"syncMode\": \"FORCE\",
             \"clientAuthMethod\": \"client_secret_post\"
         }

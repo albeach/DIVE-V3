@@ -110,79 +110,9 @@ const CLASSIFICATION_CONFIG: Record<
   },
 };
 
-// National classification equivalents (ACP-240 Section 4.3)
-const NATIONAL_CLASSIFICATIONS: Record<string, Record<string, string>> = {
-  USA: {
-    UNCLASSIFIED: 'UNCLASSIFIED',
-    RESTRICTED: 'RESTRICTED',
-    CONFIDENTIAL: 'CONFIDENTIAL',
-    SECRET: 'SECRET',
-    TOP_SECRET: 'TOP SECRET',
-  },
-  GBR: {
-    UNCLASSIFIED: 'OFFICIAL',
-    RESTRICTED: 'OFFICIAL-SENSITIVE',
-    CONFIDENTIAL: 'CONFIDENTIAL',
-    SECRET: 'SECRET',
-    TOP_SECRET: 'TOP SECRET',
-  },
-  FRA: {
-    UNCLASSIFIED: 'NON CLASSIFIÉ',
-    RESTRICTED: 'DIFFUSION RESTREINTE',
-    CONFIDENTIAL: 'CONFIDENTIEL DÉFENSE',
-    SECRET: 'SECRET DÉFENSE',
-    TOP_SECRET: 'TRÈS SECRET DÉFENSE',
-  },
-  CAN: {
-    UNCLASSIFIED: 'UNCLASSIFIED',
-    RESTRICTED: 'PROTECTED',
-    CONFIDENTIAL: 'CONFIDENTIAL',
-    SECRET: 'SECRET',
-    TOP_SECRET: 'TOP SECRET',
-  },
-  DEU: {
-    UNCLASSIFIED: 'OFFEN',
-    RESTRICTED: 'VS-NUR FÜR DEN DIENSTGEBRAUCH',
-    CONFIDENTIAL: 'VS-VERTRAULICH',
-    SECRET: 'GEHEIM',
-    TOP_SECRET: 'STRENG GEHEIM',
-  },
-  AUS: {
-    UNCLASSIFIED: 'UNCLASSIFIED',
-    RESTRICTED: 'PROTECTED',
-    CONFIDENTIAL: 'CONFIDENTIAL',
-    SECRET: 'SECRET',
-    TOP_SECRET: 'TOP SECRET',
-  },
-  NZL: {
-    UNCLASSIFIED: 'UNCLASSIFIED',
-    RESTRICTED: 'IN-CONFIDENCE',
-    CONFIDENTIAL: 'CONFIDENTIAL',
-    SECRET: 'SECRET',
-    TOP_SECRET: 'TOP SECRET',
-  },
-  ESP: {
-    UNCLASSIFIED: 'NO CLASIFICADO',
-    RESTRICTED: 'DIFUSIÓN LIMITADA',
-    CONFIDENTIAL: 'CONFIDENCIAL',
-    SECRET: 'SECRETO',
-    TOP_SECRET: 'ALTO SECRETO',
-  },
-  ITA: {
-    UNCLASSIFIED: 'NON CLASSIFICATO',
-    RESTRICTED: 'RISERVATO',
-    CONFIDENTIAL: 'CONFIDENZIALE',
-    SECRET: 'SEGRETO',
-    TOP_SECRET: 'SEGRETISSIMO',
-  },
-  POL: {
-    UNCLASSIFIED: 'NIEJAWNE',
-    RESTRICTED: 'ZASTRZEŻONE',
-    CONFIDENTIAL: 'POUFNE',
-    SECRET: 'TAJNE',
-    TOP_SECRET: 'ŚCIŚLE TAJNE',
-  },
-};
+// National classification lookups — SSOT via clearance-localization.ts
+// Fetches from backend MongoDB via /api/admin/clearance/mappings
+import { getLocalizedClearance } from '@/utils/clearance-localization';
 
 // Country data with flags and full names
 const COUNTRIES = [
@@ -273,7 +203,7 @@ const pulseVariants = {
 };
 
 function getNationalClassificationLabel(natoLevel: string, country: string): string {
-  return NATIONAL_CLASSIFICATIONS[country]?.[natoLevel] || natoLevel;
+  return getLocalizedClearance(natoLevel, country);
 }
 
 export default function SecurityLabelForm({

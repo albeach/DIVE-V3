@@ -571,8 +571,8 @@ describe('Clearance Mapper Service - 22 NATO Members (Phase 1)', () => {
         it('should map Swedish clearances correctly', () => {
             expect(mapNationalClearance('OFFENTLIG', 'SWE')).toBe('UNCLASSIFIED');
             expect(mapNationalClearance('BEGRÄNSAD', 'SWE')).toBe('RESTRICTED');
-            expect(mapNationalClearance('HEMLIG', 'SWE')).toBe('CONFIDENTIAL');
-            expect(mapNationalClearance('HEMLIG', 'SWE')).toBe('CONFIDENTIAL'); // Same as CONFIDENTIAL
+            expect(mapNationalClearance('KONFIDENTIELL', 'SWE')).toBe('CONFIDENTIAL');
+            expect(mapNationalClearance('HEMLIG', 'SWE')).toBe('SECRET');
             expect(mapNationalClearance('KVALIFICERAT HEMLIG', 'SWE')).toBe('TOP_SECRET');
         });
     });

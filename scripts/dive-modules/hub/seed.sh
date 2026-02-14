@@ -88,14 +88,36 @@ hub_seed() {
     log_info "Client logout URIs will be configured after Terraform completes..."
     echo ""
 
-    # Step 1: Initialize COI Keys (CRITICAL - must run first)
-    log_step "Step 1/4: Initializing COI Keys database..."
     local backend_container="${BACKEND_CONTAINER:-dive-hub-backend}"
 
     if ! ${DOCKER_CMD:-docker} ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then
         log_error "Backend container '${backend_container}' is not running"
         return 1
     fi
+
+    # Step 1: Initialize Clearance Equivalency SSOT (foundational data)
+    log_step "Step 1/4: Initializing clearance equivalency mappings..."
+    log_info "Seeding clearance_equivalency collection (32 NATO nations, 5 levels)..."
+    ${DOCKER_CMD:-docker} exec "$backend_container" npx tsx src/scripts/initialize-clearance-equivalency.ts 2>&1 | tail -10
+
+    if [ $? -eq 0 ]; then
+        log_success "Clearance equivalency SSOT initialized (32 countries)"
+    else
+        log_warn "Clearance equivalency initialization failed (non-fatal — static fallback active)"
+    fi
+
+    # Generate OPA classification equivalency data from SSOT
+    log_info "Generating OPA classification equivalency JSON..."
+    ${DOCKER_CMD:-docker} exec "$backend_container" npx tsx src/scripts/generate-opa-clearance-data.ts 2>&1 | tail -5
+    if [ $? -eq 0 ]; then
+        log_success "OPA classification equivalency data generated"
+    else
+        log_warn "OPA data generation failed (non-fatal — static fallback in Rego policy)"
+    fi
+    echo ""
+
+    # Step 2: Initialize COI Keys (CRITICAL - must run before resource seeding)
+    log_step "Step 2/4: Initializing COI Keys database..."
 
     log_info "Initializing 35 COI definitions (NATO, FVEY, bilateral agreements, etc.)..."
     ${DOCKER_CMD:-docker} exec "$backend_container" npx tsx src/scripts/initialize-coi-keys.ts 2>&1 | tail -10
@@ -108,8 +130,8 @@ hub_seed() {
     fi
     echo ""
 
-    # Step 2: Seed test users (SSOT: scripts/hub-init/seed-hub-users.sh)
-    log_step "Step 2/4: Seeding test users..."
+    # Step 3: Seed test users (SSOT: scripts/hub-init/seed-hub-users.sh)
+    log_step "Step 3/4: Seeding test users..."
 
     local seed_users_script="${DIVE_ROOT}/scripts/hub-init/seed-hub-users.sh"
 
@@ -127,8 +149,8 @@ hub_seed() {
 
     log_success "Test users created: testuser-usa-1 through testuser-usa-5, admin-usa"
 
-    # Step 3: Seed ZTDF encrypted resources using TypeScript seeder
-    log_step "Step 3/4: Seeding ${resource_count} ZTDF encrypted resources..."
+    # Step 4: Seed ZTDF encrypted resources using TypeScript seeder
+    log_step "Step 4/4: Seeding ${resource_count} ZTDF encrypted resources..."
 
     # Check if backend container is still running
     if ! ${DOCKER_CMD:-docker} ps --format '{{.Names}}' | grep -q "^${backend_container}$"; then

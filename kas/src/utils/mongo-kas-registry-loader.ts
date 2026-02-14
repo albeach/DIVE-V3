@@ -211,35 +211,78 @@ export class MongoKASRegistryLoader {
      * UPDATED (2026-02-07): Takes countryCode directly instead of full spoke object
      */
     private buildPolicyTranslation(countryCode: string): IKASRegistryEntry['policyTranslation'] {
-        // Standard clearance mappings (can be customized per spoke)
+        // Standard clearance mappings (all 5 levels)
         const clearanceMapping: Record<string, string> = {
             'TOP_SECRET': 'TOP_SECRET',
             'SECRET': 'SECRET',
             'CONFIDENTIAL': 'CONFIDENTIAL',
+            'RESTRICTED': 'RESTRICTED',
             'UNCLASSIFIED': 'UNCLASSIFIED',
         };
 
         // Add country-specific mappings
+        // FIX: DIFFUSION_RESTREINTE=RESTRICTED (was CONFIDENTIAL), VS_NUR_FUER...=RESTRICTED (was CONFIDENTIAL),
+        //      OFFICIAL_SENSITIVE=RESTRICTED (was CONFIDENTIAL) — aligned with CLEARANCE_EQUIVALENCY_TABLE SSOT
         switch (countryCode.toUpperCase()) {
             case 'FRA':
                 clearanceMapping['TRES_SECRET_DEFENSE'] = 'TOP_SECRET';
                 clearanceMapping['SECRET_DEFENSE'] = 'SECRET';
                 clearanceMapping['CONFIDENTIEL_DEFENSE'] = 'CONFIDENTIAL';
-                clearanceMapping['DIFFUSION_RESTREINTE'] = 'CONFIDENTIAL';
+                clearanceMapping['DIFFUSION_RESTREINTE'] = 'RESTRICTED';
                 clearanceMapping['NON_PROTEGE'] = 'UNCLASSIFIED';
+                clearanceMapping['NON_CLASSIFIE'] = 'UNCLASSIFIED';
                 break;
 
             case 'DEU':
                 clearanceMapping['STRENG_GEHEIM'] = 'TOP_SECRET';
                 clearanceMapping['GEHEIM'] = 'SECRET';
                 clearanceMapping['VS_VERTRAULICH'] = 'CONFIDENTIAL';
-                clearanceMapping['VS_NUR_FUER_DEN_DIENSTGEBRAUCH'] = 'CONFIDENTIAL';
+                clearanceMapping['VS_NUR_FUER_DEN_DIENSTGEBRAUCH'] = 'RESTRICTED';
                 clearanceMapping['OFFEN'] = 'UNCLASSIFIED';
                 break;
 
             case 'GBR':
-                clearanceMapping['OFFICIAL_SENSITIVE'] = 'CONFIDENTIAL';
+                clearanceMapping['OFFICIAL_SENSITIVE'] = 'RESTRICTED';
                 clearanceMapping['OFFICIAL'] = 'UNCLASSIFIED';
+                break;
+
+            case 'ITA':
+                clearanceMapping['SEGRETISSIMO'] = 'TOP_SECRET';
+                clearanceMapping['SEGRETO'] = 'SECRET';
+                clearanceMapping['RISERVATO'] = 'CONFIDENTIAL';
+                clearanceMapping['USO_UFFICIALE'] = 'RESTRICTED';
+                clearanceMapping['NON_CLASSIFICATO'] = 'UNCLASSIFIED';
+                break;
+
+            case 'ESP':
+                clearanceMapping['ALTO_SECRETO'] = 'TOP_SECRET';
+                clearanceMapping['SECRETO'] = 'SECRET';
+                clearanceMapping['CONFIDENCIAL'] = 'CONFIDENTIAL';
+                clearanceMapping['DIFUSION_LIMITADA'] = 'RESTRICTED';
+                clearanceMapping['NO_CLASIFICADO'] = 'UNCLASSIFIED';
+                break;
+
+            case 'POL':
+                clearanceMapping['SCISLE_TAJNE'] = 'TOP_SECRET';
+                clearanceMapping['TAJNE'] = 'SECRET';
+                clearanceMapping['POUFNE'] = 'CONFIDENTIAL';
+                clearanceMapping['ZASTRZEZIONE'] = 'CONFIDENTIAL';
+                clearanceMapping['UZYTEK_SLUZBOWY'] = 'RESTRICTED';
+                clearanceMapping['NIEJAWNE'] = 'UNCLASSIFIED';
+                break;
+
+            case 'NLD':
+                clearanceMapping['ZEER_GEHEIM'] = 'TOP_SECRET';
+                clearanceMapping['GEHEIM'] = 'SECRET';
+                clearanceMapping['VERTROUWELIJK'] = 'CONFIDENTIAL';
+                clearanceMapping['DEPARTEMENTAAL_VERTROUWELIJK'] = 'RESTRICTED';
+                clearanceMapping['NIET_GERUBRICEERD'] = 'UNCLASSIFIED';
+                break;
+
+            case 'CAN':
+                clearanceMapping['PROTECTED_C'] = 'SECRET';
+                clearanceMapping['PROTECTED_B'] = 'CONFIDENTIAL';
+                clearanceMapping['PROTECTED_A'] = 'RESTRICTED';
                 break;
         }
 

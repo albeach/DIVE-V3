@@ -84,11 +84,35 @@ export interface IFederatedSearchResult {
     sourceInstance: string;
 }
 
+export interface IFacetItem {
+    value: string;
+    label?: string;
+    count: number;
+}
+
+export interface IFederatedFacets {
+    classifications: IFacetItem[];
+    countries: IFacetItem[];
+    cois: IFacetItem[];
+    instances: IFacetItem[];
+    encryptionStatus: IFacetItem[];
+    fileTypes: IFacetItem[];
+}
+
+export interface IDocumentStats {
+    avgDocAgeDays: number | null;
+    newestDocDate: string | null;
+    oldestDocDate: string | null;
+    totalWithDates: number;
+}
+
 export interface IFederatedSearchResponse {
     totalResults: number;
     /** Sum of accessible documents across all instances (ABAC-filtered) */
     totalAccessible: number;
     results: IFederatedSearchResult[];
+    facets?: IFederatedFacets;
+    stats?: IDocumentStats;
     instanceResults: Record<string, {
         count: number;
         /** Total ABAC-accessible documents in this instance */
@@ -170,9 +194,26 @@ class FederatedResourceService {
             const { federationDiscovery } = await import('./federation-discovery.service');
             const discoveredInstances = await federationDiscovery.getInstances();
 
+            logger.info('FEDERATION DIAGNOSTIC: Discovery returned instances', {
+                count: discoveredInstances.length,
+                instances: discoveredInstances.map(i => ({
+                    code: i.code,
+                    type: i.type,
+                    enabled: i.enabled,
+                    hasApiEndpoint: !!i.endpoints?.api,
+                    hasApiInternalEndpoint: !!i.endpoints?.apiInternal,
+                    hasBackendService: !!i.services?.backend,
+                    containerName: i.services?.backend?.containerName
+                }))
+            });
+
             for (const inst of discoveredInstances) {
                 if (!inst.enabled) {
-                    logger.debug(`Instance ${inst.code} is disabled, skipping`);
+                    logger.warn(`FEDERATION DIAGNOSTIC: Instance ${inst.code} is DISABLED, skipping`, {
+                        code: inst.code,
+                        type: inst.type,
+                        hint: 'Instance disabled in federation_spokes or not approved'
+                    });
                     continue;
                 }
 
@@ -182,11 +223,15 @@ class FederatedResourceService {
                     logger.info(`Initialized federated instance: ${inst.code}`, {
                         code: federatedInstance.code,
                         type: federatedInstance.type,
+                        useApiMode: federatedInstance.useApiMode,
+                        apiUrl: federatedInstance.apiUrl,
+                        hasMongoUrl: !!federatedInstance.mongoUrl,
                         source: 'mongodb-discovery'
                     });
                 } catch (error) {
-                    logger.error(`Failed to initialize instance ${inst.code}`, {
-                        error: error instanceof Error ? error.message : 'Unknown error'
+                    logger.error(`FEDERATION DIAGNOSTIC: Failed to initialize instance ${inst.code}`, {
+                        error: error instanceof Error ? error.message : 'Unknown error',
+                        instanceData: { code: inst.code, type: inst.type, endpoints: inst.endpoints }
                     });
                 }
             }
@@ -276,9 +321,29 @@ class FederatedResourceService {
             const approvedSpokes = await hubSpokeRegistry.listActiveSpokes();
             let addedCount = 0;
 
+            logger.debug('FEDERATION DIAGNOSTIC: refreshApprovedSpokes result', {
+                approvedSpokeCount: approvedSpokes.length,
+                spokes: approvedSpokes.map(s => ({
+                    code: s.instanceCode,
+                    status: s.status,
+                    hasApiUrl: !!s.apiUrl,
+                    apiUrl: s.apiUrl,
+                    hasInternalApiUrl: !!(s as any).internalApiUrl
+                })),
+                alreadyRegistered: Array.from(this.instances.keys())
+            });
+
             for (const spoke of approvedSpokes) {
                 // Skip if already registered or no API URL
-                if (this.instances.has(spoke.instanceCode) || !spoke.apiUrl) {
+                if (this.instances.has(spoke.instanceCode)) {
+                    logger.debug(`Spoke ${spoke.instanceCode} already registered, skipping`);
+                    continue;
+                }
+                if (!spoke.apiUrl) {
+                    logger.warn(`FEDERATION DIAGNOSTIC: Spoke ${spoke.instanceCode} has no apiUrl, cannot register for federation`, {
+                        spokeId: spoke.spokeId,
+                        status: spoke.status
+                    });
                     continue;
                 }
 
@@ -689,19 +754,51 @@ class FederatedResourceService {
             });
         }
 
+        // Log all registered instances for diagnostics
+        const allRegisteredInstances = Array.from(this.instances.keys());
+        const requestedInstances = options.instances?.map(i => i.toUpperCase()) || [];
+
         const targetInstances = options.instances?.length
             ? Array.from(this.instances.entries()).filter(([key]) =>
-                options.instances!.map(i => i.toUpperCase()).includes(key))
+                requestedInstances.includes(key))
             : Array.from(this.instances.entries());
 
+        // Detect missing instances (requested but not registered)
+        const targetCodes = targetInstances.map(([key]) => key);
+        const missingInstances = requestedInstances.filter(i => !allRegisteredInstances.includes(i));
+
+        if (missingInstances.length > 0) {
+            logger.error('FEDERATION DIAGNOSTIC: Requested instances NOT registered in service', {
+                missingInstances,
+                requestedInstances,
+                registeredInstances: allRegisteredInstances,
+                hint: 'Missing instances have no entry in federatedResourceService.instances map. ' +
+                      'Check: 1) federation_spokes MongoDB collection, ' +
+                      '2) spoke approval status, ' +
+                      '3) federationDiscovery.getInstances() response'
+            });
+        }
+
         logger.info('Executing federated search', {
-            targetInstances: targetInstances.map(([key]) => key),
+            requestedInstances,
+            targetInstances: targetCodes,
+            missingInstances,
+            allRegisteredInstances,
+            registeredInstanceDetails: Array.from(this.instances.entries()).map(([key, inst]) => ({
+                code: key,
+                type: inst.type,
+                enabled: inst.enabled,
+                useApiMode: inst.useApiMode,
+                hasApiUrl: !!inst.apiUrl,
+                apiUrl: inst.apiUrl ? inst.apiUrl.replace(/\/\/.*@/, '//***@') : undefined,
+                circuitBreaker: inst.circuitBreaker.state
+            })),
             query: options.query,
             classification: options.classification,
             user: userAttributes.uniqueID
         });
 
-        // Execute parallel queries - now returns { results, accessibleCount }
+        // Execute parallel queries - now returns { results, accessibleCount, facets, stats }
         const searchPromises = targetInstances.map(async ([key, instance]) => {
             const instanceStart = Date.now();
             try {
@@ -711,6 +808,8 @@ class FederatedResourceService {
                     key,
                     results: searchResult.results,
                     accessibleCount: searchResult.accessibleCount,
+                    facets: searchResult.facets,
+                    stats: searchResult.stats,
                     latencyMs: Date.now() - instanceStart,
                     error: undefined as string | undefined,
                     circuitBreakerState: instance.circuitBreaker.state
@@ -720,6 +819,8 @@ class FederatedResourceService {
                     key,
                     results: [] as IFederatedSearchResult[],
                     accessibleCount: 0,
+                    facets: undefined as IFederatedFacets | undefined,
+                    stats: undefined as IDocumentStats | undefined,
                     latencyMs: Date.now() - instanceStart,
                     error: error instanceof Error ? error.message : 'Unknown error',
                     circuitBreakerState: instance.circuitBreaker.state
@@ -729,9 +830,11 @@ class FederatedResourceService {
 
         const results = await Promise.all(searchPromises);
 
-        // Aggregate results and sum accessible counts
+        // Aggregate results, sum accessible counts, merge facets and stats
         const allResults: IFederatedSearchResult[] = [];
         const instanceResults: Record<string, any> = {};
+        const allFacets: IFederatedFacets[] = [];
+        const allStats: IDocumentStats[] = [];
         let totalAccessible = 0;
 
         for (const result of results) {
@@ -744,7 +847,19 @@ class FederatedResourceService {
             };
             allResults.push(...result.results);
             totalAccessible += result.accessibleCount;
+            if (result.facets) {
+                allFacets.push(result.facets);
+            }
+            if (result.stats) {
+                allStats.push(result.stats);
+            }
         }
+
+        // Merge facets from all instances
+        const mergedFacets = this.mergeFacets(allFacets);
+
+        // Merge stats from all instances (weighted average by document count)
+        const mergedStats = this.mergeStats(allStats);
 
         // Apply ABAC filtering (safety net - primary ABAC is now in each instance)
         const filteredResults = this.applyABACFilter(allResults, userAttributes);
@@ -764,6 +879,8 @@ class FederatedResourceService {
             totalResults: deduped.length,
             totalAccessible, // Sum of accessible docs from all instances
             results: paginatedResults,
+            facets: mergedFacets,
+            stats: mergedStats,
             instanceResults,
             executionTimeMs: Date.now() - startTime,
             cacheHit: false
@@ -793,7 +910,7 @@ class FederatedResourceService {
         instance: IFederatedInstance,
         options: IFederatedSearchOptions,
         userAttributes: IUserAttributes
-    ): Promise<{ results: IFederatedSearchResult[]; accessibleCount: number }> {
+    ): Promise<{ results: IFederatedSearchResult[]; accessibleCount: number; facets?: IFederatedFacets; stats?: IDocumentStats }> {
         // Use API-based federation for non-local instances
         // API calls already include auth token, so remote instance applies ABAC
         if (instance.useApiMode && instance.apiUrl) {
@@ -899,14 +1016,154 @@ class FederatedResourceService {
         // Final query filter (use $and if we have conditions)
         const finalQuery = query.$and.length > 0 ? query : {};
 
-        // Get total ABAC-accessible count
-        const accessibleCount = await collection.countDocuments(finalQuery);
+        // Run main query and facet aggregation in parallel
+        const [accessibleCount, documents, facetResult] = await Promise.all([
+            // Get total ABAC-accessible count
+            collection.countDocuments(finalQuery),
+            // Get documents
+            collection.find(finalQuery)
+                .limit(MAX_RESULTS_PER_INSTANCE)
+                .maxTimeMS(timeoutMs)
+                .toArray(),
+            // Get facets via aggregation
+            collection.aggregate([
+                { $match: finalQuery },
+                {
+                    $addFields: {
+                        _computedReleasabilityTo: {
+                            $ifNull: ['$ztdf.policy.securityLabel.releasabilityTo', '$releasabilityTo']
+                        },
+                        _computedCOI: {
+                            $ifNull: ['$ztdf.policy.securityLabel.COI', '$COI']
+                        }
+                    }
+                },
+                {
+                    $facet: {
+                        classifications: [
+                            { $group: { _id: { $ifNull: ['$ztdf.policy.securityLabel.classification', '$classification'] }, count: { $sum: 1 } } },
+                            { $match: { _id: { $ne: null } } },
+                            { $sort: { count: -1 } }
+                        ],
+                        countries: [
+                            { $unwind: { path: '$_computedReleasabilityTo', preserveNullAndEmptyArrays: false } },
+                            { $group: { _id: '$_computedReleasabilityTo', count: { $sum: 1 } } },
+                            { $sort: { count: -1 } },
+                            { $limit: 20 }
+                        ],
+                        cois: [
+                            { $unwind: { path: '$_computedCOI', preserveNullAndEmptyArrays: false } },
+                            { $match: { _computedCOI: { $ne: null } } },
+                            { $group: { _id: '$_computedCOI', count: { $sum: 1 } } },
+                            { $sort: { count: -1 } }
+                        ],
+                        encryptionStatus: [
+                            { $group: { _id: { $cond: [{ $eq: ['$encrypted', true] }, 'encrypted', 'unencrypted'] }, count: { $sum: 1 } } },
+                            { $sort: { _id: 1 } }
+                        ],
+                        fileTypes: [
+                            {
+                                $project: {
+                                    contentType: '$ztdf.manifest.contentType',
+                                    category: {
+                                        $switch: {
+                                            branches: [
+                                                { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: '^image/', options: 'i' } }, then: 'images' },
+                                                { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: '^video/', options: 'i' } }, then: 'videos' },
+                                                { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: '^audio/', options: 'i' } }, then: 'audio' },
+                                                { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'application/json|text/csv|application/xml|spreadsheet', options: 'i' } }, then: 'structured' },
+                                                { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'pdf|msword|wordprocessing|presentation|powerpoint', options: 'i' } }, then: 'documents' },
+                                                { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'zip|tar|gzip|rar|7z', options: 'i' } }, then: 'archives' },
+                                                { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'javascript|text/html|text/css', options: 'i' } }, then: 'code' },
+                                                { case: { $regexMatch: { input: { $ifNull: ['$ztdf.manifest.contentType', ''] }, regex: 'text/plain|text/markdown', options: 'i' } }, then: 'text' }
+                                            ],
+                                            default: 'other'
+                                        }
+                                    }
+                                }
+                            },
+                            { $match: { category: { $ne: 'other' }, contentType: { $ne: null, $exists: true } } },
+                            { $group: { _id: '$category', count: { $sum: 1 } } },
+                            { $sort: { count: -1 } },
+                            {
+                                $project: {
+                                    value: '$_id',
+                                    label: {
+                                        $switch: {
+                                            branches: [
+                                                { case: { $eq: ['$_id', 'documents'] }, then: 'Documents' },
+                                                { case: { $eq: ['$_id', 'images'] }, then: 'Images' },
+                                                { case: { $eq: ['$_id', 'videos'] }, then: 'Videos' },
+                                                { case: { $eq: ['$_id', 'audio'] }, then: 'Audio' },
+                                                { case: { $eq: ['$_id', 'structured'] }, then: 'Structured Data' },
+                                                { case: { $eq: ['$_id', 'archives'] }, then: 'Archives' },
+                                                { case: { $eq: ['$_id', 'code'] }, then: 'Code Files' },
+                                                { case: { $eq: ['$_id', 'text'] }, then: 'Text Files' }
+                                            ],
+                                            default: '$_id'
+                                        }
+                                    },
+                                    count: 1
+                                }
+                            }
+                        ],
+                        documentStats: [
+                            {
+                                $addFields: {
+                                    _rawDate: { $ifNull: ['$ztdf.policy.securityLabel.creationDate', '$creationDate'] }
+                                }
+                            },
+                            { $match: { _rawDate: { $exists: true, $ne: null } } },
+                            {
+                                $addFields: {
+                                    _parsedDate: { $dateFromString: { dateString: '$_rawDate', onError: null } }
+                                }
+                            },
+                            { $match: { _parsedDate: { $ne: null } } },
+                            {
+                                $group: {
+                                    _id: null,
+                                    avgAgeDays: {
+                                        $avg: {
+                                            $divide: [
+                                                { $subtract: ['$$NOW', '$_parsedDate'] },
+                                                86400000
+                                            ]
+                                        }
+                                    },
+                                    newestDoc: { $max: '$_parsedDate' },
+                                    oldestDoc: { $min: '$_parsedDate' },
+                                    count: { $sum: 1 }
+                                }
+                            }
+                        ]
+                    }
+                }
+            ], { maxTimeMS: timeoutMs }).toArray()
+        ]);
 
-        const cursor = collection.find(finalQuery)
-            .limit(MAX_RESULTS_PER_INSTANCE)
-            .maxTimeMS(timeoutMs);
+        // Transform facet aggregation result
+        const fr = facetResult[0] || {};
+        const localFacets: IFederatedFacets = {
+            classifications: (fr.classifications || []).map((f: any) => ({ value: f._id, count: f.count })),
+            countries: (fr.countries || []).map((f: any) => ({ value: f._id, count: f.count })),
+            cois: (fr.cois || []).map((f: any) => ({ value: f._id, count: f.count })),
+            instances: [{ value: instance.code, count: accessibleCount }],
+            encryptionStatus: (fr.encryptionStatus || []).map((f: any) => ({ value: f._id, count: f.count })),
+            fileTypes: (fr.fileTypes || []).map((f: any) => ({ value: f.value, label: f.label, count: f.count })),
+        };
 
-        const documents = await cursor.toArray();
+        // Extract document stats
+        let localStats: IDocumentStats | undefined;
+        const ds = fr.documentStats?.[0];
+        if (ds) {
+            localStats = {
+                avgDocAgeDays: ds.avgAgeDays != null ? Math.round(ds.avgAgeDays * 10) / 10 : null,
+                newestDocDate: ds.newestDoc ? new Date(ds.newestDoc).toISOString() : null,
+                oldestDocDate: ds.oldestDoc ? new Date(ds.oldestDoc).toISOString() : null,
+                totalWithDates: ds.count || 0,
+            };
+        }
 
         logger.debug('Local instance search completed', {
             instance: instance.code,
@@ -914,12 +1171,18 @@ class FederatedResourceService {
             userCountry,
             accessibleCount,
             returnedCount: documents.length,
+            facetCounts: {
+                classifications: localFacets.classifications.length,
+                countries: localFacets.countries.length,
+                fileTypes: localFacets.fileTypes.length,
+            },
+            stats: localStats ? { avgDocAgeDays: localStats.avgDocAgeDays, totalWithDates: localStats.totalWithDates } : 'none',
         });
 
         // Transform to federated search result format
         const results = documents.map(doc => this.transformDocument(doc, instance.code));
 
-        return { results, accessibleCount };
+        return { results, accessibleCount, facets: localFacets, stats: localStats };
     }
 
     /**
@@ -930,14 +1193,24 @@ class FederatedResourceService {
     private async searchInstanceViaApi(
         instance: IFederatedInstance,
         options: IFederatedSearchOptions
-    ): Promise<{ results: IFederatedSearchResult[]; accessibleCount: number }> {
+    ): Promise<{ results: IFederatedSearchResult[]; accessibleCount: number; facets?: IFederatedFacets; stats?: IDocumentStats }> {
         const apiUrl = `${instance.apiUrl}/api/resources/search`;
 
-        logger.info(`Federated API search to ${instance.code}`, {
+        logger.info(`FEDERATION DIAGNOSTIC: API search to ${instance.code}`, {
             apiUrl,
             query: options.query,
-            hasAuth: !!options.authHeader
+            hasAuth: !!options.authHeader,
+            authHeaderPrefix: options.authHeader ? options.authHeader.substring(0, 20) + '...' : 'NONE',
+            instanceType: instance.type,
+            useApiMode: instance.useApiMode,
+            circuitBreaker: instance.circuitBreaker.state
         });
+
+        if (!options.authHeader) {
+            logger.error(`FEDERATION DIAGNOSTIC: No auth header for ${instance.code} - remote search will fail with 401`, {
+                hint: 'Auth header must be forwarded from the original request to authenticate with remote instance'
+            });
+        }
 
         // Build headers with optional auth
         const headers: Record<string, string> = {
@@ -950,21 +1223,28 @@ class FederatedResourceService {
             headers['Authorization'] = options.authHeader;
         }
 
+        const requestBody = {
+            query: options.query,
+            filters: {
+                classifications: options.classification,
+                countries: options.releasableTo,
+                cois: options.coi,
+                encrypted: options.encrypted,
+            },
+            pagination: {
+                limit: options.limit || MAX_RESULTS_PER_INSTANCE,
+            },
+            // Request facets from remote instances for aggregation
+            includeFacets: true,
+        };
+
         try {
-            const response = await federationAxios.post(apiUrl, {
-                query: options.query,
-                filters: {
-                    classifications: options.classification,
-                    countries: options.releasableTo,
-                    cois: options.coi,
-                    encrypted: options.encrypted,
-                },
-                pagination: {
-                    limit: options.limit || MAX_RESULTS_PER_INSTANCE,
-                },
-                // Don't include facets for federated sub-queries
-                includeFacets: false,
-            }, {
+            logger.debug(`FEDERATION DIAGNOSTIC: Sending request to ${instance.code}`, {
+                url: apiUrl,
+                body: requestBody
+            });
+
+            const response = await federationAxios.post(apiUrl, requestBody, {
                 headers,
             });
 
@@ -972,9 +1252,37 @@ class FederatedResourceService {
             // Capture the ABAC-filtered totalCount from the remote instance
             const accessibleCount = response.data.pagination?.totalCount || responseResults.length;
 
-            logger.debug(`Federated API response from ${instance.code}`, {
+            // Capture facets from remote instance response
+            const remoteFacets: IFederatedFacets | undefined = response.data.facets ? {
+                classifications: (response.data.facets.classifications || []).map((f: any) => ({ value: f.value, count: f.count })),
+                countries: (response.data.facets.countries || []).map((f: any) => ({ value: f.value, count: f.count })),
+                cois: (response.data.facets.cois || []).map((f: any) => ({ value: f.value, count: f.count })),
+                instances: [{ value: instance.code, count: accessibleCount }],
+                encryptionStatus: (response.data.facets.encryptionStatus || []).map((f: any) => ({ value: f.value, count: f.count })),
+                fileTypes: (response.data.facets.fileTypes || []).map((f: any) => ({ value: f.value, label: f.label, count: f.count })),
+            } : undefined;
+
+            // Capture document stats from remote instance response
+            const remoteStats: IDocumentStats | undefined = response.data.stats ? {
+                avgDocAgeDays: response.data.stats.avgDocAgeDays,
+                newestDocDate: response.data.stats.newestDocDate,
+                oldestDocDate: response.data.stats.oldestDocDate,
+                totalWithDates: response.data.stats.totalWithDates || 0,
+            } : undefined;
+
+            logger.info(`FEDERATION DIAGNOSTIC: API response from ${instance.code}`, {
+                httpStatus: response.status,
                 resultsCount: responseResults.length,
                 accessibleCount,
+                totalCount: response.data.pagination?.totalCount,
+                hasMore: response.data.pagination?.hasMore,
+                hasFacets: !!remoteFacets,
+                facetCounts: remoteFacets ? {
+                    classifications: remoteFacets.classifications.length,
+                    countries: remoteFacets.countries.length,
+                    fileTypes: remoteFacets.fileTypes.length,
+                } : 'none',
+                sampleResourceIds: responseResults.slice(0, 3).map((r: any) => r.resourceId),
             });
 
             // Transform to federated search result format
@@ -987,13 +1295,41 @@ class FederatedResourceService {
                 encrypted: doc.encrypted || false,
                 creationDate: doc.creationDate,
                 displayMarking: doc.displayMarking,
-                originRealm: instance.code,
+                originRealm: doc.originRealm || instance.code,
                 sourceInstance: instance.code,
             }));
 
-            return { results, accessibleCount };
+            return { results, accessibleCount, facets: remoteFacets, stats: remoteStats };
 
-        } catch (error) {
+        } catch (error: any) {
+            // Enhanced error diagnostics for federation failures
+            const errorDetails: Record<string, any> = {
+                instance: instance.code,
+                apiUrl,
+                errorMessage: error instanceof Error ? error.message : 'Unknown error',
+                circuitBreakerState: instance.circuitBreaker.state,
+                circuitBreakerFailures: instance.circuitBreaker.failures,
+            };
+
+            if (error.response) {
+                errorDetails.httpStatus = error.response.status;
+                errorDetails.httpStatusText = error.response.statusText;
+                errorDetails.responseData = typeof error.response.data === 'string'
+                    ? error.response.data.substring(0, 500)
+                    : error.response.data;
+            } else if (error.code) {
+                errorDetails.errorCode = error.code;
+                if (error.code === 'ECONNREFUSED') {
+                    errorDetails.hint = `${instance.code} backend is not reachable at ${apiUrl}. Check: 1) spoke containers running, 2) dive-shared Docker network, 3) container name resolution`;
+                } else if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+                    errorDetails.hint = `${instance.code} backend timed out. Check: 1) spoke backend health, 2) network latency, 3) increase REMOTE_QUERY_TIMEOUT_MS`;
+                } else if (error.code === 'ENOTFOUND') {
+                    errorDetails.hint = `DNS resolution failed for ${apiUrl}. Check: 1) dive-shared network exists, 2) spoke containers are on dive-shared network`;
+                }
+            }
+
+            logger.error(`FEDERATION DIAGNOSTIC: API search to ${instance.code} FAILED`, errorDetails);
+
             this.handleConnectionFailure(instance, error);
             throw new Error(`API federation failed for ${instance.code}: ${error instanceof Error ? error.message : 'Unknown error'}`);
         }
@@ -1103,6 +1439,83 @@ class FederatedResourceService {
         }
 
         return Array.from(seen.values());
+    }
+
+    /**
+     * Merge facets from multiple instances by summing counts for matching values.
+     * For fileTypes, preserves the label from the first instance that provides it.
+     */
+    private mergeFacets(facetSets: IFederatedFacets[]): IFederatedFacets {
+        const empty: IFederatedFacets = {
+            classifications: [],
+            countries: [],
+            cois: [],
+            instances: [],
+            encryptionStatus: [],
+            fileTypes: [],
+        };
+
+        if (facetSets.length === 0) return empty;
+        if (facetSets.length === 1) return facetSets[0];
+
+        const mergeSimple = (key: keyof IFederatedFacets): IFacetItem[] => {
+            const merged = new Map<string, IFacetItem>();
+            for (const facets of facetSets) {
+                for (const item of facets[key]) {
+                    const existing = merged.get(item.value);
+                    if (existing) {
+                        existing.count += item.count;
+                    } else {
+                        merged.set(item.value, { ...item });
+                    }
+                }
+            }
+            return Array.from(merged.values()).sort((a, b) => b.count - a.count);
+        };
+
+        return {
+            classifications: mergeSimple('classifications'),
+            countries: mergeSimple('countries'),
+            cois: mergeSimple('cois'),
+            instances: mergeSimple('instances'),
+            encryptionStatus: mergeSimple('encryptionStatus'),
+            fileTypes: mergeSimple('fileTypes'),
+        };
+    }
+
+    /**
+     * Merge document stats from multiple instances using weighted averages
+     */
+    private mergeStats(statsSets: IDocumentStats[]): IDocumentStats | undefined {
+        const valid = statsSets.filter(s => s.totalWithDates > 0);
+        if (valid.length === 0) return undefined;
+        if (valid.length === 1) return valid[0];
+
+        // Weighted average of avgDocAgeDays by totalWithDates
+        let totalDocs = 0;
+        let weightedAgeSum = 0;
+        let newestDoc: string | null = null;
+        let oldestDoc: string | null = null;
+
+        for (const s of valid) {
+            totalDocs += s.totalWithDates;
+            if (s.avgDocAgeDays != null) {
+                weightedAgeSum += s.avgDocAgeDays * s.totalWithDates;
+            }
+            if (s.newestDocDate && (!newestDoc || s.newestDocDate > newestDoc)) {
+                newestDoc = s.newestDocDate;
+            }
+            if (s.oldestDocDate && (!oldestDoc || s.oldestDocDate < oldestDoc)) {
+                oldestDoc = s.oldestDocDate;
+            }
+        }
+
+        return {
+            avgDocAgeDays: totalDocs > 0 ? Math.round((weightedAgeSum / totalDocs) * 10) / 10 : null,
+            newestDocDate: newestDoc,
+            oldestDocDate: oldestDoc,
+            totalWithDates: totalDocs,
+        };
     }
 
     /**

@@ -397,7 +397,7 @@ services:
       # The rootCA.pem is synced during deployment via:
       #   spoke_init_prepare_certificates() in phase-initialization.sh
       # ==========================================================================
-      KC_TRUSTSTORE_PATHS: /opt/keycloak/certs/ca/rootCA.pem
+      KC_TRUSTSTORE_PATHS: /opt/keycloak/ca-bundle/rootCA.pem
       # Terraform SSOT: Skip JSON import, Keycloak starts empty
       SKIP_REALM_IMPORT: "true"
       # Legacy realm import variables (kept for compatibility, but not used)
@@ -414,6 +414,7 @@ services:
       - "127.0.0.1:{{KEYCLOAK_HTTP_PORT}}:8080"
     volumes:
       - ./certs:/opt/keycloak/certs:ro
+      - ../../certs/ca-bundle:/opt/keycloak/ca-bundle:ro  # SSOT CA bundle for federation
       - ../../keycloak/themes:/opt/keycloak/themes:ro
       - ../../keycloak/realms:/opt/keycloak/realm-templates:ro
     depends_on:
@@ -481,7 +482,6 @@ services:
       OPAL_SERVER_URL: ${HUB_OPAL_URL:?HUB_OPAL_URL required - set in .env}
       # Authentication - token and public key from Hub
       OPAL_CLIENT_TOKEN: ${SPOKE_OPAL_TOKEN:-}
-      OPAL_AUTH_PUBLIC_KEY: ${OPAL_AUTH_PUBLIC_KEY:-}
       # Policy subscription directories - CRITICAL FIX for duplicate paths issue
       # Request only specific directories from Hub (NOT "." which requests entire repo)
       # This prevents OPAL from including files with "policies/" prefix duplicates
@@ -495,7 +495,7 @@ services:
       OPAL_SUBSCRIPTION_ID: spoke-{{INSTANCE_CODE_LOWER}}
       # Data topics to subscribe to (must match Hub topics)
       # CRITICAL: Subscribe to ALL data topics for dynamic trusted issuers, federation matrix, etc.
-      OPAL_DATA_TOPICS: policy_data,trusted_issuers,federation_matrix,tenant_configs,federation_constraints
+      OPAL_DATA_TOPICS: policy_data,trusted_issuers,federation_matrix,tenant_configs,coi_definitions,federation_constraints
       OPAL_LOG_LEVEL: INFO
       # Enable data updater to receive dynamic data from Hub
       OPAL_DATA_UPDATER_ENABLED: "true"
@@ -504,17 +504,17 @@ services:
       OPAL_RECONNECT_MAX_INTERVAL: 300
       OPAL_POLICY_REFRESH_INTERVAL: 60
       # SSL Certificate Trust - CRITICAL for Hub OPAL server connection
-      # CA certs are in /ca/ subdirectory, combined in entrypoint
-      SSL_CERT_FILE: /var/opal/hub-certs/ca/rootCA.pem
-      REQUESTS_CA_BUNDLE: /var/opal/hub-certs/ca/rootCA.pem
-      WEBSOCKET_SSL_CERT: /var/opal/hub-certs/ca/rootCA.pem
+      # SSOT CA bundle mounted from project root (mkcert + Vault PKI)
+      SSL_CERT_FILE: /var/opal/ca-bundle/rootCA.pem
+      REQUESTS_CA_BUNDLE: /var/opal/ca-bundle/rootCA.pem
+      WEBSOCKET_SSL_CERT: /var/opal/ca-bundle/rootCA.pem
     ports:
       - "{{OPAL_OPA_PORT}}:8181"  # Expose inline OPA for backend
     volumes:
       - opal_cache:/var/opal/cache
       - opal_backup:/opal/backup  # Prevent anonymous volume from base image
       - ./certs:/var/opal/certs:ro
-      - ../../instances/hub/certs:/var/opal/hub-certs:ro  # Mount Hub CA for SSL trust
+      - ../../certs/ca-bundle:/var/opal/ca-bundle:ro  # SSOT CA bundle for Hub OPAL server trust
     networks:
       - dive-internal      # Internal spoke communication
       - dive-shared        # CRITICAL: Required for Hub OPAL server communication
@@ -632,7 +632,7 @@ services:
       - backend_node_modules:/app/node_modules
       - ./certs:/app/certs:rw
       - ./certs:/opt/keycloak/certs:ro
-      - ./certs/ca:/app/certs/ca:ro  # Instance-specific CA for TLS trust
+      - ../../certs/ca-bundle:/app/certs/ca:ro  # SSOT CA bundle (mkcert + Vault PKI)
       - ../../NATO_Security_Policy.xml:/app/NATO_Security_Policy.xml:ro
       - ./config.json:/app/instance-config.json:ro  # Instance-specific config
       - ../../config/federation-registry.json:/app/config/federation-registry.json:ro
@@ -719,7 +719,7 @@ services:
       - dive-shared  # For federation with hub and other spokes
     volumes:
       - ./certs:/opt/app/certs:ro
-      - ./certs/ca:/app/certs/ca:ro  # CA bundle for TLS trust (mkcert + Vault PKI)
+      - ../../certs/ca-bundle:/app/certs/ca:ro  # SSOT CA bundle (mkcert + Vault PKI)
       - ../../kas/src:/app/src
       - kas_logs:/app/logs
       - ../../config:/app/config:ro
@@ -787,7 +787,7 @@ services:
       - frontend_next:/app/.next
       - ./certs:/app/certs:ro
       - ./certs:/opt/app/certs:ro
-      - ./certs/ca:/app/certs/ca:ro  # Instance-specific CA for TLS trust
+      - ../../certs/ca-bundle:/app/certs/ca:ro  # SSOT CA bundle (mkcert + Vault PKI)
     extra_hosts:
       - "localhost:host-gateway"
     depends_on:

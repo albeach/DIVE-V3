@@ -49,9 +49,17 @@ export interface IFacets {
   fileTypes: IFacetItem[];  // File type facets (documents, images, videos, audio, archives, code)
 }
 
+export interface IDocumentStats {
+  avgDocAgeDays: number | null;
+  newestDocDate: string | null;
+  oldestDocDate: string | null;
+  totalWithDates: number;
+}
+
 export interface IPaginatedSearchResponse<T> {
   results: T[];
   facets?: IFacets;
+  stats?: IDocumentStats;
   pagination: {
     nextCursor: string | null;
     prevCursor: string | null;
@@ -130,6 +138,8 @@ export interface UseInfiniteScrollReturn<T> {
   sentinelRef: (node: HTMLElement | null) => void;
   /** Timing info from last request */
   timing: { searchMs: number; facetMs: number; totalMs: number } | null;
+  /** Document stats from API */
+  stats: IDocumentStats | null;
 }
 
 // ============================================
@@ -264,6 +274,7 @@ export function useInfiniteScroll<T = any>({
   const [filters, setFiltersState] = useState<ISearchFilters>(initialFilters);
   const [sort, setSortState] = useState<ISortOptions>(initialSort);
   const [timing, setTiming] = useState<{ searchMs: number; facetMs: number; totalMs: number } | null>(null);
+  const [stats, setStats] = useState<IDocumentStats | null>(null);
 
   // Track if we've successfully fetched data at least once
   const [hasFetched, setHasFetched] = useState(false);
@@ -345,6 +356,10 @@ export function useInfiniteScroll<T = any>({
         setFacets(response.facets);
       }
 
+      if (response.stats) {
+        setStats(response.stats);
+      }
+
       setHasMore(response.pagination.hasMore);
       setTotalCount(response.pagination.totalCount);
       cursorRef.current = response.pagination.nextCursor;
@@ -420,6 +435,7 @@ export function useInfiniteScroll<T = any>({
     setSortState(initialSort);
     setItems([]);
     setFacets(null);
+    setStats(null);
     setError(null);
     setHasMore(false);
     setTotalCount(0);
@@ -538,6 +554,7 @@ export function useInfiniteScroll<T = any>({
     reset,
     sentinelRef,
     timing,
+    stats,
   };
 }
 

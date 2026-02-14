@@ -177,12 +177,58 @@ spoke_phase_verification() {
         fi
     fi
 
-    # Step 4.5: OPAL data sync verification (deploy mode) - NOW WARNING ONLY (2026-02-08)
-    # CHANGED: Made non-blocking since OPAL works correctly but needs time to propagate
-    # spoke_verify_opal_sync now returns success with warnings if timeout occurs
+    # Step 4.5: Bidirectional SSO endpoint verification (deploy mode) - WARNING ONLY
     if [ "$pipeline_mode" = "deploy" ] && [ "$verification_passed" = "true" ]; then
-        # This call will warn if OPAL sync times out but won't fail
-        spoke_verify_opal_sync "$instance_code" || true
+        log_step "Verifying bidirectional SSO endpoints..."
+        local sso_ok=true
+
+        # Test spoke can reach Hub OIDC discovery
+        local hub_oidc
+        hub_oidc=$(docker exec "dive-spoke-${code_lower}-keycloak" \
+            curl -sfk "https://dive-hub-keycloak:8443/realms/dive-v3-broker-usa/.well-known/openid-configuration" 2>/dev/null) || true
+        if echo "$hub_oidc" | grep -q "token_endpoint"; then
+            log_success "Spoke→Hub OIDC discovery: reachable"
+        else
+            log_warn "Spoke→Hub OIDC discovery: FAILED (SSO login will fail)"
+            sso_ok=false
+        fi
+
+        # Test Hub can reach Spoke OIDC discovery
+        local spoke_oidc
+        spoke_oidc=$(docker exec "dive-hub-keycloak" \
+            curl -sfk "https://dive-spoke-${code_lower}-keycloak:8443/realms/dive-v3-broker-${code_lower}/.well-known/openid-configuration" 2>/dev/null) || true
+        if echo "$spoke_oidc" | grep -q "token_endpoint"; then
+            log_success "Hub→Spoke OIDC discovery: reachable"
+        else
+            log_warn "Hub→Spoke OIDC discovery: FAILED (reverse SSO will fail)"
+            sso_ok=false
+        fi
+
+        # Verify spoke's trusted issuer registered in Hub OPA
+        local spoke_issuer_check
+        spoke_issuer_check=$(curl -sk "https://localhost:8181/v1/data/trusted_issuers" 2>/dev/null | \
+            grep -c "dive-v3-broker-${code_lower}" || echo "0")
+        if [ "$spoke_issuer_check" -gt 0 ]; then
+            log_success "Spoke trusted issuer in Hub OPA: registered"
+        else
+            log_warn "Spoke trusted issuer not yet in Hub OPA (may take ~60s to propagate)"
+        fi
+
+        if [ "$sso_ok" = "true" ]; then
+            log_success "Bidirectional SSO endpoints verified"
+        else
+            log_warn "SSO endpoint issues detected — federation may need manual verification"
+        fi
+    fi
+
+    # Step 4.6: OPAL data sync verification (deploy mode) - BLOCKING
+    # The backend API queries MongoDB directly — data should be available immediately
+    # after spoke approval in CONFIGURATION phase.
+    if [ "$pipeline_mode" = "deploy" ] && [ "$verification_passed" = "true" ]; then
+        if ! spoke_verify_opal_sync "$instance_code"; then
+            log_error "OPAL sync verification failed - federation data not propagated"
+            verification_passed=false
+        fi
     fi
 
     # Step 5: API health
@@ -674,7 +720,7 @@ _spoke_verify_opal_sync_check() {
     # The verification script runs on the HOST, not inside Docker network
     # Using dive-hub-backend hostname will fail DNS resolution
     local hub_api="https://localhost:4000/api"
-    local hub_code="${INSTANCE_CODE:-USA}"
+    local hub_code="USA"  # Hub is always USA — INSTANCE_CODE is the spoke during spoke deploy
     local spoke_issuer_pattern="${code_lower}"
 
     for ((attempt=1; attempt<=max_retries; attempt++)); do
@@ -780,14 +826,7 @@ _spoke_verify_opal_sync_check() {
         local sync_duration=$(($(date +%s) - sync_start_time))
         local total_check_time=$((max_retries * retry_delay))
 
-        if [ "$stabilization_time" -gt 0 ]; then
-            # Called from main function with stabilization wait
-            log_error "❌ OPAL sync verification failed (${sync_duration}s elapsed, expected: 40-60s)"
-            log_error "   Waited ${stabilization_time}s + ${total_check_time}s retries = $((stabilization_time + total_check_time))s total"
-        else
-            # Quick recheck (no stabilization)
-            log_error "❌ Quick recheck failed (${total_check_time}s retries, no stabilization wait)"
-        fi
+        log_error "❌ OPAL sync verification failed (${sync_duration}s elapsed, ${max_retries} attempts)"
 
         return 1  # Verification failed
     fi
@@ -819,30 +858,14 @@ spoke_verify_opal_sync() {
 
     log_step "Verifying OPAL data sync to Hub OPA..."
 
-    # BEST PRACTICE FIX (2026-02-07): Wait for realistic stabilization time BEFORE checking
-    # Eliminates false positive warnings from checking too early
-    #
-    # OPAL CDC polling: 5 seconds
-    # Data processing + MongoDB → OPAL → OPA: 5-15 seconds per source
-    # Multiple concurrent sources: 4-6 sources (trusted_issuers, federation_matrix, tenant_configs, etc.)
-    # OPA index rebuild: 10-20 seconds after bulk updates
-    # By waiting upfront, we avoid false positive failures from concurrent CDC processing
-    local stabilization_time="${DIVE_TIMEOUT_OPAL_STABILIZE:-45}"
-
-    log_info "⏳ Waiting ${stabilization_time}s for OPAL CDC to detect and process federation changes..."
-    log_verbose "   OPAL client polls MongoDB every 5s and syncs to OPA"
-    log_verbose "   Processing multiple concurrent CDC events (trusted_issuers, federation_matrix, etc.)"
-
-    # Progress indicator
-    local progress_interval=5
-    for ((i=progress_interval; i<=stabilization_time; i+=progress_interval)); do
-        log_verbose "   ${i}/${stabilization_time}s elapsed..."
-        sleep $progress_interval
-    done
-
-    # NOW check with focused retries (12 needed for OPA index building)
-    local max_retries=12  # Increased from 8 to account for OPA index rebuild time
+    # Poll-first approach: Start checking immediately, then retry with backoff.
+    # OPAL CDC polls MongoDB every 5s. Propagation chain:
+    #   MongoDB change → OPAL CDC detects (5s) → data fetch (1-3s) → OPA push (1-2s)
+    # Typical sync: 10-30s. Worst case (cold start): ~90s.
+    # Total budget: 21 retries × 5s = 105s (same budget, no blind wait)
+    local max_retries=21
     local retry_delay=5
+    local stabilization_time=0  # No blind wait — poll from start
 
     # Use helper function to perform the actual verification (pass stabilization_time for error reporting)
     if _spoke_verify_opal_sync_check "$instance_code" "$max_retries" "$retry_delay" "$sync_start_time" "$stabilization_time"; then
@@ -851,8 +874,8 @@ spoke_verify_opal_sync() {
         # CRITICAL FIX (2026-02-11): Make OPAL sync verification BLOCKING
         # Previous issue: Returned success on timeout, hiding policy propagation failures
         # Impact: Policy data not synced but deployment marked complete, causing 403 errors
-        local stabilization_total=$((stabilization_time + max_retries * retry_delay))
-        log_error "❌ OPAL sync verification FAILED after ${stabilization_total}s"
+        local total_wait=$((max_retries * retry_delay))
+        log_error "❌ OPAL sync verification FAILED after ${total_wait}s"
         log_error "   Policy data has NOT propagated from MongoDB → OPAL → OPA"
         log_error ""
         log_error "   Impact:"

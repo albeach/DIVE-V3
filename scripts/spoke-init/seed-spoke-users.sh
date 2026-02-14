@@ -201,20 +201,13 @@ fi
 ##
 # Map NATO standard clearance to country-specific classification
 #
-# CRITICAL ARCHITECTURAL FIX (2026-02-08):
-# Users should store their ACTUAL national classification (e.g., "OFFEN")
+# SSOT: Reads from scripts/data/national-clearance-mappings.json
+# Generated from: backend/src/services/clearance-mapper.service.ts (CLEARANCE_EQUIVALENCY_TABLE)
+# Regenerate: cd backend && npx tsx src/scripts/generate-national-clearance-json.ts
+#
+# Users store their ACTUAL national classification (e.g., "OFFEN")
 # not the normalized NATO standard (e.g., "UNCLASSIFIED").
-#
-# The backend clearance-mapper.service.ts normalizes country-specific
-# classifications to standard levels for policy evaluation (SSOT).
-#
-# This ensures:
-# - Authenticity: Users have their actual national classification
-# - Auditability: Logs show real classifications from user's country
-# - Flexibility: Different countries use different classification systems
-# - SSOT: Backend service is single source of truth for normalization
-#
-# Based on: backend/src/services/clearance-mapper.service.ts (CLEARANCE_EQUIVALENCY_TABLE)
+# The backend clearance-mapper.service.ts normalizes for policy evaluation.
 #
 # Arguments:
 #   $1 - NATO standard clearance (UNCLASSIFIED, RESTRICTED, CONFIDENTIAL, SECRET, TOP_SECRET)
@@ -226,94 +219,20 @@ fi
 map_clearance_to_national() {
     local nato_level="$1"
     local country="$2"
+    local mappings_file="${DIVE_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}/scripts/data/national-clearance-mappings.json"
 
-    case "$country" in
-        USA|CAN|GBR|NZL)
-            # NATO English-speaking countries use NATO standard
-            case "$nato_level" in
-                UNCLASSIFIED) echo "UNCLASSIFIED" ;;
-                RESTRICTED) echo "RESTRICTED" ;;
-                CONFIDENTIAL) echo "CONFIDENTIAL" ;;
-                SECRET) echo "SECRET" ;;
-                TOP_SECRET) echo "TOP SECRET" ;;
-            esac
-            ;;
-        DEU)
-            # Germany - Verschlusssache (VS) classification system
-            case "$nato_level" in
-                UNCLASSIFIED) echo "OFFEN" ;;
-                RESTRICTED) echo "VS-NUR FÜR DEN DIENSTGEBRAUCH" ;;
-                CONFIDENTIAL) echo "VS-VERTRAULICH" ;;
-                SECRET) echo "GEHEIM" ;;
-                TOP_SECRET) echo "STRENG GEHEIM" ;;
-            esac
-            ;;
-        FRA)
-            # France - Classification française
-            case "$nato_level" in
-                UNCLASSIFIED) echo "NON CLASSIFIÉ" ;;
-                RESTRICTED) echo "DIFFUSION RESTREINTE" ;;
-                CONFIDENTIAL) echo "CONFIDENTIEL DÉFENSE" ;;
-                SECRET) echo "SECRET DÉFENSE" ;;
-                TOP_SECRET) echo "TRÈS SECRET DÉFENSE" ;;
-            esac
-            ;;
-        ITA)
-            # Italy - Classificazione italiana
-            case "$nato_level" in
-                UNCLASSIFIED) echo "NON CLASSIFICATO" ;;
-                RESTRICTED) echo "RISERVATO" ;;
-                CONFIDENTIAL) echo "RISERVATISSIMO" ;;
-                SECRET) echo "SEGRETO" ;;
-                TOP_SECRET) echo "SEGRETISSIMO" ;;
-            esac
-            ;;
-        ESP)
-            # Spain - Clasificación española
-            case "$nato_level" in
-                UNCLASSIFIED) echo "NO CLASIFICADO" ;;
-                RESTRICTED) echo "DIFUSIÓN LIMITADA" ;;
-                CONFIDENTIAL) echo "CONFIDENCIAL" ;;
-                SECRET) echo "SECRETO" ;;
-                TOP_SECRET) echo "ALTO SECRETO" ;;
-            esac
-            ;;
-        POL)
-            # Poland - Klauzule tajności
-            case "$nato_level" in
-                UNCLASSIFIED) echo "NIEJAWNE" ;;
-                RESTRICTED) echo "ZASTRZEŻONE" ;;
-                CONFIDENTIAL) echo "POUFNE" ;;
-                SECRET) echo "TAJNE" ;;
-                TOP_SECRET) echo "ŚCIŚLE TAJNE" ;;
-            esac
-            ;;
-        NLD)
-            # Netherlands - Nederlandse rubricering
-            case "$nato_level" in
-                UNCLASSIFIED) echo "NIET-GERUBRICEERD" ;;
-                RESTRICTED) echo "DEPARTEMENTAAL VERTROUWELIJK" ;;
-                CONFIDENTIAL) echo "CONFIDENTIEEL" ;;
-                SECRET) echo "GEHEIM" ;;
-                TOP_SECRET) echo "ZEER GEHEIM" ;;
-            esac
-            ;;
-        EST)
-            # Estonia - Eesti salastusastmed
-            case "$nato_level" in
-                UNCLASSIFIED) echo "AVALIK" ;;
-                RESTRICTED) echo "PIIRATUD" ;;
-                CONFIDENTIAL) echo "KONFIDENTSIAALNE" ;;
-                SECRET) echo "SALAJANE" ;;
-                TOP_SECRET) echo "TÄIESTI SALAJANE" ;;
-            esac
-            ;;
-        *)
-            # Fallback: Use NATO standard for unknown/industry partners
-            log_warn "Unknown country $country, using NATO standard clearance: $nato_level"
-            echo "$nato_level"
-            ;;
-    esac
+    if [ -f "$mappings_file" ] && command -v jq &>/dev/null; then
+        local result
+        result=$(jq -r --arg c "$country" --arg l "$nato_level" '.[$c][$l] // empty' "$mappings_file" 2>/dev/null)
+        if [ -n "$result" ]; then
+            echo "$result"
+            return
+        fi
+    fi
+
+    # Fallback: Use NATO standard for unmapped countries or if jq unavailable
+    log_warn "Using NATO standard clearance for $country: $nato_level (SSOT file: $mappings_file)"
+    echo "$nato_level"
 }
 
 # =============================================================================

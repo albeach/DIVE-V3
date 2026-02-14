@@ -41,6 +41,88 @@ import {
 
 config({ path: '.env.local' });
 
+// ============================================
+// Clearance Normalization (localized → NATO standard)
+// SSOT: Loaded from MongoDB clearance_equivalency collection at startup.
+// Static fallback covers standard levels only — MongoDB provides all 32 NATO countries.
+// ============================================
+let CLEARANCE_NORMALIZATION_MAP: Record<string, string> = {
+    // Static fallback: standard levels (passthrough)
+    'UNCLASSIFIED': 'UNCLASSIFIED', 'RESTRICTED': 'RESTRICTED',
+    'CONFIDENTIAL': 'CONFIDENTIAL', 'SECRET': 'SECRET', 'TOP_SECRET': 'TOP_SECRET',
+};
+
+/**
+ * Load clearance normalization map from MongoDB clearance_equivalency collection.
+ * Called during initializeKASService() — populates CLEARANCE_NORMALIZATION_MAP
+ * with all 32 NATO country mappings from the SSOT.
+ */
+export async function loadClearanceMappingsFromMongoDB(): Promise<number> {
+    try {
+        const { MongoClient } = await import('mongodb');
+        const mongoUrl = process.env.MONGODB_URL;
+        const dbName = process.env.MONGODB_DATABASE || 'dive-v3';
+
+        if (!mongoUrl) {
+            kasLogger.warn('MONGODB_URL not set, using static clearance fallback');
+            return 0;
+        }
+
+        const client = await MongoClient.connect(mongoUrl);
+        const db = client.db(dbName);
+        const collection = db.collection('clearance_equivalency');
+
+        const docs = await collection.find({}).toArray();
+        if (docs.length === 0) {
+            kasLogger.warn('clearance_equivalency collection empty, using static fallback');
+            await client.close();
+            return 0;
+        }
+
+        // Build normalization map from MongoDB documents
+        const newMap: Record<string, string> = {};
+
+        // Standard levels (passthrough)
+        for (const level of ['UNCLASSIFIED', 'RESTRICTED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET']) {
+            newMap[level] = level;
+        }
+
+        // Build from MongoDB documents (same schema as CLEARANCE_EQUIVALENCY_TABLE)
+        let totalMappings = 0;
+        for (const doc of docs) {
+            const standardLevel = doc.standardLevel as string;
+            const equivalents = doc.nationalEquivalents as Record<string, string[]>;
+            for (const [_country, values] of Object.entries(equivalents)) {
+                for (const value of values) {
+                    newMap[value.toUpperCase()] = standardLevel;
+                    totalMappings++;
+                }
+            }
+        }
+
+        CLEARANCE_NORMALIZATION_MAP = newMap;
+        kasLogger.info('Clearance normalization map loaded from MongoDB SSOT', {
+            totalMappings,
+            countries: docs.length > 0 ? Object.keys((docs[0] as any).nationalEquivalents || {}).length : 0,
+        });
+
+        await client.close();
+        return totalMappings;
+    } catch (error) {
+        kasLogger.error('Failed to load clearance mappings from MongoDB', {
+            error: error instanceof Error ? error.message : String(error),
+            fallback: 'static-standard-levels',
+        });
+        return 0;
+    }
+}
+
+function normalizeClearanceLevel(clearance: string): string {
+    if (!clearance) return 'UNCLASSIFIED';
+    const upper = clearance.trim().toUpperCase();
+    return CLEARANCE_NORMALIZATION_MAP[upper] || upper;
+}
+
 const app: Application = express();
 const PORT = process.env.KAS_PORT || 8080;
 const HTTPS_ENABLED = process.env.HTTPS_ENABLED === 'true';
@@ -205,7 +287,7 @@ app.post('/request-key', async (req: Request, res: Response) => {
             // Service account token: extract user identity from request body (Issue B fix)
             const userIdentity = keyRequest.userIdentity as any;
             uniqueID = userIdentity.uniqueID || 'service-account-user';
-            clearance = userIdentity.clearance || 'UNCLASSIFIED';
+            clearance = normalizeClearanceLevel(userIdentity.clearance || 'UNCLASSIFIED');
             countryOfAffiliation = userIdentity.countryOfAffiliation || 'USA';
             acpCOI = Array.isArray(userIdentity.acpCOI) ? userIdentity.acpCOI : [];
             dutyOrg = userIdentity.dutyOrg;
@@ -223,7 +305,7 @@ app.post('/request-key', async (req: Request, res: Response) => {
         } else {
             // Regular user token: extract from JWT claims
             uniqueID = decodedToken.uniqueID || decodedToken.preferred_username || decodedToken.sub || 'unknown';
-            clearance = decodedToken.clearance || 'UNCLASSIFIED';
+            clearance = normalizeClearanceLevel(decodedToken.clearance || 'UNCLASSIFIED');
             countryOfAffiliation = decodedToken.countryOfAffiliation || 'USA';
             dutyOrg = decodedToken.dutyOrg;        // Gap #4: Organization attribute
             orgUnit = decodedToken.orgUnit;        // Gap #4: Organizational unit
@@ -1385,8 +1467,15 @@ app.get('/federation/registry', async (req: Request, res: Response) => {
 // ============================================
 async function initializeKASService(): Promise<void> {
     kasLogger.info('Initializing KAS Service');
-    
+
     try {
+        // Load clearance normalization mappings from MongoDB SSOT
+        const clearanceCount = await loadClearanceMappingsFromMongoDB();
+        kasLogger.info('Clearance normalization initialized', {
+            mappings: clearanceCount,
+            source: clearanceCount > 0 ? 'MongoDB clearance_equivalency' : 'static fallback',
+        });
+
         // Initialize MongoDB-backed KAS registry (SSOT)
         if (process.env.ENABLE_FEDERATION !== 'false') {
             kasLogger.info('Loading KAS registry from MongoDB');
@@ -1394,12 +1483,12 @@ async function initializeKASService(): Promise<void> {
             const loadedCount = await initializeKASRegistryFromMongoDB();
             kasLogger.info('KAS registry loaded', {
                 loadedCount,
-                source: 'MongoDB federation_spokes',
+                source: 'MongoDB kas_registry',
             });
         } else {
             kasLogger.info('Federation disabled, skipping KAS registry initialization');
         }
-        
+
         kasLogger.info('KAS Service initialization complete');
     } catch (error) {
         kasLogger.error('KAS Service initialization failed', {

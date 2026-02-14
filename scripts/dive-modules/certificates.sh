@@ -85,26 +85,27 @@ get_mkcert_ca_path() {
 # =============================================================================
 
 ##
-# Build a CA bundle containing ALL trusted CAs
+# Build the SSOT CA trust bundle
 #
-# Combines mkcert CA (for spoke-signed certs) and Vault PKI CA (for hub-signed certs)
-# into a single PEM file. Services mount this as their trust root.
+# Combines mkcert CA + Vault PKI CA chain into a single PEM file at
+# certs/ca-bundle/rootCA.pem. All app services and federation-aware services
+# mount this one bundle. Infra services (postgres, mongo, redis) use the
+# Vault-only chain from their instance certs dir.
 #
 # Arguments:
-#   $1 - Output file path (e.g., /path/to/rootCA.pem)
-#   $2 - Include Vault PKI CA (default: true)
+#   $1 - Output file path (optional, default: certs/ca-bundle/rootCA.pem)
 #
 # Returns:
 #   0 - Always (best-effort)
 ##
 _rebuild_ca_bundle() {
-    local output_file="${1:?Output file path required}"
-    local include_vault_pki="${2:-true}"
+    ensure_dive_root
+    local output_file="${1:-${DIVE_ROOT}/certs/ca-bundle/rootCA.pem}"
 
     mkdir -p "$(dirname "$output_file")"
     : > "$output_file"
 
-    # 1. Always include mkcert CA (spokes use mkcert-signed certs)
+    # 1. Include mkcert CA (development trust provider)
     if command -v mkcert &>/dev/null; then
         local mkcert_ca
         mkcert_ca=$(get_mkcert_ca_path 2>/dev/null) || true
@@ -113,22 +114,21 @@ _rebuild_ca_bundle() {
         fi
     fi
 
-    # 2. Include Vault PKI CA chain if present and requested
-    if [ "$include_vault_pki" = "true" ]; then
-        local vault_ca="${DIVE_ROOT}/instances/hub/certs/ca/rootCA.pem"
-        if [ -f "$vault_ca" ] && openssl x509 -in "$vault_ca" -noout -issuer 2>/dev/null | grep -q "DIVE"; then
-            cat "$vault_ca" >> "$output_file"
-        fi
+    # 2. Include Vault PKI CA chain from stable location (never clobbered by issuance)
+    local vault_ca="${DIVE_ROOT}/certs/vault-pki/ca-chain.pem"
+    if [ -f "$vault_ca" ] && [ -s "$vault_ca" ]; then
+        cat "$vault_ca" >> "$output_file"
     fi
 
     chmod 644 "$output_file"
 }
 
 ##
-# Build spoke CA bundle: mkcert + hub Vault PKI (for cross-trust)
+# Copy the SSOT CA bundle into a spoke instance directory
 #
-# Writes the combined CA bundle to the spoke's certs/ca/, certs/, and truststores/ dirs
-# so all spoke services (Keycloak, backend, KAS) trust both CA providers.
+# Spoke infra services (postgres, mongo, redis) mount ./certs/ and reference
+# /certs/ca/rootCA.pem. This copies the SSOT bundle there so infra services
+# trust both mkcert and Vault PKI CAs.
 #
 # Arguments:
 #   $1 - Spoke code (e.g., DEU)
@@ -136,11 +136,17 @@ _rebuild_ca_bundle() {
 _rebuild_spoke_ca_bundle() {
     local spoke_code="${1:?Spoke code required}"
     local spoke_dir="${DIVE_ROOT}/instances/$(lower "$spoke_code")"
+    local ca_bundle="${DIVE_ROOT}/certs/ca-bundle/rootCA.pem"
+
+    # Ensure the SSOT bundle exists
+    if [ ! -f "$ca_bundle" ] || [ ! -s "$ca_bundle" ]; then
+        _rebuild_ca_bundle
+    fi
 
     mkdir -p "$spoke_dir/certs/ca" "$spoke_dir/truststores"
-    _rebuild_ca_bundle "$spoke_dir/certs/ca/rootCA.pem"
-    cp "$spoke_dir/certs/ca/rootCA.pem" "$spoke_dir/certs/rootCA.pem" 2>/dev/null || true
-    cp "$spoke_dir/certs/ca/rootCA.pem" "$spoke_dir/truststores/mkcert-rootCA.pem" 2>/dev/null || true
+    cp "$ca_bundle" "$spoke_dir/certs/ca/rootCA.pem" 2>/dev/null || true
+    cp "$ca_bundle" "$spoke_dir/certs/rootCA.pem" 2>/dev/null || true
+    cp "$ca_bundle" "$spoke_dir/truststores/mkcert-rootCA.pem" 2>/dev/null || true
 }
 
 # =============================================================================
@@ -271,17 +277,23 @@ generate_spoke_truststore() {
 
     log_step "Generating Java truststore for $instance_code"
 
-    # Ensure CA directory exists and has root CA
+    # Ensure CA directory exists and has SSOT CA bundle
     mkdir -p "$certs_dir/ca"
-    
-    local ca_path
-    ca_path=$(get_mkcert_ca_path)
-    
-    if [ -f "$ca_path" ]; then
-        cp "$ca_path" "$certs_dir/ca/rootCA.pem"
+
+    local ca_bundle="${DIVE_ROOT}/certs/ca-bundle/rootCA.pem"
+    if [ -f "$ca_bundle" ] && [ -s "$ca_bundle" ]; then
+        cp "$ca_bundle" "$certs_dir/ca/rootCA.pem"
         chmod 644 "$certs_dir/ca/rootCA.pem"
     else
-        log_warn "mkcert CA not found, truststore will be incomplete"
+        # Fallback to mkcert CA if SSOT bundle not yet built
+        local ca_path
+        ca_path=$(get_mkcert_ca_path 2>/dev/null) || true
+        if [ -f "$ca_path" ]; then
+            cp "$ca_path" "$certs_dir/ca/rootCA.pem"
+            chmod 644 "$certs_dir/ca/rootCA.pem"
+        else
+            log_warn "No CA bundle or mkcert CA found, truststore will be incomplete"
+        fi
     fi
 
     # Generate the truststore
@@ -311,13 +323,20 @@ generate_hub_truststore() {
 
     # Ensure CA directory exists
     mkdir -p "$certs_dir/ca"
-    
-    local ca_path
-    ca_path=$(get_mkcert_ca_path)
-    
-    if [ -f "$ca_path" ]; then
-        cp "$ca_path" "$certs_dir/ca/rootCA.pem"
-        chmod 644 "$certs_dir/ca/rootCA.pem"
+
+    # Use SSOT CA bundle for truststore (includes mkcert + Vault PKI)
+    local ca_bundle="${DIVE_ROOT}/certs/ca-bundle/rootCA.pem"
+    if [ -f "$ca_bundle" ] && [ -s "$ca_bundle" ]; then
+        cp "$ca_bundle" "$certs_dir/mkcert-rootCA.pem"
+        chmod 644 "$certs_dir/mkcert-rootCA.pem"
+    else
+        # Fallback to mkcert CA if SSOT bundle not yet built
+        local ca_path
+        ca_path=$(get_mkcert_ca_path 2>/dev/null) || true
+        if [ -f "$ca_path" ]; then
+            cp "$ca_path" "$certs_dir/mkcert-rootCA.pem"
+            chmod 644 "$certs_dir/mkcert-rootCA.pem"
+        fi
     fi
 
     if generate_java_truststore "$certs_dir" "changeit"; then
@@ -758,6 +777,9 @@ _hub_service_sans() {
     # Loopback / Docker host aliases
     sans="localhost host.docker.internal"
 
+    # Certificate CN (must match allowed_domains for Vault PKI issuance)
+    sans="$sans dive-hub-services"
+
     # Hub container names (dive-hub-{service} convention)
     sans="$sans dive-hub-keycloak dive-hub-backend dive-hub-frontend"
     sans="$sans dive-hub-opa dive-hub-opal-server dive-hub-kas"
@@ -804,6 +826,9 @@ _spoke_service_sans() {
 
     # Loopback / Docker host aliases
     sans="localhost host.docker.internal"
+
+    # Certificate CN (must match allowed_domains for Vault PKI issuance)
+    sans="$sans dive-spoke-${code_lower}-services"
 
     # Spoke container names: dive-spoke-{code}-{service}
     local services="keycloak backend frontend opa opal-client mongodb postgres redis kas"
@@ -1001,6 +1026,12 @@ _vault_pki_issue_cert() {
     # Copy CA to alternate location expected by some services
     cp "$target_dir/ca/rootCA.pem" "$target_dir/rootCA.pem" 2>/dev/null || true
 
+    # Write Vault PKI CA chain to stable SSOT location (never clobbered by bundle rebuilds)
+    local vault_pki_dir="${DIVE_ROOT}/certs/vault-pki"
+    mkdir -p "$vault_pki_dir"
+    cp "$target_dir/ca/rootCA.pem" "$vault_pki_dir/ca-chain.pem" 2>/dev/null || true
+    chmod 644 "$vault_pki_dir/ca-chain.pem" 2>/dev/null || true
+
     # Set permissions (matching mkcert convention)
     chmod 600 "$target_dir/key.pem"
     chmod 644 "$target_dir/certificate.pem"
@@ -1105,18 +1136,19 @@ generate_hub_certificate_vault() {
     if _vault_pki_issue_cert "hub-services" "dive-hub-services" "$dns_sans" "$ip_sans" "$cert_dir" "2160h"; then
         log_success "Hub certificate issued from Vault PKI"
 
-        # Copy CA to truststore locations
-        # IMPORTANT: Do NOT write to certs/mkcert/ — that directory belongs to mkcert CA.
-        # Vault PKI CA goes to its own directory to avoid contaminating mkcert fullchain.pem.
-        local truststore_dir="${DIVE_ROOT}/instances/hub/truststores"
-        local vault_pki_dir="${DIVE_ROOT}/certs/vault-pki"
-        mkdir -p "$truststore_dir" "$vault_pki_dir"
-        cp "$cert_dir/ca/rootCA.pem" "$truststore_dir/mkcert-rootCA.pem" 2>/dev/null || true
-        cp "$cert_dir/ca/rootCA.pem" "$vault_pki_dir/rootCA.pem" 2>/dev/null || true
-        cp "$cert_dir/ca/rootCA.pem" "$cert_dir/mkcert-rootCA.pem" 2>/dev/null || true
+        # Rebuild SSOT CA bundle (mkcert + Vault PKI) — _vault_pki_issue_cert
+        # already wrote Vault chain to certs/vault-pki/ca-chain.pem
+        _rebuild_ca_bundle
 
-        # Generate Java truststore for Keycloak federation
-        _generate_truststore_from_ca "$cert_dir/ca/rootCA.pem" "$cert_dir"
+        # Copy combined bundle to hub truststore locations
+        local ca_bundle="${DIVE_ROOT}/certs/ca-bundle/rootCA.pem"
+        local truststore_dir="${DIVE_ROOT}/instances/hub/truststores"
+        mkdir -p "$truststore_dir"
+        cp "$ca_bundle" "$truststore_dir/mkcert-rootCA.pem" 2>/dev/null || true
+        cp "$ca_bundle" "$cert_dir/mkcert-rootCA.pem" 2>/dev/null || true
+
+        # Generate Java truststore for Keycloak federation (from combined bundle)
+        _generate_truststore_from_ca "$ca_bundle" "$cert_dir"
 
         return 0
     else
@@ -1167,13 +1199,13 @@ generate_spoke_certificate_vault() {
         "$dns_sans" "$ip_sans" "$cert_dir" "2160h"; then
         log_success "Spoke certificate issued from Vault PKI for $(upper "$spoke_code")"
 
-        # Copy CA to truststore locations (matching mkcert convention)
-        local truststore_dir="$spoke_dir/truststores"
-        mkdir -p "$truststore_dir"
-        cp "$cert_dir/ca/rootCA.pem" "$truststore_dir/mkcert-rootCA.pem" 2>/dev/null || true
+        # Rebuild SSOT CA bundle and copy to spoke instance dir
+        _rebuild_ca_bundle
+        _rebuild_spoke_ca_bundle "$code_lower"
 
-        # Generate Java truststore for Keycloak federation
-        _generate_truststore_from_ca "$cert_dir/ca/rootCA.pem" "$cert_dir"
+        # Generate Java truststore for Keycloak federation (from combined bundle)
+        local ca_bundle="${DIVE_ROOT}/certs/ca-bundle/rootCA.pem"
+        _generate_truststore_from_ca "$ca_bundle" "$cert_dir"
 
         return 0
     else

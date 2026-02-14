@@ -825,9 +825,9 @@ spoke_deployment_provision_opal_token() {
             # so we must restart the container for it to re-read environment
             local opal_container="dive-spoke-${code_lower}-opal-client"
             if docker ps --format '{{.Names}}' | grep -q "^${opal_container}$"; then
-                log_verbose "Restarting OPAL client to pick up new token..."
-                docker restart "$opal_container" 2>/dev/null || \
-                    log_verbose "Could not restart OPAL client (manual restart may be needed)"
+                log_verbose "Recreating OPAL client to pick up new token..."
+                (cd "$spoke_dir" && docker compose up -d --force-recreate "opal-client-${code_lower}") 2>/dev/null || \
+                    log_verbose "Could not recreate OPAL client (manual restart may be needed)"
             fi
 
             log_success "OPAL token provisioned"

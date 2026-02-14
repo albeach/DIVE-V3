@@ -444,6 +444,11 @@ spoke_secrets_load_from_vault() {
     local code_upper=$(upper "$instance_code")
     local code_lower=$(lower "$instance_code")
 
+    # CLI runs on host — use VAULT_CLI_ADDR (host-accessible) over VAULT_ADDR (Docker-internal)
+    if [ -n "${VAULT_CLI_ADDR:-}" ]; then
+        export VAULT_ADDR="$VAULT_CLI_ADDR"
+    fi
+
     # Authenticate with AppRole if credentials available
     if [ -n "${VAULT_ROLE_ID:-}" ] && [ -n "${VAULT_SECRET_ID:-}" ]; then
         vault_approle_login "$VAULT_ROLE_ID" "$VAULT_SECRET_ID" || true
