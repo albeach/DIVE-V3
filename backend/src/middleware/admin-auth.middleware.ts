@@ -51,7 +51,7 @@ export const adminAuthMiddleware = async (
 
         // First run JWT authentication
         await new Promise<void>((resolve, reject) => {
-            authenticateJWT(req, res, (err?: any) => {
+            authenticateJWT(req, res, (err?: unknown) => {
                 if (err) {
                     reject(err);
                 } else {

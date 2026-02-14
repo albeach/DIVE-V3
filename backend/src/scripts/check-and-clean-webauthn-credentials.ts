@@ -112,7 +112,7 @@ async function checkAndCleanCredentials(username: string, deleteCredentials: boo
           credentialId: cred.id!,
         });
         console.log(`  ✅ Deleted credential: ${cred.id} (${cred.userLabel || 'no label'})`);
-      } catch (error: any) {
+      } catch (error) {
         console.error(`  ❌ Failed to delete credential ${cred.id}: ${error.message}`);
       }
     }

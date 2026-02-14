@@ -29,7 +29,7 @@ import {
     IIdPCreateRequest,
     IIdPUpdateRequest
 } from '../types/keycloak.types';
-import { IAdminAPIResponse } from '../types/admin.types';
+import { IAdminAPIResponse, IIdPSubmission } from '../types/admin.types';
 import { IValidationResults, IPreliminaryScore } from '../types/validation.types';
 
 /**
@@ -414,24 +414,24 @@ export const createIdPHandler = async (
         const riskScoringStartTime = Date.now();
 
         // Prepare submission data for Phase 2
-        const submissionData: any = {
+        const submissionData: Record<string, unknown> = {
             alias: createRequest.alias,
             displayName: createRequest.displayName,
             description: createRequest.description,
             protocol: createRequest.protocol,
-            operationalData: (req.body as any).operationalData,
-            complianceDocuments: (req.body as any).complianceDocuments
+            operationalData: (req.body as Record<string, unknown>).operationalData,
+            complianceDocuments: (req.body as Record<string, unknown>).complianceDocuments
         };
 
         // Calculate comprehensive risk score (100 points)
         const comprehensiveRiskScore = await riskScoringService.calculateRiskScore(
             validationResults,
-            submissionData
+            submissionData as unknown as IIdPSubmission
         );
 
         // Validate compliance (ACP-240, STANAG, NIST)
         const complianceCheck = await complianceValidationService.validateCompliance(
-            submissionData
+            submissionData as unknown as IIdPSubmission
         );
 
         const riskScoringDuration = Date.now() - riskScoringStartTime;

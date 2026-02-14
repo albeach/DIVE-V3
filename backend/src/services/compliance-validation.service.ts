@@ -118,7 +118,7 @@ class ComplianceValidationService {
             });
 
             return result;
-        } catch (error: any) {
+        } catch (error) {
             const duration = Date.now() - startTime;
             logger.error('Compliance validation failed', {
                 submissionId: submissionData.submissionId,

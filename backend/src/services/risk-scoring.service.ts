@@ -147,7 +147,7 @@ class RiskScoringService {
             });
 
             return comprehensiveScore;
-        } catch (error: any) {
+        } catch (error) {
             const duration = Date.now() - startTime;
             logger.error('Risk scoring failed', {
                 submissionId: submissionData.submissionId,

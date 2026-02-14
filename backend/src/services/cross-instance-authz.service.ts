@@ -387,11 +387,12 @@ export class CrossInstanceAuthzService {
                     this.authzCache.set(cacheKey, result);
                     return result;
                 }
-            } catch (error: any) {
+            } catch (error) {
+                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
                 logger.error('Remote policy evaluation failed', {
                     requestId: request.requestId,
                     remoteInstance: request.resource.instanceId,
-                    error: error.message,
+                    error: errorMessage,
                 });
 
                 auditTrail.push({
@@ -399,7 +400,7 @@ export class CrossInstanceAuthzService {
                     instanceId: request.resource.instanceId,
                     action: 'remote_policy_error',
                     outcome: 'error',
-                    details: error.message,
+                    details: errorMessage,
                 });
 
                 // Fail-closed: deny on remote evaluation failure
@@ -476,8 +477,8 @@ export class CrossInstanceAuthzService {
                 );
                 successfulQueries++;
                 return instanceResources;
-            } catch (error: any) {
-                failedQueries.push(`${instanceId}: ${error.message}`);
+            } catch (error) {
+                failedQueries.push(`${instanceId}: ${error instanceof Error ? error.message : 'Unknown error'}`);
                 return [];
             }
         });
@@ -576,10 +577,10 @@ export class CrossInstanceAuthzService {
                 allow: decision.allow,
                 reason: decision.reason || (decision.allow ? 'Access allowed' : 'Access denied'),
             };
-        } catch (error: any) {
+        } catch (error) {
             logger.error('Local OPA evaluation failed', {
                 requestId: request.requestId,
-                error: error.message,
+                error: error instanceof Error ? error.message : 'Unknown error',
             });
 
             // Fail-closed
@@ -637,9 +638,9 @@ export class CrossInstanceAuthzService {
                 reason: response.data.reason,
                 instanceId: instance.instanceId,
             };
-        } catch (error: any) {
+        } catch (error) {
             // If endpoint doesn't exist, try direct OPA evaluation
-            if (error.response?.status === 404) {
+            if (axios.isAxiosError(error) && error.response?.status === 404) {
                 logger.debug('Remote federation endpoint not found, using local OPA', {
                     instanceId: instance.instanceId,
                 });
@@ -691,15 +692,15 @@ export class CrossInstanceAuthzService {
                 timeout: 10000,
             });
 
-            return response.data.resources.map((r: any) => ({
+            return response.data.resources.map((r: Record<string, unknown>) => ({
                 ...r,
                 instanceId: instance.instanceId,
                 instanceUrl: instance.instanceUrl,
-            }));
-        } catch (error: any) {
+            })) as IFederatedResource[];
+        } catch (error) {
             logger.warn('Failed to query remote instance', {
                 instanceId: instance.instanceId,
-                error: error.message,
+                error: error instanceof Error ? error.message : 'Unknown error',
             });
             throw error;
         }

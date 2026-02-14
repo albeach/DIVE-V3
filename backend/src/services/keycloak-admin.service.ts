@@ -17,6 +17,7 @@
  */
 
 import KcAdminClient from '@keycloak/keycloak-admin-client';
+import type UserRepresentation from '@keycloak/keycloak-admin-client/lib/defs/userRepresentation';
 import https from 'https';
 import { logger } from '../utils/logger';
 import { getKeycloakPassword } from '../utils/gcp-secrets';
@@ -208,9 +209,10 @@ class KeycloakAdminService {
 
             const idps = response.data;
 
+            type RawIdP = { alias?: string; displayName?: string; providerId?: string; enabled?: boolean; config?: Record<string, string> };
             logger.info('Retrieved identity providers (direct REST)', {
                 count: idps.length,
-                idps: idps.map((i: any) => ({
+                idps: idps.map((i: RawIdP) => ({
                     alias: i.alias,
                     providerId: i.providerId,
                     enabled: i.enabled
@@ -218,7 +220,7 @@ class KeycloakAdminService {
             });
 
             return {
-                idps: idps.map((idp: any) => ({
+                idps: idps.map((idp: RawIdP) => ({
                     alias: idp.alias!,
                     displayName: idp.displayName || idp.alias!,
                     protocol: (idp.providerId === 'oidc' || idp.providerId === 'saml'
@@ -564,25 +566,25 @@ class KeycloakAdminService {
     }
 
     /** @see admin-user-management.ts */
-    async listUsers(max: number = 100, first: number = 0, search: string = ''): Promise<{ users: any[], total: number }> {
+    async listUsers(max: number = 100, first: number = 0, search: string = ''): Promise<{ users: UserRepresentation[], total: number }> {
         await this.ensureAuthenticated();
         return listUsersCore(this.getContext(), max, first, search);
     }
 
     /** @see admin-user-management.ts */
-    async getUserById(userId: string): Promise<any> {
+    async getUserById(userId: string): Promise<UserRepresentation> {
         await this.ensureAuthenticated();
         return getUserByIdCore(this.getContext(), userId);
     }
 
     /** @see admin-user-management.ts */
-    async createUser(userData: any): Promise<string> {
+    async createUser(userData: Record<string, unknown>): Promise<string> {
         await this.ensureAuthenticated();
         return createUserCore(this.getContext(), userData);
     }
 
     /** @see admin-user-management.ts */
-    async updateUser(userId: string, userData: any): Promise<void> {
+    async updateUser(userId: string, userData: Record<string, unknown>): Promise<void> {
         await this.ensureAuthenticated();
         return updateUserCore(this.getContext(), userId, userData);
     }
@@ -600,31 +602,31 @@ class KeycloakAdminService {
     }
 
     /** @see admin-user-management.ts */
-    async getUserByUsername(realmName: string, username: string): Promise<any> {
+    async getUserByUsername(realmName: string, username: string): Promise<UserRepresentation | null> {
         await this.ensureAuthenticated();
         return getUserByUsernameCore(this.getContext(), realmName, username);
     }
 
     /** @see admin-mfa-sessions.ts */
-    async getMFAConfig(realmName?: string): Promise<any> {
+    async getMFAConfig(realmName?: string): Promise<Record<string, unknown>> {
         await this.ensureAuthenticated();
         return getMFAConfigCore(this.getContext(), realmName);
     }
 
     /** @see admin-mfa-sessions.ts */
-    async updateMFAConfig(config: any, realmName?: string): Promise<void> {
+    async updateMFAConfig(config: Record<string, unknown>, realmName?: string): Promise<void> {
         await this.ensureAuthenticated();
         return updateMFAConfigCore(this.getContext(), config, realmName);
     }
 
     /** @see admin-mfa-sessions.ts */
-    async testMFAFlow(realmName?: string): Promise<any> {
+    async testMFAFlow(realmName?: string): Promise<Record<string, unknown>> {
         await this.ensureAuthenticated();
         return testMFAFlowCore(this.getContext(), realmName);
     }
 
     /** @see admin-mfa-sessions.ts */
-    async getActiveSessions(realmName?: string, filters?: any): Promise<any[]> {
+    async getActiveSessions(realmName?: string, filters?: Record<string, unknown>): Promise<Record<string, unknown>[]> {
         await this.ensureAuthenticated();
         return getActiveSessionsCore(this.getContext(), realmName, filters);
     }
@@ -642,13 +644,13 @@ class KeycloakAdminService {
     }
 
     /** @see admin-mfa-sessions.ts */
-    async getSessionStats(realmName?: string): Promise<any> {
+    async getSessionStats(realmName?: string): Promise<Record<string, unknown>> {
         await this.ensureAuthenticated();
         return getSessionStatsCore(this.getContext(), realmName);
     }
 
     /** @see admin-mfa-sessions.ts */
-    async getRealmTheme(realmName?: string): Promise<any> {
+    async getRealmTheme(realmName?: string): Promise<Record<string, unknown>> {
         await this.ensureAuthenticated();
         return getRealmThemeCore(this.getContext(), realmName);
     }

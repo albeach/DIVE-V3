@@ -28,7 +28,7 @@ async function checkHealth(url: string, name: string): Promise<{ status: string;
         } else {
             return { status: `⚠️  ${response.status}`, responseTime };
         }
-    } catch (error: any) {
+    } catch (error) {
         const responseTime = Date.now() - start;
         if (error.code === 'ECONNREFUSED') {
             return { status: '❌ Connection Refused', responseTime };

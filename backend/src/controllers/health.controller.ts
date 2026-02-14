@@ -203,7 +203,7 @@ export const getDetailedHealthHandler = async (
   _next: NextFunction
 ): Promise<void> => {
   const startTime = Date.now();
-  const checks: Record<string, { healthy: boolean; latencyMs?: number; error?: string; details?: any }> = {};
+  const checks: Record<string, { healthy: boolean; latencyMs?: number; error?: string; details?: Record<string, unknown> }> = {};
 
   // Check OPA
   try {

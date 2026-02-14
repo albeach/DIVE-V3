@@ -8,11 +8,24 @@
  */
 
 import { logger } from '../utils/logger';
+import type { IZTDFResource } from '../types/ztdf.types';
+
+interface IResourceAttributes {
+    resourceId: string;
+    classification: string;
+    releasabilityTo: string[];
+    COI: string[];
+    creationDate?: string;
+    encrypted: boolean;
+    originalClassification?: string;
+    originalCountry?: string;
+    natoEquivalent?: string;
+}
 
 /**
  * Check if resource is ZTDF-enhanced
  */
-export function isZTDFResource(resource: any): boolean {
+export function isZTDFResource(resource: IZTDFResource | Record<string, unknown>): resource is IZTDFResource {
     return resource && typeof resource === 'object' && 'ztdf' in resource;
 }
 
@@ -20,7 +33,7 @@ export function isZTDFResource(resource: any): boolean {
  * Extract authorization-relevant attributes from a resource.
  * Handles both ZTDF-enhanced and legacy resource formats.
  */
-export function extractResourceAttributes(resource: any): any {
+export function extractResourceAttributes(resource: IZTDFResource | Record<string, unknown>): IResourceAttributes {
     if (isZTDFResource(resource)) {
         return {
             resourceId: resource.resourceId,
@@ -37,12 +50,12 @@ export function extractResourceAttributes(resource: any): any {
 
     // Legacy resource format
     return {
-        resourceId: resource.resourceId,
-        classification: resource.classification || 'UNCLASSIFIED',
-        releasabilityTo: resource.releasabilityTo || [],
-        COI: resource.COI || [],
-        creationDate: resource.creationDate,
-        encrypted: resource.encrypted || false,
+        resourceId: resource.resourceId as string,
+        classification: (resource.classification as string) || 'UNCLASSIFIED',
+        releasabilityTo: (resource.releasabilityTo as string[]) || [],
+        COI: (resource.COI as string[]) || [],
+        creationDate: resource.creationDate as string | undefined,
+        encrypted: (resource.encrypted as boolean) || false,
     };
 }
 
@@ -53,7 +66,7 @@ export function extractResourceAttributes(resource: any): any {
 export async function fetchResourceForAuthz(
     resourceId: string,
     authHeader: string | string[] | undefined
-): Promise<any | null> {
+): Promise<IZTDFResource | null> {
     const { getResourceById } = await import('../services/resource.service');
     // Authorization header is always a single string value
     const headerValue = Array.isArray(authHeader) ? authHeader[0] : authHeader;

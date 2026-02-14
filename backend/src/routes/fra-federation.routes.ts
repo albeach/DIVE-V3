@@ -80,12 +80,12 @@ router.get('/resources', async (req: Request, res: Response) => {
       count: resources.length,
       resources
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error(`[${correlationId}] Error fetching resources:`, error);
     res.status(500).json({
       correlationId,
       error: 'Failed to fetch federation resources',
-      message: error.message
+      message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
@@ -112,7 +112,7 @@ router.post('/resources', async (req: Request, res: Response): Promise<void> => 
     }
 
     // Import resources
-    const result = await (federationService as any).importResources(resources, originRealm || 'USA');
+    const result = await (federationService as unknown as { importResources(resources: unknown[], realm: string): Promise<{ synced: number; updated: number; conflicted: number; conflicts: unknown[] }> }).importResources(resources, originRealm || 'USA');
 
     res.json({
       correlationId,
@@ -126,12 +126,12 @@ router.post('/resources', async (req: Request, res: Response): Promise<void> => 
         conflicts: result.conflicts
       }
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error(`[${correlationId}] Error importing resources:`, error);
     res.status(500).json({
       correlationId,
       error: 'Failed to import resources',
-      message: error.message
+      message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
@@ -162,12 +162,12 @@ router.post('/sync', async (req: Request, res: Response): Promise<void> => {
       ...result,
       correlationId
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error(`[${correlationId}] Sync error:`, error);
     res.status(500).json({
       correlationId,
       error: 'Sync failed',
-      message: error.message
+      message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
@@ -189,12 +189,12 @@ router.get('/sync/history', async (req: Request, res: Response) => {
       count: history.length,
       syncHistory: history
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error(`[${correlationId}] Error fetching sync history:`, error);
     res.status(500).json({
       correlationId,
       error: 'Failed to fetch sync history',
-      message: error.message
+      message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
@@ -214,12 +214,12 @@ router.get('/conflicts', async (req: Request, res: Response) => {
       timestamp: new Date(),
       ...report
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error(`[${correlationId}] Error fetching conflict report:`, error);
     res.status(500).json({
       correlationId,
       error: 'Failed to fetch conflict report',
-      message: error.message
+      message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
@@ -262,12 +262,12 @@ router.post('/decisions', async (req: Request, res: Response): Promise<void> => 
       decisionsReceived: stored.length,
       status: 'stored'
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error(`[${correlationId}] Error storing decisions:`, error);
     res.status(500).json({
       correlationId,
       error: 'Failed to store decisions',
-      message: error.message
+      message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
@@ -303,12 +303,12 @@ router.get('/status', async (req: Request, res: Response) => {
         'correlation_tracking'
       ]
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error(`[${correlationId}] Error fetching status:`, error);
     res.status(500).json({
       correlationId,
       error: 'Failed to fetch status',
-      message: error.message
+      message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });
@@ -331,12 +331,12 @@ router.post('/scheduler/start', async (req: Request, res: Response) => {
       status: 'started',
       syncInterval: process.env.FEDERATION_SYNC_INTERVAL || '300'
     });
-  } catch (error: any) {
+  } catch (error) {
     console.error(`[${correlationId}] Error starting scheduler:`, error);
     res.status(500).json({
       correlationId,
       error: 'Failed to start scheduler',
-      message: error.message
+      message: error instanceof Error ? error.message : 'Unknown error'
     });
   }
 });

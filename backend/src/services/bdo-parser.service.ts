@@ -20,6 +20,8 @@ import {
 } from '../types/stanag.types';
 import { XMP_NAMESPACES, NATO_POLICY_OID } from '../config/spif.config';
 
+type XmlNode = Record<string, unknown> & { $?: Record<string, string>; _?: string };
+
 /**
  * Extract BDO from a file buffer based on MIME type
  */
@@ -168,8 +170,9 @@ async function parseBindingInformationXML(xmlContent: string): Promise<IBindingD
         const result = await parser.parseStringPromise(xmlContent);
 
         // Navigate through the binding structure
-        const bindingInfo = findBindingInformation(result);
-        if (!bindingInfo) return null;
+        const bindingInfoRaw = findBindingInformation(result);
+        if (!bindingInfoRaw) return null;
+        const bindingInfo = bindingInfoRaw as XmlNode;
 
         // Extract confidentiality label
         const confLabel = extractConfidentialityLabel(bindingInfo);
@@ -195,21 +198,23 @@ async function parseBindingInformationXML(xmlContent: string): Promise<IBindingD
 /**
  * Find BindingInformation in parsed XML
  */
-function findBindingInformation(obj: any, depth: number = 0): any {
+function findBindingInformation(obj: unknown, depth: number = 0): unknown {
     if (depth > 10) return null;
 
     if (typeof obj !== 'object' || obj === null) return null;
 
+    const record = obj as Record<string, unknown>;
+
     // Check for BindingInformation key
-    for (const key of Object.keys(obj)) {
+    for (const key of Object.keys(record)) {
         if (key.toLowerCase().includes('bindinginformation') ||
             key.toLowerCase().includes('metadatabinding')) {
-            return obj[key];
+            return record[key];
         }
     }
 
     // Recurse into child objects
-    for (const value of Object.values(obj)) {
+    for (const value of Object.values(record)) {
         if (typeof value === 'object' && value !== null) {
             const found = findBindingInformation(value, depth + 1);
             if (found) return found;
@@ -228,7 +233,7 @@ function findBindingInformation(obj: any, depth: number = 0): any {
 /**
  * Extract confidentiality label from binding information
  */
-function extractConfidentialityLabel(bindingInfo: any): IConfidentialityLabel | null {
+function extractConfidentialityLabel(bindingInfo: XmlNode): IConfidentialityLabel | null {
     // Search for originatorConfidentialityLabel
     const label = findInObject(bindingInfo, 'originatorConfidentialityLabel') ||
         findInObject(bindingInfo, 'ConfidentialityLabel') ||
@@ -246,10 +251,10 @@ function extractConfidentialityLabel(bindingInfo: any): IConfidentialityLabel | 
     const classification = extractTextValue(findInObject(confInfo, 'Classification')) || 'UNCLASSIFIED';
 
     // Extract categories if present
-    const categories = extractCategories(confInfo);
+    const categories = extractCategories(confInfo as XmlNode);
 
     // Extract originator info
-    const originatorId = findInObject(label, 'OriginatorID');
+    const originatorId = findInObject(label, 'OriginatorID') as XmlNode | null;
     const creationDateTime = extractTextValue(findInObject(label, 'CreationDateTime'));
 
     return {
@@ -258,19 +263,20 @@ function extractConfidentialityLabel(bindingInfo: any): IConfidentialityLabel | 
         categories: categories.length > 0 ? categories : undefined,
         creationDateTime,
         originatorId: extractTextValue(originatorId) || undefined,
-        originatorIdType: originatorId?.$?.IDType,
+        originatorIdType: originatorId?.$?.IDType as 'uniformResourceIdentifier' | 'distinguishedName' | undefined,
     };
 }
 
 /**
  * Extract data references from binding information
  */
-function extractDataReferences(bindingInfo: any): IDataReference[] {
+function extractDataReferences(bindingInfo: XmlNode): IDataReference[] {
     const refs: IDataReference[] = [];
 
     const dataRefNodes = findAllInObject(bindingInfo, 'DataReference');
 
-    for (const node of dataRefNodes) {
+    for (const rawNode of dataRefNodes) {
+        const node = rawNode as XmlNode;
         const uri = node.$?.URI || extractTextValue(node) || '';
         const hashAlg = node.$?.hashAlgorithm;
         const hashVal = node.$?.hashValue;
@@ -293,7 +299,7 @@ function extractDataReferences(bindingInfo: any): IDataReference[] {
 /**
  * Extract additional metadata from binding information
  */
-function extractMetadata(bindingInfo: any): Partial<IBindingDataObject> {
+function extractMetadata(bindingInfo: XmlNode): Partial<IBindingDataObject> {
     return {
         creator: extractTextValue(findInObject(bindingInfo, 'Creator')),
         description: extractTextValue(findInObject(bindingInfo, 'Description')),
@@ -308,14 +314,15 @@ function extractMetadata(bindingInfo: any): Partial<IBindingDataObject> {
 /**
  * Extract categories from confidentiality information
  */
-function extractCategories(confInfo: any): IConfidentialityLabel['categories'] {
+function extractCategories(confInfo: XmlNode): IConfidentialityLabel['categories'] {
     const categories: IConfidentialityLabel['categories'] = [];
 
     // Look for Category or SecurityCategory elements
     const categoryNodes = findAllInObject(confInfo, 'Category') ||
         findAllInObject(confInfo, 'SecurityCategory');
 
-    for (const node of categoryNodes) {
+    for (const rawNode of categoryNodes) {
+        const node = rawNode as XmlNode;
         const tagSetId = node.$?.tagSetId || '';
         const tagName = node.$?.tagName || extractTextValue(findInObject(node, 'TagName')) || '';
         const values = extractCategoryValues(node);
@@ -331,7 +338,7 @@ function extractCategories(confInfo: any): IConfidentialityLabel['categories'] {
 /**
  * Extract category values
  */
-function extractCategoryValues(categoryNode: any): string[] {
+function extractCategoryValues(categoryNode: XmlNode): string[] {
     const values: string[] = [];
 
     const valueNodes = findAllInObject(categoryNode, 'Value') ||
@@ -450,23 +457,23 @@ export async function parseSidecarBDO(sidecarBuffer: Buffer, filename: string): 
 /**
  * Normalize JSON BDO to standard format
  */
-function normalizeJSONBDO(json: any): IBindingDataObject | null {
+function normalizeJSONBDO(json: Record<string, unknown>): IBindingDataObject | null {
     if (!json.classification && !json.originatorConfidentialityLabel) {
         return null;
     }
 
     if (json.originatorConfidentialityLabel) {
-        return json as IBindingDataObject;
+        return json as unknown as IBindingDataObject;
     }
 
     // Simplified JSON format
     return {
         originatorConfidentialityLabel: {
-            policyIdentifier: json.policyIdentifier || NATO_POLICY_OID,
-            classification: normalizeClassification(json.classification),
-            categories: json.categories,
+            policyIdentifier: (json.policyIdentifier as string) || NATO_POLICY_OID,
+            classification: normalizeClassification(json.classification as string),
+            categories: json.categories as IConfidentialityLabel['categories'],
         },
-        dataReferences: json.dataReferences || [{ uri: '' }],
+        dataReferences: (json.dataReferences as IDataReference[]) || [{ uri: '' }],
     };
 }
 
@@ -495,18 +502,19 @@ function normalizeClassification(classification: string): string {
 /**
  * Utility: Find value by key in nested object
  */
-function findInObject(obj: any, key: string, depth: number = 0): any {
+function findInObject(obj: unknown, key: string, depth: number = 0): unknown {
     if (depth > 10 || typeof obj !== 'object' || obj === null) return null;
 
+    const record = obj as Record<string, unknown>;
     const lowerKey = key.toLowerCase();
 
-    for (const k of Object.keys(obj)) {
+    for (const k of Object.keys(record)) {
         if (k.toLowerCase() === lowerKey || k.toLowerCase().endsWith(`:${lowerKey}`)) {
-            return obj[k];
+            return record[k];
         }
     }
 
-    for (const value of Object.values(obj)) {
+    for (const value of Object.values(record)) {
         if (typeof value === 'object') {
             const found = findInObject(value, key, depth + 1);
             if (found !== null) return found;
@@ -525,14 +533,15 @@ function findInObject(obj: any, key: string, depth: number = 0): any {
 /**
  * Utility: Find all values by key in nested object
  */
-function findAllInObject(obj: any, key: string, depth: number = 0): any[] {
-    const results: any[] = [];
+function findAllInObject(obj: unknown, key: string, depth: number = 0): unknown[] {
+    const results: unknown[] = [];
 
     if (depth > 10 || typeof obj !== 'object' || obj === null) return results;
 
+    const record = obj as Record<string, unknown>;
     const lowerKey = key.toLowerCase();
 
-    for (const [k, v] of Object.entries(obj)) {
+    for (const [k, v] of Object.entries(record)) {
         if (k.toLowerCase() === lowerKey || k.toLowerCase().endsWith(`:${lowerKey}`)) {
             if (Array.isArray(v)) {
                 results.push(...v);
@@ -542,7 +551,7 @@ function findAllInObject(obj: any, key: string, depth: number = 0): any[] {
         }
     }
 
-    for (const value of Object.values(obj)) {
+    for (const value of Object.values(record)) {
         if (typeof value === 'object' && value !== null) {
             results.push(...findAllInObject(value, key, depth + 1));
         }
@@ -559,11 +568,11 @@ function findAllInObject(obj: any, key: string, depth: number = 0): any[] {
 /**
  * Utility: Extract text value from XML node
  */
-function extractTextValue(node: any): string | undefined {
+function extractTextValue(node: unknown): string | undefined {
     if (typeof node === 'string') return node;
     if (node === null || node === undefined) return undefined;
     if (typeof node === 'object') {
-        if (node._) return node._;
+        if ('_' in (node as Record<string, unknown>) && typeof (node as Record<string, unknown>)._ === 'string') return (node as Record<string, unknown>)._ as string;
         if (Array.isArray(node) && node.length > 0) {
             return extractTextValue(node[0]);
         }

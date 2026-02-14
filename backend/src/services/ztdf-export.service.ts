@@ -501,7 +501,7 @@ function mapDIVEAssertionToOpenTDF(
     // Build statement from DIVE assertion
     const statement: IOpenTDFAssertionStatement = {
         format: 'json-structured',
-        value: diveAssertion.value || {}
+        value: (diveAssertion.value || {}) as IOpenTDFAssertionValue
     };
 
     // Build binding (create signature for policy assertion)

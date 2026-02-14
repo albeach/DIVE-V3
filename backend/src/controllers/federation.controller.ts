@@ -54,7 +54,7 @@ router.get('/resources/search', authenticateJWT, async (req: Request, res: Respo
   const { query, classification, releasableTo, coi, limit = '100' } = req.query;
   const requestId = req.headers['x-request-id'] as string || `fed-${Date.now()}`;
   const originRealm = req.headers['x-origin-realm'] as string;
-  const user = (req as any).user;
+  const user = (req as Request & { user?: Record<string, unknown> }).user;
 
   try {
     logger.info('Federation user search request', {
@@ -67,7 +67,7 @@ router.get('/resources/search', authenticateJWT, async (req: Request, res: Respo
     });
 
     // Build search query
-    const searchQuery: any = {};
+    const searchQuery: Record<string, unknown> = {};
 
     if (classification) {
       searchQuery['ztdf.policy.securityLabel.classification'] = classification;
@@ -108,17 +108,20 @@ router.get('/resources/search', authenticateJWT, async (req: Request, res: Respo
     });
 
     // Map to federated search result format
-    const results = resources.map((r: any) => ({
-      resourceId: r.resourceId,
-      title: r.title,
-      classification: r.ztdf?.policy?.securityLabel?.classification || r.classification || 'UNCLASSIFIED',
-      releasabilityTo: r.ztdf?.policy?.securityLabel?.releasabilityTo || r.releasabilityTo || [],
-      COI: r.ztdf?.policy?.securityLabel?.COI || r.COI || [],
-      encrypted: Boolean(r.ztdf?.payload?.encryptedContent),
-      creationDate: r.ztdf?.policy?.securityLabel?.creationDate || r.creationDate,
-      displayMarking: r.ztdf?.policy?.securityLabel?.displayMarking,
-      originRealm: process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA'
-    }));
+    const results = resources.map((r: Record<string, unknown>) => {
+      const ztdf = r.ztdf as { policy?: { securityLabel?: Record<string, unknown> }; payload?: { encryptedContent?: unknown } } | undefined;
+      return {
+        resourceId: r.resourceId,
+        title: r.title,
+        classification: ztdf?.policy?.securityLabel?.classification || r.classification || 'UNCLASSIFIED',
+        releasabilityTo: ztdf?.policy?.securityLabel?.releasabilityTo || r.releasabilityTo || [],
+        COI: ztdf?.policy?.securityLabel?.COI || r.COI || [],
+        encrypted: Boolean(ztdf?.payload?.encryptedContent),
+        creationDate: ztdf?.policy?.securityLabel?.creationDate || r.creationDate,
+        displayMarking: ztdf?.policy?.securityLabel?.displayMarking,
+        originRealm: process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA'
+      };
+    });
 
     logger.info('Federation user search completed', {
       requestId,
@@ -195,8 +198,7 @@ router.get('/search', requireSPAuth, requireSPScope('resource:search'), async (r
     }
 
     // Build search query based on SP's allowed access
-    const query: any = {
-      // Always filter by releasability to include SP's country
+    const query: Record<string, unknown> = {
       releasabilityTo: { $in: [spContext.sp.country] }
     };
 
@@ -400,7 +402,7 @@ router.post('/resources/request', requireSPAuth, requireSPScope('resource:read')
 router.post('/resources/publish', authenticateJWT, async (req: Request, res: Response) => {
   const { resourceIds, federationScope } = req.body;
   const requestId = req.headers['x-request-id'] as string;
-  const user = (req as any).user;
+  const user = (req as Request & { user?: Record<string, unknown> }).user;
 
   // Check admin privileges
   if (!user || user.preferred_username !== 'admin') {
