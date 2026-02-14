@@ -19,6 +19,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
 import { Request, Response, NextFunction } from 'express';
+import { logger } from '../logger';
 
 export type Locale = 'en' | 'fr' | 'de' | 'es' | 'it' | 'nl' | 'pl';
 
@@ -45,7 +46,7 @@ function loadTranslations(locale: Locale, namespace: string = 'errors'): Record<
     translationsCache.set(cacheKey, translations);
     return translations;
   } catch (error) {
-    console.error(`[i18n] Failed to load translations: ${locale}/${namespace}`, error);
+    logger.error('Failed to load translations', { locale, namespace, error: error instanceof Error ? error.message : String(error) });
 
     // Fallback to English if available
     if (locale !== defaultLocale) {
@@ -93,7 +94,7 @@ export function t(
   const value = getNestedValue(translations, key);
 
   if (!value) {
-    console.warn(`[i18n] Translation missing: ${locale}:${namespace}:${key}`);
+    logger.warn('Translation missing', { locale, namespace, key });
     return key; // Return key as fallback
   }
 

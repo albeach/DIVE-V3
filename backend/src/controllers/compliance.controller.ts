@@ -253,18 +253,18 @@ export async function getCoiKeysInfo(
     res: Response,
 ): Promise<void> {
     try {
-        console.log('[COI Keys API] Request received');
+        logger.debug('COI Keys API request received');
 
         // Import the COI Keys service
         const { getAllCOIKeys, getCOIKeyStatistics } = await import('../services/coi-key.service');
 
         // Get live statistics from database
         const stats = await getCOIKeyStatistics();
-        console.log('[COI Keys API] Stats:', stats);
+        logger.debug('COI Keys API stats retrieved', { stats });
 
         // Get all active COI Keys from database
         const { cois } = await getAllCOIKeys('active');
-        console.log('[COI Keys API] COIs retrieved:', cois.length);
+        logger.debug('COI Keys API COIs retrieved', { count: cois.length });
 
         // Transform to compliance page format
         const coiList = cois.map(coi => ({
@@ -278,7 +278,7 @@ export async function getCoiKeysInfo(
             resourceCount: coi.resourceCount,
         }));
 
-        console.log('[COI Keys API] Returning', coiList.length, 'COIs to client');
+        logger.debug('COI Keys API returning COIs to client', { count: coiList.length });
 
         const coiKeysInfo = {
             title: "Community of Interest (COI) Keys",

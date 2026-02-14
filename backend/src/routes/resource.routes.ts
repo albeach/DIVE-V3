@@ -17,6 +17,7 @@ import {
     getFacetsHandler
 } from '../controllers/paginated-search.controller';
 import { authzMiddleware, authenticateJWT } from '../middleware/authz.middleware';
+import { logger } from '../utils/logger';
 import { enrichmentMiddleware } from '../middleware/enrichment.middleware';
 import { enforceFederationAgreement } from '../middleware/federation-agreement.middleware';
 
@@ -283,7 +284,7 @@ router.get('/count', async (req, res) => {
             await client.close();
         }
     } catch (error) {
-        console.error('Error counting resources:', error);
+        logger.error('Error counting resources', { error });
         res.status(500).json({ error: 'Internal server error', count: 0 });
     }
 });

@@ -232,7 +232,7 @@ async function startServer() {
   }
 
   const serverCallback = async () => {
-    console.log('🚀 SERVER CALLBACK STARTED - SPOKE_MODE:', process.env.SPOKE_MODE);
+    logger.info('Server callback started', { spokeMode: process.env.SPOKE_MODE });
     logger.info('DIVE V3 Backend API started', {
       port: PORT,
       env: process.env.NODE_ENV,
@@ -549,7 +549,7 @@ async function startServer() {
     // Hub MongoDB is the Single Source of Truth for spokeId.
     // SPOKE_TOKEN (from registration) is the identity - Hub knows which spokeId it belongs to.
     // Flow: Start heartbeat with SPOKE_TOKEN → Hub validates → returns spokeId → cache locally
-    console.log('🔄 Initializing spoke identity and heartbeat services...');
+    logger.info('Initializing spoke identity and heartbeat services');
 
     const isSpokeMode = process.env.SPOKE_MODE === 'true';
 
