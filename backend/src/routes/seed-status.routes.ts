@@ -126,7 +126,7 @@ router.get('/seed-status', async (_req: Request, res: Response) => {
                 count: b.count,
                 timestamp: b.timestamp
             })),
-            byInstance: instanceDistribution.reduce((acc: Record<string, number>, curr: any) => {
+            byInstance: instanceDistribution.reduce((acc: Record<string, number>, curr: { _id: string; count: number }) => {
                 acc[curr._id] = curr.count;
                 return acc;
             }, {})
@@ -225,7 +225,7 @@ router.get('/distribution', async (_req: Request, res: Response) => {
                     acc[curr._id] = curr.count;
                     return acc;
                 }, {}),
-                percentages: classificationDist.reduce((acc: Record<string, string>, curr: any) => {
+                percentages: classificationDist.reduce((acc: Record<string, string>, curr: { _id: string; count: number }) => {
                     acc[curr._id] = ((curr.count / totalCount) * 100).toFixed(2) + '%';
                     return acc;
                 }, {}),
@@ -236,34 +236,34 @@ router.get('/distribution', async (_req: Request, res: Response) => {
                     acc[curr._id] = curr.count;
                     return acc;
                 }, {}),
-                percentages: coiDist.reduce((acc: Record<string, string>, curr: any) => {
+                percentages: coiDist.reduce((acc: Record<string, string>, curr: { _id: string; count: number }) => {
                     acc[curr._id] = ((curr.count / totalCount) * 100).toFixed(2) + '%';
                     return acc;
                 }, {})
             },
             byKASCount: {
-                counts: kasDist.reduce((acc: Record<string, number>, curr: any) => {
+                counts: kasDist.reduce((acc: Record<string, number>, curr: { _id: number; count: number }) => {
                     const label = curr._id === 1 ? 'Single KAS' : `${curr._id} KAS (Multi)`;
                     acc[label] = curr.count;
                     return acc;
                 }, {}),
-                percentages: kasDist.reduce((acc: Record<string, string>, curr: any) => {
+                percentages: kasDist.reduce((acc: Record<string, string>, curr: { _id: number; count: number }) => {
                     const label = curr._id === 1 ? 'Single KAS' : `${curr._id} KAS (Multi)`;
                     acc[label] = ((curr.count / totalCount) * 100).toFixed(2) + '%';
                     return acc;
                 }, {})
             },
             byIndustryAccess: {
-                counts: industryDist.reduce((acc: Record<string, number>, curr: any) => {
+                counts: industryDist.reduce((acc: Record<string, number>, curr: { _id: boolean; count: number }) => {
                     acc[curr._id ? 'Allowed' : 'Gov-Only'] = curr.count;
                     return acc;
                 }, {}),
-                percentages: industryDist.reduce((acc: Record<string, string>, curr: any) => {
+                percentages: industryDist.reduce((acc: Record<string, string>, curr: { _id: boolean; count: number }) => {
                     acc[curr._id ? 'Allowed' : 'Gov-Only'] = ((curr.count / totalCount) * 100).toFixed(2) + '%';
                     return acc;
                 }, {})
             },
-            topReleasabilityPatterns: releasabilityDist.map((item: any) => ({
+            topReleasabilityPatterns: releasabilityDist.map((item: { _id: string[] | null; count: number }) => ({
                 countries: item._id?.join(', ') || 'None',
                 count: item.count,
                 percentage: ((item.count / totalCount) * 100).toFixed(2) + '%'
@@ -309,7 +309,7 @@ router.get('/seed-manifests', async (_req: Request, res: Response) => {
         const result = {
             timestamp: new Date().toISOString(),
             count: manifests.length,
-            manifests: manifests.map((m: any) => ({
+            manifests: manifests.map((m: { _id: string; instanceCode: string; count: number; classifications: string[]; firstCreated: Date; lastCreated: Date }) => ({
                 batchId: m._id,
                 instanceCode: m.instanceCode,
                 documentCount: m.count,

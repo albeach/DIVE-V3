@@ -9,8 +9,8 @@ import { logger } from './logger';
  * Parse SCIM filter expression
  * Simple implementation - production would need full SCIM filter parser
  */
-export function parseSCIMFilter(filter: string): any {
-  const parsed: any = {};
+export function parseSCIMFilter(filter: string): Record<string, unknown> {
+  const parsed: Record<string, unknown> = {};
   
   if (!filter) {
     return parsed;
@@ -64,7 +64,7 @@ export function validateResourceType(resourceType: string): boolean {
 /**
  * Build SCIM error response
  */
-export function buildSCIMError(status: number, detail: string, scimType?: string): any {
+export function buildSCIMError(status: number, detail: string, scimType?: string): Record<string, unknown> {
   return {
     schemas: ["urn:ietf:params:scim:api:messages:2.0:Error"],
     status: status.toString(),
@@ -76,7 +76,7 @@ export function buildSCIMError(status: number, detail: string, scimType?: string
 /**
  * Validate SCIM patch operation
  */
-export function validatePatchOperation(operation: any): boolean {
+export function validatePatchOperation(operation: { op?: string; path?: string; value?: unknown }): boolean {
   const validOps = ['add', 'remove', 'replace'];
   
   if (!operation.op || !validOps.includes(operation.op)) {
@@ -122,7 +122,7 @@ export function parseAttributePath(path: string): {
 /**
  * Apply SCIM attribute filtering
  */
-export function filterAttributes(resource: any, attributes?: string[], excludedAttributes?: string[]): any {
+export function filterAttributes(resource: Record<string, unknown>, attributes?: string[], excludedAttributes?: string[]): Record<string, unknown> {
   if (!attributes && !excludedAttributes) {
     return resource;
   }
@@ -134,7 +134,7 @@ export function filterAttributes(resource: any, attributes?: string[], excludedA
   if (attributes && attributes.length > 0) {
     // allowed variable defined but not used - keeping for potential future use
     // const allowed = new Set(attributes);
-    const result: any = {
+    const result: Record<string, unknown> = {
       schemas: filtered.schemas,
       id: filtered.id
     };
@@ -181,7 +181,7 @@ export function isValidCountryCode(country: string): boolean {
 /**
  * Normalize SCIM multi-valued attributes
  */
-export function normalizeMultiValuedAttribute(values: any[]): any[] {
+export function normalizeMultiValuedAttribute(values: (string | Record<string, unknown>)[]): Record<string, unknown>[] {
   return values.map((value, index) => {
     if (typeof value === 'string') {
       return {

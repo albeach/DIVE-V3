@@ -31,7 +31,7 @@ export interface IExternalKASConfig {
  * Create authenticated HTTP client for external KAS
  */
 export function createKASClient(config: IExternalKASConfig): AxiosInstance {
-    const axiosConfig: any = {
+    const axiosConfig: Record<string, unknown> = {
         baseURL: config.kasUrl,
         timeout: 10000,
         headers: {
@@ -81,7 +81,7 @@ export async function requestKeyFromExternalKAS(
         requestId: string;
         requestTimestamp: string;
     }
-): Promise<any> {
+): Promise<Record<string, unknown>> {
     const client = createKASClient(config);
     
     logger.info('Requesting key from external KAS', {
@@ -106,12 +106,12 @@ export async function requestKeyFromExternalKAS(
         });
 
         return response.data;
-    } catch (error: any) {
+    } catch (error) {
         logger.error('Key request failed from external KAS', {
             requestId: request.requestId,
             kasId: config.kasId,
-            error: error.message,
-            status: error.response?.status,
+            error: error instanceof Error ? error.message : 'Unknown error',
+            status: (error as { response?: { status?: number } }).response?.status,
         });
 
         throw error;

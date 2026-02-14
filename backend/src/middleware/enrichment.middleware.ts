@@ -263,7 +263,7 @@ export async function enrichmentMiddleware(
     const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
 
     try {
-        let payload: any;
+        let payload: Record<string, unknown> & { uniqueID?: string; clearance?: string; countryOfAffiliation?: string; acpCOI?: string | string[]; email?: string };
 
         // Check if user is already authenticated (from authenticateJWT middleware)
         if ((req as any).user) {

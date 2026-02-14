@@ -336,18 +336,18 @@ export const sanitizeAllStrings = (
     next: NextFunction
 ): void => {
     if (req.body && typeof req.body === 'object') {
-        const sanitize = (obj: any): any => {
+        const sanitize = (obj: unknown): unknown => {
             if (typeof obj === 'string') {
                 // Trim whitespace
-                obj = obj.trim();
+                let str = obj.trim();
 
                 // Limit length
-                if (obj.length > MAX_STRING_LENGTH) {
-                    obj = obj.substring(0, MAX_STRING_LENGTH);
+                if (str.length > MAX_STRING_LENGTH) {
+                    str = str.substring(0, MAX_STRING_LENGTH);
                 }
 
                 // Escape HTML (basic XSS prevention)
-                obj = obj
+                return str
                     .replace(/&/g, '&amp;')
                     .replace(/</g, '&lt;')
                     .replace(/>/g, '&gt;')
@@ -357,9 +357,11 @@ export const sanitizeAllStrings = (
             } else if (Array.isArray(obj)) {
                 obj = obj.map(sanitize);
             } else if (obj !== null && typeof obj === 'object') {
-                for (const key in obj) {
-                    obj[key] = sanitize(obj[key]);
+                const record = obj as Record<string, unknown>;
+                for (const key in record) {
+                    record[key] = sanitize(record[key]);
                 }
+                return record;
             }
             return obj;
         };

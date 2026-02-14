@@ -5,7 +5,7 @@
  * Type definitions for file upload with automatic ZTDF conversion
  */
 
-import { ClassificationLevel, COIOperator } from './ztdf.types';
+import { ClassificationLevel, COIOperator, IZTDFObject } from './ztdf.types';
 
 /**
  * Upload metadata (from client)
@@ -43,7 +43,7 @@ export interface IUploadResult {
     resourceId: string;
     ztdfObjectId: string;
     displayMarking: string;
-    ztdf?: any;  // Include full ZTDF object for classification equivalency tests
+    ztdf?: IZTDFObject;  // Include full ZTDF object for classification equivalency tests
     metadata: {
         fileSize: number;
         mimeType: string;

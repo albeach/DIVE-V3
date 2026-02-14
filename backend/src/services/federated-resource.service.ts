@@ -1301,7 +1301,7 @@ class FederatedResourceService {
 
             return { results, accessibleCount, facets: remoteFacets, stats: remoteStats };
 
-        } catch (error: any) {
+        } catch (error) {
             // Enhanced error diagnostics for federation failures
             const errorDetails: Record<string, any> = {
                 instance: instance.code,

@@ -101,8 +101,8 @@ export async function createCOIKeyHandler(req: Request, res: Response): Promise<
         logger.info('Created COI Key', { coiId: request.coiId });
 
         res.status(201).json(coiKey);
-    } catch (error: any) {
-        if (error.message.includes('already exists')) {
+    } catch (error) {
+        if (error instanceof Error && error.message.includes('already exists')) {
             res.status(409).json({ error: error.message });
         } else {
             logger.error('Failed to create COI Key', { error });
@@ -135,8 +135,8 @@ export async function updateCOIKeyHandler(req: Request, res: Response): Promise<
         logger.info('Updated COI Key', { coiId });
 
         res.json(coiKey);
-    } catch (error: any) {
-        if (error.message.includes('not found')) {
+    } catch (error) {
+        if (error instanceof Error && error.message.includes('not found')) {
             res.status(404).json({ error: error.message });
         } else {
             logger.error('Failed to update COI Key', { coiId: req.params.coiId, error });
@@ -158,10 +158,10 @@ export async function deprecateCOIKeyHandler(req: Request, res: Response): Promi
         logger.info('Deprecated COI Key', { coiId });
 
         res.json({ message: `COI Key '${coiId}' deprecated successfully` });
-    } catch (error: any) {
-        if (error.message.includes('not found')) {
+    } catch (error) {
+        if (error instanceof Error && error.message.includes('not found')) {
             res.status(404).json({ error: error.message });
-        } else if (error.message.includes('resources still use it')) {
+        } else if (error instanceof Error && error.message.includes('resources still use it')) {
             res.status(409).json({ error: error.message });
         } else {
             logger.error('Failed to deprecate COI Key', { coiId: req.params.coiId, error });

@@ -183,7 +183,7 @@ async function main() {
             process.exit(1);
         }
 
-    } catch (error: any) {
+    } catch (error) {
         // Graceful failure if MongoDB not available (CI environment)
         if (error.message?.includes('ECONNREFUSED') ||
             error.message?.includes('EAI_AGAIN') ||

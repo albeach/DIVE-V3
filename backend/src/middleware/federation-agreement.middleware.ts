@@ -136,8 +136,8 @@ export async function enforceFederationAgreement(
  * Validates request against federation agreement
  */
 async function validateFederationAgreement(
-  user: any,
-  resource: any,
+  user: { iss?: string; countryOfAffiliation?: string; acpCOI?: string[]; acr?: string; auth_time?: number },
+  resource: { classification?: string; COI?: string[] },
   spId: string
 ): Promise<FederationValidationResult> {
   const violations: string[] = [];
@@ -166,7 +166,7 @@ async function validateFederationAgreement(
   // Validate IdP
   if (
     agreement.allowedIdPs.length > 0 &&
-    !agreement.allowedIdPs.includes(user.iss)
+    !agreement.allowedIdPs.includes(user.iss as string)
   ) {
     violations.push(
       `IdP ${user.iss} not allowed (permitted: ${agreement.allowedIdPs.join(', ')})`
@@ -176,7 +176,7 @@ async function validateFederationAgreement(
   // Validate country
   if (
     agreement.allowedCountries.length > 0 &&
-    !agreement.allowedCountries.includes(user.countryOfAffiliation)
+    !agreement.allowedCountries.includes(user.countryOfAffiliation as string)
   ) {
     violations.push(
       `Country ${user.countryOfAffiliation} not allowed (permitted: ${agreement.allowedCountries.join(', ')})`
@@ -185,7 +185,7 @@ async function validateFederationAgreement(
 
   // Validate classification
   const classificationLevels = ['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET'];
-  const resourceLevel = classificationLevels.indexOf(resource.classification);
+  const resourceLevel = classificationLevels.indexOf(resource.classification as string);
   const maxLevel = classificationLevels.indexOf(agreement.maxClassification);
 
   if (resourceLevel > maxLevel) {
@@ -222,7 +222,7 @@ async function validateFederationAgreement(
 
   // Validate auth age
   const authTime = user.auth_time || 0;
-  const authAge = Math.floor(Date.now() / 1000) - authTime;
+  const authAge = Math.floor(Date.now() / 1000) - (authTime as number);
 
   if (authAge > agreement.maxAuthAge) {
     violations.push(

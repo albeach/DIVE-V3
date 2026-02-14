@@ -181,8 +181,8 @@ export async function uploadPolicy(req: Request, res: Response, next: NextFuncti
 
         res.status(201).json(response);
 
-    } catch (error: any) {
-        logger.error('Upload policy error', { error: error.message });
+    } catch (error) {
+        logger.error('Upload policy error', { error: error instanceof Error ? error.message : 'Unknown error' });
         next(error);
     }
 }
@@ -252,14 +252,14 @@ export async function evaluatePolicyById(req: Request, res: Response, next: Next
         const response: IEvaluatePolicyResponse = result;
         res.status(200).json(response);
 
-    } catch (error: any) {
-        logger.error('Evaluate policy error', { error: error.message });
+    } catch (error) {
+        logger.error('Evaluate policy error', { error: error instanceof Error ? error.message : 'Unknown error' });
 
         // Check for timeout
-        if (error.message?.includes('timeout')) {
+        if (error instanceof Error && error.message?.includes('timeout')) {
             res.status(408).json({
                 error: 'PolicyEvaluationTimeout',
-                message: error.message,
+                message: error instanceof Error ? error.message : 'Unknown error',
                 details: { policyId: req.params.id }
             });
             return;
@@ -299,8 +299,8 @@ export async function getPolicyMetadata(req: Request, res: Response, next: NextF
         const response: IGetPolicyResponse = policy;
         res.status(200).json(response);
 
-    } catch (error: any) {
-        logger.error('Get policy metadata error', { error: error.message });
+    } catch (error) {
+        logger.error('Get policy metadata error', { error: error instanceof Error ? error.message : 'Unknown error' });
         next(error);
     }
 }
@@ -341,8 +341,8 @@ export async function deletePolicy(req: Request, res: Response, next: NextFuncti
 
         res.status(204).send();
 
-    } catch (error: any) {
-        logger.error('Delete policy error', { error: error.message });
+    } catch (error) {
+        logger.error('Delete policy error', { error: error instanceof Error ? error.message : 'Unknown error' });
         next(error);
     }
 }
@@ -388,8 +388,8 @@ export async function listUserPolicies(req: Request, res: Response, next: NextFu
             examplePolicyCount: examplePolicies.length
         });
 
-    } catch (error: any) {
-        logger.error('List policies error', { error: error.message });
+    } catch (error) {
+        logger.error('List policies error', { error: error instanceof Error ? error.message : 'Unknown error' });
         next(error);
     }
 }
@@ -511,9 +511,9 @@ export async function loadSamplePolicies(req: Request, res: Response, next: Next
                     type: sample.type
                 });
 
-            } catch (error: any) {
-                logger.error('Failed to load sample policy', { filename: sample.filename, error: error.message });
-                errors.push(`Failed to load ${sample.filename}: ${error.message}`);
+            } catch (error) {
+                logger.error('Failed to load sample policy', { filename: sample.filename, error: error instanceof Error ? error.message : 'Unknown error' });
+                errors.push(`Failed to load ${sample.filename}: ${error instanceof Error ? error.message : 'Unknown error'}`);
             }
         }
 
@@ -522,8 +522,8 @@ export async function loadSamplePolicies(req: Request, res: Response, next: Next
             count: loadedPolicies.length,
             policies: loadedPolicies,
             errors: errors.length > 0 ? errors : undefined
-        });    } catch (error: any) {
-        logger.error('Load sample policies error', { error: error.message });
+        });    } catch (error) {
+        logger.error('Load sample policies error', { error: error instanceof Error ? error.message : 'Unknown error' });
         next(error);
     }
 }

@@ -139,9 +139,9 @@ export class MongoOpalDataStore {
 
           indexesCreated = true;
           logger.info('MongoDB indexes created successfully');
-        } catch (error: any) {
+        } catch (error) {
           // Check if error is "not primary"
-          if (error.message && error.message.includes('not primary')) {
+          if (error instanceof Error && error.message.includes('not primary')) {
             attempt++;
             const delay = Math.pow(2, attempt) * 1000; // 2s, 4s, 8s, 16s, 32s
             logger.warn(`MongoDB not PRIMARY yet (attempt ${attempt}/${maxRetries}), retrying in ${delay}ms...`);

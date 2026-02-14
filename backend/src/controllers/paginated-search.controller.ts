@@ -43,6 +43,43 @@ async function getMongoClient(): Promise<MongoClient> {
 // Types
 // ============================================
 
+interface IMongoResource {
+  _id: ObjectId;
+  resourceId?: string;
+  title?: string;
+  classification?: string;
+  releasabilityTo?: string[];
+  COI?: string[];
+  encrypted?: boolean;
+  creationDate?: string;
+  displayMarking?: string;
+  originRealm?: string;
+  ztdf?: {
+    manifest?: { version?: string; contentType?: string };
+    policy?: {
+      securityLabel?: {
+        classification?: string;
+        releasabilityTo?: string[];
+        COI?: string[];
+      };
+    };
+    payload?: { keyAccessObjects?: unknown[] };
+  };
+  score?: number;
+  [key: string]: unknown;
+}
+
+interface IFacetBucket {
+  _id: string | null;
+  count: number;
+}
+
+interface IFileTypeFacetBucket {
+  value: string;
+  label: string;
+  count: number;
+}
+
 interface IPaginatedSearchRequest {
   query?: string;
   filters?: {
@@ -90,7 +127,7 @@ interface IDocumentStats {
 }
 
 interface IPaginatedSearchResponse {
-  results: any[];
+  results: Record<string, unknown>[];
   facets?: {
     classifications: IFacetItem[];
     countries: IFacetItem[];
@@ -137,7 +174,7 @@ const CLEARANCE_ORDER: Record<string, number> = {
 /**
  * Encode cursor from document ID and sort values
  */
-function encodeCursor(doc: any, sortField: string): string {
+function encodeCursor(doc: IMongoResource, sortField: string): string {
   const cursorData = {
     id: doc._id.toString(),
     sortValue: doc[sortField] || doc.resourceId,
@@ -148,7 +185,7 @@ function encodeCursor(doc: any, sortField: string): string {
 /**
  * Decode cursor to get document ID and sort values
  */
-function decodeCursor(cursor: string): { id: string; sortValue: any } | null {
+function decodeCursor(cursor: string): { id: string; sortValue: unknown } | null {
   try {
     const decoded = Buffer.from(cursor, 'base64').toString('utf-8');
     return JSON.parse(decoded);
@@ -160,7 +197,7 @@ function decodeCursor(cursor: string): { id: string; sortValue: any } | null {
 /**
  * Get classification from resource (handles both ZTDF and legacy formats)
  */
-function getClassification(resource: any): string {
+function getClassification(resource: IMongoResource): string {
   return resource.ztdf?.policy?.securityLabel?.classification ||
     resource.classification ||
     'UNCLASSIFIED';
@@ -169,7 +206,7 @@ function getClassification(resource: any): string {
 /**
  * Get releasability from resource
  */
-function getReleasability(resource: any): string[] {
+function getReleasability(resource: IMongoResource): string[] {
   return resource.ztdf?.policy?.securityLabel?.releasabilityTo ||
     resource.releasabilityTo ||
     [];
@@ -178,7 +215,7 @@ function getReleasability(resource: any): string[] {
 /**
  * Get COI from resource
  */
-function getCOI(resource: any): string[] {
+function getCOI(resource: IMongoResource): string[] {
   return resource.ztdf?.policy?.securityLabel?.COI ||
     resource.COI ||
     [];
@@ -217,7 +254,7 @@ export const paginatedSearchHandler = async (
     const cursor = pagination?.cursor;
 
     // Get user attributes from JWT
-    const token = (req as any).user;
+    const token = (req as Request & { user?: { clearance?: string; countryOfAffiliation?: string } }).user;
     const userClearance = token?.clearance || 'UNCLASSIFIED';
     const userClearanceLevel = CLEARANCE_ORDER[userClearance] ?? 0;
     const userCountry = token?.countryOfAffiliation || '';
@@ -242,7 +279,7 @@ export const paginatedSearchHandler = async (
     // ========================================
     // Build Query Filter with ABAC
     // ========================================
-    const mongoFilter: any = {};
+    const mongoFilter: Document = {};
     let useTextScore = false;
 
     // ========================================
@@ -342,7 +379,7 @@ export const paginatedSearchHandler = async (
       if (advancedFilters.fieldFilters && advancedFilters.fieldFilters.length > 0) {
         mongoFilter.$and = mongoFilter.$and || [];
         advancedFilters.fieldFilters.forEach(filter => {
-          const condition: any = {};
+          const condition: Record<string, unknown> = {};
 
           switch (filter.operator) {
             case '=':
@@ -488,7 +525,7 @@ export const paginatedSearchHandler = async (
         ]
       };
 
-      const contentTypeConditions: any[] = [];
+      const contentTypeConditions: Record<string, unknown>[] = [];
 
       for (const selectedType of filters.fileTypes) {
         const patterns = fileTypePatterns[selectedType];
@@ -525,7 +562,7 @@ export const paginatedSearchHandler = async (
           sort.field === 'relevance' ? 'title' : 'title';
     const sortOrder = sort.order === 'desc' ? -1 : 1;
 
-    let sortCriteria: any;
+    let sortCriteria: Document;
 
     if (useTextScore && sort.field === 'relevance') {
       // Sort by text search relevance score
@@ -586,7 +623,7 @@ export const paginatedSearchHandler = async (
     // Primary ABAC filtering is now in MongoDB query above.
     // This is a safety net in case documents slip through.
     // ========================================
-    const filteredResults = results.filter((resource: WithId<Document>) => {
+    const filteredResults = results.filter((resource: WithId<Document> & IMongoResource) => {
       const resourceClassification = getClassification(resource);
       const resourceClearanceLevel = CLEARANCE_ORDER[resourceClassification] ?? 0;
 
@@ -634,7 +671,7 @@ export const paginatedSearchHandler = async (
       // Build ABAC-constrained base filter for facets
       // This ensures facet counts only include documents the user can access
       // But does NOT include user-selected filters (so they can see all options)
-      const abacFilter: any = { $and: [] };
+      const abacFilter: Document = { $and: [] as Document[] };
 
       // ABAC: Clearance filter
       abacFilter.$and.push({
@@ -830,27 +867,27 @@ export const paginatedSearchHandler = async (
       if (facetResults.length > 0) {
         const fr = facetResults[0];
         facets = {
-          classifications: (fr.classifications || []).map((f: any) => ({
+          classifications: (fr.classifications || []).map((f: IFacetBucket) => ({
             value: f._id,
             count: f.count
           })),
-          countries: (fr.countries || []).map((f: any) => ({
+          countries: (fr.countries || []).map((f: IFacetBucket) => ({
             value: f._id,
             count: f.count
           })),
-          cois: (fr.cois || []).map((f: any) => ({
+          cois: (fr.cois || []).map((f: IFacetBucket) => ({
             value: f._id,
             count: f.count
           })),
-          instances: (fr.instances || []).map((f: any) => ({
+          instances: (fr.instances || []).map((f: IFacetBucket) => ({
             value: f._id,
             count: f.count
           })),
-          encryptionStatus: (fr.encryptionStatus || []).map((f: any) => ({
+          encryptionStatus: (fr.encryptionStatus || []).map((f: IFacetBucket) => ({
             value: f._id,
             count: f.count
           })),
-          fileTypes: (fr.fileTypes || []).map((f: any) => ({
+          fileTypes: (fr.fileTypes || []).map((f: IFileTypeFacetBucket) => ({
             value: f.value,
             label: f.label,
             count: f.count
@@ -874,7 +911,7 @@ export const paginatedSearchHandler = async (
     // Get Total Count (with ABAC filters)
     // ========================================
     // Build count filter with same ABAC constraints as search query
-    const countFilter: any = { $and: [] };
+    const countFilter: Document = { $and: [] as Document[] };
 
     // Text search filter (if provided)
     if (query && query.trim()) {
@@ -922,7 +959,7 @@ export const paginatedSearchHandler = async (
     // ========================================
     // Transform Results
     // ========================================
-    const transformedResults = filteredResults.map((resource: WithId<Document>) => ({
+    const transformedResults = filteredResults.map((resource: WithId<Document> & IMongoResource) => ({
       resourceId: resource.resourceId,
       title: resource.title,
       classification: getClassification(resource),
@@ -932,13 +969,11 @@ export const paginatedSearchHandler = async (
       creationDate: resource.creationDate,
       displayMarking: resource.displayMarking,
       originRealm: resource.originRealm,
-      ztdfVersion: (resource.ztdf as any)?.manifest?.version,
-      kaoCount: (resource.ztdf as any)?.payload?.keyAccessObjects?.length || 0,
-      // File type metadata from ZTDF manifest
-      contentType: (resource.ztdf as any)?.manifest?.contentType || 'application/octet-stream',
-      // Phase 2: Include relevance score if using text search
-      ...(useTextScore && (resource as any).score !== undefined && {
-        relevanceScore: Math.round((resource as any).score * 100) / 100,
+      ztdfVersion: resource.ztdf?.manifest?.version,
+      kaoCount: (resource.ztdf?.payload?.keyAccessObjects as unknown[] | undefined)?.length || 0,
+      contentType: resource.ztdf?.manifest?.contentType || 'application/octet-stream',
+      ...(useTextScore && resource.score !== undefined && {
+        relevanceScore: Math.round(resource.score * 100) / 100,
       }),
     }));
 
@@ -1132,27 +1167,27 @@ export const getFacetsHandler = async (
       const fr = facetResults[0];
       res.json({
         facets: {
-          classifications: (fr.classifications || []).map((f: any) => ({
+          classifications: (fr.classifications || []).map((f: IFacetBucket) => ({
             value: f._id,
             count: f.count
           })),
-          countries: (fr.countries || []).map((f: any) => ({
+          countries: (fr.countries || []).map((f: IFacetBucket) => ({
             value: f._id,
             count: f.count
           })),
-          cois: (fr.cois || []).map((f: any) => ({
+          cois: (fr.cois || []).map((f: IFacetBucket) => ({
             value: f._id,
             count: f.count
           })),
-          instances: (fr.instances || []).map((f: any) => ({
+          instances: (fr.instances || []).map((f: IFacetBucket) => ({
             value: f._id,
             count: f.count
           })),
-          encryptionStatus: (fr.encryptionStatus || []).map((f: any) => ({
+          encryptionStatus: (fr.encryptionStatus || []).map((f: IFacetBucket) => ({
             value: f._id,
             count: f.count
           })),
-          fileTypes: (fr.fileTypes || []).map((f: any) => ({
+          fileTypes: (fr.fileTypes || []).map((f: IFileTypeFacetBucket) => ({
             value: f.value,
             label: f.label,
             count: f.count

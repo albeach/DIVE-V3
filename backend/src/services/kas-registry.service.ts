@@ -492,7 +492,7 @@ class KASRegistryService {
           latencyMs
         };
 
-      } catch (error: any) {
+      } catch (error) {
         lastError = error;
 
         // Check if it's a 403 denial (don't retry)

@@ -261,7 +261,7 @@ export function unifiedToXACMLRequest(input: IUnifiedInput): string {
         const xml = builder.buildObject(requestObj);
         return xml;
 
-    } catch (error: any) {
+    } catch (error) {
         logger.error('Failed to convert Unified input to XACML Request', { error: error.message });
         throw new Error('XACML Request conversion failed');
     }
@@ -415,7 +415,7 @@ export async function normalizeXACMLResponse(
             }
         };
 
-    } catch (error: any) {
+    } catch (error) {
         logger.error('Failed to normalize XACML Response', { error: error.message });
         throw new Error('XACML Response normalization failed');
     }

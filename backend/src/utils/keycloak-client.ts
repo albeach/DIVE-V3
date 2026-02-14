@@ -90,7 +90,7 @@ export async function getServiceAccountToken(
     const realm = process.env.INSTANCE_CODE || process.env.INSTANCE_REALM || 'USA';
 
     // Get access token for service account
-    const axiosConfig: any = {
+    const axiosConfig: Record<string, unknown> = {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
@@ -161,7 +161,7 @@ export async function getKASServiceAccountToken(userIdentity?: {
  * @param token - Token to validate
  * @returns Decoded token payload
  */
-export async function validateServiceAccountToken(token: string): Promise<any> {
+export async function validateServiceAccountToken(token: string): Promise<Record<string, unknown>> {
   try {
     // Decode without verification for debugging
     const decoded = jwt.decode(token, { complete: true });

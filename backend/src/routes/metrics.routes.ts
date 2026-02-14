@@ -104,7 +104,7 @@ router.get('/health', async (_req: Request, res: Response, _next: NextFunction) 
     );
 
     const overallHealthy = Object.values(healthStatus).every(
-      (s: any) => s?.healthy !== false
+      (s: Record<string, unknown>) => s?.healthy !== false
     );
 
     res.status(overallHealthy ? 200 : 503).json({
@@ -135,7 +135,7 @@ router.get('/authorization', async (_req: Request, res: Response, next: NextFunc
     const metricsJson = await prometheusMetrics.getMetricsJSON();
 
     // Filter to authorization-related metrics
-    const authzMetrics = (metricsJson as any[]).filter((m: any) =>
+    const authzMetrics = (metricsJson as { name: string }[]).filter((m) =>
       m.name.includes('authorization') ||
       m.name.includes('decision') ||
       m.name.includes('policy')
@@ -162,7 +162,7 @@ router.get('/cache', async (_req: Request, res: Response, next: NextFunction) =>
     const metricsJson = await prometheusMetrics.getMetricsJSON();
 
     // Filter to cache-related metrics
-    const cacheMetrics = (metricsJson as any[]).filter((m: any) =>
+    const cacheMetrics = (metricsJson as { name: string }[]).filter((m) =>
       m.name.includes('cache')
     );
 
@@ -187,7 +187,7 @@ router.get('/federation', async (_req: Request, res: Response, next: NextFunctio
     const metricsJson = await prometheusMetrics.getMetricsJSON();
 
     // Filter to federation-related metrics
-    const fedMetrics = (metricsJson as any[]).filter((m: any) =>
+    const fedMetrics = (metricsJson as { name: string }[]).filter((m) =>
       m.name.includes('federation') || m.name.includes('federated')
     );
 
@@ -212,7 +212,7 @@ router.get('/opal', async (_req: Request, res: Response, next: NextFunction) => 
     const metricsJson = await prometheusMetrics.getMetricsJSON();
 
     // Filter to OPAL and policy-related metrics
-    const opalMetrics = (metricsJson as any[]).filter((m: any) =>
+    const opalMetrics = (metricsJson as { name: string }[]).filter((m) =>
       m.name.includes('opal') ||
       m.name.includes('bundle') ||
       m.name.includes('spoke') ||

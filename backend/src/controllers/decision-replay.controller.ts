@@ -54,13 +54,13 @@ export class DecisionReplayController {
             });
 
             res.status(200).json(result);
-        } catch (error: any) {
+        } catch (error) {
             logger.error('Decision replay controller error', {
-                error: error.message,
-                stack: error.stack
+                error: error instanceof Error ? error.message : 'Unknown error',
+                stack: error instanceof Error ? error.stack : undefined
             });
 
-            if (error.message.includes('not found')) {
+            if (error instanceof Error && error.message.includes('not found')) {
                 res.status(404).json({
                     error: 'Not Found',
                     message: error.message

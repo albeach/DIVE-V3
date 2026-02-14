@@ -184,7 +184,7 @@ export class FRAFederationService {
       );
 
       return response.data;
-    } catch (error: any) {
+    } catch (error) {
       console.error(`Failed to push resources: ${error.message}`);
       return { synced: 0, updated: 0, conflicted: 0, conflicts: [] };
     }
@@ -213,7 +213,7 @@ export class FRAFederationService {
       );
 
       return response.data.resources || [];
-    } catch (error: any) {
+    } catch (error) {
       console.error(`Failed to pull resources: ${error.message}`);
       return [];
     }

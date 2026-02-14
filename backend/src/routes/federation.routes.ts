@@ -306,8 +306,8 @@ async function requireSpokeToken(req: Request, res: Response, next: NextFunction
     }
 
     // Attach spoke info to request
-    (req as any).spoke = validation.spoke;
-    (req as any).spokeScopes = validation.scopes;
+    (req as Request & { spoke?: unknown; spokeScopes?: string[] }).spoke = validation.spoke;
+    (req as Request & { spoke?: unknown; spokeScopes?: string[] }).spokeScopes = validation.scopes;
 
     next();
 }
@@ -485,8 +485,8 @@ router.get('/status', async (_req: Request, res: Response): Promise<void> => {
         const allSpokes = await hubSpokeRegistry.listAllSpokes();
 
         // Build status for each instance from MongoDB
-        const instances = allSpokes.map((spoke: any) => {
-            const isUnhealthy = unhealthy.some((u: any) => u.spokeId === spoke.spokeId);
+        const instances = allSpokes.map((spoke) => {
+            const isUnhealthy = unhealthy.some((u) => u.spokeId === spoke.spokeId);
 
             return {
                 code: spoke.instanceCode,
@@ -794,8 +794,8 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
 
                 // FIXED (Dec 2025): Get updated spoke from error if available (race condition fix)
                 // The approveSpoke function now attaches the re-fetched spoke to the error
-                if ((approvalError as any).spoke) {
-                    spoke = (approvalError as any).spoke;
+                if ((approvalError as Error & { spoke?: typeof spoke }).spoke) {
+                    spoke = (approvalError as Error & { spoke?: typeof spoke }).spoke;
                     logger.warn('Spoke status after failed approval', {
                         spokeId: spoke.spokeId,
                         status: spoke.status,
@@ -1129,13 +1129,14 @@ router.get(
     '/search',
     requireSPAuth,
     requireSPScope('resource:search'),
-    async (req: any, res: Response): Promise<void> => {
-        const spContext = req.sp;
+    async (req: Request, res: Response): Promise<void> => {
+        const spContext = (req as unknown as Record<string, unknown>).sp as Record<string, unknown> | undefined;
         const classification = (req.query.classification as string) || undefined;
 
-        // Enforce agreements; tailor messages for test expectations
-        const agreements = spContext?.sp?.federationAgreements || [];
-        const activeAgreements = agreements.filter((ag: any) => !ag.validUntil || new Date(ag.validUntil) > new Date());
+        interface IAgreement { validUntil?: string; classifications?: string[]; countries?: string[] }
+        const sp = spContext?.sp as Record<string, unknown> | undefined;
+        const agreements = (sp?.federationAgreements || []) as IAgreement[];
+        const activeAgreements = agreements.filter((ag) => !ag.validUntil || new Date(ag.validUntil) > new Date());
 
         if (activeAgreements.length === 0) {
             res.status(403).json({
@@ -1147,11 +1148,11 @@ router.get(
 
         const allowedClasses = activeAgreements[0]?.classifications || [];
         const agreementCoversClass =
-            !classification || activeAgreements.some((ag: any) =>
+            !classification || activeAgreements.some((ag) =>
                 !ag.classifications || ag.classifications.includes(classification)
             );
-        const agreementCoversCountry = activeAgreements.some((ag: any) =>
-            (ag.countries || []).includes(spContext.sp.country)
+        const agreementCoversCountry = activeAgreements.some((ag) =>
+            (ag.countries || []).includes(sp?.country as string)
         );
 
         if (!agreementCoversCountry) {
@@ -1175,7 +1176,7 @@ router.get(
         const offset = parseInt((req.query.offset as string) || '0', 10);
         const limit = Math.min(Math.max(limitParam, 1), 1000);
 
-        const query: any = {};
+        const query: Record<string, unknown> = {};
         if (classification) {
             query.classification = classification;
         }
@@ -1202,21 +1203,20 @@ router.get(
             }
         });
 
-        // Strip content if any
-        const sanitized = resources.map((r: any) => ({
+        const sanitized = resources.map((r: Record<string, unknown>) => ({
             resourceId: r.resourceId,
             title: r.title,
             classification: r.classification,
-            releasabilityTo: r.releasabilityTo || [],
-            COI: r.COI || []
+            releasabilityTo: (r.releasabilityTo as string[]) || [],
+            COI: (r.COI as string[]) || []
         }));
 
         res.json({
             totalResults: sanitized.length,
             resources: sanitized,
             searchContext: {
-                country: spContext?.sp?.country || spContext?.country || 'UNKNOWN',
-                requestingEntity: spContext?.sp?.spId || spContext?.spId || 'UNKNOWN'
+                country: sp?.country || 'UNKNOWN',
+                requestingEntity: sp?.spId || 'UNKNOWN'
             }
         });
     }
@@ -1294,8 +1294,8 @@ router.post(
     '/resources/request',
     requireSPAuth,
     requireSPScope('resource:read'),
-    async (req: any, res: Response): Promise<void> => {
-        const spContext = req.sp;
+    async (req: Request, res: Response): Promise<void> => {
+        const spContext = (req as unknown as Record<string, unknown>).sp as Record<string, unknown> | undefined;
         const { resourceId, justification } = req.body || {};
 
         if (!resourceId) {
@@ -1311,16 +1311,18 @@ router.post(
             return;
         }
 
+        interface IAgreement2 { validUntil?: string; classifications?: string[]; countries?: string[] }
+        const sp2 = spContext?.sp as Record<string, unknown> | undefined;
         const classification = resource.classification;
-        const agreements = spContext?.sp?.federationAgreements || [];
-        const activeAgreements = agreements.filter((ag: any) => !ag.validUntil || new Date(ag.validUntil) > new Date());
-        const agreementCoversCountry = activeAgreements.some((ag: any) =>
-            (ag.countries || []).includes(spContext.sp.country)
+        const agreements = (sp2?.federationAgreements || []) as IAgreement2[];
+        const activeAgreements = agreements.filter((ag) => !ag.validUntil || new Date(ag.validUntil) > new Date());
+        const agreementCoversCountry = activeAgreements.some((ag) =>
+            (ag.countries || []).includes(sp2?.country as string)
         );
         const agreementCoversClass =
             !classification ||
-            activeAgreements.some((ag: any) =>
-                !ag.classifications || ag.classifications.includes(classification)
+            activeAgreements.some((ag) =>
+                !ag.classifications || ag.classifications.includes(classification as string)
             );
 
         if (activeAgreements.length === 0) {

@@ -83,7 +83,7 @@ export async function authzMiddleware(req: Request, res: Response, next: NextFun
             auth_time: user.auth_time,
         });
 
-        const opaInput = buildOPAInput(user, resourceAttributes, req);
+        const opaInput = buildOPAInput(user, resourceAttributes as unknown as Record<string, unknown>, req);
 
         logger.info('OPA input constructed', {
             subject: user.uniqueID,

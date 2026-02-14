@@ -163,7 +163,7 @@ function loadTrustedIssuerTenantMap(): Record<string, string> {
  * Uses user_acr (from user attributes) when it indicates higher AAL than session ACR
  * This allows AAL testing without requiring actual MFA registration
  */
-export const getEffectiveAcr = (user: any): string => {
+export const getEffectiveAcr = (user: Record<string, unknown>): string => {
     const sessionAcr = user.acr ? String(user.acr) : '0';
     const userAcr = user.user_acr ? String(user.user_acr) : null;
 
@@ -194,7 +194,7 @@ export const getEffectiveAcr = (user: any): string => {
  * the IdP broker execution). The spoke's AMR is forwarded via user_amr
  * attribute mapper.
  */
-export const getEffectiveAmr = (user: any): string[] => {
+export const getEffectiveAmr = (user: Record<string, unknown>): string[] => {
     const sessionAmr = Array.isArray(user.amr) && user.amr.length > 0 ? user.amr : null;
     const userAmr = Array.isArray(user.user_amr) && user.user_amr.length > 0 ? user.user_amr : null;
     const sessionAcr = user.acr ? String(user.acr) : '0';
@@ -224,7 +224,7 @@ export const getEffectiveAmr = (user: any): string[] => {
  * Used for multi-tenant policy isolation
  */
 export const extractTenant = (token: IKeycloakToken, req: Request): string | undefined => {
-    const issuer = (token as any)?.iss;
+    const issuer = token?.iss;
 
     // Preferred: map issuer via trusted issuers metadata (OPAL data)
     const tenantMap = loadTrustedIssuerTenantMap();
@@ -337,7 +337,7 @@ export interface IOPAResponse {
             resourceId?: string;
         }>;
         evaluation_details?: Record<string, unknown>;
-        [key: string]: any; // Other rules/tests in the package
+        [key: string]: unknown; // Other rules/tests in the package
     };
 }
 
@@ -364,8 +364,8 @@ export interface IOPADecision {
  * Build OPA input from user, resource attributes, and request context.
  */
 export function buildOPAInput(
-    user: any,
-    resourceAttributes: any,
+    user: Record<string, unknown>,
+    resourceAttributes: Record<string, unknown>,
     req: Request
 ): IOPAInput {
     const effectiveAmr = getEffectiveAmr(user);
@@ -380,17 +380,17 @@ export function buildOPAInput(
         input: {
             subject: {
                 authenticated: true,
-                uniqueID: user.uniqueID,
-                clearance: user.clearance,
-                countryOfAffiliation: user.countryOfAffiliation,
-                acpCOI: user.acpCOI || [],
-                issuer: user.iss,
+                uniqueID: user.uniqueID as string,
+                clearance: user.clearance as string,
+                countryOfAffiliation: user.countryOfAffiliation as string,
+                acpCOI: (user.acpCOI as string[]) || [],
+                issuer: user.iss as string,
                 mfa_used, // Hub guardrail: MFA verification
             },
             action: {
                 operation: req.method.toLowerCase(),
             },
-            resource: resourceAttributes,
+            resource: resourceAttributes as IOPAInput['input']['resource'],
             context: {
                 currentTime: new Date().toISOString(),
                 sourceIP: req.ip || req.socket?.remoteAddress || 'unknown',
@@ -399,8 +399,8 @@ export function buildOPAInput(
                 // ACR/AMR for OPA policy evaluation
                 acr: getEffectiveAcr(user),
                 amr: getEffectiveAmr(user),
-                auth_time: user.auth_time,
-                tenant: extractTenant(user, req),
+                auth_time: user.auth_time as number,
+                tenant: extractTenant(user as unknown as IKeycloakToken, req),
             },
         },
     };

@@ -243,7 +243,7 @@ export interface IOpenTDFAssertionValue {
     ConfidentialityInformation?: IOpenTDFConfidentialityInformation;
 
     /** Allow custom fields for extensibility */
-    [key: string]: any;
+    [key: string]: unknown;
 }
 
 /**

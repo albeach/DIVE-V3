@@ -61,15 +61,15 @@ export async function validateRego(source: string): Promise<IValidationResult> {
             // Step 1: Syntax check with OPA fmt
             try {
                 await execAsync(`opa fmt --fail ${tempFile}`, { timeout: 5000 });
-            } catch (error: any) {
-                errors.push(`Syntax error: ${error.message || 'Invalid Rego syntax'}`);
+            } catch (error) {
+                errors.push(`Syntax error: ${error instanceof Error ? error.message : 'Invalid Rego syntax'}`);
             }
 
             // Step 2: Semantic check with OPA check
             try {
                 await execAsync(`opa check ${tempFile}`, { timeout: 5000 });
-            } catch (error: any) {
-                errors.push(`Semantic error: ${error.message || 'Invalid policy semantics'}`);
+            } catch (error) {
+                errors.push(`Semantic error: ${error instanceof Error ? error.message : 'Invalid policy semantics'}`);
             }
 
             // Step 3: Security checks
@@ -85,8 +85,8 @@ export async function validateRego(source: string): Promise<IValidationResult> {
                     const extracted = extractRegoMetadata(source);
                     metadata = extracted.metadata;
                     structure = extracted.structure;
-                } catch (error: any) {
-                    logger.warn('Failed to extract Rego metadata', { error: error.message });
+                } catch (error) {
+                    logger.warn('Failed to extract Rego metadata', { error: error instanceof Error ? error.message : 'Unknown error' });
                 }
             }
 
@@ -102,11 +102,11 @@ export async function validateRego(source: string): Promise<IValidationResult> {
             await fs.rm(tempDir, { recursive: true, force: true });
         }
 
-    } catch (error: any) {
-        logger.error('Rego validation failed', { error: error.message });
+    } catch (error) {
+        logger.error('Rego validation failed', { error: error instanceof Error ? error.message : 'Unknown error' });
         return {
             validated: false,
-            errors: [`Validation error: ${error.message || 'Unknown error'}`]
+            errors: [`Validation error: ${error instanceof Error ? error.message : 'Unknown error'}`]
         };
     }
 }
@@ -200,15 +200,15 @@ export async function validateXACML(source: string): Promise<IValidationResult> 
 
     try {
         // Step 1: Parse XML
-        let parsed: any;
+        let parsed: Record<string, unknown>;
         try {
             parsed = await parseStringPromise(source, {
                 explicitArray: false,
                 mergeAttrs: true,
                 xmlns: true
             });
-        } catch (error: any) {
-            errors.push(`XML parsing error: ${error.message || 'Malformed XML'}`);
+        } catch (error) {
+            errors.push(`XML parsing error: ${error instanceof Error ? error.message : 'Malformed XML'}`);
             return { validated: false, errors };
         }
 
@@ -229,8 +229,8 @@ export async function validateXACML(source: string): Promise<IValidationResult> 
                 const extracted = extractXACMLMetadata(parsed, source);
                 metadata = extracted.metadata;
                 structure = extracted.structure;
-            } catch (error: any) {
-                logger.warn('Failed to extract XACML metadata', { error: error.message });
+            } catch (error) {
+                logger.warn('Failed to extract XACML metadata', { error: error instanceof Error ? error.message : 'Unknown error' });
             }
         }
 
@@ -241,11 +241,11 @@ export async function validateXACML(source: string): Promise<IValidationResult> 
             structure
         };
 
-    } catch (error: any) {
-        logger.error('XACML validation failed', { error: error.message });
+    } catch (error) {
+        logger.error('XACML validation failed', { error: error instanceof Error ? error.message : 'Unknown error' });
         return {
             validated: false,
-            errors: [`Validation error: ${error.message || 'Unknown error'}`]
+            errors: [`Validation error: ${error instanceof Error ? error.message : 'Unknown error'}`]
         };
     }
 }
@@ -253,7 +253,7 @@ export async function validateXACML(source: string): Promise<IValidationResult> 
 /**
  * Validate XACML document structure
  */
-function validateXACMLStructure(parsed: any): string[] {
+function validateXACMLStructure(parsed: Record<string, unknown>): string[] {
     const errors: string[] = [];
 
     // Check for PolicySet or Policy root element
@@ -264,7 +264,7 @@ function validateXACMLStructure(parsed: any): string[] {
     }
 
     // Get root element
-    const root = parsed.PolicySet || parsed.Policy;
+    const root = (parsed.PolicySet || parsed.Policy) as Record<string, unknown>;
     const rootType = parsed.PolicySet ? 'PolicySet' : 'Policy';
 
     // Validate required attributes
@@ -296,14 +296,14 @@ function validateXACMLStructure(parsed: any): string[] {
 /**
  * Calculate nesting depth of XACML policy
  */
-function calculateXACMLDepth(node: any, currentDepth: number = 0): number {
+function calculateXACMLDepth(node: Record<string, unknown>, currentDepth: number = 0): number {
     let maxDepth = currentDepth;
 
     // Check nested policies
     if (node.Policy) {
         const policies = Array.isArray(node.Policy) ? node.Policy : [node.Policy];
         for (const policy of policies) {
-            const depth = calculateXACMLDepth(policy, currentDepth + 1);
+            const depth = calculateXACMLDepth(policy as Record<string, unknown>, currentDepth + 1);
             maxDepth = Math.max(maxDepth, depth);
         }
     }
@@ -312,7 +312,7 @@ function calculateXACMLDepth(node: any, currentDepth: number = 0): number {
     if (node.PolicySet) {
         const sets = Array.isArray(node.PolicySet) ? node.PolicySet : [node.PolicySet];
         for (const set of sets) {
-            const depth = calculateXACMLDepth(set, currentDepth + 1);
+            const depth = calculateXACMLDepth(set as Record<string, unknown>, currentDepth + 1);
             maxDepth = Math.max(maxDepth, depth);
         }
     }
@@ -323,7 +323,7 @@ function calculateXACMLDepth(node: any, currentDepth: number = 0): number {
 /**
  * Security validation for XACML policies
  */
-function validateXACMLSecurity(source: string, _parsed: any): string[] {
+function validateXACMLSecurity(source: string, _parsed: Record<string, unknown>): string[] {
     const errors: string[] = [];
 
     // Check for DTD (XXE attack prevention)
@@ -352,17 +352,17 @@ function validateXACMLSecurity(source: string, _parsed: any): string[] {
 /**
  * Extract metadata from XACML policy
  */
-function extractXACMLMetadata(parsed: any, _source: string): {
+function extractXACMLMetadata(parsed: Record<string, unknown>, _source: string): {
     metadata: Partial<IPolicyMetadata>;
     structure: Partial<IPolicyStructure>;
 } {
-    const root = parsed.PolicySet || parsed.Policy;
+    const root = (parsed.PolicySet || parsed.Policy) as Record<string, unknown>;
     const rootType = parsed.PolicySet ? 'PolicySet' : 'Policy';
 
     // Helper function to extract string value from attribute (handles both string and object formats)
-    const getAttrValue = (attr: any): string | undefined => {
+    const getAttrValue = (attr: unknown): string | undefined => {
         if (typeof attr === 'string') return attr;
-        if (attr && typeof attr === 'object' && attr.value) return attr.value;
+        if (attr && typeof attr === 'object' && 'value' in attr && typeof (attr as Record<string, unknown>).value === 'string') return (attr as Record<string, unknown>).value as string;
         return undefined;
     };
 
@@ -372,17 +372,18 @@ function extractXACMLMetadata(parsed: any, _source: string): {
 
     // Count rules
     let rulesCount = 0;
-    const policies: any[] = [];
+    const policies: Array<{ policyId: string | undefined; ruleCombiningAlg: string | undefined; rulesCount: number }> = [];
 
     if (rootType === 'PolicySet') {
         // Count policies and their rules
         const nestedPolicies = root.Policy ? (Array.isArray(root.Policy) ? root.Policy : [root.Policy]) : [];
         for (const policy of nestedPolicies) {
-            const rules = policy.Rule ? (Array.isArray(policy.Rule) ? policy.Rule : [policy.Rule]) : [];
+            const p = policy as Record<string, unknown>;
+            const rules = p.Rule ? (Array.isArray(p.Rule) ? p.Rule : [p.Rule]) : [];
             rulesCount += rules.length;
             policies.push({
-                policyId: getAttrValue(policy.PolicyId),
-                ruleCombiningAlg: getAttrValue(policy.RuleCombiningAlgId),
+                policyId: getAttrValue(p.PolicyId),
+                ruleCombiningAlg: getAttrValue(p.RuleCombiningAlgId),
                 rulesCount: rules.length
             });
         }

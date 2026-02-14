@@ -234,12 +234,12 @@ export class OTPService {
             });
 
             return true;
-        } catch (error: any) {
+        } catch (error) {
             logger.error('Failed to store pending OTP secret', {
                 userId,
                 realmName,
-                error: error.message,
-                response: error.response?.data
+                error: error instanceof Error ? error.message : 'Unknown error',
+                response: axios.isAxiosError(error) ? error.response?.data : undefined
             });
             return false;
         }
@@ -301,12 +301,12 @@ export class OTPService {
                 attributeName,
                 attributeValue
             });
-        } catch (error: any) {
+        } catch (error) {
             logger.error('Failed to set user attribute', {
                 userId,
                 realmName,
                 attributeName,
-                error: error.message
+                error: error instanceof Error ? error.message : 'Unknown error'
             });
         }
     }
@@ -332,11 +332,11 @@ export class OTPService {
             } else {
                 throw new Error(`User not found: ${username}`);
             }
-        } catch (error: any) {
+        } catch (error) {
             logger.error('Failed to get user ID', {
                 username,
                 realmName,
-                error: error.message
+                error: error instanceof Error ? error.message : 'Unknown error'
             });
             throw new Error('User not found');
         }
@@ -361,9 +361,9 @@ export class OTPService {
             });
 
             return response.data.access_token;
-        } catch (error: any) {
+        } catch (error) {
             logger.error('Failed to get admin token', {
-                error: error.message
+                error: error instanceof Error ? error.message : 'Unknown error'
             });
             throw new Error('Failed to authenticate with Keycloak admin API');
         }
@@ -386,7 +386,7 @@ export class OTPService {
             });
 
             // Check if any credential is of type 'otp'
-            const hasOTP = response.data.some((cred: any) => cred.type === 'otp');
+            const hasOTP = response.data.some((cred: { type: string }) => cred.type === 'otp');
 
             logger.info('Checked OTP configuration status', {
                 userId,
@@ -395,11 +395,11 @@ export class OTPService {
             });
 
             return hasOTP;
-        } catch (error: any) {
+        } catch (error) {
             logger.error('Failed to check OTP configuration', {
                 userId,
                 realmName,
-                error: error.message
+                error: error instanceof Error ? error.message : 'Unknown error'
             });
             return false;
         }
@@ -422,7 +422,7 @@ export class OTPService {
             });
 
             // Check if any credential is of type 'webauthn'
-            const hasWebAuthn = response.data.some((cred: any) =>
+            const hasWebAuthn = response.data.some((cred: { type: string }) =>
                 cred.type === 'webauthn' || cred.type === 'webauthn-passwordless'
             );
 
@@ -433,11 +433,11 @@ export class OTPService {
             });
 
             return hasWebAuthn;
-        } catch (error: any) {
+        } catch (error) {
             logger.error('Failed to check WebAuthn configuration', {
                 userId,
                 realmName,
-                error: error.message
+                error: error instanceof Error ? error.message : 'Unknown error'
             });
             return false;
         }

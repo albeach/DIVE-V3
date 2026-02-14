@@ -62,7 +62,7 @@ async function testUserLogin(
         }
 
         return { success: false, message: 'No token received' };
-    } catch (error: any) {
+    } catch (error) {
         if (error.response?.data?.error_description) {
             return {
                 success: false,
@@ -105,7 +105,7 @@ async function testAdminDashboardAccess(token: string, backendUrl: string): Prom
         );
 
         return response.status === 200;
-    } catch (error: any) {
+    } catch (error) {
         return false;
     }
 }

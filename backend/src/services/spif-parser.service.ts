@@ -34,6 +34,9 @@ import {
     FAIL_SECURE_CLASSIFICATION,
 } from '../config/spif.config';
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- xml2js parse output is inherently untyped
+type XmlParseNode = Record<string, any>;
+
 // Cached SPIF data
 let cachedSPIF: ISPIFData | null = null;
 let cachedMarkingRules: ISPIFMarkingRules | null = null;
@@ -67,7 +70,7 @@ function getSPIFPath(): string {
 /**
  * Extract marking data from XML element
  */
-function extractMarkingData(markingDataList: any[]): { en: string; fr: string; portionMarking?: string } {
+function extractMarkingData(markingDataList: XmlParseNode[]): { en: string; fr: string; portionMarking?: string } {
     const result: { en: string; fr: string; portionMarking?: string } = { en: '', fr: '' };
 
     if (!markingDataList) return result;
@@ -81,7 +84,7 @@ function extractMarkingData(markingDataList: any[]): { en: string; fr: string; p
         const lang = typeof langAttr === 'string' ? langAttr : langAttr?.value || 'en';
 
         // Extract code values from array
-        const codes = (markingData.code || []).map((c: any) => c._ || c);
+        const codes = ((markingData.code || []) as XmlParseNode[]).map((c) => c._ || c);
 
         // Check if this is a portion marking
         if (codes.includes('portionMarking')) {
@@ -101,7 +104,7 @@ function extractMarkingData(markingDataList: any[]): { en: string; fr: string; p
 /**
  * Parse security classifications from SPIF XML
  */
-function parseClassifications(classificationsXml: any): Map<string, IClassificationMarking> {
+function parseClassifications(classificationsXml: XmlParseNode): Map<string, IClassificationMarking> {
     const classifications = new Map<string, IClassificationMarking>();
 
     if (!classificationsXml?.securityClassification) {
@@ -134,7 +137,7 @@ function parseClassifications(classificationsXml: any): Map<string, IClassificat
 /**
  * Parse marking qualifier from XML
  */
-function parseMarkingQualifier(qualifierXml: any): IMarkingQualifier | undefined {
+function parseMarkingQualifier(qualifierXml: XmlParseNode): IMarkingQualifier | undefined {
     if (!qualifierXml) return undefined;
 
     // Extract markingCode (handle xmlns object format)
@@ -164,7 +167,7 @@ function parseMarkingQualifier(qualifierXml: any): IMarkingQualifier | undefined
 /**
  * Parse security category tag set from SPIF XML
  */
-function parseCategoryTagSet(tagSetXml: any): ISecurityCategoryTagSet {
+function parseCategoryTagSet(tagSetXml: XmlParseNode): ISecurityCategoryTagSet {
     // Extract attributes (handle xmlns object format)
     const nameAttr = tagSetXml.$.name;
     const name = typeof nameAttr === 'string' ? nameAttr : nameAttr?.value || '';
@@ -188,7 +191,7 @@ function parseCategoryTagSet(tagSetXml: any): ISecurityCategoryTagSet {
 
         const tag: ISecurityCategoryTag = {
             name: tagName,
-            tagType: tagType as any,
+            tagType: tagType as ISecurityCategoryTag['tagType'],
             categories: new Map(),
             qualifier: parseMarkingQualifier(tagXml.markingQualifier?.[0]),
         };
@@ -222,7 +225,7 @@ function parseCategoryTagSet(tagSetXml: any): ISecurityCategoryTagSet {
 /**
  * Parse memberships from SPIF extensions
  */
-function parseMemberships(extensionsXml: any): Map<string, IMembership> {
+function parseMemberships(extensionsXml: XmlParseNode): Map<string, IMembership> {
     const memberships = new Map<string, IMembership>();
 
     if (!extensionsXml) return memberships;

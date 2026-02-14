@@ -17,7 +17,7 @@ const INSTANCE_REALM = process.env.INSTANCE_CODE || process.env.INSTANCE_REALM |
  * Check if resource requires cross-instance KAS access
  * MongoDB SSOT replacement for legacy kasRegistryService.isCrossInstanceResource
  */
-function isCrossInstanceResource(resource: any): boolean {
+function isCrossInstanceResource(resource: Record<string, unknown>): boolean {
     const kasAuthority = getKASAuthority(resource);
     const localKasId = `${INSTANCE_REALM.toLowerCase()}-kas`;
     return kasAuthority !== localKasId;
@@ -27,13 +27,13 @@ function isCrossInstanceResource(resource: any): boolean {
  * Determine KAS authority for a resource based on originRealm
  * MongoDB SSOT replacement for legacy kasRegistryService.getKASAuthority
  */
-function getKASAuthority(resource: any): string {
+function getKASAuthority(resource: Record<string, unknown>): string {
     // Priority: explicit kasAuthority > originRealm-derived > local instance
     if (resource.kasAuthority) {
-        return resource.kasAuthority;
+        return resource.kasAuthority as string;
     }
     if (resource.originRealm) {
-        return `${resource.originRealm.toLowerCase()}-kas`;
+        return `${(resource.originRealm as string).toLowerCase()}-kas`;
     }
     // Default to local instance KAS
     return `${INSTANCE_REALM.toLowerCase()}-kas`;
@@ -43,8 +43,8 @@ import axios from 'axios';
 /**
  * Check if resource is ZTDF-enhanced
  */
-function isZTDFResource(resource: any): resource is IZTDFResource {
-    return resource && typeof resource === 'object' && 'ztdf' in resource;
+function isZTDFResource(resource: unknown): resource is IZTDFResource {
+    return !!resource && typeof resource === 'object' && 'ztdf' in resource;
 }
 
 /**
@@ -141,7 +141,7 @@ export const listResourcesHandler = async (
                     };
                 } else {
                     // Legacy resource (should not happen after migration)
-                    const legacyResource: any = r;
+                    const legacyResource = r as unknown as Record<string, unknown>;
                     return {
                         resourceId: legacyResource.resourceId,
                         title: legacyResource.title,
@@ -215,7 +215,7 @@ export const getResourceHandler = async (
 
         // Check if PEP set any obligations (e.g., KAS key request required)
         const obligations = (req as any).authzObligations || [];
-        const kasObligation = obligations.find((o: any) => o.type === 'kas');
+        const kasObligation = obligations.find((o: { type: string }) => o.type === 'kas');
 
         // Phase 4: Check if this is a cross-instance resource (MongoDB SSOT)
         const crossInstance = isCrossInstanceResource(resource);
@@ -269,7 +269,7 @@ export const getResourceHandler = async (
                 }
             }
 
-            const response: any = {
+            const response: Record<string, unknown> = {
                 resourceId: resource.resourceId,
                 title: resource.title,
                 classification,
@@ -353,7 +353,7 @@ export const getResourceHandler = async (
 
         } else {
             // Legacy resource (should not happen after migration)
-            const legacyResource: any = resource;
+            const legacyResource = resource as Record<string, unknown>;
             res.json({
                 resourceId: legacyResource.resourceId,
                 title: legacyResource.title,
@@ -865,8 +865,8 @@ export const requestKeyHandler = async (
         }
 
         // Phase 4: Check if this is a cross-instance resource (MongoDB SSOT)
-        const crossInstanceRes = isCrossInstanceResource(resource);
-        const kasAuth = getKASAuthority(resource);
+        const crossInstanceRes = isCrossInstanceResource(resource as unknown as Record<string, unknown>);
+        const kasAuth = getKASAuthority(resource as unknown as Record<string, unknown>);
 
         // Get user info from request (set by JWT middleware)
         const user = (req as any).user || {};
@@ -895,7 +895,7 @@ export const requestKeyHandler = async (
             }
         });
 
-        let kasResponse: any;
+        let kasResponse: { data: Record<string, unknown> };
 
         // Phase 4: Use cross-KAS client for remote resources (MongoDB SSOT via kasRouterService)
         if (crossInstanceRes) {
@@ -1170,14 +1170,14 @@ export const requestKeyHandler = async (
                     encryptedData,
                     iv: resource.ztdf.payload.iv,
                     authTag: resource.ztdf.payload.authTag,
-                    dek: kasResponse.data.dek
+                    dek: kasResponse.data.dek as string
                 });
 
                 logger.info('Content decrypted successfully', {
                     requestId,
                     resourceId,
                     isCrossInstance: crossInstanceRes,
-                    kasAuthority: kasResponse.data.kasDecision?.kasAuthority
+                    kasAuthority: (kasResponse.data.kasDecision as Record<string, unknown>)?.kasAuthority
                 });
 
                 res.json({

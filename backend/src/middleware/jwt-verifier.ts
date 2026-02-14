@@ -22,6 +22,7 @@ import { decisionCacheService } from '../services/decision-cache.service';
 // Dependency Injection for Testability
 // ============================================
 interface IJwtService {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- DI interface must match jsonwebtoken's broad signatures
     verify: (...args: any[]) => any;
     decode: (...args: any[]) => any;
     sign: (...args: any[]) => any;
@@ -42,7 +43,7 @@ export const initializeJwtService = (service?: IJwtService): void => {
 // JWKS cache (1 hour TTL) - cache fetched public keys
 const jwksCache = new NodeCache({ stdTTL: 3600, checkperiod: 600 });
 // Simplified decision cache for test-mode fast path
-const testDecisionCache = new Map<string, any>();
+const testDecisionCache = new Map<string, unknown>();
 
 /**
  * Clear all caches (for testing)
@@ -250,14 +251,14 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
             const jwks = response.data;
 
             // Find the key with matching kid and use="sig"
-            const key = jwks.keys.find((k: any) => k.kid === header.kid && k.use === 'sig');
+            const key = jwks.keys.find((k: { kid?: string; use?: string }) => k.kid === header.kid && k.use === 'sig');
 
             if (!key) {
                 logger.warn('No matching signing key found in JWKS at this URL', {
                     kid: header.kid,
                     realm,
                     jwksUri,
-                    availableKids: jwks.keys.map((k: any) => ({ kid: k.kid, use: k.use, alg: k.alg })),
+                    availableKids: jwks.keys.map((k: { kid?: string; use?: string; alg?: string }) => ({ kid: k.kid, use: k.use, alg: k.alg })),
                 });
                 continue; // Try next URL
             }
@@ -337,7 +338,7 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
                             algorithms: ['HS256'],
                             ignoreExpiration: true, // tests control validity
                         },
-                        (err: any, decodedToken: any) => {
+                        (err: Error | null, decodedToken: unknown) => {
                             if (err) {
                                 reject(err);
                             } else {

@@ -142,7 +142,7 @@ async function emergencySetACR(username: string) {
           { headers: { 'Authorization': `Bearer ${adminToken}`, 'Content-Type': 'application/json' } }
         );
         console.log('   ✅ Protocol mapper created!\n');
-      } catch (error: any) {
+      } catch (error) {
         console.log(`   ⚠️  Could not create mapper: ${error.message}`);
         console.log('   💡 You may need to log out and log back in for the attribute to take effect\n');
       }

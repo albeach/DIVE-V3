@@ -104,7 +104,7 @@ class SAMLMetadataParserService {
 
       // Find HTTP-Redirect or HTTP-POST binding
       const ssoService = ssoServices.find(
-        (service: any) =>
+        (service: { $: Record<string, string> }) =>
           service.$.Binding &&
           (service.$.Binding.includes('HTTP-Redirect') || service.$.Binding.includes('HTTP-POST'))
       );
@@ -119,7 +119,7 @@ class SAMLMetadataParserService {
       const sloServices = idpSSODescriptor.SingleLogoutService;
       if (sloServices && sloServices.length > 0) {
         const sloService = sloServices.find(
-          (service: any) =>
+          (service: { $: Record<string, string> }) =>
             service.$.Binding &&
             (service.$.Binding.includes('HTTP-Redirect') || service.$.Binding.includes('HTTP-POST'))
         );
@@ -134,7 +134,7 @@ class SAMLMetadataParserService {
       if (keyDescriptors && keyDescriptors.length > 0) {
         // Find signing key
         const signingKey = keyDescriptors.find(
-          (kd: any) => !kd.$.use || kd.$.use === 'signing'
+          (kd: { $: Record<string, string>; KeyInfo?: unknown[] }) => !kd.$.use || kd.$.use === 'signing'
         );
 
         if (signingKey) {
@@ -188,15 +188,16 @@ class SAMLMetadataParserService {
       });
 
       return result;
-    } catch (error: any) {
+    } catch (error) {
       const duration = Date.now() - startTime;
-      logger.error('SAML metadata parsing failed', { error: error.message, durationMs: duration });
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('SAML metadata parsing failed', { error: errorMessage, durationMs: duration });
 
       result.valid = false;
-      if (error.message.includes('XML')) {
-        result.errors.push(`Invalid XML: ${error.message}`);
+      if (errorMessage.includes('XML')) {
+        result.errors.push(`Invalid XML: ${errorMessage}`);
       } else {
-        result.errors.push(`Parsing error: ${error.message}`);
+        result.errors.push(`Parsing error: ${errorMessage}`);
       }
 
       return result;
@@ -275,11 +276,12 @@ class SAMLMetadataParserService {
       });
 
       return certInfo;
-    } catch (error: any) {
-      logger.error('Certificate parsing failed', { error: error.message });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('Certificate parsing failed', { error: errorMessage });
 
       certInfo.valid = false;
-      certInfo.warnings.push(`Certificate parsing error: ${error.message}`);
+      certInfo.warnings.push(`Certificate parsing error: ${errorMessage}`);
 
       return certInfo;
     }
@@ -290,11 +292,10 @@ class SAMLMetadataParserService {
    * 
    * @private
    */
-  private formatDN(dn: any): string {
-    // node-forge returns an object with attributes array
+  private formatDN(dn: { attributes?: Array<{ shortName?: string; name?: string; value?: string | unknown[] }> }): string {
     const attributes = dn.attributes || [];
     return attributes
-      .map((attr: any) => `${attr.shortName || attr.name}=${attr.value}`)
+      .map((attr) => `${attr.shortName || attr.name}=${attr.value}`)
       .join(', ');
   }
 

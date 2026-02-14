@@ -181,7 +181,7 @@ export const trackSearchEventHandler = async (
       queryLength: event.query?.length || 0,
       hasFilters: !!(event.filters && Object.keys(event.filters).length > 0),
       filterTypes: event.filters ? Object.keys(event.filters).filter(k => {
-        const val = (event.filters as any)[k];
+        const val = (event.filters as Record<string, unknown>)[k];
         return val !== undefined && (Array.isArray(val) ? val.length > 0 : val !== null);
       }) : [],
       resultCount: event.resultCount || 0,
@@ -306,15 +306,15 @@ export const getSearchMetricsHandler = async (
       avgLatencyMs: Math.round(data.avgLatencyMs?.[0]?.avg || 0),
       zeroResultRate: totalSearches > 0 ? (zeroResultCount / totalSearches) * 100 : 0,
       clickThroughRate: totalSearches > 0 ? (clickCount / totalSearches) * 100 : 0,
-      topFilters: (data.topFilters || []).map((f: any) => ({
+      topFilters: (data.topFilters || []).map((f: { _id: string; count: number }) => ({
         filter: f._id,
         count: f.count,
       })),
-      searchesByHour: (data.searchesByHour || []).map((h: any) => ({
+      searchesByHour: (data.searchesByHour || []).map((h: { _id: number; count: number }) => ({
         hour: h._id,
         count: h.count,
       })),
-      searchesBySource: (data.searchesBySource || []).map((s: any) => ({
+      searchesBySource: (data.searchesBySource || []).map((s: { _id: string; count: number }) => ({
         source: s._id,
         count: s.count,
       })),
@@ -390,9 +390,9 @@ export const getPopularSearchesHandler = async (
       { $group: { _id: '$queryHash', clicks: { $sum: 1 } } },
     ]).toArray();
 
-    const clickMap = new Map(clickData.map((c: any) => [c._id, c.clicks]));
+    const clickMap = new Map(clickData.map((c: { _id: string; clicks: number }) => [c._id, c.clicks]));
 
-    const results: IPopularSearch[] = popularSearches.map((search: any) => ({
+    const results: IPopularSearch[] = popularSearches.map((search: { _id: string; searchCount: number; avgResultCount: number; avgLatencyMs: number; lastSearched: Date; queryLength: number }) => ({
       queryHash: search._id,
       searchCount: search.searchCount,
       avgResultCount: Math.round(search.avgResultCount || 0),
@@ -483,7 +483,7 @@ export const getZeroResultQueriesHandler = async (
         start: startDate.toISOString(),
         end: new Date().toISOString(),
       },
-      queries: zeroResults.map((q: any) => ({
+      queries: zeroResults.map((q: { _id: string; count: number; avgQueryLength: number; lastOccurred: Date; sources: string[] }) => ({
         queryHash: q._id,
         occurrences: q.count,
         avgQueryLength: Math.round(q.avgQueryLength || 0),

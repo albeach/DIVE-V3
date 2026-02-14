@@ -587,7 +587,7 @@ router.get('/states', async (req: Request, res: Response): Promise<void> => {
 });
 
 // Helper function for recommended actions
-function getRecommendedAction(state: any): string {
+function getRecommendedAction(state: { driftType?: string }): string {
   switch (state.driftType) {
     case 'orphaned_idp':
       return 'Disable or remove the orphaned Keycloak IdP';

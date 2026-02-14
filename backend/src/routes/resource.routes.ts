@@ -265,7 +265,7 @@ router.get('/count', async (req, res) => {
             const collection = db.collection('resources');
 
             // Build filter based on releasability
-            const filter: any = {};
+            const filter: Record<string, unknown> = {};
             if (releasableTo) {
                 filter.releasabilityTo = releasableTo.toString().toUpperCase();
             }

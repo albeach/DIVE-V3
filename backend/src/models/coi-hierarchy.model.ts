@@ -151,7 +151,7 @@ export class MongoCoiHierarchyStore {
       }
     };
 
-    await this.collection!.insertOne(doc as any);
+    await (this.collection! as unknown as Collection<Record<string, unknown>>).insertOne(doc as unknown as Record<string, unknown>);
 
     logger.info('COI hierarchy node created', {
       coiId: node.coiId,
@@ -212,7 +212,7 @@ export class MongoCoiHierarchyStore {
   async find(query: IHierarchyNodeQuery = {}): Promise<ICoiHierarchyNode[]> {
     await this.ensureInitialized();
 
-    const filter: any = {};
+    const filter: Record<string, unknown> = {};
     if (query.coiId) filter.coiId = query.coiId;
     if (query.type) filter.type = query.type;
     if (query.level !== undefined) filter.level = query.level;
@@ -409,11 +409,11 @@ export class MongoCoiHierarchyStore {
    * Build detailed hierarchy nodes for OPA (with conditional metadata)
    * Format: { "coi_id": { children: [], conditional: {...}, ... } }
    */
-  async buildDetailedHierarchyForOPA(): Promise<Record<string, any>> {
+  async buildDetailedHierarchyForOPA(): Promise<Record<string, Record<string, unknown>>> {
     await this.ensureInitialized();
 
     const nodes = await this.find({ enabled: true });
-    const map: Record<string, any> = {};
+    const map: Record<string, Record<string, unknown>> = {};
 
     for (const node of nodes) {
       map[node.coiId] = {
@@ -472,7 +472,7 @@ export class MongoCoiHierarchyStore {
   /**
    * Get full hierarchy tree structure
    */
-  async getHierarchyTree(): Promise<any> {
+  async getHierarchyTree(): Promise<Record<string, unknown>[]> {
     await this.ensureInitialized();
 
     const roots = await this.findRoots();
@@ -485,7 +485,7 @@ export class MongoCoiHierarchyStore {
     return tree;
   }
 
-  private async buildSubtree(node: ICoiHierarchyNode): Promise<any> {
+  private async buildSubtree(node: ICoiHierarchyNode): Promise<Record<string, unknown>> {
     const children = await this.findChildren(node.coiId);
     const childTrees = [];
 

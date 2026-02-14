@@ -390,15 +390,15 @@ export const customLoginHandler = async (
             };
 
             res.status(200).json(loginResponse);
-        } catch (keycloakError: any) {
-            // Check if MFA is required
-            if (keycloakError.response?.status === 401) {
-                const errorData = keycloakError.response?.data;
-                const errorDescription = errorData?.error_description || '';
+        } catch (keycloakError) {
+            const axiosErr = keycloakError as { response?: { status?: number; data?: Record<string, unknown> }; message?: string };
+            if (axiosErr.response?.status === 401) {
+                const errorData = axiosErr.response?.data as Record<string, unknown> | undefined;
+                const errorDescription = (errorData?.error_description as string) || '';
 
                 // Custom SPI returns error in response body (errorData.error and errorData.message)
-                const customSPIError = errorData?.error || '';
-                const customSPIMessage = errorData?.message || '';
+                const customSPIError = (errorData?.error as string) || '';
+                const customSPIMessage = (errorData?.message as string) || '';
 
                 logger.warn('Authentication failed', {
                     requestId,

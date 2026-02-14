@@ -203,7 +203,6 @@ export interface ISCIMError {
  */
 export interface IRequestWithSP extends Request {
   sp?: ISPContext;
-  user?: any;  // Existing user context
 }
 
 /**

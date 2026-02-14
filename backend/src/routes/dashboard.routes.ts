@@ -62,7 +62,7 @@ async function getAuditLogsCollection() {
  */
 router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promise<void> => {
     const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
-        const user = (req as any).user;
+        const user = (req as Request & { user?: Record<string, unknown> }).user;
         const currentInstance = process.env.INSTANCE_CODE || 'USA';
 
         try {
@@ -87,7 +87,7 @@ router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promi
 
             // Get ABAC-filtered local document count
             // Only count documents the user can actually access based on releasability
-            const localFilter: any = {
+            const localFilter: Record<string, unknown> = {
                 releasabilityTo: { $in: [userCountry] }
             };
             const localDocuments = await resourcesCollection.countDocuments(localFilter);
@@ -261,14 +261,14 @@ router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promi
         }
 
         // Get recent decisions for dashboard
-        let recentDecisions: any[] = [];
-        let recentAuditEvents: any[] = [];
+        let recentDecisions: Record<string, unknown>[] = [];
+        let recentAuditEvents: Record<string, unknown>[] = [];
         let userStats = {
             lastLogin: null,
             sessionCount: 1
         };
         let byClassification: Record<string, number> = {};
-        let recentlyAccessed: any[] = [];
+        let recentlyAccessed: Record<string, unknown>[] = [];
         const complianceMetrics = [
             {
                 name: 'ACP-240 Compliance',
@@ -420,7 +420,7 @@ router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promi
                 }
             ];
             const classificationResults = await resourcesCollection.aggregate(classificationPipeline).toArray();
-            classificationResults.forEach((result: any) => {
+            classificationResults.forEach((result: { _id: string | null; count: number }) => {
                 byClassification[result._id || 'UNKNOWN'] = result.count;
             });
         } catch (error) {
@@ -630,13 +630,16 @@ router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promi
  */
 router.get('/spokes', authenticateJWT, async (req: Request, res: Response): Promise<void> => {
     const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
-    const user = (req as any).user;
+    const user = (req as Request & { user?: Record<string, unknown> }).user;
 
     try {
         // Check if user has admin role
-        const isAdmin = user?.roles?.includes('dive-admin') ||
-                        user?.realm_access?.roles?.includes('dive-admin') ||
-                        user?.resource_access?.['dive-v3-broker']?.roles?.includes('dive-admin');
+        const roles = user?.roles as string[] | undefined;
+        const realmRoles = (user?.realm_access as Record<string, unknown> | undefined)?.roles as string[] | undefined;
+        const resourceRoles = ((user?.resource_access as Record<string, unknown> | undefined)?.['dive-v3-broker'] as Record<string, unknown> | undefined)?.roles as string[] | undefined;
+        const isAdmin = roles?.includes('dive-admin') ||
+                        realmRoles?.includes('dive-admin') ||
+                        resourceRoles?.includes('dive-admin');
 
         if (!isAdmin) {
             res.status(403).json({

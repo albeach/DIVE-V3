@@ -86,7 +86,7 @@ router.get('/', authenticateJWT, async (req: IAuthenticatedRequest, res: Respons
         }
 
         // Build MongoDB filter for audit_logs collection
-        const filter: any = {
+        const filter: Record<string, unknown> = {
             subject: uniqueID
         };
 
@@ -111,12 +111,12 @@ router.get('/', authenticateJWT, async (req: IAuthenticatedRequest, res: Respons
             .toArray();
 
         // Transform audit_logs to activity format
-        const activities = auditLogs.map((log: any) => {
+        const activities = auditLogs.map((log: Record<string, unknown>) => {
             // Determine activity type from event type and outcome
             let activityType: 'view' | 'download' | 'upload' | 'access_granted' | 'access_denied' | 'request_submitted';
 
             const eventType = log.acp240EventType || log.eventType;
-            const outcome = log.outcome || (log.policyEvaluation?.allow ? 'ALLOW' : 'DENY');
+            const outcome = log.outcome || ((log.policyEvaluation as Record<string, unknown>)?.allow ? 'ALLOW' : 'DENY');
             const action = log.action || 'access';
 
             if (outcome === 'ALLOW') {
@@ -136,17 +136,18 @@ router.get('/', authenticateJWT, async (req: IAuthenticatedRequest, res: Respons
             // Extract resource title if available
             const resourceId = log.resourceId || 'unknown';
             let resourceTitle = resourceId;
-            if (log.resourceAttributes?.title) {
-                resourceTitle = log.resourceAttributes.title;
+            const resourceAttributes = log.resourceAttributes as Record<string, unknown> | undefined;
+            if (resourceAttributes?.title) {
+                resourceTitle = resourceAttributes.title as string;
             }
 
             return {
-                id: log._id?.toString() || log.requestId || `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                id: (log._id as { toString(): string })?.toString() || log.requestId || `activity-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
                 type: activityType,
                 resourceId: resourceId,
                 resourceTitle: resourceTitle,
-                classification: log.resourceAttributes?.classification || 'UNCLASSIFIED',
-                timestamp: new Date(log.timestamp),
+                classification: resourceAttributes?.classification || 'UNCLASSIFIED',
+                timestamp: new Date(log.timestamp as string),
                 details: outcome === 'DENY' ? log.reason : undefined,
                 decision: outcome
             };

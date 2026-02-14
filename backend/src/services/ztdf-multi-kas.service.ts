@@ -439,7 +439,7 @@ export class ZTDFMultiKASService {
                     },
                 };
 
-            } catch (error: any) {
+            } catch (error) {
                 // Record failure
                 recordKASFailure(kasId);
 
@@ -522,7 +522,7 @@ export class ZTDFMultiKASService {
                 error: response.data.denialReason || response.data.error || 'KAS denied request',
             };
 
-        } catch (error: any) {
+        } catch (error) {
             const errorMessage = error.response?.data?.denialReason ||
                 error.response?.data?.error ||
                 error.message ||

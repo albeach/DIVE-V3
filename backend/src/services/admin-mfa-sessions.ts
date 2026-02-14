@@ -22,7 +22,7 @@ import type { AdminServiceContext } from './admin-idp-testing';
  * Get MFA Configuration for Realm.
  * Reads authentication flow configuration.
  */
-export async function getMFAConfigCore(ctx: AdminServiceContext, realmName?: string): Promise<any> {
+export async function getMFAConfigCore(ctx: AdminServiceContext, realmName?: string): Promise<Record<string, unknown>> {
   try {
     const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
     const baseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
@@ -35,7 +35,7 @@ export async function getMFAConfigCore(ctx: AdminServiceContext, realmName?: str
     });
 
     // Find browser flow (contains MFA config)
-    const browserFlow = response.data.find((f: any) => f.alias === 'browser');
+    const browserFlow = response.data.find((f: { alias?: string }) => f.alias === 'browser');
 
     logger.info('Retrieved MFA configuration', { realm, flowAlias: browserFlow?.alias });
 
@@ -57,7 +57,7 @@ export async function getMFAConfigCore(ctx: AdminServiceContext, realmName?: str
  * Update MFA Configuration for Realm.
  * Modifies authentication flows to require/optional OTP.
  */
-export async function updateMFAConfigCore(ctx: AdminServiceContext, config: any, realmName?: string): Promise<void> {
+export async function updateMFAConfigCore(ctx: AdminServiceContext, config: Record<string, unknown>, realmName?: string): Promise<void> {
   try {
     const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
     const baseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
@@ -70,13 +70,14 @@ export async function updateMFAConfigCore(ctx: AdminServiceContext, config: any,
     });
 
     // Update OTP policy
+    const otp = config.otp as Record<string, unknown> | undefined;
     const otpPolicyUpdate = {
       ...realmResponse.data,
-      otpPolicyType: config.otp?.type || 'totp',
-      otpPolicyAlgorithm: config.otp?.algorithm || 'HmacSHA256',
-      otpPolicyDigits: config.otp?.digits || 6,
-      otpPolicyPeriod: config.otp?.period || 30,
-      otpPolicyInitialCounter: config.otp?.initialCounter || 0
+      otpPolicyType: otp?.type || 'totp',
+      otpPolicyAlgorithm: otp?.algorithm || 'HmacSHA256',
+      otpPolicyDigits: otp?.digits || 6,
+      otpPolicyPeriod: otp?.period || 30,
+      otpPolicyInitialCounter: otp?.initialCounter || 0
     };
 
     await axios.put(realmUrl, otpPolicyUpdate, {
@@ -99,7 +100,7 @@ export async function updateMFAConfigCore(ctx: AdminServiceContext, config: any,
  * Test MFA Flow.
  * Returns flow configuration details.
  */
-export async function testMFAFlowCore(ctx: AdminServiceContext, realmName?: string): Promise<any> {
+export async function testMFAFlowCore(ctx: AdminServiceContext, realmName?: string): Promise<Record<string, unknown>> {
   try {
     const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
     const baseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
@@ -111,12 +112,12 @@ export async function testMFAFlowCore(ctx: AdminServiceContext, realmName?: stri
       headers: { 'Authorization': `Bearer ${token}` }
     });
 
-    const otpAction = response.data.find((a: any) => a.alias === 'CONFIGURE_TOTP');
+    const otpAction = response.data.find((a: { alias?: string; enabled?: boolean }) => a.alias === 'CONFIGURE_TOTP');
 
     return {
       success: true,
       message: 'MFA flow test successful',
-      requiredActions: response.data.map((a: any) => a.alias),
+      requiredActions: response.data.map((a: { alias?: string }) => a.alias),
       otpEnabled: otpAction?.enabled || false
     };
   } catch (error) {
@@ -138,14 +139,14 @@ export async function testMFAFlowCore(ctx: AdminServiceContext, realmName?: stri
  * Get Active Sessions for Realm.
  * Returns list of active user sessions.
  */
-export async function getActiveSessionsCore(ctx: AdminServiceContext, realmName?: string, filters?: any): Promise<any[]> {
+export async function getActiveSessionsCore(ctx: AdminServiceContext, realmName?: string, filters?: Record<string, unknown>): Promise<Record<string, unknown>[]> {
   try {
     const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
 
     // Get all users (then get their sessions)
     const users = await ctx.client.users.find({ max: 1000, realm });
 
-    const sessions: any[] = [];
+    const sessions: Record<string, unknown>[] = [];
 
     for (const user of users) {
       if (!user.id) continue;
@@ -156,7 +157,7 @@ export async function getActiveSessionsCore(ctx: AdminServiceContext, realmName?
           realm
         });
 
-        userSessions.forEach((session: any) => {
+        userSessions.forEach((session) => {
           // Apply filters
           if (filters?.username && user.username !== filters.username) return;
           if (filters?.ipAddress && session.ipAddress !== filters.ipAddress) return;
@@ -255,7 +256,7 @@ export async function revokeUserSessionsCore(
 /**
  * Get Session Statistics.
  */
-export async function getSessionStatsCore(ctx: AdminServiceContext, realmName?: string): Promise<any> {
+export async function getSessionStatsCore(ctx: AdminServiceContext, realmName?: string): Promise<Record<string, unknown>> {
   try {
     const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
     const sessions = await getActiveSessionsCore(ctx, realm);
@@ -272,14 +273,15 @@ export async function getSessionStatsCore(ctx: AdminServiceContext, realmName?: 
 
     sessions.forEach(session => {
       // Calculate duration
-      const duration = (session.lastAccess - session.start) / 1000; // seconds
+      const duration = ((session.lastAccess as number) - (session.start as number)) / 1000; // seconds
       totalDuration += duration;
 
       // Count by user
-      stats.byUser[session.username] = (stats.byUser[session.username] || 0) + 1;
+      const username = session.username as string;
+      stats.byUser[username] = (stats.byUser[username] || 0) + 1;
 
       // Count by client
-      Object.keys(session.clients || {}).forEach(clientId => {
+      Object.keys((session.clients || {}) as Record<string, unknown>).forEach(clientId => {
         stats.byClient[clientId] = (stats.byClient[clientId] || 0) + 1;
       });
     });
@@ -303,7 +305,7 @@ export async function getSessionStatsCore(ctx: AdminServiceContext, realmName?: 
 /**
  * Get Realm Theme Settings.
  */
-export async function getRealmThemeCore(ctx: AdminServiceContext, realmName?: string): Promise<any> {
+export async function getRealmThemeCore(ctx: AdminServiceContext, realmName?: string): Promise<Record<string, unknown>> {
   try {
     const realm = realmName || process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
     const baseUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';

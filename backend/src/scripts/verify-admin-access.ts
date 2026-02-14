@@ -77,7 +77,7 @@ async function testAdminAccess(instance: typeof INSTANCES[0]) {
                 console.log(`  ❌ Dashboard returned status ${dashboardResponse.status}`);
                 return { success: false, hasRole: hasSuperAdmin, dashboardAccess: false };
             }
-        } catch (error: any) {
+        } catch (error) {
             if (error.response?.status === 403) {
                 console.log(`  ❌ Dashboard access denied (403 Forbidden)`);
             } else if (error.response?.status === 401) {
@@ -88,7 +88,7 @@ async function testAdminAccess(instance: typeof INSTANCES[0]) {
             return { success: false, hasRole: hasSuperAdmin, dashboardAccess: false };
         }
 
-    } catch (error: any) {
+    } catch (error) {
         console.log(`  ❌ ERROR: ${error.message}`);
         if (error.response?.data) {
             console.log(`     Response:`, JSON.stringify(error.response.data, null, 2));

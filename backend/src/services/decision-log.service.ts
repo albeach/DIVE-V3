@@ -15,7 +15,7 @@
  * Last Updated: October 29, 2025 (Phase 4)
  */
 
-import { MongoClient, Db, Collection } from 'mongodb';
+import { MongoClient, Db, Collection, Document } from 'mongodb';
 import { logger } from '../utils/logger';
 import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
 
@@ -198,7 +198,7 @@ class DecisionLogService {
                 timestamp: decision.timestamp || new Date().toISOString(),
             };
 
-            await collection.insertOne(sanitizedDecision as any);
+            await collection.insertOne(sanitizedDecision);
 
             logger.debug('Decision logged to MongoDB', {
                 requestId: decision.requestId,
@@ -224,7 +224,7 @@ class DecisionLogService {
             const collection = await this.getCollection();
 
             // Build MongoDB query
-            const filter: any = {};
+            const filter: Document = {};
 
             if (query.subject) {
                 filter['subject.uniqueID'] = query.subject;
@@ -293,7 +293,7 @@ class DecisionLogService {
             const collection = await this.getCollection();
 
             // Build time filter
-            const timeFilter: any = {};
+            const timeFilter: Document = {};
             if (startTime || endTime) {
                 timeFilter.timestamp = {};
                 if (startTime) {
@@ -420,7 +420,7 @@ class DecisionLogService {
             }
             const collection = this.db.collection<IKeyReleaseLog>(KEY_RELEASES_COLLECTION);
 
-            const filter: any = {};
+            const filter: Document = {};
 
             if (query.subjectUniqueID) {
                 filter.subjectUniqueID = query.subjectUniqueID;
@@ -481,7 +481,7 @@ class DecisionLogService {
             }
             const collection = this.db.collection(KEY_RELEASES_COLLECTION);
 
-            const timeFilter: any = {};
+            const timeFilter: Document = {};
             if (timeRange?.startTime || timeRange?.endTime) {
                 timeFilter.timestamp = {};
                 if (timeRange.startTime) {
@@ -515,9 +515,9 @@ class DecisionLogService {
                 { $limit: 10 }
             ]).toArray();
 
-            const topDenyReasons = denyReasonsResult.map((r: any) => ({
-                reason: r._id,
-                count: r.count
+            const topDenyReasons = denyReasonsResult.map((r) => ({
+                reason: r._id as string,
+                count: r.count as number
             }));
 
             // Releases by country
@@ -528,9 +528,9 @@ class DecisionLogService {
             ]).toArray();
 
             const releasesByCountry: Record<string, number> = {};
-            countryResult.forEach((r: any) => {
+            countryResult.forEach((r) => {
                 if (r._id) {
-                    releasesByCountry[r._id] = r.count;
+                    releasesByCountry[r._id as string] = r.count as number;
                 }
             });
 

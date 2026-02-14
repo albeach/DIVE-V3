@@ -629,10 +629,10 @@ async function handleRefreshTokenGrant(params: {
 
   // Validate refresh token
   const { publicKey } = getSigningKeys();
-  let decoded: any;
-  
+  let decoded: Record<string, unknown>;
+
   try {
-    decoded = jwt.verify(refresh_token, publicKey, { algorithms: ['RS256'] });
+    decoded = jwt.verify(refresh_token, publicKey, { algorithms: ['RS256'] }) as Record<string, unknown>;
   } catch (error) {
     throw new Error('invalid_grant: Invalid refresh token');
   }
