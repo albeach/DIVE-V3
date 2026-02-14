@@ -81,9 +81,52 @@ hub_phase_database_init() {
 
     log_info "Phase 2: PostgreSQL and Orchestration Database initialization"
 
+    cd "$DIVE_ROOT" || return 1
+
+    # -------------------------------------------------------------------------
+    # Step 0: Ensure hub certificates exist (required for PostgreSQL TLS)
+    # After a nuke, certs are cleaned. PKI is available from Phase 1.
+    # -------------------------------------------------------------------------
+    local cert_dir="${DIVE_ROOT}/instances/hub/certs"
+    if [ ! -f "${cert_dir}/certificate.pem" ]; then
+        log_info "Hub certificates not found — generating before infra services start..."
+        mkdir -p "$cert_dir"
+        source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+
+        if use_vault_pki 2>/dev/null && type generate_hub_certificate_vault &>/dev/null; then
+            if generate_hub_certificate_vault; then
+                log_success "Hub certificates issued from Vault PKI"
+            else
+                log_warn "Vault PKI cert generation failed — trying mkcert fallback"
+                if command -v mkcert >/dev/null 2>&1; then
+                    cd "$cert_dir"
+                    mkcert -cert-file certificate.pem -key-file key.pem \
+                        localhost "*.localhost" 127.0.0.1 \
+                        backend keycloak opa mongodb postgres redis kas opal-server frontend \
+                        >/dev/null 2>&1
+                    cd "$DIVE_ROOT"
+                fi
+            fi
+        elif command -v mkcert >/dev/null 2>&1; then
+            cd "$cert_dir"
+            mkcert -cert-file certificate.pem -key-file key.pem \
+                localhost "*.localhost" 127.0.0.1 \
+                backend keycloak opa mongodb postgres redis kas opal-server frontend \
+                >/dev/null 2>&1
+            cd "$DIVE_ROOT"
+        fi
+
+        # Fix permissions for Docker containers (non-root users need read access)
+        chmod 644 "${cert_dir}/key.pem" 2>/dev/null || true
+        chmod 644 "${cert_dir}/certificate.pem" 2>/dev/null || true
+
+        # Build SSOT CA bundle (mkcert + Vault PKI)
+        _rebuild_ca_bundle
+        log_verbose "CA bundle built at ${DIVE_ROOT}/certs/ca-bundle/rootCA.pem"
+    fi
+
     # Start PostgreSQL container only
     log_verbose "Starting PostgreSQL container..."
-    cd "$DIVE_ROOT" || return 1
 
     if ! ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" up -d postgres >/dev/null 2>&1; then
         log_error "Failed to start PostgreSQL container"
@@ -358,6 +401,24 @@ hub_phase_vault_bootstrap() {
     fi
 
     # -------------------------------------------------------------------------
+    # Step 4b: Setup PKI engines if not configured (Root CA + Intermediate CA)
+    # -------------------------------------------------------------------------
+    if ! vault secrets list 2>/dev/null | grep -q "^pki_int/"; then
+        log_info "Vault PKI not configured — running PKI setup..."
+        if type module_vault_pki_setup &>/dev/null; then
+            if module_vault_pki_setup; then
+                log_success "Vault PKI setup complete (Root CA + Intermediate CA)"
+            else
+                log_warn "Vault PKI setup failed — spoke certs will use mkcert fallback"
+            fi
+        else
+            log_verbose "module_vault_pki_setup not available — skipping PKI"
+        fi
+    else
+        log_verbose "Vault PKI engines already configured"
+    fi
+
+    # -------------------------------------------------------------------------
     # Step 5: Seed secrets if not yet seeded
     # -------------------------------------------------------------------------
     if ! vault kv get dive-v3/core/usa/postgres >/dev/null 2>&1; then
@@ -389,6 +450,149 @@ hub_phase_vault_bootstrap() {
     export HUB_VAULT_BOOTSTRAPPED=true
 
     log_success "Vault bootstrap complete — cluster ready for secret operations"
+    return 0
+}
+
+##
+# Install the Vault Root CA into the host system trust store (pipeline-friendly).
+# Runs after Vault PKI setup and cert generation — ensures browsers trust the
+# DIVE V3 certificate chain without manual intervention.
+#
+# This is non-blocking: if sudo isn't available, it warns with instructions.
+# Spokes use the same Hub Root CA, so this only needs to run during hub deploy.
+##
+_hub_install_ca_trust() {
+    # Source certificates module if not already loaded
+    if ! type install_vault_ca_to_system_truststore &>/dev/null; then
+        source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+    fi
+
+    # Extract the current Root CA fingerprint
+    local root_ca_file="${DIVE_ROOT}/certs/vault-pki/ca-chain.pem"
+    if [ ! -f "$root_ca_file" ]; then
+        log_verbose "No Vault PKI chain found — skipping CA trust installation"
+        return 0
+    fi
+
+    # Get fingerprint of the Root CA (last cert in chain)
+    local cert_count
+    cert_count=$(grep -c "BEGIN CERTIFICATE" "$root_ca_file" 2>/dev/null || echo "0")
+    local current_fingerprint=""
+
+    if [ "$cert_count" -ge 1 ]; then
+        local tmp_root="${DIVE_ROOT}/.tmp-pipeline-root-ca.pem"
+        # Extract the last cert (Root CA — self-signed)
+        awk -v n="$cert_count" '/-----BEGIN CERTIFICATE-----/{c++} c==n{print} /-----END CERTIFICATE-----/{if(c==n) exit}' \
+            "$root_ca_file" > "$tmp_root"
+        current_fingerprint=$(openssl x509 -in "$tmp_root" -noout -fingerprint -sha256 2>/dev/null | sed 's/.*=//')
+        rm -f "$tmp_root"
+    fi
+
+    if [ -z "$current_fingerprint" ]; then
+        log_verbose "Could not determine Root CA fingerprint — skipping trust check"
+        return 0
+    fi
+
+    # Check if this exact CA is already trusted in the system keychain
+    local os_type
+    os_type=$(uname -s)
+    local already_trusted=false
+
+    if [ "$os_type" = "Darwin" ]; then
+        # macOS: Check system keychain for a cert with matching fingerprint
+        local keychain_fingerprint
+        keychain_fingerprint=$(security find-certificate -c "DIVE V3 Root CA" -Z /Library/Keychains/System.keychain 2>/dev/null \
+            | grep "SHA-256" | head -1 | sed 's/.*: //')
+        if [ -n "$keychain_fingerprint" ]; then
+            # Normalize both to uppercase hex without colons/spaces
+            local norm_current norm_keychain
+            norm_current=$(echo "$current_fingerprint" | tr -d ':' | tr '[:lower:]' '[:upper:]')
+            norm_keychain=$(echo "$keychain_fingerprint" | tr -d ':' | tr -d ' ' | tr '[:lower:]' '[:upper:]')
+            if [ "$norm_current" = "$norm_keychain" ]; then
+                already_trusted=true
+            fi
+        fi
+    elif [ "$os_type" = "Linux" ]; then
+        # Linux: Check if the cert file exists and matches
+        local system_ca="/usr/local/share/ca-certificates/dive-v3-root-ca.crt"
+        if [ -f "$system_ca" ]; then
+            local system_fingerprint
+            system_fingerprint=$(openssl x509 -in "$system_ca" -noout -fingerprint -sha256 2>/dev/null | sed 's/.*=//')
+            if [ "$current_fingerprint" = "$system_fingerprint" ]; then
+                already_trusted=true
+            fi
+        fi
+    fi
+
+    if [ "$already_trusted" = "true" ]; then
+        log_success "Vault Root CA already trusted in system keychain (fingerprint matches)"
+        return 0
+    fi
+
+    # CA not trusted or fingerprint changed — install it
+    log_info "Installing Vault Root CA to system trust store (browsers will trust DIVE certificates)..."
+
+    if [ "$os_type" = "Darwin" ]; then
+        # Try non-interactive sudo first (succeeds if user has recent sudo session or NOPASSWD)
+        local root_ca_pem="${DIVE_ROOT}/.tmp-pipeline-root-ca.pem"
+        awk -v n="$cert_count" '/-----BEGIN CERTIFICATE-----/{c++} c==n{print} /-----END CERTIFICATE-----/{if(c==n) exit}' \
+            "$root_ca_file" > "$root_ca_pem"
+
+        if sudo -n security add-trusted-cert -d -r trustRoot \
+            -k /Library/Keychains/System.keychain "$root_ca_pem" 2>/dev/null; then
+            log_success "Vault Root CA installed in macOS system keychain"
+            rm -f "$root_ca_pem"
+            return 0
+        fi
+
+        # Non-interactive failed — try interactive (user sees password prompt in terminal)
+        echo ""
+        log_info "sudo password required to trust the Vault Root CA in your browser"
+        log_info "(This prevents SEC_ERROR_BAD_SIGNATURE errors in Firefox/Chrome)"
+        echo ""
+        if sudo security add-trusted-cert -d -r trustRoot \
+            -k /Library/Keychains/System.keychain "$root_ca_pem" 2>/dev/null; then
+            log_success "Vault Root CA installed in macOS system keychain"
+            echo ""
+            echo "  Chrome/Safari: Trusted immediately (restart browser)"
+            echo "  Firefox:       Set security.enterprise_roots.enabled=true in about:config"
+            echo ""
+            rm -f "$root_ca_pem"
+            return 0
+        fi
+
+        # Both attempts failed — warn but don't block
+        rm -f "$root_ca_pem"
+        log_warn "Could not install Root CA (sudo required)"
+        log_warn "Run manually after deployment: ./dive vault trust-ca"
+        return 0
+    elif [ "$os_type" = "Linux" ]; then
+        local root_ca_pem="${DIVE_ROOT}/.tmp-pipeline-root-ca.pem"
+        awk -v n="$cert_count" '/-----BEGIN CERTIFICATE-----/{c++} c==n{print} /-----END CERTIFICATE-----/{if(c==n) exit}' \
+            "$root_ca_file" > "$root_ca_pem"
+
+        local ca_dest="/usr/local/share/ca-certificates/dive-v3-root-ca.crt"
+        if sudo -n cp "$root_ca_pem" "$ca_dest" 2>/dev/null && sudo -n update-ca-certificates 2>/dev/null; then
+            log_success "Vault Root CA installed in Linux system CA store"
+            rm -f "$root_ca_pem"
+            return 0
+        fi
+
+        echo ""
+        log_info "sudo password required to trust the Vault Root CA in your browser"
+        echo ""
+        if sudo cp "$root_ca_pem" "$ca_dest" && sudo update-ca-certificates; then
+            log_success "Vault Root CA installed in Linux system CA store"
+            rm -f "$root_ca_pem"
+            return 0
+        fi
+
+        rm -f "$root_ca_pem"
+        log_warn "Could not install Root CA (sudo required)"
+        log_warn "Run manually after deployment: ./dive vault trust-ca"
+        return 0
+    fi
+
     return 0
 }
 
@@ -909,6 +1113,15 @@ _hub_pipeline_execute_internal() {
             deployment_set_state "$instance_code" "INITIALIZING" "" \
                 "{\"mode\":\"$pipeline_mode\",\"resume\":$resume_mode,\"phase\":\"POST_DATABASE_INIT\"}"
         fi
+    fi
+
+    # =========================================================================
+    # CA Trust: Install Vault Root CA into host system trust store
+    # =========================================================================
+    # Runs after Phase 2 (certs + CA bundle exist). Non-blocking — warns on failure.
+    # Spokes use the same Hub Root CA, so this covers all instances.
+    if [ $phase_result -eq 0 ]; then
+        _hub_install_ca_trust || true
     fi
 
     # =========================================================================
@@ -1541,7 +1754,6 @@ hub_init() {
 
     # Generate certificates if not exists
     local cert_dir="${DIVE_ROOT}/instances/hub/certs"
-    local mkcert_ca_dir="${DIVE_ROOT}/certs/mkcert"
 
     if [ ! -f "${cert_dir}/certificate.pem" ]; then
         if use_vault_pki 2>/dev/null && type generate_hub_certificate_vault &>/dev/null; then
@@ -1573,12 +1785,11 @@ hub_init() {
         chmod 644 "${cert_dir}/key.pem" 2>/dev/null || true
     fi
 
-    # Build CA bundle for docker-compose volume mounts
-    # Services expect: ./certs/mkcert:/app/certs/ca:ro → NODE_EXTRA_CA_CERTS=/app/certs/ca/rootCA.pem
+    # Build SSOT CA bundle for docker-compose volume mounts
+    # Services mount: ./certs/ca-bundle:/app/certs/ca:ro → NODE_EXTRA_CA_CERTS=/app/certs/ca/rootCA.pem
     # The bundle includes ALL trusted CAs so both hub (Vault PKI) and spoke (mkcert) services work.
-    mkdir -p "${mkcert_ca_dir}"
-    _rebuild_ca_bundle "${mkcert_ca_dir}/rootCA.pem"
-    log_verbose "CA bundle built at ${mkcert_ca_dir}/rootCA.pem"
+    _rebuild_ca_bundle
+    log_verbose "CA bundle built at ${DIVE_ROOT}/certs/ca-bundle/rootCA.pem"
 
     # Initialize hub config if not exists
     if [ ! -f "${HUB_DATA_DIR}/config/hub.json" ]; then

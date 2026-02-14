@@ -20,9 +20,10 @@ import { clearAccountTokensByUserId, updateAccountTokensByUserId } from "@/lib/d
  */
 const EMAIL_DOMAIN_COUNTRY_MAP: Record<string, string> = {
     // United States
-    'mil': 'USA', 'army.mil': 'USA', 'navy.mil': 'USA', 'af.mil': 'USA',
+    'army.mil': 'USA', 'navy.mil': 'USA', 'af.mil': 'USA',
+    'usmc.mil': 'USA', 'uscg.mil': 'USA', 'defense.gov': 'USA',
     // France
-    'gouv.fr': 'FRA', 'defense.gouv.fr': 'FRA',
+    'gouv.fr': 'FRA', 'defense.gouv.fr': 'FRA', 'intradef.gouv.fr': 'FRA',
     // Canada
     'gc.ca': 'CAN', 'forces.gc.ca': 'CAN',
     // United Kingdom / Great Britain
@@ -43,6 +44,12 @@ const EMAIL_DOMAIN_COUNTRY_MAP: Record<string, string> = {
 };
 
 /**
+ * DIVE test domain pattern: <country>.dive25.mil
+ * Extract country code from test email domains
+ */
+const DIVE_TEST_DOMAIN_REGEX = /^([a-z]{3})\.dive25\.mil$/;
+
+/**
  * Infer country from email domain
  */
 function inferCountryFromEmail(email: string): { country: string; confidence: 'high' | 'low' } {
@@ -50,6 +57,12 @@ function inferCountryFromEmail(email: string): { country: string; confidence: 'h
 
     const domain = email.toLowerCase().split('@')[1];
     if (!domain) return { country: 'USA', confidence: 'low' };
+
+    // Check DIVE test domain pattern first: <country>.dive25.mil
+    const testMatch = domain.match(DIVE_TEST_DOMAIN_REGEX);
+    if (testMatch) {
+        return { country: testMatch[1].toUpperCase(), confidence: 'high' };
+    }
 
     // Check exact match
     if (EMAIL_DOMAIN_COUNTRY_MAP[domain]) {

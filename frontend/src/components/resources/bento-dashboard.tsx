@@ -313,14 +313,14 @@ export default function BentoDashboard({
           </div>
         </motion.div>
 
-        {/* Access Rate & Data Freshness */}
+        {/* ZTDF Encryption Coverage & Data Freshness */}
         <motion.div
           variants={itemVariants}
           className="rounded-xl bg-gradient-to-br from-emerald-500 to-green-600 p-3 text-white shadow-lg"
         >
           <div className="flex items-center gap-1 mb-1">
-            <Eye className="w-4 h-4 text-white/70" />
-            <span className="text-[10px] text-white/70">{t('bentoDashboard.accessRate')}</span>
+            <Lock className="w-4 h-4 text-white/70" />
+            <span className="text-[10px] text-white/70">ZTDF Coverage</span>
           </div>
           <div className="text-xl font-bold">
             {accessRate !== undefined ? `${Math.round(accessRate)}%` : '—'}

@@ -870,13 +870,25 @@ spoke_init_prepare_certificates() {
     # Without this, Keycloak crashes on startup with "No such file or directory"
     mkdir -p "$spoke_dir/certs/ca" "$spoke_dir/truststores"
 
-    # Vault PKI path: if CERT_PROVIDER=vault, issue from Vault and return early
+    # CRITICAL FIX (2026-02-12): Source certificates.sh BEFORE checking use_vault_pki
+    # The function use_vault_pki() is defined in certificates.sh — sourcing it inside
+    # the conditional that checks for the function creates a chicken-and-egg bug where
+    # Vault PKI is never used for spokes, causing CA trust mismatch with Hub.
+    if [ -f "${DIVE_ROOT}/scripts/dive-modules/certificates.sh" ]; then
+        source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+    fi
+
+    # Vault PKI path: if CERT_PROVIDER=vault, issue from Vault PKI
+    # Industry standard: all instances (hub + spokes) use the same PKI hierarchy
+    # for consistent cross-instance TLS trust and true data sovereignty
     if type use_vault_pki &>/dev/null && use_vault_pki; then
         log_info "CERT_PROVIDER=vault — using Vault PKI for spoke certificates"
-        if [ -f "${DIVE_ROOT}/scripts/dive-modules/certificates.sh" ]; then
-            source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
-        fi
         if type generate_spoke_certificate_vault &>/dev/null && generate_spoke_certificate_vault "$code_lower"; then
+            # Rebuild CA bundle: Vault PKI chain + mkcert CA (backward compat)
+            if type _rebuild_spoke_ca_bundle &>/dev/null; then
+                _rebuild_spoke_ca_bundle "$code_lower"
+                log_verbose "Spoke CA bundle rebuilt (Vault PKI + mkcert)"
+            fi
             log_success "Federation certificates prepared via Vault PKI"
             return 0
         fi
@@ -893,19 +905,10 @@ spoke_init_prepare_certificates() {
             log_info "TLS certificates exist and have required SANs - skipping generation"
 
             # Build CA bundle with ALL trusted CAs (mkcert + Vault PKI)
-            # This ensures spoke services trust both spoke (mkcert) and hub (Vault PKI) certs
+            # This ensures spoke services trust both CA providers for cross-instance TLS
             if type _rebuild_spoke_ca_bundle &>/dev/null; then
                 _rebuild_spoke_ca_bundle "$code_lower"
                 log_verbose "Spoke CA bundle rebuilt (mkcert + Vault PKI)"
-            elif command -v mkcert &>/dev/null; then
-                local mkcert_ca="$(mkcert -CAROOT)/rootCA.pem"
-                if [ -f "$mkcert_ca" ]; then
-                    cp "$mkcert_ca" "$spoke_dir/certs/rootCA.pem" 2>/dev/null || true
-                    cp "$mkcert_ca" "$spoke_dir/certs/ca/rootCA.pem" 2>/dev/null || true
-                    cp "$mkcert_ca" "$spoke_dir/truststores/mkcert-rootCA.pem" 2>/dev/null || true
-                    chmod 644 "$spoke_dir/certs/rootCA.pem" "$spoke_dir/certs/ca/rootCA.pem" 2>/dev/null || true
-                    log_verbose "mkcert rootCA.pem synced (fallback)"
-                fi
             fi
 
             return 0
@@ -925,59 +928,55 @@ spoke_init_prepare_certificates() {
     # ==========================================================================
     # This ensures consistent SANs across all deployment paths
     # FIX (2026-01-15): Consolidated duplicate certificate generation code
+    # NOTE (2026-02-12): certificates.sh already sourced at function entry
     # ==========================================================================
 
-    # Load certificates module (SSOT for all certificate operations)
-    if [ -f "${DIVE_ROOT}/scripts/dive-modules/certificates.sh" ]; then
-        source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
+    # Use SSOT function with comprehensive SANs (certificates.sh sourced above)
+    if type generate_spoke_certificate &>/dev/null; then
+        if generate_spoke_certificate "$code_lower"; then
+            log_success "Federation certificates prepared via SSOT"
 
-        # Use SSOT function with comprehensive SANs
-        if type generate_spoke_certificate &>/dev/null; then
-            if generate_spoke_certificate "$code_lower"; then
-                log_success "Federation certificates prepared via SSOT"
-
-                # Build CA bundle with ALL trusted CAs (mkcert + Vault PKI)
-                if type _rebuild_spoke_ca_bundle &>/dev/null; then
-                    _rebuild_spoke_ca_bundle "$code_lower"
-                    log_verbose "Spoke CA bundle rebuilt (mkcert + Vault PKI)"
-                elif type install_mkcert_ca_in_spoke &>/dev/null; then
-                    install_mkcert_ca_in_spoke "$code_lower" 2>/dev/null || true
-                fi
-
-                # ==========================================================================
-                # CRITICAL: Generate Java truststore for Keycloak federation
-                # ==========================================================================
-                # Without this truststore, Keycloak cannot verify TLS certificates for
-                # server-to-server calls (tokenUrl, userInfoUrl, jwksUrl) during federation.
-                # Error: "PKIX path building failed: unable to find valid certification path"
-                # ==========================================================================
-                if type generate_spoke_truststore &>/dev/null; then
-                    generate_spoke_truststore "$code_lower" || {
-                        log_warn "Java truststore generation failed - federation may not work"
-                    }
-                else
-                    # Inline fallback for truststore generation
-                    log_verbose "Generating Java truststore (inline fallback)"
-                    if command -v keytool &>/dev/null && [ -f "$spoke_dir/certs/ca/rootCA.pem" ]; then
-                        rm -f "$spoke_dir/certs/truststore.p12"
-                        keytool -importcert -noprompt -trustcacerts \
-                            -alias mkcert-ca \
-                            -file "$spoke_dir/certs/ca/rootCA.pem" \
-                            -keystore "$spoke_dir/certs/truststore.p12" \
-                            -storepass changeit \
-                            -storetype PKCS12 2>/dev/null && {
-                            chmod 644 "$spoke_dir/certs/truststore.p12"
-                            log_success "Generated Java truststore for Keycloak federation"
-                        } || log_warn "Failed to generate Java truststore"
-                    else
-                        log_warn "Cannot generate Java truststore (keytool or rootCA.pem missing)"
-                    fi
-                fi
-
-                return 0
-            else
-                log_warn "SSOT certificate generation failed, trying fallback..."
+            # Build CA bundle with ALL trusted CAs (mkcert + Vault PKI)
+            if type _rebuild_spoke_ca_bundle &>/dev/null; then
+                _rebuild_spoke_ca_bundle "$code_lower"
+                log_verbose "Spoke CA bundle rebuilt (mkcert + Vault PKI)"
+            elif type install_mkcert_ca_in_spoke &>/dev/null; then
+                install_mkcert_ca_in_spoke "$code_lower" 2>/dev/null || true
             fi
+
+            # ==========================================================================
+            # CRITICAL: Generate Java truststore for Keycloak federation
+            # ==========================================================================
+            # Without this truststore, Keycloak cannot verify TLS certificates for
+            # server-to-server calls (tokenUrl, userInfoUrl, jwksUrl) during federation.
+            # Error: "PKIX path building failed: unable to find valid certification path"
+            # ==========================================================================
+            if type generate_spoke_truststore &>/dev/null; then
+                generate_spoke_truststore "$code_lower" || {
+                    log_warn "Java truststore generation failed - federation may not work"
+                }
+            else
+                # Inline fallback for truststore generation
+                log_verbose "Generating Java truststore (inline fallback)"
+                if command -v keytool &>/dev/null && [ -f "$spoke_dir/certs/ca/rootCA.pem" ]; then
+                    rm -f "$spoke_dir/certs/truststore.p12"
+                    keytool -importcert -noprompt -trustcacerts \
+                        -alias mkcert-ca \
+                        -file "$spoke_dir/certs/ca/rootCA.pem" \
+                        -keystore "$spoke_dir/certs/truststore.p12" \
+                        -storepass changeit \
+                        -storetype PKCS12 2>/dev/null && {
+                        chmod 644 "$spoke_dir/certs/truststore.p12"
+                        log_success "Generated Java truststore for Keycloak federation"
+                    } || log_warn "Failed to generate Java truststore"
+                else
+                    log_warn "Cannot generate Java truststore (keytool or rootCA.pem missing)"
+                fi
+            fi
+
+            return 0
+        else
+            log_warn "SSOT certificate generation failed, trying fallback..."
         fi
     fi
 

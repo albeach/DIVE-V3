@@ -76,26 +76,11 @@ const classificationColors: Record<string, string> = {
   TOP_SECRET: 'bg-red-100 text-red-800 border-red-300',
 };
 
-// National classification mappings
-const NATIONAL_CLASSIFICATIONS: Record<string, Record<string, string>> = {
-  USA: { UNCLASSIFIED: 'UNCLASSIFIED', RESTRICTED: 'RESTRICTED', CONFIDENTIAL: 'CONFIDENTIAL', SECRET: 'SECRET', TOP_SECRET: 'TOP SECRET' },
-  GBR: { UNCLASSIFIED: 'OFFICIAL', RESTRICTED: 'OFFICIAL-SENSITIVE', CONFIDENTIAL: 'CONFIDENTIAL', SECRET: 'SECRET', TOP_SECRET: 'TOP SECRET' },
-  FRA: { UNCLASSIFIED: 'NON CLASSIFIÉ', RESTRICTED: 'RESTREINT', CONFIDENTIAL: 'CONFIDENTIEL DÉFENSE', SECRET: 'SECRET DÉFENSE', TOP_SECRET: 'TRÈS SECRET DÉFENSE' },
-  CAN: { UNCLASSIFIED: 'UNCLASSIFIED', RESTRICTED: 'PROTECTED A', CONFIDENTIAL: 'CONFIDENTIAL', SECRET: 'SECRET', TOP_SECRET: 'TOP SECRET' },
-  DEU: { UNCLASSIFIED: 'OFFEN', RESTRICTED: 'VS-NFD', CONFIDENTIAL: 'VS-VERTRAULICH', SECRET: 'GEHEIM', TOP_SECRET: 'STRENG GEHEIM' },
-  AUS: { UNCLASSIFIED: 'UNCLASSIFIED', RESTRICTED: 'RESTRICTED', CONFIDENTIAL: 'CONFIDENTIAL', SECRET: 'SECRET', TOP_SECRET: 'TOP SECRET' },
-  NZL: { UNCLASSIFIED: 'UNCLASSIFIED', RESTRICTED: 'RESTRICTED', CONFIDENTIAL: 'CONFIDENTIAL', SECRET: 'SECRET', TOP_SECRET: 'TOP SECRET' },
-  ESP: { UNCLASSIFIED: 'NO CLASIFICADO', RESTRICTED: 'DIFUSIÓN LIMITADA', CONFIDENTIAL: 'CONFIDENCIAL', SECRET: 'SECRETO', TOP_SECRET: 'ALTO SECRETO' },
-  ITA: { UNCLASSIFIED: 'NON CLASSIFICATO', RESTRICTED: 'USO UFFICIALE', CONFIDENTIAL: 'CONFIDENZIALE', SECRET: 'SEGRETO', TOP_SECRET: 'SEGRETISSIMO' },
-  POL: { UNCLASSIFIED: 'NIEJAWNE', RESTRICTED: 'UŻYTEK SŁUŻBOWY', CONFIDENTIAL: 'POUFNE', SECRET: 'TAJNE', TOP_SECRET: 'ŚCIŚLE TAJNE' },
-};
+// National classification lookups — SSOT via clearance-localization.ts
+// Fetches from backend MongoDB via /api/admin/clearance/mappings
+import { getLocalizedClearance } from '@/utils/clearance-localization';
 
 const CURRENT_INSTANCE = process.env.NEXT_PUBLIC_INSTANCE || 'USA';
-
-// Helper function to get localized clearance level
-function getLocalizedClearance(clearance: string, country: string): string {
-  return NATIONAL_CLASSIFICATIONS[country]?.[clearance] || clearance;
-}
 
 export default function UploadPage() {
   const { data: session, status } = useSession();
@@ -286,8 +271,7 @@ export default function UploadPage() {
 
   // Generate display marking
   const displayMarking = useMemo(() => {
-    const nationalLabel =
-      NATIONAL_CLASSIFICATIONS[userCountry]?.[classification] || classification;
+    const nationalLabel = getLocalizedClearance(classification, userCountry);
     const isDifferent = nationalLabel !== classification;
 
     const classificationPart = isDifferent
@@ -346,8 +330,7 @@ export default function UploadPage() {
         formData.append('description', description.trim());
       }
 
-      const nationalLabel =
-        NATIONAL_CLASSIFICATIONS[userCountry]?.[classification] || classification;
+      const nationalLabel = getLocalizedClearance(classification, userCountry);
       formData.append('originalClassification', nationalLabel);
       formData.append('originalCountry', userCountry);
 

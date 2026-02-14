@@ -267,7 +267,7 @@ class KeycloakAdminService {
                     tokenUrl: config.tokenUrl,
                     userInfoUrl: config.userInfoUrl || '',
                     jwksUrl: config.jwksUrl || '',
-                    defaultScope: config.defaultScopes || 'openid profile email',
+                    defaultScope: config.defaultScopes || 'openid profile email clearance countryOfAffiliation uniqueID acpCOI user_acr user_amr',
                     validateSignature: String(config.validateSignature ?? true),
                     syncMode: 'FORCE',
                     // Metadata

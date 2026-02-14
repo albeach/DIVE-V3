@@ -1,13 +1,13 @@
-# Flexible claim sources per attribute to handle partner-specific naming (e.g., surname vs family_name)
+# Flexible claim sources for standard profile attributes to handle provider-specific naming
+# CRITICAL (2026-02-14): Do NOT add flex mappers for DIVE custom attributes (clearance,
+# countryOfAffiliation, uniqueID, acpCOI). When a flex mapper's claim is absent from the
+# partner token, Keycloak writes empty/null to the user attribute, OVERWRITING the value
+# set by the canonical mapper. DIVE instances always use canonical claim names.
 locals {
   idp_attribute_sources = {
-    clearance            = ["clearance", "security_clearance", "clearance_level"]
-    countryOfAffiliation = ["countryOfAffiliation", "country", "nationality"]
-    uniqueID             = ["uniqueID", "uniqueId", "uid", "sub"]
-    acpCOI               = ["acpCOI", "acpCoi", "coi", "COI"]
-    email                = ["email", "mail"]
-    given_name           = ["given_name", "firstName", "firstname", "givenName"]
-    family_name          = ["family_name", "lastName", "surname", "familyName"]
+    email       = ["email", "mail"]
+    given_name  = ["given_name", "firstName", "firstname", "givenName"]
+    family_name = ["family_name", "lastName", "surname", "familyName"]
   }
 }
 
@@ -48,7 +48,7 @@ resource "keycloak_oidc_identity_provider" "federation_partner" {
 
   # OIDC settings
   validate_signature = true
-  default_scopes     = "openid profile email"
+  default_scopes     = "openid profile email clearance countryOfAffiliation uniqueID acpCOI user_acr user_amr"
 
   # Sync settings
   sync_mode   = "FORCE"
@@ -227,112 +227,10 @@ resource "keycloak_custom_identity_provider_mapper" "acr_mapper" {
   }
 }
 
-# Flexible claim mappers (multiple variants per attribute)
-resource "keycloak_custom_identity_provider_mapper" "flex_clearance" {
-  for_each = {
-    for combo in flatten([
-      for partner_key, partner_val in var.federation_partners : [
-        for claim in local.idp_attribute_sources.clearance : {
-          k      = "${partner_key}-clearance-${claim}"
-          alias  = keycloak_oidc_identity_provider.federation_partner[partner_key].alias
-          claim  = claim
-          target = "clearance"
-        }
-      ]
-    ]) : combo.k => combo
-  }
-
-  realm                    = keycloak_realm.broker.id
-  identity_provider_alias  = each.value.alias
-  name                     = "clearance-flex-${each.value.claim}"
-  identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-
-  extra_config = {
-    "claim"          = each.value.claim
-    "user.attribute" = each.value.target
-    "syncMode"       = "FORCE"
-  }
-}
-
-resource "keycloak_custom_identity_provider_mapper" "flex_country" {
-  for_each = {
-    for combo in flatten([
-      for partner_key, partner_val in var.federation_partners : [
-        for claim in local.idp_attribute_sources.countryOfAffiliation : {
-          k      = "${partner_key}-country-${claim}"
-          alias  = keycloak_oidc_identity_provider.federation_partner[partner_key].alias
-          claim  = claim
-          target = "countryOfAffiliation"
-        }
-      ]
-    ]) : combo.k => combo
-  }
-
-  realm                    = keycloak_realm.broker.id
-  identity_provider_alias  = each.value.alias
-  name                     = "country-flex-${each.value.claim}"
-  identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-
-  extra_config = {
-    "claim"          = each.value.claim
-    "user.attribute" = each.value.target
-    "syncMode"       = "FORCE"
-  }
-}
-
-resource "keycloak_custom_identity_provider_mapper" "flex_unique_id" {
-  for_each = {
-    for combo in flatten([
-      for partner_key, partner_val in var.federation_partners : [
-        for claim in local.idp_attribute_sources.uniqueID : {
-          k      = "${partner_key}-unique-${claim}"
-          alias  = keycloak_oidc_identity_provider.federation_partner[partner_key].alias
-          claim  = claim
-          target = "uniqueID"
-        }
-      ]
-    ]) : combo.k => combo
-  }
-
-  realm                    = keycloak_realm.broker.id
-  identity_provider_alias  = each.value.alias
-  name                     = "unique-flex-${each.value.claim}"
-  identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-
-  extra_config = {
-    "claim"          = each.value.claim
-    "user.attribute" = each.value.target
-    "syncMode"       = "FORCE"
-  }
-}
-
-resource "keycloak_custom_identity_provider_mapper" "flex_coi" {
-  for_each = {
-    for combo in flatten([
-      for partner_key, partner_val in var.federation_partners : [
-        for claim in local.idp_attribute_sources.acpCOI : {
-          k      = "${partner_key}-coi-${claim}"
-          alias  = keycloak_oidc_identity_provider.federation_partner[partner_key].alias
-          claim  = claim
-          target = "acpCOI"
-        }
-      ]
-    ]) : combo.k => combo
-  }
-
-  realm                    = keycloak_realm.broker.id
-  identity_provider_alias  = each.value.alias
-  name                     = "coi-flex-${each.value.claim}"
-  identity_provider_mapper = "oidc-user-attribute-idp-mapper"
-
-  extra_config = {
-    "claim"          = each.value.claim
-    "user.attribute" = each.value.target
-    "syncMode"       = "FORCE"
-  }
-}
-
-# Ensure basic profile imports survive provider differences
+# Flexible claim mappers for standard profile attributes only
+# These handle legitimate naming differences across OIDC providers (e.g., surname vs family_name)
+# NOTE: DIVE custom attributes (clearance, countryOfAffiliation, uniqueID, acpCOI) use
+# only the static mappers above — flex mappers with absent claims erase correct values.
 resource "keycloak_custom_identity_provider_mapper" "flex_email" {
   for_each = {
     for combo in flatten([

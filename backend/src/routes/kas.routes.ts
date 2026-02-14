@@ -11,6 +11,7 @@
 
 import express, { Router, Request, Response, NextFunction } from 'express';
 import { authenticateJWT } from '../middleware/authz.middleware';
+import { enrichmentMiddleware } from '../middleware/enrichment.middleware';
 import { enforceFederationAgreement } from '../middleware/federation-agreement.middleware';
 import { requestKeyHandler } from '../controllers/resource.controller';
 import { mongoKasRegistryStore, IKasInstance } from '../models/kas-registry.model';
@@ -110,7 +111,7 @@ function legacyRequireAdmin(req: Request, res: Response, next: NextFunction): vo
  *                   type: string
  *                   example: Insufficient clearance level
  */
-router.post('/request-key', authenticateJWT, enforceFederationAgreement, (req: Request, res: Response, next: NextFunction) => {
+router.post('/request-key', authenticateJWT, enrichmentMiddleware, enforceFederationAgreement, (req: Request, res: Response, next: NextFunction) => {
     logger.info('KAS route: request-key called', {
         requestId: req.headers['x-request-id'],
         resourceId: req.body?.resourceId,

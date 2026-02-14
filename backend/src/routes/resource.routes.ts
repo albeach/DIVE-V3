@@ -648,6 +648,6 @@ router.get('/:id', authenticateJWT, enrichmentMiddleware, authzMiddleware, enfor
  *       403:
  *         $ref: '#/components/responses/Forbidden'
  */
-router.post('/request-key', authenticateJWT, enforceFederationAgreement, requestKeyHandler);
+router.post('/request-key', authenticateJWT, enrichmentMiddleware, enforceFederationAgreement, requestKeyHandler);
 
 export default router;

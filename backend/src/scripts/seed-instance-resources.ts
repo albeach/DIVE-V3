@@ -26,6 +26,7 @@ import { generateDisplayMarking, COIOperator, ClassificationLevel } from '../typ
 import { encryptContent, computeSHA384, computeObjectHash } from '../utils/ztdf.utils';
 import { validateCOICoherence } from '../services/coi-validation.service';
 import { getMongoDBPassword, isGCPSecretsAvailable } from '../utils/gcp-secrets';
+import { CLEARANCE_EQUIVALENCY_TABLE } from '../services/clearance-mapper.service';
 
 // ============================================
 // CONFIGURATION
@@ -173,288 +174,22 @@ function validateCountryCodes(codes: string[]): { valid: boolean; invalid: strin
  * ACP-240 Section 4.3: Classification Equivalency
  *
  * Maps NATO standard classification levels to national language terms.
- * This enables proper "originalClassification" labeling per source nation,
- * while maintaining NATO equivalency for authorization decisions.
+ * Derived from CLEARANCE_EQUIVALENCY_TABLE (SSOT) — takes the first
+ * national equivalent for each country at each level.
  *
- * Reference: STANAG 4774/5636 Classification and Handling Markings
+ * Countries not in the SSOT fall back to NATO standard labels via
+ * getOriginalClassification().
  */
-const LOCALE_CLASSIFICATIONS: Record<string, Record<string, string>> = {
-    // FVEY Nations (English-speaking)
-    USA: {
-        UNCLASSIFIED: 'UNCLASSIFIED',
-        RESTRICTED: 'RESTRICTED',
-        CONFIDENTIAL: 'CONFIDENTIAL',
-        SECRET: 'SECRET',
-        TOP_SECRET: 'TOP SECRET'
-    },
-    GBR: {
-        UNCLASSIFIED: 'OFFICIAL',
-        RESTRICTED: 'OFFICIAL',
-        CONFIDENTIAL: 'OFFICIAL-SENSITIVE',
-        SECRET: 'SECRET',
-        TOP_SECRET: 'TOP SECRET'
-    },
-    CAN: {
-        UNCLASSIFIED: 'UNCLASSIFIED',
-        RESTRICTED: 'PROTECTED A',
-        CONFIDENTIAL: 'PROTECTED B',
-        SECRET: 'SECRET',
-        TOP_SECRET: 'TOP SECRET'
-    },
-    AUS: {
-        UNCLASSIFIED: 'OFFICIAL',
-        RESTRICTED: 'OFFICIAL',
-        CONFIDENTIAL: 'OFFICIAL:SENSITIVE',
-        SECRET: 'SECRET',
-        TOP_SECRET: 'TOP SECRET'
-    },
-    NZL: {
-        UNCLASSIFIED: 'UNCLASSIFIED',
-        RESTRICTED: 'RESTRICTED',
-        CONFIDENTIAL: 'CONFIDENTIAL',
-        SECRET: 'SECRET',
-        TOP_SECRET: 'TOP SECRET'
-    },
-
-    // French-speaking Nations
-    FRA: {
-        UNCLASSIFIED: 'NON PROTÉGÉ',
-        RESTRICTED: 'DIFFUSION RESTREINTE',
-        CONFIDENTIAL: 'CONFIDENTIEL DÉFENSE',
-        SECRET: 'SECRET DÉFENSE',
-        TOP_SECRET: 'TRÈS SECRET DÉFENSE'
-    },
-    BEL: {
-        UNCLASSIFIED: 'NON CLASSIFIÉ',
-        RESTRICTED: 'DIFFUSION RESTREINTE',
-        CONFIDENTIAL: 'CONFIDENTIEL',
-        SECRET: 'SECRET',
-        TOP_SECRET: 'TRÈS SECRET'
-    },
-    LUX: {
-        UNCLASSIFIED: 'NON CLASSIFIÉ',
-        RESTRICTED: 'DIFFUSION RESTREINTE',
-        CONFIDENTIAL: 'CONFIDENTIEL',
-        SECRET: 'SECRET',
-        TOP_SECRET: 'TRÈS SECRET'
-    },
-
-    // German-speaking Nations
-    DEU: {
-        UNCLASSIFIED: 'OFFEN',
-        RESTRICTED: 'FÜR DEN DIENSTGEBRAUCH',
-        CONFIDENTIAL: 'VS-VERTRAULICH',
-        SECRET: 'GEHEIM',
-        TOP_SECRET: 'STRENG GEHEIM'
-    },
-    AUT: {
-        UNCLASSIFIED: 'OFFEN',
-        RESTRICTED: 'EINGESCHRÄNKT',
-        CONFIDENTIAL: 'VERTRAULICH',
-        SECRET: 'GEHEIM',
-        TOP_SECRET: 'STRENG GEHEIM'
-    },
-
-    // Spanish-speaking Nations
-    ESP: {
-        UNCLASSIFIED: 'SIN CLASIFICAR',
-        RESTRICTED: 'USO OFICIAL',
-        CONFIDENTIAL: 'CONFIDENCIAL',
-        SECRET: 'SECRETO',
-        TOP_SECRET: 'ALTO SECRETO'
-    },
-    MEX: {
-        UNCLASSIFIED: 'NO CLASIFICADO',
-        RESTRICTED: 'USO OFICIAL',
-        CONFIDENTIAL: 'CONFIDENCIAL',
-        SECRET: 'SECRETO',
-        TOP_SECRET: 'ALTO SECRETO'
-    },
-
-    // Italian
-    ITA: {
-        UNCLASSIFIED: 'NON CLASSIFICATO',
-        RESTRICTED: 'RISERVATO',
-        CONFIDENTIAL: 'RISERVATO',
-        SECRET: 'SEGRETO',
-        TOP_SECRET: 'SEGRETISSIMO'
-    },
-
-    // Portuguese
-    PRT: {
-        UNCLASSIFIED: 'NÃO CLASSIFICADO',
-        RESTRICTED: 'RESERVADO',
-        CONFIDENTIAL: 'CONFIDENCIAL',
-        SECRET: 'SECRETO',
-        TOP_SECRET: 'MUITO SECRETO'
-    },
-
-    // Nordic Countries
-    NOR: {
-        UNCLASSIFIED: 'UGRADERT',
-        RESTRICTED: 'BEGRENSET',
-        CONFIDENTIAL: 'FORTROLIG',
-        SECRET: 'HEMMELIG',
-        TOP_SECRET: 'STRENGT HEMMELIG'
-    },
-    DNK: {
-        UNCLASSIFIED: 'UKLASSIFICERET',
-        RESTRICTED: 'TIL TJENESTEBRUG',
-        CONFIDENTIAL: 'FORTROLIGT',
-        SECRET: 'HEMMELIGT',
-        TOP_SECRET: 'YDERST HEMMELIGT'
-    },
-    SWE: {
-        UNCLASSIFIED: 'ÖPPEN',
-        RESTRICTED: 'BEGRÄNSAD',
-        CONFIDENTIAL: 'KONFIDENTIELLT',
-        SECRET: 'HEMLIGT',
-        TOP_SECRET: 'KVALIFICERAT HEMLIGT'
-    },
-    FIN: {
-        UNCLASSIFIED: 'JULKINEN',
-        RESTRICTED: 'RAJOITETTU',
-        CONFIDENTIAL: 'LUOTTAMUKSELLINEN',
-        SECRET: 'SALAINEN',
-        TOP_SECRET: 'ERITTÄIN SALAINEN'
-    },
-    ISL: {
-        UNCLASSIFIED: 'ÓFLOKAÐ',
-        RESTRICTED: 'TAKMARKAÐ',
-        CONFIDENTIAL: 'TRÚNAÐARMÁL',
-        SECRET: 'LEYNDARMÁL',
-        TOP_SECRET: 'MJÖG LEYNDARMÁL'
-    },
-
-    // Central/Eastern Europe
-    POL: {
-        UNCLASSIFIED: 'JAWNE',
-        RESTRICTED: 'ZASTRZEŻONE',
-        CONFIDENTIAL: 'POUFNE',
-        SECRET: 'TAJNE',
-        TOP_SECRET: 'ŚCIŚLE TAJNE'
-    },
-    CZE: {
-        UNCLASSIFIED: 'NEUTAJOVANÉ',
-        RESTRICTED: 'VYHRAZENÉ',
-        CONFIDENTIAL: 'DŮVĚRNÉ',
-        SECRET: 'TAJNÉ',
-        TOP_SECRET: 'PŘÍSNĚ TAJNÉ'
-    },
-    HUN: {
-        UNCLASSIFIED: 'NYÍLT',
-        RESTRICTED: 'KORLÁTOZOTT TERJESZTÉSŰ',
-        CONFIDENTIAL: 'BIZALMAS',
-        SECRET: 'TITKOS',
-        TOP_SECRET: 'SZIGORÚAN TITKOS'
-    },
-    SVK: {
-        UNCLASSIFIED: 'NEUTAJOVANÉ',
-        RESTRICTED: 'VYHRADENÉ',
-        CONFIDENTIAL: 'DÔVERNÉ',
-        SECRET: 'TAJNÉ',
-        TOP_SECRET: 'PRÍSNE TAJNÉ'
-    },
-    SVN: {
-        UNCLASSIFIED: 'NEKLASIFICIRANO',
-        RESTRICTED: 'INTERNO',
-        CONFIDENTIAL: 'ZAUPNO',
-        SECRET: 'TAJNO',
-        TOP_SECRET: 'STROGO TAJNO'
-    },
-    HRV: {
-        UNCLASSIFIED: 'NEKLASIFICIRANO',
-        RESTRICTED: 'INTERNO',
-        CONFIDENTIAL: 'POVJERLJIVO',
-        SECRET: 'TAJNO',
-        TOP_SECRET: 'VRLO TAJNO'
-    },
-    ROU: {
-        UNCLASSIFIED: 'NECLASIFICAT',
-        RESTRICTED: 'UZUL OFICIAL',
-        CONFIDENTIAL: 'CONFIDENȚIAL',
-        SECRET: 'SECRET',
-        TOP_SECRET: 'STRICT SECRET'
-    },
-    BGR: {
-        UNCLASSIFIED: 'НЕКЛАСИФИЦИРАНО',
-        RESTRICTED: 'ЗА СЛУЖЕБНО ПОЛЗВАНЕ',
-        CONFIDENTIAL: 'ПОВЕРИТЕЛНО',
-        SECRET: 'СЕКРЕТНО',
-        TOP_SECRET: 'СТРОГО СЕКРЕТНО'
-    },
-
-    // Baltic States
-    EST: {
-        UNCLASSIFIED: 'AVALIK',
-        RESTRICTED: 'PIIRATUD',
-        CONFIDENTIAL: 'KONFIDENTSIAALNE',
-        SECRET: 'SALAJANE',
-        TOP_SECRET: 'TÄIESTI SALAJANE'
-    },
-    LVA: {
-        UNCLASSIFIED: 'NEKLASIFICĒTA',
-        RESTRICTED: 'IEROBEŽOTAS PIEEJAMĪBAS',
-        CONFIDENTIAL: 'KONFIDENCIĀLA',
-        SECRET: 'SLEPENA',
-        TOP_SECRET: 'SEVIŠĶI SLEPENA'
-    },
-    LTU: {
-        UNCLASSIFIED: 'NESLAPTA',
-        RESTRICTED: 'RIBOTO NAUDOJIMO',
-        CONFIDENTIAL: 'KONFIDENCIALI',
-        SECRET: 'SLAPTA',
-        TOP_SECRET: 'VISIŠKAI SLAPTA'
-    },
-
-    // Southeastern Europe
-    ALB: {
-        UNCLASSIFIED: 'I PAKLASIFIKUAR',
-        RESTRICTED: 'PËRDORIM I KUFIZUAR',
-        CONFIDENTIAL: 'KONFIDENCIAL',
-        SECRET: 'SEKRET',
-        TOP_SECRET: 'TEPER SEKRET'
-    },
-    MNE: {
-        UNCLASSIFIED: 'NEKLASIFIKOVANO',
-        RESTRICTED: 'INTERNO',
-        CONFIDENTIAL: 'POVJERLJIVO',
-        SECRET: 'TAJNO',
-        TOP_SECRET: 'STROGO TAJNO'
-    },
-    MKD: {
-        UNCLASSIFIED: 'НЕКЛАСИФИЦИРАНО',
-        RESTRICTED: 'ИНТЕРНО',
-        CONFIDENTIAL: 'ДОВЕРЛИВО',
-        SECRET: 'ТАЈНО',
-        TOP_SECRET: 'СТРОГО ТАЈНО'
-    },
-    GRC: {
-        UNCLASSIFIED: 'ΑΔΙΑΒΑΘΜΗΤΟ',
-        RESTRICTED: 'ΠΕΡΙΟΡΙΣΜΕΝΗΣ ΧΡΗΣΗΣ',
-        CONFIDENTIAL: 'ΕΜΠΙΣΤΕΥΤΙΚΟ',
-        SECRET: 'ΑΠΟΡΡΗΤΟ',
-        TOP_SECRET: 'ΑΚΡΩΣ ΑΠΟΡΡΗΤΟ'
-    },
-
-    // Turkey
-    TUR: {
-        UNCLASSIFIED: 'TASNIF DIŞI',
-        RESTRICTED: 'SINIRLI',
-        CONFIDENTIAL: 'HİZMETE ÖZEL',
-        SECRET: 'GİZLİ',
-        TOP_SECRET: 'ÇOK GİZLİ'
-    },
-
-    // Netherlands
-    NLD: {
-        UNCLASSIFIED: 'ONGERUBRICEERD',
-        RESTRICTED: 'DEPARTEMENTAAL VERTROUWELIJK',
-        CONFIDENTIAL: 'VERTROUWELIJK',
-        SECRET: 'GEHEIM',
-        TOP_SECRET: 'ZEER GEHEIM'
+const LOCALE_CLASSIFICATIONS: Record<string, Record<string, string>> = {};
+for (const mapping of CLEARANCE_EQUIVALENCY_TABLE) {
+    for (const [country, variants] of Object.entries(mapping.nationalEquivalents)) {
+        if (country === 'INDUSTRY') continue;
+        if (!LOCALE_CLASSIFICATIONS[country]) {
+            LOCALE_CLASSIFICATIONS[country] = {};
+        }
+        LOCALE_CLASSIFICATIONS[country][mapping.standardLevel] = variants[0];
     }
-};
+}
 
 /**
  * Get locale-specific classification label for a country

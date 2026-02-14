@@ -129,7 +129,7 @@ describe('Clearance Mapper Service', () => {
     describe('UK Clearance Mappings', () => {
         it('should map UK UNCLASSIFIED and OFFICIAL', () => {
             expect(mapNationalClearance('UNCLASSIFIED', 'GBR')).toBe('UNCLASSIFIED');
-            expect(mapNationalClearance('OFFICIAL', 'GBR')).toBe('UNCLASSIFIED');
+            expect(mapNationalClearance('OFFICIAL', 'GBR')).toBe('RESTRICTED');
         });
 
         it('should map UK CONFIDENTIAL correctly', () => {

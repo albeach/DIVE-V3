@@ -148,21 +148,20 @@ export async function POST(request: NextRequest) {
 
         if (isFederated) {
             // Federated search: Query all selected instances in parallel
-            console.log('[SearchAPI] Using federated endpoint for instances:', instances);
+            console.log('[SearchAPI] Federated search for instances:', instances, 'currentInstance:', currentInstance);
 
             // Transform request for federated-query endpoint
+            // CRITICAL: Backend reads classification/releasableTo/coi/limit at top level,
+            // NOT nested inside filters/pagination objects
             const federatedBody = {
                 query: body.query || '',
-                filters: {
-                    classification: body.filters?.classifications?.[0], // Single value for federated
-                    releasableTo: body.filters?.countries,
-                    coi: body.filters?.cois,
-                },
+                classification: body.filters?.classifications || undefined,
+                releasableTo: body.filters?.countries || undefined,
+                coi: body.filters?.cois || undefined,
+                encrypted: body.filters?.encrypted,
                 instances: instances.length > 0 ? instances : ['USA', 'FRA', 'GBR', 'DEU'],
-                pagination: {
-                    limit: body.pagination?.limit || 50,
-                    cursor: body.pagination?.cursor,
-                },
+                limit: body.pagination?.limit || 50,
+                offset: 0,
                 sort: body.sort,
                 includeFacets: body.includeFacets !== false,
             };
@@ -206,6 +205,13 @@ export async function POST(request: NextRequest) {
         }
 
         if (!backendResponse.ok) {
+            console.error('[SearchAPI] Backend error:', {
+                status: backendResponse.status,
+                isFederated,
+                instances,
+                error: data.message || data.error,
+                details: data,
+            });
             return NextResponse.json(
                 {
                     error: 'BackendError',
@@ -219,9 +225,9 @@ export async function POST(request: NextRequest) {
         // For federated responses, transform to match expected format
         if (isFederated && data.results) {
             // Federated response has different structure, normalize it
-            // Use totalAccessible (sum of ABAC-accessible docs from all instances)
-            // Fall back to totalResults (deduplicated fetched results) if not available
-            const totalCount = data.totalAccessible || data.totalResults || data.results?.length || 0;
+            // Use totalResults (deduplicated count) as primary — this is the accurate post-dedup count
+            // Fall back to totalAccessible (pre-dedup sum) only if totalResults not available
+            const totalCount = data.totalResults || data.totalAccessible || data.results?.length || 0;
 
             // Build instance facets from instanceResults if available
             const instanceFacets = data.instanceResults
@@ -243,13 +249,19 @@ export async function POST(request: NextRequest) {
                     kaoCount: r.kaoCount,
                     originRealm: r.originRealm || r.source || r.sourceInstance,
                 })),
-                facets: data.facets || {
+                facets: data.facets ? {
+                    ...data.facets,
+                    // Ensure instances facet includes per-instance counts from instanceResults
+                    instances: data.facets.instances?.length ? data.facets.instances : instanceFacets,
+                } : {
                     classifications: [],
                     countries: [],
                     cois: [],
                     instances: instanceFacets,
                     encryptionStatus: [],
+                    fileTypes: [],
                 },
+                stats: data.stats || undefined,
                 pagination: {
                     nextCursor: data.pagination?.nextCursor || null,
                     prevCursor: data.pagination?.prevCursor || null,
@@ -264,11 +276,27 @@ export async function POST(request: NextRequest) {
                 },
             };
 
-            console.log('[SearchAPI] Federated response normalized:', {
+            // Diagnostic: Log per-instance federation results
+            const instanceSummary = data.instanceResults
+                ? Object.entries(data.instanceResults).map(([inst, info]: [string, any]) => ({
+                    instance: inst,
+                    count: info.count,
+                    accessibleCount: info.accessibleCount,
+                    latencyMs: info.latencyMs,
+                    error: info.error || null,
+                    circuitBreaker: info.circuitBreakerState,
+                }))
+                : [];
+
+            console.log('[SearchAPI] Federated response:', {
                 totalAccessible: data.totalAccessible,
                 totalResults: data.totalResults,
                 normalizedTotalCount: totalCount,
-                instanceResults: data.instanceResults,
+                resultCount: data.results?.length,
+                instanceSummary,
+                missingInstances: instances.filter(
+                    (i: string) => !data.instanceResults?.[i]
+                ),
             });
 
             return NextResponse.json(normalizedResponse);

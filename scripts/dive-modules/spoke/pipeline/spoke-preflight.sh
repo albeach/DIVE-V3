@@ -45,7 +45,7 @@ spoke_preflight_validation() {
     local failed_checks=0
     local warning_checks=0
 
-    # Check 0: Vault Provisioning (fast-fail before expensive checks)
+    # Check 0: Vault Provisioning — auto-provision if needed
     if [ "${SECRETS_PROVIDER:-}" = "vault" ]; then
         log_verbose "Check 0: Vault provisioning..."
         if ! type vault_spoke_is_provisioned &>/dev/null; then
@@ -53,9 +53,18 @@ spoke_preflight_validation() {
         fi
         if type vault_spoke_is_provisioned &>/dev/null; then
             if ! vault_spoke_is_provisioned "$code_lower"; then
-                log_error "✗ Spoke $code_upper not provisioned in Vault"
-                log_info "  Run: ./dive vault provision $code_upper"
-                return 1
+                # Auto-provision was already done in spoke_deploy(), but handle edge case
+                log_info "Spoke $code_upper not provisioned in Vault — auto-provisioning..."
+                if type module_vault_provision &>/dev/null; then
+                    if ! module_vault_provision "$code_upper"; then
+                        log_error "✗ Vault auto-provisioning failed for $code_upper"
+                        return 1
+                    fi
+                    log_success "✓ Vault auto-provisioned for $code_upper"
+                else
+                    log_error "✗ Vault provision function not available"
+                    return 1
+                fi
             else
                 log_success "✓ Vault provisioning verified (policy + AppRole + secrets)"
             fi
@@ -300,13 +309,12 @@ preflight_check_ports_available() {
     }
 
     # Use exported SPOKE_* variables
+    # Only check ports ACTUALLY EXPOSED to the host in the spoke docker-compose template
+    # Redis, PostgreSQL, MongoDB are internal-only (no host port mapping in template)
     local frontend_port="${SPOKE_FRONTEND_PORT:-}"
     local backend_port="${SPOKE_BACKEND_PORT:-}"
     local keycloak_https="${SPOKE_KEYCLOAK_HTTPS_PORT:-}"
     local keycloak_http="${SPOKE_KEYCLOAK_HTTP_PORT:-}"
-    local postgres_port="${SPOKE_POSTGRES_PORT:-}"
-    local mongodb_port="${SPOKE_MONGODB_PORT:-}"
-    local redis_port="${SPOKE_REDIS_PORT:-}"
     local opa_port="${SPOKE_OPA_PORT:-}"
     local kas_port="${SPOKE_KAS_PORT:-}"
 
@@ -315,9 +323,6 @@ preflight_check_ports_available() {
         "$backend_port"
         "$keycloak_https"
         "$keycloak_http"
-        "$postgres_port"
-        "$mongodb_port"
-        "$redis_port"
         "$opa_port"
         "$kas_port"
     )

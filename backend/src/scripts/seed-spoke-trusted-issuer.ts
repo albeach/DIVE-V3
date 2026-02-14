@@ -28,8 +28,8 @@
  * INTEGRATION:
  * Add to spoke deployment: phase-seeding.sh after Keycloak realm creation
  *
- * @version 1.0.0
- * @date 2026-01-28
+ * @version 1.1.0
+ * @date 2026-02-13
  */
 
 import { MongoClient } from 'mongodb';
@@ -304,6 +304,106 @@ async function registerTrustedIssuer(
 }
 
 // ============================================
+// HUB ISSUER CROSS-REGISTRATION
+// ============================================
+
+/**
+ * Register the Hub's Keycloak issuer in the spoke's MongoDB.
+ * This enables the spoke to validate JWT tokens issued by the Hub,
+ * which is required for federated queries (Hub forwards user tokens to spokes).
+ *
+ * Without this, federated queries from Hub fail with 401:
+ *   "Issuer https://localhost:8443/realms/dive-v3-broker-usa is not in the list of trusted issuers"
+ */
+async function registerHubTrustedIssuer(
+  db: any,
+  spokeCode: string
+): Promise<{ registered: number; skipped: number; error?: string }> {
+  // Skip if this IS the hub
+  if (spokeCode === 'USA') {
+    console.log('ℹ Skipping hub issuer cross-registration (this IS the hub)');
+    return { registered: 0, skipped: 0 };
+  }
+
+  try {
+    const collection = db.collection('trusted_issuers');
+    let registered = 0;
+    let skipped = 0;
+
+    const hubRealmName = 'dive-v3-broker-usa';
+
+    // Hub PUBLIC issuer URL (what appears in JWT tokens)
+    const hubPublicUrl = process.env.NODE_ENV === 'production'
+      ? `https://usa-idp.dive25.com/realms/${hubRealmName}`
+      : `https://localhost:8443/realms/${hubRealmName}`;
+
+    // Hub INTERNAL issuer URL (Docker network)
+    const hubInternalUrl = process.env.NODE_ENV === 'production'
+      ? undefined
+      : `https://dive-hub-keycloak:8443/realms/${hubRealmName}`;
+
+    // Register hub PUBLIC issuer
+    const existingPublic = await collection.findOne({ issuerUrl: hubPublicUrl });
+    if (existingPublic) {
+      console.log(`✓ Hub trusted issuer already exists (PUBLIC): ${hubPublicUrl}`);
+      skipped++;
+    } else {
+      const hubPublicIssuer: TrustedIssuer = {
+        issuerUrl: hubPublicUrl,
+        tenant: 'USA',
+        name: 'USA Hub Keycloak',
+        country: 'USA',
+        trustLevel: 'HIGH',
+        realm: hubRealmName,
+        enabled: true,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      await collection.insertOne(hubPublicIssuer);
+      console.log(`✅ Hub trusted issuer registered (PUBLIC URL)`);
+      console.log(`   Issuer URL:  ${hubPublicUrl}`);
+      registered++;
+    }
+
+    // Register hub INTERNAL issuer (Docker network)
+    if (hubInternalUrl) {
+      const existingInternal = await collection.findOne({ issuerUrl: hubInternalUrl });
+      if (existingInternal) {
+        console.log(`✓ Hub trusted issuer already exists (INTERNAL): ${hubInternalUrl}`);
+        skipped++;
+      } else {
+        const hubInternalIssuer: TrustedIssuer = {
+          issuerUrl: hubInternalUrl,
+          tenant: 'USA',
+          name: 'USA Hub Keycloak (internal)',
+          country: 'USA',
+          trustLevel: 'HIGH',
+          realm: hubRealmName,
+          enabled: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        await collection.insertOne(hubInternalIssuer);
+        console.log(`✅ Hub trusted issuer registered (INTERNAL URL)`);
+        console.log(`   Issuer URL:  ${hubInternalUrl}`);
+        console.log(`   Purpose:     Docker network / federated query auth`);
+        registered++;
+      }
+    }
+
+    return { registered, skipped };
+  } catch (error) {
+    console.error('❌ Failed to register hub trusted issuer');
+    console.error('Error:', error instanceof Error ? error.message : 'Unknown error');
+    return {
+      registered: 0,
+      skipped: 0,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
+// ============================================
 // VERIFICATION
 // ============================================
 
@@ -314,10 +414,8 @@ async function verifyTrustedIssuer(
   try {
     const collection = db.collection('trusted_issuers');
 
-    // Find all issuers for this tenant
-    const issuers = await collection.find({
-      tenant: config.instanceCode,
-    }).toArray();
+    // Find all issuers (spoke's own + hub cross-registered)
+    const issuers = await collection.find({}).toArray();
 
     console.log('');
     console.log('='.repeat(80));
@@ -443,21 +541,21 @@ async function main(): Promise<void> {
 
   try {
     // Step 1: Build configuration
-    console.log('Step 1/4: Building spoke trusted issuer configuration...');
-    const config = getSpokeTrustedIssuerConfig(instanceCode);
+    console.log('Step 1/5: Building spoke trusted issuer configuration...');
+    const spokeConfig = getSpokeTrustedIssuerConfig(instanceCode);
     console.log('✓ Configuration built');
     console.log('');
 
     // Step 2: Connect to MongoDB
-    console.log('Step 2/4: Connecting to MongoDB...');
+    console.log('Step 2/5: Connecting to MongoDB...');
     const connection = await getMongoConnection();
     client = connection.client;
     const db = connection.db;
     console.log('');
 
-    // Step 3: Register trusted issuer
-    console.log('Step 3/4: Registering spoke trusted issuer...');
-    const result = await registerTrustedIssuer(db, config);
+    // Step 3: Register spoke's own trusted issuer
+    console.log('Step 3/5: Registering spoke trusted issuer...');
+    const result = await registerTrustedIssuer(db, spokeConfig);
     console.log('');
 
     if (!result.registered && !result.existed) {
@@ -468,9 +566,20 @@ async function main(): Promise<void> {
       process.exit(1);
     }
 
-    // Step 4: Verify registration
-    console.log('Step 4/4: Verifying trusted issuer registration...');
-    const verification = await verifyTrustedIssuer(db, config);
+    // Step 4: Cross-register hub issuer (enables federated query auth)
+    console.log('Step 4/5: Cross-registering hub trusted issuer...');
+    const hubResult = await registerHubTrustedIssuer(db, instanceCode.toUpperCase());
+    if (hubResult.error) {
+      console.warn(`⚠ Hub issuer cross-registration failed: ${hubResult.error}`);
+      console.warn('  Impact: Federated queries from hub may fail with 401');
+    } else if (hubResult.registered > 0) {
+      console.log(`✅ Hub issuer cross-registered (${hubResult.registered} new, ${hubResult.skipped} existing)`);
+    }
+    console.log('');
+
+    // Step 5: Verify registration
+    console.log('Step 5/5: Verifying trusted issuer registration...');
+    const verification = await verifyTrustedIssuer(db, spokeConfig);
     console.log('');
 
     if (!verification.verified) {
@@ -479,7 +588,7 @@ async function main(): Promise<void> {
     }
 
     // Optional: Notify OPAL
-    await notifyOpalIfAvailable(config);
+    await notifyOpalIfAvailable(spokeConfig);
 
     // Success summary
     console.log('');
@@ -489,12 +598,13 @@ async function main(): Promise<void> {
     console.log('');
     console.log('Next Steps:');
     console.log('  1. Verify issuer appears in /api/idps/public:');
-    console.log(`     curl -sk "https://localhost:${config.keycloakPort - 4000 + 4010}/api/idps/public"`);
+    console.log(`     curl -sk "https://localhost:${spokeConfig.keycloakPort - 4000 + 4010}/api/idps/public"`);
     console.log('');
     console.log('  2. Check resources page shows spoke as trusted issuer:');
-    console.log(`     https://localhost:${config.keycloakPort - 4000 + 3010}/resources`);
+    console.log(`     https://localhost:${spokeConfig.keycloakPort - 4000 + 3010}/resources`);
     console.log('');
-    console.log('  3. Test authentication flow with spoke\'s Keycloak realm');
+    console.log('  3. Test federated search from Hub:');
+    console.log('     curl -sk -X POST https://localhost:4000/api/resources/federated-query -d \'{"instances":["USA","FRA"]}\'');
     console.log('');
 
   } catch (error) {
@@ -551,6 +661,7 @@ if (require.main === module) {
 export {
   getSpokeTrustedIssuerConfig,
   registerTrustedIssuer,
+  registerHubTrustedIssuer,
   verifyTrustedIssuer,
   type SpokeConfig,
   type TrustedIssuer,

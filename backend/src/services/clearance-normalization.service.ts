@@ -1,28 +1,20 @@
 /**
  * DIVE V3 - Clearance Normalization Service
- * 
+ *
  * Normalizes foreign clearance levels to standardized English equivalents
  * for consistent policy evaluation across coalition partners.
- * 
- * Supports:
- * - Spanish clearances (ESP): SECRETO → SECRET
- * - French clearances (FRA): SECRET DEFENSE → SECRET
- * - German clearances (DEU): GEHEIM → SECRET
- * - Italian clearances (ITA): SEGRETO → SECRET
- * - Dutch clearances (NLD): GEHEIM → SECRET
- * - Polish clearances (POL): TAJNY → SECRET
- * - UK clearances (GBR): OFFICIAL-SENSITIVE → CONFIDENTIAL
- * - Canadian clearances (CAN): PROTECTED B → CONFIDENTIAL
- * - Industry clearances (IND): SENSITIVE → SECRET
- * - NATO clearances: NATO_SECRET → SECRET
- * 
+ *
+ * SSOT: Derives all mappings from CLEARANCE_EQUIVALENCY_TABLE in clearance-mapper.service.ts,
+ * which seeds the MongoDB clearance_equivalency collection (the runtime SSOT).
+ * This eliminates duplicate mapping tables and ensures consistency.
+ *
+ * Supports all 32 NATO member nations + partners via the SSOT table.
+ *
  * Pattern: Backend enrichment (TypeScript) rather than Keycloak SPI (Java)
- * Rationale: Faster iteration, codebase consistency, pilot demonstration scope
- * 
- * Last Updated: October 28, 2025 - Added 6 new countries (DEU, ITA, NLD, POL, GBR, IND)
  */
 
 import { logger } from '../utils/logger';
+import { CLEARANCE_EQUIVALENCY_TABLE } from './clearance-mapper.service';
 
 /**
  * Standard DIVE clearance levels (English)
@@ -36,57 +28,19 @@ export enum StandardClearance {
 }
 
 /**
- * Spanish clearance level mappings
- * Source: Spanish Ministry of Defense classification system
+ * Clearance hierarchy — consistent with OPA clearance.rego and authz.middleware.ts
+ * RESTRICTED=1 (integer rank, not 0.5)
  */
-const SPANISH_CLEARANCE_MAP: Record<string, StandardClearance> = {
-    // Spanish classification levels
-    'NO_CLASIFICADO': StandardClearance.UNCLASSIFIED,
-    'DIFUSION_LIMITADA': StandardClearance.RESTRICTED,  // Limited distribution
-    'CONFIDENCIAL': StandardClearance.CONFIDENTIAL,
-    'SECRETO': StandardClearance.SECRET,
-    'ALTO_SECRETO': StandardClearance.TOP_SECRET,
-
-    // Alternate spellings/formats
-    'NO CLASIFICADO': StandardClearance.UNCLASSIFIED,
-    'DIFUSIÓN LIMITADA': StandardClearance.RESTRICTED,
-    'ALTO SECRETO': StandardClearance.TOP_SECRET,
+const CLEARANCE_HIERARCHY: Record<StandardClearance, number> = {
+    [StandardClearance.UNCLASSIFIED]: 0,
+    [StandardClearance.RESTRICTED]: 1,
+    [StandardClearance.CONFIDENTIAL]: 2,
+    [StandardClearance.SECRET]: 3,
+    [StandardClearance.TOP_SECRET]: 4,
 };
 
 /**
- * French clearance level mappings
- * Source: French Defense Security Authority (ANSSI)
- */
-const FRENCH_CLEARANCE_MAP: Record<string, StandardClearance> = {
-    // French classification levels
-    'NON_PROTEGE': StandardClearance.UNCLASSIFIED,
-    'DIFFUSION_RESTREINTE': StandardClearance.RESTRICTED,
-    'CONFIDENTIEL_DEFENSE': StandardClearance.CONFIDENTIAL,
-    'SECRET_DEFENSE': StandardClearance.SECRET,
-    'TRES_SECRET_DEFENSE': StandardClearance.TOP_SECRET,
-
-    // Alternate formats
-    'NON PROTÉGÉ': StandardClearance.UNCLASSIFIED,
-    'DIFFUSION RESTREINTE': StandardClearance.RESTRICTED,
-    'CONFIDENTIEL DÉFENSE': StandardClearance.CONFIDENTIAL,
-    'SECRET DÉFENSE': StandardClearance.SECRET,
-    'TRÈS SECRET DÉFENSE': StandardClearance.TOP_SECRET,
-};
-
-/**
- * Canadian clearance level mappings (already in English, but included for completeness)
- */
-const CANADIAN_CLEARANCE_MAP: Record<string, StandardClearance> = {
-    'UNCLASSIFIED': StandardClearance.UNCLASSIFIED,
-    'PROTECTED_A': StandardClearance.RESTRICTED,
-    'PROTECTED_B': StandardClearance.CONFIDENTIAL,
-    'CONFIDENTIAL': StandardClearance.CONFIDENTIAL,
-    'SECRET': StandardClearance.SECRET,
-    'TOP_SECRET': StandardClearance.TOP_SECRET,
-};
-
-/**
- * NATO clearance level mappings (multilingual)
+ * NATO prefix clearance mappings (not country-specific)
  */
 const NATO_CLEARANCE_MAP: Record<string, StandardClearance> = {
     'NATO_UNCLASSIFIED': StandardClearance.UNCLASSIFIED,
@@ -97,140 +51,32 @@ const NATO_CLEARANCE_MAP: Record<string, StandardClearance> = {
 };
 
 /**
- * German clearance level mappings
- * Source: German Federal Office for Information Security (BSI)
+ * Build country-specific normalization maps from the SSOT CLEARANCE_EQUIVALENCY_TABLE.
+ * Each country gets a map of { nationalValue → StandardClearance }.
+ * Built once at module load time.
  */
-const GERMAN_CLEARANCE_MAP: Record<string, StandardClearance> = {
-    // German classification levels
-    'OFFEN': StandardClearance.UNCLASSIFIED,
-    'VERTRAULICH': StandardClearance.CONFIDENTIAL,
-    'GEHEIM': StandardClearance.SECRET,
-    'STRENG_GEHEIM': StandardClearance.TOP_SECRET,
+function buildClearanceMaps(): Record<string, Record<string, StandardClearance>> {
+    const maps: Record<string, Record<string, StandardClearance>> = {};
 
-    // Alternate formats
-    'STRENG GEHEIM': StandardClearance.TOP_SECRET,
-    'VS-NUR_FÜR_DEN_DIENSTGEBRAUCH': StandardClearance.RESTRICTED, // VS-NFD
-    'VS-VERTRAULICH': StandardClearance.CONFIDENTIAL,
-    'VS-GEHEIM': StandardClearance.SECRET,
-    'STRENGGEHEIM': StandardClearance.TOP_SECRET,
-};
+    for (const mapping of CLEARANCE_EQUIVALENCY_TABLE) {
+        const level = mapping.standardLevel as StandardClearance;
+        for (const [country, equivalents] of Object.entries(mapping.nationalEquivalents)) {
+            if (!maps[country]) {
+                maps[country] = {};
+            }
+            for (const equiv of equivalents) {
+                maps[country][equiv.toUpperCase()] = level;
+            }
+        }
+    }
 
-/**
- * Italian clearance level mappings
- * Source: Italian Ministry of Defense classification system
- */
-const ITALIAN_CLEARANCE_MAP: Record<string, StandardClearance> = {
-    // Italian classification levels
-    'NON_CLASSIFICATO': StandardClearance.UNCLASSIFIED,
-    'RISERVATO': StandardClearance.CONFIDENTIAL,
-    'SEGRETO': StandardClearance.SECRET,
-    'SEGRETISSIMO': StandardClearance.TOP_SECRET,
+    // Add NATO prefix mappings as a pseudo-country
+    maps['NATO'] = { ...NATO_CLEARANCE_MAP };
 
-    // Alternate formats
-    'NON CLASSIFICATO': StandardClearance.UNCLASSIFIED,
-    'USO UFFICIALE': StandardClearance.RESTRICTED,
-    'AD USO UFFICIALE': StandardClearance.RESTRICTED,
-    'RISERVATISSIMO': StandardClearance.CONFIDENTIAL, // Highly Confidential
-};
+    return maps;
+}
 
-/**
- * Dutch clearance level mappings
- * Source: Dutch Ministry of Defense classification system
- */
-const DUTCH_CLEARANCE_MAP: Record<string, StandardClearance> = {
-    // Dutch classification levels
-    'NIET_GERUBRICEERD': StandardClearance.UNCLASSIFIED,
-    'DEPARTEMENTAAL_VERTROUWELIJK': StandardClearance.RESTRICTED,
-    'VERTROUWELIJK': StandardClearance.CONFIDENTIAL,
-    'GEHEIM': StandardClearance.SECRET,
-    'ZEER_GEHEIM': StandardClearance.TOP_SECRET,
-
-    // Alternate formats
-    'NIET GERUBRICEERD': StandardClearance.UNCLASSIFIED,
-    'DEPARTEMENTAAL VERTROUWELIJK': StandardClearance.RESTRICTED,
-    'ZEER GEHEIM': StandardClearance.TOP_SECRET,
-    'STGGEHEIM': StandardClearance.TOP_SECRET, // Staatsgeheim
-};
-
-/**
- * Polish clearance level mappings
- * Source: Polish Ministry of National Defense classification system
- */
-const POLISH_CLEARANCE_MAP: Record<string, StandardClearance> = {
-    // Polish classification levels
-    'JAWNY': StandardClearance.UNCLASSIFIED,
-    'NIEJAWNE': StandardClearance.UNCLASSIFIED,
-    'UŻYTEK SŁUŻBOWY': StandardClearance.RESTRICTED, // Official use
-    'UZYTEK SLUZBOWY': StandardClearance.RESTRICTED, // Without diacritics
-    'ZASTRZEŻONY': StandardClearance.CONFIDENTIAL, // Restricted
-    'POUFNY': StandardClearance.CONFIDENTIAL,
-    'TAJNY': StandardClearance.SECRET,
-    'ŚCIŚLE_TAJNY': StandardClearance.TOP_SECRET,
-
-    // Alternate formats
-    'ŚCIŚLE TAJNY': StandardClearance.TOP_SECRET,
-    'SCISLE TAJNY': StandardClearance.TOP_SECRET, // Without diacritics
-    'ZASTRZEZONY': StandardClearance.CONFIDENTIAL,
-};
-
-/**
- * United Kingdom clearance level mappings
- * Source: UK Government Security Classifications
- */
-const UK_CLEARANCE_MAP: Record<string, StandardClearance> = {
-    // UK classification levels
-    'OFFICIAL': StandardClearance.UNCLASSIFIED,
-    'OFFICIAL-SENSITIVE': StandardClearance.RESTRICTED,
-    'SECRET': StandardClearance.SECRET,
-    'TOP_SECRET': StandardClearance.TOP_SECRET,
-
-    // Alternate formats
-    'TOP SECRET': StandardClearance.TOP_SECRET,
-    'OFFICIAL_SENSITIVE': StandardClearance.RESTRICTED,
-    'OFFICIAL SENSITIVE': StandardClearance.RESTRICTED,
-
-    // Legacy classifications (pre-2014)
-    'PROTECT': StandardClearance.UNCLASSIFIED,
-    'RESTRICTED': StandardClearance.RESTRICTED,
-    'CONFIDENTIAL': StandardClearance.CONFIDENTIAL,
-};
-
-/**
- * Industry/Commercial clearance level mappings
- * Source: Common commercial classification schemes
- */
-const INDUSTRY_CLEARANCE_MAP: Record<string, StandardClearance> = {
-    // Industry classification levels
-    'PUBLIC': StandardClearance.UNCLASSIFIED,
-    'INTERNAL': StandardClearance.RESTRICTED,
-    'INTERNAL_USE_ONLY': StandardClearance.RESTRICTED,
-    'CONFIDENTIAL': StandardClearance.CONFIDENTIAL,
-    'SENSITIVE': StandardClearance.SECRET,
-    'HIGHLY_SENSITIVE': StandardClearance.TOP_SECRET,
-
-    // Alternate formats
-    'HIGHLY SENSITIVE': StandardClearance.TOP_SECRET,
-    'PROPRIETARY': StandardClearance.CONFIDENTIAL,
-    'COMPANY_CONFIDENTIAL': StandardClearance.CONFIDENTIAL,
-    'RESTRICTED': StandardClearance.RESTRICTED,
-};
-
-/**
- * Country-specific clearance mappings
- */
-const CLEARANCE_MAPS: Record<string, Record<string, StandardClearance>> = {
-    'ESP': SPANISH_CLEARANCE_MAP,
-    'FRA': FRENCH_CLEARANCE_MAP,
-    'CAN': CANADIAN_CLEARANCE_MAP,
-    'DEU': GERMAN_CLEARANCE_MAP,
-    'ITA': ITALIAN_CLEARANCE_MAP,
-    'NLD': DUTCH_CLEARANCE_MAP,
-    'POL': POLISH_CLEARANCE_MAP,
-    'GBR': UK_CLEARANCE_MAP,
-    'IND': INDUSTRY_CLEARANCE_MAP,
-    'USA': {}, // USA already uses English standard
-    'NATO': NATO_CLEARANCE_MAP,
-};
+const CLEARANCE_MAPS = buildClearanceMaps();
 
 /**
  * Normalization result interface
@@ -250,7 +96,7 @@ export interface IClearanceNormalizationResult {
 
 /**
  * Normalize clearance level to standard English equivalent
- * 
+ *
  * @param clearance - Original clearance level from IdP
  * @param country - Country code (ESP, FRA, CAN, USA, etc.)
  * @returns Normalization result with original and normalized values
@@ -296,7 +142,19 @@ export function normalizeClearance(
         };
     }
 
-    // Get country-specific mapping
+    // Check NATO prefix mappings (country-independent)
+    const natoMatch = NATO_CLEARANCE_MAP[cleanedClearance];
+    if (natoMatch) {
+        return {
+            original: clearance,
+            normalized: natoMatch,
+            country: cleanedCountry,
+            wasNormalized: true,
+            confidence: 'exact'
+        };
+    }
+
+    // Get country-specific mapping from SSOT-derived maps
     const countryMap = CLEARANCE_MAPS[cleanedCountry] || {};
 
     // Try exact match first
@@ -365,7 +223,7 @@ export function normalizeClearance(
 
 /**
  * Batch normalize multiple clearances (for performance)
- * 
+ *
  * @param clearances - Array of clearances with country codes
  * @returns Array of normalization results
  */
@@ -378,7 +236,7 @@ export function normalizeClearances(
 }
 
 /**
- * Get all supported countries
+ * Get all supported countries (derived from SSOT)
  */
 export function getSupportedCountries(): string[] {
     return Object.keys(CLEARANCE_MAPS);
@@ -408,23 +266,11 @@ export function isValidStandardClearance(clearance: string): boolean {
 
 /**
  * Get clearance hierarchy level (for comparison)
- * Returns numeric value: UNCLASSIFIED=0, RESTRICTED=0.5, CONFIDENTIAL=1, SECRET=2, TOP_SECRET=3
- * 
- * CRITICAL: RESTRICTED is now a separate level above UNCLASSIFIED
- * - UNCLASSIFIED users CANNOT access RESTRICTED content
- * - RESTRICTED users CAN access UNCLASSIFIED content
- * - Both remain AAL1 (no MFA required)
+ * Returns integer rank: UNCLASSIFIED=0, RESTRICTED=1, CONFIDENTIAL=2, SECRET=3, TOP_SECRET=4
+ * Consistent with OPA clearance.rego and authz.middleware.ts
  */
 export function getClearanceLevel(clearance: StandardClearance): number {
-    const levels: Record<StandardClearance, number> = {
-        [StandardClearance.UNCLASSIFIED]: 0,
-        [StandardClearance.RESTRICTED]: 0.5,
-        [StandardClearance.CONFIDENTIAL]: 1,
-        [StandardClearance.SECRET]: 2,
-        [StandardClearance.TOP_SECRET]: 3,
-    };
-
-    return levels[clearance] ?? 0;
+    return CLEARANCE_HIERARCHY[clearance] ?? 0;
 }
 
 /**
@@ -441,20 +287,9 @@ export function compareClearances(a: StandardClearance, b: StandardClearance): n
 }
 
 /**
- * Export all mappings for documentation/testing
+ * Export all mappings for documentation/testing (derived from SSOT)
  */
-export const CLEARANCE_MAPPINGS = {
-    SPANISH: SPANISH_CLEARANCE_MAP,
-    FRENCH: FRENCH_CLEARANCE_MAP,
-    CANADIAN: CANADIAN_CLEARANCE_MAP,
-    GERMAN: GERMAN_CLEARANCE_MAP,
-    ITALIAN: ITALIAN_CLEARANCE_MAP,
-    DUTCH: DUTCH_CLEARANCE_MAP,
-    POLISH: POLISH_CLEARANCE_MAP,
-    UK: UK_CLEARANCE_MAP,
-    INDUSTRY: INDUSTRY_CLEARANCE_MAP,
-    NATO: NATO_CLEARANCE_MAP,
-};
+export const CLEARANCE_MAPPINGS = CLEARANCE_MAPS;
 
 /**
  * Service singleton instance

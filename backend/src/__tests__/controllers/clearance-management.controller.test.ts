@@ -6,12 +6,11 @@
  */
 
 import { Request, Response } from 'express';
-import { ClearanceEquivalencyDBService } from '../../services/clearance-equivalency-db.service';
+import { ClearanceEquivalencyDBService, IClearanceEquivalencyDocument } from '../../services/clearance-equivalency-db.service';
 import { DiveClearanceLevel } from '../../services/clearance-mapper.service';
 
 // Mock the database service
 jest.mock('../../services/clearance-equivalency-db.service');
-jest.mock('../../utils/db');
 
 describe('Clearance Management Controller', () => {
     let mockService: jest.Mocked<ClearanceEquivalencyDBService>;
@@ -20,12 +19,20 @@ describe('Clearance Management Controller', () => {
     let controller: any;
 
     beforeEach(() => {
-        // Setup mock service
+        // Setup mock service (aligned with ClearanceEquivalencyDBService interface)
         mockService = {
             getAllMappings: jest.fn(),
-            getCountryMappings: jest.fn(),
+            getNationalMapping: jest.fn(),
+            getEquivalents: jest.fn(),
+            getMapping: jest.fn(),
             updateCountryMappings: jest.fn(),
-            validateMappings: jest.fn(),
+            addCountry: jest.fn(),
+            removeCountry: jest.fn(),
+            getSupportedCountries: jest.fn(),
+            validate: jest.fn(),
+            getStats: jest.fn(),
+            initialize: jest.fn(),
+            reset: jest.fn(),
         } as any;
 
         // Setup mock request and response
@@ -52,7 +59,7 @@ describe('Clearance Management Controller', () => {
 
     describe('GET /api/admin/clearance/mappings', () => {
         it('should return all clearance mappings', async () => {
-            const mockMappings = [
+            const mockMappings: IClearanceEquivalencyDocument[] = [
                 {
                     standardLevel: 'SECRET' as DiveClearanceLevel,
                     nationalEquivalents: {
@@ -62,6 +69,8 @@ describe('Clearance Management Controller', () => {
                     mfaRequired: true,
                     aalLevel: 2,
                     acrLevel: 1,
+                    description: 'Sensitive information requiring strict protection',
+                    updatedAt: new Date(),
                 },
             ];
 
@@ -90,7 +99,7 @@ describe('Clearance Management Controller', () => {
                 'TOP_SECRET': ['TOP SECRET'],
             };
 
-            mockService.getCountryMappings.mockResolvedValue(mockCountryMappings);
+            mockService.getNationalMapping.mockResolvedValue(mockCountryMappings as any);
 
             expect(mockService).toBeDefined();
         });
@@ -98,7 +107,7 @@ describe('Clearance Management Controller', () => {
         it('should return 404 for unknown country', async () => {
             mockRequest.params = { countryCode: 'XXX' };
 
-            mockService.getCountryMappings.mockResolvedValue(null);
+            mockService.getNationalMapping.mockResolvedValue(null as any);
 
             expect(mockResponse.status).toBeDefined();
         });
@@ -168,11 +177,10 @@ describe('Clearance Management Controller', () => {
         it('should validate all mappings successfully', async () => {
             const mockValidation = {
                 valid: true,
-                errors: [],
-                warnings: [],
+                errors: [] as string[],
             };
 
-            mockService.validateMappings.mockResolvedValue(mockValidation);
+            mockService.validate.mockResolvedValue(mockValidation);
 
             expect(mockService).toBeDefined();
         });
@@ -181,10 +189,9 @@ describe('Clearance Management Controller', () => {
             const mockValidation = {
                 valid: false,
                 errors: ['Country XXX missing TOP_SECRET mapping'],
-                warnings: ['Country YYY has only 3 levels defined'],
             };
 
-            mockService.validateMappings.mockResolvedValue(mockValidation);
+            mockService.validate.mockResolvedValue(mockValidation);
 
             expect(mockService).toBeDefined();
         });
@@ -193,10 +200,9 @@ describe('Clearance Management Controller', () => {
             const mockValidation = {
                 valid: false,
                 errors: ['Country USA: "SECRET" appears in both SECRET and TOP_SECRET'],
-                warnings: [],
             };
 
-            mockService.validateMappings.mockResolvedValue(mockValidation);
+            mockService.validate.mockResolvedValue(mockValidation);
 
             expect(mockService).toBeDefined();
         });

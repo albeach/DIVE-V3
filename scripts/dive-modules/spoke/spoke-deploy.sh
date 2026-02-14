@@ -108,7 +108,7 @@ spoke_deploy() {
         fi
     fi
 
-    # GUARDRAIL: Require Vault provisioning before spoke deployment
+    # AUTO-PROVISION: Ensure Vault provisioning before spoke deployment
     if [ "${SECRETS_PROVIDER:-}" = "vault" ]; then
         # Load vault module if not already available
         if ! type vault_spoke_is_provisioned &>/dev/null; then
@@ -116,9 +116,18 @@ spoke_deploy() {
         fi
         if type vault_spoke_is_provisioned &>/dev/null; then
             if ! vault_spoke_is_provisioned "$(lower "$instance_code")"; then
-                log_error "Spoke $(upper "$instance_code") not provisioned in Vault"
-                log_info "Run: ./dive vault provision $(upper "$instance_code")"
-                return 1
+                log_info "Spoke $(upper "$instance_code") not yet provisioned in Vault — auto-provisioning..."
+                if type module_vault_provision &>/dev/null; then
+                    if ! module_vault_provision "$(upper "$instance_code")"; then
+                        log_error "Vault auto-provisioning failed for $(upper "$instance_code")"
+                        return 1
+                    fi
+                    log_success "Vault auto-provisioned for $(upper "$instance_code")"
+                else
+                    log_error "Vault provision function not available"
+                    log_info "Run manually: ./dive vault provision $(upper "$instance_code")"
+                    return 1
+                fi
             fi
         fi
     fi

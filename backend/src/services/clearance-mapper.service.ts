@@ -91,16 +91,16 @@ export const CLEARANCE_EQUIVALENCY_TABLE: IClearanceMapping[] = [
     {
         standardLevel: 'UNCLASSIFIED',
         nationalEquivalents: {
-            // Existing (10)
+            // Existing (10) — includes normalization variants (underscores, accents, colloquial)
             USA: ['UNCLASSIFIED', 'U'],
-            FRA: ['NON CLASSIFIÉ', 'NON CLASSIFIE'],
+            FRA: ['NON CLASSIFIÉ', 'NON CLASSIFIE', 'NON_CLASSIFIE', 'NON PROTÉGÉ', 'NON_PROTEGE', 'NON PROTEGE'],
             CAN: ['UNCLASSIFIED', 'U'],
-            GBR: ['UNCLASSIFIED', 'OFFICIAL'],
+            GBR: ['UNCLASSIFIED', 'PROTECT'],
             DEU: ['OFFEN'],
-            ITA: ['NON CLASSIFICATO'],
-            ESP: ['NO CLASIFICADO'],
-            POL: ['NIEJAWNE'],
-            NLD: ['NIET-GERUBRICEERD'],
+            ITA: ['NON CLASSIFICATO', 'NON_CLASSIFICATO'],
+            ESP: ['NO CLASIFICADO', 'NO_CLASIFICADO', 'SIN CLASIFICAR'],
+            POL: ['NIEJAWNE', 'JAWNY'],
+            NLD: ['NIET-GERUBRICEERD', 'NIET GERUBRICEERD', 'NIET_GERUBRICEERD'],
             INDUSTRY: ['UNCLASSIFIED', 'PUBLIC'],
             // NEW - 22 NATO Members
             ALB: ['JOSEKRET', 'I PAKONTROLLUAR'],
@@ -140,23 +140,23 @@ export const CLEARANCE_EQUIVALENCY_TABLE: IClearanceMapping[] = [
     {
         standardLevel: 'RESTRICTED',
         nationalEquivalents: {
-            // Existing (10)
+            // Existing (10) — includes normalization variants
             USA: ['RESTRICTED', 'FOUO', 'FOR OFFICIAL USE ONLY'],
-            FRA: ['RESTREINT', 'DIFFUSION RESTREINTE'],  // Short form first (UI display), full form second (official)
-            CAN: ['PROTECTED A', 'PROTECTED-A'],
-            GBR: ['OFFICIAL-SENSITIVE', 'OFFICIAL SENSITIVE'],
-            DEU: ['VS-NUR FÜR DEN DIENSTGEBRAUCH', 'VS-NUR FUR DEN DIENSTGEBRAUCH', 'VS-NFD'],
+            FRA: ['DIFFUSION RESTREINTE', 'DIFFUSION_RESTREINTE', 'RESTREINT'],
+            CAN: ['PROTECTED A', 'PROTECTED-A', 'PROTECTED_A'],
+            GBR: ['OFFICIAL', 'OFFICIAL-SENSITIVE', 'OFFICIAL SENSITIVE', 'OFFICIAL_SENSITIVE', 'RESTRICTED'],
+            DEU: ['VS-NUR FÜR DEN DIENSTGEBRAUCH', 'VS-NUR FUR DEN DIENSTGEBRAUCH', 'VS-NFD', 'VS-NUR_FÜR_DEN_DIENSTGEBRAUCH'],
             ITA: ['USO UFFICIALE', 'AD USO UFFICIALE'],
-            ESP: ['DIFUSIÓN LIMITADA', 'DIFUSION LIMITADA'],
+            ESP: ['DIFUSIÓN LIMITADA', 'DIFUSION LIMITADA', 'DIFUSION_LIMITADA'],
             POL: ['UŻYTEK SŁUŻBOWY', 'UZYTEK SLUZBOWY'],
-            NLD: ['DEPARTEMENTAAL VERTROUWELIJK'],
-            INDUSTRY: ['INTERNAL', 'INTERNAL USE ONLY'],
+            NLD: ['DEPARTEMENTAAL VERTROUWELIJK', 'DEPARTEMENTAAL_VERTROUWELIJK'],
+            INDUSTRY: ['INTERNAL', 'INTERNAL USE ONLY', 'INTERNAL_USE_ONLY'],
             // NEW - 22 NATO Members
             ALB: ['KUFIZUAR', 'I KUFIZUAR'],
             BEL: ['BEPERKTE VERSPREIDING', 'DIFFUSION RESTREINTE'],  // Dutch/French
             BGR: ['ОГРАНИЧЕН', 'OGRANICHEN'],  // Cyrillic + Latin
             CZE: ['OMEZENÉ ŠÍŘENÍ', 'OMEZENE SIRENI'],  // With/without diacritics
-            DNK: ['BEGRÆNSET', 'BEGRÆNSET'],  // With diacritic
+            DNK: ['BEGRÆNSET', 'BEGRAENSET'],  // With/without diacritic
             EST: ['PIIRATUD'],
             FIN: ['RAJOITETTU', 'BEGRÄNSAD'],  // Finnish/Swedish
             GRC: ['ΠΕΡΙΟΡΙΣΜΈΝΟ', 'PERIORISMENO'],  // Greek + Latin
@@ -185,24 +185,25 @@ export const CLEARANCE_EQUIVALENCY_TABLE: IClearanceMapping[] = [
     {
         standardLevel: 'CONFIDENTIAL',
         nationalEquivalents: {
-            // Existing (10)
+            // Existing (10) — includes normalization variants
             USA: ['CONFIDENTIAL', 'C'],
             FRA: [
-                'CONFIDENTIEL',  // Short form (UI display) - ADDED
+                'CONFIDENTIEL',
                 'CONFIDENTIEL DÉFENSE',
                 'CONFIDENTIEL DEFENSE',
                 'CONFIDENTIEL-DÉFENSE',
                 'CONFIDENTIEL-DEFENSE',
+                'CONFIDENTIEL_DEFENSE',
                 'CONFIDENTIAL'
             ],
-            CAN: ['CONFIDENTIAL', 'PROTECTED B', 'PROTECTED-B'],
+            CAN: ['CONFIDENTIAL', 'PROTECTED B', 'PROTECTED-B', 'PROTECTED_B'],
             GBR: ['CONFIDENTIAL'],
-            DEU: ['VS-VERTRAULICH'],
+            DEU: ['VS-VERTRAULICH', 'VERTRAULICH'],
             ITA: ['RISERVATO', 'RISERVATISSIMO'],
             ESP: ['CONFIDENCIAL'],
-            POL: ['ZASTRZEŻONE', 'ZASTRZEZIONE', 'POUFNE'],
+            POL: ['ZASTRZEŻONE', 'ZASTRZEZONY', 'ZASTRZEZIONE', 'POUFNE'],
             NLD: ['VERTROUWELIJK'],
-            INDUSTRY: ['CONFIDENTIAL', 'PROPRIETARY'],
+            INDUSTRY: ['CONFIDENTIAL', 'PROPRIETARY', 'COMPANY_CONFIDENTIAL'],
             // NEW - 22 NATO Members
             ALB: ['KONFIDENCIAL', 'I FSHEHTË SHËRBIMI'],  // Albanian
             BEL: ['VERTROUWELIJK', 'CONFIDENTIEL'],  // Dutch/French
@@ -221,12 +222,12 @@ export const CLEARANCE_EQUIVALENCY_TABLE: IClearanceMapping[] = [
             MKD: ['ДОВЕРЛИВО', 'DOVERЛIVO'],  // Cyrillic + Latin
             MNE: ['ПОВЕРЉИВО', 'POVERLJIVO'],  // Cyrillic + Latin
             NOR: ['KONFIDENSIELT'],
-            NZL: ['CONFIDENTIAL', 'IN CONFIDENCE'],
+            NZL: ['CONFIDENTIAL'],
             PRT: ['CONFIDENCIAL'],
             ROU: ['CONFIDENȚIAL', 'CONFIDENTIAL'],  // With/without diacritic
             SVK: ['DÔVERNÉ', 'DOVERNE'],  // With/without diacritic
             SVN: ['ZAUPNO'],
-            SWE: ['HEMLIG'],
+            SWE: ['KONFIDENTIELL'],  // Swedish for confidential
             TUR: ['ÖZEL', 'OZEL', 'GİZLİ DERECELİ']  // With/without diacritic
         },
         mfaRequired: true,
@@ -237,23 +238,24 @@ export const CLEARANCE_EQUIVALENCY_TABLE: IClearanceMapping[] = [
     {
         standardLevel: 'SECRET',
         nationalEquivalents: {
-            // Existing (10)
+            // Existing (10) — includes normalization variants
             USA: ['SECRET', 'S'],
             FRA: [
-                'SECRET',  // Short form (UI display) - ADDED
+                'SECRET',
                 'SECRET DÉFENSE',
                 'SECRET DEFENSE',
                 'SECRET-DÉFENSE',
-                'SECRET-DEFENSE'
+                'SECRET-DEFENSE',
+                'SECRET_DEFENSE'
             ],
             CAN: ['SECRET', 'PROTECTED C', 'PROTECTED-C'],
             GBR: ['SECRET'],
-            DEU: ['GEHEIM'],
+            DEU: ['GEHEIM', 'VS-GEHEIM'],
             ITA: ['SEGRETO'],
             ESP: ['SECRETO'],
-            POL: ['TAJNE'],
+            POL: ['TAJNE', 'TAJNY'],
             NLD: ['GEHEIM'],
-            INDUSTRY: ['SECRET', 'TRADE SECRET'],
+            INDUSTRY: ['SECRET', 'TRADE SECRET', 'SENSITIVE'],
             // NEW - 22 NATO Members
             ALB: ['SEKRET', 'I FSHEHTË'],  // Albanian
             BEL: ['GEHEIM', 'SECRET'],  // Dutch/French
@@ -267,7 +269,7 @@ export const CLEARANCE_EQUIVALENCY_TABLE: IClearanceMapping[] = [
             HUN: ['TITKOS'],
             ISL: ['LEYNDARMÁL', 'LEYNDARMAL'],  // With/without diacritic
             LTU: ['SLAPTAI'],
-            LUX: ['SECRET', 'GEHEIM', 'GEHEIM'],  // French/German/Lux (same word)
+            LUX: ['SECRET', 'GEHEIM'],  // French/German
             LVA: ['SLEPENS'],
             MKD: ['ТАЈНО', 'TAJNO'],  // Cyrillic + Latin
             MNE: ['ТАЈНО', 'TAJNO'],  // Cyrillic + Latin
@@ -288,24 +290,25 @@ export const CLEARANCE_EQUIVALENCY_TABLE: IClearanceMapping[] = [
     {
         standardLevel: 'TOP_SECRET',
         nationalEquivalents: {
-            // Existing (10)
+            // Existing (10) — includes normalization variants
             USA: ['TOP SECRET', 'TS', 'TOP_SECRET'],
             FRA: [
-                'TRÈS SECRET',  // Short form (UI display) - ADDED
+                'TRÈS SECRET',
                 'TRÈS SECRET DÉFENSE',
                 'TRES SECRET DEFENSE',
                 'TRÈS-SECRET-DÉFENSE',
                 'TRES-SECRET-DEFENSE',
+                'TRES_SECRET_DEFENSE',
                 'TOP SECRET'
             ],
             CAN: ['TOP SECRET', 'TS', 'TOP_SECRET'],
             GBR: ['TOP SECRET', 'TS'],
-            DEU: ['STRENG GEHEIM'],
+            DEU: ['STRENG GEHEIM', 'STRENG_GEHEIM', 'STRENGGEHEIM'],
             ITA: ['SEGRETISSIMO'],
-            ESP: ['ALTO SECRETO'],
-            POL: ['ŚCIŚLE TAJNE', 'SCISLE TAJNE'],
-            NLD: ['ZEER GEHEIM'],
-            INDUSTRY: ['TOP SECRET', 'HIGHLY CONFIDENTIAL'],
+            ESP: ['ALTO SECRETO', 'ALTO_SECRETO'],
+            POL: ['ŚCIŚLE TAJNE', 'SCISLE TAJNE', 'ŚCIŚLE_TAJNY', 'SCISLE TAJNY'],
+            NLD: ['ZEER GEHEIM', 'ZEER_GEHEIM', 'STGGEHEIM'],
+            INDUSTRY: ['TOP SECRET', 'HIGHLY CONFIDENTIAL', 'HIGHLY_SENSITIVE', 'HIGHLY SENSITIVE'],
             // NEW - 22 NATO Members
             ALB: ['TEPËR SEKRET', 'TEPER SEKRET', 'SHUMË I FSHEHTË'],  // Albanian (with/without diacritics)
             BEL: ['ZEER GEHEIM', 'TRÈS SECRET'],  // Dutch/French
@@ -339,9 +342,11 @@ export const CLEARANCE_EQUIVALENCY_TABLE: IClearanceMapping[] = [
 
 /**
  * Feature flag for MongoDB SSOT
- * Set via environment variable: CLEARANCE_DB_ENABLED=true
+ * Enabled by default — MongoDB is the runtime SSOT for clearance mappings.
+ * The static TypeScript table is the seed source and fallback.
+ * Disable with CLEARANCE_DB_ENABLED=false if MongoDB is unavailable.
  */
-const USE_MONGODB = process.env.CLEARANCE_DB_ENABLED === 'true';
+const USE_MONGODB = process.env.CLEARANCE_DB_ENABLED !== 'false';
 
 /**
  * Get or create MongoDB service instance
@@ -362,6 +367,9 @@ async function getDBService(): Promise<ClearanceEquivalencyDBService | null> {
             const db = client.db(dbName);
 
             dbService = new ClearanceEquivalencyDBService(db);
+            // Auto-seed: ensure clearance_equivalency collection is populated from SSOT table.
+            // initialize() is idempotent — skips if collection already has data.
+            await dbService.initialize();
             dbServiceInitialized = true;
             logger.info('MongoDB clearance equivalency service initialized', {
                 enabled: true,
