@@ -77,10 +77,8 @@ resource "keycloak_oidc_identity_provider" "federation_partner" {
   hide_on_login_page = false
 
   # MFA Flow Binding - DISABLED for Federation (Trust Partner MFA)
-  # CRITICAL FIX: Do NOT enforce post-broker MFA for federated IdPs
-  # Rationale: Partner IdPs already enforce MFA (ACR/AMR claims in token)
-  # Re-requiring MFA enrollment breaks user experience and ignores partner security
-  # Hub should trust partner's authentication including MFA
+  # Partner IdPs already enforce MFA (ACR/AMR claims in token)
+  # Re-requiring MFA enrollment breaks UX and ignores partner security
   post_broker_login_flow_alias = ""  # Empty = no post-broker flow
 
   # Extra config for attribute mapping
@@ -172,33 +170,22 @@ resource "keycloak_custom_identity_provider_mapper" "organization_mapper" {
 }
 
 # =============================================================================
-# ACR/AMR MAPPERS FOR FEDERATION (CRITICAL - Fixed Feb 2026)
+# ACR/AMR MAPPERS FOR FEDERATION
 # =============================================================================
-# CRITICAL FIX: These mappers MUST exist for federated users.
+# These mappers extract AMR/ACR from spoke tokens for federated users.
 #
-# Architecture (corrected Feb 2026):
-# 1. FRA Spoke authenticates user with password + OTP
-# 2. Spoke's browser flow sets session: AUTHENTICATORS_COMPLETED (exec IDs), acr = 2
-# 3. Spoke's native oidc-amr-mapper outputs: amr = ["pwd","otp"] (from session)
-#    Spoke's native oidc-acr-mapper outputs: acr = "2" (from session AcrStore)
-# 4. Hub receives spoke token with native amr and acr claims
-# 5. Hub's IdP mapper (BELOW) extracts amr → stores to user.amr attribute
-#    Hub's IdP mapper (BELOW) extracts acr → stores to user.acr attribute
-# 6. Hub's broker client user_amr mapper reads user.amr → outputs user_amr to frontend
-# 7. Frontend reads user_amr (prioritized over native amr for federated users)
+# Data flow:
+# 1. Spoke authenticates user → session: AUTHENTICATORS_COMPLETED, acr = 2
+# 2. Spoke native mappers output: amr = ["pwd","otp"], acr = "2" (from session)
+# 3. Hub IdP mapper (below) extracts amr/acr → stores to user attributes
+# 4. Hub broker client user_amr/user_acr mappers → outputs to frontend
 #
-# KEY INSIGHT (Feb 2026): Use native 'amr'/'acr' claims, NOT 'user_amr'/'user_acr'!
-# The user_amr/user_acr claims come from user ATTRIBUTES which are EMPTY for
-# locally-authenticated spoke users. Only the native session-based claims are reliable.
+# KEY: Use native 'amr'/'acr' claims, NOT 'user_amr'/'user_acr'.
+# The user_amr/user_acr attributes are EMPTY for locally-authenticated spoke users.
 
 # AMR IdP Mapper - extracts amr from Spoke token → stores to user.amr
-# CRITICAL FIX (Feb 2026): Must use native 'amr' claim, NOT 'user_amr'!
-# The native oidc-amr-mapper on the spoke reads AUTHENTICATORS_COMPLETED user
-# session note + "default.reference.value" from execution configs → outputs 'amr'.
-# The 'user_amr' claim reads from user.amr attribute, which is EMPTY for
-# locally-authenticated spoke users (only populated for federated users).
-# Using 'user_amr' caused AAL1/MFA-not-set for all federated users.
-# This matches the shell script _configure_idp_mappers() which also uses 'amr'.
+# Must use native 'amr' claim (from session AUTHENTICATORS_COMPLETED),
+# NOT 'user_amr' (user attribute, EMPTY for locally-authenticated spoke users).
 resource "keycloak_custom_identity_provider_mapper" "amr_mapper" {
   for_each = var.federation_partners
 
@@ -215,10 +202,8 @@ resource "keycloak_custom_identity_provider_mapper" "amr_mapper" {
 }
 
 # ACR IdP Mapper - extracts acr from Spoke token → stores to user.acr
-# CRITICAL FIX (Feb 2026): Must use native 'acr' claim, NOT 'user_acr'!
-# Same rationale as AMR — the native oidc-acr-mapper reads from the spoke's
-# authentication session (AcrStore) and is always correct for local auth.
-# The 'user_acr' attribute is EMPTY for locally-authenticated spoke users.
+# Must use native 'acr' claim (from session AcrStore),
+# NOT 'user_acr' (user attribute, EMPTY for locally-authenticated spoke users).
 resource "keycloak_custom_identity_provider_mapper" "acr_mapper" {
   for_each = var.federation_partners
 

@@ -17,6 +17,8 @@ notes/
 bin/
 backups/
 .archive/
+.archived/
+.archived/**/*
 resources/
 # (your prior rule was /resources/ root-only; keeping it root-only)
 #/resources/
