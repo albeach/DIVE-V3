@@ -64,6 +64,27 @@ if _vault_is_dev_mode; then
 fi
 
 ##
+# Check if Vault is unsealed (with retry for post-deploy timing)
+# Retries up to 3 times with 2s sleep to handle Raft cluster formation
+##
+_vault_check_unsealed() {
+    local retries=3
+    local delay=2
+    for ((i=1; i<=retries; i++)); do
+        if vault status 2>/dev/null | grep -q "Sealed.*false"; then
+            return 0
+        fi
+        if [ "$i" -lt "$retries" ]; then
+            log_verbose "Vault not yet responding (attempt $i/$retries) — retrying in ${delay}s..."
+            sleep "$delay"
+        fi
+    done
+    log_error "Vault is sealed or unreachable after ${retries} attempts"
+    log_info "Check seal status: ./dive vault seal-status"
+    return 1
+}
+
+##
 # Check if Vault is running (dev: vault-dev, HA: vault-1)
 ##
 vault_is_running() {
@@ -275,9 +296,8 @@ module_vault_setup() {
         return 1
     fi
 
-    # Check if unsealed
-    if ! vault status 2>/dev/null | grep -q "Sealed.*false"; then
-        log_error "Vault is sealed - check seal vault: ./dive vault seal-status"
+    # Check if unsealed (with retry for post-deploy timing)
+    if ! _vault_check_unsealed; then
         return 1
     fi
 
@@ -417,9 +437,8 @@ module_vault_snapshot() {
         return 1
     fi
 
-    # Check if unsealed
-    if ! vault status 2>/dev/null | grep -q "Sealed.*false"; then
-        log_error "Vault is sealed - check seal vault: ./dive vault seal-status"
+    # Check if unsealed (with retry for post-deploy timing)
+    if ! _vault_check_unsealed; then
         return 1
     fi
 
@@ -806,8 +825,7 @@ module_vault_seed() {
     fi
 
     # Check if unsealed FIRST (before attempting any authentication)
-    if ! vault status 2>/dev/null | grep -q "Sealed.*false"; then
-        log_error "Vault is sealed - check seal vault: ./dive vault seal-status"
+    if ! _vault_check_unsealed; then
         return 1
     fi
 
@@ -1158,9 +1176,8 @@ module_vault_pki_setup() {
         return 1
     fi
 
-    # Check if unsealed
-    if ! vault status 2>/dev/null | grep -q "Sealed.*false"; then
-        log_error "Vault is sealed - check seal vault: ./dive vault seal-status"
+    # Check if unsealed (with retry for post-deploy timing)
+    if ! _vault_check_unsealed; then
         return 1
     fi
 
@@ -1383,9 +1400,8 @@ module_vault_provision() {
         return 1
     fi
 
-    # Check if unsealed
-    if ! vault status 2>/dev/null | grep -q "Sealed.*false"; then
-        log_error "Vault is sealed - check seal vault: ./dive vault seal-status"
+    # Check if unsealed (with retry for post-deploy timing)
+    if ! _vault_check_unsealed; then
         return 1
     fi
 
@@ -1949,8 +1965,7 @@ module_vault_refresh_credentials() {
         return 1
     fi
 
-    if ! vault status 2>/dev/null | grep -q "Sealed.*false"; then
-        log_error "Vault is sealed"
+    if ! _vault_check_unsealed; then
         return 1
     fi
 
@@ -2064,8 +2079,7 @@ module_vault_deprovision() {
         return 1
     fi
 
-    if ! vault status 2>/dev/null | grep -q "Sealed.*false"; then
-        log_error "Vault is sealed"
+    if ! _vault_check_unsealed; then
         return 1
     fi
 

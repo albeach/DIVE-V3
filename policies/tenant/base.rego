@@ -277,11 +277,11 @@ subject_can_access_tenant if {
 # ============================================
 
 untrusted_issuer_msg(issuer) := msg if {
-	msg := sprintf("Untrusted token issuer: %s", [issuer])
+	msg := sprintf("Access denied: Your identity provider (%s) is not recognized as a trusted issuer in this system", [issuer])
 }
 
 federation_denied_msg(subject_tenant, target_tenant) := msg if {
-	msg := sprintf("Federation denied: %s cannot access %s resources", [
+	msg := sprintf("Federation access denied: Your organization (%s) does not have a federation agreement with %s to access their resources", [
 		subject_tenant,
 		target_tenant,
 	])

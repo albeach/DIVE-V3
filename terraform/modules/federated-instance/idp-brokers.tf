@@ -172,28 +172,33 @@ resource "keycloak_custom_identity_provider_mapper" "organization_mapper" {
 }
 
 # =============================================================================
-# ACR/AMR MAPPERS FOR FEDERATION (CRITICAL - Re-enabled Jan 2026)
+# ACR/AMR MAPPERS FOR FEDERATION (CRITICAL - Fixed Feb 2026)
 # =============================================================================
 # CRITICAL FIX: These mappers MUST exist for federated users.
 #
-# Architecture:
-# 1. NZL Spoke authenticates user with password + OTP
-# 2. NZL's event listener sets: AUTH_METHODS_REF = ["pwd","otp"], user.amr = ["pwd","otp"]
-# 3. NZL's client mappers output: amr (native session), user_amr (user attribute)
-# 4. Hub receives NZL token with amr and user_amr claims
-# 5. Hub's IdP mapper (BELOW) extracts user_amr → stores to user.amr attribute
-# 6. Hub's event listener detects federated user → preserves user.amr in session
-# 7. Hub's client mapper reads user.amr → outputs user_amr to frontend
-# 8. Frontend reads user_amr (prioritized over amr for federated users)
+# Architecture (corrected Feb 2026):
+# 1. FRA Spoke authenticates user with password + OTP
+# 2. Spoke's browser flow sets session: AUTHENTICATORS_COMPLETED (exec IDs), acr = 2
+# 3. Spoke's native oidc-amr-mapper outputs: amr = ["pwd","otp"] (from session)
+#    Spoke's native oidc-acr-mapper outputs: acr = "2" (from session AcrStore)
+# 4. Hub receives spoke token with native amr and acr claims
+# 5. Hub's IdP mapper (BELOW) extracts amr → stores to user.amr attribute
+#    Hub's IdP mapper (BELOW) extracts acr → stores to user.acr attribute
+# 6. Hub's broker client user_amr mapper reads user.amr → outputs user_amr to frontend
+# 7. Frontend reads user_amr (prioritized over native amr for federated users)
 #
-# Without these IdP mappers, federated user's AMR is never updated on the Hub!
+# KEY INSIGHT (Feb 2026): Use native 'amr'/'acr' claims, NOT 'user_amr'/'user_acr'!
+# The user_amr/user_acr claims come from user ATTRIBUTES which are EMPTY for
+# locally-authenticated spoke users. Only the native session-based claims are reliable.
 
-# AMR IdP Mapper - extracts user_amr from Spoke token → stores to user.amr
-# CRITICAL (Jan 2026): Must use 'user_amr' NOT 'amr' claim!
-# The native oidc-amr-mapper reads AUTH_METHODS_REF from session notes,
-# but during federation token generation the session notes may be empty.
-# The user_amr claim (from oidc-usermodel-attribute-mapper) reads from
-# user.amr attribute which IS always correct (set by spoke's event listener).
+# AMR IdP Mapper - extracts amr from Spoke token → stores to user.amr
+# CRITICAL FIX (Feb 2026): Must use native 'amr' claim, NOT 'user_amr'!
+# The native oidc-amr-mapper on the spoke reads AUTHENTICATORS_COMPLETED user
+# session note + "default.reference.value" from execution configs → outputs 'amr'.
+# The 'user_amr' claim reads from user.amr attribute, which is EMPTY for
+# locally-authenticated spoke users (only populated for federated users).
+# Using 'user_amr' caused AAL1/MFA-not-set for all federated users.
+# This matches the shell script _configure_idp_mappers() which also uses 'amr'.
 resource "keycloak_custom_identity_provider_mapper" "amr_mapper" {
   for_each = var.federation_partners
 
@@ -203,15 +208,17 @@ resource "keycloak_custom_identity_provider_mapper" "amr_mapper" {
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
 
   extra_config = {
-    "claim"          = "user_amr" # Read from user attribute mapper claim (guaranteed correct)
-    "user.attribute" = "amr"      # Store to local user's amr attribute
-    "syncMode"       = "FORCE"    # Update on every login (dynamic!)
+    "claim"          = "amr"   # Read from native session AMR claim (always set after auth)
+    "user.attribute" = "amr"   # Store to local user's amr attribute
+    "syncMode"       = "FORCE" # Update on every login (dynamic!)
   }
 }
 
-# ACR IdP Mapper - extracts user_acr from Spoke token → stores to user.acr
-# Same rationale as AMR - the native oidc-acr-mapper may not have session data
-# during federation, but user_acr from user attribute mapper is always correct.
+# ACR IdP Mapper - extracts acr from Spoke token → stores to user.acr
+# CRITICAL FIX (Feb 2026): Must use native 'acr' claim, NOT 'user_acr'!
+# Same rationale as AMR — the native oidc-acr-mapper reads from the spoke's
+# authentication session (AcrStore) and is always correct for local auth.
+# The 'user_acr' attribute is EMPTY for locally-authenticated spoke users.
 resource "keycloak_custom_identity_provider_mapper" "acr_mapper" {
   for_each = var.federation_partners
 
@@ -221,9 +228,9 @@ resource "keycloak_custom_identity_provider_mapper" "acr_mapper" {
   identity_provider_mapper = "oidc-user-attribute-idp-mapper"
 
   extra_config = {
-    "claim"          = "user_acr" # Read from user attribute mapper claim (guaranteed correct)
-    "user.attribute" = "acr"      # Store to local user's acr attribute
-    "syncMode"       = "FORCE"    # Update on every login (dynamic!)
+    "claim"          = "acr"   # Read from native session ACR claim (always set after auth)
+    "user.attribute" = "acr"   # Store to local user's acr attribute
+    "syncMode"       = "FORCE" # Update on every login (dynamic!)
   }
 }
 

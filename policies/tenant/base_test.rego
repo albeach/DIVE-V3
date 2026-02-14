@@ -229,14 +229,14 @@ test_subject_can_access_fra_to_gbr if {
 test_untrusted_issuer_msg_format if {
 	msg := base.untrusted_issuer_msg("https://evil.example.com")
 	contains(msg, "evil.example.com")
-	contains(msg, "Untrusted")
+	contains(msg, "not recognized as a trusted issuer")
 }
 
 test_federation_denied_msg_format if {
 	msg := base.federation_denied_msg("XYZ", "USA")
 	contains(msg, "XYZ")
 	contains(msg, "USA")
-	contains(msg, "Federation denied")
+	contains(msg, "Federation access denied")
 }
 
 # ============================================

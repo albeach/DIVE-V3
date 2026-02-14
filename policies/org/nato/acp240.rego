@@ -32,7 +32,7 @@ import data.dive.org.nato.classification
 
 is_not_authenticated := msg if {
 	not input.subject.authenticated
-	msg := "Subject is not authenticated"
+	msg := "Authentication required — you must be logged in to access this resource"
 }
 
 check_authenticated if {
@@ -47,44 +47,44 @@ check_authenticated if {
 
 is_missing_required_attributes := msg if {
 	not input.subject.uniqueID
-	msg := "Missing required attribute: uniqueID"
+	msg := "Your account is missing a unique identifier (uniqueID). Contact your administrator"
 } else := msg if {
 	input.subject.uniqueID == ""
-	msg := "Empty uniqueID is not allowed"
+	msg := "Your account has an empty unique identifier. Contact your administrator"
 } else := msg if {
 	not input.subject.clearance
-	msg := "Missing required attribute: clearance"
+	msg := "Your account is missing a security clearance level. Contact your administrator"
 } else := msg if {
 	input.subject.clearance == ""
-	msg := "Empty clearance is not allowed"
+	msg := "Your account has an empty security clearance. Contact your administrator"
 } else := msg if {
 	not input.subject.countryOfAffiliation
-	msg := "Missing required attribute: countryOfAffiliation"
+	msg := "Your account is missing a country of affiliation. Contact your administrator"
 } else := msg if {
 	input.subject.countryOfAffiliation == ""
-	msg := "Empty countryOfAffiliation is not allowed"
+	msg := "Your account has an empty country of affiliation. Contact your administrator"
 } else := msg if {
 	not input.resource.classification
-	msg := "Missing required attribute: resource.classification"
+	msg := "This resource has no classification level assigned and cannot be accessed until classified"
 } else := msg if {
 	not input.resource.releasabilityTo
-	msg := "Missing required attribute: resource.releasabilityTo"
+	msg := "This resource has no releasability markings and cannot be accessed until release countries are assigned"
 } else := msg if {
 	input.resource.releasabilityTo == null
-	msg := "Null releasabilityTo is not allowed"
+	msg := "This resource has invalid releasability markings. Contact the resource owner"
 } else := msg if {
 	# Validate country codes
 	input.subject.countryOfAffiliation
 	input.subject.countryOfAffiliation != ""
 	not country.is_valid(input.subject.countryOfAffiliation)
-	msg := sprintf("Invalid country code: %s (must be ISO 3166-1 alpha-3)", [input.subject.countryOfAffiliation])
+	msg := sprintf("Invalid country code '%s' on your account. Must be a valid 3-letter country code (e.g., USA, GBR, FRA)", [input.subject.countryOfAffiliation])
 } else := msg if {
 	country.is_valid(input.subject.countryOfAffiliation)
 	input.resource.releasabilityTo
 	count(input.resource.releasabilityTo) > 0
 	invalid := country.invalid_countries(input.resource.releasabilityTo)
 	count(invalid) > 0
-	msg := sprintf("Invalid country codes in releasabilityTo: %v", [invalid])
+	msg := sprintf("This resource contains invalid country codes in its release markings: %v. Contact the resource owner", [invalid])
 }
 
 check_required_attributes if {
@@ -133,7 +133,7 @@ is_insufficient_clearance := msg if {
 	normalized_user_clearance := classification.get_dive_level(input.subject.clearance, input.subject.clearanceCountry)
 	normalized_user_clearance != null  # Normalization succeeded
 	not clearance.sufficient(normalized_user_clearance, input.resource.classification)
-	msg := sprintf("Insufficient clearance: user has %s (%s normalized), resource requires %s",
+	msg := sprintf("Access denied: Your clearance level (%s, normalized to %s) is below the required %s classification",
 		[input.subject.clearance, normalized_user_clearance, input.resource.classification])
 } else := msg if {
 	# User has clearanceCountry but clearance is not in known mapping - deny
@@ -141,7 +141,7 @@ is_insufficient_clearance := msg if {
 	input.subject.clearanceCountry
 	normalized_user_clearance := classification.get_dive_level(input.subject.clearance, input.subject.clearanceCountry)
 	normalized_user_clearance == null
-	msg := sprintf("Invalid clearance level: %s not recognized for country %s",
+	msg := sprintf("Unrecognized clearance level '%s' for country %s. Contact your administrator to correct your clearance",
 		[input.subject.clearance, input.subject.clearanceCountry])
 } else := msg if {
 	# Clearance check with DIVE V3 standard levels (backward compatibility)
@@ -174,12 +174,12 @@ check_clearance_sufficient if {
 # Uses else-chain to return first matching error (avoids OPA conflict).
 is_not_releasable_to_country := msg if {
 	count(input.resource.releasabilityTo) == 0
-	msg := "Resource releasabilityTo is empty (deny all)"
+	msg := "This resource is not approved for release to any country"
 } else := msg if {
 	count(input.resource.releasabilityTo) > 0
 	user_country := input.subject.countryOfAffiliation
 	not user_country in input.resource.releasabilityTo
-	msg := sprintf("Country %s not in releasabilityTo: %v", [
+	msg := sprintf("This resource is not releasable to your country (%s). Approved countries: %v", [
 		user_country,
 		input.resource.releasabilityTo,
 	])
@@ -200,7 +200,7 @@ is_coi_violation := msg if {
 	"US-ONLY" in input.resource.COI
 	user_coi := object.get(input.subject, "acpCOI", [])
 	not user_coi == ["US-ONLY"]
-	msg := sprintf("Resource requires US-ONLY COI. User has COI: %v", [user_coi])
+	msg := sprintf("This resource is restricted to US-ONLY access. Your community memberships (%v) do not include US-ONLY", [user_coi])
 } else := msg if {
 	count(input.resource.COI) > 0
 	user_coi := object.get(input.subject, "acpCOI", [])
@@ -208,9 +208,9 @@ is_coi_violation := msg if {
 	operator := object.get(input.resource, "coiOperator", "ALL")
 	operator == "ALL"
 	not coi.has_access_all(user_coi, input.resource.COI)
-	msg := sprintf("COI operator=ALL: user COI %v does not satisfy resource COI %v", [
-		user_coi,
+	msg := sprintf("Access denied: You must be a member of all required communities %v. Your memberships: %v", [
 		input.resource.COI,
+		user_coi,
 	])
 } else := msg if {
 	count(input.resource.COI) > 0
@@ -219,9 +219,9 @@ is_coi_violation := msg if {
 	operator := object.get(input.resource, "coiOperator", "ALL")
 	operator == "ANY"
 	not coi.has_access_any(user_coi, input.resource.COI)
-	msg := sprintf("COI operator=ANY: user COI %v does not intersect resource COI %v", [
-		user_coi,
+	msg := sprintf("Access denied: You must be a member of at least one required community %v. Your memberships: %v", [
 		input.resource.COI,
+		user_coi,
 	])
 }
 
@@ -254,22 +254,22 @@ check_embargo_passed if {
 is_ztdf_integrity_violation := msg if {
 	input.resource.ztdf
 	input.resource.ztdf.integrityValidated == false
-	msg := "ZTDF integrity validation failed (cryptographic binding compromised)"
+	msg := "Data integrity check failed — the cryptographic binding on this resource has been compromised"
 } else := msg if {
 	input.resource.ztdf
 	not input.resource.ztdf.policyHash
-	msg := "ZTDF policy hash missing (STANAG 4778 binding required)"
+	msg := "Data integrity error: This resource is missing its policy hash. A valid cryptographic binding is required"
 } else := msg if {
 	input.resource.ztdf
 	input.resource.ztdf.policyHash
 	not input.resource.ztdf.payloadHash
-	msg := "ZTDF payload hash missing (integrity protection required)"
+	msg := "Data integrity error: This resource is missing its content hash. Integrity protection is required"
 } else := msg if {
 	input.resource.ztdf
 	input.resource.ztdf.policyHash
 	input.resource.ztdf.payloadHash
 	not input.resource.ztdf.integrityValidated
-	msg := "ZTDF integrity not validated (STANAG 4778 binding required)"
+	msg := "Data integrity not verified — this resource requires cryptographic validation before access"
 }
 
 check_ztdf_integrity_valid if {
@@ -309,22 +309,33 @@ is_authentication_strength_insufficient := msg if {
 	# Fallback: Check AMR for 2+ factors
 	amr_factors := parse_amr(input.context.amr)
 	count(amr_factors) < 2
-	msg := sprintf("Classification %v requires AAL2, but ACR='%v' and only %v factor(s)", [
+	msg := sprintf("Multi-factor authentication required: %v-classified resources require stronger authentication, but only %v authentication factor(s) were provided (ACR='%v')", [
 		input.resource.classification,
-		acr_str,
 		count(amr_factors),
+		acr_str,
 	])
 }
 
+# MFA verified via AMR (2+ authentication methods) OR ACR >= 2 (defense-in-depth).
+# ACR fallback covers federated users where hub AMR is always empty (hub only sees
+# the IdP broker execution, not the spoke's pwd/otp).
 is_mfa_not_verified := msg if {
 	input.resource.classification != "UNCLASSIFIED"
+	not _mfa_sufficient
+	msg := sprintf("Multi-factor authentication required for %v-classified resources. Please re-authenticate with a second factor (e.g., authenticator app or security key)", [
+		input.resource.classification,
+	])
+}
+
+_mfa_sufficient if {
 	input.context.amr
 	amr_factors := parse_amr(input.context.amr)
-	count(amr_factors) < 2
-	msg := sprintf("MFA required for %v: need 2+ factors, got %v", [
-		input.resource.classification,
-		count(amr_factors),
-	])
+	count(amr_factors) >= 2
+}
+
+_mfa_sufficient if {
+	input.context.acr
+	to_number(input.context.acr) >= 2
 }
 
 check_authentication_strength_sufficient if {
@@ -344,7 +355,7 @@ is_upload_not_releasable_to_uploader := msg if {
 	input.action.operation == "upload"
 	count(input.resource.releasabilityTo) > 0
 	not input.subject.countryOfAffiliation in input.resource.releasabilityTo
-	msg := sprintf("Upload releasabilityTo must include uploader country: %s", [input.subject.countryOfAffiliation])
+	msg := sprintf("Upload denied: The release markings must include your country (%s). You cannot upload a resource that is not releasable to you", [input.subject.countryOfAffiliation])
 }
 
 check_upload_releasability_valid if {
@@ -371,9 +382,8 @@ resolved_industry_allowed := allowed if {
 is_industry_access_blocked := msg if {
 	resolved_org_type == "INDUSTRY"
 	not resolved_industry_allowed
-	msg := sprintf("Industry access denied: organizationType=%s but resource.releasableToIndustry=%v", [
+	msg := sprintf("Industry access denied: This resource is restricted to government/military personnel and is not available to industry partners (your organization type: %s)", [
 		resolved_org_type,
-		object.get(input.resource, "releasableToIndustry", "not set"),
 	])
 }
 
@@ -438,12 +448,10 @@ is_industry_clearance_exceeded := msg if {
 	# Check if resource exceeds industry cap
 	resource_level > max_level
 
-	msg := sprintf("Industry clearance cap exceeded: resource=%s (%d) > tenant %s max=%s (%d)", [
+	msg := sprintf("Industry clearance cap exceeded: This resource's %s classification is above the maximum %s level allowed for industry partners in %s", [
 		resource_class,
-		resource_level,
-		user_country,
 		max_class,
-		max_level,
+		user_country,
 	])
 }
 
@@ -460,21 +468,21 @@ is_coi_coherence_violation contains msg if {
 	"US-ONLY" in input.resource.COI
 	some x in input.resource.COI
 	x != "US-ONLY"
-	msg := sprintf("COI US-ONLY cannot be combined with foreign-sharing COIs: %s", [x])
+	msg := sprintf("Invalid resource marking: US-ONLY cannot be combined with '%s' because US-ONLY restricts access to the United States only", [x])
 }
 
 is_coi_coherence_violation contains msg if {
 	"EU-RESTRICTED" in input.resource.COI
 	some x in input.resource.COI
 	x == "NATO-COSMIC"
-	msg := "COI EU-RESTRICTED cannot be combined with NATO-COSMIC"
+	msg := "Invalid resource marking: EU-RESTRICTED and NATO-COSMIC communities cannot be combined as they have conflicting membership requirements"
 }
 
 is_coi_coherence_violation contains msg if {
 	"EU-RESTRICTED" in input.resource.COI
 	some x in input.resource.COI
 	x == "US-ONLY"
-	msg := "COI EU-RESTRICTED cannot be combined with US-ONLY"
+	msg := "Invalid resource marking: EU-RESTRICTED and US-ONLY communities cannot be combined as they have conflicting membership requirements"
 }
 
 # RELAXED: Releasability ⊆ COI check (ACP-240 Section 4.7 - Explicit Release)
@@ -494,7 +502,7 @@ is_coi_coherence_violation contains msg if {
 	union := {c | some coi_name in input.resource.COI; some c in coi.members(coi_name)}
 	some r in input.resource.releasabilityTo
 	not r in union
-	msg := sprintf("[STRICT] Releasability country %s not in COI union %v", [r, union])
+	msg := sprintf("[STRICT] Country %s is listed in the release markings but is not a member of any assigned community: %v", [r, union])
 }
 
 # Informational warning (does not block access)
@@ -503,7 +511,7 @@ coi_extended_release_warning := warning if {
 	union := {c | some coi_name in input.resource.COI; some c in coi.members(coi_name)}
 	extended := {r | some r in input.resource.releasabilityTo; not r in union}
 	count(extended) > 0
-	warning := sprintf("Explicit release beyond COI: %v extended to %v", [input.resource.COI, extended])
+	warning := sprintf("Note: This resource is explicitly released beyond its community membership. Communities %v extended to include countries: %v", [input.resource.COI, extended])
 }
 
 # NOFORN caveat enforcement
@@ -511,7 +519,7 @@ is_coi_coherence_violation contains msg if {
 	input.resource.caveats
 	"NOFORN" in input.resource.caveats
 	count(input.resource.COI) != 1
-	msg := "NOFORN caveat requires COI=[US-ONLY] (single COI)"
+	msg := "NOFORN violation: Resources marked NOFORN must have exactly one community assignment: US-ONLY"
 }
 
 is_coi_coherence_violation contains msg if {
@@ -519,14 +527,14 @@ is_coi_coherence_violation contains msg if {
 	"NOFORN" in input.resource.caveats
 	count(input.resource.COI) == 1
 	input.resource.COI[0] != "US-ONLY"
-	msg := "NOFORN caveat requires COI=[US-ONLY]"
+	msg := "NOFORN violation: Resources marked NOFORN must be assigned to the US-ONLY community"
 }
 
 is_coi_coherence_violation contains msg if {
 	input.resource.caveats
 	"NOFORN" in input.resource.caveats
 	count(input.resource.releasabilityTo) != 1
-	msg := "NOFORN caveat requires releasabilityTo=[USA] (single country)"
+	msg := "NOFORN violation: Resources marked NOFORN must be releasable to exactly one country: USA"
 }
 
 is_coi_coherence_violation contains msg if {
@@ -534,7 +542,7 @@ is_coi_coherence_violation contains msg if {
 	"NOFORN" in input.resource.caveats
 	count(input.resource.releasabilityTo) == 1
 	input.resource.releasabilityTo[0] != "USA"
-	msg := "NOFORN caveat requires releasabilityTo=[USA]"
+	msg := "NOFORN violation: Resources marked NOFORN must be releasable only to USA"
 }
 
 # Subset/superset checks (ANY operator)
@@ -542,28 +550,28 @@ is_coi_coherence_violation contains msg if {
 	input.resource.coiOperator == "ANY"
 	"CAN-US" in input.resource.COI
 	"FVEY" in input.resource.COI
-	msg := "Subset+superset COIs [CAN-US, FVEY] invalid with ANY semantics"
+	msg := "Invalid resource marking: CAN-US is a subset of FVEY — using both with ANY operator would unintentionally widen access"
 }
 
 is_coi_coherence_violation contains msg if {
 	input.resource.coiOperator == "ANY"
 	"GBR-US" in input.resource.COI
 	"FVEY" in input.resource.COI
-	msg := "Subset+superset COIs [GBR-US, FVEY] invalid with ANY semantics"
+	msg := "Invalid resource marking: GBR-US is a subset of FVEY — using both with ANY operator would unintentionally widen access"
 }
 
 is_coi_coherence_violation contains msg if {
 	input.resource.coiOperator == "ANY"
 	"AUKUS" in input.resource.COI
 	"FVEY" in input.resource.COI
-	msg := "Subset+superset COIs [AUKUS, FVEY] invalid with ANY semantics"
+	msg := "Invalid resource marking: AUKUS is a subset of FVEY — using both with ANY operator would unintentionally widen access"
 }
 
 is_coi_coherence_violation contains msg if {
 	input.resource.coiOperator == "ANY"
 	"NATO-COSMIC" in input.resource.COI
 	"NATO" in input.resource.COI
-	msg := "Subset+superset COIs [NATO-COSMIC, NATO] invalid with ANY semantics"
+	msg := "Invalid resource marking: NATO-COSMIC is a subset of NATO — using both with ANY operator would unintentionally widen access"
 }
 
 # ============================================
@@ -579,7 +587,7 @@ kas_obligations contains obligation if {
 		"resourceId": input.resource.resourceId,
 		"kaoId": sprintf("kao-%s", [input.resource.resourceId]),
 		"kasEndpoint": object.get(input.resource, "kasUrl", "http://localhost:8080/request-key"),
-		"reason": "Encrypted resource requires KAS key release",
+		"reason": "This encrypted resource requires key release from the Key Access Service",
 		"policyContext": {
 			"clearanceRequired": input.resource.classification,
 			"countriesAllowed": input.resource.releasabilityTo,

@@ -94,7 +94,7 @@ aal_sufficient(user_aal, classification) if {
 
 # Generate clearance insufficient error message
 insufficient_clearance_msg(user_clearance, resource_classification) := msg if {
-	msg := sprintf("Insufficient clearance: user has %s, resource requires %s", [
+	msg := sprintf("Access denied: Your clearance (%s) is below the required %s classification for this resource", [
 		user_clearance,
 		resource_classification,
 	])
@@ -102,7 +102,7 @@ insufficient_clearance_msg(user_clearance, resource_classification) := msg if {
 
 # Generate invalid clearance error message
 invalid_clearance_msg(clearance) := msg if {
-	msg := sprintf("Invalid clearance level: %s (valid: %v)", [
+	msg := sprintf("Unrecognized clearance level '%s'. Valid levels are: %v", [
 		clearance,
 		valid_clearances,
 	])
@@ -111,7 +111,7 @@ invalid_clearance_msg(clearance) := msg if {
 # Generate AAL insufficient error message
 aal_insufficient_msg(user_aal, classification) := msg if {
 	required := required_aal(classification)
-	msg := sprintf("Insufficient AAL: user has AAL%d, %s classification requires AAL%d", [
+	msg := sprintf("Stronger authentication required: You are at Authentication Assurance Level %d, but %s-classified resources require Level %d", [
 		user_aal,
 		classification,
 		required,

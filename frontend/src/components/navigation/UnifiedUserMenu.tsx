@@ -35,6 +35,7 @@ interface IdentityUser {
     acpCOI?: string[] | null;
     acr?: string | null;
     amr?: string[] | null;
+    user_amr?: string[] | null;
     auth_time?: number | null;
     roles?: string[];
 }
@@ -95,23 +96,14 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
         : (decoded?.auth_time ? new Date(decoded.auth_time * 1000).toLocaleString() : null);
     const acr: string | null = user?.acr || decoded?.acr || null;
 
-    // Derive AMR from ACR since native Keycloak authenticators don't set AUTH_METHODS_REF session note
-    // Our authentication flow has a 1:1 mapping: ACR=1→pwd, ACR=2→pwd+otp, ACR=3→pwd+hwk
-    const deriveAmrFromAcr = (acrValue: string | null): string[] => {
-        if (!acrValue) return [];
-        const acrNum = parseInt(acrValue, 10);
-        if (acrNum >= 3) return ['pwd', 'hwk']; // TOP_SECRET: password + hardware key (WebAuthn)
-        if (acrNum >= 2) return ['pwd', 'otp']; // SECRET/CONFIDENTIAL: password + OTP
-        if (acrNum >= 1) return ['pwd'];         // UNCLASSIFIED: password only
-        return [];
-    };
-
-    // Get raw AMR from token, or derive from ACR if empty
-    const rawAmr = Array.isArray(user?.amr) && user!.amr.length > 0
-        ? user!.amr
-        : (Array.isArray(decoded?.amr) && decoded!.amr.length > 0 ? decoded!.amr : null);
-    const derivedAmrArray = rawAmr || deriveAmrFromAcr(acr);
-    const amr: string | null = derivedAmrArray.length > 0 ? derivedAmrArray.join(' + ') : null;
+    // AMR from token: prefer user_amr (federated) > amr (local) > decoded JWT
+    const amrArray: string[] = (() => {
+        const userAmr = Array.isArray(user?.user_amr) && user!.user_amr.length > 0 ? user!.user_amr : null;
+        const sessionAmr = Array.isArray(user?.amr) && user!.amr.length > 0 ? user!.amr : null;
+        const decodedAmr = Array.isArray(decoded?.amr) && decoded!.amr.length > 0 ? decoded!.amr : null;
+        return userAmr || sessionAmr || decodedAmr || [];
+    })();
+    const amr: string | null = amrArray.length > 0 ? amrArray.join(' + ') : null;
 
     // Convert ACR to readable AAL level
     const getAALDisplay = (acrValue: string | null): string => {
@@ -200,13 +192,13 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
 
     // Check if user has MFA configured (OTP or WebAuthn)
     const hasMFA = (): boolean | null => {
-        // Use derivedAmrArray which is either from token or derived from ACR
-        const hasWebAuthnInAMR = derivedAmrArray.some((m: string) =>
+        // Use amrArray which is either from token or derived from ACR
+        const hasWebAuthnInAMR = amrArray.some((m: string) =>
             m.toLowerCase().includes('hwk') ||
             m.toLowerCase().includes('webauthn') ||
             m.toLowerCase().includes('passkey')
         );
-        const hasOTPInAMR = derivedAmrArray.some((m: string) =>
+        const hasOTPInAMR = amrArray.some((m: string) =>
             m.toLowerCase().includes('otp') ||
             m.toLowerCase().includes('totp')
         );
@@ -225,13 +217,13 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
     // Check MFA status (OTP and WebAuthn) when profile tab is active
     useEffect(() => {
         if (activeTab === 'profile' && (otpConfigured === null || webAuthnConfigured === null) && user?.uniqueID) {
-            // Use derived AMR (either from token or derived from ACR)
-            const hasWebAuthnInAMR = derivedAmrArray.some((m: string) =>
+            // Use AMR from token
+            const hasWebAuthnInAMR = amrArray.some((m: string) =>
                 m.toLowerCase().includes('hwk') ||
                 m.toLowerCase().includes('webauthn') ||
                 m.toLowerCase().includes('passkey')
             );
-            const hasOTPInAMR = derivedAmrArray.some((m: string) =>
+            const hasOTPInAMR = amrArray.some((m: string) =>
                 m.toLowerCase().includes('otp') ||
                 m.toLowerCase().includes('totp')
             );
@@ -280,7 +272,7 @@ export function UnifiedUserMenu({ user, onClose, isActive, getNationalClearance,
                     });
             }
         }
-    }, [activeTab, otpConfigured, webAuthnConfigured, user?.uniqueID, decoded, derivedAmrArray, acr]);
+    }, [activeTab, otpConfigured, webAuthnConfigured, user?.uniqueID, decoded, amrArray, acr]);
 
     const [unreadCount, setUnreadCount] = useState<number>(0);
 
