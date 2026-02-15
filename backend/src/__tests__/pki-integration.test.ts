@@ -157,14 +157,15 @@ describe('PKI Integration Tests - End-to-End', () => {
                         chunkId: 1,
                         encryptedData: Buffer.from('encrypted-data-placeholder').toString('base64'),
                         size: 1024,
-                        integrityHash: 'chunk-hash-placeholder'
+                        integrityHash: 'chunk-hash-placeholder',
+                        storageMode: 'inline' as const
                     }],
                     payloadHash: 'payload-hash-placeholder'
                 }
             };
 
             // Step 2: Compute ZTDF hash (STANAG 4778)
-            const ztdfHash = computeObjectHash(ztdfObject);
+            const ztdfHash = computeObjectHash(ztdfObject as unknown as Record<string, unknown>);
             expect(ztdfHash).toBeDefined();
             expect(ztdfHash.length).toBeGreaterThan(0);
 
@@ -216,7 +217,8 @@ describe('PKI Integration Tests - End-to-End', () => {
                         chunkId: 1,
                         encryptedData: Buffer.from('original-encrypted-data').toString('base64'),
                         size: 1024,
-                        integrityHash: 'original-hash'
+                        integrityHash: 'original-hash',
+                        storageMode: 'inline' as const
                     }],
                     payloadHash: 'original-payload-hash'
                 }
