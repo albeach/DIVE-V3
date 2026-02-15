@@ -20,6 +20,11 @@ import * as circuitBreakerModule from '../utils/circuit-breaker';
 jest.mock('axios');
 jest.mock('mongodb');
 jest.mock('../services/authz-cache.service');
+jest.mock('../services/federation-bootstrap.service', () => ({
+    federationBootstrap: {
+        isBootstrapComplete: jest.fn().mockReturnValue(true),
+    },
+}));
 jest.mock('../utils/circuit-breaker', () => ({
     getAllCircuitBreakerStats: jest.fn(() => ({
         opa: {
@@ -418,12 +423,12 @@ describe('HealthService', () => {
         });
 
         it('should return degraded status when service is slow', async () => {
-            // Mock slow MongoDB (>100ms)
+            // Mock slow MongoDB (>500ms threshold)
             const mockMongoClient = {
                 db: jest.fn().mockReturnValue({
                     admin: jest.fn().mockReturnValue({
-                        ping: jest.fn().mockImplementation(() => 
-                            new Promise(resolve => setTimeout(() => resolve({}), 150))
+                        ping: jest.fn().mockImplementation(() =>
+                            new Promise(resolve => setTimeout(() => resolve({}), 600))
                         ),
                     }),
                     collection: jest.fn().mockReturnValue({
@@ -462,6 +467,7 @@ describe('HealthService', () => {
             } as any;
 
             healthService.setMongoClient(mockMongoClient);
+            healthService.setServicesReady(true);
 
             const readiness = await healthService.readinessCheck();
 

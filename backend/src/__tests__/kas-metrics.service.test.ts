@@ -183,8 +183,8 @@ describe('KAS Metrics Service', () => {
       const usaKas = result.kasEndpoints.find(k => k.kasId === 'usa-kas');
 
       expect(usaKas?.federationTrust).toBeDefined();
-      expect(usaKas?.federationTrust?.maxClassification).toBe('TOP_SECRET');
-      expect(usaKas?.federationTrust?.allowedCOIs).toContain('FVEY');
+      expect(usaKas?.federationTrust?.maxClassification).toBe('SECRET');
+      expect(usaKas?.federationTrust?.allowedCOIs).toContain('NATO');
     });
   });
 

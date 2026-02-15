@@ -86,6 +86,30 @@ jest.mock('../services/resource.service', () => ({
   queryResources: jest.fn(() => []),
 }));
 
+// Mock admin middleware to accept X-Admin-Key in tests
+jest.mock('../middleware/admin.middleware', () => ({
+  requireAdmin: (req: any, res: any, next: any) => {
+    const adminKey = req.headers['x-admin-key'];
+    if (adminKey && adminKey === process.env.FEDERATION_ADMIN_KEY) {
+      next();
+      return;
+    }
+    if (process.env.NODE_ENV === 'production') {
+      res.status(403).json({ success: false, error: 'Forbidden' });
+      return;
+    }
+    next();
+  },
+  requireSuperAdmin: (req: any, res: any, next: any) => {
+    const adminKey = req.headers['x-admin-key'];
+    if (adminKey && adminKey === process.env.FEDERATION_ADMIN_KEY) {
+      next();
+      return;
+    }
+    res.status(401).json({ success: false, error: 'Authentication required' });
+  },
+}));
+
 // Import routes after mocking
 import federationRoutes from '../routes/federation.routes';
 

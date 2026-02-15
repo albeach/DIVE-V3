@@ -249,7 +249,7 @@ describe('Compliance Controller', () => {
             const usaKas = response.kasEndpoints.find((k: any) => k.id === 'usa-kas');
             
             expect(usaKas).toBeDefined();
-            expect(usaKas.name).toContain('USA');
+            expect(usaKas.name).toContain('United States');
             expect(usaKas.url).toBe('https://kas.usa.mil:8080');
             expect(usaKas.country).toBe('USA');
             expect(usaKas.status).toBe('active');
@@ -400,25 +400,25 @@ describe('Compliance Controller', () => {
 
             const response = (mockRes.json as jest.Mock).mock.calls[0][0];
             expect(response.title).toBe('Classification Equivalency Mapping');
-            expect(response.supportedNations).toBe(12);
+            expect(response.supportedNations).toBe(35);
         });
 
         it('should include all classification levels with mappings', async () => {
             await getClassificationEquivalency(mockReq as Request, mockRes as Response);
 
             const response = (mockRes.json as jest.Mock).mock.calls[0][0];
-            expect(response.levels).toHaveLength(4);
+            expect(response.levels).toHaveLength(5);
 
             const unclassified = response.levels[0];
             expect(unclassified).toEqual(
                 expect.objectContaining({
                     canonicalLevel: 'UNCLASSIFIED',
-                    displayName: 'Unclassified',
+                    displayName: 'Unclassified / NATO UNCLASSIFIED',
                     numericValue: 0,
                     color: '#10B981',
                 })
             );
-            expect(unclassified.mappings).toHaveLength(12);
+            expect(unclassified.mappings).toHaveLength(35);
         });
 
         it('should include correct USA mappings for all levels', async () => {
@@ -436,17 +436,22 @@ describe('Compliance Controller', () => {
             });
             expect(usaMappings[1]).toEqual({
                 country: 'USA',
+                localLevel: 'FOUO',
+                localAbbrev: 'FOUO',
+            });
+            expect(usaMappings[2]).toEqual({
+                country: 'USA',
                 localLevel: 'CONFIDENTIAL',
                 localAbbrev: 'C',
             });
-            expect(usaMappings[2]).toEqual({
+            expect(usaMappings[3]).toEqual({
                 country: 'USA',
                 localLevel: 'SECRET',
                 localAbbrev: 'S',
             });
-            expect(usaMappings[3]).toEqual({
+            expect(usaMappings[4]).toEqual({
                 country: 'USA',
-                localLevel: 'TOP_SECRET',
+                localLevel: 'TOP SECRET',
                 localAbbrev: 'TS',
             });
         });
@@ -455,12 +460,12 @@ describe('Compliance Controller', () => {
             await getClassificationEquivalency(mockReq as Request, mockRes as Response);
 
             const response = (mockRes.json as jest.Mock).mock.calls[0][0];
-            const confidentialLevel = response.levels[1];
+            const confidentialLevel = response.levels[2];
             const fraMapping = confidentialLevel.mappings.find((m: any) => m.country === 'FRA');
 
             expect(fraMapping).toEqual({
                 country: 'FRA',
-                localLevel: 'CONFIDENTIEL_DEFENSE',
+                localLevel: 'CONFIDENTIEL DÉFENSE',
                 localAbbrev: 'CD',
             });
         });
@@ -469,12 +474,12 @@ describe('Compliance Controller', () => {
             await getClassificationEquivalency(mockReq as Request, mockRes as Response);
 
             const response = (mockRes.json as jest.Mock).mock.calls[0][0];
-            const secretLevel = response.levels[2];
+            const secretLevel = response.levels[3];
             const natoMapping = secretLevel.mappings.find((m: any) => m.country === 'NATO');
 
             expect(natoMapping).toEqual({
                 country: 'NATO',
-                localLevel: 'NATO_SECRET',
+                localLevel: 'NATO SECRET',
                 localAbbrev: 'NS',
             });
         });

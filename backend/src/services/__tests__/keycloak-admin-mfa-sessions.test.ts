@@ -8,8 +8,40 @@
 import { keycloakAdminService } from '../keycloak-admin.service';
 import axios from 'axios';
 
-// Mock axios
-jest.mock('axios');
+// Mock axios with create() returning a proper instance
+// NOTE: Must define inside factory to avoid TDZ — jest.mock is hoisted above const declarations
+jest.mock('axios', () => {
+    const actual = jest.requireActual('axios');
+    const instance = {
+        defaults: { baseURL: 'https://localhost:8443', timeout: 10000, httpsAgent: {} },
+        get: jest.fn(),
+        post: jest.fn().mockResolvedValue({
+            data: { access_token: 'mock-admin-token', expires_in: 300 }
+        }),
+        put: jest.fn(),
+        delete: jest.fn(),
+        interceptors: { request: { use: jest.fn() }, response: { use: jest.fn() } },
+    };
+    return {
+        ...actual,
+        __esModule: true,
+        default: {
+            ...actual,
+            create: jest.fn(() => instance),
+            isAxiosError: jest.fn().mockReturnValue(false),
+            get: jest.fn(),
+            post: jest.fn(),
+            put: jest.fn(),
+            delete: jest.fn(),
+        },
+        create: jest.fn(() => instance),
+        isAxiosError: jest.fn().mockReturnValue(false),
+        get: jest.fn(),
+        post: jest.fn(),
+        put: jest.fn(),
+        delete: jest.fn(),
+    };
+});
 const mockedAxios = axios as jest.Mocked<typeof axios>;
 
 // Mock Keycloak Admin Client
