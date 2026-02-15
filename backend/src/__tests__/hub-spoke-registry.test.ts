@@ -125,12 +125,14 @@ describe('Hub-Spoke Registry Service', () => {
       expect(spoke.allowedPolicyScopes).toEqual([]);
     });
 
-    it('should reject duplicate instance codes', async () => {
-      await registry.registerSpoke(validRegistrationRequest);
+    it('should return existing registration for duplicate instance codes (idempotent)', async () => {
+      const firstSpoke = await registry.registerSpoke(validRegistrationRequest);
 
-      await expect(
-        registry.registerSpoke(validRegistrationRequest)
-      ).rejects.toThrow('Instance NZL is already registered');
+      // Second registration with same code returns existing (not rejected)
+      const secondSpoke = await registry.registerSpoke(validRegistrationRequest);
+
+      expect(secondSpoke.spokeId).toBe(firstSpoke.spokeId);
+      expect(secondSpoke.instanceCode).toBe('NZL');
     });
 
     it('should allow re-registration after revocation', async () => {
