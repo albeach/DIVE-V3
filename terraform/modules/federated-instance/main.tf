@@ -213,7 +213,7 @@ resource "keycloak_openid_client" "broker_client" {
       "https://localhost:3000",
       "https://localhost:4000",
       "https://localhost:8443",
-      # CRITICAL FIX (2026-02-09): Add 127.0.0.1 variants for PKCE cookie compatibility
+      # 127.0.0.1 variants for PKCE cookie compatibility
       "https://127.0.0.1:3000",
       "https://127.0.0.1:4000",
       "https://127.0.0.1:8443",
@@ -838,9 +838,7 @@ resource "keycloak_openid_client_default_scopes" "incoming_federation_defaults" 
     "web-origins",
     "acr",
     "basic",
-    # DIVE custom scopes - TERRAFORM SSOT (matches dive-client-scopes.tf)
-    # Core identity: uniqueID, clearance, countryOfAffiliation, acpCOI
-    # Fallback for federation: user_acr, user_amr (NOT dive_acr/dive_amr - conflicts with native)
+    # DIVE custom scopes (matches dive-client-scopes.tf)
     keycloak_openid_client_scope.uniqueID.name,
     keycloak_openid_client_scope.clearance.name,
     keycloak_openid_client_scope.countryOfAffiliation.name,
@@ -856,7 +854,6 @@ resource "keycloak_openid_client_default_scopes" "incoming_federation_defaults" 
     keycloak_openid_client_scope.clearance,
     keycloak_openid_client_scope.countryOfAffiliation,
     keycloak_openid_client_scope.acpCOI,
-    # Fallback scopes for federation (NOT dive_acr/dive_amr - removed due to conflicts)
     keycloak_openid_client_scope.user_acr,
     keycloak_openid_client_scope.user_amr,
     # Protocol mappers for core scopes
@@ -864,7 +861,6 @@ resource "keycloak_openid_client_default_scopes" "incoming_federation_defaults" 
     keycloak_openid_user_attribute_protocol_mapper.clearance_mapper,
     keycloak_openid_user_attribute_protocol_mapper.countryOfAffiliation_mapper,
     keycloak_openid_user_attribute_protocol_mapper.acpCOI_mapper,
-    # Protocol mappers for fallback scopes (NOT dive_acr/dive_amr - removed due to conflicts)
     keycloak_openid_user_attribute_protocol_mapper.user_acr_mapper,
     keycloak_openid_user_attribute_protocol_mapper.user_amr_mapper,
   ]
