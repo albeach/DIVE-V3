@@ -1,15 +1,8 @@
 # =============================================================================
 # DIVE V3 - Custom Client Scopes for ABAC Attributes
 # =============================================================================
-# Creates client scopes with proper protocol mappers for DIVE attributes
-#
-# CRITICAL FIX (2026-01-19): SF-026 - Explicit claim.name Configuration
-# Previous: Scopes created by backend with claim.name sometimes null
-# Fixed: Terraform creates scopes with explicit claim.name from start
-#
-# CRITICAL FIX (2026-01-20): ACR/AMR - Cross-Instance MFA Enforcement
-# Previous: Access tokens missing acr/amr claims (ID token only)
-# Fixed: Added acr/amr client scopes with access.token.claim = true
+# Creates client scopes with proper protocol mappers for DIVE attributes.
+# All mappers use explicit claim.name to ensure tokens include correct claims.
 #
 # Ensures access tokens include:
 # - uniqueID (globally unique identifier)
@@ -73,60 +66,6 @@ resource "keycloak_openid_client_scope" "acpCOI" {
 
   gui_order = 5
 }
-
-# ============================================================================
-# DEPRECATED (Feb 2026): dive_acr Client Scope - Removed
-# ============================================================================
-# REASON: The mapper for this scope outputs to "acr" claim, conflicting with
-# the native oidc-acr-mapper in main.tf (line 677).
-#
-# Native oidc-acr-mapper reads from Keycloak's AcrStore (session-based),
-# while this user-attribute mapper reads stale user.acr attribute.
-#
-# When both mappers target the same claim, Keycloak picks one arbitrarily,
-# breaking MFA enforcement and step-up authentication.
-#
-# CORRECT APPROACH:
-# - Native oidc-acr-mapper handles "acr" claim (main.tf:677-690)
-# - user_acr scope/mapper handles "user_acr" claim (fallback for federation)
-#
-# This resource and its mapper (dive_acr_mapper) have been REMOVED.
-# See: docs/TERRAFORM-ACR-AMR-CONFLICTS.md
-#
-# resource "keycloak_openid_client_scope" "dive_acr" {
-#   realm_id               = keycloak_realm.broker.id
-#   name                   = "dive_acr"
-#   description            = "DIVE Authentication Context Class Reference (AAL level)"
-#   include_in_token_scope = true
-#   consent_screen_text    = "Authentication assurance level"
-#   gui_order = 5
-# }
-
-# ============================================================================
-# DEPRECATED (Feb 2026): dive_amr Client Scope - Removed
-# ============================================================================
-# REASON: The mapper for this scope outputs to "amr" claim, conflicting with
-# the native oidc-amr-mapper in main.tf (line 642).
-#
-# Native oidc-amr-mapper reads AUTHENTICATORS_COMPLETED user session note
-# + "default.reference.value" from execution configs. This user-attribute
-# mapper reads stale user.amr attribute — hence removed.
-#
-# CORRECT APPROACH:
-# - Native oidc-amr-mapper handles "amr" claim (main.tf:642-656)
-# - user_amr scope/mapper handles "user_amr" claim (fallback for federation)
-#
-# This resource and its mapper (dive_amr_mapper) have been REMOVED.
-# See: docs/TERRAFORM-ACR-AMR-CONFLICTS.md
-#
-# resource "keycloak_openid_client_scope" "dive_amr" {
-#   realm_id               = keycloak_realm.broker.id
-#   name                   = "dive_amr"
-#   description            = "DIVE Authentication Methods References (MFA methods)"
-#   include_in_token_scope = true
-#   consent_screen_text    = "Authentication methods used"
-#   gui_order = 6
-# }
 
 resource "keycloak_openid_client_scope" "user_amr" {
   realm_id               = keycloak_realm.broker.id
@@ -233,58 +172,6 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "acpCOI_mapper" {
   aggregate_attributes = false  # Keep as array, don't extract first element
 }
 
-# ============================================================================
-# DEPRECATED (Feb 2026): dive_acr_mapper - Removed
-# ============================================================================
-# REASON: Outputs to "acr" claim, conflicting with native oidc-acr-mapper
-# in main.tf (line 677). Native mapper reads from AcrStore (session-based),
-# while this reads stale user.acr attribute.
-#
-# Result: Session-based ACR overridden by stale user attribute, breaking MFA.
-#
-# CORRECT: Native oidc-acr-mapper handles "acr" (main.tf:677-690)
-#          user_acr_mapper handles "user_acr" (fallback, line 253 below)
-#
-# resource "keycloak_openid_user_attribute_protocol_mapper" "dive_acr_mapper" {
-#   realm_id        = keycloak_realm.broker.id
-#   client_scope_id = keycloak_openid_client_scope.dive_acr.id
-#   name            = "dive-acr-mapper"
-#   claim_name      = "acr"
-#   user_attribute  = "acr"
-#   add_to_id_token      = true
-#   add_to_access_token  = true
-#   add_to_userinfo      = true
-#   claim_value_type     = "String"
-#   multivalued          = false
-#   aggregate_attributes = true
-# }
-
-# ============================================================================
-# DEPRECATED (Feb 2026): dive_amr_mapper - Removed
-# ============================================================================
-# REASON: Outputs to "amr" claim, conflicting with native oidc-amr-mapper
-# in main.tf (line 642). Native mapper reads AUTHENTICATORS_COMPLETED user
-# session note, while this reads stale user.amr attribute.
-#
-# Result: Session-based AMR overridden by stale user attribute, breaking MFA.
-#
-# CORRECT: Native oidc-amr-mapper handles "amr" (main.tf:642-656)
-#          user_amr_mapper handles "user_amr" (fallback, line 233 below)
-#
-# resource "keycloak_openid_user_attribute_protocol_mapper" "dive_amr_mapper" {
-#   realm_id        = keycloak_realm.broker.id
-#   client_scope_id = keycloak_openid_client_scope.dive_amr.id
-#   name            = "dive-amr-mapper"
-#   claim_name      = "amr"
-#   user_attribute  = "amr"
-#   add_to_id_token      = true
-#   add_to_access_token  = true
-#   add_to_userinfo      = true
-#   claim_value_type     = "String"
-#   multivalued          = true
-#   aggregate_attributes = false
-# }
-
 resource "keycloak_openid_user_attribute_protocol_mapper" "user_amr_mapper" {
   realm_id        = keycloak_realm.broker.id
   client_scope_id = keycloak_openid_client_scope.user_amr.id
@@ -344,7 +231,6 @@ resource "keycloak_openid_client_default_scopes" "broker_client_dive_scopes" {
     keycloak_openid_client_scope.countryOfAffiliation.name,
     keycloak_openid_client_scope.acpCOI.name,
     # Federation IdP mapper scopes (for cross-instance MFA)
-    # NOTE: dive_amr and dive_acr removed (Feb 2026) - conflicted with native mappers
     keycloak_openid_client_scope.user_amr.name,
     keycloak_openid_client_scope.user_acr.name,
   ]
@@ -355,7 +241,6 @@ resource "keycloak_openid_client_default_scopes" "broker_client_dive_scopes" {
     keycloak_openid_client_scope.clearance,
     keycloak_openid_client_scope.countryOfAffiliation,
     keycloak_openid_client_scope.acpCOI,
-    # NOTE: dive_acr and dive_amr removed (Feb 2026) - conflicted with native mappers
     keycloak_openid_client_scope.user_acr,
     keycloak_openid_client_scope.user_amr,
     # Protocol mappers for core DIVE scopes
@@ -363,7 +248,6 @@ resource "keycloak_openid_client_default_scopes" "broker_client_dive_scopes" {
     keycloak_openid_user_attribute_protocol_mapper.clearance_mapper,
     keycloak_openid_user_attribute_protocol_mapper.countryOfAffiliation_mapper,
     keycloak_openid_user_attribute_protocol_mapper.acpCOI_mapper,
-    # NOTE: dive_acr_mapper and dive_amr_mapper removed (Feb 2026) - conflicted with native mappers
     keycloak_openid_user_attribute_protocol_mapper.user_acr_mapper,
     keycloak_openid_user_attribute_protocol_mapper.user_amr_mapper,
   ]
