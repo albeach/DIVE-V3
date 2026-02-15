@@ -28,7 +28,8 @@ module.exports = {
     ],
     moduleNameMapper: {
         '^@keycloak/keycloak-admin-client$': '<rootDir>/src/__mocks__/keycloak-admin-client.ts',
-        '^ioredis$': '<rootDir>/src/__mocks__/ioredis.ts'
+        '^ioredis$': '<rootDir>/src/__mocks__/ioredis.ts',
+        '^music-metadata$': '<rootDir>/src/__mocks__/music-metadata.ts'
     },
     testTimeout: 30000, // Increased timeout for integration tests
     maxWorkers: '50%', // Allow parallel execution (50% of available cores)

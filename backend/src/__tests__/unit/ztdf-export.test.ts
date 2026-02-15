@@ -68,7 +68,8 @@ describe('ZTDF Export Service', () => {
                     chunkId: 0,
                     encryptedData: Buffer.from('encrypted-payload-data').toString('base64'),
                     size: Buffer.from('encrypted-payload-data').length,
-                    integrityHash: 'base64-chunk-hash-here'
+                    integrityHash: 'base64-chunk-hash-here',
+                    storageMode: 'inline'
                 }
             ],
             payloadHash: 'base64-payload-hash-here'

@@ -17,7 +17,9 @@ jest.mock('../models/kas-registry.model', () => ({
     initialize: jest.fn().mockResolvedValue(undefined),
     findAll: jest.fn(),
     findByKasId: jest.fn(),
+    findByCountry: jest.fn(),
     getActiveKASCount: jest.fn(),
+    getFederationAgreement: jest.fn().mockResolvedValue(null),
   }
 }));
 
@@ -27,14 +29,14 @@ const mockAuditCollection = {
   aggregate: jest.fn(),
 };
 
-jest.mock('../config/mongodb', () => ({
-  default: {
+jest.mock('mongodb', () => ({
+  MongoClient: jest.fn().mockImplementation(() => ({
+    connect: jest.fn().mockResolvedValue(undefined),
     db: jest.fn().mockReturnValue({
       collection: jest.fn().mockReturnValue(mockAuditCollection),
     }),
-    isConnected: jest.fn().mockReturnValue(true),
-    connect: jest.fn().mockResolvedValue(undefined),
-  },
+    close: jest.fn().mockResolvedValue(undefined),
+  })),
 }));
 
 describe('KAS Metrics Service', () => {
