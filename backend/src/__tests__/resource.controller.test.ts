@@ -55,6 +55,7 @@ describe('Resource Controller', () => {
         mockReq = {
             headers: { 'x-request-id': 'res-test-123' },
             params: {},
+            query: {},
             body: {},
             user: {
                 uniqueID: 'test-user-123',
@@ -108,11 +109,11 @@ describe('Resource Controller', () => {
                 },
             ];
 
-            (resourceService.getAllResources as jest.Mock).mockResolvedValue(mockResources);
+            (resourceService.getResourcesPaginated as jest.Mock).mockResolvedValue({ resources: mockResources, total: mockResources.length });
 
             await listResourcesHandler(mockReq as Request, mockRes as Response, mockNext);
 
-            expect(resourceService.getAllResources).toHaveBeenCalled();
+            expect(resourceService.getResourcesPaginated).toHaveBeenCalled();
             expect(mockRes.json).toHaveBeenCalledWith(
                 expect.objectContaining({
                     resources: expect.arrayContaining([
@@ -163,7 +164,7 @@ describe('Resource Controller', () => {
                 },
             ];
 
-            (resourceService.getAllResources as jest.Mock).mockResolvedValue(mockResources);
+            (resourceService.getResourcesPaginated as jest.Mock).mockResolvedValue({ resources: mockResources, total: mockResources.length });
 
             await listResourcesHandler(mockReq as Request, mockRes as Response, mockNext);
 
@@ -207,7 +208,7 @@ describe('Resource Controller', () => {
                 },
             ];
 
-            (resourceService.getAllResources as jest.Mock).mockResolvedValue(mockResources);
+            (resourceService.getResourcesPaginated as jest.Mock).mockResolvedValue({ resources: mockResources, total: mockResources.length });
 
             await listResourcesHandler(mockReq as Request, mockRes as Response, mockNext);
 
@@ -229,7 +230,7 @@ describe('Resource Controller', () => {
                 },
             ];
 
-            (resourceService.getAllResources as jest.Mock).mockResolvedValue(mockResources);
+            (resourceService.getResourcesPaginated as jest.Mock).mockResolvedValue({ resources: mockResources, total: mockResources.length });
 
             await listResourcesHandler(mockReq as Request, mockRes as Response, mockNext);
 
@@ -247,7 +248,7 @@ describe('Resource Controller', () => {
         });
 
         it('should return empty array when no resources exist', async () => {
-            (resourceService.getAllResources as jest.Mock).mockResolvedValue([]);
+            (resourceService.getResourcesPaginated as jest.Mock).mockResolvedValue({ resources: [], total: 0 });
 
             await listResourcesHandler(mockReq as Request, mockRes as Response, mockNext);
 
@@ -260,7 +261,7 @@ describe('Resource Controller', () => {
         });
 
         it('should handle service errors', async () => {
-            (resourceService.getAllResources as jest.Mock).mockRejectedValue(
+            (resourceService.getResourcesPaginated as jest.Mock).mockRejectedValue(
                 new Error('Database connection failed')
             );
 
@@ -291,7 +292,7 @@ describe('Resource Controller', () => {
                 },
             ];
 
-            (resourceService.getAllResources as jest.Mock).mockResolvedValue(mockResources);
+            (resourceService.getResourcesPaginated as jest.Mock).mockResolvedValue({ resources: mockResources, total: mockResources.length });
 
             await listResourcesHandler(mockReq as Request, mockRes as Response, mockNext);
 
@@ -339,7 +340,7 @@ describe('Resource Controller', () => {
 
             await getResourceHandler(mockReq as Request, mockRes as Response, mockNext);
 
-            expect(resourceService.getResourceById).toHaveBeenCalledWith('ztdf-123');
+            expect(resourceService.getResourceById).toHaveBeenCalledWith('ztdf-123', undefined);
             expect(mockRes.json).toHaveBeenCalledWith(
                 expect.objectContaining({
                     resourceId: 'ztdf-123',
@@ -491,7 +492,7 @@ describe('Resource Controller', () => {
 
             await getZTDFDetailsHandler(mockReq as Request, mockRes as Response, mockNext);
 
-            expect(resourceService.getResourceById).toHaveBeenCalledWith('ztdf-123');
+            expect(resourceService.getResourceById).toHaveBeenCalledWith('ztdf-123', undefined);
             // The response includes resourceId and ztdfDetails with manifest, policy, and payload sections
             expect(mockRes.json).toHaveBeenCalledWith(
                 expect.objectContaining({
@@ -868,7 +869,7 @@ describe('Resource Controller', () => {
                 },
             ];
 
-            (resourceService.getAllResources as jest.Mock).mockResolvedValue(mockResources);
+            (resourceService.getResourcesPaginated as jest.Mock).mockResolvedValue({ resources: mockResources, total: mockResources.length });
 
             await listResourcesHandler(mockReq as Request, mockRes as Response, mockNext);
 
@@ -924,7 +925,7 @@ describe('Resource Controller', () => {
                 },
             ];
 
-            (resourceService.getAllResources as jest.Mock).mockResolvedValue(mockResources);
+            (resourceService.getResourcesPaginated as jest.Mock).mockResolvedValue({ resources: mockResources, total: mockResources.length });
 
             await listResourcesHandler(mockReq as Request, mockRes as Response, mockNext);
 

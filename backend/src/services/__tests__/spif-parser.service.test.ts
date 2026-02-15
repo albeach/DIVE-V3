@@ -107,7 +107,7 @@ describe('SPIF Parser Service', () => {
 
             expect(rules.classifications.size).toBeGreaterThan(0);
             expect(rules.countries.size).toBeGreaterThan(0);
-            expect(rules.releasableToQualifier.prefix).toBe('REL TO ');
+            expect(rules.releasableToQualifier.prefix).toBe('REL TO');
         });
     });
 

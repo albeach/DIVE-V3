@@ -60,32 +60,34 @@ describe('COI Validation Service', () => {
         await mongoClient.connect();
         db = mongoClient.db(DB_NAME);
 
-        // Seed required COI keys for tests (use bulkWrite with upsert to avoid duplicates)
-        const coiKeys = Object.keys(COI_MEMBERSHIP_STATIC).map(coiId => ({
+        // Seed COI definitions matching ICoiDefinition interface (coi_definitions collection is SSOT)
+        const coiDefs = Object.keys(COI_MEMBERSHIP_STATIC).map(coiId => ({
             coiId,
             name: coiId,
+            type: 'country-based',
+            members: COI_MEMBERSHIP_STATIC[coiId],
             description: `COI: ${coiId}`,
-            memberCountries: COI_MEMBERSHIP_STATIC[coiId],
-            status: 'active',
-            color: '#6B7280',
-            icon: '🔑',
-            resourceCount: 0,
-            algorithm: 'AES-256-GCM',
-            keyVersion: 1,
-            createdAt: new Date(),
-            updatedAt: new Date()
+            mutable: false,
+            autoUpdate: false,
+            priority: 1,
+            metadata: {
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                source: 'manual'
+            },
+            enabled: true
         }));
 
-        // Use bulkWrite with upsert to handle existing keys gracefully
-        const bulkOps = coiKeys.map(key => ({
+        // Use bulkWrite with upsert to handle existing definitions gracefully
+        const bulkOps = coiDefs.map(def => ({
             updateOne: {
-                filter: { coiId: key.coiId },
-                update: { $set: key },
+                filter: { coiId: def.coiId },
+                update: { $set: def },
                 upsert: true
             }
         }));
-        
-        await db.collection('coi_keys').bulkWrite(bulkOps);
+
+        await db.collection('coi_definitions').bulkWrite(bulkOps);
     });
 
     afterAll(async () => {
