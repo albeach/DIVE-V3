@@ -245,6 +245,13 @@ describe('KAS Flow Endpoints', () => {
             const mockResource = {
                 resourceId: 'doc-ztdf-0001',
                 ztdf: {
+                    policy: {
+                        securityLabel: {
+                            classification: 'SECRET',
+                            releasabilityTo: ['USA'],
+                            COI: []
+                        }
+                    },
                     payload: {
                         keyAccessObjects: [{
                             kaoId: 'kao-doc-ztdf-0001',
@@ -252,6 +259,7 @@ describe('KAS Flow Endpoints', () => {
                         }],
                         encryptedChunks: [{
                             chunkId: 1,
+                            storageMode: 'inline',
                             encryptedData: 'VGVzdCBlbmNyeXB0ZWQgY29udGVudA==', // Base64 encoded
                             size: 100
                         }],
@@ -281,7 +289,7 @@ describe('KAS Flow Endpoints', () => {
                 mockNext
             );
 
-            // Verify KAS was called (with HTTPS)
+            // Verify KAS was called (uses internal KAS URL, not KAO's kasUrl)
             expect(mockedAxios.post).toHaveBeenCalledWith(
                 'https://localhost:8080/request-key',
                 expect.objectContaining({
@@ -384,6 +392,13 @@ describe('KAS Flow Endpoints', () => {
             const mockResource = {
                 resourceId: 'doc-ztdf-0001',
                 ztdf: {
+                    policy: {
+                        securityLabel: {
+                            classification: 'SECRET',
+                            releasabilityTo: ['USA'],
+                            COI: []
+                        }
+                    },
                     payload: {
                         keyAccessObjects: [{
                             kaoId: 'kao-doc-ztdf-0001',
@@ -618,6 +633,13 @@ describe('KAS Flow Endpoints', () => {
             const mockResource = {
                 resourceId: 'doc-ztdf-0001',
                 ztdf: {
+                    policy: {
+                        securityLabel: {
+                            classification: 'SECRET',
+                            releasabilityTo: ['USA'],
+                            COI: []
+                        }
+                    },
                     payload: {
                         keyAccessObjects: [{
                             kaoId: 'kao-doc-ztdf-0001',
@@ -712,6 +734,13 @@ describe('KAS Flow Endpoints', () => {
             const mockResource = {
                 resourceId: 'doc-ztdf-0001',
                 ztdf: {
+                    policy: {
+                        securityLabel: {
+                            classification: 'SECRET',
+                            releasabilityTo: ['USA'],
+                            COI: []
+                        }
+                    },
                     payload: {
                         keyAccessObjects: [{
                             kaoId: 'kao-doc-ztdf-0001',
@@ -734,7 +763,7 @@ describe('KAS Flow Endpoints', () => {
                 mockNext
             );
 
-            // Verify it tried to call the KAS URL (uses configured KAS_URL with HTTPS)
+            // Verify it tried to call internal KAS URL (not KAO's kasUrl)
             expect(mockedAxios.post).toHaveBeenCalledWith(
                 'https://localhost:8080/request-key',
                 expect.any(Object),

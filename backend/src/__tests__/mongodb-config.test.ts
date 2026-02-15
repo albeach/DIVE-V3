@@ -18,6 +18,18 @@ import {
     logMongoDBConnection,
 } from '../utils/mongodb-config';
 
+// Mock logger (Phase 6: console.* replaced with Winston)
+jest.mock('../utils/logger', () => ({
+    logger: {
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn(),
+    },
+}));
+
+const mockLogger = (require('../utils/logger') as any).logger;
+
 describe('MongoDB Config Utils', () => {
     const originalEnv = process.env;
 
@@ -228,25 +240,19 @@ describe('MongoDB Config Utils', () => {
     });
 
     describe('logMongoDBConnection', () => {
-        let consoleLogSpy: jest.SpyInstance;
-
         beforeEach(() => {
-            consoleLogSpy = jest.spyOn(console, 'log').mockImplementation();
-        });
-
-        afterEach(() => {
-            consoleLogSpy.mockRestore();
+            jest.clearAllMocks();
         });
 
         describe('Happy Path', () => {
             it('should log MongoDB connection info', () => {
-                // Use actual test environment values
                 logMongoDBConnection('Test Context');
-                
-                expect(consoleLogSpy).toHaveBeenCalled();
-                const [message, data] = consoleLogSpy.mock.calls[0];
-                
-                expect(message).toBe('MongoDB connection (Test Context):');
+
+                expect(mockLogger.info).toHaveBeenCalled();
+                const [message, data] = mockLogger.info.mock.calls[0];
+
+                expect(message).toBe('MongoDB connection');
+                expect(data).toHaveProperty('context', 'Test Context');
                 expect(data).toHaveProperty('url');
                 expect(data).toHaveProperty('database');
                 expect(data).toHaveProperty('environment');
@@ -255,25 +261,25 @@ describe('MongoDB Config Utils', () => {
             it('should mask credentials in URL', () => {
                 const originalUri = process.env.MONGODB_URI;
                 process.env.MONGODB_URI = 'mongodb://admin:example@secure-host:27017/mydb';
-                
+
                 logMongoDBConnection('Production');
-                
-                const [, data] = consoleLogSpy.mock.calls[0];
+
+                const [, data] = mockLogger.info.mock.calls[0];
                 expect(data.url).toContain('***:***@');
                 expect(data.url).not.toContain('password123');
-                
+
                 process.env.MONGODB_URI = originalUri;
             });
 
             it('should handle URL without credentials', () => {
                 const originalUri = process.env.MONGODB_URI;
                 process.env.MONGODB_URI = 'mongodb://localhost:27017';
-                
+
                 logMongoDBConnection('Local Dev');
-                
-                const [, data] = consoleLogSpy.mock.calls[0];
+
+                const [, data] = mockLogger.info.mock.calls[0];
                 expect(data.url).toContain('mongodb://');
-                
+
                 process.env.MONGODB_URI = originalUri;
             });
         });
@@ -281,20 +287,20 @@ describe('MongoDB Config Utils', () => {
         describe('Credential Masking', () => {
             it('should mask simple username:password', () => {
                 process.env.MONGODB_URI = 'mongodb://user:pass@host:27017';
-                
+
                 logMongoDBConnection('Test');
-                
-                const callArgs = consoleLogSpy.mock.calls[0][1];
+
+                const callArgs = mockLogger.info.mock.calls[0][1];
                 expect(callArgs.url).not.toContain('user:pass');
                 expect(callArgs.url).toContain('***:***@');
             });
 
             it('should mask complex password with special characters', () => {
                 process.env.MONGODB_URI = 'mongodb://admin:Ex@mple!@host:27017';
-                
+
                 logMongoDBConnection('Test');
-                
-                const callArgs = consoleLogSpy.mock.calls[0][1];
+
+                const callArgs = mockLogger.info.mock.calls[0][1];
                 expect(callArgs.url).not.toContain('p@ssw0rd!');
                 expect(callArgs.url).toContain('***:***@');
             });
@@ -302,33 +308,33 @@ describe('MongoDB Config Utils', () => {
             it('should not modify URL without credentials', () => {
                 const originalUri = process.env.MONGODB_URI;
                 process.env.MONGODB_URI = 'mongodb://localhost:27017/testdb';
-                
+
                 logMongoDBConnection('Test');
-                
-                const [, data] = consoleLogSpy.mock.calls[0];
+
+                const [, data] = mockLogger.info.mock.calls[0];
                 expect(data.url).toBe('mongodb://localhost:27017/testdb');
                 expect(data.url).not.toContain('***');
-                
+
                 process.env.MONGODB_URI = originalUri;
             });
         });
 
         describe('Context Parameter', () => {
-            it('should include context in log message', () => {
+            it('should include context in log metadata', () => {
                 logMongoDBConnection('Startup');
-                
-                expect(consoleLogSpy).toHaveBeenCalledWith(
-                    'MongoDB connection (Startup):',
-                    expect.any(Object)
+
+                expect(mockLogger.info).toHaveBeenCalledWith(
+                    'MongoDB connection',
+                    expect.objectContaining({ context: 'Startup' })
                 );
             });
 
             it('should handle empty context', () => {
                 logMongoDBConnection('');
-                
-                expect(consoleLogSpy).toHaveBeenCalledWith(
-                    'MongoDB connection ():',
-                    expect.any(Object)
+
+                expect(mockLogger.info).toHaveBeenCalledWith(
+                    'MongoDB connection',
+                    expect.objectContaining({ context: '' })
                 );
             });
         });

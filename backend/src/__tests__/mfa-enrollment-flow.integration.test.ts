@@ -17,6 +17,40 @@
  * - Error scenarios
  */
 
+// Mock axios before server import (federated-search.controller.ts calls axios.create at import time)
+// Also handles Direct Grant authentication in otp.controller.ts
+jest.mock('axios', () => {
+    const mockInstance = {
+        defaults: { baseURL: '' },
+        get: jest.fn(),
+        post: jest.fn(),
+        put: jest.fn(),
+        delete: jest.fn(),
+        interceptors: { request: { use: jest.fn() }, response: { use: jest.fn() } },
+    };
+    return {
+        __esModule: true,
+        default: {
+            create: jest.fn(() => mockInstance),
+            get: jest.fn(),
+            post: jest.fn(async (url: string) => {
+                if (url.includes('/protocol/openid-connect/token')) {
+                    return {
+                        data: {
+                            access_token: 'mock-access-token',
+                            refresh_token: 'mock-refresh-token'
+                        }
+                    };
+                }
+                throw new Error('Unexpected axios call');
+            }),
+            put: jest.fn(),
+            delete: jest.fn(),
+        },
+        create: jest.fn(() => mockInstance),
+    };
+});
+
 import request from 'supertest';
 import app from '../server';
 import speakeasy from 'speakeasy';
@@ -66,25 +100,7 @@ jest.mock('../services/keycloak-admin.service', () => ({
     }
 }));
 
-// Mock axios for Direct Grant authentication in otp.controller.ts
-jest.mock('axios', () => ({
-    default: {
-        post: jest.fn(async (url: string, _data: any) => {
-            if (url.includes('/protocol/openid-connect/token')) {
-                // Mock successful authentication
-                return {
-                    data: {
-                        access_token: 'mock-access-token',
-                        refresh_token: 'mock-refresh-token'
-                    }
-                };
-            }
-            throw new Error('Unexpected axios call');
-        }),
-        get: jest.fn(),
-        put: jest.fn()
-    }
-}));
+// axios mock for Direct Grant is now consolidated in the mock above
 
 describeIf(redisAvailable)('MFA Enrollment Flow Integration Tests', () => {
     beforeEach(async () => {

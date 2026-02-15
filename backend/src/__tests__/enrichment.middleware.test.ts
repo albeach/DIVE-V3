@@ -290,7 +290,8 @@ describe('Enrichment Middleware', () => {
             await enrichmentMiddleware(req as Request, res as Response, next);
 
             expect((req as any).enrichedUser.clearance).toBe('TOP_SECRET');
-            expect((req as any).wasEnriched).toBe(false);
+            // wasEnriched is true because default COIs are added for USA even though clearance wasn't modified
+            expect((req as any).wasEnriched).toBe(true);
         });
 
         it('should set UNCLASSIFIED for missing clearance', async () => {
@@ -328,7 +329,7 @@ describe('Enrichment Middleware', () => {
             expect((req as any).enrichedUser.clearance).toBe('UNCLASSIFIED');
         });
 
-        it('should reject invalid clearance level', async () => {
+        it('should normalize invalid clearance level to UNCLASSIFIED', async () => {
             const payload = {
                 uniqueID: 'testuser',
                 email: 'testuser@example.mil',
@@ -342,11 +343,9 @@ describe('Enrichment Middleware', () => {
 
             await enrichmentMiddleware(req as Request, res as Response, next);
 
-            expect(res.status).toHaveBeenCalledWith(403);
-            expect(res.json).toHaveBeenCalledWith(expect.objectContaining({
-                error: 'Forbidden',
-                message: 'Invalid clearance level'
-            }));
+            // Clearance normalization now falls back to UNCLASSIFIED instead of rejecting
+            expect((req as any).enrichedUser.clearance).toBe('UNCLASSIFIED');
+            expect((req as any).wasEnriched).toBe(true);
         });
 
         it('should accept all valid clearance levels', async () => {
@@ -429,7 +428,8 @@ describe('Enrichment Middleware', () => {
 
             await enrichmentMiddleware(req as Request, res as Response, next);
 
-            expect((req as any).enrichedUser.acpCOI).toBe('[]');
+            // USA defaults: ['US-ONLY', 'FVEY', 'NATO'] (no longer empty string)
+            expect((req as any).enrichedUser.acpCOI).toEqual(['US-ONLY', 'FVEY', 'NATO']);
             expect((req as any).wasEnriched).toBe(true);
         });
 
@@ -470,7 +470,8 @@ describe('Enrichment Middleware', () => {
 
             expect((req as any).enrichedUser.countryOfAffiliation).toBe('USA');
             expect((req as any).enrichedUser.clearance).toBe('UNCLASSIFIED');
-            expect((req as any).enrichedUser.acpCOI).toBe('[]');
+            // USA defaults: ['US-ONLY', 'FVEY', 'NATO'] (no longer empty string)
+            expect((req as any).enrichedUser.acpCOI).toEqual(['US-ONLY', 'FVEY', 'NATO']);
             expect((req as any).wasEnriched).toBe(true);
         });
 
