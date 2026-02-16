@@ -84,6 +84,7 @@ export class MongoTestHelper {
             'trusted_issuers',
             'coi_definitions',
             'coi_keys',
+            'clearance_equivalency',
         ]);
 
         try {

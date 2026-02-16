@@ -65,9 +65,19 @@ describe('PEP/PDP Integration Tests - Phase 3', () => {
             { upsert: true }
         );
 
-        // Insert test resources for all countries
+        // Insert test resources for all countries (idempotent upserts)
         await seedTestResources(db);
     }, 30000);
+
+    beforeEach(async () => {
+        // Re-seed resources if wiped by parallel workers (cross-worker safety)
+        const count = await db.collection('resources').countDocuments({
+            resourceId: { $regex: /^test-phase3-/ }
+        });
+        if (count === 0) {
+            await seedTestResources(db);
+        }
+    });
 
     afterAll(async () => {
         // Clean up test resources
@@ -888,5 +898,13 @@ async function seedTestResources(db: any) {
         }
     ];
 
-    await db.collection('resources').insertMany(resources);
+    // Use upserts for cross-worker safety (parallel workers may wipe resources)
+    const bulkOps = resources.map(r => ({
+        updateOne: {
+            filter: { resourceId: r.resourceId },
+            update: { $set: r },
+            upsert: true
+        }
+    }));
+    await db.collection('resources').bulkWrite(bulkOps);
 }
