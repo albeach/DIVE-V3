@@ -32,9 +32,8 @@ describe.skip('Decision Log Service', () => {
     }, 30000);
 
     afterAll(async () => {
-        // Clean up
+        // Clean up - no need to close service connection (singleton managed globally)
         await mongoClient.close();
-        await decisionLogService.close();
     });
 
     describe('logDecision', () => {

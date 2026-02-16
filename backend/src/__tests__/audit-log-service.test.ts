@@ -29,12 +29,7 @@ describe.skip('Audit Log Service', () => {
     });
 
     afterAll(async () => {
-        // Close service connection (but only after all tests complete)
-        try {
-            await auditLogService.close();
-        } catch (error) {
-            // Ignore close errors
-        }
+        // No need to close service connection - MongoDB singleton is managed globally
         if (client) {
             await client.close();
         }
