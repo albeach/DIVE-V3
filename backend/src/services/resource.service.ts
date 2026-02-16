@@ -1,5 +1,14 @@
-import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
-import { MongoClient, Db, Collection } from 'mongodb';
+/**
+ * Resource Service
+ * 
+ * MEMORY LEAK FIX (2026-02-16): Refactored to use MongoDB singleton
+ * OLD: Created new MongoClient() with caching logic (leak on cache invalidation)
+ * NEW: Uses shared singleton connection pool via getDb()
+ * IMPACT: Prevents connection leaks in all resource CRUD operations
+ */
+
+import { Db, Collection } from 'mongodb';
+import { getDb } from '../utils/mongodb-singleton';
 import { logger } from '../utils/logger';
 import { IZTDFResource, IZTDFObject } from '../types/ztdf.types';
 import { validateZTDFIntegrity } from '../utils/ztdf.utils';
@@ -27,56 +36,23 @@ export interface IResource {
     releasableToIndustry?: boolean; // Optional, defaults to false (gov-only) if not set
 }
 
-let cachedClient: MongoClient | null = null;
-let cachedDb: Db | null = null;
+/**
+ * Get MongoDB collection for resources
+ * Uses singleton connection pool - no caching needed
+ */
+async function getCollection(): Promise<Collection<IZTDFResource>> {
+    const db = getDb();
+    return db.collection<IZTDFResource>(COLLECTION_NAME);
+}
 
 /**
  * Clear cached MongoDB connections (for testing)
  * @internal
+ * @deprecated No longer needed with singleton pattern - kept for backward compatibility with tests
  */
 export function clearResourceServiceCache(): void {
-    cachedClient = null;
-    cachedDb = null;
-}
-
-async function getMongoClient(): Promise<MongoClient> {
-    if (cachedClient) {
-        // Try to ping to check if still connected
-        try {
-            await cachedClient.db().admin().ping();
-            return cachedClient;
-        } catch {
-            // Connection lost, will reconnect below
-        }
-    }
-
-    try {
-        const MONGODB_URL = getMongoDBUrl(); // Read at runtime
-        const client = new MongoClient(MONGODB_URL);
-        await client.connect();
-        cachedClient = client;
-        logger.info('Connected to MongoDB');
-        return client;
-    } catch (error) {
-        logger.error('Failed to connect to MongoDB', { error });
-        throw error;
-    }
-}
-
-async function getDatabase(): Promise<Db> {
-    if (cachedDb) {
-        return cachedDb;
-    }
-
-    const client = await getMongoClient();
-    const DB_NAME = getMongoDBName(); // Read at runtime
-    cachedDb = client.db(DB_NAME);
-    return cachedDb;
-}
-
-async function getCollection(): Promise<Collection<IZTDFResource>> {
-    const db = await getDatabase();
-    return db.collection<IZTDFResource>(COLLECTION_NAME);
+    // No-op: Singleton pattern doesn't use per-service caching
+    // Tests can continue to call this without errors
 }
 
 /**
@@ -816,9 +792,7 @@ export async function getResourcesByQuery(
         fields?: Record<string, number>;
     }
 ): Promise<Record<string, unknown>[]> {
-    const client = await getMongoClient();
-    const DB_NAME = getMongoDBName(); // Read at runtime
-    const db = client.db(DB_NAME);
+    const db = getDb();
     const collection = db.collection(COLLECTION_NAME);
 
     try {
