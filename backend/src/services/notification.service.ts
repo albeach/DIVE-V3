@@ -46,14 +46,18 @@ export interface INotificationPreferences {
 }
 
 class NotificationService {
+    private indexesCreated = false;
+
     private collection(): Collection {
         const db = getDb();
         const col = db.collection(COLLECTION);
-        // Note: Indexes should be created once at startup, not on every call
-        // For now, we keep the index creation but it's idempotent
-        col.createIndex({ userId: 1, read: 1, timestamp: -1 }).catch((err) => {
-            logger.warn('Failed to create notification indexes', { error: err });
-        });
+        if (!this.indexesCreated) {
+            this.indexesCreated = true;
+            col.createIndex({ userId: 1, read: 1, timestamp: -1 }).catch((err) => {
+                this.indexesCreated = false;
+                logger.warn('Failed to create notification indexes', { error: err });
+            });
+        }
         return col;
     }
 
@@ -135,13 +139,18 @@ class NotificationService {
         return result.insertedId.toString();
     }
 
+    private prefsIndexesCreated = false;
+
     private prefsCollection(): Collection {
         const db = getDb();
         const col = db.collection(PREFS_COLLECTION);
-        // Note: Indexes should be created once at startup
-        col.createIndex({ userId: 1 }, { unique: true }).catch((err) => {
-            logger.warn('Failed to create notification prefs indexes', { error: err });
-        });
+        if (!this.prefsIndexesCreated) {
+            this.prefsIndexesCreated = true;
+            col.createIndex({ userId: 1 }, { unique: true }).catch((err) => {
+                this.prefsIndexesCreated = false;
+                logger.warn('Failed to create notification prefs indexes', { error: err });
+            });
+        }
         return col;
     }
 
