@@ -1,187 +1,50 @@
 #!/usr/bin/env bash
 # =============================================================================
-# DIVE V3 Circuit Breaker Pattern (Consolidated)
+# DIVE V3 CLI - Orchestration Circuit Breaker
 # =============================================================================
-# Resilience patterns: circuit breaker, retry, exponential backoff
-# =============================================================================
-# Version: 5.0.0 (Module Consolidation)
-# Date: 2026-01-22
-#
-# Extracted from error-recovery.sh for better separation of concerns
+# Extracted from orchestration/execution.sh (Phase 13e)
 # =============================================================================
 
-# Prevent multiple sourcing
-[ -n "${DIVE_CIRCUIT_BREAKER_LOADED:-}" ] && return 0
-export DIVE_CIRCUIT_BREAKER_LOADED=1
+[ -n "${DIVE_ORCH_CIRCUIT_BREAKER_LOADED:-}" ] && return 0
 
 # =============================================================================
-# LOAD DEPENDENCIES
+# SMART RETRY & CIRCUIT BREAKER PATTERNS (Phase 3)
 # =============================================================================
 
-ORCH_DIR="$(dirname "${BASH_SOURCE[0]}")"
-MODULES_DIR="$(dirname "$ORCH_DIR")"
-
-if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
-    source "${MODULES_DIR}/common.sh"
-    export DIVE_COMMON_LOADED=1
+# Circuit breaker states (only set if not already defined by error-recovery.sh)
+if [ -z "$CIRCUIT_CLOSED" ]; then
+    readonly CIRCUIT_CLOSED="CLOSED"      # Normal operation, requests pass through
+    readonly CIRCUIT_OPEN="OPEN"         # Failing, requests fail immediately
+    readonly CIRCUIT_HALF_OPEN="HALF_OPEN" # Testing if service recovered
 fi
-
-# Load state module for database
-if [ -f "${ORCH_DIR}/state.sh" ]; then
-    source "${ORCH_DIR}/state.sh"
-fi
-
-# =============================================================================
-# CONFIGURATION
-# =============================================================================
 
 # Circuit breaker configuration
-CIRCUIT_FAILURE_THRESHOLD="${CIRCUIT_FAILURE_THRESHOLD:-5}"
-CIRCUIT_COOLDOWN_PERIOD="${CIRCUIT_COOLDOWN_PERIOD:-60}"  # seconds
+declare -A CIRCUIT_BREAKERS=()
+declare -A CIRCUIT_FAILURE_COUNTS=()
+declare -A CIRCUIT_LAST_FAILURE_TIME=()
+declare -A CIRCUIT_SUCCESS_COUNTS=()
 
-# Circuit breaker states
-readonly CIRCUIT_CLOSED="CLOSED"
-readonly CIRCUIT_OPEN="OPEN"
-readonly CIRCUIT_HALF_OPEN="HALF_OPEN"
-
-# =============================================================================
-# CIRCUIT BREAKER IMPLEMENTATION
-# =============================================================================
+# Circuit breaker defaults (NOTE: Authoritative values now in error-recovery.sh)
+# Using fallback values here for backward compatibility if error-recovery.sh not loaded
+CIRCUIT_FAILURE_THRESHOLD="${CIRCUIT_FAILURE_THRESHOLD:-3}"     # Open circuit after N failures
+CIRCUIT_TIMEOUT_SECONDS="${CIRCUIT_TIMEOUT_SECONDS:-60}"        # Auto-close after N seconds
+CIRCUIT_SUCCESS_THRESHOLD="${CIRCUIT_SUCCESS_THRESHOLD:-2}"     # Close circuit after N successes in half-open
 
 ##
-# Execute operation through circuit breaker
+# Initialize circuit breaker for an operation
 #
 # Arguments:
-#   $1 - Operation name (unique identifier)
-#   $@ - Command to execute
-#
-# Returns:
-#   0 - Succeeded
-#   1 - Failed
-#   2 - Circuit OPEN (fast fail)
+#   $1 - Operation name (e.g., "keycloak_health", "federation_config")
 ##
-orch_circuit_breaker_execute() {
-    local operation_name="$1"
-    shift
-    local command=("$@")
+orch_init_circuit_breaker() {
+    local operation="$1"
 
-    # Get circuit state from database
-    local circuit_data=""
-    if type orch_db_check_connection &>/dev/null && orch_db_check_connection; then
-        circuit_data=$(orch_db_exec "
-            SELECT state, failure_count,
-                   COALESCE(EXTRACT(EPOCH FROM (NOW() - last_failure_time))::integer, 999999) as elapsed
-            FROM circuit_breakers
-            WHERE operation_name='$operation_name'
-        " 2>/dev/null | tr -d ' ')
-    fi
+    CIRCUIT_BREAKERS["$operation"]="$CIRCUIT_CLOSED"
+    CIRCUIT_FAILURE_COUNTS["$operation"]=0
+    CIRCUIT_LAST_FAILURE_TIME["$operation"]=0
+    CIRCUIT_SUCCESS_COUNTS["$operation"]=0
 
-    if [ -z "$circuit_data" ]; then
-        # Create new circuit in CLOSED state
-        orch_db_exec "
-            INSERT INTO circuit_breakers (operation_name, state, failure_count, success_count)
-            VALUES ('$operation_name', 'CLOSED', 0, 0)
-        " >/dev/null 2>&1
-        circuit_data="CLOSED|0|999999"
-    fi
-
-    local state=$(echo "$circuit_data" | cut -d'|' -f1)
-    local failure_count=$(echo "$circuit_data" | cut -d'|' -f2)
-    local elapsed=$(echo "$circuit_data" | cut -d'|' -f3)
-
-    # Handle circuit states
-    case "$state" in
-        "OPEN")
-            if [ "$elapsed" -ge "$CIRCUIT_COOLDOWN_PERIOD" ]; then
-                log_info "Circuit cooldown complete, entering HALF_OPEN: $operation_name"
-                orch_db_exec "
-                    UPDATE circuit_breakers
-                    SET state='HALF_OPEN', last_state_change=NOW()
-                    WHERE operation_name='$operation_name'
-                " >/dev/null 2>&1
-                state="HALF_OPEN"
-            else
-                log_warn "Circuit breaker OPEN for $operation_name (cooldown: ${elapsed}/${CIRCUIT_COOLDOWN_PERIOD}s) - FAST FAIL"
-                return 2
-            fi
-            ;;
-        "HALF_OPEN")
-            log_info "Circuit HALF_OPEN for $operation_name (test request)"
-            ;;
-        "CLOSED")
-            log_verbose "Circuit CLOSED for $operation_name (normal operation)"
-            ;;
-    esac
-
-    # Execute operation
-    local start_time=$(date +%s)
-    local exit_code
-    
-    # ARCHITECTURE DECISION: Stream vs Capture
-    # - BUILD operations: Generate gigabytes → MUST stream
-    # - SERVICE operations: Start containers, long health checks → MUST stream
-    # - PHASE operations: Load modules, need function context, produce logs → MUST stream
-    # - Quick operations: Can capture for error reporting
-    case "$operation_name" in
-        *_build|*_BUILD|hub_phase_build|*_SERVICES|*_services|hub_phase_services|*_phase_*|*_PHASE_*)
-            # Stream directly - no output capture (preserves function context & real-time logs)
-            "${command[@]}"
-            exit_code=$?
-            ;;
-        *)
-            # Quick operations: capture for error reporting
-            local output
-            output=$("${command[@]}" 2>&1)
-            exit_code=$?
-            ;;
-    esac
-
-    if [ $exit_code -eq 0 ]; then
-        local duration=$(($(date +%s) - start_time))
-        log_success "$operation_name succeeded (${duration}s)"
-
-        # Record success - close circuit
-        orch_db_exec "
-            UPDATE circuit_breakers
-            SET success_count = success_count + 1,
-                failure_count = 0,
-                last_success_time = NOW(),
-                state = 'CLOSED',
-                last_state_change = CASE WHEN state != 'CLOSED' THEN NOW() ELSE last_state_change END
-            WHERE operation_name='$operation_name'
-        " </dev/null >/dev/null 2>&1
-
-        return 0
-    else
-        log_warn "$operation_name failed (exit code: $exit_code)"
-        # Only log output if it was captured
-        if [ -n "${output:-}" ]; then
-            log_verbose "Error output: $output"
-        fi
-
-        local new_failure_count=$((failure_count + 1))
-
-        if [ $new_failure_count -ge $CIRCUIT_FAILURE_THRESHOLD ]; then
-            log_error "Circuit breaker OPENING for $operation_name (failures: $new_failure_count/$CIRCUIT_FAILURE_THRESHOLD)"
-            orch_db_exec "
-                UPDATE circuit_breakers
-                SET failure_count = $new_failure_count,
-                    state = 'OPEN',
-                    last_failure_time = NOW(),
-                    last_state_change = NOW()
-                WHERE operation_name='$operation_name'
-            " >/dev/null 2>&1
-        else
-            orch_db_exec "
-                UPDATE circuit_breakers
-                SET failure_count = $new_failure_count,
-                    last_failure_time = NOW()
-                WHERE operation_name='$operation_name'
-            " >/dev/null 2>&1
-        fi
-
-        return 1
-    fi
+    log_verbose "Initialized circuit breaker for $operation"
 }
 
 ##
@@ -191,178 +54,308 @@ orch_circuit_breaker_execute() {
 #   $1 - Operation name
 #
 # Returns:
-#   0 - Circuit is OPEN
-#   1 - Circuit is not OPEN
+#   0 - Circuit is closed (allow operation)
+#   1 - Circuit is open (fail fast)
 ##
-orch_circuit_breaker_is_open() {
-    local operation_name="$1"
+orch_is_circuit_open() {
+    local operation="$1"
 
-    if ! type orch_db_check_connection &>/dev/null || ! orch_db_check_connection; then
-        return 1
+    # Initialize if not exists
+    if [ -z "${CIRCUIT_BREAKERS[$operation]}" ]; then
+        orch_init_circuit_breaker "$operation"
     fi
 
-    local state=$(orch_db_exec "
-        SELECT state FROM circuit_breakers WHERE operation_name='$operation_name'
-    " 2>/dev/null | xargs)
+    local state="${CIRCUIT_BREAKERS[$operation]}"
+    local last_failure="${CIRCUIT_LAST_FAILURE_TIME[$operation]}"
+    local now=$(date +%s)
 
-    [ "$state" = "OPEN" ]
-}
-
-##
-# Manually reset circuit breaker
-#
-# Arguments:
-#   $1 - Operation name
-##
-orch_circuit_breaker_reset() {
-    local operation_name="$1"
-
-    log_info "Resetting circuit breaker: $operation_name"
-
-    orch_db_exec "
-        UPDATE circuit_breakers
-        SET state='CLOSED', failure_count=0, success_count=0, last_state_change=NOW()
-        WHERE operation_name='$operation_name'
-    " >/dev/null 2>&1
-
-    log_success "Circuit breaker reset: $operation_name"
-}
-
-##
-# Initialize circuit breaker for operation
-#
-# Arguments:
-#   $1 - Operation name
-#   $2 - Initial state (default: CLOSED)
-##
-orch_circuit_breaker_init() {
-    local operation_name="$1"
-    local initial_state="${2:-CLOSED}"
-
-    if type orch_db_check_connection &>/dev/null && orch_db_check_connection; then
-        # RESILIENCE FIX (2026-02-07): Check if circuit is stuck in OPEN state
-        # If cooldown period has expired, auto-recover to CLOSED
-        local circuit_data=$(orch_db_exec "
-            SELECT state, 
-                   COALESCE(EXTRACT(EPOCH FROM (NOW() - last_failure_time))::integer, 999999) as elapsed
-            FROM circuit_breakers
-            WHERE operation_name='$operation_name'
-        " 2>/dev/null | tr -d ' ')
-        
-        if [ -n "$circuit_data" ]; then
-            local state=$(echo "$circuit_data" | cut -d'|' -f1)
-            local elapsed=$(echo "$circuit_data" | cut -d'|' -f2)
-            
-            if [ "$state" = "OPEN" ] && [ "${elapsed:-0}" -ge "$CIRCUIT_COOLDOWN_PERIOD" ]; then
-                log_info "Auto-recovering stuck circuit '$operation_name' (cooldown expired: ${elapsed}s)"
-                orch_db_exec "
-                    UPDATE circuit_breakers
-                    SET state = 'CLOSED',
-                        failure_count = 0,
-                        last_state_change = NOW()
-                    WHERE operation_name='$operation_name'
-                " >/dev/null 2>&1
-                log_success "Circuit breaker auto-recovered: $operation_name → CLOSED"
-                return 0
+    case "$state" in
+        "$CIRCUIT_OPEN")
+            # Check if timeout has elapsed (auto-transition to half-open)
+            if [ $((now - last_failure)) -gt $CIRCUIT_TIMEOUT_SECONDS ]; then
+                CIRCUIT_BREAKERS["$operation"]="$CIRCUIT_HALF_OPEN"
+                CIRCUIT_SUCCESS_COUNTS["$operation"]=0
+                log_info "Circuit breaker for $operation transitioning to HALF_OPEN (timeout)"
+                return 0  # Allow one test request
+            else
+                log_warn "Circuit breaker for $operation is OPEN (fail fast)"
+                return 1  # Fail fast
             fi
-        fi
-        
-        # Insert if doesn't exist (DO NOTHING if already exists)
-        orch_db_exec "
-            INSERT INTO circuit_breakers (operation_name, state, failure_count, success_count, last_state_change)
-            VALUES ('$operation_name', '$initial_state', 0, 0, NOW())
-            ON CONFLICT (operation_name) DO NOTHING
-        " >/dev/null 2>&1
-    fi
-}
-
-##
-# Get status of all circuit breakers
-#
-# Arguments:
-#   $1 - Output format: "table" or "json"
-##
-orch_circuit_breaker_status() {
-    local format="${1:-table}"
-
-    if ! type orch_db_check_connection &>/dev/null || ! orch_db_check_connection; then
-        echo "Database unavailable"
-        return 1
-    fi
-
-    case "$format" in
-        json)
-            orch_db_exec "
-                SELECT json_agg(row_to_json(cb))
-                FROM (
-                    SELECT operation_name, state, failure_count, success_count,
-                           to_char(last_state_change, 'YYYY-MM-DD HH24:MI:SS') as last_change
-                    FROM circuit_breakers
-                    ORDER BY operation_name
-                ) cb
-            " 2>/dev/null
             ;;
-        table|*)
-            echo "=== Circuit Breaker Status ==="
-            printf "%-30s %-10s %-8s %-8s %-20s\n" "OPERATION" "STATE" "FAILURES" "SUCCESS" "LAST CHANGE"
-            printf "%-30s %-10s %-8s %-8s %-20s\n" "─────────" "─────" "────────" "───────" "───────────"
-
-            orch_db_exec "
-                SELECT operation_name, state, failure_count, success_count,
-                       to_char(last_state_change, 'MM-DD HH24:MI')
-                FROM circuit_breakers
-                ORDER BY
-                    CASE state WHEN 'OPEN' THEN 0 WHEN 'HALF_OPEN' THEN 1 ELSE 2 END,
-                    operation_name
-            " 2>/dev/null | while IFS='|' read -r op state fail succ change; do
-                op=$(echo "$op" | xargs)
-                state=$(echo "$state" | xargs)
-                fail=$(echo "$fail" | xargs)
-                succ=$(echo "$succ" | xargs)
-                change=$(echo "$change" | xargs)
-
-                case "$state" in
-                    OPEN)      state_display="⚡ OPEN" ;;
-                    HALF_OPEN) state_display="⏳ HALF" ;;
-                    CLOSED)    state_display="✓ CLOSED" ;;
-                    *)         state_display="$state" ;;
-                esac
-
-                printf "%-30s %-10s %-8s %-8s %-20s\n" "$op" "$state_display" "$fail" "$succ" "$change"
-            done
+        "$CIRCUIT_HALF_OPEN")
+            # In half-open, allow requests but monitor closely
+            return 0
+            ;;
+        "$CIRCUIT_CLOSED"|*)
+            return 0  # Allow operation
             ;;
     esac
 }
 
 ##
-# Reset all OPEN circuit breakers
+# Record operation success for circuit breaker
+#
+# Arguments:
+#   $1 - Operation name
 ##
-orch_circuit_breaker_reset_all_open() {
-    if ! type orch_db_check_connection &>/dev/null || ! orch_db_check_connection; then
-        log_error "Database unavailable"
+orch_record_circuit_success() {
+    local operation="$1"
+
+    case "${CIRCUIT_BREAKERS[$operation]}" in
+        "$CIRCUIT_HALF_OPEN")
+            # In half-open state, count successes
+            ((CIRCUIT_SUCCESS_COUNTS["$operation"]++))
+            if [ "${CIRCUIT_SUCCESS_COUNTS[$operation]}" -ge $CIRCUIT_SUCCESS_THRESHOLD ]; then
+                CIRCUIT_BREAKERS["$operation"]="$CIRCUIT_CLOSED"
+                CIRCUIT_FAILURE_COUNTS["$operation"]=0
+                log_success "Circuit breaker for $operation closed (recovery confirmed)"
+            fi
+            ;;
+        "$CIRCUIT_CLOSED")
+            # Reset failure count on success
+            CIRCUIT_FAILURE_COUNTS["$operation"]=0
+            ;;
+    esac
+}
+
+##
+# Record operation failure for circuit breaker
+#
+# Arguments:
+#   $1 - Operation name
+##
+orch_record_circuit_failure() {
+    local operation="$1"
+
+    CIRCUIT_LAST_FAILURE_TIME["$operation"]=$(date +%s)
+
+    case "${CIRCUIT_BREAKERS[$operation]}" in
+        "$CIRCUIT_HALF_OPEN")
+            # Half-open failure -> immediately open
+            CIRCUIT_BREAKERS["$operation"]="$CIRCUIT_OPEN"
+            CIRCUIT_SUCCESS_COUNTS["$operation"]=0
+            log_error "Circuit breaker for $operation opened (half-open failure)"
+            ;;
+        "$CIRCUIT_CLOSED")
+            # Closed failure -> increment counter
+            ((CIRCUIT_FAILURE_COUNTS["$operation"]++))
+            if [ "${CIRCUIT_FAILURE_COUNTS[$operation]}" -ge $CIRCUIT_FAILURE_THRESHOLD ]; then
+                CIRCUIT_BREAKERS["$operation"]="$CIRCUIT_OPEN"
+                log_error "Circuit breaker for $operation opened (failure threshold exceeded)"
+            fi
+            ;;
+    esac
+}
+
+##
+# Execute operation with circuit breaker protection
+#
+# Arguments:
+#   $1 - Operation name
+#   $2 - Operation command/function
+#
+# Returns:
+#   Operation exit code
+##
+orch_execute_with_circuit_breaker() {
+    local operation="$1"
+    local operation_cmd="$2"
+
+    # Check circuit breaker
+    if ! orch_is_circuit_open "$operation"; then
+        orch_record_error "CIRCUIT_OPEN" "$ORCH_SEVERITY_HIGH" \
+            "Circuit breaker is open for $operation" "circuit_breaker" \
+            "Operation will fail fast until circuit closes" \
+            "{\"operation\":\"$operation\",\"state\":\"${CIRCUIT_BREAKERS[$operation]}\"}"
         return 1
     fi
 
-    local reset_count=$(orch_db_exec "
-        UPDATE circuit_breakers
-        SET state='CLOSED', failure_count=0, success_count=0, last_state_change=NOW()
-        WHERE state='OPEN'
-        RETURNING operation_name
-    " 2>/dev/null | wc -l | xargs)
+    # Execute operation
+    if $operation_cmd; then
+        orch_record_circuit_success "$operation"
+        return 0
+    else
+        orch_record_circuit_failure "$operation"
+        return 1
+    fi
+}
 
-    log_info "Reset $reset_count OPEN circuit breakers to CLOSED"
-    echo "$reset_count"
+##
+# Smart retry with context-aware backoff strategies
+#
+# Arguments:
+#   $1 - Operation name
+#   $2 - Operation command/function
+#   $3 - Max attempts (optional, default: 3)
+#   $4 - Base delay seconds (optional, default: 5)
+#
+# Returns:
+#   Operation exit code
+##
+orch_execute_with_smart_retry() {
+    local operation="$1"
+    local operation_cmd="$2"
+    local max_attempts="${3:-3}"
+    local base_delay="${4:-5}"
+
+    local attempt=1
+    local last_exit_code=1
+
+    while [ $attempt -le $max_attempts ]; do
+        log_verbose "Smart retry attempt $attempt/$max_attempts for $operation"
+
+        # Use circuit breaker protection
+        if orch_execute_with_circuit_breaker "$operation" "$operation_cmd"; then
+            log_verbose "Operation $operation succeeded on attempt $attempt"
+            return 0
+        fi
+
+        last_exit_code=$?
+        attempt=$((attempt + 1))
+
+        if [ $attempt -le $max_attempts ]; then
+            # Calculate context-aware delay
+            local delay=$(orch_calculate_retry_delay "$operation" $attempt $base_delay)
+
+            log_warn "Operation $operation failed (attempt $((attempt-1))), retrying in ${delay}s..."
+            sleep $delay
+        fi
+    done
+
+    log_error "Operation $operation failed after $max_attempts attempts"
+    return $last_exit_code
+}
+
+##
+# Calculate context-aware retry delay
+#
+# Arguments:
+#   $1 - Operation name
+#   $2 - Attempt number
+#   $3 - Base delay
+#
+# Returns:
+#   Delay in seconds
+##
+orch_calculate_retry_delay() {
+    local operation="$1"
+    local attempt="$2"
+    local base_delay="$3"
+
+    # Context-aware delay calculation
+    case "$operation" in
+        *keycloak*)
+            # Keycloak operations: progressive backoff (takes time to start)
+            echo $((base_delay * attempt + (attempt * attempt * 2)))
+            ;;
+        *federation*)
+            # Federation operations: fixed delay with jitter (usually permanent failures)
+            echo $((base_delay + (RANDOM % 5)))
+            ;;
+        *secret*)
+            # Secret operations: exponential backoff with jitter (GCP may be transient)
+            echo $((base_delay * (2 ** (attempt - 1)) + (RANDOM % 3)))
+            ;;
+        *health*)
+            # Health checks: linear backoff (services need time to stabilize)
+            echo $((base_delay * attempt))
+            ;;
+        *)
+    # Default: exponential backoff
+    echo $((base_delay * (2 ** (attempt - 1))))
+    ;;
+    esac
+}
+
+##
+# Calculate dynamic timeout based on historical startup times
+# GAP-SD-002 Fix: Now integrated into health check flow
+#
+# Arguments:
+#   $1 - Service name
+#   $2 - Instance code (optional)
+#   $3 - Force recalculation (optional, default: false)
+#
+# Returns:
+#   Dynamic timeout in seconds
+##
+orch_calculate_dynamic_timeout() {
+    local service="$1"
+    local instance_code="${2:-}"
+    local force_recalc="${3:-false}"
+
+    local static_timeout="${SERVICE_TIMEOUTS[$service]:-60}"
+
+    # Check if database is available for metrics
+    if ! orch_db_check_connection 2>/dev/null; then
+        log_verbose "Dynamic timeout: Database unavailable, using static timeout (${static_timeout}s) for $service"
+        echo "$static_timeout"
+        return 0
+    fi
+
+    # Query P95 startup time from deployment steps
+    local p95_startup=0
+    local sample_count=0
+
+    if [ -n "$instance_code" ]; then
+        # Instance-specific query
+        local result
+        result=$(orch_db_exec "
+            SELECT
+                COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_seconds), 0)::INTEGER as p95,
+                COUNT(*) as samples
+            FROM deployment_steps
+            WHERE step_name = 'start_${service}'
+            AND instance_code = '$(lower "$instance_code")'
+            AND status = 'COMPLETED'
+            AND started_at > NOW() - INTERVAL '30 days'
+        " 2>/dev/null | tail -n 1)
+
+        p95_startup=$(echo "$result" | cut -d'|' -f1 | xargs)
+        sample_count=$(echo "$result" | cut -d'|' -f2 | xargs)
+    else
+        # Global query across all instances
+        local result
+        result=$(orch_db_exec "
+            SELECT
+                COALESCE(PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY duration_seconds), 0)::INTEGER as p95,
+                COUNT(*) as samples
+            FROM deployment_steps
+            WHERE step_name = 'start_${service}'
+            AND status = 'COMPLETED'
+            AND started_at > NOW() - INTERVAL '30 days'
+        " 2>/dev/null | tail -n 1)
+
+        p95_startup=$(echo "$result" | cut -d'|' -f1 | xargs)
+        sample_count=$(echo "$result" | cut -d'|' -f2 | xargs)
+    fi
+
+    # Need at least 3 samples for confidence
+    if [ "${p95_startup:-0}" -eq 0 ] || [ "${sample_count:-0}" -lt 3 ]; then
+        log_verbose "Dynamic timeout: Insufficient data ($sample_count samples), using static timeout (${static_timeout}s) for $service"
+        echo "$static_timeout"
+        return 0
+    fi
+
+    # Calculate dynamic timeout = P95 + 50% margin
+    local dynamic_timeout=$((p95_startup + (p95_startup * 50 / 100)))
+
+    # Clamp to min/max bounds
+    local min_timeout=${SERVICE_MIN_TIMEOUTS[$service]:-30}
+    local max_timeout=${SERVICE_MAX_TIMEOUTS[$service]:-300}
+
+    if [ "$dynamic_timeout" -lt "$min_timeout" ]; then
+        log_verbose "Dynamic timeout: Clamped to min (${min_timeout}s) for $service (calculated: ${dynamic_timeout}s)"
+        echo "$min_timeout"
+    elif [ "$dynamic_timeout" -gt "$max_timeout" ]; then
+        log_verbose "Dynamic timeout: Clamped to max (${max_timeout}s) for $service (calculated: ${dynamic_timeout}s)"
+        echo "$max_timeout"
+    else
+        log_verbose "Dynamic timeout: Using calculated value (${dynamic_timeout}s) for $service (P95: ${p95_startup}s, samples: $sample_count)"
+        echo "$dynamic_timeout"
+    fi
 }
 
 # =============================================================================
-# MODULE EXPORTS
-# =============================================================================
 
-export -f orch_circuit_breaker_execute
-export -f orch_circuit_breaker_is_open
-export -f orch_circuit_breaker_reset
-export -f orch_circuit_breaker_init
-export -f orch_circuit_breaker_status
-export -f orch_circuit_breaker_reset_all_open
-
-log_verbose "Circuit breaker module loaded"
+export DIVE_ORCH_CIRCUIT_BREAKER_LOADED=1
