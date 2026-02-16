@@ -74,6 +74,21 @@ jest.mock('../services/opal-data.service', () => ({
   }
 }));
 
+// Mock coi-definition model to prevent updateNATOFromFederation from
+// overwriting the globally-seeded coi_definitions (cross-worker contamination)
+jest.mock('../models/coi-definition.model', () => ({
+  mongoCoiDefinitionStore: {
+    initialize: jest.fn(() => Promise.resolve()),
+    getCoiMembershipMapForOpa: jest.fn(() => Promise.resolve({})),
+    updateNATOFromFederation: jest.fn(() => Promise.resolve()),
+    updateMembers: jest.fn(() => Promise.resolve()),
+    find: jest.fn(() => Promise.resolve([])),
+    findByCoiId: jest.fn(() => Promise.resolve(null)),
+    save: jest.fn(() => Promise.resolve()),
+    delete: jest.fn(() => Promise.resolve(true)),
+  }
+}));
+
 // ============================================
 // TEST DATA
 // ============================================

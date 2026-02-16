@@ -100,7 +100,7 @@ describe('Keycloak Admin Service - MFA Configuration', () => {
             await keycloakAdminService.getMFAConfig();
 
             expect(mockedAxios.get).toHaveBeenCalledWith(
-                expect.stringContaining('/dive-v3-broker/'),
+                expect.stringContaining('/dive-v3-broker-usa/'),
                 expect.any(Object)
             );
         });

@@ -40,7 +40,7 @@ const TEST_SECRET = 'test-secret';
 /**
  * Default issuer (Keycloak realm)
  */
-const DEFAULT_ISSUER = 'http://localhost:8081/realms/dive-v3-broker';
+const DEFAULT_ISSUER = 'http://localhost:8081/realms/dive-v3-broker-usa';
 
 /**
  * Create a mock JWT token with custom claims

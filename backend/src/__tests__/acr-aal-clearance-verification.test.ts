@@ -157,7 +157,7 @@ initializeJwtService(mockJwtService as any);
 
 // Test secret for JWT signing
 const TEST_SECRET = 'test-secret';
-const DEFAULT_ISSUER = 'http://localhost:8081/realms/dive-v3-broker';
+const DEFAULT_ISSUER = 'http://localhost:8081/realms/dive-v3-broker-usa';
 
 /**
  * Helper: Create OPA mock response
