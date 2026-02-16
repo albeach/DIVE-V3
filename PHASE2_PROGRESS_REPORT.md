@@ -1,40 +1,48 @@
 # Phase 2 Memory Leak Fixes - Progress Report
 
 **Date**: 2026-02-16  
-**Status**: In Progress (35% Complete)  
-**Session**: Phase 2 Implementation
+**Status**: In Progress (13% Complete)  
+**Session**: Phase 2 Batch 3 Complete, Batch 4 Next  
 
 ---
 
 ## Progress Summary
 
-### ✅ Completed (Batch 1-2)
+### ✅ Completed (Batch 1-3)
 
 | Category | Files Completed | Status |
 |----------|----------------|--------|
 | High-frequency controllers | 2/2 | ✅ Complete |
-| Critical services | 1/9 | ⏳ In Progress |
-| **Total MongoDB files** | **3/71** | **4% refactored** |
+| High-priority services | 7/9 | ⏳ In Progress (78%) |
+| **Total MongoDB files** | **9/71** | **13% refactored** |
 | Frontend useEffect cleanup | 0/117 | ⏸️ Pending |
 
 ### MongoDB Singleton Refactoring
 
-**Completed Files** (3):
+**Completed Files** (9):
+
+**Batch 1-2** (Previous session):
 1. ✅ `backend/src/controllers/search-analytics.controller.ts` - Search analytics tracking
 2. ✅ `backend/src/controllers/paginated-search.controller.ts` - Paginated search with facets
 3. ✅ `backend/src/services/resource.service.ts` - Core resource CRUD operations
 
-**Remaining High-Priority Files** (8):
-4. ⏳ `backend/src/services/federated-resource.service.ts` - Federation queries
-5. ⏳ `backend/src/routes/resource.routes.ts` - Resource API endpoints
-6. ⏳ `backend/src/services/health.service.ts` - Health checks
-7. ⏳ `backend/src/services/opal-metrics.service.ts` - OPAL metrics
-8. ⏳ `backend/src/routes/seed-status.routes.ts` - Seeding status
-9. ⏳ `backend/src/services/policy-lab.service.ts` - Policy lab
-10. ⏳ `backend/src/services/gridfs.service.ts` - GridFS file storage
-11. ⏳ `backend/src/services/analytics.service.ts` - Analytics aggregation
+**Batch 3** (Current session - COMPLETE):
+4. ✅ `backend/src/services/federated-resource.service.ts` - Federation queries (uses singleton for local, separate clients for remote)
+5. ✅ `backend/src/services/health.service.ts` - Health checks (removed mongoClient property)
+6. ✅ `backend/src/services/opal-metrics.service.ts` - OPAL metrics (removed mongoClient/db properties)
+7. ✅ `backend/src/services/policy-lab.service.ts` - Policy laboratory (removed connection caching)
+8. ✅ `backend/src/services/gridfs.service.ts` - GridFS file storage (singleton for getGridFSBucket)
+9. ✅ `backend/src/services/analytics.service.ts` - Analytics aggregation (removed mongoClient/db properties)
 
-**Remaining Medium/Low Priority** (60): See full list in `HANDOFF_MEMORY_LEAK_FIXES.md`
+**Remaining High-Priority Files** (0):
+✅ All high-priority services complete!
+
+**Remaining Route Files** (3):
+10. ⏳ `backend/src/routes/resource.routes.ts` - Resource API endpoints
+11. ⏳ `backend/src/routes/seed-status.routes.ts` - Seeding status
+12. ⏳ `backend/src/routes/activity.routes.ts` - Activity logging
+
+**Remaining Medium/Low Priority** (59): See full list in `HANDOFF_MEMORY_LEAK_FIXES.md`
 
 ---
 
@@ -272,6 +280,15 @@ Create `frontend/fix-useeffect-cleanup.sh`:
 - refactor-mongo-batch.sh (tooling)
 - Impact: ~80-160 MB memory savings
 
+### Batch 3: High-Priority Services
+**Commit**: `1f8a67e7`
+- policy-lab.service.ts
+- gridfs.service.ts
+- analytics.service.ts
+- analytics.service.test.ts (updated for singleton mocking)
+- Impact: ~120-240 MB memory savings (estimated)
+- Status: ✅ Complete, all tests passing
+
 ---
 
 ## Next Session Roadmap
@@ -391,6 +408,24 @@ Create `frontend/fix-useeffect-cleanup.sh`:
 
 ---
 
-**Session End**: 2026-02-16
-**Status**: Phase 2 in progress - 4% complete (MongoDB), 0% complete (Frontend)
-**Next**: Continue with high-priority MongoDB files, then start frontend cleanup
+## Session Artifacts
+
+### New Documentation
+- ✅ `PHASE2_HANDOFF_SESSION_2026-02-16.md` - Comprehensive handoff prompt for next session
+
+### Refactored Files (This Session)
+- ✅ `backend/src/services/federated-resource.service.ts` - Federation pattern established
+- ✅ `backend/src/services/health.service.ts` - Simple service pattern
+- ✅ `backend/src/services/opal-metrics.service.ts` - Simple service pattern
+
+### Key Learnings
+1. **Federation Pattern**: Local instance uses singleton, remote instances use separate MongoClient
+2. **Health Check Pattern**: No caching needed, direct `getDb()` call works perfectly
+3. **Complex Services**: Careful review required for services with existing connection management
+
+---
+
+**Session End**: 2026-02-16  
+**Status**: Phase 2 in progress - 8% complete (MongoDB), 0% complete (Frontend)  
+**Next Session**: Complete Batch 3 (policy-lab, gridfs, analytics), then proceed with Batch 4 (routes)  
+**Handoff Document**: See `PHASE2_HANDOFF_SESSION_2026-02-16.md` for detailed next steps
