@@ -1,6 +1,11 @@
 /**
  * GridFS Service
  *
+ * MEMORY LEAK FIX (2026-02-16): Refactored to use MongoDB singleton
+ * OLD: Created new MongoClient() with connection caching (connection leak)
+ * NEW: Uses shared singleton connection pool via getDb()
+ * IMPACT: Prevents connection leaks during GridFS file operations
+ *
  * Handles large file storage in MongoDB GridFS to bypass 16MB BSON document limit.
  * GridFS automatically chunks files into 255KB pieces stored in separate collections.
  *
@@ -10,71 +15,23 @@
  * - Encrypted payloads that exceed BSON limits
  */
 
-import { MongoClient, Db, GridFSBucket, ObjectId } from 'mongodb';
+import { GridFSBucket, ObjectId } from 'mongodb';
 import { Readable } from 'stream';
 import { logger } from '../utils/logger';
-import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
+import { getDb } from '../utils/mongodb-singleton';
 
 const GRIDFS_BUCKET_NAME = 'ztdf-payloads';
 
-let cachedClient: MongoClient | null = null;
-let cachedDb: Db | null = null;
-let cachedBucket: GridFSBucket | null = null;
-
 /**
- * Get MongoDB client with connection pooling
+ * Get GridFS bucket using singleton database connection
+ * Pattern: new GridFSBucket(getDb(), { bucketName })
  */
-async function getMongoClient(): Promise<MongoClient> {
-    if (cachedClient) {
-        try {
-            await cachedClient.db().admin().ping();
-            return cachedClient;
-        } catch {
-            // Connection lost, reconnect below
-        }
-    }
-
-    try {
-        const MONGODB_URL = getMongoDBUrl();
-        const client = new MongoClient(MONGODB_URL);
-        await client.connect();
-        cachedClient = client;
-        logger.info('GridFS: Connected to MongoDB');
-        return client;
-    } catch (error) {
-        logger.error('GridFS: Failed to connect to MongoDB', { error });
-        throw error;
-    }
-}
-
-/**
- * Get MongoDB database
- */
-async function getDatabase(): Promise<Db> {
-    if (cachedDb) {
-        return cachedDb;
-    }
-
-    const client = await getMongoClient();
-    const DB_NAME = getMongoDBName();
-    cachedDb = client.db(DB_NAME);
-    return cachedDb;
-}
-
-/**
- * Get GridFS bucket
- */
-async function getGridFSBucket(): Promise<GridFSBucket> {
-    if (cachedBucket) {
-        return cachedBucket;
-    }
-
-    const db = await getDatabase();
-    cachedBucket = new GridFSBucket(db, {
+function getGridFSBucket(): GridFSBucket {
+    const db = getDb();
+    return new GridFSBucket(db, {
         bucketName: GRIDFS_BUCKET_NAME,
         chunkSizeBytes: 255 * 1024 // 255KB chunks (MongoDB standard)
     });
-    return cachedBucket;
 }
 
 /**
@@ -96,7 +53,7 @@ export async function uploadToGridFS(
     }
 ): Promise<string> {
     try {
-        const bucket = await getGridFSBucket();
+        const bucket = getGridFSBucket();
 
         // Convert base64 to buffer for storage
         const buffer = Buffer.from(encryptedData, 'base64');
@@ -157,7 +114,7 @@ export async function uploadToGridFS(
  */
 export async function downloadFromGridFS(fileId: string): Promise<string> {
     try {
-        const bucket = await getGridFSBucket();
+        const bucket = getGridFSBucket();
         const objectId = new ObjectId(fileId);
 
         // Create download stream
@@ -207,7 +164,7 @@ export async function downloadFromGridFS(fileId: string): Promise<string> {
  */
 export async function deleteFromGridFS(fileId: string): Promise<void> {
     try {
-        const bucket = await getGridFSBucket();
+        const bucket = getGridFSBucket();
         const objectId = new ObjectId(fileId);
 
         await bucket.delete(objectId);
@@ -231,7 +188,7 @@ export async function deleteFromGridFS(fileId: string): Promise<void> {
  */
 export async function existsInGridFS(fileId: string): Promise<boolean> {
     try {
-        const bucket = await getGridFSBucket();
+        const bucket = getGridFSBucket();
         const objectId = new ObjectId(fileId);
 
         const files = await bucket.find({ _id: objectId }).toArray();
@@ -247,11 +204,9 @@ export async function existsInGridFS(fileId: string): Promise<boolean> {
 }
 
 /**
- * Clear GridFS caches (for testing)
+ * @deprecated No longer needed with singleton - kept for test compatibility
  * @internal
  */
 export function clearGridFSCache(): void {
-    cachedClient = null;
-    cachedDb = null;
-    cachedBucket = null;
+    // No-op: Singleton pattern doesn't use per-service caching
 }
