@@ -1,6 +1,11 @@
 /**
  * Migrate COI Capitalization
  *
+ * MEMORY LEAK FIX (2026-02-16): Refactored to use MongoDB singleton
+ * OLD: Created new MongoClient() for migration (connection leak)
+ * NEW: Uses shared singleton connection pool via getDb()
+ * IMPACT: Prevents connection leaks during COI migration operations
+ *
  * Updates all MongoDB documents to reflect the new COI capitalization:
  * - ALPHA → Alpha
  * - BETA → Beta
@@ -15,12 +20,8 @@
  * Date: November 6, 2025
  */
 
-import { MongoClient } from 'mongodb';
 import { logger } from '../utils/logger';
-
-// CRITICAL: No hardcoded passwords - use MONGODB_URL from GCP Secret Manager
-const MONGODB_URL = process.env.MONGODB_URL || (() => { throw new Error('MONGODB_URL not set'); })();
-const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
 
 // COI capitalization mapping
 const COI_MAPPING: Record<string, string> = {
@@ -38,7 +39,6 @@ interface MigrationStats {
 }
 
 async function migrateCOICapitalization(): Promise<MigrationStats> {
-    const client = new MongoClient(MONGODB_URL);
     const stats: MigrationStats = {
         resources: 0,
         coiKeys: 0,
@@ -48,10 +48,10 @@ async function migrateCOICapitalization(): Promise<MigrationStats> {
     };
 
     try {
-        await client.connect();
+        await mongoSingleton.connect();
         console.log('✅ Connected to MongoDB\n');
 
-        const db = client.db(DB_NAME);
+        const db = getDb();
 
         // ============================================
         // 1. Update Resources Collection
@@ -228,8 +228,8 @@ async function migrateCOICapitalization(): Promise<MigrationStats> {
         console.error('❌ Migration failed:', error);
         throw error;
     } finally {
-        await client.close();
-        console.log('👋 MongoDB connection closed\n');
+        // Singleton manages lifecycle - no need to close
+        console.log('👋 Migration complete\n');
     }
 
     return stats;

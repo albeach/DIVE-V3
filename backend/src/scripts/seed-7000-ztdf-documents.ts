@@ -1,6 +1,11 @@
 /**
  * Seed ZTDF-Encrypted Documents (COI COHERENCE FIX + NEW COIs)
  *
+ * MEMORY LEAK FIX (2026-02-16): Refactored to use MongoDB singleton
+ * OLD: Created new MongoClient() for seeding (connection leak)
+ * NEW: Uses shared singleton connection pool via getDb()
+ * IMPACT: Prevents connection leaks during large document seeding operations
+ *
  * Enhanced version with:
  * - Configurable quantity (1 - 20,000 documents)
  * - Dry-run validation mode
@@ -17,17 +22,13 @@
  * Date: November 6, 2025
  */
 
-import { MongoClient } from 'mongodb';
 import { generateDisplayMarking, COIOperator, ClassificationLevel } from '../types/ztdf.types';
 import { encryptContent, computeSHA384, computeObjectHash } from '../utils/ztdf.utils';
 import { validateCOICoherence } from '../services/coi-validation.service';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
 
 // CRITICAL: No hardcoded passwords - use environment variables loaded from GCP Secret Manager
 // Run: source ./scripts/sync-gcp-secrets.sh before running this script
-const MONGODB_URL = process.env.MONGODB_URL || (() => {
-    throw new Error('MONGODB_URL not set. Run: source ./scripts/sync-gcp-secrets.sh');
-})();
-const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
 const KAS_URL = process.env.KAS_URL || 'https://kas:8080';
 
 // Parse arguments
@@ -76,8 +77,8 @@ interface ICOITemplate {
  * Build COI templates dynamically from MongoDB coi_definitions collection (SSOT)
  * This eliminates hardcoded country/COI lists and ensures consistency
  */
-async function buildCoiTemplatesFromDatabase(client: MongoClient): Promise<ICOITemplate[]> {
-    const db = client.db(DB_NAME);
+async function buildCoiTemplatesFromDatabase(): Promise<ICOITemplate[]> {
+    const db = getDb();
     const coiDefsCollection = db.collection('coi_definitions');
 
     // Query all enabled COI definitions
@@ -170,8 +171,9 @@ async function buildCoiTemplatesFromDatabase(client: MongoClient): Promise<ICOIT
     return templates;
 }
 
-const COI_TEMPLATES: ICOITemplate[] = [];
-// COI templates are now built dynamically from MongoDB (see buildCoiTemplatesFromDatabase function)
+let COI_TEMPLATES: ICOITemplate[] = [];
+// NOTE: COI_TEMPLATES will be populated dynamically in main() from buildCoiTemplatesFromDatabase()
+// Initialized as empty array, populated during script execution
 
 // Document title templates
 const TITLE_PREFIXES = [
@@ -681,6 +683,11 @@ async function main() {
     }
     console.log('=====================================================================\n');
 
+    // Build COI templates from MongoDB (SSOT)
+    await mongoSingleton.connect();
+    COI_TEMPLATES = await buildCoiTemplatesFromDatabase();
+    console.log(`✅ Built ${COI_TEMPLATES.length} COI templates from database\n`);
+
     // Validate all templates first
     console.log('✅ Validating COI templates...\n');
     for (const template of COI_TEMPLATES) {
@@ -728,14 +735,11 @@ async function main() {
     }
 
     // Production mode: seed to MongoDB
-    // NOTE: Credentials should be in MONGODB_URL (e.g., mongodb://admin:PASSWORD@host:27017?authSource=admin)
-    const client = new MongoClient(MONGODB_URL);
-
     try {
-        await client.connect();
+        await mongoSingleton.connect();
         console.log('✅ Connected to MongoDB\n');
 
-        const db = client.db(DB_NAME);
+        const db = getDb();
         const collection = db.collection('resources');
 
         // Clear existing generated documents
@@ -852,8 +856,8 @@ async function main() {
         console.error('❌ Error seeding documents:', error);
         process.exit(1);
     } finally {
-        await client.close();
-        console.log('🔌 MongoDB connection closed\n');
+        // Singleton manages lifecycle - no need to close
+        console.log('🔌 Script complete\n');
     }
 }
 

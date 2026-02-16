@@ -1,6 +1,11 @@
 /**
  * Initialize COI Keys Database
  *
+ * MEMORY LEAK FIX (2026-02-16): Refactored to use MongoDB singleton
+ * OLD: Created new MongoClient() for script execution (connection leak)
+ * NEW: Uses shared singleton connection pool via getDb()
+ * IMPACT: Prevents connection leaks during COI initialization
+ *
  * Migration script to populate MongoDB with COI Keys from existing
  * COI_MEMBERSHIP definitions in coi-validation.service.ts
  *
@@ -10,12 +15,8 @@
  * Date: October 21, 2025
  */
 
-import { MongoClient } from 'mongodb';
 import { ICreateCOIKeyRequest } from '../types/coi-key.types';
-
-// CRITICAL: No hardcoded passwords - use MONGODB_URL from GCP Secret Manager
-const MONGODB_URL = process.env.MONGODB_URL || (() => { throw new Error('MONGODB_URL not set'); })();
-const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
 
 /**
  * Authoritative COI definitions with complete metadata
@@ -268,15 +269,12 @@ async function main() {
     console.log('🔑 Initializing COI Keys Database');
     console.log('==================================\n');
 
-    // Note: When running from host (outside Docker), use .env.local connection without auth
-    // When running inside Docker, use docker-compose MONGODB_URL with auth
-    const client = new MongoClient(MONGODB_URL);
-
     try {
-        await client.connect();
+        // Connect to MongoDB singleton
+        await mongoSingleton.connect();
         console.log('✅ Connected to MongoDB\n');
 
-        const db = client.db(DB_NAME);
+        const db = getDb();
 
         // SSOT: Use coi_definitions collection (matches coi-definition.model.ts)
         // The coi_keys collection is legacy and no longer used
@@ -365,8 +363,8 @@ async function main() {
         console.error('❌ Error initializing COI Keys:', error);
         process.exit(1);
     } finally {
-        await client.close();
-        console.log('👋 MongoDB connection closed\n');
+        // Singleton manages lifecycle - no need to close
+        console.log('👋 Script complete\n');
     }
 }
 
