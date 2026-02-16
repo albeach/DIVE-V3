@@ -30,7 +30,57 @@ jest.mock('../utils/logger', () => ({
 jest.mock('../services/opal-client', () => ({
   opalClient: {
     isOPALEnabled: jest.fn(() => false),
-    triggerPolicyRefresh: jest.fn(() => ({ success: true }))
+    triggerPolicyRefresh: jest.fn(() => ({ success: true })),
+    publishInlineData: jest.fn(() => Promise.resolve({ success: true }))
+  }
+}));
+
+// Mock coi-definition model to prevent updateNATOFromFederation from
+// overwriting the globally-seeded coi_definitions (cross-worker contamination)
+jest.mock('../models/coi-definition.model', () => ({
+  mongoCoiDefinitionStore: {
+    initialize: jest.fn(() => Promise.resolve()),
+    getCoiMembershipMapForOpa: jest.fn(() => Promise.resolve({})),
+    updateNATOFromFederation: jest.fn(() => Promise.resolve()),
+    updateMembers: jest.fn(() => Promise.resolve()),
+    find: jest.fn(() => Promise.resolve([])),
+    findByCoiId: jest.fn(() => Promise.resolve(null)),
+    save: jest.fn(() => Promise.resolve()),
+    delete: jest.fn(() => Promise.resolve(true)),
+  }
+}));
+
+// Mock keycloak-federation.service to avoid actual HTTP calls
+jest.mock('../services/keycloak-federation.service', () => ({
+  keycloakFederationService: {
+    createBidirectionalFederation: jest.fn(() => Promise.resolve({ success: true })),
+    createIdPForSpoke: jest.fn(() => Promise.resolve({ success: true, idpAlias: 'test-idp' })),
+    deleteIdPForSpoke: jest.fn(() => Promise.resolve({ success: true })),
+    getFederatedSpokesList: jest.fn(() => Promise.resolve([]))
+  }
+}));
+
+// Mock opal-data.service for dynamic trust updates
+jest.mock('../services/opal-data.service', () => ({
+  opalDataService: {
+    updateTrustedIssuer: jest.fn(() => Promise.resolve({ success: true })),
+    removeTrustedIssuer: jest.fn(() => Promise.resolve({ success: true })),
+    updateFederationMatrix: jest.fn(() => Promise.resolve({ success: true }))
+  }
+}));
+
+// Mock idp-validation.service
+jest.mock('../services/idp-validation.service', () => ({
+  idpValidationService: {
+    validateTLS: jest.fn(() => ({
+      pass: true,
+      version: 'TLSv1.3',
+      score: 15,
+      cipher: 'TLS_AES_256_GCM_SHA384',
+      certificateValid: true,
+      warnings: [],
+      errors: []
+    }))
   }
 }));
 

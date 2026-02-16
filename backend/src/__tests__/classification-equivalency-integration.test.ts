@@ -29,41 +29,24 @@ describe('Classification Equivalency Integration Tests (ACP-240 Section 4.3)', (
         // Mock Keycloak JWKS and OPA
         await mockKeycloakJWKS();
         mockOPAServer();
-        
+
         // Connect to MongoDB Memory Server
         mongoClient = new MongoClient(MONGO_URI);
         await mongoClient.connect();
         db = mongoClient.db(DB_NAME);
 
-        // Seed NATO COI key (required for COI validation)
-        try {
-            // Delete any existing NATO COI to ensure clean state
-            await db.collection('coi_keys').deleteOne({ coiId: 'NATO' });
-
-            // Insert complete NATO COI with all required fields
-            await db.collection('coi_keys').insertOne({
-                coiId: 'NATO',  // Correct field name
-                name: 'NATO',
-                description: 'North Atlantic Treaty Organization',
-                memberCountries: [  // Correct field name - all 32 NATO members including GBR
-                    'ALB', 'BEL', 'BGR', 'CAN', 'HRV', 'CZE', 'DNK', 'EST', 'FIN', 'FRA',
-                    'DEU', 'GBR', 'GRC', 'HUN', 'ISL', 'ITA', 'LVA', 'LTU', 'LUX', 'MNE', 'NLD',
-                    'MKD', 'NOR', 'POL', 'PRT', 'ROU', 'SVK', 'SVN', 'ESP', 'SWE', 'TUR', 'USA'
-                ],
-                status: 'active',
-                color: '#3B82F6',
-                icon: '⭐',
-                resourceCount: 0,
-                algorithm: 'AES-256-GCM',
-                keyVersion: 1,
-                createdAt: new Date(),
-                updatedAt: new Date()
-            });
-            console.log('Seeded NATO COI key for tests with complete schema');
-        } catch (error) {
-            console.error('Failed to seed NATO COI key', error);
-            throw error; // Fail fast if seed fails
-        }
+        // trusted_issuers and coi_definitions are seeded globally by seed-test-data.ts
+        // Ensure trusted issuer exists (idempotent upsert — safe with parallel workers)
+        await db.collection('trusted_issuers').updateOne(
+            { issuerUrl: 'http://localhost:8081/realms/dive-v3-broker-usa' },
+            { $setOnInsert: {
+                issuerUrl: 'http://localhost:8081/realms/dive-v3-broker-usa',
+                tenant: 'USA', name: 'Test Keycloak Instance', country: 'USA',
+                trustLevel: 'DEVELOPMENT', realm: 'dive-v3-broker-usa',
+                enabled: true, createdAt: new Date(), updatedAt: new Date()
+            }},
+            { upsert: true }
+        );
 
         // Generate test JWT token (German user with GEHEIM clearance + AAL2 MFA)
         accessToken = createE2EJWT({
@@ -77,11 +60,10 @@ describe('Classification Equivalency Integration Tests (ACP-240 Section 4.3)', (
     });
 
     afterAll(async () => {
-        // Clean up test data
+        // Clean up only test-specific resources (don't touch globally-seeded collections)
         await db.collection('resources').deleteMany({ resourceId: /^test-classification-equiv-/ });
-        await db.collection('coi_keys').deleteMany({ coiId: 'NATO' });  // Correct field name
         await mongoClient.close();
-        
+
         // Clean up mocks
         cleanupJWKSMock();
         cleanupOPAMock();

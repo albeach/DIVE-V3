@@ -37,10 +37,16 @@ export async function seedTestData(mongoUrl: string): Promise<void> {
         
         // Seed resources
         await seedTestResources(db);
-        
+
         // Seed COI keys
         await seedCOIKeys(db);
-        
+
+        // Seed COI definitions (coi_definitions is SSOT for COI validation)
+        await seedCOIDefinitions(db);
+
+        // Seed trusted issuers (required for JWT validation in integration tests)
+        await seedTrustedIssuers(db);
+
         console.log('✅ Test data seeded successfully');
     } catch (error) {
         console.error('❌ Failed to seed test data:', error);
@@ -293,6 +299,81 @@ async function seedCOIKeys(db: Db): Promise<void> {
     if (operations.length > 0) {
         await coiKeys.bulkWrite(operations);
         console.log(`   ✓ Seeded ${testCOIs.length} COI keys`);
+    }
+}
+
+/**
+ * Seed COI definitions (coi_definitions is the SSOT collection for COI validation)
+ */
+async function seedCOIDefinitions(db: Db): Promise<void> {
+    const natoMembers = [
+        'ALB', 'BEL', 'BGR', 'CAN', 'HRV', 'CZE', 'DNK', 'EST', 'FIN', 'FRA',
+        'DEU', 'GBR', 'GRC', 'HUN', 'ISL', 'ITA', 'LVA', 'LTU', 'LUX', 'MNE', 'NLD',
+        'MKD', 'NOR', 'POL', 'PRT', 'ROU', 'SVK', 'SVN', 'ESP', 'SWE', 'TUR', 'USA'
+    ];
+
+    const coiDefinitions = [
+        { coiId: 'US-ONLY', name: 'US Only', type: 'country-based', members: ['USA'] },
+        { coiId: 'CAN-US', name: 'Canada-US', type: 'country-based', members: ['CAN', 'USA'] },
+        { coiId: 'GBR-US', name: 'UK-US', type: 'country-based', members: ['GBR', 'USA'] },
+        { coiId: 'FRA-US', name: 'France-US', type: 'country-based', members: ['FRA', 'USA'] },
+        { coiId: 'FVEY', name: 'Five Eyes', type: 'coalition', members: ['USA', 'GBR', 'CAN', 'AUS', 'NZL'] },
+        { coiId: 'NATO', name: 'NATO', type: 'coalition', members: natoMembers },
+        { coiId: 'NATO-COSMIC', name: 'NATO COSMIC TOP SECRET', type: 'coalition', members: natoMembers },
+        { coiId: 'AUKUS', name: 'AUKUS', type: 'coalition', members: ['AUS', 'GBR', 'USA'] },
+    ].map(def => ({
+        ...def,
+        description: `COI: ${def.name}`,
+        mutable: false,
+        autoUpdate: false,
+        priority: 1,
+        metadata: { createdAt: new Date(), updatedAt: new Date(), source: 'manual' as const },
+        enabled: true
+    }));
+
+    const operations = coiDefinitions.map(def => ({
+        updateOne: {
+            filter: { coiId: def.coiId },
+            update: { $set: def },
+            upsert: true
+        }
+    }));
+
+    if (operations.length > 0) {
+        await db.collection('coi_definitions').bulkWrite(operations);
+        console.log(`   ✓ Seeded ${coiDefinitions.length} COI definitions`);
+    }
+}
+
+/**
+ * Seed trusted issuers for JWT validation in integration tests
+ */
+async function seedTrustedIssuers(db: Db): Promise<void> {
+    const issuers = [
+        {
+            issuerUrl: 'http://localhost:8081/realms/dive-v3-broker-usa',
+            tenant: 'USA',
+            name: 'Test Keycloak Instance',
+            country: 'USA',
+            trustLevel: 'DEVELOPMENT',
+            realm: 'dive-v3-broker-usa',
+            enabled: true,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        }
+    ];
+
+    const operations = issuers.map(issuer => ({
+        updateOne: {
+            filter: { issuerUrl: issuer.issuerUrl },
+            update: { $set: issuer },
+            upsert: true
+        }
+    }));
+
+    if (operations.length > 0) {
+        await db.collection('trusted_issuers').bulkWrite(operations);
+        console.log(`   ✓ Seeded ${issuers.length} trusted issuers`);
     }
 }
 

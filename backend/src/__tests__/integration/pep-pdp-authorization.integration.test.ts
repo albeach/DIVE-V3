@@ -53,18 +53,17 @@ describe('PEP/PDP Integration Tests - Phase 3', () => {
         mongoClient = await MongoClient.connect(MONGODB_URI);
         db = mongoClient.db(TEST_DB);
 
-        // Seed trusted issuer so JWT validation accepts our test tokens
-        await db.collection('trusted_issuers').insertOne({
-            issuerUrl: 'http://localhost:8081/realms/dive-v3-broker',
-            tenant: 'USA',
-            name: 'Test Keycloak Instance',
-            country: 'USA',
-            trustLevel: 'DEVELOPMENT',
-            realm: 'dive-v3-broker',
-            enabled: true,
-            createdAt: new Date(),
-            updatedAt: new Date()
-        });
+        // Ensure trusted issuer exists (idempotent upsert — safe with parallel workers)
+        await db.collection('trusted_issuers').updateOne(
+            { issuerUrl: 'http://localhost:8081/realms/dive-v3-broker-usa' },
+            { $setOnInsert: {
+                issuerUrl: 'http://localhost:8081/realms/dive-v3-broker-usa',
+                tenant: 'USA', name: 'Test Keycloak Instance', country: 'USA',
+                trustLevel: 'DEVELOPMENT', realm: 'dive-v3-broker-usa',
+                enabled: true, createdAt: new Date(), updatedAt: new Date()
+            }},
+            { upsert: true }
+        );
 
         // Insert test resources for all countries
         await seedTestResources(db);

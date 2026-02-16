@@ -45,7 +45,7 @@ const mockValidateToken = (require('../services/token-introspection.service') as
 jest.mock('../models/trusted-issuer.model', () => ({
     mongoOpalDataStore: {
         getAllIssuers: jest.fn().mockResolvedValue([
-            { issuerUrl: 'http://localhost:8081/realms/dive-v3-broker' },
+            { issuerUrl: 'http://localhost:8081/realms/dive-v3-broker-usa' },
             { issuerUrl: 'http://localhost:8081/realms/dive-v3-broker-usa' },
         ]),
     },
@@ -178,7 +178,7 @@ function createMockIntrospectionResponse(overrides: Record<string, any> = {}) {
         clearance: 'SECRET',
         countryOfAffiliation: 'USA',
         acpCOI: ['FVEY'],
-        iss: 'http://localhost:8081/realms/dive-v3-broker',
+        iss: 'http://localhost:8081/realms/dive-v3-broker-usa',
         aud: 'dive-v3-client',
         exp: Math.floor(Date.now() / 1000) + 3600,
         iat: Math.floor(Date.now() / 1000),
@@ -204,7 +204,7 @@ function createMockUser(overrides: Record<string, any> = {}) {
         acpCOI: ['FVEY'],
         roles: [],
         sub: 'testuser-us',
-        iss: 'http://localhost:8081/realms/dive-v3-broker',
+        iss: 'http://localhost:8081/realms/dive-v3-broker-usa',
         client_id: 'dive-v3-client',
         email: 'testuser-us',
         acr: 'urn:mace:incommon:iap:silver',
@@ -1397,7 +1397,7 @@ describe('Authorization Middleware (PEP)', () => {
                 uniqueID: 'testuser-us',
                 clearance: 'SECRET',
                 countryOfAffiliation: 'USA',
-                iss: 'http://localhost:8081/realms/dive-v3-broker',
+                iss: 'http://localhost:8081/realms/dive-v3-broker-usa',
                 exp: Math.floor(Date.now() / 1000) + 3600,
                 iat: Math.floor(Date.now() / 1000)
             };
