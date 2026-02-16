@@ -295,7 +295,7 @@ _nuke_show_summary() {
     elif [ "$reset_spokes" = true ]; then
         local spoke_count=0
         for spoke_dir in "${DIVE_ROOT}/instances"/*; do
-            [ -d "$spoke_dir" ] && [ -f "$spoke_dir/config.json" ] && spoke_count=$((spoke_count + 1))
+            [ -d "$spoke_dir" ] && spoke_count=$((spoke_count + 1))
         done
         echo "    - Spoke Configs:                ${spoke_count} (all registration data will be cleared)"
     fi
@@ -466,25 +466,16 @@ _nuke_remove_containers() {
     # Port-based cleanup for spoke or all (BEST PRACTICE: Force-stop containers holding ports)
     if [ "$target_type" = "spoke" ] || [ "$target_type" = "all" ]; then
         if [ "$target_type" = "spoke" ]; then
-            # Spoke-specific: Determine ports from config.json (NO HARDCODING)
+            # Spoke-specific: Determine ports from get_instance_ports (SSOT)
             local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
-            local config_file="${DIVE_ROOT}/instances/${instance_lower}/config.json"
+            local instance_upper=$(echo "$target_instance" | tr '[:lower:]' '[:upper:]')
 
             local spoke_ports=()
-            if [ -f "$config_file" ] && command -v jq &>/dev/null; then
-                # Extract ports from endpoints dynamically
-                local frontend_port=$(jq -r '.endpoints.baseUrl // ""' "$config_file" | grep -oE ':[0-9]+' | tr -d ':')
-                local backend_port=$(jq -r '.endpoints.apiUrl // ""' "$config_file" | grep -oE ':[0-9]+' | tr -d ':')
-                local idp_port=$(jq -r '.endpoints.idpUrl // ""' "$config_file" | grep -oE ':[0-9]+' | tr -d ':')
-                local idp_public_port=$(jq -r '.endpoints.idpPublicUrl // ""' "$config_file" | grep -oE ':[0-9]+' | tr -d ':')
-                local kas_port=$(jq -r '.endpoints.kasUrl // ""' "$config_file" | grep -oE ':[0-9]+' | tr -d ':')
-
-                [ -n "$frontend_port" ] && spoke_ports+=("$frontend_port")
-                [ -n "$backend_port" ] && spoke_ports+=("$backend_port")
-                [ -n "$idp_port" ] && spoke_ports+=("$idp_port")
-                [ -n "$idp_public_port" ] && [ "$idp_public_port" != "$idp_port" ] && spoke_ports+=("$idp_public_port")
-                [ -n "$kas_port" ] && spoke_ports+=("$kas_port")
-            fi
+            eval "$(get_instance_ports "$instance_upper")"
+            [ -n "${SPOKE_FRONTEND_PORT:-}" ] && spoke_ports+=("$SPOKE_FRONTEND_PORT")
+            [ -n "${SPOKE_BACKEND_PORT:-}" ] && spoke_ports+=("$SPOKE_BACKEND_PORT")
+            [ -n "${SPOKE_KEYCLOAK_HTTPS_PORT:-}" ] && spoke_ports+=("$SPOKE_KEYCLOAK_HTTPS_PORT")
+            [ -n "${SPOKE_KAS_PORT:-}" ] && spoke_ports+=("$SPOKE_KAS_PORT")
 
             if [ ${#spoke_ports[@]} -gt 0 ]; then
                 log_verbose "  Force-stopping containers using spoke ${target_instance^^} ports: ${spoke_ports[*]}..."
@@ -500,7 +491,7 @@ _nuke_remove_containers() {
                     done
                 done
             else
-                log_verbose "  No ports found in config.json - using pattern-based cleanup only"
+                log_verbose "  No ports resolved from get_instance_ports - using pattern-based cleanup only"
             fi
         elif [ "$target_type" = "all" ]; then
             # Batch: stop DIVE containers on known ports (single docker ps call)

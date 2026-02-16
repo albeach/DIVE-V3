@@ -262,6 +262,13 @@ class HubSpokeRegistryService extends EventEmitter {
       }
     }
 
+    // Compute ports from port offset (SSOT: nato-countries.sh)
+    const { getPortOffsetForCountry } = await import('./federation-cascade');
+    const portOffset = getPortOffsetForCountry(request.instanceCode);
+    const extractPort = (url: string, fallback: number): number => {
+      try { return parseInt(new URL(url).port) || fallback; } catch { return fallback; }
+    };
+
     const spoke: ISpokeRegistration = {
       spokeId,
       instanceCode: request.instanceCode.toUpperCase(),
@@ -282,6 +289,29 @@ class HubSpokeRegistryService extends EventEmitter {
       certificateNotBefore: certNotBefore,
       certificateNotAfter: certNotAfter,
       certificateValidationResult: certValidation,
+
+      // Port configuration (Database SSOT)
+      frontendPort: extractPort(request.baseUrl, 3000 + portOffset * 10),
+      backendPort: extractPort(request.apiUrl, 4000 + portOffset * 10),
+      keycloakPort: 8443 + portOffset,
+      kasPort: 10000 + portOffset,
+
+      // Identity metadata
+      country: request.instanceCode.toUpperCase(),
+      organizationType: 'government',
+      contactEmail: request.contactEmail,
+      hubUrl: 'https://dive-hub-backend:4000',
+
+      // Operational defaults
+      operationalSettings: {
+        heartbeatIntervalMs: 30000,
+        tokenRefreshBufferMs: 300000,
+        offlineGracePeriodMs: 3600000,
+        policyCachePath: `/app/instances/${request.instanceCode.toLowerCase()}/cache/policies`,
+        auditQueuePath: `/app/instances/${request.instanceCode.toLowerCase()}/cache/audit`,
+        maxAuditQueueSize: 10000,
+        auditFlushIntervalMs: 60000,
+      },
 
       status: 'pending',
 

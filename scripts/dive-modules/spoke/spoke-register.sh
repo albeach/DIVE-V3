@@ -71,7 +71,6 @@ spoke_register() {
     ensure_dive_root
     local code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
-    local config_file="$spoke_dir/config.json"
     local poll_mode=false
     local poll_timeout=600  # 10 minutes default
     local poll_interval=30   # 30 seconds between polls
@@ -97,7 +96,7 @@ spoke_register() {
         esac
     done
 
-    if [ ! -f "$config_file" ]; then
+    if [ ! -d "$spoke_dir" ]; then
         log_error "Spoke not initialized. Run: ./dive spoke init <CODE> <NAME>"
         return 1
     fi
@@ -106,12 +105,12 @@ spoke_register() {
     echo -e "${BOLD}Registering Spoke with Hub${NC}"
     echo ""
 
-    # Parse config (handle both old and new format)
-    local spoke_id=$(grep -o '"spokeId"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
-    local instance_code_config=$(grep -o '"instanceCode"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
-    local name=$(grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | head -1 | cut -d'"' -f4)
-    local hub_url=$(grep -o '"hubUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
-    local contact_email=$(grep -o '"contactEmail"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | head -1 | cut -d'"' -f4 | tr -d '\n\r')
+    # Parse config from spoke_config_get (SSOT)
+    local spoke_id=$(spoke_config_get "$instance_code" "identity.spokeId")
+    local instance_code_config=$(spoke_config_get "$instance_code" "identity.instanceCode")
+    local name=$(spoke_config_get "$instance_code" "identity.name")
+    local hub_url=$(spoke_config_get "$instance_code" "endpoints.hubUrl")
+    local contact_email=$(spoke_config_get "$instance_code" "identity.contactEmail")
 
     # Override hub URL from environment
     hub_url="${HUB_API_URL:-$hub_url}"
@@ -125,7 +124,7 @@ spoke_register() {
 
     # Validate contact email
     if [ -z "$contact_email" ]; then
-        log_warn "Contact email not set in config.json"
+        log_warn "Contact email not configured"
         read -p "  Enter contact email: " contact_email
         if [ -z "$contact_email" ]; then
             log_error "Contact email is required for registration"
@@ -194,10 +193,10 @@ spoke_register() {
     echo ""
 
     # Build registration request
-    local base_url=$(grep -o '"baseUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
-    local api_url=$(grep -o '"apiUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
-    local idp_url=$(grep -o '"idpUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
-    local idp_public_url=$(grep -o '"idpPublicUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
+    local base_url=$(spoke_config_get "$instance_code" "endpoints.baseUrl")
+    local api_url=$(spoke_config_get "$instance_code" "endpoints.apiUrl")
+    local idp_url=$(spoke_config_get "$instance_code" "endpoints.idpUrl")
+    local idp_public_url=$(spoke_config_get "$instance_code" "endpoints.idpPublicUrl")
 
     # IMPORTANT: Do NOT convert idpPublicUrl to host.docker.internal!
     # The idpPublicUrl is used for BROWSER redirects (authorizationUrl, issuer, logoutUrl)
@@ -588,7 +587,6 @@ _spoke_poll_for_approval() {
     local interval="${5:-30}"
 
     local elapsed=0
-    local config_file="$spoke_dir/config.json"
     local env_file="$spoke_dir/.env"
 
     while [ $elapsed -lt $timeout ]; do
@@ -661,7 +659,6 @@ _spoke_configure_token() {
     local expires="$3"
 
     local env_file="$spoke_dir/.env"
-    local config_file="$spoke_dir/config.json"
     local code_lower=$(basename "$spoke_dir")
 
     log_step "Configuring Hub API token..."
@@ -700,12 +697,6 @@ _spoke_configure_token() {
         log_warn "No .env file found at $env_file"
         echo "SPOKE_OPAL_TOKEN=$token" > "$env_file"
         log_info "Created $env_file with token"
-    fi
-
-    # Update config.json
-    if command -v jq &> /dev/null && [ -f "$config_file" ]; then
-        jq ".federation.status = \"approved\" | .federation.approvedAt = \"$(date -u +"%Y-%m-%dT%H:%M:%SZ")\" | .authentication.tokenExpiresAt = \"$expires\"" \
-            "$config_file" > "$config_file.tmp" && mv "$config_file.tmp" "$config_file"
     fi
 
     # Check if OPAL client is running and restart if needed
@@ -759,10 +750,9 @@ spoke_token_refresh() {
     local instance_code="${INSTANCE:-usa}"
     local code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
-    local config_file="$spoke_dir/config.json"
     local env_file="$spoke_dir/.env"
 
-    if [ ! -f "$config_file" ]; then
+    if [ ! -d "$spoke_dir" ]; then
         log_error "Spoke not initialized"
         return 1
     fi
@@ -772,14 +762,11 @@ spoke_token_refresh() {
     echo ""
 
     # Get current token info
-    local hub_url=$(grep -o '"hubUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
+    local hub_url=$(spoke_config_get "$instance_code" "endpoints.hubUrl")
     hub_url="${HUB_API_URL:-$hub_url}"
     hub_url="${hub_url:-https://hub.dive25.com}"
 
-    local spoke_id=$(grep -o '"registeredSpokeId"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
-    if [ -z "$spoke_id" ]; then
-        spoke_id=$(grep -o '"spokeId"[[:space:]]*:[[:space:]]*"[^"]*"' "$config_file" 2>/dev/null | cut -d'"' -f4)
-    fi
+    local spoke_id=$(spoke_config_get "$instance_code" "identity.spokeId")
 
     # Get current token from .env
     local current_token=""
@@ -839,15 +826,10 @@ spoke_register_with_hub() {
 
     # Check if already registered
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
-    local config_file="$spoke_dir/config.json"
 
-    if [ -f "$config_file" ]; then
-        local federation_status
-        federation_status=$(jq -r '.federation.status // "unregistered"' "$config_file" 2>/dev/null)
-        if [ "$federation_status" = "approved" ]; then
-            log_info "Spoke $code_upper already registered with federation hub"
-            return 0
-        fi
+    if [ -f "$spoke_dir/.federation-registered" ]; then
+        log_info "Spoke $code_upper already registered with federation hub"
+        return 0
     fi
 
     log_info "Attempting automatic federation registration for $code_upper..."

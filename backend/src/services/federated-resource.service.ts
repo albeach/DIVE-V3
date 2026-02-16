@@ -2,6 +2,11 @@
  * Federated Resource Service
  * Phase 3, Task 3.1-3.4: Distributed Query Federation
  *
+ * MEMORY LEAK FIX (2026-02-16): Refactored to use MongoDB singleton for local instance
+ * OLD: Created new MongoClient() for every connection (connection leak)
+ * NEW: Uses shared singleton for local instance, separate clients for federation
+ * IMPACT: Prevents connection leaks for local queries while maintaining federation capability
+ *
  * Provides direct MongoDB connections to all federated instances for
  * high-performance cross-instance resource queries.
  *
@@ -23,6 +28,7 @@ import axios, { AxiosInstance } from 'axios';
 import https from 'https';
 import { logger } from '../utils/logger';
 import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
+import { getDb } from '../utils/mongodb-singleton';
 import { hubSpokeRegistry } from './hub-spoke-registry.service';
 
 // MongoDB aggregation facet result shapes
@@ -574,6 +580,8 @@ class FederatedResourceService {
 
     /**
      * Get or create MongoDB connection for an instance
+     * 
+     * MEMORY LEAK FIX: Uses singleton for local instance, separate clients for federation
      */
     private async getConnection(instance: IFederatedInstance): Promise<Db | null> {
         // Check circuit breaker
@@ -588,6 +596,29 @@ class FederatedResourceService {
             logger.info(`Circuit breaker HALF-OPEN for ${instance.code}, attempting reconnect`);
         }
 
+        // MEMORY LEAK FIX: Use singleton for local instance
+        if (instance.type === 'local' || instance.code === this.currentInstanceRealm) {
+            try {
+                const db = getDb();
+                
+                // Reset circuit breaker on success
+                instance.circuitBreaker.state = 'closed';
+                instance.circuitBreaker.failures = 0;
+                
+                logger.debug(`Using MongoDB singleton for local instance ${instance.code}`);
+                return db;
+            } catch (error) {
+                logger.error(`Failed to get singleton DB for local instance ${instance.code}`, {
+                    error: error instanceof Error ? error.message : 'Unknown error'
+                });
+                this.handleConnectionFailure(instance, error);
+                return null;
+            }
+        }
+
+        // For remote federated instances, maintain separate connections
+        // (This is intentional for federation - each remote instance needs its own connection)
+        
         // Return existing connection if valid
         if (instance.connection?.client) {
             try {
@@ -599,11 +630,11 @@ class FederatedResourceService {
             }
         }
 
-        // Create new connection
+        // Create new connection for remote instance
         try {
             const client = new MongoClient(instance.mongoUrl, {
-                connectTimeoutMS: instance.type === 'remote' ? REMOTE_QUERY_TIMEOUT_MS : QUERY_TIMEOUT_MS,
-                socketTimeoutMS: instance.type === 'remote' ? REMOTE_QUERY_TIMEOUT_MS : QUERY_TIMEOUT_MS,
+                connectTimeoutMS: REMOTE_QUERY_TIMEOUT_MS,
+                socketTimeoutMS: REMOTE_QUERY_TIMEOUT_MS,
                 maxPoolSize: 5,
                 minPoolSize: 1
             });
@@ -621,7 +652,7 @@ class FederatedResourceService {
             instance.circuitBreaker.state = 'closed';
             instance.circuitBreaker.failures = 0;
 
-            logger.info(`Connected to MongoDB for ${instance.code}`, {
+            logger.info(`Connected to remote MongoDB for ${instance.code}`, {
                 database: instance.mongoDatabase
             });
 
@@ -660,6 +691,8 @@ class FederatedResourceService {
      * Get a specific resource from a target instance
      * Used for cross-instance resource detail access
      * @param authHeader User's Authorization header (required for remote API queries)
+     * 
+     * MEMORY LEAK FIX: Uses singleton for local instance
      */
     async getResourceFromInstance(
         resourceId: string,
@@ -680,8 +713,21 @@ class FederatedResourceService {
         }
 
         try {
-            if (!instance.useApiMode && instance.mongoUrl) {
-                // Direct MongoDB access
+            // MEMORY LEAK FIX: Use singleton for local instance
+            if (!instance.useApiMode && (instance.type === 'local' || instance.code === this.currentInstanceRealm)) {
+                const db = getDb();
+                const collection = db.collection('resources');
+                const resource = await collection.findOne({ resourceId });
+
+                logger.info('Fetched cross-instance resource via MongoDB singleton', {
+                    resourceId,
+                    sourceInstance: targetInstance,
+                    found: !!resource
+                });
+
+                return resource;
+            } else if (!instance.useApiMode && instance.mongoUrl) {
+                // Direct MongoDB access for remote instances (federation)
                 const MongoClient = (await import('mongodb')).MongoClient;
                 const client = new MongoClient(instance.mongoUrl);
 

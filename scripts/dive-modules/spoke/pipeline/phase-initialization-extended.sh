@@ -45,7 +45,7 @@ spoke_init_generate_compose() {
         fi
 
         local instance_name="$code_upper Instance"
-        local spoke_id=$(json_get_field "$spoke_dir/config.json" "spokeId" "spoke-${code_lower}")
+        local spoke_id=$(spoke_config_get "$code_upper" "identity.spokeId" "spoke-${code_lower}")
         local idp_hostname="dive-spoke-${code_lower}-keycloak"
         local api_url="https://localhost:${SPOKE_BACKEND_PORT:-4000}"
         local base_url="https://localhost:${SPOKE_FRONTEND_PORT:-3000}"
@@ -246,9 +246,9 @@ spoke_init_generate_mtls_certs() {
     local code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
-    # Generate unique spoke ID
+    # Generate unique spoke ID from spoke_config_get (SSOT)
     local spoke_id
-    spoke_id=$(json_get_field "$spoke_dir/config.json" "spokeId" "spoke-${code_lower}")
+    spoke_id=$(spoke_config_get "$code_upper" "identity.spokeId" "spoke-${code_lower}")
 
     log_verbose "Generating mTLS certificates"
 
@@ -456,11 +456,6 @@ spoke_checkpoint_initialization() {
     fi
 
     # Check config files exist
-    if [ ! -f "$spoke_dir/config.json" ]; then
-        log_error "Checkpoint FAILED: config.json missing"
-        return 1
-    fi
-
     if [ ! -f "$spoke_dir/.env" ]; then
         log_error "Checkpoint FAILED: .env file missing"
         return 1

@@ -329,17 +329,12 @@ spoke_generate_certs() {
         return 1
     fi
 
-    # Load config to get spoke ID
-    local config_file="$spoke_dir/config.json"
+    # Load config to get spoke ID from spoke_config_get (SSOT)
     local spoke_id=""
     local instance_name=""
 
-    if [ -f "$config_file" ]; then
-        spoke_id=$(json_get_field "$config_file" "spokeId" "")
-        instance_name=$(json_get_field "$config_file" "name" "$instance_code")
-    fi
-
-    spoke_id="${spoke_id:-spoke-${code_lower}-unknown}"
+    spoke_id=$(spoke_config_get "$instance_code" "identity.spokeId" "spoke-${code_lower}-unknown")
+    instance_name=$(spoke_config_get "$instance_code" "identity.name" "$instance_code")
 
     print_header
     echo -e "${BOLD}Generating X.509 Certificates for Spoke:${NC} $(upper "$instance_code")"

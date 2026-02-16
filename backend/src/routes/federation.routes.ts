@@ -2179,6 +2179,97 @@ router.get('/spokes/pending', requireAdmin, async (_req: Request, res: Response)
 });
 
 /**
+ * GET /api/federation/spokes/config/:instanceCode
+ * Returns complete spoke configuration from database (SSOT)
+ * No auth required - runs on internal Docker network
+ */
+router.get('/spokes/config/:instanceCode', async (req: Request, res: Response): Promise<void> => {
+    const { instanceCode } = req.params;
+
+    try {
+        const spoke = await hubSpokeRegistry.getSpokeByInstanceCode(instanceCode);
+
+        if (!spoke) {
+            res.status(404).json({
+                error: 'Spoke not found',
+                instanceCode,
+            });
+            return;
+        }
+
+        const code = spoke.instanceCode;
+        const codeLower = code.toLowerCase();
+
+        const config = {
+            identity: {
+                spokeId: spoke.spokeId,
+                instanceCode: code,
+                name: spoke.name,
+                description: spoke.description || `DIVE V3 Spoke Instance for ${spoke.name}`,
+                country: spoke.country || code,
+                organizationType: spoke.organizationType || 'government',
+                contactEmail: spoke.contactEmail || `admin@${codeLower}.dive25.com`,
+            },
+            endpoints: {
+                hubUrl: spoke.hubUrl || 'https://dive-hub-backend:4000',
+                hubApiUrl: `${spoke.hubUrl || 'https://dive-hub-backend:4000'}/api`,
+                hubOpalUrl: 'https://dive-hub-opal-server:7002',
+                baseUrl: spoke.baseUrl || `https://localhost:${spoke.frontendPort || 3000}`,
+                apiUrl: spoke.apiUrl || `https://localhost:${spoke.backendPort || 4000}`,
+                idpUrl: spoke.idpUrl || `https://dive-spoke-${codeLower}-keycloak:8443`,
+                idpPublicUrl: spoke.idpPublicUrl || `https://localhost:${spoke.keycloakPort || 8443}`,
+                kasUrl: `https://localhost:${spoke.kasPort || 8080}`,
+            },
+            ports: {
+                frontend: spoke.frontendPort || 3000,
+                backend: spoke.backendPort || 4000,
+                keycloak: spoke.keycloakPort || 8443,
+                kas: spoke.kasPort || 8080,
+            },
+            certificates: {
+                certificatePath: `/app/instances/${codeLower}/certs/spoke.crt`,
+                privateKeyPath: `/app/instances/${codeLower}/certs/spoke.key`,
+                csrPath: `/app/instances/${codeLower}/certs/spoke.csr`,
+                caBundlePath: `/app/instances/${codeLower}/certs/hub-ca.crt`,
+            },
+            authentication: spoke.keycloakAdminPassword ? { hasCredentials: true } : {},
+            federation: {
+                status: spoke.status,
+                approvedAt: spoke.approvedAt,
+                requestedScopes: spoke.allowedPolicyScopes || [
+                    'policy:base',
+                    `policy:${codeLower}`,
+                    'data:federation_matrix',
+                    'data:trusted_issuers',
+                ],
+            },
+            operational: spoke.operationalSettings || {
+                heartbeatIntervalMs: 30000,
+                tokenRefreshBufferMs: 300000,
+                offlineGracePeriodMs: 3600000,
+                policyCachePath: `/app/instances/${codeLower}/cache/policies`,
+                auditQueuePath: `/app/instances/${codeLower}/cache/audit`,
+                maxAuditQueueSize: 10000,
+                auditFlushIntervalMs: 60000,
+            },
+            metadata: {
+                version: '2.0.0',
+                createdAt: spoke.registeredAt,
+                lastModified: spoke.registeredAt,
+            },
+        };
+
+        res.json(config);
+    } catch (error) {
+        logger.error('Failed to retrieve spoke configuration', {
+            instanceCode,
+            error: error instanceof Error ? error.message : 'Unknown error',
+        });
+        res.status(500).json({ error: 'Internal server error' });
+    }
+});
+
+/**
  * @openapi
  * /api/federation/spokes/{spokeId}:
  *   get:

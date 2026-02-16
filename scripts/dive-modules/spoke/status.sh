@@ -57,25 +57,24 @@ spoke_status() {
     # Original simple status display
     local code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
-    local config_file="$spoke_dir/config.json"
 
     print_header
     echo -e "${BOLD}Spoke Federation Status:${NC} $(upper "$instance_code")"
     echo ""
 
-    if [ ! -f "$config_file" ]; then
+    if [ ! -d "$spoke_dir" ]; then
         echo -e "  Status: ${RED}Not Initialized${NC}"
         echo ""
         echo "  Run: ./dive spoke init $instance_code <NAME>"
         return 0
     fi
 
-    # Parse config
-    local spoke_id=$(json_get_field "$config_file" "spokeId" "")
-    local instance_code_config=$(json_get_field "$config_file" "instanceCode" "")
-    local name=$(json_get_field "$config_file" "name" "")
-    local status=$(json_get_field "$config_file" "status" "")
-    local created=$(json_get_field "$config_file" "createdAt" "")
+    # Parse config from spoke_config_get (SSOT)
+    local spoke_id=$(spoke_config_get "$instance_code" "identity.spokeId")
+    local instance_code_config=$(spoke_config_get "$instance_code" "identity.instanceCode")
+    local name=$(spoke_config_get "$instance_code" "identity.name")
+    local status=""
+    local created=""
 
     # Get Hub URL from .env file (FIX 2026-01-27: was unbound variable)
     local hub_url="<not configured>"

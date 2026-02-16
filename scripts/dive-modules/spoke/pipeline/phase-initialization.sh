@@ -4,7 +4,7 @@
 # =============================================================================
 # Handles instance initialization:
 #   - Instance directory setup
-#   - Configuration file generation
+#   - Environment configuration generation (.env)
 #   - Certificate generation
 #   - Terraform initialization and apply
 #   - Docker compose generation
@@ -102,7 +102,7 @@ spoke_phase_initialization() {
     local init_marker="${spoke_dir}/.initialized"
     local needs_full_init=true
 
-    if [ -f "$spoke_dir/docker-compose.yml" ] && [ -f "$spoke_dir/config.json" ]; then
+    if [ -f "$spoke_dir/docker-compose.yml" ]; then
         needs_full_init=false
         log_info "Instance already initialized at: $spoke_dir"
 
@@ -364,7 +364,7 @@ spoke_init_ensure_mongo_keyfile() {
 # =============================================================================
 
 ##
-# Generate instance configuration (config.json)
+# Generate instance configuration (.env file and secrets)
 #
 # Arguments:
 #   $1 - Instance code
@@ -406,13 +406,10 @@ spoke_init_generate_config() {
     #
     # Benefits:
     # - No spokeId mismatch issues
-    # - No complex sync between .env, config.json, docker-compose
+    # - No complex sync between .env, docker-compose
     # - Single source of truth in Hub MongoDB
     # - Automatic offline resilience via local cache
     # ==========================================================================
-
-    # Get contact email from env or generate default
-    local contact_email="${CONTACT_EMAIL:-admin@${code_lower}.dive25.com}"
 
     # Hub URL for containers (Docker internal network)
     local hub_url_internal="https://dive-hub-backend:4000"
@@ -424,165 +421,89 @@ spoke_init_generate_config() {
     local idp_public_url="https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT}"
     local kas_url="https://localhost:${SPOKE_KAS_PORT}"
 
-    # Create config.json
-    # NOTE: spokeId is NOT included - backend queries Hub for this at startup (SSOT)
-    cat > "$spoke_dir/config.json" << EOF
-{
-  "identity": {
-    "instanceCode": "$code_upper",
-    "name": "$code_upper Instance",
-    "description": "DIVE V3 Spoke Instance for $code_upper",
-    "country": "$code_upper",
-    "organizationType": "government",
-    "contactEmail": "$contact_email"
-  },
-  "endpoints": {
-    "hubUrl": "$hub_url_internal",
-    "hubApiUrl": "${hub_url_internal}/api",
-    "hubOpalUrl": "https://dive-hub-opal-server:7002",
-    "baseUrl": "$base_url",
-    "apiUrl": "$api_url",
-    "idpUrl": "$idp_url",
-    "idpPublicUrl": "$idp_public_url",
-    "kasUrl": "$kas_url"
-  },
-  "certificates": {
-    "certificatePath": "$spoke_dir/certs/spoke.crt",
-    "privateKeyPath": "$spoke_dir/certs/spoke.key",
-    "csrPath": "$spoke_dir/certs/spoke.csr",
-    "caBundlePath": "$spoke_dir/certs/hub-ca.crt"
-  },
-  "authentication": {},
-  "federation": {
-    "status": "unregistered",
-    "requestedScopes": [
-      "policy:base",
-      "policy:${code_lower}",
-      "data:federation_matrix",
-      "data:trusted_issuers"
-    ]
-  },
-  "operational": {
-    "heartbeatIntervalMs": 30000,
-    "tokenRefreshBufferMs": 300000,
-    "offlineGracePeriodMs": 3600000,
-    "policyCachePath": "$spoke_dir/cache/policies",
-    "auditQueuePath": "$spoke_dir/cache/audit",
-    "maxAuditQueueSize": 10000,
-    "auditFlushIntervalMs": 60000
-  },
-  "metadata": {
-    "version": "1.0.0",
-    "createdAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-    "lastModified": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-    "configHash": ""
-  }
-}
-EOF
+    # Create .env file with config variables
+    # NOTE: No SPOKE_ID - backend queries Hub at startup (SSOT architecture)
+    spoke_init_generate_env "$instance_code" "$base_url" "$api_url" "$idp_url" "$idp_public_url" "$kas_url" "$hub_url_internal"
 
-    if [ -f "$spoke_dir/config.json" ]; then
-        log_success "Configuration generated: $spoke_dir/config.json"
+    log_success "Instance configuration generated (.env)"
 
-        # Create .env file with config variables
-        # NOTE: No SPOKE_ID - backend queries Hub at startup (SSOT architecture)
-        spoke_init_generate_env "$instance_code" "$base_url" "$api_url" "$idp_url" "$idp_public_url" "$kas_url" "$hub_url_internal"
+    # CRITICAL FIX (2026-01-15): Sync secrets to .env BEFORE containers start
+    # Root cause: Containers were starting with incomplete .env (missing secrets)
+    # Solution: Sync secrets during initialization, not configuration phase
+    if type spoke_secrets_sync_to_env &>/dev/null; then
+        log_verbose "Syncing secrets to .env before container startup"
+        spoke_secrets_sync_to_env "$instance_code" || log_warn "Secret sync had issues (continuing)"
+    fi
 
-        # CRITICAL FIX (2026-01-15): Sync secrets to .env BEFORE containers start
-        # Root cause: Containers were starting with incomplete .env (missing secrets)
-        # Solution: Sync secrets during initialization, not configuration phase
-        if type spoke_secrets_sync_to_env &>/dev/null; then
-            log_verbose "Syncing secrets to .env before container startup"
-            spoke_secrets_sync_to_env "$instance_code" || log_warn "Secret sync had issues (continuing)"
+    # ==========================================================================
+    # CRITICAL FIX (2026-01-22): Provision OPAL token BEFORE container startup
+    # ==========================================================================
+    # ROOT CAUSE: OPAL client was starting with empty token, causing:
+    #   - Infinite 403 Forbidden retry loop
+    #   - OPAL client never becoming healthy
+    #   - KAS failing to start (depends on OPAL client healthy)
+    # SOLUTION: Provision token during initialization, before docker compose up
+    log_verbose "Attempting to provision OPAL token before container startup..."
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "dive-hub-opal-server"; then
+        log_verbose "Hub OPAL server detected - provisioning token"
+        local hub_env_file="${DIVE_ROOT}/.env.hub"
+        local master_token=""
+
+        if [ -f "$hub_env_file" ]; then
+            master_token=$(grep "^OPAL_AUTH_MASTER_TOKEN=" "$hub_env_file" 2>/dev/null | cut -d= -f2)
         fi
 
-        # ==========================================================================
-        # CRITICAL FIX (2026-01-22): Provision OPAL token BEFORE container startup
-        # ==========================================================================
-        # ROOT CAUSE: OPAL client was starting with empty token, causing:
-        #   - Infinite 403 Forbidden retry loop
-        #   - OPAL client never becoming healthy
-        #   - KAS failing to start (depends on OPAL client healthy)
-        # SOLUTION: Provision token during initialization, before docker compose up
-        log_verbose "Attempting to provision OPAL token before container startup..."
-        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "dive-hub-opal-server"; then
-            log_verbose "Hub OPAL server detected - provisioning token"
-            local hub_env_file="${DIVE_ROOT}/.env.hub"
-            local master_token=""
+        if [ -n "$master_token" ]; then
+            # Request JWT from OPAL server
+            local token_response
+            token_response=$(curl -sk --max-time 10 \
+                -X POST "https://localhost:7002/token" \
+                -H "Authorization: Bearer ${master_token}" \
+                -H "Content-Type: application/json" \
+                -d '{"type": "client"}' 2>/dev/null || echo "")
 
-            if [ -f "$hub_env_file" ]; then
-                master_token=$(grep "^OPAL_AUTH_MASTER_TOKEN=" "$hub_env_file" 2>/dev/null | cut -d= -f2)
+            local opal_token=""
+            if [ -n "$token_response" ]; then
+                opal_token=$(echo "$token_response" | jq -r '.token // empty' 2>/dev/null)
             fi
 
-            if [ -n "$master_token" ]; then
-                # Request JWT from OPAL server
-                local token_response
-                token_response=$(curl -sk --max-time 10 \
-                    -X POST "https://localhost:7002/token" \
-                    -H "Authorization: Bearer ${master_token}" \
-                    -H "Content-Type: application/json" \
-                    -d '{"type": "client"}' 2>/dev/null || echo "")
-
-                local opal_token=""
-                if [ -n "$token_response" ]; then
-                    opal_token=$(echo "$token_response" | jq -r '.token // empty' 2>/dev/null)
-                fi
-
-                local env_file="$spoke_dir/.env"
-                if [ -n "$opal_token" ] && [[ "$opal_token" =~ ^eyJ ]]; then
-                    # Update .env file with the token
-                    if [ -f "$env_file" ]; then
-                        sed -i.bak "s|^SPOKE_OPAL_TOKEN=.*|SPOKE_OPAL_TOKEN=$opal_token|" "$env_file"
-                        rm -f "$env_file.bak"
-                        log_success "✓ OPAL token provisioned during initialization"
-                    fi
-                else
-                    log_warn "Could not get OPAL token from Hub (will retry after container start)"
-                    # Set placeholder token to prevent OPAL client from failing during deployment
-                    # Real token will be provisioned in configuration phase after federation
-                    if [ -f "$env_file" ]; then
-                        # Check if SPOKE_OPAL_TOKEN is empty or missing
-                        local current_token
-                        current_token=$(grep "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null | cut -d= -f2- | tr -d ' ' || echo "")
-
-                        if [ -z "$current_token" ] || [ "$current_token" = "" ]; then
-                            # Token is empty - set placeholder
-                            if grep -q "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null; then
-                                # Update existing empty line
-                                sed -i.bak "s|^SPOKE_OPAL_TOKEN=.*|SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision|" "$env_file"
-                                rm -f "$env_file.bak" 2>/dev/null
-                            else
-                                # Add new line
-                                echo "SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision" >> "$env_file"
-                            fi
-                            log_verbose "✓ Set placeholder OPAL token (will be replaced in configuration phase)"
-                        else
-                            log_verbose "OPAL token already set (not empty)"
-                        fi
-                    else
-                        log_warn ".env file not found - placeholder token will be set when .env is created"
-                    fi
+            local env_file="$spoke_dir/.env"
+            if [ -n "$opal_token" ] && [[ "$opal_token" =~ ^eyJ ]]; then
+                # Update .env file with the token
+                if [ -f "$env_file" ]; then
+                    sed -i.bak "s|^SPOKE_OPAL_TOKEN=.*|SPOKE_OPAL_TOKEN=$opal_token|" "$env_file"
+                    rm -f "$env_file.bak"
+                    log_success "✓ OPAL token provisioned during initialization"
                 fi
             else
-                log_verbose "Hub master token not found - OPAL token will be provisioned later"
-                # Set placeholder token
-                local env_file="$spoke_dir/.env"
+                log_warn "Could not get OPAL token from Hub (will retry after container start)"
+                # Set placeholder token to prevent OPAL client from failing during deployment
+                # Real token will be provisioned in configuration phase after federation
                 if [ -f "$env_file" ]; then
+                    # Check if SPOKE_OPAL_TOKEN is empty or missing
                     local current_token
                     current_token=$(grep "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null | cut -d= -f2- | tr -d ' ' || echo "")
 
                     if [ -z "$current_token" ] || [ "$current_token" = "" ]; then
+                        # Token is empty - set placeholder
                         if grep -q "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null; then
+                            # Update existing empty line
                             sed -i.bak "s|^SPOKE_OPAL_TOKEN=.*|SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision|" "$env_file"
                             rm -f "$env_file.bak" 2>/dev/null
                         else
+                            # Add new line
                             echo "SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision" >> "$env_file"
                         fi
                         log_verbose "✓ Set placeholder OPAL token (will be replaced in configuration phase)"
+                    else
+                        log_verbose "OPAL token already set (not empty)"
                     fi
+                else
+                    log_warn ".env file not found - placeholder token will be set when .env is created"
                 fi
             fi
         else
-            log_verbose "Hub OPAL server not running - OPAL token will be provisioned later"
+            log_verbose "Hub master token not found - OPAL token will be provisioned later"
             # Set placeholder token
             local env_file="$spoke_dir/.env"
             if [ -f "$env_file" ]; then
@@ -600,14 +521,27 @@ EOF
                 fi
             fi
         fi
-
-        return 0
     else
-        orch_record_error "$SPOKE_ERROR_CONFIG_GENERATE" "$ORCH_SEVERITY_CRITICAL" \
-            "Failed to generate config.json" "initialization" \
-            "$(spoke_error_get_remediation $SPOKE_ERROR_CONFIG_GENERATE $instance_code)"
-        return 1
+        log_verbose "Hub OPAL server not running - OPAL token will be provisioned later"
+        # Set placeholder token
+        local env_file="$spoke_dir/.env"
+        if [ -f "$env_file" ]; then
+            local current_token
+            current_token=$(grep "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null | cut -d= -f2- | tr -d ' ' || echo "")
+
+            if [ -z "$current_token" ] || [ "$current_token" = "" ]; then
+                if grep -q "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null; then
+                    sed -i.bak "s|^SPOKE_OPAL_TOKEN=.*|SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision|" "$env_file"
+                    rm -f "$env_file.bak" 2>/dev/null
+                else
+                    echo "SPOKE_OPAL_TOKEN=placeholder-token-awaiting-provision" >> "$env_file"
+                fi
+                log_verbose "✓ Set placeholder OPAL token (will be replaced in configuration phase)"
+            fi
+        fi
     fi
+
+    return 0
 }
 
 ##

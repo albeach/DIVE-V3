@@ -458,22 +458,14 @@ spoke_config_register_in_hub_mongodb() {
         hub_url="https://localhost:4000"
     fi
 
-    # Get spoke configuration
-    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
-    local config_file="$spoke_dir/config.json"
-
-    if [ ! -f "$config_file" ]; then
-        log_error "Spoke config not found: $config_file"
-        return 1
-    fi
-
-    local spoke_id=$(jq -r '.identity.spokeId // empty' "$config_file" 2>/dev/null)
-    local instance_name=$(jq -r '.identity.name // empty' "$config_file" 2>/dev/null)
-    local base_url=$(jq -r '.endpoints.baseUrl // empty' "$config_file" 2>/dev/null)
-    local api_url=$(jq -r '.endpoints.apiUrl // empty' "$config_file" 2>/dev/null)
-    local idp_url=$(jq -r '.endpoints.idpUrl // empty' "$config_file" 2>/dev/null)
-    local idp_public_url=$(jq -r '.endpoints.idpPublicUrl // empty' "$config_file" 2>/dev/null)
-    local contact_email=$(jq -r '.identity.contactEmail // empty' "$config_file" 2>/dev/null)
+    # Get spoke configuration from SSOT (spoke_config_get)
+    local spoke_id=$(spoke_config_get "$instance_code" "identity.spokeId")
+    local instance_name=$(spoke_config_get "$instance_code" "identity.name")
+    local base_url=$(spoke_config_get "$instance_code" "endpoints.baseUrl")
+    local api_url=$(spoke_config_get "$instance_code" "endpoints.apiUrl")
+    local idp_url=$(spoke_config_get "$instance_code" "endpoints.idpUrl")
+    local idp_public_url=$(spoke_config_get "$instance_code" "endpoints.idpPublicUrl")
+    local contact_email=$(spoke_config_get "$instance_code" "identity.contactEmail")
 
     # Fallback to NATO database for name if config doesn't have it
     if [ -z "$instance_name" ] || [ "$instance_name" = "null" ]; then

@@ -1,7 +1,6 @@
 # Optimized multi-stage build for DIVE V3 KAS
 FROM node:24-alpine AS base
-RUN apk add --no-cache curl && \
-    apk cache clean
+RUN apk add --no-cache curl
 
 FROM base AS deps
 RUN apk add --no-cache libc6-compat
@@ -39,7 +38,7 @@ COPY --from=builder --chown=kasuser:nodejs /app/src ./src
 
 # Create logs directory with correct permissions
 RUN mkdir -p logs && \
-    chown -R kasuser:nodejs /app
+    chown kasuser:nodejs logs
 
 USER kasuser
 
@@ -53,4 +52,3 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 
 # Support both development and production modes
 CMD if [ "$NODE_ENV" = "development" ]; then npm run dev; else node dist/server.js; fi
-

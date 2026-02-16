@@ -93,7 +93,6 @@ orch_checkpoint_configuration() {
 
     # Copy configuration files
     cp "${instance_dir}/.env" "${checkpoint_dir}/.env" 2>/dev/null || true
-    cp "${instance_dir}/config.json" "${checkpoint_dir}/config.json" 2>/dev/null || true
     cp "${instance_dir}/docker-compose.yml" "${checkpoint_dir}/docker-compose.yml" 2>/dev/null || true
 
     # Backup environment file with timestamp
@@ -142,13 +141,6 @@ orch_checkpoint_federation() {
     local checkpoint_dir="$2"
 
     log_verbose "Checkpointing federation configuration..."
-
-    local config_file="${DIVE_ROOT}/instances/${instance_code}/config.json"
-
-    # Copy federation-related configuration
-    if [ -f "$config_file" ]; then
-        cp "$config_file" "${checkpoint_dir}/federation_config.json"
-    fi
 
     # Export federation registry entries
     if [ -f "${DIVE_ROOT}/config/federation-registry.json" ]; then
@@ -455,7 +447,6 @@ orch_rollback_complete() {
             mkdir -p "$backup_dir"
 
             # Backup config files if they exist
-            [ -f "$instance_dir/config.json" ] && cp "$instance_dir/config.json" "$backup_dir/" 2>/dev/null
             [ -f "$instance_dir/.env" ] && cp "$instance_dir/.env" "$backup_dir/" 2>/dev/null
 
             # Remove instance directory

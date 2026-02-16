@@ -202,7 +202,6 @@ _validate_preflight_state() {
 # Validate INITIALIZATION phase state
 #
 # Checks:
-#   - config.json exists and valid
 #   - docker-compose.yml exists
 #   - .env file exists with required variables
 #
@@ -220,18 +219,6 @@ _validate_initialization_state() {
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     log_verbose "Validating INITIALIZATION state for $code_upper..."
-
-    # Check config.json exists and is valid JSON
-    local config_file="$spoke_dir/config.json"
-    if [ ! -f "$config_file" ]; then
-        log_warn "config.json missing: $config_file"
-        return 1
-    fi
-
-    if ! jq empty "$config_file" 2>/dev/null; then
-        log_warn "config.json is invalid JSON: $config_file"
-        return 1
-    fi
 
     # Check docker-compose.yml exists
     local compose_file="$spoke_dir/docker-compose.yml"
