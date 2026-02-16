@@ -14,12 +14,10 @@
  * @date 2026-01-16
  */
 
-import { MongoClient, Db, Collection } from 'mongodb';
+import { Collection } from 'mongodb';
 import { logger } from '../utils/logger';
+import { getDb } from '../utils/mongodb-singleton';
 import { mongoKasRegistryStore, IKasInstance, IKasFederationAgreement } from '../models/kas-registry.model';
-
-const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
-const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
 
 // ============================================
 // Interfaces
@@ -118,8 +116,6 @@ interface IAuditLogEntry {
 // ============================================
 
 class KASMetricsService {
-  private db: Db | null = null;
-  private client: MongoClient | null = null;
   private auditCollection: Collection<IAuditLogEntry> | null = null;
   private initialized = false;
 
@@ -130,16 +126,14 @@ class KASMetricsService {
     if (this.initialized) return;
 
     try {
-      this.client = new MongoClient(MONGODB_URL);
-      await this.client.connect();
-      this.db = this.client.db(DB_NAME);
-      this.auditCollection = this.db.collection<IAuditLogEntry>('audit_log');
+      const db = getDb();
+      this.auditCollection = db.collection<IAuditLogEntry>('audit_log');
 
       // Ensure MongoDB KAS registry is initialized
       await mongoKasRegistryStore.initialize();
 
       this.initialized = true;
-      logger.info('KAS Metrics Service initialized', { database: DB_NAME });
+      logger.info('KAS Metrics Service initialized');
     } catch (error) {
       logger.error('Failed to initialize KAS Metrics Service', {
         error: error instanceof Error ? error.message : 'Unknown error'
@@ -414,19 +408,6 @@ class KASMetricsService {
       },
       timestamp: new Date().toISOString()
     };
-  }
-
-  /**
-   * Close MongoDB connection
-   */
-  async close(): Promise<void> {
-    if (this.client) {
-      await this.client.close();
-      this.client = null;
-      this.db = null;
-      this.auditCollection = null;
-      this.initialized = false;
-    }
   }
 }
 

@@ -10,8 +10,7 @@
  */
 
 import { logger } from '../utils/logger';
-import { MongoClient, Db } from 'mongodb';
-import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
+import { getDb } from '../utils/mongodb-singleton';
 
 export interface IComplianceReport {
   reportId: string;
@@ -44,29 +43,7 @@ export interface IComplianceFinding {
 }
 
 class ComplianceReportingService {
-  private mongoClient: MongoClient | null = null;
-  private db: Db | null = null;
-
-  async initialize(): Promise<void> {
-    if (this.mongoClient && this.db) {
-      return;
-    }
-
-    try {
-      const MONGODB_URL = getMongoDBUrl();
-      const DB_NAME = getMongoDBName();
-      
-      this.mongoClient = new MongoClient(MONGODB_URL);
-      await this.mongoClient.connect();
-      this.db = this.mongoClient.db(DB_NAME);
-      logger.debug('Compliance reporting service: Connected to MongoDB');
-    } catch (error) {
-      logger.error('Failed to connect to MongoDB for compliance reporting', {
-        error: error instanceof Error ? error.message : 'Unknown error'
-      });
-      throw error;
-    }
-  }
+  // MongoDB is connected via singleton at server startup - no per-service connection needed
 
   /**
    * Generate NIST SP 800-63-3 compliance report
@@ -76,13 +53,8 @@ class ComplianceReportingService {
     endDate: Date,
     generatedBy: string
   ): Promise<IComplianceReport> {
-    await this.initialize();
-    
-    if (!this.db) {
-      throw new Error('MongoDB not initialized');
-    }
-
-    const collection = this.db.collection('audit_logs');
+    const db = getDb();
+    const collection = db.collection('audit_logs');
     
     // Query audit logs for the period
     const logs = await collection.find({
@@ -179,13 +151,8 @@ class ComplianceReportingService {
     endDate: Date,
     generatedBy: string
   ): Promise<IComplianceReport> {
-    await this.initialize();
-    
-    if (!this.db) {
-      throw new Error('MongoDB not initialized');
-    }
-
-    const collection = this.db.collection('audit_logs');
+    const db = getDb();
+    const collection = db.collection('audit_logs');
     
     const logs = await collection.find({
       timestamp: {
@@ -402,14 +369,6 @@ class ComplianceReportingService {
     }
 
     return recommendations;
-  }
-
-  async close(): Promise<void> {
-    if (this.mongoClient) {
-      await this.mongoClient.close();
-      this.mongoClient = null;
-      this.db = null;
-    }
   }
 }
 
