@@ -28,7 +28,7 @@ const createRateLimitStore = (prefix: string) => {
             });
 
             // Test connection
-            redisClient.ping().catch((error) => {
+            redisClient.ping().catch((error): null => {
                 logger.warn(`Redis store unavailable for ${prefix} rate limiting, falling back to memory`, {
                     error: error.message,
                     prefix

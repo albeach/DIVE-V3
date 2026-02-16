@@ -795,7 +795,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
                 // FIXED (Dec 2025): Get updated spoke from error if available (race condition fix)
                 // The approveSpoke function now attaches the re-fetched spoke to the error
                 if ((approvalError as Error & { spoke?: typeof spoke }).spoke) {
-                    spoke = (approvalError as Error & { spoke?: typeof spoke }).spoke;
+                    spoke = (approvalError as Error & { spoke?: typeof spoke }).spoke!;
                     logger.warn('Spoke status after failed approval', {
                         spokeId: spoke.spokeId,
                         status: spoke.status,

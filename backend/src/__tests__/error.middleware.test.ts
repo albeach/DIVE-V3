@@ -419,7 +419,7 @@ describe('Error Middleware', () => {
 
             const error = new ValidationError('Multiple validation errors', details);
 
-            expect(error.details.errors).toHaveLength(3);
+            expect(error.details!.errors).toHaveLength(3);
         });
     });
 
@@ -514,7 +514,7 @@ describe('Error Middleware', () => {
 
         it('should handle null details', () => {
             const error = new ValidationError('Test');
-            error.details = null;
+            error.details = undefined;
 
             errorHandler(error, req as Request, res as Response, next);
 

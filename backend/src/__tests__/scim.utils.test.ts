@@ -84,15 +84,16 @@ describe('SCIM Utils', () => {
 
             it('should parse complex AND filter', () => {
                 const result = parseSCIMFilter('userName eq "bjensen" and emails pr');
+                const filters = result.filters as Record<string, unknown>[];
 
                 expect(result.operator).toBe('and');
-                expect(result.filters).toHaveLength(2);
-                expect(result.filters[0]).toEqual({
+                expect(filters).toHaveLength(2);
+                expect(filters[0]).toEqual({
                     attribute: 'userName',
                     operator: 'eq',
                     value: 'bjensen',
                 });
-                expect(result.filters[1]).toEqual({
+                expect(filters[1]).toEqual({
                     attribute: 'emails',
                     operator: 'pr',
                 });
@@ -100,15 +101,16 @@ describe('SCIM Utils', () => {
 
             it('should parse complex OR filter', () => {
                 const result = parseSCIMFilter('userName eq "bjensen" or userName eq "jsmith"');
+                const filters = result.filters as Record<string, unknown>[];
 
                 expect(result.operator).toBe('or');
-                expect(result.filters).toHaveLength(2);
-                expect(result.filters[0]).toEqual({
+                expect(filters).toHaveLength(2);
+                expect(filters[0]).toEqual({
                     attribute: 'userName',
                     operator: 'eq',
                     value: 'bjensen',
                 });
-                expect(result.filters[1]).toEqual({
+                expect(filters[1]).toEqual({
                     attribute: 'userName',
                     operator: 'eq',
                     value: 'jsmith',

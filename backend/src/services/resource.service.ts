@@ -83,7 +83,7 @@ async function getCollection(): Promise<Collection<IZTDFResource>> {
  * Check if resource is ZTDF-enhanced
  */
 function isZTDFResource(resource: unknown): resource is IZTDFResource {
-    return resource && typeof resource === 'object' && 'ztdf' in resource;
+    return Boolean(resource && typeof resource === 'object' && 'ztdf' in resource);
 }
 
 /**

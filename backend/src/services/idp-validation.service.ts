@@ -234,11 +234,12 @@ class IdPValidationService {
       return result;
     } catch (error) {
       const duration = Date.now() - startTime;
-      logger.error('TLS validation failed', { url, error: error.message, durationMs: duration });
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      logger.error('TLS validation failed', { url, error: errorMessage, durationMs: duration });
 
       result.pass = false;
       result.score = 0;
-      result.errors.push(`TLS connection failed: ${error.message}`);
+      result.errors.push(`TLS connection failed: ${errorMessage}`);
 
       return result;
     }
@@ -439,15 +440,16 @@ class IdPValidationService {
       return result;
     } catch (error) {
       const duration = Date.now() - startTime;
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
       logger.error('OIDC algorithms validation error', {
         jwksUrl,
-        error: error.message,
+        error: errorMessage,
         durationMs: duration,
       });
 
       result.pass = false;
       result.score = 0;
-      result.violations = [`Failed to fetch JWKS: ${error.message}`];
+      result.violations = [`Failed to fetch JWKS: ${errorMessage}`];
 
       return result;
     }
@@ -582,14 +584,15 @@ class IdPValidationService {
       return result;
     } catch (error) {
       const duration = Date.now() - startTime;
+      const errorMessage = error instanceof Error ? error.message : (error as { message?: string })?.message || 'Unknown error';
       result.latency_ms = duration;
       result.reachable = false;
       result.score = 0;
-      result.errors.push(`Endpoint unreachable: ${error.message}`);
+      result.errors.push(`Endpoint unreachable: ${errorMessage}`);
 
       logger.error('Endpoint reachability check failed', {
         url,
-        error: error.message,
+        error: errorMessage,
         latencyMs: duration,
       });
 

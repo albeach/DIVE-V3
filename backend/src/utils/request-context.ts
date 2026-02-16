@@ -158,7 +158,7 @@ export function withErrorHandling<T>(
   fn: () => Promise<T>,
   context: IErrorContext
 ): Promise<T | null> {
-  return fn().catch((error) => {
+  return fn().catch((error): null => {
     logError(error, context);
     return null;
   });

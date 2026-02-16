@@ -322,7 +322,7 @@ export async function uploadFile(
                 COI: metadata.COI || [],
                 coiOperator: metadata.coiOperator || 'ALL',
                 encrypted: true,
-                encryptedContent: null  // NEVER store content inline - always use GridFS or ZTDF payload
+                encryptedContent: undefined  // NEVER store content inline - always use GridFS or ZTDF payload
             },
             stanag: stanagMetadata,
             // Add multimedia metadata if present
@@ -541,8 +541,8 @@ function createMultipleKAOs(params: {
 
     for (const nation of relevantNations) {
         const alreadyCovered = kaos.some(k =>
-            k.policyBinding.countriesAllowed.length === 1 &&
-            k.policyBinding.countriesAllowed[0] === nation
+            k.policyBinding.countriesAllowed?.length === 1 &&
+            k.policyBinding.countriesAllowed?.[0] === nation
         );
 
         if (!alreadyCovered) {

@@ -234,7 +234,7 @@ class FederationDiscoveryService {
                     }
                 }));
 
-            instances.push(...remoteInstances);
+            instances.push(...remoteInstances as IFederationInstance[]);
         }
 
         logger.info('Loaded federation instances from Hub API', {

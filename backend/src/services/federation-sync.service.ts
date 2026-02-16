@@ -154,7 +154,7 @@ class FederationSyncService extends EventEmitter {
       // Token typically valid for 60 seconds
       this.keycloakTokenExpiry = Date.now() + (response.data.expires_in || 60) * 1000;
 
-      return this.keycloakToken;
+      return this.keycloakToken!;
     } catch (error) {
       logger.error('Failed to get Keycloak admin token', {
         error: error instanceof Error ? error.message : 'Unknown error'

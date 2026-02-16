@@ -35,10 +35,10 @@ router.get('/api/admin/logs/opal-server',
     // Send logs to client
     dockerLogs.stdout.on('data', (data) => {
       const logLines = data.toString().split('\n');
-      logLines.forEach(line => {
+      logLines.forEach((line: string) => {
         if (line.trim()) {
-          res.write(`data: ${JSON.stringify({ 
-            type: 'log', 
+          res.write(`data: ${JSON.stringify({
+            type: 'log',
             source: 'opal-server',
             message: line,
             timestamp: new Date().toISOString()
@@ -49,10 +49,10 @@ router.get('/api/admin/logs/opal-server',
 
     dockerLogs.stderr.on('data', (data) => {
       const logLines = data.toString().split('\n');
-      logLines.forEach(line => {
+      logLines.forEach((line: string) => {
         if (line.trim()) {
-          res.write(`data: ${JSON.stringify({ 
-            type: 'log', 
+          res.write(`data: ${JSON.stringify({
+            type: 'log',
             source: 'opal-server',
             level: 'error',
             message: line,
@@ -118,10 +118,10 @@ router.get('/api/admin/logs/opa/:instance',
 
     dockerLogs.stdout.on('data', (data) => {
       const logLines = data.toString().split('\n');
-      logLines.forEach(line => {
+      logLines.forEach((line: string) => {
         if (line.trim()) {
-          res.write(`data: ${JSON.stringify({ 
-            type: 'log', 
+          res.write(`data: ${JSON.stringify({
+            type: 'log',
             source: `opa-${instance}`,
             message: line,
             timestamp: new Date().toISOString()
@@ -132,10 +132,10 @@ router.get('/api/admin/logs/opa/:instance',
 
     dockerLogs.stderr.on('data', (data) => {
       const logLines = data.toString().split('\n');
-      logLines.forEach(line => {
+      logLines.forEach((line: string) => {
         if (line.trim()) {
-          res.write(`data: ${JSON.stringify({ 
-            type: 'log', 
+          res.write(`data: ${JSON.stringify({
+            type: 'log',
             source: `opa-${instance}`,
             level: 'error',
             message: line,
@@ -200,7 +200,7 @@ router.get('/api/admin/logs/aggregate',
     
     opalLogs.stdout.on('data', (data) => {
       const logLines = data.toString().split('\n');
-      logLines.forEach(line => {
+      logLines.forEach((line: string) => {
         if (line.trim() && new RegExp(filterPattern, 'i').test(line)) {
           res.write(`data: ${JSON.stringify({ 
             type: 'log', 

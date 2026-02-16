@@ -995,8 +995,8 @@ export async function runPolicyUnitTests(policyId: string): Promise<IOPATestRunR
                         results: unitTests.tests.map(t => ({
                             name: t.name,
                             passed: true,
-                            duration: undefined,
-                            error: undefined,
+                            duration: undefined as string | undefined,
+                            error: undefined as string | undefined,
                             location: t.sourceFile
                         })),
                         timestamp: new Date().toISOString()

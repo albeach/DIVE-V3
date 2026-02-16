@@ -257,11 +257,11 @@ export const getSearchMetricsHandler = async (
           ],
           avgResultCount: [
             { $match: { event: 'search' } },
-            { $group: { _id: null, avg: { $avg: '$resultCount' } } },
+            { $group: { _id: null as unknown, avg: { $avg: '$resultCount' } } },
           ],
           avgLatencyMs: [
             { $match: { event: 'search', latencyMs: { $exists: true } } },
-            { $group: { _id: null, avg: { $avg: '$latencyMs' } } },
+            { $group: { _id: null as unknown, avg: { $avg: '$latencyMs' } } },
           ],
           zeroResults: [
             { $match: { event: { $in: ['search', 'zero_results'] }, resultCount: 0 } },
@@ -390,9 +390,9 @@ export const getPopularSearchesHandler = async (
       { $group: { _id: '$queryHash', clicks: { $sum: 1 } } },
     ]).toArray();
 
-    const clickMap = new Map(clickData.map((c: { _id: string; clicks: number }) => [c._id, c.clicks]));
+    const clickMap = new Map((clickData as Array<{ _id: string; clicks: number }>).map((c) => [c._id, c.clicks]));
 
-    const results: IPopularSearch[] = popularSearches.map((search: { _id: string; searchCount: number; avgResultCount: number; avgLatencyMs: number; lastSearched: Date; queryLength: number }) => ({
+    const results: IPopularSearch[] = (popularSearches as Array<{ _id: string; searchCount: number; avgResultCount: number; avgLatencyMs: number; lastSearched: Date; queryLength: number }>).map((search) => ({
       queryHash: search._id,
       searchCount: search.searchCount,
       avgResultCount: Math.round(search.avgResultCount || 0),
@@ -483,7 +483,7 @@ export const getZeroResultQueriesHandler = async (
         start: startDate.toISOString(),
         end: new Date().toISOString(),
       },
-      queries: zeroResults.map((q: { _id: string; count: number; avgQueryLength: number; lastOccurred: Date; sources: string[] }) => ({
+      queries: (zeroResults as Array<{ _id: string; count: number; avgQueryLength: number; lastOccurred: Date; sources: string[] }>).map((q) => ({
         queryHash: q._id,
         occurrences: q.count,
         avgQueryLength: Math.round(q.avgQueryLength || 0),

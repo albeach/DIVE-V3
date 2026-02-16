@@ -260,7 +260,7 @@ function extractConfidentialityLabel(bindingInfo: XmlNode): IConfidentialityLabe
     return {
         policyIdentifier: policyId,
         classification: normalizeClassification(classification),
-        categories: categories.length > 0 ? categories : undefined,
+        categories: categories && categories.length > 0 ? categories : undefined,
         creationDateTime,
         originatorId: extractTextValue(originatorId) || undefined,
         originatorIdType: originatorId?.$?.IDType as 'uniformResourceIdentifier' | 'distinguishedName' | undefined,

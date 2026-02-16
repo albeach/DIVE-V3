@@ -742,25 +742,25 @@ export const paginatedSearchHandler = async (
                   count: { $sum: 1 }
                 }
               },
-              { $match: { _id: { $ne: null } } },
+              { $match: { _id: { $ne: null as unknown } } },
               { $sort: { count: -1 } }
             ],
             countries: [
               { $unwind: { path: '$_computedReleasabilityTo', preserveNullAndEmptyArrays: false } },
-              { $match: { _computedReleasabilityTo: { $ne: null, $exists: true } } },
+              { $match: { _computedReleasabilityTo: { $ne: null as unknown, $exists: true } } },
               { $group: { _id: '$_computedReleasabilityTo', count: { $sum: 1 } } },
               { $sort: { count: -1 } },
               { $limit: 20 }
             ],
             cois: [
               { $unwind: { path: '$_computedCOI', preserveNullAndEmptyArrays: false } },
-              { $match: { _computedCOI: { $ne: null, $exists: true } } },
+              { $match: { _computedCOI: { $ne: null as unknown, $exists: true } } },
               { $group: { _id: '$_computedCOI', count: { $sum: 1 } } },
               { $sort: { count: -1 } }
             ],
             instances: [
               { $group: { _id: '$originRealm', count: { $sum: 1 } } },
-              { $match: { _id: { $ne: null } } },
+              { $match: { _id: { $ne: null as unknown } } },
               { $sort: { count: -1 } }
             ],
             encryptionStatus: [
@@ -794,7 +794,7 @@ export const paginatedSearchHandler = async (
                   }
                 }
               },
-              { $match: { category: { $ne: 'other' }, contentType: { $ne: null, $exists: true } } },
+              { $match: { category: { $ne: 'other' as unknown }, contentType: { $ne: null as unknown, $exists: true } } },
               {
                 $group: {
                   _id: '$category',
@@ -833,16 +833,16 @@ export const paginatedSearchHandler = async (
                   _rawDate: { $ifNull: ['$ztdf.policy.securityLabel.creationDate', '$creationDate'] }
                 }
               },
-              { $match: { _rawDate: { $exists: true, $ne: null } } },
+              { $match: { _rawDate: { $exists: true, $ne: null as unknown } } },
               {
                 $addFields: {
-                  _parsedDate: { $dateFromString: { dateString: '$_rawDate', onError: null } }
+                  _parsedDate: { $dateFromString: { dateString: '$_rawDate', onError: null as unknown } }
                 }
               },
-              { $match: { _parsedDate: { $ne: null } } },
+              { $match: { _parsedDate: { $ne: null as unknown } } },
               {
                 $group: {
-                  _id: null,
+                  _id: null as unknown,
                   avgAgeDays: {
                     $avg: {
                       $divide: [
@@ -1073,25 +1073,25 @@ export const getFacetsHandler = async (
                 count: { $sum: 1 }
               }
             },
-            { $match: { _id: { $ne: null } } },
+            { $match: { _id: { $ne: null as unknown } } },
             { $sort: { count: -1 } }
           ],
           countries: [
             { $unwind: { path: '$_computedReleasabilityTo', preserveNullAndEmptyArrays: false } },
-            { $match: { _computedReleasabilityTo: { $ne: null, $exists: true } } },
+            { $match: { _computedReleasabilityTo: { $ne: null as unknown, $exists: true } } },
             { $group: { _id: '$_computedReleasabilityTo', count: { $sum: 1 } } },
             { $sort: { count: -1 } },
             { $limit: 20 }
           ],
           cois: [
             { $unwind: { path: '$_computedCOI', preserveNullAndEmptyArrays: false } },
-            { $match: { _computedCOI: { $ne: null, $exists: true } } },
+            { $match: { _computedCOI: { $ne: null as unknown, $exists: true } } },
             { $group: { _id: '$_computedCOI', count: { $sum: 1 } } },
             { $sort: { count: -1 } }
           ],
           instances: [
             { $group: { _id: '$originRealm', count: { $sum: 1 } } },
-            { $match: { _id: { $ne: null } } },
+            { $match: { _id: { $ne: null as unknown } } },
             { $sort: { count: -1 } }
           ],
           encryptionStatus: [
@@ -1125,7 +1125,7 @@ export const getFacetsHandler = async (
                 }
               }
             },
-            { $match: { category: { $ne: 'other' }, contentType: { $ne: null, $exists: true } } },
+            { $match: { category: { $ne: 'other' as unknown }, contentType: { $ne: null as unknown, $exists: true } } },
             {
               $group: {
                 _id: '$category',

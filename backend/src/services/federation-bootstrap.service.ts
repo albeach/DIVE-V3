@@ -724,7 +724,7 @@ class FederationBootstrapService {
       try {
         const startTime = Date.now();
         // Phase 5: Federation sync service handles drift detection separately
-        const result = { success: true, updates: [], errors: [] };
+        const result = { success: true, updates: [] as string[], errors: [] as string[] };
         const duration = Date.now() - startTime;
 
         if (result.success) {
@@ -771,7 +771,7 @@ class FederationBootstrapService {
       try {
         const startTime = Date.now();
         // Phase 5: Federation sync service handles drift detection separately
-        const result = { success: true, updates: [], errors: [] };
+        const result = { success: true, updates: [] as string[], errors: [] as string[] };
         const duration = Date.now() - startTime;
 
         logger.info('Federation cascade completed for spoke revocation', {

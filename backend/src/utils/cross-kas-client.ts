@@ -31,7 +31,7 @@ export interface IExternalKASConfig {
  * Create authenticated HTTP client for external KAS
  */
 export function createKASClient(config: IExternalKASConfig): AxiosInstance {
-    const axiosConfig: Record<string, unknown> = {
+    const axiosConfig: Record<string, unknown> & { headers: Record<string, string> } = {
         baseURL: config.kasUrl,
         timeout: 10000,
         headers: {
@@ -56,7 +56,7 @@ export function createKASClient(config: IExternalKASConfig): AxiosInstance {
 
         case 'apikey':
             const headerName = config.authConfig.apiKeyHeader || 'X-API-Key';
-            axiosConfig.headers[headerName] = config.authConfig.apiKey;
+            axiosConfig.headers[headerName] = config.authConfig.apiKey ?? '';
             break;
 
         case 'jwt':

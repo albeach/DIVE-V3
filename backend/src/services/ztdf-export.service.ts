@@ -342,7 +342,7 @@ function buildIntegrityInformation(ztdf: IZTDFObject): IOpenTDFIntegrityInformat
 
     // Build segments (one per encrypted chunk)
     const segments: IOpenTDFSegmentInfo[] = ztdf.payload.encryptedChunks.map(chunk => {
-        const encryptedData = Buffer.from(chunk.encryptedData, 'base64');
+        const encryptedData = Buffer.from(chunk.encryptedData ?? '', 'base64');
         const encryptedSize = encryptedData.length;
         
         // Estimate plaintext size (subtract auth tag size: 16 bytes for GCM)
@@ -552,12 +552,12 @@ function extractPayloadBuffer(ztdf: IZTDFObject): Buffer {
     // For single-chunk files (typical case)
     if (ztdf.payload.encryptedChunks.length === 1) {
         const chunk = ztdf.payload.encryptedChunks[0];
-        return Buffer.from(chunk.encryptedData, 'base64');
+        return Buffer.from(chunk.encryptedData ?? '', 'base64');
     }
 
     // For multi-chunk files, concatenate all chunks
     const buffers = ztdf.payload.encryptedChunks.map(chunk => {
-        return Buffer.from(chunk.encryptedData, 'base64');
+        return Buffer.from(chunk.encryptedData ?? '', 'base64');
     });
 
     return Buffer.concat(buffers);

@@ -372,10 +372,10 @@ export async function updateIdentityProviderCore(
   };
 
   // Update client credentials if provided
-  if (config.clientId) {
+  if (updates.config && config.clientId) {
     updates.config.clientId = config.clientId;
   }
-  if (config.clientSecret) {
+  if (updates.config && config.clientSecret) {
     updates.config.clientSecret = config.clientSecret;
   }
 
@@ -384,14 +384,14 @@ export async function updateIdentityProviderCore(
   const idpInternalUrl = config.idpInternalUrl || idpBaseUrl;
   const idpRealm = config.idpRealm;
 
-  if (idpBaseUrl && idpRealm) {
+  if (updates.config && idpBaseUrl && idpRealm) {
     // Browser-facing URL (authorization, logout)
     updates.config.authorizationUrl = `${idpBaseUrl}/realms/${idpRealm}/protocol/openid-connect/auth`;
     updates.config.logoutUrl = `${idpBaseUrl}/realms/${idpRealm}/protocol/openid-connect/logout`;
     updates.config.issuer = `${idpBaseUrl}/realms/${idpRealm}`;
   }
 
-  if (idpInternalUrl && idpRealm) {
+  if (updates.config && idpInternalUrl && idpRealm) {
     // Backend-to-backend URLs (token, userInfo, jwks)
     updates.config.tokenUrl = `${idpInternalUrl}/realms/${idpRealm}/protocol/openid-connect/token`;
     updates.config.userInfoUrl = `${idpInternalUrl}/realms/${idpRealm}/protocol/openid-connect/userinfo`;

@@ -370,9 +370,9 @@ describe('Keycloak Admin Service - Session Management', () => {
 
             expect(stats.totalActive).toBe(2);
             expect(stats.averageDuration).toBeGreaterThan(0);
-            expect(stats.byClient['client-1']).toBe(2);
-            expect(stats.byUser['john.doe']).toBe(1);
-            expect(stats.byUser['jane.smith']).toBe(1);
+            expect((stats.byClient as Record<string, number>)['client-1']).toBe(2);
+            expect((stats.byUser as Record<string, number>)['john.doe']).toBe(1);
+            expect((stats.byUser as Record<string, number>)['jane.smith']).toBe(1);
         });
 
         it('should handle empty sessions', async () => {
@@ -383,8 +383,8 @@ describe('Keycloak Admin Service - Session Management', () => {
 
             expect(stats.totalActive).toBe(0);
             expect(stats.averageDuration).toBe(0);
-            expect(Object.keys(stats.byClient)).toHaveLength(0);
-            expect(Object.keys(stats.byUser)).toHaveLength(0);
+            expect(Object.keys(stats.byClient as Record<string, number>)).toHaveLength(0);
+            expect(Object.keys(stats.byUser as Record<string, number>)).toHaveLength(0);
         });
     });
 });

@@ -618,12 +618,12 @@ class OPALDataService {
     logger.info('Updating COI membership', { coiName, memberCount: members.length });
 
     // Update in-memory state
-    this.dataState.coi_members[coiName] = members;
+    this.dataState!.coi_members[coiName] = members;
 
     // Publish to OPAL (in-memory only, no file persistence)
     return opalClient.publishInlineData(
       'coi_members',
-      this.dataState.coi_members,
+      this.dataState!.coi_members,
       `Updated COI membership: ${coiName}`
     );
   }
