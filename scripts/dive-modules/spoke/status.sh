@@ -487,40 +487,7 @@ spoke_logs() {
 }
 
 # =============================================================================
-# SPOKE AUDIT STATUS (PLACEHOLDER)
+# SPOKE AUDIT STATUS (Delegated to spoke-failover.sh)
 # =============================================================================
-
-spoke_audit_status() {
-    local instance_code="${1:-$INSTANCE}"
-
-    if [ -z "$instance_code" ]; then
-        log_error "Instance code required"
-        echo ""
-        echo "Usage: ./dive spoke audit-status CODE"
-        echo ""
-        echo "Examples:"
-        echo "  ./dive spoke audit-status FRA"
-        echo "  ./dive spoke audit-status DEU"
-        return 1
-    fi
-
-    ensure_dive_root
-    local code_lower=$(lower "$instance_code")
-
-    print_header
-    echo -e "${BOLD}Spoke Audit Queue Status:${NC} $(upper "$instance_code")"
-    echo ""
-
-    # TODO: Implement actual audit queue monitoring
-    # This would check:
-    # - Audit log file size
-    # - Recent audit events
-    # - Queue depth
-    # - Processing rate
-
-    echo -e "${YELLOW}⚠ Audit status monitoring not yet implemented${NC}"
-    echo ""
-    echo "This feature will be available in Phase 6."
-    echo "It will monitor audit queue metrics and processing status."
-    echo ""
-}
+# spoke_audit_status() is defined in spoke-failover.sh with full implementation
+# It is loaded on-demand via the spoke_failover() delegation in maintenance.sh
