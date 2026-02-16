@@ -170,6 +170,12 @@ export default async function globalSetup() {
             // Ensure database name is set correctly
             process.env.MONGODB_DATABASE = process.env.MONGODB_DATABASE || 'dive-v3-test';
 
+            // Initialize MongoDB singleton for tests that use it
+            console.log('   Initializing MongoDB singleton...');
+            const { mongoSingleton } = await import('../utils/mongodb-singleton');
+            await mongoSingleton.connect();
+            console.log('✅ MongoDB singleton initialized');
+
             // Seed test data with existing connection
             console.log('   Seeding test data with external connection...');
             await seedTestData(existingMongoUrl);
@@ -211,6 +217,12 @@ export default async function globalSetup() {
         console.log(`   Database: dive-v3-test`);
         console.log(`   Environment: ${process.env.NODE_ENV}`);
         console.log(`   Mode: In-memory database (local development)`);
+
+        // Initialize MongoDB singleton for tests that use it
+        console.log('🔧 Initializing MongoDB singleton...');
+        const { mongoSingleton } = await import('../utils/mongodb-singleton');
+        await mongoSingleton.connect();
+        console.log('✅ MongoDB singleton initialized');
 
         // BEST PRACTICE: Seed test data as part of infrastructure
         // This runs automatically every test run, ensuring consistent test data

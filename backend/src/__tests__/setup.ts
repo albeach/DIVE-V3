@@ -74,6 +74,20 @@ jest.mock('../utils/logger', () => {
 // Global test timeout
 jest.setTimeout(10000);
 
+// Global MongoDB singleton initialization for all tests
+// globalSetup runs in separate process, so we re-connect here in test worker
+beforeAll(async () => {
+    try {
+        const { mongoSingleton } = await import('../utils/mongodb-singleton');
+        if (!mongoSingleton.isConnected()) {
+            await mongoSingleton.connect();
+            console.log('[Test Worker] MongoDB singleton connected');
+        }
+    } catch (error) {
+        console.warn('[Test Worker] Could not connect MongoDB singleton - tests may fail:', error);
+    }
+}, 30000); // Allow up to 30s for MongoDB connection
+
 // Database connection helper for tests
 export function getTestDatabase(): { mongoClient: any; db: any } | null {
     // Use the global MongoDB connection established by globalSetup

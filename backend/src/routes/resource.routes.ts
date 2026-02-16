@@ -254,35 +254,26 @@ router.get('/count', async (req, res) => {
             return;
         }
 
-        // Dynamically import to avoid circular dependencies
-        const { getMongoDBUrl, getMongoDBName } = await import('../utils/mongodb-config');
-        const { MongoClient } = await import('mongodb');
+        // MEMORY LEAK FIX: Use MongoDB singleton instead of creating new client
+        const { getDb } = await import('../utils/mongodb-singleton');
+        const db = getDb();
+        const collection = db.collection('resources');
 
-        const client = new MongoClient(getMongoDBUrl());
-        await client.connect();
-
-        try {
-            const db = client.db(getMongoDBName());
-            const collection = db.collection('resources');
-
-            // Build filter based on releasability
-            const filter: Record<string, unknown> = {};
-            if (releasableTo) {
-                filter.releasabilityTo = releasableTo.toString().toUpperCase();
-            }
-
-            const count = await collection.countDocuments(filter);
-
-            res.status(200).json({
-                success: true,
-                count,
-                accessibleCount: count,
-                releasableTo: releasableTo || 'all',
-                instance: process.env.INSTANCE_CODE || 'USA'
-            });
-        } finally {
-            await client.close();
+        // Build filter based on releasability
+        const filter: Record<string, unknown> = {};
+        if (releasableTo) {
+            filter.releasabilityTo = releasableTo.toString().toUpperCase();
         }
+
+        const count = await collection.countDocuments(filter);
+
+        res.status(200).json({
+            success: true,
+            count,
+            accessibleCount: count,
+            releasableTo: releasableTo || 'all',
+            instance: process.env.INSTANCE_CODE || 'USA'
+        });
     } catch (error) {
         logger.error('Error counting resources', { error });
         res.status(500).json({ error: 'Internal server error', count: 0 });

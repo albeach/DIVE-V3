@@ -1,6 +1,11 @@
 /**
  * Seed Status Routes
  *
+ * MEMORY LEAK FIX (2026-02-16): Refactored to use MongoDB singleton
+ * OLD: Created new MongoClient() with connection caching (connection leak)
+ * NEW: Uses shared singleton connection pool via getDb()
+ * IMPACT: Prevents connection leaks during seed status monitoring operations
+ *
  * API endpoints to check the status of seeded resources
  * Used for validation and monitoring of the seeding process.
  *
@@ -13,33 +18,17 @@
  */
 
 import { Router, Request, Response } from 'express';
-import { MongoClient, Db } from 'mongodb';
+import { Db } from 'mongodb';
 import { logger } from '../utils/logger';
+import { getDb } from '../utils/mongodb-singleton';
 
 const router = Router();
 
-// MongoDB connection
-const MONGODB_URL =
-  process.env.MONGODB_URL ||
-  process.env.MONGODB_URI ||
-  (process.env.MONGO_PASSWORD
-    ? `mongodb://admin:${process.env.MONGO_PASSWORD}@localhost:27017?authSource=admin`
-    : '');
-const MONGODB_DATABASE = process.env.MONGODB_DATABASE || 'dive-v3';
-
-let dbClient: MongoClient | null = null;
-let db: Db | null = null;
-
-async function getDb(): Promise<Db> {
-    if (!db) {
-        dbClient = new MongoClient(MONGODB_URL, {
-            authSource: 'admin',
-            connectTimeoutMS: 10000
-        });
-        await dbClient.connect();
-        db = dbClient.db(MONGODB_DATABASE);
-    }
-    return db;
+/**
+ * Get MongoDB database instance using singleton
+ */
+function getDatabase(): Db {
+    return getDb();
 }
 
 // Expected distribution targets
@@ -68,7 +57,7 @@ const EXPECTED_DISTRIBUTIONS = {
  */
 router.get('/seed-status', async (_req: Request, res: Response) => {
     try {
-        const database = await getDb();
+        const database = getDatabase();
         const collection = database.collection('resources');
 
         // Get total count
@@ -107,7 +96,7 @@ router.get('/seed-status', async (_req: Request, res: Response) => {
         ]).toArray();
 
         const status = {
-            database: MONGODB_DATABASE,
+            database: process.env.MONGODB_DATABASE || 'dive-v3',
             status: 'healthy',
             timestamp: new Date().toISOString(),
             counts: {
@@ -150,7 +139,7 @@ router.get('/seed-status', async (_req: Request, res: Response) => {
  */
 router.get('/distribution', async (_req: Request, res: Response) => {
     try {
-        const database = await getDb();
+        const database = getDatabase();
         const collection = database.collection('resources');
 
         const totalCount = await collection.countDocuments({});
@@ -288,7 +277,7 @@ router.get('/distribution', async (_req: Request, res: Response) => {
  */
 router.get('/seed-manifests', async (_req: Request, res: Response) => {
     try {
-        const database = await getDb();
+        const database = getDatabase();
         const collection = database.collection('resources');
 
         // Get all unique seed batches with statistics

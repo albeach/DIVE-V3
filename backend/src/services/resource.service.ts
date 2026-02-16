@@ -875,11 +875,8 @@ export async function getResourcesByQuery(
     }
 }
 
-// Graceful shutdown
-process.on('SIGINT', async () => {
-    if (cachedClient) {
-        await cachedClient.close();
-        logger.info('MongoDB connection closed');
-    }
-    process.exit(0);
-});
+/**
+ * @deprecated Graceful shutdown is now handled by MongoDB singleton
+ * This process-level handler is no longer needed as the singleton
+ * registers its own shutdown handlers in mongodb-singleton.ts
+ */

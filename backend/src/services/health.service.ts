@@ -1,10 +1,19 @@
+/**
+ * Health Check Service (Phase 3)
+ * 
+ * MEMORY LEAK FIX (2026-02-16): Refactored to use MongoDB singleton
+ * OLD: Created new MongoClient() for health checks (connection leak)
+ * NEW: Uses shared singleton connection pool via getDb()
+ * IMPACT: Prevents connection leaks during frequent health check operations
+ */
+
 import axios from 'axios';
 import * as https from 'https';
 import * as fs from 'fs';
 import * as path from 'path';
-import { MongoClient } from 'mongodb';
 import Redis from 'ioredis';
 import { logger } from '../utils/logger';
+import { getDb } from '../utils/mongodb-singleton';
 import { getAllCircuitBreakerStats, CircuitState } from '../utils/circuit-breaker';
 import { authzCacheService } from './authz-cache.service';
 import { prometheusMetrics } from './prometheus-metrics.service';
@@ -172,7 +181,7 @@ export interface ILivenessCheck {
  */
 class HealthService {
     private startTime: Date;
-    private mongoClient: MongoClient | null = null;
+    // REFACTORED: Removed mongoClient property - now using singleton via getDb()
     private metricsIntervalId: NodeJS.Timeout | null = null;
     private redisHealthClient: Redis | null = null;
     private blacklistRedisHealthClient: Redis | null = null;
@@ -253,10 +262,11 @@ class HealthService {
     }
 
     /**
-     * Set MongoDB client for health checks
+     * @deprecated No longer needed with MongoDB singleton
+     * Kept for backward compatibility with tests
      */
-    setMongoClient(client: MongoClient): void {
-        this.mongoClient = client;
+    setMongoClient(_client: any): void {
+        // No-op: Singleton pattern doesn't use per-service client setting
     }
 
     /**
@@ -514,33 +524,18 @@ class HealthService {
 
     /**
      * Check MongoDB health
+     * 
+     * MEMORY LEAK FIX: Uses MongoDB singleton instead of creating new client
      */
     private async checkMongoDB(): Promise<IServiceHealth> {
         const startTime = Date.now();
 
         try {
-            if (!this.mongoClient) {
-                // Try to connect
-                this.mongoClient = new MongoClient(MONGODB_URL);
-                await this.mongoClient.connect();
-            } else {
-                // Verify existing connection
-                try {
-                    await this.mongoClient.db().admin().ping();
-                } catch {
-                    // Connection lost, close stale client before reconnecting
-                    try {
-                        await this.mongoClient.close();
-                    } catch {
-                        // Ignore close errors on stale connection
-                    }
-                    this.mongoClient = new MongoClient(MONGODB_URL);
-                    await this.mongoClient.connect();
-                }
-            }
-
+            // Use singleton - it's already connected at server startup
+            const db = getDb();
+            
             // Ping the database
-            await this.mongoClient.db(DB_NAME).admin().ping();
+            await db.admin().ping();
 
             const responseTime = Date.now() - startTime;
 
@@ -549,6 +544,7 @@ class HealthService {
                 responseTime,
                 details: {
                     connected: true,
+                    usingSingleton: true,
                 },
             };
         } catch (error) {
@@ -741,26 +737,24 @@ class HealthService {
             // Get cache stats
             const cacheStats = authzCacheService.getStats();
 
-            // Get IdP counts (if MongoDB available)
+            // Get IdP counts (using MongoDB singleton)
             let activeIdPs = 0;
             let pendingApprovals = 0;
 
-            if (this.mongoClient) {
-                try {
-                    const db = this.mongoClient.db(DB_NAME);
+            try {
+                const db = getDb();
 
-                    // Count active IdPs (approved submissions)
-                    activeIdPs = await db.collection('idp_submissions').countDocuments({
-                        status: 'approved',
-                    });
+                // Count active IdPs (approved submissions)
+                activeIdPs = await db.collection('idp_submissions').countDocuments({
+                    status: 'approved',
+                });
 
-                    // Count pending approvals
-                    pendingApprovals = await db.collection('idp_submissions').countDocuments({
-                        status: 'pending',
-                    });
-                } catch (error) {
-                    logger.warn('Could not fetch IdP metrics', { error });
-                }
+                // Count pending approvals
+                pendingApprovals = await db.collection('idp_submissions').countDocuments({
+                    status: 'pending',
+                });
+            } catch (error) {
+                logger.warn('Could not fetch IdP metrics', { error });
             }
 
             return {

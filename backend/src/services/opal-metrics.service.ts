@@ -1,6 +1,11 @@
 /**
  * DIVE V3 - OPAL Metrics Service
  *
+ * MEMORY LEAK FIX (2026-02-16): Refactored to use MongoDB singleton
+ * OLD: Created new MongoClient() instance for metrics (connection leak)
+ * NEW: Uses shared singleton connection pool via getDb()
+ * IMPACT: Prevents connection leaks during OPAL metrics collection
+ *
  * Provides real metrics for OPAL operations by:
  * - Tracking publish transactions in MongoDB
  * - Querying Redis for connected clients
@@ -13,7 +18,8 @@
 
 import { logger } from '../utils/logger';
 import Redis from 'ioredis';
-import { MongoClient, Db, Collection } from 'mongodb';
+import { Collection } from 'mongodb';
+import { getDb } from '../utils/mongodb-singleton';
 
 // ============================================
 // TYPES
@@ -79,14 +85,15 @@ export interface IOPALServerMetrics {
 
 class OPALMetricsService {
   private redis: Redis | null = null;
-  private mongoClient: MongoClient | null = null;
-  private db: Db | null = null;
+  // REFACTORED: Removed mongoClient and db - now using singleton via getDb()
   private transactionsCollection: Collection<IOPALTransaction> | null = null;
   private initialized = false;
   private serverStartTime = Date.now();
 
   /**
    * Initialize connections to Redis and MongoDB
+   * 
+   * MEMORY LEAK FIX: Uses MongoDB singleton instead of creating new client
    */
   async initialize(): Promise<void> {
     if (this.initialized) return;
@@ -116,13 +123,9 @@ class OPALMetricsService {
         logger.error('OPAL Metrics Redis error', { error: err.message });
       });
 
-      // Connect to MongoDB for transaction storage
-      const mongoUrl = process.env.MONGODB_URL || 'mongodb://localhost:27017';
-      const mongoDbName = process.env.MONGODB_DATABASE || 'dive-v3';
-      this.mongoClient = new MongoClient(mongoUrl);
-      await this.mongoClient.connect();
-      this.db = this.mongoClient.db(mongoDbName);
-      this.transactionsCollection = this.db.collection<IOPALTransaction>('opal_transactions');
+      // Use MongoDB singleton instead of creating new client
+      const db = getDb();
+      this.transactionsCollection = db.collection<IOPALTransaction>('opal_transactions');
 
       // Create indexes
       await this.transactionsCollection.createIndex({ timestamp: -1 });
@@ -132,7 +135,7 @@ class OPALMetricsService {
       this.initialized = true;
       logger.info('OPAL Metrics Service initialized', {
         redis: redisUrl ? redisUrl.replace(/\/\/:[^@]*@/, '//***@') : `${process.env.REDIS_HOST || 'redis'}:${process.env.REDIS_PORT || '6379'}`,
-        mongo: mongoDbName,
+        mongo: 'using-singleton',
       });
     } catch (error) {
       logger.error('Failed to initialize OPAL Metrics Service', {
@@ -411,16 +414,15 @@ class OPALMetricsService {
 
   /**
    * Cleanup connections
+   * 
+   * MEMORY LEAK FIX: No need to close MongoDB - singleton handles lifecycle
    */
   async close(): Promise<void> {
     if (this.redis) {
       await this.redis.quit();
       this.redis = null;
     }
-    if (this.mongoClient) {
-      await this.mongoClient.close();
-      this.mongoClient = null;
-    }
+    // MongoDB singleton handles its own lifecycle - no per-service cleanup needed
     this.initialized = false;
   }
 }
