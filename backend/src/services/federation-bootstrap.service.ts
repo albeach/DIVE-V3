@@ -126,13 +126,8 @@ class FederationBootstrapService {
    */
   private async registerHubInstance(instanceCode: string): Promise<void> {
     try {
-      const { MongoClient } = await import('mongodb');
-      const mongoUrl = process.env.MONGODB_URL || 'mongodb://localhost:27017';
-      const dbName = process.env.MONGODB_DATABASE || 'dive-v3-hub';
-
-      const client = new MongoClient(mongoUrl);
-      await client.connect();
-      const db = client.db(dbName);
+      const { getDb } = await import('../utils/mongodb-singleton');
+      const db = getDb();
       const collection = db.collection('federation_spokes');
 
       // Check if Hub instance already registered
@@ -173,8 +168,6 @@ class FederationBootstrapService {
         createdAt: new Date(),
         updatedAt: new Date()
       });
-
-      await client.close();
 
       logger.info('Registered Hub instance (SSOT)', {
         instanceCode,
@@ -810,13 +803,8 @@ class FederationBootstrapService {
     try {
       logger.info('Replaying missed federation events');
 
-      const { MongoClient } = await import('mongodb');
-      const mongoUrl = process.env.MONGODB_URL || 'mongodb://localhost:27017';
-      const dbName = process.env.MONGODB_DATABASE || 'dive-v3-hub';
-
-      const client = new MongoClient(mongoUrl);
-      await client.connect();
-      const db = client.db(dbName);
+      const { getDb } = await import('../utils/mongodb-singleton');
+      const db = getDb();
       const collection = db.collection('federation_spokes');
 
       // Find all approved spokes (these should have trusted issuers registered)
@@ -863,8 +851,6 @@ class FederationBootstrapService {
           // Don't throw - continue replaying other events
         }
       }
-
-      await client.close();
 
       logger.info('Event replay completed', {
         processedCount: approvedSpokes.length

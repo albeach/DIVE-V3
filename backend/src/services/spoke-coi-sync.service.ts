@@ -163,76 +163,65 @@ class SpokeCoiSyncService {
    * Uses upsert to handle both initial sync and re-sync scenarios.
    */
   private async writeToLocalMongoDB(coiDefinitions: ISyncedCoiDefinition[]): Promise<number> {
-    const { MongoClient } = await import('mongodb');
-    const mongoUrl = getMongoDBUrl();
-    const dbName = getMongoDBName();
+    const { getDb } = await import('../utils/mongodb-singleton');
+    const db = getDb();
+    const collection = db.collection('coi_definitions');
 
-    const client = new MongoClient(mongoUrl);
-    await client.connect();
+    // Create indexes (idempotent)
+    await collection.createIndex({ coiId: 1 }, { unique: true });
+    await collection.createIndex({ enabled: 1 });
+    await collection.createIndex({ members: 1 });
 
-    try {
-      const db = client.db(dbName);
-      const collection = db.collection('coi_definitions');
+    let syncedCount = 0;
 
-      // Create indexes (idempotent)
-      await collection.createIndex({ coiId: 1 }, { unique: true });
-      await collection.createIndex({ enabled: 1 });
-      await collection.createIndex({ members: 1 });
+    for (const coi of coiDefinitions) {
+      try {
+        // Normalize members: handle both memberCountries (ICOIKey) and members (ICoiDefinition)
+        const members = coi.members || coi.memberCountries || [];
 
-      let syncedCount = 0;
+        const doc = {
+          coiId: coi.coiId,
+          name: coi.name,
+          type: coi.type || 'country-based',
+          members: Array.isArray(members) ? members.sort() : [],
+          description: coi.description || '',
+          mutable: coi.mutable ?? false,
+          autoUpdate: coi.autoUpdate ?? false,
+          priority: coi.priority ?? 0,
+          enabled: coi.status !== 'inactive',
+          // Preserve extra fields for coi-key.service.ts compatibility
+          memberCountries: Array.isArray(members) ? members.sort() : [],
+          status: coi.status === 'inactive' ? 'deprecated' : 'active',
+          color: coi.color || '#6B7280',
+          icon: coi.icon || '',
+          mutuallyExclusiveWith: coi.mutuallyExclusiveWith || [],
+          subsetOf: coi.subsetOf || undefined,
+          supersetOf: coi.supersetOf || [],
+          metadata: {
+            updatedAt: new Date(),
+            source: 'hub_sync' as const
+          }
+        };
 
-      for (const coi of coiDefinitions) {
-        try {
-          // Normalize members: handle both memberCountries (ICOIKey) and members (ICoiDefinition)
-          const members = coi.members || coi.memberCountries || [];
+        await collection.updateOne(
+          { coiId: coi.coiId },
+          {
+            $set: doc,
+            $setOnInsert: { 'metadata.createdAt': new Date() }
+          },
+          { upsert: true }
+        );
 
-          const doc = {
-            coiId: coi.coiId,
-            name: coi.name,
-            type: coi.type || 'country-based',
-            members: Array.isArray(members) ? members.sort() : [],
-            description: coi.description || '',
-            mutable: coi.mutable ?? false,
-            autoUpdate: coi.autoUpdate ?? false,
-            priority: coi.priority ?? 0,
-            enabled: coi.status !== 'inactive',
-            // Preserve extra fields for coi-key.service.ts compatibility
-            memberCountries: Array.isArray(members) ? members.sort() : [],
-            status: coi.status === 'inactive' ? 'deprecated' : 'active',
-            color: coi.color || '#6B7280',
-            icon: coi.icon || '',
-            mutuallyExclusiveWith: coi.mutuallyExclusiveWith || [],
-            subsetOf: coi.subsetOf || undefined,
-            supersetOf: coi.supersetOf || [],
-            metadata: {
-              updatedAt: new Date(),
-              source: 'hub_sync' as const
-            }
-          };
-
-          await collection.updateOne(
-            { coiId: coi.coiId },
-            {
-              $set: doc,
-              $setOnInsert: { 'metadata.createdAt': new Date() }
-            },
-            { upsert: true }
-          );
-
-          syncedCount++;
-        } catch (error) {
-          logger.warn('Failed to upsert COI definition', {
-            coiId: coi.coiId,
-            error: error instanceof Error ? error.message : 'Unknown error'
-          });
-        }
+        syncedCount++;
+      } catch (error) {
+        logger.warn('Failed to upsert COI definition', {
+          coiId: coi.coiId,
+          error: error instanceof Error ? error.message : 'Unknown error'
+        });
       }
-
-      return syncedCount;
-
-    } finally {
-      await client.close();
     }
+
+    return syncedCount;
   }
 }
 

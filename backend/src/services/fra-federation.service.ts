@@ -56,6 +56,7 @@ interface ConflictRecord {
 
 export class FRAFederationService {
   private db!: Db;
+  private client!: MongoClient;
   private resourcesCollection!: Collection<FederationResource>;
   private syncLogCollection!: Collection<SyncResult>;
   private readonly INSTANCE_REALM = 'FRA';
@@ -66,11 +67,13 @@ export class FRAFederationService {
 
   /**
    * Initialize database connection
+   * FEDERATION PATTERN: This service connects to FRA's separate MongoDB instance,
+   * so it needs its own MongoClient (not the singleton which connects to local Hub/Spoke DB)
    */
   async initialize(): Promise<void> {
-    const client = new MongoClient(this.mongoUrl);
-    await client.connect();
-    this.db = client.db('dive-v3-fra');
+    this.client = new MongoClient(this.mongoUrl);
+    await this.client.connect();
+    this.db = this.client.db('dive-v3-fra');
     this.resourcesCollection = this.db.collection<FederationResource>('resources');
     this.syncLogCollection = this.db.collection<SyncResult>('federation_sync');
 
