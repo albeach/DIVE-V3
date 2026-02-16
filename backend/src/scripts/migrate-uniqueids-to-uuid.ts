@@ -99,7 +99,7 @@ async function fetchAllUsers(adminToken: string): Promise<any[]> {
 /**
  * Migrate a single user from email-based uniqueID to UUID
  */
-async function migrateUser(adminToken: string, user: any): Promise<void> {
+async function migrateUser(adminToken: string, user: Record<string, unknown>): Promise<void> {
     const userId = user.id;
     const currentUniqueID = user.attributes?.uniqueID?.[0] || user.attributes?.uniqueID;
 

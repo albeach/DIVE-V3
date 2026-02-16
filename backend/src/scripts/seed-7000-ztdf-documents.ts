@@ -115,11 +115,11 @@ async function buildCoiTemplatesFromDatabase(client: MongoClient): Promise<ICOIT
     }
 
     // Add multi-COI templates (NATO+QUAD, etc.)
-    const natoCoi = coiDefs.find((c: any) => c.coiId === 'NATO');
-    const quadCoi = coiDefs.find((c: any) => c.coiId === 'QUAD');
-    const eucomCoi = coiDefs.find((c: any) => c.coiId === 'EUCOM');
-    const pacomCoi = coiDefs.find((c: any) => c.coiId === 'PACOM');
-    const northcomCoi = coiDefs.find((c: any) => c.coiId === 'NORTHCOM');
+    const natoCoi = coiDefs.find((c: { coiId: string }) => c.coiId === 'NATO');
+    const quadCoi = coiDefs.find((c: { coiId: string }) => c.coiId === 'QUAD');
+    const eucomCoi = coiDefs.find((c: { coiId: string }) => c.coiId === 'EUCOM');
+    const pacomCoi = coiDefs.find((c: { coiId: string }) => c.coiId === 'PACOM');
+    const northcomCoi = coiDefs.find((c: { coiId: string }) => c.coiId === 'NORTHCOM');
 
     if (natoCoi && quadCoi) {
         templates.push({

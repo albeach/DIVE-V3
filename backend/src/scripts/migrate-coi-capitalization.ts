@@ -68,7 +68,7 @@ async function migrateCOICapitalization(): Promise<MigrationStats> {
 
         for (const doc of resourcesWithOldCOI) {
             try {
-                const updateFields: any = { updatedAt: new Date() };
+                const updateFields: Record<string, unknown> = { updatedAt: new Date() };
 
                 // Update ZTDF path
                 if (doc.ztdf?.policy?.securityLabel?.COI) {

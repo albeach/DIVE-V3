@@ -576,7 +576,7 @@ export class ZTDFMultiKASService {
             return this.kasClients.get(baseUrl)!;
         }
 
-        const config: any = {
+        const config: Record<string, unknown> = {
             baseURL: baseUrl,
             timeout: 10000,
             headers: {

@@ -574,7 +574,7 @@ class HealthService {
         const opaUrl = process.env.OPA_URL || 'http://opa:8181';
 
         try {
-            const config: any = {
+            const config: Record<string, unknown> = {
                 timeout: 5000,
             };
 
@@ -629,7 +629,7 @@ class HealthService {
         const keycloakUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
 
         // Build axios config with HTTPS agent if needed
-        const config: any = {
+        const config: Record<string, unknown> = {
             timeout: 5000,
         };
         if (keycloakUrl.startsWith('https://')) {
@@ -694,7 +694,7 @@ class HealthService {
         const startTime = Date.now();
 
         // Build axios config with HTTPS agent if needed
-        const config: any = {
+        const config: Record<string, unknown> = {
             timeout: 5000,
         };
         if (kasUrl.startsWith('https://')) {

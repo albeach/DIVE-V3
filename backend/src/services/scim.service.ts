@@ -4,9 +4,18 @@
  */
 
 import KcAdminClient from '@keycloak/keycloak-admin-client';
+import type UserRepresentation from '@keycloak/keycloak-admin-client/lib/defs/userRepresentation';
 import { logger } from '../utils/logger';
 import { ISCIMUser } from '../types/sp-federation.types';
 import crypto from 'crypto';
+
+interface ISCIMPatchOperation {
+    Operations?: Array<{
+        op: 'replace' | 'add' | 'remove';
+        path: string;
+        value?: string | string[] | Array<{ value: string }>;
+    }>;
+}
 
 export class SCIMService {
   private kcAdminClient: KcAdminClient | null = null;
@@ -243,7 +252,7 @@ export class SCIMService {
   /**
    * Patch user (partial update)
    */
-  async patchUser(id: string, patchOp: any): Promise<ISCIMUser | null> {
+  async patchUser(id: string, patchOp: ISCIMPatchOperation): Promise<ISCIMUser | null> {
     const kcAdmin = await this.initializeKeycloak();
 
     try {
@@ -311,7 +320,7 @@ export class SCIMService {
   /**
    * Convert Keycloak user to SCIM format
    */
-  private keycloakToSCIM(kcUser: any): ISCIMUser {
+  private keycloakToSCIM(kcUser: UserRepresentation): ISCIMUser {
     const attrs = kcUser.attributes || {};
     
     // Parse acpCOI from JSON string
@@ -361,9 +370,9 @@ export class SCIMService {
   /**
    * Parse SCIM filter to Keycloak query
    */
-  private parseFilterToKeycloakQuery(filter: string): any {
+  private parseFilterToKeycloakQuery(filter: string): Record<string, string> {
     // Simple filter parsing - production would need full SCIM filter parser
-    const query: any = {};
+    const query: Record<string, string> = {};
 
     // Handle userName filter
     if (filter.includes('userName')) {
@@ -387,7 +396,7 @@ export class SCIMService {
   /**
    * Apply SCIM patch operations
    */
-  private async applyPatchOperations(kcUser: any, patchOp: any): Promise<any> {
+  private async applyPatchOperations(kcUser: UserRepresentation, patchOp: ISCIMPatchOperation): Promise<UserRepresentation> {
     const operations = patchOp.Operations || [];
     const updatedUser = { ...kcUser };
 
@@ -409,34 +418,34 @@ export class SCIMService {
   /**
    * Apply patch value to user object
    */
-  private applyPatchValue(user: any, path: string, value: any): void {
+  private applyPatchValue(user: UserRepresentation, path: string, value: string | string[] | Array<{ value: string }>): void {
     // Handle different paths
     if (path === 'userName') {
-      user.username = value;
+      user.username = value as string;
     } else if (path.startsWith('name.')) {
       const field = path.split('.')[1];
-      if (field === 'givenName') user.firstName = value;
-      if (field === 'familyName') user.lastName = value;
+      if (field === 'givenName') user.firstName = value as string;
+      if (field === 'familyName') user.lastName = value as string;
     } else if (path.startsWith('emails')) {
       if (Array.isArray(value) && value.length > 0) {
-        user.email = value[0].value;
+        user.email = (value[0] as { value: string }).value;
       }
     } else if (path.startsWith('urn:dive:params:scim:schemas:extension:2.0:User:')) {
       const field = path.split(':').pop();
       if (!user.attributes) user.attributes = {};
-      
+
       switch (field) {
         case 'clearance':
-          user.attributes.clearance = value;
+          user.attributes.clearance = value as string;
           break;
         case 'countryOfAffiliation':
-          user.attributes.countryOfAffiliation = value;
+          user.attributes.countryOfAffiliation = value as string;
           break;
         case 'acpCOI':
           user.attributes.acpCOI = JSON.stringify(value);
           break;
         case 'dutyOrg':
-          user.attributes.dutyOrg = value;
+          user.attributes.dutyOrg = value as string;
           break;
       }
     }
@@ -445,7 +454,7 @@ export class SCIMService {
   /**
    * Remove patch value from user object
    */
-  private removePatchValue(user: any, path: string): void {
+  private removePatchValue(user: UserRepresentation, path: string): void {
     if (path === 'emails') {
       delete user.email;
     }

@@ -153,7 +153,7 @@ const INDEX_DEFINITIONS = {
 async function createIndexesForCollection(
     db: Db,
     collectionName: string,
-    indexes: any[]
+    indexes: Record<string, unknown>[]
 ): Promise<void> {
     console.log(`\n📊 Optimizing collection: ${collectionName}`);
     console.log('─'.repeat(60));
@@ -184,7 +184,7 @@ async function createIndexesForCollection(
                 continue;
             }
 
-            const options: any = { name: indexDef.name };
+            const options: Record<string, unknown> = { name: indexDef.name };
             if (indexDef.unique) {
                 options.unique = true;
             }

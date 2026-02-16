@@ -191,7 +191,7 @@ class KASRegistryService {
     const isLocal = kas.kasId === `${this.instanceRealm.toLowerCase()}-kas`;
     const baseURL = isLocal && kas.internalKasUrl ? kas.internalKasUrl : kas.kasUrl;
 
-    const config: any = {
+    const config: Record<string, unknown> = {
       baseURL,
       timeout: this.registry?.federationTrust.maxCrossKASLatencyMs || 5000,
       headers: {
@@ -322,7 +322,7 @@ class KASRegistryService {
   /**
    * Determine KAS authority for a resource based on originRealm
    */
-  getKASAuthority(resource: any): string {
+  getKASAuthority(resource: { kasAuthority?: string; originRealm?: string }): string {
     // Priority: explicit kasAuthority > originRealm-derived > local instance
     if (resource.kasAuthority) {
       return resource.kasAuthority;
@@ -339,7 +339,7 @@ class KASRegistryService {
   /**
    * Check if resource requires cross-instance KAS access
    */
-  isCrossInstanceResource(resource: any): boolean {
+  isCrossInstanceResource(resource: { kasAuthority?: string; originRealm?: string }): boolean {
     const kasAuthority = this.getKASAuthority(resource);
     const localKasId = `${this.instanceRealm.toLowerCase()}-kas`;
     return kasAuthority !== localKasId;
@@ -458,7 +458,7 @@ class KASRegistryService {
     // Retry logic
     const retryPolicy = this.registry?.federationTrust.retryPolicy;
     const maxRetries = retryPolicy?.maxRetries || 2;
-    let lastError: any = null;
+    let lastError: unknown = null;
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
@@ -546,7 +546,7 @@ class KASRegistryService {
       resourceId: request.resourceId,
       kasId,
       organization: kas.organization,
-      error: lastError?.message,
+      error: lastError instanceof Error ? lastError.message : String(lastError),
       latencyMs,
       maxRetries
     });
@@ -554,7 +554,7 @@ class KASRegistryService {
     return {
       success: false,
       error: 'KAS_REQUEST_FAILED',
-      denialReason: `Failed to contact KAS ${kasId}: ${lastError?.message || 'Unknown error'}`,
+      denialReason: `Failed to contact KAS ${kasId}: ${lastError instanceof Error ? lastError.message : 'Unknown error'}`,
       kasId,
       organization: kas.organization,
       latencyMs

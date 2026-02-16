@@ -109,7 +109,7 @@ async function debugWebAuthn(username: string) {
   );
 
   const credentials = credentialsResponse.data;
-  const webauthnCredentials = credentials.filter((cred: any) =>
+  const webauthnCredentials = credentials.filter((cred: { type?: string }) =>
     cred.type === 'webauthn' ||
     cred.type === 'webauthn-passwordless' ||
     cred.type?.toLowerCase().includes('fido') ||
@@ -122,7 +122,7 @@ async function debugWebAuthn(username: string) {
     console.log('❌ No WebAuthn credentials found!');
     console.log('   The user needs to register a passkey first.\n');
   } else {
-    webauthnCredentials.forEach((cred: any, idx: number) => {
+    webauthnCredentials.forEach((cred: { id?: string; type?: string; userLabel?: string; credentialData?: string }, idx: number) => {
       console.log(`Credential ${idx + 1}:`);
       console.log(`  ID: ${cred.id}`);
       console.log(`  Type: ${cred.type}`);
@@ -243,7 +243,7 @@ async function debugWebAuthn(username: string) {
     console.log('   - Go to Security → Register Passkey');
     console.log('   - Follow the prompts\n');
   } else {
-    const hasMismatch = webauthnCredentials.some((cred: any) => {
+    const hasMismatch = webauthnCredentials.some((cred: { type?: string; credentialData?: string }) => {
       try {
         const credData = JSON.parse(cred.credentialData);
         if (credData.userHandle) {

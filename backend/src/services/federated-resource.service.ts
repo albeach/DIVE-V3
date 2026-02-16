@@ -16,20 +16,50 @@
  * NATO Compliance: ACP-240 §5.4 (Federated Resource Access)
  */
 
-import { MongoClient, Db } from 'mongodb';
+import { MongoClient, Db, Document } from 'mongodb';
 import fs from 'fs';
 import path from 'path';
-import axios from 'axios';
+import axios, { AxiosInstance } from 'axios';
 import https from 'https';
 import { logger } from '../utils/logger';
 import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
 import { hubSpokeRegistry } from './hub-spoke-registry.service';
 
+// MongoDB aggregation facet result shapes
+interface IAggregationBucket {
+    _id: string;
+    count: number;
+}
+
+interface IAggregationBucketLabeled {
+    value: string;
+    label: string;
+    count: number;
+}
+
+// Discovery service instance shape
+interface IDiscoveryInstance {
+    code: string;
+    name: string;
+    type?: 'local' | 'remote' | 'hub' | 'spoke';
+    enabled: boolean;
+    services?: {
+        backend?: {
+            containerName?: string;
+            hostname?: string;
+            internalPort?: number;
+        };
+    };
+    endpoints: {
+        api: string;
+    };
+}
+
 // Create axios instance with custom HTTPS agent for self-signed certs
 const httpsAgent = new https.Agent({
     rejectUnauthorized: process.env.NODE_ENV !== 'development'
 });
-const federationAxios = (axios as any).create ? (axios as any).create({ httpsAgent, timeout: 8000 }) : (axios as any);
+const federationAxios: AxiosInstance = axios.create({ httpsAgent, timeout: 8000 });
 
 // ============================================
 // Interfaces
@@ -407,7 +437,7 @@ class FederatedResourceService {
     /**
      * Create federated instance from discovery service
      */
-    private async createInstanceFromDiscovery(inst: any): Promise<IFederatedInstance> {
+    private async createInstanceFromDiscovery(inst: IDiscoveryInstance): Promise<IFederatedInstance> {
         const instanceCode = inst.code.toUpperCase();
         const backendService = inst.services?.backend;
 
@@ -472,7 +502,7 @@ class FederatedResourceService {
      * FIX: For current instance, use existing MONGODB_URL environment variable
      * instead of building a new one (ensures consistency with paginated-search.controller.ts)
      */
-    private async createInstanceConfig(key: string, inst: any): Promise<IFederatedInstance> {
+    private async createInstanceConfig(key: string, inst: IDiscoveryInstance): Promise<IFederatedInstance> {
         const instanceCode = key.toUpperCase();
         const isSameInstance = instanceCode === this.currentInstanceRealm;
 
@@ -529,7 +559,7 @@ class FederatedResourceService {
         return {
             code: inst.code,
             name: inst.name,
-            type: inst.type,
+            type: isSameInstance ? 'local' : 'remote',
             enabled: inst.enabled,
             mongoUrl,
             mongoDatabase,
@@ -926,7 +956,7 @@ class FederatedResourceService {
         const collection = db.collection('resources');
 
         // Build MongoDB query with ABAC filters
-        const query: any = { $and: [] };
+        const query: { $and: Record<string, unknown>[] } = { $and: [] };
 
         // ========================================
         // ABAC Filter 1: Classification (Clearance)
@@ -1145,12 +1175,12 @@ class FederatedResourceService {
         // Transform facet aggregation result
         const fr = facetResult[0] || {};
         const localFacets: IFederatedFacets = {
-            classifications: (fr.classifications || []).map((f: any) => ({ value: f._id, count: f.count })),
-            countries: (fr.countries || []).map((f: any) => ({ value: f._id, count: f.count })),
-            cois: (fr.cois || []).map((f: any) => ({ value: f._id, count: f.count })),
+            classifications: (fr.classifications || []).map((f: IAggregationBucket) => ({ value: f._id, count: f.count })),
+            countries: (fr.countries || []).map((f: IAggregationBucket) => ({ value: f._id, count: f.count })),
+            cois: (fr.cois || []).map((f: IAggregationBucket) => ({ value: f._id, count: f.count })),
             instances: [{ value: instance.code, count: accessibleCount }],
-            encryptionStatus: (fr.encryptionStatus || []).map((f: any) => ({ value: f._id, count: f.count })),
-            fileTypes: (fr.fileTypes || []).map((f: any) => ({ value: f.value, label: f.label, count: f.count })),
+            encryptionStatus: (fr.encryptionStatus || []).map((f: IAggregationBucket) => ({ value: f._id, count: f.count })),
+            fileTypes: (fr.fileTypes || []).map((f: IAggregationBucketLabeled) => ({ value: f.value, label: f.label, count: f.count })),
         };
 
         // Extract document stats
@@ -1254,12 +1284,12 @@ class FederatedResourceService {
 
             // Capture facets from remote instance response
             const remoteFacets: IFederatedFacets | undefined = response.data.facets ? {
-                classifications: (response.data.facets.classifications || []).map((f: any) => ({ value: f.value, count: f.count })),
-                countries: (response.data.facets.countries || []).map((f: any) => ({ value: f.value, count: f.count })),
-                cois: (response.data.facets.cois || []).map((f: any) => ({ value: f.value, count: f.count })),
+                classifications: (response.data.facets.classifications || []).map((f: IFacetItem) => ({ value: f.value, count: f.count })),
+                countries: (response.data.facets.countries || []).map((f: IFacetItem) => ({ value: f.value, count: f.count })),
+                cois: (response.data.facets.cois || []).map((f: IFacetItem) => ({ value: f.value, count: f.count })),
                 instances: [{ value: instance.code, count: accessibleCount }],
-                encryptionStatus: (response.data.facets.encryptionStatus || []).map((f: any) => ({ value: f.value, count: f.count })),
-                fileTypes: (response.data.facets.fileTypes || []).map((f: any) => ({ value: f.value, label: f.label, count: f.count })),
+                encryptionStatus: (response.data.facets.encryptionStatus || []).map((f: IFacetItem) => ({ value: f.value, count: f.count })),
+                fileTypes: (response.data.facets.fileTypes || []).map((f: IFacetItem) => ({ value: f.value, label: f.label, count: f.count })),
             } : undefined;
 
             // Capture document stats from remote instance response
@@ -1282,20 +1312,20 @@ class FederatedResourceService {
                     countries: remoteFacets.countries.length,
                     fileTypes: remoteFacets.fileTypes.length,
                 } : 'none',
-                sampleResourceIds: responseResults.slice(0, 3).map((r: any) => r.resourceId),
+                sampleResourceIds: responseResults.slice(0, 3).map((r: Record<string, unknown>) => r.resourceId),
             });
 
             // Transform to federated search result format
-            const results = responseResults.map((doc: any) => ({
-                resourceId: doc.resourceId,
-                title: doc.title,
-                classification: doc.classification || 'UNCLASSIFIED',
-                releasabilityTo: doc.releasabilityTo || [],
-                COI: doc.COI || doc.coi || [],
-                encrypted: doc.encrypted || false,
-                creationDate: doc.creationDate,
-                displayMarking: doc.displayMarking,
-                originRealm: doc.originRealm || instance.code,
+            const results = responseResults.map((doc: Record<string, unknown>) => ({
+                resourceId: doc.resourceId as string,
+                title: doc.title as string,
+                classification: (doc.classification as string) || 'UNCLASSIFIED',
+                releasabilityTo: (doc.releasabilityTo as string[]) || [],
+                COI: (doc.COI as string[]) || (doc.coi as string[]) || [],
+                encrypted: (doc.encrypted as boolean) || false,
+                creationDate: doc.creationDate as string | undefined,
+                displayMarking: doc.displayMarking as string | undefined,
+                originRealm: (doc.originRealm as string) || instance.code,
                 sourceInstance: instance.code,
             }));
 
@@ -1303,7 +1333,7 @@ class FederatedResourceService {
 
         } catch (error) {
             // Enhanced error diagnostics for federation failures
-            const errorDetails: Record<string, any> = {
+            const errorDetails: Record<string, unknown> = {
                 instance: instance.code,
                 apiUrl,
                 errorMessage: error instanceof Error ? error.message : 'Unknown error',
@@ -1338,7 +1368,7 @@ class FederatedResourceService {
     /**
      * Transform MongoDB document to FederatedSearchResult
      */
-    private transformDocument(doc: any, sourceInstance: string): IFederatedSearchResult {
+    private transformDocument(doc: Document, sourceInstance: string): IFederatedSearchResult {
         const ztdf = doc.ztdf;
 
         if (ztdf) {

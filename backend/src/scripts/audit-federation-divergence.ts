@@ -145,7 +145,7 @@ async function fetchKeycloakIdPs(): Promise<KeycloakIdP[]> {
         headers: { Authorization: `Bearer ${token}` },
       }
     );
-    return response.data.map((idp: any) => ({
+    return response.data.map((idp: { alias?: string; displayName?: string; providerId?: string; enabled?: boolean; config?: Record<string, string> }) => ({
       alias: idp.alias,
       displayName: idp.displayName || idp.alias,
       providerId: idp.providerId,
@@ -165,7 +165,7 @@ async function fetchMongoDBSpokes(): Promise<MongoSpoke[]> {
     await client.connect();
     const db = client.db('dive_resources');
     const spokes = await db.collection('spokes').find({}).toArray();
-    return spokes.map((s: any) => ({
+    return spokes.map((s: { spokeId?: string; instanceCode?: string; name?: string; status?: string; baseUrl?: string; apiUrl?: string; idpUrl?: string; registeredAt?: Date; lastHeartbeat?: Date }) => ({
       spokeId: s.spokeId,
       instanceCode: s.instanceCode,
       name: s.name,

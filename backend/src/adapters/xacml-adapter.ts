@@ -17,6 +17,29 @@ import {
     DecisionType
 } from '../types/policies-lab.types';
 
+// XACML XML builder object types
+interface IXacmlAttributeValue {
+    $: { DataType: string };
+    _: string;
+}
+
+interface IXacmlAttribute {
+    $: { AttributeId: string; IncludeInResult: string };
+    AttributeValue: IXacmlAttributeValue | IXacmlAttributeValue[];
+}
+
+interface IXacmlAttributeCategory {
+    $: { Category: string };
+    Attribute: IXacmlAttribute[];
+}
+
+interface IXacmlRequest {
+    Request: {
+        $: Record<string, string>;
+        Attributes: IXacmlAttributeCategory[];
+    };
+}
+
 // ============================================================================
 // Unified JSON → XACML Request XML
 // ============================================================================
@@ -26,7 +49,7 @@ import {
  */
 export function unifiedToXACMLRequest(input: IUnifiedInput): string {
     try {
-        const requestObj: any = {
+        const requestObj: IXacmlRequest = {
             Request: {
                 $: {
                     'xmlns': 'urn:oasis:names:tc:xacml:3.0:core:schema:wd-17',
@@ -39,7 +62,7 @@ export function unifiedToXACMLRequest(input: IUnifiedInput): string {
         };
 
         // Subject Attributes
-        const subjectAttrs: any = {
+        const subjectAttrs: IXacmlAttributeCategory = {
             $: { Category: 'urn:oasis:names:tc:xacml:1.0:subject-category:access-subject' },
             Attribute: []
         };
@@ -108,7 +131,7 @@ export function unifiedToXACMLRequest(input: IUnifiedInput): string {
         requestObj.Request.Attributes.push(subjectAttrs);
 
         // Action Attributes
-        const actionAttrs: any = {
+        const actionAttrs: IXacmlAttributeCategory = {
             $: { Category: 'urn:oasis:names:tc:xacml:3.0:attribute-category:action' },
             Attribute: [{
                 $: { AttributeId: 'urn:oasis:names:tc:xacml:1.0:action:action-id', IncludeInResult: 'false' },
@@ -122,7 +145,7 @@ export function unifiedToXACMLRequest(input: IUnifiedInput): string {
         requestObj.Request.Attributes.push(actionAttrs);
 
         // Resource Attributes
-        const resourceAttrs: any = {
+        const resourceAttrs: IXacmlAttributeCategory = {
             $: { Category: 'urn:oasis:names:tc:xacml:3.0:attribute-category:resource' },
             Attribute: []
         };
@@ -205,7 +228,7 @@ export function unifiedToXACMLRequest(input: IUnifiedInput): string {
         requestObj.Request.Attributes.push(resourceAttrs);
 
         // Environment/Context Attributes
-        const envAttrs: any = {
+        const envAttrs: IXacmlAttributeCategory = {
             $: { Category: 'urn:oasis:names:tc:xacml:3.0:attribute-category:environment' },
             Attribute: []
         };

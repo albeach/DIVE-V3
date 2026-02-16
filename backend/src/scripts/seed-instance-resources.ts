@@ -614,7 +614,7 @@ interface IKASRegistry {
     federationTrust?: {
         trustMatrix?: Record<string, string[]>;
     };
-    federationAgreements?: any[];
+    federationAgreements?: Record<string, unknown>[];
 }
 
 interface IKASServer {
@@ -1016,7 +1016,7 @@ async function loadKASRegistry(): Promise<IKASRegistry> {
 
                 // Convert API response to legacy format
                 return {
-                    kasServers: kasServers.map((k: any) => ({
+                    kasServers: kasServers.map((k: { kasId: string; kasUrl: string; organization: string; countryCode?: string; instanceCode?: string; internalKasUrl?: string; authConfig?: { jwtIssuer?: string }; supportedCOIs?: string[] }) => ({
                         kasId: k.kasId,
                         organization: k.organization,
                         countryCode: k.countryCode || k.instanceCode, // Use countryCode from API
@@ -1268,7 +1268,7 @@ function getKASServersForInstance(kasRegistry: IKASRegistry, instanceCode: strin
  * @param db MongoDB database connection
  * @returns Array of COI templates with weights and instance affinity
  */
-async function buildCoiTemplatesFromDatabase(db: any): Promise<ICOITemplate[]> {
+async function buildCoiTemplatesFromDatabase(db: Db): Promise<ICOITemplate[]> {
     const coiCollection = db.collection('coi_definitions');
     const coiDefs = await coiCollection.find({ enabled: true }).toArray();
 
@@ -1278,7 +1278,7 @@ async function buildCoiTemplatesFromDatabase(db: any): Promise<ICOITemplate[]> {
 
     // Helper to get COI members
     const getMembers = (coiId: string): string[] => {
-        const coi = coiDefs.find((c: any) => c.coiId === coiId);
+        const coi = coiDefs.find((c: { coiId: string }) => c.coiId === coiId);
         return coi?.memberCountries || coi?.members || [];
     };
 
@@ -1402,7 +1402,7 @@ async function buildCoiTemplatesFromDatabase(db: any): Promise<ICOITemplate[]> {
     ];
 
     for (const prog of programs) {
-        if (coiDefs.find((c: any) => c.coiId === prog.id)) {
+        if (coiDefs.find((c: { coiId: string }) => c.coiId === prog.id)) {
             templates.push({
                 coi: [prog.id],
                 coiOperator: 'ALL',

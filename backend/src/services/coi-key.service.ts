@@ -185,7 +185,7 @@ export async function updateCOIKey(coiId: string, request: IUpdateCOIKeyRequest)
     try {
         const collection = await getCollection();
 
-        const updateDoc: any = {
+        const updateDoc: Record<string, unknown> = {
             updatedAt: new Date()
         };
 

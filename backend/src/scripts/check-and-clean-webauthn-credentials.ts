@@ -65,7 +65,7 @@ async function checkAndCleanCredentials(username: string, deleteCredentials: boo
   const credentials = await kcAdminClient.users.getCredentials({ id: user.id! });
 
   // Filter for WebAuthn/FIDO2 credentials
-  const webauthnCredentials = credentials.filter((cred: any) =>
+  const webauthnCredentials = credentials.filter((cred: { type?: string }) =>
     cred.type === 'webauthn' ||
     cred.type === 'webauthn-passwordless' ||
     cred.type?.toLowerCase().includes('fido') ||
@@ -81,7 +81,7 @@ async function checkAndCleanCredentials(username: string, deleteCredentials: boo
   }
 
   // Display credentials
-  webauthnCredentials.forEach((cred: any, index: number) => {
+  webauthnCredentials.forEach((cred: { id?: string; type?: string; userLabel?: string }, index: number) => {
     console.log(`  Credential ${index + 1}:`);
     console.log(`    ID: ${cred.id}`);
     console.log(`    Type: ${cred.type}`);

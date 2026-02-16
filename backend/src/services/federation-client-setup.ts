@@ -10,6 +10,8 @@
  */
 
 import type KcAdminClient from '@keycloak/keycloak-admin-client';
+import type ClientScopeRepresentation from '@keycloak/keycloak-admin-client/lib/defs/clientScopeRepresentation';
+import type ProtocolMapperRepresentation from '@keycloak/keycloak-admin-client/lib/defs/protocolMapperRepresentation';
 import { logger } from '../utils/logger';
 
 // ============================================
@@ -91,7 +93,7 @@ export async function ensureDiveClientScopes(ctx: KeycloakContext): Promise<void
     try {
       // Check if scope exists
       const existingScopes = await ctx.kcAdmin.clientScopes.find({ realm: ctx.realm });
-      const exists = existingScopes.find((s: any) => s.name === scopeConfig.name);
+      const exists = existingScopes.find((s: ClientScopeRepresentation) => s.name === scopeConfig.name);
 
       if (!exists) {
         // Create the scope
@@ -141,7 +143,7 @@ export async function ensureProtocolMapperForScope(ctx: KeycloakContext, scopeNa
   try {
     // Get the scope
     const scopes = await ctx.kcAdmin.clientScopes.find({ realm: ctx.realm });
-    const scope = scopes.find((s: any) => s.name === scopeName);
+    const scope = scopes.find((s: ClientScopeRepresentation) => s.name === scopeName);
 
     if (!scope || !scope.id) {
       logger.warn('Client scope not found for protocol mapper', { scopeName });
@@ -154,7 +156,7 @@ export async function ensureProtocolMapperForScope(ctx: KeycloakContext, scopeNa
       realm: ctx.realm
     });
 
-    const mapperExists = existingMappers.some((m: any) => m.name === `${scopeName}-mapper`);
+    const mapperExists = existingMappers.some((m: ProtocolMapperRepresentation) => m.name === `${scopeName}-mapper`);
 
     if (mapperExists) {
       logger.debug('Protocol mapper already exists for scope', { scopeName });
@@ -365,7 +367,7 @@ export async function ensureProtocolMappersForClient(ctx: KeycloakContext, clien
         realm: ctx.realm,
       });
 
-      const mapperExists = existingMappers.some((m: any) => m.name === mapperName);
+      const mapperExists = existingMappers.some((m: ProtocolMapperRepresentation) => m.name === mapperName);
 
       if (mapperExists) {
         logger.debug('Protocol mapper already exists', { clientId, mapperName });

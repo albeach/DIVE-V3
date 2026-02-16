@@ -60,7 +60,7 @@ async function quickFixACR(username: string) {
   // Check WebAuthn credentials
   console.log('[3/4] Checking WebAuthn credentials...');
   const credentials = await kcAdminClient.users.getCredentials({ id: user.id! });
-  const webauthnCredentials = credentials.filter((cred: any) =>
+  const webauthnCredentials = credentials.filter((cred: { type?: string }) =>
     cred.type === 'webauthn' ||
     cred.type === 'webauthn-passwordless' ||
     cred.type?.toLowerCase().includes('fido') ||
@@ -73,7 +73,7 @@ async function quickFixACR(username: string) {
     console.log('   However, we can still set ACR=2 manually for demo purposes.\n');
   } else {
     console.log(`✅ Found ${webauthnCredentials.length} WebAuthn credential(s):`);
-    webauthnCredentials.forEach((cred: any, idx: number) => {
+    webauthnCredentials.forEach((cred: { type?: string; userLabel?: string }, idx: number) => {
       console.log(`   ${idx + 1}. ${cred.userLabel || 'Unlabeled'} (${cred.type})`);
     });
     console.log('');

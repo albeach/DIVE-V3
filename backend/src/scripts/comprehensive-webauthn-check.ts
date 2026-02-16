@@ -21,8 +21,8 @@ const TEST_REALM = 'dive-v3-pol';
 interface WebAuthnPolicyCheck {
   name: string;
   status: 'PASS' | 'FAIL' | 'WARN';
-  value: any;
-  expected?: any;
+  value: unknown;
+  expected?: unknown;
   message: string;
 }
 

@@ -514,7 +514,7 @@ export class TokenIntrospectionService {
       params.append('token', token);
       params.append('token_type_hint', 'access_token');
 
-      const requestConfig: any = {
+      const requestConfig: Record<string, unknown> = {
         method: 'POST' as const,
         url: metadata.introspection_endpoint,
         data: params,

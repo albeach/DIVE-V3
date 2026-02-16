@@ -53,7 +53,7 @@ class PolicyUpdateStreamService extends EventEmitter {
     });
 
     // Listen for policy bundle updates
-    this.on('policy_bundle_update', (details: any) => {
+    this.on('policy_bundle_update', (details: Record<string, unknown>) => {
       this.broadcastUpdate({
         type: 'policy_bundle',
         timestamp: new Date().toISOString(),

@@ -58,7 +58,7 @@ async function fetchKeycloakIdPs(token: string): Promise<Array<{ alias: string; 
       headers: { Authorization: `Bearer ${token}` },
     }
   );
-  return response.data.map((idp: any) => ({
+  return response.data.map((idp: { alias?: string; displayName?: string; providerId?: string; enabled?: boolean }) => ({
     alias: idp.alias,
     displayName: idp.displayName || idp.alias,
     enabled: idp.enabled,

@@ -3728,7 +3728,7 @@ router.get('/audit/statistics', requireAdmin, async (_req: Request, res: Respons
 // ============================================
 
 // Lazy import to avoid circular dependencies
-let crossInstanceAuthzService: any = null;
+let crossInstanceAuthzService: InstanceType<typeof import('../services/cross-instance-authz.service').CrossInstanceAuthzService> | null = null;
 
 async function getCrossInstanceService() {
     if (!crossInstanceAuthzService) {
@@ -3886,7 +3886,7 @@ router.post('/query-resources', async (req: Request, res: Response): Promise<voi
         });
 
         // Build MongoDB query from federation query
-        const mongoQuery: any = {};
+        const mongoQuery: Record<string, unknown> = {};
 
         if (query.classification && query.classification.length > 0) {
             mongoQuery['ztdf.policy.securityLabel.classification'] = { $in: query.classification };
@@ -3925,7 +3925,7 @@ router.post('/query-resources', async (req: Request, res: Response): Promise<voi
         const instanceUrl = process.env.BACKEND_URL || 'https://backend:4000';
 
         res.json({
-            resources: resources.map((r: any) => ({
+            resources: resources.map((r) => ({
                 resourceId: r.resourceId,
                 title: r.title,
                 classification: r.classification,
@@ -4693,7 +4693,7 @@ router.post('/link-idp', requireSuperAdmin, async (req: Request, res: Response):
 
         // Look up remote spoke
         const spokes = await hubSpokeRegistry.listAllSpokes();
-        const remoteSpoke = spokes.find((s: any) => s.instanceCode === remoteInstanceCode);
+        const remoteSpoke = spokes.find((s: { instanceCode?: string }) => s.instanceCode === remoteInstanceCode);
 
         if (!remoteSpoke) {
             res.status(404).json({

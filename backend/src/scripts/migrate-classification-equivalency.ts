@@ -66,7 +66,7 @@ async function migrateClassificationEquivalency(): Promise<void> {
     });
 
     const client = new MongoClient(MONGO_URI);
-    let rollbackData: any[] = [];
+    let rollbackData: Record<string, unknown>[] = [];
 
     try {
         await client.connect();

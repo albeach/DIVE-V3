@@ -198,7 +198,7 @@ class OPALMetricsService {
 
     const { limit = 50, offset = 0, type, status, since } = options;
 
-    const filter: any = {};
+    const filter: Record<string, unknown> = {};
     if (type) filter.type = type;
     if (status) filter.status = status;
     if (since) filter.timestamp = { $gte: since.toISOString() };

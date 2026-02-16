@@ -1,4 +1,4 @@
-import { Collection, Db, MongoClient, ObjectId } from 'mongodb';
+import { Collection, Db, Document, MongoClient, ObjectId } from 'mongodb';
 import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
 import { logger } from '../utils/logger';
 
@@ -69,7 +69,7 @@ class NotificationService {
 
     async list(userId: string, limit: number = 50, cursor?: string): Promise<IListResult> {
         const col = await this.collection();
-        const query: any = { userId };
+        const query: Record<string, unknown> = { userId };
         if (cursor) {
             try {
                 query._id = { $lt: new ObjectId(cursor) };
@@ -87,7 +87,7 @@ class NotificationService {
         const unreadCount = await col.countDocuments({ userId, read: false });
         const nextCursor = docs.length === limit ? docs[docs.length - 1]._id.toString() : null;
 
-        const notifications: INotification[] = docs.map((doc: any) => ({
+        const notifications: INotification[] = docs.map((doc: Document) => ({
             id: doc._id.toString(),
             userId: doc.userId,
             type: doc.type,
