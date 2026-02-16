@@ -909,7 +909,7 @@ load_gcp_secrets() {
     map_if_empty "NEXTAUTH_SECRET_${inst_uc}" "$NEXTAUTH_SECRET"
 
     # Note: Environment variables are now available for docker-compose
-    # The --env-file flag in hub/services.sh ensures .env.hub is still used as fallback
+    # The --env-file flag ensures .env.hub is still used as fallback
     log_success "Secrets loaded from GCP"
 
     log_success "Secrets loaded from GCP"

@@ -9,7 +9,7 @@
 #
 # Consolidates:
 #   - policy.sh
-#   - hub/policy.sh
+#   (Formerly: hub/policy.sh — removed Phase 13b)
 #   - spoke/spoke-policy.sh
 # =============================================================================
 

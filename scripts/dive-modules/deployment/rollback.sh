@@ -8,7 +8,7 @@
 # Date: 2026-01-22
 #
 # Consolidates:
-#   - hub/cleanup.sh, hub/reset.sh
+#   (Formerly: hub/cleanup.sh, hub/reset.sh — removed Phase 13b)
 #   - Rollback logic from deploy.sh
 # =============================================================================
 

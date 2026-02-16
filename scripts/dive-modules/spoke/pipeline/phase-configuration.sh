@@ -1215,19 +1215,7 @@ spoke_config_nato_localization() {
 
     log_step "Configuring NATO localization for $code_upper..."
 
-    # Load localization module if available
-    if [ -f "${DIVE_ROOT}/scripts/dive-modules/spoke/localization.sh" ]; then
-        source "${DIVE_ROOT}/scripts/dive-modules/spoke/localization.sh"
-
-        if type configure_nato_localization &>/dev/null; then
-            if configure_nato_localization "$code_upper"; then
-                log_success "NATO localization configured"
-                return 0
-            fi
-        fi
-    fi
-
-    # Fallback: Configure basic localization
+    # Configure basic localization
     log_verbose "Configuring basic localization..."
 
     local kc_container="dive-spoke-${code_lower}-keycloak"
