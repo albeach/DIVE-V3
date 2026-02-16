@@ -1,6 +1,8 @@
 /**
  * Analytics Service Tests (Phase 3)
  * 
+ * MEMORY LEAK FIX (2026-02-16): Updated tests for singleton pattern
+ * 
  * Test coverage:
  * - Risk distribution calculation
  * - Compliance trends aggregation
@@ -11,15 +13,23 @@
  */
 
 import { analyticsService } from '../services/analytics.service';
-import { MongoClient, Db, Collection } from 'mongodb';
+import { Db, Collection } from 'mongodb';
 
-// Mock MongoDB
-jest.mock('mongodb');
+// Mock MongoDB singleton
+jest.mock('../utils/mongodb-singleton', () => {
+    const mockDb = {
+        collection: jest.fn(),
+    };
+    return {
+        getDb: jest.fn(() => mockDb),
+    };
+});
+
+import { getDb } from '../utils/mongodb-singleton';
 
 describe('AnalyticsService', () => {
     let mockDb: jest.Mocked<Db>;
     let mockCollection: jest.Mocked<Collection>;
-    let mockMongoClient: jest.Mocked<MongoClient>;
 
     beforeEach(() => {
         // Create mock collection
@@ -29,26 +39,9 @@ describe('AnalyticsService', () => {
             aggregate: jest.fn(),
         } as any;
 
-        // Create mock database
-        mockDb = {
-            collection: jest.fn().mockReturnValue(mockCollection),
-        } as any;
-
-        // Create mock MongoDB client with admin and ping methods
-        mockMongoClient = {
-            db: jest.fn().mockReturnValue(mockDb),
-            connect: jest.fn().mockResolvedValue(undefined),
-            close: jest.fn().mockResolvedValue(undefined),
-        } as any;
-
-        // Mock db().admin().ping() for connection check
-        const mockAdmin = {
-            ping: jest.fn().mockResolvedValue({}),
-        };
-        mockDb.admin = jest.fn().mockReturnValue(mockAdmin as any);
-
-        // Set the mock client
-        analyticsService.setMongoClient(mockMongoClient);
+        // Get mocked database
+        mockDb = getDb() as jest.Mocked<Db>;
+        mockDb.collection = jest.fn().mockReturnValue(mockCollection);
 
         // Clear cache before each test
         analyticsService.clearCache();
@@ -501,51 +494,6 @@ describe('AnalyticsService', () => {
             }
         });
 
-        it('should handle MongoDB ping failure and reconnect', async () => {
-            // Mock MongoDB constructor to return our mock client on reconnect
-            const {  MongoClient: MockedMongoClient } = require('mongodb');
-            (MockedMongoClient as jest.Mock).mockImplementation(() => mockMongoClient);
-
-            // First ping fails, triggering reconnect
-            const mockAdmin = {
-                ping: jest.fn()
-                    .mockRejectedValueOnce(new Error('Connection lost'))
-                    .mockResolvedValue({}),
-            };
-            mockDb.admin = jest.fn().mockReturnValue(mockAdmin as any);
-
-            // Mock successful counts for getRiskDistribution
-            mockCollection.countDocuments
-                .mockResolvedValueOnce(10)
-                .mockResolvedValueOnce(20)
-                .mockResolvedValueOnce(30)
-                .mockResolvedValueOnce(5);
-
-            // First call triggers reconnect
-            const result1 = await analyticsService.getRiskDistribution();
-            expect(result1).toBeDefined();
-
-            // Verify reconnect was triggered
-            expect(mockMongoClient.connect).toHaveBeenCalled();
-        });
-
-        it('should throw error when MongoDB connection fails completely', async () => {
-            // Mock MongoClient constructor to throw error
-            const { MongoClient: MockedMongoClient } = require('mongodb');
-            (MockedMongoClient as jest.Mock).mockImplementation(() => {
-                throw new Error('Connection refused');
-            });
-
-            // Make ping fail to trigger reconnection
-            const mockAdmin = {
-                ping: jest.fn().mockRejectedValue(new Error('Connection lost')),
-            };
-            mockDb.admin = jest.fn().mockReturnValue(mockAdmin as any);
-
-            // Trigger connection by calling a method - should fail on reconnect
-            await expect(analyticsService.getRiskDistribution()).rejects.toThrow('Database connection failed');
-        });
-
         it('should handle countDocuments errors in risk distribution', async () => {
             mockCollection.countDocuments = jest.fn()
                 .mockRejectedValue(new Error('Query timeout'));
@@ -583,24 +531,6 @@ describe('AnalyticsService', () => {
             }) as any;
 
             await expect(analyticsService.getSecurityPosture()).rejects.toThrow();
-        });
-
-        it('should throw error when db not initialized after connection attempt', async () => {
-            // Mock MongoClient constructor to return a client where db() returns null
-            const { MongoClient: MockedMongoClient } = require('mongodb');
-            const brokenClient: any = {
-                connect: jest.fn().mockResolvedValue(undefined),
-                db: jest.fn().mockReturnValue(null),
-            };
-            (MockedMongoClient as jest.Mock).mockImplementation(() => brokenClient);
-
-            // Make ping fail to trigger reconnection
-            const mockAdmin = {
-                ping: jest.fn().mockRejectedValue(new Error('Connection lost')),
-            };
-            mockDb.admin = jest.fn().mockReturnValue(mockAdmin as any);
-
-            await expect(analyticsService.getRiskDistribution()).rejects.toThrow('MongoDB client not initialized');
         });
 
         it('should handle find errors with date range in authz metrics', async () => {

@@ -1,60 +1,29 @@
 /**
  * Policies Lab Service
  *
+ * MEMORY LEAK FIX (2026-02-16): Refactored to use MongoDB singleton
+ * OLD: Created new MongoClient() with connection caching (connection leak)
+ * NEW: Uses shared singleton connection pool via getDb()
+ * IMPACT: Prevents connection leaks during policy upload/management operations
+ *
  * Service for managing user-uploaded policies in the Policies Lab.
  * Handles storage, retrieval, and metadata management for both Rego and XACML policies.
  *
  * Date: October 26, 2025
  */
 
-import { MongoClient, Db, Collection } from 'mongodb';
+import { Collection } from 'mongodb';
 import { logger } from '../utils/logger';
+import { getDb } from '../utils/mongodb-singleton';
 import { IPolicyUpload } from '../types/policies-lab.types';
 
-const MONGODB_URL =
-  process.env.MONGODB_URL ||
-  (process.env.MONGO_PASSWORD
-    ? `mongodb://admin:${process.env.MONGO_PASSWORD}@localhost:27017?authSource=admin`
-    : '');
-const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
 const COLLECTION_NAME = 'policy_uploads';
-
-let cachedClient: MongoClient | null = null;
-let cachedDb: Db | null = null;
-
-/**
- * Get MongoDB connection (with caching)
- */
-async function getMongoClient(): Promise<{ client: MongoClient; db: Db }> {
-    if (cachedClient && cachedDb) {
-        // Test connection
-        try {
-            await cachedClient.db().admin().ping();
-            return { client: cachedClient, db: cachedDb };
-        } catch {
-            // Connection lost, will reconnect below
-            cachedClient = null;
-            cachedDb = null;
-        }
-    }
-
-    const client = new MongoClient(MONGODB_URL);
-    await client.connect();
-    const db = client.db(DB_NAME);
-
-    cachedClient = client;
-    cachedDb = db;
-
-    logger.info('Connected to MongoDB (Policies Lab)', { database: DB_NAME, collection: COLLECTION_NAME });
-
-    return { client, db };
-}
 
 /**
  * Get policy uploads collection
  */
-async function getCollection(): Promise<Collection<IPolicyUpload>> {
-    const { db } = await getMongoClient();
+function getCollection(): Collection<IPolicyUpload> {
+    const db = getDb();
     return db.collection<IPolicyUpload>(COLLECTION_NAME);
 }
 
@@ -63,7 +32,7 @@ async function getCollection(): Promise<Collection<IPolicyUpload>> {
  */
 export async function initializePolicyLabCollection(): Promise<void> {
     try {
-        const collection = await getCollection();
+        const collection = getCollection();
 
         // Create indexes for efficient querying
         await collection.createIndex({ policyId: 1 }, { unique: true });
@@ -85,7 +54,7 @@ export async function initializePolicyLabCollection(): Promise<void> {
  */
 export async function savePolicyUpload(policy: IPolicyUpload): Promise<void> {
     try {
-        const collection = await getCollection();
+        const collection = getCollection();
         await collection.insertOne(policy);
         logger.debug('Policy upload saved', { policyId: policy.policyId, type: policy.type, ownerId: policy.ownerId });
     } catch (error) {
@@ -99,7 +68,7 @@ export async function savePolicyUpload(policy: IPolicyUpload): Promise<void> {
  */
 export async function getPolicyById(policyId: string, ownerId?: string): Promise<IPolicyUpload | null> {
     try {
-        const collection = await getCollection();
+        const collection = getCollection();
         const filter: Record<string, unknown> = { policyId };
 
         // If ownerId provided, enforce ownership
@@ -120,7 +89,7 @@ export async function getPolicyById(policyId: string, ownerId?: string): Promise
  */
 export async function getPoliciesByOwner(ownerId: string, limit: number = 50): Promise<IPolicyUpload[]> {
     try {
-        const collection = await getCollection();
+        const collection = getCollection();
         const policies = await collection
             .find({ ownerId })
             .sort({ createdAt: -1 })
@@ -139,7 +108,7 @@ export async function getPoliciesByOwner(ownerId: string, limit: number = 50): P
  */
 export async function countPoliciesByOwner(ownerId: string): Promise<number> {
     try {
-        const collection = await getCollection();
+        const collection = getCollection();
         return await collection.countDocuments({ ownerId });
     } catch (error) {
         logger.error('Failed to count policies by owner', { ownerId, error });
@@ -152,7 +121,7 @@ export async function countPoliciesByOwner(ownerId: string): Promise<number> {
  */
 export async function deletePolicyById(policyId: string, ownerId: string): Promise<boolean> {
     try {
-        const collection = await getCollection();
+        const collection = getCollection();
         const result = await collection.deleteOne({ policyId, ownerId });
 
         if (result.deletedCount === 0) {
@@ -177,7 +146,7 @@ export async function updatePolicyMetadata(
     updates: Partial<IPolicyUpload>
 ): Promise<boolean> {
     try {
-        const collection = await getCollection();
+        const collection = getCollection();
         const result = await collection.updateOne(
             { policyId, ownerId },
             {
@@ -206,7 +175,7 @@ export async function updatePolicyMetadata(
  */
 export async function policyHashExists(hash: string, ownerId: string): Promise<boolean> {
     try {
-        const collection = await getCollection();
+        const collection = getCollection();
         const count = await collection.countDocuments({ hash, ownerId });
         return count > 0;
     } catch (error) {
@@ -226,7 +195,7 @@ export async function getPolicyStats(): Promise<{
     totalUsers: number;
 }> {
     try {
-        const collection = await getCollection();
+        const collection = getCollection();
 
         const [totalPolicies, regoCount, xacmlCount, validatedCount] = await Promise.all([
             collection.countDocuments({}),
@@ -253,9 +222,8 @@ export async function getPolicyStats(): Promise<{
 }
 
 /**
- * Clear cache (for testing)
+ * @deprecated No longer needed with singleton - kept for test compatibility
  */
 export function clearPolicyLabCache(): void {
-    cachedClient = null;
-    cachedDb = null;
+    // No-op: Singleton pattern doesn't use per-service caching
 }
