@@ -51,7 +51,7 @@ services:
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
     healthcheck:
-      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      test: ["CMD-SHELL", "nc -z localhost 27017 || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 5
