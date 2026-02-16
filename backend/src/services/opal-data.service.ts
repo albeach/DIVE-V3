@@ -609,7 +609,7 @@ class OPALDataService {
   /**
    * Update COI membership and sync to OPAL
    * NOTE: COI membership is managed in-memory for now
-   * TODO: Add MongoDB collection for COI membership if needed
+   * NOTE: COI membership is in-memory. Add MongoDB persistence if cross-restart state is needed.
    */
   async updateCOIMembership(
     coiName: string,

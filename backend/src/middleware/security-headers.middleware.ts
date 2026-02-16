@@ -32,7 +32,7 @@ export const securityHeaders = helmet({
             // 'unsafe-inline' needed for inline scripts (consider removing in production with nonce)
             scriptSrc: [
                 "'self'",
-                "'unsafe-inline'", // TODO: Replace with nonce-based CSP in production
+                "'unsafe-inline'", // SECURITY: Replace with nonce-based CSP before production deployment
                 "https://cdn.jsdelivr.net", // For CDN resources if used
             ],
             
@@ -40,7 +40,7 @@ export const securityHeaders = helmet({
             // 'unsafe-inline' needed for inline styles (consider removing in production with nonce)
             styleSrc: [
                 "'self'",
-                "'unsafe-inline'", // TODO: Replace with nonce-based CSP in production
+                "'unsafe-inline'", // SECURITY: Replace with nonce-based CSP before production deployment
                 "https://fonts.googleapis.com",
             ],
             

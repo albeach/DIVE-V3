@@ -59,13 +59,8 @@ export class AttributeAuthorityService {
   ): Promise<Record<string, any>> {
     const attributes: Record<string, any> = {};
 
-    // TODO: Implement attribute fetching from:
-    // 1. Attribute cache (Redis) - Phase 2
-    // 2. LDAP via Keycloak UserInfo
-    // 3. MongoDB user attributes
-    // 4. Computed attributes (e.g., derived COI)
+    // LIMITATION: Returns placeholder attributes. Production needs Redis cache, LDAP, and MongoDB integration.
 
-    // For now, return placeholder attributes
     for (const name of attributeNames) {
       switch (name) {
         case 'clearance':

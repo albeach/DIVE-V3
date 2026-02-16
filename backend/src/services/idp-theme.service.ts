@@ -282,7 +282,7 @@ class IdPThemeService {
             const uploadsDir = path.join(process.cwd(), 'uploads', 'idp-themes', idpAlias);
             await fs.mkdir(uploadsDir, { recursive: true });
 
-            // For now, save file directly (TODO: Add sharp optimization later)
+            // Saves file without optimization (sharp can be added for production image resizing)
             // Determine file extension
             const ext = type === 'background' ? 'jpg' : 'png';
             const filepath = path.join(uploadsDir, `${type}.${ext}`);

@@ -334,9 +334,10 @@ export async function getCOIKeyStatistics(): Promise<{
 
         const countries = await getAllCOICountries();
 
-        // TODO: Count total resources with COIs
-        // For now, set to 0 until resource schema is properly implemented
-        const totalResources = 0;
+        const { db } = await getMongoClient();
+        const totalResources = await db.collection('resources').countDocuments({
+            'ztdf.policy.securityLabel.COI': { $exists: true, $ne: [] }
+        });
 
         return {
             total,

@@ -21,6 +21,7 @@ import {
     getBlacklistStats
 } from '../services/token-blacklist.service';
 import { authenticateJWT } from '../middleware/authz.middleware';
+import { requireAdmin } from '../middleware/admin.middleware';
 
 const router = Router();
 
@@ -154,13 +155,11 @@ router.post('/logout', authenticateJWT, async (req: Request, res: Response) => {
  * GET /api/auth/blacklist-stats
  * Get token blacklist statistics (admin only)
  */
-router.get('/blacklist-stats', authenticateJWT, async (req: Request, res: Response) => {
+router.get('/blacklist-stats', authenticateJWT, requireAdmin, async (req: Request, res: Response) => {
     const requestId = req.headers['x-request-id'] as string;
     const user = (req as any).user;
 
     try {
-        // TODO: Add admin role check
-        // For now, allow any authenticated user to view stats
 
         const stats = await getBlacklistStats();
 

@@ -647,7 +647,7 @@ class SpokeRuntimeService extends EventEmitter {
   async getHealthStatus(): Promise<ISpokeHealthStatus> {
     const uptimeMs = Date.now() - this.startTime.getTime();
 
-    // TODO: Actual health checks will be implemented
+    // LIMITATION: Returns true for all services. Needs per-service HTTP health probes.
     const services = {
       opa: true, // Will check http://localhost:8181/health
       opalClient: this.state.opalConnected,
@@ -660,7 +660,7 @@ class SpokeRuntimeService extends EventEmitter {
 
     let policySyncStatus: 'current' | 'behind' | 'stale' | 'unknown' = 'unknown';
     if (this.state.policyVersion) {
-      // TODO: Compare with Hub version
+      // LIMITATION: Policy version comparison not implemented; assumes current.
       policySyncStatus = 'current';
     }
 
@@ -676,7 +676,7 @@ class SpokeRuntimeService extends EventEmitter {
       },
       metrics: {
         uptime: uptimeMs,
-        requestsLastHour: 0, // TODO: Track from metrics
+        requestsLastHour: 0, // LIMITATION: No metrics collection yet
         authDecisionsLastHour: 0,
         errorRate: 0,
       },

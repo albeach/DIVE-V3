@@ -446,7 +446,7 @@ class PolicySyncService {
           updateId: update.updateId,
           unackedSpokes
         });
-        // TODO: Alert admin, consider suspending unacked spokes
+        // LIMITATION: Unacknowledged spokes are logged but not alerted or suspended.
         return;
       }
 
