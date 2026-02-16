@@ -30,10 +30,10 @@
  *   npm run migrate:classification-equivalency -- --execute --create-rollback
  */
 
-import { MongoClient } from 'mongodb';
 import { logger } from '../utils/logger';
 import { mapToNATOLevel, mapFromNATOLevel } from '../utils/classification-equivalency';
 import type { NationalClassificationSystem } from '../utils/classification-equivalency';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
 
 // Command-line arguments
 const args = process.argv.slice(2);
@@ -65,14 +65,13 @@ async function migrateClassificationEquivalency(): Promise<void> {
         dbName: DB_NAME
     });
 
-    const client = new MongoClient(MONGO_URI);
     let rollbackData: Record<string, unknown>[] = [];
 
     try {
-        await client.connect();
+        await mongoSingleton.connect();
         logger.info('Connected to MongoDB');
 
-        const db = client.db(DB_NAME);
+        const db = getDb();
         const collection = db.collection(COLLECTION_NAME);
 
         // Fetch all ZTDF resources
@@ -244,8 +243,8 @@ async function migrateClassificationEquivalency(): Promise<void> {
         });
         throw error;
     } finally {
-        await client.close();
-        logger.info('Disconnected from MongoDB');
+        // Singleton manages lifecycle - no need to close
+        logger.info('Migration cleanup complete');
     }
 }
 
@@ -261,11 +260,9 @@ async function rollbackMigration(rollbackFile: string): Promise<void> {
     const fs = require('fs');
     const rollbackData = JSON.parse(fs.readFileSync(rollbackFile, 'utf8'));
 
-    const client = new MongoClient(MONGO_URI);
-
     try {
-        await client.connect();
-        const db = client.db(DB_NAME);
+        await mongoSingleton.connect();
+        const db = getDb();
         const collection = db.collection(COLLECTION_NAME);
 
         let restored = 0;
@@ -295,7 +292,7 @@ async function rollbackMigration(rollbackFile: string): Promise<void> {
         });
 
     } finally {
-        await client.close();
+        // Singleton manages lifecycle - no need to close
     }
 }
 

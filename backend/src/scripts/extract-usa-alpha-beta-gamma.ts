@@ -10,9 +10,9 @@
  * Includes encryption details and decryption instructions
  */
 
-import { MongoClient } from 'mongodb';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
 
 // MongoDB connection
 const MONGO_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017';
@@ -204,13 +204,11 @@ async function extractDocuments(): Promise<void> {
   console.log('='.repeat(60));
   console.log();
 
-  const client = new MongoClient(MONGO_URI);
-
   try {
-    await client.connect();
+    await mongoSingleton.connect();
     console.log('✅ Connected to MongoDB');
 
-    const db = client.db(DB_NAME);
+    const db = getDb();
     const collection = db.collection(COLLECTION_NAME);
 
     // Query for documents matching criteria
@@ -314,8 +312,8 @@ async function extractDocuments(): Promise<void> {
     console.error('❌ Extraction failed:', error);
     throw error;
   } finally {
-    await client.close();
-    console.log('✅ MongoDB connection closed');
+    // Singleton manages lifecycle - no need to close
+    console.log('✅ Extraction cleanup complete');
   }
 }
 

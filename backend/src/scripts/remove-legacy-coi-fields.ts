@@ -17,9 +17,9 @@
  * @date 2026-01-29
  */
 
-import { MongoClient } from 'mongodb';
 import { logger } from '../utils/logger';
-import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
+import { getMongoDBName } from '../utils/mongodb-config';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
 
 interface MigrationStats {
     totalDocuments: number;
@@ -29,10 +29,8 @@ interface MigrationStats {
 }
 
 async function removeLegacyCOIFields(dryRun: boolean = false): Promise<MigrationStats> {
-    const MONGODB_URL = getMongoDBUrl();
     const DB_NAME = getMongoDBName();
 
-    const client = new MongoClient(MONGODB_URL);
     const stats: MigrationStats = {
         totalDocuments: 0,
         documentsWithLegacyCOI: 0,
@@ -41,12 +39,12 @@ async function removeLegacyCOIFields(dryRun: boolean = false): Promise<Migration
     };
 
     try {
-        await client.connect();
+        await mongoSingleton.connect();
         console.log('✅ Connected to MongoDB');
         console.log(`   Database: ${DB_NAME}`);
         console.log(`   Mode: ${dryRun ? 'DRY RUN (no changes)' : 'LIVE'}\n`);
 
-        const db = client.db(DB_NAME);
+        const db = getDb();
         const resourcesCollection = db.collection('resources');
 
         // Count total documents
@@ -140,8 +138,8 @@ async function removeLegacyCOIFields(dryRun: boolean = false): Promise<Migration
         console.error('❌ Migration failed:', error);
         throw error;
     } finally {
-        await client.close();
-        console.log('👋 MongoDB connection closed\n');
+        // Singleton manages lifecycle - no need to close
+        console.log('👋 Migration cleanup complete\n');
     }
 
     return stats;

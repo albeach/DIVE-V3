@@ -8,28 +8,24 @@
  * Date: 2026-01-04
  */
 
-import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
 import { MongoClient, Db } from 'mongodb';
 import { ClearanceEquivalencyDBService } from '../services/clearance-equivalency-db.service';
 import { logger } from '../utils/logger';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
 
 /**
  * Main initialization function
  */
 async function main(): Promise<void> {
     let db: Db | undefined;
-    let client: MongoClient | undefined;
 
     try {
         console.log('🔧 Initializing Clearance Equivalency Collection...\n');
 
-        // Connect to MongoDB
+        // Connect to MongoDB singleton
         console.log('📡 Connecting to MongoDB...');
-        const mongoUrl = getMongoDBUrl();
-        const dbName = getMongoDBName();
-        client = new MongoClient(mongoUrl);
-        await client.connect();
-        db = client.db(dbName);
+        await mongoSingleton.connect();
+        db = getDb();
         console.log('✅ Connected to MongoDB\n');
 
         // Create service instance
@@ -89,10 +85,7 @@ async function main(): Promise<void> {
         process.exit(1);
 
     } finally {
-        // Close database connection
-        if (client) {
-            await client.close();
-        }
+        // Singleton manages lifecycle - no need to close
     }
 }
 

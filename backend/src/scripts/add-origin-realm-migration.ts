@@ -15,8 +15,9 @@
  * NATO Compliance: ACP-240 §5.3 (Resource Origin Authority)
  */
 
-import { MongoClient, Db, Collection } from 'mongodb';
+import { Db, Collection } from 'mongodb';
 import dotenv from 'dotenv';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
 
 // Load environment
 dotenv.config();
@@ -127,7 +128,6 @@ async function runMigration(): Promise<void> {
   console.log(`  Dry Run:        ${DRY_RUN ? 'YES (no changes)' : 'NO (will modify data)'}`);
   console.log('═══════════════════════════════════════════════════════════════\n');
 
-  const client = new MongoClient(MONGODB_URI);
   const stats: MigrationStats = {
     total: 0,
     updated: 0,
@@ -137,10 +137,10 @@ async function runMigration(): Promise<void> {
   };
 
   try {
-    // Connect to MongoDB
+    // Connect to MongoDB singleton
     console.log('Connecting to MongoDB...');
-    await client.connect();
-    const db: Db = client.db(MONGODB_DB);
+    await mongoSingleton.connect();
+    const db: Db = getDb();
     const collection: Collection<ResourceDocument> = db.collection('resources');
 
     // Count resources without originRealm
@@ -284,8 +284,8 @@ async function runMigration(): Promise<void> {
     console.error('\n❌ MIGRATION FAILED:', error);
     process.exit(1);
   } finally {
-    await client.close();
-    console.log('\nDatabase connection closed.');
+    // Singleton manages lifecycle - no need to close
+    console.log('\nMigration complete.');
   }
 }
 
@@ -297,11 +297,9 @@ async function verifyMigration(): Promise<void> {
   console.log('  MIGRATION VERIFICATION');
   console.log('═══════════════════════════════════════════════════════════════\n');
 
-  const client = new MongoClient(MONGODB_URI);
-
   try {
-    await client.connect();
-    const db: Db = client.db(MONGODB_DB);
+    await mongoSingleton.connect();
+    const db: Db = getDb();
     const collection = db.collection('resources');
 
     // Check coverage
@@ -343,7 +341,7 @@ async function verifyMigration(): Promise<void> {
     console.log('\n═══════════════════════════════════════════════════════════════\n');
 
   } finally {
-    await client.close();
+    // Singleton manages lifecycle - no need to close
   }
 }
 

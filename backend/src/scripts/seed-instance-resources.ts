@@ -19,7 +19,7 @@
  * Version: 1.1.0 - Standardized on 5000 ZTDF documents per instance
  */
 
-import { MongoClient, Db, Collection } from 'mongodb';
+import { Db, Collection } from 'mongodb';
 import * as fs from 'fs';
 import * as path from 'path';
 import { generateDisplayMarking, COIOperator, ClassificationLevel } from '../types/ztdf.types';
@@ -27,6 +27,7 @@ import { encryptContent, computeSHA384, computeObjectHash } from '../utils/ztdf.
 import { validateCOICoherence } from '../services/coi-validation.service';
 import { getMongoDBPassword, isGCPSecretsAvailable } from '../utils/gcp-secrets';
 import { CLEARANCE_EQUIVALENCY_TABLE } from '../services/clearance-mapper.service';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
 
 // ============================================
 // CONFIGURATION
@@ -945,17 +946,12 @@ async function loadFederationRegistry(): Promise<IFederationRegistry> {
 
     // Hub mode: Query local MongoDB
     try {
-        const { MongoClient } = await import('mongodb');
-        const mongoUrl = process.env.MONGODB_URL || 'mongodb://localhost:27017';
-        const dbName = process.env.MONGODB_DATABASE || 'dive-v3';
-
-        const client = new MongoClient(mongoUrl);
-        await client.connect();
-        const db = client.db(dbName);
+        await mongoSingleton.connect();
+        const db = getDb();
         const collection = db.collection('federation_spokes');
 
         const spokes = await collection.find({}).toArray();
-        await client.close();
+        // Singleton manages lifecycle - no need to close
 
         if (spokes.length > 0) {
             console.log(`   ✅ Loaded ${spokes.length} spokes from MongoDB (SSOT)`);
@@ -2465,23 +2461,14 @@ async function seedInstance(
         };
     }
 
-    // Connect to MongoDB with credentials from GCP Secret Manager
-    const client = new MongoClient(mongoConnection.uri, {
-        auth: {
-            username: mongoConnection.user,
-            password: mongoConnection.password
-        },
-        authSource: 'admin',
-        connectTimeoutMS: 10000,
-        serverSelectionTimeoutMS: 10000
-    });
-
+    // Connect to MongoDB using singleton (uses MONGODB_URL from environment)
+    // The mongoConnection was built from getMongoDBConnection which respects MONGODB_URL env var
     try {
-        await client.connect();
+        await mongoSingleton.connect();
         console.log('✅ Connected to MongoDB\n');
 
         // CRITICAL: Use database from mongoConnection (from MONGODB_URL), not config
-        const db = client.db(mongoConnection.database);
+        const db = getDb();
         const collection = db.collection('resources');
 
         // ============================================
@@ -2743,7 +2730,7 @@ async function seedInstance(
         return manifest;
 
     } finally {
-        await client.close();
+        // Singleton manages lifecycle - no need to close
     }
 }
 
@@ -2820,15 +2807,11 @@ async function main() {
     // Build COI templates from MongoDB (SSOT)
     console.log('🔧 Building COI templates from MongoDB...');
 
-    // Use Hub MongoDB URL from environment (includes tls=true when MongoDB requires TLS)
-    const mongoUrl = process.env.MONGODB_URL || `mongodb://admin:${await getMongoDBPassword('USA')}@localhost:27017/dive-v3-hub?authSource=admin&tls=true`;
-    const dbName = process.env.MONGODB_DATABASE || 'dive-v3-hub';
-
-    const client = new MongoClient(mongoUrl);
-    await client.connect();
-    const db = client.db(dbName);
+    // Connect using singleton (uses MONGODB_URL from environment)
+    await mongoSingleton.connect();
+    const db = getDb();
     COI_TEMPLATES = await buildCoiTemplatesFromDatabase(db);
-    await client.close();  // Close after loading templates
+    // Singleton manages lifecycle - no need to close
 
     // Validate COI templates
     console.log('✅ Validating COI templates...');
