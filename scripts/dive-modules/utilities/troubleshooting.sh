@@ -8,7 +8,7 @@
 # Date: 2026-01-22
 #
 # Consolidates:
-#   - hub/fix.sh
+#   (Formerly: hub/fix.sh — removed Phase 13b)
 #   - federation-diagnose.sh
 #   - spoke/spoke-fix-hostname.sh
 # =============================================================================

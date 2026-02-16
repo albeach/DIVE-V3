@@ -8,7 +8,7 @@
 # Date: 2026-01-22
 #
 # Consolidates:
-#   - hub/status.sh
+#   (Formerly: hub/status.sh — removed Phase 13b)
 #   - spoke/status.sh, spoke/verification.sh, spoke/spoke-verification.sh
 #   - spoke/pipeline/phase-verification.sh
 # =============================================================================
