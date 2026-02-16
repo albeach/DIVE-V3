@@ -36,7 +36,7 @@ const createSessionRateLimitStore = (prefix: string) => {
             });
 
             // Test connection
-            redisClient.ping().catch((error) => {
+            redisClient.ping().catch((error): null => {
                 logger.warn(`Redis store unavailable for session ${prefix} rate limiting`, {
                     error: error.message,
                     prefix,

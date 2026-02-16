@@ -264,7 +264,7 @@ router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promi
         let recentDecisions: Record<string, unknown>[] = [];
         let recentAuditEvents: Record<string, unknown>[] = [];
         let userStats = {
-            lastLogin: null,
+            lastLogin: null as unknown,
             sessionCount: 1
         };
         let byClassification: Record<string, number> = {};
@@ -420,7 +420,7 @@ router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promi
                 }
             ];
             const classificationResults = await resourcesCollection.aggregate(classificationPipeline).toArray();
-            classificationResults.forEach((result: { _id: string | null; count: number }) => {
+            (classificationResults as Array<{ _id: string | null; count: number }>).forEach((result) => {
                 byClassification[result._id || 'UNKNOWN'] = result.count;
             });
         } catch (error) {

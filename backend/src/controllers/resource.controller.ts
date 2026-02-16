@@ -680,27 +680,27 @@ export const getKASFlowHandler = async (
             step3: {
                 name: 'Key Request to KAS',
                 status: 'PENDING' as const,
-                timestamp: null,
+                timestamp: null as string | null,
                 details: 'Ready to request key from KAS',
                 kasUrl: encrypted ? resource.ztdf.payload.keyAccessObjects[0].kasUrl : null
             },
             step4: {
                 name: 'KAS Policy Re-evaluation',
                 status: 'PENDING' as const,
-                timestamp: null,
+                timestamp: null as string | null,
                 details: 'Awaiting policy re-evaluation',
-                policyCheck: null
+                policyCheck: null as Record<string, unknown> | null
             },
             step5: {
                 name: 'Key Release',
                 status: 'PENDING' as const,
-                timestamp: null,
+                timestamp: null as string | null,
                 details: 'Awaiting key release from KAS'
             },
             step6: {
                 name: 'Content Decryption',
                 status: 'PENDING' as const,
-                timestamp: null,
+                timestamp: null as string | null,
                 details: 'Will decrypt content with released key'
             }
         };

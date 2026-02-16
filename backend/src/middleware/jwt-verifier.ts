@@ -385,7 +385,7 @@ const verifyToken = async (token: string): Promise<IKeycloakToken> => {
         const keycloakToken: IKeycloakToken = {
             // Standard JWT claims
             iss: introspectionResult.iss,
-            sub: introspectionResult.sub,
+            sub: introspectionResult.sub ?? '',
             aud: Array.isArray(introspectionResult.aud) ? introspectionResult.aud : [introspectionResult.aud || ''],
             exp: introspectionResult.exp,
             iat: introspectionResult.iat,

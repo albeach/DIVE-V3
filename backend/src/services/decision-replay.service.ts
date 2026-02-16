@@ -76,7 +76,7 @@ export class DecisionReplayService {
             // 2. Build OPA input (use override userId/context if provided)
             const subject = {
                 authenticated: true,
-                uniqueID: request.userId || userToken.uniqueID || userToken.sub,
+                uniqueID: request.userId || userToken.uniqueID || userToken.sub || '',
                 clearance: userToken.clearance,
                 countryOfAffiliation: userToken.countryOfAffiliation,
                 acpCOI: userToken.acpCOI || [],
@@ -179,14 +179,14 @@ export class DecisionReplayService {
             reason: `User clearance (${input.subject.clearance}) ${clearanceSufficient ? '>=' : '<'} resource classification (${input.resource.classification})`,
             attributes: ['subject.clearance', 'resource.classification'],
             comparison: {
-                user: input.subject.clearance,
+                user: input.subject.clearance ?? '',
                 resource: input.resource.classification,
                 operator: '>=',
             },
         });
 
         // Step 3: Releasability
-        const releasable = (input.resource.releasabilityTo || []).includes(input.subject.countryOfAffiliation);
+        const releasable = (input.resource.releasabilityTo || []).includes(input.subject.countryOfAffiliation ?? '');
         steps.push({
             rule: 'is_not_releasable_to_country',
             result: releasable ? 'PASS' : 'FAIL',
@@ -240,7 +240,7 @@ export class DecisionReplayService {
      * - UNCLASSIFIED users CANNOT access RESTRICTED content
      * - RESTRICTED users CAN access UNCLASSIFIED content
      */
-    private static compareClearance(userClearance: string, resourceClassification: string): boolean {
+    private static compareClearance(userClearance: string | undefined, resourceClassification: string): boolean {
         const levels: Record<string, number> = {
             'UNCLASSIFIED': 0,
             'RESTRICTED': 0.5,
@@ -248,7 +248,7 @@ export class DecisionReplayService {
             'SECRET': 2,
             'TOP_SECRET': 3
         };
-        const userLevel = levels[userClearance] ?? 0;
+        const userLevel = levels[userClearance ?? ''] ?? 0;
         const resourceLevel = levels[resourceClassification] ?? 0;
         return userLevel >= resourceLevel;
     }
@@ -259,16 +259,16 @@ export class DecisionReplayService {
     private static buildProvenance(userToken: IUserToken): { subject: Record<string, IAttributeProvenance> } {
         return {
             subject: {
-                issuer: { source: 'IdP', claim: 'iss', value: userToken.iss },
-                uniqueID: { source: 'IdP', claim: 'sub', value: userToken.sub },
-                clearance: { source: 'Attribute Authority', claim: 'clearance', value: userToken.clearance },
+                issuer: { source: 'IdP', claim: 'iss', value: userToken.iss ?? '' },
+                uniqueID: { source: 'IdP', claim: 'sub', value: userToken.sub ?? '' },
+                clearance: { source: 'Attribute Authority', claim: 'clearance', value: userToken.clearance ?? '' },
                 countryOfAffiliation: {
                     source: (userToken.countryOfAffiliation_source as IAttributeProvenance['source']) || 'Derived (email domain)',
                     claim: 'countryOfAffiliation',
-                    value: userToken.countryOfAffiliation
+                    value: userToken.countryOfAffiliation ?? ''
                 },
-                auth_time: { source: 'IdP', claim: 'auth_time', value: userToken.auth_time },
-                acr: { source: 'Derived', claim: 'acr', value: userToken.acr },
+                auth_time: { source: 'IdP', claim: 'auth_time', value: userToken.auth_time ?? 0 },
+                acr: { source: 'Derived', claim: 'acr', value: userToken.acr ?? '' },
             },
         };
     }

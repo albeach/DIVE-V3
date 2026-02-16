@@ -42,7 +42,7 @@ if (SKIP) {
 
     it('should have all required COIs', async () => {
       const cois = await db.collection('coi_definitions').find({}).toArray();
-      const coiIds = cois.map(c => c.coiId);
+      const coiIds = cois.map((c: { coiId: string }) => c.coiId);
 
       const required = [
         'FVEY', 'NATO', 'NATO-COSMIC', 'US-ONLY',

@@ -162,15 +162,18 @@ export async function extractVideoMetadata(
 
         // Use ffprobe to extract metadata
         const metadata = await new Promise<IVideoMetadata>((resolve, reject) => {
-            ffmpeg.ffprobe(tempFile, (err, data) => {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            ffmpeg.ffprobe(tempFile, (err: Error | null, data: any) => {
                 if (err) {
                     reject(err);
                     return;
                 }
 
                 // Find video and audio streams
-                const videoStream = data.streams.find(s => s.codec_type === 'video');
-                const audioStream = data.streams.find(s => s.codec_type === 'audio');
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const videoStream = data.streams.find((s: any) => s.codec_type === 'video');
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                const audioStream = data.streams.find((s: any) => s.codec_type === 'audio');
 
                 const result: IVideoMetadata = {
                     duration: data.format.duration,

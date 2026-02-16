@@ -401,7 +401,7 @@ function extractXACMLMetadata(parsed: Record<string, unknown>, _source: string):
         structure: {
             policySetId: rootType === 'PolicySet' ? policyId : undefined,
             policyCombiningAlg: rootType === 'PolicySet' ? combiningAlg : undefined,
-            policies: policies.length > 0 ? policies : undefined
+            policies: policies.length > 0 ? policies as Array<{ policyId: string; ruleCombiningAlg: string; rulesCount: number }> : undefined
         }
     };
 }

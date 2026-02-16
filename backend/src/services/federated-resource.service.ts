@@ -1333,6 +1333,7 @@ class FederatedResourceService {
 
         } catch (error) {
             // Enhanced error diagnostics for federation failures
+            const err = error as Error & { response?: { status?: number; statusText?: string; data?: unknown }; code?: string };
             const errorDetails: Record<string, unknown> = {
                 instance: instance.code,
                 apiUrl,
@@ -1341,19 +1342,19 @@ class FederatedResourceService {
                 circuitBreakerFailures: instance.circuitBreaker.failures,
             };
 
-            if (error.response) {
-                errorDetails.httpStatus = error.response.status;
-                errorDetails.httpStatusText = error.response.statusText;
-                errorDetails.responseData = typeof error.response.data === 'string'
-                    ? error.response.data.substring(0, 500)
-                    : error.response.data;
-            } else if (error.code) {
-                errorDetails.errorCode = error.code;
-                if (error.code === 'ECONNREFUSED') {
+            if (err.response) {
+                errorDetails.httpStatus = err.response.status;
+                errorDetails.httpStatusText = err.response.statusText;
+                errorDetails.responseData = typeof err.response.data === 'string'
+                    ? err.response.data.substring(0, 500)
+                    : err.response.data;
+            } else if (err.code) {
+                errorDetails.errorCode = err.code;
+                if (err.code === 'ECONNREFUSED') {
                     errorDetails.hint = `${instance.code} backend is not reachable at ${apiUrl}. Check: 1) spoke containers running, 2) dive-shared Docker network, 3) container name resolution`;
-                } else if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
+                } else if (err.code === 'ECONNABORTED' || err.code === 'ETIMEDOUT') {
                     errorDetails.hint = `${instance.code} backend timed out. Check: 1) spoke backend health, 2) network latency, 3) increase REMOTE_QUERY_TIMEOUT_MS`;
-                } else if (error.code === 'ENOTFOUND') {
+                } else if (err.code === 'ENOTFOUND') {
                     errorDetails.hint = `DNS resolution failed for ${apiUrl}. Check: 1) dive-shared network exists, 2) spoke containers are on dive-shared network`;
                 }
             }

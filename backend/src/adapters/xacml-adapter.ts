@@ -285,7 +285,7 @@ export function unifiedToXACMLRequest(input: IUnifiedInput): string {
         return xml;
 
     } catch (error) {
-        logger.error('Failed to convert Unified input to XACML Request', { error: error.message });
+        logger.error('Failed to convert Unified input to XACML Request', { error: error instanceof Error ? error.message : 'Unknown error' });
         throw new Error('XACML Request conversion failed');
     }
 }
@@ -439,7 +439,7 @@ export async function normalizeXACMLResponse(
         };
 
     } catch (error) {
-        logger.error('Failed to normalize XACML Response', { error: error.message });
+        logger.error('Failed to normalize XACML Response', { error: error instanceof Error ? error.message : 'Unknown error' });
         throw new Error('XACML Response normalization failed');
     }
 }

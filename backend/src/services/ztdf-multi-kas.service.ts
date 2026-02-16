@@ -443,7 +443,7 @@ export class ZTDFMultiKASService {
                 // Record failure
                 recordKASFailure(kasId);
 
-                const errorMessage = error.message || 'Unknown error';
+                const errorMessage = error instanceof Error ? error.message : 'Unknown error';
                 failedKAOs.push({ kaoId: kao.kaoId, error: errorMessage });
                 perKaoLatency.push({
                     kaoId: kao.kaoId,
@@ -523,9 +523,10 @@ export class ZTDFMultiKASService {
             };
 
         } catch (error) {
-            const errorMessage = error.response?.data?.denialReason ||
-                error.response?.data?.error ||
-                error.message ||
+            const err = error as Error & { response?: { data?: { denialReason?: string; error?: string } } };
+            const errorMessage = err.response?.data?.denialReason ||
+                err.response?.data?.error ||
+                err.message ||
                 'KAS request failed';
 
             return {
