@@ -1,6 +1,11 @@
 /**
  * DIVE V3 - Spoke Trusted Issuer Seeding Script
  *
+ * MEMORY LEAK FIX (2026-02-16): Refactored to use MongoDB singleton
+ * OLD: Created new MongoClient() for issuer registration (connection leak)
+ * NEW: Uses shared singleton connection pool via getDb()
+ * IMPACT: Prevents connection leaks during spoke issuer registration
+ *
  * PURPOSE:
  * Registers spoke's own Keycloak realm as a trusted OIDC issuer in spoke MongoDB.
  * This enables the spoke's frontend to display the spoke's IdP in the resources page
@@ -32,9 +37,10 @@
  * @date 2026-02-13
  */
 
-import { MongoClient, Db } from 'mongodb';
+import { Db } from 'mongodb';
 import { config } from 'dotenv';
 import * as path from 'path';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
 
 // ============================================
 // CONFIGURATION
@@ -200,20 +206,10 @@ function getSpokeTrustedIssuerConfig(instanceCode?: string): SpokeConfig {
 // MONGODB CONNECTION
 // ============================================
 
-async function getMongoConnection(): Promise<{ client: MongoClient; db: Db }> {
-  const mongoUrl = process.env.MONGODB_URL || 'mongodb://localhost:27017';
-  const dbName = process.env.MONGODB_DATABASE || 'dive-v3-spoke';
-
-  console.log(`Connecting to MongoDB: ${mongoUrl}`);
-  console.log(`Database: ${dbName}`);
-
-  const client = new MongoClient(mongoUrl);
-  await client.connect();
-
+async function getMongoConnection(): Promise<Db> {
+  await mongoSingleton.connect();
   console.log('✓ MongoDB connection established');
-
-  const db = client.db(dbName);
-  return { client, db };
+  return getDb();
 }
 
 // ============================================
@@ -537,8 +533,6 @@ async function main(): Promise<void> {
   console.log(`Environment:          ${process.env.NODE_ENV || 'development'}`);
   console.log('');
 
-  let client: MongoClient | null = null;
-
   try {
     // Step 1: Build configuration
     console.log('Step 1/5: Building spoke trusted issuer configuration...');
@@ -548,9 +542,7 @@ async function main(): Promise<void> {
 
     // Step 2: Connect to MongoDB
     console.log('Step 2/5: Connecting to MongoDB...');
-    const connection = await getMongoConnection();
-    client = connection.client;
-    const db = connection.db;
+    const db = await getMongoConnection();
     console.log('');
 
     // Step 3: Register spoke's own trusted issuer
@@ -636,12 +628,9 @@ async function main(): Promise<void> {
 
     process.exit(1);
   } finally {
-    // Cleanup: Close MongoDB connection
-    if (client) {
-      await client.close();
-      console.log('✓ MongoDB connection closed');
-      console.log('');
-    }
+    // Singleton manages lifecycle - no need to close
+    console.log('✓ Script complete');
+    console.log('');
   }
 }
 

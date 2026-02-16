@@ -137,7 +137,7 @@ class FederationBootstrapService {
           instanceCode,
           spokeId: existing.spokeId
         });
-        await client.close();
+        // Singleton manages lifecycle - no need to close
         return;
       }
 

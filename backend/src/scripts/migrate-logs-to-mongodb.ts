@@ -1,18 +1,22 @@
 /**
  * Migration Script: Backfill Audit Logs to MongoDB
  * 
+ * MEMORY LEAK FIX (2026-02-16): Refactored to use MongoDB singleton
+ * OLD: Created new MongoClient() for migration (connection leak)
+ * NEW: Uses shared singleton connection pool via getDb()
+ * IMPACT: Prevents connection leaks during log migration operations
+ * 
  * Reads existing authz.log file and imports all ACP-240 events into MongoDB
  * so they appear in the admin dashboard.
  * 
  * Usage: npx ts-node src/scripts/migrate-logs-to-mongodb.ts
  */
 
-import { MongoClient } from 'mongodb';
 import fs from 'fs';
 import path from 'path';
 import readline from 'readline';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
 
-const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
 const DB_NAME = 'dive-v3';
 const LOGS_COLLECTION = 'audit_logs';
 const LOG_FILE_PATH = path.join(process.cwd(), 'logs', 'authz.log');
@@ -45,11 +49,10 @@ async function migrateLogsToMongoDB() {
 
     // Connect to MongoDB
     console.log('📡 Connecting to MongoDB...');
-    const client = new MongoClient(MONGODB_URL);
 
     try {
-        await client.connect();
-        const db = client.db(DB_NAME);
+        await mongoSingleton.connect();
+        const db = getDb();
         const collection = db.collection(LOGS_COLLECTION);
 
         console.log('✅ Connected to MongoDB\n');
@@ -153,8 +156,8 @@ async function migrateLogsToMongoDB() {
         console.error('❌ Migration failed:', error);
         process.exit(1);
     } finally {
-        await client.close();
-        console.log('\n🔌 MongoDB connection closed');
+        // Singleton manages lifecycle - no need to close
+        console.log('\n🔌 Migration complete');
     }
 }
 
