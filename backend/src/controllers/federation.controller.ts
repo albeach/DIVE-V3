@@ -299,7 +299,7 @@ router.post('/resources/request', requireSPAuth, requireSPScope('resource:read')
       return;
     }
 
-    const resourceData = resource[0];
+    const resourceData = resource[0] as { releasabilityTo: string[]; classification: string; [key: string]: unknown };
 
     // Check releasability
     if (!resourceData.releasabilityTo.includes(spContext.sp.country)) {

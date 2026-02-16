@@ -65,7 +65,7 @@ function isReleasableToUSA(releasabilityTo: string[]): boolean {
 /**
  * Extract encryption details from ZTDF document
  */
-function extractEncryptionDetails(ztdfDoc: any): IExtractedDocument {
+function extractEncryptionDetails(ztdfDoc: Record<string, unknown>): IExtractedDocument {
   const ztdf = ztdfDoc.ztdf;
   const legacy = ztdfDoc.legacy;
 

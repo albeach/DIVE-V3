@@ -32,7 +32,7 @@
  * @date 2026-02-13
  */
 
-import { MongoClient } from 'mongodb';
+import { MongoClient, Db } from 'mongodb';
 import { config } from 'dotenv';
 import * as path from 'path';
 
@@ -200,7 +200,7 @@ function getSpokeTrustedIssuerConfig(instanceCode?: string): SpokeConfig {
 // MONGODB CONNECTION
 // ============================================
 
-async function getMongoConnection(): Promise<{ client: MongoClient; db: any }> {
+async function getMongoConnection(): Promise<{ client: MongoClient; db: Db }> {
   const mongoUrl = process.env.MONGODB_URL || 'mongodb://localhost:27017';
   const dbName = process.env.MONGODB_DATABASE || 'dive-v3-spoke';
 
@@ -221,7 +221,7 @@ async function getMongoConnection(): Promise<{ client: MongoClient; db: any }> {
 // ============================================
 
 async function registerTrustedIssuer(
-  db: any,
+  db: Db,
   config: SpokeConfig
 ): Promise<{ registered: boolean; existed: boolean; error?: string }> {
   try {
@@ -316,7 +316,7 @@ async function registerTrustedIssuer(
  *   "Issuer https://localhost:8443/realms/dive-v3-broker-usa is not in the list of trusted issuers"
  */
 async function registerHubTrustedIssuer(
-  db: any,
+  db: Db,
   spokeCode: string
 ): Promise<{ registered: number; skipped: number; error?: string }> {
   // Skip if this IS the hub
@@ -408,7 +408,7 @@ async function registerHubTrustedIssuer(
 // ============================================
 
 async function verifyTrustedIssuer(
-  db: any,
+  db: Db,
   config: SpokeConfig
 ): Promise<{ verified: boolean; count: number }> {
   try {

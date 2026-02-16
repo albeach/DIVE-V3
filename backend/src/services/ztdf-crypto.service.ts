@@ -387,7 +387,7 @@ export class ZTDFCryptoService {
     /**
      * Compute hash of object (canonical JSON)
      */
-    computeObjectHash(obj: any): string {
+    computeObjectHash(obj: Record<string, unknown>): string {
         const canonical = JSON.stringify(obj, Object.keys(obj).sort());
         return this.computeSHA384(canonical);
     }

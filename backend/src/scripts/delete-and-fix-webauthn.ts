@@ -94,7 +94,7 @@ async function deleteWebAuthnCredential(username: string) {
   );
 
   const credentials = credentialsResponse.data;
-  const webauthnCredentials = credentials.filter((cred: any) =>
+  const webauthnCredentials = credentials.filter((cred: { type?: string }) =>
     cred.type === 'webauthn' ||
     cred.type === 'webauthn-passwordless' ||
     cred.type?.toLowerCase().includes('fido') ||
@@ -112,7 +112,7 @@ async function deleteWebAuthnCredential(username: string) {
   }
 
   console.log(`Found ${webauthnCredentials.length} WebAuthn credential(s) to delete:\n`);
-  webauthnCredentials.forEach((cred: any, idx: number) => {
+  webauthnCredentials.forEach((cred: { type?: string; id?: string; userLabel?: string }, idx: number) => {
     console.log(`  ${idx + 1}. ${cred.userLabel || 'Unlabeled'} (${cred.type}) - ID: ${cred.id}`);
   });
   console.log('');
@@ -140,7 +140,7 @@ async function deleteWebAuthnCredential(username: string) {
     `${KEYCLOAK_URL}/admin/realms/${REALM}/users/${user.id}/credentials`,
     { headers: { 'Authorization': `Bearer ${adminToken}` } }
   );
-  const remaining = verifyResponse.data.filter((cred: any) =>
+  const remaining = verifyResponse.data.filter((cred: { type?: string }) =>
     cred.type === 'webauthn' || cred.type === 'webauthn-passwordless'
   );
 

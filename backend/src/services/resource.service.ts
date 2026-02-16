@@ -82,7 +82,7 @@ async function getCollection(): Promise<Collection<IZTDFResource>> {
 /**
  * Check if resource is ZTDF-enhanced
  */
-function isZTDFResource(resource: any): resource is IZTDFResource {
+function isZTDFResource(resource: unknown): resource is IZTDFResource {
     return resource && typeof resource === 'object' && 'ztdf' in resource;
 }
 
@@ -261,7 +261,8 @@ export interface ISearchOptions {
 export async function searchResources(options: ISearchOptions): Promise<IZTDFResource[]> {
     try {
         const collection = await getCollection();
-        const filter: any = {};
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- MongoDB dynamic query builder requires flexible typing
+        const filter: { $or?: Record<string, unknown>[]; [key: string]: unknown } = {};
 
         // Text search on title (simple contains match)
         if (options.query) {
@@ -802,13 +803,19 @@ export async function getZTDFObject(resourceId: string): Promise<IZTDFObject | n
  * Query resources with flexible criteria (for federation)
  */
 export async function getResourcesByQuery(
-    query: any,
+    query: {
+        resourceId?: string | { $in: string[] };
+        classification?: string;
+        releasabilityTo?: string;
+        COI?: string;
+        $text?: { $search: string };
+    },
     options?: {
         limit?: number;
         offset?: number;
-        fields?: any;
+        fields?: Record<string, number>;
     }
-): Promise<any[]> {
+): Promise<Record<string, unknown>[]> {
     const client = await getMongoClient();
     const DB_NAME = getMongoDBName(); // Read at runtime
     const db = client.db(DB_NAME);
@@ -821,13 +828,13 @@ export async function getResourcesByQuery(
         const projection = options?.fields || {};
 
         // Build MongoDB query
-        const mongoQuery: any = {};
+        const mongoQuery: Record<string, unknown> = {};
 
         // Handle resourceId queries (single or array)
         if (query.resourceId) {
             if (typeof query.resourceId === 'string') {
                 mongoQuery.resourceId = query.resourceId;
-            } else if (query.resourceId.$in) {
+            } else if (typeof query.resourceId === 'object' && '$in' in query.resourceId) {
                 mongoQuery.resourceId = { $in: query.resourceId.$in };
             }
         }

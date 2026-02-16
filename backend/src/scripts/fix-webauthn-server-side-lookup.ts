@@ -154,7 +154,7 @@ async function diagnoseWebAuthnLookup(username: string) {
             webauthnPriority: -1,
         };
 
-        function checkExecutions(execs: any[], depth = 0): void {
+        function checkExecutions(execs: Record<string, unknown>[], depth = 0): void {
             for (const exec of execs) {
                 const indent = '  '.repeat(depth + 1);
                 if (exec.authenticator === 'auth-username-password-form') {

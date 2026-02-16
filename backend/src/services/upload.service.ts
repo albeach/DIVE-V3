@@ -27,6 +27,7 @@ import {
 import {
     IZTDFObject,
     IZTDFResource,
+    IKeyAccessObject,
     ClassificationLevel
 } from '../types/ztdf.types';
 import {
@@ -509,8 +510,8 @@ function createMultipleKAOs(params: {
     wrappedKey: string;
     currentTimestamp: string;
     selectedCOI: string;
-}): any[] {
-    const kaos: any[] = [];
+}): IKeyAccessObject[] {
+    const kaos: IKeyAccessObject[] = [];
     const kasBaseUrl = process.env.KAS_URL || 'https://localhost:8080';
 
     // Strategy 1: COI-based KAOs
@@ -523,7 +524,7 @@ function createMultipleKAOs(params: {
                 wrappedKey: params.wrappedKey,
                 wrappingAlgorithm: 'AES-256-GCM-WRAPPED',
                 policyBinding: {
-                    clearanceRequired: params.classification,
+                    clearanceRequired: params.classification as ClassificationLevel,
                     countriesAllowed: params.releasabilityTo,
                     coiRequired: [coi]
                 },
@@ -552,7 +553,7 @@ function createMultipleKAOs(params: {
                 wrappedKey: params.wrappedKey,
                 wrappingAlgorithm: 'AES-256-GCM-WRAPPED',
                 policyBinding: {
-                    clearanceRequired: params.classification,
+                    clearanceRequired: params.classification as ClassificationLevel,
                     countriesAllowed: [nation],
                     coiRequired: []
                 },
@@ -570,7 +571,7 @@ function createMultipleKAOs(params: {
             wrappedKey: params.wrappedKey,
             wrappingAlgorithm: 'AES-256-GCM-WRAPPED',
             policyBinding: {
-                clearanceRequired: params.classification,
+                clearanceRequired: params.classification as ClassificationLevel,
                 countriesAllowed: params.releasabilityTo,
                 coiRequired: params.coiTags
             },

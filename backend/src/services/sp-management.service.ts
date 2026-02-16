@@ -183,7 +183,7 @@ export class SPManagementService {
   }): Promise<{ sps: IExternalSP[]; total: number; page: number; limit: number; totalPages: number }> {
     await this.initialize();
 
-    const query: any = {};
+    const query: Record<string, unknown> = {};
     if (filter.status) query.status = filter.status;
     if (filter.country) query.country = filter.country;
     if (filter.organizationType) query.organizationType = filter.organizationType;

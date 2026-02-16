@@ -3,9 +3,50 @@ import { getResourceById } from './resource.service';
 import {
     IDecisionReplayRequest,
     IDecisionReplayResponse,
-    IReplayStep
+    IReplayStep,
+    IAttributeProvenance
 } from '../types/decision-replay.types';
 import { logger } from '../utils/logger';
+
+interface IUserToken {
+    sub?: string;
+    iss?: string;
+    uniqueID?: string;
+    preferred_username?: string;
+    clearance?: string;
+    countryOfAffiliation?: string;
+    countryOfAffiliation_source?: string;
+    acpCOI?: string[];
+    auth_time?: number;
+    acr?: string;
+}
+
+interface IOpaInput {
+    subject: {
+        authenticated: boolean;
+        uniqueID: string;
+        clearance?: string;
+        countryOfAffiliation?: string;
+        acpCOI: string[];
+    };
+    action: { operation: string };
+    resource: {
+        resourceId: string;
+        classification: string;
+        originalClassification?: string;
+        originalCountry?: string;
+        releasabilityTo: string[];
+        COI: string[];
+        creationDate?: string;
+        encrypted: boolean;
+    };
+    context: {
+        currentTime: string;
+        sourceIP: string;
+        deviceCompliant: boolean;
+        requestId: string;
+    };
+}
 
 const OPA_URL = process.env.OPA_URL || 'http://localhost:8181';
 
@@ -21,7 +62,7 @@ export class DecisionReplayService {
      */
     static async replayDecision(
         request: IDecisionReplayRequest,
-        userToken: any
+        userToken: IUserToken
     ): Promise<IDecisionReplayResponse> {
         const startTime = Date.now();
 
@@ -96,7 +137,7 @@ export class DecisionReplayService {
                 decision: decision as "ALLOW" | "DENY",
                 reason,
                 steps,
-                obligations: obligations.map((o: any) => ({
+                obligations: obligations.map((o: { type: string; resourceId?: string }) => ({
                     ...o,
                     status: 'pending' as const,
                 })),
@@ -116,7 +157,7 @@ export class DecisionReplayService {
     /**
      * Build replay steps from OPA input and decision
      */
-    private static buildReplaySteps(input: any, _decision: string): IReplayStep[] {
+    private static buildReplaySteps(input: IOpaInput, _decision: string): IReplayStep[] {
         const steps: IReplayStep[] = [];
 
         // Step 1: Authentication
@@ -215,14 +256,14 @@ export class DecisionReplayService {
     /**
      * Build attribute provenance
      */
-    private static buildProvenance(userToken: any): any {
+    private static buildProvenance(userToken: IUserToken): { subject: Record<string, IAttributeProvenance> } {
         return {
             subject: {
                 issuer: { source: 'IdP', claim: 'iss', value: userToken.iss },
                 uniqueID: { source: 'IdP', claim: 'sub', value: userToken.sub },
                 clearance: { source: 'Attribute Authority', claim: 'clearance', value: userToken.clearance },
                 countryOfAffiliation: {
-                    source: userToken.countryOfAffiliation_source || 'Derived (email domain)',
+                    source: (userToken.countryOfAffiliation_source as IAttributeProvenance['source']) || 'Derived (email domain)',
                     claim: 'countryOfAffiliation',
                     value: userToken.countryOfAffiliation
                 },

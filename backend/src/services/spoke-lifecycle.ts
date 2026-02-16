@@ -33,7 +33,7 @@ import {
 
 export interface LifecycleContext {
   store: ISpokeStore;
-  emit: (event: string, ...args: any[]) => boolean;
+  emit: (event: string, ...args: unknown[]) => boolean;
 }
 
 // ============================================

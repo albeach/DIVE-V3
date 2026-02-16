@@ -13,6 +13,7 @@ import { logger } from '../utils/logger';
 import type { KeycloakContext } from './federation-client-setup';
 import { ensureDiveClientScopes, ensureCrossBorderClient } from './federation-client-setup';
 import type { IFederationConfig, IFederationResult } from './keycloak-federation.service';
+import type IdentityProviderRepresentation from '@keycloak/keycloak-admin-client/lib/defs/identityProviderRepresentation';
 
 // ============================================
 // IDP CRUD OPERATIONS
@@ -25,7 +26,7 @@ import type { IFederationConfig, IFederationResult } from './keycloak-federation
 export async function getIdentityProviderCore(
   ctx: KeycloakContext,
   alias: string
-): Promise<{ internalId: string; config: any } | null> {
+): Promise<{ internalId: string; config: IdentityProviderRepresentation } | null> {
   try {
     const idp = await ctx.kcAdmin.identityProviders.findOne({ alias });
     return idp ? { internalId: idp.internalId!, config: idp } : null;
@@ -360,7 +361,7 @@ export async function updateIdentityProviderCore(
   const existingIdp = existing.config;
 
   // Build complete updates including URL endpoints
-  const updates: any = {
+  const updates: IdentityProviderRepresentation = {
     alias: existingIdp.alias,
     providerId: existingIdp.providerId,
     enabled: config.enabled !== undefined ? config.enabled : existingIdp.enabled,

@@ -29,7 +29,7 @@ async function testUserLogin(
     try {
         const tokenUrl = `${keycloakUrl}/realms/${REALM}/protocol/openid-connect/token`;
 
-        const params: any = {
+        const params: Record<string, string> = {
             grant_type: 'password',
             client_id: 'dive-v3-client',
             username,
