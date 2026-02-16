@@ -65,36 +65,6 @@ generate_hub_certificate() {
 }
 
 ##
-# Generate certificate for Spoke
-#
-# Arguments:
-#   $1 - Instance code
-##
-generate_spoke_certificate() {
-    local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
-
-    local certs_dir="${DIVE_ROOT}/instances/${code_lower}/certs"
-    mkdir -p "$certs_dir"
-
-    log_info "Generating certificates for Spoke $instance_code..."
-
-    if command -v mkcert >/dev/null 2>&1; then
-        cd "$certs_dir"
-        mkcert -cert-file certificate.pem -key-file key.pem \
-            localhost "*.localhost" "${code_lower}.dive.local" "keycloak" \
-            127.0.0.1 ::1 \
-            >/dev/null 2>&1
-        cd - >/dev/null
-    else
-        generate_self_signed_cert "$certs_dir" "dive-spoke-${code_lower}"
-    fi
-
-    log_success "Spoke certificates generated in $certs_dir"
-    return 0
-}
-
-##
 # Generate self-signed certificate using OpenSSL
 #
 # Arguments:
@@ -348,7 +318,6 @@ mkcert_ca_root() {
 # =============================================================================
 
 export -f generate_hub_certificate
-export -f generate_spoke_certificate
 export -f generate_self_signed_cert
 export -f rotate_certificates
 export -f validate_certificate

@@ -521,42 +521,7 @@ spoke_failover() {
 }
 
 # =============================================================================
-# MAINTENANCE MODE (PLACEHOLDER)
+# MAINTENANCE MODE (Delegated to spoke-failover.sh)
 # =============================================================================
-
-spoke_maintenance() {
-    local subcommand="${1:-status}"
-    shift || true
-
-    ensure_dive_root
-    local instance_code="${INSTANCE:-usa}"
-
-    print_header
-    echo -e "${BOLD}Spoke Maintenance Mode:${NC} $(upper "$instance_code")"
-    echo ""
-
-    case "$subcommand" in
-        status)
-            echo -e "${YELLOW}⚠ Maintenance mode monitoring not yet implemented${NC}"
-            echo ""
-            echo "This feature will be available in Phase 6."
-            echo "It will show maintenance windows, scheduled downtime, and service status."
-            ;;
-        enable|disable)
-            echo -e "${YELLOW}⚠ Maintenance mode control not yet implemented${NC}"
-            echo ""
-            echo "This feature will be available in Phase 6."
-            echo "It will allow enabling/disabling maintenance mode for spoke services."
-            ;;
-        *)
-            echo -e "${CYAN}Usage:${NC}"
-            echo "  ./dive spoke maintenance [status|enable|disable]"
-            echo ""
-            echo -e "${CYAN}Subcommands:${NC}"
-            echo "  status    Show current maintenance mode status"
-            echo "  enable    Enable maintenance mode (drain connections)"
-            echo "  disable   Disable maintenance mode (resume normal operation)"
-            echo ""
-            ;;
-    esac
-}
+# spoke_maintenance() is defined in spoke-failover.sh with full implementation
+# It is loaded on-demand via the spoke_failover() delegation above

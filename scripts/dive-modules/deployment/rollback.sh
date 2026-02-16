@@ -256,50 +256,6 @@ cleanup_spoke() {
     log_success "Spoke $code_upper cleanup complete"
 }
 
-##
-# Nuke everything (emergency full reset)
-##
-cmd_nuke() {
-    log_warn "⚠️  NUCLEAR OPTION: This will destroy EVERYTHING!"
-    log_warn "All containers, volumes, networks, and data will be removed."
-    echo ""
-    read -p "Type 'NUKE' to confirm: " confirm
-
-    if [ "$confirm" != "NUKE" ]; then
-        log_info "Nuke cancelled"
-        return 0
-    fi
-
-    log_warn "Nuking all DIVE resources..."
-
-    # Stop all DIVE containers
-    docker ps -a --filter "name=dive" -q | grep . | xargs docker stop 2>/dev/null || true
-    docker ps -a --filter "name=dive" -q | grep . | xargs docker rm -f 2>/dev/null || true
-
-    # Remove all DIVE volumes
-    docker volume ls -q --filter "name=dive" | grep . | xargs docker volume rm 2>/dev/null || true
-
-    # Remove all DIVE networks
-    docker network ls --filter "name=dive" -q | grep . | xargs docker network rm 2>/dev/null || true
-
-    # Clean instance directories
-    rm -rf "${DIVE_ROOT}/instances"/* 2>/dev/null || true
-
-    # Clean data directories
-    rm -rf "${DIVE_ROOT}/data"/* 2>/dev/null || true
-
-    # Clean logs
-    rm -rf "${DIVE_ROOT}/logs"/* 2>/dev/null || true
-
-    # Prune Docker system
-    docker system prune -af --volumes 2>/dev/null || true
-
-    log_success "☢️  NUKE COMPLETE - All DIVE resources destroyed"
-    echo ""
-    echo "To redeploy:"
-    echo "  ./dive hub deploy"
-}
-
 # =============================================================================
 # MODULE EXPORTS
 # =============================================================================
@@ -311,6 +267,5 @@ export -f cmd_cleanup
 export -f cleanup_all
 export -f cleanup_hub
 export -f cleanup_spoke
-export -f cmd_nuke
 
 log_verbose "Rollback module loaded"

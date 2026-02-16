@@ -73,19 +73,6 @@ declare -A NATO_REDIS_PORTS=(
 # UTILITY FUNCTIONS
 # =============================================================================
 
-# Inline logging functions (for single-line output)
-log_success_inline() {
-    echo -e "${GREEN}✅ $1${NC}"
-}
-
-log_error_inline() {
-    echo -e "${RED}❌ $1${NC}"
-}
-
-log_warn_inline() {
-    echo -e "${YELLOW}⚠️  $1${NC}"
-}
-
 # Get Redis port for instance
 get_redis_port() {
     local instance="${1:-usa}"
@@ -189,12 +176,6 @@ redis_info() {
 redis_memory_stats() {
     local instance="${1:-usa}"
     redis_exec "$instance" "info memory" 2>/dev/null
-}
-
-# Get Redis stats
-redis_stats() {
-    local instance="${1:-usa}"
-    redis_exec "$instance" "info stats" 2>/dev/null
 }
 
 # Get connected clients

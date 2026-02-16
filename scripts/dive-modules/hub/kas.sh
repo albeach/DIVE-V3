@@ -87,18 +87,7 @@ KAS_REGISTRY_FILE="${DIVE_ROOT}/config/kas-registry.json"
 # UTILITY FUNCTIONS
 # =============================================================================
 
-# Inline logging functions
-log_success_inline() {
-    echo -e "${GREEN}✅ $1${NC}"
-}
-
-log_error_inline() {
-    echo -e "${RED}❌ $1${NC}"
-}
-
-log_warn_inline() {
-    echo -e "${YELLOW}⚠️  $1${NC}"
-}
+# Inline logging functions provided by common.sh (log_success_inline, log_error_inline, log_warn_inline)
 
 # Get KAS port for instance
 get_kas_port() {

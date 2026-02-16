@@ -485,6 +485,18 @@ log_dry() {
     echo -e "${GRAY}[DRY-RUN] $1${NC}"
 }
 
+log_success_inline() {
+    echo -e "${GREEN}✅ $1${NC}"
+}
+
+log_error_inline() {
+    echo -e "${RED}❌ $1${NC}"
+}
+
+log_warn_inline() {
+    echo -e "${YELLOW}⚠️  $1${NC}"
+}
+
 log_verbose() {
     [ "$VERBOSE" = true ] && echo -e "${GRAY}  $1${NC}" || true
 }
