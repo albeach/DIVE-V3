@@ -66,7 +66,7 @@ export function requireRole(allowedRoles: (UserRole | string)[]) {
 
     // Check if user has required role
     const userRole = req.user.role;
-    const hasRequiredRole = allowedRoles.includes(userRole);
+    const hasRequiredRole = allowedRoles.includes(userRole ?? '');
 
     if (!hasRequiredRole) {
       logger.warn('Role check failed: Insufficient permissions', {

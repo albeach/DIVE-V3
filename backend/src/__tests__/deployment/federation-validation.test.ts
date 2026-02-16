@@ -44,7 +44,7 @@ if (SKIP) {
 
       // Check for each link, there's a reverse link
       for (const link of matrix) {
-        const reverse = matrix.find(l =>
+        const reverse = matrix.find((l: { source: string; target: string }) =>
           l.source === link.target && l.target === link.source
         );
 

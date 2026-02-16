@@ -36,7 +36,7 @@ function loadTranslations(locale: Locale, namespace: string = 'errors'): Record<
   const cacheKey = `${locale}:${namespace}`;
 
   if (translationsCache.has(cacheKey)) {
-    return translationsCache.get(cacheKey);
+    return translationsCache.get(cacheKey) ?? {};
   }
 
   try {

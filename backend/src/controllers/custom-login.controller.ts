@@ -528,7 +528,7 @@ export const customLoginHandler = async (
             logger.error('Custom login failed - Keycloak error', {
                 requestId,
                 username,
-                error: keycloakError.response?.data || keycloakError.message
+                error: axiosErr.response?.data || axiosErr.message
             });
 
             res.status(500).json({

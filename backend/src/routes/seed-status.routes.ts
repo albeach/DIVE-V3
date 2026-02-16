@@ -126,7 +126,7 @@ router.get('/seed-status', async (_req: Request, res: Response) => {
                 count: b.count,
                 timestamp: b.timestamp
             })),
-            byInstance: instanceDistribution.reduce((acc: Record<string, number>, curr: { _id: string; count: number }) => {
+            byInstance: (instanceDistribution as Array<{ _id: string; count: number }>).reduce((acc: Record<string, number>, curr) => {
                 acc[curr._id] = curr.count;
                 return acc;
             }, {})
@@ -221,49 +221,49 @@ router.get('/distribution', async (_req: Request, res: Response) => {
             timestamp: new Date().toISOString(),
             totalCount,
             byClassification: {
-                counts: classificationDist.reduce((acc: Record<string, number>, curr: { _id: string; count: number }) => {
+                counts: (classificationDist as Array<{ _id: string; count: number }>).reduce((acc: Record<string, number>, curr) => {
                     acc[curr._id] = curr.count;
                     return acc;
                 }, {}),
-                percentages: classificationDist.reduce((acc: Record<string, string>, curr: { _id: string; count: number }) => {
+                percentages: (classificationDist as Array<{ _id: string; count: number }>).reduce((acc: Record<string, string>, curr) => {
                     acc[curr._id] = ((curr.count / totalCount) * 100).toFixed(2) + '%';
                     return acc;
                 }, {}),
                 variance: classificationVariance
             },
             byCOI: {
-                counts: coiDist.reduce((acc: Record<string, number>, curr: { _id: string; count: number }) => {
+                counts: (coiDist as Array<{ _id: string; count: number }>).reduce((acc: Record<string, number>, curr) => {
                     acc[curr._id] = curr.count;
                     return acc;
                 }, {}),
-                percentages: coiDist.reduce((acc: Record<string, string>, curr: { _id: string; count: number }) => {
+                percentages: (coiDist as Array<{ _id: string; count: number }>).reduce((acc: Record<string, string>, curr) => {
                     acc[curr._id] = ((curr.count / totalCount) * 100).toFixed(2) + '%';
                     return acc;
                 }, {})
             },
             byKASCount: {
-                counts: kasDist.reduce((acc: Record<string, number>, curr: { _id: number; count: number }) => {
+                counts: (kasDist as Array<{ _id: number; count: number }>).reduce((acc: Record<string, number>, curr) => {
                     const label = curr._id === 1 ? 'Single KAS' : `${curr._id} KAS (Multi)`;
                     acc[label] = curr.count;
                     return acc;
                 }, {}),
-                percentages: kasDist.reduce((acc: Record<string, string>, curr: { _id: number; count: number }) => {
+                percentages: (kasDist as Array<{ _id: number; count: number }>).reduce((acc: Record<string, string>, curr) => {
                     const label = curr._id === 1 ? 'Single KAS' : `${curr._id} KAS (Multi)`;
                     acc[label] = ((curr.count / totalCount) * 100).toFixed(2) + '%';
                     return acc;
                 }, {})
             },
             byIndustryAccess: {
-                counts: industryDist.reduce((acc: Record<string, number>, curr: { _id: boolean; count: number }) => {
+                counts: (industryDist as Array<{ _id: boolean; count: number }>).reduce((acc: Record<string, number>, curr) => {
                     acc[curr._id ? 'Allowed' : 'Gov-Only'] = curr.count;
                     return acc;
                 }, {}),
-                percentages: industryDist.reduce((acc: Record<string, string>, curr: { _id: boolean; count: number }) => {
+                percentages: (industryDist as Array<{ _id: boolean; count: number }>).reduce((acc: Record<string, string>, curr) => {
                     acc[curr._id ? 'Allowed' : 'Gov-Only'] = ((curr.count / totalCount) * 100).toFixed(2) + '%';
                     return acc;
                 }, {})
             },
-            topReleasabilityPatterns: releasabilityDist.map((item: { _id: string[] | null; count: number }) => ({
+            topReleasabilityPatterns: (releasabilityDist as Array<{ _id: string[] | null; count: number }>).map((item) => ({
                 countries: item._id?.join(', ') || 'None',
                 count: item.count,
                 percentage: ((item.count / totalCount) * 100).toFixed(2) + '%'
@@ -309,7 +309,7 @@ router.get('/seed-manifests', async (_req: Request, res: Response) => {
         const result = {
             timestamp: new Date().toISOString(),
             count: manifests.length,
-            manifests: manifests.map((m: { _id: string; instanceCode: string; count: number; classifications: string[]; firstCreated: Date; lastCreated: Date }) => ({
+            manifests: (manifests as Array<{ _id: string; instanceCode: string; count: number; classifications: string[]; firstCreated: Date; lastCreated: Date }>).map((m) => ({
                 batchId: m._id,
                 instanceCode: m.instanceCode,
                 documentCount: m.count,

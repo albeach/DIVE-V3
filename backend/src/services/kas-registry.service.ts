@@ -191,7 +191,7 @@ class KASRegistryService {
     const isLocal = kas.kasId === `${this.instanceRealm.toLowerCase()}-kas`;
     const baseURL = isLocal && kas.internalKasUrl ? kas.internalKasUrl : kas.kasUrl;
 
-    const config: Record<string, unknown> = {
+    const config: Record<string, unknown> & { headers: Record<string, string> } = {
       baseURL,
       timeout: this.registry?.federationTrust.maxCrossKASLatencyMs || 5000,
       headers: {
@@ -223,7 +223,7 @@ class KASRegistryService {
 
       case 'apikey':
         const headerName = kas.authConfig.apiKeyHeader || 'X-API-Key';
-        config.headers[headerName] = kas.authConfig.apiKey || process.env[`${kas.kasId.toUpperCase().replace('-', '_')}_API_KEY`];
+        config.headers[headerName] = kas.authConfig.apiKey || process.env[`${kas.kasId.toUpperCase().replace('-', '_')}_API_KEY`] ?? '';
         break;
 
       case 'jwt':
@@ -530,7 +530,7 @@ class KASRegistryService {
             attempt: attempt + 1,
             maxRetries,
             backoffMs,
-            error: error.message
+            error: error instanceof Error ? error.message : String(error)
           });
 
           await new Promise(resolve => setTimeout(resolve, backoffMs));

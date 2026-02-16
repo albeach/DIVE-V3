@@ -244,13 +244,13 @@ export class TokenIntrospectionService {
       return {
         ...metadata,
         issuer: normalizeUrl(metadata.issuer) || metadata.issuer,
-        authorization_endpoint: normalizeUrl(metadata.authorization_endpoint),
-        token_endpoint: normalizeUrl(metadata.token_endpoint),
-        introspection_endpoint: normalizeUrl(metadata.introspection_endpoint),
-        userinfo_endpoint: normalizeUrl(metadata.userinfo_endpoint),
+        authorization_endpoint: normalizeUrl(metadata.authorization_endpoint) ?? '',
+        token_endpoint: normalizeUrl(metadata.token_endpoint) ?? '',
+        introspection_endpoint: normalizeUrl(metadata.introspection_endpoint) ?? '',
+        userinfo_endpoint: normalizeUrl(metadata.userinfo_endpoint) ?? '',
         end_session_endpoint: normalizeUrl(metadata.end_session_endpoint),
-        jwks_uri: normalizeUrl(metadata.jwks_uri),
-        revocation_endpoint: normalizeUrl(metadata.revocation_endpoint),
+        jwks_uri: normalizeUrl(metadata.jwks_uri) ?? '',
+        revocation_endpoint: normalizeUrl(metadata.revocation_endpoint) ?? '',
         device_authorization_endpoint: normalizeUrl(metadata.device_authorization_endpoint),
         registration_endpoint: normalizeUrl(metadata.registration_endpoint),
       };
@@ -375,7 +375,7 @@ export class TokenIntrospectionService {
       const metadata = await this.discoverEndpoints(issuer);
 
       // If discovery succeeded, use the discovered JWKS URI
-      let jwksUri: string;
+      let jwksUri: string = '';
       if (metadata?.jwks_uri) {
         jwksUri = metadata.jwks_uri;
         logger.debug('Using discovered JWKS URI', { issuer, jwksUri });
@@ -514,7 +514,7 @@ export class TokenIntrospectionService {
       params.append('token', token);
       params.append('token_type_hint', 'access_token');
 
-      const requestConfig: Record<string, unknown> = {
+      const requestConfig: Record<string, unknown> & { headers: Record<string, string> } = {
         method: 'POST' as const,
         url: metadata.introspection_endpoint,
         data: params,

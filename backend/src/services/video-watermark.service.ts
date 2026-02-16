@@ -157,17 +157,17 @@ export async function burnWatermarksIntoVideo(
           '+faststart', // Enable streaming
         ])
         .output(outputFile)
-        .on('start', (commandLine) => {
+        .on('start', (commandLine: string) => {
           logger.debug('FFmpeg started', { commandLine });
         })
-        .on('progress', (progress) => {
+        .on('progress', (progress: { percent: number }) => {
           logger.debug('FFmpeg progress', { percent: progress.percent });
         })
         .on('end', () => {
           logger.info('Video watermarking complete');
           resolve();
         })
-        .on('error', (err, stdout, stderr) => {
+        .on('error', (err: Error, stdout: string, stderr: string) => {
           logger.error('FFmpeg error', {
             error: err.message,
             stdout,
@@ -310,7 +310,8 @@ export async function extractThumbnailWithWatermark(
  */
 export async function checkFFmpegAvailable(): Promise<boolean> {
   return new Promise((resolve) => {
-    ffmpeg.getAvailableFormats((err, formats) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    ffmpeg.getAvailableFormats((err: Error | null, formats: any) => {
       if (err) {
         logger.warn('FFmpeg not available', { error: err.message });
         resolve(false);
@@ -339,7 +340,8 @@ export async function getVideoDuration(inputBuffer: Buffer): Promise<number> {
     fs.writeFileSync(inputFile, inputBuffer);
 
     return new Promise((resolve, reject) => {
-      ffmpeg.ffprobe(inputFile, (err, metadata) => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      ffmpeg.ffprobe(inputFile, (err: Error | null, metadata: any) => {
         if (err) {
           reject(err);
         } else {

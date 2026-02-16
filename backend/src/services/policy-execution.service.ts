@@ -178,9 +178,10 @@ export async function evaluateRego(
 
     } catch (error) {
         const latency_ms = Date.now() - startTime;
+        const err = error as Error & { code?: string };
 
         // Handle timeout
-        if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
             logger.error('OPA evaluation timeout', { policyId: context.policyId, latency_ms });
             throw new Error(`Policy evaluation exceeded ${EVALUATION_TIMEOUT_MS}ms timeout`);
         }
@@ -188,11 +189,11 @@ export async function evaluateRego(
         // Handle other errors
         logger.error('OPA evaluation failed', {
             policyId: context.policyId,
-            error: error.message,
+            error: err.message,
             latency_ms
         });
 
-        throw new Error(`OPA evaluation failed: ${error.message || 'Unknown error'}`);
+        throw new Error(`OPA evaluation failed: ${err.message || 'Unknown error'}`);
     }
 }
 
@@ -266,9 +267,10 @@ export async function evaluateXACML(
 
     } catch (error) {
         const latency_ms = Date.now() - startTime;
+        const err = error as Error & { code?: string; response?: { data?: unknown } };
 
         // Handle timeout
-        if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+        if (err.code === 'ECONNABORTED' || err.message?.includes('timeout')) {
             logger.error('AuthzForce evaluation timeout', { policyId: context.policyId, latency_ms });
             throw new Error(`Policy evaluation exceeded ${EVALUATION_TIMEOUT_MS}ms timeout`);
         }
@@ -276,12 +278,12 @@ export async function evaluateXACML(
         // Handle other errors
         logger.error('AuthzForce evaluation failed', {
             policyId: context.policyId,
-            error: error.message,
-            response: error.response?.data,
+            error: err.message,
+            response: err.response?.data,
             latency_ms
         });
 
-        throw new Error(`XACML evaluation failed: ${error.message || 'Unknown error'}`);
+        throw new Error(`XACML evaluation failed: ${err.message || 'Unknown error'}`);
     }
 }
 
@@ -328,7 +330,7 @@ export async function evaluatePolicy(
         logger.error('Policy evaluation error', {
             policyId: context.policyId,
             policyType: context.policyType,
-            error: error.message
+            error: error instanceof Error ? error.message : String(error)
         });
 
         throw error;

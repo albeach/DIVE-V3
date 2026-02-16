@@ -338,9 +338,9 @@ export class SCIMService {
 
     return {
       schemas: ["urn:ietf:params:scim:schemas:core:2.0:User"],
-      id: kcUser.id,
+      id: kcUser.id ?? '',
       externalId: attrs.scimId,
-      userName: kcUser.username,
+      userName: kcUser.username ?? '',
       name: {
         formatted: `${kcUser.firstName || ''} ${kcUser.lastName || ''}`.trim(),
         familyName: kcUser.lastName,
@@ -351,7 +351,7 @@ export class SCIMService {
         type: 'work',
         primary: true
       }] : [],
-      active: kcUser.enabled,
+      active: kcUser.enabled ?? false,
       "urn:dive:params:scim:schemas:extension:2.0:User": {
         clearance: attrs.clearance || 'UNCLASSIFIED',
         countryOfAffiliation: attrs.countryOfAffiliation || 'USA',
@@ -404,7 +404,7 @@ export class SCIMService {
       switch (op.op) {
         case 'replace':
         case 'add':
-          this.applyPatchValue(updatedUser, op.path, op.value);
+          this.applyPatchValue(updatedUser, op.path, op.value!);
           break;
         case 'remove':
           this.removePatchValue(updatedUser, op.path);

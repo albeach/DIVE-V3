@@ -115,7 +115,7 @@ class KeycloakAdminService {
         const username = process.env.KEYCLOAK_ADMIN_USER || process.env.KEYCLOAK_ADMIN_USERNAME || 'admin';
         const password = process.env.KC_ADMIN_PASSWORD || process.env.KEYCLOAK_ADMIN_PASSWORD;
 
-        const masterAuthUrl = `${this.axios.defaults.baseURL.replace(/\/$/, '')}/realms/master/protocol/openid-connect/token`;
+        const masterAuthUrl = `${(this.axios.defaults.baseURL ?? '').replace(/\/$/, '')}/realms/master/protocol/openid-connect/token`;
 
         logger.debug('Authenticating to Keycloak Admin API (direct REST)', {
             username,
@@ -137,7 +137,7 @@ class KeycloakAdminService {
                     grant_type: 'password',
                     client_id: 'admin-cli',
                     username,
-                    password,
+                    password: password ?? '',
                 }),
                 {
                     headers: {
@@ -152,10 +152,10 @@ class KeycloakAdminService {
 
             logger.debug('Keycloak Admin authentication successful (direct REST)', {
                 expiresIn,
-                tokenLength: this.accessToken.length
+                tokenLength: this.accessToken!.length
             });
 
-            return this.accessToken;
+            return this.accessToken!;
         } catch (error) {
             logger.error('Failed to authenticate Keycloak Admin (direct REST)', {
                 error: error instanceof Error ? error.message : 'Unknown error',
