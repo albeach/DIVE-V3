@@ -7,8 +7,8 @@
  * Date: October 21, 2025
  */
 
-import { MongoClient } from 'mongodb';
 import { validateCOICoherence } from '../services/coi-validation.service';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
 // import { logger } from '../utils/logger';  // Commented out - not used in this script
 
 // CRITICAL: No hardcoded passwords - use MONGODB_URL from GCP Secret Manager
@@ -42,16 +42,11 @@ async function main() {
         return await runMockValidationTests();
     }
 
-    const client = new MongoClient(MONGODB_URL!, {
-        // Credentials should be in MONGODB_URL,
-        serverSelectionTimeoutMS: 5000 // Fail fast if MongoDB not available
-    });
-
     try {
-        await client.connect();
+        await mongoSingleton.connect();
         console.log('✅ Connected to MongoDB\n');
 
-        const db = client.db(DB_NAME);
+        const db = getDb();
         const collection = db.collection('resources');
 
         // Get all resources
@@ -195,13 +190,6 @@ async function main() {
 
         console.error('❌ Error auditing documents:', error);
         throw error;
-    } finally {
-        try {
-            await client.close();
-            console.log('🔌 MongoDB connection closed\n');
-        } catch (closeError) {
-            // Ignore close errors
-        }
     }
 }
 

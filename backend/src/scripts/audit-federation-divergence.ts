@@ -19,10 +19,10 @@
 
 import axios from 'axios';
 import https from 'https';
-import { MongoClient } from 'mongodb';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
 
 // ============================================
 // CONFIGURATION
@@ -159,11 +159,9 @@ async function fetchKeycloakIdPs(): Promise<KeycloakIdP[]> {
 }
 
 async function fetchMongoDBSpokes(): Promise<MongoSpoke[]> {
-  let client: MongoClient | null = null;
   try {
-    client = new MongoClient(MONGODB_URL);
-    await client.connect();
-    const db = client.db('dive_resources');
+    await mongoSingleton.connect();
+    const db = getDb();
     const spokes = await db.collection('spokes').find({}).toArray();
     return spokes.map((s: { spokeId?: string; instanceCode?: string; name?: string; status?: string; baseUrl?: string; apiUrl?: string; idpUrl?: string; registeredAt?: Date; lastHeartbeat?: Date }) => ({
       spokeId: s.spokeId,
@@ -179,8 +177,6 @@ async function fetchMongoDBSpokes(): Promise<MongoSpoke[]> {
   } catch (error) {
     console.error('Failed to fetch MongoDB spokes:', error instanceof Error ? error.message : error);
     return [];
-  } finally {
-    if (client) await client.close();
   }
 }
 
@@ -243,13 +239,12 @@ async function fetchStaticRegistry(): Promise<{ instances: string[]; enabledInst
     const mongoUrl = process.env.MONGODB_URL || 'mongodb://localhost:27017';
     const dbName = process.env.MONGODB_DATABASE || 'dive-v3';
     
-    const client = new MongoClient(mongoUrl);
-    await client.connect();
-    const db = client.db(dbName);
+    await mongoSingleton.connect();
+    const db = getDb();
     const collection = db.collection('federation_spokes');
     
     const spokes = await collection.find({}).toArray();
-    await client.close();
+    // Singleton manages lifecycle - no need to close
     
     const instances = spokes.map(s => s.instanceCode.toUpperCase());
     const enabledInstances = spokes

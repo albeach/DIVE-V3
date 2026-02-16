@@ -12,11 +12,10 @@
  */
 
 import { logger } from './logger';
-import { MongoClient, Db } from 'mongodb';
-import { getMongoDBUrl, getMongoDBName } from './mongodb-config';
+import { Db } from 'mongodb';
+import { getDb, mongoSingleton } from './mongodb-singleton';
 
-// MongoDB client (singleton)
-let mongoClient: MongoClient | null = null;
+// MongoDB connection (using singleton)
 let db: Db | null = null;
 
 /**
@@ -28,20 +27,16 @@ function getLogsCollection(): string {
 
 /**
  * Initialize MongoDB connection for audit logging
- * BEST PRACTICE: Read MongoDB URL at runtime (after globalSetup configures it)
+ * BEST PRACTICE: Use MongoDB singleton for connection pooling
  */
 async function initMongoDB(): Promise<void> {
-    if (mongoClient && db) {
+    if (db) {
         return;
     }
 
     try {
-        const MONGODB_URL = getMongoDBUrl(); // Read at runtime
-        const DB_NAME = getMongoDBName();
-
-        mongoClient = new MongoClient(MONGODB_URL);
-        await mongoClient.connect();
-        db = mongoClient.db(DB_NAME);
+        await mongoSingleton.connect();
+        db = getDb();
         logger.debug('ACP-240 logger: Connected to MongoDB for audit persistence');
     } catch (error) {
         logger.error('ACP-240 logger: Failed to connect to MongoDB', {
@@ -467,18 +462,10 @@ export function logAuthenticationEvent(params: {
 
 /**
  * Close MongoDB connection (for graceful shutdown)
+ * Note: With singleton pattern, connection lifecycle is managed centrally
  */
 export async function closeAuditLogConnection(): Promise<void> {
-    if (mongoClient) {
-        try {
-            await mongoClient.close();
-            mongoClient = null;
-            db = null;
-            logger.info('ACP-240 logger: MongoDB connection closed');
-        } catch (error) {
-            logger.error('Failed to close MongoDB connection', {
-                error: error instanceof Error ? error.message : 'Unknown error'
-            });
-        }
-    }
+    // Reset local db reference
+    db = null;
+    logger.info('ACP-240 logger: MongoDB reference cleared (singleton manages connection lifecycle)');
 }
