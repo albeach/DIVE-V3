@@ -100,7 +100,7 @@ export async function savePolicyUpload(policy: IPolicyUpload): Promise<void> {
 export async function getPolicyById(policyId: string, ownerId?: string): Promise<IPolicyUpload | null> {
     try {
         const collection = await getCollection();
-        const filter: any = { policyId };
+        const filter: Record<string, unknown> = { policyId };
 
         // If ownerId provided, enforce ownership
         if (ownerId) {

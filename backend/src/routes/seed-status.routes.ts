@@ -221,7 +221,7 @@ router.get('/distribution', async (_req: Request, res: Response) => {
             timestamp: new Date().toISOString(),
             totalCount,
             byClassification: {
-                counts: classificationDist.reduce((acc: Record<string, number>, curr: any) => {
+                counts: classificationDist.reduce((acc: Record<string, number>, curr: { _id: string; count: number }) => {
                     acc[curr._id] = curr.count;
                     return acc;
                 }, {}),
@@ -232,7 +232,7 @@ router.get('/distribution', async (_req: Request, res: Response) => {
                 variance: classificationVariance
             },
             byCOI: {
-                counts: coiDist.reduce((acc: Record<string, number>, curr: any) => {
+                counts: coiDist.reduce((acc: Record<string, number>, curr: { _id: string; count: number }) => {
                     acc[curr._id] = curr.count;
                     return acc;
                 }, {}),

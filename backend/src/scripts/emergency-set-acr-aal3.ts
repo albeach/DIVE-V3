@@ -79,7 +79,7 @@ async function emergencySetACR(username: string) {
     { headers: { 'Authorization': `Bearer ${adminToken}` } }
   );
 
-  const appClient = clientResponse.data.find((c: any) =>
+  const appClient = clientResponse.data.find((c: { clientId?: string; name?: string }) =>
     c.clientId === 'dive-v3-client' || c.clientId === 'dive-v3-app-broker'
   );
 
@@ -89,7 +89,7 @@ async function emergencySetACR(username: string) {
       { headers: { 'Authorization': `Bearer ${adminToken}` } }
     );
 
-    const acrMapper = mappersResponse.data.find((m: any) =>
+    const acrMapper = mappersResponse.data.find((m: { name?: string }) =>
       m.name === 'acr-from-session' || m.name === 'acr-attribute-mapper'
     );
 
@@ -116,7 +116,7 @@ async function emergencySetACR(username: string) {
       { headers: { 'Authorization': `Bearer ${adminToken}` } }
     );
 
-    const attributeMapper = mappersResponse.data.find((m: any) =>
+    const attributeMapper = mappersResponse.data.find((m: { name?: string; protocolMapper?: string; config?: Record<string, string> }) =>
       m.name === 'acr-from-attribute' ||
       (m.protocolMapper === 'oidc-usermodel-attribute-mapper' && m.config?.['user.attribute'] === 'acr')
     );

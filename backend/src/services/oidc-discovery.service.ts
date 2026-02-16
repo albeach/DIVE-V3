@@ -243,7 +243,7 @@ class OIDCDiscoveryService {
 
       // Extract algorithms
       const algorithms: string[] = jwks.keys
-        .map((key: any) => key.alg)
+        .map((key: { alg: string }) => key.alg)
         .filter((alg: string | undefined): alg is string => !!alg);
 
       jwksInfo.algorithms = [...new Set(algorithms)]; // Deduplicate
@@ -272,7 +272,7 @@ class OIDCDiscoveryService {
    * - acr_values_supported for MFA-related URNs
    * - claims_supported for 'amr' (authentication methods reference)
    */
-  private detectMFASupport(discovery: any): IMFASupportInfo {
+  private detectMFASupport(discovery: Record<string, unknown>): IMFASupportInfo {
     const mfaInfo: IMFASupportInfo = {
       detected: false,
       acrValues: [],

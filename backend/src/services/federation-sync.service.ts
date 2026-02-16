@@ -59,9 +59,9 @@ export interface IDriftEvent {
   driftType: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
   description: string;
-  keycloakState: any;
-  mongodbState: any;
-  dockerState: any;
+  keycloakState: Record<string, unknown>;
+  mongodbState: Record<string, unknown>;
+  dockerState: Record<string, unknown>;
   resolved: boolean;
   resolvedAt?: Date;
   resolvedBy?: string;

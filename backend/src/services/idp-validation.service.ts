@@ -372,7 +372,7 @@ class IdPValidationService {
 
       // Extract algorithms from keys
       const algorithms: string[] = jwks.keys
-        .map((key: any) => key.alg)
+        .map((key: { alg: string }) => key.alg)
         .filter((alg: string | undefined): alg is string => !!alg); // Filter out undefined
 
       result.algorithms = algorithms;

@@ -233,7 +233,7 @@ try {
         level,
         rank: getClearanceLevel(level as any),
     }));
-    const ordered = ranks.every((r: any, i: number) => i === 0 || r.rank > ranks[i - 1].rank);
+    const ordered = ranks.every((r: { rank: number }, i: number) => i === 0 || r.rank > ranks[i - 1].rank);
     if (ordered) {
         pass('Clearance hierarchy is strictly ordered');
     } else {

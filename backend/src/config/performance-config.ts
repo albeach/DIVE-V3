@@ -177,6 +177,7 @@ export function performanceHeadersMiddleware(req: Request, res: Response, next: 
     // Override res.end to capture timing before headers are sent
     const originalEnd = res.end;
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Express res.end has complex overloaded signatures
     res.end = function (this: Response, ...args: any[]): Response {
         const duration = Date.now() - startTime;
 

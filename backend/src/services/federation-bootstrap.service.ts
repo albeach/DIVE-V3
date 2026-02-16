@@ -23,6 +23,15 @@ import { opalClient } from './opal-client';
 // Note: federation-sync.service.ts (Phase 5) handles drift detection separately
 // This service handles spoke lifecycle event cascades
 import { logger } from '../utils/logger';
+import type { ISpokeRegistration } from './registry-types';
+
+interface ISpokeEvent {
+    spoke: ISpokeRegistration;
+    correlationId?: string;
+    contactEmail?: string;
+    reason?: string;
+    approvedBy?: string;
+}
 
 // ============================================
 // FEDERATION BOOTSTRAP SERVICE
@@ -591,7 +600,7 @@ class FederationBootstrapService {
     // SPOKE REGISTERED EVENT (Phase 2: Gap Closure)
     // ============================================
     // Alert Hub admins when new spoke registers (pending approval)
-    hubSpokeRegistry.on('spoke:registered', async (event: any) => {
+    hubSpokeRegistry.on('spoke:registered', async (event: ISpokeEvent) => {
       const { spoke, contactEmail, correlationId } = event;
 
       logger.info('Received spoke:registered event - creating admin notification', {
@@ -640,7 +649,7 @@ class FederationBootstrapService {
     // ============================================
     // SPOKE APPROVED EVENT
     // ============================================
-    hubSpokeRegistry.on('spoke:approved', async (event: any) => {
+    hubSpokeRegistry.on('spoke:approved', async (event: ISpokeEvent) => {
       const { spoke, correlationId } = event;
 
       logger.info('Received spoke:approved event - registering trusted issuer', {
@@ -702,7 +711,7 @@ class FederationBootstrapService {
     // ============================================
     // SPOKE SUSPENDED EVENT
     // ============================================
-    hubSpokeRegistry.on('spoke:suspended', async (event: any) => {
+    hubSpokeRegistry.on('spoke:suspended', async (event: ISpokeEvent) => {
       const { spoke, correlationId } = event;
 
       logger.warn('Received spoke:suspended event - starting cascade', {
@@ -749,7 +758,7 @@ class FederationBootstrapService {
     // ============================================
     // SPOKE REVOKED EVENT
     // ============================================
-    hubSpokeRegistry.on('spoke:revoked', async (event: any) => {
+    hubSpokeRegistry.on('spoke:revoked', async (event: ISpokeEvent) => {
       const { spoke, correlationId } = event;
 
       logger.error('Received spoke:revoked event - starting cascade', {

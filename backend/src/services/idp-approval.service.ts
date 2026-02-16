@@ -16,6 +16,7 @@ import { logger } from '../utils/logger';
 import { keycloakAdminService } from './keycloak-admin.service';
 import { IIdPSubmission, IApprovalResponse } from '../types/admin.types';
 import { IApprovalDecision, SLAStatus, IRiskScoringConfig } from '../types/risk-scoring.types';
+import { IIdPCreateRequest } from '../types/keycloak.types';
 
 /**
  * Default approval configuration
@@ -197,7 +198,7 @@ class IdPApprovalService {
                 protocol: submission.protocol
             });
 
-            const createRequest: any = {
+            const createRequest: IIdPCreateRequest = {
                 alias: submission.alias,
                 displayName: submission.displayName,
                 description: submission.description,
@@ -454,8 +455,8 @@ class IdPApprovalService {
 
                 // Collect critical issues
                 const criticalIssues = riskScore.factors
-                    .filter((f: any) => f.score === 0 && f.maxScore > 0)
-                    .map((f: any) => `${f.factor}: ${f.concerns.join(', ')}`);
+                    .filter((f: { score: number; maxScore: number; factor: string; concerns: string[] }) => f.score === 0 && f.maxScore > 0)
+                    .map((f: { score: number; maxScore: number; factor: string; concerns: string[] }) => `${f.factor}: ${f.concerns.join(', ')}`);
 
                 decision = {
                     action: 'auto-reject',

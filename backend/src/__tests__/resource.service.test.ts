@@ -827,7 +827,7 @@ describe('Resource Service', () => {
                 });
 
                 expect(results.length).toBeGreaterThanOrEqual(2);
-                expect(results.every(r => ids.includes(r.resourceId))).toBe(true);
+                expect(results.every(r => ids.includes(r.resourceId as string))).toBe(true);
             });
 
             it('should query resources by classification', async () => {
@@ -845,7 +845,7 @@ describe('Resource Service', () => {
                 });
 
                 expect(results.length).toBeGreaterThan(0);
-                expect(results.every(r => r.releasabilityTo.includes('USA'))).toBe(true);
+                expect(results.every(r => (r.releasabilityTo as string[]).includes('USA'))).toBe(true);
             });
 
             it('should query resources by COI', async () => {

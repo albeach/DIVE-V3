@@ -16,6 +16,7 @@
  */
 
 import KcAdminClient from '@keycloak/keycloak-admin-client';
+import type IdentityProviderRepresentation from '@keycloak/keycloak-admin-client/lib/defs/identityProviderRepresentation';
 import https from 'https';
 import { logger } from '../utils/logger';
 
@@ -226,7 +227,7 @@ export class KeycloakFederationService {
    * Get Identity Provider by alias.
    * @see idp-management.ts for implementation
    */
-  async getIdentityProvider(alias: string): Promise<{ internalId: string; config: any } | null> {
+  async getIdentityProvider(alias: string): Promise<{ internalId: string; config: IdentityProviderRepresentation } | null> {
     await this.initialize();
     return getIdentityProviderCore(this.getContext(), alias);
   }

@@ -112,10 +112,10 @@ class AuthzCacheService {
         });
 
         // Log cache events
-        this.cache.on('expired', (key: string, value: any) => {
+        this.cache.on('expired', (key: string, value: unknown) => {
             logger.debug('Cache entry expired', {
                 key,
-                classification: value?.classification,
+                classification: (value as Record<string, unknown>)?.classification,
             });
         });
 

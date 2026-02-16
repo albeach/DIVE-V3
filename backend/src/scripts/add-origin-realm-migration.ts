@@ -48,7 +48,7 @@ interface MigrationStats {
 }
 
 interface ResourceDocument {
-  _id: any;
+  _id: unknown;
   resourceId: string;
   originRealm?: string;
   kasAuthority?: string;

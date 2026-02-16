@@ -26,10 +26,10 @@ interface LogEntry {
     resourceId?: string;
     outcome?: 'ALLOW' | 'DENY';
     reason?: string;
-    subjectAttributes?: any;
-    resourceAttributes?: any;
-    policyEvaluation?: any;
-    context?: any;
+    subjectAttributes?: Record<string, unknown>;
+    resourceAttributes?: Record<string, unknown>;
+    policyEvaluation?: Record<string, unknown>;
+    context?: Record<string, unknown>;
     latencyMs?: number;
 }
 

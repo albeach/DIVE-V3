@@ -4,13 +4,13 @@
  */
 
 export class KeycloakAdminClient {
-    private config: any = {};
-    
-    constructor(config?: any) {
+    private config: Record<string, unknown> = {};
+
+    constructor(config?: Record<string, unknown>) {
         this.config = config || {};
     }
-    
-    setConfig(config: any) {
+
+    setConfig(config: Record<string, unknown>) {
         this.config = { ...this.config, ...config };
     }
     
