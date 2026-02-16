@@ -1,6 +1,11 @@
 /**
  * DIVE V3 - Trusted Issuer MongoDB Model
  *
+ * MEMORY LEAK FIX (2026-02-16): Refactored to use MongoDB singleton
+ * OLD: Created separate MongoClient() instance in initialize() method (connection leak)
+ * NEW: Uses shared singleton connection pool via getDb()
+ * IMPACT: Prevents connection leak from OPAL data store initialization
+ *
  * Persists trusted issuers for OPAL policy data distribution.
  * Replaces static policies/data.json with dynamic MongoDB-backed storage.
  *
@@ -10,11 +15,10 @@
  * @date 2025-01-03
  */
 
-import { Collection, Db, MongoClient, ChangeStream } from 'mongodb';
+import { Collection, Db, ChangeStream } from 'mongodb';
 import { logger } from '../utils/logger';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
 
-const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
-const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
 const COLLECTION_ISSUERS = 'trusted_issuers';
 const COLLECTION_FED_MATRIX = 'federation_matrix';
 const COLLECTION_TENANT_CONFIGS = 'tenant_configs';
@@ -68,7 +72,6 @@ export interface ITenantConfig {
  */
 export class MongoOpalDataStore {
   private db: Db | null = null;
-  private client: MongoClient | null = null;
   private issuersCollection: Collection<ITrustedIssuer> | null = null;
   private fedMatrixCollection: Collection<IFederationMatrixEntry> | null = null;
   private tenantConfigsCollection: Collection<ITenantConfig> | null = null;
@@ -83,31 +86,11 @@ export class MongoOpalDataStore {
     if (this.initialized) return;
 
     try {
-      // Add directConnection and readPreference for standalone MongoDB (fixes "not primary" error)
-      const mongoUrl = new URL(MONGODB_URL);
-      if (!mongoUrl.searchParams.has('directConnection')) {
-        mongoUrl.searchParams.set('directConnection', 'true');
-      }
-      if (!mongoUrl.searchParams.has('readPreference')) {
-        mongoUrl.searchParams.set('readPreference', 'primaryPreferred');
-      }
+      logger.info('Initializing MongoDB OPAL Data Store with singleton');
 
-      logger.info('Connecting to MongoDB OPAL Data Store', {
-        url: mongoUrl.toString().replace(/:([^:]+)@/, ':****@'), // Mask password
-        database: DB_NAME,
-      });
-
-      this.client = new MongoClient(mongoUrl.toString(), {
-        maxPoolSize: 10,
-        minPoolSize: 2,
-        serverSelectionTimeoutMS: 5000,
-        connectTimeoutMS: 10000,
-      });
-
-      await this.client.connect();
-      logger.info('MongoDB client connected successfully');
-
-      this.db = this.client.db(DB_NAME);
+      // Use singleton connection
+      await mongoSingleton.connect();
+      this.db = getDb();
 
       this.issuersCollection = this.db.collection<ITrustedIssuer>(COLLECTION_ISSUERS);
       this.fedMatrixCollection = this.db.collection<IFederationMatrixEntry>(COLLECTION_FED_MATRIX);
@@ -159,7 +142,6 @@ export class MongoOpalDataStore {
 
       this.initialized = true;
       logger.info('MongoDB OPAL Data Store initialized successfully', {
-        database: DB_NAME,
         collections: [COLLECTION_ISSUERS, COLLECTION_FED_MATRIX, COLLECTION_TENANT_CONFIGS],
       });
 
@@ -173,7 +155,6 @@ export class MongoOpalDataStore {
       logger.error('Failed to initialize MongoDB OPAL Data Store', {
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined,
-        mongoUrl: MONGODB_URL.replace(/:([^:]+)@/, ':****@'),
       });
       throw error;
     }
