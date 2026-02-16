@@ -1,6 +1,11 @@
 /**
  * Paginated Search Controller
  *
+ * MEMORY LEAK FIX (2026-02-16): Refactored to use MongoDB singleton
+ * OLD: Created new MongoClient() instances with cached connection pattern (leak on cache invalidation)
+ * NEW: Uses shared singleton connection pool via getDb()
+ * IMPACT: Prevents connection leak accumulation in high-frequency search requests
+ *
  * Phase 1: Performance Foundation
  * Server-side cursor-based pagination for 28K+ documents
  *
@@ -12,32 +17,9 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { ObjectId, Document, WithId, MongoClient } from 'mongodb';
-import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
+import { ObjectId, Document, WithId } from 'mongodb';
+import { getDb } from '../utils/mongodb-singleton';
 import { logger } from '../utils/logger';
-
-// ============================================
-// MongoDB Connection Cache
-// ============================================
-
-let cachedClient: MongoClient | null = null;
-
-async function getMongoClient(): Promise<MongoClient> {
-  if (cachedClient) {
-    try {
-      await cachedClient.db().admin().ping();
-      return cachedClient;
-    } catch {
-      cachedClient = null;
-    }
-  }
-
-  const MONGODB_URL = getMongoDBUrl();
-  const client = new MongoClient(MONGODB_URL);
-  await client.connect();
-  cachedClient = client;
-  return client;
-}
 
 // ============================================
 // Types
@@ -271,9 +253,7 @@ export const paginatedSearchHandler = async (
     });
 
     // Get MongoDB connection
-    const client = await getMongoClient();
-    const DB_NAME = getMongoDBName();
-    const db = client.db(DB_NAME);
+    const db = getDb();
     const collection = db.collection(COLLECTION_NAME);
 
     // ========================================
@@ -1041,9 +1021,7 @@ export const getFacetsHandler = async (
   const startTime = Date.now();
 
   try {
-    const client = await getMongoClient();
-    const DB_NAME = getMongoDBName();
-    const db = client.db(DB_NAME);
+    const db = getDb();
     const collection = db.collection(COLLECTION_NAME);
 
     const facetPipeline = [

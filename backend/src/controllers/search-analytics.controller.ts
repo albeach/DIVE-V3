@@ -4,6 +4,11 @@
  * Phase 2: Search & Discovery Enhancement
  * Track search queries, click-through rates, and zero-result searches
  *
+ * MEMORY LEAK FIX (2026-02-16): Refactored to use MongoDB singleton
+ * OLD: Created new MongoClient() instances on every call (connection leak)
+ * NEW: Uses shared singleton connection pool via getDb()
+ * IMPACT: Prevents connection leak accumulation in high-frequency analytics endpoints
+ *
  * Features:
  * - Anonymized search query logging
  * - Click-through event tracking
@@ -13,9 +18,8 @@
  */
 
 import { Request, Response, NextFunction } from 'express';
-import { MongoClient, Collection } from 'mongodb';
-// import { Db } from 'mongodb'; // Unused import
-import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
+import { Collection } from 'mongodb';
+import { getDb } from '../utils/mongodb-singleton';
 import { logger } from '../utils/logger';
 
 // ============================================
@@ -89,32 +93,11 @@ const COLLECTION_NAME = 'search_analytics';
 const RETENTION_DAYS = 90;
 
 // ============================================
-// MongoDB Connection
+// MongoDB Collection Access (Singleton Pattern)
 // ============================================
 
-let cachedClient: MongoClient | null = null;
-
-async function getMongoClient(): Promise<MongoClient> {
-  if (cachedClient) {
-    try {
-      await cachedClient.db().admin().ping();
-      return cachedClient;
-    } catch {
-      cachedClient = null;
-    }
-  }
-
-  const MONGODB_URL = getMongoDBUrl();
-  const client = new MongoClient(MONGODB_URL);
-  await client.connect();
-  cachedClient = client;
-  return client;
-}
-
 async function getAnalyticsCollection(): Promise<Collection<IStoredSearchEvent>> {
-  const client = await getMongoClient();
-  const DB_NAME = getMongoDBName();
-  const db = client.db(DB_NAME);
+  const db = getDb();
   return db.collection<IStoredSearchEvent>(COLLECTION_NAME);
 }
 
