@@ -6,12 +6,8 @@
  */
 
 import { logger } from '../utils/logger';
-import { MongoClient, Db, Collection, Document } from 'mongodb';
-
-// BEST PRACTICE: Read MongoDB URL at connection time, not module load time
-// This allows globalSetup to configure MongoDB Memory Server before services connect
-const getMongoDBUrl = () => process.env.MONGODB_URL || process.env.MONGODB_URI || 'mongodb://localhost:27017';
-const DB_NAME = process.env.MONGODB_DATABASE || (process.env.NODE_ENV === 'test' ? 'dive-v3-test' : 'dive-v3');
+import { Collection, Document } from 'mongodb';
+import { getDb } from '../utils/mongodb-singleton';
 
 /**
  * Get collection name (allows test override for parallel test isolation)
@@ -58,44 +54,14 @@ interface IAuditLogStats {
 }
 
 class AuditLogService {
-    private client: MongoClient | null = null;
-    private db: Db | null = null;
-
-    /**
-     * Connect to MongoDB
-     * BEST PRACTICE: Read URL at connection time (not module load)
-     */
-    private async connect(): Promise<void> {
-        if (this.client && this.db) {
-            return;
-        }
-
-        try {
-            const mongoUrl = getMongoDBUrl(); // Read at runtime
-            this.client = new MongoClient(mongoUrl);
-            await this.client.connect();
-            this.db = this.client.db(DB_NAME);
-
-            logger.debug('Connected to MongoDB for audit log queries', {
-                url: mongoUrl.replace(/\/\/.*@/, '//***@'), // Mask credentials in logs
-            });
-        } catch (error) {
-            logger.error('Failed to connect to MongoDB', {
-                error: error instanceof Error ? error.message : 'Unknown error'
-            });
-            throw new Error('Database connection failed');
-        }
-    }
+    // MongoDB is connected via singleton at server startup - no per-service connection needed
 
     /**
      * Get logs collection
      */
-    private async getCollection(): Promise<Collection> {
-        await this.connect();
-        if (!this.db) {
-            throw new Error('Database not initialized');
-        }
-        return this.db.collection(getLogsCollection());
+    private getCollection(): Collection {
+        const db = getDb();
+        return db.collection(getLogsCollection());
     }
 
     /**
@@ -103,7 +69,7 @@ class AuditLogService {
      */
     async queryLogs(query: IAuditLogQuery): Promise<{ logs: IAuditLogEntry[]; total: number }> {
         try {
-            const collection = await this.getCollection();
+            const collection = this.getCollection();
 
             // Build MongoDB filter
             const filter: Document = {};
@@ -216,7 +182,7 @@ class AuditLogService {
      */
     async getLogStatistics(days: number = 7): Promise<IAuditLogStats> {
         try {
-            const collection = await this.getCollection();
+            const collection = this.getCollection();
 
             // Calculate start date
             const startDate = new Date();
@@ -324,17 +290,6 @@ class AuditLogService {
     async exportLogs(query: IAuditLogQuery): Promise<string> {
         const result = await this.queryLogs({ ...query, limit: 10000 });
         return JSON.stringify(result.logs, null, 2);
-    }
-
-    /**
-     * Close database connection
-     */
-    async close(): Promise<void> {
-        if (this.client) {
-            await this.client.close();
-            this.client = null;
-            this.db = null;
-        }
     }
 }
 

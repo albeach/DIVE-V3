@@ -9,8 +9,7 @@
  */
 
 import { logger } from '../utils/logger';
-import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
-import { MongoClient, Db } from 'mongodb';
+import { getDb } from '../utils/mongodb-singleton';
 import { ClearanceEquivalencyDBService } from './clearance-equivalency-db.service';
 
 // MongoDB service instance (lazy-loaded)
@@ -359,12 +358,8 @@ async function getDBService(): Promise<ClearanceEquivalencyDBService | null> {
 
     if (!dbServiceInitialized) {
         try {
-            // Connect to MongoDB using the same pattern as resource service
-            const mongoUrl = getMongoDBUrl();
-            const dbName = getMongoDBName();
-            const client = new MongoClient(mongoUrl);
-            await client.connect();
-            const db = client.db(dbName);
+            // Use singleton connection instead of creating new client
+            const db = getDb();
 
             dbService = new ClearanceEquivalencyDBService(db);
             // Auto-seed: ensure clearance_equivalency collection is populated from SSOT table.

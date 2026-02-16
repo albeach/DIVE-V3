@@ -15,9 +15,9 @@
  * Last Updated: October 29, 2025 (Phase 4)
  */
 
-import { MongoClient, Db, Collection, Document } from 'mongodb';
+import { Collection, Document } from 'mongodb';
 import { logger } from '../utils/logger';
-import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
+import { getDb } from '../utils/mongodb-singleton';
 
 // MongoDB collection names
 const DECISIONS_COLLECTION = 'decisions';
@@ -115,47 +115,14 @@ export interface IKeyReleaseLog {
  * Decision Log Service
  */
 class DecisionLogService {
-    private client: MongoClient | null = null;
-    private db: Db | null = null;
-
-    /**
-     * Connect to MongoDB
-     * BEST PRACTICE: Read MongoDB URL at runtime (after globalSetup)
-     */
-    private async connect(): Promise<void> {
-        if (this.client && this.db) {
-            return;
-        }
-
-        try {
-            const MONGODB_URL = getMongoDBUrl(); // Read at runtime
-            const DB_NAME = getMongoDBName();
-            
-            this.client = new MongoClient(MONGODB_URL);
-            await this.client.connect();
-            this.db = this.client.db(DB_NAME);
-
-            logger.debug('Decision log service connected to MongoDB', {
-                database: DB_NAME,
-                collection: DECISIONS_COLLECTION
-            });
-
-            // Ensure TTL index exists (90-day retention)
-            await this.ensureTTLIndex();
-        } catch (error) {
-            logger.error('Failed to connect to MongoDB for decision logging', {
-                error: error instanceof Error ? error.message : 'Unknown error'
-            });
-            throw new Error('Decision log database connection failed');
-        }
-    }
+    // MongoDB is connected via singleton at server startup - no per-service connection needed
 
     /**
      * Ensure TTL index exists for automatic 90-day deletion
      */
     private async ensureTTLIndex(): Promise<void> {
         try {
-            const collection = await this.getCollection();
+            const collection = this.getCollection();
 
             // Create TTL index on timestamp field (90 days)
             await collection.createIndex(
@@ -180,9 +147,9 @@ class DecisionLogService {
     /**
      * Get decisions collection
      */
-    private async getCollection(): Promise<Collection<IDecisionLog>> {
-        await this.connect();
-        return this.db!.collection<IDecisionLog>(DECISIONS_COLLECTION);
+    private getCollection(): Collection<IDecisionLog> {
+        const db = getDb();
+        return db.collection<IDecisionLog>(DECISIONS_COLLECTION);
     }
 
     /**
@@ -190,7 +157,7 @@ class DecisionLogService {
      */
     async logDecision(decision: IDecisionLog): Promise<void> {
         try {
-            const collection = await this.getCollection();
+            const collection = this.getCollection();
 
             // Sanitize PII - only store uniqueID, not full names/emails
             const sanitizedDecision: IDecisionLog = {
@@ -221,7 +188,7 @@ class DecisionLogService {
      */
     async queryDecisions(query: IDecisionLogQuery): Promise<IDecisionLog[]> {
         try {
-            const collection = await this.getCollection();
+            const collection = this.getCollection();
 
             // Build MongoDB query
             const filter: Document = {};
@@ -290,7 +257,7 @@ class DecisionLogService {
         decisionsByCountry: Record<string, number>;
     }> {
         try {
-            const collection = await this.getCollection();
+            const collection = this.getCollection();
 
             // Build time filter
             const timeFilter: Document = {};
@@ -369,11 +336,8 @@ class DecisionLogService {
      */
     async logKeyRelease(logEntry: IKeyReleaseLog): Promise<void> {
         try {
-            await this.connect();
-            if (!this.db) {
-                throw new Error('Database not connected');
-            }
-            const collection = this.db.collection(KEY_RELEASES_COLLECTION);
+            const db = getDb();
+            const collection = db.collection(KEY_RELEASES_COLLECTION);
 
             // Ensure TTL index exists (90-day retention)
             await collection.createIndex(
@@ -414,11 +378,8 @@ class DecisionLogService {
         skip?: number;
     }): Promise<IKeyReleaseLog[]> {
         try {
-            await this.connect();
-            if (!this.db) {
-                throw new Error('Database not connected');
-            }
-            const collection = this.db.collection<IKeyReleaseLog>(KEY_RELEASES_COLLECTION);
+            const db = getDb();
+            const collection = db.collection<IKeyReleaseLog>(KEY_RELEASES_COLLECTION);
 
             const filter: Document = {};
 
@@ -475,11 +436,8 @@ class DecisionLogService {
         releasesByCountry: Record<string, number>;
     }> {
         try {
-            await this.connect();
-            if (!this.db) {
-                throw new Error('Database not connected');
-            }
-            const collection = this.db.collection(KEY_RELEASES_COLLECTION);
+            const db = getDb();
+            const collection = db.collection(KEY_RELEASES_COLLECTION);
 
             const timeFilter: Document = {};
             if (timeRange?.startTime || timeRange?.endTime) {
@@ -547,17 +505,6 @@ class DecisionLogService {
                 error: error instanceof Error ? error.message : 'Unknown error'
             });
             throw new Error('Failed to get KAS key release statistics');
-        }
-    }
-
-    /**
-     * Close MongoDB connection
-     */
-    async close(): Promise<void> {
-        if (this.client) {
-            await this.client.close();
-            this.client = null;
-            this.db = null;
         }
     }
 }
