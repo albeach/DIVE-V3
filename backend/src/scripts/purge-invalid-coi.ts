@@ -7,8 +7,8 @@
  * Date: October 21, 2025
  */
 
-import { MongoClient } from 'mongodb';
 import { validateCOICoherence } from '../services/coi-validation.service';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
 // import { logger } from '../utils/logger';  // Commented out - not used in this script
 import * as fs from 'fs';
 
@@ -20,15 +20,11 @@ async function main() {
     console.log('🧹 Purging Invalid COI Documents');
     console.log('==================================\n');
 
-    const client = new MongoClient(MONGODB_URL, {
-        // Credentials should be in MONGODB_URL
-    });
-
     try {
-        await client.connect();
+        await mongoSingleton.connect();
         console.log('✅ Connected to MongoDB\n');
 
-        const db = client.db(DB_NAME);
+        const db = getDb();
         const collection = db.collection('resources');
 
         // Get all resources
@@ -114,9 +110,6 @@ async function main() {
     } catch (error) {
         console.error('❌ Error purging documents:', error);
         throw error;
-    } finally {
-        await client.close();
-        console.log('🔌 MongoDB connection closed\n');
     }
 }
 

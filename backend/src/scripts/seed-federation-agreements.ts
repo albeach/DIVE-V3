@@ -3,8 +3,7 @@
  * Uses native MongoDB driver (consistent with codebase)
  */
 
-import { MongoClient } from 'mongodb';
-import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
 
 interface IFederationAgreement {
   spId: string;
@@ -26,13 +25,8 @@ interface IFederationAgreement {
 }
 
 async function seedFederationAgreements() {
-  const connectionString = getMongoDBUrl();
-  const dbName = getMongoDBName();
-
-  const client = new MongoClient(connectionString);
-  await client.connect();
-
-  const db = client.db(dbName);
+  await mongoSingleton.connect();
+  const db = getDb();
   const collection = db.collection<IFederationAgreement>('federation_agreements');
 
   const now = new Date();
@@ -133,7 +127,7 @@ async function seedFederationAgreements() {
   }
 
   console.log(`✅ ${agreements.length} federation agreements created`);
-  await client.close();
+  // Singleton manages lifecycle - no need to close
   process.exit(0);
 }
 
