@@ -286,11 +286,7 @@ class PolicyVersionMonitor {
       }))
     });
 
-    // TODO: Integrate with external alerting systems
-    // - Slack webhook
-    // - PagerDuty
-    // - Email
-    // - SMS
+    // NOTE: External alerting (Slack, PagerDuty, email) not yet integrated
   }
 
   /**

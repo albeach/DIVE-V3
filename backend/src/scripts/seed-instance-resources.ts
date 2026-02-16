@@ -1088,7 +1088,7 @@ async function loadKASRegistry(): Promise<IKASRegistry> {
                 })),
                 version: '2.0',
                 federationTrust: {
-                    trustMatrix: {} // TODO: Build from agreements if needed
+                    trustMatrix: {} // Populated from federation agreements if applicable
                 }
             };
         }

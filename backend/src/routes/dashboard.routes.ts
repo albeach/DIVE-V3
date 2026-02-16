@@ -544,7 +544,7 @@ router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promi
                 sessionCount: userStats.sessionCount,
                 byClassification,
                 recentlyAccessed,
-                uploadedByUser: 0 // TODO: Implement user upload tracking
+                uploadedByUser: 0 // LIMITATION: User upload tracking not yet implemented
             }
         });
 

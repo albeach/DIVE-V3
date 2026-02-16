@@ -394,11 +394,11 @@ router.post('/public/sp-registration', async (req: Request, res: Response): Prom
             status: registration.status
         });
 
-        // TODO: Store in MongoDB
+        // LIMITATION: SP registration not persisted to MongoDB; lost on restart.
         // const db = getMongoClient().db();
         // await db.collection('sp_registrations').insertOne(registration);
 
-        // TODO: Send notification email to SuperAdmin
+        // LIMITATION: No admin email notification for pending SP registrations.
         // await sendAdminNotification({
         //     type: 'SP_REGISTRATION_PENDING',
         //     registrationId,
@@ -407,7 +407,7 @@ router.post('/public/sp-registration', async (req: Request, res: Response): Prom
         //     contactEmail
         // });
 
-        // TODO: Send confirmation email to applicant
+        // LIMITATION: No confirmation email sent to SP applicant.
         // await sendConfirmationEmail({
         //     to: contactEmail,
         //     registrationId,
@@ -452,7 +452,7 @@ router.get('/public/sp-registration/:id', async (req: Request, res: Response): P
             registrationId: id
         });
 
-        // TODO: Fetch from MongoDB
+        // LIMITATION: Returns mock status; SP registration lookup not connected to persistence.
         // const db = getMongoClient().db();
         // const registration = await db.collection('sp_registrations').findOne({ registrationId: id });
 

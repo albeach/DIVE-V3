@@ -573,9 +573,7 @@ export const customLoginMFAHandler = async (
             requestId
         });
 
-        // TODO: Verify OTP with Keycloak
-        // This requires storing the MFA token and validating the OTP
-        // For now, return a placeholder response
+        // LIMITATION: OTP verification is a placeholder. Needs Keycloak MFA token storage and validation.
 
         res.status(200).json({
             success: true,

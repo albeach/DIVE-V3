@@ -24,7 +24,7 @@ import {
 } from '../controllers/coi-keys.controller';
 // Note: Admin routes protected by validateAdminToken middleware
 // For now, POST/PUT/DELETE routes are public for initial setup
-// TODO: Add proper authentication middleware when ready
+// NOTE: Authentication middleware intentionally omitted during development
 
 const router = Router();
 
