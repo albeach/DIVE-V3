@@ -52,6 +52,7 @@ class PresenceManager {
   private heartbeatInterval: NodeJS.Timeout | null = null;
   private cleanupInterval: NodeJS.Timeout | null = null;
   private isInitialized: boolean = false;
+  private unloadHandler: (() => void) | null = null;
 
   constructor(userId: string, userName: string) {
     this.currentUserId = userId;
@@ -85,9 +86,8 @@ class PresenceManager {
 
       // Cleanup on page unload
       if (typeof window !== 'undefined') {
-        window.addEventListener('beforeunload', () => {
-          this.leave();
-        });
+        this.unloadHandler = () => this.leave();
+        window.addEventListener('beforeunload', this.unloadHandler);
       }
 
       this.isInitialized = true;
@@ -285,6 +285,12 @@ class PresenceManager {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
       this.cleanupInterval = null;
+    }
+
+    // Remove beforeunload listener
+    if (typeof window !== 'undefined' && this.unloadHandler) {
+      window.removeEventListener('beforeunload', this.unloadHandler);
+      this.unloadHandler = null;
     }
 
     // Leave current page
