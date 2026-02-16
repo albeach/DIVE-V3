@@ -12,45 +12,18 @@
  * Date: October 21, 2025
  */
 
-import { MongoClient, Db, Collection } from 'mongodb';
+import { Db, Collection } from 'mongodb';
 import { logger } from '../utils/logger';
-import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
+import { getDb } from '../utils/mongodb-singleton';
 import { ICOIKey, ICreateCOIKeyRequest, IUpdateCOIKeyRequest, ICOIKeyListResponse } from '../types/coi-key.types';
 
 const COLLECTION_NAME = 'coi_definitions';
 
-let cachedClient: MongoClient | null = null;
-let cachedDb: Db | null = null;
-
-/**
- * Get MongoDB connection (with caching)
- * BEST PRACTICE: Read MongoDB config at runtime
- */
-async function getMongoClient(): Promise<{ client: MongoClient; db: Db }> {
-    if (cachedClient && cachedDb) {
-        return { client: cachedClient, db: cachedDb };
-    }
-
-    const MONGODB_URL = getMongoDBUrl(); // Read at runtime
-    const DB_NAME = getMongoDBName();
-
-    const client = new MongoClient(MONGODB_URL);
-    await client.connect();
-    const db = client.db(DB_NAME);
-
-    cachedClient = client;
-    cachedDb = db;
-
-    logger.info('Connected to MongoDB (COI Keys)', { database: DB_NAME, collection: COLLECTION_NAME });
-
-    return { client, db };
-}
-
 /**
  * Get COI Keys collection
  */
-async function getCollection(): Promise<Collection<ICOIKey>> {
-    const { db } = await getMongoClient();
+function getCollection(): Collection<ICOIKey> {
+    const db = getDb();
     return db.collection<ICOIKey>(COLLECTION_NAME);
 }
 
@@ -59,7 +32,7 @@ async function getCollection(): Promise<Collection<ICOIKey>> {
  */
 export async function initializeCOIKeyCollection(): Promise<void> {
     try {
-        const collection = await getCollection();
+        const collection = getCollection();
 
         // Create unique index on coiId
         await collection.createIndex({ coiId: 1 }, { unique: true });
@@ -82,7 +55,7 @@ export async function initializeCOIKeyCollection(): Promise<void> {
  */
 export async function createCOIKey(request: ICreateCOIKeyRequest): Promise<ICOIKey> {
     try {
-        const collection = await getCollection();
+        const collection = getCollection();
 
         // Check if COI already exists
         const existing = await collection.findOne({ coiId: request.coiId });
@@ -125,13 +98,13 @@ export async function createCOIKey(request: ICreateCOIKeyRequest): Promise<ICOIK
  */
 export async function getAllCOIKeys(status?: 'active' | 'deprecated' | 'pending'): Promise<ICOIKeyListResponse> {
     try {
-        const collection = await getCollection();
+        const collection = getCollection();
 
         const filter = status ? { status } : {};
         const cois = await collection.find(filter).sort({ coiId: 1 }).toArray();
 
         // Count resources for each COI
-        const { db } = await getMongoClient();
+        const db = getDb();
         const resourcesCollection = db.collection('resources');
 
         for (const coi of cois) {
@@ -158,12 +131,12 @@ export async function getAllCOIKeys(status?: 'active' | 'deprecated' | 'pending'
  */
 export async function getCOIKeyById(coiId: string): Promise<ICOIKey | null> {
     try {
-        const collection = await getCollection();
+        const collection = getCollection();
         const coiKey = await collection.findOne({ coiId });
 
         if (coiKey) {
             // Compute resource count
-            const { db } = await getMongoClient();
+            const db = getDb();
             const resourcesCollection = db.collection('resources');
             const count = await resourcesCollection.countDocuments({
                 'ztdf.policy.securityLabel.COI': coiId
@@ -183,7 +156,7 @@ export async function getCOIKeyById(coiId: string): Promise<ICOIKey | null> {
  */
 export async function updateCOIKey(coiId: string, request: IUpdateCOIKeyRequest): Promise<ICOIKey> {
     try {
-        const collection = await getCollection();
+        const collection = getCollection();
 
         const updateDoc: Record<string, unknown> = {
             updatedAt: new Date()
@@ -223,10 +196,10 @@ export async function updateCOIKey(coiId: string, request: IUpdateCOIKeyRequest)
  */
 export async function deprecateCOIKey(coiId: string): Promise<void> {
     try {
-        const collection = await getCollection();
+        const collection = getCollection();
 
         // Check if any resources use this COI
-        const { db } = await getMongoClient();
+        const db = getDb();
         const resourcesCollection = db.collection('resources');
         const resourceCount = await resourcesCollection.countDocuments({
             'ztdf.policy.securityLabel.COI': coiId
@@ -277,7 +250,7 @@ export async function getCOIMembershipMap(): Promise<Record<string, Set<string>>
  */
 export async function getAllCOICountries(): Promise<string[]> {
     try {
-        const collection = await getCollection();
+        const collection = getCollection();
 
         // Get all active COIs and aggregate their member countries
         const cois = await collection.find({ status: 'active' }, { projection: { memberCountries: 1 } }).toArray();
@@ -299,7 +272,7 @@ export async function getAllCOICountries(): Promise<string[]> {
  */
 export async function getCOIsForCountry(countryCode: string): Promise<ICOIKey[]> {
     try {
-        const collection = await getCollection();
+        const collection = getCollection();
 
         const cois = await collection.find({
             memberCountries: countryCode,
@@ -325,7 +298,7 @@ export async function getCOIKeyStatistics(): Promise<{
     totalResources: number;
 }> {
     try {
-        const collection = await getCollection();
+        const collection = getCollection();
 
         const total = await collection.countDocuments();
         const active = await collection.countDocuments({ status: 'active' });
@@ -334,7 +307,7 @@ export async function getCOIKeyStatistics(): Promise<{
 
         const countries = await getAllCOICountries();
 
-        const { db } = await getMongoClient();
+        const db = getDb();
         const totalResources = await db.collection('resources').countDocuments({
             'ztdf.policy.securityLabel.COI': { $exists: true, $ne: [] }
         });
@@ -355,12 +328,9 @@ export async function getCOIKeyStatistics(): Promise<{
 
 /**
  * Close MongoDB connection (for graceful shutdown)
+ * @deprecated MongoDB singleton handles connection lifecycle
  */
 export async function closeCOIKeyConnection(): Promise<void> {
-    if (cachedClient) {
-        await cachedClient.close();
-        cachedClient = null;
-        cachedDb = null;
-        logger.info('Closed MongoDB connection (COI Keys)');
-    }
+    // No-op: MongoDB singleton manages connection lifecycle
+    logger.debug('closeCOIKeyConnection() called - singleton manages lifecycle');
 }

@@ -1,5 +1,5 @@
-import { Collection, Db, Document, MongoClient, ObjectId } from 'mongodb';
-import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
+import { Collection, Db, Document, ObjectId } from 'mongodb';
+import { getDb } from '../utils/mongodb-singleton';
 import { logger } from '../utils/logger';
 
 export type NotificationType =
@@ -46,29 +46,19 @@ export interface INotificationPreferences {
 }
 
 class NotificationService {
-    private client: MongoClient | null = null;
-    private db: Db | null = null;
-
-    private async connect(): Promise<void> {
-        if (this.client && this.db) return;
-
-        const url = getMongoDBUrl();
-        this.client = new MongoClient(url);
-        await this.client.connect();
-        this.db = this.client.db(getMongoDBName());
-    }
-
-    private async collection(): Promise<Collection> {
-        await this.connect();
-        if (!this.db) throw new Error('Database not initialized');
-        const col = this.db.collection(COLLECTION);
-        // Ensure indexes for performance
-        await col.createIndex({ userId: 1, read: 1, timestamp: -1 });
+    private collection(): Collection {
+        const db = getDb();
+        const col = db.collection(COLLECTION);
+        // Note: Indexes should be created once at startup, not on every call
+        // For now, we keep the index creation but it's idempotent
+        col.createIndex({ userId: 1, read: 1, timestamp: -1 }).catch((err) => {
+            logger.warn('Failed to create notification indexes', { error: err });
+        });
         return col;
     }
 
     async list(userId: string, limit: number = 50, cursor?: string): Promise<IListResult> {
-        const col = await this.collection();
+        const col = this.collection();
         const query: Record<string, unknown> = { userId };
         if (cursor) {
             try {
@@ -106,12 +96,12 @@ class NotificationService {
     }
 
     async unreadCount(userId: string): Promise<number> {
-        const col = await this.collection();
+        const col = this.collection();
         return col.countDocuments({ userId, read: false });
     }
 
     async markRead(userId: string, id: string): Promise<boolean> {
-        const col = await this.collection();
+        const col = this.collection();
         const result = await col.updateOne(
             { _id: new ObjectId(id), userId },
             { $set: { read: true, updatedAt: new Date() } }
@@ -120,7 +110,7 @@ class NotificationService {
     }
 
     async markAllRead(userId: string): Promise<number> {
-        const col = await this.collection();
+        const col = this.collection();
         const result = await col.updateMany(
             { userId, read: { $ne: true } },
             { $set: { read: true, updatedAt: new Date() } }
@@ -129,13 +119,13 @@ class NotificationService {
     }
 
     async delete(userId: string, id: string): Promise<boolean> {
-        const col = await this.collection();
+        const col = this.collection();
         const result = await col.deleteOne({ _id: new ObjectId(id), userId });
         return result.deletedCount > 0;
     }
 
     async create(notification: Omit<INotification, 'id' | 'createdAt' | 'updatedAt'>): Promise<string> {
-        const col = await this.collection();
+        const col = this.collection();
         const result = await col.insertOne({
             ...notification,
             read: notification.read ?? false,
@@ -145,16 +135,18 @@ class NotificationService {
         return result.insertedId.toString();
     }
 
-    private async prefsCollection(): Promise<Collection> {
-        await this.connect();
-        if (!this.db) throw new Error('Database not initialized');
-        const col = this.db.collection(PREFS_COLLECTION);
-        await col.createIndex({ userId: 1 }, { unique: true });
+    private prefsCollection(): Collection {
+        const db = getDb();
+        const col = db.collection(PREFS_COLLECTION);
+        // Note: Indexes should be created once at startup
+        col.createIndex({ userId: 1 }, { unique: true }).catch((err) => {
+            logger.warn('Failed to create notification prefs indexes', { error: err });
+        });
         return col;
     }
 
     async getPreferences(userId: string): Promise<INotificationPreferences> {
-        const col = await this.prefsCollection();
+        const col = this.prefsCollection();
         const doc = await col.findOne({ userId });
         if (doc) {
             return {
@@ -168,7 +160,7 @@ class NotificationService {
     }
 
     async upsertPreferences(userId: string, prefs: Partial<INotificationPreferences>): Promise<INotificationPreferences> {
-        const col = await this.prefsCollection();
+        const col = this.prefsCollection();
         const update = {
             $set: {
                 emailOptIn: prefs.emailOptIn ?? false,
@@ -255,10 +247,8 @@ class NotificationService {
      */
     private async getAdminUsers(): Promise<string[]> {
         try {
-            await this.connect();
-            if (!this.db) return [];
-
-            const usersCollection = this.db.collection('users');
+            const db = getDb();
+            const usersCollection = db.collection('users');
             
             // Find users with admin roles
             const adminDocs = await usersCollection.find({
