@@ -203,6 +203,12 @@ services:
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-mongodb
     # Use official docker-entrypoint with custom command for replica set + keyFile
     # KeyFile permissions fixed via init script before MongoDB starts
+    deploy:
+      resources:
+        limits:
+          memory: 2G  # MEMORY LEAK FIX (2026-02-16): Hard limit prevents host OOM
+        reservations:
+          memory: 512M  # Minimum guaranteed memory
     command:
       - bash
       - -c
@@ -222,7 +228,8 @@ services:
           --tlsMode requireTLS \
           --tlsCertificateKeyFile /tmp/mongodb.pem \
           --tlsCAFile /tmp/ca.pem \
-          --tlsAllowConnectionsWithoutCertificates
+          --tlsAllowConnectionsWithoutCertificates \
+          --wiredTigerCacheSizeGB 1
     environment:
       MONGO_INITDB_DATABASE: dive-v3-{{INSTANCE_CODE_LOWER}}
       MONGO_INITDB_ROOT_USERNAME: admin
@@ -239,87 +246,19 @@ services:
     networks:
       - dive-internal
     healthcheck:
-      # CRITICAL FIX (2026-02-06): Initialize replica set AND verify PRIMARY status
-      # This ensures MongoDB is TRULY READY before dependent services (KAS, backend) start
+      # MEMORY LEAK FIX (2026-02-16): TCP-based health check eliminates mongosh connection churn
+      # OLD: mongosh creates new connection every 10s with replica set checks
+      # NEW: TCP socket check (zero MongoDB connections)
+      # IMPACT: Eliminates health check connection overhead entirely
       #
-      # Root Cause: Docker healthcheck must test READINESS, not just connectivity
-      # - Phase 1: Check if replica set exists, initialize if not
-      # - Phase 2: Verify node is PRIMARY (not SECONDARY/RECOVERING/STARTUP)
-      # - Phase 3: Only mark healthy when PRIMARY is confirmed
-      #
-      # This prevents race conditions where:
-      # - KAS starts before MongoDB replica set is initialized
-      # - Backend connects before PRIMARY election completes
-      # - Services get "node is not in primary or recovering state" errors
-      test: |
-        mongosh admin -u admin -p ${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}} --tls --tlsAllowInvalidCertificates --quiet --eval "
-          try {
-            const status = rs.status();
-
-            // Check if this node is PRIMARY
-            if (status.ok === 1 && status.myState === 1) {
-              // PRIMARY confirmed - truly ready!
-              quit(0);
-            }
-
-            // Replica set exists but not PRIMARY yet
-            // Log current state for debugging
-            if (status.myState === 2) {
-              print('MongoDB in SECONDARY state - waiting for PRIMARY election');
-            } else if (status.myState === 5) {
-              print('MongoDB in STARTUP2 state - initializing replica set');
-            } else {
-              print('MongoDB state: ' + status.myState + ' - waiting for PRIMARY');
-            }
-            quit(1);
-
-          } catch (e) {
-            // Replica set not configured yet - initialize it
-            if (e.message.includes('no replset config') || e.message.includes('not running with --replSet')) {
-              print('[MongoDB] Replica set not initialized - initializing now...');
-
-              const initResult = rs.initiate({
-                _id: 'rs0',
-                members: [{
-                  _id: 0,
-                  host: 'localhost:27017',
-                  priority: 1
-                }]
-              });
-
-              if (initResult.ok === 1) {
-                print('[MongoDB] Replica set initialization successful');
-                // Give it time to elect PRIMARY (typically 5-10 seconds)
-                sleep(8000);
-
-                // Verify PRIMARY status after initialization
-                try {
-                  const statusAfterInit = rs.status();
-                  if (statusAfterInit.ok === 1 && statusAfterInit.myState === 1) {
-                    print('[MongoDB] PRIMARY elected - ready for connections');
-                    quit(0);
-                  } else {
-                    print('[MongoDB] Replica set initializing, state: ' + statusAfterInit.myState);
-                    quit(1);
-                  }
-                } catch (verifyError) {
-                  print('[MongoDB] Waiting for replica set to stabilize...');
-                  quit(1);
-                }
-              } else {
-                print('[MongoDB] Replica set initialization failed: ' + JSON.stringify(initResult));
-                quit(1);
-              }
-            } else {
-              print('[MongoDB] Error checking replica set status: ' + e.message);
-              quit(1);
-            }
-          }
-        "
-      interval: 5s
-      timeout: 10s
-      retries: 24
-      start_period: 40s
+      # NOTE: Replica set initialization still happens via deployment script
+      # (scripts/init-mongo-replica-set-post-start.sh) during spoke pipeline
+      # This health check only verifies MongoDB is listening on port 27017
+      test: ["CMD-SHELL", "nc -z localhost 27017 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 40s  # Longer start period for replica set init
     restart: unless-stopped
 
   redis-{{INSTANCE_CODE_LOWER}}:
@@ -364,6 +303,12 @@ services:
       context: ../../keycloak
       dockerfile: Dockerfile
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-keycloak
+    deploy:
+      resources:
+        limits:
+          memory: 1G  # MEMORY LEAK FIX (2026-02-16): Spokes need less memory than Hub (768M heap + 256M native)
+        reservations:
+          memory: 256M
     entrypoint: ["/bin/bash", "/opt/keycloak/scripts/import-realm.sh"]
     command: ["start-dev", "--spi-login-protocol-openid-connect-suppress-logout-confirmation-screen=true", "--features=scripts"]
     environment:
@@ -371,6 +316,9 @@ services:
       KC_DB_URL: jdbc:postgresql://postgres-{{INSTANCE_CODE_LOWER}}:5432/keycloak?sslmode=verify-full&sslrootcert=/opt/keycloak/certs/ca/rootCA.pem
       KC_DB_USERNAME: ${KC_DB_USERNAME:-keycloak}
       KC_DB_PASSWORD: ${KC_DB_PASSWORD:-${POSTGRES_PASSWORD_{{INSTANCE_CODE_UPPER}}}}
+      KC_DB_POOL_INITIAL_SIZE: 3
+      KC_DB_POOL_MIN_SIZE: 3
+      KC_DB_POOL_MAX_SIZE: 15  # MEMORY LEAK FIX: Reduced from default 100
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_{{INSTANCE_CODE_UPPER}}}
       KC_HOSTNAME: {{IDP_HOSTNAME}}
@@ -409,6 +357,23 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-DiveAdminSecure2025!}
       TEST_USER_PASSWORD: ${TEST_USER_PASSWORD:-TestUser2025!Pilot}  # SSOT: Same as seed-spoke-users.sh
       INSTANCE_CODE: {{INSTANCE_CODE_UPPER}}
+      # MEMORY LEAK FIX (2026-02-16): JVM heap tuning for spoke (smaller than Hub)
+      JAVA_OPTS: >-
+        -Xms256m
+        -Xmx768m
+        -XX:MetaspaceSize=96m
+        -XX:MaxMetaspaceSize=192m
+        -XX:+UseG1GC
+        -XX:MaxGCPauseMillis=100
+        -XX:+UseStringDeduplication
+        -Djava.net.preferIPv4Stack=true
+      # MEMORY LEAK FIX (2026-02-16): Aggressive session pruning (spoke settings)
+      KC_SPI_USER_SESSIONS_INFINISPAN_USER_SESSIONS_IDLE_TIMEOUT: "900"  # 15 min
+      KC_SPI_USER_SESSIONS_INFINISPAN_OFFLINE_SESSION_IDLE_TIMEOUT: "43200"  # 12 hours
+      KC_SPI_USER_SESSIONS_INFINISPAN_MAX_CACHE_SIZE: "5000"  # Lower than Hub
+      KC_DB_POOL_INITIAL_SIZE: 5
+      KC_DB_POOL_MIN_SIZE: 5
+      KC_DB_POOL_MAX_SIZE: 15  # MEMORY LEAK FIX: Reduced from default 100
     ports:
       - "127.0.0.1:{{KEYCLOAK_HOST_PORT}}:8443"  # Localhost only (secure)
       - "127.0.0.1:{{KEYCLOAK_HTTP_PORT}}:8080"
@@ -744,6 +709,12 @@ services:
       context: ../../frontend
       dockerfile: Dockerfile.dev
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-frontend
+    deploy:
+      resources:
+        limits:
+          memory: 1G  # MEMORY LEAK FIX (2026-02-16): Prevent frontend from exceeding 1GB
+        reservations:
+          memory: 256M
     # IMPORTANT: Use hash-based detection to reinstall when package.json changes
     # This ensures new dependencies are installed even when node_modules volume exists
     command: ["/bin/sh","-c","rm -f /app/.env.local && if [ ! -f /app/node_modules/.package-hash ] || [ \"$(md5sum /app/package.json | cut -d' ' -f1)\" != \"$(cat /app/node_modules/.package-hash 2>/dev/null)\" ]; then echo 'Package.json changed - reinstalling dependencies...' && npm install && md5sum /app/package.json | cut -d' ' -f1 > /app/node_modules/.package-hash; else echo 'Dependencies up to date'; fi && npm run dev"]

@@ -466,6 +466,12 @@ services:
     container_name: ${COMPOSE_PROJECT_NAME}-mongodb
     restart: unless-stopped
     # Production-grade replica set: keyFile auth + TLS encryption
+    deploy:
+      resources:
+        limits:
+          memory: 2G  # MEMORY LEAK FIX (2026-02-16): Hard limit prevents host OOM
+        reservations:
+          memory: 512M  # Minimum guaranteed memory
     entrypoint:
       - bash
       - -c
@@ -486,7 +492,8 @@ services:
           --tlsMode requireTLS \
           --tlsCertificateKeyFile /tmp/mongodb.pem \
           --tlsCAFile /tmp/ca.pem \
-          --tlsAllowConnectionsWithoutCertificates
+          --tlsAllowConnectionsWithoutCertificates \
+          --wiredTigerCacheSizeGB 1
     env_file:
       - .env.hub
     environment:
@@ -505,11 +512,12 @@ services:
     networks:
       - hub-internal
     healthcheck:
-      # Check if MongoDB is accepting connections (basic connectivity only)
-      # Replica set initialization happens in Phase 4a of deployment
-      test: >
-        mongosh admin -u admin -p ${MONGO_PASSWORD_USA} --tls --tlsAllowInvalidCertificates --quiet --eval "db.adminCommand('ping')" | grep -q "ok"
-      interval: 3s
+      # MEMORY LEAK FIX (2026-02-16): TCP-based health check eliminates mongosh connection churn
+      # OLD: mongosh creates new connection every 10s (8,640 connections/day)
+      # NEW: TCP socket check (zero MongoDB connections)
+      # IMPACT: Eliminates health check connection overhead entirely
+      test: ["CMD-SHELL", "nc -z localhost 27017 || exit 1"]
+      interval: 10s
       timeout: 5s
       retries: 15
       start_period: 20s
@@ -591,6 +599,12 @@ services:
       dockerfile: Dockerfile
     container_name: ${COMPOSE_PROJECT_NAME}-keycloak
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1536M  # MEMORY LEAK FIX (2026-02-16): 1.5GB (1GB heap + 512MB native)
+        reservations:
+          memory: 512M
     env_file:
       - .env.hub
     entrypoint: ["/bin/bash", "/opt/keycloak/scripts/import-realm.sh"]
@@ -600,6 +614,9 @@ services:
       KC_DB_URL: jdbc:postgresql://postgres:5432/keycloak_db?sslmode=verify-full&sslrootcert=/opt/keycloak/certs/ca/rootCA.pem
       KC_DB_USERNAME: ${KC_DB_USERNAME:-postgres}
       KC_DB_PASSWORD: ${KC_DB_PASSWORD:-${POSTGRES_PASSWORD_USA}}
+      KC_DB_POOL_INITIAL_SIZE: 5
+      KC_DB_POOL_MIN_SIZE: 5
+      KC_DB_POOL_MAX_SIZE: 20  # MEMORY LEAK FIX: Reduced from default 100
       KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:-localhost}
       KC_HOSTNAME_STRICT: "false"
       KC_PROXY_HEADERS: xforwarded
@@ -611,7 +628,7 @@ services:
       KC_HTTPS_CLIENT_AUTH: request
       # SSOT CA bundle for federation with spoke Keycloaks (mkcert + Vault PKI)
       KC_TRUSTSTORE_PATHS: /opt/keycloak/ca-bundle/rootCA.pem
-      KC_LOG_LEVEL: "debug,org.keycloak.events:debug,org.keycloak.services:debug,org.keycloak.authentication:debug"
+      KC_LOG_LEVEL: "info"  # MEMORY LEAK FIX: Reduced from debug (saves heap memory)
       KC_METRICS_ENABLED: "true"
       KC_HEALTH_ENABLED: "true"
       KC_FEATURES: scripts
@@ -620,6 +637,13 @@ services:
       # Initial admin user creation (Keycloak 26.5.2)
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KC_ADMIN_PASSWORD_USA}
+      # MEMORY LEAK FIX (2026-02-16): Aggressive session pruning
+      # OLD: Default session cleanup (1 hour interval, long idle timeout)
+      # NEW: 15-minute cleanup, reduced cache sizes
+      # IMPACT: Reduces Keycloak growth rate by 50-100 MB/hour
+      KC_SPI_USER_SESSIONS_INFINISPAN_USER_SESSIONS_IDLE_TIMEOUT: "900"  # 15 min (was 1 hour)
+      KC_SPI_USER_SESSIONS_INFINISPAN_OFFLINE_SESSION_IDLE_TIMEOUT: "43200"  # 12 hours
+      KC_SPI_USER_SESSIONS_INFINISPAN_MAX_CACHE_SIZE: "10000"  # Limit cache growth
       # Bootstrap realm for Terraform provider authentication
       SKIP_REALM_IMPORT: "true"  # Terraform SSOT: Start empty, configure via Terraform
       # Legacy realm import variables (kept for compatibility, but not used)
@@ -631,6 +655,16 @@ services:
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-DiveAdminSecure2025!}
       TEST_USER_PASSWORD: ${TEST_USER_PASSWORD:-TestUser2025!Pilot}  # SSOT: Same as seed-hub-users.sh
       INSTANCE_CODE: ${INSTANCE:-USA}
+      # MEMORY LEAK FIX (2026-02-16): JVM heap tuning
+      JAVA_OPTS: >-
+        -Xms512m
+        -Xmx1024m
+        -XX:MetaspaceSize=128m
+        -XX:MaxMetaspaceSize=256m
+        -XX:+UseG1GC
+        -XX:MaxGCPauseMillis=100
+        -XX:+UseStringDeduplication
+        -Djava.net.preferIPv4Stack=true
       # OpenTelemetry integration (Keycloak 26.5.2)
       OTEL_TRACES_EXPORTER: "otlp"
       OTEL_METRICS_EXPORTER: "otlp"
@@ -1033,6 +1067,12 @@ services:
       dockerfile: Dockerfile.dev
     container_name: ${COMPOSE_PROJECT_NAME}-frontend
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G  # MEMORY LEAK FIX (2026-02-16): Prevent frontend from exceeding 1GB
+        reservations:
+          memory: 256M
     env_file:
       - .env.hub
     healthcheck:

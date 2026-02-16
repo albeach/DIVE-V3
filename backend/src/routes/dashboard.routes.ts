@@ -5,33 +5,17 @@
  * - Document count accessible to user
  * - Authorization success rate
  * - Average response time
+ * 
+ * MEMORY LEAK FIX (2026-02-16): Uses MongoDB singleton instead of creating new connections
  */
 
 import { Router, Request, Response } from 'express';
 import { authenticateJWT } from '../middleware/authz.middleware';
 import { decisionLogService } from '../services/decision-log.service';
-import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
-import { MongoClient } from 'mongodb';
+import { getDb } from '../utils/mongodb-singleton';
 import { logger } from '../utils/logger';
 
 const router = Router();
-
-// Singleton MongoDB client for dashboard stats
-let mongoClient: MongoClient | null = null;
-
-async function getDbClient(): Promise<MongoClient> {
-    if (!mongoClient) {
-        mongoClient = new MongoClient(getMongoDBUrl());
-        await mongoClient.connect();
-    }
-    return mongoClient;
-}
-
-async function getAuditLogsCollection() {
-    const client = await getDbClient();
-    const db = client.db(getMongoDBName());
-    return db.collection('audit_logs');
-}
 
 /**
  * @openapi
@@ -78,8 +62,7 @@ router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promi
                 }
             });
 
-            const client = await getDbClient();
-            const db = client.db(getMongoDBName());
+            const db = getDb();
             const resourcesCollection = db.collection('resources');
 
             // Get user's country for ABAC filtering
@@ -366,7 +349,7 @@ router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promi
 
         try {
             // Get recent audit events
-            const auditCollection = await getAuditLogsCollection();
+            const auditCollection = getDb().collection('audit_logs');
             recentAuditEvents = await auditCollection
                 .find({
                     subject: user?.uniqueID,
@@ -384,7 +367,7 @@ router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promi
 
         try {
             // Get user login/session statistics
-            const auditCollection = await getAuditLogsCollection();
+            const auditCollection = getDb().collection('audit_logs');
             const lastLoginDoc = await auditCollection
                 .find({ subject: user?.uniqueID })
                 .sort({ timestamp: -1 })
@@ -432,7 +415,7 @@ router.get('/stats', authenticateJWT, async (req: Request, res: Response): Promi
 
         try {
             // Get recently accessed resources
-            const auditCollection = await getAuditLogsCollection();
+            const auditCollection = getDb().collection('audit_logs');
             const recentAccess = await auditCollection
                 .find({
                     subject: user?.uniqueID,
@@ -928,8 +911,7 @@ router.get('/federated-stats', async (req, res) => {
         // Also include the hub's (USA) documents accessible to requesting user
         let hubDocumentCount = 0;
         try {
-            const client = await getDbClient();
-            const db = client.db(getMongoDBName());
+            const db = getDb();
             const resourcesCollection = db.collection('resources');
 
             // Count hub documents accessible to the requesting country
@@ -1025,8 +1007,7 @@ router.get('/stats/public', async (req: Request, res: Response): Promise<void> =
     const requestId = req.headers['x-request-id'] as string || `req-${Date.now()}`;
 
     try {
-        const client = await getDbClient();
-        const db = client.db(getMongoDBName());
+        const db = getDb();
         const resourcesCollection = db.collection('resources');
         const totalDocuments = await resourcesCollection.countDocuments();
 
