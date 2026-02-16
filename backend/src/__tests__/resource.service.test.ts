@@ -56,7 +56,13 @@ describe('Resource Service', () => {
     });
 
     beforeEach(async () => {
-        await mongoHelper.clearDatabase();
+        // Only clear the resources collection, not the entire database.
+        // clearDatabase() wipes all non-preserved collections, which causes
+        // cross-worker contamination with pep-pdp-authorization and other parallel tests.
+        const db = mongoHelper.getDb();
+        if (db) {
+            await db.collection('resources').deleteMany({});
+        }
     });
 
     // ============================================

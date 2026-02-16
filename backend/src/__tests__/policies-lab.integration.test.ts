@@ -67,7 +67,15 @@ jest.mock('../services/policy-validation.service', () => ({
     })
 }));
 
+const savedEnv: Record<string, string | undefined> = {};
+
 beforeAll(async () => {
+    // Save env vars before overwriting
+    savedEnv.MONGODB_URL = process.env.MONGODB_URL;
+    savedEnv.MONGODB_URI = process.env.MONGODB_URI;
+    savedEnv.MONGODB_DB = process.env.MONGODB_DB;
+    savedEnv.MONGODB_DATABASE = process.env.MONGODB_DATABASE;
+
     // Start in-memory MongoDB
     mongoServer = await MongoMemoryServer.create();
     const uri = mongoServer.getUri();
@@ -107,6 +115,14 @@ beforeAll(async () => {
 afterAll(async () => {
     await mongoClient.close();
     await mongoServer.stop();
+    // Restore env vars to avoid polluting subsequent tests in the same worker
+    for (const [key, value] of Object.entries(savedEnv)) {
+        if (value === undefined) {
+            delete process.env[key];
+        } else {
+            process.env[key] = value;
+        }
+    }
 });
 
 beforeEach(async () => {
