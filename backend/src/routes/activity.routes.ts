@@ -1,6 +1,11 @@
 /**
  * Activity Routes
  *
+ * MEMORY LEAK FIX (2026-02-16): Refactored to use MongoDB singleton
+ * OLD: Created new MongoClient() with connection caching (connection leak)
+ * NEW: Uses shared singleton connection pool via getDb()
+ * IMPACT: Prevents connection leaks during activity log queries
+ *
  * User activity endpoints for tracking document interactions and authorization decisions
  *
  * IMPORTANT: This route queries the `audit_logs` collection (populated by ACP-240 audit logger)
@@ -8,26 +13,19 @@
  */
 
 import { Router } from 'express';
-import { MongoClient, Db } from 'mongodb';
+import { Collection } from 'mongodb';
 import { authenticateJWT } from '../middleware/authz.middleware';
 import { logger } from '../utils/logger';
-import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
+import { getDb } from '../utils/mongodb-singleton';
 import type { Request, Response } from 'express';
 
 const router = Router();
 
-// MongoDB connection for audit_logs
-let mongoClient: MongoClient | null = null;
-let db: Db | null = null;
-
-async function getAuditLogsCollection() {
-    if (!mongoClient || !db) {
-        const url = getMongoDBUrl();
-        const dbName = getMongoDBName();
-        mongoClient = new MongoClient(url);
-        await mongoClient.connect();
-        db = mongoClient.db(dbName);
-    }
+/**
+ * Get audit logs collection using singleton
+ */
+function getAuditLogsCollection(): Collection {
+    const db = getDb();
     return db.collection(process.env.ACP240_LOGS_COLLECTION || 'audit_logs');
 }
 
@@ -102,7 +100,7 @@ router.get('/', authenticateJWT, async (req: IAuthenticatedRequest, res: Respons
         }
 
         // Query audit_logs collection
-        const collection = await getAuditLogsCollection();
+        const collection = getAuditLogsCollection();
         const auditLogs = await collection
             .find(filter)
             .sort({ timestamp: -1 })

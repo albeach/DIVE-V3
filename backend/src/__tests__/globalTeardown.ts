@@ -15,6 +15,15 @@ export default async function globalTeardown() {
     console.log('🔧 Starting global teardown...');
 
     try {
+        // Close MongoDB singleton connection
+        const { mongoSingleton } = await import('../utils/mongodb-singleton');
+        await mongoSingleton.close();
+        console.log('  ✓ MongoDB singleton connection closed');
+    } catch (error) {
+        // Ignore errors if singleton wasn't established
+    }
+
+    try {
         // Close ACP-240 logger MongoDB connection
         await closeAuditLogConnection();
         console.log('  ✓ ACP-240 logger connection closed');
