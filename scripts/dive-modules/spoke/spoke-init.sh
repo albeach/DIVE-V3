@@ -434,7 +434,7 @@ _spoke_init_internal() {
 
     ensure_dive_root
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
-    
+
     # ==========================================================================
     # CRITICAL FIX (2026-01-27): Calculate port offsets FIRST
     # ==========================================================================
@@ -442,7 +442,7 @@ _spoke_init_internal() {
     # Must be set before any operations that use them
     # ==========================================================================
     eval "$(get_instance_ports "$code_upper")"
-    
+
     # Extract individual port variables for later use
     local keycloak_https_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
     local keycloak_http_port="${SPOKE_KEYCLOAK_HTTP_PORT:-8080}"
@@ -466,7 +466,7 @@ _spoke_init_internal() {
     # Hub MongoDB is SSOT for spokeId - will be assigned during registration
     # Use placeholder until Hub assigns real spokeId
     local spoke_id="PENDING_REGISTRATION"
-    
+
     # Try to register with Hub NOW to get real spokeId
     local hub_api="${HUB_URL:-https://localhost:4000}"
     if curl -sk --max-time 5 "${hub_api}/api/health" >/dev/null 2>&1; then
@@ -475,14 +475,14 @@ _spoke_init_internal() {
         reg_response=$(curl -sk --max-time 30 -X POST "${hub_api}/api/federation/register" \
             -H "Content-Type: application/json" \
             -d "{\"instanceCode\":\"$code_upper\",\"name\":\"$instance_name\",\"baseUrl\":\"$base_url\",\"apiUrl\":\"$api_url\",\"idpUrl\":\"$idp_url\",\"idpPublicUrl\":\"$idp_public_url\",\"requestedScopes\":[\"policy:base\",\"policy:org\",\"policy:tenant\"],\"contactEmail\":\"$contact_email\",\"skipValidation\":true}" 2>&1)
-        
+
         local hub_spoke_id=$(echo "$reg_response" | jq -r '.spoke.spokeId // empty' 2>/dev/null)
         if [ -n "$hub_spoke_id" ] && [ "$hub_spoke_id" != "null" ]; then
             spoke_id="$hub_spoke_id"
             log_success "✓ Got spokeId from Hub: $spoke_id"
         fi
     fi
-    
+
     # If still pending, use temp ID (will be updated during registration)
     if [ "$spoke_id" = "PENDING_REGISTRATION" ]; then
         spoke_id="spoke-${code_lower}-temp-$(openssl rand -hex 4)"
@@ -491,63 +491,6 @@ _spoke_init_internal() {
 
     # Extract hostname from IdP URL for Keycloak config
     local idp_hostname=$(echo "$idp_url" | sed 's|https://||' | cut -d: -f1)
-
-    # Create config.json
-    log_step "Creating spoke configuration"
-    cat > "$spoke_dir/config.json" << EOF
-{
-  "identity": {
-    "spokeId": "$spoke_id",
-    "instanceCode": "$code_upper",
-    "name": "$instance_name",
-    "description": "DIVE V3 Spoke Instance for $instance_name",
-    "country": "$code_upper",
-    "organizationType": "government",
-    "contactEmail": "$contact_email"
-  },
-  "endpoints": {
-    "hubUrl": "$hub_url",
-    "hubApiUrl": "${hub_url}/api",
-    "hubOpalUrl": "${hub_url//:4000/:7002}",
-    "baseUrl": "$base_url",
-    "apiUrl": "$api_url",
-    "idpUrl": "$idp_url",
-    "idpPublicUrl": "$idp_public_url",
-    "kasUrl": "$kas_url"
-  },
-  "certificates": {
-    "certificatePath": "$spoke_dir/certs/spoke.crt",
-    "privateKeyPath": "$spoke_dir/certs/spoke.key",
-    "csrPath": "$spoke_dir/certs/spoke.csr",
-    "caBundlePath": "$spoke_dir/certs/hub-ca.crt"
-  },
-  "authentication": {},
-  "federation": {
-    "status": "unregistered",
-    "requestedScopes": [
-      "policy:base",
-      "policy:${code_lower}",
-      "data:federation_matrix",
-      "data:trusted_issuers"
-    ]
-  },
-  "operational": {
-    "heartbeatIntervalMs": 30000,
-    "tokenRefreshBufferMs": 300000,
-    "offlineGracePeriodMs": 3600000,
-    "policyCachePath": "$spoke_dir/cache/policies",
-    "auditQueuePath": "$spoke_dir/cache/audit",
-    "maxAuditQueueSize": 10000,
-    "auditFlushIntervalMs": 60000
-  },
-  "metadata": {
-    "version": "1.0.0",
-    "createdAt": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-    "lastModified": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-    "configHash": ""
-  }
-}
-EOF
 
     # Create .env file with GCP secret references (NO SECRETS STORED LOCALLY)
     log_step "Creating environment configuration (GCP Secret Manager references)"
@@ -732,7 +675,6 @@ log_info "GCP Secret Manager will manage secrets automatically during deployment
     echo "  Keycloak IdP:    $idp_url"
     echo ""
     echo -e "${BOLD}Files Created:${NC}"
-    echo "  ✓ $spoke_dir/config.json"
     echo "  ✓ $spoke_dir/docker-compose.yml"
     echo "  ✓ $spoke_dir/.env (ready to use!)"
     echo "  ✓ $spoke_dir/certs/* (TLS certificates)"

@@ -84,9 +84,17 @@ export interface ISpokeMetadata {
   configHash: string;
 }
 
+export interface ISpokePortConfig {
+  frontend: number;
+  backend: number;
+  keycloak: number;
+  kas: number;
+}
+
 export interface ISpokeFullConfig {
   identity: ISpokeIdentity;
   endpoints: ISpokeEndpoints;
+  ports: ISpokePortConfig;
   certificates: ISpokeCertificates;
   authentication: ISpokeAuthentication;
   federation: ISpokeFederation;
@@ -215,6 +223,12 @@ class SpokeConfigService {
         baseUrl: options.baseUrl,
         apiUrl: options.apiUrl,
         idpUrl: options.idpUrl,
+      },
+      ports: {
+        frontend: parseInt(new URL(options.baseUrl).port) || 3000,
+        backend: parseInt(new URL(options.apiUrl).port) || 4000,
+        keycloak: parseInt(new URL(options.idpUrl).port) || 8443,
+        kas: 8080,
       },
       certificates: {
         certificatePath: path.join(instanceDir, 'certs', 'spoke.crt'),
@@ -522,6 +536,12 @@ class SpokeConfigService {
         idpUrl: (raw.idpUrl as string) || `https://${instanceCode.toLowerCase()}-idp.dive25.com`,
         kasUrl: raw.kasUrl as string | undefined,
       },
+      ports: {
+        frontend: (raw.frontendPort as number) || 3000,
+        backend: (raw.backendPort as number) || 4000,
+        keycloak: (raw.keycloakPort as number) || 8443,
+        kas: (raw.kasPort as number) || 8080,
+      },
       certificates: {
         certificatePath: (raw.certificatePath as string) || path.join(instanceDir, 'certs', 'spoke.crt'),
         privateKeyPath: (raw.privateKeyPath as string) || path.join(instanceDir, 'certs', 'spoke.key'),
@@ -566,9 +586,17 @@ class SpokeConfigService {
     const operational = (raw.operational || {}) as Record<string, unknown>;
     const metadata = (raw.metadata || {}) as Record<string, unknown>;
 
+    const ports = (raw.ports || {}) as Record<string, unknown>;
+
     return {
       identity: identity as unknown as ISpokeIdentity,
       endpoints: endpoints as unknown as ISpokeEndpoints,
+      ports: {
+        frontend: (ports.frontend as number) || 3000,
+        backend: (ports.backend as number) || 4000,
+        keycloak: (ports.keycloak as number) || 8443,
+        kas: (ports.kas as number) || 8080,
+      },
       certificates: certificates as unknown as ISpokeCertificates,
       authentication: {
         ...authentication,

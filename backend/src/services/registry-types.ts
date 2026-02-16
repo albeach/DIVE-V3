@@ -25,6 +25,29 @@ export interface ISpokeRegistration {
   idpUrl: string;         // Internal Docker network URL (for backend validation)
   idpPublicUrl?: string;  // Public browser-accessible URL (for federation)
 
+  // Port configuration (Database SSOT)
+  frontendPort?: number;
+  backendPort?: number;
+  keycloakPort?: number;
+  kasPort?: number;
+
+  // Operational settings (from config — Database SSOT)
+  operationalSettings?: {
+    heartbeatIntervalMs: number;
+    tokenRefreshBufferMs: number;
+    offlineGracePeriodMs: number;
+    policyCachePath: string;
+    auditQueuePath: string;
+    maxAuditQueueSize: number;
+    auditFlushIntervalMs: number;
+  };
+
+  // Additional identity metadata
+  country?: string;
+  organizationType?: 'government' | 'military' | 'commercial';
+  contactEmail?: string;
+  hubUrl?: string;
+
   // Certificate/Auth
   publicKey?: string;
   certificateFingerprint?: string;

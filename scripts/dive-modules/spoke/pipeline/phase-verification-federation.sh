@@ -380,13 +380,14 @@ _spoke_verify_federation_oidc_endpoints() {
     local spoke_realm="dive-v3-broker-${code_lower}"
     local hub_realm="dive-v3-broker-usa"
 
-    # Get spoke Keycloak port
+    # Get spoke Keycloak port from get_instance_ports (SSOT)
     local spoke_kc_port
-    if [ -f "${DIVE_ROOT}/instances/${code_lower}/config.json" ]; then
-        spoke_kc_port=$(jq -r '.endpoints.idpPublicUrl // "https://localhost:8443"' \
-            "${DIVE_ROOT}/instances/${code_lower}/config.json" 2>/dev/null | grep -o ':[0-9]*' | tr -d ':')
+    if type get_instance_ports &>/dev/null; then
+        eval "$(get_instance_ports "$(upper "$instance_code")" 2>/dev/null)" || true
+        spoke_kc_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
+    else
+        spoke_kc_port="8443"
     fi
-    spoke_kc_port="${spoke_kc_port:-8443}"
 
     # Test both OIDC discovery endpoints (quick test - 3s timeout)
     local spoke_ok hub_ok

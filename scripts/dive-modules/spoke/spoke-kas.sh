@@ -59,16 +59,9 @@ spoke_kas_init() {
         return 1
     fi
 
-    # Load spoke configuration
-    local config_file="$spoke_dir/config.json"
-    if [ ! -f "$config_file" ]; then
-        log_error "Spoke configuration not found: $config_file"
-        return 1
-    fi
-
-    # Get country info
+    # Get country info from spoke_config_get (SSOT)
     local country_name
-    country_name=$(jq -r '.name // .instanceName // "Unknown"' "$config_file" 2>/dev/null || echo "$code_upper")
+    country_name=$(spoke_config_get "$code_upper" "identity.name" "$code_upper")
 
     # Calculate KAS port
     eval "$(_spoke_kas_get_ports "$code_upper")"
@@ -215,26 +208,18 @@ spoke_kas_register() {
         return 0
     fi
 
-    # Get country info
+    # Get country info from spoke_config_get (SSOT)
     local country_name
-    local spoke_config="${DIVE_ROOT}/instances/${code_lower}/config.json"
-
-    if [ -f "$spoke_config" ]; then
-        country_name=$(jq -r '.name // .instanceName // "Unknown"' "$spoke_config" 2>/dev/null)
-    else
-        country_name=$(get_country_name "$code_upper" 2>/dev/null || echo "$code_upper")
-    fi
+    country_name=$(spoke_config_get "$code_upper" "identity.name" "$code_upper")
 
     # Calculate ports
     eval "$(_spoke_kas_get_ports "$code_upper")"
 
-    # Get URLs from config or generate defaults
+    # Get URLs from spoke_config_get or generate defaults
     local kas_url idp_url internal_kas_url
 
-    if [ -f "$spoke_config" ]; then
-        kas_url=$(jq -r '.endpoints.kas // empty' "$spoke_config" 2>/dev/null)
-        idp_url=$(jq -r '.endpoints.idp // empty' "$spoke_config" 2>/dev/null)
-    fi
+    kas_url=$(spoke_config_get "$code_upper" "endpoints.kasUrl" "")
+    idp_url=$(spoke_config_get "$code_upper" "endpoints.idpPublicUrl" "")
 
     kas_url="${kas_url:-https://${code_lower}-api.dive25.com/api/kas}"
     # FIX (2026-01-15): Realm name includes instance code suffix
@@ -440,29 +425,21 @@ spoke_kas_register_mongodb() {
     echo -e "${BOLD}Register Spoke KAS in MongoDB - ${code_upper}${NC}"
     echo ""
 
-    # Get country info
+    # Get country info from spoke_config_get (SSOT)
     local country_name
-    local spoke_config="${DIVE_ROOT}/instances/${code_lower}/config.json"
-
-    if [ -f "$spoke_config" ]; then
-        country_name=$(jq -r '.name // .instanceName // "Unknown"' "$spoke_config" 2>/dev/null)
-    else
-        country_name=$(get_country_name "$code_upper" 2>/dev/null || echo "$code_upper")
-    fi
+    country_name=$(spoke_config_get "$code_upper" "identity.name" "$code_upper")
 
     # Calculate ports
     eval "$(_spoke_kas_get_ports "$code_upper")"
 
-    # Get URLs from config or generate defaults for LOCAL Docker development
+    # Get URLs from spoke_config_get or generate defaults for LOCAL Docker development
     local kas_url internal_kas_url idp_url
     local backend_port="${SPOKE_BACKEND_PORT:-14000}"
     local kas_port="${SPOKE_KAS_PORT:-10008}"
     local keycloak_https_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8451}"
 
-    if [ -f "$spoke_config" ]; then
-        kas_url=$(jq -r '.endpoints.kas // empty' "$spoke_config" 2>/dev/null)
-        idp_url=$(jq -r '.endpoints.idp // empty' "$spoke_config" 2>/dev/null)
-    fi
+    kas_url=$(spoke_config_get "$code_upper" "endpoints.kasUrl" "")
+    idp_url=$(spoke_config_get "$code_upper" "endpoints.idpPublicUrl" "")
 
     # Use localhost URLs for local Docker development (operational!)
     # External URLs would be: https://${code_lower}-kas.dive25.com for production

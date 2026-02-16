@@ -281,19 +281,17 @@ spoke_compose_get_spoke_id() {
         fi
     fi
     
-    # Priority 2: Check config.json
-    if [ -f "$target_dir/config.json" ]; then
-        local existing_id
-        existing_id=$(json_get_field "$target_dir/config.json" "spokeId" "")
-        if [ -n "$existing_id" ] && [[ ! "$existing_id" =~ ^spoke-.*-temp- ]] && [ "$existing_id" != "PENDING_REGISTRATION" ]; then
-            echo "$existing_id"
-            return
-        fi
+    # Priority 2: Check spoke_config_get (SSOT — reads from .env / env vars)
+    local code_upper="${code_lower^^}"
+    local config_id
+    config_id=$(spoke_config_get "$code_upper" "identity.spokeId" "")
+    if [ -n "$config_id" ] && [[ ! "$config_id" =~ ^spoke-.*-temp- ]] && [ "$config_id" != "PENDING_REGISTRATION" ]; then
+        echo "$config_id"
+        return
     fi
     
     # Priority 3: Query Hub MongoDB via API
     local hub_api="${HUB_URL:-https://localhost:4000}"
-    local code_upper="${code_lower^^}"
     local hub_spoke_id
     hub_spoke_id=$(curl -sk --max-time 5 "${hub_api}/api/federation/spokes?instanceCode=${code_upper}" 2>/dev/null | jq -r '.spokes[0].spokeId // empty' 2>/dev/null)
     if [ -n "$hub_spoke_id" ] && [ "$hub_spoke_id" != "null" ]; then
@@ -328,19 +326,10 @@ spoke_compose_get_instance_name() {
         return
     fi
 
-    # Try config file
-    local config_file="${DIVE_ROOT}/instances/$(lower "$code_upper")/config.json"
-    if [ -f "$config_file" ]; then
-        local name
-        name=$(json_get_field "$config_file" "name" "")
-        if [ -n "$name" ]; then
-            echo "$name"
-            return
-        fi
-    fi
-
-    # Default
-    echo "$code_upper Instance"
+    # Fallback: use spoke_config_get (SSOT)
+    local config_name
+    config_name=$(spoke_config_get "$code_upper" "identity.name" "$code_upper Instance")
+    echo "$config_name"
 }
 
 # =============================================================================

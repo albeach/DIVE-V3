@@ -226,16 +226,6 @@ REDIS_PASSWORD=TestRedis123!
 KEYCLOAK_URL=https://localhost:8443
 EOF
 
-    # Create minimal config.json
-    cat > "${test_dir}/config.json" << EOF
-{
-    "instanceCode": "${test_instance}",
-    "instanceName": "${test_instance} Test Instance",
-    "created": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-    "environment": "test"
-}
-EOF
-
     log_verbose "Test instance setup complete: $test_instance"
 }
 

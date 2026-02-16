@@ -256,11 +256,11 @@ spoke_teardown() {
     fi
 
     # Optional: Notify hub before teardown
-    if [ "$notify_hub" = "--notify-hub" ] && [ -f "$spoke_dir/config.json" ]; then
+    if [ "$notify_hub" = "--notify-hub" ] && [ -d "$spoke_dir" ]; then
         echo -e "${CYAN}Notifying Hub of teardown...${NC}"
-        # Extract hub URL and token if available
-        local hub_url=$(json_get_field "$spoke_dir/config.json" "hubUrl" "")
-        local spoke_id=$(json_get_field "$spoke_dir/config.json" "spokeId" "")
+        # Extract hub URL and spoke ID from spoke_config_get (SSOT)
+        local hub_url=$(spoke_config_get "$instance_code" "endpoints.hubUrl")
+        local spoke_id=$(spoke_config_get "$instance_code" "identity.spokeId")
 
         if [ -n "$hub_url" ] && [ -n "$spoke_id" ]; then
             # Try to notify hub (best effort)

@@ -7,12 +7,9 @@ WORKDIR /app
 # Install ca-certificates for proper TLS trust chain (mkcert support)
 RUN apk add --no-cache curl su-exec ca-certificates
 
-# Update npm to latest version for security and performance
-RUN npm install -g npm@latest
-
 # Install dependencies
 COPY package.json package-lock.json* ./
-RUN npm install
+RUN npm ci --no-audit --no-fund
 
 # Don't copy source code - it will be mounted as volume
 # This allows hot reload during development
@@ -22,12 +19,7 @@ RUN npm install
 RUN mkdir -p .next && \
     addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs && \
-    chown -R nextjs:nodejs /app
-
-# CRITICAL FIX: Named volume ownership
-# After npm install, ensure nextjs user owns node_modules
-# This fixes permission issues when using named volumes
-RUN chown -R nextjs:nodejs /app/node_modules
+    chown -R nextjs:nodejs /app/.next /app/node_modules
 
 # Install mkcert root CA into system trust store (Development Only)
 # This allows Node.js fetch() API to trust self-signed mkcert certificates
@@ -46,7 +38,8 @@ ENV PORT=3000
 ENV NODE_ENV=development
 # CRITICAL: Make Node.js fetch() API respect system CA trust store
 # This enables proper TLS verification with mkcert certificates
-ENV NODE_OPTIONS="--use-openssl-ca"
+# MEMORY LEAK FIX (2026-02-16): Limit heap to 512MB to prevent runaway memory growth
+ENV NODE_OPTIONS="--use-openssl-ca --max-old-space-size=512"
 
 # Copy entrypoint script for runtime CA installation
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
@@ -55,4 +48,3 @@ RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 # Development mode with hot reload
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["npm", "run", "dev"]
-

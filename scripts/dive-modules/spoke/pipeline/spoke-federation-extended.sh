@@ -41,21 +41,11 @@ spoke_federation_register_in_hub() {
     # ==========================================================================
 
     local hub_tfvars="${DIVE_ROOT}/terraform/hub/hub.tfvars"
-    local spoke_config="${DIVE_ROOT}/instances/${code_lower}/config.json"
 
-    if [ ! -f "$spoke_config" ]; then
-        log_error "Spoke config not found: $spoke_config"
-        return 1
-    fi
-
-    # Extract spoke details from config.json
-    local spoke_name=$(jq -r '.identity.name // "'"$code_upper"'"' "$spoke_config")
-
-    # CRITICAL FIX (2026-01-15): Port extraction was including leading newlines causing multi-line Terraform strings
-    # Root cause: grep -o can include newlines in output, tr -d only removes ':', not whitespace
-    # Solution: Use xargs to trim ALL whitespace (including newlines)
-    local spoke_keycloak_port=$(jq -r '.endpoints.idpPublicUrl // "https://localhost:8443"' "$spoke_config" | grep -o ':[0-9]*' | tr -d ':' | xargs)
-    local spoke_frontend_port=$(jq -r '.endpoints.baseUrl // "https://localhost:3000"' "$spoke_config" | grep -o ':[0-9]*' | tr -d ':' | xargs)
+    # Extract spoke details from SSOT (spoke_config_get)
+    local spoke_name=$(spoke_config_get "$instance_code" "identity.name" "$code_upper")
+    local spoke_keycloak_port=$(spoke_config_get "$instance_code" "ports.keycloak" "8443")
+    local spoke_frontend_port=$(spoke_config_get "$instance_code" "ports.frontend" "3000")
 
     # Build complete URLs as atomic strings (no variable expansion that could introduce newlines)
     local idp_url="https://localhost:${spoke_keycloak_port}"
@@ -386,14 +376,9 @@ spoke_federation_create_bidirectional() {
 
     log_verbose "DEBUG: Hub admin token retrieved successfully (${#hub_admin_token} chars)"
 
-    # Get spoke details
+    # Get spoke details from SSOT
     local spoke_keycloak_port
-    spoke_keycloak_port=$(jq -r '.endpoints.idpPublicUrl // ""' "${DIVE_ROOT}/instances/${code_lower}/config.json" | grep -o ':[0-9]*' | tr -d ':')
-
-    if [ -z "$spoke_keycloak_port" ]; then
-        log_error "Cannot determine spoke Keycloak port"
-        return 1
-    fi
+    spoke_keycloak_port=$(spoke_config_get "$instance_code" "ports.keycloak" "8443")
 
     # Source URLs (spoke)
     local source_public_url="https://localhost:${spoke_keycloak_port}"
@@ -746,21 +731,13 @@ spoke_federation_get_admin_token() {
 }
 
 ##
-# Update federation status in config.json
+# Update federation status (no-op: config.json writes replaced by DB state)
 ##
 spoke_federation_update_status() {
     local instance_code="$1"
     local status="$2"
 
-    local code_lower=$(lower "$instance_code")
-    local config_file="${DIVE_ROOT}/instances/${code_lower}/config.json"
-
-    if [ -f "$config_file" ]; then
-        # Update status in config.json
-        local temp_file=$(mktemp)
-        jq --arg status "$status" '.federation.status = $status' "$config_file" > "$temp_file"
-        mv "$temp_file" "$config_file"
-    fi
+    log_verbose "Federation status for $(upper "$instance_code"): $status"
 }
 
 export SPOKE_FEDERATION_EXTENDED_LOADED=1

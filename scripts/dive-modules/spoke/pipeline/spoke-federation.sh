@@ -417,24 +417,9 @@ _spoke_federation_verify_oidc_endpoints() {
 
     log_verbose "Starting OIDC endpoint verification for $instance_code (${max_oidc_retries} retries, ${oidc_timeout}s timeout)"
 
-    # Get spoke Keycloak port from instance config
+    # Get spoke Keycloak port from SSOT
     local spoke_kc_port
-    if [ -f "${DIVE_ROOT}/instances/${code_lower}/config.json" ]; then
-        # CRITICAL FIX: Check if json_get_field is available
-        if ! type json_get_field &>/dev/null; then
-            log_warn "json_get_field not available - using fallback port extraction"
-            # Fallback: grep directly from config.json
-            local idp_url=$(grep -o '"idpPublicUrl"[[:space:]]*:[[:space:]]*"[^"]*"' "${DIVE_ROOT}/instances/${code_lower}/config.json" | cut -d'"' -f4)
-            spoke_kc_port=$(echo "$idp_url" | grep -o ':[0-9]*' | tr -d ':\n\r')
-        else
-            local idp_url
-            idp_url=$(json_get_field "${DIVE_ROOT}/instances/${code_lower}/config.json" "endpoints.idpPublicUrl" "https://localhost:8443" | tr -d '\n\r')
-            # Extract port from URL
-            spoke_kc_port=$(echo "$idp_url" | grep -o ':[0-9]*' | tr -d ':\n\r')
-            log_verbose "DEBUG: Extracted port from config: spoke_kc_port=$spoke_kc_port (from idp_url=$idp_url)"
-        fi
-    fi
-    spoke_kc_port="${spoke_kc_port:-8443}"
+    spoke_kc_port=$(spoke_config_get "$instance_code" "ports.keycloak" "8443")
 
     log_verbose "DEBUG: Spoke Keycloak port: $spoke_kc_port"
 

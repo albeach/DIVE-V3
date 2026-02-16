@@ -1,0 +1,11 @@
+{
+  "instanceCode": "FRA",
+  "instanceName": "France",
+  "realm": "dive-v3-broker-fra",
+  "isHub": false,
+  "hubUrl": "https://dive-hub-backend:4000",
+  "deployment": {
+    "timestamp": "2026-02-16T03:50:00Z",
+    "version": "3.0.0"
+  }
+}

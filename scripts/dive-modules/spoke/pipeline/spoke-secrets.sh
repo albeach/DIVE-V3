@@ -811,29 +811,24 @@ spoke_secrets_sync_to_env() {
         log_verbose "Enabled federation CORS mode"
     fi
 
-    # Compute CORS_ALLOWED_ORIGINS from config.json (dynamic, not hardcoded)
+    # Compute CORS_ALLOWED_ORIGINS from SSOT (dynamic, not hardcoded)
     if ! grep -q "^CORS_ALLOWED_ORIGINS=" "$env_file" 2>/dev/null; then
-        local config_file="$spoke_dir/config.json"
-        if [ -f "$config_file" ]; then
-            # Extract all endpoint URLs from config.json
-            local base_url=$(jq -r '.endpoints.baseUrl // "https://localhost:3000"' "$config_file")
-            local api_url=$(jq -r '.endpoints.apiUrl // "https://localhost:4000"' "$config_file")
-            local idp_url=$(jq -r '.endpoints.idpUrl // "https://localhost:8443"' "$config_file")
-            local idp_public_url=$(jq -r '.endpoints.idpPublicUrl // ""' "$config_file")
+        # Extract all endpoint URLs from spoke_config_get
+        local base_url=$(spoke_config_get "$instance_code" "endpoints.baseUrl" "https://localhost:3000")
+        local api_url=$(spoke_config_get "$instance_code" "endpoints.apiUrl" "https://localhost:4000")
+        local idp_url=$(spoke_config_get "$instance_code" "endpoints.idpUrl" "https://localhost:8443")
+        local idp_public_url=$(spoke_config_get "$instance_code" "endpoints.idpPublicUrl")
 
-            # Build CORS origins list (unique values only)
-            local cors_origins="$base_url,$api_url,$idp_url"
-            [ -n "$idp_public_url" ] && cors_origins="$cors_origins,$idp_public_url"
+        # Build CORS origins list (unique values only)
+        local cors_origins="$base_url,$api_url,$idp_url"
+        [ -n "$idp_public_url" ] && cors_origins="$cors_origins,$idp_public_url"
 
-            # Add Hub URLs for federation
-            cors_origins="$cors_origins,https://localhost:3000,https://localhost:4000,https://localhost:8443"
+        # Add Hub URLs for federation
+        cors_origins="$cors_origins,https://localhost:3000,https://localhost:4000,https://localhost:8443"
 
-            echo "# Computed from config.json endpoints (auto-generated)" >> "$env_file"
-            echo "CORS_ALLOWED_ORIGINS=${cors_origins}" >> "$env_file"
-            log_verbose "Generated CORS_ALLOWED_ORIGINS from config.json endpoints"
-        else
-            log_verbose "config.json not found - CORS_ALLOWED_ORIGINS not generated"
-        fi
+        echo "# Computed from spoke config SSOT (auto-generated)" >> "$env_file"
+        echo "CORS_ALLOWED_ORIGINS=${cors_origins}" >> "$env_file"
+        log_verbose "Generated CORS_ALLOWED_ORIGINS from spoke config SSOT"
     fi
 
     # ==========================================================================

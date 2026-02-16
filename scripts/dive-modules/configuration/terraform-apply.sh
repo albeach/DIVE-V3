@@ -344,7 +344,7 @@ terraform_apply_acr_amr_ssot() {
 
     local failed_spokes=()
     for spoke_code in $spoke_instances; do
-        if [[ -f "${DIVE_ROOT}/instances/$spoke_code/config.json" ]]; then
+        if [[ -d "${DIVE_ROOT}/instances/$spoke_code" ]]; then
             log_info "  → Applying for Spoke: ${spoke_code^^}"
             if spoke_terraform_apply "${spoke_code^^}"; then
                 log_success "  ✅ ${spoke_code^^}"
@@ -363,7 +363,7 @@ terraform_apply_acr_amr_ssot() {
         echo "  1. Restart all instances:"
         echo "     ./dive hub restart"
         for spoke in $spoke_instances; do
-            if [[ -f "${DIVE_ROOT}/instances/$spoke/config.json" ]]; then
+            if [[ -d "${DIVE_ROOT}/instances/$spoke" ]]; then
                 echo "     ./dive --instance $spoke spoke restart"
             fi
         done

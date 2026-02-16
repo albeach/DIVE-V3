@@ -462,23 +462,18 @@ terraform_apply_spoke() {
             keycloak_url="https://localhost:${keycloak_port}"
             log_verbose "Discovered Keycloak URL from Docker: $keycloak_url (port: $keycloak_port)"
         else
-            log_warn "Could not determine Keycloak port from Docker, falling back to config.json"
+            log_warn "Could not determine Keycloak port from Docker, falling back to get_instance_ports"
         fi
     else
-        log_warn "Keycloak container not running, falling back to config.json"
+        log_warn "Keycloak container not running, falling back to get_instance_ports"
     fi
-    
-    # Fallback to config.json if Docker query failed
+
+    # Fallback to get_instance_ports (SSOT) if Docker query failed
     if [ -z "$keycloak_url" ]; then
-        local config_file="${DIVE_ROOT}/instances/${code_lower}/config.json"
-        if [ -f "$config_file" ]; then
-            local idp_public_url
-            idp_public_url=$(jq -r '.endpoints.idpPublicUrl // empty' "$config_file" 2>/dev/null)
-            
-            if [ -n "$idp_public_url" ] && [ "$idp_public_url" != "null" ] && [ "$idp_public_url" != "" ]; then
-                keycloak_url="$idp_public_url"
-                log_verbose "Using Keycloak URL from config.json (fallback): $keycloak_url"
-            fi
+        eval "$(get_instance_ports "$code_upper")"
+        if [ -n "${SPOKE_KEYCLOAK_HTTPS_PORT:-}" ]; then
+            keycloak_url="https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT}"
+            log_verbose "Using Keycloak URL from get_instance_ports (fallback): $keycloak_url"
         fi
     fi
     
@@ -493,7 +488,7 @@ terraform_apply_spoke() {
             -var="idp_url=${keycloak_url}" \
             -var="keycloak_url=${keycloak_url}"
     else
-        log_warn "Could not determine Keycloak URL from Docker or config.json"
+        log_warn "Could not determine Keycloak URL from Docker or get_instance_ports"
         log_warn "Terraform will use tfvars file values (may fail if incorrect)"
         terraform_apply "$TF_SPOKE_DIR" "$tfvars_file" -var="instance_code=${code_upper}"
     fi

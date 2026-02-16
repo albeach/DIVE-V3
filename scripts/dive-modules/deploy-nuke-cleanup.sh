@@ -229,26 +229,17 @@ _nuke_cleanup_state() {
         if [ "$target_type" = "spoke" ] && [ -n "$target_instance" ]; then
             local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
             local spoke_dir="${DIVE_ROOT}/instances/${instance_lower}"
-            if [ -f "$spoke_dir/config.json" ] && command -v jq &> /dev/null; then
-                jq 'del(.identity.registeredSpokeId) | .federation.status = "unregistered" | del(.federation.registeredAt)' \
-                    "$spoke_dir/config.json" > "$spoke_dir/config.json.tmp" && mv "$spoke_dir/config.json.tmp" "$spoke_dir/config.json"
-                rm -f "$spoke_dir/.federation-registered"
-                log_verbose "  Cleared registration for ${target_instance^^}"
-            fi
+            rm -f "$spoke_dir/.federation-registered"
+            log_verbose "  Cleared registration for ${target_instance^^}"
         else
             if [ -f "${DIVE_ROOT}/scripts/clear-stale-spoke-registration.sh" ]; then
                 bash "${DIVE_ROOT}/scripts/clear-stale-spoke-registration.sh" --all 2>/dev/null || log_warn "Could not clear spoke registrations"
             else
                 for spoke_dir in "${DIVE_ROOT}/instances"/*; do
-                    if [ -f "$spoke_dir/config.json" ]; then
+                    if [ -d "$spoke_dir" ]; then
                         local instance_code=$(basename "$spoke_dir" | tr '[:lower:]' '[:upper:]')
-                        if command -v jq &> /dev/null; then
-                            jq 'del(.identity.registeredSpokeId) | .federation.status = "unregistered" | del(.federation.registeredAt)' \
-                                "$spoke_dir/config.json" > "$spoke_dir/config.json.tmp" && \
-                                mv "$spoke_dir/config.json.tmp" "$spoke_dir/config.json"
-                            log_verbose "  Cleared registration for $instance_code"
-                        fi
                         rm -f "$spoke_dir/.federation-registered"
+                        log_verbose "  Cleared registration for $instance_code"
                     fi
                 done
             fi

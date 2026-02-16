@@ -484,7 +484,6 @@ backup_spoke() {
     fi
 
     # Configuration
-    cp "${DIVE_ROOT}/instances/${code_lower}/config.json" "${spoke_path}/" 2>/dev/null || true
     cp -r "${DIVE_ROOT}/instances/${code_lower}/certs" "${spoke_path}/" 2>/dev/null || true
 
     log_success "Spoke $code_upper backup complete"

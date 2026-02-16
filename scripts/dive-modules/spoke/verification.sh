@@ -52,17 +52,14 @@ spoke_verify() {
         return 1
     fi
 
-    # Load config
-    local config_file="$spoke_dir/config.json"
+    # Load config from spoke_config_get (SSOT) and .env
     local env_file="$spoke_dir/.env"
     local hub_url=""
     local spoke_id=""
     local spoke_token=""
 
-    if [ -f "$config_file" ]; then
-        hub_url=$(json_get_field "$config_file" "hubUrl" "")
-    fi
-    # In local/dev mode, always use localhost (config.json has Docker-internal hostname)
+    hub_url=$(spoke_config_get "$instance_code" "endpoints.hubUrl")
+    # In local/dev mode, always use localhost (spoke_config_get returns Docker-internal hostname)
     if [ "$ENVIRONMENT" = "local" ] || [ "$ENVIRONMENT" = "dev" ]; then
         hub_url="https://localhost:4000"
     else

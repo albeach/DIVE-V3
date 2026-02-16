@@ -175,24 +175,17 @@ export POSTGRES_VERSION="15"
 # =============================================================================
 # ENVIRONMENT SETUP
 # =============================================================================
-# Ensure Docker and other tools are in PATH for all execution contexts
+# Ensure Docker, Vault, and other tools are in PATH for all execution contexts
 # (main shell, subshells, background processes, etc.)
 
-# Add Docker to PATH if not already present (macOS Docker Desktop)
-if ! command -v docker &>/dev/null; then
-    # Common Docker Desktop locations
-    if [ -d "/Applications/Docker.app/Contents/Resources/bin" ]; then
-        export PATH="/Applications/Docker.app/Contents/Resources/bin:$PATH"
+# Add common tool directories to PATH if not already present
+# Note: We add these regardless of docker availability because other tools (vault, terraform) may be in these locations
+for _tool_dir in "/usr/local/bin" "/opt/homebrew/bin" "/Applications/Docker.app/Contents/Resources/bin"; do
+    if [ -d "$_tool_dir" ] && [[ ":$PATH:" != *":$_tool_dir:"* ]]; then
+        export PATH="$_tool_dir:$PATH"
     fi
-    # Homebrew location
-    if [ -d "/usr/local/bin" ]; then
-        export PATH="/usr/local/bin:$PATH"
-    fi
-    # Homebrew (Apple Silicon)
-    if [ -d "/opt/homebrew/bin" ]; then
-        export PATH="/opt/homebrew/bin:$PATH"
-    fi
-fi
+done
+unset _tool_dir
 
 # =============================================================================
 # LOAD NATO COUNTRIES DATABASE (SSOT for port offsets)
@@ -860,6 +853,98 @@ export -f _vault_is_dev_mode
 # Extract JSON field value using jq (BEST PRACTICE for grep pattern fix)
 # Falls back to grep if jq unavailable
 #
+# =============================================================================
+# spoke_config_get — Database SSOT spoke configuration helper
+# =============================================================================
+# Computes spoke configuration values from get_instance_ports() and env vars.
+# Hub MongoDB is the runtime SSOT; this function provides local computation
+# for shell scripts that run during deployment.
+#
+# Arguments:
+#   $1 - Instance code (e.g., FRA, USA, GBR)
+#   $2 - Field path (e.g., "ports.frontend", "endpoints.baseUrl")
+#   $3 - Default value (optional)
+#
+# Examples:
+#   frontend_port=$(spoke_config_get "FRA" "ports.frontend")
+#   hub_url=$(spoke_config_get "FRA" "endpoints.hubUrl")
+##
+spoke_config_get() {
+    local instance_code="$1"
+    local field="$2"
+    local default="${3:-}"
+
+    local code_upper=$(upper "$instance_code")
+    local code_lower=$(lower "$instance_code")
+
+    # Load port assignments from SSOT
+    eval "$(get_instance_ports "$code_upper")"
+
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    local env_file="$spoke_dir/.env"
+
+    case "$field" in
+        ports.frontend|frontend_port)
+            echo "${SPOKE_FRONTEND_PORT:-3000}" ;;
+        ports.backend|backend_port)
+            echo "${SPOKE_BACKEND_PORT:-4000}" ;;
+        ports.keycloak|keycloak_port)
+            echo "${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}" ;;
+        ports.kas|kas_port)
+            echo "${SPOKE_KAS_PORT:-9000}" ;;
+        identity.instanceCode)
+            echo "$code_upper" ;;
+        identity.name)
+            if [ -n "${NATO_COUNTRIES[$code_upper]:-}" ]; then
+                echo "${NATO_COUNTRIES[$code_upper]}" | cut -d'|' -f1
+            else
+                echo "${default:-$code_upper Instance}"
+            fi
+            ;;
+        identity.contactEmail)
+            if [ -f "$env_file" ]; then
+                local email
+                email=$(grep "^CONTACT_EMAIL=" "$env_file" 2>/dev/null | cut -d= -f2-)
+                [ -n "$email" ] && echo "$email" && return 0
+            fi
+            echo "${CONTACT_EMAIL:-admin@${code_lower}.dive25.com}" ;;
+        identity.spokeId|spokeId)
+            if [ -f "$env_file" ]; then
+                local sid
+                sid=$(grep "^SPOKE_ID=" "$env_file" 2>/dev/null | cut -d= -f2-)
+                [ -n "$sid" ] && echo "$sid" && return 0
+            fi
+            echo "${SPOKE_ID:-spoke-${code_lower}}" ;;
+        endpoints.hubUrl|hubUrl)
+            if [ -f "$env_file" ]; then
+                local hu
+                hu=$(grep "^HUB_URL=" "$env_file" 2>/dev/null | cut -d= -f2-)
+                [ -n "$hu" ] && echo "$hu" && return 0
+            fi
+            echo "${HUB_URL:-https://dive-hub-backend:4000}" ;;
+        endpoints.hubApiUrl)
+            local hub
+            hub=$(spoke_config_get "$instance_code" "endpoints.hubUrl")
+            echo "${hub}/api" ;;
+        endpoints.hubOpalUrl)
+            echo "https://dive-hub-opal-server:7002" ;;
+        endpoints.baseUrl|baseUrl)
+            echo "https://localhost:${SPOKE_FRONTEND_PORT:-3000}" ;;
+        endpoints.apiUrl|apiUrl)
+            echo "https://localhost:${SPOKE_BACKEND_PORT:-4000}" ;;
+        endpoints.idpUrl|idpUrl)
+            echo "https://dive-spoke-${code_lower}-keycloak:8443" ;;
+        endpoints.idpPublicUrl|idpPublicUrl)
+            echo "https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}" ;;
+        endpoints.kasUrl|kasUrl)
+            echo "https://localhost:${SPOKE_KAS_PORT:-9000}" ;;
+        federation.status)
+            echo "${default:-unregistered}" ;;
+        *)
+            echo "$default" ;;
+    esac
+}
+
 # CRITICAL FIX (2026-02-06): Replaces fragile grep patterns like:
 #   grep -o '"spokeId"[[:space:]]*:[[:space:]]*"[^"]*"'
 # which cause "brackets not balanced" errors on macOS BSD grep.

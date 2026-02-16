@@ -12,7 +12,7 @@ RUN apk add --no-cache bash curl docker-cli su-exec ca-certificates tzdata jq \
 
 # Install dependencies
 COPY package.json package-lock.json* ./
-RUN npm install && npm install -g npm@latest
+RUN npm ci --no-audit --no-fund
 
 # Don't copy source code - it will be mounted as volume
 # This allows hot reload during development
@@ -32,4 +32,3 @@ ENV CHOKIDAR_INTERVAL=1000
 
 # Development mode with hot reload (tsx watch)
 CMD ["npm", "run", "dev"]
-
