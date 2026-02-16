@@ -20,9 +20,9 @@
  * @date 2025-12-20
  */
 
-import { Collection, Db, MongoClient, ObjectId } from 'mongodb';
+import { Collection, Db, ObjectId } from 'mongodb';
 import { logger } from '../utils/logger';
-import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
 
 // ============================================
 // TYPES
@@ -147,9 +147,8 @@ class FederationAuditStore {
         if (this.initialized) return;
 
         try {
-            const client = new MongoClient(getMongoDBUrl());
-            await client.connect();
-            this.db = client.db(getMongoDBName());
+            await mongoSingleton.connect();
+            this.db = getDb();
             this.collection = this.db.collection<IFederationAuditEntry>(COLLECTION_NAME);
 
             // Create indexes for efficient querying

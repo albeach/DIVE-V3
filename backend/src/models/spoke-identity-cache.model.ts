@@ -13,8 +13,9 @@
  * @date 2026-01-22
  */
 
-import { Collection, Db, MongoClient } from 'mongodb';
+import { Collection, Db } from 'mongodb';
 import { logger } from '../utils/logger';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
 
 // ============================================
 // INTERFACE
@@ -36,8 +37,6 @@ export interface ISpokeIdentityCache {
 // CONSTANTS
 // ============================================
 
-const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
-const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
 const COLLECTION_NAME = 'spoke_identity_cache';
 
 // ============================================
@@ -57,13 +56,11 @@ class SpokeIdentityCacheStore {
 
     try {
       logger.debug('Initializing Spoke Identity Cache Store', {
-        database: DB_NAME,
         collection: COLLECTION_NAME,
       });
 
-      const client = new MongoClient(MONGODB_URL);
-      await client.connect();
-      this.db = client.db(DB_NAME);
+      await mongoSingleton.connect();
+      this.db = getDb();
       this.collection = this.db.collection<ISpokeIdentityCache>(COLLECTION_NAME);
 
       // Create indexes

@@ -7,26 +7,15 @@
  */
 
 import { Request, Response } from 'express';
-import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
-import { MongoClient, Db } from 'mongodb';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
+import { Db } from 'mongodb';
 import { ClearanceEquivalencyDBService, IClearanceEquivalencyDocument } from '../services/clearance-equivalency-db.service';
 import { logger } from '../utils/logger';
 import { DiveClearanceLevel, NationalClearanceSystem } from '../services/clearance-mapper.service';
 
-// MongoDB connection singleton
-let mongoClient: MongoClient | null = null;
-let db: Db | null = null;
-
 async function getDatabase(): Promise<Db> {
-    if (!db) {
-        const mongoUrl = getMongoDBUrl();
-        const dbName = getMongoDBName();
-        mongoClient = new MongoClient(mongoUrl);
-        await mongoClient.connect();
-        db = mongoClient.db(dbName);
-        logger.info('Clearance management controller: MongoDB connected', { dbName });
-    }
-    return db;
+    await mongoSingleton.connect();
+    return getDb();
 }
 
 /**
