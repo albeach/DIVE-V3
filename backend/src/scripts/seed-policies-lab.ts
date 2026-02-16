@@ -7,8 +7,8 @@
  * Run: npx tsx src/scripts/seed-policies-lab.ts
  */
 
-import { MongoClient } from 'mongodb';
 import crypto from 'crypto';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
 
 // CRITICAL: No hardcoded passwords - use MONGODB_URL from GCP Secret Manager
 const MONGODB_URL = process.env.MONGODB_URL || (() => { throw new Error('MONGODB_URL not set'); })();
@@ -266,13 +266,11 @@ function createPolicyUpload(
 async function seedPoliciesLab() {
     console.log('🌱 Seeding Policies Lab with sample policies...\n');
 
-    const client = new MongoClient(MONGODB_URL);
-
     try {
-        await client.connect();
+        await mongoSingleton.connect();
         console.log('✅ Connected to MongoDB\n');
 
-        const db = client.db(DB_NAME);
+        const db = getDb();
         const collection = db.collection(COLLECTION_NAME);
 
         // Clear existing sample policies (owned by system-examples)
@@ -332,8 +330,8 @@ async function seedPoliciesLab() {
         console.error('❌ Error seeding Policies Lab:', error);
         process.exit(1);
     } finally {
-        await client.close();
-        console.log('✅ MongoDB connection closed');
+        // Singleton manages lifecycle - no need to close
+        console.log('✅ Seeding cleanup complete');
     }
 }
 

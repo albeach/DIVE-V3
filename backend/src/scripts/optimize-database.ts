@@ -17,8 +17,9 @@
  * - Improved performance under load
  */
 
-import { MongoClient, Db } from 'mongodb';
+import { Db } from 'mongodb';
 import dotenv from 'dotenv';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
 
 // Load environment variables
 dotenv.config();
@@ -274,15 +275,12 @@ async function optimizeDatabase(): Promise<void> {
     console.log('╚═════════════════════════════════════════════════════════╝');
     console.log(`\nConnecting to: ${MONGODB_URI}\n`);
 
-    let client: MongoClient | null = null;
-
     try {
-        // Connect to MongoDB
-        client = new MongoClient(MONGODB_URI);
-        await client.connect();
+        // Connect to MongoDB singleton
+        await mongoSingleton.connect();
         console.log('✅ Connected to MongoDB\n');
 
-        const db = client.db();
+        const db = getDb();
 
         // Create indexes for each collection
         for (const [collectionName, indexes] of Object.entries(INDEX_DEFINITIONS)) {
@@ -309,10 +307,8 @@ async function optimizeDatabase(): Promise<void> {
         console.error('\n❌ Error during optimization:', error);
         process.exit(1);
     } finally {
-        if (client) {
-            await client.close();
-            console.log('Disconnected from MongoDB\n');
-        }
+        // Singleton manages lifecycle - no need to close
+        console.log('Optimization cleanup complete\n');
     }
 }
 

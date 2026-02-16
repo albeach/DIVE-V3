@@ -21,10 +21,10 @@
  * @date 2026-02-03
  */
 
-import { MongoClient } from 'mongodb';
 import axios from 'axios';
 import https from 'https';
 import { logger } from '../utils/logger';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
 
 // Environment configuration
 const MONGODB_URL = process.env.MONGODB_URL || (() => { throw new Error('MONGODB_URL not set'); })();
@@ -105,14 +105,12 @@ async function main() {
         process.exit(1);
     }
 
-    // Step 2: Connect to spoke's MongoDB
-    const client = new MongoClient(MONGODB_URL);
-
+    // Step 2: Connect to spoke's MongoDB singleton
     try {
-        await client.connect();
+        await mongoSingleton.connect();
         console.log('✅ Connected to spoke MongoDB\n');
 
-        const db = client.db(DB_NAME);
+        const db = getDb();
         const collection = db.collection('coi_definitions');
 
         // Step 3: Drop existing collection (fresh sync)
@@ -193,8 +191,8 @@ async function main() {
         console.error('❌ Error syncing COI definitions:', error);
         process.exit(1);
     } finally {
-        await client.close();
-        console.log('👋 MongoDB connection closed\n');
+        // Singleton manages lifecycle - no need to close
+        console.log('👋 Sync cleanup complete\n');
     }
 }
 

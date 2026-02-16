@@ -11,11 +11,11 @@
  *   --resource-id=<id>: Migrate only specific resource (for testing)
  */
 
-import { MongoClient } from 'mongodb';
 import { IResource } from '../services/resource.service';
 import { IZTDFResource } from '../types/ztdf.types';
 import { migrateLegacyResourceToZTDF, validateZTDFIntegrity } from '../utils/ztdf.utils';
 import { logger } from '../utils/logger';
+import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
 
 const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
 const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
@@ -123,17 +123,14 @@ async function runMigration() {
         database: DB_NAME
     });
 
-    let client: MongoClient | null = null;
-
     try {
         // ============================================
-        // 1. Connect to MongoDB
+        // 1. Connect to MongoDB singleton
         // ============================================
-        client = new MongoClient(MONGODB_URL);
-        await client.connect();
+        await mongoSingleton.connect();
         logger.info('Connected to MongoDB');
 
-        const db = client.db(DB_NAME);
+        const db = getDb();
         const collection = db.collection<IResource>(COLLECTION_NAME);
 
         // ============================================
@@ -256,10 +253,8 @@ async function runMigration() {
         process.exit(1);
 
     } finally {
-        if (client) {
-            await client.close();
-            logger.info('MongoDB connection closed');
-        }
+        // Singleton manages lifecycle - no need to close
+        logger.info('Migration cleanup complete');
     }
 }
 
