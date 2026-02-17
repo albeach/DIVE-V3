@@ -34,9 +34,10 @@ export async function POST(request: NextRequest) {
         validatedBody = validateSessionRefreshRequest(body);
     } catch (error) {
         if (error instanceof z.ZodError) {
+            const validationErrors = error.issues;
             console.error('[SessionRefresh] Validation error:', {
                 requestId,
-                errors: error.errors
+                errors: validationErrors
             });
             return NextResponse.json(
                 {
@@ -45,7 +46,7 @@ export async function POST(request: NextRequest) {
                     message: 'Invalid request body',
                     details: {
                         code: 'INVALID_REQUEST_BODY',
-                        validationErrors: error.errors
+                        validationErrors
                     }
                 },
                 { status: 400 }
