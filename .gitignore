@@ -24,6 +24,46 @@ resources/
 #/resources/
 
 ##########
+# Handoff documents (session-specific, not source code)
+##########
+**/HANDOFF*.md
+**/handoff*.md
+**/SESSION-HANDOFF*.md
+**/*CONTINUATION_HANDOFF*.md
+**/*COMPLETION_HANDOFF*.md
+**/*IMPLEMENTATION-HANDOFF*.md
+
+##########
+# Archived files (should stay local only)
+##########
+**/*.archived
+**/archived/
+keycloak/realms/archived/
+
+##########
+# Diagnostic screenshots (debug artifacts)
+##########
+frontend/*.png
+frontend/*.jpg
+
+##########
+# One-off debug/fix test scripts
+##########
+scripts/test-*-fix.sh
+scripts/audit-*.sh
+tests/**/test-*-fixes.sh
+tests/**/test-*-fix.sh
+
+##########
+# Large media files (use LFS or external storage)
+##########
+**/*.mp4
+**/*.mp3
+**/*.m4a
+**/*.avi
+**/*.mov
+
+##########
 # Docs: keep README(s), ignore local-only notes
 ##########
 docs/*.md
@@ -127,6 +167,10 @@ out/
 build/
 dist/
 
+# TypeScript build info
+*.tsbuildinfo
+**/*.tsbuildinfo
+
 # SWC cache (you have frontend/.swc in tree)
 .swc/
 **/.swc/
@@ -181,8 +225,15 @@ Thumbs.db
 **/*.p7b
 **/*.p7c
 **/*.csr
+**/*.srl
 mongo-keyfile
 **/mongo-keyfile
+
+# Allow test fixture certs (needed for unit tests)
+!backend/src/__tests__/__fixtures__/**/*.crt
+
+# OPAL master token (NEVER commit)
+certs/opal/master_token.txt
 
 # Explicit instance cert locations (belt + suspenders)
 instances/*/certs/
@@ -198,6 +249,8 @@ instances/*/.secret-hash
 instances/*/.env
 instances/*/.env.*
 instances/*/docker-compose.yml
+instances/*/verification-report.json
+instances/*/config.json
 
 # Pilot spoke selection cache
 .pilot-spoke
@@ -235,6 +288,7 @@ cloudflared/tunnel-credentials.json
 *.tfstate.*
 *.tfplan
 *.plan
+*.auto.tfvars
 terraform/crash.log
 terraform/crash.*.log
 terraform/*.tfvars
@@ -242,6 +296,7 @@ terraform/*.tfvars.json
 terraform/instances/*.tfvars
 terraform/instances/*.tfplan
 terraform/tfplan*
+**/tfplan
 .terraform.lock.hcl
 
 # Exceptions
