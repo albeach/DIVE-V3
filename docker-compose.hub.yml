@@ -516,7 +516,7 @@ services:
       # OLD: mongosh creates new connection every 10s (8,640 connections/day)
       # NEW: TCP socket check (zero MongoDB connections)
       # IMPACT: Eliminates health check connection overhead entirely
-      test: ["CMD-SHELL", "nc -z localhost 27017 || exit 1"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/27017'"]
       interval: 10s
       timeout: 5s
       retries: 15

@@ -599,6 +599,9 @@ async function main(): Promise<void> {
     console.log('     curl -sk -X POST https://localhost:4000/api/resources/federated-query -d \'{"instances":["USA","FRA"]}\'');
     console.log('');
 
+    // Explicitly exit — MongoDB singleton keeps event loop alive
+    process.exit(0);
+
   } catch (error) {
     console.error('');
     console.error('='.repeat(80));

@@ -51,7 +51,7 @@ services:
     environment:
       MONGO_INITDB_ROOT_USERNAME: admin
     healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 27017 || exit 1"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/27017'"]
       interval: 10s
       timeout: 5s
       retries: 5

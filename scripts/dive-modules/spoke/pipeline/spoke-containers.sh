@@ -217,31 +217,33 @@ spoke_containers_start() {
     log_info "Pre-pulling Docker images in parallel..."
     local pull_start=$(date +%s)
 
-    # Start pull in background to continue with preparation
-    if $compose_cmd pull --quiet --ignore-pull-failures 2>/dev/null & then
-        local pull_pid=$!
-        log_verbose "Image pull started (PID: $pull_pid)"
+    # Start pull in background so we can enforce a timeout
+    $compose_cmd pull --quiet --ignore-pull-failures 2>/dev/null &
+    local pull_pid=$!
+    log_verbose "Image pull started (PID: $pull_pid)"
 
-        # Wait for pull with timeout
-        local pull_timeout=120
-        local pull_waited=0
-        while kill -0 $pull_pid 2>/dev/null && [ $pull_waited -lt $pull_timeout ]; do
-            sleep 2
-            pull_waited=$((pull_waited + 2))
-        done
+    # Wait for pull with timeout
+    local pull_timeout=120
+    local pull_waited=0
+    while kill -0 $pull_pid 2>/dev/null && [ $pull_waited -lt $pull_timeout ]; do
+        sleep 2
+        pull_waited=$((pull_waited + 2))
+    done
 
-        # Check if pull completed
-        if kill -0 $pull_pid 2>/dev/null; then
-            log_verbose "Image pull still running after ${pull_timeout}s, continuing anyway"
-            # Don't kill - let it finish in background
-        else
-            wait $pull_pid 2>/dev/null
-            local pull_end=$(date +%s)
-            local pull_duration=$((pull_end - pull_start))
-            log_success "✓ Images pre-pulled in ${pull_duration}s"
-        fi
+    # Check if pull completed
+    if kill -0 $pull_pid 2>/dev/null; then
+        log_warn "Image pull still running after ${pull_timeout}s, continuing anyway"
+        # Don't kill - let it finish in background
     else
-        log_verbose "Image pull skipped (images likely cached)"
+        local pull_exit=0
+        wait $pull_pid 2>/dev/null || pull_exit=$?
+        local pull_end=$(date +%s)
+        local pull_duration=$((pull_end - pull_start))
+        if [ $pull_exit -eq 0 ]; then
+            log_success "✓ Images pre-pulled in ${pull_duration}s"
+        else
+            log_warn "Image pull completed with warnings (exit: $pull_exit, ${pull_duration}s) — cached images will be used"
+        fi
     fi
 
     # Stage 1: Start core infrastructure (postgres, redis, mongodb, opa)

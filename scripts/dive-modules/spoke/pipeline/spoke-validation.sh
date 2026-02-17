@@ -127,13 +127,41 @@ spoke_phase_mark_complete() {
 spoke_phase_clear() {
     local instance_code="$1"
     local phase="$2"
-    
+
     # Mark as pending in orchestration DB to force re-run
     if type orch_db_record_step &>/dev/null; then
         orch_db_record_step "$instance_code" "$phase" "PENDING" "Validation failed, will re-run" 2>/dev/null || true
     fi
-    
+
     return 0
+}
+
+##
+# Get the completion timestamp of a phase
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Phase name
+#
+# Returns:
+#   ISO 8601 timestamp on stdout, or empty string if not found
+##
+spoke_phase_get_timestamp() {
+    local instance_code="$1"
+    local phase="$2"
+
+    if type orch_db_check_connection &>/dev/null && orch_db_check_connection 2>/dev/null; then
+        local code_lower=$(lower "$instance_code")
+        local ts
+        ts=$(orch_db_exec "SELECT TO_CHAR(completed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') FROM deployment_steps WHERE instance_code = '${code_lower}' AND step_name = '${phase}' AND status = 'COMPLETED' ORDER BY completed_at DESC LIMIT 1;" 2>/dev/null | tr -d ' \n')
+        if [ -n "$ts" ] && [ "$ts" != "" ]; then
+            echo "$ts"
+            return 0
+        fi
+    fi
+
+    echo ""
+    return 1
 }
 
 # =============================================================================

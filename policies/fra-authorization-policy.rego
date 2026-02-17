@@ -17,13 +17,28 @@ default decision := {
 }
 
 # French clearance normalization mapping
+# Covers all French national classification variants (with/without accents, underscores, spaces)
 clearance_map := {
     "NON_PROTEGE": "UNCLASSIFIED",
+    "NON PROTEGE": "UNCLASSIFIED",
+    "NON PROTÉGÉ": "UNCLASSIFIED",
+    "NON CLASSIFIÉ": "UNCLASSIFIED",
+    "NON CLASSIFIE": "UNCLASSIFIED",
+    "NON_CLASSIFIE": "UNCLASSIFIED",
+    "DIFFUSION RESTREINTE": "RESTRICTED",
+    "DIFFUSION_RESTREINTE": "RESTRICTED",
     "CONFIDENTIEL_DEFENSE": "CONFIDENTIAL",
+    "CONFIDENTIEL DEFENSE": "CONFIDENTIAL",
+    "CONFIDENTIEL DÉFENSE": "CONFIDENTIAL",
     "SECRET_DEFENSE": "SECRET",
+    "SECRET DEFENSE": "SECRET",
+    "SECRET DÉFENSE": "SECRET",
     "TRES_SECRET_DEFENSE": "TOP_SECRET",
+    "TRES SECRET DEFENSE": "TOP_SECRET",
+    "TRÈS SECRET DÉFENSE": "TOP_SECRET",
     # Also support NATO standard terms
     "UNCLASSIFIED": "UNCLASSIFIED",
+    "RESTRICTED": "RESTRICTED",
     "CONFIDENTIAL": "CONFIDENTIAL",
     "SECRET": "SECRET",
     "TOP_SECRET": "TOP_SECRET"

@@ -77,7 +77,11 @@ spoke_phase_verification() {
             local checkpoint_age=$(spoke_phase_get_timestamp "$instance_code" "VERIFICATION" 2>/dev/null || echo "")
             if [ -n "$checkpoint_age" ]; then
                 local now=$(date +%s)
-                local checkpoint_ts=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$checkpoint_age" +%s 2>/dev/null || echo "0")
+                # Cross-platform ISO 8601 timestamp parsing (macOS + Linux)
+                local checkpoint_ts
+                checkpoint_ts=$(date -j -f "%Y-%m-%dT%H:%M:%SZ" "$checkpoint_age" +%s 2>/dev/null \
+                    || date -d "$checkpoint_age" +%s 2>/dev/null \
+                    || echo "0")
                 local age_seconds=$((now - checkpoint_ts))
 
                 # Only skip if verification was recent (< 5 minutes)

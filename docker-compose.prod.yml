@@ -191,7 +191,7 @@ services:
         max-file: "5"
     command: --tlsMode requireTLS --tlsCertificateKeyFile /certs/mongodb.pem --tlsCAFile /certs/ca.pem
     healthcheck:
-      test: ["CMD-SHELL", "nc -z localhost 27017 || exit 1"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/27017'"]
       interval: 15s
       timeout: 10s
       retries: 5

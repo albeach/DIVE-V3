@@ -105,6 +105,34 @@ default_classification_equivalency := {
 		"TOP SECRET": "COSMIC_TOP_SECRET",
 		"TOP_SECRET": "COSMIC_TOP_SECRET",
 	},
+	"FRA": {
+		"NON CLASSIFIÉ": "NATO_UNCLASSIFIED",
+		"NON CLASSIFIE": "NATO_UNCLASSIFIED",
+		"NON_CLASSIFIE": "NATO_UNCLASSIFIED",
+		"NON PROTÉGÉ": "NATO_UNCLASSIFIED",
+		"NON_PROTEGE": "NATO_UNCLASSIFIED",
+		"NON PROTEGE": "NATO_UNCLASSIFIED",
+		"UNCLASSIFIED": "NATO_UNCLASSIFIED",
+		"DIFFUSION RESTREINTE": "NATO_RESTRICTED",
+		"CONFIDENTIEL DÉFENSE": "NATO_CONFIDENTIAL",
+		"CONFIDENTIEL DEFENSE": "NATO_CONFIDENTIAL",
+		"CONFIDENTIEL_DEFENSE": "NATO_CONFIDENTIAL",
+		"SECRET DÉFENSE": "NATO_SECRET",
+		"SECRET DEFENSE": "NATO_SECRET",
+		"SECRET_DEFENSE": "NATO_SECRET",
+		"TRÈS SECRET DÉFENSE": "COSMIC_TOP_SECRET",
+		"TRES SECRET DEFENSE": "COSMIC_TOP_SECRET",
+		"TRES_SECRET_DEFENSE": "COSMIC_TOP_SECRET",
+	},
+	"DEU": {
+		"OFFEN": "NATO_UNCLASSIFIED",
+		"UNCLASSIFIED": "NATO_UNCLASSIFIED",
+		"VS-NUR FÜR DEN DIENSTGEBRAUCH": "NATO_RESTRICTED",
+		"VS-NFD": "NATO_RESTRICTED",
+		"VS-VERTRAULICH": "NATO_CONFIDENTIAL",
+		"GEHEIM": "NATO_SECRET",
+		"STRENG GEHEIM": "COSMIC_TOP_SECRET",
+	},
 	"NATO": {
 		"NATO UNCLASSIFIED": "NATO_UNCLASSIFIED",
 		"NATO RESTRICTED": "NATO_RESTRICTED",
@@ -115,13 +143,16 @@ default_classification_equivalency := {
 }
 
 # Use OPAL-provided data if available, otherwise use defaults
-classification_equivalency := data.classification_equivalency if {
+# OPAL data comes from backend API which wraps response in {success, classification_equivalency, count, timestamp}
+# Must unwrap the inner classification_equivalency object (same pattern as trusted_issuers in base.rego)
+classification_equivalency := data.classification_equivalency.classification_equivalency if {
+	data.classification_equivalency.classification_equivalency
+} else := data.classification_equivalency if {
+	# Fallback: Direct data without API wrapper (e.g., loaded from JSON file in tests)
 	data.classification_equivalency
-}
-
-classification_equivalency := default_classification_equivalency if {
-	not data.classification_equivalency
-}
+	is_object(data.classification_equivalency)
+	not data.classification_equivalency.success # Not an API response wrapper
+} else := default_classification_equivalency
 
 # ============================================
 # NATO to DIVE V3 Standard Mapping

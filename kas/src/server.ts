@@ -277,6 +277,8 @@ app.post('/request-key', async (req: Request, res: Response) => {
         // Extract user identity - handle both user tokens and service account tokens
         let uniqueID: string;
         let clearance: string;
+        let clearanceOriginal: string | undefined;  // ACP-240: Original national clearance
+        let clearanceCountry: string | undefined;    // ACP-240: Country that issued clearance
         let countryOfAffiliation: string;
         let dutyOrg: string | undefined;
         let orgUnit: string | undefined;
@@ -287,8 +289,11 @@ app.post('/request-key', async (req: Request, res: Response) => {
             // Service account token: extract user identity from request body (Issue B fix)
             const userIdentity = keyRequest.userIdentity as any;
             uniqueID = userIdentity.uniqueID || 'service-account-user';
-            clearance = normalizeClearanceLevel(userIdentity.clearance || 'UNCLASSIFIED');
+            const rawClearance = userIdentity.clearance || 'UNCLASSIFIED';
+            clearance = normalizeClearanceLevel(rawClearance);
+            clearanceOriginal = rawClearance !== clearance ? rawClearance : undefined;
             countryOfAffiliation = userIdentity.countryOfAffiliation || 'USA';
+            clearanceCountry = clearanceOriginal ? countryOfAffiliation : undefined;
             acpCOI = Array.isArray(userIdentity.acpCOI) ? userIdentity.acpCOI : [];
             dutyOrg = userIdentity.dutyOrg;
             orgUnit = userIdentity.orgUnit;
@@ -305,8 +310,11 @@ app.post('/request-key', async (req: Request, res: Response) => {
         } else {
             // Regular user token: extract from JWT claims
             uniqueID = decodedToken.uniqueID || decodedToken.preferred_username || decodedToken.sub || 'unknown';
-            clearance = normalizeClearanceLevel(decodedToken.clearance || 'UNCLASSIFIED');
+            const rawClearance = decodedToken.clearance || 'UNCLASSIFIED';
+            clearance = normalizeClearanceLevel(rawClearance);
+            clearanceOriginal = rawClearance !== clearance ? rawClearance : undefined;
             countryOfAffiliation = decodedToken.countryOfAffiliation || 'USA';
+            clearanceCountry = clearanceOriginal ? countryOfAffiliation : undefined;
             dutyOrg = decodedToken.dutyOrg;        // Gap #4: Organization attribute
             orgUnit = decodedToken.orgUnit;        // Gap #4: Organizational unit
 
@@ -429,6 +437,8 @@ app.post('/request-key', async (req: Request, res: Response) => {
                     authenticated: true,
                     uniqueID,
                     clearance,
+                    clearanceOriginal,   // ACP-240: Original national clearance for equivalency
+                    clearanceCountry,    // ACP-240: Country that issued clearance
                     countryOfAffiliation,
                     acpCOI: userCOI,  // ✅ Guaranteed array
                     dutyOrg,          // Gap #4: Organization attribute

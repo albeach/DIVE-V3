@@ -31,16 +31,18 @@ spoke_federation_register_in_hub() {
     log_step "Registering $code_upper in Hub Terraform configuration..."
 
     # ==========================================================================
-    # BEST PRACTICE: Update Hub Terraform configuration (SSOT)
+    # BEST PRACTICE: Update hub.auto.tfvars (not hub.tfvars)
     # ==========================================================================
-    # Instead of manually creating IdPs via Keycloak API, we update the Hub's
-    # Terraform configuration and apply it. This ensures:
-    # - Persistence across Hub redeployments
-    # - Proper client creation with protocol mappers
-    # - Consistent configuration management
+    # hub.tfvars is the static base config (empty federation_partners = {}).
+    # hub.auto.tfvars is auto-generated and overrides the base config.
+    # This aligns with MongoDB SSOT architecture:
+    #   - Spoke deploys → registers with Hub → MongoDB entry created
+    #   - Hub deployment → queries MongoDB → generates hub.auto.tfvars
+    #   - Spoke deployment (this path) → directly writes hub.auto.tfvars
+    # Terraform automatically loads *.auto.tfvars, overriding hub.tfvars.
     # ==========================================================================
 
-    local hub_tfvars="${DIVE_ROOT}/terraform/hub/hub.tfvars"
+    local hub_auto_tfvars="${DIVE_ROOT}/terraform/hub/hub.auto.tfvars"
 
     # Extract spoke details from SSOT (spoke_config_get)
     local spoke_name=$(spoke_config_get "$instance_code" "identity.name" "$code_upper")
@@ -51,12 +53,11 @@ spoke_federation_register_in_hub() {
     local idp_url="https://localhost:${spoke_keycloak_port}"
     local frontend_url="https://localhost:${spoke_frontend_port}"
 
-    # Check if already in tfvars (specifically in federation_partners block)
-    # Use a more precise check that looks for the key assignment, not just the string
-    if grep -E "^\s*${code_lower}\s*=" "$hub_tfvars" 2>/dev/null | grep -v "^#" | head -1 | grep -q .; then
-        log_info "$code_upper already in Hub Terraform configuration (federation_partners)"
+    # Check if already in auto.tfvars (specifically in federation_partners block)
+    if [ -f "$hub_auto_tfvars" ] && grep -E "^\s*${code_lower}\s*=" "$hub_auto_tfvars" 2>/dev/null | grep -v "^#" | head -1 | grep -q .; then
+        log_info "$code_upper already in hub.auto.tfvars (federation_partners)"
     else
-        log_step "Adding $code_upper to Hub federation_partners..."
+        log_step "Adding $code_upper to hub.auto.tfvars federation_partners..."
 
         # Create federation partner entry (using pre-built URL variables)
         local federation_entry="  ${code_lower} = {
@@ -70,20 +71,19 @@ spoke_federation_register_in_hub() {
     disable_trust_manager = true
   }"
 
-        # Backup tfvars
-        cp "$hub_tfvars" "${hub_tfvars}.backup-$(date +%Y%m%d-%H%M%S)"
-
-        # Write entry to temp file for safe multi-line handling (no quotes = variable expansion)
-        cat > "${hub_tfvars}.entry" << ENTRY_EOF
+        # Write entry to temp file for safe multi-line handling
+        cat > "${hub_auto_tfvars}.entry" << ENTRY_EOF
 $federation_entry
 ENTRY_EOF
 
-        # Use Python for reliable multi-line insertion (safer than sed/awk)
-        python3 - "$hub_tfvars" "${hub_tfvars}.entry" "$code_lower" << 'PYTHON_EOF'
+        # Use Python for reliable hub.auto.tfvars creation/update
+        python3 - "$hub_auto_tfvars" "${hub_auto_tfvars}.entry" "$code_lower" << 'PYTHON_EOF'
 import sys
 import re
+import os
+from datetime import datetime, timezone
 
-hub_tfvars = sys.argv[1]
+auto_tfvars = sys.argv[1]
 entry_file = sys.argv[2]
 code_lower = sys.argv[3]
 
@@ -91,8 +91,33 @@ code_lower = sys.argv[3]
 with open(entry_file, 'r') as f:
     entry = f.read().strip()
 
-# Read tfvars
-with open(hub_tfvars, 'r') as f:
+# If hub.auto.tfvars doesn't exist, create it with a fresh federation_partners block
+if not os.path.exists(auto_tfvars):
+    timestamp = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+    content = f"""# =============================================================================
+# DIVE V3 Hub - Auto-Generated Federation Partners
+# =============================================================================
+# Auto-generated on {timestamp}
+# Source: Spoke deployment registration
+#
+# DO NOT EDIT MANUALLY - This file is automatically regenerated when:
+#   1. A spoke is deployed (spoke_federation_register_in_hub)
+#   2. Hub deployment queries MongoDB (generateHubAutoTfvars)
+#
+# Terraform automatically loads *.auto.tfvars, overriding hub.tfvars
+# =============================================================================
+
+federation_partners = {{
+{entry}
+}}
+"""
+    with open(auto_tfvars, 'w') as f:
+        f.write(content)
+    print(f"✓ Created hub.auto.tfvars with {code_lower.upper()}")
+    sys.exit(0)
+
+# File exists — read and update
+with open(auto_tfvars, 'r') as f:
     content = f.read()
     lines = content.splitlines(keepends=True)
 
@@ -110,47 +135,46 @@ for i, line in enumerate(lines):
         break
 
 if fed_start is None:
-    print(f"ERROR: federation_partners block not found", file=sys.stderr)
-    sys.exit(1)
-
-# Check if empty map
-if lines[fed_start].strip() == 'federation_partners = {}':
-    # Replace entire line
-    lines[fed_start] = f'federation_partners = {{\n{entry}\n}}\n'
+    # No federation_partners block — append one
+    lines.append(f'\nfederation_partners = {{\n{entry}\n}}\n')
 else:
-    # Find matching closing brace
-    brace_count = 1
-    close_idx = None
-    for i in range(fed_start + 1, len(lines)):
-        stripped = lines[i].strip()
-        if stripped.startswith('#'):
-            continue
-        brace_count += stripped.count('{') - stripped.count('}')
-        if brace_count == 0:
-            close_idx = i
-            break
+    # Check if empty map on single line
+    if lines[fed_start].strip() == 'federation_partners = {}':
+        lines[fed_start] = f'federation_partners = {{\n{entry}\n}}\n'
+    else:
+        # Find matching closing brace
+        brace_count = 1
+        close_idx = None
+        for i in range(fed_start + 1, len(lines)):
+            stripped = lines[i].strip()
+            if stripped.startswith('#'):
+                continue
+            brace_count += stripped.count('{') - stripped.count('}')
+            if brace_count == 0:
+                close_idx = i
+                break
 
-    if close_idx is None:
-        print(f"ERROR: Could not find closing brace for federation_partners", file=sys.stderr)
-        sys.exit(1)
+        if close_idx is None:
+            print("ERROR: Could not find closing brace for federation_partners", file=sys.stderr)
+            sys.exit(1)
 
-    # Insert entry before closing brace
-    lines.insert(close_idx, f'{entry}\n')
+        # Insert entry before closing brace
+        lines.insert(close_idx, f'{entry}\n')
 
 # Write back
-with open(hub_tfvars, 'w') as f:
+with open(auto_tfvars, 'w') as f:
     f.writelines(lines)
 
 print(f"✓ Added {code_lower.upper()} to federation_partners")
 PYTHON_EOF
         local python_exit=$?
 
-        rm -f "${hub_tfvars}.entry"
+        rm -f "${hub_auto_tfvars}.entry"
 
         if [ $python_exit -eq 0 ]; then
-            log_success "Added $code_upper to Hub Terraform configuration"
+            log_success "Added $code_upper to hub.auto.tfvars"
         else
-            log_error "Failed to update Hub Terraform configuration"
+            log_error "Failed to update hub.auto.tfvars"
             return 1
         fi
     fi
@@ -731,7 +755,7 @@ spoke_federation_get_admin_token() {
 }
 
 ##
-# Update federation status (no-op: config.json writes replaced by DB state)
+# Update federation status (no-op: DB state is the SSOT)
 ##
 spoke_federation_update_status() {
     local instance_code="$1"

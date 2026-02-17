@@ -952,7 +952,7 @@ class FederatedResourceService {
         const paginatedResults = deduped.slice(offset, offset + limit);
 
         const response: IFederatedSearchResponse = {
-            totalResults: deduped.length,
+            totalResults: totalAccessible, // True total across all instances (from countDocuments)
             totalAccessible, // Sum of accessible docs from all instances
             results: paginatedResults,
             facets: mergedFacets,
@@ -1448,11 +1448,15 @@ class FederatedResourceService {
     }
 
     /**
-     * Apply ABAC filtering based on user attributes
+     * Apply ABAC filtering based on user attributes (safety net)
      *
-     * Note: Results from remote instances (via API) are NOT re-filtered here
-     * because the user already authenticated with the remote instance's ABAC.
-     * Only local MongoDB results need filtering.
+     * Primary ABAC filtering is done in the MongoDB query (searchInstance).
+     * Remote instance results are already ABAC-filtered by the remote instance.
+     * This is a defense-in-depth check for clearance and releasability only.
+     *
+     * COI is NOT filtered here — matches paginated-search.controller behavior.
+     * COI access is enforced when the user tries to ACCESS a specific resource,
+     * not at search time. The UI shows "COI may be required" badges instead.
      */
     private applyABACFilter(
         results: IFederatedSearchResult[],
@@ -1460,7 +1464,6 @@ class FederatedResourceService {
     ): IFederatedSearchResult[] {
         const userClearanceLevel = CLEARANCE_HIERARCHY[user.clearance] ?? 0;
         const userCountry = user.countryOfAffiliation;
-        const userCOIs = user.acpCOI || [];
 
         return results.filter(resource => {
             // Skip ABAC filtering for results from remote instances (API-based federation)
@@ -1480,14 +1483,6 @@ class FederatedResourceService {
                 !resource.releasabilityTo.includes('NATO') &&
                 !resource.releasabilityTo.includes('FVEY')) {
                 return false;
-            }
-
-            // Check COI (if resource has COI requirement, local results only)
-            if (resource.COI && resource.COI.length > 0) {
-                const hasCOI = resource.COI.some(coi => userCOIs.includes(coi));
-                if (!hasCOI) {
-                    return false;
-                }
             }
 
             return true;

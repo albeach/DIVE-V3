@@ -249,10 +249,25 @@ spoke_phase_configuration() {
 
     # Step 2.5: Federation setup (CRITICAL - required for SSO)
     # This runs AFTER registration so Hub API has already attempted bidirectional IdP creation.
-    # CRITICAL FIX (2026-02-11): Add delay to ensure Hub API completes IdP creation before CLI attempts
+    # CRITICAL FIX (2026-02-11): Wait for Hub API to complete IdP creation before CLI attempts
     # Previous issue: Both Hub API and CLI creating IdPs simultaneously caused Keycloak conflicts
     log_step "Waiting for Hub federation API to complete IdP creation..."
-    sleep 5  # Give Hub API time to complete bidirectional federation setup
+    local _fed_wait=0
+    local _fed_max_wait=15
+    while [ $_fed_wait -lt $_fed_max_wait ]; do
+        # Check if Hub Keycloak already has the spoke IdP (means API finished)
+        local _hub_kc="${HUB_KC_CONTAINER:-dive-hub-keycloak}"
+        if docker exec "$_hub_kc" curl -sf "http://localhost:8080/admin/realms/dive-v3-broker-usa/identity-provider/instances/${code_lower}-idp" \
+            -H "Authorization: Bearer $(spoke_federation_get_admin_token "$_hub_kc" 2>/dev/null)" 2>/dev/null | grep -q '"alias"'; then
+            log_verbose "Hub IdP for $code_lower already exists — proceeding"
+            break
+        fi
+        sleep 2
+        _fed_wait=$((_fed_wait + 2))
+    done
+    if [ $_fed_wait -ge $_fed_max_wait ]; then
+        log_verbose "Hub IdP not yet detected after ${_fed_max_wait}s — proceeding anyway (federation setup is idempotent)"
+    fi
 
     # spoke_federation_setup() is idempotent and will skip links that already exist
     # It checks if IdPs exist before attempting creation to avoid race conditions
@@ -333,16 +348,22 @@ spoke_phase_configuration() {
         return 0
     fi
 
-    # Give Keycloak a brief moment to load realm configuration after Terraform apply
+    # Wait for Keycloak to load realm configuration after Terraform apply
     # Keycloak caches realm configs, may need a moment to refresh
     log_verbose "Waiting for Keycloak to load realm configuration..."
-    sleep 3
-
-    # Validate realm is actually accessible (not just that Keycloak is running)
-    local realm_check
-    realm_check=$(docker exec "$kc_container" curl -sf \
-        "http://localhost:8080/realms/${realm_name}" 2>/dev/null | \
-        jq -r '.realm // empty' 2>/dev/null)
+    local realm_check=""
+    local _realm_wait=0
+    local _realm_max_wait=15
+    while [ $_realm_wait -lt $_realm_max_wait ]; do
+        realm_check=$(docker exec "$kc_container" curl -sf \
+            "http://localhost:8080/realms/${realm_name}" 2>/dev/null | \
+            jq -r '.realm // empty' 2>/dev/null)
+        if [ "$realm_check" = "$realm_name" ]; then
+            break
+        fi
+        sleep 2
+        _realm_wait=$((_realm_wait + 2))
+    done
 
     if [ "$realm_check" = "$realm_name" ]; then
         log_success "✓ Terraform validated: realm '$realm_name' is accessible"
@@ -609,7 +630,7 @@ EOF
                 # CRITICAL FIX (2026-01-22): Restart spoke backend to pick up new credentials
                 # ==========================================================================
                 # ROOT CAUSE: Backend container was started BEFORE registration, so it has
-                # the OLD spoke_id from config.json. Registration creates a NEW spoke_id in
+                # the OLD spoke_id from .env. Registration creates a NEW spoke_id in
                 # Hub MongoDB. Without restart, heartbeat fails because IDs don't match.
                 # FIX: Restart backend after .env is updated with new SPOKE_ID and SPOKE_TOKEN
                 # ==========================================================================
