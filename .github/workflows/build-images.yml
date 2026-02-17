@@ -176,6 +176,7 @@ jobs:
           scan-ref: '${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-frontend:${{ github.sha }}'
           format: 'sarif'
           output: 'trivy-frontend-results.sarif'
+          trivyignores: '.trivyignore'
           severity: 'HIGH,CRITICAL'
 
       - name: Security Scan Backend
@@ -185,6 +186,7 @@ jobs:
           scan-ref: '${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-backend:${{ github.sha }}'
           format: 'sarif'
           output: 'trivy-backend-results.sarif'
+          trivyignores: '.trivyignore'
           severity: 'HIGH,CRITICAL'
 
       - name: Security Scan Keycloak
@@ -194,6 +196,7 @@ jobs:
           scan-ref: '${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-keycloak:${{ github.sha }}'
           format: 'sarif'
           output: 'trivy-keycloak-results.sarif'
+          trivyignores: '.trivyignore'
           severity: 'HIGH,CRITICAL'
 
       - name: Security Scan KAS
@@ -203,6 +206,7 @@ jobs:
           scan-ref: '${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-kas:${{ github.sha }}'
           format: 'sarif'
           output: 'trivy-kas-results.sarif'
+          trivyignores: '.trivyignore'
           severity: 'HIGH,CRITICAL'
 
       - name: Upload Trivy scan results to GitHub Security tab

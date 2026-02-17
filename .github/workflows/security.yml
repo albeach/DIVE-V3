@@ -134,6 +134,7 @@ jobs:
           image-ref: dive-v3-${{ matrix.service }}:test
           format: 'sarif'
           output: 'trivy-results.sarif'
+          trivyignores: '.trivyignore'
       
       - name: Ensure Trivy SARIF exists
         if: always()
