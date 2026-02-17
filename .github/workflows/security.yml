@@ -71,12 +71,29 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for secret scanning
       
-      - name: TruffleHog Secret Scan
+      - name: TruffleHog Secret Scan (pull requests)
+        if: github.event_name == 'pull_request'
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.pull_request.base.sha }}
+          head: ${{ github.event.pull_request.head.sha }}
+          extra_args: --debug --only-verified
+
+      - name: TruffleHog Secret Scan (push)
+        if: github.event_name == 'push'
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
           base: ${{ github.event.before }}
           head: ${{ github.sha }}
+          extra_args: --debug --only-verified
+
+      - name: TruffleHog Secret Scan (scheduled full repository)
+        if: github.event_name == 'schedule'
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
           extra_args: --debug --only-verified
 
   docker-scan:
