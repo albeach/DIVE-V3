@@ -186,24 +186,106 @@ runs:
           fi
         done
 
-        # Create users from JSON input
-        echo '${{ inputs.keycloak-users }}' | jq -c '.[]' | while read -r user; do
+        # Disable first-login required actions that break unattended Playwright login.
+        for alias in UPDATE_PROFILE VERIFY_EMAIL; do
+          ACTION_JSON=$(curl -sk "https://localhost:8443/admin/realms/$REALM/authentication/required-actions" \
+            -H "Authorization: Bearer $TOKEN" | jq -c ".[] | select(.alias == \"$alias\")" | head -n1)
+          if [ -n "$ACTION_JSON" ]; then
+            curl -sk -X PUT "https://localhost:8443/admin/realms/$REALM/authentication/required-actions/$alias" \
+              -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+              -d "$(echo "$ACTION_JSON" | jq '.defaultAction=false')" >/dev/null 2>&1 || true
+            echo "::notice::Disabled default required action: $alias"
+          fi
+        done
+
+        upsert_user() {
+          local username="$1"
+          local password="$2"
+          local clearance="$3"
+          local coi_json="$4"
+          local first_name="$5"
+          local last_name="$6"
+          local email="$7"
+          local country="$8"
+
+          local user_payload
+          user_payload=$(jq -cn \
+            --arg username "$username" \
+            --arg first_name "$first_name" \
+            --arg last_name "$last_name" \
+            --arg email "$email" \
+            --arg clearance "$clearance" \
+            --arg country "$country" \
+            --argjson coi "$coi_json" \
+            '{
+              "username": $username,
+              "enabled": true,
+              "firstName": $first_name,
+              "lastName": $last_name,
+              "email": $email,
+              "emailVerified": true,
+              "requiredActions": [],
+              "attributes": {
+                "clearance": [$clearance],
+                "countryOfAffiliation": [$country],
+                "acpCOI": $coi
+              }
+            }')
+
+          curl -sk -X POST "https://localhost:8443/admin/realms/$REALM/users" \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d "$user_payload" >/dev/null 2>&1 || true
+
+          local user_id
+          user_id=$(curl -sk "https://localhost:8443/admin/realms/$REALM/users?username=$username&exact=true" \
+            -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id // empty')
+          if [ -z "$user_id" ]; then
+            echo "::error::Failed to resolve Keycloak user id for $username"
+            return 1
+          fi
+
+          local update_payload
+          update_payload=$(echo "$user_payload" | jq -c --arg id "$user_id" '. + {"id": $id}')
+          curl -sk -X PUT "https://localhost:8443/admin/realms/$REALM/users/$user_id" \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d "$update_payload" >/dev/null
+
+          curl -sk -X PUT "https://localhost:8443/admin/realms/$REALM/users/$user_id/reset-password" \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d "{\"type\":\"password\",\"value\":\"$password\",\"temporary\":false}" >/dev/null
+
+          local required_actions
+          required_actions=$(curl -sk "https://localhost:8443/admin/realms/$REALM/users/$user_id" \
+            -H "Authorization: Bearer $TOKEN" | jq -r '.requiredActions | join(",")')
+          if [ -n "$required_actions" ]; then
+            echo "::warning::User $username still has required actions: $required_actions"
+          fi
+
+          echo "::notice::Ensured user: $username ($clearance, $country)"
+        }
+
+        # Create users from JSON input (upsert + password reset for deterministic CI behavior)
+        if ! echo '${{ inputs.keycloak-users }}' | jq -c '.[]' | while read -r user; do
           username=$(echo "$user" | jq -r '.username')
           password=$(echo "$user" | jq -r '.password')
           clearance=$(echo "$user" | jq -r '.clearance')
           coi=$(echo "$user" | jq -c '.coi // []')
+          country=$(echo "$user" | jq -r '.countryOfAffiliation // "USA"')
+          first_name=$(echo "$user" | jq -r '.firstName // "Test"')
+          last_name=$(echo "$user" | jq -r '.lastName // "User"')
+          email=$(echo "$user" | jq -r '.email // empty')
+          if [ -z "$email" ]; then
+            email="${username}@dive-ci.test"
+          fi
 
-          curl -sk -X POST "https://localhost:8443/admin/realms/$REALM/users" \
-            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-            -d "{\"username\":\"$username\",\"enabled\":true,\"credentials\":[{\"type\":\"password\",\"value\":\"$password\",\"temporary\":false}],\"attributes\":{\"clearance\":[\"$clearance\"],\"countryOfAffiliation\":[\"USA\"],\"acpCOI\":$coi}}" || true
-
-          echo "::notice::Created user: $username ($clearance)"
-        done
+          upsert_user "$username" "$password" "$clearance" "$coi" "$first_name" "$last_name" "$email" "$country" || exit 1
+        done; then
+          echo "::error::Failed to provision one or more Keycloak test users"
+          exit 1
+        fi
 
         # Ensure baseline AAL1 test user exists for Playwright auth state generation.
-        curl -sk -X POST "https://localhost:8443/admin/realms/$REALM/users" \
-          -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-          -d "{\"username\":\"testuser-usa-1\",\"enabled\":true,\"credentials\":[{\"type\":\"password\",\"value\":\"TestUser2025!Pilot\",\"temporary\":false}],\"attributes\":{\"clearance\":[\"UNCLASSIFIED\"],\"countryOfAffiliation\":[\"USA\"],\"acpCOI\":[]}}" || true
+        upsert_user "testuser-usa-1" "TestUser2025!Pilot" "UNCLASSIFIED" "[]" "Test" "User" "testuser-usa-1@dive-ci.test" "USA"
         echo "::notice::Ensured baseline user: testuser-usa-1"
 
     - name: Setup PostgreSQL Schema
