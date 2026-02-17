@@ -198,7 +198,7 @@ export default function ApprovalsPage() {
             <div className="mb-8">
                 <div className="flex justify-between items-start">
                     <div>
-                        <h1 className="text-3xl font-bold text-gray-900">IdP Approvals</h1>
+                        <h1 data-testid="admin-heading" className="text-3xl font-bold text-gray-900">IdP Approvals</h1>
                         <p className="mt-2 text-sm text-gray-600">
                             Review and approve or reject pending identity provider submissions.
                         </p>

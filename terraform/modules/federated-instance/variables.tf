@@ -83,8 +83,8 @@ variable "test_user_password" {
   default     = null
 
   validation {
-    condition     = var.create_test_users == false || (var.test_user_password != null && length(var.test_user_password) >= 12)
-    error_message = "test_user_password must be set (>=12 chars) when create_test_users is true."
+    condition     = var.test_user_password == null || length(var.test_user_password) >= 12
+    error_message = "test_user_password must be null or at least 12 characters."
   }
 }
 

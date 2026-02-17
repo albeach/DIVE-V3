@@ -97,7 +97,7 @@ is_member(country, coi) if {
 
 # Check if user has COI access to resource (ALL mode)
 # User must have ALL required COI tags
-has_access_all(user_cois, resource_cois) if {
+has_access_all(_, resource_cois) if {
 	count(resource_cois) == 0
 }
 
@@ -110,7 +110,7 @@ has_access_all(user_cois, resource_cois) if {
 
 # Check if user has COI access to resource (ANY mode)
 # User must have at least ONE matching COI tag
-has_access_any(user_cois, resource_cois) if {
+has_access_any(_, resource_cois) if {
 	count(resource_cois) == 0
 }
 
@@ -143,7 +143,7 @@ has_access(user_cois, resource_cois, operator) if {
 # ============================================
 # Check if user's country is in the union of COI memberships
 
-country_in_coi_union(country, resource_cois) if {
+country_in_coi_union(_, resource_cois) if {
 	count(resource_cois) == 0
 }
 
@@ -209,4 +209,3 @@ coi_access_denied_msg(user_cois, resource_cois, operator) := msg if {
 unknown_coi_msg(coi) := msg if {
 	msg := sprintf("Unknown COI: '%s' is not a recognized Community of Interest", [coi])
 }
-

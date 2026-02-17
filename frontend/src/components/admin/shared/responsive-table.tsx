@@ -185,8 +185,8 @@ export function ResponsiveTable<T extends Record<string, unknown>>({
   // Empty state
   if (data.length === 0) {
     return (
-      <div className={`bg-white rounded-xl shadow-lg border border-slate-200 p-12 text-center ${className}`}>
-        <div className="text-gray-400 mb-2">
+      <div data-testid="admin-table" className={`bg-white rounded-xl shadow-lg border border-slate-200 p-12 text-center ${className}`}>
+        <div data-testid="empty-state" className="text-gray-400 mb-2">
           <MoreHorizontal className="w-12 h-12 mx-auto" />
         </div>
         <p className="text-gray-500">{emptyMessage}</p>
@@ -195,7 +195,7 @@ export function ResponsiveTable<T extends Record<string, unknown>>({
   }
 
   return (
-    <div className={`bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden ${className}`}>
+    <div data-testid="admin-table" className={`bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden ${className}`}>
       {/* Desktop Table */}
       <div className="hidden md:block overflow-x-auto">
         <table className="w-full">

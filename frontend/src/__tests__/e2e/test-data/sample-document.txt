@@ -1,0 +1,31 @@
+DIVE V3 Sample Document for E2E Testing
+==========================================
+
+CLASSIFICATION: UNCLASSIFIED
+
+Document ID: TEST-DOC-E2E-001
+Date: 2026-02-16
+Author: E2E Test Suite
+Country of Origin: USA
+
+PURPOSE
+-------
+This document is used by the DIVE V3 E2E test suite to verify document
+upload, classification, and access control workflows.
+
+CONTENT
+-------
+Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod
+tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim
+veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea
+commodo consequat.
+
+RELEASABILITY
+-------------
+REL TO: USA, GBR, CAN, AUS, NZL (FVEY)
+
+HANDLING INSTRUCTIONS
+---------------------
+This is a test document. No special handling required.
+
+END OF DOCUMENT

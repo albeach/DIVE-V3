@@ -80,7 +80,7 @@ log_violation() {
     local file="$2"
     local detail="$3"
 
-    ((TOTAL_VIOLATIONS++))
+    TOTAL_VIOLATIONS=$((TOTAL_VIOLATIONS + 1))
 
     echo -e "${RED}✗${NC} [$type] $file"
     if [[ "$VERBOSE" == "true" && -n "$detail" ]]; then
@@ -142,7 +142,8 @@ check_required_syntax() {
         [[ ! -f "$file" ]] && continue
 
         local rel_path="${file#$PROJECT_ROOT/}"
-        local dirname=$(basename "$spoke_dir")
+        local dirname
+        dirname=$(basename "$spoke_dir")
 
         # Skip hub/shared
         [[ "$dirname" == "hub" || "$dirname" == "shared" ]] && continue
@@ -174,7 +175,8 @@ check_source_files() {
         # Exclude test files - they may have dummy data
         while IFS= read -r match; do
             [[ -z "$match" ]] && continue
-            local file=$(echo "$match" | cut -d: -f1)
+            local file
+            file=$(echo "$match" | cut -d: -f1)
             local rel_path="${file#$PROJECT_ROOT/}"
 
             # Skip test files

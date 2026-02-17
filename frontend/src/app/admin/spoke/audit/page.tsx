@@ -238,7 +238,7 @@ export default function AuditPage() {
               <ArrowLeft className="w-5 h-5" />
             </Link>
             <div className="flex-1">
-              <h1 className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
+              <h1 data-testid="admin-heading" className="text-3xl font-bold text-slate-900 dark:text-white flex items-center gap-3">
                 <FileText className="w-8 h-8 text-blue-600" />
                 Audit Queue Management
               </h1>

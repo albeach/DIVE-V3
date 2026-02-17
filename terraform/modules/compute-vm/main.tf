@@ -57,6 +57,8 @@ resource "google_compute_instance" "vm" {
   )
 
   boot_disk {
+    disk_encryption_key_raw = var.disk_encryption_key_raw
+
     initialize_params {
       image = data.google_compute_image.ubuntu.self_link
       size  = var.disk_size_gb
@@ -77,6 +79,7 @@ resource "google_compute_instance" "vm" {
   metadata = {
     ssh-keys                  = var.ssh_public_key != "" ? "${var.ssh_user}:${var.ssh_public_key}" : null
     enable-oslogin            = var.enable_os_login ? "TRUE" : "FALSE"
+    block-project-ssh-keys    = "TRUE"
     google-logging-enabled    = "true"
     google-monitoring-enabled = "true"
   }
@@ -167,4 +170,3 @@ resource "google_compute_health_check" "vm_health" {
     request_path = var.health_check_path
   }
 }
-

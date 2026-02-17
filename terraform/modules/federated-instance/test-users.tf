@@ -111,13 +111,13 @@ locals {
 
   # Get country-specific clearances for this instance (fallback to NATO standard)
   instance_clearances = lookup(local.national_clearances, var.instance_code,
-    ["UNCLASSIFIED", "RESTRICTED", "CONFIDENTIAL", "SECRET", "TOP SECRET"])
+  ["UNCLASSIFIED", "RESTRICTED", "CONFIDENTIAL", "SECRET", "TOP SECRET"])
 
   # Clearance levels mapped to numbers (1=lowest, 5=highest)
   # UPDATED (2026-02-08): Use country-specific classifications
   clearance_levels = {
     "1" = {
-      clearance         = local.instance_clearances[0]  # UNCLASSIFIED equivalent
+      clearance         = local.instance_clearances[0] # UNCLASSIFIED equivalent
       coi               = []
       display_name      = "Level 1 - Unclassified"
       organization_type = "GOV"
@@ -125,7 +125,7 @@ locals {
       mfa_required      = false
     }
     "2" = {
-      clearance         = local.instance_clearances[1]  # RESTRICTED equivalent
+      clearance         = local.instance_clearances[1] # RESTRICTED equivalent
       coi               = []
       display_name      = "Level 2 - Restricted"
       organization_type = "GOV"
@@ -133,7 +133,7 @@ locals {
       mfa_required      = false
     }
     "3" = {
-      clearance         = local.instance_clearances[2]  # CONFIDENTIAL equivalent
+      clearance         = local.instance_clearances[2] # CONFIDENTIAL equivalent
       coi               = []
       display_name      = "Level 3 - Confidential"
       organization_type = "GOV"
@@ -141,7 +141,7 @@ locals {
       mfa_required      = true
     }
     "4" = {
-      clearance         = local.instance_clearances[3]  # SECRET equivalent
+      clearance         = local.instance_clearances[3] # SECRET equivalent
       coi               = ["NATO"]
       display_name      = "Level 4 - Secret"
       organization_type = "GOV"
@@ -149,7 +149,7 @@ locals {
       mfa_required      = true
     }
     "5" = {
-      clearance         = local.instance_clearances[4]  # TOP SECRET equivalent
+      clearance         = local.instance_clearances[4] # TOP SECRET equivalent
       coi               = ["FVEY", "NATO-COSMIC"]
       display_name      = "Level 5 - Top Secret"
       organization_type = "GOV"
@@ -164,8 +164,8 @@ locals {
     for level, config in local.clearance_levels : level => {
       # Deterministic pseudonym based on username hash
       # Formula: (sum of ASCII chars) mod array_length
-      username  = "testuser-${lower(var.instance_code)}-${level}"
-      adj_index = sum([for i, c in split("", "testuser-${lower(var.instance_code)}-${level}") : pow(31, i) * (try(tonumber(c), 0) == 0 ? (index(split("", "abcdefghijklmnopqrstuvwxyz-0123456789"), c) + 97) : tonumber(c) + 48)]) % length(local.ocean_adjectives)
+      username   = "testuser-${lower(var.instance_code)}-${level}"
+      adj_index  = sum([for i, c in split("", "testuser-${lower(var.instance_code)}-${level}") : pow(31, i) * (try(tonumber(c), 0) == 0 ? (index(split("", "abcdefghijklmnopqrstuvwxyz-0123456789"), c) + 97) : tonumber(c) + 48)]) % length(local.ocean_adjectives)
       noun_index = floor(sum([for i, c in split("", "testuser-${lower(var.instance_code)}-${level}") : pow(31, i) * (try(tonumber(c), 0) == 0 ? (index(split("", "abcdefghijklmnopqrstuvwxyz-0123456789"), c) + 97) : tonumber(c) + 48)]) / 256) % length(local.ocean_nouns)
     }
   }
@@ -179,21 +179,21 @@ locals {
       company_name  = "Booz Allen Hamilton"
       company_short = "bah"
       email_domain  = "bah.com"
-      clearance     = local.instance_clearances[3]  # SECRET equivalent
+      clearance     = local.instance_clearances[3] # SECRET equivalent
       coi           = ["NATO"]
     }
     "DEU" = {
       company_name  = "IABG"
       company_short = "iabg"
       email_domain  = "iabg.de"
-      clearance     = local.instance_clearances[3]  # SECRET equivalent (GEHEIM)
+      clearance     = local.instance_clearances[3] # SECRET equivalent (GEHEIM)
       coi           = ["NATO"]
     }
     "FRA" = {
       company_name  = "Thales"
       company_short = "thales"
       email_domain  = "thalesgroup.com"
-      clearance     = local.instance_clearances[3]  # SECRET equivalent (SECRET DÉFENSE)
+      clearance     = local.instance_clearances[3] # SECRET equivalent (SECRET DÉFENSE)
       coi           = ["NATO"]
     }
   }
@@ -286,7 +286,7 @@ resource "keycloak_user" "industry_partner" {
   email = "contractor.${local.this_industry_partner.company_short}@${local.this_industry_partner.email_domain}"
 
   # PII Minimization: Ocean-themed pseudonyms for contractors too
-  first_name = "Pacific"  # Neutral ocean for industry
+  first_name = "Pacific" # Neutral ocean for industry
   last_name  = local.ocean_nouns[(length(local.this_industry_partner.company_short) * 5) % length(local.ocean_nouns)]
 
   initial_password {
