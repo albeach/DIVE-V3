@@ -128,7 +128,6 @@ jobs:
       
       - name: Run Checkov
         id: checkov
-        continue-on-error: ${{ github.event_name == 'pull_request' }}
         uses: bridgecrewio/checkov-action@master
         with:
           directory: terraform
@@ -143,12 +142,12 @@ jobs:
           sarif_file: checkov-report.sarif
 
       - name: Report Checkov Outcome
-        if: github.event_name == 'pull_request' && always()
+        if: always()
         run: |
           if [ "${{ steps.checkov.outcome }}" = "success" ]; then
-            echo "✅ Checkov scan passed with no blocking findings" >> $GITHUB_STEP_SUMMARY
+            echo "✅ Checkov scan passed with no findings" >> $GITHUB_STEP_SUMMARY
           else
-            echo "⚠️ Checkov reported findings (non-blocking in PR workflow)." >> $GITHUB_STEP_SUMMARY
+            echo "❌ Checkov reported findings. Review the SARIF report for details." >> $GITHUB_STEP_SUMMARY
           fi
 
   code-quality:
