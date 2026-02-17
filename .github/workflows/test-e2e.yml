@@ -17,8 +17,8 @@ env:
   NEXTAUTH_URL: https://localhost:3000
   DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
   KEYCLOAK_URL: https://localhost:8443
-  KEYCLOAK_REALM: dive-v3-broker
-  KEYCLOAK_CLIENT_ID: dive-v3-broker
+  KEYCLOAK_REALM: dive-v3-broker-usa
+  KEYCLOAK_CLIENT_ID: dive-v3-broker-usa
   KEYCLOAK_CLIENT_SECRET: test-client-secret
   KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
   MONGODB_URL: mongodb://localhost:27017/dive-v3-test

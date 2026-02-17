@@ -382,7 +382,7 @@ export default function FederationStatisticsPage() {
           <div className="max-w-[1600px] mx-auto px-8 py-6">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
+                <h1 data-testid="admin-heading" className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
                   Federation Statistics
                 </h1>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
