@@ -24,7 +24,7 @@ import data.dive.authorization
 # =============================================================================
 
 test_guardrails_metadata_present if {
-	guardrails.metadata.package == "dive.base.guardrails"
+	guardrails.metadata["package"] == "dive.base.guardrails"
 	guardrails.metadata.version == "1.0.0"
 	guardrails.metadata.source == "hub"
 }
@@ -161,7 +161,7 @@ test_policy_version_accessible if {
 
 # Test that policy package is correctly named
 test_policy_package_naming if {
-	guardrails.metadata.package == "dive.base.guardrails"
+	guardrails.metadata["package"] == "dive.base.guardrails"
 }
 
 # =============================================================================
@@ -268,7 +268,6 @@ token_violation_exists(violations) if {
 	some v in violations
 	v.code == "TOKEN_LIFETIME_TOO_LONG"
 }
-
 
 
 
