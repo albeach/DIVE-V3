@@ -105,10 +105,28 @@ runs:
           exit 1
         fi
 
+        REALM="dive-v3-broker-usa"
+
         # Create realm
         curl -sk -X POST https://localhost:8443/admin/realms \
           -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-          -d '{"realm":"dive-v3-broker","enabled":true}' || true
+          -d "{\"realm\":\"$REALM\",\"enabled\":true}" || true
+
+        # Create OIDC client for NextAuth
+        curl -sk -X POST "https://localhost:8443/admin/realms/$REALM/clients" \
+          -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+          -d '{
+            "clientId": "dive-v3-broker-usa",
+            "enabled": true,
+            "protocol": "openid-connect",
+            "publicClient": false,
+            "secret": "test-client-secret",
+            "redirectUris": ["https://localhost:3000/*"],
+            "webOrigins": ["https://localhost:3000"],
+            "directAccessGrantsEnabled": true,
+            "standardFlowEnabled": true
+          }' || true
+        echo "::notice::OIDC client created in $REALM"
 
         # Create users from JSON input
         echo '${{ inputs.keycloak-users }}' | jq -c '.[]' | while read -r user; do
@@ -117,7 +135,7 @@ runs:
           clearance=$(echo "$user" | jq -r '.clearance')
           coi=$(echo "$user" | jq -c '.coi // []')
 
-          curl -sk -X POST "https://localhost:8443/admin/realms/dive-v3-broker/users" \
+          curl -sk -X POST "https://localhost:8443/admin/realms/$REALM/users" \
             -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
             -d "{\"username\":\"$username\",\"enabled\":true,\"credentials\":[{\"type\":\"password\",\"value\":\"$password\",\"temporary\":false}],\"attributes\":{\"clearance\":[\"$clearance\"],\"countryOfAffiliation\":[\"USA\"],\"acpCOI\":$coi}}" || true
 
@@ -185,8 +203,8 @@ runs:
         NEXTAUTH_SECRET: ${{ inputs.nextauth-secret }}
         DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
         KEYCLOAK_URL: https://localhost:8443
-        KEYCLOAK_REALM: dive-v3-broker
-        KEYCLOAK_CLIENT_ID: dive-v3-broker
+        KEYCLOAK_REALM: dive-v3-broker-usa
+        KEYCLOAK_CLIENT_ID: dive-v3-broker-usa
         KEYCLOAK_CLIENT_SECRET: test-client-secret
         KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
         MONGODB_URL: mongodb://localhost:27017/dive-v3-test

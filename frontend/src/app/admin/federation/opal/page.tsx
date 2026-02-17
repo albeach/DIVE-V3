@@ -260,7 +260,7 @@ export default function OPALDashboardPage() {
                 <Server className="w-8 h-8 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
+                <h1 data-testid="admin-heading" className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
                   OPAL Server Dashboard
                 </h1>
                 <p className="text-slate-600 dark:text-gray-400 text-sm sm:text-base">

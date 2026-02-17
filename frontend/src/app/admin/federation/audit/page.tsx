@@ -207,7 +207,7 @@ export default function FederationAuditPage() {
           <div className="max-w-[1800px] mx-auto px-8 py-6">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-3xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">
+                <h1 data-testid="admin-heading" className="text-3xl font-bold bg-gradient-to-r from-violet-600 to-purple-600 bg-clip-text text-transparent">
                   Federation Audit Logs
                 </h1>
                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">

@@ -11,11 +11,13 @@ export class AdminSpokePage {
   readonly auditQueueStatus: Locator;
   readonly policySyncStatus: Locator;
   readonly spokeStatusCard: Locator;
+  readonly spokeEntries: Locator;
 
   constructor(page: Page) {
     this.page = page;
     this.heading = page
       .getByRole('heading', { name: /spoke/i })
+      .or(page.getByRole('heading', { name: /spoke.*dashboard/i }))
       .or(page.getByRole('heading', { name: /spoke management/i }));
     this.maintenanceToggle = page
       .getByRole('switch', { name: /maintenance/i })
@@ -40,6 +42,10 @@ export class AdminSpokePage {
     this.spokeStatusCard = page
       .getByRole('region', { name: /spoke status/i })
       .or(page.locator('[data-testid="spoke-status-card"]'));
+    this.spokeEntries = page
+      .locator('[data-testid="spoke-entry"]')
+      .or(page.locator('[data-testid="spoke-status-card"]'))
+      .or(page.locator('.spoke-card'));
   }
 
   async goto(subRoute?: string) {
@@ -118,4 +124,19 @@ export class AdminSpokePage {
     const status = await this.getMaintenanceStatus();
     expect(status.toLowerCase()).toMatch(/inactive|disabled|off/i);
   }
+
+  async navigateToMaintenance() {
+    await this.goto('maintenance');
+  }
+
+  async navigateToFailover() {
+    await this.goto('failover');
+  }
+
+  async navigateToAudit() {
+    await this.goto('audit');
+  }
 }
+
+// Re-export as AdminSpokeOpsPage for backward compatibility
+export { AdminSpokePage as AdminSpokeOpsPage };

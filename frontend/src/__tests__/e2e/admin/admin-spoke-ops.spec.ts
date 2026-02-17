@@ -1,7 +1,7 @@
 import { test, expect } from '../fixtures/base-test';
 import { AUTH_STATE, hasAuthState } from '../fixtures/base-test';
 import { TEST_CONFIG } from '../fixtures/test-config';
-import { AdminSpokeOpsPage } from '../pages/AdminSpokeOpsPage';
+import { AdminSpokeOpsPage } from '../pages/AdminSpokePage';
 
 test.describe('Admin Spoke Operations', () => {
   // Use saved admin session if available
