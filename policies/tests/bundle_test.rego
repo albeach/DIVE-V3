@@ -17,7 +17,6 @@ package dive.bundle_test
 import rego.v1
 
 import data.dive.base.guardrails
-import data.dive.authorization
 
 # =============================================================================
 # BUNDLE METADATA TESTS
@@ -268,7 +267,6 @@ token_violation_exists(violations) if {
 	some v in violations
 	v.code == "TOKEN_LIFETIME_TOO_LONG"
 }
-
 
 
 

@@ -33,15 +33,8 @@ package dive.authz
 
 import rego.v1
 
-# Import base layer packages
-import data.dive.base.clearance as base_clearance
-import data.dive.base.coi as base_coi
-import data.dive.base.country as base_country
-import data.dive.base.time as base_time
-
 # Import organization layer
 import data.dive.org.nato.acp240
-import data.dive.org.nato.classification as nato_classification
 
 # Import tenant layer
 import data.dive.tenant.base as tenant_base

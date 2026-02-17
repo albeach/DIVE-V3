@@ -67,7 +67,7 @@ resource "keycloak_oidc_identity_provider" "federation_partner" {
   # 
   # Keycloak v26+ Best Practice: Use built-in "first broker login" flow
   # This is required for IdP mappers to execute with syncMode: FORCE
-  first_broker_login_flow_alias = "first broker login"  # Required for attribute import
+  first_broker_login_flow_alias = "first broker login" # Required for attribute import
 
   # Store tokens for later use
   store_token = true
@@ -79,7 +79,7 @@ resource "keycloak_oidc_identity_provider" "federation_partner" {
   # MFA Flow Binding - DISABLED for Federation (Trust Partner MFA)
   # Partner IdPs already enforce MFA (ACR/AMR claims in token)
   # Re-requiring MFA enrollment breaks UX and ignores partner security
-  post_broker_login_flow_alias = ""  # Empty = no post-broker flow
+  post_broker_login_flow_alias = "" # Empty = no post-broker flow
 
   # Extra config for attribute mapping
   extra_config = {

@@ -100,18 +100,18 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "uniqueID_mapper" {
   name            = "uniqueID-mapper"
 
   # CRITICAL: Explicit claim.name (SF-026 fix)
-  claim_name      = "uniqueID"
-  user_attribute  = "uniqueID"
+  claim_name     = "uniqueID"
+  user_attribute = "uniqueID"
 
   # Token inclusion
-  add_to_id_token      = true
-  add_to_access_token  = true
-  add_to_userinfo      = true
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
 
   # Single-valued attribute configuration
   claim_value_type     = "String"
   multivalued          = false
-  aggregate_attributes = true  # Extract first element if multi-valued in Keycloak
+  aggregate_attributes = true # Extract first element if multi-valued in Keycloak
 }
 
 resource "keycloak_openid_user_attribute_protocol_mapper" "clearance_mapper" {
@@ -120,12 +120,12 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "clearance_mapper" {
   name            = "clearance-mapper"
 
   # CRITICAL: Explicit claim.name
-  claim_name      = "clearance"
-  user_attribute  = "clearance"
+  claim_name     = "clearance"
+  user_attribute = "clearance"
 
-  add_to_id_token      = true
-  add_to_access_token  = true
-  add_to_userinfo      = true
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
 
   claim_value_type     = "String"
   multivalued          = false
@@ -141,12 +141,12 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "countryOfAffiliation_
   name            = "countryOfAffiliation-mapper"
 
   # CRITICAL: Explicit claim.name
-  claim_name      = "countryOfAffiliation"
-  user_attribute  = "countryOfAffiliation"
+  claim_name     = "countryOfAffiliation"
+  user_attribute = "countryOfAffiliation"
 
-  add_to_id_token      = true
-  add_to_access_token  = true
-  add_to_userinfo      = true
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
 
   claim_value_type     = "String"
   multivalued          = false
@@ -159,17 +159,17 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "acpCOI_mapper" {
   name            = "acpCOI-mapper"
 
   # CRITICAL: Explicit claim.name
-  claim_name      = "acpCOI"
-  user_attribute  = "acpCOI"
+  claim_name     = "acpCOI"
+  user_attribute = "acpCOI"
 
-  add_to_id_token      = true
-  add_to_access_token  = true
-  add_to_userinfo      = true
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
 
   # Multi-valued attribute configuration (array of COIs)
   claim_value_type     = "String"
   multivalued          = true
-  aggregate_attributes = false  # Keep as array, don't extract first element
+  aggregate_attributes = false # Keep as array, don't extract first element
 }
 
 resource "keycloak_openid_user_attribute_protocol_mapper" "user_amr_mapper" {
@@ -178,12 +178,12 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "user_amr_mapper" {
   name            = "user-amr-mapper"
 
   # CRITICAL: Outputs user_amr claim for Hub IdP mappers to read
-  claim_name      = "user_amr"  # Different claim name!
-  user_attribute  = "amr"       # Same user attribute
+  claim_name     = "user_amr" # Different claim name!
+  user_attribute = "amr"      # Same user attribute
 
-  add_to_id_token      = true
-  add_to_access_token  = true
-  add_to_userinfo      = true
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
 
   claim_value_type     = "String"
   multivalued          = true
@@ -196,12 +196,12 @@ resource "keycloak_openid_user_attribute_protocol_mapper" "user_acr_mapper" {
   name            = "user-acr-mapper"
 
   # CRITICAL: Outputs user_acr claim for Hub IdP mappers to read
-  claim_name      = "user_acr"  # Different claim name!
-  user_attribute  = "acr"       # Same user attribute
+  claim_name     = "user_acr" # Different claim name!
+  user_attribute = "acr"      # Same user attribute
 
-  add_to_id_token      = true
-  add_to_access_token  = true
-  add_to_userinfo      = true
+  add_to_id_token     = true
+  add_to_access_token = true
+  add_to_userinfo     = true
 
   claim_value_type     = "String"
   multivalued          = false
@@ -224,7 +224,7 @@ resource "keycloak_openid_client_default_scopes" "broker_client_dive_scopes" {
     "email",
     "roles",
     "web-origins",
-    "acr",  # Built-in Keycloak scope for authentication context
+    "acr", # Built-in Keycloak scope for authentication context
     # DIVE custom scopes - NOW MANAGED BY TERRAFORM
     keycloak_openid_client_scope.uniqueID.name,
     keycloak_openid_client_scope.clearance.name,

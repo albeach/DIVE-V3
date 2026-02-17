@@ -182,7 +182,7 @@ jobs:
       - name: Setup OPA
         uses: open-policy-agent/setup-opa@v2
         with:
-          version: latest
+          version: 1.12.3
 
       - name: Run Policy Tests
         run: |
@@ -250,7 +250,6 @@ jobs:
           else
             echo "❌ **Some tests failed** - Please review and fix issues" >> $GITHUB_STEP_SUMMARY
           fi
-
 
 
 
