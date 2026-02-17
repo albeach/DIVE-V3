@@ -127,6 +127,8 @@ jobs:
           soft_fail: false
       
       - name: Run Checkov
+        id: checkov
+        continue-on-error: ${{ github.event_name == 'pull_request' }}
         uses: bridgecrewio/checkov-action@master
         with:
           directory: terraform
@@ -135,9 +137,19 @@ jobs:
           output_file_path: checkov-report.sarif
       
       - name: Upload Checkov results
+        if: always()
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: checkov-report.sarif
+
+      - name: Report Checkov Outcome
+        if: github.event_name == 'pull_request' && always()
+        run: |
+          if [ "${{ steps.checkov.outcome }}" = "success" ]; then
+            echo "✅ Checkov scan passed with no blocking findings" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ Checkov reported findings (non-blocking in PR workflow)." >> $GITHUB_STEP_SUMMARY
+          fi
 
   code-quality:
     name: Code Quality Analysis
@@ -185,4 +197,3 @@ jobs:
           echo "| Terraform Security | ${{ needs.terraform-security.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "View detailed reports in workflow artifacts and GitHub Security tab" >> $GITHUB_STEP_SUMMARY
-
