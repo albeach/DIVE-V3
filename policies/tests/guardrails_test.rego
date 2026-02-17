@@ -397,7 +397,7 @@ test_all_critical_violations if {
 # =============================================================================
 
 test_metadata_exists if {
-	guardrails.metadata.package == "dive.base.guardrails"
+	guardrails.metadata["package"] == "dive.base.guardrails"
 	guardrails.metadata.version == "1.0.0"
 	guardrails.metadata.source == "hub"
 	guardrails.metadata.immutable == true
@@ -423,4 +423,3 @@ test_zero_session_hours_no_violation if {
 	}
 	count({v | v := violations[_]; v.code == "SESSION_TOO_LONG"}) == 0
 }
-
