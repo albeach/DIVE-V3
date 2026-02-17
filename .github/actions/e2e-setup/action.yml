@@ -1,0 +1,193 @@
+name: 'E2E Test Setup'
+description: 'Shared setup for DIVE V3 E2E test jobs: Node.js, deps, SSL, Keycloak, PostgreSQL, Playwright, Next.js HTTPS, optional OPA'
+
+inputs:
+  nextauth-secret:
+    description: 'NEXTAUTH_SECRET for the Next.js server'
+    required: true
+  keycloak-users:
+    description: 'JSON array of Keycloak user configs. Each: {"username":"...","password":"...","clearance":"...","coi":[...]}'
+    required: false
+    default: '[{"username":"admin-dive","password":"Admin123!","clearance":"TOP_SECRET","coi":[]},{"username":"testuser-unclass","password":"Unclass123!","clearance":"UNCLASSIFIED","coi":[]}]'
+  start-opa:
+    description: 'Whether to start OPA server (true/false)'
+    required: false
+    default: 'false'
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node.js 20
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install Frontend Dependencies
+      shell: bash
+      run: cd frontend && npm ci --legacy-peer-deps
+
+    - name: Generate SSL Certificates
+      shell: bash
+      run: |
+        mkdir -p ${{ github.workspace }}/frontend/certs \
+                 ${{ github.workspace }}/keycloak-certs \
+                 ${{ github.workspace }}/certs
+
+        # Frontend certificates
+        openssl req -x509 -newkey rsa:4096 -nodes \
+          -keyout ${{ github.workspace }}/frontend/certs/key.pem \
+          -out ${{ github.workspace }}/frontend/certs/certificate.pem \
+          -days 1 -subj "/C=US/ST=Test/L=Test/O=DIVE V3/CN=localhost"
+
+        # Keycloak certificates
+        openssl req -x509 -newkey rsa:4096 -nodes \
+          -keyout ${{ github.workspace }}/keycloak-certs/key.pem \
+          -out ${{ github.workspace }}/keycloak-certs/cert.pem \
+          -days 1 -subj "/C=US/ST=Test/L=Test/O=DIVE V3 CI/CN=localhost" \
+          -addext "subjectAltName=DNS:localhost,DNS:keycloak,IP:127.0.0.1"
+        chmod 644 ${{ github.workspace }}/keycloak-certs/cert.pem \
+                  ${{ github.workspace }}/keycloak-certs/key.pem
+
+        # OPA certificates (always generated for simplicity)
+        openssl req -x509 -newkey rsa:4096 -nodes \
+          -keyout ${{ github.workspace }}/certs/key.pem \
+          -out ${{ github.workspace }}/certs/certificate.pem \
+          -days 1 -subj "/C=US/ST=Test/L=Test/O=DIVE V3 CI/CN=localhost" \
+          -addext "subjectAltName=DNS:localhost,DNS:opa,IP:127.0.0.1"
+
+        echo "::notice::SSL certificates generated"
+
+    - name: Start Keycloak
+      shell: bash
+      run: |
+        docker run -d --name keycloak \
+          -p 8443:8443 \
+          -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
+          -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
+          -e KC_HTTPS_CERTIFICATE_FILE=/opt/keycloak/certs/cert.pem \
+          -e KC_HTTPS_CERTIFICATE_KEY_FILE=/opt/keycloak/certs/key.pem \
+          -e KC_HEALTH_ENABLED=true \
+          -e KC_HOSTNAME_STRICT=false \
+          -v ${{ github.workspace }}/keycloak-certs:/opt/keycloak/certs:ro \
+          quay.io/keycloak/keycloak:26.4.2 start-dev
+
+        for i in {1..60}; do
+          if curl -k -f https://localhost:8443/health/ready 2>/dev/null; then
+            echo "::notice::Keycloak ready"
+            break
+          fi
+          if [ $i -eq 60 ]; then
+            echo "::error::Keycloak failed to start after 2 minutes"
+            docker logs keycloak
+            exit 1
+          fi
+          sleep 2
+        done
+
+    - name: Configure Keycloak Realm and Users
+      shell: bash
+      run: |
+        TOKEN=$(curl -sk -X POST https://localhost:8443/realms/master/protocol/openid-connect/token \
+          -d "client_id=admin-cli&username=admin&password=admin&grant_type=password" | jq -r .access_token)
+
+        # Create realm
+        curl -sk -X POST https://localhost:8443/admin/realms \
+          -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+          -d '{"realm":"dive-v3-broker","enabled":true}' || true
+
+        # Create users from JSON input
+        echo '${{ inputs.keycloak-users }}' | jq -c '.[]' | while read -r user; do
+          username=$(echo "$user" | jq -r '.username')
+          password=$(echo "$user" | jq -r '.password')
+          clearance=$(echo "$user" | jq -r '.clearance')
+          coi=$(echo "$user" | jq -c '.coi // []')
+
+          curl -sk -X POST "https://localhost:8443/admin/realms/dive-v3-broker/users" \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d "{\"username\":\"$username\",\"enabled\":true,\"credentials\":[{\"type\":\"password\",\"value\":\"$password\",\"temporary\":false}],\"attributes\":{\"clearance\":[\"$clearance\"],\"countryOfAffiliation\":[\"USA\"],\"acpCOI\":$coi}}" || true
+
+          echo "::notice::Created user: $username ($clearance)"
+        done
+
+    - name: Setup PostgreSQL Schema
+      shell: bash
+      run: cd frontend && npx drizzle-kit push || true
+      env:
+        DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
+
+    - name: Cache Playwright Browsers
+      uses: actions/cache@v4
+      id: playwright-cache
+      with:
+        path: ~/.cache/ms-playwright
+        key: playwright-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+
+    - name: Install Playwright Browsers
+      if: steps.playwright-cache.outputs.cache-hit != 'true'
+      shell: bash
+      run: cd frontend && npx playwright install chromium --with-deps
+
+    - name: Install Playwright System Dependencies
+      if: steps.playwright-cache.outputs.cache-hit == 'true'
+      shell: bash
+      run: cd frontend && npx playwright install-deps chromium
+
+    - name: Start Next.js HTTPS Server
+      shell: bash
+      run: |
+        cd frontend
+        nohup node -e "
+          const { createServer } = require('https');
+          const { parse } = require('url');
+          const next = require('next');
+          const fs = require('fs');
+          const app = next({ dev: true });
+          const handle = app.getRequestHandler();
+          app.prepare().then(() => {
+            createServer({
+              key: fs.readFileSync('certs/key.pem'),
+              cert: fs.readFileSync('certs/certificate.pem')
+            }, (req, res) => handle(req, res, parse(req.url, true)))
+            .listen(3000, () => console.log('Ready on https://localhost:3000'));
+          });
+        " > nextjs.log 2>&1 &
+
+        for i in {1..60}; do
+          if curl -k -f https://localhost:3000 2>/dev/null; then
+            echo "::notice::Next.js HTTPS server ready"
+            break
+          fi
+          if [ $i -eq 60 ]; then
+            echo "::error::Next.js failed to start"
+            cat nextjs.log
+            exit 1
+          fi
+          sleep 2
+        done
+      env:
+        NODE_ENV: development
+        NEXTAUTH_URL: https://localhost:3000
+        NEXTAUTH_SECRET: ${{ inputs.nextauth-secret }}
+        DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
+        KEYCLOAK_URL: https://localhost:8443
+        KEYCLOAK_REALM: dive-v3-broker
+        KEYCLOAK_CLIENT_ID: dive-v3-broker
+        KEYCLOAK_CLIENT_SECRET: test-client-secret
+        KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
+        MONGODB_URL: mongodb://localhost:27017/dive-v3-test
+
+    - name: Start OPA Server
+      if: inputs.start-opa == 'true'
+      shell: bash
+      run: |
+        curl -L -o opa https://openpolicyagent.org/downloads/latest/opa_linux_amd64_static
+        chmod +x opa
+        nohup ./opa run --server --addr=:8181 --log-level=error \
+          --tls-cert-file=${{ github.workspace }}/certs/certificate.pem \
+          --tls-private-key-file=${{ github.workspace }}/certs/key.pem \
+          > opa.log 2>&1 &
+        sleep 5
+        curl -k -f https://localhost:8181/health || (cat opa.log && exit 1)
+        echo "::notice::OPA server ready"

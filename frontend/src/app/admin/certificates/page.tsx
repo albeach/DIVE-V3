@@ -349,7 +349,7 @@ export default function AdminCertificatesPage() {
                 <Shield className="w-10 h-10 text-white" />
               </div>
               <div>
-                <h1 className="text-4xl md:text-5xl font-bold text-white mb-2">
+                <h1 data-testid="admin-heading" className="text-4xl md:text-5xl font-bold text-white mb-2">
                   Certificate Management
                 </h1>
                 <p className="text-blue-100 text-lg max-w-3xl">

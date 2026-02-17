@@ -120,7 +120,7 @@ export default function AdminDashboard() {
                 <div className="mb-6 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-slate-200 dark:border-gray-700 p-4 sm:p-6">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="space-y-2">
-                            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+                            <h1 data-testid="admin-heading" className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
                                 🔐 DIVE V3 Command Center
                             </h1>
                             <p className="text-slate-600 dark:text-slate-400 text-sm sm:text-base lg:text-lg">
@@ -159,6 +159,7 @@ export default function AdminDashboard() {
 
                             {/* Manual Refresh */}
                             <AnimatedButton
+                                data-testid="refresh-button"
                                 onClick={() => setLastRefresh(new Date())}
                                 className="px-3 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm sm:text-base hover:bg-blue-700 transition-all shadow-md hover:shadow-lg"
                             >
@@ -183,6 +184,8 @@ export default function AdminDashboard() {
                         {tabs.map((tab) => (
                             <AnimatedButton
                                 key={tab.id}
+                                role="tab"
+                                aria-selected={activeTab === tab.id}
                                 onClick={() => setActiveTab(tab.id as TabView)}
                                 title={tab.tooltip}
                                 intensity="subtle"

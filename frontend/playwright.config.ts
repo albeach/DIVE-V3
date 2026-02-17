@@ -68,11 +68,20 @@ export default defineConfig({
     grep: process.env.TEST_TAG ? new RegExp(process.env.TEST_TAG) : undefined,
 
     projects: [
+        // Global auth setup — authenticates key users and saves storageState
+        // Runs before 'chromium' project; tests can load saved sessions
+        {
+            name: 'setup',
+            testMatch: /auth-setup\.ts/,
+            use: { ...devices['Desktop Chrome'] },
+        },
+
         // ✅ Chromium only by default for faster CI (40-50% reduction)
         // Firefox and WebKit can be enabled via --project flag if needed
         {
             name: 'chromium',
             use: { ...devices['Desktop Chrome'] },
+            dependencies: ['setup'],
         },
         // Commented out for faster CI - enable manually with: --project=firefox
         // {
