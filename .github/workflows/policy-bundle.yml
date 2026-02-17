@@ -358,17 +358,6 @@ jobs:
     needs: test
     if: github.event_name == 'pull_request'
 
-    services:
-      opa:
-        image: openpolicyagent/opa:latest
-        ports:
-          - 8181:8181
-        options: >-
-          --health-cmd "wget -q --spider http://localhost:8181/health || exit 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -383,11 +372,22 @@ jobs:
         with:
           version: ${{ env.OPA_VERSION }}
 
+      - name: Start OPA Server
+        run: |
+          nohup opa run --server --addr=0.0.0.0:8181 --log-level=error > opa.log 2>&1 &
+          for i in {1..30}; do
+            if curl -sf http://localhost:8181/health >/dev/null; then
+              echo "OPA server ready"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "OPA server failed to start"
+          cat opa.log || true
+          exit 1
+
       - name: Load Policies into OPA
         run: |
-          # Wait for OPA to be ready
-          sleep 5
-
           # Load all policies
           for file in policies/*.rego; do
             if [ -f "$file" ]; then
@@ -484,7 +484,6 @@ jobs:
             cat benchmark-federation.txt >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
           fi
-
 
 
 
