@@ -63,6 +63,12 @@ runs:
           -days 1 -subj "/C=US/ST=Test/L=Test/O=DIVE V3 CI/CN=localhost" \
           -addext "subjectAltName=DNS:localhost,DNS:opa,IP:127.0.0.1"
 
+        # Build a CA bundle for Node-based services that must trust multiple
+        # self-signed certs in CI (frontend/backend HTTPS + Keycloak HTTPS).
+        cat ${{ github.workspace }}/frontend/certs/certificate.pem \
+            ${{ github.workspace }}/keycloak-certs/cert.pem \
+            > ${{ github.workspace }}/certs/ca-bundle.pem
+
         echo "::notice::SSL certificates generated"
 
     - name: Start Keycloak
@@ -285,7 +291,7 @@ runs:
         KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
         BACKEND_URL: https://localhost:4000
         NEXT_PUBLIC_API_URL: https://localhost:4000
-        NODE_EXTRA_CA_CERTS: ${{ github.workspace }}/frontend/certs/certificate.pem
+        NODE_EXTRA_CA_CERTS: ${{ github.workspace }}/certs/ca-bundle.pem
         MONGODB_URL: mongodb://localhost:27017/dive-v3-test
 
     - name: Generate Playwright Auth State Files
