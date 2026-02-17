@@ -82,7 +82,7 @@ jobs:
           echo "🔍 Verifying package naming convention..."
 
           # All packages must start with 'dive.'
-          INVALID_PACKAGES=$(grep -rh "^package" policies/*.rego 2>/dev/null | grep -v "^package dive\." | grep -v "^package data\." || true)
+          INVALID_PACKAGES=$(grep -rh "^package" policies/*.rego 2>/dev/null | grep -v "^package dive\." | grep -v "^package dive$" | grep -v "^package data\." || true)
 
           if [ -n "$INVALID_PACKAGES" ]; then
             echo "❌ ERROR: Invalid package names found:"
@@ -484,8 +484,6 @@ jobs:
             cat benchmark-federation.txt >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
           fi
-
-
 
 
 

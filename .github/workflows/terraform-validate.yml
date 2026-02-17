@@ -69,7 +69,7 @@ jobs:
             | Spoke | ${{ steps.validate-spoke.outcome == 'success' && '✅ Valid' || '❌ Invalid' }} |
             | Modules | ${{ steps.validate-modules.outcome == 'success' && '✅ Valid' || '❌ Invalid' }} |
             
-            ${steps.fmt.outcome == 'failure' ? '> Run `./dive tf fmt` to fix formatting issues.' : ''}
+            ${{ steps.fmt.outcome == 'failure' && '> Run ./dive tf fmt to fix formatting issues.' || '' }}
             `;
             
             github.rest.issues.createComment({
