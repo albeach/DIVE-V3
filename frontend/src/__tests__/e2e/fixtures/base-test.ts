@@ -29,20 +29,35 @@
  */
 
 import { test as base, expect } from '@playwright/test';
+import * as path from 'path';
+import * as fs from 'fs';
 import { TEST_USERS, type TestUser } from './test-users';
-import { 
-  loginAs as _loginAs, 
-  logout as _logout, 
+import {
+  loginAs as _loginAs,
+  logout as _logout,
   expectLoggedIn as _expectLoggedIn,
-  getDiscoveredIdPs 
+  getDiscoveredIdPs
 } from '../helpers/auth';
-import { 
-  discoverAvailableIdPs, 
+import {
+  discoverAvailableIdPs,
   isIdPAvailable,
   getIdPDisplayName,
-  type DiscoveredIdPs 
+  type DiscoveredIdPs
 } from '../helpers/idp-discovery';
 import type { Page } from '@playwright/test';
+
+/** Paths to saved storageState files from auth-setup.ts global setup */
+const AUTH_DIR = path.join(__dirname, '../../../../.auth');
+export const AUTH_STATE = {
+  AAL1: path.join(AUTH_DIR, 'aal1.json'),
+  AAL2: path.join(AUTH_DIR, 'aal2.json'),
+  ADMIN: path.join(AUTH_DIR, 'admin.json'),
+} as const;
+
+/** Check if a storageState file exists (created by global setup) */
+export function hasAuthState(level: keyof typeof AUTH_STATE): boolean {
+  return fs.existsSync(AUTH_STATE[level]);
+}
 
 /**
  * Extended test context with discovery and auth helpers

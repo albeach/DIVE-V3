@@ -20,6 +20,7 @@
  */
 
 import { Page, expect } from '@playwright/test';
+import speakeasy from 'speakeasy';
 import { TestUser } from '../fixtures/test-users';
 import { TEST_CONFIG } from '../fixtures/test-config';
 import { discoverAvailableIdPs, isIdPAvailable, getIdPDisplayName, type DiscoveredIdPs } from './idp-discovery';
@@ -29,6 +30,30 @@ import { discoverAvailableIdPs, isIdPAvailable, getIdPDisplayName, type Discover
  * Populated on first use to avoid repeated discovery overhead
  */
 let globalIdPs: DiscoveredIdPs | null = null;
+
+/**
+ * TOTP secret cache — maps username to base32-encoded secret
+ * Populated during first-time OTP setup, reused for subsequent logins
+ */
+const otpSecretCache = new Map<string, string>();
+
+/**
+ * Generate a TOTP code from a cached or provided secret
+ */
+function generateTOTP(secret: string): string {
+  return speakeasy.totp({
+    secret,
+    encoding: 'base32',
+    algorithm: 'sha256', // Must match Keycloak OTP policy (HmacSHA256)
+  });
+}
+
+/**
+ * Get stored OTP secret for a user (for tests that need direct access)
+ */
+export function getStoredOTPSecret(username: string): string | undefined {
+  return otpSecretCache.get(username);
+}
 
 /**
  * Ensure IdPs have been discovered (lazy initialization)
@@ -233,11 +258,17 @@ async function handleMFASetup(page: Page, user: TestUser, otpCode?: string): Pro
     const secretElement = page.locator(TEST_CONFIG.KEYCLOAK_SELECTORS.OTP_SECRET).first();
     const secret = await secretElement.textContent();
 
-    console.log('[AUTH] OTP secret extracted (store this for future tests)');
-
-    // Generate OTP code (requires external library or manual input)
-    // For E2E tests, we assume otpCode is provided or use a fixed test secret
-    const codeToUse = otpCode || '123456'; // Default test code (INSECURE - for testing only)
+    // Cache the secret for subsequent logins and generate a real TOTP code
+    let codeToUse: string;
+    if (secret) {
+      const cleanSecret = secret.replace(/\s/g, '');
+      otpSecretCache.set(user.username, cleanSecret);
+      codeToUse = otpCode || generateTOTP(cleanSecret);
+      console.log(`[AUTH] OTP secret cached for ${user.username}, generated TOTP code`);
+    } else {
+      codeToUse = otpCode || '123456'; // Fallback for DEMO_MODE environments
+      console.warn('[AUTH] Could not extract OTP secret — using fallback code');
+    }
 
     // Enter OTP code
     const otpInput = page.locator(TEST_CONFIG.KEYCLOAK_SELECTORS.OTP_INPUT);
@@ -293,8 +324,18 @@ async function handleMFALogin(page: Page, user: TestUser, otpCode?: string): Pro
 
     await otpInput.waitFor({ state: 'visible', timeout: TEST_CONFIG.TIMEOUTS.ACTION });
 
-    // Enter OTP code
-    const codeToUse = otpCode || '123456'; // Default test code (INSECURE - for testing only)
+    // Generate OTP code from cached secret, fall back to provided code or demo mode
+    const cachedSecret = otpSecretCache.get(user.username);
+    let codeToUse: string;
+    if (otpCode) {
+      codeToUse = otpCode;
+    } else if (cachedSecret) {
+      codeToUse = generateTOTP(cachedSecret);
+      console.log(`[AUTH] Generated TOTP from cached secret for ${user.username}`);
+    } else {
+      codeToUse = '123456'; // Fallback for DEMO_MODE environments
+      console.warn('[AUTH] No cached OTP secret — using fallback code');
+    }
     await otpInput.fill(codeToUse);
 
     // Submit OTP

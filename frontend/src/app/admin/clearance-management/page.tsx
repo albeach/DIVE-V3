@@ -153,7 +153,7 @@ export default function ClearanceManagementPage() {
                 <div className="mb-6 bg-white dark:bg-gray-800 rounded-2xl shadow-xl border border-slate-200 dark:border-gray-700 p-6">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="space-y-2 flex-1">
-                            <h1 className="text-3xl lg:text-4xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
+                            <h1 data-testid="admin-heading" className="text-3xl lg:text-4xl font-bold bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent">
                                 🔐 Clearance Management
                             </h1>
                             <p className="text-gray-600 dark:text-gray-400 text-sm lg:text-base">

@@ -17,18 +17,19 @@ import { authenticateJWT } from '../middleware/authz.middleware';
 
 const router = Router();
 
-// All routes require authentication
-router.use(authenticateJWT);
+// ==========================================================================
+// PUBLIC READ-ONLY ROUTES (no auth required)
+// ==========================================================================
+// Clearance mappings are reference data used by all users for localization
+// (e.g., upload page showing national clearance labels). No secrets exposed.
 
 /**
  * @swagger
  * /api/admin/clearance/mappings:
  *   get:
  *     summary: Get all clearance mappings
- *     description: Retrieves clearance mappings for all 5 classification levels (UNCLASSIFIED, RESTRICTED, CONFIDENTIAL, SECRET, TOP_SECRET) across all countries
+ *     description: Retrieves clearance mappings for all 5 classification levels (UNCLASSIFIED, RESTRICTED, CONFIDENTIAL, SECRET, TOP_SECRET) across all countries. Public read-only endpoint for UI localization.
  *     tags: [Clearance Management]
- *     security:
- *       - BearerAuth: []
  *     responses:
  *       200:
  *         description: Complete clearance mappings
@@ -44,12 +45,15 @@ router.use(authenticateJWT);
  *                   items:
  *                     type: string
  *                   description: National clearance equivalents
- *       401:
- *         $ref: '#/components/responses/Unauthorized'
  *       500:
  *         description: Server error
  */
 router.get('/mappings', clearanceController.getAllMappings);
+
+// ==========================================================================
+// AUTHENTICATED ROUTES (JWT required)
+// ==========================================================================
+router.use(authenticateJWT);
 
 /**
  * @swagger

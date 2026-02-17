@@ -174,7 +174,7 @@ export const SELECTORS = {
   USER_COUNTRY: '[data-testid="user-country"]',
   USER_COI: '[data-testid="user-coi"]',
 
-  // Admin
+  // IdP Management
   IDP_CARD: '[data-testid="idp-card"]',
   IDP_LIST: '[data-testid="idp-list"]',
 
@@ -183,6 +183,20 @@ export const SELECTORS = {
   AUTH_REASON: '[data-testid="auth-reason"]',
   DECISION_ALLOW: '[data-testid="decision-allow"]',
   DECISION_DENY: '[data-testid="decision-deny"]',
+
+  // Admin layout & shared components
+  ADMIN_SIDEBAR: '[data-testid="admin-sidebar"]',
+  ADMIN_HEADING: '[data-testid="admin-heading"]',
+  ADMIN_TAB: '[role="tab"]',
+  ADMIN_TAB_PANEL: '[role="tabpanel"]',
+  ADMIN_TABLE: '[data-testid="admin-table"]',
+  ADMIN_MODAL: '[role="dialog"]',
+  ADMIN_TOAST: '[data-sonner-toast]',
+  ADMIN_REFRESH: '[data-testid="refresh-button"]',
+  ADMIN_SEARCH: '[data-testid="admin-search"]',
+  ADMIN_PAGINATION: '[data-testid="pagination"]',
+  ADMIN_EMPTY_STATE: '[data-testid="empty-state"]',
+  ADMIN_ERROR: '[data-testid="error-boundary"]',
 } as const;
 
 /**
@@ -288,6 +302,16 @@ export const API_ENDPOINTS = {
   ADMIN_IDP_BY_ALIAS: (alias: string) => `/api/admin/idps/${alias}`,
   ADMIN_LOGS: '/api/admin/logs',
   ADMIN_ANALYTICS: '/api/admin/analytics',
+  ADMIN_USERS: '/api/admin/users',
+  ADMIN_USER_BY_ID: (userId: string) => `/api/admin/users/${userId}`,
+  ADMIN_CLEARANCE_COUNTRIES: '/api/admin/clearance/countries',
+  ADMIN_CLEARANCE_MAPPINGS: '/api/admin/clearance/mappings',
+  ADMIN_CLEARANCE_VALIDATE: '/api/admin/clearance/validate',
+  ADMIN_CERTIFICATES: '/api/admin/certificates',
+  ADMIN_CERTIFICATES_HEALTH: '/api/admin/certificates/health',
+  ADMIN_APPROVALS_PENDING: '/api/admin/approvals/pending',
+  ADMIN_FEDERATION_HEALTH: '/api/admin/federation/health',
+  ADMIN_FEDERATION_INSTANCES: '/api/admin/federation/instances',
 
   // Health
   HEALTH: '/api/health',

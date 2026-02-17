@@ -73,7 +73,7 @@ export default function UsersPage() {
                 <Users className="w-6 h-6 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+                <h1 data-testid="admin-heading" className="text-2xl font-bold text-gray-900 dark:text-white">
                   User Management
                 </h1>
                 <p className="text-gray-500 dark:text-gray-400">

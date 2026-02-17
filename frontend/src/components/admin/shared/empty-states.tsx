@@ -87,6 +87,7 @@ export function EmptyState({
 
   return (
     <motion.div
+      data-testid="empty-state"
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className={`text-center ${sizes.container} ${className}`}
@@ -116,6 +117,7 @@ export function EmptyState({
         <div className="mt-6 flex items-center justify-center gap-3">
           {action && (
             <button
+              data-testid="empty-state-action"
               onClick={action.onClick}
               className={`px-4 py-2 rounded-lg font-medium transition-colors ${
                 action.variant === 'secondary'
