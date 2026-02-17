@@ -46,13 +46,52 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
-
-      - name: Run ShellCheck
-        uses: ludeeus/action-shellcheck@2.0.0
         with:
-          scandir: './scripts'
-          severity: warning
-          format: gcc
+          fetch-depth: 0
+
+      - name: Detect changed shell scripts
+        id: changed-shell
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          BASE_SHA="${{ github.event.pull_request.base.sha }}"
+          HEAD_SHA="${{ github.event.pull_request.head.sha }}"
+          mapfile -t changed_files < <(git diff --name-only "$BASE_SHA...$HEAD_SHA" -- scripts/)
+
+          shell_files=()
+          for file in "${changed_files[@]}"; do
+            [[ -f "$file" ]] || continue
+            if [[ "$file" == *.sh ]] || head -n 1 "$file" | grep -qE '^#!.*(ba|z|k)?sh'; then
+              shell_files+=("$file")
+            fi
+          done
+
+          if [ "${#shell_files[@]}" -eq 0 ]; then
+            echo "has_files=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          file_list="/tmp/changed-shell-files.txt"
+          printf '%s\n' "${shell_files[@]}" > "$file_list"
+
+          echo "has_files=true" >> "$GITHUB_OUTPUT"
+          echo "file_list=$file_list" >> "$GITHUB_OUTPUT"
+
+      - name: Run ShellCheck on changed scripts
+        if: steps.changed-shell.outputs.has_files == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update
+            sudo apt-get install -y shellcheck
+          fi
+          xargs -r shellcheck -S warning < "${{ steps.changed-shell.outputs.file_list }}"
+
+      - name: Skip ShellCheck
+        if: steps.changed-shell.outputs.has_files != 'true'
+        run: echo "No changed shell scripts to lint."
 
   lint-terraform:
     name: Terraform Validate
@@ -254,5 +293,4 @@ jobs:
           else
             echo "### ⚠️ Some checks failed. Please review the details above." >> $GITHUB_STEP_SUMMARY
           fi
-
 

@@ -73,14 +73,14 @@ runs:
           -v ${{ github.workspace }}/keycloak-certs:/opt/keycloak/certs:ro \
           quay.io/keycloak/keycloak:26.4.2 start-dev
 
-        for i in {1..60}; do
+        for i in {1..150}; do
           if curl -k -f https://localhost:8443/health/ready 2>/dev/null; then
             echo "::notice::Keycloak ready"
             break
           fi
-          if [ $i -eq 60 ]; then
-            echo "::error::Keycloak failed to start after 2 minutes"
-            docker logs keycloak
+          if [ $i -eq 150 ]; then
+            echo "::error::Keycloak failed to start after 5 minutes"
+            docker logs --tail 300 keycloak
             exit 1
           fi
           sleep 2
@@ -89,8 +89,21 @@ runs:
     - name: Configure Keycloak Realm and Users
       shell: bash
       run: |
-        TOKEN=$(curl -sk -X POST https://localhost:8443/realms/master/protocol/openid-connect/token \
-          -d "client_id=admin-cli&username=admin&password=admin&grant_type=password" | jq -r .access_token)
+        TOKEN=""
+        for i in {1..30}; do
+          TOKEN=$(curl -sk -X POST https://localhost:8443/realms/master/protocol/openid-connect/token \
+            -d "client_id=admin-cli&username=admin&password=admin&grant_type=password" | jq -r '.access_token // empty')
+          if [ -n "$TOKEN" ]; then
+            break
+          fi
+          sleep 2
+        done
+
+        if [ -z "$TOKEN" ]; then
+          echo "::error::Failed to obtain Keycloak admin token"
+          docker logs --tail 300 keycloak
+          exit 1
+        fi
 
         # Create realm
         curl -sk -X POST https://localhost:8443/admin/realms \

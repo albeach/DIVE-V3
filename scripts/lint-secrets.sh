@@ -80,7 +80,7 @@ log_violation() {
     local file="$2"
     local detail="$3"
 
-    ((TOTAL_VIOLATIONS++))
+    TOTAL_VIOLATIONS=$((TOTAL_VIOLATIONS + 1))
 
     echo -e "${RED}✗${NC} [$type] $file"
     if [[ "$VERBOSE" == "true" && -n "$detail" ]]; then

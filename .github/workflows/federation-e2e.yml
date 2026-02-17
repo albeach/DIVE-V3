@@ -13,6 +13,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: |
+          rm -f .env
+          cp .env.example .env
       - run: docker compose -f docker-compose.hub.yml config --quiet
       - run: for s in scripts/dive-modules/*.sh; do bash -n "$s"; done
 
@@ -29,6 +32,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: |
+          rm -f .env
+          cp .env.example .env
           echo "POSTGRES_PASSWORD_USA=test" >> .env
           echo "KEYCLOAK_ADMIN_PASSWORD_USA=test" >> .env
           echo "MONGO_PASSWORD_USA=test" >> .env
