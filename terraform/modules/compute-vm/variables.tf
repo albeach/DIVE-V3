@@ -86,23 +86,23 @@ variable "network_tags" {
 variable "allowed_ports" {
   description = "Ports to allow for DIVE V3 services"
   type        = list(string)
-  default     = [
-    "80",    # HTTP redirect
-    "443",   # HTTPS
-    "3000",  # Frontend (USA)
-    "3001",  # Frontend (alternate spoke ports)
+  default = [
+    "80",   # HTTP redirect
+    "443",  # HTTPS
+    "3000", # Frontend (USA)
+    "3001", # Frontend (alternate spoke ports)
     "3002",
     "3003",
     "3004",
-    "4000",  # Backend (USA)
-    "4001",  # Backend (alternate spoke ports)
+    "4000", # Backend (USA)
+    "4001", # Backend (alternate spoke ports)
     "4002",
     "4003",
     "4004",
-    "7002",  # OPAL Server
-    "8080",  # Keycloak HTTP
-    "8443",  # Keycloak HTTPS (USA)
-    "8444",  # Keycloak HTTPS (spoke ports)
+    "7002", # OPAL Server
+    "8080", # Keycloak HTTP
+    "8443", # Keycloak HTTPS (USA)
+    "8444", # Keycloak HTTPS (spoke ports)
     "8445",
     "8446",
     "8447",
@@ -118,7 +118,7 @@ variable "allowed_source_ranges" {
 variable "ssh_allowed_ranges" {
   description = "CIDR ranges allowed SSH access (use IAP range for secure access)"
   type        = list(string)
-  default     = ["35.235.240.0/20"]  # Google IAP range
+  default     = ["35.235.240.0/20"] # Google IAP range
 }
 
 variable "create_firewall_rules" {
@@ -162,7 +162,7 @@ variable "service_account_email" {
 variable "service_account_scopes" {
   description = "Service account scopes"
   type        = list(string)
-  default     = [
+  default = [
     "https://www.googleapis.com/auth/cloud-platform",
     "https://www.googleapis.com/auth/logging.write",
     "https://www.googleapis.com/auth/monitoring.write",

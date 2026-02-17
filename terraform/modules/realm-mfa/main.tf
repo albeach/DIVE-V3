@@ -175,8 +175,8 @@ resource "keycloak_authentication_execution_config" "browser_loa_level_3_config"
   execution_id = keycloak_authentication_execution.browser_loa_level_3.id
   alias        = "LoA Level 3 AAL3 - ${local.flow_suffix}"
   config = {
-    loa-condition-level = "3"   # AAL3 for TOP_SECRET + WebAuthn (correct property name!)
-    loa-max-age         = "0"   # 0 = require re-auth every time (most secure for TOP_SECRET)
+    loa-condition-level = "3" # AAL3 for TOP_SECRET + WebAuthn (correct property name!)
+    loa-max-age         = "0" # 0 = require re-auth every time (most secure for TOP_SECRET)
   }
 }
 

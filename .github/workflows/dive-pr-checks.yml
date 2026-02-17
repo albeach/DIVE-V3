@@ -137,6 +137,7 @@ jobs:
         run: |
           rm -f .env
           cp .env.example .env
+          cp .env .env.hub
           cat >> .env <<'EOF'
           POSTGRES_PASSWORD=test
           POSTGRES_PASSWORD_USA=test
