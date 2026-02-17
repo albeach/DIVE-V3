@@ -282,7 +282,7 @@ runs:
       shell: bash
       run: |
         cd frontend
-        npx tsx -e "import setup from './src/__tests__/e2e/fixtures/auth-setup.ts'; await setup({ projects: [{ use: { baseURL: process.env.BASE_URL || 'https://localhost:3000' } }] } as any);"
+        npx tsx -e "import setup from './src/__tests__/e2e/fixtures/auth-setup.ts'; (async () => { await setup({ projects: [{ use: { baseURL: process.env.BASE_URL || 'https://localhost:3000' } }] } as any); })().catch((error) => { console.error(error); process.exit(1); });"
 
         if [ ! -f .auth/aal1.json ]; then
           echo "::error::Missing required Playwright auth state: .auth/aal1.json"
