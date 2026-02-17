@@ -69,6 +69,12 @@ default_trusted_issuers := {
 		"country": "DEU",
 		"trust_level": "HIGH",
 	},
+	"https://deu-idp.dive25.com/realms/dive-v3-broker": {
+		"tenant": "DEU",
+		"name": "Germany Keycloak (Testing)",
+		"country": "DEU",
+		"trust_level": "HIGH",
+	},
 	# Local Development - Hub Keycloak (port 8443)
 	"https://localhost:8443/realms/dive-v3-broker-usa": {
 		"tenant": "USA",
@@ -79,6 +85,12 @@ default_trusted_issuers := {
 	"https://localhost:8443/realms/dive-v3-broker": {
 		"tenant": "USA",
 		"name": "USA Hub Keycloak Base Realm (Local Dev)",
+		"country": "USA",
+		"trust_level": "DEVELOPMENT",
+	},
+	"http://localhost:8443/realms/dive-v3-broker": {
+		"tenant": "USA",
+		"name": "USA Hub Keycloak Base Realm (Local Dev HTTP)",
 		"country": "USA",
 		"trust_level": "DEVELOPMENT",
 	},
@@ -199,6 +211,8 @@ default_tenant_configs := {
 		"mfa_required_above": "UNCLASSIFIED",
 		"max_session_hours": 10,
 		"default_coi": ["US-ONLY", "FVEY", "NATO"],
+		"allow_industry_access": true,
+		"industry_max_classification": "SECRET",
 	},
 	"FRA": {
 		"code": "FRA",
@@ -207,6 +221,8 @@ default_tenant_configs := {
 		"mfa_required_above": "UNCLASSIFIED",
 		"max_session_hours": 8,
 		"default_coi": ["FRA-US", "FVEY", "NATO"],
+		"allow_industry_access": true,
+		"industry_max_classification": "CONFIDENTIAL",
 	},
 	"GBR": {
 		"code": "GBR",
@@ -215,6 +231,8 @@ default_tenant_configs := {
 		"mfa_required_above": "UNCLASSIFIED",
 		"max_session_hours": 8,
 		"default_coi": ["GBR-US", "FVEY", "NATO"],
+		"allow_industry_access": true,
+		"industry_max_classification": "SECRET",
 	},
 	"DEU": {
 		"code": "DEU",
@@ -223,6 +241,8 @@ default_tenant_configs := {
 		"mfa_required_above": "UNCLASSIFIED",
 		"max_session_hours": 8,
 		"default_coi": ["DEU-US", "NATO"],
+		"allow_industry_access": true,
+		"industry_max_classification": "CONFIDENTIAL",
 	},
 }
 

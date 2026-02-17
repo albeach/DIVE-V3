@@ -13,6 +13,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - run: |
+          rm -f .env
+          cp .env.example .env
+          cp .env .env.hub
+          cat >> .env <<'EOF'
+          POSTGRES_PASSWORD_USA=test
+          MONGO_PASSWORD_USA=test
+          REDIS_PASSWORD_USA=test
+          KC_ADMIN_PASSWORD_USA=test
+          KEYCLOAK_ADMIN_PASSWORD_USA=test
+          KEYCLOAK_CLIENT_SECRET_USA=test
+          EOF
       - run: docker compose -f docker-compose.hub.yml config --quiet
       - run: for s in scripts/dive-modules/*.sh; do bash -n "$s"; done
 
@@ -21,6 +33,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: open-policy-agent/setup-opa@v2
+        with:
+          version: 1.12.3
       - run: cd policies && opa test . -v
 
   hub-test:
@@ -29,13 +43,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: |
+          rm -f .env
+          cp .env.example .env
+          cp .env .env.hub
           echo "POSTGRES_PASSWORD_USA=test" >> .env
           echo "KEYCLOAK_ADMIN_PASSWORD_USA=test" >> .env
+          echo "KC_ADMIN_PASSWORD_USA=test" >> .env
           echo "MONGO_PASSWORD_USA=test" >> .env
           echo "REDIS_PASSWORD_USA=test" >> .env
           echo "NEXTAUTH_SECRET_USA=testsecret123456789012" >> .env
           echo "KEYCLOAK_CLIENT_SECRET_USA=test" >> .env
-      - run: docker compose -f docker-compose.hub.yml up -d postgres-usa mongodb-usa
+      - run: docker compose -f docker-compose.hub.yml up -d postgres mongodb
       - run: sleep 15 && docker compose -f docker-compose.hub.yml ps
       - if: always()
         run: docker compose -f docker-compose.hub.yml down -v

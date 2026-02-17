@@ -38,7 +38,7 @@ variable "idp_url" {
 variable "client_id" {
   description = "OIDC client ID (DEPRECATED - computed in main.tf, this value is ignored)"
   type        = string
-  default     = null  # No default - value is computed in main.tf
+  default     = null # No default - value is computed in main.tf
 }
 
 variable "client_secret" {

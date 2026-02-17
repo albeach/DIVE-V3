@@ -133,8 +133,8 @@ resource "keycloak_realm_user_profile" "dive_attributes" {
     group        = "dive-attributes"
 
     permissions {
-      view = ["admin", "user"]  # Users can view their own clearance
-      edit = ["admin"]          # Only admins can change clearance
+      view = ["admin", "user"] # Users can view their own clearance
+      edit = ["admin"]         # Only admins can change clearance
     }
 
     # NO VALIDATOR: Accept any country-specific classification
@@ -152,8 +152,8 @@ resource "keycloak_realm_user_profile" "dive_attributes" {
     group        = "dive-attributes"
 
     permissions {
-      view = ["admin", "user"]  # Users can view their own country
-      edit = ["admin"]          # Only admins can change country
+      view = ["admin", "user"] # Users can view their own country
+      edit = ["admin"]         # Only admins can change country
     }
 
     validator {
@@ -172,8 +172,8 @@ resource "keycloak_realm_user_profile" "dive_attributes" {
     group        = "dive-attributes"
 
     permissions {
-      view = ["admin", "user"]  # Users can view their own uniqueID
-      edit = ["admin"]          # Only admins can change uniqueID
+      view = ["admin", "user"] # Users can view their own uniqueID
+      edit = ["admin"]         # Only admins can change uniqueID
     }
 
     validator {
@@ -279,8 +279,8 @@ resource "keycloak_realm_user_profile" "dive_attributes" {
     }
 
     permissions {
-      view = ["admin", "user"]  # Users can view their own COIs
-      edit = ["admin"]          # Only admins can change COIs
+      view = ["admin", "user"] # Users can view their own COIs
+      edit = ["admin"]         # Only admins can change COIs
     }
 
     validator {

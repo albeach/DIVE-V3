@@ -180,7 +180,7 @@ export default function MaintenancePage() {
                 <Wrench className="w-8 h-8 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
+                <h1 data-testid="admin-heading" className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-slate-800 to-slate-600 bg-clip-text text-transparent">
                   Maintenance Mode
                 </h1>
                 <p className="text-slate-600 text-sm sm:text-base">

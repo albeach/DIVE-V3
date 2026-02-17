@@ -100,6 +100,7 @@
         "zod": "^4.1.12"
     },
     "devDependencies": {
+        "@axe-core/playwright": "^4.11.1",
         "@playwright/test": "^1.57.0",
         "@storybook/nextjs-vite": "^10.2.7",
         "@swc/jest": "^0.2.39",

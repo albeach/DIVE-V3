@@ -203,6 +203,7 @@ export function Pagination({
 
   return (
     <div
+      data-testid="pagination"
       className={`flex flex-wrap items-center justify-between gap-4 ${className}`}
     >
       {/* Left side: Item range and page size */}
@@ -221,6 +222,7 @@ export function Pagination({
               Show
             </span>
             <select
+              data-testid="page-size-select"
               value={pageSize}
               onChange={(e) => onPageSizeChange(Number(e.target.value))}
               className="px-2 py-1 text-sm border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
@@ -315,6 +317,7 @@ export function Pagination({
               Go to
             </span>
             <input
+              data-testid="page-jump-input"
               type="number"
               min={1}
               max={totalPages}

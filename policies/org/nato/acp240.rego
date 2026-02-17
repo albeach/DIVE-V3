@@ -417,6 +417,13 @@ get_clearance_level(clearance) := level if {
 
 # Look up industry max classification for a tenant
 # Uses imported tenant_configs data
+default_industry_max_classification := {
+	"USA": "SECRET",
+	"FRA": "CONFIDENTIAL",
+	"GBR": "SECRET",
+	"DEU": "CONFIDENTIAL",
+}
+
 get_industry_max_classification(tenant_code) := max_class if {
 	data.tenant_configs
 	tenant_cfg := data.tenant_configs[tenant_code]
@@ -425,6 +432,8 @@ get_industry_max_classification(tenant_code) := max_class if {
 	# Fallback: check tenant-specific data files
 	data.tenant_config
 	max_class := data.tenant_config.industry_max_classification
+} else := max_class if {
+	max_class := default_industry_max_classification[tenant_code]
 } else := "CONFIDENTIAL" # Default cap for industry if not configured
 
 # Check if industry user exceeds clearance cap

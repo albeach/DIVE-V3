@@ -310,7 +310,7 @@ export default function FederationSpokesPage() {
                 <Server className="w-8 h-8 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
+                <h1 data-testid="admin-heading" className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-600 bg-clip-text text-transparent">
                   Federation Spoke Registry
                 </h1>
                 <p className="text-slate-600 text-sm sm:text-base">
@@ -336,6 +336,7 @@ export default function FederationSpokesPage() {
 
               {/* Refresh Button */}
               <button
+                data-testid="refresh-button"
                 onClick={() => fetchSpokes(true)}
                 disabled={refreshing}
                 className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors shadow-md hover:shadow-lg"
@@ -405,6 +406,7 @@ export default function FederationSpokesPage() {
         <div className="mb-6 bg-white rounded-xl shadow-lg border border-slate-200 p-4">
           <div className="flex gap-4">
             <input
+              data-testid="admin-search"
               type="text"
               placeholder="Search by name, code, or ID..."
               value={searchQuery}

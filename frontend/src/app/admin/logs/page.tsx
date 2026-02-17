@@ -448,7 +448,7 @@ export default function AdminAuditLogsPage() {
                     <div className="max-w-[1800px] mx-auto px-8 py-6">
                         <div className="flex items-center justify-between">
                             <div>
-                                <h1 className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 bg-clip-text text-transparent">
+                                <h1 data-testid="admin-heading" className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 dark:from-blue-400 dark:to-purple-400 bg-clip-text text-transparent">
                                     📋 Audit Logs
                                 </h1>
                                 <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
@@ -661,6 +661,7 @@ export default function AdminAuditLogsPage() {
                                                     // Delay to allow click on suggestion
                                                     setTimeout(() => setShowSuggestions(false), 200);
                                                 }}
+                                                data-testid="admin-search"
                                                 placeholder="Search logs (typo-tolerant)... Try 'denyed', 'frence', 'secrat'"
                                                 className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:ring-2 focus:ring-blue-500"
                                             />

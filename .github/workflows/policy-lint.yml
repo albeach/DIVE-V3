@@ -154,7 +154,7 @@ jobs:
 
             if [ -n "$PACKAGE" ]; then
               # Check if package starts with dive. (except for data. packages)
-              if [[ ! "$PACKAGE" =~ ^dive\. ]] && [[ ! "$PACKAGE" =~ ^data\. ]]; then
+              if [[ "$PACKAGE" != "dive" && ! "$PACKAGE" =~ ^dive\. && ! "$PACKAGE" =~ ^data\. ]]; then
                 VIOLATIONS="${VIOLATIONS}\n  - ${file}: package ${PACKAGE}"
                 VIOLATION_COUNT=$((VIOLATION_COUNT + 1))
               fi
@@ -344,7 +344,6 @@ jobs:
           echo "## ✅ Policy Quality Gate Passed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "All policy lint and quality checks have passed." >> $GITHUB_STEP_SUMMARY
-
 
 
 

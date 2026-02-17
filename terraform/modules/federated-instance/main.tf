@@ -47,19 +47,19 @@ resource "keycloak_realm" "broker" {
   login_theme              = var.login_theme
   registration_allowed     = false
   reset_password_allowed   = true
-  remember_me              = false  # Disabled for consistent 8-hour sessions
+  remember_me              = false # Disabled for consistent 8-hour sessions
   verify_email             = false
   login_with_email_allowed = true
   duplicate_emails_allowed = false
   edit_username_allowed    = false
 
   # Token settings
-  access_token_lifespan        = "15m"   # 15 minutes (unchanged)
-  refresh_token_max_reuse      = 1       # Enable rotation (single-use refresh tokens)
-  sso_session_idle_timeout     = "15m"   # Align with access token lifespan
-  sso_session_max_lifespan     = "8h"    # Align with NextAuth maxAge
-  offline_session_idle_timeout = "720h"  # 30 days for offline sessions
-  revoke_refresh_token         = true    # Revoke refresh token after use (Keycloak v26.5+)
+  access_token_lifespan        = "15m"  # 15 minutes (unchanged)
+  refresh_token_max_reuse      = 1      # Enable rotation (single-use refresh tokens)
+  sso_session_idle_timeout     = "15m"  # Align with access token lifespan
+  sso_session_max_lifespan     = "8h"   # Align with NextAuth maxAge
+  offline_session_idle_timeout = "720h" # 30 days for offline sessions
+  revoke_refresh_token         = true   # Revoke refresh token after use (Keycloak v26.5+)
 
   # NIST 800-63B Compliant Password Policy (Phase 1 - Nov 27, 2025)
   # - Minimum 16 characters (exceeds NIST 12-char minimum)
@@ -344,11 +344,11 @@ resource "keycloak_user" "backend_service_account" {
   attributes = {
     uniqueID             = "service-account-backend"
     countryOfAffiliation = var.instance_code
-    clearance            = local.instance_clearances[4]  # TOP SECRET equivalent (country-specific)
+    clearance            = local.instance_clearances[4] # TOP SECRET equivalent (country-specific)
     clearance_level      = "5"
     acpCOI               = jsonencode(["FVEY", "NATO-COSMIC"])
     organization         = "${var.instance_name} Backend Service"
-    organizationType     = "GOV"  # User Profile only accepts: GOV, IND, INT, NGO
+    organizationType     = "GOV" # User Profile only accepts: GOV, IND, INT, NGO
     userType             = "service_account"
     pilot_user           = "false"
     created_by           = "terraform"
@@ -642,11 +642,11 @@ resource "keycloak_generic_protocol_mapper" "amr_mapper" {
   protocol_mapper = "oidc-amr-mapper"
 
   config = {
-    "id.token.claim"           = "true"
-    "access.token.claim"       = "true"
+    "id.token.claim"            = "true"
+    "access.token.claim"        = "true"
     "introspection.token.claim" = "true"
-    "userinfo.token.claim"     = "true"
-    "claim.name"               = "amr"
+    "userinfo.token.claim"      = "true"
+    "claim.name"                = "amr"
   }
 }
 
@@ -984,8 +984,8 @@ resource "keycloak_user" "admin_user" {
   attributes = {
     uniqueID             = "admin-${lower(var.instance_code)}"
     countryOfAffiliation = var.instance_code
-    clearance            = local.instance_clearances[4]  # TOP SECRET equivalent (country-specific)
-    clearance_level      = "5"                           # Updated for 5-level system
+    clearance            = local.instance_clearances[4] # TOP SECRET equivalent (country-specific)
+    clearance_level      = "5"                          # Updated for 5-level system
     # Keep admin aligned with L5 users for policy evaluation
     acpCOI           = jsonencode(["FVEY", "NATO-COSMIC"])
     organization     = "${var.instance_name} Admin"

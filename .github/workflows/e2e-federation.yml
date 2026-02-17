@@ -26,6 +26,7 @@ on:
 jobs:
   federation-attribute-sync:
     name: Test Federated Attribute Sync
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 30
 

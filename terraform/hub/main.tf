@@ -50,7 +50,7 @@ module "instance" {
   #   1. Remove scripts/hub-init/seed-hub-users.sh from deployment
   #   2. Update Phase 7 in scripts/dive-modules/deployment/hub.sh
   #   3. Document the change in .cursorrules SSOT section
-  create_test_users   = false  # SSOT: scripts/hub-init/seed-hub-users.sh (bash script)
+  create_test_users   = false # SSOT: scripts/hub-init/seed-hub-users.sh (bash script)
   test_user_password  = var.test_user_password
   admin_user_password = var.admin_user_password
 

@@ -14,10 +14,10 @@ terraform {
 }
 
 provider "keycloak" {
-  client_id = "admin-cli"
-  username  = var.keycloak_admin_username
-  password  = var.keycloak_admin_password
-  url       = coalesce(var.keycloak_url, var.idp_url)
+  client_id                = "admin-cli"
+  username                 = var.keycloak_admin_username
+  password                 = var.keycloak_admin_password
+  url                      = coalesce(var.keycloak_url, var.idp_url)
   tls_insecure_skip_verify = true
 }
 

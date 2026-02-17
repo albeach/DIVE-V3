@@ -66,6 +66,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -91,21 +93,31 @@ jobs:
             type=ref,event=pr
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-
+            type=sha,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Check if image needs building
         id: check
+        shell: bash
         run: |
+          set -euo pipefail
+
+          CONTEXT_PATH="${{ matrix.context }}"
+          CONTEXT_PATH="${CONTEXT_PATH#./}"
+          DOCKERFILE_PATH="${{ matrix.dockerfile }}"
+          DOCKERFILE_PATH="${DOCKERFILE_PATH#./}"
+
           # Get list of changed files
           if [ "${{ github.event_name }}" = "pull_request" ]; then
-            CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }})
+            CHANGED_FILES=$(git diff --name-only "${{ github.event.pull_request.base.sha }}...${{ github.event.pull_request.head.sha }}")
+          elif [ "${{ github.event_name }}" = "push" ] && [ "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]; then
+            CHANGED_FILES=$(git diff --name-only "${{ github.event.before }}" "${{ github.sha }}")
           else
-            CHANGED_FILES=$(git diff --name-only HEAD^..HEAD)
+            CHANGED_FILES=$(git ls-files)
           fi
           
           # Check if this service's files changed
-          if echo "$CHANGED_FILES" | grep -q "^${{ matrix.context }}/\|^${{ matrix.dockerfile }}"; then
+          if echo "$CHANGED_FILES" | grep -E -q "^${CONTEXT_PATH}/|^${DOCKERFILE_PATH}$"; then
             echo "needs_build=true" >> $GITHUB_OUTPUT
             echo "Service ${{ matrix.name }} has changes - will build"
           elif [ "${{ github.event.inputs.force_build }}" = "true" ]; then

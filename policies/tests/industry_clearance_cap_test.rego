@@ -19,7 +19,6 @@ package dive.tests.industry_clearance_cap
 
 import rego.v1
 
-import data.dive.authz as authz
 import data.dive.org.nato.acp240 as acp240
 
 # ============================================
@@ -327,4 +326,3 @@ test_error_message_contains_details if {
     contains(msg, "SECRET")
     contains(msg, "USA")
 }
-

@@ -86,7 +86,7 @@ variable "create_test_users" {
       3. Document the architectural change
   EOT
   type        = bool
-  default     = false  # SSOT: bash script (scripts/hub-init/seed-hub-users.sh)
+  default     = false # SSOT: bash script (scripts/hub-init/seed-hub-users.sh)
 }
 
 variable "test_user_password" {

@@ -1,0 +1,118 @@
+/**
+ * Global Auth Setup for Playwright
+ *
+ * Authenticates key test users and saves session state to disk.
+ * Subsequent tests load storageState instead of re-authenticating,
+ * reducing per-test overhead by ~5-10 seconds.
+ *
+ * Usage in spec files:
+ * ```typescript
+ * import { test } from './fixtures/base-test';
+ *
+ * // Tests in this file reuse the AAL1 session
+ * test.use({ storageState: '.auth/aal1.json' });
+ * ```
+ *
+ * The setup project runs before 'chromium' in playwright.config.ts.
+ */
+
+import { chromium, FullConfig } from '@playwright/test';
+import { TEST_USERS } from './test-users';
+import { loginAs } from '../helpers/auth';
+import { TEST_CONFIG } from './test-config';
+import * as fs from 'fs';
+import * as path from 'path';
+
+const AUTH_DIR = path.join(__dirname, '../../../../.auth');
+
+async function globalSetup(config: FullConfig) {
+  const baseURL = config.projects[0]?.use?.baseURL || TEST_CONFIG.URLS.BASE;
+
+  // Ensure .auth directory exists
+  if (!fs.existsSync(AUTH_DIR)) {
+    fs.mkdirSync(AUTH_DIR, { recursive: true });
+  }
+
+  const browser = await chromium.launch({
+    args: [
+      '--ignore-certificate-errors',
+      '--allow-insecure-localhost',
+      '--disable-features=CookiesWithoutSameSiteMustBeSecure',
+      '--disable-features=SameSiteByDefaultCookies',
+    ],
+  });
+
+  try {
+    // === AAL1 session (UNCLASSIFIED — no MFA) ===
+    await setupSession(browser, baseURL, TEST_USERS.USA.LEVEL_1, 'aal1.json');
+
+    // === AAL2 session (SECRET — OTP via speakeasy or demo mode) ===
+    // Only attempt if MFA tests are enabled and infrastructure supports it
+    if (TEST_CONFIG.FEATURES.MFA_TESTS) {
+      try {
+        await setupSession(browser, baseURL, TEST_USERS.USA.LEVEL_3, 'aal2.json', {
+          expectMFASetup: true,
+        });
+      } catch (error) {
+        console.warn('[AUTH-SETUP] AAL2 session setup failed (MFA may not be configured):', error);
+        console.warn('[AUTH-SETUP] Tests requiring AAL2 will authenticate individually');
+      }
+    }
+
+    // === Admin session (admin-dive user — uses storageState if available) ===
+    // Admin user is only available in CI with specific setup
+    if (process.env.CI) {
+      try {
+        await setupSession(browser, baseURL, {
+          username: 'admin-dive',
+          password: process.env.ADMIN_PASSWORD || 'Admin123!',
+          email: 'admin@dive-demo.example',
+          clearance: 'TOP_SECRET',
+          clearanceLevel: 4 as const,
+          country: 'United States',
+          countryCode: 'USA',
+          coi: ['FVEY', 'NATO'],
+          dutyOrg: 'DIVE Administration',
+          mfaRequired: false, // Admin may or may not have MFA
+          idp: 'United States',
+          realmName: 'dive-v3-broker-usa',
+        }, 'admin.json');
+      } catch (error) {
+        console.warn('[AUTH-SETUP] Admin session setup failed:', error);
+      }
+    }
+  } finally {
+    await browser.close();
+  }
+
+  console.log('[AUTH-SETUP] Global auth setup complete');
+}
+
+async function setupSession(
+  browser: Awaited<ReturnType<typeof chromium.launch>>,
+  baseURL: string,
+  user: Parameters<typeof loginAs>[1],
+  filename: string,
+  options?: Parameters<typeof loginAs>[2],
+) {
+  const context = await browser.newContext({
+    baseURL,
+    ignoreHTTPSErrors: true,
+  });
+  const page = await context.newPage();
+
+  try {
+    console.log(`[AUTH-SETUP] Setting up ${filename} session for ${user.username}...`);
+    await loginAs(page, user, options);
+    await context.storageState({ path: path.join(AUTH_DIR, filename) });
+    console.log(`[AUTH-SETUP] ✅ ${filename} saved`);
+  } catch (error) {
+    console.error(`[AUTH-SETUP] ❌ Failed to setup ${filename}:`, error);
+    throw error;
+  } finally {
+    await page.close();
+    await context.close();
+  }
+}
+
+export default globalSetup;

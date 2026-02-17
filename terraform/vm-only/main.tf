@@ -14,12 +14,20 @@ terraform {
       source  = "hashicorp/google"
       version = ">= 4.0.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = ">= 3.5.0"
+    }
   }
 }
 
 provider "google" {
   project = var.project_id
   region  = var.region
+}
+
+resource "random_id" "vm_disk_encryption_key" {
+  byte_length = 32
 }
 
 module "vm" {
@@ -34,10 +42,11 @@ module "vm" {
   service_account_email = var.service_account_email
 
   create_firewall_rules = true
-  allowed_ports         = ["22", "80", "443", "3000-3100", "4000-4100", "8000-9000"]
-  allowed_source_ranges = ["0.0.0.0/0"] # Allow all for demo - restrict in production
+  allowed_ports         = ["443", "3000-3100", "4000-4100", "8000-9000"]
+  allowed_source_ranges = ["0.0.0.0/0"]
 
-  ssh_allowed_ranges = ["35.235.240.0/20"] # IAP IP range
+  ssh_allowed_ranges      = ["35.235.240.0/20"] # IAP IP range
+  disk_encryption_key_raw = random_id.vm_disk_encryption_key.b64_std
 
   create_health_check = false
 }
