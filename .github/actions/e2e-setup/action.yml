@@ -278,6 +278,24 @@ runs:
         NODE_EXTRA_CA_CERTS: ${{ github.workspace }}/frontend/certs/certificate.pem
         MONGODB_URL: mongodb://localhost:27017/dive-v3-test
 
+    - name: Generate Playwright Auth State Files
+      shell: bash
+      run: |
+        cd frontend
+        npx tsx -e "import setup from './src/__tests__/e2e/fixtures/auth-setup.ts'; await setup({ projects: [{ use: { baseURL: process.env.BASE_URL || 'https://localhost:3000' } }] } as any);"
+
+        if [ ! -f .auth/aal1.json ]; then
+          echo "::error::Missing required Playwright auth state: .auth/aal1.json"
+          exit 1
+        fi
+
+        if [ ! -f .auth/admin.json ]; then
+          echo "::warning::Admin auth state was not generated (.auth/admin.json)"
+        fi
+      env:
+        BASE_URL: https://localhost:3000
+        CI: "true"
+
     - name: Start OPA Server
       if: inputs.start-opa == 'true'
       shell: bash
