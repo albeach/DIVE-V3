@@ -3,6 +3,10 @@
  * Configures test environment and global settings
  */
 
+import fs from 'fs';
+import path from 'path';
+import { generateKeyPairSync } from 'crypto';
+
 // Set test environment variables
 process.env.NODE_ENV = 'test';
 process.env.SKIP_INTEGRATION_TESTS = 'true';
@@ -24,7 +28,26 @@ if (!process.env.MONGODB_URL && !process.env.MONGODB_URI) {
     process.env.MONGODB_URI = 'mongodb://localhost:27017/dive-v3-test';
     process.env.MONGODB_URL = 'mongodb://localhost:27017';
 }
+
 process.env.MONGODB_DATABASE = process.env.MONGODB_DATABASE || 'dive-v3-test';
+
+// Ensure test RSA keys exist for integration tests that sign RS256 JWTs
+const testKeysDir = path.join(__dirname, 'keys');
+const testPrivateKeyPath = path.join(testKeysDir, 'test-private-key.pem');
+const testPublicKeyPath = path.join(testKeysDir, 'test-public-key.pem');
+
+if (!fs.existsSync(testPrivateKeyPath) || !fs.existsSync(testPublicKeyPath)) {
+    fs.mkdirSync(testKeysDir, { recursive: true });
+
+    const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+        modulusLength: 2048,
+        publicKeyEncoding: { type: 'spki', format: 'pem' },
+        privateKeyEncoding: { type: 'pkcs8', format: 'pem' }
+    });
+
+    fs.writeFileSync(testPrivateKeyPath, privateKey, { encoding: 'utf8', mode: 0o600 });
+    fs.writeFileSync(testPublicKeyPath, publicKey, { encoding: 'utf8', mode: 0o644 });
+}
 
 // Mock Winston logger to prevent EPIPE errors during test shutdown
 // This is the primary cause of Jest hanging - Winston tries to write to closed streams

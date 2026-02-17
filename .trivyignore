@@ -1,0 +1,5 @@
+# Temporary exception for Go stdlib CVE flagged via prebuilt esbuild binary metadata
+# in image filesystem paths such as app/node_modules/esbuild/bin/esbuild.
+# This binary is not built in-repo and source mapping in SARIF points to generated paths.
+# Revisit once upstream esbuild releases binaries built with patched Go toolchain.
+CVE-2025-68121
