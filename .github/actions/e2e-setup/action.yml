@@ -34,6 +34,19 @@ runs:
       shell: bash
       run: cd backend && npm ci --legacy-peer-deps
 
+    - name: Normalize E2E test.step awaits (CI hotfix)
+      shell: bash
+      run: |
+        cd frontend
+        before_count=$(rg -n '^[[:space:]]*test\.step\(' src/__tests__/e2e --glob '*.spec.ts' | wc -l | tr -d ' ')
+        if [ "${before_count}" -gt 0 ]; then
+          rg -l '^[[:space:]]*test\.step\(' src/__tests__/e2e --glob '*.spec.ts' \
+            | xargs sed -i -E 's/^([[:space:]]*)test\.step\(/\1await test.step(/'
+        fi
+        after_count=$(rg -n '^[[:space:]]*test\.step\(' src/__tests__/e2e --glob '*.spec.ts' | wc -l | tr -d ' ')
+        fixed_count=$((before_count - after_count))
+        echo "::notice::Normalized un-awaited test.step calls in CI: $fixed_count"
+
     - name: Generate SSL Certificates
       shell: bash
       run: |

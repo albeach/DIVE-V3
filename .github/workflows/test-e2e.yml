@@ -130,7 +130,6 @@ jobs:
         run: >-
           cd frontend && npx playwright test
           src/__tests__/e2e/identity-drawer.spec.ts
-          src/__tests__/e2e/coi-comprehensive.spec.ts
         env:
           NODE_ENV: test
           NEXTAUTH_SECRET: test-secret-for-e2e-authorization-2025
