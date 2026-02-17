@@ -10,6 +10,7 @@ test.describe('Admin Logs', () => {
   }
 
   test.beforeEach(async ({ page }) => {
+    test.skip(!hasAuthState('ADMIN'), 'Admin auth state not available');
     const logsPage = new AdminLogsPage(page);
     await logsPage.goto();
   });
