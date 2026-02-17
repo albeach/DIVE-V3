@@ -71,12 +71,36 @@ jobs:
         with:
           fetch-depth: 0  # Fetch all history for secret scanning
       
-      - name: TruffleHog Secret Scan
+      - name: TruffleHog Secret Scan (pull requests)
+        if: github.event_name == 'pull_request'
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.pull_request.base.sha }}
+          head: ${{ github.event.pull_request.head.sha }}
+          extra_args: --debug --only-verified
+
+      - name: TruffleHog Secret Scan (push diff)
+        if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
         uses: trufflesecurity/trufflehog@main
         with:
           path: ./
           base: ${{ github.event.before }}
           head: ${{ github.sha }}
+          extra_args: --debug --only-verified
+
+      - name: TruffleHog Secret Scan (push initial full repository)
+        if: github.event_name == 'push' && github.event.before == '0000000000000000000000000000000000000000'
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          extra_args: --debug --only-verified
+
+      - name: TruffleHog Secret Scan (scheduled full repository)
+        if: github.event_name == 'schedule'
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
           extra_args: --debug --only-verified
 
   docker-scan:
@@ -86,8 +110,15 @@ jobs:
       security-events: write
       contents: read
     strategy:
+      fail-fast: false
       matrix:
-        service: [backend, frontend, kas]
+        include:
+          - service: backend
+            sarif_category: .github/workflows/security.yml:docker-scan/service:backend
+          - service: frontend
+            sarif_category: .github/workflows/security.yml:docker-scan/service:frontend
+          - service: kas
+            sarif_category: .github/workflows/security.yml:docker-scan/service:kas
     
     steps:
       - name: Checkout Code
@@ -104,12 +135,19 @@ jobs:
           format: 'sarif'
           output: 'trivy-results.sarif'
       
+      - name: Ensure Trivy SARIF exists
+        if: always()
+        run: |
+          if [ ! -f trivy-results.sarif ]; then
+            echo '{"version":"2.1.0","runs":[]}' > trivy-results.sarif
+          fi
+
       - name: Upload Trivy results to GitHub Security tab
         if: always()
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: 'trivy-results.sarif'
-          category: 'docker-scan-${{ matrix.service }}'
+          category: ${{ matrix.sarif_category }}
 
   terraform-security:
     name: Terraform Security Scan
@@ -137,12 +175,19 @@ jobs:
           output_format: sarif
           output_file_path: checkov-report.sarif
       
+      - name: Ensure Checkov SARIF exists
+        if: always()
+        run: |
+          if [ ! -f checkov-report.sarif ]; then
+            echo '{"version":"2.1.0","runs":[]}' > checkov-report.sarif
+          fi
+
       - name: Upload Checkov results
         if: always()
         uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: checkov-report.sarif
-          category: 'checkov-terraform'
+          category: .github/workflows/security.yml:terraform-security
 
       - name: Report Checkov Outcome
         if: always()
