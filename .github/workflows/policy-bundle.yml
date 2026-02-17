@@ -19,7 +19,7 @@ on:
         type: boolean
 
 env:
-  OPA_VERSION: '0.68.0'
+  OPA_VERSION: '1.12.3'
   REGAL_VERSION: '0.24.0'
 
 jobs:
@@ -484,7 +484,6 @@ jobs:
             cat benchmark-federation.txt >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
           fi
-
 
 
 
