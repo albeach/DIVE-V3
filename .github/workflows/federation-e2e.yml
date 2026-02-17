@@ -53,7 +53,7 @@ jobs:
           echo "REDIS_PASSWORD_USA=test" >> .env
           echo "NEXTAUTH_SECRET_USA=testsecret123456789012" >> .env
           echo "KEYCLOAK_CLIENT_SECRET_USA=test" >> .env
-      - run: docker compose -f docker-compose.hub.yml up -d postgres-usa mongodb-usa
+      - run: docker compose -f docker-compose.hub.yml up -d postgres mongodb
       - run: sleep 15 && docker compose -f docker-compose.hub.yml ps
       - if: always()
         run: docker compose -f docker-compose.hub.yml down -v
