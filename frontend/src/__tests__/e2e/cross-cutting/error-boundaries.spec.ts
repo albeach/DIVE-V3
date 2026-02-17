@@ -73,6 +73,10 @@ async function interceptAndAssertErrorBoundary(
 test.describe('Error boundaries - Admin API failures', () => {
   test.use({ storageState: AUTH_STATE.ADMIN });
 
+  test.beforeEach(() => {
+    test.skip(!hasAuthState('ADMIN'), 'Admin auth state not available');
+  });
+
   test('Force API error on /admin/users renders error boundary', async ({ page }) => {
     await interceptAndAssertErrorBoundary(
       page,
@@ -120,6 +124,10 @@ test.describe('Error boundaries - Admin API failures', () => {
 
 test.describe('Error boundaries - Error page behaviour', () => {
   test.use({ storageState: AUTH_STATE.ADMIN });
+
+  test.beforeEach(() => {
+    test.skip(!hasAuthState('ADMIN'), 'Admin auth state not available');
+  });
 
   test('Error page shows retry button', async ({ page }) => {
     await page.route('**/api/admin/users*', (route) =>
@@ -290,6 +298,10 @@ test.describe('Error boundaries - Error page behaviour', () => {
 
 test.describe('Error boundaries - Network and session edge cases', () => {
   test.use({ storageState: AUTH_STATE.ADMIN });
+
+  test.beforeEach(() => {
+    test.skip(!hasAuthState('ADMIN'), 'Admin auth state not available');
+  });
 
   test('Force network offline shows graceful degradation', async ({ page, context }) => {
     // Load the page first so the shell renders

@@ -26,6 +26,7 @@ test.describe('Admin Users', () => {
   }
 
   test.beforeEach(async ({ page }) => {
+    test.skip(!hasAuthState('ADMIN'), 'Admin auth state not available');
     const adminPage = new AdminUsersPage(page);
     await adminPage.goto();
   });

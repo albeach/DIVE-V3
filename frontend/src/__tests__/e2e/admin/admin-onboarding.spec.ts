@@ -10,6 +10,7 @@ test.describe('Admin Onboarding Tour', () => {
   }
 
   test.beforeEach(async ({ page }) => {
+    test.skip(!hasAuthState('ADMIN'), 'Admin auth state not available');
     const onboardingPage = new AdminOnboardingPage(page);
     // ?start=1 clears localStorage so tour always shows
     await onboardingPage.goto();

@@ -26,6 +26,7 @@ test.describe('Admin Certificates', () => {
   }
 
   test.beforeEach(async ({ page }) => {
+    test.skip(!hasAuthState('ADMIN'), 'Admin auth state not available');
     const certsPage = new AdminCertificatesPage(page);
     await certsPage.goto();
   });

@@ -10,6 +10,7 @@ test.describe('Admin Spoke Operations', () => {
   }
 
   test.beforeEach(async ({ page }) => {
+    test.skip(!hasAuthState('ADMIN'), 'Admin auth state not available');
     const spokeOpsPage = new AdminSpokeOpsPage(page);
     await spokeOpsPage.goto();
   });
