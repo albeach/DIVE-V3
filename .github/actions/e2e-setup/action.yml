@@ -156,6 +156,36 @@ runs:
           }' || true
         echo "::notice::OIDC client created in $REALM"
 
+        CLIENT_UUID=$(curl -sk "https://localhost:8443/admin/realms/$REALM/clients?clientId=dive-v3-broker-usa" \
+          -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id // empty')
+        if [ -z "$CLIENT_UUID" ]; then
+          echo "::error::Failed to resolve Keycloak client UUID for dive-v3-broker-usa"
+          exit 1
+        fi
+
+        # Ensure all scopes requested by NextAuth are available for the client.
+        # Missing scopes cause Keycloak invalid_scope and immediate auth callback failure.
+        for scope in openid profile email uniqueID clearance countryOfAffiliation acpCOI user_acr user_amr; do
+          SCOPE_ID=$(curl -sk "https://localhost:8443/admin/realms/$REALM/client-scopes" \
+            -H "Authorization: Bearer $TOKEN" | jq -r ".[] | select(.name == \"$scope\") | .id" | head -n1)
+
+          if [ -z "$SCOPE_ID" ]; then
+            curl -sk -X POST "https://localhost:8443/admin/realms/$REALM/client-scopes" \
+              -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+              -d "{\"name\":\"$scope\",\"protocol\":\"openid-connect\",\"attributes\":{\"include.in.token.scope\":\"true\",\"display.on.consent.screen\":\"false\"}}" || true
+            SCOPE_ID=$(curl -sk "https://localhost:8443/admin/realms/$REALM/client-scopes" \
+              -H "Authorization: Bearer $TOKEN" | jq -r ".[] | select(.name == \"$scope\") | .id" | head -n1)
+          fi
+
+          if [ -n "$SCOPE_ID" ]; then
+            curl -sk -X PUT "https://localhost:8443/admin/realms/$REALM/clients/$CLIENT_UUID/default-client-scopes/$SCOPE_ID" \
+              -H "Authorization: Bearer $TOKEN" >/dev/null 2>&1 || true
+            echo "::notice::Ensured client scope on dive-v3-broker-usa: $scope"
+          else
+            echo "::warning::Unable to resolve/create client scope: $scope"
+          fi
+        done
+
         # Create users from JSON input
         echo '${{ inputs.keycloak-users }}' | jq -c '.[]' | while read -r user; do
           username=$(echo "$user" | jq -r '.username')
