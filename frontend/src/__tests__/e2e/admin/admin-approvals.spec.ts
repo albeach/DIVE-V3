@@ -10,6 +10,7 @@ test.describe('Admin Approvals', () => {
   }
 
   test.beforeEach(async ({ page }) => {
+    test.skip(!hasAuthState('ADMIN'), 'Admin auth state not available');
     const adminPage = new AdminApprovalsPage(page);
     await adminPage.goto();
   });

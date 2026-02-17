@@ -21,6 +21,7 @@ test.describe('Admin Clearance Management', () => {
   }
 
   test.beforeEach(async ({ page }) => {
+    test.skip(!hasAuthState('ADMIN'), 'Admin auth state not available');
     const clearancePage = new AdminClearancePage(page);
     await clearancePage.goto();
   });
