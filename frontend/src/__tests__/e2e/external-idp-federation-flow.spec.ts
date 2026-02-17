@@ -19,7 +19,19 @@ import { loginAs, logout } from './helpers/auth';
 import { DashboardPage } from './pages/DashboardPage';
 import { ResourcesPage } from './pages/ResourcesPage';
 
+// ESP (Spain) users not yet in centralized test-users.ts — safe fallback prevents crash at module load
+const ESP_SECRET = ((TEST_USERS as Record<string, any>).ESP?.SECRET ?? {
+  username: 'testuser-esp-3', password: 'TestUser2025!Pilot',
+  email: 'testuser-esp-3@dive-demo.example', clearance: 'SECRET', clearanceLevel: 3,
+  country: 'Spain', countryCode: 'ESP', coi: ['NATO-COSMIC'], dutyOrg: 'Spain Defense',
+  mfaRequired: true, mfaType: 'otp', idp: 'Spain', realmName: 'dive-v3-broker',
+}) as import('./fixtures/test-users').TestUser;
+
 test.describe('External IdP Federation - Spain (Refactored)', { tag: ['@critical', '@flaky'] }, () => {
+    test.beforeEach(() => {
+        test.skip(process.env.CI === 'true', 'External IdP federation requires multi-instance infrastructure');
+    });
+
     test.afterEach(async ({ page }) => {
         try {
             await logout(page);
@@ -30,16 +42,16 @@ test.describe('External IdP Federation - Spain (Refactored)', { tag: ['@critical
 
     test('Spain SECRET user can log in', async ({ page }) => {
         test.step('Login via Spain IdP', async () => {
-            await loginAs(page, TEST_USERS.ESP.SECRET);
+            await loginAs(page, ESP_SECRET);
         });
 
         test.step('Verify dashboard shows Spanish user info', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.verifyLoggedIn();
             await dashboard.verifyUserInfo(
-                TEST_USERS.ESP.SECRET.username,
-                TEST_USERS.ESP.SECRET.clearance,
-                TEST_USERS.ESP.SECRET.countryCode
+                ESP_SECRET.username,
+                ESP_SECRET.clearance,
+                ESP_SECRET.countryCode
             );
         });
 
@@ -51,7 +63,7 @@ test.describe('External IdP Federation - Spain (Refactored)', { tag: ['@critical
 
     test('Spain user can access NATO-COSMIC resource', async ({ page }) => {
         test.step('Login as Spanish SECRET user', async () => {
-            await loginAs(page, TEST_USERS.ESP.SECRET);
+            await loginAs(page, ESP_SECRET);
         });
 
         test.step('Verify access to NATO document', async () => {
@@ -69,7 +81,7 @@ test.describe('External IdP Federation - Spain (Refactored)', { tag: ['@critical
 
     test('Spain user denied access to US-ONLY resource', async ({ page }) => {
         test.step('Login as Spanish SECRET user', async () => {
-            await loginAs(page, TEST_USERS.ESP.SECRET);
+            await loginAs(page, ESP_SECRET);
         });
 
         test.step('Verify US-ONLY document is denied', async () => {
@@ -87,7 +99,7 @@ test.describe('External IdP Federation - Spain (Refactored)', { tag: ['@critical
 
     test('Spain user denied access to FVEY resource', async ({ page }) => {
         test.step('Login as Spanish SECRET user', async () => {
-            await loginAs(page, TEST_USERS.ESP.SECRET);
+            await loginAs(page, ESP_SECRET);
         });
 
         test.step('Verify FVEY document is denied (Spain not in FVEY)', async () => {
@@ -98,6 +110,10 @@ test.describe('External IdP Federation - Spain (Refactored)', { tag: ['@critical
 });
 
 test.describe('External IdP Federation - USA (Refactored)', () => {
+    test.beforeEach(() => {
+        test.skip(process.env.CI === 'true', 'External IdP federation requires multi-instance infrastructure');
+    });
+
     test.afterEach(async ({ page }) => {
         try {
             await logout(page);
@@ -158,6 +174,10 @@ test.describe('External IdP Federation - USA (Refactored)', () => {
 });
 
 test.describe('External IdP Federation - France (Refactored)', () => {
+    test.beforeEach(() => {
+        test.skip(process.env.CI === 'true', 'External IdP federation requires multi-instance infrastructure');
+    });
+
     test.afterEach(async ({ page }) => {
         try {
             await logout(page);
@@ -200,6 +220,10 @@ test.describe('External IdP Federation - France (Refactored)', () => {
 });
 
 test.describe('External IdP Federation - Cross-Nation (Refactored)', () => {
+    test.beforeEach(() => {
+        test.skip(process.env.CI === 'true', 'External IdP federation requires multi-instance infrastructure');
+    });
+
     test.afterEach(async ({ page }) => {
         try {
             await logout(page);
@@ -212,7 +236,7 @@ test.describe('External IdP Federation - Cross-Nation (Refactored)', () => {
         const natoUsers = [
             TEST_USERS.USA.SECRET,
             TEST_USERS.FRA.SECRET,
-            TEST_USERS.ESP.SECRET,
+            ESP_SECRET,
             TEST_USERS.DEU.SECRET,
         ];
 
@@ -233,7 +257,7 @@ test.describe('External IdP Federation - Cross-Nation (Refactored)', () => {
         const fveyUsers = [TEST_USERS.USA.SECRET, TEST_USERS.GBR.SECRET];
         
         // Non-FVEY members
-        const nonFveyUsers = [TEST_USERS.FRA.SECRET, TEST_USERS.ESP.SECRET];
+        const nonFveyUsers = [TEST_USERS.FRA.SECRET, ESP_SECRET];
 
         test.step('FVEY members can access', async () => {
             for (const user of fveyUsers) {
@@ -258,7 +282,7 @@ test.describe('External IdP Federation - Cross-Nation (Refactored)', () => {
         const testUsers = [
             TEST_USERS.USA.SECRET,
             TEST_USERS.FRA.SECRET,
-            TEST_USERS.ESP.SECRET,
+            ESP_SECRET,
         ];
 
         for (const user of testUsers) {

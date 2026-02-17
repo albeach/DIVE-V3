@@ -27,6 +27,7 @@ test.describe('Admin Federation Management', () => {
 
   test.describe('Spokes', () => {
     test.beforeEach(async ({ page }) => {
+      test.skip(!hasAuthState('ADMIN'), 'Admin auth state not available');
       const fedPage = new AdminFederationPage(page);
       await fedPage.goto('spokes');
     });
@@ -84,6 +85,7 @@ test.describe('Admin Federation Management', () => {
 
   test.describe('OPAL Dashboard', () => {
     test.beforeEach(async ({ page }) => {
+      test.skip(!hasAuthState('ADMIN'), 'Admin auth state not available');
       const fedPage = new AdminFederationPage(page);
       await fedPage.goto('opal');
     });
@@ -131,6 +133,7 @@ test.describe('Admin Federation Management', () => {
 
   test.describe('Drift Detection', () => {
     test.beforeEach(async ({ page }) => {
+      test.skip(!hasAuthState('ADMIN'), 'Admin auth state not available');
       const fedPage = new AdminFederationPage(page);
       await fedPage.goto('drift');
     });
@@ -260,6 +263,7 @@ test.describe('Admin Federation Management', () => {
 
   test.describe('Audit Log', () => {
     test.beforeEach(async ({ page }) => {
+      test.skip(!hasAuthState('ADMIN'), 'Admin auth state not available');
       const fedPage = new AdminFederationPage(page);
       await fedPage.goto('audit');
     });
@@ -338,6 +342,7 @@ test.describe('Admin Federation Management', () => {
 
   test.describe('Statistics', () => {
     test.beforeEach(async ({ page }) => {
+      test.skip(!hasAuthState('ADMIN'), 'Admin auth state not available');
       const fedPage = new AdminFederationPage(page);
       await fedPage.goto('statistics');
     });
@@ -386,6 +391,7 @@ test.describe('Admin Federation Management', () => {
 
   test.describe('Policies', () => {
     test.beforeEach(async ({ page }) => {
+      test.skip(!hasAuthState('ADMIN'), 'Admin auth state not available');
       const fedPage = new AdminFederationPage(page);
       await fedPage.goto('policies');
     });
