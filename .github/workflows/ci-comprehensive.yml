@@ -449,11 +449,11 @@ jobs:
           MONGODB_AUTH_DISABLED: true
           OPA_URL: https://localhost:8181
 
-      - name: Setup Playwright
-        uses: microsoft/playwright-github-action@v1
-
       - name: Install Frontend Dependencies
         run: cd frontend && npm ci
+
+      - name: Install Playwright browsers and system dependencies
+        run: cd frontend && npx playwright install --with-deps chromium
 
       - name: E2E Performance Tests
         run: |
