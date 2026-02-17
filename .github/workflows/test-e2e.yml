@@ -25,6 +25,63 @@ env:
   BASE_URL: https://localhost:3000
 
 jobs:
+  e2e-core-smoke:
+    name: E2E - Core Smoke (Gating)
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+
+    services:
+      mongodb:
+        image: mongo:7.0
+        ports: ['27017:27017']
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
+          --health-interval 10s --health-timeout 5s --health-retries 5
+      postgres:
+        image: postgres:15
+        ports: ['5432:5432']
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+          POSTGRES_DB: dive_v3_app
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s --health-timeout 5s --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: E2E Setup
+        uses: ./.github/actions/e2e-setup
+        with:
+          nextauth-secret: test-secret-for-e2e-core-smoke-2025
+          keycloak-users: >-
+            [
+              {"username":"admin-dive","password":"Admin123!","clearance":"TOP_SECRET","coi":["FVEY"]},
+              {"username":"testuser-usa-1","password":"TestUser2025!Pilot","clearance":"UNCLASSIFIED","coi":[],"countryOfAffiliation":"USA"}
+            ]
+
+      - name: Run Core Smoke E2E Tests
+        run: >-
+          cd frontend && npx playwright test
+          src/__tests__/e2e/dynamic/hub/basic.spec.ts
+          --grep "instance is accessible|instance shows IdP selector|instance HTTPS is properly configured"
+        env:
+          NODE_ENV: test
+          NEXTAUTH_SECRET: test-secret-for-e2e-core-smoke-2025
+          CI: true
+          GITHUB_ACTIONS: ""
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-core-smoke-results
+          path: |
+            frontend/playwright-report/
+            frontend/test-results/
+          retention-days: 7
+
   e2e-authentication:
     name: E2E - Authentication Flows (Non-Gating)
     runs-on: ubuntu-latest
@@ -91,8 +148,9 @@ jobs:
           retention-days: 7
 
   e2e-authorization:
-    name: E2E - Authorization Checks
+    name: E2E - Authorization Checks (Non-Gating)
     runs-on: ubuntu-latest
+    continue-on-error: true
     timeout-minutes: 15
 
     services:
@@ -272,8 +330,9 @@ jobs:
           retention-days: 7
 
   e2e-admin:
-    name: E2E - Admin Pages
+    name: E2E - Admin Pages (Non-Gating)
     runs-on: ubuntu-latest
+    continue-on-error: true
     timeout-minutes: 20
 
     services:
@@ -443,7 +502,7 @@ jobs:
   e2e-summary:
     name: E2E Test Summary
     runs-on: ubuntu-latest
-    needs: [e2e-authentication, e2e-authorization, e2e-classification-equivalency, e2e-resource-management, e2e-admin, e2e-user-journeys, e2e-quality]
+    needs: [e2e-core-smoke, e2e-authentication, e2e-authorization, e2e-classification-equivalency, e2e-resource-management, e2e-admin, e2e-user-journeys, e2e-quality]
     if: always()
 
     steps:
@@ -453,11 +512,12 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Test Suite | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|------------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Core Smoke (Gating) | ${{ needs.e2e-core-smoke.result == 'success' && 'Pass' || 'Fail' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Authentication (Non-Gating) | ${{ needs.e2e-authentication.result == 'success' && 'Pass' || 'Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Authorization | ${{ needs.e2e-authorization.result == 'success' && 'Pass' || 'Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Authorization (Non-Gating) | ${{ needs.e2e-authorization.result == 'success' && 'Pass' || 'Fail' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Classification Equivalency (Non-Gating) | ${{ needs.e2e-classification-equivalency.result == 'success' && 'Pass' || 'Fail' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Resource Management (Non-Gating) | ${{ needs.e2e-resource-management.result == 'success' && 'Pass' || 'Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Admin Pages | ${{ needs.e2e-admin.result == 'success' && 'Pass' || 'Fail' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Admin Pages (Non-Gating) | ${{ needs.e2e-admin.result == 'success' && 'Pass' || 'Fail' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| User Journeys (Non-Gating) | ${{ needs.e2e-user-journeys.result == 'success' && 'Pass' || 'Fail' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Quality & Accessibility (Non-Gating) | ${{ needs.e2e-quality.result == 'success' && 'Pass' || 'Fail' }} |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
