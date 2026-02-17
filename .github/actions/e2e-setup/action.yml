@@ -64,6 +64,7 @@ runs:
       run: |
         docker run -d --name keycloak \
           -p 8443:8443 \
+          -p 9000:9000 \
           -e KC_BOOTSTRAP_ADMIN_USERNAME=admin \
           -e KC_BOOTSTRAP_ADMIN_PASSWORD=admin \
           -e KC_HTTPS_CERTIFICATE_FILE=/opt/keycloak/certs/cert.pem \
@@ -73,13 +74,28 @@ runs:
           -v ${{ github.workspace }}/keycloak-certs:/opt/keycloak/certs:ro \
           quay.io/keycloak/keycloak:26.4.2 start-dev
 
-        for i in {1..150}; do
-          if curl -k -f https://localhost:8443/health/ready 2>/dev/null; then
-            echo "::notice::Keycloak ready"
+        max_attempts=300
+        for i in $(seq 1 "$max_attempts"); do
+          # Keycloak health endpoints are served on management port 9000.
+          if curl -kfsS https://localhost:9000/health/ready >/dev/null 2>&1; then
+            echo "::notice::Keycloak management health ready"
             break
           fi
-          if [ $i -eq 150 ]; then
-            echo "::error::Keycloak failed to start after 5 minutes"
+
+          # Fallback: confirm the public OIDC endpoint is reachable.
+          if curl -kfsS https://localhost:8443/realms/master/.well-known/openid-configuration >/dev/null 2>&1; then
+            echo "::notice::Keycloak OIDC endpoint ready"
+            break
+          fi
+
+          if ! docker ps --filter "name=^/keycloak$" --filter "status=running" --format '{{.Names}}' | grep -q '^keycloak$'; then
+            echo "::error::Keycloak container exited before becoming ready"
+            docker logs --tail 300 keycloak || true
+            exit 1
+          fi
+
+          if [ "$i" -eq "$max_attempts" ]; then
+            echo "::error::Keycloak failed to become ready after 10 minutes"
             docker logs --tail 300 keycloak
             exit 1
           fi
