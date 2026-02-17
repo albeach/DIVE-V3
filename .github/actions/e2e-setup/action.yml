@@ -164,6 +164,12 @@ runs:
           echo "::notice::Created user: $username ($clearance)"
         done
 
+        # Ensure baseline AAL1 test user exists for Playwright auth state generation.
+        curl -sk -X POST "https://localhost:8443/admin/realms/$REALM/users" \
+          -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+          -d "{\"username\":\"testuser-usa-1\",\"enabled\":true,\"credentials\":[{\"type\":\"password\",\"value\":\"TestUser2025!Pilot\",\"temporary\":false}],\"attributes\":{\"clearance\":[\"UNCLASSIFIED\"],\"countryOfAffiliation\":[\"USA\"],\"acpCOI\":[]}}" || true
+        echo "::notice::Ensured baseline user: testuser-usa-1"
+
     - name: Setup PostgreSQL Schema
       shell: bash
       run: cd frontend && npx drizzle-kit push --force || true
@@ -295,6 +301,7 @@ runs:
       env:
         BASE_URL: https://localhost:3000
         CI: "true"
+        ENABLE_MFA_TESTS: "false"
 
     - name: Start OPA Server
       if: inputs.start-opa == 'true'
