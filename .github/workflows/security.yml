@@ -175,18 +175,27 @@ jobs:
           output_format: sarif
           output_file_path: checkov-report.sarif
       
-      - name: Ensure Checkov SARIF exists
+      - name: Normalize Checkov SARIF output
         if: always()
         run: |
-          if [ ! -f checkov-report.sarif ]; then
-            echo '{"version":"2.1.0","runs":[]}' > checkov-report.sarif
+          if [ -f checkov-report.sarif ]; then
+            cp checkov-report.sarif checkov-report-upload.sarif
+          elif [ -d checkov-report.sarif ]; then
+            FOUND_SARIF=$(find checkov-report.sarif -type f -name '*.sarif' | head -n 1)
+            if [ -n "$FOUND_SARIF" ]; then
+              cp "$FOUND_SARIF" checkov-report-upload.sarif
+            else
+              echo '{"version":"2.1.0","runs":[]}' > checkov-report-upload.sarif
+            fi
+          else
+            echo '{"version":"2.1.0","runs":[]}' > checkov-report-upload.sarif
           fi
 
       - name: Upload Checkov results
         if: always()
         uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: checkov-report.sarif
+          sarif_file: checkov-report-upload.sarif
           category: .github/workflows/security.yml:terraform-security
 
       - name: Report Checkov Outcome
