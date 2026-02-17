@@ -160,7 +160,7 @@ runs:
 
     - name: Setup PostgreSQL Schema
       shell: bash
-      run: cd frontend && npx drizzle-kit push || true
+      run: cd frontend && npx drizzle-kit push --force || true
       env:
         DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
 
