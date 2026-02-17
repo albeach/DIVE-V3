@@ -200,7 +200,7 @@ export async function loginAs(
       fullPage: true,
     });
 
-    throw new Error(`Login failed for ${user.username}: ${error}`);
+    throw new Error(`Login failed for ${user.username} at ${page.url()}: ${error}`);
   }
 }
 
@@ -318,11 +318,45 @@ async function handleMFALogin(page: Page, user: TestUser, otpCode?: string): Pro
   if (user.mfaType === 'otp') {
     console.log('[AUTH] Entering OTP code');
 
-    // Wait for OTP input field
+    // Wait for one of: OTP challenge, first-time OTP setup, or direct redirect back to app
     const otpInput = page.locator(TEST_CONFIG.KEYCLOAK_SELECTORS.OTP_INPUT)
+      .or(page.locator('input[name="totp"], input[name="otp"], #otp, input[autocomplete="one-time-code"]'))
       .or(page.getByLabel(/one-time code|otp|authenticator/i));
 
-    await otpInput.waitFor({ state: 'visible', timeout: TEST_CONFIG.TIMEOUTS.ACTION });
+    const otpSetupSignal = page.locator(TEST_CONFIG.KEYCLOAK_SELECTORS.OTP_QR_CODE)
+      .or(page.locator(TEST_CONFIG.KEYCLOAK_SELECTORS.OTP_SECRET))
+      .first();
+
+    const keycloakErrorSignal = page.locator(TEST_CONFIG.KEYCLOAK_SELECTORS.ERROR_MESSAGE)
+      .or(page.locator(TEST_CONFIG.KEYCLOAK_SELECTORS.ERROR_ALERT))
+      .first();
+
+    const mfaState = await Promise.race([
+      otpInput.waitFor({ state: 'visible', timeout: TEST_CONFIG.TIMEOUTS.AUTH_FLOW }).then(() => 'otp-login'),
+      otpSetupSignal.waitFor({ state: 'visible', timeout: TEST_CONFIG.TIMEOUTS.AUTH_FLOW }).then(() => 'otp-setup'),
+      page.waitForURL(/\/(dashboard|$)/, { timeout: TEST_CONFIG.TIMEOUTS.AUTH_FLOW }).then(() => 'app-redirect'),
+      keycloakErrorSignal.waitFor({ state: 'visible', timeout: TEST_CONFIG.TIMEOUTS.AUTH_FLOW }).then(() => 'keycloak-error'),
+    ]).catch(() => 'unknown');
+
+    if (mfaState === 'app-redirect') {
+      console.log('[AUTH] OTP challenge not shown; login redirected directly to app');
+      return;
+    }
+
+    if (mfaState === 'otp-setup') {
+      console.log('[AUTH] OTP setup challenge detected during login; running setup flow');
+      await handleMFASetup(page, user, otpCode);
+      return;
+    }
+
+    if (mfaState === 'keycloak-error') {
+      const errorText = (await keycloakErrorSignal.textContent())?.trim() || 'Unknown Keycloak login error';
+      throw new Error(`Keycloak MFA challenge failed before OTP input: ${errorText}`);
+    }
+
+    if (mfaState !== 'otp-login') {
+      throw new Error(`MFA state unresolved (url=${page.url()})`);
+    }
 
     // Generate OTP code from cached secret, fall back to provided code or demo mode
     const cachedSecret = otpSecretCache.get(user.username);
@@ -392,6 +426,22 @@ async function verifySession(page: Page, user: TestUser): Promise<void> {
  */
 export async function logout(page: Page): Promise<void> {
   console.log('[AUTH] Logging out');
+
+  // If auth failed and we are still on Keycloak/error page, do lightweight cleanup only
+  const currentUrl = page.url();
+  if (/keycloak|\/realms\//i.test(currentUrl)) {
+    await page.context().clearCookies();
+    await page.evaluate(() => {
+      try {
+        localStorage.clear();
+        sessionStorage.clear();
+      } catch {
+        // ignore storage cleanup issues in cross-origin contexts
+      }
+    }).catch(() => undefined);
+    console.log('[AUTH] Logout skipped (still on IdP page); local session cleared');
+    return;
+  }
 
   try {
     // Option 1: Use NextAuth signout endpoint
