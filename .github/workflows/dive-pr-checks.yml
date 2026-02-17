@@ -230,8 +230,8 @@ jobs:
       - name: Run OPA Tests
         run: |
           cd policies
-          opa test . -v --coverage --format=json > opa-coverage.json || true
-          opa test . -v
+          opa test . -v --coverage --format=json > opa-coverage.json || rm -f opa-coverage.json
+          opa test . -v --ignore='opa-coverage.json'
 
       - name: Check OPA Coverage
         run: |
