@@ -797,10 +797,10 @@ spoke_secrets_sync_to_env() {
     fi
 
     # ==========================================================================
-    # CORS CONFIGURATION (Computed from instance config.json)
+    # CORS CONFIGURATION (Computed from spoke config SSOT)
     # ==========================================================================
     # BEST PRACTICE FIX (2026-02-06): Dynamically compute CORS origins from instance endpoints
-    # No hardcoded URLs - derives from config.json to ensure consistency
+    # No hardcoded URLs - derives from spoke config SSOT to ensure consistency
     # ==========================================================================
     if ! grep -q "^ENABLE_FEDERATION_CORS=" "$env_file" 2>/dev/null; then
         echo "" >> "$env_file"

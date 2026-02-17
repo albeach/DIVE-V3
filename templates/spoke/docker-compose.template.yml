@@ -254,7 +254,7 @@ services:
       # NOTE: Replica set initialization still happens via deployment script
       # (scripts/init-mongo-replica-set-post-start.sh) during spoke pipeline
       # This health check only verifies MongoDB is listening on port 27017
-      test: ["CMD-SHELL", "nc -z localhost 27017 || exit 1"]
+      test: ["CMD-SHELL", "bash -c 'echo > /dev/tcp/localhost/27017'"]
       interval: 10s
       timeout: 5s
       retries: 15
@@ -316,9 +316,6 @@ services:
       KC_DB_URL: jdbc:postgresql://postgres-{{INSTANCE_CODE_LOWER}}:5432/keycloak?sslmode=verify-full&sslrootcert=/opt/keycloak/certs/ca/rootCA.pem
       KC_DB_USERNAME: ${KC_DB_USERNAME:-keycloak}
       KC_DB_PASSWORD: ${KC_DB_PASSWORD:-${POSTGRES_PASSWORD_{{INSTANCE_CODE_UPPER}}}}
-      KC_DB_POOL_INITIAL_SIZE: 3
-      KC_DB_POOL_MIN_SIZE: 3
-      KC_DB_POOL_MAX_SIZE: 15  # MEMORY LEAK FIX: Reduced from default 100
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_{{INSTANCE_CODE_UPPER}}}
       KC_HOSTNAME: {{IDP_HOSTNAME}}
@@ -460,7 +457,7 @@ services:
       OPAL_SUBSCRIPTION_ID: spoke-{{INSTANCE_CODE_LOWER}}
       # Data topics to subscribe to (must match Hub topics)
       # CRITICAL: Subscribe to ALL data topics for dynamic trusted issuers, federation matrix, etc.
-      OPAL_DATA_TOPICS: policy_data,trusted_issuers,federation_matrix,tenant_configs,coi_definitions,federation_constraints
+      OPAL_DATA_TOPICS: policy_data,trusted_issuers,federation_matrix,tenant_configs,coi_definitions,federation_constraints,classification_equivalency
       OPAL_LOG_LEVEL: INFO
       # Enable data updater to receive dynamic data from Hub
       OPAL_DATA_UPDATER_ENABLED: "true"
@@ -583,7 +580,7 @@ services:
       # Hub federation - use Docker internal container name for local deployment
       HUB_URL: ${HUB_URL:-https://dive-hub-backend:4000}
       SPOKE_TOKEN: ${SPOKE_TOKEN:-}  # Hub API token for heartbeat authentication
-      SPOKE_CONFIG_PATH: /app/config/config.json
+      # SPOKE_CONFIG_PATH removed — DB state is the SSOT
       DIVE_POLICY_CACHE_PATH: /app/cache/policies
       DIVE_AUDIT_QUEUE_PATH: /app/cache/audit
       # Multimedia/FFmpeg Configuration (STANAG 4774/4778)
@@ -599,7 +596,7 @@ services:
       - ./certs:/opt/keycloak/certs:ro
       - ../../certs/ca-bundle:/app/certs/ca:ro  # SSOT CA bundle (mkcert + Vault PKI)
       - ../../NATO_Security_Policy.xml:/app/NATO_Security_Policy.xml:ro
-      - ./config.json:/app/instance-config.json:ro  # Instance-specific config
+      # NOTE: config.json mount REMOVED — DB state is the SSOT (spoke_config_get)
       - ../../config/federation-registry.json:/app/config/federation-registry.json:ro
       # NOTE: kas-registry.json mount REMOVED in Phase 3 (MongoDB KAS Registry Migration)
       # Spokes now use MongoDB kas_registry collection as SSOT for KAS instances

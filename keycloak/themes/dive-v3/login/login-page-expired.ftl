@@ -19,12 +19,30 @@
 
             <!-- Actions -->
             <div class="dive-expired-actions">
-                <a id="loginRestartLink" href="${url.loginRestartFlowUrl}" class="dive-button dive-button-primary">
-                    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    ${msg("doClickHere")} - ${msg("pageExpiredTitle")}
-                </a>
+                <#-- Restart login: prefer frontend app redirect (initiates fresh OAuth flow)
+                     over loginRestartFlowUrl (depends on KC_RESTART cookie which is gone) -->
+                <#if client?? && client.baseUrl?has_content>
+                    <a id="loginRestartLink" href="${client.baseUrl}" class="dive-button dive-button-primary">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        ${msg("doClickHere")}
+                    </a>
+                <#elseif properties.appBaseUrl?has_content>
+                    <a id="loginRestartLink" href="${properties.appBaseUrl}" class="dive-button dive-button-primary">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        ${msg("doClickHere")}
+                    </a>
+                <#else>
+                    <a id="loginRestartLink" href="${url.loginRestartFlowUrl}" class="dive-button dive-button-primary">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                        ${msg("doClickHere")} - ${msg("pageExpiredTitle")}
+                    </a>
+                </#if>
 
                 <a id="loginContinueLink" href="${url.loginAction}" class="dive-button dive-button-secondary">
                     <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" width="20" height="20">

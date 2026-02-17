@@ -267,7 +267,7 @@ spoke_compose_get_spoke_id() {
     # ==========================================================================
     # Priority:
     # 1. .env file (set during registration)
-    # 2. config.json (may have Hub-assigned ID)
+    # 2. spoke_config_get (may have Hub-assigned ID)
     # 3. Query Hub MongoDB directly
     # 4. Use placeholder (will fail heartbeat until properly registered)
     

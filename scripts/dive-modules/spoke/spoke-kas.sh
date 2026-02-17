@@ -29,9 +29,11 @@ fi
 _spoke_kas_get_ports() {
     local code="$1"
 
-    # Use SSOT function from common.sh
+    # Use SSOT function from common.sh — pass through all port variables
     eval "$(get_instance_ports "$code")"
     echo "SPOKE_KAS_PORT=$SPOKE_KAS_PORT"
+    echo "SPOKE_BACKEND_PORT=$SPOKE_BACKEND_PORT"
+    echo "SPOKE_KEYCLOAK_HTTPS_PORT=$SPOKE_KEYCLOAK_HTTPS_PORT"
 }
 
 # Initialize KAS for a spoke instance
@@ -434,9 +436,9 @@ spoke_kas_register_mongodb() {
 
     # Get URLs from spoke_config_get or generate defaults for LOCAL Docker development
     local kas_url internal_kas_url idp_url
-    local backend_port="${SPOKE_BACKEND_PORT:-14000}"
-    local kas_port="${SPOKE_KAS_PORT:-10008}"
-    local keycloak_https_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8451}"
+    local backend_port="${SPOKE_BACKEND_PORT:-4000}"
+    local kas_port="${SPOKE_KAS_PORT:-8000}"
+    local keycloak_https_port="${SPOKE_KEYCLOAK_HTTPS_PORT:-8443}"
 
     kas_url=$(spoke_config_get "$code_upper" "endpoints.kasUrl" "")
     idp_url=$(spoke_config_get "$code_upper" "endpoints.idpPublicUrl" "")

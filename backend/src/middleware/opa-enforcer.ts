@@ -382,6 +382,8 @@ export function buildOPAInput(
                 authenticated: true,
                 uniqueID: user.uniqueID as string,
                 clearance: user.clearance as string,
+                clearanceOriginal: (user.clearanceOriginal as string) || undefined,
+                clearanceCountry: (user.clearanceCountry as string) || undefined,
                 countryOfAffiliation: user.countryOfAffiliation as string,
                 acpCOI: (user.acpCOI as string[]) || [],
                 issuer: user.iss as string,

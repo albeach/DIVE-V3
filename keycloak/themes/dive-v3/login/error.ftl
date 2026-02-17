@@ -192,10 +192,22 @@
                 </#if>
             </#if>
             <div class="dive-error-actions">
-                <#if isSessionExpiredError && url.loginUrl?has_content>
-                    <a href="${url.loginUrl}" class="dive-button-primary">
-                        ${msg("errorTryAgain")}
-                    </a>
+                <#if isSessionExpiredError>
+                    <#-- Session expired: redirect to the frontend app which will initiate a fresh OAuth flow.
+                         Priority: client.baseUrl (known client) > appBaseUrl (theme property) > url.loginUrl (last resort) -->
+                    <#if client?? && client.baseUrl?has_content>
+                        <a href="${client.baseUrl}" class="dive-button-primary">
+                            ${msg("errorTryAgain")}
+                        </a>
+                    <#elseif properties.appBaseUrl?has_content>
+                        <a href="${properties.appBaseUrl}" class="dive-button-primary">
+                            ${msg("errorTryAgain")}
+                        </a>
+                    <#elseif url.loginUrl?has_content>
+                        <a href="${url.loginUrl}" class="dive-button-primary">
+                            ${msg("errorTryAgain")}
+                        </a>
+                    </#if>
                 <#elseif url.loginRestartFlowUrl?has_content>
                     <a href="${url.loginRestartFlowUrl}" class="dive-button-primary">
                         ${msg("errorTryAgain")}
@@ -207,6 +219,10 @@
                 </#if>
                 <#if client?? && client.baseUrl?has_content>
                     <a href="${client.baseUrl}" class="dive-button-secondary">
+                        ${msg("errorBackToApp")}
+                    </a>
+                <#elseif isSessionExpiredError && properties.appBaseUrl?has_content>
+                    <a href="${properties.appBaseUrl}" class="dive-button-secondary">
                         ${msg("errorBackToApp")}
                     </a>
                 </#if>

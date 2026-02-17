@@ -466,6 +466,10 @@ export async function enrichmentMiddleware(
             const originalClearance = payload.clearance;
             payload.clearance = normalizedResult.normalized;
 
+            // Preserve original clearance for OPA classification equivalency (ACP-240 Section 4.3)
+            (payload as any).clearanceOriginal = originalClearance;
+            (payload as any).clearanceCountry = countryForNormalization;
+
             logger.info('enrichment', 'Clearance normalized', {
                 requestId,
                 uniqueID: payload.uniqueID,
@@ -573,6 +577,8 @@ export async function enrichmentMiddleware(
                 Object.assign((req as any).user, {
                     uniqueID: payload.uniqueID,
                     clearance: payload.clearance,
+                    clearanceOriginal: (payload as any).clearanceOriginal,
+                    clearanceCountry: (payload as any).clearanceCountry,
                     countryOfAffiliation: payload.countryOfAffiliation,
                     acpCOI: payload.acpCOI,
                 });

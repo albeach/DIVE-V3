@@ -275,7 +275,7 @@ spoke_federation_setup() {
             # ENHANCED (2026-02-07): OIDC endpoint check is now optional
             # If IdPs exist and are enabled, SSO will work even if OIDC discovery
             # endpoints aren't immediately ready (Keycloak caches need ~60s to refresh)
-            log_verbose "DEBUG: Bidirectional federation confirmed, checking OIDC endpoints..."
+            log_verbose "Bidirectional federation confirmed, checking OIDC endpoints..."
             if _spoke_federation_verify_oidc_endpoints "$instance_code"; then
                 verification_passed=true
                 log_success "Bidirectional federation established and OIDC endpoints verified (attempt $i)"
@@ -285,9 +285,9 @@ spoke_federation_setup() {
                 log_warn "IdPs configured correctly (bidirectional:true) but OIDC discovery endpoints not yet ready"
                 log_warn "SSO will work once Keycloak caches refresh (~60s after deployment)"
                 log_info "To verify OIDC later: curl -sk https://localhost:8453/realms/dive-v3-broker-${code_lower}/.well-known/openid-configuration"
-                log_verbose "DEBUG: Setting verification_passed=true despite OIDC check failure"
+                log_verbose "Setting verification_passed=true (IdPs correct, OIDC will resolve)"
                 verification_passed=true
-                log_verbose "DEBUG: Breaking from verification loop with verification_passed=$verification_passed"
+                log_verbose "Exiting verification loop (passed=$verification_passed)"
                 break
             fi
         fi
@@ -421,7 +421,7 @@ _spoke_federation_verify_oidc_endpoints() {
     local spoke_kc_port
     spoke_kc_port=$(spoke_config_get "$instance_code" "ports.keycloak" "8443")
 
-    log_verbose "DEBUG: Spoke Keycloak port: $spoke_kc_port"
+    log_verbose "Spoke Keycloak port: $spoke_kc_port"
 
     # ENHANCEMENT: Retry loop for OIDC endpoint verification
     for ((attempt=1; attempt<=max_oidc_retries; attempt++)); do
@@ -430,7 +430,7 @@ _spoke_federation_verify_oidc_endpoints() {
 
         # Test Spoke OIDC discovery endpoint
         local spoke_discovery_url="https://localhost:${spoke_kc_port}/realms/${spoke_realm}/.well-known/openid-configuration"
-        log_verbose "DEBUG: Testing Spoke OIDC endpoint (attempt $attempt/$max_oidc_retries): $spoke_discovery_url"
+        log_verbose "Testing Spoke OIDC endpoint (attempt $attempt/$max_oidc_retries): $spoke_discovery_url"
         
         local spoke_curl_result
         spoke_curl_result=$(curl -sk --max-time $oidc_timeout "$spoke_discovery_url" 2>&1)
@@ -442,12 +442,12 @@ _spoke_federation_verify_oidc_endpoints() {
             log_verbose "✓ Spoke OIDC discovery: ${spoke_realm} (port ${spoke_kc_port}, issuer: ${spoke_issuer})"
         else
             log_verbose "✗ Spoke OIDC discovery not ready (exit: $spoke_curl_exit, length: ${#spoke_curl_result})"
-            log_verbose "DEBUG: Curl output: ${spoke_curl_result:0:200}"
+            log_verbose "Spoke OIDC response: ${spoke_curl_result:0:200}"
         fi
 
         # Test Hub OIDC discovery endpoint
         local hub_discovery_url="https://localhost:8443/realms/${hub_realm}/.well-known/openid-configuration"
-        log_verbose "DEBUG: Testing Hub OIDC endpoint (attempt $attempt/$max_oidc_retries): $hub_discovery_url"
+        log_verbose "Testing Hub OIDC endpoint (attempt $attempt/$max_oidc_retries): $hub_discovery_url"
         
         local hub_curl_result
         hub_curl_result=$(curl -sk --max-time $oidc_timeout "$hub_discovery_url" 2>&1)
@@ -459,7 +459,7 @@ _spoke_federation_verify_oidc_endpoints() {
             log_verbose "✓ Hub OIDC discovery: ${hub_realm} (issuer: ${hub_issuer})"
         else
             log_verbose "✗ Hub OIDC discovery not ready (exit: $hub_curl_exit, length: ${#hub_curl_result})"
-            log_verbose "DEBUG: Curl output: ${hub_curl_result:0:200}"
+            log_verbose "Hub OIDC response: ${hub_curl_result:0:200}"
         fi
 
         # Check if both endpoints are ready

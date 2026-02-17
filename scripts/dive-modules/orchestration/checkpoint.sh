@@ -280,12 +280,12 @@ orch_rollback_configuration() {
 
     # CRITICAL SIMPLIFICATION (2026-01-15): Database-only rollback
     # Root cause: File-based checkpoint restoration is flaky and unnecessary
-    # Previous: Restored .env, config.json, docker-compose.yml from checkpoint files
+    # Previous: Restored .env, docker-compose.yml from checkpoint files
     # Fixed: These files are regenerated from SSOT (templates) on redeployment
     #
     # Best Practice: Don't restore config files - regenerate from authoritative sources
     # - .env: Generated from template + secrets from GCP
-    # - config.json: Generated from instance parameters
+    # - spoke config: Computed from get_instance_ports / spoke_config_get
     # - docker-compose.yml: Generated from template
 
     log_info "Configuration rollback skipped - files regenerated from templates on redeploy"

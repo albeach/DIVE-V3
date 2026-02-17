@@ -157,13 +157,15 @@ spoke_phase_deployment() {
         return 1
     fi
 
-    # Step 2a: REMOVED - MongoDB replica set initialization now in healthcheck
-    # Previously: spoke_deployment_init_mongodb_replica_set (race condition)
-    # Now: Healthcheck initializes replica set BEFORE marking container healthy
-    # This ensures KAS/backend don't start until MongoDB is truly PRIMARY
+    # Step 2a: Initialize MongoDB replica set
+    # RESTORED (2026-02-16): TCP healthcheck (Phase 4 memory leak fix) doesn't initialize
+    # the replica set — only verifies port is open. Must call rs.initiate() explicitly.
+    if ! spoke_deployment_init_mongodb_replica_set "$instance_code"; then
+        log_error "MongoDB replica set initialization failed"
+        return 1
+    fi
 
-    # Step 2b: Verify MongoDB PRIMARY status (redundant check for safety)
-    # Healthcheck already ensures PRIMARY, but we verify once more
+    # Step 2b: Verify MongoDB PRIMARY status
     if ! spoke_deployment_verify_mongodb_ready "$instance_code"; then
         log_error "MongoDB verification failed - check healthcheck logs"
         return 1
@@ -337,9 +339,7 @@ spoke_deployment_init_mongodb_replica_set() {
 
     log_success "MongoDB replica set initialized for $code_upper"
 
-    # OPTIMIZATION: Removed fixed 3s sleep - container healthcheck ensures PRIMARY
-    # Healthcheck already verifies replica set is ready before marking container healthy
-    log_verbose "MongoDB replica set ready (healthcheck ensures PRIMARY before containers start)"
+    log_verbose "MongoDB replica set initialized (TCP healthcheck only checks port, rs.initiate() done here)"
 
     return 0
 }

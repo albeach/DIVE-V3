@@ -155,7 +155,7 @@ echo ""
 
 echo "Health Check Verification:"
 echo "  Run: docker inspect dive-hub-mongodb --format '{{.Config.Healthcheck.Test}}'"
-echo "  Expected: [CMD-SHELL nc -z localhost 27017 || exit 1]"
+echo "  Expected: [CMD-SHELL bash -c 'echo > /dev/tcp/localhost/27017']"
 echo ""
 
 echo "Next Steps:"
