@@ -43,6 +43,13 @@ variable "disk_type" {
   default     = "pd-ssd"
 }
 
+variable "disk_encryption_key_raw" {
+  description = "Base64-encoded 256-bit customer-supplied encryption key (CSEK) for the boot disk"
+  type        = string
+  default     = null
+  sensitive   = true
+}
+
 variable "environment" {
   description = "Environment label (dev, staging, prod)"
   type        = string
@@ -202,4 +209,3 @@ variable "health_check_path" {
   type        = string
   default     = "/health"
 }
-
