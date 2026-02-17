@@ -265,21 +265,8 @@ runs:
             });
         "
 
-        nohup node -e "
-          const { createServer } = require('https');
-          const { parse } = require('url');
-          const next = require('next');
-          const fs = require('fs');
-          const app = next({ dev: true });
-          const handle = app.getRequestHandler();
-          app.prepare().then(() => {
-            createServer({
-              key: fs.readFileSync('certs/key.pem'),
-              cert: fs.readFileSync('certs/certificate.pem')
-            }, (req, res) => handle(req, res, parse(req.url, true)))
-            .listen(3000, () => console.log('Ready on https://localhost:3000'));
-          });
-        " > nextjs.log 2>&1 &
+        npm run build
+        nohup node server.js > nextjs.log 2>&1 &
 
         for i in {1..60}; do
           if curl -k -f https://localhost:3000 2>/dev/null; then
@@ -294,12 +281,14 @@ runs:
           sleep 2
         done
       env:
-        NODE_ENV: development
+        NODE_ENV: production
         NEXTAUTH_URL: https://localhost:3000
         NEXTAUTH_SECRET: ${{ inputs.nextauth-secret }}
         AUTH_URL: https://localhost:3000
         AUTH_SECRET: ${{ inputs.nextauth-secret }}
         AUTH_TRUST_HOST: "true"
+        PORT: "3000"
+        SSL_CERT_PATH: ${{ github.workspace }}/frontend/certs
         DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
         KEYCLOAK_URL: https://localhost:8443
         KEYCLOAK_REALM: dive-v3-broker-usa
