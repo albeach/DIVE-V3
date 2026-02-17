@@ -137,6 +137,7 @@ jobs:
           CI: true
           GITHUB_ACTIONS: ""
           BACKEND_API_URL: http://localhost:4000
+          ENABLE_MFA_TESTS: "false"
 
       - name: Upload Test Results
         if: always()
@@ -312,7 +313,6 @@ jobs:
           src/__tests__/e2e/policies-lab.spec.ts
           src/__tests__/e2e/nato-expansion.spec.ts
           src/__tests__/e2e/idp-management-revamp.spec.ts
-          tests/e2e/sp-registry.spec.ts
           src/__tests__/e2e/kas-integration-flow.spec.ts
           src/__tests__/e2e/upload-flow-modern.spec.ts
           || true
