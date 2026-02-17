@@ -1,5 +1,5 @@
 name: 'E2E Test Setup'
-description: 'Shared setup for DIVE V3 E2E test jobs: Node.js, deps, SSL, Keycloak, PostgreSQL, Playwright, Next.js HTTPS, optional OPA'
+description: 'Shared setup for DIVE V3 E2E test jobs: Node.js, deps, SSL, Keycloak, PostgreSQL, backend HTTPS, Playwright, Next.js HTTPS, optional OPA'
 
 inputs:
   nextauth-secret:
@@ -22,11 +22,17 @@ runs:
       with:
         node-version: '20'
         cache: 'npm'
-        cache-dependency-path: frontend/package-lock.json
+        cache-dependency-path: |
+          frontend/package-lock.json
+          backend/package-lock.json
 
     - name: Install Frontend Dependencies
       shell: bash
       run: cd frontend && npm ci --legacy-peer-deps
+
+    - name: Install Backend Dependencies
+      shell: bash
+      run: cd backend && npm ci --legacy-peer-deps
 
     - name: Generate SSL Certificates
       shell: bash
@@ -181,6 +187,50 @@ runs:
       shell: bash
       run: cd frontend && npx playwright install-deps chromium
 
+    - name: Start Backend HTTPS Server
+      shell: bash
+      run: |
+        cd backend
+        nohup npx tsx src/https-server.ts > backend.log 2>&1 &
+        BACKEND_PID=$!
+        echo "Backend PID: $BACKEND_PID"
+
+        for i in {1..90}; do
+          if curl -kfsS https://localhost:4000/api/health/live >/dev/null 2>&1; then
+            echo "::notice::Backend HTTPS server ready"
+            break
+          fi
+
+          if ! kill -0 "$BACKEND_PID" 2>/dev/null; then
+            echo "::error::Backend process exited before becoming ready"
+            tail -n 300 backend.log || true
+            exit 1
+          fi
+
+          if [ $i -eq 90 ]; then
+            echo "::error::Backend failed to become ready on https://localhost:4000"
+            tail -n 300 backend.log || true
+            exit 1
+          fi
+          sleep 2
+        done
+      env:
+        NODE_ENV: test
+        PORT: "4000"
+        SSL_CERT_PATH: ${{ github.workspace }}/frontend/certs
+        MONGODB_URL: mongodb://localhost:27017/dive-v3-test
+        MONGODB_DATABASE: dive-v3-test
+        DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
+        KEYCLOAK_URL: https://localhost:8443
+        KEYCLOAK_REALM: dive-v3-broker-usa
+        KEYCLOAK_CLIENT_ID: dive-v3-broker-usa
+        KEYCLOAK_CLIENT_SECRET: test-client-secret
+        KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
+        KEYCLOAK_ADMIN_USER: admin
+        KEYCLOAK_ADMIN_PASSWORD: admin
+        KC_ADMIN_PASSWORD: admin
+        ALLOW_INSECURE_LOCAL_DEVELOPMENT: "true"
+
     - name: Start Next.js HTTPS Server
       shell: bash
       run: |
@@ -223,6 +273,9 @@ runs:
         KEYCLOAK_CLIENT_ID: dive-v3-broker-usa
         KEYCLOAK_CLIENT_SECRET: test-client-secret
         KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
+        BACKEND_URL: https://localhost:4000
+        NEXT_PUBLIC_API_URL: https://localhost:4000
+        NODE_EXTRA_CA_CERTS: ${{ github.workspace }}/frontend/certs/certificate.pem
         MONGODB_URL: mongodb://localhost:27017/dive-v3-test
 
     - name: Start OPA Server
