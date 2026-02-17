@@ -44,10 +44,30 @@ env:
   IMAGE_PREFIX: dive-v3
 
 jobs:
+  auth-preflight:
+    name: GCP Auth Preflight
+    runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+
+    steps:
+      - name: Check GCP auth secrets availability
+        id: check
+        run: |
+          if [ -n "${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}" ] && [ -n "${{ secrets.GCP_SERVICE_ACCOUNT }}" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "✅ GCP auth secrets are configured" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "⚠️ Skipping image build/push because GCP auth secrets are unavailable for this run (common on forks/Dependabot)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   build-images:
     name: Build and Push Images
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    needs: [auth-preflight]
+    if: needs.auth-preflight.outputs.ready == 'true'
 
     permissions:
       contents: read
@@ -156,6 +176,7 @@ jobs:
           scan-ref: '${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-frontend:${{ github.sha }}'
           format: 'sarif'
           output: 'trivy-frontend-results.sarif'
+          trivyignores: '.trivyignore'
           severity: 'HIGH,CRITICAL'
 
       - name: Security Scan Backend
@@ -165,6 +186,7 @@ jobs:
           scan-ref: '${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-backend:${{ github.sha }}'
           format: 'sarif'
           output: 'trivy-backend-results.sarif'
+          trivyignores: '.trivyignore'
           severity: 'HIGH,CRITICAL'
 
       - name: Security Scan Keycloak
@@ -174,6 +196,7 @@ jobs:
           scan-ref: '${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-keycloak:${{ github.sha }}'
           format: 'sarif'
           output: 'trivy-keycloak-results.sarif'
+          trivyignores: '.trivyignore'
           severity: 'HIGH,CRITICAL'
 
       - name: Security Scan KAS
@@ -183,6 +206,7 @@ jobs:
           scan-ref: '${{ env.REGISTRY }}/${{ env.GCP_PROJECT_ID }}/${{ env.IMAGE_PREFIX }}-kas:${{ github.sha }}'
           format: 'sarif'
           output: 'trivy-kas-results.sarif'
+          trivyignores: '.trivyignore'
           severity: 'HIGH,CRITICAL'
 
       - name: Upload Trivy scan results to GitHub Security tab
@@ -208,4 +232,3 @@ jobs:
           echo "**Security:** Trivy vulnerability scanning completed" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Images are ready for deployment to Kubernetes!" >> $GITHUB_STEP_SUMMARY
-
