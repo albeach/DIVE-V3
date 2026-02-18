@@ -14,7 +14,7 @@ test.describe('AnimatedButton Component', () => {
   test.beforeEach(async ({ page }) => {
     // Navigate to admin dashboard which has many AnimatedButtons
     await page.goto('/admin/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
   });
 
   test('should render buttons without errors', async ({ page }) => {
@@ -133,7 +133,7 @@ test.describe('AnimatedButton Component', () => {
     await reducedMotionPage.emulateMedia({ reducedMotion: 'reduce' });
     
     await reducedMotionPage.goto('/admin/dashboard');
-    await reducedMotionPage.waitForLoadState('networkidle');
+    await reducedMotionPage.waitForLoadState('domcontentloaded');
     
     const button = reducedMotionPage.locator('button').first();
     
@@ -190,7 +190,7 @@ test.describe('AnimatedButton on Multiple Pages', () => {
   for (const { path, name } of adminPages) {
     test(`should work correctly on ${name} page`, async ({ page }) => {
       await page.goto(path);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
       
       const buttons = page.locator('button');
       const count = await buttons.count();
@@ -215,7 +215,7 @@ test.describe('AnimatedButton on Multiple Pages', () => {
 test.describe('AnimatedButton Performance', () => {
   test('should maintain 60fps during animations', async ({ page }) => {
     await page.goto('/admin/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // Collect performance metrics
     const button = page.locator('button').first();
@@ -258,7 +258,7 @@ test.describe('AnimatedButton Performance', () => {
 test.describe('AnimatedButton Variants', () => {
   test('should handle different button types', async ({ page }) => {
     await page.goto('/admin/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // Test different button types if they exist
     const regularButtons = page.locator('button[type="button"]');
@@ -275,7 +275,7 @@ test.describe('AnimatedButton Variants', () => {
 
   test('should work with icon buttons', async ({ page }) => {
     await page.goto('/admin/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // Find buttons with SVG icons
     const iconButtons = page.locator('button:has(svg)');

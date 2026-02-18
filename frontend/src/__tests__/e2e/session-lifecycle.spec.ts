@@ -68,7 +68,7 @@ test.describe('Session Lifecycle Tests - Production Ready', { tag: ['@fast', '@s
         
         // Reload page
         await test.step('Reload page', async () => {
-            await page.reload({ waitUntil: 'networkidle' });
+            await page.reload({ waitUntil: 'domcontentloaded' });
         });
         
         // Should still be logged in (session cookie persists)
@@ -230,7 +230,7 @@ test.describe('Session Lifecycle Tests - Production Ready', { tag: ['@fast', '@s
         console.log('[DB Persistence] Session valid, reloading...');
         
         // Reload page - session should persist
-        await page.reload({ waitUntil: 'networkidle' });
+        await page.reload({ waitUntil: 'domcontentloaded' });
         await expect(page.locator('[data-testid="user-menu"]')).toBeVisible({ timeout: TIMEOUTS.SESSION_CHECK });
         
         // Health check should return same or refreshed session
@@ -323,7 +323,7 @@ test.describe('Session Lifecycle Tests - Production Ready', { tag: ['@fast', '@s
         // Should redirect to login (or already at /)
         await test.step('Verify redirect to login', async () => {
             // Wait for page to settle after logout
-            await page.waitForLoadState('networkidle');
+            await page.waitForLoadState('domcontentloaded');
             await page.waitForTimeout(500);
             
             const currentUrl = page.url();

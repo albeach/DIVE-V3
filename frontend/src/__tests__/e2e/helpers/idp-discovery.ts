@@ -153,7 +153,7 @@ export async function discoverAvailableIdPs(page: Page, hubUrl?: string): Promis
         console.log('[IdP Discovery] ✅ Buttons are visible');
       } catch (e) {
         console.log('[IdP Discovery] ⚠️ No buttons found yet, waiting for network idle...');
-        await page.waitForLoadState('networkidle', { timeout: 10000 });  // Increased from 5s to 10s
+        await page.waitForLoadState('domcontentloaded', { timeout: 10000 });  // Increased from 5s to 10s
       }
       
       // Give React extra time to hydrate

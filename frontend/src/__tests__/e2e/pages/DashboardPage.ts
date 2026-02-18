@@ -53,7 +53,8 @@ export class DashboardPage {
     this.page = page;
     
     // Main elements
-    this.heading = page.getByRole('heading', { name: /dashboard|home|welcome/i });
+    // Match actual dashboard h1 which uses time-based greetings: "Good morning, {name}"
+    this.heading = page.getByRole('heading', { name: /dashboard|home|welcome|good morning|good afternoon|good evening/i });
     this.welcomeMessage = page.getByText(/welcome|hello/i);
     
     this.userMenu = page.locator(TEST_CONFIG.SELECTORS.USER_MENU)

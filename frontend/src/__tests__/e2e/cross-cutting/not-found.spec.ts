@@ -37,7 +37,7 @@ async function assertNotFoundOrErrorOrRedirect(
   path: string,
 ) {
   const response = await page.goto(path);
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
 
   const status = response?.status() ?? 0;
   const currentUrl = new URL(page.url());
@@ -109,7 +109,7 @@ test.describe('Not Found - Page quality', () => {
    */
   async function goto404(page: import('@playwright/test').Page): Promise<boolean> {
     const response = await page.goto('/nonexistent');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     const status = response?.status() ?? 0;
     const url = new URL(page.url());
     // If the app redirected us away, these quality checks don't apply
@@ -193,17 +193,17 @@ test.describe('Not Found - Page quality', () => {
   test('Back button from 404 returns to previous page', async ({ page }) => {
     // First navigate to a known good page so there is history
     await page.goto('/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const dashboardUrl = page.url();
 
     // Now navigate to a non-existent page
     await page.goto('/nonexistent');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Go back using browser history
     await page.goBack();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Should be back on the dashboard (or at least not on the 404 page)
     const currentUrl = page.url();

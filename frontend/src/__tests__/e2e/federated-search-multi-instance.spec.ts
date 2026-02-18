@@ -75,7 +75,7 @@ test.describe('Federated Search Multi-Instance', () => {
         test('should display document count for local instance', async ({ page }) => {
             await page.goto('/resources');
 
-            await page.waitForLoadState('networkidle');
+            await page.waitForLoadState('domcontentloaded');
 
             // Look for document count indicator
             const countBadge = page.locator('text=/\\d+\\s*Documents/i');
@@ -86,7 +86,7 @@ test.describe('Federated Search Multi-Instance', () => {
     test.describe('Federated Search', () => {
         test('should enable federation toggle and show instance buttons', async ({ page }) => {
             await page.goto('/resources');
-            await page.waitForLoadState('networkidle');
+            await page.waitForLoadState('domcontentloaded');
 
             // Find and click federation toggle
             const federatedToggle = page.locator('button').filter({ hasText: /Local Only/i }).or(
@@ -108,7 +108,7 @@ test.describe('Federated Search Multi-Instance', () => {
 
         test('should search USA + FRA federation', async ({ page }) => {
             await page.goto('/resources');
-            await page.waitForLoadState('networkidle');
+            await page.waitForLoadState('domcontentloaded');
 
             // Enable federation
             await enableFederatedSearch(page);
@@ -117,7 +117,7 @@ test.describe('Federated Search Multi-Instance', () => {
             await page.getByRole('button', { name: /FRA/i }).click();
 
             // Wait for federated results
-            await page.waitForLoadState('networkidle');
+            await page.waitForLoadState('domcontentloaded');
             await page.waitForTimeout(TEST_CONFIG.TIMEOUTS.DEBOUNCE);
 
             // Verify we have results (could be from either instance)
@@ -127,7 +127,7 @@ test.describe('Federated Search Multi-Instance', () => {
 
         test('should search USA + FRA + GBR federation', async ({ page }) => {
             await page.goto('/resources');
-            await page.waitForLoadState('networkidle');
+            await page.waitForLoadState('domcontentloaded');
 
             // Enable federation
             await enableFederatedSearch(page);
@@ -137,7 +137,7 @@ test.describe('Federated Search Multi-Instance', () => {
             await page.getByRole('button', { name: /GBR/i }).click();
 
             // Wait for federated results
-            await page.waitForLoadState('networkidle');
+            await page.waitForLoadState('domcontentloaded');
             await page.waitForTimeout(TEST_CONFIG.TIMEOUTS.DEBOUNCE * 2);
 
             // Verify we have results
@@ -147,7 +147,7 @@ test.describe('Federated Search Multi-Instance', () => {
 
         test('should search all four instances (full federation)', async ({ page }) => {
             await page.goto('/resources');
-            await page.waitForLoadState('networkidle');
+            await page.waitForLoadState('domcontentloaded');
 
             // Enable federation
             await enableFederatedSearch(page);
@@ -158,7 +158,7 @@ test.describe('Federated Search Multi-Instance', () => {
             await page.getByRole('button', { name: /DEU/i }).click();
 
             // Wait for federated results (longer timeout for remote DEU)
-            await page.waitForLoadState('networkidle');
+            await page.waitForLoadState('domcontentloaded');
             await page.waitForTimeout(TEST_CONFIG.TIMEOUTS.NETWORK);
 
             // Verify we have results
@@ -170,7 +170,7 @@ test.describe('Federated Search Multi-Instance', () => {
     test.describe('Federation Instance Selection', () => {
         test('should not allow deselecting all instances', async ({ page }) => {
             await page.goto('/resources');
-            await page.waitForLoadState('networkidle');
+            await page.waitForLoadState('domcontentloaded');
 
             // Enable federation
             await enableFederatedSearch(page);
@@ -185,7 +185,7 @@ test.describe('Federated Search Multi-Instance', () => {
 
         test('should toggle instances on and off', async ({ page }) => {
             await page.goto('/resources');
-            await page.waitForLoadState('networkidle');
+            await page.waitForLoadState('domcontentloaded');
 
             // Enable federation
             await enableFederatedSearch(page);
@@ -204,13 +204,13 @@ test.describe('Federated Search Multi-Instance', () => {
     test.describe('Federation Performance', () => {
         test('should display search timing information', async ({ page }) => {
             await page.goto('/resources');
-            await page.waitForLoadState('networkidle');
+            await page.waitForLoadState('domcontentloaded');
 
             // Enable federation with multiple instances
             await enableFederatedSearch(page);
             await page.getByRole('button', { name: /FRA/i }).click();
 
-            await page.waitForLoadState('networkidle');
+            await page.waitForLoadState('domcontentloaded');
 
             // Look for timing information
             const timingInfo = page.locator('text=/\\d+ms\\s*search|\\d+ms\\s*facets/i');
@@ -219,7 +219,7 @@ test.describe('Federated Search Multi-Instance', () => {
 
         test('should complete federated search within performance target', async ({ page }) => {
             await page.goto('/resources');
-            await page.waitForLoadState('networkidle');
+            await page.waitForLoadState('domcontentloaded');
 
             // Enable federation
             await enableFederatedSearch(page);
@@ -232,7 +232,7 @@ test.describe('Federated Search Multi-Instance', () => {
             const searchInput = page.locator('input[placeholder*="search"], [data-testid="resource-search"]');
             if (await searchInput.isVisible()) {
                 await searchInput.fill('test');
-                await page.waitForLoadState('networkidle');
+                await page.waitForLoadState('domcontentloaded');
             }
 
             const endTime = Date.now();
@@ -246,7 +246,7 @@ test.describe('Federated Search Multi-Instance', () => {
     test.describe('Federation Error Handling', () => {
         test('should handle unavailable instance gracefully', async ({ page }) => {
             await page.goto('/resources');
-            await page.waitForLoadState('networkidle');
+            await page.waitForLoadState('domcontentloaded');
 
             // Enable federation
             await enableFederatedSearch(page);
@@ -256,7 +256,7 @@ test.describe('Federated Search Multi-Instance', () => {
             await page.getByRole('button', { name: /GBR/i }).click();
             await page.getByRole('button', { name: /DEU/i }).click();
 
-            await page.waitForLoadState('networkidle');
+            await page.waitForLoadState('domcontentloaded');
             await page.waitForTimeout(TEST_CONFIG.TIMEOUTS.NETWORK);
 
             // Should not show fatal error - partial results are acceptable
@@ -274,12 +274,12 @@ test.describe('Federated Search Multi-Instance', () => {
         test('should filter federated results by user clearance', async ({ page }) => {
             // This test verifies that federated results respect ABAC policies
             await page.goto('/resources');
-            await page.waitForLoadState('networkidle');
+            await page.waitForLoadState('domcontentloaded');
 
             // Enable federation
             await enableFederatedSearch(page);
             await page.getByRole('button', { name: /FRA/i }).click();
-            await page.waitForLoadState('networkidle');
+            await page.waitForLoadState('domcontentloaded');
 
             // All displayed resources should be accessible to the current user
             // (verified by not seeing "Access Denied" indicators)
@@ -289,12 +289,12 @@ test.describe('Federated Search Multi-Instance', () => {
 
         test('should show classification badges on federated results', async ({ page }) => {
             await page.goto('/resources');
-            await page.waitForLoadState('networkidle');
+            await page.waitForLoadState('domcontentloaded');
 
             // Enable federation
             await enableFederatedSearch(page);
             await page.getByRole('button', { name: /FRA/i }).click();
-            await page.waitForLoadState('networkidle');
+            await page.waitForLoadState('domcontentloaded');
 
             // Look for classification badges
             const classificationBadges = page.locator('text=/UNCLASSIFIED|CONFIDENTIAL|SECRET|TOP.SECRET/i');
@@ -311,12 +311,12 @@ test.describe('Federated Search Multi-Instance', () => {
     test.describe('Federation with Filters', () => {
         test('should apply classification filter to federated search', async ({ page }) => {
             await page.goto('/resources');
-            await page.waitForLoadState('networkidle');
+            await page.waitForLoadState('domcontentloaded');
 
             // Enable federation
             await enableFederatedSearch(page);
             await page.getByRole('button', { name: /FRA/i }).click();
-            await page.waitForLoadState('networkidle');
+            await page.waitForLoadState('domcontentloaded');
 
             // Open filters and select classification
             const filterButton = page.getByRole('button', { name: /Filters?/i });
@@ -329,7 +329,7 @@ test.describe('Federated Search Multi-Instance', () => {
                 );
                 if (await unclassifiedFilter.isVisible()) {
                     await unclassifiedFilter.click();
-                    await page.waitForLoadState('networkidle');
+                    await page.waitForLoadState('domcontentloaded');
                 }
             }
 

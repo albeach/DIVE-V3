@@ -52,7 +52,7 @@ test.describe('Dark Mode / Theme Switching', () => {
 
   test.beforeEach(async ({ page }) => {
     await page.goto(TEST_CONFIG.baseUrl);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Skip all dark-mode tests if the theme toggle is not rendered
     const toggle = themeToggle(page);
@@ -103,7 +103,7 @@ test.describe('Dark Mode / Theme Switching', () => {
 
     // Reload the page
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Dark mode should persist
     expect(await isDarkMode(page)).toBeTruthy();
@@ -167,7 +167,7 @@ test.describe('Dark Mode / Theme Switching', () => {
 
     // Navigate to resources
     await page.goto(`${TEST_CONFIG.baseUrl}/resources`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     expect(await isDarkMode(page)).toBeTruthy();
 
@@ -188,7 +188,7 @@ test.describe('Dark Mode / Theme Switching', () => {
     }
 
     await page.goto(`${TEST_CONFIG.baseUrl}/upload`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     expect(await isDarkMode(page)).toBeTruthy();
 
@@ -208,7 +208,7 @@ test.describe('Dark Mode / Theme Switching', () => {
     }
 
     await page.goto(`${TEST_CONFIG.baseUrl}/admin`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     expect(await isDarkMode(page)).toBeTruthy();
 
@@ -256,14 +256,14 @@ test.describe('Dark Mode / Theme Switching', () => {
     // Emulate dark color scheme preference
     await page.emulateMedia({ colorScheme: 'dark' });
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const darkWithPref = await isDarkMode(page);
 
     // Emulate light color scheme preference
     await page.emulateMedia({ colorScheme: 'light' });
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const lightWithPref = await isDarkMode(page);
 
