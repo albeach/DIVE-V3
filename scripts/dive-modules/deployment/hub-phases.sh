@@ -449,8 +449,9 @@ hub_phase_vault_bootstrap() {
         if type module_vault_pki_setup &>/dev/null; then
             if module_vault_pki_setup; then
                 log_success "Vault PKI setup complete (Root CA + Intermediate CA)"
-                # Auto-set CERT_PROVIDER=vault so subsequent phases use Vault PKI
+                # Auto-set CERT_PROVIDER + SECRETS_PROVIDER so subsequent phases use Vault
                 _hub_set_env "CERT_PROVIDER" "vault"
+                _hub_set_env "SECRETS_PROVIDER" "vault"
             else
                 log_warn "Vault PKI setup failed — spoke certs will use mkcert fallback"
             fi
@@ -459,8 +460,9 @@ hub_phase_vault_bootstrap() {
         fi
     else
         log_verbose "Vault PKI engines already configured"
-        # Ensure CERT_PROVIDER=vault is set even on resume
+        # Ensure CERT_PROVIDER + SECRETS_PROVIDER are set even on resume
         _hub_set_env "CERT_PROVIDER" "vault"
+        _hub_set_env "SECRETS_PROVIDER" "vault"
     fi
 
     # -------------------------------------------------------------------------
@@ -473,8 +475,10 @@ hub_phase_vault_bootstrap() {
             return 1
         fi
         log_success "Vault secrets seeded"
+        _hub_set_env "SECRETS_PROVIDER" "vault"
     else
         log_verbose "Vault secrets already seeded"
+        _hub_set_env "SECRETS_PROVIDER" "vault"
     fi
 
     # -------------------------------------------------------------------------
