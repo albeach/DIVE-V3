@@ -366,6 +366,25 @@ hub_phase_vault_bootstrap() {
         return 1
     fi
 
+    # Wait for Raft leader election (required after container restart/recreation)
+    # Docker health check passes before Raft cluster elects a leader, which causes
+    # "local node not active but active cluster node not found" errors.
+    if [ "$vault_profile" = "vault-ha" ]; then
+        log_verbose "Waiting for Vault Raft leader election..."
+        local leader_wait=0
+        while [ $leader_wait -lt 30 ]; do
+            if VAULT_SKIP_VERIFY=1 vault status 2>/dev/null | grep -q "HA Mode.*active"; then
+                log_verbose "Vault Raft leader elected (${leader_wait}s)"
+                break
+            fi
+            sleep 2
+            leader_wait=$((leader_wait + 2))
+        done
+        if [ $leader_wait -ge 30 ]; then
+            log_warn "Vault leader election timeout — proceeding (may retry)"
+        fi
+    fi
+
     fi  # end: vault_already_running=false
 
     # -------------------------------------------------------------------------
