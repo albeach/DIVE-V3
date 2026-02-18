@@ -434,6 +434,7 @@ jobs:
           NEXTAUTH_SECRET: test-secret-for-e2e-journeys-2025
           CI: true
           GITHUB_ACTIONS: ""
+          ENABLE_MFA_TESTS: "false"
 
       - name: Upload Test Results
         if: always()

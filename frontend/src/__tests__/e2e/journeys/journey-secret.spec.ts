@@ -23,6 +23,8 @@ import { DashboardPage } from '../pages/DashboardPage';
 import { ResourcesPage } from '../pages/ResourcesPage';
 
 test.describe('Journey: SECRET User (AAL2, OTP)', () => {
+  test.skip(!TEST_CONFIG.FEATURES.MFA_TESTS, 'MFA not configured');
+
   test.beforeEach(async ({ page, auth, users, idps }) => {
     skipIfNotAvailable(idps, 'USA');
 

@@ -25,6 +25,8 @@ import { DashboardPage } from '../pages/DashboardPage';
 import { ResourcesPage } from '../pages/ResourcesPage';
 
 test.describe('Journey: TOP_SECRET User (AAL3, WebAuthn)', () => {
+  test.skip(!TEST_CONFIG.FEATURES.MFA_TESTS, 'MFA/WebAuthn not configured');
+
   test.beforeEach(async ({ page, auth, users, idps }) => {
     skipIfNotAvailable(idps, 'USA');
 

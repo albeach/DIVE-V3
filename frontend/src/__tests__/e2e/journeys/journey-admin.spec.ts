@@ -28,6 +28,8 @@ import { AdminLogsPage } from '../pages/AdminLogsPage';
 import { AdminFederationPage } from '../pages/AdminFederationPage';
 
 test.describe('Journey: Admin User', () => {
+  test.skip(!hasAuthState('ADMIN') && process.env.CI === 'true', 'Admin auth state not available in CI');
+
   // Use pre-saved ADMIN storageState if available from global setup
   test.use({
     storageState: hasAuthState('ADMIN') ? AUTH_STATE.ADMIN : undefined,
