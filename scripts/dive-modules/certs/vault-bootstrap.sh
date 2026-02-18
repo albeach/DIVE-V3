@@ -482,8 +482,11 @@ generate_vault_node_certs() {
         use_bootstrap_ca=true
     elif [ -n "${INSTANCE_PRIVATE_IP:-}" ]; then
         use_bootstrap_ca=true
+    elif curl -sX PUT "http://169.254.169.254/latest/api/token" \
+            -H "X-aws-ec2-metadata-token-ttl-seconds: 60" -m 1 >/dev/null 2>&1; then
+        use_bootstrap_ca=true  # IMDSv2
     elif curl -sf -m 1 http://169.254.169.254/latest/meta-data/ >/dev/null 2>&1; then
-        use_bootstrap_ca=true
+        use_bootstrap_ca=true  # IMDSv1
     fi
 
     if [ "$use_bootstrap_ca" = "true" ]; then
@@ -646,6 +649,7 @@ _vault_node_dns_sans() {
 _vault_node_ip_sans() {
     local sans="127.0.0.1 ::1"
     [ -n "${INSTANCE_PRIVATE_IP:-}" ] && sans="$sans ${INSTANCE_PRIVATE_IP}"
+    [ -n "${INSTANCE_PUBLIC_IP:-}" ] && sans="$sans ${INSTANCE_PUBLIC_IP}"
     echo "$sans"
 }
 
