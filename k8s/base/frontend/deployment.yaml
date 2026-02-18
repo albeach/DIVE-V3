@@ -31,7 +31,7 @@ spec:
         fsGroup: 1001
       containers:
         - name: frontend
-          image: us-east4-docker.pkg.dev/dive25/dive-v3-repo/dive-v3-frontend:19feee9c586119e661c04073da0a120257bc64a6
+          image: us-east4-docker.pkg.dev/dive25/dive-v3-repo/dive-v3-frontend:66984cd5847d99980bed03ec3ff313467c21c2f1
           imagePullPolicy: Always
           ports:
             - name: http
