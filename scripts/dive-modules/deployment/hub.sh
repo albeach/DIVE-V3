@@ -60,14 +60,9 @@ fi
 HUB_COMPOSE_FILE="${DIVE_ROOT}/docker-compose.hub.yml"
 HUB_DATA_DIR="${DIVE_ROOT}/data/hub"
 
-# Compose command args: includes EC2 overlay for external access on 0.0.0.0
+# Compose command args
 # yq commands use $HUB_COMPOSE_FILE (single file); docker compose uses $HUB_COMPOSE_FILES
 HUB_COMPOSE_FILES="-f ${HUB_COMPOSE_FILE}"
-if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost" ] \
-    && [ -f "${DIVE_ROOT}/docker-compose.ec2.yml" ]; then
-    HUB_COMPOSE_FILES="${HUB_COMPOSE_FILES} -f ${DIVE_ROOT}/docker-compose.ec2.yml"
-    log_info "EC2 mode: services exposed on 0.0.0.0 for external access"
-fi
 
 # =============================================================================
 # HUB PIPELINE EXECUTION (Phase 3: Hub Pipeline Enhancement)
