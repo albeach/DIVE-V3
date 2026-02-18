@@ -268,8 +268,8 @@ fi
 # nginx owns the standard ports (443, 3000, 4000, 7002, 8443, 8200) on 0.0.0.0.
 # Services remap to 127.0.0.1:1XXXX to avoid conflicts.
 if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost" ]; then
-    # EC2 mode — services bind directly to 0.0.0.0 (no nginx, no port remapping)
-    # Standard ports are used; docker-compose.ec2.yml overrides bind address only.
+    # EC2 mode — services bind to 0.0.0.0 for external access (no nginx, no port remapping)
+    export BIND_ADDRESS="${BIND_ADDRESS:-0.0.0.0}"
 
     # Keycloak issuer — must match the external URL users see in their browser
     export KEYCLOAK_HOSTNAME="${KEYCLOAK_HOSTNAME:-${HUB_EXTERNAL_ADDRESS}}"

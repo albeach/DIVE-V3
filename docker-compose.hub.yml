@@ -229,7 +229,7 @@ services:
       - ./${VAULT_CONFIG_BASE:-vault_config}/node1:/vault/config:ro
       - ./certs/vault/node1:/vault/certs:ro    # TLS certs (production: VAULT_SCHEME=https)
     ports:
-      - "127.0.0.1:${VAULT_API_PORT:-8200}:8200"  # Primary API port (backward compatible)
+      - "${BIND_ADDRESS:-127.0.0.1}:${VAULT_API_PORT:-8200}:8200"  # Primary API port
     networks:
       hub-internal:
       dive-shared:
@@ -671,9 +671,9 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector:4317"
       OTEL_SERVICE_NAME: "keycloak-${INSTANCE:-usa}"
     ports:
-      - "127.0.0.1:${KEYCLOAK_HTTP_PORT:-8080}:8080"
-      - "127.0.0.1:${KEYCLOAK_HTTPS_PORT:-8443}:8443"
-      - "127.0.0.1:${KEYCLOAK_MGMT_PORT:-9000}:9000"
+      - "${BIND_ADDRESS:-127.0.0.1}:${KEYCLOAK_HTTP_PORT:-8080}:8080"
+      - "${BIND_ADDRESS:-127.0.0.1}:${KEYCLOAK_HTTPS_PORT:-8443}:8443"
+      - "${BIND_ADDRESS:-127.0.0.1}:${KEYCLOAK_MGMT_PORT:-9000}:9000"
     volumes:
       - ./instances/hub/certs:/opt/keycloak/certs:ro
       - ./certs/ca-bundle:/opt/keycloak/ca-bundle:ro  # SSOT CA bundle for federation
@@ -870,7 +870,7 @@ services:
       - watch
       - src/https-server.ts
     ports:
-      - "127.0.0.1:${BACKEND_PORT:-4000}:4000"
+      - "${BIND_ADDRESS:-127.0.0.1}:${BACKEND_PORT:-4000}:4000"
     volumes:
       - ./backend/src:/app/src
       - ./backend/package.json:/app/package.json:ro
@@ -1119,7 +1119,7 @@ services:
       NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem  # Legacy https module support
       DATABASE_URL: ${FRONTEND_DATABASE_URL:-postgresql://postgres:${POSTGRES_PASSWORD_USA}@postgres:5432/dive_v3_app?sslmode=require}
     ports:
-      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
+      - "${BIND_ADDRESS:-127.0.0.1}:${FRONTEND_PORT:-3000}:3000"
     depends_on:
       keycloak:
         condition: service_healthy
@@ -1252,7 +1252,7 @@ services:
       OPAL_AUTH_PUBLIC_KEY_PATH: /opal-keys/jwt-signing-key.pub.pem
       OPAL_AUTH_JWT_ALGORITHM: RS256
     ports:
-      - "127.0.0.1:${OPAL_PORT:-7002}:7002"
+      - "${BIND_ADDRESS:-127.0.0.1}:${OPAL_PORT:-7002}:7002"
     networks:
       - hub-internal
       - dive-shared  # Allow spoke OPAL clients to connect via federation network
