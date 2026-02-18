@@ -142,7 +142,18 @@ spoke_phase_preflight() {
 
     log_info "→ Executing PREFLIGHT phase for $code_upper (mode: $pipeline_mode)"
 
-    # Step 0: Validate deployment dependencies (comprehensive pre-flight checks)
+    # Step 1: Hub auto-discovery (MUST run first — discovers Vault, Keycloak, backend health)
+    # All downstream steps depend on Hub being healthy and configured
+    if [ "$pipeline_mode" = "deploy" ]; then
+        if ! spoke_preflight_check_hub "$instance_code"; then
+            return 1
+        fi
+    else
+        spoke_preflight_check_hub "$instance_code" || \
+            log_warn "Hub not detected (federation features may be limited)"
+    fi
+
+    # Step 2: Validate deployment dependencies
     if type orch_validate_dependencies &>/dev/null; then
         log_step "Validating deployment dependencies..."
         if ! orch_validate_dependencies "$instance_code"; then
@@ -151,8 +162,13 @@ spoke_phase_preflight() {
         fi
     fi
 
-    # Step 0.5: Run comprehensive preflight validation
-    # This performs 6 critical checks: Hub reachability, secrets, ports, Docker resources, network, Terraform
+    # Step 3: Check for deployment conflicts
+    if ! spoke_preflight_check_conflicts "$instance_code"; then
+        return 1
+    fi
+
+    # Step 4: Run comprehensive preflight validation (secrets, ports, Docker, Terraform)
+    # Hub is already verified healthy at this point, so Vault provisioning in Check 0 won't hang
     if type spoke_preflight_validation &>/dev/null; then
         log_step "Running comprehensive preflight validation..."
         if ! spoke_preflight_validation "$instance_code"; then
@@ -163,23 +179,7 @@ spoke_phase_preflight() {
         log_verbose "spoke_preflight_validation not available, using legacy checks"
     fi
 
-    # Step 1: Check for deployment conflicts
-    # Validates no concurrent deployment is in progress and checks orchestration DB state
-    if ! spoke_preflight_check_conflicts "$instance_code"; then
-        return 1
-    fi
-
-    # Step 2: Hub detection (required for deploy mode, optional for up mode)
-    if [ "$pipeline_mode" = "deploy" ]; then
-        if ! spoke_preflight_check_hub "$instance_code"; then
-            return 1
-        fi
-    else
-        spoke_preflight_check_hub "$instance_code" || \
-            log_warn "Hub not detected (federation features may be limited)"
-    fi
-
-    # Step 3: Load secrets
+    # Step 5: Load secrets
     local secrets_changed=false
     if [ "$pipeline_mode" = "deploy" ]; then
         # Full deployment: load or generate secrets
@@ -201,7 +201,7 @@ spoke_phase_preflight() {
         fi
     fi
 
-    # Step 4: Validate secrets
+    # Step 6: Validate secrets
     if ! spoke_secrets_validate "$instance_code"; then
         if [ "$pipeline_mode" = "deploy" ]; then
             log_warn "Secret validation failed, but continuing deployment"
@@ -210,20 +210,20 @@ spoke_phase_preflight() {
         fi
     fi
 
-    # Step 5: Ensure shared network exists
+    # Step 7: Ensure shared network exists
     if ! spoke_preflight_ensure_network; then
         return 1
     fi
 
-    # Step 6: Configure Hub hostname resolution
+    # Step 8: Configure Hub hostname resolution
     spoke_preflight_configure_hub_connectivity "$instance_code"
 
-    # Step 7: Check for stale containers (cleanup)
+    # Step 9: Check for stale containers (cleanup)
     if [ "$pipeline_mode" != "up" ]; then
         spoke_preflight_cleanup_stale_containers "$instance_code"
     fi
 
-    # Step 8: Clean volumes if secrets changed (prevents password mismatch)
+    # Step 10: Clean volumes if secrets changed (prevents password mismatch)
     if [ "$secrets_changed" = "true" ]; then
         log_warn "Secrets changed - cleaning database volumes to prevent password mismatch"
         spoke_preflight_clean_database_volumes "$instance_code"
@@ -377,7 +377,12 @@ spoke_preflight_cleanup_failed_state() {
 # =============================================================================
 
 ##
-# Check if Hub infrastructure is running
+# Check if Hub infrastructure is running and healthy (auto-discovery)
+#
+# Does three things:
+#   1. Discovers Hub containers and reads .env.hub for config
+#   2. Verifies each critical service is actually healthy (not just running)
+#   3. Exports discovered config for downstream phases (Vault token, URLs, etc.)
 #
 # Arguments:
 #   $1 - Instance code
@@ -389,9 +394,11 @@ spoke_preflight_cleanup_failed_state() {
 spoke_preflight_check_hub() {
     local instance_code="$1"
 
-    log_step "Checking Hub infrastructure..."
+    log_step "Auto-discovering Hub infrastructure..."
 
-    # Check if Hub containers are running
+    # =========================================================================
+    # Step 1: Detect Hub containers
+    # =========================================================================
     local hub_containers
     hub_containers=$(docker ps -q --filter "name=dive-hub" 2>/dev/null | wc -l | tr -d ' ')
 
@@ -414,7 +421,109 @@ spoke_preflight_check_hub() {
 
     log_success "Hub infrastructure detected ($hub_containers containers)"
 
-    # Check Hub OPAL server (required for federation)
+    # =========================================================================
+    # Step 2: Load Hub configuration from .env.hub
+    # =========================================================================
+    local env_hub="${DIVE_ROOT}/.env.hub"
+    if [ -f "$env_hub" ]; then
+        log_verbose "Loading Hub configuration from .env.hub"
+        # Export key Hub config for downstream use (only if not already set)
+        local _val
+        for _key in KEYCLOAK_ADMIN_PASSWORD VAULT_ROLE_ID VAULT_SECRET_ID CERT_PROVIDER SECRETS_PROVIDER DIVE_DOMAIN_SUFFIX; do
+            _val=$(grep "^${_key}=" "$env_hub" 2>/dev/null | cut -d= -f2- || true)
+            if [ -n "$_val" ] && [ -z "${!_key:-}" ]; then
+                export "$_key=$_val"
+                log_verbose "  Auto-discovered $_key from .env.hub"
+            fi
+        done
+    else
+        log_warn "No .env.hub found — Hub configuration may be incomplete"
+    fi
+
+    # =========================================================================
+    # Step 3: Verify Vault health (critical for certs + secrets)
+    # =========================================================================
+    log_verbose "Checking Vault health..."
+
+    # Load vault module to get VAULT_ADDR, token, etc.
+    if [ -z "${VAULT_ADDR:-}" ]; then
+        if [ -f "${DIVE_ROOT}/scripts/dive-modules/vault/module.sh" ]; then
+            source "${DIVE_ROOT}/scripts/dive-modules/vault/module.sh" 2>/dev/null || true
+        fi
+    fi
+
+    # Load token
+    local vault_token_file="${DIVE_ROOT}/.vault-token"
+    if [ -f "$vault_token_file" ]; then
+        VAULT_TOKEN=$(cat "$vault_token_file")
+        export VAULT_TOKEN
+        log_verbose "  Loaded Vault token from .vault-token"
+    fi
+
+    # Health check with TLS fallback (vault module may set VAULT_CACERT to stale cert)
+    local vault_healthy=false
+    if type _vault_check_unsealed &>/dev/null; then
+        if _vault_check_unsealed; then
+            vault_healthy=true
+        fi
+    else
+        # Fallback: direct check
+        if command -v vault &>/dev/null; then
+            local _old_cacert="${VAULT_CACERT:-}"
+            for _try in 1 2; do
+                if vault status 2>/dev/null | grep -q "Sealed.*false"; then
+                    vault_healthy=true
+                    break
+                fi
+                # First attempt with CACERT may hang/fail — try with SKIP_VERIFY
+                if [ "$_try" -eq 1 ] && [ -n "${VAULT_CACERT:-}" ]; then
+                    unset VAULT_CACERT
+                    export VAULT_SKIP_VERIFY=1
+                fi
+            done
+        fi
+    fi
+
+    if [ "$vault_healthy" = "true" ]; then
+        log_success "Hub Vault unsealed and healthy"
+    else
+        log_error "Hub Vault is sealed or unreachable"
+        echo ""
+        echo "  SOLUTION:"
+        echo "    1. Check Vault status: ./dive vault status"
+        echo "    2. Unseal if needed:   ./dive vault unseal"
+        echo "    3. Then retry:         ./dive spoke deploy $instance_code"
+        echo ""
+        return 1
+    fi
+
+    # =========================================================================
+    # Step 4: Verify Keycloak health
+    # =========================================================================
+    local hub_kc_container="${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}"
+    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${hub_kc_container}$"; then
+        # Actually test the health endpoint (not just that the container exists)
+        if curl -skf --max-time 5 "https://localhost:8443/health/ready" >/dev/null 2>&1; then
+            log_success "Hub Keycloak healthy"
+        else
+            log_warn "Hub Keycloak container running but health check failed (may still be starting)"
+        fi
+    else
+        log_warn "Hub Keycloak not detected - federation setup may fail"
+    fi
+
+    # =========================================================================
+    # Step 5: Verify Backend API health
+    # =========================================================================
+    if curl -skf --max-time 5 "https://localhost:4000/api/health" >/dev/null 2>&1; then
+        log_success "Hub Backend API healthy"
+    else
+        log_warn "Hub Backend API not responding (may still be starting)"
+    fi
+
+    # =========================================================================
+    # Step 6: Verify OPAL server
+    # =========================================================================
     if ! docker ps -q --filter "name=dive-hub-opal-server" 2>/dev/null | grep -q .; then
         log_error "Hub OPAL server not running - required for spoke federation"
 
@@ -427,15 +536,7 @@ spoke_preflight_check_hub() {
     fi
 
     log_success "Hub OPAL server available"
-
-    # Check Hub Keycloak
-    local hub_kc_container="${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}"
-    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${hub_kc_container}$"; then
-        log_success "Hub Keycloak available"
-    else
-        log_warn "Hub Keycloak not detected - federation setup may fail"
-    fi
-
+    log_success "Hub auto-discovery complete — all critical services healthy"
     return 0
 }
 
