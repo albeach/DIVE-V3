@@ -89,6 +89,17 @@ export function requireAdmin(req: Request, res: Response, next: NextFunction): v
  * Only allows 'super_admin' role
  */
 export function requireSuperAdmin(req: Request, res: Response, next: NextFunction): void {
+    // Check for valid X-Admin-Key (CLI/admin tool access) — same key as requireAdmin
+    const adminKey = req.headers['x-admin-key'] as string;
+    if (adminKey && adminKey === process.env.FEDERATION_ADMIN_KEY) {
+        logger.debug('Super admin access granted via X-Admin-Key (CLI)', {
+            path: req.path,
+            method: req.method
+        });
+        next();
+        return;
+    }
+
     // DEV ONLY: Allow CLI bypass for local development
     // WARNING: This should NEVER be enabled in production
     const cliBypass = process.env.NODE_ENV !== 'production' &&

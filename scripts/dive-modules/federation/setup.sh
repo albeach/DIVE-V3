@@ -881,6 +881,288 @@ federation_status() {
 }
 
 # =============================================================================
+# CLI SPOKE MANAGEMENT (Hub API)
+# =============================================================================
+
+# Resolve Hub API URL for CLI management operations
+_fed_hub_api_url() {
+    if [ -n "${HUB_API_URL:-}" ]; then
+        echo "$HUB_API_URL"
+    elif [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+        local _env_prefix _base_domain
+        _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
+        _base_domain="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"
+        echo "https://${_env_prefix}-usa-api.${_base_domain}"
+    else
+        echo "https://localhost:${BACKEND_PORT:-4000}"
+    fi
+}
+
+# Get admin key for CLI API calls
+_fed_admin_key() {
+    local key="${FEDERATION_ADMIN_KEY:-}"
+    if [ -z "$key" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
+        key=$(grep "^FEDERATION_ADMIN_KEY=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2-)
+    fi
+    echo "$key"
+}
+
+# CLI curl helper with admin key authentication
+_fed_api_call() {
+    local method="$1"
+    local path="$2"
+    shift 2
+    local hub_api
+    hub_api=$(_fed_hub_api_url)
+    local admin_key
+    admin_key=$(_fed_admin_key)
+
+    local auth_headers=()
+    if [ -n "$admin_key" ]; then
+        auth_headers=(-H "X-Admin-Key: ${admin_key}")
+    else
+        # Dev fallback: CLI bypass
+        auth_headers=(-H "X-CLI-Bypass: dive-cli-local-dev")
+    fi
+
+    curl -sk --max-time 15 -X "$method" \
+        "${hub_api}${path}" \
+        -H "Content-Type: application/json" \
+        "${auth_headers[@]}" \
+        "$@" 2>/dev/null
+}
+
+##
+# List all registered spokes or filter by status
+# Usage: ./dive federation list [--pending|--approved|--suspended]
+##
+cmd_federation_list() {
+    local filter="${1:-}"
+    local path="/api/federation/spokes"
+
+    case "$filter" in
+        --pending)  path="/api/federation/spokes/pending" ;;
+        --approved) ;;  # will filter client-side
+        --suspended) ;;
+    esac
+
+    local response
+    response=$(_fed_api_call GET "$path")
+
+    if [ -z "$response" ]; then
+        log_error "Hub API unreachable at $(_fed_hub_api_url)"
+        return 1
+    fi
+
+    # Check for error response
+    if echo "$response" | jq -e '.error' >/dev/null 2>&1; then
+        log_error "API error: $(echo "$response" | jq -r '.error // .message')"
+        return 1
+    fi
+
+    # Extract spokes array (handle both /spokes and /spokes/pending response shapes)
+    local spokes
+    spokes=$(echo "$response" | jq -r '.spokes // .pending // []' 2>/dev/null)
+
+    # Client-side filter if needed
+    if [ "$filter" = "--approved" ]; then
+        spokes=$(echo "$spokes" | jq '[.[] | select(.status == "approved")]')
+    elif [ "$filter" = "--suspended" ]; then
+        spokes=$(echo "$spokes" | jq '[.[] | select(.status == "suspended")]')
+    fi
+
+    local count
+    count=$(echo "$spokes" | jq 'length')
+
+    if [ "$count" = "0" ] || [ "$count" = "null" ]; then
+        log_info "No spokes found${filter:+ ($filter)}"
+        return 0
+    fi
+
+    echo ""
+    printf "  %-8s  %-20s  %-12s  %-12s  %-10s  %-30s\n" \
+        "CODE" "NAME" "STATUS" "TRUST" "MAX CLASS" "DOMAIN"
+    printf "  %-8s  %-20s  %-12s  %-12s  %-10s  %-30s\n" \
+        "--------" "--------------------" "------------" "------------" "----------" "------------------------------"
+
+    echo "$spokes" | jq -r '.[] | [.instanceCode, .name, .status, .trustLevel, .maxClassification, .baseUrl] | @tsv' 2>/dev/null | \
+    while IFS=$'\t' read -r code name status trust maxclass url; do
+        printf "  %-8s  %-20s  %-12s  %-12s  %-10s  %-30s\n" \
+            "${code:-?}" "${name:-?}" "${status:-?}" "${trust:-?}" "${maxclass:-?}" "${url:-?}"
+    done
+
+    echo ""
+    log_info "${count} spoke(s) found"
+}
+
+##
+# Approve a pending spoke
+# Usage: ./dive federation approve <CODE> [--trust bilateral] [--max-classification SECRET]
+##
+cmd_federation_approve() {
+    local code="${1:-}"
+    shift || true
+
+    if [ -z "$code" ]; then
+        log_error "Usage: ./dive federation approve <CODE> [--trust <level>] [--max-classification <class>]"
+        return 1
+    fi
+
+    code=$(echo "$code" | tr '[:lower:]' '[:upper:]')
+
+    # Parse options
+    local trust_level="bilateral"
+    local max_classification="SECRET"
+
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --trust)              trust_level="${2:-bilateral}"; shift 2 ;;
+            --max-classification) max_classification="${2:-SECRET}"; shift 2 ;;
+            *)                    shift ;;
+        esac
+    done
+
+    # Resolve spokeId from instanceCode
+    local spoke_data
+    spoke_data=$(_fed_api_call GET "/api/federation/spokes")
+    local spoke_id
+    spoke_id=$(echo "$spoke_data" | jq -r --arg code "$code" '.spokes[] | select(.instanceCode == $code) | .spokeId' 2>/dev/null)
+
+    if [ -z "$spoke_id" ] || [ "$spoke_id" = "null" ]; then
+        log_error "Spoke not found: ${code}"
+        return 1
+    fi
+
+    log_info "Approving spoke ${code} (${spoke_id})..."
+    log_verbose "  Trust level: ${trust_level}"
+    log_verbose "  Max classification: ${max_classification}"
+
+    local payload
+    payload=$(cat <<EOF
+{
+  "allowedScopes": ["policy:base", "policy:org", "policy:tenant"],
+  "trustLevel": "$trust_level",
+  "maxClassification": "$max_classification",
+  "dataIsolationLevel": "filtered"
+}
+EOF
+)
+
+    local response
+    response=$(_fed_api_call POST "/api/federation/spokes/${spoke_id}/approve" -d "$payload")
+
+    if echo "$response" | jq -e '.spoke.status == "approved"' >/dev/null 2>&1; then
+        log_success "Spoke ${code} approved (trust=${trust_level}, class=${max_classification})"
+    else
+        local err
+        err=$(echo "$response" | jq -r '.error // .message // "Unknown error"' 2>/dev/null)
+        log_error "Approval failed: ${err}"
+        return 1
+    fi
+}
+
+##
+# Suspend a spoke
+# Usage: ./dive federation suspend <CODE> [--reason "text"]
+##
+cmd_federation_suspend() {
+    local code="${1:-}"
+    shift || true
+
+    if [ -z "$code" ]; then
+        log_error "Usage: ./dive federation suspend <CODE> [--reason <text>]"
+        return 1
+    fi
+
+    code=$(echo "$code" | tr '[:lower:]' '[:upper:]')
+
+    local reason="Suspended via CLI"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --reason) reason="${2:-Suspended via CLI}"; shift 2 ;;
+            *)        shift ;;
+        esac
+    done
+
+    # Resolve spokeId
+    local spoke_data
+    spoke_data=$(_fed_api_call GET "/api/federation/spokes")
+    local spoke_id
+    spoke_id=$(echo "$spoke_data" | jq -r --arg code "$code" '.spokes[] | select(.instanceCode == $code) | .spokeId' 2>/dev/null)
+
+    if [ -z "$spoke_id" ] || [ "$spoke_id" = "null" ]; then
+        log_error "Spoke not found: ${code}"
+        return 1
+    fi
+
+    log_warn "Suspending spoke ${code} (${spoke_id})..."
+
+    local response
+    response=$(_fed_api_call POST "/api/federation/spokes/${spoke_id}/suspend" -d "{\"reason\": \"$reason\"}")
+
+    if echo "$response" | jq -e '.spoke.status == "suspended"' >/dev/null 2>&1; then
+        log_success "Spoke ${code} suspended"
+    else
+        local err
+        err=$(echo "$response" | jq -r '.error // .message // "Unknown error"' 2>/dev/null)
+        log_error "Suspension failed: ${err}"
+        return 1
+    fi
+}
+
+##
+# Revoke a spoke (permanent removal from federation)
+# Usage: ./dive federation revoke <CODE> [--confirm]
+##
+cmd_federation_revoke() {
+    local code="${1:-}"
+    local confirmed=false
+    [ "${2:-}" = "--confirm" ] && confirmed=true
+
+    if [ -z "$code" ]; then
+        log_error "Usage: ./dive federation revoke <CODE> [--confirm]"
+        return 1
+    fi
+
+    code=$(echo "$code" | tr '[:lower:]' '[:upper:]')
+
+    # Resolve spokeId
+    local spoke_data
+    spoke_data=$(_fed_api_call GET "/api/federation/spokes")
+    local spoke_id
+    spoke_id=$(echo "$spoke_data" | jq -r --arg code "$code" '.spokes[] | select(.instanceCode == $code) | .spokeId' 2>/dev/null)
+
+    if [ -z "$spoke_id" ] || [ "$spoke_id" = "null" ]; then
+        log_error "Spoke not found: ${code}"
+        return 1
+    fi
+
+    if [ "$confirmed" = false ]; then
+        log_warn "This will PERMANENTLY revoke ${code} from the federation."
+        log_warn "The spoke's certificates and tokens will be invalidated."
+        read -rp "  Type 'yes' to confirm: " answer
+        if [ "$answer" != "yes" ]; then
+            log_info "Cancelled."
+            return 0
+        fi
+    fi
+
+    log_warn "Revoking spoke ${code} (${spoke_id})..."
+
+    local response
+    response=$(_fed_api_call POST "/api/federation/spokes/${spoke_id}/revoke" -d "{\"reason\": \"Revoked via CLI\"}")
+
+    if echo "$response" | jq -e '.spoke.status == "revoked"' >/dev/null 2>&1; then
+        log_success "Spoke ${code} revoked from federation"
+    else
+        local err
+        err=$(echo "$response" | jq -r '.error // .message // "Unknown error"' 2>/dev/null)
+        log_error "Revocation failed: ${err}"
+        return 1
+    fi
+}
+
+# =============================================================================
 # MODULE DISPATCH
 # =============================================================================
 
@@ -902,6 +1184,10 @@ module_federation() {
             federation_verify "$@"
             ;;
         status)         federation_status "$@" ;;
+        list)           cmd_federation_list "$@" ;;
+        approve)        cmd_federation_approve "$@" ;;
+        suspend)        cmd_federation_suspend "$@" ;;
+        revoke)         cmd_federation_revoke "$@" ;;
         test|integration-test)
             # Load verification module for test functions
             if [ -f "${FEDERATION_DIR}/verification.sh" ]; then
@@ -925,7 +1211,7 @@ module_federation() {
                 log_error "Cannot get Hub admin token"
             fi
             ;;
-        help|*)
+        help|--help|-h)
             echo "Usage: ./dive federation <command> [args]"
             echo ""
             echo "Commands:"
@@ -936,6 +1222,25 @@ module_federation() {
             echo "  token-revocation  Test cross-instance token revocation"
             echo "  status            Show overall federation status"
             echo "  list-idps         List configured IdPs on Hub"
+            echo ""
+            echo "Spoke Management (via Hub API):"
+            echo "  list [--pending|--approved|--suspended]"
+            echo "                    List registered spokes (filtered by status)"
+            echo "  approve <CODE>    Approve a pending spoke"
+            echo "    --trust <level>           bilateral (default), national, partner"
+            echo "    --max-classification <c>  SECRET (default), TOP_SECRET"
+            echo "  suspend <CODE>    Suspend a spoke (reversible)"
+            echo "    --reason <text>           Suspension reason"
+            echo "  revoke <CODE>     Permanently revoke a spoke from federation"
+            echo ""
+            echo "Environment:"
+            echo "  FEDERATION_ADMIN_KEY  API key for CLI management (from .env.hub)"
+            echo "  HUB_API_URL           Hub backend URL (auto-derived from DIVE_DOMAIN_SUFFIX)"
+            ;;
+        *)
+            log_error "Unknown federation command: $action"
+            log_info "Run './dive federation help' for usage"
+            return 1
             ;;
     esac
 }
@@ -951,6 +1256,10 @@ export -f federation_unlink
 export -f federation_configure_mappers
 export -f federation_status
 export -f module_federation
+export -f cmd_federation_list
+export -f cmd_federation_approve
+export -f cmd_federation_suspend
+export -f cmd_federation_revoke
 # Ported from federation-link.sh
 export -f _get_federation_secret
 export -f _get_instance_port
