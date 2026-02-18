@@ -77,8 +77,11 @@ install_system_packages() {
             iptables-services
     else
         export DEBIAN_FRONTEND=noninteractive
+        # Pre-seed debconf to prevent interactive prompts from iptables-persistent
+        echo iptables-persistent iptables-persistent/autosave_v4 boolean true | sudo debconf-set-selections
+        echo iptables-persistent iptables-persistent/autosave_v6 boolean true | sudo debconf-set-selections
         sudo apt-get update -qq
-        sudo apt-get install -y -qq \
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
             git jq curl wget unzip tar gzip openssl \
             build-essential libnss3-tools \
             apt-transport-https ca-certificates gnupg lsb-release \

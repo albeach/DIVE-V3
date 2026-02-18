@@ -386,6 +386,7 @@ aws_launch() {
         cat > "$shim_file" <<'SHIM'
 #!/bin/bash
 set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
 exec > /var/log/cloud-init-output.log 2>&1
 echo "[BOOTSTRAP] Installing git..."
 apt-get update -qq && apt-get install -y -qq git
@@ -393,7 +394,7 @@ echo "[BOOTSTRAP] Cloning DIVE V3..."
 git clone --branch main https://github.com/albeach/DIVE-V3.git /opt/dive-v3
 echo "[BOOTSTRAP] Running bootstrap..."
 chmod +x /opt/dive-v3/scripts/aws/bootstrap-ec2.sh
-DIVE_DIR=/opt/dive-v3 /opt/dive-v3/scripts/aws/bootstrap-ec2.sh
+DEBIAN_FRONTEND=noninteractive DIVE_DIR=/opt/dive-v3 /opt/dive-v3/scripts/aws/bootstrap-ec2.sh
 SHIM
         user_data_flag=(--user-data "file://${shim_file}")
     fi
