@@ -79,6 +79,12 @@ async function globalSetup(config: FullConfig) {
         }, 'admin.json');
       } catch (error) {
         console.warn('[AUTH-SETUP] Admin session setup failed:', error);
+        // Clean up partial/invalid admin.json to prevent false-positive hasAuthState checks
+        const adminJsonPath = path.join(AUTH_DIR, 'admin.json');
+        if (fs.existsSync(adminJsonPath)) {
+          fs.unlinkSync(adminJsonPath);
+          console.warn('[AUTH-SETUP] Removed partial admin.json');
+        }
       }
     }
   } finally {
