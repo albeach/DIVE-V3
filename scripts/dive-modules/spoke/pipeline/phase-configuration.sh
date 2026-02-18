@@ -378,6 +378,18 @@ spoke_phase_configuration() {
         return 1
     fi
 
+    # ==========================================================================
+    # CADDY INTEGRATION: Set up reverse proxy and DNS for spoke (EC2 only)
+    # ==========================================================================
+    if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+        if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-caddy.sh" ]; then
+            source "$(dirname "${BASH_SOURCE[0]}")/spoke-caddy.sh"
+        fi
+        if type spoke_caddy_setup &>/dev/null; then
+            spoke_caddy_setup "$instance_code" || log_warn "Caddy setup had issues (non-fatal)"
+        fi
+    fi
+
     # CRITICAL FIX: Validate configuration BEFORE creating checkpoint
     # Previous issue: Checkpoint created before validation, so failed configurations were marked complete
     if ! spoke_checkpoint_configuration "$instance_code"; then

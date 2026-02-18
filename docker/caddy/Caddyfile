@@ -100,3 +100,10 @@
 		respond "Forbidden" 403
 	}
 }
+
+# =============================================================================
+# Spoke Domains (auto-generated per spoke during ./dive spoke deploy)
+# =============================================================================
+# Each spoke deployment creates a snippet file in /etc/caddy/spokes/
+# e.g., spokes/gbr.caddy with domain blocks for dev-gbr-{app,api,idp}.dive25.com
+import /etc/caddy/spokes/*.caddy
