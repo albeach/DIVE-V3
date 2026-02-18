@@ -267,43 +267,33 @@ fi
 # Auto-configure nginx proxy mode when running on EC2.
 # nginx owns the standard ports (443, 3000, 4000, 7002, 8443, 8200) on 0.0.0.0.
 # Services remap to 127.0.0.1:1XXXX to avoid conflicts.
-if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost" ] \
-    && [ -f "${DIVE_ROOT}/docker-compose.proxy.yml" ]; then
-    # Port offsets — services bind to 127.0.0.1:1XXXX, nginx proxies 0.0.0.0:XXXX
-    export KEYCLOAK_HTTPS_PORT="${KEYCLOAK_HTTPS_PORT:-18443}"
-    export KEYCLOAK_HTTP_PORT="${KEYCLOAK_HTTP_PORT:-18080}"
-    export KEYCLOAK_MGMT_PORT="${KEYCLOAK_MGMT_PORT:-19000}"
-    export BACKEND_PORT="${BACKEND_PORT:-14000}"
-    export FRONTEND_PORT="${FRONTEND_PORT:-13000}"
-    export OPAL_PORT="${OPAL_PORT:-17002}"
-    export VAULT_API_PORT="${VAULT_API_PORT:-18200}"
-
-    # Vault CLI address — host-accessible port for vault init/setup/seal-status
-    export VAULT_CLI_ADDR="${VAULT_CLI_ADDR:-https://localhost:${VAULT_API_PORT}}"
+if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost" ]; then
+    # EC2 mode — services bind directly to 0.0.0.0 (no nginx, no port remapping)
+    # Standard ports are used; docker-compose.ec2.yml overrides bind address only.
 
     # Keycloak issuer — must match the external URL users see in their browser
     export KEYCLOAK_HOSTNAME="${KEYCLOAK_HOSTNAME:-${HUB_EXTERNAL_ADDRESS}}"
 
-    # Frontend public URLs — browser-accessible via nginx.
+    # Frontend public URLs — browser-accessible externally.
     # Force-set (no :- guard): .env may contain stale localhost values from templates
-    # that would otherwise prevent proxy-mode overrides.
-    export NEXT_PUBLIC_API_URL="https://${HUB_EXTERNAL_ADDRESS}:4000"
-    export NEXT_PUBLIC_BACKEND_URL="https://${HUB_EXTERNAL_ADDRESS}:4000"
-    export NEXT_PUBLIC_BASE_URL="https://${HUB_EXTERNAL_ADDRESS}:3000"
-    export NEXT_PUBLIC_KEYCLOAK_URL="https://${HUB_EXTERNAL_ADDRESS}:8443"
-    export NEXTAUTH_URL="https://${HUB_EXTERNAL_ADDRESS}:3000"
-    export AUTH_URL="https://${HUB_EXTERNAL_ADDRESS}:3000"
-    export KEYCLOAK_ISSUER="https://${HUB_EXTERNAL_ADDRESS}:8443/realms/${HUB_REALM:-dive-v3-broker-usa}"
-    export AUTH_KEYCLOAK_ISSUER="https://${HUB_EXTERNAL_ADDRESS}:8443/realms/${HUB_REALM:-dive-v3-broker-usa}"
-    export KEYCLOAK_URL="https://${HUB_EXTERNAL_ADDRESS}:8443"
+    # that would otherwise prevent EC2 overrides.
+    export NEXT_PUBLIC_API_URL="https://${HUB_EXTERNAL_ADDRESS}:${BACKEND_PORT:-4000}"
+    export NEXT_PUBLIC_BACKEND_URL="https://${HUB_EXTERNAL_ADDRESS}:${BACKEND_PORT:-4000}"
+    export NEXT_PUBLIC_BASE_URL="https://${HUB_EXTERNAL_ADDRESS}:${FRONTEND_PORT:-3000}"
+    export NEXT_PUBLIC_KEYCLOAK_URL="https://${HUB_EXTERNAL_ADDRESS}:${KEYCLOAK_HTTPS_PORT:-8443}"
+    export NEXTAUTH_URL="https://${HUB_EXTERNAL_ADDRESS}:${FRONTEND_PORT:-3000}"
+    export AUTH_URL="https://${HUB_EXTERNAL_ADDRESS}:${FRONTEND_PORT:-3000}"
+    export KEYCLOAK_ISSUER="https://${HUB_EXTERNAL_ADDRESS}:${KEYCLOAK_HTTPS_PORT:-8443}/realms/${HUB_REALM:-dive-v3-broker-usa}"
+    export AUTH_KEYCLOAK_ISSUER="https://${HUB_EXTERNAL_ADDRESS}:${KEYCLOAK_HTTPS_PORT:-8443}/realms/${HUB_REALM:-dive-v3-broker-usa}"
+    export KEYCLOAK_URL="https://${HUB_EXTERNAL_ADDRESS}:${KEYCLOAK_HTTPS_PORT:-8443}"
 
-    # Host-accessible URLs for scripts running on the EC2 host (via nginx)
-    export HUB_KC_URL="https://localhost:${KEYCLOAK_HTTPS_PORT}"
-    export HUB_BACKEND_URL="https://localhost:${BACKEND_PORT}"
-    export HUB_OPAL_URL="https://localhost:${OPAL_PORT}"
+    # Host-accessible URLs for scripts (services on standard ports, no offset)
+    export HUB_KC_URL="https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}"
+    export HUB_BACKEND_URL="https://localhost:${BACKEND_PORT:-4000}"
+    export HUB_OPAL_URL="https://localhost:${OPAL_PORT:-7002}"
 
-    # Terraform Keycloak provider: connect directly, bypassing nginx
-    export TF_VAR_keycloak_url="https://localhost:${KEYCLOAK_HTTPS_PORT}"
+    # Terraform Keycloak provider
+    export TF_VAR_keycloak_url="https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}"
 fi
 
 # Environment-specific AWS defaults

@@ -1,0 +1,32 @@
+# =============================================================================
+# DIVE V3 Hub EC2 Overlay — External Access
+# =============================================================================
+# Exposes key services on 0.0.0.0 for EC2/remote access.
+# Use with:
+#   docker compose -f docker-compose.hub.yml -f docker-compose.ec2.yml up -d
+#
+# No nginx, no port remapping — services handle TLS directly.
+# =============================================================================
+
+services:
+  keycloak:
+    ports:
+      - "0.0.0.0:${KEYCLOAK_HTTPS_PORT:-8443}:8443"
+      - "0.0.0.0:${KEYCLOAK_HTTP_PORT:-8080}:8080"
+      - "0.0.0.0:${KEYCLOAK_MGMT_PORT:-9000}:9000"
+
+  backend:
+    ports:
+      - "0.0.0.0:${BACKEND_PORT:-4000}:4000"
+
+  frontend:
+    ports:
+      - "0.0.0.0:${FRONTEND_PORT:-3000}:3000"
+
+  opal-server:
+    ports:
+      - "0.0.0.0:${OPAL_PORT:-7002}:7002"
+
+  vault-1:
+    ports:
+      - "0.0.0.0:${VAULT_API_PORT:-8200}:8200"
