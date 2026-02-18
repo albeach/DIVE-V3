@@ -617,11 +617,13 @@ EOF
             return 1
         fi
 
-        # Install mkcert CA in spoke truststore (SSOT function)
-        if type install_mkcert_ca_in_spoke &>/dev/null; then
+        # Install CA in spoke truststore (mkcert for local dev only)
+        if ! is_cloud_environment 2>/dev/null && type install_mkcert_ca_in_spoke &>/dev/null; then
             install_mkcert_ca_in_spoke "$code_lower" || {
                 log_warn "CA installation had issues (non-critical)"
             }
+        elif type _rebuild_spoke_ca_bundle &>/dev/null; then
+            _rebuild_spoke_ca_bundle "$code_lower" 2>/dev/null || true
         fi
     else
         log_error "certificates.sh module not found"

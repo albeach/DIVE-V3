@@ -181,8 +181,8 @@ preflight_check_tools() {
         return 1
     fi
 
-    # Check optional but recommended tools
-    if ! command -v mkcert >/dev/null 2>&1; then
+    # Check optional but recommended tools (mkcert only needed for local dev)
+    if ! is_cloud_environment 2>/dev/null && ! command -v mkcert >/dev/null 2>&1; then
         log_warn "mkcert not found - using openssl for certificates"
     fi
 

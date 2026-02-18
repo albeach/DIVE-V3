@@ -117,7 +117,7 @@ cmd_deploy() {
     if [ "$ENVIRONMENT" = "local" ] || [ "$ENVIRONMENT" = "dev" ]; then
         check_certs || { log_error "Certificate generation failed"; return 1; }
     else
-        log_verbose "Skipping mkcert for env ${ENVIRONMENT}"
+        log_verbose "Skipping local cert generation for env ${ENVIRONMENT}"
     fi
 
     # Choose compose file based on target/pilot/local

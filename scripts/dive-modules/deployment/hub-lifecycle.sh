@@ -151,6 +151,17 @@ hub_init() {
         if use_vault_pki 2>/dev/null && type generate_hub_certificate_vault &>/dev/null; then
             log_verbose "Generating hub certificates from Vault PKI..."
             generate_hub_certificate_vault
+        elif is_cloud_environment 2>/dev/null; then
+            log_verbose "Cloud: generating hub certificates with OpenSSL..."
+            local san_str="DNS:localhost,DNS:backend,DNS:keycloak,DNS:frontend,DNS:opal-server,DNS:kas,DNS:postgres,DNS:mongodb,DNS:redis,IP:127.0.0.1"
+            [ -n "${INSTANCE_PRIVATE_IP:-}" ] && san_str="${san_str},IP:${INSTANCE_PRIVATE_IP}"
+            [ -n "${INSTANCE_PUBLIC_IP:-}" ] && san_str="${san_str},IP:${INSTANCE_PUBLIC_IP}"
+            openssl req -x509 -nodes -days 30 -newkey rsa:2048 \
+                -keyout "${cert_dir}/key.pem" \
+                -out "${cert_dir}/certificate.pem" \
+                -subj "/CN=hub.dive-v3.local" \
+                -addext "subjectAltName=${san_str}" >/dev/null 2>&1
+            log_verbose "Certificates generated with OpenSSL (cloud mode)"
         elif command -v mkcert >/dev/null 2>&1; then
             log_verbose "Generating hub certificates with mkcert..."
             cd "$cert_dir"
@@ -161,16 +172,14 @@ hub_init() {
                 >/dev/null 2>&1
             cp "$(mkcert -CAROOT)/rootCA.pem" mkcert-rootCA.pem 2>/dev/null || true
             cd - >/dev/null
-            log_verbose "Certificates generated with mkcert (includes all Docker service names)"
+            log_verbose "Certificates generated with mkcert"
         else
-            # Fallback to openssl
-            log_verbose "Generating hub certificates with openssl..."
+            log_verbose "Generating hub certificates with OpenSSL (fallback)..."
             openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
                 -keyout "${cert_dir}/key.pem" \
                 -out "${cert_dir}/certificate.pem" \
                 -subj "/CN=localhost" >/dev/null 2>&1
-            cp "${cert_dir}/certificate.pem" "${cert_dir}/mkcert-rootCA.pem"
-            log_verbose "Certificates generated with openssl"
+            log_verbose "Certificates generated with OpenSSL"
         fi
 
         # Fix permissions for Docker containers (non-root users need read access)
@@ -178,8 +187,6 @@ hub_init() {
     fi
 
     # Build SSOT CA bundle for docker-compose volume mounts
-    # Services mount: ./certs/ca-bundle:/app/certs/ca:ro → NODE_EXTRA_CA_CERTS=/app/certs/ca/rootCA.pem
-    # The bundle includes ALL trusted CAs so both hub (Vault PKI) and spoke (mkcert) services work.
     _rebuild_ca_bundle
     log_verbose "CA bundle built at ${DIVE_ROOT}/certs/ca-bundle/rootCA.pem"
 

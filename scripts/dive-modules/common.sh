@@ -393,6 +393,21 @@ if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost
 fi
 
 # =============================================================================
+# ENVIRONMENT DETECTION HELPERS
+# =============================================================================
+
+##
+# Returns true (0) when running on a cloud/EC2 instance (NOT local dev).
+# Used to skip mkcert code paths and enable cloud-specific behavior.
+##
+is_cloud_environment() {
+    [ -n "${INSTANCE_PRIVATE_IP:-}" ] && return 0
+    { [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost" ]; } && return 0
+    return 1
+}
+export -f is_cloud_environment
+
+# =============================================================================
 # NETWORK MANAGEMENT (LOCAL DEV ONLY)
 # =============================================================================
 
@@ -632,7 +647,6 @@ check_terraform() {
 
 check_certs() {
     # SSOT: Use certificates.sh module for all certificate operations
-    # This matches the spoke pipeline approach for consistency
 
     # Vault PKI path: if CERT_PROVIDER=vault, issue from Vault and return early
     if type use_vault_pki &>/dev/null && use_vault_pki; then
@@ -643,20 +657,54 @@ check_certs() {
         if type generate_hub_certificate_vault &>/dev/null && generate_hub_certificate_vault; then
             return 0
         fi
-        log_warn "Vault PKI failed — falling back to mkcert"
+        log_warn "Vault PKI cert issuance failed — trying fallback"
     fi
 
-    # Ensure mkcert is installed and CA present
+    local cert_dir="${DIVE_ROOT}/instances/hub/certs"
+
+    # Check if valid certificates already exist
+    if [ -f "$cert_dir/certificate.pem" ] && [ -f "$cert_dir/key.pem" ]; then
+        local expiry_check
+        expiry_check=$(openssl x509 -in "$cert_dir/certificate.pem" -checkend 86400 2>/dev/null && echo "valid" || echo "expiring")
+        if [ "$expiry_check" = "valid" ]; then
+            log_info "Hub certificates exist and are valid - skipping regeneration"
+            is_cloud_environment || _sync_mkcert_ca_to_hub
+            return 0
+        fi
+        log_warn "Certificate expiring within 24h - regenerating"
+    fi
+
+    # Cloud/EC2: generate OpenSSL self-signed certs (no mkcert dependency)
+    if is_cloud_environment; then
+        log_info "Cloud environment: generating hub certificate with OpenSSL..."
+        mkdir -p "$cert_dir"
+        local san_str="DNS:localhost,DNS:backend,DNS:keycloak,DNS:frontend,DNS:opal-server,DNS:kas,DNS:postgres,DNS:mongodb,DNS:redis,IP:127.0.0.1"
+        [ -n "${INSTANCE_PRIVATE_IP:-}" ] && san_str="${san_str},IP:${INSTANCE_PRIVATE_IP}"
+        [ -n "${INSTANCE_PUBLIC_IP:-}" ] && san_str="${san_str},IP:${INSTANCE_PUBLIC_IP}"
+        [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost" ] && san_str="${san_str},DNS:${HUB_EXTERNAL_ADDRESS}"
+        if openssl req -x509 -newkey rsa:2048 -nodes -days 30 \
+            -keyout "${cert_dir}/key.pem" -out "${cert_dir}/certificate.pem" \
+            -subj "/CN=hub.dive-v3.local" \
+            -addext "subjectAltName=${san_str}" 2>/dev/null; then
+            chmod 644 "${cert_dir}/key.pem" "${cert_dir}/certificate.pem"
+            cp "${cert_dir}/certificate.pem" "${cert_dir}/fullchain.pem" 2>/dev/null || true
+            _rebuild_ca_bundle 2>/dev/null || true
+            log_success "Hub certificates generated (OpenSSL self-signed)"
+            return 0
+        fi
+        log_error "OpenSSL certificate generation failed"
+        return 1
+    fi
+
+    # Local dev: use mkcert
     if ! command -v mkcert >/dev/null 2>&1; then
-        log_error "mkcert not installed. Install mkcert and trust the local CA."
+        log_error "mkcert not installed. Install: brew install mkcert && mkcert -install"
         return 1
     fi
 
     local caroot
     caroot=$(mkcert -CAROOT 2>/dev/null || true)
-    if [ -z "$caroot" ]; then
-        caroot="${HOME}/Library/Application Support/mkcert"
-    fi
+    [ -z "$caroot" ] && caroot="${HOME}/Library/Application Support/mkcert"
 
     local ca_key="${caroot}/rootCA-key.pem"
     local ca_cert="${caroot}/rootCA.pem"
@@ -675,24 +723,6 @@ check_certs() {
         return 1
     fi
 
-    # Determine certificate target directory based on context
-    local cert_dir="${DIVE_ROOT}/instances/hub/certs"
-
-    # Check if valid certificates already exist
-    if [ -f "$cert_dir/certificate.pem" ] && [ -f "$cert_dir/key.pem" ]; then
-        # Verify certificate hasn't expired
-        local expiry_check
-        expiry_check=$(openssl x509 -in "$cert_dir/certificate.pem" -checkend 86400 2>/dev/null && echo "valid" || echo "expiring")
-        if [ "$expiry_check" = "valid" ]; then
-            log_info "Hub certificates exist and are valid - skipping regeneration"
-            log_info "To force regeneration: rm -f $cert_dir/certificate.pem"
-            # Still sync mkcert CA to truststores
-            _sync_mkcert_ca_to_hub
-            return 0
-        fi
-        log_warn "Certificate expiring within 24h - regenerating"
-    fi
-
     log_step "Generating hub certificates via SSOT (instances/hub/certs)..."
     if [ "$DRY_RUN" = true ]; then
         log_dry "Would generate certificates to $cert_dir"
@@ -702,7 +732,6 @@ check_certs() {
     mkdir -p "$cert_dir"
 
     # Hub certificate SANs — delegate to SSOT in certificates.sh
-    # Load certificates.sh if _hub_service_sans is not already available
     if ! type _hub_service_sans &>/dev/null; then
         if [ -f "${DIVE_ROOT}/scripts/dive-modules/certificates.sh" ]; then
             source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
@@ -711,12 +740,8 @@ check_certs() {
 
     local hostnames
     if type _hub_service_sans &>/dev/null; then
-        # SSOT path: DNS SANs from certificates.sh + IP literals for mkcert
-        hostnames="$(_hub_service_sans) 127.0.0.1 ::1"
-        # mkcert also supports wildcard for future-proofing
-        hostnames="$hostnames *.dive25.com"
+        hostnames="$(_hub_service_sans) 127.0.0.1 ::1 *.dive25.com"
     else
-        # Fallback: inline list (kept in sync manually if certificates.sh unavailable)
         hostnames="localhost 127.0.0.1 ::1 host.docker.internal"
         hostnames="$hostnames dive-hub-keycloak dive-hub-backend dive-hub-frontend"
         hostnames="$hostnames dive-hub-opa dive-hub-opal-server dive-hub-kas"
@@ -727,18 +752,13 @@ check_certs() {
         hostnames="$hostnames *.dive25.com usa-idp.dive25.com usa-api.dive25.com usa-app.dive25.com"
     fi
 
-    # Generate certificate
     # shellcheck disable=SC2086
     if mkcert -key-file "$cert_dir/key.pem" \
               -cert-file "$cert_dir/certificate.pem" \
               $hostnames 2>/dev/null; then
-        chmod 644 "$cert_dir/key.pem"   # 644: Docker containers run as non-owner UIDs
-        chmod 644 "$cert_dir/certificate.pem"
+        chmod 644 "$cert_dir/key.pem" "$cert_dir/certificate.pem"
         log_success "Hub certificates generated to $cert_dir"
-
-        # Sync mkcert CA to truststores
         _sync_mkcert_ca_to_hub
-
         return 0
     else
         log_error "Failed to generate hub certificates"
