@@ -77,8 +77,8 @@ export function getDynamicConfig() {
   }
 
   // Fallback: try to parse instance from hostname pattern
-  // e.g., "usa-app" -> USA config
-  const match = hostname.match(/^([a-z]+)-app/);
+  // e.g., "usa-app.dive25.com" or "dev-usa-app.dive25.com"
+  const match = hostname.match(/(?:^|-)([a-z]{2,3})-app\./);
   if (match) {
     const instanceCode = match[1].toUpperCase();
     const foundConfig = Object.values(DOMAIN_CONFIG).find(
