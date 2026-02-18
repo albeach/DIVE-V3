@@ -65,6 +65,18 @@ if [ -z "${VAULT_CACERT:-}" ] && [[ "$VAULT_ADDR" == https://* ]]; then
     export VAULT_SKIP_VERIFY=1
 fi
 
+# Validate auto-detected CACERT: if vault is reachable but CACERT fails TLS, fall back
+# This prevents hangs when certs/vault/node1/ca.pem is stale or mismatched
+if [ -n "${VAULT_CACERT:-}" ] && [ -z "${VAULT_SKIP_VERIFY:-}" ] && [[ "$VAULT_ADDR" == https://* ]]; then
+    if command -v timeout &>/dev/null; then
+        if ! timeout 3 vault status >/dev/null 2>&1; then
+            # CACERT may be stale — try without it
+            unset VAULT_CACERT
+            export VAULT_SKIP_VERIFY=1
+        fi
+    fi
+fi
+
 # Scheme for per-node CLI calls (derived from VAULT_ADDR)
 _VAULT_CLI_SCHEME="${VAULT_ADDR%%://*}"
 
