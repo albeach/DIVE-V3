@@ -10,7 +10,7 @@ test.describe('Responsive Layouts', () => {
 
     test('Dashboard renders in single column', async ({ page }) => {
       await page.goto(TEST_CONFIG.baseUrl);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       // Dashboard content area should be single column at mobile width
       const dashboardGrid = page.locator(
@@ -51,7 +51,7 @@ test.describe('Responsive Layouts', () => {
 
     test('Mobile navigation drawer is present (hamburger menu)', async ({ page }) => {
       await page.goto(TEST_CONFIG.baseUrl);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       // Look for hamburger/menu button
       const hamburger = page.locator(
@@ -83,7 +83,7 @@ test.describe('Responsive Layouts', () => {
 
     test('Mobile bottom navigation bar is visible', async ({ page }) => {
       await page.goto(TEST_CONFIG.baseUrl);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       // Look for bottom navigation
       const bottomNav = page.locator(
@@ -128,7 +128,7 @@ test.describe('Responsive Layouts', () => {
 
     test('Resources page stacks cards vertically', async ({ page }) => {
       await page.goto(`${TEST_CONFIG.baseUrl}/resources`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       // Find resource cards
       const cards = page.locator(
@@ -171,7 +171,7 @@ test.describe('Responsive Layouts', () => {
 
     test('Dashboard uses 2-column layout', async ({ page }) => {
       await page.goto(TEST_CONFIG.baseUrl);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       const dashboardGrid = page.locator(
         '[data-testid="dashboard-grid"], ' +
@@ -210,7 +210,7 @@ test.describe('Responsive Layouts', () => {
 
     test('Navigation sidebar collapses', async ({ page }) => {
       await page.goto(TEST_CONFIG.baseUrl);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       // Sidebar should be collapsed (icons only) or hidden at tablet size
       const sidebar = page.locator(
@@ -240,7 +240,7 @@ test.describe('Responsive Layouts', () => {
 
     test('Resource cards display in grid (2 columns)', async ({ page }) => {
       await page.goto(`${TEST_CONFIG.baseUrl}/resources`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       const cards = page.locator(
         '[data-testid="resource-card"], ' +
@@ -278,7 +278,7 @@ test.describe('Responsive Layouts', () => {
 
     test('Upload form is usable', async ({ page }) => {
       await page.goto(`${TEST_CONFIG.baseUrl}/upload`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       // Upload form should be visible and functional
       const uploadForm = page.locator(
@@ -319,7 +319,7 @@ test.describe('Responsive Layouts', () => {
 
     test('Full sidebar navigation visible', async ({ page }) => {
       await page.goto(TEST_CONFIG.baseUrl);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       // Full sidebar should be visible at desktop size
       const sidebar = page.locator(
@@ -354,7 +354,7 @@ test.describe('Responsive Layouts', () => {
 
     test('Dashboard uses multi-column layout', async ({ page }) => {
       await page.goto(TEST_CONFIG.baseUrl);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       const dashboardGrid = page.locator(
         '[data-testid="dashboard-grid"], ' +
@@ -391,7 +391,7 @@ test.describe('Responsive Layouts', () => {
 
     test('Resource cards display in grid (3+ columns)', async ({ page }) => {
       await page.goto(`${TEST_CONFIG.baseUrl}/resources`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       const cards = page.locator(
         '[data-testid="resource-card"], ' +
@@ -426,7 +426,7 @@ test.describe('Responsive Layouts', () => {
 
     test('Admin panel has full sidebar + content area', async ({ page }) => {
       await page.goto(`${TEST_CONFIG.baseUrl}/admin`);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       // Full sidebar should be present
       const sidebar = page.locator(

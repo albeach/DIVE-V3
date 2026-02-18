@@ -43,7 +43,7 @@ test.describe('Accessibility - WCAG 2.1 AA page scans', () => {
 
   test('Landing page (/) passes axe-core scan', async ({ page }) => {
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const results = await runAxeScan(page);
     expect(results.violations).toEqual([]);
@@ -51,7 +51,7 @@ test.describe('Accessibility - WCAG 2.1 AA page scans', () => {
 
   test('Dashboard (/dashboard) passes axe-core scan', async ({ page }) => {
     await page.goto('/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const results = await runAxeScan(page);
     expect(results.violations).toEqual([]);
@@ -59,7 +59,7 @@ test.describe('Accessibility - WCAG 2.1 AA page scans', () => {
 
   test('Resources page (/resources) passes axe-core scan', async ({ page }) => {
     await page.goto('/resources');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const results = await runAxeScan(page);
     expect(results.violations).toEqual([]);
@@ -67,7 +67,7 @@ test.describe('Accessibility - WCAG 2.1 AA page scans', () => {
 
   test('Upload page (/upload) passes axe-core scan', async ({ page }) => {
     await page.goto('/upload');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const results = await runAxeScan(page);
     expect(results.violations).toEqual([]);
@@ -75,7 +75,7 @@ test.describe('Accessibility - WCAG 2.1 AA page scans', () => {
 
   test('Policies page (/policies) passes axe-core scan', async ({ page }) => {
     await page.goto('/policies');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const results = await runAxeScan(page);
     expect(results.violations).toEqual([]);
@@ -83,7 +83,7 @@ test.describe('Accessibility - WCAG 2.1 AA page scans', () => {
 
   test('Help page (/help) passes axe-core scan', async ({ page }) => {
     await page.goto('/help');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const results = await runAxeScan(page);
     expect(results.violations).toEqual([]);
@@ -99,7 +99,7 @@ test.describe('Accessibility - Admin page scans', () => {
 
   test('Admin users page (/admin/users) passes axe-core scan', async ({ page }) => {
     await page.goto('/admin/users');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const results = await runAxeScan(page);
     expect(results.violations).toEqual([]);
@@ -107,7 +107,7 @@ test.describe('Accessibility - Admin page scans', () => {
 
   test('Admin clearance page (/admin/clearance-management) passes axe-core scan', async ({ page }) => {
     await page.goto('/admin/clearance-management');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const results = await runAxeScan(page);
     expect(results.violations).toEqual([]);
@@ -122,7 +122,7 @@ test.describe('Accessibility - Structural checks', () => {
   test('Login page has proper form labels and ARIA attributes', async ({ page }) => {
     // Visit the landing/login page without auth state so the login form renders
     await page.goto('/');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Every <input> that is not hidden should have an accessible label
     const inputs = page.locator('input:not([type="hidden"])');
@@ -167,7 +167,7 @@ test.describe('Accessibility - Structural checks', () => {
 
     for (const route of routes) {
       await page.goto(route);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       // Collect all headings in DOM order
       const headings = await page.$$eval(
@@ -197,7 +197,7 @@ test.describe('Accessibility - Structural checks', () => {
 
     for (const route of routes) {
       await page.goto(route);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       const images = page.locator('img');
       const imgCount = await images.count();
@@ -219,7 +219,7 @@ test.describe('Accessibility - Structural checks', () => {
 
   test('Interactive elements have visible focus indicators', async ({ page }) => {
     await page.goto('/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Tab through the first several interactive elements and verify outline/box-shadow
     const interactiveSelector = 'a[href], button, input, select, textarea, [tabindex="0"]';
@@ -257,7 +257,7 @@ test.describe('Accessibility - Structural checks', () => {
 
   test('Color contrast meets WCAG AA (axe-core checks this)', async ({ page }) => {
     await page.goto('/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Run axe-core with only the color-contrast rule enabled for a targeted check.
     // Known contrast issues are tracked in the backlog; this test ensures no
@@ -272,7 +272,7 @@ test.describe('Accessibility - Structural checks', () => {
 
   test('Skip links are present and functional', async ({ page }) => {
     await page.goto('/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Look for a skip-link (common patterns: "Skip to main content", "Skip to content")
     const skipLink = page.locator(
@@ -310,7 +310,7 @@ test.describe('Accessibility - Structural checks', () => {
 
     for (const route of routes) {
       await page.goto(route);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
 
       // Run axe-core label rule specifically
       const results = await new AxeBuilder({ page })

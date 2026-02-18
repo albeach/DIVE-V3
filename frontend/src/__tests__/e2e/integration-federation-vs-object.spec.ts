@@ -15,7 +15,7 @@ test.describe('Integration: Federation vs Object', { tag: '@critical' }, () => {
     test.beforeEach(async ({ page }) => {
         // Use relative path - Playwright prepends baseURL from config
         await page.goto('/integration/federation-vs-object');
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('domcontentloaded');
 
         // Skip all tests if this page route does not exist in the current build
         const heading = page.getByRole('heading', { name: /Federation.*Object Security/i });

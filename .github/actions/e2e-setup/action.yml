@@ -206,6 +206,48 @@ runs:
           fi
         done
 
+        # CRITICAL: Ensure realm_access.roles appears in the ID token.
+        # By default, Keycloak's built-in "realm roles" mapper only adds realm_access
+        # to the ACCESS token (id.token.claim=false). NextAuth's session callback
+        # (auth.ts) extracts roles from the decoded ID token, so they must be present.
+        ROLES_SCOPE_ID=$(curl -sk "https://localhost:8443/admin/realms/$REALM/client-scopes" \
+          -H "Authorization: Bearer $TOKEN" | jq -r '.[] | select(.name == "roles") | .id' | head -n1)
+
+        if [ -n "$ROLES_SCOPE_ID" ]; then
+          # Find the existing "realm roles" mapper and enable id.token.claim
+          MAPPER_JSON=$(curl -sk "https://localhost:8443/admin/realms/$REALM/client-scopes/$ROLES_SCOPE_ID/protocol-mappers/models" \
+            -H "Authorization: Bearer $TOKEN" | jq -c '[.[] | select(.name == "realm roles")] | .[0] // empty')
+
+          if [ -n "$MAPPER_JSON" ] && [ "$MAPPER_JSON" != "null" ]; then
+            MAPPER_ID=$(echo "$MAPPER_JSON" | jq -r '.id')
+            UPDATED_MAPPER=$(echo "$MAPPER_JSON" | jq '.config["id.token.claim"] = "true"')
+            curl -sk -X PUT "https://localhost:8443/admin/realms/$REALM/client-scopes/$ROLES_SCOPE_ID/protocol-mappers/models/$MAPPER_ID" \
+              -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+              -d "$UPDATED_MAPPER" >/dev/null 2>&1
+            echo "::notice::Updated 'realm roles' mapper: id.token.claim=true"
+          else
+            # No existing mapper — create one that includes realm_access in the ID token
+            curl -sk -X POST "https://localhost:8443/admin/realms/$REALM/client-scopes/$ROLES_SCOPE_ID/protocol-mappers/models" \
+              -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+              -d '{
+                "name": "realm roles",
+                "protocol": "openid-connect",
+                "protocolMapper": "oidc-usermodel-realm-role-list-mapper",
+                "config": {
+                  "multivalued": "true",
+                  "claim.name": "realm_access.roles",
+                  "jsonType.label": "String",
+                  "id.token.claim": "true",
+                  "access.token.claim": "true",
+                  "introspection.token.claim": "true"
+                }
+              }' >/dev/null 2>&1
+            echo "::notice::Created 'realm roles' mapper with id.token.claim=true"
+          fi
+        else
+          echo "::warning::Could not find 'roles' client scope — realm_access may be missing from ID token"
+        fi
+
         # Disable first-login required actions that break unattended Playwright login.
         for alias in UPDATE_PROFILE VERIFY_EMAIL; do
           ACTION_JSON=$(curl -sk "https://localhost:8443/admin/realms/$REALM/authentication/required-actions" \

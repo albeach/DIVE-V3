@@ -59,7 +59,7 @@ async function interceptAndAssertErrorBoundary(
   );
 
   await page.goto(route);
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
 
   // Wait for the error UI to appear (may take a moment after the fetch fails)
   const errorElement = page.locator(ERROR_BOUNDARY_SELECTORS).first();
@@ -139,7 +139,7 @@ test.describe('Error boundaries - Error page behaviour', () => {
     );
 
     await page.goto('/admin/users');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const errorElement = page.locator(ERROR_BOUNDARY_SELECTORS).first();
     await expect(errorElement).toBeVisible({ timeout: 10_000 });
@@ -173,7 +173,7 @@ test.describe('Error boundaries - Error page behaviour', () => {
     });
 
     await page.goto('/admin/users');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const errorElement = page.locator(ERROR_BOUNDARY_SELECTORS).first();
     await expect(errorElement).toBeVisible({ timeout: 10_000 });
@@ -185,7 +185,7 @@ test.describe('Error boundaries - Error page behaviour', () => {
     await retryButton.first().click();
 
     // After retry, the error boundary should disappear (or at least a second request was made)
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     expect(callCount).toBeGreaterThanOrEqual(2);
   });
 
@@ -203,7 +203,7 @@ test.describe('Error boundaries - Error page behaviour', () => {
     );
 
     await page.goto('/admin/users');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const errorElement = page.locator(ERROR_BOUNDARY_SELECTORS).first();
     await expect(errorElement).toBeVisible({ timeout: 10_000 });
@@ -229,7 +229,7 @@ test.describe('Error boundaries - Error page behaviour', () => {
     );
 
     await page.goto('/admin/users');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const errorElement = page.locator(ERROR_BOUNDARY_SELECTORS).first();
     await expect(errorElement).toBeVisible({ timeout: 10_000 });
@@ -266,7 +266,7 @@ test.describe('Error boundaries - Error page behaviour', () => {
 
     // Trigger the error
     await page.goto('/admin/users');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     const errorElement = page.locator(ERROR_BOUNDARY_SELECTORS).first();
     await expect(errorElement).toBeVisible({ timeout: 10_000 });
@@ -274,11 +274,11 @@ test.describe('Error boundaries - Error page behaviour', () => {
     // Navigate away
     shouldFail = false;
     await page.goto('/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Navigate back -- the API now succeeds so the error boundary should not render
     await page.goto('/admin/users');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Give the page a moment to settle, then verify no error boundary is visible
     await page.waitForTimeout(2_000);
@@ -306,7 +306,7 @@ test.describe('Error boundaries - Network and session edge cases', () => {
   test('Force network offline shows graceful degradation', async ({ page, context }) => {
     // Load the page first so the shell renders
     await page.goto('/admin/users');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Go offline
     await context.setOffline(true);
@@ -330,7 +330,7 @@ test.describe('Error boundaries - Network and session edge cases', () => {
   test('Session expiry during admin operation shows session error boundary', async ({ page }) => {
     // Let the page load normally first
     await page.goto('/admin/users');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Now intercept all subsequent API calls with a 401 to simulate session expiry
     await page.route('**/api/**', (route) =>
@@ -352,7 +352,7 @@ test.describe('Error boundaries - Network and session edge cases', () => {
       await page.goto('/admin/users');
     }
 
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(3_000);
 
     // The app should show either the error boundary, a session-expired message,
