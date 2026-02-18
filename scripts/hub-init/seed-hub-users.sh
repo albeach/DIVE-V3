@@ -42,26 +42,32 @@ KEYCLOAK_URL="${KEYCLOAK_URL:-https://localhost:8443}"
 REALM_NAME="${REALM_NAME:-dive-v3-broker-usa}"
 CLIENT_ID="${CLIENT_ID:-dive-v3-broker-usa}"
 ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
-ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-}"
+ADMIN_PASSWORD=""
 TEST_USER_PASSWORD="${TEST_USER_PASSWORD:-TestUser2025!Pilot}"
 ADMIN_USER_PASSWORD="${ADMIN_USER_PASSWORD:-TestUser2025!SecureAdmin}"
 
-# Get admin password from container if not set
-# Try multiple container names for compatibility
+# Password lookup priority:
+# 1. KC_ADMIN_PASSWORD_USA env var (canonical — from Vault seed)
+# 2. Container env (KC_ADMIN_PASSWORD_USA or KEYCLOAK_ADMIN_PASSWORD)
+# 3. .env.hub file (KC_ADMIN_PASSWORD_USA, KEYCLOAK_ADMIN_PASSWORD_USA, KEYCLOAK_ADMIN_PASSWORD)
+# 4. KEYCLOAK_ADMIN_PASSWORD env var (may be stale "admin" from defaults — last resort)
+
+# Step 1: Canonical Vault-seeded password
+[ -z "$ADMIN_PASSWORD" ] && [ -n "${KC_ADMIN_PASSWORD_USA:-}" ] && ADMIN_PASSWORD="$KC_ADMIN_PASSWORD_USA"
+[ -z "$ADMIN_PASSWORD" ] && [ -n "${KEYCLOAK_ADMIN_PASSWORD_USA:-}" ] && ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD_USA"
+
+# Step 2: Container env var lookup
 if [ -z "$ADMIN_PASSWORD" ]; then
     for container in "dive-hub-keycloak" "dive-hub-backend" "dive-v3-keycloak" "dive-v3-backend"; do
         if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
-            ADMIN_PASSWORD=$(docker exec "$container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null || echo "")
-            if [ -z "$ADMIN_PASSWORD" ]; then
-                # Try KC_ADMIN_PASSWORD_USA (compose uses this variable name)
-                ADMIN_PASSWORD=$(docker exec "$container" printenv KC_ADMIN_PASSWORD_USA 2>/dev/null || echo "")
-            fi
+            ADMIN_PASSWORD=$(docker exec "$container" printenv KC_ADMIN_PASSWORD_USA 2>/dev/null || echo "")
+            [ -z "$ADMIN_PASSWORD" ] && ADMIN_PASSWORD=$(docker exec "$container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null || echo "")
             [ -n "$ADMIN_PASSWORD" ] && break
         fi
     done
 fi
 
-# Fallback: read from .env.hub file
+# Step 3: .env.hub file fallback
 if [ -z "$ADMIN_PASSWORD" ] && [ -f "${PROJECT_ROOT}/.env.hub" ]; then
     ADMIN_PASSWORD=$(grep "^KC_ADMIN_PASSWORD_USA=" "${PROJECT_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'" | head -1)
     [ -z "$ADMIN_PASSWORD" ] && \
@@ -69,6 +75,9 @@ if [ -z "$ADMIN_PASSWORD" ] && [ -f "${PROJECT_ROOT}/.env.hub" ]; then
     [ -z "$ADMIN_PASSWORD" ] && \
         ADMIN_PASSWORD=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" "${PROJECT_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'" | head -1)
 fi
+
+# Step 4: KEYCLOAK_ADMIN_PASSWORD env (last resort — may be stale "admin")
+[ -z "$ADMIN_PASSWORD" ] && ADMIN_PASSWORD="${KEYCLOAK_ADMIN_PASSWORD:-}"
 
 if [ -z "$ADMIN_PASSWORD" ]; then
     log_error "KEYCLOAK_ADMIN_PASSWORD not found"
