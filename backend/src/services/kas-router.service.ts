@@ -13,6 +13,7 @@
  */
 
 import axios, { AxiosError } from 'axios';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 import { logger } from '../utils/logger';
 import { mongoKasRegistryStore, IKasInstance, IKasFederationAgreement } from '../models/kas-registry.model';
 
@@ -225,10 +226,7 @@ class KasRouterService {
             'X-KAS-Router': 'dive-v3-cross-kas',
           },
           timeout: 30000, // 30 second timeout for KAS operations
-          // Trust self-signed certs in development
-          ...(process.env.NODE_ENV !== 'production' && {
-            httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false }),
-          }),
+          httpsAgent: getSecureHttpsAgent(),
         }
       );
 
@@ -335,9 +333,7 @@ class KasRouterService {
       const healthUrl = kas.kasUrl.replace('/request-key', '/health');
       await axios.get(healthUrl, {
         timeout: 5000,
-        ...(process.env.NODE_ENV !== 'production' && {
-          httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false }),
-        }),
+        httpsAgent: getSecureHttpsAgent(),
       });
 
       const latencyMs = Date.now() - startTime;

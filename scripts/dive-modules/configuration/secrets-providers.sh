@@ -304,6 +304,11 @@ get_secret() {
                     path="master-token"
                     field="token"
                     ;;
+                opal-data-source-token)
+                    category="opal"
+                    path="data-source-token"
+                    field="token"
+                    ;;
                 *)
                     log_error "Unknown secret type for Vault: $secret_name"
                     return 1
@@ -355,6 +360,10 @@ set_secret() {
                 opal-master-token)
                     category="opal"
                     path="master-token"
+                    ;;
+                opal-data-source-token)
+                    category="opal"
+                    path="data-source-token"
                     ;;
                 *)
                     log_error "Unknown secret type for Vault: $secret_name"

@@ -3,6 +3,7 @@
  */
 
 import axios from 'axios';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 
 const INSTANCES = [
     { code: 'USA', keycloak: 'https://localhost:8443', backend: 'https://localhost:4000' },
@@ -34,7 +35,7 @@ async function testAdminAccess(instance: typeof INSTANCES[0]) {
             }),
             {
                 headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false })
+                httpsAgent: getSecureHttpsAgent()
             }
         );
 
@@ -66,7 +67,7 @@ async function testAdminAccess(instance: typeof INSTANCES[0]) {
                 `${instance.backend}/api/admin/dashboard`,
                 {
                     headers: { 'Authorization': `Bearer ${token}` },
-                    httpsAgent: new (require('https').Agent)({ rejectUnauthorized: false })
+                    httpsAgent: getSecureHttpsAgent()
                 }
             );
 

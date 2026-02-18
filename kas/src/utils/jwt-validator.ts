@@ -97,50 +97,45 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
     // CRITICAL: For federation, we must fetch JWKS from the TOKEN'S issuer, not local Keycloak
     let issuerJwksUri: string | null = null;
     const rewriteToInternal = (uri: string): string => {
-        // FEDERATION FIX: Map localhost URLs to correct instance Keycloak based on realm or port
-        // A token from USA Hub (localhost:8443/.../dive-v3-broker-usa) should map to keycloak-usa, not local keycloak-fra
-        
-        // Extract realm from URL if present (e.g., /realms/dive-v3-broker-usa -> usa)
+        // Map external/localhost URLs to Docker-internal Keycloak for JWKS fetching
+        const keycloakUrl = process.env.KEYCLOAK_URL || 'https://keycloak:8443';
+
+        // Caddy external domains (e.g., dev-usa-idp.dive25.com) → internal Keycloak
+        // Matches: {env}-{country}-idp.{domain} or {country}-idp.{domain}
+        const caddyMatch = uri.match(/https:\/\/(?:\w+-)?([a-z]{2,3})-idp\.[^/]+/);
+        if (caddyMatch) {
+            const country = caddyMatch[1].toLowerCase();
+            const internalHost = country === 'usa'
+                ? keycloakUrl
+                : `https://keycloak-${country}:8443`;
+            return uri.replace(/https:\/\/[^/]+/, internalHost);
+        }
+
+        // Extract realm country for spoke-specific routing
         const realmMatch = uri.match(/\/realms\/dive-v3-broker-([a-z]{3})/i);
-        if (realmMatch) {
-            const realmCountry = realmMatch[1].toLowerCase(); // usa, fra, gbr, deu
-            const keycloakHost = `https://keycloak-${realmCountry}:8443`;
-            
-            // Handle spoke-specific external ports: 8453 (FRA), 8454 (GBR), 8455 (DEU)
-            if (uri.startsWith('https://localhost:8453/realms/')) {
-                return uri.replace('https://localhost:8453', 'https://keycloak-fra:8443');
-            }
-            if (uri.startsWith('https://localhost:8454/realms/')) {
-                return uri.replace('https://localhost:8454', 'https://keycloak-gbr:8443');
-            }
-            if (uri.startsWith('https://localhost:8455/realms/')) {
-                return uri.replace('https://localhost:8455', 'https://keycloak-deu:8443');
-            }
-            
-            if (uri.startsWith('https://localhost:8443/realms/')) {
-                return uri.replace('https://localhost:8443', keycloakHost);
-            }
-            if (uri.startsWith('http://localhost:8081/realms/')) {
-                return uri.replace('http://localhost:8081', keycloakHost);
+        const realmCountry = realmMatch ? realmMatch[1].toLowerCase() : null;
+        const keycloakHost = realmCountry ? `https://keycloak-${realmCountry}:8443` : keycloakUrl;
+
+        // Spoke-specific external ports: 8453 (FRA), 8454 (GBR), 8455 (DEU)
+        const portMap: Record<string, string> = {
+            '8453': 'https://keycloak-fra:8443',
+            '8454': 'https://keycloak-gbr:8443',
+            '8455': 'https://keycloak-deu:8443',
+        };
+        for (const [port, host] of Object.entries(portMap)) {
+            if (uri.startsWith(`https://localhost:${port}/`)) {
+                return uri.replace(`https://localhost:${port}`, host);
             }
         }
-        
-        // Fallback: if no realm country, use local Keycloak (for base realm)
-        if (uri.startsWith('https://localhost:8453/realms/')) {
-            return uri.replace('https://localhost:8453', process.env.KEYCLOAK_URL || 'https://keycloak:8443');
+
+        // localhost:8443 → realm-specific or default Keycloak
+        if (uri.startsWith('https://localhost:8443/')) {
+            return uri.replace('https://localhost:8443', keycloakHost);
         }
-        if (uri.startsWith('https://localhost:8454/realms/')) {
-            return uri.replace('https://localhost:8454', process.env.KEYCLOAK_URL || 'https://keycloak:8443');
+        if (uri.startsWith('http://localhost:8081/')) {
+            return uri.replace('http://localhost:8081', keycloakHost);
         }
-        if (uri.startsWith('https://localhost:8455/realms/')) {
-            return uri.replace('https://localhost:8455', process.env.KEYCLOAK_URL || 'https://keycloak:8443');
-        }
-        if (uri.startsWith('https://localhost:8443/realms/')) {
-            return uri.replace('https://localhost:8443', process.env.KEYCLOAK_URL || 'https://keycloak:8443');
-        }
-        if (uri.startsWith('http://localhost:8081/realms/')) {
-            return uri.replace('http://localhost:8081', process.env.KEYCLOAK_URL || 'https://keycloak:8443');
-        }
+
         return uri;
     };
 
@@ -307,23 +302,32 @@ export const verifyToken = async (token: string): Promise<IKeycloakToken> => {
         // Get current realm (supports both instance-specific and base realms)
         const currentRealm = process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
 
+        // Build valid issuers dynamically from env vars + static known issuers
+        const dynamicIssuers: string[] = [];
+
+        // KEYCLOAK_ISSUER: external Caddy URL (e.g., https://dev-usa-idp.dive25.com/realms/...)
+        if (process.env.KEYCLOAK_ISSUER) {
+            dynamicIssuers.push(process.env.KEYCLOAK_ISSUER);
+        }
+
+        // TRUSTED_ISSUERS: comma-separated list from hub deployment
+        if (process.env.TRUSTED_ISSUERS) {
+            const envIssuers = process.env.TRUSTED_ISSUERS.split(',').map(s => s.trim()).filter(Boolean);
+            dynamicIssuers.push(...envIssuers);
+        }
+
         const validIssuers: [string, ...string[]] = [
             // Local instance (dynamic based on deployment)
             `${process.env.KEYCLOAK_URL}/realms/${currentRealm}`,
 
+            // Dynamic env-configured issuers (Caddy external domains, etc.)
+            ...dynamicIssuers,
+
             // === COALITION PARTNER IdPs (Cloudflare Tunnels) ===
-            // USA
             'https://usa-idp.dive25.com/realms/dive-v3-broker-usa',
-            'https://usa-idp.dive25.com:8443/realms/dive-v3-broker-usa',
-            // FRA
             'https://fra-idp.dive25.com/realms/dive-v3-broker-fra',
-            'https://fra-idp.dive25.com:8443/realms/dive-v3-broker-fra',
-            // GBR
             'https://gbr-idp.dive25.com/realms/dive-v3-broker-gbr',
-            'https://gbr-idp.dive25.com:8443/realms/dive-v3-broker-gbr',
-            // DEU (uses prosecurity.biz domain)
             'https://deu-idp.prosecurity.biz/realms/dive-v3-broker-deu',
-            'https://deu-idp.prosecurity.biz:8443/realms/dive-v3-broker-deu',
 
             // === LOCAL/DEV ISSUERS ===
             'http://localhost:8081/realms/dive-v3-broker-usa',
@@ -331,16 +335,11 @@ export const verifyToken = async (token: string): Promise<IKeycloakToken> => {
             'https://localhost:8443/realms/dive-v3-broker-fra',
             'https://localhost:8443/realms/dive-v3-broker-gbr',
             'https://localhost:8443/realms/dive-v3-broker-deu',
-            // FRA external port (8453)
             'https://localhost:8453/realms/dive-v3-broker-fra',
-            // GBR external port (8454)
             'https://localhost:8454/realms/dive-v3-broker-gbr',
-            // DEU external port (8455)
             'https://localhost:8455/realms/dive-v3-broker-deu',
             // Internal container names
             'https://keycloak:8443/realms/dive-v3-broker-usa',
-            'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-broker-usa',
-            'https://dev-auth.dive25.com/realms/dive-v3-broker-usa',
         ];
 
         // Multi-realm: Accept tokens for both clients + Keycloak default audience + backend service accounts

@@ -28,6 +28,7 @@ import { validateCOICoherence } from '../services/coi-validation.service';
 import { getMongoDBPassword, isGCPSecretsAvailable } from '../utils/gcp-secrets';
 import { CLEARANCE_EQUIVALENCY_TABLE } from '../services/clearance-mapper.service';
 import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 
 // ============================================
 // CONFIGURATION
@@ -903,7 +904,7 @@ async function loadFederationRegistry(): Promise<IFederationRegistry> {
 
             console.log(`   🔍 Querying Hub federation registry API (spoke mode: ${instanceCode})`);
             const response = await axios.get(`${hubBackendUrl}/api/federation/spokes`, {
-                httpsAgent: new (await import('https')).Agent({ rejectUnauthorized: false }),
+                httpsAgent: getSecureHttpsAgent(),
                 timeout: 10000
             });
 
@@ -1002,7 +1003,7 @@ async function loadKASRegistry(): Promise<IKASRegistry> {
 
             console.log(`   🔍 Querying Hub KAS registry API (spoke mode: ${instanceCode})`);
             const response = await axios.get(`${hubBackendUrl}/api/kas/registry`, {
-                httpsAgent: new (await import('https')).Agent({ rejectUnauthorized: false }),
+                httpsAgent: getSecureHttpsAgent(),
                 timeout: 10000
             });
 

@@ -12,7 +12,7 @@ import { uploadFile } from '../services/upload.service';
 import { IUploadMetadata, IUploaderInfo } from '../types/upload.types';
 import { ValidationError, ForbiddenError, UnauthorizedError } from '../middleware/error.middleware';
 import axios from 'axios';
-import * as https from 'https';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 
 const OPA_URL = process.env.OPA_URL || 'http://localhost:8181';
 
@@ -190,10 +190,7 @@ async function enforceUploadAuthorization(
         });
 
         // Call OPA decision endpoint (same as authz middleware)
-        const httpsAgent = new https.Agent({
-            minVersion: 'TLSv1.2',
-            rejectUnauthorized: false, // Allow self-signed certs in development
-        });
+        const httpsAgent = getSecureHttpsAgent();
 
         const response = await axios.post(
             `${OPA_URL}/v1/data/dive/authorization`,

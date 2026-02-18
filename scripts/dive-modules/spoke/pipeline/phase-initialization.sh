@@ -559,29 +559,33 @@ spoke_init_generate_config() {
 #   Public key string on stdout, or empty if not available
 ##
 spoke_get_hub_opal_public_key() {
-    # Try to fetch from running Hub OPAL server
-    if docker ps --format '{{.Names}}' | grep -q "dive-hub-opal-server"; then
-        # Check if public key is in Hub OPAL environment
-        local public_key=$(docker exec dive-hub-opal-server printenv OPAL_AUTH_PUBLIC_KEY 2>/dev/null | tr -d '\n\r' || echo "")
+    # Strategy 1: Read from Vault (SSOT)
+    if vault_is_authenticated 2>/dev/null; then
+        local vault_pub_ssh=""
+        vault_pub_ssh=$(vault_get_secret "opal" "jwt-signing" "public_key_ssh" 2>/dev/null || true)
+        if [ -n "$vault_pub_ssh" ]; then
+            echo "$vault_pub_ssh"
+            return 0
+        fi
+    fi
 
+    # Strategy 2: Read SSH file on disk
+    local ssh_file="${DIVE_ROOT}/certs/opal/jwt-signing-key.pub.ssh"
+    if [ -f "$ssh_file" ]; then
+        cat "$ssh_file"
+        return 0
+    fi
+
+    # Strategy 3: Read from running OPAL server container
+    if docker ps --format '{{.Names}}' | grep -q "dive-hub-opal-server"; then
+        local public_key
+        public_key=$(docker exec dive-hub-opal-server printenv OPAL_AUTH_PUBLIC_KEY 2>/dev/null | tr -d '\n\r' || echo "")
         if [ -n "$public_key" ] && [ "$public_key" != "# NOT_CONFIGURED" ]; then
             echo "$public_key"
             return 0
         fi
     fi
 
-    # Fallback: Use user's SSH public key (same as NZL does)
-    # This is acceptable for local development (not production)
-    if [ -f "$HOME/.ssh/id_rsa.pub" ]; then
-        local ssh_key=$(cat "$HOME/.ssh/id_rsa.pub" 2>/dev/null | tr -d '\n\r')
-        if [ -n "$ssh_key" ]; then
-            log_verbose "Using user SSH public key for OPAL authentication (local dev)"
-            echo "$ssh_key"
-            return 0
-        fi
-    fi
-
-    # No public key available
     log_verbose "OPAL public key not available (OPAL client will use no-auth mode)"
     return 1
 }

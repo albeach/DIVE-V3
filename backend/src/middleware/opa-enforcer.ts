@@ -11,13 +11,16 @@
 import fs from 'fs';
 import path from 'path';
 import axios from 'axios';
-import * as https from 'https';
 import { Request } from 'express';
 import { logger } from '../utils/logger';
 import { opaCircuitBreaker } from '../utils/circuit-breaker';
 import { decisionCacheService } from '../services/decision-cache.service';
 import { getClearanceLevel as _getClearanceRank, StandardClearance } from '../services/clearance-normalization.service';
 import { IKeycloakToken } from './jwt-verifier';
+import { getSecureHttpsAgent } from '../utils/https-agent';
+
+// Shared HTTPS agent with proper CA verification for OPA calls
+const opaHttpsAgent = getSecureHttpsAgent();
 
 // ============================================
 // OPA Endpoint Configuration
@@ -429,7 +432,7 @@ export async function callOPA(
             return await axios.post(OPA_DECISION_ENDPOINT, opaInput, {
                 headers: { 'Content-Type': 'application/json' },
                 timeout: 5000,
-                httpsAgent: new https.Agent({ rejectUnauthorized: false }), // For development
+                httpsAgent: opaHttpsAgent,
             });
         });
 

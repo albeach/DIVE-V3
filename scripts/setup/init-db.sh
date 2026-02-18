@@ -39,6 +39,15 @@ else
     echo "⚠ Service users script not found, skipping"
 fi
 
+# Initialize audit tables in dive_v3_app database
+echo "Initializing audit tables..."
+if [ -f "/scripts/postgres-init/05-init-audit-tables.sql" ]; then
+    psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname "dive_v3_app" < /scripts/postgres-init/05-init-audit-tables.sql
+    echo "✓ Audit tables initialized (authorization_log, federation_log, audit_log)"
+else
+    echo "⚠ Audit tables script not found, skipping"
+fi
+
 # Apply WebAuthn userHandle fix for Keycloak 26 bug
 if [ -f "/scripts/postgres-init/04-fix-webauthn-userhandle.sql" ]; then
     echo "Applying WebAuthn userHandle fix..."

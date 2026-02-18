@@ -17,7 +17,7 @@
  */
 
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
-import https from 'https';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 import NodeCache from 'node-cache';
 import { logger } from '../utils/logger';
 import CircuitBreaker from 'opossum';
@@ -125,9 +125,7 @@ export class TokenIntrospectionService {
         'Content-Type': 'application/x-www-form-urlencoded',
         'Accept': 'application/json',
       },
-      httpsAgent: new https.Agent({
-        rejectUnauthorized: false, // Accept self-signed certificates
-      }),
+      httpsAgent: getSecureHttpsAgent(),
     });
 
     // Initialize caches
@@ -420,7 +418,7 @@ export class TokenIntrospectionService {
           cache: true,
           cacheMaxAge: this.JWKS_CACHE_TTL * 1000,
           requestHeaders: {},
-          requestAgent: new https.Agent({ rejectUnauthorized: false }), // Accept self-signed certs
+          requestAgent: getSecureHttpsAgent(),
         });
         this.jwksCache.set(cacheKey, jwksClient);
       }

@@ -20,9 +20,9 @@
  */
 
 import axios from 'axios';
-import * as https from 'https';
 import { EventEmitter } from 'events';
 import { execSync } from 'child_process';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 import { logger } from '../utils/logger';
 import { hubSpokeRegistry } from './hub-spoke-registry.service';
 
@@ -103,8 +103,7 @@ const DRIFT_CHECK_INTERVAL_MS = parseInt(process.env.DRIFT_CHECK_INTERVAL_MS || 
 // Enable auto-reconciliation (default: false for safety)
 const AUTO_RECONCILE_ENABLED = process.env.AUTO_RECONCILE_ENABLED === 'true';
 
-// HTTPS agent for self-signed certs
-const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+const httpsAgent = getSecureHttpsAgent();
 
 // ============================================
 // FEDERATION SYNC SERVICE

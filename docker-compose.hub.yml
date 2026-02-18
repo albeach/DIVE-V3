@@ -830,6 +830,8 @@ services:
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_USA}@mongodb:27017?authSource=admin&directConnection=true&tls=true
       MONGODB_HOST: mongodb:27017
       MONGODB_DATABASE: dive-v3-hub
+      # PostgreSQL audit persistence (authorization_log, federation_log, audit_log)
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD_USA}@postgres:5432/dive_v3_app?sslmode=require
       OPA_URL: https://opa:8181
       KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker-usa
@@ -858,6 +860,8 @@ services:
       # OPAL JWT Auth: Backend obtains its own JWT via opalTokenService (see opal-client.ts)
       # The OPAL_AUTH_MASTER_TOKEN is used internally by opalTokenService to request JWTs
       OPAL_AUTH_MASTER_TOKEN: ${OPAL_AUTH_MASTER_TOKEN}
+      # OPAL data source token for service-to-service auth (backend validates this)
+      OPAL_DATA_SOURCE_TOKEN: ${OPAL_DATA_SOURCE_TOKEN}
       # Docker exec configuration for running OPA tests
       OPA_CONTAINER: ${COMPOSE_PROJECT_NAME}-opa
       OPA_POLICIES_PATH: /policies
@@ -1045,6 +1049,8 @@ services:
       KEYCLOAK_URL: https://keycloak:8443
       KEYCLOAK_REALM: dive-v3-broker-usa
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-broker-usa}
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-https://keycloak:8443/realms/dive-v3-broker-usa}
+      TRUSTED_ISSUERS: ${TRUSTED_ISSUERS:-https://keycloak:8443/realms/dive-v3-broker-usa,https://localhost:8443/realms/dive-v3-broker-usa}
     ports:
       - "127.0.0.1:8085:8080"
     depends_on:
@@ -1213,53 +1219,54 @@ services:
                 "url": "https://backend:4000/api/opal/policy-data",
                 "topics": ["policy_data"],
                 "dst_path": "dive/federation",
-                "config": {"headers": {"Accept": "application/json"}}
+                "config": {"headers": {"Accept": "application/json", "Authorization": "Bearer ${OPAL_DATA_SOURCE_TOKEN}"}}
               },
               {
                 "url": "https://backend:4000/api/opal/trusted-issuers",
                 "topics": ["trusted_issuers"],
                 "dst_path": "trusted_issuers",
-                "config": {"headers": {"Accept": "application/json"}}
+                "config": {"headers": {"Accept": "application/json", "Authorization": "Bearer ${OPAL_DATA_SOURCE_TOKEN}"}}
               },
               {
                 "url": "https://backend:4000/api/opal/federation-matrix",
                 "topics": ["federation_matrix"],
                 "dst_path": "federation_matrix",
-                "config": {"headers": {"Accept": "application/json"}}
+                "config": {"headers": {"Accept": "application/json", "Authorization": "Bearer ${OPAL_DATA_SOURCE_TOKEN}"}}
               },
               {
                 "url": "https://backend:4000/api/opal/tenant-configs",
                 "topics": ["tenant_configs"],
                 "dst_path": "tenant_configs",
-                "config": {"headers": {"Accept": "application/json"}}
+                "config": {"headers": {"Accept": "application/json", "Authorization": "Bearer ${OPAL_DATA_SOURCE_TOKEN}"}}
               },
               {
                 "url": "https://backend:4000/api/opal/coi-definitions",
                 "topics": ["coi_definitions"],
                 "dst_path": "coi_definitions",
-                "config": {"headers": {"Accept": "application/json"}}
+                "config": {"headers": {"Accept": "application/json", "Authorization": "Bearer ${OPAL_DATA_SOURCE_TOKEN}"}}
               },
               {
                 "url": "https://backend:4000/api/opal/federation-constraints",
                 "topics": ["federation_constraints"],
                 "dst_path": "federation_constraints",
-                "config": {"headers": {"Accept": "application/json"}},
+                "config": {"headers": {"Accept": "application/json", "Authorization": "Bearer ${OPAL_DATA_SOURCE_TOKEN}"}},
                 "description": "Phase 2: Tenant-controlled federation constraints (bilateral)"
               },
               {
                 "url": "https://backend:4000/api/opal/classification-equivalency",
                 "topics": ["classification_equivalency"],
                 "dst_path": "classification_equivalency",
-                "config": {"headers": {"Accept": "application/json"}}
+                "config": {"headers": {"Accept": "application/json", "Authorization": "Bearer ${OPAL_DATA_SOURCE_TOKEN}"}}
               }
             ]
           }
         }
       # OPAL Authentication - JWT token verification for spoke clients
       OPAL_AUTH_MASTER_TOKEN: ${OPAL_AUTH_MASTER_TOKEN}
-      # JWT signing keys loaded from mounted files (not env var content — avoids MalformedFraming)
+      # Key files loaded by entrypoint (private=PEM, public=SSH format)
+      # Entrypoint reads: /opal-keys/jwt-signing-key.pem + /opal-keys/jwt-signing-key.pub.ssh
       OPAL_AUTH_PRIVATE_KEY_PATH: /opal-keys/jwt-signing-key.pem
-      OPAL_AUTH_PUBLIC_KEY_PATH: /opal-keys/jwt-signing-key.pub.pem
+      OPAL_AUTH_PUBLIC_KEY_PATH: /opal-keys/jwt-signing-key.pub.ssh
       OPAL_AUTH_JWT_ALGORITHM: RS256
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:${OPAL_PORT:-7002}:7002"

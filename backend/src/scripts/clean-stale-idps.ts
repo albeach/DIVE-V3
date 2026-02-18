@@ -14,7 +14,7 @@
  */
 
 import axios from 'axios';
-import https from 'https';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 import { execSync } from 'child_process';
 import * as readline from 'readline';
 
@@ -27,7 +27,7 @@ const KEYCLOAK_REALM = process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
 const KEYCLOAK_ADMIN_USER = process.env.KEYCLOAK_ADMIN_USER || 'admin';
 const KEYCLOAK_ADMIN_PASSWORD = process.env.KC_ADMIN_PASSWORD || process.env.KEYCLOAK_ADMIN_PASSWORD || '';
 
-const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+const httpsAgent = getSecureHttpsAgent();
 
 // ============================================
 // HELPERS

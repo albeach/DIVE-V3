@@ -17,7 +17,7 @@
 
 import KcAdminClient from '@keycloak/keycloak-admin-client';
 import type IdentityProviderRepresentation from '@keycloak/keycloak-admin-client/lib/defs/identityProviderRepresentation';
-import https from 'https';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 import { logger } from '../utils/logger';
 
 // Sub-module imports
@@ -39,11 +39,7 @@ import {
   getFederationSecret,
 } from './bidirectional-federation';
 
-// Create HTTPS agent that accepts self-signed certificates
-// This is required for local development where mkcert certificates are used
-const httpsAgent = new https.Agent({
-  rejectUnauthorized: false, // Required for self-signed certs in Docker
-});
+const httpsAgent = getSecureHttpsAgent();
 
 // ============================================
 // TYPES

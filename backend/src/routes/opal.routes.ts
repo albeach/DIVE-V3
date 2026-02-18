@@ -73,6 +73,35 @@ async function requireSpokeToken(req: Request, res: Response, next: NextFunction
 }
 
 /**
+ * Validate OPAL data source token for service-to-service auth.
+ * OPAL Server sends this token when fetching policy data from backend endpoints.
+ * Token is generated during hub deployment and stored in Vault KV v2 as SSOT.
+ */
+function requireOpalDataToken(req: Request, res: Response, next: NextFunction): void {
+  const expectedToken = process.env.OPAL_DATA_SOURCE_TOKEN;
+
+  if (!expectedToken) {
+    logger.warn('OPAL_DATA_SOURCE_TOKEN not configured — allowing unauthenticated access');
+    next();
+    return;
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    res.status(401).json({ error: 'Missing or invalid Authorization header' });
+    return;
+  }
+
+  const token = authHeader.substring(7);
+  if (token !== expectedToken) {
+    res.status(403).json({ error: 'Invalid data source token' });
+    return;
+  }
+
+  next();
+}
+
+/**
  * Legacy requireAdmin - replaced by proper role-based middleware
  * Now using:
  *   - requireAdmin from admin.middleware.ts (checks admin OR super_admin role)
@@ -161,7 +190,7 @@ function legacyRequireAdmin(req: Request, res: Response, next: NextFunction): vo
  * Endpoint for OPAL Server to fetch policy data
  * Called periodically by OPAL to sync data to connected clients
  */
-router.get('/policy-data', async (req: Request, res: Response): Promise<void> => {
+router.get('/policy-data', requireOpalDataToken, async (req: Request, res: Response): Promise<void> => {
   try {
     const opalSource = req.headers['x-opal-source'] as string;
 
@@ -960,7 +989,7 @@ router.post('/data/publish', async (req: Request, res: Response): Promise<void> 
  * GET /api/opal/trusted-issuers
  * Get all trusted issuers from MongoDB (OPAL-compatible format)
  */
-router.get('/trusted-issuers', async (_req: Request, res: Response): Promise<void> => {
+router.get('/trusted-issuers', requireOpalDataToken, async (_req: Request, res: Response): Promise<void> => {
   try {
     const issuers = await mongoOpalDataStore.getIssuersForOpal();
 
@@ -1270,7 +1299,7 @@ router.delete('/trusted-issuers/:encodedUrl', authenticateJWT, requireHubAdmin, 
  * GET /api/opal/federation-matrix
  * Get federation trust matrix from MongoDB
  */
-router.get('/federation-matrix', async (_req: Request, res: Response): Promise<void> => {
+router.get('/federation-matrix', requireOpalDataToken, async (_req: Request, res: Response): Promise<void> => {
   try {
     const matrix = await mongoOpalDataStore.getFederationMatrix();
 
@@ -1558,7 +1587,7 @@ router.delete('/federation-matrix/:source/:target', authenticateJWT, requireHubA
  * GET /api/opal/tenant-configs
  * Get all tenant configurations from MongoDB
  */
-router.get('/tenant-configs', async (_req: Request, res: Response): Promise<void> => {
+router.get('/tenant-configs', requireOpalDataToken, async (_req: Request, res: Response): Promise<void> => {
   try {
     const configs = await mongoOpalDataStore.getAllTenantConfigs();
 
@@ -1617,7 +1646,7 @@ router.get('/tenant-configs', async (_req: Request, res: Response): Promise<void
  * Serve federation constraints for OPAL distribution
  * Public endpoint (used by OPAL server with datasource token)
  */
-router.get('/federation-constraints', async (_req: Request, res: Response): Promise<void> => {
+router.get('/federation-constraints', requireOpalDataToken, async (_req: Request, res: Response): Promise<void> => {
   try {
     const { FederationConstraint } = await import('../models/federation-constraint.model');
     const constraints = await FederationConstraint.getActiveConstraintsForOPAL();
@@ -1691,7 +1720,7 @@ router.get('/federation-constraints', async (_req: Request, res: Response): Prom
  * - Program-based COIs (Alpha, Beta, etc.)
  * - Auto-updated coalition COIs (NATO auto-updates from active federation)
  */
-router.get('/coi-definitions', async (_req: Request, res: Response): Promise<void> => {
+router.get('/coi-definitions', requireOpalDataToken, async (_req: Request, res: Response): Promise<void> => {
   try {
     const { mongoCoiDefinitionStore } = await import('../models/coi-definition.model');
 
@@ -1721,7 +1750,7 @@ router.get('/coi-definitions', async (_req: Request, res: Response): Promise<voi
  * Maps national classification terms to NATO standard levels.
  * Public endpoint (used by OPAL server with datasource token).
  */
-router.get('/classification-equivalency', async (_req: Request, res: Response): Promise<void> => {
+router.get('/classification-equivalency', requireOpalDataToken, async (_req: Request, res: Response): Promise<void> => {
   try {
     const { CLEARANCE_EQUIVALENCY_TABLE } = await import('../services/clearance-mapper.service');
 

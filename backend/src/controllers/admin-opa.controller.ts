@@ -7,7 +7,7 @@
 
 import { Request, Response } from 'express';
 import axios from 'axios';
-import * as https from 'https';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 import { logger } from '../utils/logger';
 import { logAdminAction } from '../middleware/admin-auth.middleware';
 import { IAdminAPIResponse } from '../types/admin.types';
@@ -185,10 +185,7 @@ export const getOPAStatusHandler = async (
         let opaVersion = 'unknown';
 
         try {
-            const httpsAgent = new https.Agent({
-                minVersion: 'TLSv1.2',
-                rejectUnauthorized: false, // Allow self-signed certs in development
-            });
+            const httpsAgent = getSecureHttpsAgent();
 
             const healthResponse = await axios.get(healthUrl, {
                 timeout: 2000,

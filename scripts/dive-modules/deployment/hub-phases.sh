@@ -686,26 +686,168 @@ hub_phase_build() {
 
 ##
 # Ensure OPAL JWT signing keys exist before starting services.
-# Generates keys if missing (idempotent).
+# SSOT: Vault KV v2 at dive-v3/opal/jwt-signing.
+# Files on disk at certs/opal/ are a cache derived from Vault.
+#
+# Key formats (OPAL requirement):
+#   Private key: PEM (-----BEGIN PRIVATE KEY-----)
+#   Public key:  SSH (ssh-rsa AAAA...) — OPAL's cast_public_key() calls load_ssh_public_key()
+#
+# Flow: Vault restore → Disk check → Generate fresh → Store in Vault
 ##
 _hub_ensure_opal_keys() {
     local opal_dir="${DIVE_ROOT}/certs/opal"
-    if [ -f "$opal_dir/jwt-signing-key.pem" ]; then
-        log_verbose "OPAL JWT signing keys already exist"
+    mkdir -p "$opal_dir"
+
+    # Phase 1: Try to restore from Vault (SSOT)
+    if vault_is_authenticated 2>/dev/null; then
+        local vault_priv=""
+        vault_priv=$(vault_get_secret "opal" "jwt-signing" "private_key_pem" 2>/dev/null || true)
+        if [ -n "$vault_priv" ]; then
+            local vault_pub_ssh=""
+            vault_pub_ssh=$(vault_get_secret "opal" "jwt-signing" "public_key_ssh" 2>/dev/null || true)
+            if [ -n "$vault_pub_ssh" ]; then
+                local vault_pub_pem=""
+                vault_pub_pem=$(vault_get_secret "opal" "jwt-signing" "public_key_pem" 2>/dev/null || true)
+                echo "$vault_priv" > "$opal_dir/jwt-signing-key.pem"
+                echo "$vault_pub_ssh" > "$opal_dir/jwt-signing-key.pub.ssh"
+                [ -n "$vault_pub_pem" ] && echo "$vault_pub_pem" > "$opal_dir/jwt-signing-key.pub.pem"
+                chmod 644 "$opal_dir/jwt-signing-key.pem"
+                chmod 644 "$opal_dir/jwt-signing-key.pub.ssh"
+                chmod 644 "$opal_dir/jwt-signing-key.pub.pem" 2>/dev/null || true
+                log_success "OPAL JWT signing keys restored from Vault"
+                return 0
+            fi
+        fi
+    fi
+
+    # Phase 2: Check if correct files already exist on disk
+    if [ -f "$opal_dir/jwt-signing-key.pem" ] && [ -f "$opal_dir/jwt-signing-key.pub.ssh" ]; then
+        log_verbose "OPAL JWT signing keys already exist (PEM + SSH)"
+        _hub_opal_keys_to_vault "$opal_dir" 2>/dev/null || true
         return 0
     fi
 
-    log_info "Generating OPAL JWT signing keys..."
-    mkdir -p "$opal_dir"
+    # Phase 2b: PEM exists but SSH missing — convert without regenerating
+    if [ -f "$opal_dir/jwt-signing-key.pem" ] && [ ! -f "$opal_dir/jwt-signing-key.pub.ssh" ]; then
+        log_info "Converting existing OPAL public key to SSH format..."
+        if [ ! -f "$opal_dir/jwt-signing-key.pub.pem" ]; then
+            openssl rsa -in "$opal_dir/jwt-signing-key.pem" \
+                -pubout -out "$opal_dir/jwt-signing-key.pub.pem" 2>/dev/null
+        fi
+        ssh-keygen -i -m PKCS8 -f "$opal_dir/jwt-signing-key.pub.pem" \
+            > "$opal_dir/jwt-signing-key.pub.ssh" 2>/dev/null || {
+            log_error "Failed to convert OPAL public key to SSH format"
+            return 1
+        }
+        chmod 644 "$opal_dir/jwt-signing-key.pub.ssh"
+        _hub_opal_keys_to_vault "$opal_dir" 2>/dev/null || true
+        log_success "OPAL public key converted to SSH format (existing private key preserved)"
+        return 0
+    fi
 
+    # Phase 3: Generate fresh keys
+    log_info "Generating OPAL JWT signing keys..."
     openssl genrsa -out "$opal_dir/jwt-signing-key.pem" 4096 2>/dev/null
     openssl rsa -in "$opal_dir/jwt-signing-key.pem" \
         -pubout -out "$opal_dir/jwt-signing-key.pub.pem" 2>/dev/null
 
+    # Convert PEM public key to SSH format (OPAL requires ssh-rsa format)
+    ssh-keygen -i -m PKCS8 -f "$opal_dir/jwt-signing-key.pub.pem" \
+        > "$opal_dir/jwt-signing-key.pub.ssh" 2>/dev/null || {
+        log_error "Failed to convert public key to SSH format"
+        return 1
+    }
+
     chmod 644 "$opal_dir/jwt-signing-key.pem"
+    chmod 644 "$opal_dir/jwt-signing-key.pub.ssh"
     chmod 644 "$opal_dir/jwt-signing-key.pub.pem"
 
+    # Store in Vault (best-effort)
+    _hub_opal_keys_to_vault "$opal_dir" 2>/dev/null || true
+
     log_success "OPAL JWT signing keys generated at $opal_dir"
+}
+
+##
+# Upload OPAL JWT signing keys to Vault KV v2 (idempotent, best-effort).
+##
+_hub_opal_keys_to_vault() {
+    local opal_dir="$1"
+    vault_is_authenticated 2>/dev/null || return 0
+
+    local priv_pem pub_ssh pub_pem
+    priv_pem=$(cat "$opal_dir/jwt-signing-key.pem")
+    pub_ssh=$(cat "$opal_dir/jwt-signing-key.pub.ssh")
+    pub_pem=$(cat "$opal_dir/jwt-signing-key.pub.pem" 2>/dev/null || echo "")
+
+    local json_payload
+    json_payload=$(jq -n \
+        --arg priv "$priv_pem" \
+        --arg pub_ssh "$pub_ssh" \
+        --arg pub_pem "$pub_pem" \
+        '{private_key_pem: $priv, public_key_ssh: $pub_ssh, public_key_pem: $pub_pem}')
+
+    if vault_set_secret "opal" "jwt-signing" "$json_payload"; then
+        log_verbose "OPAL JWT signing keys stored in Vault (dive-v3/opal/jwt-signing)"
+    else
+        log_warn "Could not store OPAL keys in Vault (non-fatal)"
+    fi
+}
+
+##
+# Ensure OPAL data source token exists (service-to-service auth).
+# SSOT: Vault KV v2 (dive-v3/opal/data-source-token)
+# Fallback: .env.hub → generate fresh → store in Vault + .env files
+##
+_hub_ensure_opal_data_token() {
+    local token=""
+
+    # Strategy 1: Vault SSOT
+    if vault_is_authenticated 2>/dev/null; then
+        token=$(vault_get_secret "opal" "data-source-token" "token" 2>/dev/null || true)
+        if [ -n "$token" ]; then
+            log_verbose "OPAL data source token loaded from Vault"
+        fi
+    fi
+
+    # Strategy 2: .env.hub fallback
+    if [ -z "$token" ] && [ -f "$DIVE_ROOT/.env.hub" ]; then
+        token=$(grep "^OPAL_DATA_SOURCE_TOKEN=" "$DIVE_ROOT/.env.hub" 2>/dev/null | cut -d= -f2)
+        [ -n "$token" ] && log_verbose "OPAL data source token loaded from .env.hub"
+    fi
+
+    # Strategy 3: Generate fresh
+    if [ -z "$token" ]; then
+        token=$(openssl rand -base64 48 | tr -d '/+=' | cut -c1-64)
+        log_info "Generated new OPAL data source token"
+
+        # Store in Vault (best-effort)
+        if vault_is_authenticated 2>/dev/null; then
+            local json_payload
+            json_payload=$(jq -n --arg t "$token" '{token: $t}')
+            if vault_set_secret "opal" "data-source-token" "$json_payload"; then
+                log_verbose "OPAL data source token stored in Vault"
+            fi
+        fi
+    fi
+
+    # Write to .env.hub
+    if grep -q "^OPAL_DATA_SOURCE_TOKEN=" "$DIVE_ROOT/.env.hub" 2>/dev/null; then
+        sed -i '' "s|^OPAL_DATA_SOURCE_TOKEN=.*|OPAL_DATA_SOURCE_TOKEN=${token}|" "$DIVE_ROOT/.env.hub"
+    else
+        echo "OPAL_DATA_SOURCE_TOKEN=${token}" >> "$DIVE_ROOT/.env.hub"
+    fi
+
+    # Write to .env (Docker Compose variable substitution source)
+    if grep -q "^OPAL_DATA_SOURCE_TOKEN=" "$DIVE_ROOT/.env" 2>/dev/null; then
+        sed -i '' "s|^OPAL_DATA_SOURCE_TOKEN=.*|OPAL_DATA_SOURCE_TOKEN=${token}|" "$DIVE_ROOT/.env"
+    else
+        echo "OPAL_DATA_SOURCE_TOKEN=${token}" >> "$DIVE_ROOT/.env"
+    fi
+
+    export OPAL_DATA_SOURCE_TOKEN="$token"
+    log_success "OPAL data source token ready"
 }
 
 hub_phase_services() {
@@ -729,6 +871,9 @@ hub_phase_services() {
 
     # Ensure OPAL JWT signing keys exist (required by opal-server entrypoint)
     _hub_ensure_opal_keys
+
+    # Ensure OPAL data source token exists (service-to-service auth for data endpoints)
+    _hub_ensure_opal_data_token
 
     # Ensure dive-shared network exists
     if ! ${DOCKER_CMD:-docker} network inspect dive-shared >/dev/null 2>&1; then
@@ -765,7 +910,42 @@ hub_phase_services() {
     # Provision Hub OPAL client token (after services are up)
     _hub_provision_opal_client_token
 
+    # Start shared services stack (token-store, Prometheus, Grafana, Alertmanager)
+    _hub_start_shared_stack
+
     log_success "Hub services started successfully"
+    return 0
+}
+
+# ============================================================================
+# Shared Services Stack (token-store, monitoring, exporters)
+# ============================================================================
+# Seeds shared .env from hub secrets, syncs certs, starts the stack.
+# Requires: .env.hub populated, instances/hub/certs/ present, dive-shared network.
+# ============================================================================
+_hub_start_shared_stack() {
+    local shared_dir="${DIVE_ROOT}/docker/instances/shared"
+    if [ ! -f "${shared_dir}/docker-compose.yml" ]; then
+        log_warn "Shared services stack not found at ${shared_dir} — skipping"
+        return 0
+    fi
+
+    log_info "Starting shared services stack (token-store, Prometheus, Grafana)..."
+
+    # Seed shared .env + certs from hub (load-secrets.sh reads .env.hub)
+    if [ -f "${shared_dir}/load-secrets.sh" ]; then
+        DIVE_ROOT="${DIVE_ROOT}" bash "${shared_dir}/load-secrets.sh" || {
+            log_warn "load-secrets.sh failed — shared stack may use stale secrets"
+        }
+    fi
+
+    # Start the stack
+    if ${DOCKER_CMD:-docker} compose -f "${shared_dir}/docker-compose.yml" up -d 2>/dev/null; then
+        log_success "Shared services stack started"
+    else
+        log_warn "Shared services stack failed to start (non-fatal)"
+    fi
+
     return 0
 }
 

@@ -3,6 +3,7 @@
  */
 
 import axios from 'axios';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 
 const INSTANCES = [
     { code: 'USA', backend: 'https://localhost:4000', keycloak: 'https://localhost:8443', frontend: 'https://localhost:3000' },
@@ -11,7 +12,7 @@ const INSTANCES = [
     { code: 'DEU', backend: 'https://deu-api.prosecurity.biz', keycloak: 'https://deu-idp.prosecurity.biz', frontend: 'https://deu-app.prosecurity.biz' }
 ];
 
-const httpsAgent = new (require('https').Agent)({ rejectUnauthorized: false });
+const httpsAgent = getSecureHttpsAgent();
 
 async function checkHealth(url: string, name: string): Promise<{ status: string; responseTime?: number }> {
     const start = Date.now();

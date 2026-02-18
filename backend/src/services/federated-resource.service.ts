@@ -25,7 +25,7 @@ import { MongoClient, Db, Document } from 'mongodb';
 import fs from 'fs';
 import path from 'path';
 import axios, { AxiosInstance } from 'axios';
-import https from 'https';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 import { logger } from '../utils/logger';
 import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
 import { getDb } from '../utils/mongodb-singleton';
@@ -61,11 +61,7 @@ interface IDiscoveryInstance {
     };
 }
 
-// Create axios instance with custom HTTPS agent for self-signed certs
-const httpsAgent = new https.Agent({
-    rejectUnauthorized: process.env.NODE_ENV !== 'development'
-});
-const federationAxios: AxiosInstance = axios.create({ httpsAgent, timeout: 8000 });
+const federationAxios: AxiosInstance = axios.create({ httpsAgent: getSecureHttpsAgent(), timeout: 8000 });
 
 // ============================================
 // Interfaces
@@ -746,8 +742,7 @@ class FederatedResourceService {
                 return resource;
             } else {
                 // API mode: Query via HTTP with user's auth token
-                const https = await import('https');
-                const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+                const httpsAgent = getSecureHttpsAgent();
 
                 if (!authHeader) {
                     logger.warn('No auth header provided for cross-instance resource query', {

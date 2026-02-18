@@ -16,7 +16,7 @@
  */
 
 import { logger } from '../utils/logger';
-import https from 'https';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 
 // Token types supported by OPAL
 type OPALPeerType = 'client' | 'datasource';
@@ -149,10 +149,8 @@ class OPALTokenService {
   private async fetchOPALToken(peerType: OPALPeerType): Promise<IOPALTokenResponse> {
     const url = new URL('/token', this.opalServerUrl);
 
-    // Create custom HTTPS agent to handle self-signed certs
-    const agent = new https.Agent({
-      rejectUnauthorized: false // For self-signed certificates in development
-    });
+    // Secure HTTPS agent with proper CA verification
+    const agent = getSecureHttpsAgent();
 
     const response = await fetch(url.toString(), {
       method: 'POST',

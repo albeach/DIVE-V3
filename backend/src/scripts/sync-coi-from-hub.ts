@@ -22,9 +22,9 @@
  */
 
 import axios from 'axios';
-import https from 'https';
 import { logger } from '../utils/logger';
 import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 
 // Environment configuration
 const MONGODB_URL = process.env.MONGODB_URL || (() => { throw new Error('MONGODB_URL not set'); })();
@@ -33,10 +33,7 @@ const INSTANCE_CODE = process.env.INSTANCE_CODE || process.env.INSTANCE_REALM ||
 const HUB_API_URL = process.env.HUB_API_URL || process.env.HUB_URL || 'https://dive-hub:3002';
 const SPOKE_TOKEN = process.env.SPOKE_TOKEN || process.env.FEDERATION_TOKEN;
 
-// Skip SSL verification for internal Docker networks
-const httpsAgent = new https.Agent({
-    rejectUnauthorized: false
-});
+const httpsAgent = getSecureHttpsAgent();
 
 interface ICoiDefinitionSync {
     coiId: string;
