@@ -147,6 +147,11 @@ export interface IRegistrationRequest {
   // CRITICAL FOR BIDIRECTIONAL FEDERATION:
   // Spoke must provide its Keycloak admin credentials so Hub can create reverse IdP
   keycloakAdminPassword?: string;  // Spoke's Keycloak admin password (for bidirectional federation)
+
+  // Pre-approved partner metadata (from Vault KV, set by shell pipeline)
+  partnerPreApproved?: boolean;
+  partnerTrustLevel?: 'development' | 'partner' | 'bilateral' | 'national';
+  partnerMaxClassification?: 'UNCLASSIFIED' | 'CONFIDENTIAL' | 'SECRET' | 'TOP_SECRET';
 }
 
 export interface IHubStatistics {

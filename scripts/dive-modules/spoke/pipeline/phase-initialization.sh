@@ -432,7 +432,13 @@ spoke_init_generate_config() {
     local idp_public_url="https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT}"
     local kas_url="https://localhost:${SPOKE_KAS_PORT}"
 
-    if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+    if [ -n "${SPOKE_CUSTOM_DOMAIN:-}" ]; then
+        # Custom domain: app.<domain>, api.<domain>, idp.<domain>
+        base_url="https://app.${SPOKE_CUSTOM_DOMAIN}"
+        api_url="https://api.${SPOKE_CUSTOM_DOMAIN}"
+        idp_public_url="https://idp.${SPOKE_CUSTOM_DOMAIN}"
+        log_info "Custom domain: spoke ${code_upper} URLs → ${SPOKE_CUSTOM_DOMAIN}"
+    elif [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
         local _env_prefix _base_domain
         _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
         _base_domain="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"
