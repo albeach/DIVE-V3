@@ -151,7 +151,7 @@ cmd_deploy() {
         echo "  ${wait_time}s elapsed..."
 
         # Check if Keycloak is ready
-        if curl -kfs --max-time 3 "https://localhost:8443/health" >/dev/null 2>&1; then
+        if curl -kfs --max-time 3 "https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}/health" >/dev/null 2>&1; then
             log_success "Keycloak is healthy!"
             break
         fi
