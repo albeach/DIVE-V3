@@ -70,16 +70,6 @@ volumes:
       dive.resource.service: "redis"
       dive.resource.purpose: "cache"
   # redis_blacklist_data: MOVED to shared stack (shared-blacklist-redis-data)
-  frontend_node_modules:  # Development hot reload
-    labels:
-      dive.resource.type: "volume"
-      dive.resource.service: "frontend"
-      dive.resource.purpose: "node_modules"
-  frontend_next:  # Development hot reload
-    labels:
-      dive.resource.type: "volume"
-      dive.resource.service: "frontend"
-      dive.resource.purpose: "build_cache"
   authzforce_data:
     labels:
       dive.resource.type: "volume"
@@ -1080,7 +1070,7 @@ services:
       dive.service.description: "Next.js React application with NextAuth.js"
     build:
       context: ./frontend
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile.prod.optimized
     container_name: ${COMPOSE_PROJECT_NAME}-frontend
     restart: unless-stopped
     deploy:
@@ -1092,13 +1082,13 @@ services:
     env_file:
       - .env.hub
     healthcheck:
-      test: ["CMD-SHELL", "curl -ksf https://localhost:3000/ >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/ >/dev/null || exit 1"]
       interval: 5s         # Check every 5 seconds (was 10s)
       timeout: 8s
       retries: 10          # Allow 10 failures (was 12)
       start_period: 30s    # Start checking after 30s (was 90s)
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       PORT: "3000"  # Frontend listens on 3000 (override .env.hub PORT=4000 which is for backend)
       # Instance identification for frontend theme/branding
       NEXT_PUBLIC_INSTANCE: USA
@@ -1146,15 +1136,8 @@ services:
     extra_hosts:
       - "localhost:host-gateway"
     volumes:
-      # DEVELOPMENT: Enable hot reload with source mounts
-      # WARNING: These volume mounts will overlay the production image contents
-      # For production deployment, create docker-compose.hub.prod.yml without these mounts
-      - ./frontend:/app  # Source code for hot reload
       - ./instances/hub/certs:/opt/app/certs:ro  # Hub certificates for HTTPS server (key.pem, certificate.pem)
       - ./certs/ca-bundle:/app/certs/ca:ro  # SSOT CA bundle (mkcert + Vault PKI)
-      # Named volumes for persistence (development hot reload)
-      - frontend_node_modules:/app/node_modules
-      - frontend_next:/app/.next
 
   # ---------------------------------------------------------------------------
   # OPAL Server - Policy distribution hub

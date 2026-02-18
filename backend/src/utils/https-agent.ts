@@ -50,3 +50,15 @@ export function getSecureHttpsAgent(): https.Agent {
         keepAlive: true,
     });
 }
+
+/**
+ * Get secure TLS options for ioredis connections.
+ * Same CA cert loading as HTTPS agent, for Redis TLS (rediss://) connections.
+ */
+export function getSecureRedisTlsOptions(): { ca?: Buffer[]; rejectUnauthorized: boolean } {
+    const certs = loadCACertificates();
+    return {
+        ca: certs || undefined,
+        rejectUnauthorized: certs ? true : false,
+    };
+}

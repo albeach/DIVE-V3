@@ -162,9 +162,8 @@ const nextConfig: NextConfig = {
     devIndicators: {
         position: 'bottom-right',
     },
-    // Docker deployment: Don't use standalone when using custom HTTPS server
-    // Standalone is incompatible with custom server.js (required for mTLS)
-    // output: process.env.NODE_ENV === 'production' ? 'standalone' : undefined,
+    // Docker deployment: Use standalone output for production (Caddy handles TLS termination)
+    output: process.env.NODE_ENV === 'production' ? 'standalone' : undefined,
 
     // FIX: Next.js 15 AbortError - Reduce aggressive fetch caching
     // This prevents "Fetch is aborted" errors from NextAuth session refetches

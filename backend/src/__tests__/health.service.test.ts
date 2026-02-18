@@ -18,8 +18,8 @@ import * as circuitBreakerModule from '../utils/circuit-breaker';
 
 // Mock dependencies
 jest.mock('axios');
-jest.mock('mongodb');
 jest.mock('../services/authz-cache.service');
+jest.mock('../utils/mongodb-singleton');
 jest.mock('../services/federation-bootstrap.service', () => ({
     federationBootstrap: {
         isBootstrapComplete: jest.fn().mockReturnValue(true),
@@ -96,11 +96,22 @@ jest.mock('../utils/circuit-breaker', () => ({
 }));
 
 const mockedAxios = axios as jest.Mocked<typeof axios>;
+const { getDb } = require('../utils/mongodb-singleton');
 
 describe('HealthService', () => {
     beforeEach(() => {
         jest.clearAllMocks();
-        
+
+        // Default: MongoDB singleton returns healthy mock
+        (getDb as jest.Mock).mockReturnValue({
+            admin: jest.fn().mockReturnValue({
+                ping: jest.fn().mockResolvedValue({}),
+            }),
+            collection: jest.fn().mockReturnValue({
+                countDocuments: jest.fn().mockResolvedValue(0),
+            }),
+        });
+
         // Reset mock for getAllCircuitBreakerStats
         (circuitBreakerModule.getAllCircuitBreakerStats as jest.Mock).mockReturnValue({
             opa: {
@@ -180,15 +191,11 @@ describe('HealthService', () => {
 
         it('should return unhealthy status when MongoDB is down', async () => {
             // Mock MongoDB failure
-            const mockMongoClient = {
-                db: jest.fn().mockReturnValue({
-                    admin: jest.fn().mockReturnValue({
-                        ping: jest.fn().mockRejectedValue(new Error('Connection failed')),
-                    }),
+            (getDb as jest.Mock).mockReturnValue({
+                admin: jest.fn().mockReturnValue({
+                    ping: jest.fn().mockRejectedValue(new Error('Connection failed')),
                 }),
-            } as any;
-
-            healthService.setMongoClient(mockMongoClient);
+            });
 
             // Mock OPA success
             mockedAxios.get.mockResolvedValue({ data: { status: 'ok' } });
@@ -365,20 +372,16 @@ describe('HealthService', () => {
         it('should include metrics', async () => {
             mockedAxios.get.mockResolvedValue({ data: { status: 'ok' } });
 
-            const mockMongoClient = {
-                db: jest.fn().mockReturnValue({
-                    admin: jest.fn().mockReturnValue({
-                        ping: jest.fn().mockResolvedValue({}),
-                    }),
-                    collection: jest.fn().mockReturnValue({
-                        countDocuments: jest.fn()
-                            .mockResolvedValueOnce(10) // active IdPs
-                            .mockResolvedValueOnce(3), // pending approvals
-                    }),
+            (getDb as jest.Mock).mockReturnValue({
+                admin: jest.fn().mockReturnValue({
+                    ping: jest.fn().mockResolvedValue({}),
                 }),
-            } as any;
-
-            healthService.setMongoClient(mockMongoClient);
+                collection: jest.fn().mockReturnValue({
+                    countDocuments: jest.fn()
+                        .mockResolvedValueOnce(10) // active IdPs
+                        .mockResolvedValueOnce(3), // pending approvals
+                }),
+            });
 
             (authzCacheService.getStats as jest.Mock).mockReturnValue({
                 size: 150,
@@ -424,20 +427,16 @@ describe('HealthService', () => {
 
         it('should return degraded status when service is slow', async () => {
             // Mock slow MongoDB (>500ms threshold)
-            const mockMongoClient = {
-                db: jest.fn().mockReturnValue({
-                    admin: jest.fn().mockReturnValue({
-                        ping: jest.fn().mockImplementation(() =>
-                            new Promise(resolve => setTimeout(() => resolve({}), 600))
-                        ),
-                    }),
-                    collection: jest.fn().mockReturnValue({
-                        countDocuments: jest.fn().mockResolvedValue(0),
-                    }),
+            (getDb as jest.Mock).mockReturnValue({
+                admin: jest.fn().mockReturnValue({
+                    ping: jest.fn().mockImplementation(() =>
+                        new Promise(resolve => setTimeout(() => resolve({}), 600))
+                    ),
                 }),
-            } as any;
-
-            healthService.setMongoClient(mockMongoClient);
+                collection: jest.fn().mockReturnValue({
+                    countDocuments: jest.fn().mockResolvedValue(0),
+                }),
+            });
 
             // Mock OPA success
             mockedAxios.get.mockResolvedValue({ data: { status: 'ok' } });
@@ -480,15 +479,11 @@ describe('HealthService', () => {
 
         it('should return not ready when MongoDB is down', async () => {
             // Mock MongoDB failure
-            const mockMongoClient = {
-                db: jest.fn().mockReturnValue({
-                    admin: jest.fn().mockReturnValue({
-                        ping: jest.fn().mockRejectedValue(new Error('Connection failed')),
-                    }),
+            (getDb as jest.Mock).mockReturnValue({
+                admin: jest.fn().mockReturnValue({
+                    ping: jest.fn().mockRejectedValue(new Error('Connection failed')),
                 }),
-            } as any;
-
-            healthService.setMongoClient(mockMongoClient);
+            });
 
             // Mock other services as healthy
             mockedAxios.get.mockResolvedValue({ data: { status: 'ok' } });
@@ -599,15 +594,14 @@ describe('HealthService', () => {
             });
 
             it('should mark as down when ping fails', async () => {
-                const mockMongoClient = {
-                    db: jest.fn().mockReturnValue({
-                        admin: jest.fn().mockReturnValue({
-                            ping: jest.fn().mockRejectedValue(new Error('Connection refused')),
-                        }),
+                (getDb as jest.Mock).mockReturnValue({
+                    admin: jest.fn().mockReturnValue({
+                        ping: jest.fn().mockRejectedValue(new Error('Connection refused')),
                     }),
-                } as any;
-
-                healthService.setMongoClient(mockMongoClient);
+                    collection: jest.fn().mockReturnValue({
+                        countDocuments: jest.fn().mockResolvedValue(0),
+                    }),
+                });
 
                 mockedAxios.get.mockResolvedValue({ data: {} });
 
@@ -782,15 +776,11 @@ describe('HealthService', () => {
             // Mock all services failing
             mockedAxios.get.mockRejectedValue(new Error('Network error'));
 
-            const mockMongoClient = {
-                db: jest.fn().mockReturnValue({
-                    admin: jest.fn().mockReturnValue({
-                        ping: jest.fn().mockRejectedValue(new Error('Mongo down')),
-                    }),
+            (getDb as jest.Mock).mockReturnValue({
+                admin: jest.fn().mockReturnValue({
+                    ping: jest.fn().mockRejectedValue(new Error('Mongo down')),
                 }),
-            };
-
-            healthService.setMongoClient(mockMongoClient as any);
+            });
 
             const health = await healthService.detailedHealthCheck();
 
@@ -877,19 +867,15 @@ describe('HealthService', () => {
         });
 
         it('should handle MongoDB ping timeout', async () => {
-            const mockMongoClient = {
-                db: jest.fn().mockReturnValue({
-                    admin: jest.fn().mockReturnValue({
-                        ping: jest.fn().mockImplementation(() => 
-                            new Promise((_, reject) => 
-                                setTimeout(() => reject(new Error('ping timeout')), 6000)
-                            )
-                        ),
-                    }),
+            (getDb as jest.Mock).mockReturnValue({
+                admin: jest.fn().mockReturnValue({
+                    ping: jest.fn().mockImplementation(() =>
+                        new Promise((_, reject) =>
+                            setTimeout(() => reject(new Error('ping timeout')), 6000)
+                        )
+                    ),
                 }),
-            };
-
-            healthService.setMongoClient(mockMongoClient as any);
+            });
             mockedAxios.get.mockResolvedValue({ data: { status: 'ok' } });
 
             const health = await healthService.detailedHealthCheck();
@@ -922,7 +908,9 @@ describe('HealthService', () => {
         });
 
         it('should handle missing MongoDB client gracefully', async () => {
-            healthService.setMongoClient(null as any);
+            (getDb as jest.Mock).mockImplementation(() => {
+                throw new Error('MongoDB not connected');
+            });
             mockedAxios.get.mockResolvedValue({ data: { status: 'ok' } });
 
             const health = await healthService.detailedHealthCheck();

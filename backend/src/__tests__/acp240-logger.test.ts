@@ -9,7 +9,7 @@
  * - logAccessDeniedEvent() - ACCESS_DENIED event logging
  * - logAccessModifiedEvent() - ACCESS_MODIFIED event logging
  * - logDataSharedEvent() - DATA_SHARED event logging
- * - closeAuditLogConnection() - graceful MongoDB shutdown
+ * - closeAuditLogConnection() - graceful reference cleanup
  * - MongoDB connection handling
  * - Error cases
  */
@@ -41,38 +41,34 @@ jest.mock('../utils/logger', () => ({
     },
 }));
 
-// Mock mongodb
-const mockCollection = {
-    insertOne: jest.fn(),
-};
-
-const mockDb = {
-    collection: jest.fn().mockReturnValue(mockCollection),
-};
-
-const mockMongoClient = {
-    connect: jest.fn(),
-    db: jest.fn().mockReturnValue(mockDb),
-    close: jest.fn(),
-};
-
-jest.mock('mongodb', () => ({
-    MongoClient: jest.fn().mockImplementation(() => mockMongoClient),
-}));
-
-// Mock mongodb-config
-jest.mock('../utils/mongodb-config', () => ({
-    getMongoDBUrl: jest.fn().mockReturnValue('mongodb://localhost:27017'),
-    getMongoDBName: jest.fn().mockReturnValue('test-db'),
-}));
+// Mock mongodb-singleton (source uses getDb/mongoSingleton, not raw MongoClient)
+// NOTE: jest.mock factories are hoisted — use inline jest.fn() to avoid TDZ
+jest.mock('../utils/mongodb-singleton', () => {
+    const insertOne = jest.fn();
+    const collection = jest.fn().mockReturnValue({ insertOne });
+    const db = { collection };
+    return {
+        getDb: jest.fn(() => db),
+        mongoSingleton: {
+            connect: jest.fn().mockResolvedValue(undefined),
+            close: jest.fn().mockResolvedValue(undefined),
+        },
+        __mocks: { insertOne, collection, db },
+    };
+});
 
 const { logger } = require('../utils/logger');
+const mongoSingletonMod = require('../utils/mongodb-singleton');
+const mockInsertOne = mongoSingletonMod.__mocks.insertOne as jest.Mock;
+const mockCollection = mongoSingletonMod.__mocks.collection as jest.Mock;
+const mockConnect = mongoSingletonMod.mongoSingleton.connect as jest.Mock;
 
 describe('ACP-240 Logger', () => {
     beforeEach(async () => {
         jest.clearAllMocks();
-        mockCollection.insertOne.mockResolvedValue({ insertedId: 'mock-id' });
-        mockMongoClient.connect.mockResolvedValue(undefined);
+        mockInsertOne.mockResolvedValue({ insertedId: 'mock-id' });
+        mockConnect.mockResolvedValue(undefined);
+        mockCollection.mockReturnValue({ insertOne: mockInsertOne });
 
         // Reset connection by closing before each test
         await closeAuditLogConnection();
@@ -102,7 +98,7 @@ describe('ACP-240 Logger', () => {
                 expect(logger.child).toHaveBeenCalledWith({ service: 'acp240-audit' });
 
                 // Should write to MongoDB
-                expect(mockCollection.insertOne).toHaveBeenCalledWith(
+                expect(mockInsertOne).toHaveBeenCalledWith(
                     expect.objectContaining({
                         acp240EventType: 'ENCRYPT',
                         timestamp: '2025-11-28T10:00:00.000Z',
@@ -150,7 +146,7 @@ describe('ACP-240 Logger', () => {
 
                 await logACP240Event(event);
 
-                expect(mockCollection.insertOne).toHaveBeenCalledWith(
+                expect(mockInsertOne).toHaveBeenCalledWith(
                     expect.objectContaining({
                         subjectAttributes: event.subjectAttributes,
                         resourceAttributes: event.resourceAttributes,
@@ -167,7 +163,7 @@ describe('ACP-240 Logger', () => {
                 // Close existing connection first
                 await closeAuditLogConnection();
 
-                mockMongoClient.connect.mockRejectedValueOnce(new Error('Connection failed'));
+                mockConnect.mockRejectedValueOnce(new Error('Connection failed'));
 
                 const event: IACP240AuditEvent = {
                     eventType: 'ENCRYPT',
@@ -190,7 +186,7 @@ describe('ACP-240 Logger', () => {
             });
 
             it('should handle MongoDB insert error gracefully', async () => {
-                mockCollection.insertOne.mockRejectedValueOnce(new Error('Insert failed'));
+                mockInsertOne.mockRejectedValueOnce(new Error('Insert failed'));
 
                 const event: IACP240AuditEvent = {
                     eventType: 'ENCRYPT',
@@ -233,7 +229,7 @@ describe('ACP-240 Logger', () => {
 
                 await logACP240Event(event);
 
-                expect(mockDb.collection).toHaveBeenCalledWith('custom_audit_logs');
+                expect(mockCollection).toHaveBeenCalledWith('custom_audit_logs');
 
                 process.env.ACP240_LOGS_COLLECTION = originalEnv;
             });
@@ -250,7 +246,7 @@ describe('ACP-240 Logger', () => {
                     classification: 'SECRET',
                 });
 
-                expect(mockCollection.insertOne).toHaveBeenCalledWith(
+                expect(mockInsertOne).toHaveBeenCalledWith(
                     expect.objectContaining({
                         acp240EventType: 'ENCRYPT',
                         requestId: 'req-123',
@@ -276,7 +272,7 @@ describe('ACP-240 Logger', () => {
                     reason: 'Custom encryption reason',
                 });
 
-                expect(mockCollection.insertOne).toHaveBeenCalledWith(
+                expect(mockInsertOne).toHaveBeenCalledWith(
                     expect.objectContaining({
                         reason: 'Custom encryption reason',
                     })
@@ -302,7 +298,7 @@ describe('ACP-240 Logger', () => {
                     latencyMs: 45,
                 });
 
-                expect(mockCollection.insertOne).toHaveBeenCalledWith(
+                expect(mockInsertOne).toHaveBeenCalledWith(
                     expect.objectContaining({
                         acp240EventType: 'DECRYPT',
                         requestId: 'req-123',
@@ -337,7 +333,7 @@ describe('ACP-240 Logger', () => {
                     reason: 'Special access granted',
                 });
 
-                expect(mockCollection.insertOne).toHaveBeenCalledWith(
+                expect(mockInsertOne).toHaveBeenCalledWith(
                     expect.objectContaining({
                         reason: 'Special access granted',
                     })
@@ -372,7 +368,7 @@ describe('ACP-240 Logger', () => {
                     latencyMs: 30,
                 });
 
-                expect(mockCollection.insertOne).toHaveBeenCalledWith(
+                expect(mockInsertOne).toHaveBeenCalledWith(
                     expect.objectContaining({
                         acp240EventType: 'ACCESS_DENIED',
                         outcome: 'DENY',
@@ -405,7 +401,7 @@ describe('ACP-240 Logger', () => {
                     reason: 'Access denied',
                 });
 
-                expect(mockCollection.insertOne).toHaveBeenCalledWith(
+                expect(mockInsertOne).toHaveBeenCalledWith(
                     expect.objectContaining({
                         acp240EventType: 'ACCESS_DENIED',
                         outcome: 'DENY',
@@ -434,7 +430,7 @@ describe('ACP-240 Logger', () => {
                 // Wait for async MongoDB write
                 await new Promise(resolve => setTimeout(resolve, 100));
 
-                expect(mockCollection.insertOne).toHaveBeenCalledWith(
+                expect(mockInsertOne).toHaveBeenCalledWith(
                     expect.objectContaining({
                         acp240EventType: 'ACCESS_MODIFIED',
                         action: 'update',
@@ -460,7 +456,7 @@ describe('ACP-240 Logger', () => {
                 // Wait for async MongoDB write
                 await new Promise(resolve => setTimeout(resolve, 100));
 
-                expect(mockCollection.insertOne).toHaveBeenCalledWith(
+                expect(mockInsertOne).toHaveBeenCalledWith(
                     expect.objectContaining({
                         acp240EventType: 'ACCESS_MODIFIED',
                         action: 'delete',
@@ -486,7 +482,7 @@ describe('ACP-240 Logger', () => {
                 // Wait for async MongoDB write
                 await new Promise(resolve => setTimeout(resolve, 100));
 
-                expect(mockCollection.insertOne).toHaveBeenCalledWith(
+                expect(mockInsertOne).toHaveBeenCalledWith(
                     expect.objectContaining({
                         acp240EventType: 'DATA_SHARED',
                         action: 'share',
@@ -512,7 +508,7 @@ describe('ACP-240 Logger', () => {
                 // Wait for async MongoDB write
                 await new Promise(resolve => setTimeout(resolve, 100));
 
-                expect(mockCollection.insertOne).toHaveBeenCalledWith(
+                expect(mockInsertOne).toHaveBeenCalledWith(
                     expect.objectContaining({
                         reason: 'Bilateral agreement (shared with: CAN)',
                     })
@@ -523,7 +519,7 @@ describe('ACP-240 Logger', () => {
 
     describe('closeAuditLogConnection', () => {
         describe('Happy Path', () => {
-            it('should close MongoDB connection', async () => {
+            it('should clear MongoDB reference', async () => {
                 // First log something to establish connection
                 await logACP240Event({
                     eventType: 'ENCRYPT',
@@ -536,12 +532,11 @@ describe('ACP-240 Logger', () => {
                     reason: 'Test',
                 });
 
-                mockMongoClient.close.mockResolvedValueOnce(undefined);
-
                 await closeAuditLogConnection();
 
-                expect(mockMongoClient.close).toHaveBeenCalled();
-                expect(logger.info).toHaveBeenCalledWith('ACP-240 logger: MongoDB connection closed');
+                expect(logger.info).toHaveBeenCalledWith(
+                    'ACP-240 logger: MongoDB reference cleared (singleton manages connection lifecycle)'
+                );
             });
 
             it('should handle close when no connection exists', async () => {
@@ -549,11 +544,13 @@ describe('ACP-240 Logger', () => {
                 await closeAuditLogConnection();
 
                 // Should not throw
-                expect(true).toBe(true);
+                expect(logger.info).toHaveBeenCalledWith(
+                    'ACP-240 logger: MongoDB reference cleared (singleton manages connection lifecycle)'
+                );
             });
 
-            it('should handle close error gracefully', async () => {
-                // Establish connection first
+            it('should allow re-initialization after close', async () => {
+                // Establish connection
                 await logACP240Event({
                     eventType: 'ENCRYPT',
                     timestamp: '2025-11-28T10:00:00.000Z',
@@ -565,16 +562,22 @@ describe('ACP-240 Logger', () => {
                     reason: 'Test',
                 });
 
-                mockMongoClient.close.mockRejectedValueOnce(new Error('Close failed'));
-
+                // Close
                 await closeAuditLogConnection();
 
-                expect(logger.error).toHaveBeenCalledWith(
-                    'Failed to close MongoDB connection',
-                    expect.objectContaining({
-                        error: 'Close failed',
-                    })
-                );
+                // Log again — should re-initialize
+                await logACP240Event({
+                    eventType: 'DECRYPT',
+                    timestamp: '2025-11-28T11:00:00.000Z',
+                    requestId: 'req-456',
+                    subject: 'jane.doe@mil',
+                    action: 'decrypt',
+                    resourceId: 'doc-789',
+                    outcome: 'ALLOW',
+                    reason: 'Re-initialized',
+                });
+
+                expect(mockInsertOne).toHaveBeenCalledTimes(2);
             });
         });
     });

@@ -20,6 +20,7 @@ import { logger } from '../utils/logger';
 import Redis from 'ioredis';
 import { Collection } from 'mongodb';
 import { getDb } from '../utils/mongodb-singleton';
+import { getSecureRedisTlsOptions } from '../utils/https-agent';
 
 // ============================================
 // TYPES
@@ -107,7 +108,7 @@ class OPALMetricsService {
           if (times > 3) return null;
           return Math.min(times * 1000, 3000);
         },
-        tls: redisUrl?.startsWith('rediss://') ? { rejectUnauthorized: false } : undefined,
+        tls: redisUrl?.startsWith('rediss://') ? getSecureRedisTlsOptions() : undefined,
       };
 
       this.redis = redisUrl
