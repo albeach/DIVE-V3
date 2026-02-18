@@ -261,8 +261,10 @@ spoke_preflight_check_conflicts() {
     local instance_code="$1"
     local code_upper=$(upper "$instance_code")
 
-    # Check orchestration database availability first
-    if ! orch_db_check_connection; then
+    # Check orchestration database availability (skip for remote deployments)
+    if [ "${DEPLOYMENT_MODE:-local}" = "remote" ] || [ "${ORCH_DB_ENABLED:-true}" = "false" ]; then
+        log_verbose "Remote mode — skipping orchestration DB conflict check"
+    elif ! orch_db_check_connection; then
         log_error "Orchestration database is not available - required for deployment"
         echo ""
         echo "  SOLUTION: Ensure Hub infrastructure is running:"
