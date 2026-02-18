@@ -54,9 +54,17 @@ export const AUTH_STATE = {
   ADMIN: path.join(AUTH_DIR, 'admin.json'),
 } as const;
 
-/** Check if a storageState file exists (created by global setup) */
+/** Check if a storageState file exists and contains valid session data (created by global setup) */
 export function hasAuthState(level: keyof typeof AUTH_STATE): boolean {
-  return fs.existsSync(AUTH_STATE[level]);
+  const filePath = AUTH_STATE[level];
+  if (!fs.existsSync(filePath)) return false;
+  try {
+    const content = fs.readFileSync(filePath, 'utf-8');
+    const parsed = JSON.parse(content);
+    return Array.isArray(parsed.cookies) || Array.isArray(parsed.origins);
+  } catch {
+    return false;
+  }
 }
 
 /**

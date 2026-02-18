@@ -42,7 +42,7 @@ const TEST_USERS = {
  * Helper: Navigate to Hub and select IdP
  */
 async function selectIdP(page: Page, idpName: string) {
-    await page.goto(HUB_URL, { waitUntil: 'networkidle' });
+    await page.goto(HUB_URL, { waitUntil: 'domcontentloaded' });
 
     // Look for IdP selection button (different UI patterns)
     const idpButton = page.locator(`[data-idp="${idpName}"], button:has-text("${idpName}"), a:has-text("${idpName}")`).first();

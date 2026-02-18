@@ -53,7 +53,7 @@ export class AdminApprovalsPage {
     await this.page.goto('/admin/approvals', {
       timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
     });
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async verifyLoaded() {

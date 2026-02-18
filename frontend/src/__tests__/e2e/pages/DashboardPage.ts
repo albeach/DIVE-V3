@@ -53,7 +53,8 @@ export class DashboardPage {
     this.page = page;
     
     // Main elements
-    this.heading = page.getByRole('heading', { name: /dashboard|home|welcome/i });
+    // Match actual dashboard h1 which uses time-based greetings: "Good morning, {name}"
+    this.heading = page.getByRole('heading', { name: /dashboard|home|welcome|good morning|good afternoon|good evening/i });
     this.welcomeMessage = page.getByText(/welcome|hello/i);
     
     this.userMenu = page.locator(TEST_CONFIG.SELECTORS.USER_MENU)
@@ -121,12 +122,13 @@ export class DashboardPage {
    * Wait for dashboard to load
    */
   async waitForPageLoad() {
-    // Wait for heading or user menu to be visible
+    // Wait for heading or user menu to be visible (sufficient for page ready)
     await this.heading.or(this.userMenu).first()
       .waitFor({ state: 'visible', timeout: TEST_CONFIG.TIMEOUTS.ACTION });
-    
-    // Wait for network idle
-    await this.page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NETWORK });
+
+    // Use domcontentloaded instead of networkidle — networkidle hangs in CI
+    // due to background API polling that never settles
+    await this.page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NETWORK });
   }
   
   /**

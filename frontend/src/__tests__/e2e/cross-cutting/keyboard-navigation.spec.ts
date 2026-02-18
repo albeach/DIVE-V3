@@ -7,7 +7,7 @@ test.describe('Keyboard Navigation', () => {
 
   test.beforeEach(async ({ page }) => {
     await page.goto(TEST_CONFIG.baseUrl);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
   });
 
   test('Tab key moves focus through all interactive elements on dashboard', async ({ page }) => {
@@ -178,7 +178,7 @@ test.describe('Keyboard Navigation', () => {
   test('Arrow keys navigate resource list items', async ({ page }) => {
     // Navigate to resources page
     await page.goto(`${TEST_CONFIG.baseUrl}/resources`);
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     // Find a list or grid of resource items
     const resourceList = page.locator(

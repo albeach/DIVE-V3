@@ -455,7 +455,7 @@ test.describe('Admin Federation Management', () => {
           .or(page.getByRole('button', { name: /yes.*push/i }))
           .or(page.locator('[data-testid="confirm-push"]'));
         await confirmButton.first().click({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
-        await page.waitForLoadState('networkidle');
+        await page.waitForLoadState('domcontentloaded');
       });
 
       await test.step('Verify success notification', async () => {
