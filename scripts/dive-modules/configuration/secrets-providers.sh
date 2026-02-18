@@ -11,8 +11,18 @@
 # HASHICORP VAULT FUNCTIONS
 # =============================================================================
 
-VAULT_ADDR="${VAULT_ADDR:-https://dive-hub-vault:8200}"
+VAULT_ADDR="${VAULT_ADDR:-https://127.0.0.1:8200}"
 VAULT_TOKEN="${VAULT_TOKEN:-}"
+VAULT_CACERT="${VAULT_CACERT:-${DIVE_ROOT:-}/certs/vault/node1/ca.pem}"
+
+# Build curl TLS flags for Vault API calls
+_vault_curl_flags() {
+    local flags=""
+    if [ -n "$VAULT_CACERT" ] && [ -f "$VAULT_CACERT" ]; then
+        flags="--cacert $VAULT_CACERT"
+    fi
+    echo "$flags"
+}
 
 ##
 # Check if Vault is authenticated
@@ -31,7 +41,8 @@ vault_is_authenticated() {
     fi
 
     # Test token validity (standbyok=true for HA clusters where node may be standby)
-    curl -sfL -H "X-Vault-Token: $VAULT_TOKEN" \
+    # shellcheck disable=SC2046
+    curl -sfL $(_vault_curl_flags) -H "X-Vault-Token: $VAULT_TOKEN" \
         "${VAULT_ADDR}/v1/sys/health?standbyok=true" >/dev/null 2>&1
 }
 
@@ -46,7 +57,8 @@ vault_approle_login() {
     local secret_id="$2"
 
     local response
-    response=$(curl -sf -X POST \
+    # shellcheck disable=SC2046
+    response=$(curl -sf $(_vault_curl_flags) -X POST \
         -d "{\"role_id\":\"$role_id\",\"secret_id\":\"$secret_id\"}" \
         "${VAULT_ADDR}/v1/auth/approle/login")
 
@@ -85,7 +97,8 @@ vault_get_secret() {
     local api_path="${VAULT_ADDR}/v1/${full_path}"
 
     local response
-    response=$(curl -sfL -H "X-Vault-Token: $VAULT_TOKEN" "$api_path")
+    # shellcheck disable=SC2046
+    response=$(curl -sfL $(_vault_curl_flags) -H "X-Vault-Token: $VAULT_TOKEN" "$api_path")
 
     if [ -n "$response" ]; then
         echo "$response" | jq -r ".data.data.${field} // empty"
@@ -114,7 +127,8 @@ vault_set_secret() {
     local full_path="dive-v3/${category}/data/${path}"
     local api_path="${VAULT_ADDR}/v1/${full_path}"
 
-    curl -sfL -X POST \
+    # shellcheck disable=SC2046
+    curl -sfL $(_vault_curl_flags) -X POST \
         -H "X-Vault-Token: $VAULT_TOKEN" \
         -d "{\"data\":$value}" \
         "${api_path}" >/dev/null 2>&1

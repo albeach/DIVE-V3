@@ -606,8 +606,8 @@ _vault_pki_issue_cert() {
     cp "$target_dir/ca/rootCA.pem" "$vault_pki_dir/ca-chain.pem" 2>/dev/null || true
     chmod 644 "$vault_pki_dir/ca-chain.pem" 2>/dev/null || true
 
-    # Set permissions (matching mkcert convention)
-    chmod 600 "$target_dir/key.pem"
+    # Set permissions (644 for key: Docker containers run as non-owner UIDs)
+    chmod 644 "$target_dir/key.pem"
     chmod 644 "$target_dir/certificate.pem"
     chmod 644 "$target_dir/ca/rootCA.pem"
     chmod 644 "$target_dir/rootCA.pem" 2>/dev/null || true

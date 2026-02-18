@@ -227,7 +227,7 @@ spoke_init_prepare_certificates() {
            "dive-spoke-${code_lower}-keycloak" \
            "keycloak-${code_lower}" 2>/dev/null || return 1
 
-    chmod 600 "$spoke_dir/certs/key.pem"
+    chmod 644 "$spoke_dir/certs/key.pem"   # 644: Docker containers run as non-owner UIDs
     chmod 644 "$spoke_dir/certs/certificate.pem"
 
     # Generate spoke mTLS certificates

@@ -94,6 +94,16 @@ module_hub() {
     local action="${1:-help}"
     shift || true
 
+    # Remote execution: if env is dev/staging, delegate to remote EC2
+    if [ -f "${MODULES_DIR}/aws/remote-exec.sh" ]; then
+        source "${MODULES_DIR}/aws/remote-exec.sh"
+        if is_remote_environment 2>/dev/null; then
+            log_info "Remote environment detected (${ENVIRONMENT}). Delegating to EC2..."
+            remote_hub_exec "$action" "$@"
+            return $?
+        fi
+    fi
+
     case "$action" in
         deploy)         hub_deploy "$@" ;;
         init)           hub_init "$@" ;;

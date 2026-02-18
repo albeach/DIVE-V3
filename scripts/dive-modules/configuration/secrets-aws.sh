@@ -31,7 +31,7 @@ fi
 # CONFIGURATION
 # =============================================================================
 
-AWS_REGION="${AWS_REGION:-us-east-1}"
+AWS_REGION="${AWS_REGION:-us-gov-east-1}"
 AWS_SECRET_PREFIX="${AWS_SECRET_PREFIX:-dive-v3}"
 USE_AWS_SECRETS="${USE_AWS_SECRETS:-true}"
 
@@ -300,6 +300,221 @@ migrate_instance_secrets_from_gcp() {
     done
     
     log_success "Migration complete for $instance_code"
+}
+
+# =============================================================================
+# SEED COMMAND — Generate and store all secrets for a fresh environment
+# =============================================================================
+
+##
+# Generate a cryptographically secure random string
+#
+# Arguments:
+#   $1 - Length (default: 32)
+##
+_generate_secret() {
+    local length="${1:-32}"
+    openssl rand -base64 "$length" | tr -d '/+=' | head -c "$length"
+}
+
+##
+# Seed all required secrets for a given instance.
+# Generates new random values and stores them in AWS Secrets Manager.
+# Skips secrets that already exist (use --force to overwrite).
+#
+# Arguments:
+#   $1 - Instance code (e.g., USA, FRA, GBR)
+#   --force  Overwrite existing secrets
+##
+aws_seed_instance_secrets() {
+    local instance_code="${1:-}"
+    local force=false
+    shift || true
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --force) force=true; shift ;;
+            *) instance_code="${instance_code:-$1}"; shift ;;
+        esac
+    done
+
+    if [ -z "$instance_code" ]; then
+        log_error "Usage: aws_seed_instance_secrets <INSTANCE_CODE> [--force]"
+        return 1
+    fi
+
+    aws_is_authenticated || return 1
+
+    instance_code=$(echo "$instance_code" | tr '[:lower:]' '[:upper:]')
+    log_step "Seeding secrets for instance: $instance_code"
+
+    # Define secrets and their generation rules
+    declare -A secrets=(
+        ["keycloak-admin-password"]=32
+        ["mongo-password"]=32
+        ["postgres-password"]=32
+        ["redis-password"]=32
+        ["keycloak-client-secret"]=48
+        ["auth-secret"]=64
+    )
+
+    local created=0
+    local skipped=0
+
+    for secret_name in "${!secrets[@]}"; do
+        local length="${secrets[$secret_name]}"
+
+        if [ "$force" = "false" ] && aws_secret_exists "$secret_name" "$instance_code"; then
+            log_verbose "  Exists: $secret_name ($instance_code) — skipping"
+            skipped=$((skipped + 1))
+            continue
+        fi
+
+        local secret_value
+        secret_value=$(_generate_secret "$length")
+        aws_set_secret "$secret_name" "$secret_value" "$instance_code"
+        log_info "  Created: $secret_name ($instance_code)"
+        created=$((created + 1))
+    done
+
+    log_success "Instance $instance_code: $created created, $skipped skipped"
+}
+
+##
+# Seed shared (non-instance-specific) secrets
+#
+# Arguments:
+#   --force  Overwrite existing secrets
+##
+aws_seed_shared_secrets() {
+    local force=false
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --force) force=true; shift ;;
+            *) shift ;;
+        esac
+    done
+
+    aws_is_authenticated || return 1
+
+    log_step "Seeding shared secrets..."
+
+    declare -A shared_secrets=(
+        ["opal-auth-master-token"]=48
+        ["vault-root-token"]=48
+        ["redis-blacklist-password"]=32
+    )
+
+    local created=0
+    local skipped=0
+
+    for secret_name in "${!shared_secrets[@]}"; do
+        local length="${shared_secrets[$secret_name]}"
+
+        if [ "$force" = "false" ] && aws_secret_exists "$secret_name"; then
+            log_verbose "  Exists: $secret_name — skipping"
+            skipped=$((skipped + 1))
+            continue
+        fi
+
+        local secret_value
+        secret_value=$(_generate_secret "$length")
+        aws_set_secret "$secret_name" "$secret_value"
+        log_info "  Created: $secret_name"
+        created=$((created + 1))
+    done
+
+    log_success "Shared secrets: $created created, $skipped skipped"
+}
+
+##
+# Seed ALL secrets for a complete environment (hub + spokes)
+#
+# Arguments:
+#   --spokes "GBR FRA DEU"   Spoke codes (space-separated)
+#   --force                  Overwrite existing
+#
+# Example:
+#   aws_seed_environment --spokes "GBR FRA DEU NZL"
+##
+aws_seed_environment() {
+    local spoke_list=""
+    local force=""
+
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --spokes) spoke_list="$2"; shift 2 ;;
+            --force)  force="--force"; shift ;;
+            *) shift ;;
+        esac
+    done
+
+    aws_is_authenticated || return 1
+
+    echo ""
+    echo -e "${BOLD}DIVE V3 — Seed AWS Secrets (${ENVIRONMENT})${NC}"
+    echo "================================================"
+    echo ""
+
+    # Shared secrets
+    aws_seed_shared_secrets $force
+
+    # Hub (USA)
+    aws_seed_instance_secrets "USA" $force
+
+    # Spokes
+    if [ -n "$spoke_list" ]; then
+        for code in $spoke_list; do
+            aws_seed_instance_secrets "$code" $force
+        done
+    fi
+
+    echo ""
+    log_success "Environment secrets seeded. Verify with: ./dive secrets list"
+}
+
+##
+# Export all secrets for an instance as environment variables
+# (used during .env file generation for Docker Compose)
+#
+# Arguments:
+#   $1 - Instance code
+##
+aws_export_instance_secrets() {
+    local instance_code="${1:-USA}"
+    instance_code=$(echo "$instance_code" | tr '[:lower:]' '[:upper:]')
+
+    aws_is_authenticated || return 1
+
+    local kc_pass mongo_pass pg_pass redis_pass kc_client auth_sec
+
+    kc_pass=$(aws_get_secret "keycloak-admin-password" "$instance_code" 2>/dev/null) || true
+    mongo_pass=$(aws_get_secret "mongo-password" "$instance_code" 2>/dev/null) || true
+    pg_pass=$(aws_get_secret "postgres-password" "$instance_code" 2>/dev/null) || true
+    redis_pass=$(aws_get_secret "redis-password" "$instance_code" 2>/dev/null) || true
+    kc_client=$(aws_get_secret "keycloak-client-secret" "$instance_code" 2>/dev/null) || true
+    auth_sec=$(aws_get_secret "auth-secret" "$instance_code" 2>/dev/null) || true
+
+    # Shared secrets
+    local opal_token vault_token redis_bl_pass
+    opal_token=$(aws_get_secret "opal-auth-master-token" 2>/dev/null) || true
+    vault_token=$(aws_get_secret "vault-root-token" 2>/dev/null) || true
+    redis_bl_pass=$(aws_get_secret "redis-blacklist-password" 2>/dev/null) || true
+
+    # Export with instance-suffixed names (matches .env.hub convention)
+    export "KC_ADMIN_PASSWORD_${instance_code}=${kc_pass}"
+    export "MONGO_PASSWORD_${instance_code}=${mongo_pass}"
+    export "POSTGRES_PASSWORD_${instance_code}=${pg_pass}"
+    export "REDIS_PASSWORD_${instance_code}=${redis_pass}"
+    export "KEYCLOAK_CLIENT_SECRET_${instance_code}=${kc_client}"
+    export "AUTH_SECRET_${instance_code}=${auth_sec}"
+
+    # Shared
+    export "OPAL_AUTH_MASTER_TOKEN=${opal_token}"
+    export "VAULT_TOKEN=${vault_token}"
+    export "REDIS_PASSWORD_BLACKLIST=${redis_bl_pass}"
+
+    log_verbose "Exported secrets for $instance_code"
 }
 
 log_verbose "AWS Secrets Manager module loaded (region: $AWS_REGION)"

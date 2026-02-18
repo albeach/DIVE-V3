@@ -68,6 +68,17 @@ module_spoke() {
     local action="${1:-help}"
     shift || true
 
+    # Remote execution: if env is dev/staging, delegate to remote EC2
+    if [ -f "${MODULES_DIR}/aws/remote-exec.sh" ]; then
+        source "${MODULES_DIR}/aws/remote-exec.sh"
+        if is_remote_environment 2>/dev/null; then
+            local spoke_code="${1:-${INSTANCE}}"
+            log_info "Remote environment detected (${ENVIRONMENT}). Delegating to spoke EC2..."
+            remote_spoke_exec "$spoke_code" "$action" "$@"
+            return $?
+        fi
+    fi
+
     case "$action" in
         # === Deployment Operations (delegate to spoke-deploy.sh) ===
         deploy)
