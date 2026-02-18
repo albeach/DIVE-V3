@@ -170,10 +170,24 @@ remote_dive_exec() {
         return 1
     }
 
+    # For spoke deploys, look up the hub's public IP so the spoke knows
+    # how to reach the hub (cross-EC2 federation)
+    local env_prefix=""
+    if [ "$role" = "spoke" ]; then
+        local hub_ip
+        hub_ip=$(aws_get_instance_ip "hub" "" 2>/dev/null || echo "")
+        if [ -n "$hub_ip" ] && [ "$hub_ip" != "None" ]; then
+            env_prefix="HUB_EXTERNAL_ADDRESS=${hub_ip} "
+            log_info "Injecting hub address: HUB_EXTERNAL_ADDRESS=${hub_ip}"
+        else
+            log_warn "Could not discover hub IP — spoke may not be able to reach hub"
+        fi
+    fi
+
     # Build the remote command
     # On the remote instance, we always run as ENVIRONMENT=local because
     # the instance IS the target — no further SSH hop needed.
-    local remote_cmd="./dive --env local"
+    local remote_cmd="${env_prefix}./dive --env local"
     if [ "$role" = "spoke" ] && [ -n "$spoke_code" ]; then
         remote_cmd="${remote_cmd} --instance $(echo "$spoke_code" | tr '[:upper:]' '[:lower:]')"
     fi

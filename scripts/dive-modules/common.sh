@@ -239,6 +239,12 @@ export AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-}"
 export DIVE_AWS_KEY_PAIR="${DIVE_AWS_KEY_PAIR:-ABeach-SSH-Key}"
 export DIVE_AWS_SSH_KEY="${DIVE_AWS_SSH_KEY:-${HOME}/.ssh/ABeach-SSH-Key.pem}"
 
+# EC2 instance metadata auto-detection (runs only on EC2 instances)
+if [ -z "${INSTANCE_PRIVATE_IP:-}" ] && curl -sf -m 1 http://169.254.169.254/latest/meta-data/ >/dev/null 2>&1; then
+    export INSTANCE_PRIVATE_IP="$(curl -sf -m 2 http://169.254.169.254/latest/meta-data/local-ipv4)"
+    export INSTANCE_PUBLIC_IP="$(curl -sf -m 2 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo "")"
+fi
+
 # Environment-specific AWS defaults
 case "$ENVIRONMENT" in
     dev)
@@ -247,6 +253,7 @@ case "$ENVIRONMENT" in
         export SECRETS_PROVIDER="${SECRETS_PROVIDER:-vault}"
         export DIVE_DOCKER_BUILD_MODE="${DIVE_DOCKER_BUILD_MODE:-source}"
         export DIVE_DOMAIN_SUFFIX="${DIVE_DOMAIN_SUFFIX:-dev.dive25.com}"
+        export HUB_EXTERNAL_ADDRESS="${HUB_EXTERNAL_ADDRESS:-${INSTANCE_PUBLIC_IP:-localhost}}"
         ;;
     staging)
         export DIVE_AWS_INSTANCE_TYPE="${DIVE_AWS_INSTANCE_TYPE:-t3.2xlarge}"
@@ -254,6 +261,7 @@ case "$ENVIRONMENT" in
         export SECRETS_PROVIDER="${SECRETS_PROVIDER:-vault}"
         export DIVE_DOCKER_BUILD_MODE="${DIVE_DOCKER_BUILD_MODE:-source}"
         export DIVE_DOMAIN_SUFFIX="${DIVE_DOMAIN_SUFFIX:-staging.dive25.com}"
+        export HUB_EXTERNAL_ADDRESS="${HUB_EXTERNAL_ADDRESS:-${INSTANCE_PUBLIC_IP:-localhost}}"
         ;;
 esac
 
@@ -348,22 +356,29 @@ export HUB_REALM
 
 # Hub API URL - Environment aware
 # - LOCAL: Use localhost hub
-# - DEV/STAGING: Use environment-specific domain or localhost (single-instance)
+# - DEV/STAGING: Use HUB_EXTERNAL_ADDRESS (auto-detected on EC2, or set manually)
 # - GCP/PILOT: Use production hub
 case "$ENVIRONMENT" in
     local)
         export HUB_API_URL="${DIVE_HUB_URL:-https://localhost:4000}"
         ;;
     dev)
-        export HUB_API_URL="${DIVE_HUB_URL:-https://hub-api.dev.dive25.com:4000}"
+        export HUB_API_URL="${DIVE_HUB_URL:-https://${HUB_EXTERNAL_ADDRESS:-localhost}:4000}"
         ;;
     staging)
-        export HUB_API_URL="${DIVE_HUB_URL:-https://hub-api.staging.dive25.com:4000}"
+        export HUB_API_URL="${DIVE_HUB_URL:-https://${HUB_EXTERNAL_ADDRESS:-localhost}:4000}"
         ;;
     *)
         export HUB_API_URL="${DIVE_HUB_URL:-https://usa-api.dive25.com}"
         ;;
 esac
+
+# Derived hub URLs for cross-instance communication (set when hub is remote)
+if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost" ]; then
+    export HUB_KC_URL="${HUB_KC_URL:-https://${HUB_EXTERNAL_ADDRESS}:8443}"
+    export HUB_OPAL_URL="${HUB_OPAL_URL:-https://${HUB_EXTERNAL_ADDRESS}:7002}"
+    export HUB_VAULT_URL="${HUB_VAULT_URL:-https://${HUB_EXTERNAL_ADDRESS}:8200}"
+fi
 
 # =============================================================================
 # NETWORK MANAGEMENT (LOCAL DEV ONLY)

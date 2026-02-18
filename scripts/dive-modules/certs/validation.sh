@@ -348,6 +348,15 @@ _hub_service_sans() {
     sans="$sans hub.dive.local hub.dive25.com"
     sans="$sans usa-idp.dive25.com usa-api.dive25.com usa-app.dive25.com"
 
+    # Cross-EC2 external address (IP or hostname for remote spoke access)
+    if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost" ]; then
+        sans="$sans ${HUB_EXTERNAL_ADDRESS}"
+    fi
+    # Environment-specific domain names (dev.dive25.com, staging.dive25.com)
+    if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+        sans="$sans hub.${DIVE_DOMAIN_SUFFIX} hub-api.${DIVE_DOMAIN_SUFFIX} hub-idp.${DIVE_DOMAIN_SUFFIX}"
+    fi
+
     printf '%s' "$sans"
 }
 
@@ -406,6 +415,14 @@ _spoke_service_sans() {
     sans="$sans dive-hub-opa dive-hub-opal-server"
     sans="$sans hub-keycloak keycloak backend frontend opa opal-server"
     sans="$sans hub.dive25.com usa-idp.dive25.com usa-api.dive25.com usa-app.dive25.com"
+
+    # Cross-EC2 external addresses (spoke and hub)
+    if [ -n "${SPOKE_EXTERNAL_ADDRESS:-}" ] && [ "$SPOKE_EXTERNAL_ADDRESS" != "localhost" ]; then
+        sans="$sans ${SPOKE_EXTERNAL_ADDRESS}"
+    fi
+    if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost" ]; then
+        sans="$sans ${HUB_EXTERNAL_ADDRESS}"
+    fi
 
     printf '%s' "$sans"
 }

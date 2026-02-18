@@ -135,6 +135,64 @@ _rebuild_spoke_ca_bundle() {
     cp "$ca_bundle" "$spoke_dir/truststores/mkcert-rootCA.pem" 2>/dev/null || true
 }
 
+##
+# Fetch Hub Vault PKI CA bundle from a remote hub
+#
+# Used by remote spokes (different EC2 instances, clouds, on-prem) to download
+# the hub's Vault PKI CA chain for TLS trust bootstrapping. The hub's nginx
+# reverse proxy exposes only unauthenticated PKI CA endpoints (standard PKI
+# practice — CA certificates are public by design).
+#
+# Requires:
+#   HUB_EXTERNAL_ADDRESS - Hub's public IP or DNS name
+#
+# Returns:
+#   0 - Success
+#   1 - Failure
+##
+_fetch_hub_ca_bundle() {
+    local hub_addr="${HUB_EXTERNAL_ADDRESS:?HUB_EXTERNAL_ADDRESS required}"
+    local hub_vault="https://${hub_addr}:8200"
+    local ca_dir="${DIVE_ROOT}/certs/vault-pki"
+
+    mkdir -p "$ca_dir"
+
+    log_step "Fetching hub CA bundle from ${hub_vault}..."
+
+    # Vault PKI CA endpoints are public (standard PKI practice)
+    # -k: skip TLS verify for bootstrap (we don't trust any CA yet)
+    if ! curl -sk --max-time 10 "${hub_vault}/v1/pki/ca/pem" -o "$ca_dir/root-ca.pem"; then
+        log_error "Failed to fetch root CA from ${hub_vault}/v1/pki/ca/pem"
+        return 1
+    fi
+
+    if ! curl -sk --max-time 10 "${hub_vault}/v1/pki_int/ca/pem" -o "$ca_dir/int-ca.pem"; then
+        log_error "Failed to fetch intermediate CA from ${hub_vault}/v1/pki_int/ca/pem"
+        return 1
+    fi
+
+    # Validate we got actual PEM content (not an error page)
+    if ! grep -q "BEGIN CERTIFICATE" "$ca_dir/root-ca.pem" 2>/dev/null; then
+        log_error "Root CA response is not valid PEM"
+        rm -f "$ca_dir/root-ca.pem"
+        return 1
+    fi
+
+    if ! grep -q "BEGIN CERTIFICATE" "$ca_dir/int-ca.pem" 2>/dev/null; then
+        log_error "Intermediate CA response is not valid PEM"
+        rm -f "$ca_dir/int-ca.pem"
+        return 1
+    fi
+
+    # Build chain: intermediate first, then root (standard order)
+    cat "$ca_dir/int-ca.pem" "$ca_dir/root-ca.pem" > "$ca_dir/ca-chain.pem"
+
+    # Rebuild the unified CA bundle (includes mkcert + Vault PKI)
+    _rebuild_ca_bundle
+
+    log_success "Fetched hub CA bundle from ${hub_vault}"
+}
+
 # =============================================================================
 # TRUSTSTORE MANAGEMENT
 # =============================================================================
@@ -705,7 +763,10 @@ generate_hub_certificate_vault() {
     local dns_sans
     dns_sans=$(_hub_service_sans)
 
+    # IP SANs: loopback + EC2 instance IPs (if running on EC2)
     local ip_sans="127.0.0.1,::1"
+    [ -n "${INSTANCE_PRIVATE_IP:-}" ] && ip_sans="${ip_sans},${INSTANCE_PRIVATE_IP}"
+    [ -n "${INSTANCE_PUBLIC_IP:-}" ] && ip_sans="${ip_sans},${INSTANCE_PUBLIC_IP}"
 
     if _vault_pki_issue_cert "hub-services" "dive-hub-services" "$dns_sans" "$ip_sans" "$cert_dir" "2160h"; then
         log_success "Hub certificate issued from Vault PKI"
@@ -766,7 +827,10 @@ generate_spoke_certificate_vault() {
     local dns_sans
     dns_sans=$(_spoke_service_sans "$code_lower")
 
+    # IP SANs: loopback + EC2 instance IPs (if running on EC2)
     local ip_sans="127.0.0.1,::1"
+    [ -n "${INSTANCE_PRIVATE_IP:-}" ] && ip_sans="${ip_sans},${INSTANCE_PRIVATE_IP}"
+    [ -n "${INSTANCE_PUBLIC_IP:-}" ] && ip_sans="${ip_sans},${INSTANCE_PUBLIC_IP}"
     local role_name="spoke-${code_lower}-services"
 
     if _vault_pki_issue_cert "$role_name" "dive-spoke-${code_lower}-services" \

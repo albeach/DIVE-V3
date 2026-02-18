@@ -603,10 +603,12 @@ _vault_node_dns_sans() {
 }
 
 ##
-# Return IP SANs for Vault nodes (loopback only).
+# Return IP SANs for Vault nodes (loopback + EC2 instance IP if available).
 ##
 _vault_node_ip_sans() {
-    echo "127.0.0.1 ::1"
+    local sans="127.0.0.1 ::1"
+    [ -n "${INSTANCE_PRIVATE_IP:-}" ] && sans="$sans ${INSTANCE_PRIVATE_IP}"
+    echo "$sans"
 }
 
 ##

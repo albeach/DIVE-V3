@@ -209,7 +209,7 @@ hub_up() {
     cd "$DIVE_ROOT"
 
     if [ "$DRY_RUN" = "true" ]; then
-        log_info "[DRY RUN] Would run: ${DOCKER_CMD:-docker} compose -f $HUB_COMPOSE_FILE up -d"
+        log_info "[DRY RUN] Would run: ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES up -d"
         return 0
     fi
 
@@ -242,7 +242,7 @@ hub_up() {
     echo "DEBUG [hub_up]: Building Docker images..." >&2
     log_info "Building Docker images (if needed)..."
     local build_log="/tmp/hub-docker-build-$(date +%s).log"
-    if ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" --profile "$(_vault_get_profile)" build > "$build_log" 2>&1; then
+    if ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES --profile "$(_vault_get_profile)" build > "$build_log" 2>&1; then
         log_success "Docker images built successfully"
         echo "DEBUG [hub_up]: Docker images built" >&2
     else
@@ -339,7 +339,7 @@ hub_up() {
     else
         # Fallback: Traditional sequential startup
         log_verbose "Using traditional sequential startup (PARALLEL_STARTUP_ENABLED=false)"
-        ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" --profile "$(_vault_get_profile)" up -d
+        ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES --profile "$(_vault_get_profile)" up -d
 
         log_success "Hub services started (sequential mode)"
     fi
@@ -367,7 +367,7 @@ hub_down() {
         fi
     fi
 
-    ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" --profile "$(_vault_get_profile)" down
+    ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES --profile "$(_vault_get_profile)" down
 
     log_success "Hub services stopped"
     return 0

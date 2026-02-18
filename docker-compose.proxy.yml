@@ -1,0 +1,56 @@
+# =============================================================================
+# DIVE V3 Hub Reverse Proxy Overlay
+# =============================================================================
+# Adds nginx reverse proxy for EC2/remote deployments.
+# This is a compose OVERLAY — use with:
+#   docker compose -f docker-compose.hub.yml -f docker-compose.proxy.yml up -d
+#
+# nginx owns the standard ports (443, 3000, 4000, 7002, 8443, 8200) on 0.0.0.0.
+#
+# IMPORTANT: To avoid port conflicts, set these in .env.hub on EC2:
+#   KEYCLOAK_HTTPS_PORT=18443
+#   KEYCLOAK_HTTP_PORT=18080
+#   KEYCLOAK_MGMT_PORT=19000
+#   BACKEND_PORT=14000
+#   FRONTEND_PORT=13000
+#   OPAL_PORT=17002
+#   VAULT_API_PORT=18200
+#
+# This remaps service ports to offsets (127.0.0.1:1XXXX) while nginx
+# uses the standard ports (0.0.0.0:XXXX). Services are still accessible
+# via SSH tunnel on the offset ports.
+# =============================================================================
+
+services:
+  # =========================================================================
+  # nginx reverse proxy — public-facing entry point
+  # =========================================================================
+  nginx:
+    image: nginx:alpine
+    container_name: ${COMPOSE_PROJECT_NAME:-dive-hub}-nginx
+    restart: unless-stopped
+    stop_grace_period: 10s
+    volumes:
+      - ./nginx/hub-proxy.conf:/etc/nginx/nginx.conf:ro
+      - ./instances/hub/certs:/etc/nginx/ssl:ro
+      - ./certs/ca-bundle:/etc/nginx/ca-bundle:ro
+    ports:
+      - "0.0.0.0:443:443"
+      - "0.0.0.0:3000:3000"
+      - "0.0.0.0:4000:4000"
+      - "0.0.0.0:7002:7002"
+      - "0.0.0.0:8443:8443"
+      - "0.0.0.0:8200:8200"
+    networks:
+      - hub-internal
+    healthcheck:
+      test: ["CMD", "curl", "-kf", "https://localhost:443/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      backend:
+        condition: service_healthy

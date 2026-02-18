@@ -16,7 +16,7 @@ hub_parallel_startup() {
         local vault_profile
         vault_profile=$(_vault_get_profile)
         log_info "Starting Vault services (profile: ${vault_profile})..."
-        ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" --profile "$vault_profile" up -d 2>&1 || true
+        ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES --profile "$vault_profile" up -d 2>&1 || true
         sleep 5
     else
         log_verbose "Vault already bootstrapped in Phase 1 — skipping startup"
@@ -26,7 +26,7 @@ hub_parallel_startup() {
     # Uses yq to directly query service labels - more reliable than helper functions
     if ! command -v yq >/dev/null 2>&1; then
         log_warn "yq not found — falling back to sequential startup"
-        ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" up -d 2>&1
+        ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES up -d 2>&1
         return $?
     fi
     local all_services_raw=$(yq eval '.services | keys | .[]' "$HUB_COMPOSE_FILE" 2>/dev/null | xargs)
@@ -205,7 +205,7 @@ hub_parallel_startup() {
                 # Start service using ${DOCKER_CMD:-docker} compose
                 log_verbose "Starting $service (timeout: ${timeout}s)"
                 local start_output
-                if ! start_output=$(${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" up -d "$service" 2>&1); then
+                if ! start_output=$(${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES up -d "$service" 2>&1); then
                     log_error "Failed to start $service container"
                     # FIX: Provide detailed error information for debugging
                     log_error "Docker compose output: $start_output"
@@ -830,9 +830,9 @@ hub_logs() {
     cd "$DIVE_ROOT"
 
     if [ -n "$service" ]; then
-        ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" logs -f "$service"
+        ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES logs -f "$service"
     else
-        ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" logs -f
+        ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES logs -f
     fi
 }
 
