@@ -17,7 +17,7 @@ dotenv.config();
 const KEYCLOAK_URL = process.env.KEYCLOAK_URL || 'https://usa-idp.dive25.com';
 const ADMIN_USER = process.env.KEYCLOAK_ADMIN_USERNAME || 'admin';
 const ADMIN_PASSWORD = process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin';
-const REALM = 'dive-v3-broker';
+const REALM = 'dive-v3-broker-usa';
 
 async function emergencySetACR(username: string) {
   console.log('\n🚨 EMERGENCY FIX: Set ACR=2 (AAL3) for Demo');

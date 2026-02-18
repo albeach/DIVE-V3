@@ -86,8 +86,8 @@ echo ""
 
 echo "4. Keycloak Realm"
 echo "-----------------"
-echo -n "Checking 'dive-v3-broker' realm... "
-if curl -kfs "https://localhost:8443/realms/dive-v3-broker" > /dev/null 2>&1; then
+echo -n "Checking 'dive-v3-broker-usa' realm... "
+if curl -kfs "https://localhost:8443/realms/dive-v3-broker-usa" > /dev/null 2>&1; then
     echo -e "${GREEN}✓${NC}"
 else
     echo -e "${RED}✗${NC} (Run: ./dive tf)"

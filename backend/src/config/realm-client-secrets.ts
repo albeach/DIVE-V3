@@ -37,12 +37,12 @@ export const REALM_CLIENT_SECRETS: RealmClientSecrets = {
     'dive-v3-industry': process.env.INDUSTRY_CLIENT_SECRET || '7FW6q4oBWRubhm5zLDkFrgp3TlqCLgUP',
 
     // Broker Realm (fallback)
-    'dive-v3-broker': process.env.KEYCLOAK_CLIENT_SECRET || '8AcfbgtdNIZp3tbrcmc2voiUfxNb8d6L',
+    'dive-v3-broker-usa': process.env.KEYCLOAK_CLIENT_SECRET || '8AcfbgtdNIZp3tbrcmc2voiUfxNb8d6L',
 };
 
 /**
  * Get client secret for a specific realm
- * @param realmName Keycloak realm name (e.g., "dive-v3-usa" or "dive-v3-broker")
+ * @param realmName Keycloak realm name (e.g., "dive-v3-usa" or "dive-v3-broker-usa")
  * @returns Client secret for the realm's client
  * @throws Error if realm not found
  */
@@ -53,7 +53,7 @@ export function getClientSecretForRealm(realmName: string): string {
     // Phase 2.3: If realm not found, default to broker secret for federation
     // This handles cases where IdP brokers authenticate via broker realm
     logger.warn('No specific client secret for realm, using broker secret', { realmName });
-    return REALM_CLIENT_SECRETS['dive-v3-broker'] || process.env.KEYCLOAK_CLIENT_SECRET || '';
+    return REALM_CLIENT_SECRETS['dive-v3-broker-usa'] || process.env.KEYCLOAK_CLIENT_SECRET || '';
   }
   
   return secret;

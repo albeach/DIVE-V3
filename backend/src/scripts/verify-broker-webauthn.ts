@@ -16,10 +16,10 @@ async function verifyBrokerWebAuthn() {
     clientId: 'admin-cli',
   });
 
-  console.log('\n✅ Checking WebAuthn Policy Configuration for dive-v3-broker realm...\n');
+  console.log('\n✅ Checking WebAuthn Policy Configuration for dive-v3-broker-usa realm...\n');
 
-  kcAdminClient.setConfig({ realmName: 'dive-v3-broker' });
-  const realm = await kcAdminClient.realms.findOne({ realm: 'dive-v3-broker' });
+  kcAdminClient.setConfig({ realmName: 'dive-v3-broker-usa' });
+  const realm = await kcAdminClient.realms.findOne({ realm: 'dive-v3-broker-usa' });
 
   console.log('WebAuthn Policy (2FA):');
   console.log('================================');

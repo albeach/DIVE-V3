@@ -26,7 +26,7 @@ const REALMS = [
   'dive-v3-pol',
   'dive-v3-nld',
   'dive-v3-industry',
-  'dive-v3-broker',
+  'dive-v3-broker-usa',
 ];
 
 /**

@@ -1391,7 +1391,7 @@ describe('Authorization Middleware (PEP)', () => {
     });
 
     describe('Multi-Realm Token Handling', () => {
-        it('should handle token from dive-v3-broker realm', async () => {
+        it('should handle token from dive-v3-broker-usa realm', async () => {
             const tokenPayload = {
                 sub: 'testuser-us',
                 uniqueID: 'testuser-us',

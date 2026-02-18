@@ -251,11 +251,11 @@ export default function CustomLoginPage() {
                 accent = '#AE1C28';
                 displayName = 'Netherlands (Ministerie van Defensie)';
                 backgroundImage = '/login-backgrounds/netherlands-flag.jpg';
-            } else if (idpAlias === 'dive-v3-broker') {
+            } else if (idpAlias === 'dive-v3-broker-usa') {
                 primary = '#6B46C1';
                 accent = '#F59E0B';
                 displayName = 'DIVE V3 Super Administrator';
-                backgroundImage = '/login-backgrounds/dive-v3-broker.jpg';
+                backgroundImage = '/login-backgrounds/dive-v3-broker-usa.jpg';
             } else {
                 primary = '#6B46C1';
                 accent = '#9333EA';

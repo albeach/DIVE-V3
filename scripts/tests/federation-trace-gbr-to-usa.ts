@@ -7,7 +7,7 @@
  * Prereqs:
  *   - Playwright installed (dev dependency in repo)
  *   - USA hub running locally on 3000/8443, GBR IdP on 8446
- *   - Env: KEYCLOAK_CLIENT_SECRET=<hub broker client secret> (for dive-v3-broker)
+ *   - Env: KEYCLOAK_CLIENT_SECRET=<hub broker client secret> (for dive-v3-broker-usa)
  *
  * Run:
  *   KEYCLOAK_CLIENT_SECRET=... npx ts-node scripts/tests/federation-trace-gbr-to-usa.ts
@@ -22,18 +22,18 @@ const fetchFn: typeof fetch = (...args: Parameters<typeof fetch>) =>
 
 // Broker auth entrypoint (hub) and the broker endpoint redirect (what Keycloak uses when acting as a broker).
 const HUB_AUTH_URL =
-    'https://localhost:8443/realms/dive-v3-broker/protocol/openid-connect/auth?response_type=code&client_id=dive-v3-broker&redirect_uri=https%3A%2F%2Flocalhost%3A3000%2Fapi%2Fauth%2Fcallback%2Fkeycloak&scope=openid+profile+email&kc_idp_hint=gbr-federation';
+    'https://localhost:8443/realms/dive-v3-broker-usa/protocol/openid-connect/auth?response_type=code&client_id=dive-v3-broker-usa&redirect_uri=https%3A%2F%2Flocalhost%3A3000%2Fapi%2Fauth%2Fcallback%2Fkeycloak&scope=openid+profile+email&kc_idp_hint=gbr-federation';
 const HUB_BROKER_ENDPOINT_REDIRECT =
-    'https://localhost:8443/realms/dive-v3-broker/broker/gbr-federation/endpoint';
+    'https://localhost:8443/realms/dive-v3-broker-usa/broker/gbr-federation/endpoint';
 
 const HUB_TOKEN_URL =
-    'https://localhost:8443/realms/dive-v3-broker/protocol/openid-connect/token';
+    'https://localhost:8443/realms/dive-v3-broker-usa/protocol/openid-connect/token';
 const GBR_TOKEN_URL =
     'https://localhost:8446/realms/dive-v3-broker-gbr/protocol/openid-connect/token';
 const HUB_ADMIN_TOKEN_URL =
     'https://localhost:8443/realms/master/protocol/openid-connect/token';
 const HUB_CLIENTS_URL =
-    'https://localhost:8443/admin/realms/dive-v3-broker/clients';
+    'https://localhost:8443/admin/realms/dive-v3-broker-usa/clients';
 // For code exchange: default to the real frontend callback; allow override via env.
 const REDIRECT_URI =
     process.env.REDIRECT_URI ?? 'https://localhost:3000/api/auth/callback/keycloak';
@@ -42,7 +42,7 @@ const USERNAME = process.env.TEST_USERNAME ?? 'testuser-gbr-1';
 const PASSWORD = process.env.TEST_PASSWORD ?? 'TestUser2025!Pilot';
 const ADMIN_USER = process.env.KEYCLOAK_ADMIN_USERNAME ?? 'admin';
 let ADMIN_PASS = process.env.KEYCLOAK_ADMIN_PASSWORD ?? null;
-const CLIENT_ID = 'dive-v3-broker';
+const CLIENT_ID = 'dive-v3-broker-usa';
 
 function decodeJwt(jwt: string) {
     const [, payload] = jwt.split('.');
@@ -287,7 +287,7 @@ async function main() {
 
         // Optionally call userinfo
         if (access_token) {
-            const uiRes = await fetchFn('https://localhost:8443/realms/dive-v3-broker/protocol/openid-connect/userinfo', {
+            const uiRes = await fetchFn('https://localhost:8443/realms/dive-v3-broker-usa/protocol/openid-connect/userinfo', {
                 method: 'GET',
                 headers: { Authorization: `Bearer ${access_token}` },
             });

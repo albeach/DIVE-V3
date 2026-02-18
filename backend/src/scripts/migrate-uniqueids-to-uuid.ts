@@ -21,7 +21,7 @@ config({ path: '.env.local' });
 
 // Keycloak configuration
 const KEYCLOAK_URL = process.env.KEYCLOAK_URL || 'http://localhost:8081';
-const KEYCLOAK_REALM = process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+const KEYCLOAK_REALM = process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
 const KEYCLOAK_ADMIN_USERNAME = process.env.KEYCLOAK_ADMIN_USERNAME || 'admin';
 const KEYCLOAK_ADMIN_PASSWORD = process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin';
 

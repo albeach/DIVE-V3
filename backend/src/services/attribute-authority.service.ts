@@ -34,7 +34,7 @@ export class AttributeAuthorityService {
     try {
       // Fetch JWKS from Keycloak
       const keycloakUrl = process.env.KEYCLOAK_URL || 'http://localhost:8081';
-      const realm = process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+      const realm = process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
       const jwksUrl = `${keycloakUrl}/realms/${realm}/protocol/openid-connect/certs`;
       const JWKS = jose.createRemoteJWKSet(new URL(jwksUrl));
 

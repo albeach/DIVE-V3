@@ -155,7 +155,7 @@ async function initUserProfile(instanceCode: string): Promise<void> {
 
   // Get Keycloak configuration for this instance
   const isHub = code === 'USA';
-  const realm = isHub ? 'dive-v3-broker' : `dive-v3-broker-${code.toLowerCase()}`;
+  const realm = isHub ? 'dive-v3-broker-usa' : `dive-v3-broker-${code.toLowerCase()}`;
   
   // Determine Keycloak URL (internal Docker network)
   const keycloakUrl = isHub 

@@ -361,7 +361,7 @@ export HUB_KEYCLOAK_CONTAINER="${HUB_PROJECT_NAME}-keycloak"
 export HUB_BACKEND_CONTAINER="${HUB_PROJECT_NAME}-backend"
 export HUB_FRONTEND_CONTAINER="${HUB_PROJECT_NAME}-frontend"
 # FIX (2026-01-15): Hub realm is dive-v3-broker-usa (USA is the hub)
-# LEGACY dive-v3-broker (without suffix) is DEPRECATED and should not exist
+# LEGACY dive-v3-broker-usa (without suffix) is DEPRECATED and should not exist
 # FIX (2026-01-18): Use conditional assignment to avoid readonly conflicts with other modules
 : "${HUB_REALM:=dive-v3-broker-usa}"
 export HUB_REALM

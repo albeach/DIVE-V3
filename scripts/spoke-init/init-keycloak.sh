@@ -831,7 +831,7 @@ HUB_IDP_PUBLIC_URL="${HUB_IDP_URL:-https://localhost:8443}"
 # For Docker internal communication, use dive-hub-keycloak:8443 (HTTPS) by default
 HUB_IDP_INTERNAL_URL="${HUB_IDP_INTERNAL_URL:-https://dive-hub-keycloak:8443}"
 HUB_IDP_DISABLE_TRUST="${HUB_IDP_DISABLE_TRUST:-true}"
-# Use the spoke-specific client on Hub (must exist in USA Keycloak's dive-v3-broker realm)
+# Use the spoke-specific client on Hub (must exist in USA Keycloak's dive-v3-broker-usa realm)
 # Format: dive-v3-client-<spoke_code> (e.g., dive-v3-client-lva for Latvia)
 USA_IDP_CLIENT_ID="${USA_IDP_CLIENT_ID:-dive-v3-broker-${CODE_LOWER}}"
 # Allow multiple env var fallbacks for the client secret

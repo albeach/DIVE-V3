@@ -311,22 +311,22 @@ fi
 # =============================================================================
 section "Realm JSON Template"
 
-# Test 6.1: dive-v3-broker.json exists
-if [[ -f "keycloak/realms/dive-v3-broker.json" ]]; then
-    pass "dive-v3-broker.json exists"
+# Test 6.1: dive-v3-broker-usa.json exists
+if [[ -f "keycloak/realms/dive-v3-broker-usa.json" ]]; then
+    pass "dive-v3-broker-usa.json exists"
 else
-    fail "dive-v3-broker.json missing"
+    fail "dive-v3-broker-usa.json missing"
 fi
 
 # Test 6.2: Realm JSON is valid
-if jq . "keycloak/realms/dive-v3-broker.json" >/dev/null 2>&1; then
-    pass "dive-v3-broker.json is valid JSON"
+if jq . "keycloak/realms/dive-v3-broker-usa.json" >/dev/null 2>&1; then
+    pass "dive-v3-broker-usa.json is valid JSON"
 else
-    fail "dive-v3-broker.json has invalid JSON"
+    fail "dive-v3-broker-usa.json has invalid JSON"
 fi
 
 # Test 6.3: Realm has no hardcoded IdPs (they should be created dynamically)
-IDP_COUNT=$(jq '.identityProviders | length' "keycloak/realms/dive-v3-broker.json" 2>/dev/null)
+IDP_COUNT=$(jq '.identityProviders | length' "keycloak/realms/dive-v3-broker-usa.json" 2>/dev/null)
 if [[ "$IDP_COUNT" -eq 0 ]]; then
     pass "Realm has no hardcoded IdPs (correct - IdPs created via federation link)"
 else
@@ -334,20 +334,20 @@ else
 fi
 
 # Test 6.4: Realm has DIVE V3 client with protocol mappers
-if jq -e '.clients[] | select(.clientId=="dive-v3-broker")' "keycloak/realms/dive-v3-broker.json" >/dev/null 2>&1; then
-    pass "dive-v3-broker client defined"
+if jq -e '.clients[] | select(.clientId=="dive-v3-broker-usa")' "keycloak/realms/dive-v3-broker-usa.json" >/dev/null 2>&1; then
+    pass "dive-v3-broker-usa client defined"
 
     # Check for DIVE mappers on client
     for attr in clearance countryOfAffiliation uniqueID acpCOI; do
-        if jq -e ".clients[] | select(.clientId==\"dive-v3-broker\") | .protocolMappers[] | select(.name==\"${attr}\")" \
-            "keycloak/realms/dive-v3-broker.json" >/dev/null 2>&1; then
+        if jq -e ".clients[] | select(.clientId==\"dive-v3-broker-usa\") | .protocolMappers[] | select(.name==\"${attr}\")" \
+            "keycloak/realms/dive-v3-broker-usa.json" >/dev/null 2>&1; then
             pass "  Client has ${attr} mapper"
         else
             fail "  Client missing ${attr} mapper"
         fi
     done
 else
-    fail "dive-v3-broker client not defined"
+    fail "dive-v3-broker-usa client not defined"
 fi
 
 # =============================================================================

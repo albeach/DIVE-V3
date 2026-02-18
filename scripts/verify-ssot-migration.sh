@@ -56,8 +56,8 @@ fi
 cd ../..
 
 # Check 4: Verify realm exists in Keycloak
-echo -n "4. Checking realm 'dive-v3-broker' exists... "
-REALM_EXISTS=$(docker exec dive-hub-keycloak /opt/keycloak/bin/kcadm.sh get realms/dive-v3-broker --server http://localhost:8080 --realm master --user admin --password "${KEYCLOAK_ADMIN_PASSWORD:-admin}" 2>/dev/null | grep -c "dive-v3-broker" || true)
+echo -n "4. Checking realm 'dive-v3-broker-usa' exists... "
+REALM_EXISTS=$(docker exec dive-hub-keycloak /opt/keycloak/bin/kcadm.sh get realms/dive-v3-broker-usa --server http://localhost:8080 --realm master --user admin --password "${KEYCLOAK_ADMIN_PASSWORD:-admin}" 2>/dev/null | grep -c "dive-v3-broker-usa" || true)
 if [ "$REALM_EXISTS" -gt 0 ]; then
     echo -e "${GREEN}✅ PASS${NC} - Realm exists"
 else
@@ -71,7 +71,7 @@ echo -e "${YELLOW}⚠️ MANUAL${NC} - Check in Keycloak Admin Console"
 
 # Check 6: Verify JSON realm templates are archived
 echo -n "6. Checking realm templates are archived... "
-if [ -f "keycloak/realms/archived/dive-v3-broker.json" ]; then
+if [ -f "keycloak/realms/archived/dive-v3-broker-usa.json" ]; then
     echo -e "${GREEN}✅ PASS${NC} - Templates archived"
 else
     echo -e "${RED}❌ FAIL${NC} - Templates not properly archived"

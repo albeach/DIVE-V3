@@ -158,14 +158,14 @@ const getRealmFromToken = (token: string): string => {
     try {
         const decoded = jwtService.decode(token, { complete: true });
         if (!decoded || !decoded.payload) {
-            return process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+            return process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
         }
 
         const payload = decoded.payload as any;
         const issuer = payload.iss;
 
         if (!issuer) {
-            return process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+            return process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
         }
 
         // Extract realm from issuer URL: http://localhost:8081/realms/{realm}
@@ -174,12 +174,12 @@ const getRealmFromToken = (token: string): string => {
             return match[1];
         }
 
-        return process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+        return process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
     } catch (error) {
         logger.warn('Could not extract realm from token, using default', {
             error: error instanceof Error ? error.message : 'Unknown error',
         });
-        return process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+        return process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
     }
 };
 
@@ -189,12 +189,12 @@ const getRealmFromToken = (token: string): string => {
  *
  * Multi-Realm Migration (Oct 21, 2025):
  * - Dynamically determines JWKS URL based on token issuer
- * - Supports both dive-v3-broker and dive-v3-broker realms
+ * - Supports both dive-v3-broker-usa and dive-v3-broker-usa realms
  * - Caches keys per kid (realm-independent caching)
  */
 const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<string> => {
     // Determine which realm to fetch JWKS from
-    const realm = token ? getRealmFromToken(token) : (process.env.KEYCLOAK_REALM || 'dive-v3-broker');
+    const realm = token ? getRealmFromToken(token) : (process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa');
 
     // Phase 3B: Extract full issuer URL from token for federated JWKS fetching
     let tokenIssuer: string | null = null;
@@ -303,10 +303,10 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
  * Verify JWT token with dual-issuer support (multi-realm migration)
  *
  * Multi-Realm Migration (Oct 21, 2025):
- * - Supports both dive-v3-broker (legacy single-realm) AND dive-v3-broker (multi-realm federation)
- * - Backward compatible: Existing tokens from dive-v3-broker still work
- * - Forward compatible: New tokens from dive-v3-broker federation accepted
- * - Dual audience support: dive-v3-client AND dive-v3-broker
+ * - Supports both dive-v3-broker-usa (legacy single-realm) AND dive-v3-broker-usa (multi-realm federation)
+ * - Backward compatible: Existing tokens from dive-v3-broker-usa still work
+ * - Forward compatible: New tokens from dive-v3-broker-usa federation accepted
+ * - Dual audience support: dive-v3-client AND dive-v3-broker-usa
  */
 /**
  * Verify JWT token using OAuth2 Token Introspection

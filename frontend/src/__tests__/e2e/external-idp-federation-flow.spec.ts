@@ -24,7 +24,7 @@ const ESP_SECRET = ((TEST_USERS as Record<string, any>).ESP?.SECRET ?? {
   username: 'testuser-esp-3', password: 'TestUser2025!Pilot',
   email: 'testuser-esp-3@dive-demo.example', clearance: 'SECRET', clearanceLevel: 3,
   country: 'Spain', countryCode: 'ESP', coi: ['NATO-COSMIC'], dutyOrg: 'Spain Defense',
-  mfaRequired: true, mfaType: 'otp', idp: 'Spain', realmName: 'dive-v3-broker',
+  mfaRequired: true, mfaType: 'otp', idp: 'Spain', realmName: 'dive-v3-broker-usa',
 }) as import('./fixtures/test-users').TestUser;
 
 test.describe('External IdP Federation - Spain (Refactored)', { tag: ['@critical', '@flaky'] }, () => {

@@ -45,7 +45,7 @@ describe('Session Lifecycle Management', () => {
         });
 
         test('should link account to user on first broker login', () => {
-            // Simulates Keycloak broker creating user in dive-v3-broker
+            // Simulates Keycloak broker creating user in dive-v3-broker-usa
             const brokerLogin = {
                 externalIdP: 'france-idp',
                 externalUserId: 'pierre.dubois@defense.gouv.fr',

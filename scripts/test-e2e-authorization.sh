@@ -97,7 +97,7 @@ run_test \
           "authenticated": true,
           "acr": "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport",
           "amr": ["pwd", "mfa"],
-          "issuer": "https://usa-idp.dive25.com/realms/dive-v3-broker"
+          "issuer": "https://usa-idp.dive25.com/realms/dive-v3-broker-usa"
         },
         "resource": {
           "resourceId": "usa-doc-001",
@@ -124,7 +124,7 @@ run_test \
           "authenticated": true,
           "acr": "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport",
           "amr": ["pwd", "mfa"],
-          "issuer": "https://gbr-idp.dive25.com/realms/dive-v3-broker"
+          "issuer": "https://gbr-idp.dive25.com/realms/dive-v3-broker-usa"
         },
         "resource": {
           "resourceId": "fvey-intel-001",
@@ -158,7 +158,7 @@ run_test \
           "authenticated": true,
           "acr": "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport",
           "amr": ["pwd", "mfa"],
-          "issuer": "https://usa-idp.dive25.com/realms/dive-v3-broker"
+          "issuer": "https://usa-idp.dive25.com/realms/dive-v3-broker-usa"
         },
         "resource": {
           "resourceId": "classified-doc-001",
@@ -185,7 +185,7 @@ run_test \
           "authenticated": true,
           "acr": "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport",
           "amr": ["pwd", "mfa"],
-          "issuer": "https://usa-idp.dive25.com/realms/dive-v3-broker"
+          "issuer": "https://usa-idp.dive25.com/realms/dive-v3-broker-usa"
         },
         "resource": {
           "resourceId": "normal-doc-001",
@@ -219,7 +219,7 @@ run_test \
           "authenticated": true,
           "acr": "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport",
           "amr": ["pwd", "mfa"],
-          "issuer": "https://fra-idp.dive25.com/realms/dive-v3-broker"
+          "issuer": "https://fra-idp.dive25.com/realms/dive-v3-broker-usa"
         },
         "resource": {
           "resourceId": "usa-only-doc-001",
@@ -246,7 +246,7 @@ run_test \
           "authenticated": true,
           "acr": "urn:oasis:names:tc:SAML:2.0:ac:classes:PasswordProtectedTransport",
           "amr": ["pwd", "mfa"],
-          "issuer": "https://deu-idp.prosecurity.biz/realms/dive-v3-broker"
+          "issuer": "https://deu-idp.prosecurity.biz/realms/dive-v3-broker-usa"
         },
         "resource": {
           "resourceId": "nato-doc-001",

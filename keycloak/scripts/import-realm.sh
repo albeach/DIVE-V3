@@ -92,7 +92,7 @@ if [ -f "${BOOTSTRAP_REALM}" ]; then
     REALM_TEMPLATE="${BOOTSTRAP_REALM}"
     echo "[DIVE] Using bootstrap realm for Terraform SSOT: ${BOOTSTRAP_REALM}"
 else
-    REALM_TEMPLATE="${REALM_TEMPLATE_DIR}/dive-v3-broker.json"
+    REALM_TEMPLATE="${REALM_TEMPLATE_DIR}/dive-v3-broker-usa.json"
     echo "[DIVE] Using full realm template: ${REALM_TEMPLATE}"
 fi
 
@@ -153,12 +153,12 @@ else
         -e "s|\${API_URL}|${API_URL}|g" \
         -e "s|\${USA_IDP_URL}|${USA_IDP_URL}|g" \
         -e "s|\${USA_IDP_CLIENT_SECRET}|${USA_IDP_CLIENT_SECRET}|g" \
-        "${REALM_TEMPLATE}" > "${REALM_IMPORT_DIR}/dive-v3-broker.json"
+        "${REALM_TEMPLATE}" > "${REALM_IMPORT_DIR}/dive-v3-broker-usa.json"
 
     echo "[DIVE] EMERGENCY RECOVERY: Realm template processed"
     echo "[DIVE] Admin password length: ${#ADMIN_PASSWORD} chars"
     echo "[DIVE] Test password length: ${#TEST_USER_PASSWORD} chars"
-    echo "[DIVE] Realm file: ${REALM_IMPORT_DIR}/dive-v3-broker.json"
+    echo "[DIVE] Realm file: ${REALM_IMPORT_DIR}/dive-v3-broker-usa.json"
 fi
 
 # Import bootstrap realms for Terraform SSOT
@@ -182,7 +182,7 @@ if [ -f "${BOOTSTRAP_REALM}" ]; then
 fi
 
 # Check if any realm files were prepared for import
-if [ -f "${REALM_IMPORT_DIR}/dive-v3-broker-${INSTANCE_LOWER}.json" ] || [ -f "${REALM_IMPORT_DIR}/dive-v3-broker.json" ]; then
+if [ -f "${REALM_IMPORT_DIR}/dive-v3-broker-${INSTANCE_LOWER}.json" ] || [ -f "${REALM_IMPORT_DIR}/dive-v3-broker-usa.json" ]; then
     echo "[DIVE] Bootstrap realm import preparation complete"
     echo "[DIVE] Starting Keycloak with --import-realm..."
     # Execute the original Keycloak entrypoint with import-realm flag

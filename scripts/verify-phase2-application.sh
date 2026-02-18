@@ -124,10 +124,10 @@ echo "Step 5: Testing Keycloak Realm..."
 echo "----------------------------------------"
 start_port_forward 8080 keycloak 8080
 sleep 2
-if curl -s -f -m 5 http://localhost:8080/realms/dive-v3-broker/.well-known/openid-configuration > /dev/null 2>&1; then
-    issuer=$(curl -s -m 5 http://localhost:8080/realms/dive-v3-broker/.well-known/openid-configuration | jq -r '.issuer' 2>/dev/null || echo "")
+if curl -s -f -m 5 http://localhost:8080/realms/dive-v3-broker-usa/.well-known/openid-configuration > /dev/null 2>&1; then
+    issuer=$(curl -s -m 5 http://localhost:8080/realms/dive-v3-broker-usa/.well-known/openid-configuration | jq -r '.issuer' 2>/dev/null || echo "")
     if [ -n "$issuer" ] && [ "$issuer" != "null" ]; then
-        print_test "Keycloak realm: dive-v3-broker accessible" "PASS"
+        print_test "Keycloak realm: dive-v3-broker-usa accessible" "PASS"
         echo "  Issuer: $issuer"
     else
         print_test "Keycloak realm: Invalid response" "FAIL"

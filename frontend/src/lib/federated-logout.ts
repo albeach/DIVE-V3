@@ -60,7 +60,7 @@ export async function federatedLogout(options: LogoutOptions = {}): Promise<void
           
           if (tokens.idToken) {
             const keycloakUrl = process.env.NEXT_PUBLIC_KEYCLOAK_URL || 'https://localhost:8443';
-            const realm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM || 'dive-v3-broker';
+            const realm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM || 'dive-v3-broker-usa';
             const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 
                            (typeof window !== 'undefined' ? window.location.origin : 'https://localhost:3000');
             

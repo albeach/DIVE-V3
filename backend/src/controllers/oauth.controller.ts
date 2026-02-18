@@ -251,7 +251,7 @@ router.get('/authorize', async (req: Request, res: Response) => {
     const user = (req as any).user;
     if (!user) {
       // Redirect to Keycloak login with return URL
-      const keycloakAuthUrl = `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker/protocol/openid-connect/auth`;
+      const keycloakAuthUrl = `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker-usa/protocol/openid-connect/auth`;
       const authParams = new URLSearchParams({
         response_type: 'code',
         client_id: 'dive-v3-broker-client',

@@ -53,14 +53,14 @@ const getRealmFromToken = (token: string): string => {
     try {
         const decoded = jwt.decode(token, { complete: true });
         if (!decoded || !decoded.payload) {
-            return process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+            return process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
         }
 
         const payload = decoded.payload as any;
         const issuer = payload.iss;
 
         if (!issuer) {
-            return process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+            return process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
         }
 
         // Extract realm from issuer URL: http://localhost:8081/realms/{realm}
@@ -69,12 +69,12 @@ const getRealmFromToken = (token: string): string => {
             return match[1];
         }
 
-        return process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+        return process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
     } catch (error) {
         kasLogger.warn('Could not extract realm from token, using default', {
             error: error instanceof Error ? error.message : 'Unknown error',
         });
-        return process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+        return process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
     }
 };
 
@@ -150,7 +150,7 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
             const payload = decoded?.payload as jwt.JwtPayload;
             if (payload?.iss) {
                 // The issuer is the Keycloak realm URL, append JWKS path
-                // e.g., https://gbr-idp.dive25.com/realms/dive-v3-broker -> https://gbr-idp.dive25.com/realms/dive-v3-broker/protocol/openid-connect/certs
+                // e.g., https://gbr-idp.dive25.com/realms/dive-v3-broker-usa -> https://gbr-idp.dive25.com/realms/dive-v3-broker-usa/protocol/openid-connect/certs
                 issuerJwksUri = rewriteToInternal(`${payload.iss}/protocol/openid-connect/certs`);
                 kasLogger.debug('Using issuer JWKS for federation', { issuer: payload.iss, jwksUri: issuerJwksUri });
             }
@@ -160,7 +160,7 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
     }
 
     // Determine which realm to fetch JWKS from (fallback for local tokens)
-    const realm = token ? getRealmFromToken(token) : (process.env.KEYCLOAK_REALM || 'dive-v3-broker');
+    const realm = token ? getRealmFromToken(token) : (process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa');
 
     // Try JWKS URLs in priority order:
     // 1. Issuer's JWKS (for federated tokens) - CRITICAL for cross-instance!
@@ -263,11 +263,10 @@ const getSigningKey = async (header: jwt.JwtHeader, token?: string): Promise<str
  *
  * SECURITY FIX: This replaces jwt.decode() with proper signature verification
  *
- * Multi-Realm Migration (Oct 21, 2025):
- * - Supports both dive-v3-broker (legacy single-realm) AND dive-v3-broker (multi-realm federation)
- * - Backward compatible: Existing tokens from dive-v3-broker still work
- * - Forward compatible: New tokens from dive-v3-broker federation accepted
- * - Dual audience support: dive-v3-client AND dive-v3-broker
+ * Multi-Realm Federation:
+ * - Each instance has its own realm: dive-v3-broker-{countrycode} (e.g., dive-v3-broker-usa, dive-v3-broker-fra)
+ * - Hub realm: dive-v3-broker-usa; Spoke realms: dive-v3-broker-{spoke_country}
+ * - Dual audience support: dive-v3-client AND dive-v3-broker-{countrycode}
  *
  * @param token - JWT bearer token from request
  * @returns Decoded and verified token payload
@@ -309,62 +308,45 @@ export const verifyToken = async (token: string): Promise<IKeycloakToken> => {
         const currentRealm = process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
 
         const validIssuers: [string, ...string[]] = [
-            // Local instance (dynamic based on deployment) - supports both formats
+            // Local instance (dynamic based on deployment)
             `${process.env.KEYCLOAK_URL}/realms/${currentRealm}`,
-            `${process.env.KEYCLOAK_URL}/realms/dive-v3-broker`,
 
             // === COALITION PARTNER IdPs (Cloudflare Tunnels) ===
-            // USA - supports both instance-specific and base realm names
+            // USA
             'https://usa-idp.dive25.com/realms/dive-v3-broker-usa',
             'https://usa-idp.dive25.com:8443/realms/dive-v3-broker-usa',
-            'https://usa-idp.dive25.com/realms/dive-v3-broker',
-            'https://usa-idp.dive25.com:8443/realms/dive-v3-broker',
             // FRA
             'https://fra-idp.dive25.com/realms/dive-v3-broker-fra',
             'https://fra-idp.dive25.com:8443/realms/dive-v3-broker-fra',
-            'https://fra-idp.dive25.com/realms/dive-v3-broker',
-            'https://fra-idp.dive25.com:8443/realms/dive-v3-broker',
             // GBR
             'https://gbr-idp.dive25.com/realms/dive-v3-broker-gbr',
             'https://gbr-idp.dive25.com:8443/realms/dive-v3-broker-gbr',
-            'https://gbr-idp.dive25.com/realms/dive-v3-broker',
-            'https://gbr-idp.dive25.com:8443/realms/dive-v3-broker',
             // DEU (uses prosecurity.biz domain)
             'https://deu-idp.prosecurity.biz/realms/dive-v3-broker-deu',
             'https://deu-idp.prosecurity.biz:8443/realms/dive-v3-broker-deu',
-            'https://deu-idp.prosecurity.biz/realms/dive-v3-broker',
-            'https://deu-idp.prosecurity.biz:8443/realms/dive-v3-broker',
 
-            // === LEGACY/DEV ISSUERS ===
+            // === LOCAL/DEV ISSUERS ===
             'http://localhost:8081/realms/dive-v3-broker-usa',
-            'http://localhost:8081/realms/dive-v3-broker',
             'https://localhost:8443/realms/dive-v3-broker-usa',
-            'https://localhost:8443/realms/dive-v3-broker',
             'https://localhost:8443/realms/dive-v3-broker-fra',
             'https://localhost:8443/realms/dive-v3-broker-gbr',
             'https://localhost:8443/realms/dive-v3-broker-deu',
             // FRA external port (8453)
             'https://localhost:8453/realms/dive-v3-broker-fra',
-            'https://localhost:8453/realms/dive-v3-broker',
             // GBR external port (8454)
             'https://localhost:8454/realms/dive-v3-broker-gbr',
-            'https://localhost:8454/realms/dive-v3-broker',
             // DEU external port (8455)
             'https://localhost:8455/realms/dive-v3-broker-deu',
-            'https://localhost:8455/realms/dive-v3-broker',
             // Internal container names
             'https://keycloak:8443/realms/dive-v3-broker-usa',
-            'https://keycloak:8443/realms/dive-v3-broker',
             'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-broker-usa',
-            'https://kas.js.usa.divedeeper.internal:8443/realms/dive-v3-broker',
             'https://dev-auth.dive25.com/realms/dive-v3-broker-usa',
-            'https://dev-auth.dive25.com/realms/dive-v3-broker',
         ];
 
         // Multi-realm: Accept tokens for both clients + Keycloak default audience + backend service accounts
         const validAudiences: [string, ...string[]] = [
             'dive-v3-client',         // Legacy client (broker realm)
-            'dive-v3-broker',  // Multi-realm broker client (old name - deprecated)
+            'dive-v3-broker-usa',  // Multi-realm broker client (old name - deprecated)
             'dive-v3-broker-client',  // National realm client (Phase 2.1 - CORRECT NAME)
             'account',                // Keycloak default audience (ID tokens)
             'kas',                    // Backend service account for KAS calls (Issue B fix)

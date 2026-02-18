@@ -195,7 +195,7 @@ router.get('/health', (_req: Request, res: Response) => {
  *                 example: https://fra-kas.dive25.com/request-key
  *               jwtIssuer:
  *                 type: string
- *                 example: https://fra-idp.dive25.com/realms/dive-v3-broker
+ *                 example: https://fra-idp.dive25.com/realms/dive-v3-broker-usa
  *               supportedCountries:
  *                 type: array
  *                 items:

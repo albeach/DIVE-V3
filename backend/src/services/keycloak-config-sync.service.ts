@@ -11,8 +11,8 @@
  * - Multi-realm support (USA, France, Canada, Industry, Broker)
  * 
  * Usage:
- *   const maxAttempts = await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker');
- *   const windowMs = await KeycloakConfigSyncService.getWindowMs('dive-v3-broker');
+ *   const maxAttempts = await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker-usa');
+ *   const windowMs = await KeycloakConfigSyncService.getWindowMs('dive-v3-broker-usa');
  * 
  * @see docs/MFA-OTP-IMPLEMENTATION.md for architecture details
  */
@@ -35,7 +35,7 @@ export class KeycloakConfigSyncService {
 
     /**
      * Get max login attempts for a realm
-     * @param realmId Keycloak realm ID (e.g., 'dive-v3-broker')
+     * @param realmId Keycloak realm ID (e.g., 'dive-v3-broker-usa')
      * @returns Max login attempts before lockout
      */
     public static async getMaxAttempts(realmId: string): Promise<number> {
@@ -105,7 +105,7 @@ export class KeycloakConfigSyncService {
      */
     public static async syncAllRealms(): Promise<void> {
         const realms = [
-            'dive-v3-broker',
+            'dive-v3-broker-usa',
             'dive-v3-usa',
             'dive-v3-fra',
             'dive-v3-can',

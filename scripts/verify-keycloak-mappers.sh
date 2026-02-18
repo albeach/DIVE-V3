@@ -154,7 +154,7 @@ get_realm_name() {
     local code_lower="${code,,}"
     
     if [[ "$code" == "USA" ]]; then
-        echo "dive-v3-broker"
+        echo "dive-v3-broker-usa"
     else
         echo "dive-v3-broker-${code_lower}"
     fi
@@ -164,7 +164,7 @@ get_client_id() {
     local code="$1"
     local code_lower="${code,,}"
     
-    echo "dive-v3-broker"
+    echo "dive-v3-broker-usa"
 }
 
 # =============================================================================

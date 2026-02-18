@@ -84,7 +84,7 @@ $(get_ports "$instance")
 
 # Keycloak Configuration
 KEYCLOAK_ADMIN_PASSWORD=DivePilot2025!SecureAdmin
-KEYCLOAK_CLIENT_ID=dive-v3-broker
+KEYCLOAK_CLIENT_ID=dive-v3-broker-usa
 KEYCLOAK_CLIENT_SECRET=$(get_client_secret "$instance")
 
 # Database Credentials

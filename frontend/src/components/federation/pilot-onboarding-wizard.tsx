@@ -85,7 +85,7 @@ export default function PilotOnboardingWizard({
         organizationName: `${partner.name} Ministry of Defense`,
         countryCode: partner.code,
         adminEmail: `admin@${partner.code.toLowerCase()}.dive-pilot.example`,
-        discoveryUrl: `https://${partner.code.toLowerCase()}-idp.dive25.com/realms/dive-v3-broker/.well-known/openid-configuration`,
+        discoveryUrl: `https://${partner.code.toLowerCase()}-idp.dive25.com/realms/dive-v3-broker-usa/.well-known/openid-configuration`,
         clientId: `dive-v3-broker-${partner.code.toLowerCase()}`,
       }));
       setCurrentStep(2); // Skip to technical setup

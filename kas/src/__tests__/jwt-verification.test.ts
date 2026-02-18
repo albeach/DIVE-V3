@@ -21,7 +21,7 @@ describe('KAS JWT Verification Security Fix (Gap #3)', () => {
 
         // Set environment variables for testing
         process.env.KEYCLOAK_URL = 'http://localhost:8081';
-        process.env.KEYCLOAK_REALM = 'dive-v3-broker';
+        process.env.KEYCLOAK_REALM = 'dive-v3-broker-usa';
         process.env.KEYCLOAK_CLIENT_ID = 'dive-v3-client';
     });
 
@@ -37,7 +37,7 @@ describe('KAS JWT Verification Security Fix (Gap #3)', () => {
                     countryOfAffiliation: 'USA',
                     exp: Math.floor(Date.now() / 1000) + 3600,
                     iat: Math.floor(Date.now() / 1000),
-                    iss: 'http://localhost:8081/realms/dive-v3-broker',
+                    iss: 'http://localhost:8081/realms/dive-v3-broker-usa',
                     aud: 'dive-v3-client'
                 },
                 'wrong-secret',  // Signed with wrong secret
@@ -82,7 +82,7 @@ describe('KAS JWT Verification Security Fix (Gap #3)', () => {
                     sub: 'testuser',
                     exp: Math.floor(Date.now() / 1000) - 3600,  // Expired 1 hour ago
                     iat: Math.floor(Date.now() / 1000) - 7200,
-                    iss: 'http://localhost:8081/realms/dive-v3-broker',
+                    iss: 'http://localhost:8081/realms/dive-v3-broker-usa',
                     aud: 'dive-v3-client'
                 },
                 'secret',
@@ -148,7 +148,7 @@ describe('KAS JWT Verification Security Fix (Gap #3)', () => {
                     sub: 'testuser',
                     exp: Math.floor(Date.now() / 1000) + 3600,
                     iat: Math.floor(Date.now() / 1000),
-                    iss: 'http://localhost:8081/realms/dive-v3-broker',
+                    iss: 'http://localhost:8081/realms/dive-v3-broker-usa',
                     aud: 'wrong-client'  // Wrong audience
                 },
                 'secret',
@@ -224,14 +224,14 @@ describe('KAS JWT Verification Security Fix (Gap #3)', () => {
 
             const requirements = {
                 algorithm: 'RS256',
-                issuer: 'http://localhost:8081/realms/dive-v3-broker',
+                issuer: 'http://localhost:8081/realms/dive-v3-broker-usa',
                 audience: 'dive-v3-client',
                 signature: 'Valid JWKS signature',
                 expiration: 'Not expired'
             };
 
             expect(requirements.algorithm).toBe('RS256');
-            expect(requirements.issuer).toContain('dive-v3-broker');
+            expect(requirements.issuer).toContain('dive-v3-broker-usa');
             expect(requirements.audience).toBe('dive-v3-client');
         });
     });
@@ -278,7 +278,7 @@ describe('KAS JWT Verification Security Fix (Gap #3)', () => {
                     sub: 'testuser',
                     exp: Math.floor(Date.now() / 1000) + 3600,
                     iat: Math.floor(Date.now() / 1000),
-                    iss: 'http://localhost:8081/realms/dive-v3-broker',
+                    iss: 'http://localhost:8081/realms/dive-v3-broker-usa',
                     aud: 'dive-v3-client'
                 },
                 'shared-secret',
@@ -326,7 +326,7 @@ describe('Attack Scenarios Prevented', () => {
                 acpCOI: ['FVEY', 'NATO-COSMIC'],  // Full access
                 exp: Math.floor(Date.now() / 1000) + 3600,
                 iat: Math.floor(Date.now() / 1000),
-                iss: 'http://localhost:8081/realms/dive-v3-broker',
+                iss: 'http://localhost:8081/realms/dive-v3-broker-usa',
                 aud: 'dive-v3-client'
             },
             'attacker-secret',
@@ -352,7 +352,7 @@ describe('Attack Scenarios Prevented', () => {
                 countryOfAffiliation: 'USA',
                 exp: Math.floor(Date.now() / 1000) - 3600,  // Expired
                 iat: Math.floor(Date.now() / 1000) - 7200,
-                iss: 'http://localhost:8081/realms/dive-v3-broker',
+                iss: 'http://localhost:8081/realms/dive-v3-broker-usa',
                 aud: 'dive-v3-client'
             },
             'secret',

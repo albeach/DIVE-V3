@@ -121,7 +121,7 @@ verify_spoke() {
     fi
 
     checks_total=$((checks_total + 1))
-    if check_endpoint "https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT}/realms/dive-v3-broker/.well-known/openid-configuration" "OIDC discovery"; then
+    if check_endpoint "https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT}/realms/dive-v3-broker-usa/.well-known/openid-configuration" "OIDC discovery"; then
         checks_passed=$((checks_passed + 1))
     fi
 
@@ -194,7 +194,7 @@ verify_hub() {
     fi
 
     checks_total=$((checks_total + 1))
-    if check_endpoint "https://localhost:8443/realms/dive-v3-broker/.well-known/openid-configuration" "OIDC discovery"; then
+    if check_endpoint "https://localhost:8443/realms/dive-v3-broker-usa/.well-known/openid-configuration" "OIDC discovery"; then
         checks_passed=$((checks_passed + 1))
     fi
 
@@ -329,7 +329,7 @@ if [ ${#COUNTRIES[@]} -gt 0 ]; then
     for code in "${COUNTRIES[@]}"; do
         code_lower="${code,,}"
         eval "$(get_country_ports "$code")"
-        oidc_url="https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT}/realms/dive-v3-broker/.well-known/openid-configuration"
+        oidc_url="https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT}/realms/dive-v3-broker-usa/.well-known/openid-configuration"
         status=$(curl -sk -o /dev/null -w "%{http_code}" --max-time 5 "$oidc_url" 2>/dev/null || echo "000")
 
         if [ "$status" = "200" ]; then

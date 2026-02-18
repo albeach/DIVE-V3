@@ -17,7 +17,7 @@ import crypto from 'crypto';
 
 const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://localhost:27017';
 const DB_NAME = process.env.MONGODB_DATABASE || 'dive-v3';
-const SP_REALM_NAME = process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+const SP_REALM_NAME = process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
 
 export class SPManagementService {
   private db: Db | null = null;

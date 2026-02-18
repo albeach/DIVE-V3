@@ -58,8 +58,8 @@ const FEDERATION_PARTNERS: FederationPartner[] = [
         code: 'USA',
         name: 'United States',
         idpUrl: 'https://usa-idp.dive25.com',
-        realm: 'dive-v3-broker',
-        clientId: 'dive-v3-broker',
+        realm: 'dive-v3-broker-usa',
+        clientId: 'dive-v3-broker-usa',
         protocol: 'oidc',
         enabled: true
     },
@@ -67,8 +67,8 @@ const FEDERATION_PARTNERS: FederationPartner[] = [
         code: 'FRA',
         name: 'France',
         idpUrl: 'https://fra-idp.dive25.com',
-        realm: 'dive-v3-broker',
-        clientId: 'dive-v3-broker',
+        realm: 'dive-v3-broker-usa',
+        clientId: 'dive-v3-broker-usa',
         protocol: 'oidc',
         enabled: true
     },
@@ -76,8 +76,8 @@ const FEDERATION_PARTNERS: FederationPartner[] = [
         code: 'GBR',
         name: 'United Kingdom',
         idpUrl: 'https://gbr-idp.dive25.com',
-        realm: 'dive-v3-broker',
-        clientId: 'dive-v3-broker',
+        realm: 'dive-v3-broker-usa',
+        clientId: 'dive-v3-broker-usa',
         protocol: 'oidc',
         enabled: true
     },
@@ -85,8 +85,8 @@ const FEDERATION_PARTNERS: FederationPartner[] = [
         code: 'DEU',
         name: 'Germany',
         idpUrl: 'https://deu-idp.prosecurity.biz',
-        realm: 'dive-v3-broker',
-        clientId: 'dive-v3-broker',
+        realm: 'dive-v3-broker-usa',
+        clientId: 'dive-v3-broker-usa',
         protocol: 'oidc',
         enabled: true
     },
@@ -94,8 +94,8 @@ const FEDERATION_PARTNERS: FederationPartner[] = [
         code: 'CAN',
         name: 'Canada',
         idpUrl: 'https://can-idp.dive25.com',
-        realm: 'dive-v3-broker',
-        clientId: 'dive-v3-broker',
+        realm: 'dive-v3-broker-usa',
+        clientId: 'dive-v3-broker-usa',
         protocol: 'oidc',
         enabled: false // Not yet deployed
     },
@@ -103,8 +103,8 @@ const FEDERATION_PARTNERS: FederationPartner[] = [
         code: 'ESP',
         name: 'Spain',
         idpUrl: 'https://esp-idp.dive25.com',
-        realm: 'dive-v3-broker',
-        clientId: 'dive-v3-broker',
+        realm: 'dive-v3-broker-usa',
+        clientId: 'dive-v3-broker-usa',
         protocol: 'oidc',
         enabled: false // Not yet deployed
     }

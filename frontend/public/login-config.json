@@ -1,5 +1,5 @@
 {
-    "dive-v3-broker": {
+    "dive-v3-broker-usa": {
         "displayName": {
             "en": "DIVE V3 Super Administrator",
             "fr": "Super Administrateur DIVE V3"
@@ -57,7 +57,7 @@
             "accent": "#F59E0B",
             "background": "#F9FAFB"
         },
-        "backgroundImage": "/login-backgrounds/dive-v3-broker.jpg",
+        "backgroundImage": "/login-backgrounds/dive-v3-broker-usa.jpg",
         "logo": "/logos/dive-v3-logo.svg",
         "mfa": {
             "enabled": true,

@@ -113,7 +113,7 @@ export class KeycloakFederationService {
   private readonly TOKEN_REFRESH_THRESHOLD_MS = 30000; // Re-auth if token older than 30 seconds
 
   constructor(realm?: string) {
-    this.realm = realm || process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+    this.realm = realm || process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
   }
 
   /**

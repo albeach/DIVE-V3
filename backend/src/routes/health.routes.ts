@@ -289,11 +289,11 @@ router.get('/kas-federation', async (_req: Request, res: Response) => {
  * GET /api/health/brute-force-config
  * Task 4.4: Dynamic brute force configuration health check
  * Query params:
- *   - realm: Keycloak realm ID (defaults to 'dive-v3-broker')
+ *   - realm: Keycloak realm ID (defaults to 'dive-v3-broker-usa')
  */
 router.get('/brute-force-config', async (req: Request, res: Response) => {
     try {
-        const realm = (req.query.realm as string) || 'dive-v3-broker';
+        const realm = (req.query.realm as string) || 'dive-v3-broker-usa';
 
         // Get current configuration for the realm
         const config = await KeycloakConfigSyncService.getConfig(realm);

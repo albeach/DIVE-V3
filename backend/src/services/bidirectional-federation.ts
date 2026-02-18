@@ -112,7 +112,7 @@ export function getLocalRealmName(instanceCode: string): string {
 
   // USA uses base realm name, others have suffix
   if (code === 'usa') {
-    return 'dive-v3-broker';
+    return 'dive-v3-broker-usa';
   }
 
   return `dive-v3-broker-${code}`;

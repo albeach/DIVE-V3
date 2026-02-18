@@ -182,7 +182,7 @@ show_service_status() {
     fi
 
     # Keycloak
-    if check_service_health "Keycloak" "http://localhost:8080/realms/dive-v3-broker/.well-known/openid-connect-configuration"; then
+    if check_service_health "Keycloak" "http://localhost:8080/realms/dive-v3-broker-usa/.well-known/openid-connect-configuration"; then
         echo -e "✅ Keycloak          ${GREEN}HEALTHY${NC}   http://localhost:8080"
         ALERT_COUNTS["keycloak"]=0
     else

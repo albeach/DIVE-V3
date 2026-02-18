@@ -188,11 +188,11 @@ jobs:
           echo "⏳ Validating Keycloak realms..."
           KEYCLOAK_URL="https://$KEYCLOAK_IP:8443"
           
-          # Check that dive-v3-broker realm exists
-          if docker exec keycloak curl -k -f "$KEYCLOAK_URL/realms/dive-v3-broker/.well-known/openid-configuration" 2>/dev/null; then
-            echo "✅ dive-v3-broker realm exists"
+          # Check that dive-v3-broker-usa realm exists
+          if docker exec keycloak curl -k -f "$KEYCLOAK_URL/realms/dive-v3-broker-usa/.well-known/openid-configuration" 2>/dev/null; then
+            echo "✅ dive-v3-broker-usa realm exists"
           else
-            echo "❌ dive-v3-broker realm not found"
+            echo "❌ dive-v3-broker-usa realm not found"
             exit 1
           fi
           
@@ -220,8 +220,8 @@ jobs:
         env:
           NODE_ENV: test
           KEYCLOAK_URL: https://${{ env.KEYCLOAK_IP }}:8443
-          KEYCLOAK_REALM: dive-v3-broker
-          KEYCLOAK_CLIENT_ID: dive-v3-broker
+          KEYCLOAK_REALM: dive-v3-broker-usa
+          KEYCLOAK_CLIENT_ID: dive-v3-broker-usa
           KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
 
   policies-lab-tests:

@@ -125,9 +125,9 @@ jobs:
           curl -k -s -X POST "$KEYCLOAK_URL/admin/realms" \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json" \
-            -d '{"realm":"dive-v3-broker","enabled":true}' || true
+            -d '{"realm":"dive-v3-broker-usa","enabled":true}' || true
           
-          curl -k -s -X POST "$KEYCLOAK_URL/admin/realms/dive-v3-broker/users" \
+          curl -k -s -X POST "$KEYCLOAK_URL/admin/realms/dive-v3-broker-usa/users" \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json" \
             -d '{"username":"testuser","enabled":true,"credentials":[{"type":"password","value":"password","temporary":false}],"attributes":{"clearance":["SECRET"],"countryOfAffiliation":["USA"]}}' || true
@@ -167,8 +167,8 @@ jobs:
           NEXTAUTH_SECRET: test-secret-for-animation-tests
           DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
           KEYCLOAK_URL: https://localhost:8443
-          KEYCLOAK_REALM: dive-v3-broker
-          KEYCLOAK_CLIENT_ID: dive-v3-broker
+          KEYCLOAK_REALM: dive-v3-broker-usa
+          KEYCLOAK_CLIENT_ID: dive-v3-broker-usa
           KEYCLOAK_CLIENT_SECRET: test-client-secret
           KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
@@ -183,8 +183,8 @@ jobs:
           NEXTAUTH_SECRET: test-secret-for-animation-tests
           DATABASE_URL: postgresql://postgres:password@localhost:5432/dive_v3_app
           KEYCLOAK_URL: https://localhost:8443
-          KEYCLOAK_REALM: dive-v3-broker
-          KEYCLOAK_CLIENT_ID: dive-v3-broker
+          KEYCLOAK_REALM: dive-v3-broker-usa
+          KEYCLOAK_CLIENT_ID: dive-v3-broker-usa
           KEYCLOAK_CLIENT_SECRET: test-client-secret
           KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test

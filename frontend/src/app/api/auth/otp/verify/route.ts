@@ -39,8 +39,8 @@ export async function POST(request: NextRequest) {
     // CRITICAL: This actually enables MFA for the user account
 
     const keycloakUrl = process.env.KEYCLOAK_URL || 'https://localhost:8443';
-    const realm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM || 'dive-v3-broker';
-    const clientId = process.env.KEYCLOAK_CLIENT_ID || 'dive-v3-broker';
+    const realm = process.env.NEXT_PUBLIC_KEYCLOAK_REALM || 'dive-v3-broker-usa';
+    const clientId = process.env.KEYCLOAK_CLIENT_ID || 'dive-v3-broker-usa';
     const clientSecret = process.env.KEYCLOAK_CLIENT_SECRET;
 
     if (!clientSecret) {

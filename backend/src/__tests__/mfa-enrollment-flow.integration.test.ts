@@ -143,7 +143,7 @@ describeIf(redisAvailable)('MFA Enrollment Flow Integration Tests', () => {
             const response = await request(app)
                 .post('/api/auth/otp/setup')
                 .send({
-                    idpAlias: 'dive-v3-broker',
+                    idpAlias: 'dive-v3-broker-usa',
                     username: 'admin-dive',
                     password: 'Password123!'
                 });
@@ -201,11 +201,11 @@ describeIf(redisAvailable)('MFA Enrollment Flow Integration Tests', () => {
 
             expect(response1.status).toBe(200);
 
-            // Test dive-v3-broker → dive-v3-broker
+            // Test dive-v3-broker-usa → dive-v3-broker-usa
             const response2 = await request(app)
                 .post('/api/auth/otp/setup')
                 .send({
-                    idpAlias: 'dive-v3-broker',
+                    idpAlias: 'dive-v3-broker-usa',
                     username: 'admin-dive',
                     password: 'Password123!'
                 });
@@ -374,7 +374,7 @@ describeIf(redisAvailable)('MFA Enrollment Flow Integration Tests', () => {
             const setup2 = await request(app)
                 .post('/api/auth/otp/setup')
                 .send({
-                    idpAlias: 'dive-v3-broker',
+                    idpAlias: 'dive-v3-broker-usa',
                     username: 'admin-dive',
                     password: 'Password123!'
                 });
@@ -425,7 +425,7 @@ describeIf(redisAvailable)('MFA Enrollment Flow Integration Tests', () => {
             const setupResponse = await request(app)
                 .post('/api/auth/otp/setup')
                 .send({
-                    idpAlias: 'dive-v3-broker',
+                    idpAlias: 'dive-v3-broker-usa',
                     username: 'admin-dive',
                     password: 'Password123!'
                 });
@@ -460,7 +460,7 @@ describeIf(redisAvailable)('MFA Enrollment Flow Integration Tests', () => {
                 .post('/api/auth/otp/finalize-enrollment')
                 .send({
                     username: 'admin-dive',
-                    idpAlias: 'dive-v3-broker',
+                    idpAlias: 'dive-v3-broker-usa',
                     otpCode: totpCode
                 });
 
@@ -551,7 +551,7 @@ describeIf(redisAvailable)('MFA Enrollment Flow Integration Tests', () => {
             const idpAliases = [
                 { alias: 'usa-realm-broker', expected: 'dive-v3-usa' },
                 { alias: 'esp-realm-broker', expected: 'dive-v3-esp' },
-                { alias: 'dive-v3-broker', expected: 'dive-v3-broker' }
+                { alias: 'dive-v3-broker-usa', expected: 'dive-v3-broker-usa' }
             ];
 
             // All should succeed with proper realm conversion

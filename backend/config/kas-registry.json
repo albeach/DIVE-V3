@@ -17,7 +17,7 @@
       "kasUrl": "https://usa-kas.dive25.com/request-key",
       "authMethod": "jwt",
       "authConfig": {
-        "jwtIssuer": "https://usa-idp.dive25.com/realms/dive-v3-broker"
+        "jwtIssuer": "https://usa-idp.dive25.com/realms/dive-v3-broker-usa"
       },
       "trustLevel": "high",
       "supportedCountries": [
@@ -64,7 +64,7 @@
       "kasUrl": "https://fra-kas.dive25.com/request-key",
       "authMethod": "jwt",
       "authConfig": {
-        "jwtIssuer": "https://fra-idp.dive25.com/realms/dive-v3-broker"
+        "jwtIssuer": "https://fra-idp.dive25.com/realms/dive-v3-broker-fra"
       },
       "trustLevel": "high",
       "supportedCountries": [
@@ -113,7 +113,7 @@
       "kasUrl": "https://gbr-kas.dive25.com/request-key",
       "authMethod": "jwt",
       "authConfig": {
-        "jwtIssuer": "https://gbr-idp.dive25.com/realms/dive-v3-broker"
+        "jwtIssuer": "https://gbr-idp.dive25.com/realms/dive-v3-broker-gbr"
       },
       "trustLevel": "high",
       "supportedCountries": [
@@ -155,7 +155,7 @@
       "kasUrl": "https://deu-kas.dive25.com/request-key",
       "authMethod": "jwt",
       "authConfig": {
-        "jwtIssuer": "https://deu-idp.dive25.com/realms/dive-v3-broker"
+        "jwtIssuer": "https://deu-idp.dive25.com/realms/dive-v3-broker-deu"
       },
       "trustLevel": "high",
       "supportedCountries": [
@@ -200,7 +200,7 @@
       "kasUrl": "http://localhost:8080/request-key",
       "authMethod": "jwt",
       "authConfig": {
-        "jwtIssuer": "https://localhost:8443/realms/dive-v3-broker"
+        "jwtIssuer": "https://localhost:8443/realms/dive-v3-broker-usa"
       },
       "trustLevel": "medium",
       "supportedCountries": [

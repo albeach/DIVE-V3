@@ -78,7 +78,7 @@ cmd_up() {
 
     if [ "$DRY_RUN" = true ]; then
         log_dry "docker compose -f $COMPOSE_FILE up -d"
-        log_dry "Would verify Keycloak realm dive-v3-broker and bootstrap if missing"
+        log_dry "Would verify Keycloak realm dive-v3-broker-usa and bootstrap if missing"
         log_dry "Would health-check backend/frontend after start"
         log_dry "Would verify IdPs are present (non-empty) and fail if missing"
     else
@@ -252,7 +252,7 @@ broker_realm_exists() {
     docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh config credentials \
         --server http://localhost:8080 --realm master --user "$admin_user" --password "$admin_pass" >/dev/null 2>&1 || return 1
 
-    docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh get realms/dive-v3-broker >/dev/null 2>&1
+    docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh get realms/dive-v3-broker-usa >/dev/null 2>&1
 }
 
 ensure_broker_realm() {
@@ -268,7 +268,7 @@ ensure_broker_realm() {
 
     while [ $elapsed -lt $max_wait ]; do
         if broker_realm_exists; then
-            log_success "Broker realm present (dive-v3-broker)"
+            log_success "Broker realm present (dive-v3-broker-usa)"
             return 0
         fi
         log_verbose "Realm not ready yet (${elapsed}s/${max_wait}s)..."
@@ -279,12 +279,12 @@ ensure_broker_realm() {
     # If realm still doesn't exist after waiting, Keycloak may not have imported it
     log_error "Broker realm not found after ${max_wait}s"
     log_error "Check Keycloak logs: docker logs dive-v3-keycloak"
-    log_error "Ensure realm JSON exists: keycloak/realms/dive-v3-broker.json"
+    log_error "Ensure realm JSON exists: keycloak/realms/dive-v3-broker-usa.json"
     return 1
 }
 
 ensure_client_https_redirects() {
-    local client_id="${KEYCLOAK_CLIENT_ID:-dive-v3-broker}"
+    local client_id="${KEYCLOAK_CLIENT_ID:-dive-v3-broker-usa}"
     local admin_user="${KEYCLOAK_ADMIN_USERNAME:-admin}"
     local admin_pass="${KEYCLOAK_ADMIN_PASSWORD:-}"
     local keycloak_container="${KEYCLOAK_CONTAINER:-$(container_name keycloak)}"
@@ -318,13 +318,13 @@ ensure_client_https_redirects() {
     }
 
     local cid
-    cid=$(docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh get clients -r dive-v3-broker -q clientId="$client_id" --fields id --format csv 2>/dev/null | tail -1 | tr -d '\r')
+    cid=$(docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh get clients -r dive-v3-broker-usa -q clientId="$client_id" --fields id --format csv 2>/dev/null | tail -1 | tr -d '\r')
     if [ -z "$cid" ]; then
         log_warn "Client $client_id not found; skipping redirect enforcement"
         return 0
     fi
 
-    docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh update "clients/${cid}" -r dive-v3-broker \
+    docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh update "clients/${cid}" -r dive-v3-broker-usa \
         -s "redirectUris=${redirects}" \
         -s "webOrigins=${web_origins}" \
         -s "baseUrl=${base_url}" \
@@ -370,7 +370,7 @@ ensure_webauthn_policy() {
         sleep "$delay"
     done
 
-    docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh update realms/dive-v3-broker \
+    docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh update realms/dive-v3-broker-usa \
       -s webAuthnPolicyRpId="${rp_id}" \
       -s 'webAuthnPolicyRpEntityName=DIVE V3' \
       -s 'webAuthnPolicySignatureAlgorithms=["ES256","RS256"]' \
@@ -385,7 +385,7 @@ ensure_webauthn_policy() {
     local rp retries
     retries=2
     while [ "$retries" -gt 0 ]; do
-        rp=$(docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh get realms/dive-v3-broker --format json 2>/dev/null | jq -r '.webAuthnPolicyRpId // ""' || true)
+        rp=$(docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh get realms/dive-v3-broker-usa --format json 2>/dev/null | jq -r '.webAuthnPolicyRpId // ""' || true)
         if [ "$rp" = "$rp_id" ]; then
             log_success "WebAuthn policy set (rpId=${rp})"
             return 0
@@ -394,9 +394,9 @@ ensure_webauthn_policy() {
         sleep 2
     done
     # Fallback: force string assignment to rpId if initial updates did not stick
-    docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh update realms/dive-v3-broker \
+    docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh update realms/dive-v3-broker-usa \
       --set-strings webAuthnPolicyRpId="${rp_id}" webAuthnPolicyRpEntityName="DIVE V3" >/dev/null 2>&1 || true
-    rp=$(docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh get realms/dive-v3-broker --format json 2>/dev/null | jq -r '.webAuthnPolicyRpId // ""' || true)
+    rp=$(docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh get realms/dive-v3-broker-usa --format json 2>/dev/null | jq -r '.webAuthnPolicyRpId // ""' || true)
     if [ "$rp" = "$rp_id" ]; then
         log_success "WebAuthn policy set after fallback (rpId=${rp})"
     else
@@ -534,14 +534,14 @@ ensure_idps_present() {
     # Get IdP count using kcadm
     local idp_list
     idp_list=$(docker exec "$keycloak_container" /opt/keycloak/bin/kcadm.sh get identity-provider/instances \
-        -r dive-v3-broker --fields alias 2>/dev/null || echo "[]")
+        -r dive-v3-broker-usa --fields alias 2>/dev/null || echo "[]")
 
     local count
     count=$(echo "$idp_list" | grep -c '"alias"' 2>/dev/null || echo "0")
 
     if [ "$count" = "0" ] || [ -z "$count" ]; then
         log_warn "No IdPs found in broker realm"
-        log_warn "IdPs should be defined in: keycloak/realms/dive-v3-broker.json"
+        log_warn "IdPs should be defined in: keycloak/realms/dive-v3-broker-usa.json"
         log_warn "Continuing without IdPs (admin can add them later)"
         # Don't fail - allow deployment to continue
         # IdPs can be added via Keycloak admin console

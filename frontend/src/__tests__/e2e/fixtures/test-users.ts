@@ -66,7 +66,7 @@ export const USA_USERS = {
     dutyOrg: 'United States Defense',
     mfaRequired: false,
     idp: 'United States',
-    realmName: 'dive-v3-broker',
+    realmName: 'dive-v3-broker-usa',
   },
   LEVEL_2: {
     username: 'testuser-usa-2',
@@ -81,7 +81,7 @@ export const USA_USERS = {
     mfaRequired: true,
     mfaType: 'otp',
     idp: 'United States',
-    realmName: 'dive-v3-broker',
+    realmName: 'dive-v3-broker-usa',
   },
   LEVEL_3: {
     username: 'testuser-usa-3',
@@ -96,7 +96,7 @@ export const USA_USERS = {
     mfaRequired: true,
     mfaType: 'otp',
     idp: 'United States',
-    realmName: 'dive-v3-broker',
+    realmName: 'dive-v3-broker-usa',
   },
   LEVEL_4: {
     username: 'testuser-usa-4',
@@ -111,7 +111,7 @@ export const USA_USERS = {
     mfaRequired: true,
     mfaType: 'webauthn',
     idp: 'United States',
-    realmName: 'dive-v3-broker',
+    realmName: 'dive-v3-broker-usa',
   },
 } as const satisfies Record<string, TestUser>;
 
@@ -131,7 +131,7 @@ export const FRA_USERS = {
     dutyOrg: 'France Defense',
     mfaRequired: false,
     idp: 'France',
-    realmName: 'dive-v3-broker',
+    realmName: 'dive-v3-broker-usa',
   },
   LEVEL_2: {
     username: 'testuser-fra-2',
@@ -146,7 +146,7 @@ export const FRA_USERS = {
     mfaRequired: true,
     mfaType: 'otp',
     idp: 'France',
-    realmName: 'dive-v3-broker',
+    realmName: 'dive-v3-broker-usa',
   },
   LEVEL_3: {
     username: 'testuser-fra-3',
@@ -161,7 +161,7 @@ export const FRA_USERS = {
     mfaRequired: true,
     mfaType: 'otp',
     idp: 'France',
-    realmName: 'dive-v3-broker',
+    realmName: 'dive-v3-broker-usa',
   },
   LEVEL_4: {
     username: 'testuser-fra-4',
@@ -176,7 +176,7 @@ export const FRA_USERS = {
     mfaRequired: true,
     mfaType: 'webauthn',
     idp: 'France',
-    realmName: 'dive-v3-broker',
+    realmName: 'dive-v3-broker-usa',
   },
 } as const satisfies Record<string, TestUser>;
 
@@ -196,7 +196,7 @@ export const DEU_USERS = {
     dutyOrg: 'Germany Defense',
     mfaRequired: false,
     idp: 'Germany',
-    realmName: 'dive-v3-broker',
+    realmName: 'dive-v3-broker-usa',
   },
   LEVEL_2: {
     username: 'testuser-deu-2',
@@ -211,7 +211,7 @@ export const DEU_USERS = {
     mfaRequired: true,
     mfaType: 'otp',
     idp: 'Germany',
-    realmName: 'dive-v3-broker',
+    realmName: 'dive-v3-broker-usa',
   },
   LEVEL_3: {
     username: 'testuser-deu-3',
@@ -226,7 +226,7 @@ export const DEU_USERS = {
     mfaRequired: true,
     mfaType: 'otp',
     idp: 'Germany',
-    realmName: 'dive-v3-broker',
+    realmName: 'dive-v3-broker-usa',
   },
   LEVEL_4: {
     username: 'testuser-deu-4',
@@ -241,7 +241,7 @@ export const DEU_USERS = {
     mfaRequired: true,
     mfaType: 'webauthn',
     idp: 'Germany',
-    realmName: 'dive-v3-broker',
+    realmName: 'dive-v3-broker-usa',
   },
 } as const satisfies Record<string, TestUser>;
 
@@ -261,7 +261,7 @@ export const GBR_USERS = {
     dutyOrg: 'United Kingdom Defense',
     mfaRequired: false,
     idp: 'United Kingdom',
-    realmName: 'dive-v3-broker',
+    realmName: 'dive-v3-broker-usa',
   },
   LEVEL_2: {
     username: 'testuser-gbr-2',
@@ -276,7 +276,7 @@ export const GBR_USERS = {
     mfaRequired: true,
     mfaType: 'otp',
     idp: 'United Kingdom',
-    realmName: 'dive-v3-broker',
+    realmName: 'dive-v3-broker-usa',
   },
   LEVEL_3: {
     username: 'testuser-gbr-3',
@@ -291,7 +291,7 @@ export const GBR_USERS = {
     mfaRequired: true,
     mfaType: 'otp',
     idp: 'United Kingdom',
-    realmName: 'dive-v3-broker',
+    realmName: 'dive-v3-broker-usa',
   },
   LEVEL_4: {
     username: 'testuser-gbr-4',
@@ -306,7 +306,7 @@ export const GBR_USERS = {
     mfaRequired: true,
     mfaType: 'webauthn',
     idp: 'United Kingdom',
-    realmName: 'dive-v3-broker',
+    realmName: 'dive-v3-broker-usa',
   },
 } as const satisfies Record<string, TestUser>;
 
@@ -327,7 +327,7 @@ export const INDUSTRY_USERS = {
     mfaRequired: true,
     mfaType: 'otp',
     idp: 'United States',
-    realmName: 'dive-v3-broker',
+    realmName: 'dive-v3-broker-usa',
   },
 } as const satisfies Record<string, TestUser>;
 

@@ -42,7 +42,7 @@ jest.mock('../services/keycloak-config-sync.service', () => ({
         syncAllRealms: jest.fn().mockResolvedValue(undefined),
         clearCaches: jest.fn(),
         getCacheStats: jest.fn().mockReturnValue({
-            realms: ['dive-v3-broker'],
+            realms: ['dive-v3-broker-usa'],
             adminTokenExpiry: null
         })
     }
@@ -72,7 +72,7 @@ beforeEach(() => {
     resetRateLimiting();
     // Reset environment variables
     process.env.KEYCLOAK_URL = 'http://localhost:8080';
-    process.env.KEYCLOAK_CLIENT_ID = 'dive-v3-broker';
+    process.env.KEYCLOAK_CLIENT_ID = 'dive-v3-broker-usa';
     process.env.KEYCLOAK_CLIENT_SECRET = 'test-secret';
 });
 
@@ -81,7 +81,7 @@ beforeEach(() => {
 // ============================================
 
 const validCredentials = {
-    idpAlias: 'dive-v3-broker',
+    idpAlias: 'dive-v3-broker-usa',
     username: 'testuser',
     password: 'ValidPassword123!'
 };
@@ -527,14 +527,14 @@ describe('Error Handling', () => {
     it('should validate required fields (idpAlias, username, password)', async () => {
         const missingUsername = await request(app)
             .post('/api/auth/custom-login')
-            .send({ idpAlias: 'dive-v3-broker', password: 'test' });
+            .send({ idpAlias: 'dive-v3-broker-usa', password: 'test' });
 
         expect(missingUsername.status).toBe(400);
         expect(missingUsername.body.error).toContain('Missing required fields');
 
         const missingPassword = await request(app)
             .post('/api/auth/custom-login')
-            .send({ idpAlias: 'dive-v3-broker', username: 'test' });
+            .send({ idpAlias: 'dive-v3-broker-usa', username: 'test' });
 
         expect(missingPassword.status).toBe(400);
 
@@ -595,7 +595,7 @@ describe('Error Handling', () => {
             expect.objectContaining({
                 username: validCredentials.username,
                 idpAlias: validCredentials.idpAlias,
-                realmName: 'dive-v3-broker'
+                realmName: 'dive-v3-broker-usa'
             })
         );
 
@@ -700,7 +700,7 @@ describe('Keycloak Integration', () => {
 
         // Verify Admin API was called
         expect(mockedAxios.get).toHaveBeenCalledWith(
-            expect.stringContaining('/admin/realms/dive-v3-broker/users'),
+            expect.stringContaining('/admin/realms/dive-v3-broker-usa/users'),
             expect.objectContaining({
                 headers: { Authorization: 'Bearer admin_token_here' }
             })
@@ -713,18 +713,18 @@ describe('Keycloak Integration', () => {
 // ============================================
 
 describe('Realm Detection', () => {
-    it('should map dive-v3-broker correctly', async () => {
+    it('should map dive-v3-broker-usa correctly', async () => {
         mockedAxios.post.mockResolvedValueOnce({ data: mockKeycloakTokenResponse });
 
         await request(app)
             .post('/api/auth/custom-login')
-            .send({ ...validCredentials, idpAlias: 'dive-v3-broker' });
+            .send({ ...validCredentials, idpAlias: 'dive-v3-broker-usa' });
 
         expect(mockedAxios.post.mock.calls.length).toBeGreaterThan(0);
         const tokenRequestCall = mockedAxios.post.mock.calls[0];
         expect(tokenRequestCall).toBeDefined();
         const tokenUrl = tokenRequestCall[0] as string;
-        expect(tokenUrl).toContain('/realms/dive-v3-broker/');
+        expect(tokenUrl).toContain('/realms/dive-v3-broker-usa/');
     });
 
     it('should return redirect for usa-realm-broker (federated IdP)', async () => {
@@ -736,7 +736,7 @@ describe('Realm Detection', () => {
         expect(response.status).toBe(200);
         expect(response.body.requiresRedirect).toBe(true);
         expect(response.body.redirectUrl).toContain('kc_idp_hint=usa-realm-broker');
-        expect(response.body.redirectUrl).toContain('/realms/dive-v3-broker/');
+        expect(response.body.redirectUrl).toContain('/realms/dive-v3-broker-usa/');
     });
 
     it('should return redirect for can-realm-broker (federated IdP)', async () => {
@@ -748,7 +748,7 @@ describe('Realm Detection', () => {
         expect(response.status).toBe(200);
         expect(response.body.requiresRedirect).toBe(true);
         expect(response.body.redirectUrl).toContain('kc_idp_hint=can-realm-broker');
-        expect(response.body.redirectUrl).toContain('/realms/dive-v3-broker/');
+        expect(response.body.redirectUrl).toContain('/realms/dive-v3-broker-usa/');
     });
 
     it('should return redirect for fra-realm-broker (federated IdP)', async () => {
@@ -760,7 +760,7 @@ describe('Realm Detection', () => {
         expect(response.status).toBe(200);
         expect(response.body.requiresRedirect).toBe(true);
         expect(response.body.redirectUrl).toContain('kc_idp_hint=fra-realm-broker');
-        expect(response.body.redirectUrl).toContain('/realms/dive-v3-broker/');
+        expect(response.body.redirectUrl).toContain('/realms/dive-v3-broker-usa/');
     });
 
     it('should return redirect for industry-realm-broker (federated IdP)', async () => {
@@ -772,7 +772,7 @@ describe('Realm Detection', () => {
         expect(response.status).toBe(200);
         expect(response.body.requiresRedirect).toBe(true);
         expect(response.body.redirectUrl).toContain('kc_idp_hint=industry-realm-broker');
-        expect(response.body.redirectUrl).toContain('/realms/dive-v3-broker/');
+        expect(response.body.redirectUrl).toContain('/realms/dive-v3-broker-usa/');
     });
 });
 
@@ -799,7 +799,7 @@ describe('Clearance Mapping for Multi-Realm', () => {
 
         const response = await request(app)
             .post('/api/auth/custom-login')
-            .send({ ...validCredentials, idpAlias: 'dive-v3-broker' }); // Use broker realm for Direct Grant
+            .send({ ...validCredentials, idpAlias: 'dive-v3-broker-usa' }); // Use broker realm for Direct Grant
 
         expect(response.status).toBe(200);
         expect(response.body.clearance).toBe('SECRET');
@@ -828,7 +828,7 @@ describe('Clearance Mapping for Multi-Realm', () => {
 
         const response = await request(app)
             .post('/api/auth/custom-login')
-            .send({ ...validCredentials, idpAlias: 'dive-v3-broker', username: 'pierre.dubois' }); // Use broker realm
+            .send({ ...validCredentials, idpAlias: 'dive-v3-broker-usa', username: 'pierre.dubois' }); // Use broker realm
 
         expect(response.status).toBe(200);
         // The clearance mapper service should normalize this to CONFIDENTIAL
@@ -857,7 +857,7 @@ describe('Clearance Mapping for Multi-Realm', () => {
 
         const response = await request(app)
             .post('/api/auth/custom-login')
-            .send({ ...validCredentials, idpAlias: 'dive-v3-broker', username: 'john.smith' }); // Use broker realm
+            .send({ ...validCredentials, idpAlias: 'dive-v3-broker-usa', username: 'john.smith' }); // Use broker realm
 
         expect(response.status).toBe(200);
         // The clearance mapper service should normalize PROTECTED B to CONFIDENTIAL
@@ -886,7 +886,7 @@ describe('Clearance Mapping for Multi-Realm', () => {
 
         const response = await request(app)
             .post('/api/auth/custom-login')
-            .send({ ...validCredentials, idpAlias: 'dive-v3-broker', username: 'bob.contractor' }); // Use broker realm
+            .send({ ...validCredentials, idpAlias: 'dive-v3-broker-usa', username: 'bob.contractor' }); // Use broker realm
 
         expect(response.status).toBe(200);
         // The clearance mapper service should normalize PROPRIETARY to CONFIDENTIAL
@@ -915,7 +915,7 @@ describe('Clearance Mapping for Multi-Realm', () => {
 
         const response = await request(app)
             .post('/api/auth/custom-login')
-            .send({ ...validCredentials, idpAlias: 'dive-v3-broker', username: 'jane.contractor' }); // Use broker realm
+            .send({ ...validCredentials, idpAlias: 'dive-v3-broker-usa', username: 'jane.contractor' }); // Use broker realm
 
         expect(response.status).toBe(200);
         expect(response.body.success).toBe(true);
@@ -952,8 +952,8 @@ describe('Dynamic Rate Limiting', () => {
             .send(validCredentials);
 
         // Verify that the service was called with the correct realm
-        expect(KeycloakConfigSyncService.getMaxAttempts).toHaveBeenCalledWith('dive-v3-broker');
-        expect(KeycloakConfigSyncService.getWindowMs).toHaveBeenCalledWith('dive-v3-broker');
+        expect(KeycloakConfigSyncService.getMaxAttempts).toHaveBeenCalledWith('dive-v3-broker-usa');
+        expect(KeycloakConfigSyncService.getWindowMs).toHaveBeenCalledWith('dive-v3-broker-usa');
     });
 
     it('should use dynamic maxAttempts from config service', async () => {
@@ -1038,8 +1038,8 @@ describe('Dynamic Rate Limiting', () => {
         // Test broker realm (all IdP brokers use broker realm for Direct Grant)
         await request(app)
             .post('/api/auth/custom-login')
-            .send({ ...validCredentials, idpAlias: 'dive-v3-broker' });
-        expect(KeycloakConfigSyncService.getMaxAttempts).toHaveBeenCalledWith('dive-v3-broker');
+            .send({ ...validCredentials, idpAlias: 'dive-v3-broker-usa' });
+        expect(KeycloakConfigSyncService.getMaxAttempts).toHaveBeenCalledWith('dive-v3-broker-usa');
 
         jest.clearAllMocks();
 

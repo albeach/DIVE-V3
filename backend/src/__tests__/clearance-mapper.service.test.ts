@@ -463,7 +463,7 @@ describe('Clearance Mapper Service', () => {
         });
 
         it('should default to USA for broker realm', () => {
-            expect(getCountryFromRealm('dive-v3-broker')).toBe('USA');
+            expect(getCountryFromRealm('dive-v3-broker-usa')).toBe('USA');
             expect(getCountryFromRealm('unknown-realm')).toBe('USA');
         });
     });

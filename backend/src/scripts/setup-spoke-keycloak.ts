@@ -3,7 +3,7 @@
  * DIVE V3 - Setup Spoke Keycloak
  *
  * Automates Keycloak realm configuration for spoke instances.
- * Creates the dive-v3-broker realm with proper client and IdP settings.
+ * Creates the dive-v3-broker-usa realm with proper client and IdP settings.
  *
  * Usage:
  *   npx ts-node setup-spoke-keycloak.ts [options]
@@ -328,7 +328,7 @@ async function setupSpokeKeycloak(config: KeycloakConfig): Promise<void> {
 
   // 2. Create realm
   const realm: RealmConfig = {
-    realm: 'dive-v3-broker',
+    realm: 'dive-v3-broker-usa',
     enabled: true,
     displayName: `DIVE V3 Broker (${code})`,
     displayNameHtml: `<div class="kc-logo-text"><span>DIVE V3 Broker</span><br><small>${code} Instance</small></div>`,
@@ -351,7 +351,7 @@ async function setupSpokeKeycloak(config: KeycloakConfig): Promise<void> {
 
   // 3. Create broker client
   const brokerClient: ClientConfig = {
-    clientId: 'dive-v3-broker',
+    clientId: 'dive-v3-broker-usa',
     name: 'DIVE V3 Client',
     description: `DIVE V3 application client for ${code} instance`,
     enabled: true,
@@ -377,7 +377,7 @@ async function setupSpokeKeycloak(config: KeycloakConfig): Promise<void> {
     },
   };
 
-  const clientUuid = await admin.createClient('dive-v3-broker', brokerClient);
+  const clientUuid = await admin.createClient('dive-v3-broker-usa', brokerClient);
 
   // 4. Create protocol mappers for DIVE attributes
   if (clientUuid) {
@@ -444,12 +444,12 @@ async function setupSpokeKeycloak(config: KeycloakConfig): Promise<void> {
     ];
 
     for (const mapper of mappers) {
-      await admin.createProtocolMapper('dive-v3-broker', clientUuid, mapper);
+      await admin.createProtocolMapper('dive-v3-broker-usa', clientUuid, mapper);
     }
 
     // Get and display client secret
     if (!config.dryRun) {
-      const secret = await admin.getClientSecret('dive-v3-broker', clientUuid);
+      const secret = await admin.getClientSecret('dive-v3-broker-usa', clientUuid);
       console.log(`\n  📋 Client Secret: ${secret}`);
       console.log('     Save this secret - you will need it for NextAuth configuration!');
     }
@@ -457,9 +457,9 @@ async function setupSpokeKeycloak(config: KeycloakConfig): Promise<void> {
 
   console.log(`\n✅ Keycloak setup complete for ${code}!`);
   console.log(`\n📋 Configuration summary:`);
-  console.log(`   Realm:     dive-v3-broker`);
-  console.log(`   Client ID: dive-v3-broker`);
-  console.log(`   URL:       ${config.keycloakUrl}/realms/dive-v3-broker`);
+  console.log(`   Realm:     dive-v3-broker-usa`);
+  console.log(`   Client ID: dive-v3-broker-usa`);
+  console.log(`   URL:       ${config.keycloakUrl}/realms/dive-v3-broker-usa`);
   console.log(`\n   Next steps:`);
   console.log('   1. Create test users with clearance, countryOfAffiliation attributes');
   console.log('   2. Configure IdP federation (if using Hub IdP)');

@@ -57,7 +57,7 @@ beforeAll(() => {
 beforeEach(() => {
     jest.clearAllMocks();
     process.env.KEYCLOAK_URL = 'http://localhost:8080';
-    process.env.KEYCLOAK_CLIENT_ID = 'dive-v3-broker';
+    process.env.KEYCLOAK_CLIENT_ID = 'dive-v3-broker-usa';
     process.env.KEYCLOAK_CLIENT_SECRET = 'test-secret';
 });
 
@@ -66,7 +66,7 @@ beforeEach(() => {
 // ============================================
 
 const validSetupRequest = {
-    idpAlias: 'dive-v3-broker',
+    idpAlias: 'dive-v3-broker-usa',
     username: 'admin-dive',
     password: 'ValidPassword123!'
 };
@@ -182,7 +182,7 @@ describe('Secret Generation', () => {
 
 describe('OTP Verification', () => {
     const validVerifyRequest = {
-        idpAlias: 'dive-v3-broker',
+        idpAlias: 'dive-v3-broker-usa',
         username: 'admin-dive',
         password: 'ValidPassword123!',
         otp: '123456',
@@ -320,7 +320,7 @@ describe('Keycloak Integration', () => {
         await request(app)
             .post('/api/auth/otp/verify')
             .send({
-                idpAlias: 'dive-v3-broker',
+                idpAlias: 'dive-v3-broker-usa',
                 username: 'admin-dive',
                 password: 'test',
                 otp: '123456',
@@ -330,7 +330,7 @@ describe('Keycloak Integration', () => {
 
         // Verify user update was called
         expect(mockedAxios.put).toHaveBeenCalledWith(
-            expect.stringContaining('/admin/realms/dive-v3-broker/users/user-123'),
+            expect.stringContaining('/admin/realms/dive-v3-broker-usa/users/user-123'),
             expect.objectContaining({
                 attributes: expect.objectContaining({
                     totp_secret: ['TESTSECRET====']
@@ -347,7 +347,7 @@ describe('Keycloak Integration', () => {
         await request(app)
             .post('/api/auth/otp/verify')
             .send({
-                idpAlias: 'dive-v3-broker',
+                idpAlias: 'dive-v3-broker-usa',
                 username: 'admin-dive',
                 password: 'test',
                 otp: '123456',
@@ -373,7 +373,7 @@ describe('Keycloak Integration', () => {
         await request(app)
             .post('/api/auth/otp/verify')
             .send({
-                idpAlias: 'dive-v3-broker',
+                idpAlias: 'dive-v3-broker-usa',
                 username: 'admin-dive',
                 password: 'test',
                 otp: '123456',
@@ -407,7 +407,7 @@ describe('Keycloak Integration', () => {
         await request(app)
             .post('/api/auth/otp/verify')
             .send({
-                idpAlias: 'dive-v3-broker',
+                idpAlias: 'dive-v3-broker-usa',
                 username: 'admin-dive',
                 password: 'test',
                 otp: '123456',
@@ -431,7 +431,7 @@ describe('Keycloak Integration', () => {
         const response = await request(app)
             .post('/api/auth/otp/verify')
             .send({
-                idpAlias: 'dive-v3-broker',
+                idpAlias: 'dive-v3-broker-usa',
                 username: 'admin-dive',
                 password: 'test',
                 otp: '123456',
@@ -482,7 +482,7 @@ describe('Security', () => {
         const response = await request(app)
             .post('/api/auth/otp/setup')
             .send({
-                idpAlias: 'dive-v3-broker',
+                idpAlias: 'dive-v3-broker-usa',
                 username: '',  // Empty username
                 password: 'test'
             });
@@ -500,7 +500,7 @@ describe('Security', () => {
         const response = await request(app)
             .post('/api/auth/otp/verify')
             .send({
-                idpAlias: 'dive-v3-broker',
+                idpAlias: 'dive-v3-broker-usa',
                 username: 'admin-dive',
                 password: 'test',
                 otp: '000000',  // Invalid OTP
@@ -600,7 +600,7 @@ describe('Input Validation', () => {
         const response = await request(app)
             .post('/api/auth/otp/setup')
             .send({
-                idpAlias: 'dive-v3-broker',
+                idpAlias: 'dive-v3-broker-usa',
                 password: 'test'
             });
 
@@ -611,7 +611,7 @@ describe('Input Validation', () => {
         const response = await request(app)
             .post('/api/auth/otp/verify')
             .send({
-                idpAlias: 'dive-v3-broker',
+                idpAlias: 'dive-v3-broker-usa',
                 username: 'test',
                 password: 'test',
                 otp: '123456',
@@ -627,7 +627,7 @@ describe('Input Validation', () => {
         const response = await request(app)
             .post('/api/auth/otp/verify')
             .send({
-                idpAlias: 'dive-v3-broker',
+                idpAlias: 'dive-v3-broker-usa',
                 username: 'test',
                 password: 'test',
                 otp: '123456',
@@ -653,13 +653,13 @@ describe('Realm Mapping', () => {
         mockGenerateSecret.mockReturnValue(mockSecret);
     });
 
-    it('should correctly map dive-v3-broker realm', async () => {
+    it('should correctly map dive-v3-broker-usa realm', async () => {
         await request(app)
             .post('/api/auth/otp/setup')
-            .send({ ...validSetupRequest, idpAlias: 'dive-v3-broker' });
+            .send({ ...validSetupRequest, idpAlias: 'dive-v3-broker-usa' });
 
         const adminCall = mockedAxios.get.mock.calls[0];
-        expect(adminCall[0]).toContain('/admin/realms/dive-v3-broker/users');
+        expect(adminCall[0]).toContain('/admin/realms/dive-v3-broker-usa/users');
     });
 
     it('should correctly map usa-realm-broker to dive-v3-usa', async () => {
