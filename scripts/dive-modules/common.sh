@@ -284,15 +284,23 @@ if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost
     # Keycloak issuer — must match the external URL users see in their browser
     export KEYCLOAK_HOSTNAME="${KEYCLOAK_HOSTNAME:-${HUB_EXTERNAL_ADDRESS}}"
 
-    # Frontend public URLs — browser-accessible via nginx
-    export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-https://${HUB_EXTERNAL_ADDRESS}:4000}"
-    export NEXT_PUBLIC_BACKEND_URL="${NEXT_PUBLIC_BACKEND_URL:-https://${HUB_EXTERNAL_ADDRESS}:4000}"
-    export NEXT_PUBLIC_BASE_URL="${NEXT_PUBLIC_BASE_URL:-https://${HUB_EXTERNAL_ADDRESS}:3000}"
-    export NEXT_PUBLIC_KEYCLOAK_URL="${NEXT_PUBLIC_KEYCLOAK_URL:-https://${HUB_EXTERNAL_ADDRESS}:8443}"
-    export NEXTAUTH_URL="${NEXTAUTH_URL:-https://${HUB_EXTERNAL_ADDRESS}:3000}"
-    export KEYCLOAK_ISSUER="${KEYCLOAK_ISSUER:-https://${HUB_EXTERNAL_ADDRESS}:8443/realms/${HUB_REALM:-dive-v3-broker-usa}}"
-    export AUTH_KEYCLOAK_ISSUER="${AUTH_KEYCLOAK_ISSUER:-https://${HUB_EXTERNAL_ADDRESS}:8443/realms/${HUB_REALM:-dive-v3-broker-usa}}"
-    export KEYCLOAK_URL="${KEYCLOAK_URL:-https://${HUB_EXTERNAL_ADDRESS}:8443}"
+    # Frontend public URLs — browser-accessible via nginx.
+    # Force-set (no :- guard): .env may contain stale localhost values from templates
+    # that would otherwise prevent proxy-mode overrides.
+    export NEXT_PUBLIC_API_URL="https://${HUB_EXTERNAL_ADDRESS}:4000"
+    export NEXT_PUBLIC_BACKEND_URL="https://${HUB_EXTERNAL_ADDRESS}:4000"
+    export NEXT_PUBLIC_BASE_URL="https://${HUB_EXTERNAL_ADDRESS}:3000"
+    export NEXT_PUBLIC_KEYCLOAK_URL="https://${HUB_EXTERNAL_ADDRESS}:8443"
+    export NEXTAUTH_URL="https://${HUB_EXTERNAL_ADDRESS}:3000"
+    export AUTH_URL="https://${HUB_EXTERNAL_ADDRESS}:3000"
+    export KEYCLOAK_ISSUER="https://${HUB_EXTERNAL_ADDRESS}:8443/realms/${HUB_REALM:-dive-v3-broker-usa}"
+    export AUTH_KEYCLOAK_ISSUER="https://${HUB_EXTERNAL_ADDRESS}:8443/realms/${HUB_REALM:-dive-v3-broker-usa}"
+    export KEYCLOAK_URL="https://${HUB_EXTERNAL_ADDRESS}:8443"
+
+    # Host-accessible URLs for scripts running on the EC2 host (via nginx)
+    export HUB_KC_URL="https://localhost:${KEYCLOAK_HTTPS_PORT}"
+    export HUB_BACKEND_URL="https://localhost:${BACKEND_PORT}"
+    export HUB_OPAL_URL="https://localhost:${OPAL_PORT}"
 
     # Terraform Keycloak provider: connect directly, bypassing nginx
     export TF_VAR_keycloak_url="https://localhost:${KEYCLOAK_HTTPS_PORT}"

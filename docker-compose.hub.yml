@@ -1098,6 +1098,7 @@ services:
       NEXT_PUBLIC_KEYCLOAK_REALM: ${NEXT_PUBLIC_KEYCLOAK_REALM:-dive-v3-broker-usa}
       KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-https://localhost:8443/realms/dive-v3-broker-usa}
       NEXTAUTH_URL: ${NEXTAUTH_URL:-https://localhost:3000}
+      AUTH_URL: ${AUTH_URL:-${NEXTAUTH_URL:-https://localhost:3000}}
       NEXT_PUBLIC_EXTERNAL_DOMAINS: "${NEXT_PUBLIC_EXTERNAL_DOMAINS:-https://localhost:3000,https://localhost:4000,https://localhost:8443}"
       AUTH_SECRET: ${AUTH_SECRET_USA:-default-auth-secret-change-me}
       NEXTAUTH_SECRET: ${AUTH_SECRET_USA:-default-auth-secret-change-me}

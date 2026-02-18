@@ -657,7 +657,7 @@ redis_rate_limits_show() {
     fi
 
     # Get rate limit stats from backend API
-    local backend_url="https://localhost:4000"
+    local backend_url="https://localhost:${BACKEND_PORT:-4000}"
     local response
 
     if response=$(curl -k -s "${backend_url}/health/detailed" 2>/dev/null); then

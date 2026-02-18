@@ -318,7 +318,7 @@ spoke_federation_setup() {
         echo ""
         log_error "Troubleshooting:"
         log_error "  1. Verify Hub is running: docker ps --filter name=dive-hub"
-        log_error "  2. Check Hub Keycloak: curl -k https://localhost:8443/realms/dive-v3-broker-usa/.well-known/openid-configuration"
+        log_error "  2. Check Hub Keycloak: curl -k ${HUB_KC_URL:-https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}}/realms/dive-v3-broker-usa/.well-known/openid-configuration"
         log_error "  3. Check Spoke Keycloak: curl -k https://localhost:\${KEYCLOAK_PORT}/realms/dive-v3-broker-${code_lower}/.well-known/openid-configuration"
         log_error "  4. Review Keycloak logs: docker logs dive-hub-keycloak && docker logs dive-spoke-${code_lower}-keycloak"
         log_error "  5. Check admin passwords are set: echo \$KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
@@ -446,7 +446,7 @@ _spoke_federation_verify_oidc_endpoints() {
         fi
 
         # Test Hub OIDC discovery endpoint
-        local hub_discovery_url="https://localhost:8443/realms/${hub_realm}/.well-known/openid-configuration"
+        local hub_discovery_url="${HUB_KC_URL:-https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}}/realms/${hub_realm}/.well-known/openid-configuration"
         log_verbose "Testing Hub OIDC endpoint (attempt $attempt/$max_oidc_retries): $hub_discovery_url"
         
         local hub_curl_result
@@ -534,7 +534,7 @@ spoke_federation_configure_upstream_idp() {
     # - tokenUrl/userInfoUrl/jwksUrl: Internal Docker URL for server-to-server calls
     # - issuer: External URL (must match what's in the tokens)
     # ==========================================================================
-    local hub_public_url="https://localhost:8443"
+    local hub_public_url="${HUB_KC_URL:-https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}}"
     local hub_internal_url="https://dive-hub-keycloak:8443"
 
     # ==========================================================================

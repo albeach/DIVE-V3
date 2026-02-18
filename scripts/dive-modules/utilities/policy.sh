@@ -104,7 +104,7 @@ policy_push() {
     fi
 
     # Check OPAL server
-    local opal_url="http://localhost:7002"
+    local opal_url="https://localhost:${OPAL_PORT:-7002}"
 
     if ! curl -sf "${opal_url}/healthz" >/dev/null 2>&1; then
         log_error "OPAL server not reachable at $opal_url"
@@ -181,10 +181,10 @@ policy_status() {
 
     # OPAL Server status
     echo "OPAL Server:"
-    if curl -sf "http://localhost:7002/healthz" >/dev/null 2>&1; then
+    if curl -sf "https://localhost:${OPAL_PORT:-7002}/healthz" >/dev/null 2>&1; then
         echo "  Status: Healthy"
 
-        local stats=$(curl -sf "http://localhost:7002/stats" 2>/dev/null)
+        local stats=$(curl -sf "https://localhost:${OPAL_PORT:-7002}/stats" 2>/dev/null)
         if [ -n "$stats" ]; then
             echo "  Connected clients: $(echo "$stats" | jq -r '.clients // "N/A"')"
         fi
@@ -223,8 +223,8 @@ policy_refresh() {
     log_info "Triggering policy refresh on all clients..."
 
     # Hub OPAL server
-    if curl -sf "http://localhost:7002/healthz" >/dev/null 2>&1; then
-        curl -sf -X POST "http://localhost:7002/policy/refresh" \
+    if curl -sf "https://localhost:${OPAL_PORT:-7002}/healthz" >/dev/null 2>&1; then
+        curl -sf -X POST "https://localhost:${OPAL_PORT:-7002}/policy/refresh" \
             -H "Content-Type: application/json" \
             -d '{"reason": "Manual refresh"}' >/dev/null 2>&1
         log_success "Hub OPAL refresh triggered"

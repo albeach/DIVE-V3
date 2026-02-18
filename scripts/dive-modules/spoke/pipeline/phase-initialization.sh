@@ -457,7 +457,7 @@ spoke_init_generate_config() {
             # Request JWT from OPAL server
             local token_response
             token_response=$(curl -sk --max-time 10 \
-                -X POST "https://localhost:7002/token" \
+                -X POST "https://localhost:${OPAL_PORT:-7002}/token" \
                 -H "Authorization: Bearer ${master_token}" \
                 -H "Content-Type: application/json" \
                 -d '{"type": "client"}' 2>/dev/null || echo "")
