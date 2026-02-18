@@ -153,6 +153,15 @@ hub_phase_database_init() {
         return 1
     fi
 
+    # Ensure PostgreSQL password matches .env.hub (PostgreSQL 18 initdb may not
+    # apply POSTGRES_PASSWORD correctly with SCRAM-SHA-256)
+    local pg_password
+    pg_password=$(grep '^POSTGRES_PASSWORD_USA=' "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2-)
+    if [ -n "$pg_password" ]; then
+        ${DOCKER_CMD:-docker} exec dive-hub-postgres psql -U postgres -c \
+            "ALTER USER postgres WITH PASSWORD '${pg_password}';" >/dev/null 2>&1 || true
+    fi
+
     # Create and initialize orchestration database
     log_verbose "Creating orchestration database..."
     ${DOCKER_CMD:-docker} exec dive-hub-postgres psql -U postgres -c "CREATE DATABASE orchestration;" >/dev/null 2>&1 || true
