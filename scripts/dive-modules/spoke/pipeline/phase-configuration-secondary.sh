@@ -117,6 +117,9 @@ spoke_config_apply_terraform() {
     export TF_VAR_admin_user_password="${ADMIN_PASSWORD:-${!keycloak_password_var}}"
 
     # Set Keycloak credentials for provider
+    # CRITICAL: Override KEYCLOAK_REALM from .env (which sets it to the spoke realm)
+    # Terraform provider must authenticate via the master realm
+    export KEYCLOAK_REALM="master"
     export KEYCLOAK_USER="admin"
     export KEYCLOAK_PASSWORD="${!keycloak_password_var}"
 
