@@ -517,9 +517,35 @@ generate_vault_node_certs() {
     fi
 
     # ── Dev / local mode: use mkcert (original behavior) ──
+    # Fall back to bootstrap CA if mkcert is unavailable (e.g., EC2 instances)
     if ! check_mkcert_ready; then
-        log_error "mkcert required for Vault node TLS certificates"
-        return 1
+        log_warn "mkcert not available — falling back to OpenSSL bootstrap CA"
+        if ! _generate_bootstrap_ca; then
+            log_error "Failed to generate bootstrap CA"
+            return 1
+        fi
+        local node nodes=("node1" "node2" "node3")
+        local generated=0 skipped=0
+        for node in "${nodes[@]}"; do
+            local node_dir="${vault_certs_dir}/${node}"
+            local cert_file="${node_dir}/certificate.pem"
+            if [ -f "$cert_file" ]; then
+                local days_left
+                days_left=$(_cert_days_remaining "$cert_file")
+                if [ "$days_left" -gt 1 ] 2>/dev/null; then
+                    log_verbose "Vault ${node} cert valid for ${days_left} days — skipping"
+                    skipped=$((skipped + 1))
+                    continue
+                fi
+            fi
+            if _generate_bootstrap_node_cert "$node" "$node_dir"; then
+                generated=$((generated + 1))
+            else
+                return 1
+            fi
+        done
+        log_success "Vault node TLS (bootstrap fallback): ${generated} generated, ${skipped} skipped"
+        return 0
     fi
 
     local mkcert_ca
