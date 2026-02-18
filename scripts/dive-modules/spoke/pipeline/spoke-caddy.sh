@@ -26,8 +26,8 @@ CADDY_SPOKES_DIR="${DIVE_ROOT}/docker/caddy/spokes"
 spoke_caddy_setup() {
     local code="$1"
 
-    if [ -z "${DIVE_DOMAIN_SUFFIX:-}" ]; then
-        log_verbose "No DIVE_DOMAIN_SUFFIX set — skipping Caddy spoke setup"
+    if [ -z "${DIVE_DOMAIN_SUFFIX:-}" ] && [ -z "${SPOKE_CUSTOM_DOMAIN:-}" ]; then
+        log_verbose "No DIVE_DOMAIN_SUFFIX or SPOKE_CUSTOM_DOMAIN set — skipping Caddy spoke setup"
         return 0
     fi
 
@@ -148,6 +148,13 @@ spoke_caddy_create_dns() {
     local code="$1"
     local code_lower
     code_lower="$(echo "$code" | tr '[:upper:]' '[:lower:]')"
+
+    # Custom domains: operator manages their own DNS
+    if [ -n "${SPOKE_CUSTOM_DOMAIN:-}" ]; then
+        log_info "Custom domain — DNS must be managed by the domain operator"
+        log_info "Create A records for: app.${SPOKE_CUSTOM_DOMAIN}, api.${SPOKE_CUSTOM_DOMAIN}, idp.${SPOKE_CUSTOM_DOMAIN}"
+        return 0
+    fi
 
     local _env_prefix _base_domain
     _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
@@ -288,14 +295,22 @@ spoke_caddy_generate_local() {
     content="${content//\{\{INSTANCE_CODE_LOWER\}\}/${code_lower}}"
     echo "$content" > "${caddy_dir}/Caddyfile"
 
-    # Add Caddy domain env vars to spoke .env
-    local _env_prefix _base_domain
-    _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
-    _base_domain="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"
+    # Derive domain names for Caddy env vars
+    local domain_app domain_api domain_idp
 
-    local domain_app="${_env_prefix}-${code_lower}-app.${_base_domain}"
-    local domain_api="${_env_prefix}-${code_lower}-api.${_base_domain}"
-    local domain_idp="${_env_prefix}-${code_lower}-idp.${_base_domain}"
+    if [ -n "${SPOKE_CUSTOM_DOMAIN:-}" ]; then
+        # Custom domain: app.<domain>, api.<domain>, idp.<domain>
+        domain_app="app.${SPOKE_CUSTOM_DOMAIN}"
+        domain_api="api.${SPOKE_CUSTOM_DOMAIN}"
+        domain_idp="idp.${SPOKE_CUSTOM_DOMAIN}"
+    else
+        local _env_prefix _base_domain
+        _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
+        _base_domain="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"
+        domain_app="${_env_prefix}-${code_lower}-app.${_base_domain}"
+        domain_api="${_env_prefix}-${code_lower}-api.${_base_domain}"
+        domain_idp="${_env_prefix}-${code_lower}-idp.${_base_domain}"
+    fi
 
     local env_file="${spoke_dir}/.env"
     if [ -f "$env_file" ]; then

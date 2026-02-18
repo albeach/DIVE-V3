@@ -522,9 +522,38 @@ spoke_config_register_in_hub_mongodb() {
 
     log_verbose "Using Keycloak password for bidirectional federation (${#keycloak_password} chars)"
 
+    # Check Vault for pre-approved partner config (enriches registration with trust metadata)
+    local partner_trust_level=""
+    local partner_max_classification=""
+    local partner_pre_approved="false"
+
+    if type vault_partner_get &>/dev/null; then
+        local partner_json
+        partner_json=$(vault_partner_get "$code_upper" 2>/dev/null || true)
+        if [ -n "$partner_json" ] && [ "$partner_json" != "null" ]; then
+            partner_pre_approved=$(echo "$partner_json" | jq -r '.preApproved // "false"')
+            partner_trust_level=$(echo "$partner_json" | jq -r '.trustLevel // ""')
+            partner_max_classification=$(echo "$partner_json" | jq -r '.maxClassification // ""')
+            if [ "$partner_pre_approved" = "true" ]; then
+                log_success "Vault partner found: ${code_upper} (trust=${partner_trust_level}, class=${partner_max_classification})"
+            fi
+        fi
+    fi
+
     # Build registration payload matching API schema exactly
     # Reference: backend/src/routes/federation.routes.ts line 180-198
     # CRITICAL: Include keycloakAdminPassword for bidirectional federation
+    # Optional: Include partner metadata for pre-approved auto-approval
+    local partner_fields=""
+    if [ "$partner_pre_approved" = "true" ]; then
+        partner_fields=$(cat <<PARTNER
+  "partnerPreApproved": true,
+  "partnerTrustLevel": "$partner_trust_level",
+  "partnerMaxClassification": "$partner_max_classification",
+PARTNER
+)
+    fi
+
     local payload=$(cat <<EOF
 {
   "instanceCode": "$code_upper",
@@ -536,6 +565,7 @@ spoke_config_register_in_hub_mongodb() {
   "requestedScopes": ["policy:base", "policy:org", "policy:tenant"],
   "contactEmail": "$contact_email",
   "keycloakAdminPassword": "$keycloak_password",
+  ${partner_fields}
   "skipValidation": true
 }
 EOF

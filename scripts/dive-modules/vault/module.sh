@@ -589,6 +589,7 @@ module_vault_restore() {
 source "${SCRIPT_DIR}/operations.sh"  # PKI DR, secret seeding, env helpers
 source "${SCRIPT_DIR}/pki.sh"         # PKI setup, spoke provisioning, credentials
 source "${SCRIPT_DIR}/testing.sh"     # Test suites, env, audit-rotate, DR
+source "${SCRIPT_DIR}/partners.sh"    # Federation partner CRUD (Vault KV)
 
 module_vault() {
     local subcommand="${1:-help}"
@@ -753,6 +754,10 @@ module_vault() {
             source "${DIVE_ROOT}/scripts/dive-modules/certificates.sh"
             revoke_spoke_certificates "$@"
             ;;
+        partner)
+            shift
+            module_vault_partner "$@"
+            ;;
         help|--help|-h)
             echo "Usage: ./dive vault <command>"
             echo ""
@@ -786,6 +791,13 @@ module_vault() {
             echo "  crl-status          Show CRL status and certificate inventory"
             echo "  crl-rotate          Force CRL rebuild on Intermediate CA"
             echo "  revoke-spoke <CODE> Revoke a spoke's certificate via Vault PKI"
+            echo ""
+            echo "Federation Partners:"
+            echo "  partner add <CODE>  Register pre-approved partner (auto-derives domains)"
+            echo "                      Options: --domain <base>, --trust <level>, --max-classification"
+            echo "  partner get <CODE>  Show partner details (JSON)"
+            echo "  partner list        List all registered partners"
+            echo "  partner remove <CODE> Remove partner registration"
             echo ""
             echo "Rotation:"
             echo "  rotate [category]   Rotate KV v2 secrets (core|auth|opal|federation|all)"

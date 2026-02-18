@@ -195,6 +195,12 @@ const registrationSchema = z.object({
     // Spoke must provide its Keycloak admin password so Hub can create reverse IdP
     // This enables true bidirectional SSO (Hub users can login at Spoke)
     keycloakAdminPassword: z.string().min(1).optional(),  // Required for bidirectional federation
+
+    // Pre-approved partner metadata (from Vault KV, set by shell pipeline)
+    // When present and partnerPreApproved=true, auto-approve even in non-development mode
+    partnerPreApproved: z.boolean().optional(),
+    partnerTrustLevel: z.enum(['development', 'partner', 'bilateral', 'national']).optional(),
+    partnerMaxClassification: z.enum(['UNCLASSIFIED', 'CONFIDENTIAL', 'SECRET', 'TOP_SECRET']).optional(),
 });
 
 const approvalSchema = z.object({
@@ -746,27 +752,37 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
             status: spoke.status
         });
 
-        // AUTO-APPROVAL FOR DEVELOPMENT MODE
-        // In development, automatically approve spokes with sensible defaults
-        // This enables rapid testing without manual admin intervention
+        // AUTO-APPROVAL: Development mode OR pre-approved Vault partner
         const isDevelopment = process.env.NODE_ENV === 'development' || !process.env.NODE_ENV;
-        const autoApprove = isDevelopment || process.env.AUTO_APPROVE_SPOKES === 'true';
+        const isPartnerPreApproved = request.partnerPreApproved === true;
+        const autoApprove = isDevelopment || process.env.AUTO_APPROVE_SPOKES === 'true' || isPartnerPreApproved;
 
         let token = null;
         if (autoApprove) {
+            // Use partner trust config when available, fall back to development defaults
+            const trustLevel = (isPartnerPreApproved && request.partnerTrustLevel)
+                ? request.partnerTrustLevel : 'development';
+            const maxClassification = (isPartnerPreApproved && request.partnerMaxClassification)
+                ? request.partnerMaxClassification : 'SECRET';
+            const approvedBy = isPartnerPreApproved
+                ? `vault-partner-${request.instanceCode}` : 'auto-approval-system';
+
             try {
-                logger.info('Auto-approving spoke (development mode)', {
+                logger.info('Auto-approving spoke', {
                     spokeId: spoke.spokeId,
                     instanceCode: spoke.instanceCode,
+                    reason: isPartnerPreApproved ? 'vault-partner' : 'development-mode',
+                    trustLevel,
+                    maxClassification,
                 });
 
                 spoke = await hubSpokeRegistry.approveSpoke(
                     spoke.spokeId,
-                    'auto-approval-system',
+                    approvedBy,
                     {
                         allowedScopes: request.requestedScopes,
-                        trustLevel: 'development',
-                        maxClassification: 'SECRET',
+                        trustLevel: trustLevel as 'development' | 'partner' | 'bilateral' | 'national',
+                        maxClassification,
                         dataIsolationLevel: 'filtered',
                         autoLinkIdP: true,  // Create bidirectional IdP federation
                     }

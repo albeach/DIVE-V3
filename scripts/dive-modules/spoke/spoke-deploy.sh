@@ -66,9 +66,16 @@ spoke_deploy() {
     local instance_name="${2:-}"
     # Export flags for use by pipeline phases
     export SKIP_FEDERATION=false
+    export SPOKE_CUSTOM_DOMAIN=""
 
-    # Parse options
-    for arg in "$@"; do
+    # Parse options (handle both --key value and positional args)
+    local skip_next=false
+    for i in $(seq 1 $#); do
+        if [ "$skip_next" = true ]; then
+            skip_next=false
+            continue
+        fi
+        local arg="${!i}"
         case "$arg" in
             --force)
                 # Force flag - clean before deploy
@@ -79,6 +86,14 @@ spoke_deploy() {
             --skip-federation)
                 export SKIP_FEDERATION=true
                 log_warn "Federation setup will be skipped (--skip-federation flag)"
+                ;;
+            --domain)
+                local next=$((i + 1))
+                export SPOKE_CUSTOM_DOMAIN="${!next:-}"
+                skip_next=true
+                if [ -n "$SPOKE_CUSTOM_DOMAIN" ]; then
+                    log_info "Custom domain: $SPOKE_CUSTOM_DOMAIN"
+                fi
                 ;;
         esac
     done
@@ -97,6 +112,7 @@ spoke_deploy() {
         echo "Options:"
         echo "  --force             Clean and redeploy"
         echo "  --skip-federation   Skip federation setup (spoke will be non-functional)"
+        echo "  --domain <base>     Custom domain (e.g. gbr.mod.uk → app.gbr.mod.uk)"
         echo ""
         return 1
     fi
