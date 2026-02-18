@@ -18,9 +18,16 @@ fi
 # Load orchestration state management (database-backed)
 if [ -f "$(dirname "${BASH_SOURCE[0]}")/../orchestration/state.sh" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/../orchestration/state.sh"
-    # Enable dual-write mode for transition period (file + database)
-    export ORCH_DB_DUAL_WRITE=true
-    export ORCH_DB_SOURCE_OF_TRUTH="db"
+    if [ "${DEPLOYMENT_MODE:-local}" = "remote" ]; then
+        # Remote mode: no local Hub PostgreSQL — use file-only state
+        export ORCH_DB_ENABLED=false
+        export ORCH_DB_DUAL_WRITE=false
+        export ORCH_DB_SOURCE_OF_TRUTH="file"
+    else
+        # Local mode: Hub PostgreSQL available
+        export ORCH_DB_DUAL_WRITE=true
+        export ORCH_DB_SOURCE_OF_TRUTH="db"
+    fi
 fi
 
 # Load orchestration framework
