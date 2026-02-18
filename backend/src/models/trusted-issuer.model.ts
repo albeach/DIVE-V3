@@ -145,18 +145,45 @@ export class MongoOpalDataStore {
         collections: [COLLECTION_ISSUERS, COLLECTION_FED_MATRIX, COLLECTION_TENANT_CONFIGS],
       });
 
-      // SSOT ARCHITECTURE (2026-01-22): DO NOT seed from static JSON files
-      // MongoDB is the Single Source of Truth. Data is populated dynamically:
-      // - Hub deployment registers USA's trusted issuer
-      // - Spoke deployment registers spoke's trusted issuer via Hub API
-      // - Federation links are created during spoke registration
-      // Static files (policies/data.json) should NOT be used for seeding
+      // SSOT ARCHITECTURE: MongoDB is the Single Source of Truth.
+      // Ensure env-configured issuers (TRUSTED_ISSUERS) exist in MongoDB.
+      // This handles Caddy external domains added via deployment pipeline.
+      await this.syncEnvIssuers();
+
     } catch (error) {
       logger.error('Failed to initialize MongoDB OPAL Data Store', {
         error: error instanceof Error ? error.message : 'Unknown error',
         stack: error instanceof Error ? error.stack : undefined,
       });
       throw error;
+    }
+  }
+
+  /**
+   * Sync issuers from TRUSTED_ISSUERS env var into MongoDB (idempotent).
+   * Ensures Caddy external domains are always present as trusted issuers.
+   */
+  private async syncEnvIssuers(): Promise<void> {
+    const envIssuers = process.env.TRUSTED_ISSUERS;
+    if (!envIssuers || !this.issuersCollection) return;
+
+    const urls = envIssuers.split(',').map(s => s.trim()).filter(Boolean);
+    for (const url of urls) {
+      const exists = await this.issuersCollection.findOne({ issuerUrl: url });
+      if (!exists) {
+        const issuer: ITrustedIssuer = {
+          issuerUrl: url,
+          tenant: 'USA',
+          name: 'United States Hub',
+          country: 'USA',
+          trustLevel: 'HIGH',
+          enabled: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        };
+        await this.issuersCollection.insertOne(issuer);
+        logger.info(`Synced trusted issuer from env: ${url}`);
+      }
     }
   }
 
