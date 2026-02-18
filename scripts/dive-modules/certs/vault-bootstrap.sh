@@ -366,20 +366,29 @@ _rotate_vault_node_certs_to_pki() {
         dns_csv=$(echo "$dns_sans" | tr ' ' ',')
         ip_csv=$(echo "$ip_sans" | tr ' ' ',')
 
-        # Issue cert via Vault PKI
-        local response
-        # shellcheck disable=SC2086
-        response=$(curl -sL $cacert_flag -X POST \
-            -H "X-Vault-Token: $vault_token" \
-            -H "Content-Type: application/json" \
-            -d "{
-                \"common_name\": \"${container_name}\",
-                \"alt_names\": \"$dns_csv\",
-                \"ip_sans\": \"$ip_csv\",
-                \"ttl\": \"2160h\",
-                \"format\": \"pem\"
-            }" \
-            "${vault_addr}/v1/pki_int/issue/vault-node-services" 2>/dev/null)
+        # Issue cert via Vault PKI (with retry for transient failures)
+        local response curl_err attempt=0 max_attempts=3
+        while [ $attempt -lt $max_attempts ]; do
+            curl_err=""
+            # shellcheck disable=SC2086
+            response=$(curl -sL $cacert_flag -X POST \
+                -H "X-Vault-Token: $vault_token" \
+                -H "Content-Type: application/json" \
+                -d "{
+                    \"common_name\": \"${container_name}\",
+                    \"alt_names\": \"$dns_csv\",
+                    \"ip_sans\": \"$ip_csv\",
+                    \"ttl\": \"2160h\",
+                    \"format\": \"pem\"
+                }" \
+                "${vault_addr}/v1/pki_int/issue/vault-node-services" 2>&1) || curl_err="curl exit $?"
+            # Non-empty JSON response with certificate data = success
+            if [ -n "$response" ] && printf '%s\n' "$response" | jq -e '.data.certificate' &>/dev/null; then
+                break
+            fi
+            attempt=$((attempt + 1))
+            [ $attempt -lt $max_attempts ] && { log_warn "Vault PKI: retry ${attempt}/${max_attempts} for ${node} (${curl_err:-empty response})"; sleep 2; }
+        done
 
         local errors
         errors=$(printf '%s\n' "$response" | jq -r '.errors // empty' 2>/dev/null)

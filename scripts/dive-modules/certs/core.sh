@@ -624,24 +624,38 @@ _vault_pki_issue_cert() {
     log_verbose "  IP SANs:  $ip_sans"
 
     # Issue certificate via Vault PKI API (curl + jq, not vault CLI)
+    # Retries up to 3 times for transient failures (Vault leader election, etc.)
     local cacert_flag
     cacert_flag=$(_vault_curl_cacert_flag)
-    local response
-    # shellcheck disable=SC2086
-    response=$(curl -sL $cacert_flag -X POST \
-        -H "X-Vault-Token: $vault_token" \
-        -H "Content-Type: application/json" \
-        -d "{
-            \"common_name\": \"$common_name\",
-            \"alt_names\": \"$dns_csv\",
-            \"ip_sans\": \"$ip_sans\",
-            \"ttl\": \"$ttl\",
-            \"format\": \"pem\"
-        }" \
-        "${vault_addr}/v1/pki_int/issue/${role_name}" 2>/dev/null)
+    local response curl_err attempt=0 max_attempts=3
+    while [ $attempt -lt $max_attempts ]; do
+        curl_err=""
+        # shellcheck disable=SC2086
+        response=$(curl -sL $cacert_flag -X POST \
+            -H "X-Vault-Token: $vault_token" \
+            -H "Content-Type: application/json" \
+            -d "{
+                \"common_name\": \"$common_name\",
+                \"alt_names\": \"$dns_csv\",
+                \"ip_sans\": \"$ip_sans\",
+                \"ttl\": \"$ttl\",
+                \"format\": \"pem\"
+            }" \
+            "${vault_addr}/v1/pki_int/issue/${role_name}" 2>&1) || curl_err="curl exit $?"
+        # Non-empty JSON response with certificate data = success
+        if [ -n "$response" ] && printf '%s\n' "$response" | jq -e '.data.certificate' &>/dev/null; then
+            break
+        fi
+        attempt=$((attempt + 1))
+        if [ $attempt -lt $max_attempts ]; then
+            log_warn "Vault PKI: retry ${attempt}/${max_attempts} for ${common_name} (${curl_err:-empty response})"
+            sleep 2
+        fi
+    done
 
-    if [ -z "$response" ]; then
-        log_error "Vault PKI: Empty response from ${vault_addr}/v1/pki_int/issue/${role_name}"
+    if [ -z "$response" ] || ! printf '%s\n' "$response" | jq -e '.data.certificate' &>/dev/null; then
+        log_error "Vault PKI: Empty/invalid response from ${vault_addr}/v1/pki_int/issue/${role_name} after ${max_attempts} attempts"
+        [ -n "$curl_err" ] && log_error "  curl error: $curl_err"
         return 1
     fi
 
