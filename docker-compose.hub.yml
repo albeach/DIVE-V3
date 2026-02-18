@@ -849,7 +849,7 @@ services:
       BLACKLIST_REDIS_URL: rediss://:${REDIS_PASSWORD_BLACKLIST}@shared-token-store:6379
       # NOTE: Spoke Keycloak admin passwords come from spoke registration, NOT environment
       # The spoke provides its password during registration, stored in MongoDB
-      NEXT_PUBLIC_BASE_URL: https://localhost:3000
+      NEXT_PUBLIC_BASE_URL: ${NEXT_PUBLIC_BASE_URL:-https://localhost:3000}
       # SECURITY: Trust mkcert CA instead of disabling TLS verification
       NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
       OPAL_SERVER_URL: https://opal-server:7002
