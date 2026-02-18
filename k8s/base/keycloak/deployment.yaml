@@ -31,7 +31,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: keycloak
-          image: us-east4-docker.pkg.dev/dive25/dive-v3-repo/dive-v3-keycloak:9c5584fdc3fbf146641ef62b5715aef4bf6c0993
+          image: us-east4-docker.pkg.dev/dive25/dive-v3-repo/dive-v3-keycloak:c40982f8adc401ef5dbcd79c7269547b9be23046
           imagePullPolicy: Always
           ports:
             - name: http
