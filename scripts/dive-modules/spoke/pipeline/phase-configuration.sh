@@ -124,31 +124,29 @@ spoke_phase_configuration() {
     export USE_TERRAFORM_SSOT=true
 
     # ==========================================================================
-    # CRITICAL: Load Hub environment FIRST (for FEDERATION_ADMIN_KEY)
+    # CRITICAL: Load Hub credentials for FEDERATION_ADMIN_KEY + KEYCLOAK_ADMIN_PASSWORD
     # ==========================================================================
-    # FIX (2026-01-27): Hub .env.hub contains FEDERATION_ADMIN_KEY needed for
-    # spoke registration/approval API calls. Load it before any Hub API interactions.
-    if [ -f "${DIVE_ROOT}/.env.hub" ]; then
-        log_verbose "Loading Hub environment for federation credentials"
-        # Export FEDERATION_ADMIN_KEY for spoke registration API calls
+    # Remote mode: these must come from environment variables (no .env.hub on spoke)
+    # Local mode: fall back to reading from .env.hub on same machine
+    if [ -z "${FEDERATION_ADMIN_KEY:-}" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
         FEDERATION_ADMIN_KEY=$(grep "^FEDERATION_ADMIN_KEY=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
-        if [ -n "$FEDERATION_ADMIN_KEY" ]; then
-            export FEDERATION_ADMIN_KEY
-            log_verbose "✓ FEDERATION_ADMIN_KEY loaded from Hub environment"
-        else
-            log_warn "FEDERATION_ADMIN_KEY not found in .env.hub"
-            log_warn "Spoke registration/approval API calls may fail without this key"
-            log_warn "Fix: Ensure .env.hub exists and contains FEDERATION_ADMIN_KEY"
-        fi
-
-        # Export Hub Keycloak admin password for wait_for_keycloak_admin_api_ready()
-        if [ -z "${KEYCLOAK_ADMIN_PASSWORD:-}" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
-            local _hub_kc_pass
-            _hub_kc_pass=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" "${DIVE_ROOT}/.env.hub" | tail -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'")
-            [ -n "$_hub_kc_pass" ] && export KEYCLOAK_ADMIN_PASSWORD="$_hub_kc_pass"
-        fi
-        [ -n "${KEYCLOAK_ADMIN_PASSWORD:-}" ] && log_verbose "Hub Keycloak admin password resolved"
     fi
+    if [ -n "${FEDERATION_ADMIN_KEY:-}" ]; then
+        export FEDERATION_ADMIN_KEY
+        log_verbose "✓ FEDERATION_ADMIN_KEY available"
+    else
+        log_warn "FEDERATION_ADMIN_KEY not set — spoke registration API calls may fail"
+        if [ "${DEPLOYMENT_MODE:-local}" = "remote" ]; then
+            log_warn "  Pass FEDERATION_ADMIN_KEY as an environment variable for remote deployments"
+        fi
+    fi
+
+    if [ -z "${KEYCLOAK_ADMIN_PASSWORD:-}" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
+        local _hub_kc_pass
+        _hub_kc_pass=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" "${DIVE_ROOT}/.env.hub" | tail -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+        [ -n "$_hub_kc_pass" ] && export KEYCLOAK_ADMIN_PASSWORD="$_hub_kc_pass"
+    fi
+    [ -n "${KEYCLOAK_ADMIN_PASSWORD:-}" ] && log_verbose "Hub Keycloak admin password resolved"
 
     # ==========================================================================
     # CRITICAL: Load secrets BEFORE any operations that need them

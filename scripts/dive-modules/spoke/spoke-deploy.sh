@@ -132,7 +132,8 @@ spoke_deploy() {
     fi
 
     # AUTO-PROVISION: Ensure Vault provisioning before spoke deployment
-    if [ "${SECRETS_PROVIDER:-}" = "vault" ]; then
+    # Skip for remote deployments — Vault lives on the Hub, not the spoke
+    if [ "${SECRETS_PROVIDER:-}" = "vault" ] && [ "${DEPLOYMENT_MODE:-local}" != "remote" ]; then
         # Load vault module if not already available
         if ! type vault_spoke_is_provisioned &>/dev/null; then
             source "$(dirname "${BASH_SOURCE[0]}")/../vault/module.sh" 2>/dev/null || true
