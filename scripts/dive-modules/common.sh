@@ -312,6 +312,11 @@ if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost
         export AUTH_KEYCLOAK_ISSUER="https://${CADDY_DOMAIN_IDP}/realms/${HUB_REALM:-dive-v3-broker-usa}"
         export KEYCLOAK_URL="https://${CADDY_DOMAIN_IDP}"
 
+        # TRUSTED_ISSUERS — backend needs both external (browser tokens) and internal (container) issuers
+        export TRUSTED_ISSUERS="https://${CADDY_DOMAIN_IDP}/realms/${HUB_REALM:-dive-v3-broker-usa},https://keycloak:8443/realms/${HUB_REALM:-dive-v3-broker-usa},https://localhost:8443/realms/${HUB_REALM:-dive-v3-broker-usa}"
+
+        # External domains list for CORS and CSP
+        export NEXT_PUBLIC_EXTERNAL_DOMAINS="https://${CADDY_DOMAIN_APP},https://${CADDY_DOMAIN_API},https://${CADDY_DOMAIN_IDP}"
         # Host-accessible URLs for scripts (localhost, standard ports)
         export HUB_KC_URL="https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}"
         export HUB_BACKEND_URL="https://localhost:${BACKEND_PORT:-4000}"
@@ -322,6 +327,25 @@ if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost
 
         # Enable Caddy compose profile
         export DIVE_CADDY_ENABLED="true"
+
+        # Persist Caddy-derived URLs to .env.hub so Docker Compose picks them up
+        # (shell exports don't survive container recreation / reboot)
+        if [ -f "${DIVE_ROOT}/.env.hub" ]; then
+            _caddy_set() { local k="$1" v="$2"; if grep -q "^${k}=" "${DIVE_ROOT}/.env.hub" 2>/dev/null; then sed -i "s|^${k}=.*|${k}=${v}|" "${DIVE_ROOT}/.env.hub" 2>/dev/null || sed -i '' "s|^${k}=.*|${k}=${v}|" "${DIVE_ROOT}/.env.hub"; else echo "${k}=${v}" >> "${DIVE_ROOT}/.env.hub"; fi; }
+            _caddy_set "KEYCLOAK_HOSTNAME" "${CADDY_DOMAIN_IDP}"
+            _caddy_set "NEXT_PUBLIC_API_URL" "https://${CADDY_DOMAIN_API}"
+            _caddy_set "NEXT_PUBLIC_BACKEND_URL" "https://${CADDY_DOMAIN_API}"
+            _caddy_set "NEXT_PUBLIC_BASE_URL" "https://${CADDY_DOMAIN_APP}"
+            _caddy_set "NEXT_PUBLIC_KEYCLOAK_URL" "https://${CADDY_DOMAIN_IDP}"
+            _caddy_set "NEXTAUTH_URL" "https://${CADDY_DOMAIN_APP}"
+            _caddy_set "AUTH_URL" "https://${CADDY_DOMAIN_APP}"
+            _caddy_set "KEYCLOAK_ISSUER" "https://${CADDY_DOMAIN_IDP}/realms/${HUB_REALM:-dive-v3-broker-usa}"
+            _caddy_set "AUTH_KEYCLOAK_ISSUER" "https://${CADDY_DOMAIN_IDP}/realms/${HUB_REALM:-dive-v3-broker-usa}"
+            _caddy_set "KEYCLOAK_URL" "https://${CADDY_DOMAIN_IDP}"
+            _caddy_set "TRUSTED_ISSUERS" "${TRUSTED_ISSUERS}"
+            _caddy_set "NEXT_PUBLIC_EXTERNAL_DOMAINS" "${NEXT_PUBLIC_EXTERNAL_DOMAINS}"
+            unset -f _caddy_set
+        fi
 
     else
         # =================================================================
