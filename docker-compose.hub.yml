@@ -1082,7 +1082,7 @@ services:
     env_file:
       - .env.hub
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ >/dev/null || exit 1"]
       interval: 5s         # Check every 5 seconds (was 10s)
       timeout: 8s
       retries: 10          # Allow 10 failures (was 12)
