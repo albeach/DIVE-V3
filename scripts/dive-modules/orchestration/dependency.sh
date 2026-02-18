@@ -386,6 +386,28 @@ orch_acquire_deployment_lock() {
 
     log_verbose "Attempting to acquire deployment lock for $instance_code (timeout: ${timeout}s)..."
 
+    # REMOTE MODE: No Hub PostgreSQL available — use file-based locking only
+    if [ "${ORCH_DB_ENABLED:-true}" = "false" ] || [ "${DEPLOYMENT_MODE:-local}" = "remote" ]; then
+        local lock_dir="${DIVE_ROOT}/.dive-state"
+        mkdir -p "$lock_dir"
+        local lock_file="${lock_dir}/${code_upper}.lock"
+        if [ -f "$lock_file" ]; then
+            local lock_age=$(( $(date +%s) - $(stat -c %Y "$lock_file" 2>/dev/null || stat -f %m "$lock_file" 2>/dev/null || echo 0) ))
+            if [ "$lock_age" -gt 3600 ]; then
+                log_warn "Stale lock file detected (${lock_age}s old) — removing"
+                rm -f "$lock_file"
+            else
+                log_error "Deployment already in progress for $code_upper (file lock age: ${lock_age}s)"
+                return 1
+            fi
+        fi
+        echo "$$:$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$lock_file"
+        ORCH_CONTEXT[lock_acquired]="true"
+        ORCH_CONTEXT[lock_type]="file"
+        log_success "Deployment lock acquired for $instance_code (file-based, remote mode)"
+        return 0
+    fi
+
     # RESILIENCE FIX (2026-02-07): Check for stale deployment states BEFORE acquiring lock
     # If state shows in-progress but no lock exists, auto-recover
     if [ "$code_upper" != "USA" ] && type orch_db_check_connection &>/dev/null && orch_db_check_connection; then

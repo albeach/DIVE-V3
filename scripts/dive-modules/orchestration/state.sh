@@ -297,6 +297,15 @@ orch_db_set_state() {
     # No file writes, no fallbacks, fail-fast on database errors.
     # ==========================================================================
     if [ "$ORCH_DB_ONLY_MODE" = "true" ]; then
+        # REMOTE MODE: No Hub PostgreSQL — use file-only state
+        if [ "${ORCH_DB_ENABLED:-true}" = "false" ] || [ "${DEPLOYMENT_MODE:-local}" = "remote" ]; then
+            local state_dir="${DIVE_ROOT}/.dive-state"
+            mkdir -p "$state_dir"
+            echo "${new_state}|$(date -u +%Y-%m-%dT%H:%M:%SZ)|${reason}" >> "${state_dir}/${code_lower}.state"
+            log_verbose "State → $new_state for $instance_code (file-only, remote mode)"
+            return 0
+        fi
+
         # CRITICAL FIX (2026-01-18): Allow Hub (USA) to deploy without database
         # Hub deployment CREATES the orchestration database, so it can't depend on it
         # Spokes and other instances require the database to exist
@@ -426,6 +435,18 @@ orch_db_get_state() {
     # ==========================================================================
     # ADR-001: Database-Only Mode (MANDATORY)
     # ==========================================================================
+    # REMOTE MODE: Read state from file
+    if [ "${ORCH_DB_ENABLED:-true}" = "false" ] || [ "${DEPLOYMENT_MODE:-local}" = "remote" ]; then
+        local state_dir="${DIVE_ROOT}/.dive-state"
+        local state_file="${state_dir}/$(lower "$instance_code").state"
+        if [ -f "$state_file" ]; then
+            tail -1 "$state_file" | cut -d'|' -f1
+        else
+            echo "UNKNOWN"
+        fi
+        return 0
+    fi
+
     # CRITICAL FIX: Allow Hub to read state without database during initial deployment
     # Hub deployment CREATES the orchestration database, so it can't depend on it
     local code_upper=$(upper "$instance_code")
