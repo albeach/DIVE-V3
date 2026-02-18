@@ -257,6 +257,41 @@ if [ -z "${INSTANCE_PRIVATE_IP:-}" ]; then
     unset _imds_token
 fi
 
+# Auto-derive HUB_EXTERNAL_ADDRESS from EC2 metadata (any environment, including local-on-EC2).
+# When remote-exec dispatches hub deploy to EC2, it uses --env local to prevent recursion.
+# This ensures the proxy overlay and external SANs activate on any EC2 instance.
+if [ -z "${HUB_EXTERNAL_ADDRESS:-}" ] && [ -n "${INSTANCE_PUBLIC_IP:-}" ]; then
+    export HUB_EXTERNAL_ADDRESS="$INSTANCE_PUBLIC_IP"
+fi
+
+# Auto-configure nginx proxy mode when running on EC2.
+# nginx owns the standard ports (443, 3000, 4000, 7002, 8443, 8200) on 0.0.0.0.
+# Services remap to 127.0.0.1:1XXXX to avoid conflicts.
+if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost" ] \
+    && [ -f "${DIVE_ROOT}/docker-compose.proxy.yml" ]; then
+    # Port offsets — services bind to 127.0.0.1:1XXXX, nginx proxies 0.0.0.0:XXXX
+    export KEYCLOAK_HTTPS_PORT="${KEYCLOAK_HTTPS_PORT:-18443}"
+    export KEYCLOAK_HTTP_PORT="${KEYCLOAK_HTTP_PORT:-18080}"
+    export KEYCLOAK_MGMT_PORT="${KEYCLOAK_MGMT_PORT:-19000}"
+    export BACKEND_PORT="${BACKEND_PORT:-14000}"
+    export FRONTEND_PORT="${FRONTEND_PORT:-13000}"
+    export OPAL_PORT="${OPAL_PORT:-17002}"
+    export VAULT_API_PORT="${VAULT_API_PORT:-18200}"
+
+    # Keycloak issuer — must match the external URL users see in their browser
+    export KEYCLOAK_HOSTNAME="${KEYCLOAK_HOSTNAME:-${HUB_EXTERNAL_ADDRESS}}"
+
+    # Frontend public URLs — browser-accessible via nginx
+    export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-https://${HUB_EXTERNAL_ADDRESS}:4000}"
+    export NEXT_PUBLIC_BACKEND_URL="${NEXT_PUBLIC_BACKEND_URL:-https://${HUB_EXTERNAL_ADDRESS}:4000}"
+    export NEXT_PUBLIC_BASE_URL="${NEXT_PUBLIC_BASE_URL:-https://${HUB_EXTERNAL_ADDRESS}:3000}"
+    export NEXT_PUBLIC_KEYCLOAK_URL="${NEXT_PUBLIC_KEYCLOAK_URL:-https://${HUB_EXTERNAL_ADDRESS}:8443}"
+    export NEXTAUTH_URL="${NEXTAUTH_URL:-https://${HUB_EXTERNAL_ADDRESS}:3000}"
+    export KEYCLOAK_ISSUER="${KEYCLOAK_ISSUER:-https://${HUB_EXTERNAL_ADDRESS}:8443/realms/${HUB_REALM:-dive-v3-broker-usa}}"
+    export AUTH_KEYCLOAK_ISSUER="${AUTH_KEYCLOAK_ISSUER:-https://${HUB_EXTERNAL_ADDRESS}:8443/realms/${HUB_REALM:-dive-v3-broker-usa}}"
+    export KEYCLOAK_URL="${KEYCLOAK_URL:-https://${HUB_EXTERNAL_ADDRESS}:8443}"
+fi
+
 # Environment-specific AWS defaults
 case "$ENVIRONMENT" in
     dev)
