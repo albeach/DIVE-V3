@@ -102,10 +102,16 @@ remote_sync() {
         --exclude '.dive-state' \
         --exclude '.dive-locks' \
         --exclude '.dive-checkpoint' \
+        --exclude '.vault-token' \
+        --exclude '.vault-init*' \
+        --exclude '.env.hub' \
+        --exclude 'certs/' \
+        --exclude 'instances/*/certs/' \
         --exclude 'data/' \
         --exclude '.terraform' \
         --exclude 'backend/logs' \
         --exclude 'coverage' \
+        --exclude 'backend/policies/uploads' \
         --exclude '._*' \
         --exclude '.DS_Store' \
         -e "ssh -i ${DIVE_AWS_SSH_KEY} ${SSH_OPTS}" \
