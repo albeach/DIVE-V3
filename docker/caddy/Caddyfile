@@ -86,30 +86,17 @@
 # Vault PKI CA (restricted — only CA + health endpoints)
 # =============================================================================
 {$CADDY_DOMAIN_VAULT} {
-	# PKI root CA
-	@pki_root path /v1/pki/ca /v1/pki/ca/pem
-	reverse_proxy @pki_root https://vault-1:8200 {
-		transport http {
-			tls_insecure_skip_verify
-		}
-	}
-
-	# PKI intermediate CA
-	@pki_int path /v1/pki_int/ca /v1/pki_int/ca/pem
-	reverse_proxy @pki_int https://vault-1:8200 {
-		transport http {
-			tls_insecure_skip_verify
-		}
-	}
-
-	# Vault health (monitoring)
-	@health path /v1/sys/health
-	reverse_proxy @health https://vault-1:8200 {
-		transport http {
-			tls_insecure_skip_verify
+	@allowed path /v1/pki/ca /v1/pki/ca/pem /v1/pki_int/ca /v1/pki_int/ca/pem /v1/sys/health
+	handle @allowed {
+		reverse_proxy https://vault-1:8200 {
+			transport http {
+				tls_insecure_skip_verify
+			}
 		}
 	}
 
 	# Block everything else
-	respond "Forbidden" 403
+	handle {
+		respond "Forbidden" 403
+	}
 }
