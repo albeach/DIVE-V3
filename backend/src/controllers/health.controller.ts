@@ -13,7 +13,7 @@
 
 import { Request, Response, NextFunction } from 'express';
 import axios from 'axios';
-import * as https from 'https';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 import { logger } from '../utils/logger';
 import { policyVersionMonitor } from '../services/policy-version-monitor.service';
 import { mongoKasRegistryStore } from '../models/kas-registry.model';
@@ -207,10 +207,7 @@ export const getDetailedHealthHandler = async (
 
   // Check OPA
   try {
-    const httpsAgent = new https.Agent({
-      minVersion: 'TLSv1.2',
-      rejectUnauthorized: false, // Allow self-signed certs in development
-    });
+    const httpsAgent = getSecureHttpsAgent();
 
     const opaStart = Date.now();
     const opaResponse = await axios.get(`${OPA_URL}/health`, {
@@ -308,10 +305,7 @@ export const readinessHandler = async (
   _next: NextFunction
 ): Promise<void> => {
   try {
-    const httpsAgent = new https.Agent({
-      minVersion: 'TLSv1.2',
-      rejectUnauthorized: false, // Allow self-signed certs in development
-    });
+    const httpsAgent = getSecureHttpsAgent();
 
     // Check OPA is reachable
     await axios.get(`${OPA_URL}/health`, {

@@ -2,7 +2,7 @@
 FROM permitio/opal-server:latest
 
 USER root
-RUN apt-get update && apt-get install -y curl && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y curl openssh-client && rm -rf /var/lib/apt/lists/*
 
 # Copy custom entrypoint script
 COPY opal-server-entrypoint.sh /opal/entrypoint.sh

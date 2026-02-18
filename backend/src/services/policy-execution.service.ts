@@ -8,7 +8,7 @@
  */
 
 import axios from 'axios';
-import * as https from 'https';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 import { logger } from '../utils/logger';
 import {
     IUnifiedInput,
@@ -78,10 +78,7 @@ export async function evaluateRego(
         };
 
         // Upload policy to OPA (PUT to /v1/policies/{id})
-        const httpsAgent = new https.Agent({
-            minVersion: 'TLSv1.2',
-            rejectUnauthorized: false, // Allow self-signed certs in development
-        });
+        const httpsAgent = getSecureHttpsAgent();
 
         const policyUploadUrl = `${OPA_URL}/v1/policies/${context.policyId}`;
         await axios.put(policyUploadUrl, policySource, {

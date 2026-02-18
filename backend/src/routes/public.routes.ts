@@ -15,16 +15,13 @@
 
 import { Router, Request, Response } from 'express';
 import axios from 'axios';
-import https from 'https';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 import { keycloakAdminService } from '../services/keycloak-admin.service';
 import { hubSpokeRegistry } from '../services/hub-spoke-registry.service';
 import { logger } from '../utils/logger';
 import { v4 as uuidv4 } from 'uuid';
 
-// HTTPS agent for self-signed certificates (development)
-const httpsAgent = new https.Agent({
-    rejectUnauthorized: false
-});
+const httpsAgent = getSecureHttpsAgent();
 
 const router = Router();
 

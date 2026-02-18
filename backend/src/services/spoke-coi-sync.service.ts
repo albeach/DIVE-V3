@@ -19,14 +19,11 @@
  * @date 2026-02-03
  */
 
-import https from 'https';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 import { logger } from '../utils/logger';
 import { getMongoDBUrl, getMongoDBName } from '../utils/mongodb-config';
 
-// HTTPS agent for self-signed certificates (local dev / Docker)
-const httpsAgent = new https.Agent({
-  rejectUnauthorized: false
-});
+const httpsAgent = getSecureHttpsAgent();
 
 interface ISyncedCoiDefinition {
   coiId: string;

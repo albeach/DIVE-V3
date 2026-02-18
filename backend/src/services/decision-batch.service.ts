@@ -26,6 +26,7 @@
 import { EventEmitter } from 'events';
 import * as http from 'http';
 import * as https from 'https';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 import { logger } from '../utils/logger';
 import { decisionCacheService } from './decision-cache.service';
 
@@ -135,13 +136,7 @@ const httpAgent = new http.Agent({
   timeout: 30000,
 });
 
-const httpsAgent = new https.Agent({
-  keepAlive: true,
-  maxSockets: 50,
-  maxFreeSockets: 10,
-  timeout: 30000,
-  rejectUnauthorized: false,
-});
+const httpsAgent = getSecureHttpsAgent();
 
 // ============================================
 // DECISION BATCH SERVICE

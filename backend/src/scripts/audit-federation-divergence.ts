@@ -18,11 +18,11 @@
  */
 
 import axios from 'axios';
-import https from 'https';
 import { execSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { getDb, mongoSingleton } from '../utils/mongodb-singleton';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 
 // ============================================
 // CONFIGURATION
@@ -34,7 +34,7 @@ const KEYCLOAK_ADMIN_USER = process.env.KEYCLOAK_ADMIN_USER || process.env.KEYCL
 const KEYCLOAK_ADMIN_PASSWORD = process.env.KC_ADMIN_PASSWORD || process.env.KEYCLOAK_ADMIN_PASSWORD || 'DivePilot2025!SecureAdmin';
 const MONGODB_URL = process.env.MONGODB_URL || 'mongodb://admin:DivePilot2025!@localhost:27017/dive_resources?authSource=admin';
 
-const httpsAgent = new https.Agent({ rejectUnauthorized: false });
+const httpsAgent = getSecureHttpsAgent();
 
 // ============================================
 // INTERFACES
@@ -227,7 +227,7 @@ function fetchFederationMatrix(): FederationMatrixEntry[] {
 
 /**
  * REMOVED: fetchStaticRegistry() from JSON file - NO JSON FILE LOADING
- * 
+ *
  * Federation registry must be loaded from MongoDB (SSOT)
  * - Hub: MongoDB federation_spokes collection
  * - Spoke: Hub API /api/federation/spokes
@@ -238,19 +238,19 @@ async function fetchStaticRegistry(): Promise<{ instances: string[]; enabledInst
     const { MongoClient } = await import('mongodb');
     const mongoUrl = process.env.MONGODB_URL || 'mongodb://localhost:27017';
     const dbName = process.env.MONGODB_DATABASE || 'dive-v3';
-    
+
     await mongoSingleton.connect();
     const db = getDb();
     const collection = db.collection('federation_spokes');
-    
+
     const spokes = await collection.find({}).toArray();
     // Singleton manages lifecycle - no need to close
-    
+
     const instances = spokes.map(s => s.instanceCode.toUpperCase());
     const enabledInstances = spokes
       .filter(s => s.enabled !== false)
       .map(s => s.instanceCode.toUpperCase());
-    
+
     return { instances, enabledInstances };
   } catch (error) {
     console.error('Failed to read federation registry from MongoDB:', error instanceof Error ? error.message : error);

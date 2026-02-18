@@ -393,6 +393,9 @@ _hub_service_sans() {
     sans="$sans keycloak backend frontend opa opal-server kas"
     sans="$sans mongodb postgres redis redis-blacklist authzforce"
 
+    # Shared cross-instance services (token revocation store uses hub certs)
+    sans="$sans shared-token-store token-store"
+
     # Compose short names (hub-{service})
     sans="$sans hub-keycloak"
 

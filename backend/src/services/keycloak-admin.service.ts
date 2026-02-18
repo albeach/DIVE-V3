@@ -18,7 +18,7 @@
 
 import KcAdminClient from '@keycloak/keycloak-admin-client';
 import type UserRepresentation from '@keycloak/keycloak-admin-client/lib/defs/userRepresentation';
-import https from 'https';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 import { logger } from '../utils/logger';
 import { getKeycloakPassword } from '../utils/gcp-secrets';
 import {
@@ -74,19 +74,13 @@ class KeycloakAdminService {
     private readonly TOKEN_REFRESH_BUFFER_MS = 5000; // Refresh 5s before expiry
 
     constructor() {
-        // Create axios instance with proper HTTPS agent for self-signed certs
         this.axios = axios.create({
             baseURL: process.env.KEYCLOAK_URL || 'https://localhost:8443',
             timeout: 10000,
-            httpsAgent: new https.Agent({
-                rejectUnauthorized: false, // Required for self-signed/mkcert certs
-            }),
+            httpsAgent: getSecureHttpsAgent(),
         });
 
-        // Legacy client (keep for methods not yet migrated to REST)
-        const httpsAgent = new https.Agent({
-            rejectUnauthorized: false,
-        });
+        const httpsAgent = getSecureHttpsAgent();
 
         this.client = new KcAdminClient({
             baseUrl: process.env.KEYCLOAK_URL || 'http://localhost:8081',

@@ -11,13 +11,10 @@
  */
 
 import KcAdminClient from '@keycloak/keycloak-admin-client';
-import https from 'https';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 import { logger } from '../utils/logger';
 
-// HTTPS agent for self-signed certificates (required for local dev with mkcert)
-const httpsAgent = new https.Agent({
-  rejectUnauthorized: false,
-});
+const httpsAgent = getSecureHttpsAgent();
 
 // ============================================
 // URL BUILDERS

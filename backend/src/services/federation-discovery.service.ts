@@ -9,14 +9,11 @@
  * - Spokes: Query Hub's API to discover federation partners
  */
 
-import https from 'https';
+import { getSecureHttpsAgent } from '../utils/https-agent';
 import { logger } from '../utils/logger';
 import { hubSpokeRegistry } from './hub-spoke-registry.service';
 
-// Create HTTPS agent for self-signed certificates (local development)
-const httpsAgent = new https.Agent({
-    rejectUnauthorized: false
-});
+const httpsAgent = getSecureHttpsAgent();
 
 export interface IFederationInstance {
     code: string;

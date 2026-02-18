@@ -2,31 +2,50 @@
 # =============================================================================
 # OPAL Server Entrypoint
 # =============================================================================
-# Validates JWT signing keys are mounted and starts OPAL server.
-# Keys are loaded by OPAL natively via OPAL_AUTH_PRIVATE_KEY_PATH /
-# OPAL_AUTH_PUBLIC_KEY_PATH env vars set in docker-compose.hub.yml.
+# Loads JWT signing keys and starts OPAL server.
+# Private key: PEM format (-----BEGIN PRIVATE KEY-----)
+# Public key:  SSH format (ssh-rsa AAAA...) — required by OPAL's cast_public_key()
+#
+# Files are mounted from certs/opal/ via docker-compose volume.
 # =============================================================================
 
 set -e
 
-# Clear any stale content-based key env vars (legacy / .env.hub leftovers)
-# — OPAL_AUTH_PRIVATE_KEY_PATH takes precedence, but leftover content vars
-#   with mangled multiline PEM cause MalformedFraming errors.
+# Clear any stale content-based key env vars (legacy / .env.hub leftovers
+# with mangled multiline PEM that cause MalformedFraming errors).
 unset OPAL_AUTH_PRIVATE_KEY 2>/dev/null || true
 unset OPAL_AUTH_PUBLIC_KEY 2>/dev/null || true
 
-# Validate that key files are mounted
-KEY_PATH="${OPAL_AUTH_PRIVATE_KEY_PATH:-/opal-keys/jwt-signing-key.pem}"
-PUB_PATH="${OPAL_AUTH_PUBLIC_KEY_PATH:-/opal-keys/jwt-signing-key.pub.pem}"
+# File paths (mounted via docker-compose volume: ./certs/opal:/opal-keys:ro)
+KEY_PATH="/opal-keys/jwt-signing-key.pem"
+PUB_SSH_PATH="/opal-keys/jwt-signing-key.pub.ssh"
+PUB_PEM_PATH="/opal-keys/jwt-signing-key.pub.pem"
 
+# Load private key (PEM format)
 if [ -f "$KEY_PATH" ]; then
-    echo "OPAL: JWT signing key found at $KEY_PATH"
-    [ -f "$PUB_PATH" ] && echo "OPAL: JWT public key found at $PUB_PATH"
+    echo "OPAL: JWT private key found at $KEY_PATH"
+    export OPAL_AUTH_PRIVATE_KEY
+    OPAL_AUTH_PRIVATE_KEY=$(cat "$KEY_PATH")
 else
-    echo "OPAL: ERROR — JWT signing key not found at $KEY_PATH"
-    echo "OPAL: Ensure certs/opal/ is mounted to /opal-keys/ and keys are generated."
+    echo "OPAL: ERROR - JWT private key not found at $KEY_PATH"
     echo "OPAL: Run: ./dive hub deploy (generates keys in SERVICES phase)"
-    # Don't exit — let OPAL start and report its own error for clearer diagnostics
+fi
+
+# Load public key (SSH format — required by OPAL's cast_public_key)
+if [ -f "$PUB_SSH_PATH" ]; then
+    echo "OPAL: JWT public key (SSH format) found at $PUB_SSH_PATH"
+    export OPAL_AUTH_PUBLIC_KEY
+    OPAL_AUTH_PUBLIC_KEY=$(cat "$PUB_SSH_PATH")
+elif [ -f "$PUB_PEM_PATH" ]; then
+    # Fallback: convert PEM to SSH inline (upgrade path)
+    echo "OPAL: WARNING - SSH public key not found, converting PEM to SSH inline"
+    export OPAL_AUTH_PUBLIC_KEY
+    OPAL_AUTH_PUBLIC_KEY=$(ssh-keygen -i -m PKCS8 -f "$PUB_PEM_PATH" 2>/dev/null || true)
+    if [ -z "$OPAL_AUTH_PUBLIC_KEY" ]; then
+        echo "OPAL: ERROR - Failed to convert PEM to SSH format"
+    fi
+else
+    echo "OPAL: ERROR - No public key found at $PUB_SSH_PATH or $PUB_PEM_PATH"
 fi
 
 echo "OPAL: Starting server..."
