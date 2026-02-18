@@ -239,10 +239,22 @@ export AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-}"
 export DIVE_AWS_KEY_PAIR="${DIVE_AWS_KEY_PAIR:-ABeach-SSH-Key}"
 export DIVE_AWS_SSH_KEY="${DIVE_AWS_SSH_KEY:-${HOME}/.ssh/ABeach-SSH-Key.pem}"
 
-# EC2 instance metadata auto-detection (runs only on EC2 instances)
-if [ -z "${INSTANCE_PRIVATE_IP:-}" ] && curl -sf -m 1 http://169.254.169.254/latest/meta-data/ >/dev/null 2>&1; then
-    export INSTANCE_PRIVATE_IP="$(curl -sf -m 2 http://169.254.169.254/latest/meta-data/local-ipv4)"
-    export INSTANCE_PUBLIC_IP="$(curl -sf -m 2 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo "")"
+# EC2 instance metadata auto-detection (IMDSv2 first, then v1 fallback)
+if [ -z "${INSTANCE_PRIVATE_IP:-}" ]; then
+    _imds_token=$(curl -sX PUT "http://169.254.169.254/latest/api/token" \
+        -H "X-aws-ec2-metadata-token-ttl-seconds: 300" -m 2 2>/dev/null || echo "")
+    if [ -n "$_imds_token" ]; then
+        # IMDSv2 (required on newer AWS instances)
+        export INSTANCE_PRIVATE_IP="$(curl -sH "X-aws-ec2-metadata-token: $_imds_token" \
+            -m 2 http://169.254.169.254/latest/meta-data/local-ipv4 2>/dev/null || echo "")"
+        export INSTANCE_PUBLIC_IP="$(curl -sH "X-aws-ec2-metadata-token: $_imds_token" \
+            -m 2 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo "")"
+    elif curl -sf -m 1 http://169.254.169.254/latest/meta-data/ >/dev/null 2>&1; then
+        # IMDSv1 fallback
+        export INSTANCE_PRIVATE_IP="$(curl -sf -m 2 http://169.254.169.254/latest/meta-data/local-ipv4)"
+        export INSTANCE_PUBLIC_IP="$(curl -sf -m 2 http://169.254.169.254/latest/meta-data/public-ipv4 2>/dev/null || echo "")"
+    fi
+    unset _imds_token
 fi
 
 # Environment-specific AWS defaults

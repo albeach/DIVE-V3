@@ -106,6 +106,12 @@ _rebuild_ca_bundle() {
         cat "$vault_ca" >> "$output_file"
     fi
 
+    # 3. Include bootstrap CA (used for Vault node TLS on EC2/cloud)
+    local bootstrap_ca="${DIVE_ROOT}/certs/vault/bootstrap-ca/ca.pem"
+    if [ -f "$bootstrap_ca" ] && [ -s "$bootstrap_ca" ]; then
+        cat "$bootstrap_ca" >> "$output_file"
+    fi
+
     chmod 644 "$output_file"
 }
 

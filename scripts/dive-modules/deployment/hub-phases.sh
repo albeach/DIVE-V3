@@ -97,6 +97,35 @@ hub_phase_database_init() {
         log_verbose "CA bundle built at ${DIVE_ROOT}/certs/ca-bundle/rootCA.pem"
     fi
 
+    # -------------------------------------------------------------------------
+    # Step 0b: Ensure fullchain.pem + ca/rootCA.pem exist
+    # PostgreSQL, Redis, Keycloak, OPA all mount instances/hub/certs as /certs
+    # and reference /certs/fullchain.pem + /certs/ca/rootCA.pem.
+    # OpenSSL self-signed fallback only creates certificate.pem + key.pem.
+    # -------------------------------------------------------------------------
+    if [ -f "${cert_dir}/certificate.pem" ] && [ ! -f "${cert_dir}/fullchain.pem" ]; then
+        log_info "Creating fullchain.pem from certificate.pem..."
+        if [ -f "${cert_dir}/ca/rootCA.pem" ]; then
+            # Chain: leaf cert + CA
+            cat "${cert_dir}/certificate.pem" "${cert_dir}/ca/rootCA.pem" > "${cert_dir}/fullchain.pem"
+        else
+            # Self-signed: the cert IS its own CA
+            cp "${cert_dir}/certificate.pem" "${cert_dir}/fullchain.pem"
+            mkdir -p "${cert_dir}/ca"
+            cp "${cert_dir}/certificate.pem" "${cert_dir}/ca/rootCA.pem"
+        fi
+        chmod 644 "${cert_dir}/fullchain.pem"
+        chmod 644 "${cert_dir}/ca/rootCA.pem"
+    fi
+
+    # Ensure CA bundle includes something useful for self-signed certs
+    local ca_bundle="${DIVE_ROOT}/certs/ca-bundle/rootCA.pem"
+    if [ ! -s "$ca_bundle" ] && [ -f "${cert_dir}/ca/rootCA.pem" ]; then
+        mkdir -p "$(dirname "$ca_bundle")"
+        cp "${cert_dir}/ca/rootCA.pem" "$ca_bundle"
+        chmod 644 "$ca_bundle"
+    fi
+
     # Start PostgreSQL container only
     log_verbose "Starting PostgreSQL container..."
 
