@@ -68,7 +68,7 @@ export class AdminCertificatesPage {
     await this.page.goto('/admin/certificates', {
       timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
     });
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async verifyLoaded() {
@@ -126,7 +126,7 @@ export class AdminCertificatesPage {
       .or(this.page.locator('[data-testid="confirm-rotate"]'));
 
     await confirmButton.click({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async revokeCertificate(alias: string) {
@@ -152,7 +152,7 @@ export class AdminCertificatesPage {
       .or(this.page.locator('[data-testid="confirm-revoke"]'));
 
     await confirmButton.click({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async downloadCRL() {

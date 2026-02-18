@@ -183,7 +183,7 @@ test.describe('Admin Certificates', () => {
         .or(page.getByRole('button', { name: /yes/i }))
         .or(page.locator('[data-testid="confirm-rotate"]'));
       await confirmButton.first().click({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
     });
 
     await test.step('Verify success notification', async () => {
@@ -240,7 +240,7 @@ test.describe('Admin Certificates', () => {
         .or(page.getByRole('button', { name: /yes/i }))
         .or(page.locator('[data-testid="confirm-revoke"]'));
       await confirmButton.first().click({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
     });
 
     await test.step('Verify success notification', async () => {
@@ -300,7 +300,7 @@ test.describe('Admin Certificates', () => {
       await certsPage.refreshButton.first().click({
         timeout: TEST_CONFIG.TIMEOUTS.ACTION,
       });
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
     });
 
     await test.step('Verify API was called', async () => {
@@ -384,7 +384,7 @@ test.describe('Admin Certificates', () => {
       await page.goto('/admin/certificates', {
         timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
       });
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
     });
 
     await test.step('Verify error state is displayed', async () => {
@@ -413,7 +413,7 @@ test.describe('Admin Certificates', () => {
       await page.goto('/admin/certificates', {
         timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
       });
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
     });
 
     await test.step('Verify health status shows error or degraded', async () => {

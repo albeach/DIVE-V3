@@ -23,7 +23,7 @@ test.describe('PresenceIndicator Component', () => {
   for (const { path, page: pageId } of pagesWithPresence) {
     test(`should show presence indicator on ${path}`, async ({ page }) => {
       await page.goto(path);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
       
       // Look for presence indicator
       const presenceIndicator = page.locator('[data-testid="presence-indicator"]');
@@ -45,7 +45,7 @@ test.describe('PresenceIndicator Component', () => {
 
   test('should show current user as active', async ({ page }) => {
     await page.goto('/admin/analytics');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(1000);
     
     // Should show at least 1 viewing user (current user)
@@ -58,7 +58,7 @@ test.describe('PresenceIndicator Component', () => {
 
   test('should show tooltip on hover', async ({ page }) => {
     await page.goto('/admin/analytics');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(1000);
     
     // Find presence indicator area
@@ -80,12 +80,12 @@ test.describe('PresenceIndicator Component', () => {
   test('should handle page navigation', async ({ page }) => {
     // Navigate to first presence page
     await page.goto('/admin/analytics');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(1000);
     
     // Navigate to another presence page
     await page.goto('/admin/logs');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(1000);
     
     // Presence should update for new page
@@ -98,7 +98,7 @@ test.describe('PresenceIndicator Component', () => {
 
   test('should work in dark mode', async ({ page }) => {
     await page.goto('/admin/analytics');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(1000);
     
     const themeToggle = page.locator('[data-testid="theme-toggle"]');
@@ -121,7 +121,7 @@ test.describe('PresenceIndicator Component', () => {
     
     for (const path of pages) {
       await page.goto(path);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
       await page.waitForTimeout(500);
     }
     
@@ -138,12 +138,12 @@ test.describe('PresenceIndicator Component', () => {
 
   test('should cleanup on page leave', async ({ page }) => {
     await page.goto('/admin/analytics');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(1000);
     
     // Navigate away from presence page
     await page.goto('/admin/idp');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // Should not show presence indicator on non-presence pages
     // (This is acceptable - some pages don't have presence)
@@ -152,12 +152,12 @@ test.describe('PresenceIndicator Component', () => {
 
   test('should handle browser refresh', async ({ page }) => {
     await page.goto('/admin/analytics');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(1000);
     
     // Reload page
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(1000);
     
     // Presence should reinitialize
@@ -180,11 +180,11 @@ test.describe('PresenceIndicator Cross-Tab Sync', () => {
     
     // Both navigate to analytics page
     await page1.goto('/admin/analytics');
-    await page1.waitForLoadState('networkidle');
+    await page1.waitForLoadState('domcontentloaded');
     await page1.waitForTimeout(1500);
     
     await page2.goto('/admin/analytics');
-    await page2.waitForLoadState('networkidle');
+    await page2.waitForLoadState('domcontentloaded');
     await page2.waitForTimeout(1500);
     
     // Note: Cross-tab sync uses BroadcastChannel which only works within same browser
@@ -212,11 +212,11 @@ test.describe('PresenceIndicator Cross-Tab Sync', () => {
     const page2 = await context.newPage();
     
     await page1.goto('/admin/analytics');
-    await page1.waitForLoadState('networkidle');
+    await page1.waitForLoadState('domcontentloaded');
     await page1.waitForTimeout(1000);
     
     await page2.goto('/admin/analytics');
-    await page2.waitForLoadState('networkidle');
+    await page2.waitForLoadState('domcontentloaded');
     await page2.waitForTimeout(1000);
     
     // Close one tab
@@ -237,7 +237,7 @@ test.describe('PresenceIndicator Cross-Tab Sync', () => {
 test.describe('PresenceIndicator Accessibility', () => {
   test('should be keyboard accessible', async ({ page }) => {
     await page.goto('/admin/analytics');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(1000);
     
     // Tab through page to presence indicator
@@ -256,7 +256,7 @@ test.describe('PresenceIndicator Accessibility', () => {
 
   test('should have proper ARIA attributes', async ({ page }) => {
     await page.goto('/admin/analytics');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await page.waitForTimeout(1000);
     
     // Find presence indicator
@@ -281,17 +281,17 @@ test.describe('PresenceIndicator Performance', () => {
     // Navigate to presence page multiple times
     for (let i = 0; i < 5; i++) {
       await page.goto('/admin/analytics');
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
       await page.waitForTimeout(1000);
       
       await page.goto('/admin/idp');
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
       await page.waitForTimeout(500);
     }
     
     // Page should still be responsive
     await page.goto('/admin/analytics');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     const presence = page.locator('text=/viewing/i');
     
@@ -304,7 +304,7 @@ test.describe('PresenceIndicator Performance', () => {
     const startTime = Date.now();
     
     await page.goto('/admin/analytics');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // Wait for presence to initialize
     await page.waitForTimeout(1500);

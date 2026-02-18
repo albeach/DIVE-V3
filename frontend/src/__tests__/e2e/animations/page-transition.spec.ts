@@ -13,7 +13,7 @@ import { test, expect } from '@playwright/test';
 test.describe('AdminPageTransition Component', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/admin/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
   });
 
   test('should render page content after transition', async ({ page }) => {
@@ -35,7 +35,7 @@ test.describe('AdminPageTransition Component', () => {
     if (await usersLink.count() > 0) {
       await usersLink.click();
       await page.waitForURL(/\/admin\/users/);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
       
       // New page should be visible
       const mainContent = page.locator('main');
@@ -58,7 +58,7 @@ test.describe('AdminPageTransition Component', () => {
     
     for (const link of links) {
       await page.goto(link);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
       await page.waitForTimeout(300); // Brief wait for transition
     }
     
@@ -72,7 +72,7 @@ test.describe('AdminPageTransition Component', () => {
     await reducedMotionPage.emulateMedia({ reducedMotion: 'reduce' });
     
     await reducedMotionPage.goto('/admin/dashboard');
-    await reducedMotionPage.waitForLoadState('networkidle');
+    await reducedMotionPage.waitForLoadState('domcontentloaded');
     
     // Page should be immediately visible without animation
     const mainContent = reducedMotionPage.locator('main');
@@ -80,7 +80,7 @@ test.describe('AdminPageTransition Component', () => {
     
     // Navigate to another page
     await reducedMotionPage.goto('/admin/users');
-    await reducedMotionPage.waitForLoadState('networkidle');
+    await reducedMotionPage.waitForLoadState('domcontentloaded');
     
     // Should transition instantly
     const newContent = reducedMotionPage.locator('main');
@@ -96,11 +96,11 @@ test.describe('AdminPageTransition Component', () => {
     
     // Navigate away
     await page.goto('/admin/users');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // Navigate back
     await page.goBack();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // Note: Scroll restoration behavior varies by browser
     // Just verify page loaded successfully
@@ -111,7 +111,7 @@ test.describe('AdminPageTransition Component', () => {
   test('should handle transition with loading states', async ({ page }) => {
     // Navigate to a page that might have loading state
     await page.goto('/admin/analytics');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // Page should eventually show content (not stuck in loading)
     const mainContent = page.locator('main');
@@ -128,32 +128,32 @@ test.describe('AdminPageTransition Component', () => {
   test('should work with browser back/forward buttons', async ({ page }) => {
     // Navigate through several pages
     await page.goto('/admin/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     await page.goto('/admin/users');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     await page.goto('/admin/analytics');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // Go back
     await page.goBack();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await expect(page.locator('main')).toBeVisible();
     
     // Go forward
     await page.goForward();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     await expect(page.locator('main')).toBeVisible();
   });
 
   test('should handle page refresh during transition', async ({ page }) => {
     await page.goto('/admin/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // Reload page
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // Page should render correctly after reload
     const mainContent = page.locator('main');
@@ -170,7 +170,7 @@ test.describe('AdminPageTransition Component', () => {
       
       // Navigate to another page in dark mode
       await page.goto('/admin/users');
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
       
       // Page should be visible in dark mode
       const mainContent = page.locator('main');
@@ -181,7 +181,7 @@ test.describe('AdminPageTransition Component', () => {
   test('should handle nested transitions (AdminSectionTransition)', async ({ page }) => {
     // Some pages use AdminSectionTransition for within-page animations
     await page.goto('/admin/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // Look for expandable sections or tabs that might use transitions
     const sections = page.locator('[data-testid*="section"]');
@@ -200,13 +200,13 @@ test.describe('AdminPageTransition Component', () => {
 test.describe('AdminPageTransition Performance', () => {
   test('should complete transition within 500ms', async ({ page }) => {
     await page.goto('/admin/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     const startTime = Date.now();
     
     // Navigate to another page
     await page.goto('/admin/users');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     const endTime = Date.now();
     const duration = endTime - startTime;
@@ -218,14 +218,14 @@ test.describe('AdminPageTransition Performance', () => {
 
   test('should not cause layout shift during transition', async ({ page }) => {
     await page.goto('/admin/dashboard');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // Get initial viewport height
     const initialHeight = await page.evaluate(() => document.documentElement.scrollHeight);
     
     // Navigate to another page
     await page.goto('/admin/users');
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
     
     // New page should have content (height > 0)
     const newHeight = await page.evaluate(() => document.documentElement.scrollHeight);
@@ -253,7 +253,7 @@ test.describe('AdminPageTransition on All Admin Pages', () => {
   for (const pagePath of adminPages) {
     test(`should work on ${pagePath}`, async ({ page }) => {
       await page.goto(pagePath);
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
       
       // Page should render successfully
       const mainContent = page.locator('main');

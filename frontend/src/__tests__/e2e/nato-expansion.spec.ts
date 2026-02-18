@@ -22,6 +22,8 @@ import { DashboardPage } from './pages/DashboardPage';
 import { ResourcesPage } from './pages/ResourcesPage';
 
 test.describe('NATO Expansion: Login Flows (Refactored)', { tag: '@smoke' }, () => {
+    test.skip(process.env.CI === 'true', 'CI: multi-nation test users not provisioned');
+
     test.afterEach(async ({ page }) => {
         try {
             await logout(page);
@@ -139,6 +141,8 @@ test.describe('NATO Expansion: Login Flows (Refactored)', { tag: '@smoke' }, () 
 });
 
 test.describe('NATO Expansion: Cross-Nation Authorization (Refactored)', () => {
+    test.skip(process.env.CI === 'true', 'CI: multi-nation test users not provisioned');
+
     test.afterEach(async ({ page }) => {
         try {
             await logout(page);
@@ -211,6 +215,8 @@ test.describe('NATO Expansion: Cross-Nation Authorization (Refactored)', () => {
 });
 
 test.describe('NATO Expansion: Multi-Nation Scenarios (Refactored)', () => {
+    test.skip(process.env.CI === 'true', 'CI: multi-nation test users not provisioned');
+
     test.afterEach(async ({ page }) => {
         try {
             await logout(page);
