@@ -414,12 +414,23 @@ spoke_init_generate_config() {
     # Hub URL for containers (Docker internal network)
     local hub_url_internal="https://dive-hub-backend:4000"
 
-    # Build URLs
+    # Build URLs — domain-aware when DIVE_DOMAIN_SUFFIX is set (EC2 with Caddy)
     local base_url="https://localhost:${SPOKE_FRONTEND_PORT}"
     local api_url="https://localhost:${SPOKE_BACKEND_PORT}"
     local idp_url="https://dive-spoke-${code_lower}-keycloak:8443"
     local idp_public_url="https://localhost:${SPOKE_KEYCLOAK_HTTPS_PORT}"
     local kas_url="https://localhost:${SPOKE_KAS_PORT}"
+
+    if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+        local _env_prefix _base_domain
+        _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
+        _base_domain="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"
+        base_url="https://${_env_prefix}-${code_lower}-app.${_base_domain}"
+        api_url="https://${_env_prefix}-${code_lower}-api.${_base_domain}"
+        idp_public_url="https://${_env_prefix}-${code_lower}-idp.${_base_domain}"
+        # idp_url stays as internal Docker name for container-to-container
+        log_info "Caddy mode: spoke ${code_upper} URLs → ${_base_domain}"
+    fi
 
     # Create .env file with config variables
     # NOTE: No SPOKE_ID - backend queries Hub at startup (SSOT architecture)
@@ -692,6 +703,43 @@ TUNNEL_TOKEN=
 # - dive-v3-redis-blacklist             (Redis password)
 # =============================================================================
 EOF
+
+    # Append Caddy domain config when DIVE_DOMAIN_SUFFIX is set (EC2 with Caddy)
+    if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+        local _env_prefix _base_domain _spoke_app _spoke_api _spoke_idp
+        _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
+        _base_domain="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"
+        _spoke_app="${_env_prefix}-${code_lower}-app.${_base_domain}"
+        _spoke_api="${_env_prefix}-${code_lower}-api.${_base_domain}"
+        _spoke_idp="${_env_prefix}-${code_lower}-idp.${_base_domain}"
+
+        # Hub Caddy domain for TRUSTED_ISSUERS
+        local _hub_lower _hub_idp
+        _hub_lower="$(echo "${INSTANCE:-usa}" | tr '[:upper:]' '[:lower:]')"
+        _hub_idp="${_env_prefix}-${_hub_lower}-idp.${_base_domain}"
+
+        cat >> "$env_file" << DOMAIN_EOF
+
+# Caddy domain configuration (auto-derived from DIVE_DOMAIN_SUFFIX=${DIVE_DOMAIN_SUFFIX})
+CADDY_SPOKE_APP=${_spoke_app}
+CADDY_SPOKE_API=${_spoke_api}
+CADDY_SPOKE_IDP=${_spoke_idp}
+KEYCLOAK_HOSTNAME=${_spoke_idp}
+NEXT_PUBLIC_API_URL=https://${_spoke_api}
+NEXT_PUBLIC_BACKEND_URL=https://${_spoke_api}
+NEXT_PUBLIC_BASE_URL=https://${_spoke_app}
+NEXT_PUBLIC_KEYCLOAK_URL=https://${_spoke_idp}
+NEXTAUTH_URL=https://${_spoke_app}
+AUTH_URL=https://${_spoke_app}
+KEYCLOAK_ISSUER=https://${_spoke_idp}/realms/dive-v3-broker-${code_lower}
+AUTH_KEYCLOAK_ISSUER=https://${_spoke_idp}/realms/dive-v3-broker-${code_lower}
+TRUSTED_ISSUERS=https://${_spoke_idp}/realms/dive-v3-broker-${code_lower},https://keycloak-${code_lower}:8443/realms/dive-v3-broker-${code_lower},https://${_hub_idp}/realms/dive-v3-broker-${_hub_lower},https://keycloak:8443/realms/dive-v3-broker-${_hub_lower}
+NEXT_PUBLIC_EXTERNAL_DOMAINS=https://${_spoke_app},https://${_spoke_api},https://${_spoke_idp}
+CORS_ALLOWED_ORIGINS=https://${_spoke_app},https://${_spoke_api},https://${_spoke_idp},https://${_hub_idp}
+NODE_ENV=production
+DOMAIN_EOF
+        log_success "Caddy domain config written to .env (${_spoke_app})"
+    fi
 
     # Restore Vault credentials if they were preserved from provisioning
     if [ -n "$_saved_secrets_provider" ]; then

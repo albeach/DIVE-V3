@@ -170,11 +170,25 @@ spoke_compose_get_placeholders() {
     local opal_opa_port=$((9181 + SPOKE_PORT_OFFSET))  # OPAL inline OPA (separate from standalone OPA)
     local kas_port="${SPOKE_KAS_PORT:-$((DEFAULT_KAS_PORT + SPOKE_PORT_OFFSET))}"
 
+    # Domain-aware URLs: when DIVE_DOMAIN_SUFFIX is set (EC2 with Caddy),
+    # use external domain names instead of localhost:port
     local idp_hostname="dive-spoke-${code_lower}-keycloak"
     local base_url="https://localhost:${frontend_port}"
     local api_url="https://localhost:${backend_port}"
     local idp_url="https://${idp_hostname}:8443"
     local idp_base_url="https://localhost:${keycloak_port}"
+
+    if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+        local _env_prefix _base_domain
+        _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
+        _base_domain="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"
+        idp_hostname="${_env_prefix}-${code_lower}-idp.${_base_domain}"
+        base_url="https://${_env_prefix}-${code_lower}-app.${_base_domain}"
+        api_url="https://${_env_prefix}-${code_lower}-api.${_base_domain}"
+        idp_base_url="https://${_env_prefix}-${code_lower}-idp.${_base_domain}"
+        # idp_url stays as internal Docker name for container-to-container
+        log_verbose "Caddy mode: spoke URLs use domain ${_base_domain}"
+    fi
 
     # Output placeholders for rendering
     cat << EOF

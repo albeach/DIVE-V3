@@ -116,18 +116,6 @@ volumes:
       dive.resource.service: "opal-client"
       dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
       dive.resource.purpose: "backup"
-  frontend_modules:
-    labels:
-      dive.resource.type: "volume"
-      dive.resource.service: "frontend"
-      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
-      dive.resource.purpose: "node_modules"
-  frontend_next:
-    labels:
-      dive.resource.type: "volume"
-      dive.resource.service: "frontend"
-      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
-      dive.resource.purpose: "build_cache"
   backend_node_modules:
     labels:
       dive.resource.type: "volume"
@@ -554,7 +542,7 @@ services:
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_{{INSTANCE_CODE_UPPER}}}
       KEYCLOAK_ISSUER: {{IDP_BASE_URL}}/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}}
       # CRITICAL: Include Hub issuer for cross-instance federation
-      TRUSTED_ISSUERS: {{IDP_BASE_URL}}/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}},https://keycloak-{{INSTANCE_CODE_LOWER}}:8443/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}},https://localhost:8443/realms/dive-v3-broker-usa,https://keycloak:8443/realms/dive-v3-broker-usa,https://usa-idp.dive25.com/realms/dive-v3-broker-usa
+      TRUSTED_ISSUERS: ${TRUSTED_ISSUERS:-{{IDP_BASE_URL}}/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}},https://keycloak-{{INSTANCE_CODE_LOWER}}:8443/realms/dive-v3-broker-{{INSTANCE_CODE_LOWER}},https://keycloak:8443/realms/dive-v3-broker-usa}
       KEYCLOAK_ADMIN_USER: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_{{INSTANCE_CODE_UPPER}}}
       # OPA
@@ -571,7 +559,7 @@ services:
       # BEST PRACTICE: Derive allowed origins from instance configuration
       # No hardcoded URLs - all origins computed from {{BASE_URL}}, {{API_URL}}, {{IDP_URL}}
       # This ensures CORS works regardless of port assignments or domain changes
-      CORS_ALLOWED_ORIGINS: {{BASE_URL}},{{API_URL}},{{IDP_URL}},https://localhost:8443,https://localhost:4000,https://localhost:3000
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-{{BASE_URL}},{{API_URL}},{{IDP_URL}},https://localhost:8443,https://localhost:4000,https://localhost:3000}
       # Federation mode - allows cross-instance communication
       # SECURITY NOTE: JWT authentication enforces security, not CORS
       # For production federations, set to 'true' to allow spoke-to-hub communication
@@ -704,7 +692,7 @@ services:
       dive.service.description: "Next.js React application with NextAuth.js"
     build:
       context: ../../frontend
-      dockerfile: Dockerfile.dev
+      dockerfile: Dockerfile.prod.optimized
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-frontend
     deploy:
       resources:
@@ -712,11 +700,8 @@ services:
           memory: 1G  # MEMORY LEAK FIX (2026-02-16): Prevent frontend from exceeding 1GB
         reservations:
           memory: 256M
-    # IMPORTANT: Use hash-based detection to reinstall when package.json changes
-    # This ensures new dependencies are installed even when node_modules volume exists
-    command: ["/bin/sh","-c","rm -f /app/.env.local && if [ ! -f /app/node_modules/.package-hash ] || [ \"$(md5sum /app/package.json | cut -d' ' -f1)\" != \"$(cat /app/node_modules/.package-hash 2>/dev/null)\" ]; then echo 'Package.json changed - reinstalling dependencies...' && npm install && md5sum /app/package.json | cut -d' ' -f1 > /app/node_modules/.package-hash; else echo 'Dependencies up to date'; fi && npm run dev"]
     environment:
-      NODE_ENV: development
+      NODE_ENV: production
       NEXT_PUBLIC_INSTANCE: {{INSTANCE_CODE_UPPER}}
       NEXT_PUBLIC_INSTANCE_NAME: "{{INSTANCE_NAME}}"
       # Public URLs for client-side requests
@@ -750,27 +735,22 @@ services:
     ports:
       - "127.0.0.1:{{FRONTEND_HOST_PORT}}:3000"  # Localhost only (secure)
     volumes:
-      - ../../frontend:/app
-      - frontend_modules:/app/node_modules
-      - frontend_next:/app/.next
-      - ./certs:/app/certs:ro
       - ./certs:/opt/app/certs:ro
       - ../../certs/ca-bundle:/app/certs/ca:ro  # SSOT CA bundle (mkcert + Vault PKI)
     extra_hosts:
       - "localhost:host-gateway"
     depends_on:
       keycloak-{{INSTANCE_CODE_LOWER}}:
-        condition: service_healthy  # NEW: NextAuth needs Keycloak realm
+        condition: service_healthy  # NextAuth needs Keycloak realm
       backend-{{INSTANCE_CODE_LOWER}}:
         condition: service_healthy
     healthcheck:
-      # FIXED: Use HTTPS (Next.js serves HTTPS only via custom server.js)
-      # Test root endpoint which always exists - using curl for better HTTPS support
-      test: ["CMD", "curl", "-k", "-f", "-m", "10", "https://127.0.0.1:3000/"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 60s  # INCREASED: Next.js SSR build can take 45-60s
+      # Production standalone Next.js serves HTTP (Caddy handles TLS termination)
+      test: ["CMD-SHELL", "curl -sf http://localhost:3000/ >/dev/null || exit 1"]
+      interval: 5s
+      timeout: 8s
+      retries: 10
+      start_period: 30s
     networks:
       - dive-internal
     restart: unless-stopped
