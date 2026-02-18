@@ -110,6 +110,34 @@ async function setupSession(
   try {
     console.log(`[AUTH-SETUP] Setting up ${filename} session for ${user.username}...`);
     await loginAs(page, user, options);
+
+    // Validate session has expected data before saving
+    if (filename === 'admin.json') {
+      try {
+        const session = await page.evaluate(() =>
+          fetch('/api/auth/session', { credentials: 'include' }).then(r => r.json())
+        );
+        const roles = session?.user?.roles || [];
+        console.log(`[AUTH-SETUP] Admin session roles:`, roles);
+        if (roles.length === 0 || (!roles.includes('admin') && !roles.includes('dive-admin') && !roles.includes('super_admin'))) {
+          console.error(`[AUTH-SETUP] ⚠️ Admin session has no admin roles: [${roles.join(', ')}]`);
+          console.error('[AUTH-SETUP] This means realm_access.roles is missing from the ID token.');
+          console.error('[AUTH-SETUP] Check Keycloak realm roles mapper (id.token.claim must be true).');
+          // Do NOT save admin.json — let hasAuthState('ADMIN') return false
+          // so admin tests skip cleanly instead of failing with redirect loops
+          throw new Error(`Admin session missing admin roles (got: [${roles.join(', ')}])`);
+        }
+        console.log(`[AUTH-SETUP] ✅ Admin session validated with roles: [${roles.join(', ')}]`);
+      } catch (sessionError) {
+        // If we can't fetch session or roles are missing, still fail the admin setup
+        if (sessionError instanceof Error && sessionError.message.includes('Admin session missing')) {
+          throw sessionError;
+        }
+        console.warn('[AUTH-SETUP] Could not validate admin session:', sessionError);
+        // Continue — save the state anyway as a fallback
+      }
+    }
+
     await context.storageState({ path: path.join(AUTH_DIR, filename) });
     console.log(`[AUTH-SETUP] ✅ ${filename} saved`);
   } catch (error) {
