@@ -278,6 +278,9 @@ if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost
     export OPAL_PORT="${OPAL_PORT:-17002}"
     export VAULT_API_PORT="${VAULT_API_PORT:-18200}"
 
+    # Vault CLI address — host-accessible port for vault init/setup/seal-status
+    export VAULT_CLI_ADDR="${VAULT_CLI_ADDR:-https://localhost:${VAULT_API_PORT}}"
+
     # Keycloak issuer — must match the external URL users see in their browser
     export KEYCLOAK_HOSTNAME="${KEYCLOAK_HOSTNAME:-${HUB_EXTERNAL_ADDRESS}}"
 

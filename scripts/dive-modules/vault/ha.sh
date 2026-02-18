@@ -14,7 +14,7 @@
 COMPOSE_PROJECT="${COMPOSE_PROJECT_NAME:-dive-hub}"
 VAULT_NODES=("${COMPOSE_PROJECT}-vault-1" "${COMPOSE_PROJECT}-vault-2" "${COMPOSE_PROJECT}-vault-3")
 VAULT_SEAL_CONTAINER="${COMPOSE_PROJECT}-vault-seal"
-VAULT_NODE_ADDRS=("http://localhost:8200" "http://localhost:8202" "http://localhost:8204")
+VAULT_NODE_ADDRS=("${_VAULT_CLI_SCHEME:-https}://localhost:${VAULT_API_PORT:-8200}" "${_VAULT_CLI_SCHEME:-https}://localhost:8202" "${_VAULT_CLI_SCHEME:-https}://localhost:8204")
 VAULT_SEAL_CLI_ADDR="${VAULT_SEAL_CLI_ADDR:-http://localhost:8210}"
 
 # Colors (reuse from common.sh if available)
