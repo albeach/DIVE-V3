@@ -71,7 +71,7 @@ export class AdminLogsPage {
     await this.page.goto('/admin/logs', {
       timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
     });
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async verifyLoaded() {
@@ -86,7 +86,7 @@ export class AdminLogsPage {
       timeout: TEST_CONFIG.TIMEOUTS.ACTION,
     });
     await this.levelFilter.selectOption({ label: level });
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async filterBySource(source: string) {
@@ -95,7 +95,7 @@ export class AdminLogsPage {
       timeout: TEST_CONFIG.TIMEOUTS.ACTION,
     });
     await this.sourceFilter.selectOption({ label: source });
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async filterByDateRange(start: string, end: string) {
@@ -105,7 +105,7 @@ export class AdminLogsPage {
     });
     await this.dateRangeStart.fill(start);
     await this.dateRangeEnd.fill(end);
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async searchLogs(query: string) {
@@ -115,7 +115,7 @@ export class AdminLogsPage {
     });
     await this.searchInput.fill(query);
     await this.searchInput.press('Enter');
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async exportLogs() {
@@ -161,7 +161,7 @@ export class AdminLogsPage {
 
   async switchToViolations() {
     await this.violationsTab.click({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async getRetentionPolicy(): Promise<string> {

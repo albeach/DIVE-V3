@@ -57,7 +57,7 @@ jobs:
           nextauth-secret: test-secret-for-e2e-core-smoke-2025
           keycloak-users: >-
             [
-              {"username":"admin-dive","password":"Admin123!","clearance":"TOP_SECRET","coi":["FVEY"]},
+              {"username":"admin-usa","password":"Admin123!","clearance":"TOP_SECRET","coi":["FVEY"],"firstName":"Admin","lastName":"USA","roles":["admin"]},
               {"username":"testuser-usa-1","password":"TestUser2025!Pilot","clearance":"UNCLASSIFIED","coi":[],"countryOfAffiliation":"USA"}
             ]
 
@@ -115,7 +115,7 @@ jobs:
           nextauth-secret: test-secret-for-e2e-authentication-flows-2025
           keycloak-users: >-
             [
-              {"username":"admin-dive","password":"Admin123!","clearance":"TOP_SECRET","coi":["FVEY","NATO"]},
+              {"username":"admin-usa","password":"Admin123!","clearance":"TOP_SECRET","coi":["FVEY","NATO"],"firstName":"Admin","lastName":"USA","roles":["admin"]},
               {"username":"testuser-secret","password":"Secret123!","clearance":"SECRET","coi":["FVEY"]},
               {"username":"testuser-unclass","password":"Unclass123!","clearance":"UNCLASSIFIED","coi":[]},
               {"username":"testuser-us","password":"password","clearance":"SECRET","coi":["FVEY"]}
@@ -183,7 +183,7 @@ jobs:
           start-opa: 'true'
           keycloak-users: >-
             [
-              {"username":"admin-dive","password":"Admin123!","clearance":"TOP_SECRET","coi":["FVEY"]},
+              {"username":"admin-usa","password":"Admin123!","clearance":"TOP_SECRET","coi":["FVEY"],"firstName":"Admin","lastName":"USA","roles":["admin"]},
               {"username":"testuser-usa-1","password":"TestUser2025!Pilot","clearance":"UNCLASSIFIED","coi":[],"countryOfAffiliation":"USA"}
             ]
 
@@ -243,7 +243,7 @@ jobs:
           nextauth-secret: test-secret-for-e2e-classification-2025
           keycloak-users: >-
             [
-              {"username":"admin-dive","password":"Admin123!","clearance":"TOP_SECRET","coi":["FVEY"]},
+              {"username":"admin-usa","password":"Admin123!","clearance":"TOP_SECRET","coi":["FVEY"],"firstName":"Admin","lastName":"USA","roles":["admin"]},
               {"username":"testuser-us","password":"password","clearance":"SECRET","coi":["FVEY"]}
             ]
 
@@ -303,7 +303,7 @@ jobs:
           start-opa: 'true'
           keycloak-users: >-
             [
-              {"username":"admin-dive","password":"Admin123!","clearance":"TOP_SECRET","coi":["FVEY"]},
+              {"username":"admin-usa","password":"Admin123!","clearance":"TOP_SECRET","coi":["FVEY"],"firstName":"Admin","lastName":"USA","roles":["admin"]},
               {"username":"testuser-us","password":"password","clearance":"SECRET","coi":["FVEY"]}
             ]
 
@@ -366,7 +366,7 @@ jobs:
           nextauth-secret: test-secret-for-e2e-admin-2025
           keycloak-users: >-
             [
-              {"username":"admin-dive","password":"Admin123!","clearance":"TOP_SECRET","coi":[]},
+              {"username":"admin-usa","password":"Admin123!","clearance":"TOP_SECRET","coi":[],"firstName":"Admin","lastName":"USA","roles":["admin"]},
               {"username":"testuser-unclass","password":"Unclass123!","clearance":"UNCLASSIFIED","coi":[]}
             ]
 
@@ -424,7 +424,7 @@ jobs:
               {"username":"testuser-usa-1","password":"TestUser2025!Pilot","clearance":"UNCLASSIFIED","coi":[]},
               {"username":"testuser-usa-3","password":"TestUser2025!Pilot","clearance":"SECRET","coi":[]},
               {"username":"testuser-usa-4","password":"TestUser2025!Pilot","clearance":"TOP_SECRET","coi":[]},
-              {"username":"admin-dive","password":"Admin123!","clearance":"TOP_SECRET","coi":[]}
+              {"username":"admin-usa","password":"Admin123!","clearance":"TOP_SECRET","coi":[],"firstName":"Admin","lastName":"USA","roles":["admin"]}
             ]
 
       - name: Run User Journey E2E Tests
@@ -480,7 +480,7 @@ jobs:
           keycloak-users: >-
             [
               {"username":"testuser-unclass","password":"Unclass123!","clearance":"UNCLASSIFIED","coi":[]},
-              {"username":"admin-dive","password":"Admin123!","clearance":"TOP_SECRET","coi":[]}
+              {"username":"admin-usa","password":"Admin123!","clearance":"TOP_SECRET","coi":[],"firstName":"Admin","lastName":"USA","roles":["admin"]}
             ]
 
       - name: Run Quality & Accessibility E2E Tests

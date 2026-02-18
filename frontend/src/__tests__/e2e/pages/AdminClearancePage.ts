@@ -124,7 +124,7 @@ export class AdminClearancePage {
     await this.page.goto('/admin/clearance-management', {
       timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
     });
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async verifyLoaded() {
@@ -146,7 +146,7 @@ export class AdminClearancePage {
 
     const tab = tabMap[tabName];
     await tab.click({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async verifyTabActive(
@@ -229,7 +229,7 @@ export class AdminClearancePage {
       .or(this.page.locator('[data-testid="save-mapping"]'));
 
     await saveButton.click({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async testClearance(country: string, clearance: string) {

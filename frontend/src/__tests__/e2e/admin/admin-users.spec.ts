@@ -126,7 +126,7 @@ test.describe('Admin Users', () => {
 
     await test.step('Clear the search field', async () => {
       await adminPage.searchInput.clear();
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
     });
 
     await test.step('Verify full list is restored', async () => {
@@ -233,7 +233,7 @@ test.describe('Admin Users', () => {
         .or(adminPage.paginationControls.locator('[data-testid="next-page"]'))
         .or(adminPage.paginationControls.locator('button:has-text("Next")'));
       await nextButton.first().click({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
     });
 
     await test.step('Verify page changed', async () => {
@@ -249,7 +249,7 @@ test.describe('Admin Users', () => {
         .or(adminPage.paginationControls.locator('[data-testid="prev-page"]'))
         .or(adminPage.paginationControls.locator('button:has-text("Previous")'));
       await prevButton.first().click({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
     });
 
     await test.step('Verify returned to first page', async () => {
@@ -423,7 +423,7 @@ test.describe('Admin Users - Non-Admin Access Denial', () => {
       await page.goto('/admin/users', {
         timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
       });
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
     });
 
     await test.step('Verify redirect or access denied', async () => {

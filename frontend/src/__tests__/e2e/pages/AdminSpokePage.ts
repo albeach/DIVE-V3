@@ -53,7 +53,7 @@ export class AdminSpokePage {
     await this.page.goto(path, {
       timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
     });
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async verifyLoaded() {
@@ -70,7 +70,7 @@ export class AdminSpokePage {
     await this.maintenanceToggle.click({
       timeout: TEST_CONFIG.TIMEOUTS.ACTION,
     });
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async getMaintenanceStatus(): Promise<string> {

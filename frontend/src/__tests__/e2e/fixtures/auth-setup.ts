@@ -59,21 +59,21 @@ async function globalSetup(config: FullConfig) {
       }
     }
 
-    // === Admin session (admin-dive user — uses storageState if available) ===
+    // === Admin session (admin-usa user — uses storageState if available) ===
     // Admin user is only available in CI with specific setup
     if (process.env.CI) {
       try {
         await setupSession(browser, baseURL, {
-          username: 'admin-dive',
+          username: 'admin-usa',
           password: process.env.ADMIN_PASSWORD || 'Admin123!',
-          email: 'admin@dive-demo.example',
+          email: 'admin-usa@dive-ci.test',
           clearance: 'TOP_SECRET',
           clearanceLevel: 4 as const,
           country: 'United States',
           countryCode: 'USA',
           coi: ['FVEY', 'NATO'],
           dutyOrg: 'DIVE Administration',
-          mfaRequired: false, // Admin may or may not have MFA
+          mfaRequired: false,
           idp: 'United States',
           realmName: 'dive-v3-broker-usa',
         }, 'admin.json');

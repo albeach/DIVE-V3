@@ -30,7 +30,7 @@ test.describe('Admin Logs', () => {
 
   test('filter by ERROR log level', async ({ page }) => {
     const logsPage = new AdminLogsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Select ERROR level filter', async () => {
       await logsPage.filterByLevel('ERROR');
@@ -52,7 +52,7 @@ test.describe('Admin Logs', () => {
 
   test('filter by WARN log level', async ({ page }) => {
     const logsPage = new AdminLogsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Select WARN level filter', async () => {
       await logsPage.filterByLevel('WARN');
@@ -72,7 +72,7 @@ test.describe('Admin Logs', () => {
 
   test('filter by INFO log level', async ({ page }) => {
     const logsPage = new AdminLogsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Select INFO level filter', async () => {
       await logsPage.filterByLevel('INFO');
@@ -92,7 +92,7 @@ test.describe('Admin Logs', () => {
 
   test('filter by DEBUG log level', async ({ page }) => {
     const logsPage = new AdminLogsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Select DEBUG level filter', async () => {
       await logsPage.filterByLevel('DEBUG');
@@ -112,7 +112,7 @@ test.describe('Admin Logs', () => {
 
   test('filter by source', async ({ page }) => {
     const logsPage = new AdminLogsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Open source filter and select a source', async () => {
       const sourceFilter = page.locator('[data-testid="source-filter"], select[name="source"], [data-testid*="source"]');
@@ -139,7 +139,7 @@ test.describe('Admin Logs', () => {
 
   test('search logs by keyword', async ({ page }) => {
     const logsPage = new AdminLogsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     const searchTerm = 'authentication';
 
@@ -168,7 +168,7 @@ test.describe('Admin Logs', () => {
 
   test('date range filter works', async ({ page }) => {
     const logsPage = new AdminLogsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Set date range', async () => {
       const startDate = page.locator('[data-testid="start-date"], input[name="startDate"], input[type="date"]').first();
@@ -200,7 +200,7 @@ test.describe('Admin Logs', () => {
 
   test('export logs triggers download', async ({ page }) => {
     const logsPage = new AdminLogsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Click export button', async () => {
       const exportButton = page.locator('button', { hasText: /export|download/i });
@@ -221,7 +221,7 @@ test.describe('Admin Logs', () => {
 
   test('log entries show correct structure', async ({ page }) => {
     const logsPage = new AdminLogsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     const rowCount = await logsPage.logRows.count();
     if (rowCount === 0) {
@@ -260,7 +260,7 @@ test.describe('Admin Logs', () => {
 
   test('pagination works for large log sets', async ({ page }) => {
     const logsPage = new AdminLogsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Check for pagination controls', async () => {
       const pagination = page.locator('[data-testid="pagination"], nav[aria-label*="pag"], .pagination, [role="navigation"]');
@@ -289,7 +289,7 @@ test.describe('Admin Logs', () => {
 
   test('violations tab shows security-relevant entries', async ({ page }) => {
     const logsPage = new AdminLogsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Switch to violations tab', async () => {
       const violationsTab = page.locator('[role="tab"], button, a').filter({ hasText: /violation|security|alert/i }).first();
@@ -315,7 +315,7 @@ test.describe('Admin Logs', () => {
 
   test('refresh button reloads log data', async ({ page }) => {
     const logsPage = new AdminLogsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Click refresh button', async () => {
       const refreshButton = page.locator('button', { hasText: /refresh|reload/i })
@@ -330,14 +330,14 @@ test.describe('Admin Logs', () => {
     });
 
     await test.step('Log table is still visible after refresh', async () => {
-      await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+      await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
       await expect(logsPage.logTable).toBeVisible();
     });
   });
 
   test('retention policy badge is visible', async ({ page }) => {
     const logsPage = new AdminLogsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Check for retention policy indicator', async () => {
       const retentionBadge = page.locator('[data-testid*="retention"], .retention, .badge').filter({ hasText: /retention|day|keep/i });
@@ -361,7 +361,7 @@ test.describe('Admin Logs', () => {
 
   test('clearing search resets log display', async ({ page }) => {
     const logsPage = new AdminLogsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     const initialCount = await logsPage.logRows.count();
 

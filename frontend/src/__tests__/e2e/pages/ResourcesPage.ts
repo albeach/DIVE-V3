@@ -81,12 +81,10 @@ export class ResourcesPage {
    */
   async waitForPageLoad() {
     await this.heading.waitFor({ state: 'visible', timeout: TEST_CONFIG.TIMEOUTS.ACTION });
-    
-    // Wait for loading to finish
-    await this.page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NETWORK });
-    
-    // Wait a bit for any animations
-    await this.page.waitForTimeout(TEST_CONFIG.TIMEOUTS.DEBOUNCE);
+
+    // Use domcontentloaded instead of networkidle — networkidle hangs in CI
+    // due to background API polling that never settles
+    await this.page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NETWORK });
   }
   
   /**
@@ -100,7 +98,7 @@ export class ResourcesPage {
     
     // Wait for debounce and results to update
     await this.page.waitForTimeout(TEST_CONFIG.TIMEOUTS.DEBOUNCE);
-    await this.page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NETWORK });
+    await this.page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NETWORK });
   }
   
   /**
@@ -170,7 +168,7 @@ export class ResourcesPage {
       timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
       waitUntil: 'domcontentloaded'
     });
-    await this.page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NETWORK });
+    await this.page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NETWORK });
   }
   
   /**
@@ -206,7 +204,7 @@ export class ResourcesPage {
     await this.applyFilterButton.click({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
     
     // Wait for results to update
-    await this.page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NETWORK });
+    await this.page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NETWORK });
   }
   
   /**
@@ -231,7 +229,7 @@ export class ResourcesPage {
     await this.applyFilterButton.click({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
     
     // Wait for results to update
-    await this.page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NETWORK });
+    await this.page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NETWORK });
   }
   
   /**
@@ -241,7 +239,7 @@ export class ResourcesPage {
     await this.clearFilterButton.click({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
     
     // Wait for results to update
-    await this.page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NETWORK });
+    await this.page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NETWORK });
   }
   
   /**
