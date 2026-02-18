@@ -188,7 +188,7 @@ load_gcp_secrets() {
     export TF_VAR_test_user_password="${TF_VAR_test_user_password:-$KEYCLOAK_ADMIN_PASSWORD}"
     export TF_VAR_admin_user_password="${TF_VAR_admin_user_password:-$KEYCLOAK_ADMIN_PASSWORD}"
     # Pilot/default Keycloak URL (matches KC_HOSTNAME=localhost in docker-compose)
-    export KEYCLOAK_URL="${KEYCLOAK_URL:-https://localhost:8443}"
+    export KEYCLOAK_URL="${KEYCLOAK_URL:-https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}}"
     export KEYCLOAK_ADMIN_USERNAME="${KEYCLOAK_ADMIN_USERNAME:-admin}"
     # Verify critical secrets
     local missing=0

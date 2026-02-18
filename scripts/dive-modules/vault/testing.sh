@@ -379,7 +379,7 @@ module_vault_test_seal_restart() {
     docker restart "$node_container" >/dev/null 2>&1
     sleep 15
 
-    if VAULT_ADDR="${_VAULT_CLI_SCHEME}://localhost:8200" vault status 2>/dev/null | grep -q "Sealed.*false"; then
+    if VAULT_ADDR="${_VAULT_CLI_SCHEME}://localhost:${VAULT_API_PORT:-8200}" vault status 2>/dev/null | grep -q "Sealed.*false"; then
         test_pass
     else
         test_fail "vault-1 did not auto-unseal"
@@ -602,7 +602,7 @@ module_vault_test_monitoring() {
     # Test 1: Metrics endpoint returns 200
     test_start "Vault metrics endpoint responds (vault-1)"
     local metrics_response
-    metrics_response=$(curl -sf "http://localhost:8200/v1/sys/metrics?format=prometheus" 2>/dev/null || true)
+    metrics_response=$(curl -sf "http://localhost:${VAULT_API_PORT:-8200}/v1/sys/metrics?format=prometheus" 2>/dev/null || true)
     if [ -n "$metrics_response" ]; then
         test_pass
     else

@@ -37,7 +37,7 @@ fi
 # CONFIGURATION
 # =============================================================================
 
-HUB_KC_URL="${HUB_KC_URL:-https://localhost:8443}"
+HUB_KC_URL="${HUB_KC_URL:-https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}}"
 HUB_REALM="${HUB_REALM:-dive-v3-broker-usa}"
 
 # =============================================================================
@@ -285,7 +285,7 @@ federation_test_sso_flow() {
 
     local auth_url="${HUB_KC_URL}/realms/${HUB_REALM}/protocol/openid-connect/auth"
     auth_url="${auth_url}?client_id=dive-frontend"
-    auth_url="${auth_url}&redirect_uri=http://localhost:3000/api/auth/callback/keycloak"
+    auth_url="${auth_url}&redirect_uri=${NEXT_PUBLIC_BASE_URL:-https://localhost:${FRONTEND_PORT:-3000}}/api/auth/callback/keycloak"
     auth_url="${auth_url}&response_type=code"
     auth_url="${auth_url}&scope=openid%20profile%20email"
     auth_url="${auth_url}&kc_idp_hint=${idp_alias}"
@@ -470,7 +470,7 @@ federation_integration_test() {
 
     # Test 1: Hub health
     test_start "Hub backend health"
-    if curl -skf --max-time "${DIVE_TIMEOUT_CURL_DEFAULT:-10}" "https://localhost:4000/api/health" >/dev/null 2>&1; then
+    if curl -skf --max-time "${DIVE_TIMEOUT_CURL_DEFAULT:-10}" "https://localhost:${BACKEND_PORT:-4000}/api/health" >/dev/null 2>&1; then
         test_pass
     else
         test_fail "Hub backend unreachable"
@@ -481,7 +481,7 @@ federation_integration_test() {
     local registry_resp
     registry_resp=$(curl -sk -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY:-dive-hub-admin-key}" \
         --max-time "${DIVE_TIMEOUT_CURL_DEFAULT:-10}" \
-        "https://localhost:4000/api/federation/spokes" 2>/dev/null)
+        "https://localhost:${BACKEND_PORT:-4000}/api/federation/spokes" 2>/dev/null)
     local spoke_count
     spoke_count=$(echo "$registry_resp" | jq '.spokes | length' 2>/dev/null || echo "0")
     if [ "$spoke_count" -ge "${#spokes[@]}" ]; then
@@ -526,7 +526,7 @@ federation_integration_test() {
         fi
         if [ -n "$hub_token" ]; then
             local idp_check
-            idp_check=$(curl -sf "https://localhost:8443/admin/realms/dive-v3-broker-usa/identity-provider/instances/${code_lower}-idp" \
+            idp_check=$(curl -sf "${HUB_KC_URL}/admin/realms/${HUB_REALM:-dive-v3-broker-usa}/identity-provider/instances/${code_lower}-idp" \
                 -H "Authorization: Bearer $hub_token" --insecure 2>/dev/null | jq -r '.alias // empty')
             if [ "$idp_check" = "${code_lower}-idp" ]; then
                 test_pass
@@ -612,7 +612,7 @@ federation_test_token_revocation() {
     health_status=$(curl -sk -o /dev/null -w "%{http_code}" \
         -H "Authorization: Bearer $hub_token" \
         --max-time "${DIVE_TIMEOUT_CURL_DEFAULT:-10}" \
-        "https://localhost:4000/api/health" 2>/dev/null)
+        "https://localhost:${BACKEND_PORT:-4000}/api/health" 2>/dev/null)
     if [ "$health_status" = "200" ]; then
         test_pass
     else
@@ -639,7 +639,7 @@ federation_test_token_revocation() {
         -H "Authorization: Bearer $hub_token" \
         -H "Content-Type: application/json" \
         -d '{"reason":"integration-test-revocation"}' \
-        "https://localhost:4000/api/auth/blacklist-token" 2>/dev/null)
+        "https://localhost:${BACKEND_PORT:-4000}/api/auth/blacklist-token" 2>/dev/null)
     if echo "$blacklist_resp" | jq -e '.message' >/dev/null 2>&1; then
         test_pass
     else
@@ -657,7 +657,7 @@ federation_test_token_revocation() {
             -X POST \
             -H "Content-Type: application/json" \
             -d "{\"jti\":\"$jti\"}" \
-            "https://localhost:4000/api/blacklist/check" 2>/dev/null)
+            "https://localhost:${BACKEND_PORT:-4000}/api/blacklist/check" 2>/dev/null)
         local is_blacklisted
         is_blacklisted=$(echo "$check_resp" | jq -r '.isBlacklisted' 2>/dev/null)
         if [ "$is_blacklisted" = "true" ]; then

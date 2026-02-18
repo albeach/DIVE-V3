@@ -731,7 +731,7 @@ _federation_link_direct() {
     # URL Strategy: Dual URLs for browser vs server-to-server
     local source_public_url source_internal_url
     if [ "$source_upper" = "USA" ]; then
-        source_public_url="https://localhost:8443"
+        source_public_url="${HUB_KC_URL:-https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}}"
         source_internal_url="https://dive-hub-keycloak:8443"
     else
         local _kc_port=$(_get_keycloak_port "$source_upper")

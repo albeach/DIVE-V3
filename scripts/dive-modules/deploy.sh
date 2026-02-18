@@ -204,10 +204,10 @@ cmd_deploy() {
     echo ""
     log_success "Deployment complete!"
     echo ""
-    echo "  Frontend: https://localhost:3000"
-    echo "  Backend:  https://localhost:4000"
-    echo "  Keycloak: https://localhost:8443"
-    echo "  OPAL:     http://localhost:7002"
+    echo "  Frontend: https://${HUB_EXTERNAL_ADDRESS:-localhost}:${FRONTEND_PORT:-3000}"
+    echo "  Backend:  https://${HUB_EXTERNAL_ADDRESS:-localhost}:${BACKEND_PORT:-4000}"
+    echo "  Keycloak: https://${HUB_EXTERNAL_ADDRESS:-localhost}:${KEYCLOAK_HTTPS_PORT:-8443}"
+    echo "  OPAL:     http://${HUB_EXTERNAL_ADDRESS:-localhost}:${OPAL_PORT:-7002}"
 }
 
 cmd_reset() {

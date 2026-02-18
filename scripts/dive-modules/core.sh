@@ -98,10 +98,10 @@ cmd_up() {
 
     log_success "Stack started"
     echo ""
-    echo "  Frontend: https://localhost:3000"
-    echo "  Backend:  https://localhost:4000"
-    echo "  Keycloak: https://localhost:8443"
-    echo "  OPAL:     https://localhost:7002"
+    echo "  Frontend: https://${HUB_EXTERNAL_ADDRESS:-localhost}:${FRONTEND_PORT:-3000}"
+    echo "  Backend:  https://${HUB_EXTERNAL_ADDRESS:-localhost}:${BACKEND_PORT:-4000}"
+    echo "  Keycloak: https://${HUB_EXTERNAL_ADDRESS:-localhost}:${KEYCLOAK_HTTPS_PORT:-8443}"
+    echo "  OPAL:     https://${HUB_EXTERNAL_ADDRESS:-localhost}:${OPAL_PORT:-7002}"
 }
 
 auto_seed_resources() {
@@ -210,7 +210,7 @@ wait_for_backend() {
     local retries=12
     local count=0
     while [ $count -lt $retries ]; do
-        if curl -kfs --max-time 5 "https://localhost:4000/health" >/dev/null 2>&1; then
+        if curl -kfs --max-time 5 "https://localhost:${BACKEND_PORT:-4000}/health" >/dev/null 2>&1; then
             log_success "Backend is reachable"
             return 0
         fi
@@ -227,7 +227,7 @@ wait_for_frontend() {
     local retries=12
     local count=0
     while [ $count -lt $retries ]; do
-        if curl -kfs --max-time 5 "https://localhost:3000/" >/dev/null 2>&1; then
+        if curl -kfs --max-time 5 "https://localhost:${FRONTEND_PORT:-3000}/" >/dev/null 2>&1; then
             log_success "Frontend is reachable"
             return 0
         fi
@@ -291,8 +291,8 @@ ensure_client_https_redirects() {
     local base_url="${NEXT_PUBLIC_BASE_URL:-https://localhost:3000}"
     local api_url="${NEXT_PUBLIC_API_URL:-https://localhost:4000}"
     local extra_web_origins="${WEB_ORIGINS_EXTRA:-}"
-    local redirect_candidates=("${base_url}/*" "https://localhost:3000/*" "https://localhost:3003/*")
-    local web_candidates=("${base_url}" "${api_url}" "https://localhost:3000" "https://localhost:3003" "https://localhost:4000" "https://localhost:4003")
+    local redirect_candidates=("${base_url}/*" "https://localhost:${FRONTEND_PORT:-3000}/*" "https://localhost:3003/*")
+    local web_candidates=("${base_url}" "${api_url}" "https://localhost:${FRONTEND_PORT:-3000}" "https://localhost:3003" "https://localhost:${BACKEND_PORT:-4000}" "https://localhost:4003")
     if [ -n "$extra_web_origins" ]; then
         IFS=',' read -r -a _extra_origins <<< "$extra_web_origins"
         for o in "${_extra_origins[@]}"; do

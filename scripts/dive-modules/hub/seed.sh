@@ -335,7 +335,7 @@ _hub_register_kas() {
             \"internalKasUrl\": \"${kas_url}\",
             \"authMethod\": \"jwt\",
             \"authConfig\": {
-                \"jwtIssuer\": \"https://localhost:8443/realms/dive-v3-broker-${instance_code,,}\"
+                \"jwtIssuer\": \"${KEYCLOAK_ISSUER:-https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}/realms/dive-v3-broker-${instance_code,,}}\"
             },
             \"trustLevel\": \"high\",
             \"supportedCountries\": [\"${instance_code}\"],

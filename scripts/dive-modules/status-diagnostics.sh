@@ -290,7 +290,7 @@ cmd_diagnostics() {
     if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "dive-hub-keycloak"; then
         patterns_checked=$((patterns_checked + 1))
         local realms
-        realms=$(curl -ks https://localhost:8443/realms/ 2>/dev/null | jq -r '.[].realm' 2>/dev/null | grep -c "dive-v3" 2>/dev/null || echo "0")
+        realms=$(curl -ks "https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}/realms/" 2>/dev/null | jq -r '.[].realm' 2>/dev/null | grep -c "dive-v3" 2>/dev/null || echo "0")
         realms=$(echo "$realms" | tr -d -c '0-9' || echo "0")
         if [ "$realms" -eq 0 ]; then
             warnings_found=$((warnings_found + 1))
@@ -406,7 +406,7 @@ cmd_diagnostics() {
     spokes_running=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E "^(est|gbr|fra|deu|pol|dnk)-" | sed 's/-.*//' | sort -u)
     if [ -n "$spokes_running" ]; then
         local hub_idps
-        hub_idps=$(curl -ks "https://localhost:8443/admin/realms/${HUB_REALM:-dive-v3-broker-usa}/identity-providers" 2>/dev/null | jq -r '.[].alias' 2>/dev/null || echo "")
+        hub_idps=$(curl -ks "https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}/admin/realms/${HUB_REALM:-dive-v3-broker-usa}/identity-providers" 2>/dev/null | jq -r '.[].alias' 2>/dev/null || echo "")
         while IFS= read -r spoke; do
             [ -z "$spoke" ] && continue
             if ! echo "$hub_idps" | grep -q "${spoke}-idp"; then

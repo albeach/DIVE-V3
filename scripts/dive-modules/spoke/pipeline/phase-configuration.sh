@@ -99,7 +99,7 @@ spoke_phase_configuration() {
     # =============================================================================
     log_step "Verifying Hub connectivity..."
     local hub_backend_url=""
-    for url in "https://localhost:4000/api/health" "https://dive-hub-backend:4000/api/health"; do
+    for url in "https://localhost:${BACKEND_PORT:-4000}/api/health" "https://dive-hub-backend:4000/api/health"; do
         if curl -sk --max-time 5 "$url" 2>/dev/null | grep -q "ok\|healthy"; then
             hub_backend_url="$url"
             break
@@ -441,7 +441,7 @@ spoke_config_register_in_hub_mongodb() {
     # Try multiple URLs since scripts run on host but containers use Docker hostnames
     local hub_url=""
     local hub_urls=(
-        "https://localhost:4000"           # Host access
+        "https://localhost:${BACKEND_PORT:-4000}"           # Host access
         "https://host.docker.internal:4000" # Docker Desktop host access  
         "https://dive-hub-backend:4000"     # Docker network access (if running in container)
     )
@@ -476,7 +476,7 @@ spoke_config_register_in_hub_mongodb() {
     else
         log_verbose "Skipping Hub reachability check (--skip-federation flag)"
         # Still set a default for scripts that might need it
-        hub_url="https://localhost:4000"
+        hub_url="https://localhost:${BACKEND_PORT:-4000}"
     fi
 
     # Get spoke configuration from SSOT (spoke_config_get)
@@ -753,7 +753,7 @@ EOF
                     log_error "Impact: Spoke cannot authenticate with Hub"
                     log_error "Fix: Ensure Hub is accessible and user has approval permissions"
                     log_error "     Check Hub status: ./dive hub status"
-                    log_error "     Verify Hub API: curl -sk https://localhost:4000/health"
+                    log_error "     Verify Hub API: curl -sk https://localhost:${BACKEND_PORT:-4000}/health"
                     return 1
                 else
                     log_warn "Manual approval failed (skipped due to --skip-federation)"
@@ -784,7 +784,7 @@ spoke_config_approve_and_get_token() {
     # Approve spoke
     local approve_payload='{"allowedScopes":["policy:base","policy:org"],"allowedFeatures":["federation","ztdf","audit"]}'
     # Use hub_url from parent scope (spoke_config_register_in_hub_mongodb), fallback to localhost
-    local hub_approve_api="${hub_url:-https://localhost:4000}/api/federation/spokes/$spoke_id/approve"
+    local hub_approve_api="${hub_url:-https://localhost:${BACKEND_PORT:-4000}}/api/federation/spokes/$spoke_id/approve"
 
     local approve_response
     approve_response=$(curl -sk -X POST "$hub_approve_api" \
@@ -900,7 +900,7 @@ spoke_config_register_in_registries() {
             sleep 2  # Wait for propagation
 
             local hub_registry_check
-            hub_registry_check=$(curl -sk https://localhost:4000/api/kas/registry 2>/dev/null | \
+            hub_registry_check=$(curl -sk "https://localhost:${BACKEND_PORT:-4000}/api/kas/registry" 2>/dev/null | \
                 jq -e ".kasServers[] | select(.instanceCode == \"$code_upper\")" 2>/dev/null)
 
             if [ -n "$hub_registry_check" ]; then
@@ -943,7 +943,7 @@ spoke_config_register_in_registries() {
             else
                 log_error "✗ KAS registration API succeeded but entry NOT found in Hub registry!"
                 log_error "This indicates a database consistency issue"
-                log_error "Verification query: curl -sk https://localhost:4000/api/kas/registry | jq '.kasServers'"
+                log_error "Verification query: curl -sk https://localhost:${BACKEND_PORT:-4000}/api/kas/registry | jq '.kasServers'"
                 kas_exit_code=1
             fi
         else

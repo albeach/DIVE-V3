@@ -696,7 +696,7 @@ spoke_kas_sync_from_hub() {
     log_info "Syncing Hub KAS registry to $code_upper MongoDB..."
 
     # Get Hub backend URL (localhost for local Docker)
-    local hub_api_url="https://localhost:4000/api/kas/registry"
+    local hub_api_url="https://localhost:${BACKEND_PORT:-4000}/api/kas/registry"
     local spoke_api_url="https://localhost:${SPOKE_BACKEND_PORT:-4010}/api/kas/register"
 
     # Query Hub's KAS registry
