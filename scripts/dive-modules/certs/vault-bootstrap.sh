@@ -334,14 +334,19 @@ _rotate_vault_node_certs_to_pki() {
     fi
     log_success "  PKI role: vault-node-services (constrained to vault-1,vault-2,vault-3)"
 
-    # Step 2: Issue new certs for each node
+    # Step 2: Issue new certs for each node (atomic: all-or-nothing)
     local vault_certs_dir="${DIVE_ROOT}/certs/vault"
     local nodes=("node1" "node2" "node3")
     local node_containers=("vault-1" "vault-2" "vault-3")
     local i=0
+    local rotation_ok=true
+
+    # Phase A: Issue all certs to a staging directory (no overwrites yet)
+    local staging_dir="${vault_certs_dir}/.rotation-staging"
+    rm -rf "$staging_dir"
+    mkdir -p "$staging_dir"
 
     for node in "${nodes[@]}"; do
-        local node_dir="${vault_certs_dir}/${node}"
         local container_name="${node_containers[$i]}"
 
         log_info "Issuing Vault PKI cert for ${node} (${container_name})..."
@@ -373,7 +378,8 @@ _rotate_vault_node_certs_to_pki() {
         errors=$(printf '%s\n' "$response" | jq -r '.errors // empty' 2>/dev/null)
         if [ -n "$errors" ] && [ "$errors" != "null" ] && [ "$errors" != "" ]; then
             log_error "Failed to issue cert for ${node}: $errors"
-            return 1
+            rotation_ok=false
+            break
         fi
 
         # Extract certificate components
@@ -385,29 +391,41 @@ _rotate_vault_node_certs_to_pki() {
 
         if [ -z "$certificate" ] || [ -z "$private_key" ]; then
             log_error "Vault PKI returned empty cert/key for ${node}"
-            return 1
+            rotation_ok=false
+            break
         fi
 
-        # Write cert files (same layout as bootstrap)
-        mkdir -p "$node_dir"
-        printf '%s\n' "$certificate" > "$node_dir/certificate.pem"
-        printf '%s\n' "$private_key" > "$node_dir/key.pem"
-
-        # CA chain for retry_join verification
+        # Stage cert files (don't overwrite originals yet)
+        mkdir -p "$staging_dir/$node"
+        printf '%s\n' "$certificate" > "$staging_dir/$node/certificate.pem"
+        printf '%s\n' "$private_key" > "$staging_dir/$node/key.pem"
         {
             printf '%s\n' "$issuing_ca"
             if [ -n "$ca_chain" ] && [ "$ca_chain" != "null" ]; then
                 printf '%s\n' "$ca_chain"
             fi
-        } > "$node_dir/ca.pem"
-
-        chmod 644 "$node_dir/key.pem"  # 644: Vault container runs as uid 100 (vault), needs read access
-        chmod 644 "$node_dir/certificate.pem" "$node_dir/ca.pem"
+        } > "$staging_dir/$node/ca.pem"
 
         log_success "  ${node}: Vault PKI cert issued (90-day TTL)"
-
         i=$((i + 1))
     done
+
+    # Phase B: Commit staged certs only if ALL nodes succeeded
+    if [ "$rotation_ok" = "true" ]; then
+        for node in "${nodes[@]}"; do
+            local node_dir="${vault_certs_dir}/${node}"
+            cp "$staging_dir/$node/certificate.pem" "$node_dir/certificate.pem"
+            cp "$staging_dir/$node/key.pem" "$node_dir/key.pem"
+            cp "$staging_dir/$node/ca.pem" "$node_dir/ca.pem"
+            chmod 644 "$node_dir/key.pem" "$node_dir/certificate.pem" "$node_dir/ca.pem"
+        done
+    else
+        log_warn "Partial rotation failed — keeping bootstrap CA certs (no changes made)"
+        rm -rf "$staging_dir"
+        return 0
+    fi
+
+    rm -rf "$staging_dir"
 
     # Step 3: Rolling restart of Vault nodes
     log_info "Performing rolling restart of Vault nodes..."

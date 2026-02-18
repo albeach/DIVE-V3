@@ -16,9 +16,13 @@ VAULT_TOKEN="${VAULT_TOKEN:-}"
 VAULT_CACERT="${VAULT_CACERT:-${DIVE_ROOT:-}/certs/vault/node1/ca.pem}"
 
 # Build curl TLS flags for Vault API calls
+# For localhost connections, use --insecure (no MITM risk, avoids CA mismatch
+# issues during bootstrap→Vault PKI cert rotation transitions)
 _vault_curl_flags() {
     local flags=""
-    if [ -n "$VAULT_CACERT" ] && [ -f "$VAULT_CACERT" ]; then
+    if [[ "${VAULT_ADDR:-}" =~ (localhost|127\.0\.0\.1) ]]; then
+        flags="--insecure"
+    elif [ -n "$VAULT_CACERT" ] && [ -f "$VAULT_CACERT" ]; then
         flags="--cacert $VAULT_CACERT"
     fi
     echo "$flags"
