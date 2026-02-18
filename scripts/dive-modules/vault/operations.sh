@@ -526,11 +526,9 @@ module_vault_seed() {
         local opal_token=$(vault_get_secret "opal" "master-token" "token")
         local usa_auth=$(vault_get_secret "auth" "usa/nextauth" "secret")
 
-        # Instance-scoped secrets (all with _USA suffix)
+        # Instance-scoped secrets
         _vault_update_env "$hub_env" "POSTGRES_PASSWORD_USA" "$usa_pg"
-        _vault_update_env "$hub_env" "KC_ADMIN_PASSWORD_USA" "$usa_kc"
-        _vault_update_env "$hub_env" "KC_BOOTSTRAP_ADMIN_PASSWORD_USA" "$usa_kc"
-        _vault_update_env "$hub_env" "KEYCLOAK_ADMIN_PASSWORD_USA" "$usa_kc"
+        _vault_update_env "$hub_env" "KEYCLOAK_ADMIN_PASSWORD" "$usa_kc"
         _vault_update_env "$hub_env" "MONGO_PASSWORD_USA" "$usa_mongo"
         _vault_update_env "$hub_env" "REDIS_PASSWORD_USA" "$usa_redis"
         _vault_update_env "$hub_env" "AUTH_SECRET_USA" "$usa_auth"
@@ -551,8 +549,7 @@ module_vault_seed() {
             _vault_update_env "$usa_env" "POSTGRES_PASSWORD_USA" "$usa_pg"
             _vault_update_env "$usa_env" "MONGO_PASSWORD_USA" "$usa_mongo"
             _vault_update_env "$usa_env" "REDIS_PASSWORD_USA" "$usa_redis"
-            _vault_update_env "$usa_env" "KEYCLOAK_ADMIN_PASSWORD_USA" "$usa_kc"
-            _vault_update_env "$usa_env" "KC_BOOTSTRAP_ADMIN_PASSWORD_USA" "$usa_kc"
+            _vault_update_env "$usa_env" "KEYCLOAK_ADMIN_PASSWORD" "$usa_kc"
             _vault_update_env "$usa_env" "KEYCLOAK_CLIENT_SECRET_USA" "$shared_client"
             _vault_update_env "$usa_env" "AUTH_SECRET_USA" "$usa_auth"
             _vault_update_env "$usa_env" "REDIS_PASSWORD_BLACKLIST" "$shared_blacklist"

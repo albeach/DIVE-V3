@@ -211,7 +211,7 @@ PYTHON_EOF
     fi
 
     # Export TF_VAR environment variables
-    export TF_VAR_keycloak_admin_password="${KEYCLOAK_ADMIN_PASSWORD_USA:-$(gcloud secrets versions access latest --secret=dive-v3-keycloak-usa --project="${GCP_PROJECT:-dive25}" 2>/dev/null)}"
+    export TF_VAR_keycloak_admin_password="${KEYCLOAK_ADMIN_PASSWORD:-$(gcloud secrets versions access latest --secret=dive-v3-keycloak-usa --project="${GCP_PROJECT:-dive25}" 2>/dev/null)}"
     export TF_VAR_client_secret="${KEYCLOAK_CLIENT_SECRET_USA:-$(gcloud secrets versions access latest --secret=dive-v3-keycloak-client-secret --project="${GCP_PROJECT:-dive25}" 2>/dev/null)}"
     # Use test user passwords following Hub pattern
     export TF_VAR_test_user_password="${TEST_USER_PASSWORD:-${TF_VAR_keycloak_admin_password}}"
