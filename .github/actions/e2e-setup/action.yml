@@ -160,6 +160,17 @@ runs:
           -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
           -d "{\"realm\":\"$REALM\",\"enabled\":true}" || true
 
+        # Extend token lifetimes for CI stability (PUT works even if realm already existed).
+        # Default access token lifetime is 300s (5 min) which causes token refresh
+        # during test runs. Extend to 900s (15 min) to cover entire test execution.
+        curl -sk -X PUT "https://localhost:8443/admin/realms/$REALM" \
+          -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+          -d "{\"realm\":\"$REALM\",\"accessTokenLifespan\":900,\"ssoSessionIdleTimeout\":3600,\"ssoSessionMaxLifespan\":7200}"
+
+        REALM_ATL=$(curl -sk "https://localhost:8443/admin/realms/$REALM" \
+          -H "Authorization: Bearer $TOKEN" | jq '.accessTokenLifespan')
+        echo "::notice::Realm $REALM accessTokenLifespan=${REALM_ATL}s"
+
         # Create OIDC client for NextAuth
         curl -sk -X POST "https://localhost:8443/admin/realms/$REALM/clients" \
           -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
@@ -214,38 +225,66 @@ runs:
           -H "Authorization: Bearer $TOKEN" | jq -r '.[] | select(.name == "roles") | .id' | head -n1)
 
         if [ -n "$ROLES_SCOPE_ID" ]; then
+          echo "::notice::Found 'roles' client scope: $ROLES_SCOPE_ID"
+
+          # List ALL mappers in the roles scope for debugging
+          ALL_MAPPERS=$(curl -sk "https://localhost:8443/admin/realms/$REALM/client-scopes/$ROLES_SCOPE_ID/protocol-mappers/models" \
+            -H "Authorization: Bearer $TOKEN")
+          echo "::notice::Mappers in roles scope: $(echo "$ALL_MAPPERS" | jq -r '[.[].name] | join(", ")')"
+
           # Find the existing "realm roles" mapper and enable id.token.claim
-          MAPPER_JSON=$(curl -sk "https://localhost:8443/admin/realms/$REALM/client-scopes/$ROLES_SCOPE_ID/protocol-mappers/models" \
-            -H "Authorization: Bearer $TOKEN" | jq -c '[.[] | select(.name == "realm roles")] | .[0] // empty')
+          MAPPER_JSON=$(echo "$ALL_MAPPERS" | jq -c '[.[] | select(.name == "realm roles")] | .[0] // empty')
 
           if [ -n "$MAPPER_JSON" ] && [ "$MAPPER_JSON" != "null" ]; then
             MAPPER_ID=$(echo "$MAPPER_JSON" | jq -r '.id')
-            UPDATED_MAPPER=$(echo "$MAPPER_JSON" | jq '.config["id.token.claim"] = "true"')
-            curl -sk -X PUT "https://localhost:8443/admin/realms/$REALM/client-scopes/$ROLES_SCOPE_ID/protocol-mappers/models/$MAPPER_ID" \
+            MAPPER_TYPE=$(echo "$MAPPER_JSON" | jq -r '.protocolMapper')
+            CURRENT_ID_CLAIM=$(echo "$MAPPER_JSON" | jq -r '.config["id.token.claim"] // "unset"')
+            echo "::notice::Found mapper id=$MAPPER_ID type=$MAPPER_TYPE id.token.claim=$CURRENT_ID_CLAIM"
+
+            UPDATED_MAPPER=$(echo "$MAPPER_JSON" | jq '.config["id.token.claim"] = "true" | .config["userinfo.token.claim"] = "true"')
+            HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" -X PUT \
+              "https://localhost:8443/admin/realms/$REALM/client-scopes/$ROLES_SCOPE_ID/protocol-mappers/models/$MAPPER_ID" \
               -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
-              -d "$UPDATED_MAPPER" >/dev/null 2>&1
-            echo "::notice::Updated 'realm roles' mapper: id.token.claim=true"
+              -d "$UPDATED_MAPPER")
+            if [ "$HTTP_CODE" = "204" ] || [ "$HTTP_CODE" = "200" ]; then
+              echo "::notice::Updated 'realm roles' mapper: id.token.claim=true (HTTP $HTTP_CODE)"
+            else
+              echo "::error::Failed to update realm roles mapper (HTTP $HTTP_CODE)"
+              echo "::error::Payload was: $(echo "$UPDATED_MAPPER" | jq -c .)"
+            fi
+
+            # Verify the update actually took effect
+            VERIFY=$(curl -sk "https://localhost:8443/admin/realms/$REALM/client-scopes/$ROLES_SCOPE_ID/protocol-mappers/models/$MAPPER_ID" \
+              -H "Authorization: Bearer $TOKEN" | jq -r '.config["id.token.claim"] // "unset"')
+            if [ "$VERIFY" = "true" ]; then
+              echo "::notice::Verified: realm roles mapper id.token.claim=$VERIFY"
+            else
+              echo "::error::Verification failed: id.token.claim=$VERIFY (expected true)"
+            fi
           else
             # No existing mapper — create one that includes realm_access in the ID token
-            curl -sk -X POST "https://localhost:8443/admin/realms/$REALM/client-scopes/$ROLES_SCOPE_ID/protocol-mappers/models" \
+            echo "::warning::No 'realm roles' mapper found — creating one"
+            HTTP_CODE=$(curl -sk -o /dev/null -w "%{http_code}" -X POST \
+              "https://localhost:8443/admin/realms/$REALM/client-scopes/$ROLES_SCOPE_ID/protocol-mappers/models" \
               -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
               -d '{
                 "name": "realm roles",
                 "protocol": "openid-connect",
-                "protocolMapper": "oidc-usermodel-realm-role-list-mapper",
+                "protocolMapper": "oidc-usermodel-realm-role-mapper",
                 "config": {
                   "multivalued": "true",
                   "claim.name": "realm_access.roles",
                   "jsonType.label": "String",
                   "id.token.claim": "true",
                   "access.token.claim": "true",
+                  "userinfo.token.claim": "true",
                   "introspection.token.claim": "true"
                 }
-              }' >/dev/null 2>&1
-            echo "::notice::Created 'realm roles' mapper with id.token.claim=true"
+              }')
+            echo "::notice::Created 'realm roles' mapper (HTTP $HTTP_CODE)"
           fi
         else
-          echo "::warning::Could not find 'roles' client scope — realm_access may be missing from ID token"
+          echo "::error::Could not find 'roles' client scope — realm_access WILL be missing from ID token"
         fi
 
         # Disable first-login required actions that break unattended Playwright login.
@@ -518,6 +557,8 @@ runs:
         BACKEND_URL: https://localhost:4000
         NEXT_PUBLIC_API_URL: https://localhost:4000
         NODE_EXTRA_CA_CERTS: ${{ github.workspace }}/certs/ca-bundle.pem
+        # Allow self-signed certs for Keycloak token refresh in CI
+        NODE_TLS_REJECT_UNAUTHORIZED: "0"
         MONGODB_URL: mongodb://localhost:27017/dive-v3-test
 
     - name: Generate Playwright Auth State Files
