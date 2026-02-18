@@ -239,6 +239,16 @@ export AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-}"
 export DIVE_AWS_KEY_PAIR="${DIVE_AWS_KEY_PAIR:-ABeach-SSH-Key}"
 export DIVE_AWS_SSH_KEY="${DIVE_AWS_SSH_KEY:-${HOME}/.ssh/ABeach-SSH-Key.pem}"
 
+# Source Caddy/domain vars from .env.hub early (before EC2 auto-config needs them).
+# Only pulls specific vars to avoid overriding unrelated settings.
+if [ -f "${DIVE_ROOT}/.env.hub" ]; then
+    _hub_val() { grep "^${1}=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | head -1 | cut -d= -f2-; }
+    [ -z "${DIVE_DOMAIN_SUFFIX:-}" ]    && { _v=$(_hub_val DIVE_DOMAIN_SUFFIX);    [ -n "$_v" ] && export DIVE_DOMAIN_SUFFIX="$_v"; }
+    [ -z "${CLOUDFLARE_API_TOKEN:-}" ]  && { _v=$(_hub_val CLOUDFLARE_API_TOKEN);  [ -n "$_v" ] && export CLOUDFLARE_API_TOKEN="$_v"; }
+    [ -z "${HUB_EXTERNAL_ADDRESS:-}" ]  && { _v=$(_hub_val HUB_EXTERNAL_ADDRESS);  [ -n "$_v" ] && export HUB_EXTERNAL_ADDRESS="$_v"; }
+    unset -f _hub_val; unset _v
+fi
+
 # EC2 instance metadata auto-detection (IMDSv2 first, then v1 fallback)
 if [ -z "${INSTANCE_PRIVATE_IP:-}" ]; then
     _imds_token=$(curl -sX PUT "http://169.254.169.254/latest/api/token" \
