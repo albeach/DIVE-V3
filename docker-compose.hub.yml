@@ -1246,6 +1246,10 @@ services:
         }
       # OPAL Authentication - JWT token verification for spoke clients
       OPAL_AUTH_MASTER_TOKEN: ${OPAL_AUTH_MASTER_TOKEN}
+      # JWT signing keys loaded from mounted files (not env var content — avoids MalformedFraming)
+      OPAL_AUTH_PRIVATE_KEY_PATH: /opal-keys/jwt-signing-key.pem
+      OPAL_AUTH_PUBLIC_KEY_PATH: /opal-keys/jwt-signing-key.pub.pem
+      OPAL_AUTH_JWT_ALGORITHM: RS256
     ports:
       - "127.0.0.1:${OPAL_PORT:-7002}:7002"
     networks:
@@ -1258,7 +1262,7 @@ services:
       - ./instances/hub/certs:/certs:ro
       - ./certs/ca-bundle:/ca-bundle:ro  # SSOT CA bundle for cross-instance TLS
       - ./certs/opal:/opal-keys:ro
-    # Uses custom entrypoint from Dockerfile that loads auth keys
+    # Uses custom entrypoint from Dockerfile that validates auth keys and starts uvicorn
     healthcheck:
       test: ["CMD", "curl", "-k", "-f", "https://localhost:7002/healthcheck"]
       interval: 5s
