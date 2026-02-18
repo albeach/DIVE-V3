@@ -573,6 +573,12 @@ hub_configure_keycloak() {
         (
             cd "${DIVE_ROOT}/terraform/hub"
 
+            # CRITICAL: Unset KEYCLOAK_REALM so the Terraform Keycloak provider
+            # defaults to 'master' realm for admin login. The .env.hub sets
+            # KEYCLOAK_REALM=dive-v3-broker-usa which is for runtime services,
+            # NOT for Terraform's initial admin authentication.
+            unset KEYCLOAK_REALM
+
             # Initialize Terraform (only if not already initialized)
             if [ ! -d ".terraform" ]; then
                 log_verbose "Initializing Terraform..."
