@@ -85,7 +85,7 @@ hub_phase_database_init() {
     # Start PostgreSQL container only
     log_verbose "Starting PostgreSQL container..."
 
-    if ! ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" up -d postgres >/dev/null 2>&1; then
+    if ! ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES up -d postgres >/dev/null 2>&1; then
         log_error "Failed to start PostgreSQL container"
         return 1
     fi
@@ -256,7 +256,7 @@ hub_phase_vault_bootstrap() {
         # simultaneously, compose may fail the dependency check before vault-seal
         # finishes its initialization (transit engine + token creation).
         log_info "Starting vault-seal (Transit auto-unseal engine)..."
-        if ! ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" --profile "$vault_profile" up -d vault-seal 2>&1; then
+        if ! ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES --profile "$vault_profile" up -d vault-seal 2>&1; then
             log_error "Failed to start vault-seal"
             return 1
         fi
@@ -284,12 +284,12 @@ hub_phase_vault_bootstrap() {
 
         # Now start cluster nodes (vault-seal is healthy, dependency satisfied)
         log_info "Starting Vault cluster nodes (vault-1, vault-2, vault-3)..."
-        if ! ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" --profile "$vault_profile" up -d vault-1 vault-2 vault-3 2>&1; then
+        if ! ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES --profile "$vault_profile" up -d vault-1 vault-2 vault-3 2>&1; then
             log_error "Failed to start Vault cluster nodes"
             return 1
         fi
     else
-        if ! ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" --profile "$vault_profile" up -d vault-dev 2>&1; then
+        if ! ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES --profile "$vault_profile" up -d vault-dev 2>&1; then
             log_error "Failed to start vault-dev"
             return 1
         fi
@@ -599,7 +599,7 @@ hub_phase_build() {
 
     log_info "Build output: $build_log"
 
-    if ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" --profile "$(_vault_get_profile)" build 2>&1 | tee "$build_log"; then
+    if ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES --profile "$(_vault_get_profile)" build 2>&1 | tee "$build_log"; then
         log_success "Docker images built successfully"
         return 0
     else
@@ -681,7 +681,7 @@ hub_phase_services() {
         fi
     else
         log_info "Using sequential service startup"
-        if ! ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" up -d; then
+        if ! ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES up -d; then
             log_error "Sequential service startup failed"
             return 1
         fi
@@ -847,7 +847,7 @@ hub_phase_vault_db_engine() {
     # - frontend: rotated PG password (nextauth_user via FRONTEND_DATABASE_URL)
     # NOTE: `up -d --force-recreate` re-reads .env.hub; `restart` does not.
     log_info "Recreating services with updated Vault credentials..."
-    if ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" --env-file "${DIVE_ROOT}/.env.hub" up -d --force-recreate --no-build backend keycloak frontend >/dev/null 2>&1; then
+    if ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES --env-file "${DIVE_ROOT}/.env.hub" up -d --force-recreate --no-build backend keycloak frontend >/dev/null 2>&1; then
         # Wait for Keycloak to become healthy (longest startup)
         local kc_wait=0
         local kc_max=90
@@ -882,7 +882,7 @@ _hub_init_mongodb_replica_set() {
 
     # Start MongoDB first
     log_verbose "Starting MongoDB container..."
-    if ! ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" up -d mongodb >/dev/null 2>&1; then
+    if ! ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES up -d mongodb >/dev/null 2>&1; then
         log_error "Failed to start MongoDB container"
         return 1
     fi

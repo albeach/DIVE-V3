@@ -60,6 +60,15 @@ fi
 HUB_COMPOSE_FILE="${DIVE_ROOT}/docker-compose.hub.yml"
 HUB_DATA_DIR="${DIVE_ROOT}/data/hub"
 
+# Compose command args: includes proxy overlay on EC2 for nginx reverse proxy
+# yq commands use $HUB_COMPOSE_FILE (single file); docker compose uses $HUB_COMPOSE_FILES
+HUB_COMPOSE_FILES="-f ${HUB_COMPOSE_FILE}"
+if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost" ] \
+    && [ -f "${DIVE_ROOT}/docker-compose.proxy.yml" ]; then
+    HUB_COMPOSE_FILES="${HUB_COMPOSE_FILES} -f ${DIVE_ROOT}/docker-compose.proxy.yml"
+    log_info "EC2 mode: nginx reverse proxy overlay enabled"
+fi
+
 # =============================================================================
 # HUB PIPELINE EXECUTION (Phase 3: Hub Pipeline Enhancement)
 # =============================================================================

@@ -229,7 +229,7 @@ services:
       - ./${VAULT_CONFIG_BASE:-vault_config}/node1:/vault/config:ro
       - ./certs/vault/node1:/vault/certs:ro    # TLS certs (production: VAULT_SCHEME=https)
     ports:
-      - "127.0.0.1:8200:8200"  # Primary API port (backward compatible)
+      - "127.0.0.1:${VAULT_API_PORT:-8200}:8200"  # Primary API port (backward compatible)
     networks:
       hub-internal:
       dive-shared:

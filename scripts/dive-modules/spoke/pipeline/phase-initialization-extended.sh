@@ -97,6 +97,15 @@ spoke_init_prepare_certificates() {
     # Without this, Keycloak crashes on startup with "No such file or directory"
     mkdir -p "$spoke_dir/certs/ca" "$spoke_dir/truststores"
 
+    # Remote spoke: fetch hub CA bundle for TLS trust bootstrapping
+    # Must happen BEFORE cert generation so Vault PKI CA is in the trust store
+    if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost" ]; then
+        if type _fetch_hub_ca_bundle &>/dev/null; then
+            log_step "Fetching hub CA bundle from ${HUB_EXTERNAL_ADDRESS}..."
+            _fetch_hub_ca_bundle || log_warn "Hub CA fetch failed — spoke may not trust hub TLS"
+        fi
+    fi
+
     # CRITICAL FIX (2026-02-12): Source certificates.sh BEFORE checking use_vault_pki
     # The function use_vault_pki() is defined in certificates.sh — sourcing it inside
     # the conditional that checks for the function creates a chicken-and-egg bug where
