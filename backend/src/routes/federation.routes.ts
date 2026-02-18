@@ -1580,11 +1580,11 @@ router.post('/sp/register', async (req: Request, res: Response): Promise<void> =
                     : 'Registration successful.'
             },
             endpoints: {
-                issuer: `${process.env.KEYCLOAK_URL || 'https://usa-idp.dive25.com'}/realms/dive-v3-broker`,
-                authorization: `${process.env.KEYCLOAK_URL || 'https://usa-idp.dive25.com'}/realms/dive-v3-broker/protocol/openid-connect/auth`,
-                token: `${process.env.KEYCLOAK_URL || 'https://usa-idp.dive25.com'}/realms/dive-v3-broker/protocol/openid-connect/token`,
-                userinfo: `${process.env.KEYCLOAK_URL || 'https://usa-idp.dive25.com'}/realms/dive-v3-broker/protocol/openid-connect/userinfo`,
-                jwks: `${process.env.KEYCLOAK_URL || 'https://usa-idp.dive25.com'}/realms/dive-v3-broker/protocol/openid-connect/certs`
+                issuer: `${process.env.KEYCLOAK_URL || 'https://usa-idp.dive25.com'}/realms/dive-v3-broker-usa`,
+                authorization: `${process.env.KEYCLOAK_URL || 'https://usa-idp.dive25.com'}/realms/dive-v3-broker-usa/protocol/openid-connect/auth`,
+                token: `${process.env.KEYCLOAK_URL || 'https://usa-idp.dive25.com'}/realms/dive-v3-broker-usa/protocol/openid-connect/token`,
+                userinfo: `${process.env.KEYCLOAK_URL || 'https://usa-idp.dive25.com'}/realms/dive-v3-broker-usa/protocol/openid-connect/userinfo`,
+                jwks: `${process.env.KEYCLOAK_URL || 'https://usa-idp.dive25.com'}/realms/dive-v3-broker-usa/protocol/openid-connect/certs`
             }
         });
 
@@ -4801,7 +4801,7 @@ router.post('/link-idp', requireSuperAdmin, async (req: Request, res: Response):
         const remoteRealm = `dive-v3-broker-${remoteInstanceCode.toLowerCase()}`;
 
         // Determine local details for bidirectional linking
-        const localRealm = process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+        const localRealm = process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
         const localIdpUrl = getPublicIdpUrl(localInstanceCode);
         const localName = getInstanceDisplayName(localInstanceCode);
 

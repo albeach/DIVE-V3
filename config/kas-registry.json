@@ -7,7 +7,7 @@
       "kasUrl": "https://kas.usa.dive25.local:8080",
       "authMethod": "jwt",
       "authConfig": {
-        "issuer": "https://keycloak.usa.dive25.local/realms/dive-v3-broker",
+        "issuer": "https://keycloak.usa.dive25.local/realms/dive-v3-broker-usa",
         "audience": "dive-v3-kas"
       },
       "trustLevel": "TOP_SECRET",
@@ -26,7 +26,7 @@
       "kasUrl": "https://kas.gbr.dive25.local:8080",
       "authMethod": "jwt",
       "authConfig": {
-        "issuer": "https://keycloak.gbr.dive25.local/realms/dive-v3-broker",
+        "issuer": "https://keycloak.gbr.dive25.local/realms/dive-v3-broker-gbr",
         "audience": "dive-v3-kas"
       },
       "trustLevel": "TOP_SECRET",
@@ -45,7 +45,7 @@
       "kasUrl": "https://kas.fra.dive25.local:8080",
       "authMethod": "jwt",
       "authConfig": {
-        "issuer": "https://keycloak.fra.dive25.local/realms/dive-v3-broker",
+        "issuer": "https://keycloak.fra.dive25.local/realms/dive-v3-broker-fra",
         "audience": "dive-v3-kas"
       },
       "trustLevel": "SECRET",
@@ -64,7 +64,7 @@
       "kasUrl": "https://kas.deu.dive25.local:8080",
       "authMethod": "jwt",
       "authConfig": {
-        "issuer": "https://keycloak.deu.dive25.local/realms/dive-v3-broker",
+        "issuer": "https://keycloak.deu.dive25.local/realms/dive-v3-broker-deu",
         "audience": "dive-v3-kas"
       },
       "trustLevel": "SECRET",
@@ -83,7 +83,7 @@
       "kasUrl": "https://kas.can.dive25.local:8080",
       "authMethod": "jwt",
       "authConfig": {
-        "issuer": "https://keycloak.can.dive25.local/realms/dive-v3-broker",
+        "issuer": "https://keycloak.can.dive25.local/realms/dive-v3-broker-can",
         "audience": "dive-v3-kas"
       },
       "trustLevel": "TOP_SECRET",
@@ -102,7 +102,7 @@
       "kasUrl": "https://kas.nato.dive25.local:8080",
       "authMethod": "jwt",
       "authConfig": {
-        "issuer": "https://keycloak.nato.dive25.local/realms/dive-v3-broker",
+        "issuer": "https://keycloak.nato.dive25.local/realms/dive-v3-broker-nato",
         "audience": "dive-v3-kas"
       },
       "trustLevel": "SECRET",

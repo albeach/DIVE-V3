@@ -157,7 +157,7 @@ export function isAuth0Available(): boolean {
  */
 export function generateAuth0CallbackUrls(idpAlias: string): string[] {
     const keycloakUrl = process.env.KEYCLOAK_URL || 'http://localhost:8080';
-    const realm = process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+    const realm = process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
 
     return [

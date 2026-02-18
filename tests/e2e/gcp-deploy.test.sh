@@ -299,10 +299,10 @@ else
 fi
 
 # Check IdP
-if wait_for_url "$idp_url/realms/dive-v3-broker" 120; then
-    test_pass "IdP is healthy ($idp_url/realms/dive-v3-broker)"
+if wait_for_url "$idp_url/realms/dive-v3-broker-usa" 120; then
+    test_pass "IdP is healthy ($idp_url/realms/dive-v3-broker-usa)"
 else
-    test_fail "IdP failed to respond ($idp_url/realms/dive-v3-broker)"
+    test_fail "IdP failed to respond ($idp_url/realms/dive-v3-broker-usa)"
 fi
 
 # ============================================================================

@@ -159,7 +159,7 @@ check_prerequisites() {
     fi
     test_pass "Frontend is accessible"
 
-    if ! wait_for_url "$IDP_URL/realms/dive-v3-broker" 30; then
+    if ! wait_for_url "$IDP_URL/realms/dive-v3-broker-usa" 30; then
         log_fail "Keycloak not accessible at $IDP_URL"
         return 1
     fi
@@ -239,7 +239,7 @@ test_idp_login() {
     # Step 3: Follow redirect to Keycloak login page
     log_verbose "Step 3: Following redirect to Keycloak..."
 
-    local redirect_url=$(grep -o 'https://[^"]*realms/dive-v3-broker[^"]*' /tmp/protected_response.html 2>/dev/null | head -1)
+    local redirect_url=$(grep -o 'https://[^"]*realms/dive-v3-broker-usa[^"]*' /tmp/protected_response.html 2>/dev/null | head -1)
 
     if [ -z "$redirect_url" ]; then
         # Try to extract from Location header if available
@@ -360,17 +360,17 @@ test_keycloak_config() {
     log_info "Testing Keycloak IdP configuration..."
 
     # Check if realm exists
-    local realm_check=$(curl -k -s "$IDP_URL/admin/realms/dive-v3-broker" \
+    local realm_check=$(curl -k -s "$IDP_URL/admin/realms/dive-v3-broker-usa" \
         -H "Authorization: Bearer admin-token" 2>/dev/null || echo "")
 
     if [ -n "$realm_check" ]; then
-        test_pass "dive-v3-broker realm exists"
+        test_pass "dive-v3-broker-usa realm exists"
     else
         test_skip "Cannot verify realm (admin auth not configured)"
     fi
 
     # Check identity providers
-    local idps_response=$(curl -k -s "$IDP_URL/realms/dive-v3-broker/.well-known/openid_connect_configuration" 2>/dev/null || echo "{}")
+    local idps_response=$(curl -k -s "$IDP_URL/realms/dive-v3-broker-usa/.well-known/openid_connect_configuration" 2>/dev/null || echo "{}")
 
     if echo "$idps_response" | jq -e '.issuer' >/dev/null 2>&1; then
         test_pass "OIDC configuration available"
@@ -380,7 +380,7 @@ test_keycloak_config() {
     fi
 
     # Check if IdP login page loads
-    local login_page=$(curl -k -s "$IDP_URL/realms/dive-v3-broker/protocol/openid-connect/auth?client_id=dive-v3-client&redirect_uri=https://localhost:3000&response_type=code" 2>/dev/null || echo "")
+    local login_page=$(curl -k -s "$IDP_URL/realms/dive-v3-broker-usa/protocol/openid-connect/auth?client_id=dive-v3-client&redirect_uri=https://localhost:3000&response_type=code" 2>/dev/null || echo "")
 
     if echo "$login_page" | grep -q "Sign in\|Login\|Identity Provider"; then
         test_pass "Login page loads correctly"

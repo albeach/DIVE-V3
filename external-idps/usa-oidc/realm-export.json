@@ -212,7 +212,7 @@
             "serviceAccountsEnabled": false,
             "consentRequired": false,
             "rootUrl": "http://localhost:8081",
-            "baseUrl": "http://localhost:8081/realms/dive-v3-broker",
+            "baseUrl": "http://localhost:8081/realms/dive-v3-broker-usa",
             "redirectUris": [
                 "http://localhost:8081/*",
                 "http://keycloak:8080/*",

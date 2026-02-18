@@ -1021,7 +1021,7 @@ async function loadKASRegistry(): Promise<IKASRegistry> {
                         authMethod: 'jwt' as const,
                         authConfig: {
                             jwtIssuer: k.authConfig?.jwtIssuer || '',
-                            jwtAudience: 'dive-v3-broker'
+                            jwtAudience: 'dive-v3-broker-usa'
                         },
                         trustLevel: k.trustLevel || 'medium',
                         supportedCountries: k.supportedCountries || [],
@@ -1069,7 +1069,7 @@ async function loadKASRegistry(): Promise<IKASRegistry> {
                     authMethod: k.authMethod,
                     authConfig: {
                         jwtIssuer: k.authConfig.jwtIssuer,
-                        jwtAudience: k.authConfig.jwtAudience || 'dive-v3-broker'
+                        jwtAudience: k.authConfig.jwtAudience || 'dive-v3-broker-usa'
                     },
                     trustLevel: k.trustLevel,
                     supportedCountries: k.supportedCountries,

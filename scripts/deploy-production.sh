@@ -257,7 +257,7 @@ run_post_deployment_tests() {
     # Test health endpoints
     test_endpoint "https://$INSTANCE_IP/health" "Frontend Health"
     test_endpoint "https://$INSTANCE_IP:4000/health" "Backend Health"
-    test_endpoint "https://$INSTANCE_IP:8443/realms/dive-v3-broker/.well-known/openid-connect-configuration" "Keycloak Health"
+    test_endpoint "https://$INSTANCE_IP:8443/realms/dive-v3-broker-usa/.well-known/openid-connect-configuration" "Keycloak Health"
 
     # Run performance tests
     log_info "Running performance validation..."

@@ -227,8 +227,8 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD_USA}@hub-redis:6379
       BLACKLIST_REDIS_URL: redis://:${REDIS_PASSWORD_BLACKLIST}@hub-redis-blacklist:6379
       KEYCLOAK_URL: https://hub-keycloak:8443
-      KEYCLOAK_REALM: dive-v3-broker
-      KEYCLOAK_CLIENT_ID: dive-v3-broker
+      KEYCLOAK_REALM: dive-v3-broker-usa
+      KEYCLOAK_CLIENT_ID: dive-v3-broker-usa
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       KEYCLOAK_ADMIN_USERNAME: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
@@ -272,12 +272,12 @@ services:
       NEXT_PUBLIC_API_URL: https://${HUB_API_HOSTNAME:-usa-api.dive25.com}
       NEXT_PUBLIC_BASE_URL: https://${HUB_APP_HOSTNAME:-usa-app.dive25.com}
       NEXT_PUBLIC_KEYCLOAK_URL: https://${HUB_HOSTNAME:-usa-idp.dive25.com}
-      NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker
+      NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker-usa
       BACKEND_URL: https://hub-backend:4000
       AUTH_SECRET: ${AUTH_SECRET:?required}
-      AUTH_KEYCLOAK_ID: dive-v3-broker
+      AUTH_KEYCLOAK_ID: dive-v3-broker-usa
       AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET}
-      AUTH_KEYCLOAK_ISSUER: https://${HUB_HOSTNAME:-usa-idp.dive25.com}/realms/dive-v3-broker
+      AUTH_KEYCLOAK_ISSUER: https://${HUB_HOSTNAME:-usa-idp.dive25.com}/realms/dive-v3-broker-usa
       AUTH_TRUST_HOST: "true"
       NEXTAUTH_URL: https://${HUB_APP_HOSTNAME:-usa-app.dive25.com}
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@hub-postgres:5432/dive_v3_app
@@ -349,7 +349,7 @@ services:
     container_name: dive-pilot-hub-kas
     environment:
       KEYCLOAK_URL: https://hub-keycloak:8443
-      KEYCLOAK_REALM: dive-v3-broker
+      KEYCLOAK_REALM: dive-v3-broker-usa
       OPA_URL: https://hub-opa:8181
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@hub-mongodb:27017?authSource=admin
       INSTANCE_CODE: USA
@@ -533,7 +533,7 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD_SPOKE}
       OPA_URL: https://spoke-opa:8181
       # Trust hub and spoke issuers
-      TRUSTED_ISSUERS: https://${SPOKE_HOSTNAME:-${SPOKE_CODE_LOWER:-spoke}-idp.dive25.com}/realms/dive-v3-broker-${SPOKE_CODE_LOWER:-spoke},https://${HUB_HOSTNAME:-usa-idp.dive25.com}/realms/dive-v3-broker
+      TRUSTED_ISSUERS: https://${SPOKE_HOSTNAME:-${SPOKE_CODE_LOWER:-spoke}-idp.dive25.com}/realms/dive-v3-broker-${SPOKE_CODE_LOWER:-spoke},https://${HUB_HOSTNAME:-usa-idp.dive25.com}/realms/dive-v3-broker-usa
     ports:
       - "${SPOKE_BACKEND_PORT:-4031}:4000"
     volumes:

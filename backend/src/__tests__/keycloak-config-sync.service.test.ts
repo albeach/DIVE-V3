@@ -66,11 +66,11 @@ describe('KeycloakConfigSyncService - Configuration Sync', () => {
         mockedAxios.post.mockResolvedValueOnce({ data: mockAdminToken });
         mockedAxios.get.mockResolvedValueOnce({ data: mockRealmConfig });
 
-        const maxAttempts = await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker');
+        const maxAttempts = await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker-usa');
 
         expect(maxAttempts).toBe(8);
         expect(mockedAxios.get).toHaveBeenCalledWith(
-            expect.stringContaining('/admin/realms/dive-v3-broker'),
+            expect.stringContaining('/admin/realms/dive-v3-broker-usa'),
             expect.objectContaining({
                 headers: { Authorization: 'Bearer admin_token_here' }
             })
@@ -82,10 +82,10 @@ describe('KeycloakConfigSyncService - Configuration Sync', () => {
         mockedAxios.get.mockResolvedValueOnce({ data: mockRealmConfig });
 
         // First call
-        await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker');
+        await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker-usa');
 
         // Second call (should use cache)
-        await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker');
+        await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker-usa');
 
         // Should only call Keycloak once
         expect(mockedAxios.get).toHaveBeenCalledTimes(1);
@@ -95,7 +95,7 @@ describe('KeycloakConfigSyncService - Configuration Sync', () => {
         mockedAxios.post.mockResolvedValueOnce({ data: mockAdminToken });
         mockedAxios.get.mockResolvedValueOnce({ data: mockRealmConfig });
 
-        const windowMs = await KeycloakConfigSyncService.getWindowMs('dive-v3-broker');
+        const windowMs = await KeycloakConfigSyncService.getWindowMs('dive-v3-broker-usa');
 
         expect(windowMs).toBe(900 * 1000); // 15 minutes in ms
     });
@@ -104,7 +104,7 @@ describe('KeycloakConfigSyncService - Configuration Sync', () => {
         mockedAxios.post.mockResolvedValueOnce({ data: mockAdminToken });
         mockedAxios.get.mockResolvedValueOnce({ data: mockRealmConfig });
 
-        const config = await KeycloakConfigSyncService.getConfig('dive-v3-broker');
+        const config = await KeycloakConfigSyncService.getConfig('dive-v3-broker-usa');
 
         expect(config).toMatchObject({
             maxLoginFailures: 8,
@@ -127,10 +127,10 @@ describe('KeycloakConfigSyncService - Cache Behavior', () => {
         mockedAxios.get.mockResolvedValue({ data: mockRealmConfig });
 
         // First call
-        await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker');
+        await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker-usa');
 
         // Force sync
-        await KeycloakConfigSyncService.forceSync('dive-v3-broker');
+        await KeycloakConfigSyncService.forceSync('dive-v3-broker-usa');
 
         // Should call Keycloak twice
         expect(mockedAxios.get).toHaveBeenCalledTimes(2);
@@ -142,7 +142,7 @@ describe('KeycloakConfigSyncService - Cache Behavior', () => {
             .mockResolvedValueOnce({ data: { ...mockRealmConfig, maxFailureWaitSeconds: 8 } })
             .mockResolvedValueOnce({ data: { ...mockRealmConfig, maxFailureWaitSeconds: 5 } });
 
-        const brokerMax = await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker');
+        const brokerMax = await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker-usa');
         const usaMax = await KeycloakConfigSyncService.getMaxAttempts('dive-v3-usa');
 
         expect(brokerMax).toBe(8);
@@ -155,12 +155,12 @@ describe('KeycloakConfigSyncService - Cache Behavior', () => {
         mockedAxios.get.mockResolvedValue({ data: mockRealmConfig });
 
         // Sync two realms
-        await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker');
+        await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker-usa');
         await KeycloakConfigSyncService.getMaxAttempts('dive-v3-usa');
 
         const stats = KeycloakConfigSyncService.getCacheStats();
 
-        expect(stats.realms).toContain('dive-v3-broker');
+        expect(stats.realms).toContain('dive-v3-broker-usa');
         expect(stats.realms).toContain('dive-v3-usa');
         expect(stats.adminTokenExpiry).toBeDefined();
         expect(typeof stats.adminTokenExpiry).toBe('string');
@@ -175,7 +175,7 @@ describe('KeycloakConfigSyncService - Error Handling', () => {
     it('should use default values on Keycloak connection failure', async () => {
         mockedAxios.post.mockRejectedValueOnce(new Error('Connection refused'));
 
-        const maxAttempts = await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker');
+        const maxAttempts = await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker-usa');
 
         expect(maxAttempts).toBe(8); // Default fallback
     });
@@ -183,7 +183,7 @@ describe('KeycloakConfigSyncService - Error Handling', () => {
     it('should use default values on admin token failure', async () => {
         mockedAxios.post.mockRejectedValueOnce(new Error('Invalid credentials'));
 
-        const windowMs = await KeycloakConfigSyncService.getWindowMs('dive-v3-broker');
+        const windowMs = await KeycloakConfigSyncService.getWindowMs('dive-v3-broker-usa');
 
         expect(windowMs).toBe(900 * 1000); // Default 15 minutes
     });
@@ -193,17 +193,17 @@ describe('KeycloakConfigSyncService - Error Handling', () => {
         mockedAxios.post.mockResolvedValueOnce({ data: mockAdminToken });
         mockedAxios.get.mockResolvedValueOnce({ data: mockRealmConfig });
 
-        await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker');
+        await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker-usa');
 
         // Clear mocks, second sync fails
         jest.clearAllMocks();
         mockedAxios.post.mockRejectedValueOnce(new Error('Network error'));
 
         // Force sync (will fail but should keep using cached value)
-        await KeycloakConfigSyncService.forceSync('dive-v3-broker').catch(() => { });
+        await KeycloakConfigSyncService.forceSync('dive-v3-broker-usa').catch(() => { });
 
         // Should still return cached value
-        const maxAttempts = await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker');
+        const maxAttempts = await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker-usa');
         expect(maxAttempts).toBe(8);
     });
 });
@@ -229,15 +229,15 @@ describe('KeycloakConfigSyncService - Admin Token Caching', () => {
 
         // Mock realm config fetches (should happen twice - once per realm)
         mockedAxios.get
-            .mockResolvedValueOnce({ data: mockRealmConfig }) // dive-v3-broker
+            .mockResolvedValueOnce({ data: mockRealmConfig }) // dive-v3-broker-usa
             .mockResolvedValueOnce({ data: mockRealmConfig }); // dive-v3-usa
 
         console.log('=== Initial state ===');
         console.log('Cache stats:', KeycloakConfigSyncService.getCacheStats());
 
-        // First call - should trigger sync for dive-v3-broker
-        const result1 = await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker');
-        console.log('=== After first call (dive-v3-broker) ===');
+        // First call - should trigger sync for dive-v3-broker-usa
+        const result1 = await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker-usa');
+        console.log('=== After first call (dive-v3-broker-usa) ===');
         console.log('Result:', result1);
         console.log('GET calls:', mockedAxios.get.mock.calls.length);
         console.log('POST calls:', mockedAxios.post.mock.calls.length);
@@ -272,7 +272,7 @@ describe('KeycloakConfigSyncService - Admin Token Caching', () => {
         mockedAxios.get.mockResolvedValue({ data: mockRealmConfig });
 
         // First call
-        await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker');
+        await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker-usa');
 
         // Wait for token to expire
         await new Promise(resolve => setTimeout(resolve, 50));
@@ -301,7 +301,7 @@ describe('KeycloakConfigSyncService - Multi-Realm Sync', () => {
 
         // Verify all realms were called
         const calls = mockedAxios.get.mock.calls;
-        expect(calls.some(call => call[0].includes('dive-v3-broker'))).toBe(true);
+        expect(calls.some(call => call[0].includes('dive-v3-broker-usa'))).toBe(true);
         expect(calls.some(call => call[0].includes('dive-v3-usa'))).toBe(true);
         expect(calls.some(call => call[0].includes('dive-v3-fra'))).toBe(true);
         expect(calls.some(call => call[0].includes('dive-v3-can'))).toBe(true);
@@ -311,7 +311,7 @@ describe('KeycloakConfigSyncService - Multi-Realm Sync', () => {
     it('should handle partial failures in syncAllRealms', async () => {
         mockedAxios.post.mockResolvedValue({ data: mockAdminToken });
         mockedAxios.get
-            .mockResolvedValueOnce({ data: mockRealmConfig }) // dive-v3-broker
+            .mockResolvedValueOnce({ data: mockRealmConfig }) // dive-v3-broker-usa
             .mockRejectedValueOnce(new Error('Realm not found')) // dive-v3-usa
             .mockResolvedValueOnce({ data: mockRealmConfig }) // dive-v3-fra
             .mockResolvedValueOnce({ data: mockRealmConfig }) // dive-v3-can
@@ -339,7 +339,7 @@ describe('KeycloakConfigSyncService - Edge Cases', () => {
             }
         });
 
-        const maxAttempts = await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker');
+        const maxAttempts = await KeycloakConfigSyncService.getMaxAttempts('dive-v3-broker-usa');
 
         // Should use default of 8 when brute force is disabled
         expect(maxAttempts).toBe(8);
@@ -354,7 +354,7 @@ describe('KeycloakConfigSyncService - Edge Cases', () => {
             }
         });
 
-        const config = await KeycloakConfigSyncService.getConfig('dive-v3-broker');
+        const config = await KeycloakConfigSyncService.getConfig('dive-v3-broker-usa');
 
         // Should use defaults for missing fields
         expect(config?.maxLoginFailures).toBe(8);

@@ -61,8 +61,8 @@ export class OTPEnrollmentController {
 
             // Convert idpAlias to realmName (CRITICAL FIX)
             let realmName: string;
-            if (idpAlias === 'dive-v3-broker') {
-                realmName = 'dive-v3-broker';
+            if (idpAlias === 'dive-v3-broker-usa') {
+                realmName = 'dive-v3-broker-usa';
             } else if (idpAlias.includes('-realm-broker')) {
                 // Convert usa-realm-broker → dive-v3-usa
                 const countryCode = idpAlias.split('-')[0];

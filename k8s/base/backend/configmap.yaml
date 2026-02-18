@@ -12,6 +12,6 @@ metadata:
     app.kubernetes.io/part-of: dive-v3
 data:
   keycloak_url: "https://keycloak.dive-v3.svc.cluster.local:8443"
-  keycloak_realm: "dive-v3-broker"
+  keycloak_realm: "dive-v3-broker-usa"
   opa_url: "http://opa.dive-v3.svc.cluster.local:8181"
 

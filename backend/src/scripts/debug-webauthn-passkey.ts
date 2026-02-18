@@ -22,7 +22,7 @@ dotenv.config();
 const KEYCLOAK_URL = process.env.KEYCLOAK_URL || process.env.NEXT_PUBLIC_KEYCLOAK_URL || 'https://usa-idp.dive25.com';
 const ADMIN_USER = process.env.KEYCLOAK_ADMIN_USERNAME || process.env.KEYCLOAK_ADMIN_USER || 'admin';
 let ADMIN_PASSWORD = process.env.KEYCLOAK_ADMIN_PASSWORD || 'admin';
-const REALM = 'dive-v3-broker';
+const REALM = 'dive-v3-broker-usa';
 
 // Try to get password from GCP Secret Manager if not set
 async function getAdminPassword(): Promise<string> {

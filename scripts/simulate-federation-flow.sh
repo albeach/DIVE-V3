@@ -35,7 +35,7 @@ echo "[Step 1/6] Retrieving USA Hub IdP configuration..."
 USA_PASS="i8mE9Gjsg3x0KsCCZaG9tQ"
 USA_TOKEN=$(docker exec dive-hub-keycloak curl -sk -X POST "https://localhost:8443/realms/master/protocol/openid-connect/token" -d "client_id=admin-cli" -d "username=admin" -d "password=${USA_PASS}" -d "grant_type=password" 2>/dev/null | jq -r '.access_token')
 
-IDP_CONFIG=$(docker exec dive-hub-keycloak curl -sk -H "Authorization: Bearer $USA_TOKEN" "https://localhost:8443/admin/realms/dive-v3-broker/identity-provider/instances/gbr-idp" 2>/dev/null)
+IDP_CONFIG=$(docker exec dive-hub-keycloak curl -sk -H "Authorization: Bearer $USA_TOKEN" "https://localhost:8443/admin/realms/dive-v3-broker-usa/identity-provider/instances/gbr-idp" 2>/dev/null)
 
 AUTH_URL=$(echo "$IDP_CONFIG" | jq -r '.config.authorizationUrl')
 TOKEN_URL=$(echo "$IDP_CONFIG" | jq -r '.config.tokenUrl')
@@ -150,7 +150,7 @@ echo ""
 echo "[Step 5/6] Checking redirect URI configuration..."
 
 REDIRECT_URIS=$(echo "$GBR_CLIENT" | jq -r '.[0].redirectUris[]')
-EXPECTED_REDIRECT="https://localhost:8443/realms/dive-v3-broker/broker/gbr-idp/endpoint"
+EXPECTED_REDIRECT="https://localhost:8443/realms/dive-v3-broker-usa/broker/gbr-idp/endpoint"
 
 echo "  Configured redirect URIs:"
 echo "$REDIRECT_URIS" | sed 's/^/    /'

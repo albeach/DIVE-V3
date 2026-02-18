@@ -37,7 +37,7 @@ export const loginAttempts: LoginAttempt[] = [];
  * Check if user is rate limited (dynamic rate limiting based on Keycloak config)
  * @param ip Client IP address
  * @param username Username
- * @param realmId Keycloak realm ID (e.g., 'dive-v3-broker')
+ * @param realmId Keycloak realm ID (e.g., 'dive-v3-broker-usa')
  * @returns True if rate limited
  */
 async function isRateLimited(ip: string, username: string, realmId: string): Promise<boolean> {
@@ -115,7 +115,7 @@ export const customLoginHandler = async (
         // Get realm name from IdP alias
         // FEDERATION ARCHITECTURE (Option A):
         // - IdP brokers (usa-realm-broker, fra-realm-broker, etc.) → BROKER REALM
-        // - Broker realm (dive-v3-broker) → BROKER REALM  
+        // - Broker realm (dive-v3-broker-usa) → BROKER REALM  
         // - Direct realm access (dive-v3-usa) → National realm (testing only)
         //
         // Phase 2.3: Preserve federation - IdP brokers authenticate via broker realm
@@ -124,16 +124,16 @@ export const customLoginHandler = async (
             // IdP broker aliases: usa-realm-broker, fra-realm-broker, etc.
             // These are IdP brokers IN THE BROKER REALM that federate with national realms
             // Authentication MUST go through broker for proper federation
-            realmName = 'dive-v3-broker';  // ✅ FEDERATION via broker
+            realmName = 'dive-v3-broker-usa';  // ✅ FEDERATION via broker
             
             logger.info('Federated IdP broker detected - authenticating via broker realm', {
                 requestId,
                 idpAlias,
                 brokerRealm: realmName
             });
-        } else if (idpAlias === 'dive-v3-broker') {
+        } else if (idpAlias === 'dive-v3-broker-usa') {
             // Direct broker realm access (super admin)
-            realmName = 'dive-v3-broker';
+            realmName = 'dive-v3-broker-usa';
         } else {
             // Direct national realm access (testing/admin only - bypasses federation)
             realmName = idpAlias.replace('-idp', '');
@@ -183,15 +183,15 @@ export const customLoginHandler = async (
         // IdP brokers (usa-realm-broker, fra-realm-broker) must use browser flow
         // Direct Grant only works for direct broker realm users
         
-        if (idpAlias.includes('-realm-broker') && idpAlias !== 'dive-v3-broker') {
+        if (idpAlias.includes('-realm-broker') && idpAlias !== 'dive-v3-broker-usa') {
             // This is an IdP broker - cannot use Direct Grant
             // Must use Authorization Code flow with kc_idp_hint
             
             const publicKeycloakUrl = process.env.PUBLIC_KEYCLOAK_URL || 'http://localhost:8081';
             const appUrl = process.env.APP_URL || 'http://localhost:3000';
-            const clientId = 'dive-v3-broker';  // Broker realm application client
+            const clientId = 'dive-v3-broker-usa';  // Broker realm application client
             
-            const authUrl = new URL(`${publicKeycloakUrl}/realms/dive-v3-broker/protocol/openid-connect/auth`);
+            const authUrl = new URL(`${publicKeycloakUrl}/realms/dive-v3-broker-usa/protocol/openid-connect/auth`);
             authUrl.searchParams.set('client_id', clientId);
             authUrl.searchParams.set('redirect_uri', `${appUrl}/api/auth/callback/keycloak`);
             authUrl.searchParams.set('response_type', 'code');

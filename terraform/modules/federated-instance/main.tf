@@ -734,7 +734,7 @@ resource "keycloak_openid_client" "incoming_federation" {
   client_secret = lookup(var.incoming_federation_secrets, each.key, null)
 
   # URLs - redirect back to the partner's Keycloak
-  # CRITICAL: Use partner's realm name (dive-v3-broker-{partner_code}), not generic dive-v3-broker
+  # CRITICAL: Use partner's realm name (dive-v3-broker-{partner_code}), not generic dive-v3-broker-usa
   valid_redirect_uris = [
     "${each.value.idp_url}/realms/dive-v3-broker-${lower(each.value.instance_code)}/broker/${lower(var.instance_code)}-idp/endpoint",
     "${each.value.idp_url}/realms/dive-v3-broker-${lower(each.value.instance_code)}/broker/${lower(var.instance_code)}-idp/endpoint/*",

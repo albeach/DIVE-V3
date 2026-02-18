@@ -114,11 +114,11 @@ test_bidirectional_sso() {
     if [ -n "$hub_token" ]; then
         local source_idp=$(curl -sk --max-time 5 \
             -H "Authorization: Bearer $hub_token" \
-            "https://localhost:8443/admin/realms/dive-v3-broker/identity-provider/instances/${source_lower}-idp" 2>/dev/null | jq -r '.alias // empty')
+            "https://localhost:8443/admin/realms/dive-v3-broker-usa/identity-provider/instances/${source_lower}-idp" 2>/dev/null | jq -r '.alias // empty')
 
         local target_idp=$(curl -sk --max-time 5 \
             -H "Authorization: Bearer $hub_token" \
-            "https://localhost:8443/admin/realms/dive-v3-broker/identity-provider/instances/${target_lower}-idp" 2>/dev/null | jq -r '.alias // empty')
+            "https://localhost:8443/admin/realms/dive-v3-broker-usa/identity-provider/instances/${target_lower}-idp" 2>/dev/null | jq -r '.alias // empty')
 
         if [ "$source_idp" = "${source_lower}-idp" ] && [ "$target_idp" = "${target_lower}-idp" ]; then
             echo -e "${GREEN}✓ PASS${NC} (Both IdPs configured)"

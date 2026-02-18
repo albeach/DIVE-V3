@@ -329,7 +329,7 @@ locals {
   }
 
   # Partner realm path (all instances use instance-code-suffixed realms for consistency)
-  # FIX (Jan 2026): Changed USA from legacy "dive-v3-broker" to "dive-v3-broker-usa" for consistency
+  # FIX (Jan 2026): Changed USA from legacy "dive-v3-broker-usa" to "dive-v3-broker-usa" for consistency
   partner_realm = {
     for k, v in var.federation_partners :
     k => "dive-v3-broker-${lower(v.instance_code)}"

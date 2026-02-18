@@ -619,7 +619,7 @@ router.get('/spokes', authenticateJWT, async (req: Request, res: Response): Prom
         // Check if user has admin role
         const roles = user?.roles as string[] | undefined;
         const realmRoles = (user?.realm_access as Record<string, unknown> | undefined)?.roles as string[] | undefined;
-        const resourceRoles = ((user?.resource_access as Record<string, unknown> | undefined)?.['dive-v3-broker'] as Record<string, unknown> | undefined)?.roles as string[] | undefined;
+        const resourceRoles = ((user?.resource_access as Record<string, unknown> | undefined)?.['dive-v3-broker-usa'] as Record<string, unknown> | undefined)?.roles as string[] | undefined;
         const isAdmin = roles?.includes('dive-admin') ||
                         realmRoles?.includes('dive-admin') ||
                         resourceRoles?.includes('dive-admin');

@@ -4,7 +4,7 @@
 # =============================================================================
 # Migrates ALL occurrences of legacy hub realm names to correct naming convention
 #
-# OLD (incorrect):  dive-v3-broker
+# OLD (incorrect):  dive-v3-broker-usa
 # NEW (correct):    dive-v3-broker-usa
 #
 # OLD (incorrect):  dive-v3-broker-usa

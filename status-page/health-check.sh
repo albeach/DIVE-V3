@@ -34,7 +34,7 @@ for inst in "${INSTANCES[@]}"; do
 
     # Check each service
     IFS='|' read -r app_code app_ms app_status <<< "$(check_url "$app_url")"
-    IFS='|' read -r idp_code idp_ms idp_status <<< "$(check_url "${idp_url}/realms/dive-v3-broker")"
+    IFS='|' read -r idp_code idp_ms idp_status <<< "$(check_url "${idp_url}/realms/dive-v3-broker-usa")"
     IFS='|' read -r api_code api_ms api_status <<< "$(check_url "${api_url}/health")"
 
     # Also check IdP public endpoint (GAP-001 indicator)

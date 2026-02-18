@@ -276,7 +276,7 @@ export async function createFederationIdP(spoke: ISpokeRegistration, store: ISpo
   const spokeRealm = `dive-v3-broker-${spokeInstanceCode.toLowerCase()}`;
 
   // Determine hub (local) details for reverse IdP creation
-  const hubRealmName = process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+  const hubRealmName = process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
   const hubIdpUrl = getHubIdpUrl();
   const hubName = getInstanceName(hubInstanceCode);
 

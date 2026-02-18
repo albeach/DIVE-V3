@@ -292,7 +292,7 @@ export const idpLocaleMap: Record<string, Locale> = {
 
     // Industry/Broker (default to English)
     'industry-idp': 'en',
-    'dive-v3-broker': 'en'
+    'dive-v3-broker-usa': 'en'
 };
 
 /**

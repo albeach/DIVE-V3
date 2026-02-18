@@ -47,18 +47,32 @@ TEST_USER_PASSWORD="${TEST_USER_PASSWORD:-TestUser2025!Pilot}"
 ADMIN_USER_PASSWORD="${ADMIN_USER_PASSWORD:-TestUser2025!SecureAdmin}"
 
 # Get admin password from container if not set
-# Try multiple container names for compatibility (dive-v3-backend, dive-hub-backend, keycloak)
+# Try multiple container names for compatibility
 if [ -z "$ADMIN_PASSWORD" ]; then
-    for container in "dive-v3-backend" "dive-hub-backend" "dive-v3-keycloak"; do
+    for container in "dive-hub-keycloak" "dive-hub-backend" "dive-v3-keycloak" "dive-v3-backend"; do
         if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
             ADMIN_PASSWORD=$(docker exec "$container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null || echo "")
+            if [ -z "$ADMIN_PASSWORD" ]; then
+                # Try KC_ADMIN_PASSWORD_USA (compose uses this variable name)
+                ADMIN_PASSWORD=$(docker exec "$container" printenv KC_ADMIN_PASSWORD_USA 2>/dev/null || echo "")
+            fi
             [ -n "$ADMIN_PASSWORD" ] && break
         fi
     done
 fi
 
+# Fallback: read from .env.hub file
+if [ -z "$ADMIN_PASSWORD" ] && [ -f "${PROJECT_ROOT}/.env.hub" ]; then
+    ADMIN_PASSWORD=$(grep "^KC_ADMIN_PASSWORD_USA=" "${PROJECT_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'" | head -1)
+    [ -z "$ADMIN_PASSWORD" ] && \
+        ADMIN_PASSWORD=$(grep "^KEYCLOAK_ADMIN_PASSWORD_USA=" "${PROJECT_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'" | head -1)
+    [ -z "$ADMIN_PASSWORD" ] && \
+        ADMIN_PASSWORD=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" "${PROJECT_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'" | head -1)
+fi
+
 if [ -z "$ADMIN_PASSWORD" ]; then
     log_error "KEYCLOAK_ADMIN_PASSWORD not found"
+    log_error "Checked: env var, containers (dive-hub-keycloak, dive-hub-backend), .env.hub"
     exit 1
 fi
 
@@ -74,14 +88,22 @@ echo ""
 # =============================================================================
 log_step "Authenticating with Keycloak..."
 
-TOKEN=$(curl -sk -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
+AUTH_RESPONSE=$(curl -sk -X POST "${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token" \
     -d "grant_type=password" \
     -d "client_id=admin-cli" \
     -d "username=${ADMIN_USER}" \
-    -d "password=${ADMIN_PASSWORD}" | jq -r '.access_token')
+    -d "password=${ADMIN_PASSWORD}" 2>&1)
+
+TOKEN=$(echo "$AUTH_RESPONSE" | jq -r '.access_token' 2>/dev/null)
 
 if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
     log_error "Failed to authenticate with Keycloak"
+    log_error "  URL: ${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token"
+    log_error "  User: ${ADMIN_USER}"
+    log_error "  Password length: ${#ADMIN_PASSWORD}"
+    local err_desc
+    err_desc=$(echo "$AUTH_RESPONSE" | jq -r '.error_description // .error // empty' 2>/dev/null)
+    [ -n "$err_desc" ] && log_error "  Keycloak error: $err_desc"
     exit 1
 fi
 log_success "Authenticated"

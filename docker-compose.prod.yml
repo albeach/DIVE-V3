@@ -331,7 +331,7 @@ services:
       PORT: 4000
       # Service URLs (Internal Docker Network)
       KEYCLOAK_URL: https://keycloak:8443
-      KEYCLOAK_REALM: dive-v3-broker
+      KEYCLOAK_REALM: dive-v3-broker-usa
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD}@mongo:27017/dive-v3?authSource=admin&tls=true&tlsCAFile=/certs/ca.pem&tlsCertificateKeyFile=/certs/mongodb.pem
       OPA_URL: https://opa:8181
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
@@ -339,7 +339,7 @@ services:
       API_URL: https://localhost:4000
       NEXT_PUBLIC_BASE_URL: https://localhost:3000
       # Secrets
-      KEYCLOAK_CLIENT_ID: dive-v3-broker
+      KEYCLOAK_CLIENT_ID: dive-v3-broker-usa
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       KEYCLOAK_ADMIN_USERNAME: ${KEYCLOAK_ADMIN_USERNAME}
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
@@ -398,12 +398,12 @@ services:
       # Client Side URLs (Browser Access)
       NEXT_PUBLIC_API_URL: https://localhost:4000
       NEXT_PUBLIC_KEYCLOAK_URL: https://localhost:8443
-      NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker
+      NEXT_PUBLIC_KEYCLOAK_REALM: dive-v3-broker-usa
       # Server Side URLs (Docker Network)
       BACKEND_URL: https://backend:4000
       KEYCLOAK_URL: https://keycloak:8443
-      KEYCLOAK_REALM: dive-v3-broker
-      KEYCLOAK_ISSUER: https://localhost:8443/realms/dive-v3-broker
+      KEYCLOAK_REALM: dive-v3-broker-usa
+      KEYCLOAK_ISSUER: https://localhost:8443/realms/dive-v3-broker-usa
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET}
       # Database (Required for NextAuth adapter)
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@postgres:5432/dive_v3_app
@@ -412,9 +412,9 @@ services:
       AUTH_SECRET: ${AUTH_SECRET}
       NEXTAUTH_SECRET: ${AUTH_SECRET}
       # Auth.js standard environment variables
-      AUTH_KEYCLOAK_ID: dive-v3-broker
+      AUTH_KEYCLOAK_ID: dive-v3-broker-usa
       AUTH_KEYCLOAK_SECRET: ${KEYCLOAK_CLIENT_SECRET}
-      AUTH_KEYCLOAK_ISSUER: https://localhost:8443/realms/dive-v3-broker
+      AUTH_KEYCLOAK_ISSUER: https://localhost:8443/realms/dive-v3-broker-usa
       # Security
       AUTH_TRUST_HOST: "true"
       # SECURITY: Production should use properly issued certificates

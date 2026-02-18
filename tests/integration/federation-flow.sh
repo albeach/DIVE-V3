@@ -91,7 +91,7 @@ test_spoke_to_hub_sso() {
             local spoke_idp_check
             spoke_idp_check=$(docker exec "$hub_kc_container" curl -sf \
                 -H "Authorization: Bearer $hub_token" \
-                "http://localhost:8080/admin/realms/dive-v3-broker/identity-provider/instances/${TEST_CODE_LOWER}-idp" 2>/dev/null)
+                "http://localhost:8080/admin/realms/dive-v3-broker-usa/identity-provider/instances/${TEST_CODE_LOWER}-idp" 2>/dev/null)
 
             if echo "$spoke_idp_check" | grep -q '"alias"'; then
                 echo -e "${GREEN}✓${NC}"

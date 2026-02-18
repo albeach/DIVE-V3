@@ -2,7 +2,7 @@
 # DIVE V3 - Instance-Specific Realm Generator
 #
 # Generates a realm JSON file customized for a specific instance (USA, FRA, GBR, etc.)
-# Uses the base dive-v3-broker.json as a template.
+# Uses the base dive-v3-broker-usa.json as a template.
 #
 # Usage: ./generate-realm.sh <instance_code> [output_dir]
 #   instance_code: USA, FRA, GBR, DEU, CAN, ESP, ITA, NLD, POL
@@ -15,7 +15,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 KEYCLOAK_DIR="$(dirname "$SCRIPT_DIR")"
-TEMPLATE="${KEYCLOAK_DIR}/realms/dive-v3-broker.json"
+TEMPLATE="${KEYCLOAK_DIR}/realms/dive-v3-broker-usa.json"
 
 # Instance code (required)
 INSTANCE_CODE="${1:-USA}"

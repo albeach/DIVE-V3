@@ -46,8 +46,8 @@ export const initiateOTPSetup = async (
 
         // Get realm name from IdP alias
         let realmName: string;
-        if (idpAlias === 'dive-v3-broker') {
-            realmName = 'dive-v3-broker';
+        if (idpAlias === 'dive-v3-broker-usa') {
+            realmName = 'dive-v3-broker-usa';
         } else if (idpAlias.includes('-realm-broker')) {
             const countryCode = idpAlias.split('-')[0];
             realmName = `dive-v3-${countryCode}`;
@@ -186,8 +186,8 @@ export const verifyAndEnableOTP = async (
 
         // Get realm name
         let realmName: string;
-        if (idpAlias === 'dive-v3-broker') {
-            realmName = 'dive-v3-broker';
+        if (idpAlias === 'dive-v3-broker-usa') {
+            realmName = 'dive-v3-broker-usa';
         } else if (idpAlias.includes('-realm-broker')) {
             const countryCode = idpAlias.split('-')[0];
             realmName = `dive-v3-${countryCode}`;

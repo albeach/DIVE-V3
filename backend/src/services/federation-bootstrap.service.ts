@@ -244,7 +244,7 @@ class FederationBootstrapService {
         authMethod: 'jwt',
         authConfig: {
           jwtIssuer: issuerUrl,
-          jwtAudience: 'dive-v3-broker',
+          jwtAudience: 'dive-v3-broker-usa',
           publicKeyUrl: `${issuerUrl}/protocol/openid-connect/certs`
         },
         trustLevel: 'high',

@@ -17,7 +17,7 @@
 # Usage: ./sync-amr-attributes.sh [--realm REALM] [--user USERNAME]
 #
 # Examples:
-#   ./sync-amr-attributes.sh                  # Sync all users in dive-v3-broker
+#   ./sync-amr-attributes.sh                  # Sync all users in dive-v3-broker-usa
 #   ./sync-amr-attributes.sh --user testuser  # Sync specific user
 #   ./sync-amr-attributes.sh --realm spoke-gbr # Sync users in GBR spoke realm
 #
@@ -44,7 +44,7 @@ log_error()   { echo -e "${RED}✗${NC} $1"; }
 log_info()    { echo -e "${CYAN}ℹ${NC} $1"; }
 
 # Parse arguments
-REALM_NAME="dive-v3-broker"
+REALM_NAME="dive-v3-broker-usa"
 SPECIFIC_USER=""
 DRY_RUN=false
 
@@ -66,7 +66,7 @@ while [[ $# -gt 0 ]]; do
             echo "Usage: $0 [--realm REALM] [--user USERNAME] [--dry-run]"
             echo ""
             echo "Options:"
-            echo "  --realm REALM    Keycloak realm (default: dive-v3-broker)"
+            echo "  --realm REALM    Keycloak realm (default: dive-v3-broker-usa)"
             echo "  --user USERNAME  Sync only this user"
             echo "  --dry-run, -n    Show what would be done without making changes"
             exit 0

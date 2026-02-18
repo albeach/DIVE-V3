@@ -39,7 +39,7 @@ export const EXTERNAL_IDP_CONFIG: Record<string, ExternalIdPConfig> = {
         enabled: process.env.USE_EXTERNAL_SPAIN_IDP === 'true',
         protocol: 'SAML',
         keycloakUrl: process.env.SPAIN_EXTERNAL_SAML_URL || 'http://localhost:9443',
-        realmName: 'dive-v3-broker', // SAML IdP is registered in broker realm
+        realmName: 'dive-v3-broker-usa', // SAML IdP is registered in broker realm
         clientId: '', // Not applicable for SAML
         discoveryUrl: `${process.env.SPAIN_EXTERNAL_SAML_URL || 'http://localhost:9443'}/simplesaml/saml2/idp/metadata.php`,
     },
@@ -49,7 +49,7 @@ export const EXTERNAL_IDP_CONFIG: Record<string, ExternalIdPConfig> = {
         enabled: process.env.USE_EXTERNAL_SPAIN_IDP === 'true',
         protocol: 'SAML',
         keycloakUrl: process.env.SPAIN_EXTERNAL_SAML_URL || 'http://localhost:9443',
-        realmName: 'dive-v3-broker',
+        realmName: 'dive-v3-broker-usa',
         clientId: '', // Not applicable for SAML
         discoveryUrl: `${process.env.SPAIN_EXTERNAL_SAML_URL || 'http://localhost:9443'}/simplesaml/saml2/idp/metadata.php`,
     },
@@ -78,7 +78,7 @@ export function getExternalIdPConfig(idpAlias: string): ExternalIdPConfig | null
  * Get Keycloak realm name for an IdP alias
  * Supports both mock realms and external IdPs
  * 
- * @param idpAlias IdP alias (e.g., 'usa-realm-broker', 'dive-v3-broker')
+ * @param idpAlias IdP alias (e.g., 'usa-realm-broker', 'dive-v3-broker-usa')
  * @returns Realm name to use for authentication
  */
 export function getRealmNameForIdP(idpAlias: string): string {
@@ -89,16 +89,16 @@ export function getRealmNameForIdP(idpAlias: string): string {
     }
 
     // Fallback to mock realm logic
-    if (idpAlias === 'dive-v3-broker') {
-        return 'dive-v3-broker';
+    if (idpAlias === 'dive-v3-broker-usa') {
+        return 'dive-v3-broker-usa';
     } else if (idpAlias.includes('-realm-broker')) {
         // Extract country code: "usa-realm-broker" → "usa"
         const countryCode = idpAlias.split('-')[0];
         return `dive-v3-${countryCode}`;
     } else if (idpAlias.includes('-realm-external') || idpAlias.includes('-external')) {
         // External IdPs registered in broker realm (e.g., esp-realm-external)
-        // These are IdP aliases in dive-v3-broker, not separate realms
-        return 'dive-v3-broker';
+        // These are IdP aliases in dive-v3-broker-usa, not separate realms
+        return 'dive-v3-broker-usa';
     } else {
         // Fallback
         return idpAlias.replace('-idp', '');
@@ -142,7 +142,7 @@ export function getClientCredentialsForIdP(idpAlias: string): { clientId: string
 
     // Default to broker client
     return {
-        clientId: process.env.KEYCLOAK_CLIENT_ID || 'dive-v3-broker',
+        clientId: process.env.KEYCLOAK_CLIENT_ID || 'dive-v3-broker-usa',
         clientSecret: process.env.KEYCLOAK_CLIENT_SECRET || '',
     };
 }

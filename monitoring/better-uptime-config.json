@@ -36,7 +36,7 @@
     },
     {
       "name": "🇺🇸 USA - Keycloak IdP",
-      "url": "https://usa-idp.dive25.com/realms/dive-v3-broker/.well-known/openid-configuration",
+      "url": "https://usa-idp.dive25.com/realms/dive-v3-broker-usa/.well-known/openid-configuration",
       "monitor_type": "status",
       "expected_status_codes": [200],
       "check_frequency": 180,
@@ -63,7 +63,7 @@
     },
     {
       "name": "🇫🇷 FRA - Keycloak IdP",
-      "url": "https://fra-idp.dive25.com/realms/dive-v3-broker/.well-known/openid-configuration",
+      "url": "https://fra-idp.dive25.com/realms/dive-v3-broker-usa/.well-known/openid-configuration",
       "monitor_type": "status",
       "expected_status_codes": [200],
       "check_frequency": 180,
@@ -90,7 +90,7 @@
     },
     {
       "name": "🇬🇧 GBR - Keycloak IdP",
-      "url": "https://gbr-idp.dive25.com/realms/dive-v3-broker/.well-known/openid-configuration",
+      "url": "https://gbr-idp.dive25.com/realms/dive-v3-broker-usa/.well-known/openid-configuration",
       "monitor_type": "status",
       "expected_status_codes": [200],
       "check_frequency": 180,
@@ -117,7 +117,7 @@
     },
     {
       "name": "🇩🇪 DEU - Keycloak IdP",
-      "url": "https://deu-idp.prosecurity.biz/realms/dive-v3-broker/.well-known/openid-configuration",
+      "url": "https://deu-idp.prosecurity.biz/realms/dive-v3-broker-usa/.well-known/openid-configuration",
       "monitor_type": "status",
       "expected_status_codes": [200],
       "check_frequency": 180,

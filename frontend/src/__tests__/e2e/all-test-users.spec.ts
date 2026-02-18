@@ -463,7 +463,7 @@ test.describe('ALL Test Users - Comprehensive Authentication & Authorization Tes
 
       for (const user of allUsers) {
         expect(user.idp).toBeDefined();
-        expect(user.realmName).toBe('dive-v3-broker');
+        expect(user.realmName).toBe('dive-v3-broker-usa');
 
         // IdP should match country or be Industry
         if (user.countryCode === 'USA') {

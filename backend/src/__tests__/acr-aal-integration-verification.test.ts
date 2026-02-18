@@ -39,12 +39,12 @@ const KEYCLOAK_URL_USA = process.env.KEYCLOAK_URL_USA || LOCAL_KEYCLOAK;
 const KEYCLOAK_URL_FRA = process.env.KEYCLOAK_URL_FRA || LOCAL_KEYCLOAK;
 const KEYCLOAK_URL_DEU = process.env.KEYCLOAK_URL_DEU || LOCAL_KEYCLOAK;
 const TEST_PASSWORD = process.env.TEST_USER_PASSWORD || 'TestUser2025!Pilot';
-const REALM = 'dive-v3-broker';
-// Support both client IDs for testing (verified via Admin API: dive-v3-broker exists)
-// Try dive-v3-broker first, fallback to dive-v3-client
+const REALM = 'dive-v3-broker-usa';
+// Support both client IDs for testing (verified via Admin API: dive-v3-broker-usa exists)
+// Try dive-v3-broker-usa first, fallback to dive-v3-client
 // NOTE: Environment variable CLIENT_ID might be set to 'dive-v3-client' - we'll try both
-const CLIENT_ID = process.env.KEYCLOAK_CLIENT_ID || process.env.CLIENT_ID || 'dive-v3-broker';
-const FALLBACK_CLIENT_ID = CLIENT_ID === 'dive-v3-broker' ? 'dive-v3-client' : 'dive-v3-broker';
+const CLIENT_ID = process.env.KEYCLOAK_CLIENT_ID || process.env.CLIENT_ID || 'dive-v3-broker-usa';
+const FALLBACK_CLIENT_ID = CLIENT_ID === 'dive-v3-broker-usa' ? 'dive-v3-client' : 'dive-v3-broker-usa';
 
 // Try to get client secret from GCP or environment
 async function getClientSecret(instanceCode?: string): Promise<string | null> {

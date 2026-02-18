@@ -48,7 +48,7 @@ fi
 
 # Test 4: OAuth redirect
 echo -e "${BLUE}Test 4: OAuth Redirect Chain${NC}"
-REDIRECT_URL=$(curl -sk -i "https://localhost:8443/realms/dive-v3-broker/protocol/openid-connect/auth?kc_idp_hint=gbr-idp&response_type=code&client_id=dive-v3-broker&redirect_uri=https://localhost:3000/callback&scope=openid" 2>&1 | grep -i "location:" | head -1 | sed 's/location: //i' | tr -d '\r\n')
+REDIRECT_URL=$(curl -sk -i "https://localhost:8443/realms/dive-v3-broker-usa/protocol/openid-connect/auth?kc_idp_hint=gbr-idp&response_type=code&client_id=dive-v3-broker-usa&redirect_uri=https://localhost:3000/callback&scope=openid" 2>&1 | grep -i "location:" | head -1 | sed 's/location: //i' | tr -d '\r\n')
 
 if [[ "$REDIRECT_URL" == *"gbr-idp"* ]]; then
     echo -e "${GREEN}✅ PASS${NC} - OAuth redirect configured correctly"

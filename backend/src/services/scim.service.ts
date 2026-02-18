@@ -19,7 +19,7 @@ interface ISCIMPatchOperation {
 
 export class SCIMService {
   private kcAdminClient: KcAdminClient | null = null;
-  private readonly REALM_NAME = process.env.KEYCLOAK_REALM || 'dive-v3-broker';
+  private readonly REALM_NAME = process.env.KEYCLOAK_REALM || 'dive-v3-broker-usa';
 
   /**
    * Initialize Keycloak admin client
