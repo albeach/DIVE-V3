@@ -38,7 +38,7 @@ fi
 # =============================================================================
 
 HUB_KC_URL="${HUB_KC_URL:-https://localhost:8443}"
-HUB_REALM="${HUB_REALM:-dive-v3-broker}"
+HUB_REALM="${HUB_REALM:-dive-v3-broker-usa}"
 
 # =============================================================================
 # VERIFICATION FUNCTIONS

@@ -188,7 +188,7 @@ hub_init() {
         cat > "${HUB_DATA_DIR}/config/hub.json" << 'EOF'
 {
   "hub_id": "dive-hub",
-  "realm": "dive-v3-broker",
+  "realm": "dive-v3-broker-usa",
   "created": "2026-01-22",
   "spokes": []
 }
