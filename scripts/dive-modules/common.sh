@@ -264,36 +264,80 @@ if [ -z "${HUB_EXTERNAL_ADDRESS:-}" ] && [ -n "${INSTANCE_PUBLIC_IP:-}" ]; then
     export HUB_EXTERNAL_ADDRESS="$INSTANCE_PUBLIC_IP"
 fi
 
-# Auto-configure nginx proxy mode when running on EC2.
-# nginx owns the standard ports (443, 3000, 4000, 7002, 8443, 8200) on 0.0.0.0.
-# Services remap to 127.0.0.1:1XXXX to avoid conflicts.
+# Auto-configure external access when running on EC2.
+# Two modes: Caddy (domain-based, Let's Encrypt) or IP (direct IP:port, Vault PKI).
 if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost" ]; then
-    # EC2 mode — services bind to 0.0.0.0 for external access (no nginx, no port remapping)
-    export BIND_ADDRESS="${BIND_ADDRESS:-0.0.0.0}"
 
-    # Keycloak issuer — must match the external URL users see in their browser
-    export KEYCLOAK_HOSTNAME="${KEYCLOAK_HOSTNAME:-${HUB_EXTERNAL_ADDRESS}}"
+    if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+        # =================================================================
+        # CADDY MODE — Domain-based URLs (Let's Encrypt TLS on port 443)
+        # =================================================================
+        # Caddy handles external access; services stay on 127.0.0.1.
+        export BIND_ADDRESS="${BIND_ADDRESS:-127.0.0.1}"
 
-    # Frontend public URLs — browser-accessible externally.
-    # Force-set (no :- guard): .env may contain stale localhost values from templates
-    # that would otherwise prevent EC2 overrides.
-    export NEXT_PUBLIC_API_URL="https://${HUB_EXTERNAL_ADDRESS}:${BACKEND_PORT:-4000}"
-    export NEXT_PUBLIC_BACKEND_URL="https://${HUB_EXTERNAL_ADDRESS}:${BACKEND_PORT:-4000}"
-    export NEXT_PUBLIC_BASE_URL="https://${HUB_EXTERNAL_ADDRESS}:${FRONTEND_PORT:-3000}"
-    export NEXT_PUBLIC_KEYCLOAK_URL="https://${HUB_EXTERNAL_ADDRESS}:${KEYCLOAK_HTTPS_PORT:-8443}"
-    export NEXTAUTH_URL="https://${HUB_EXTERNAL_ADDRESS}:${FRONTEND_PORT:-3000}"
-    export AUTH_URL="https://${HUB_EXTERNAL_ADDRESS}:${FRONTEND_PORT:-3000}"
-    export KEYCLOAK_ISSUER="https://${HUB_EXTERNAL_ADDRESS}:${KEYCLOAK_HTTPS_PORT:-8443}/realms/${HUB_REALM:-dive-v3-broker-usa}"
-    export AUTH_KEYCLOAK_ISSUER="https://${HUB_EXTERNAL_ADDRESS}:${KEYCLOAK_HTTPS_PORT:-8443}/realms/${HUB_REALM:-dive-v3-broker-usa}"
-    export KEYCLOAK_URL="https://${HUB_EXTERNAL_ADDRESS}:${KEYCLOAK_HTTPS_PORT:-8443}"
+        # Derive domain names: dev.dive25.com → dev, usa → dev-usa-{service}.dive25.com
+        _country_lower="$(echo "${INSTANCE:-usa}" | tr '[:upper:]' '[:lower:]')"
+        _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
+        _base_domain="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"
 
-    # Host-accessible URLs for scripts (services on standard ports, no offset)
-    export HUB_KC_URL="https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}"
-    export HUB_BACKEND_URL="https://localhost:${BACKEND_PORT:-4000}"
-    export HUB_OPAL_URL="https://localhost:${OPAL_PORT:-7002}"
+        export CADDY_DOMAIN_APP="${CADDY_DOMAIN_APP:-${_env_prefix}-${_country_lower}-app.${_base_domain}}"
+        export CADDY_DOMAIN_API="${CADDY_DOMAIN_API:-${_env_prefix}-${_country_lower}-api.${_base_domain}}"
+        export CADDY_DOMAIN_IDP="${CADDY_DOMAIN_IDP:-${_env_prefix}-${_country_lower}-idp.${_base_domain}}"
+        export CADDY_DOMAIN_OPAL="${CADDY_DOMAIN_OPAL:-${_env_prefix}-${_country_lower}-opal.${_base_domain}}"
+        export CADDY_DOMAIN_VAULT="${CADDY_DOMAIN_VAULT:-${_env_prefix}-${_country_lower}-vault.${_base_domain}}"
 
-    # Terraform Keycloak provider
-    export TF_VAR_keycloak_url="https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}"
+        unset _country_lower _env_prefix _base_domain
+
+        # Keycloak issuer — must match the domain users see in their browser
+        export KEYCLOAK_HOSTNAME="${CADDY_DOMAIN_IDP}"
+
+        # Browser-facing URLs (domain-based, standard HTTPS port — no :PORT suffix)
+        export NEXT_PUBLIC_API_URL="https://${CADDY_DOMAIN_API}"
+        export NEXT_PUBLIC_BACKEND_URL="https://${CADDY_DOMAIN_API}"
+        export NEXT_PUBLIC_BASE_URL="https://${CADDY_DOMAIN_APP}"
+        export NEXT_PUBLIC_KEYCLOAK_URL="https://${CADDY_DOMAIN_IDP}"
+        export NEXTAUTH_URL="https://${CADDY_DOMAIN_APP}"
+        export AUTH_URL="https://${CADDY_DOMAIN_APP}"
+        export KEYCLOAK_ISSUER="https://${CADDY_DOMAIN_IDP}/realms/${HUB_REALM:-dive-v3-broker-usa}"
+        export AUTH_KEYCLOAK_ISSUER="https://${CADDY_DOMAIN_IDP}/realms/${HUB_REALM:-dive-v3-broker-usa}"
+        export KEYCLOAK_URL="https://${CADDY_DOMAIN_IDP}"
+
+        # Host-accessible URLs for scripts (localhost, standard ports)
+        export HUB_KC_URL="https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}"
+        export HUB_BACKEND_URL="https://localhost:${BACKEND_PORT:-4000}"
+        export HUB_OPAL_URL="https://localhost:${OPAL_PORT:-7002}"
+
+        # Terraform Keycloak provider (runs on host, connects via localhost)
+        export TF_VAR_keycloak_url="https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}"
+
+        # Enable Caddy compose profile
+        export DIVE_CADDY_ENABLED="true"
+
+    else
+        # =================================================================
+        # IP MODE — Direct IP:port access (Vault PKI certs, no Caddy)
+        # =================================================================
+        # Services bind to 0.0.0.0 for direct external access.
+        export BIND_ADDRESS="${BIND_ADDRESS:-0.0.0.0}"
+
+        export KEYCLOAK_HOSTNAME="${KEYCLOAK_HOSTNAME:-${HUB_EXTERNAL_ADDRESS}}"
+
+        export NEXT_PUBLIC_API_URL="https://${HUB_EXTERNAL_ADDRESS}:${BACKEND_PORT:-4000}"
+        export NEXT_PUBLIC_BACKEND_URL="https://${HUB_EXTERNAL_ADDRESS}:${BACKEND_PORT:-4000}"
+        export NEXT_PUBLIC_BASE_URL="https://${HUB_EXTERNAL_ADDRESS}:${FRONTEND_PORT:-3000}"
+        export NEXT_PUBLIC_KEYCLOAK_URL="https://${HUB_EXTERNAL_ADDRESS}:${KEYCLOAK_HTTPS_PORT:-8443}"
+        export NEXTAUTH_URL="https://${HUB_EXTERNAL_ADDRESS}:${FRONTEND_PORT:-3000}"
+        export AUTH_URL="https://${HUB_EXTERNAL_ADDRESS}:${FRONTEND_PORT:-3000}"
+        export KEYCLOAK_ISSUER="https://${HUB_EXTERNAL_ADDRESS}:${KEYCLOAK_HTTPS_PORT:-8443}/realms/${HUB_REALM:-dive-v3-broker-usa}"
+        export AUTH_KEYCLOAK_ISSUER="https://${HUB_EXTERNAL_ADDRESS}:${KEYCLOAK_HTTPS_PORT:-8443}/realms/${HUB_REALM:-dive-v3-broker-usa}"
+        export KEYCLOAK_URL="https://${HUB_EXTERNAL_ADDRESS}:${KEYCLOAK_HTTPS_PORT:-8443}"
+
+        export HUB_KC_URL="https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}"
+        export HUB_BACKEND_URL="https://localhost:${BACKEND_PORT:-4000}"
+        export HUB_OPAL_URL="https://localhost:${OPAL_PORT:-7002}"
+
+        export TF_VAR_keycloak_url="https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}"
+    fi
 fi
 
 # Environment-specific AWS defaults

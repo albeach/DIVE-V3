@@ -135,6 +135,16 @@ volumes:
       dive.resource.type: "volume"
       dive.resource.service: "opal-client"
       dive.resource.purpose: "backup"
+  caddy_data:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "caddy"
+      dive.resource.purpose: "certificates"
+  caddy_config:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "caddy"
+      dive.resource.purpose: "config"
 
 services:
   # ---------------------------------------------------------------------------
@@ -1270,3 +1280,42 @@ services:
       timeout: 8s
       retries: 10
       start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # Caddy Reverse Proxy — Auto Let's Encrypt via Cloudflare DNS-01
+  # ---------------------------------------------------------------------------
+  # Activated via profile: docker compose --profile caddy up -d
+  # Auto-activated on EC2 when DIVE_DOMAIN_SUFFIX is set.
+  # Terminates public TLS (Let's Encrypt) and proxies to internal services.
+  # ---------------------------------------------------------------------------
+  caddy:
+    labels:
+      dive.service.class: "infrastructure"
+      dive.service.description: "Caddy reverse proxy with auto Let's Encrypt (DNS-01)"
+    profiles: ["caddy"]
+    build:
+      context: ./docker/caddy
+      dockerfile: Dockerfile
+    container_name: ${COMPOSE_PROJECT_NAME:-dive-hub}-caddy
+    restart: unless-stopped
+    environment:
+      CADDY_DOMAIN_APP: ${CADDY_DOMAIN_APP:-localhost}
+      CADDY_DOMAIN_API: ${CADDY_DOMAIN_API:-localhost}
+      CADDY_DOMAIN_IDP: ${CADDY_DOMAIN_IDP:-localhost}
+      CADDY_DOMAIN_OPAL: ${CADDY_DOMAIN_OPAL:-localhost}
+      CADDY_DOMAIN_VAULT: ${CADDY_DOMAIN_VAULT:-localhost}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+    ports:
+      - "0.0.0.0:443:443"
+      - "0.0.0.0:80:80"
+    volumes:
+      - ./docker/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - hub-internal
+    depends_on:
+      keycloak:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
