@@ -140,19 +140,18 @@ hub_seed() {
         return 1
     fi
 
-    # Ensure KEYCLOAK_ADMIN_PASSWORD is exported for the seed subprocess
-    if [ -z "${KEYCLOAK_ADMIN_PASSWORD:-}" ]; then
-        # Try KC_ADMIN_PASSWORD_USA first (canonical variable from secrets)
-        if [ -n "${KC_ADMIN_PASSWORD_USA:-}" ]; then
-            export KEYCLOAK_ADMIN_PASSWORD="$KC_ADMIN_PASSWORD_USA"
-        elif [ -n "${KEYCLOAK_ADMIN_PASSWORD_USA:-}" ]; then
-            export KEYCLOAK_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD_USA"
-        elif [ -f "${DIVE_ROOT}/.env.hub" ]; then
-            local _pw
-            _pw=$(grep "^KC_ADMIN_PASSWORD_USA=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'" | head -1)
-            [ -z "$_pw" ] && _pw=$(grep "^KEYCLOAK_ADMIN_PASSWORD_USA=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'" | head -1)
-            [ -n "$_pw" ] && export KEYCLOAK_ADMIN_PASSWORD="$_pw"
-        fi
+    # Ensure KEYCLOAK_ADMIN_PASSWORD matches the actual Vault-seeded password.
+    # KC_ADMIN_PASSWORD_USA is canonical (from Vault seed → .env.hub).
+    # KEYCLOAK_ADMIN_PASSWORD may be stale ("admin" from defaults) — always override.
+    if [ -n "${KC_ADMIN_PASSWORD_USA:-}" ]; then
+        export KEYCLOAK_ADMIN_PASSWORD="$KC_ADMIN_PASSWORD_USA"
+    elif [ -n "${KEYCLOAK_ADMIN_PASSWORD_USA:-}" ]; then
+        export KEYCLOAK_ADMIN_PASSWORD="$KEYCLOAK_ADMIN_PASSWORD_USA"
+    elif [ -f "${DIVE_ROOT}/.env.hub" ]; then
+        local _pw
+        _pw=$(grep "^KC_ADMIN_PASSWORD_USA=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'" | head -1)
+        [ -z "$_pw" ] && _pw=$(grep "^KEYCLOAK_ADMIN_PASSWORD_USA=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2- | tr -d '"' | tr -d "'" | head -1)
+        [ -n "$_pw" ] && export KEYCLOAK_ADMIN_PASSWORD="$_pw"
     fi
 
     # Run user seeding script
