@@ -32,8 +32,10 @@ if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     export DIVE_COMMON_LOADED=1
 fi
 
-# Ensure SECRETS_PROVIDER is set (may be in .env.hub, not shell env)
-if [ -z "${SECRETS_PROVIDER:-}" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
+# Ensure SECRETS_PROVIDER is set
+# Remote mode: must come from environment variable (no .env.hub on spoke)
+# Local mode: fall back to reading from .env.hub on same machine
+if [ -z "${SECRETS_PROVIDER:-}" ] && [ "${DEPLOYMENT_MODE:-local}" != "remote" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
     _line=""
     while IFS= read -r _line; do
         case "$_line" in

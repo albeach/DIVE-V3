@@ -101,7 +101,7 @@ spoke_get_service_timeout() {
         keycloak) echo 180 ;;
         opa) echo 30 ;;
         backend) echo 120 ;;
-        frontend) echo 60 ;;
+        frontend) echo 120 ;;
         kas) echo 60 ;;
         opal-client) echo 30 ;;
         *) echo 60 ;;
@@ -117,7 +117,7 @@ if declare -A SPOKE_SERVICE_TIMEOUTS 2>/dev/null; then
         ["keycloak"]=180
         ["opa"]=30
         ["backend"]=120
-        ["frontend"]=60
+        ["frontend"]=120
         ["kas"]=60
         ["opal-client"]=30
     )
