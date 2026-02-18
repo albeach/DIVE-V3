@@ -411,8 +411,19 @@ spoke_init_generate_config() {
     # - Automatic offline resilience via local cache
     # ==========================================================================
 
-    # Hub URL for containers (Docker internal network)
+    # Hub URL: internal Docker name (local) or external Caddy URL (remote)
     local hub_url_internal="https://dive-hub-backend:4000"
+    if [ "${DEPLOYMENT_MODE:-local}" = "remote" ]; then
+        hub_url_internal="${HUB_API_URL:-https://dive-hub-backend:4000}"
+        log_info "Remote mode: Hub URL → ${hub_url_internal}"
+    fi
+
+    # Hub OPAL URL: Docker container name (local) or external Caddy URL (remote)
+    local hub_opal_url="https://dive-hub-opal-server:7002"
+    if [ "${DEPLOYMENT_MODE:-local}" = "remote" ]; then
+        hub_opal_url="${HUB_OPAL_URL:-https://dive-hub-opal-server:7002}"
+        log_info "Remote mode: Hub OPAL URL → ${hub_opal_url}"
+    fi
 
     # Build URLs — domain-aware when DIVE_DOMAIN_SUFFIX is set (EC2 with Caddy)
     local base_url="https://localhost:${SPOKE_FRONTEND_PORT}"
@@ -434,7 +445,7 @@ spoke_init_generate_config() {
 
     # Create .env file with config variables
     # NOTE: No SPOKE_ID - backend queries Hub at startup (SSOT architecture)
-    spoke_init_generate_env "$instance_code" "$base_url" "$api_url" "$idp_url" "$idp_public_url" "$kas_url" "$hub_url_internal"
+    spoke_init_generate_env "$instance_code" "$base_url" "$api_url" "$idp_url" "$idp_public_url" "$kas_url" "$hub_url_internal" "$hub_opal_url"
 
     log_success "Instance configuration generated (.env)"
 
@@ -455,20 +466,35 @@ spoke_init_generate_config() {
     #   - KAS failing to start (depends on OPAL client healthy)
     # SOLUTION: Provision token during initialization, before docker compose up
     log_verbose "Attempting to provision OPAL token before container startup..."
-    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "dive-hub-opal-server"; then
-        log_verbose "Hub OPAL server detected - provisioning token"
-        local hub_env_file="${DIVE_ROOT}/.env.hub"
-        local master_token=""
 
+    # Determine OPAL server URL based on deployment mode
+    local opal_server_url=""
+    local master_token="${OPAL_AUTH_MASTER_TOKEN:-}"
+
+    if [ "${DEPLOYMENT_MODE:-local}" = "remote" ]; then
+        # Remote mode: use Hub OPAL public URL
+        opal_server_url="${HUB_OPAL_URL:-}"
+        log_verbose "Remote mode — OPAL server: ${opal_server_url}"
+    elif docker ps --format '{{.Names}}' 2>/dev/null | grep -q "dive-hub-opal-server"; then
+        # Local mode: use localhost
+        opal_server_url="https://localhost:${OPAL_PORT:-7002}"
+        log_verbose "Local mode — Hub OPAL server detected"
+    fi
+
+    # Load master token from .env.hub if not already set
+    if [ -z "$master_token" ]; then
+        local hub_env_file="${DIVE_ROOT}/.env.hub"
         if [ -f "$hub_env_file" ]; then
             master_token=$(grep "^OPAL_AUTH_MASTER_TOKEN=" "$hub_env_file" 2>/dev/null | cut -d= -f2)
         fi
+    fi
 
+    if [ -n "$opal_server_url" ] && [ -n "$master_token" ]; then
         if [ -n "$master_token" ]; then
             # Request JWT from OPAL server
             local token_response
             token_response=$(curl -sk --max-time 10 \
-                -X POST "https://localhost:${OPAL_PORT:-7002}/token" \
+                -X POST "${opal_server_url}/token" \
                 -H "Authorization: Bearer ${master_token}" \
                 -H "Content-Type: application/json" \
                 -d '{"type": "client"}' 2>/dev/null || echo "")
@@ -613,6 +639,7 @@ spoke_init_generate_env() {
     local idp_public_url="$5"
     local kas_url="$6"
     local hub_url="$7"
+    local hub_opal_url="${8:-https://dive-hub-opal-server:7002}"
 
     local code_upper=$(upper "$instance_code")
     local code_lower=$(lower "$instance_code")
@@ -682,9 +709,16 @@ KAS_URL=$kas_url
 HUB_URL=$hub_url
 
 # Federation configuration
-HUB_OPAL_URL=https://dive-hub-opal-server:7002
+HUB_OPAL_URL=$hub_opal_url
+HUB_API_URL=${HUB_API_URL:-}
 SPOKE_OPAL_TOKEN=
 OPAL_LOG_LEVEL=INFO
+
+# Token blacklist: empty = API-based revocation via HUB_API_URL (remote mode)
+BLACKLIST_REDIS_URL=$([ "${DEPLOYMENT_MODE:-local}" = "remote" ] && echo "" || echo "rediss://:\${REDIS_PASSWORD_BLACKLIST}@dive-hub-redis:6379")
+
+# Deployment mode (local = same Docker host as Hub, remote = separate instance)
+DEPLOYMENT_MODE=${DEPLOYMENT_MODE:-local}
 
 # OPAL Authentication
 OPAL_AUTH_PUBLIC_KEY="$opal_public_key"

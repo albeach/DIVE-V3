@@ -28,6 +28,11 @@ import { logger } from '../utils/logger';
 let blacklistRedisClient: Redis | null = null;
 let pubSubClient: Redis | null = null;
 
+// Remote mode: when no direct Redis and HUB_API_URL is set, use HTTP API
+const HUB_API_URL = process.env.HUB_API_URL || '';
+const DEPLOYMENT_MODE = process.env.DEPLOYMENT_MODE || 'local';
+const isRemoteMode = (): boolean => !process.env.BLACKLIST_REDIS_URL && !!HUB_API_URL;
+
 // Pub/Sub channel for blacklist events
 const BLACKLIST_CHANNEL = 'dive-v3:token-blacklist';
 const USER_REVOKE_CHANNEL = 'dive-v3:user-revoked';
@@ -198,6 +203,11 @@ export const blacklistToken = async (
         return;
     }
 
+    // Remote mode: use Hub API for cross-instance revocation
+    if (isRemoteMode()) {
+        return blacklistTokenViaApi(jti, expiresIn, reason);
+    }
+
     const redis = getBlacklistRedisClient();
 
     try {
@@ -243,6 +253,11 @@ export const blacklistToken = async (
 export const isTokenBlacklisted = async (jti: string): Promise<boolean> => {
     if (!jti) {
         return false;  // Can't check without jti
+    }
+
+    // Remote mode: check via Hub API
+    if (isRemoteMode()) {
+        return isTokenBlacklistedViaApi(jti);
     }
 
     const redis = getBlacklistRedisClient();
@@ -371,6 +386,80 @@ export const areUserTokensRevoked = async (uniqueID: string): Promise<boolean> =
     }
 };
 
+// =============================================================================
+// HTTP-BASED TOKEN REVOCATION (Remote Mode)
+// =============================================================================
+// When BLACKLIST_REDIS_URL is unset and HUB_API_URL is set, spoke backends
+// use the Hub's /api/blacklist/* endpoints instead of direct Redis access.
+// This enables cross-EC2 token revocation without exposing Redis publicly.
+// =============================================================================
+
+/**
+ * Blacklist a token via Hub API (remote mode)
+ */
+const blacklistTokenViaApi = async (
+    jti: string,
+    expiresIn: number,
+    reason?: string
+): Promise<void> => {
+    try {
+        const response = await fetch(`${HUB_API_URL}/api/blacklist/tokens`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jti, ttl: expiresIn, reason: reason || 'User logout' }),
+            signal: AbortSignal.timeout(5000),
+        });
+
+        if (response.ok) {
+            logger.info('Token blacklisted via Hub API', {
+                instance: INSTANCE_ID,
+                jti,
+                hubApiUrl: HUB_API_URL
+            });
+        } else {
+            logger.warn('Hub API blacklist request failed', {
+                instance: INSTANCE_ID,
+                jti,
+                status: response.status
+            });
+        }
+    } catch (error) {
+        logger.warn('Failed to blacklist token via Hub API (fail-open)', {
+            instance: INSTANCE_ID,
+            jti,
+            error: error instanceof Error ? error.message : 'Unknown'
+        });
+        // Fail-open: Hub API unreachable shouldn't block user operations
+    }
+};
+
+/**
+ * Check if token is blacklisted via Hub API (remote mode)
+ */
+const isTokenBlacklistedViaApi = async (jti: string): Promise<boolean> => {
+    try {
+        const response = await fetch(
+            `${HUB_API_URL}/api/blacklist/tokens/${encodeURIComponent(jti)}/status`,
+            { signal: AbortSignal.timeout(3000) }
+        );
+
+        if (response.ok) {
+            const data = (await response.json()) as { blacklisted?: boolean };
+            return data.blacklisted === true;
+        }
+
+        return false;
+    } catch (error) {
+        logger.debug('Hub API blacklist check failed (fail-open)', {
+            instance: INSTANCE_ID,
+            jti,
+            error: error instanceof Error ? error.message : 'Unknown'
+        });
+        // Fail-open: same as Redis mode
+        return false;
+    }
+};
+
 /**
  * Get blacklist statistics (for monitoring)
  * Returns stats from the shared blacklist Redis
@@ -412,6 +501,15 @@ export const getBlacklistStats = async (): Promise<{
  * Call this on application startup
  */
 export const initializeBlacklistService = async (): Promise<void> => {
+    if (isRemoteMode()) {
+        logger.info('Token blacklist using Hub API (remote mode)', {
+            instance: INSTANCE_ID,
+            hubApiUrl: HUB_API_URL,
+            deploymentMode: DEPLOYMENT_MODE
+        });
+        return;
+    }
+
     logger.info('Initializing shared token blacklist service', {
         instance: INSTANCE_ID,
         blacklistRedisUrl: getBlacklistRedisUrl().replace(/:[^:@]+@/, ':***@')

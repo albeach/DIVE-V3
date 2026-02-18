@@ -134,6 +134,18 @@ volumes:
       dive.resource.service: "kas"
       dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
       dive.resource.purpose: "logs"
+  caddy_data:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "caddy"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "tls-certificates"
+  caddy_config:
+    labels:
+      dive.resource.type: "volume"
+      dive.resource.service: "caddy"
+      dive.resource.instance: "{{INSTANCE_CODE_UPPER}}"
+      dive.resource.purpose: "config"
 
 services:
   # ==========================================================================
@@ -534,7 +546,9 @@ services:
       # - REDIS_PASSWORD_BLACKLIST must be set in spoke's .env (from GCP secret)
       # - For remote Hub: Update dive-hub-redis-blacklist to Hub's actual hostname
       # ==========================================================================
-      BLACKLIST_REDIS_URL: rediss://:${REDIS_PASSWORD_BLACKLIST}@dive-hub-redis:6379
+      # Token blacklist: set in .env (local=Hub Redis, remote=empty → API-based via HUB_API_URL)
+      BLACKLIST_REDIS_URL: ${BLACKLIST_REDIS_URL:-}
+      HUB_API_URL: ${HUB_API_URL:-}
       # Keycloak (internal Docker network URL for backend API calls)
       KEYCLOAK_URL: https://keycloak-{{INSTANCE_CODE_LOWER}}:8443
       KEYCLOAK_REALM: dive-v3-broker-{{INSTANCE_CODE_LOWER}}
@@ -565,7 +579,7 @@ services:
       # For production federations, set to 'true' to allow spoke-to-hub communication
       ENABLE_FEDERATION_CORS: ${ENABLE_FEDERATION_CORS:-true}
       FEDERATION_ALLOWED_ORIGINS: {{BASE_URL}},{{API_URL}},{{IDP_URL}}
-      # Hub federation - use Docker internal container name for local deployment
+      # Hub federation URL: .env overrides (remote mode uses external URL)
       HUB_URL: ${HUB_URL:-https://dive-hub-backend:4000}
       SPOKE_TOKEN: ${SPOKE_TOKEN:-}  # Hub API token for heartbeat authentication
       # SPOKE_CONFIG_PATH removed — DB state is the SSOT
@@ -754,6 +768,43 @@ services:
     networks:
       - dive-internal
     restart: unless-stopped
+
+  # ==========================================================================
+  # CADDY REVERSE PROXY (Remote deployment — TLS termination for spoke domains)
+  # ==========================================================================
+  # Enabled when SPOKE_CADDY_ENABLED=true (set by spoke deployment in remote mode).
+  # Each spoke EC2 gets its own Caddy for Let's Encrypt certs on spoke domains.
+  # Local dev does not use this (Hub Caddy handles all domains on same host).
+
+  caddy-{{INSTANCE_CODE_LOWER}}:
+    labels:
+      dive.service.class: "infrastructure"
+      dive.service.description: "Caddy reverse proxy with auto Let's Encrypt for spoke {{INSTANCE_CODE_UPPER}}"
+    profiles: ["caddy"]
+    build:
+      context: ../../docker/caddy
+      dockerfile: Dockerfile
+    container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-caddy
+    restart: unless-stopped
+    environment:
+      CADDY_DOMAIN_APP: ${CADDY_DOMAIN_APP:-localhost}
+      CADDY_DOMAIN_API: ${CADDY_DOMAIN_API:-localhost}
+      CADDY_DOMAIN_IDP: ${CADDY_DOMAIN_IDP:-localhost}
+      CLOUDFLARE_API_TOKEN: ${CLOUDFLARE_API_TOKEN:-}
+    ports:
+      - "0.0.0.0:443:443"
+      - "0.0.0.0:80:80"
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - dive-internal
+    depends_on:
+      keycloak-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy
+      backend-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy
 
   # ==========================================================================
   # CLOUDFLARE TUNNEL (Optional - uncomment if using dive25.com)
