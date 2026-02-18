@@ -836,6 +836,8 @@ services:
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-broker-usa}
       KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_USA}
       KEYCLOAK_JWKS_URI: https://keycloak:8443/realms/dive-v3-broker-usa/protocol/openid-connect/certs
+      KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-https://keycloak:8443/realms/dive-v3-broker-usa}
+      TRUSTED_ISSUERS: ${TRUSTED_ISSUERS:-https://keycloak:8443/realms/dive-v3-broker-usa,https://localhost:8443/realms/dive-v3-broker-usa}
       KEYCLOAK_ADMIN_USERNAME: admin
       KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
       # Redis configuration
@@ -1107,7 +1109,7 @@ services:
       KEYCLOAK_ISSUER: ${KEYCLOAK_ISSUER:-https://localhost:8443/realms/dive-v3-broker-usa}
       NEXTAUTH_URL: ${NEXTAUTH_URL:-https://localhost:3000}
       AUTH_URL: ${AUTH_URL:-${NEXTAUTH_URL:-https://localhost:3000}}
-      NEXT_PUBLIC_EXTERNAL_DOMAINS: "${NEXT_PUBLIC_EXTERNAL_DOMAINS:-https://localhost:3000,https://localhost:4000,https://localhost:8443}"
+      NEXT_PUBLIC_EXTERNAL_DOMAINS: ${NEXT_PUBLIC_EXTERNAL_DOMAINS:-https://localhost:3000,https://localhost:4000,https://localhost:8443}
       AUTH_SECRET: ${AUTH_SECRET_USA:-default-auth-secret-change-me}
       NEXTAUTH_SECRET: ${AUTH_SECRET_USA:-default-auth-secret-change-me}
       KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-dive-v3-broker-usa}
