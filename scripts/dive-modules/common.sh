@@ -293,6 +293,9 @@ if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost
     export KEYCLOAK_ISSUER="${KEYCLOAK_ISSUER:-https://${HUB_EXTERNAL_ADDRESS}:8443/realms/${HUB_REALM:-dive-v3-broker-usa}}"
     export AUTH_KEYCLOAK_ISSUER="${AUTH_KEYCLOAK_ISSUER:-https://${HUB_EXTERNAL_ADDRESS}:8443/realms/${HUB_REALM:-dive-v3-broker-usa}}"
     export KEYCLOAK_URL="${KEYCLOAK_URL:-https://${HUB_EXTERNAL_ADDRESS}:8443}"
+
+    # Terraform Keycloak provider: connect directly, bypassing nginx
+    export TF_VAR_keycloak_url="https://localhost:${KEYCLOAK_HTTPS_PORT}"
 fi
 
 # Environment-specific AWS defaults

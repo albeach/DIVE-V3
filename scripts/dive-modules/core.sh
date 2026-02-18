@@ -172,7 +172,7 @@ wait_for_keycloak() {
     local delay=2
     local max_delay=30
     local attempt=0
-    local health_url="${KEYCLOAK_HEALTH_URL:-https://localhost:8443/realms/master}"
+    local health_url="${KEYCLOAK_HEALTH_URL:-https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}/realms/master}"
 
     log_verbose "Keycloak health URL: $health_url (timeout: ${timeout}s)"
 

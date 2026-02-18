@@ -362,7 +362,7 @@ hub_checkpoint_validate_state() {
         local realm="dive-v3-broker-usa"
 
         if docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
-            local realm_check=$(curl -sk --max-time 5 "https://localhost:8443/realms/${realm}" 2>/dev/null | \
+            local realm_check=$(curl -sk --max-time 5 "https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}/realms/${realm}" 2>/dev/null | \
                 jq -r '.realm // empty' 2>/dev/null)
 
             if [ "$realm_check" != "$realm" ]; then
