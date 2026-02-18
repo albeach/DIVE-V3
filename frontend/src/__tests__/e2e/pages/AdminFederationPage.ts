@@ -97,7 +97,7 @@ export class AdminFederationPage {
     await this.page.goto(`/admin/federation/${subRoute}`, {
       timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
     });
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async verifyLoaded() {
@@ -166,7 +166,7 @@ export class AdminFederationPage {
       .or(this.page.locator('[data-testid="confirm-resolve"]'));
 
     await confirmButton.click({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async filterAuditLog(filter: string) {
@@ -179,7 +179,7 @@ export class AdminFederationPage {
       .or(this.page.locator(`[data-value="${filter}"]`))
       .click({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
 
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async verifyStatsLoaded() {
@@ -215,6 +215,6 @@ export class AdminFederationPage {
       .or(this.page.locator('[data-testid="confirm-push"]'));
 
     await confirmButton.click({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 }

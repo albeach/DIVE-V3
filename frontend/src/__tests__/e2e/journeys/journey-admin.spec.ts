@@ -2,7 +2,7 @@
  * Admin User Journey E2E Tests
  *
  * Tests the complete end-to-end workflow for an admin user:
- * - Login with admin credentials (storageState or admin-dive user)
+ * - Login with admin credentials (storageState or admin-usa user)
  * - Admin dashboard verification
  * - User management (search, browse)
  * - Clearance management (tab switching)
@@ -246,7 +246,7 @@ test.describe('Journey: Admin User', () => {
         timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
         waitUntil: 'domcontentloaded',
       });
-      await page.waitForLoadState('networkidle', {
+      await page.waitForLoadState('domcontentloaded', {
         timeout: TEST_CONFIG.TIMEOUTS.NETWORK,
       });
     });
@@ -267,7 +267,7 @@ test.describe('Journey: Admin User', () => {
       timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
       waitUntil: 'domcontentloaded',
     });
-    await page.waitForLoadState('networkidle', {
+    await page.waitForLoadState('domcontentloaded', {
       timeout: TEST_CONFIG.TIMEOUTS.NETWORK,
     });
 
@@ -302,7 +302,7 @@ test.describe('Journey: Admin User', () => {
     await page.goto('/admin/users', {
       timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
     });
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     await test.step('Click admin dashboard link in sidebar', async () => {
       const sidebar = page
@@ -350,7 +350,7 @@ test.describe('Journey: Admin User', () => {
     await page.goto('/admin', {
       timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
     });
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     for (const section of adminSections) {
       await test.step(`Navigate to ${section.name}`, async () => {
@@ -375,7 +375,7 @@ test.describe('Journey: Admin User', () => {
           });
 
           // Wait for page load
-          await page.waitForLoadState('networkidle', {
+          await page.waitForLoadState('domcontentloaded', {
             timeout: TEST_CONFIG.TIMEOUTS.NETWORK,
           });
 
@@ -414,7 +414,7 @@ test.describe('Journey: Admin User', () => {
     await page.goto('/admin', {
       timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
     });
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     await test.step('Open user menu', async () => {
       const userMenu = page

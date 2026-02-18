@@ -86,7 +86,7 @@ export class AdminOnboardingPage {
     await this.page.goto('/admin/onboarding?start=1', {
       timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
     });
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async isTourVisible(): Promise<boolean> {

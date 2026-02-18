@@ -8,7 +8,7 @@ inputs:
   keycloak-users:
     description: 'JSON array of Keycloak user configs. Each: {"username":"...","password":"...","clearance":"...","coi":[...]}'
     required: false
-    default: '[{"username":"admin-dive","password":"Admin123!","clearance":"TOP_SECRET","coi":[]},{"username":"testuser-unclass","password":"Unclass123!","clearance":"UNCLASSIFIED","coi":[]}]'
+    default: '[{"username":"admin-usa","password":"Admin123!","clearance":"TOP_SECRET","coi":[],"firstName":"Admin","lastName":"USA","roles":["admin"]},{"username":"testuser-unclass","password":"Unclass123!","clearance":"UNCLASSIFIED","coi":[]}]'
   start-opa:
     description: 'Whether to start OPA server (true/false)'
     required: false
@@ -185,7 +185,7 @@ runs:
 
         # Ensure all scopes requested by NextAuth are available for the client.
         # Missing scopes cause Keycloak invalid_scope and immediate auth callback failure.
-        for scope in openid profile email uniqueID clearance countryOfAffiliation acpCOI user_acr user_amr; do
+        for scope in openid profile email roles uniqueID clearance countryOfAffiliation acpCOI user_acr user_amr; do
           SCOPE_ID=$(curl -sk "https://localhost:8443/admin/realms/$REALM/client-scopes" \
             -H "Authorization: Bearer $TOKEN" | jq -r ".[] | select(.name == \"$scope\") | .id" | head -n1)
 
@@ -284,6 +284,38 @@ runs:
           echo "::notice::Ensured user: $username ($clearance, $country)"
         }
 
+        # Assign a Keycloak realm role to a user (creates the role if it doesn't exist)
+        assign_realm_role() {
+          local user_id="$1"
+          local username="$2"
+          local role_name="$3"
+
+          # Create the realm role if it doesn't exist
+          curl -sk -X POST "https://localhost:8443/admin/realms/$REALM/roles" \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d "{\"name\":\"$role_name\"}" >/dev/null 2>&1 || true
+
+          # Get role representation
+          local role_json
+          role_json=$(curl -sk "https://localhost:8443/admin/realms/$REALM/roles/$role_name" \
+            -H "Authorization: Bearer $TOKEN" 2>/dev/null)
+
+          local role_id
+          role_id=$(echo "$role_json" | jq -r '.id // empty')
+
+          if [ -z "$role_id" ]; then
+            echo "::warning::Could not resolve role '$role_name' for user $username"
+            return 1
+          fi
+
+          # Assign role to user
+          curl -sk -X POST "https://localhost:8443/admin/realms/$REALM/users/$user_id/role-mappings/realm" \
+            -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            -d "[{\"id\":\"$role_id\",\"name\":\"$role_name\"}]" >/dev/null 2>&1
+
+          echo "::notice::Assigned role '$role_name' to user $username"
+        }
+
         # Create users from JSON input (upsert + password reset for deterministic CI behavior)
         if ! echo '${{ inputs.keycloak-users }}' | jq -c '.[]' | while read -r user; do
           username=$(echo "$user" | jq -r '.username')
@@ -294,11 +326,23 @@ runs:
           first_name=$(echo "$user" | jq -r '.firstName // "Test"')
           last_name=$(echo "$user" | jq -r '.lastName // "User"')
           email=$(echo "$user" | jq -r '.email // empty')
+          roles=$(echo "$user" | jq -c '.roles // []')
           if [ -z "$email" ]; then
             email="${username}@dive-ci.test"
           fi
 
           upsert_user "$username" "$password" "$clearance" "$coi" "$first_name" "$last_name" "$email" "$country" || exit 1
+
+          # Assign roles if specified in the user JSON
+          if [ "$roles" != "[]" ] && [ "$roles" != "null" ]; then
+            uid=$(curl -sk "https://localhost:8443/admin/realms/$REALM/users?username=$username&exact=true" \
+              -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id // empty')
+            if [ -n "$uid" ]; then
+              echo "$roles" | jq -r '.[]' | while read -r role; do
+                assign_realm_role "$uid" "$username" "$role"
+              done
+            fi
+          fi
         done; then
           echo "::error::Failed to provision one or more Keycloak test users"
           exit 1

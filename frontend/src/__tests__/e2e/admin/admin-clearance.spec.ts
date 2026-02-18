@@ -222,7 +222,7 @@ test.describe('Admin Clearance Management', () => {
       .getByRole('option').first()
       .or(page.locator('[data-value]').first());
     await firstOption.click({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('domcontentloaded');
 
     await expect(clearancePage.editorLevelInputs.first()).toBeVisible({
       timeout: TEST_CONFIG.TIMEOUTS.ACTION,
@@ -442,7 +442,7 @@ test.describe('Admin Clearance Management', () => {
       });
       const firstOption = page.getByRole('option').first().or(page.locator('[data-value]').first());
       await firstOption.click({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('domcontentloaded');
     });
 
     await test.step('Switch to Overview and back to Editor', async () => {

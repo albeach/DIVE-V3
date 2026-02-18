@@ -24,7 +24,7 @@ test.describe('Admin Approvals', () => {
   test('pending approvals list is visible', async ({ page }) => {
     const adminPage = new AdminApprovalsPage(page);
     await test.step('Wait for approval list to load', async () => {
-      await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+      await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
     });
 
     await test.step('Verify list or empty state is displayed', async () => {
@@ -36,7 +36,7 @@ test.describe('Admin Approvals', () => {
 
   test('approval cards display required information', async ({ page }) => {
     const adminPage = new AdminApprovalsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     const cardCount = await adminPage.approvalCards.count();
     if (cardCount === 0) {
@@ -62,7 +62,7 @@ test.describe('Admin Approvals', () => {
 
   test('approve request flow updates status', async ({ page }) => {
     const adminPage = new AdminApprovalsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     const cardCount = await adminPage.approvalCards.count();
     if (cardCount === 0) {
@@ -90,7 +90,7 @@ test.describe('Admin Approvals', () => {
 
   test('reject request flow with reason', async ({ page }) => {
     const adminPage = new AdminApprovalsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     const cardCount = await adminPage.approvalCards.count();
     if (cardCount === 0) {
@@ -123,7 +123,7 @@ test.describe('Admin Approvals', () => {
 
   test('notification toast appears after approval action', async ({ page }) => {
     const adminPage = new AdminApprovalsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     const cardCount = await adminPage.approvalCards.count();
     if (cardCount === 0) {
@@ -149,7 +149,7 @@ test.describe('Admin Approvals', () => {
 
   test('empty state message when no pending approvals', async ({ page }) => {
     const adminPage = new AdminApprovalsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     const cardCount = await adminPage.approvalCards.count();
     if (cardCount > 0) {
@@ -170,7 +170,7 @@ test.describe('Admin Approvals', () => {
 
   test('status badges show correct states', async ({ page }) => {
     const adminPage = new AdminApprovalsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Check for status badges on the page', async () => {
       const badges = page.locator('[data-testid="status-badge"], .status-badge, .badge');
@@ -193,7 +193,7 @@ test.describe('Admin Approvals', () => {
 
   test('pending status badge has distinct visual styling', async ({ page }) => {
     const adminPage = new AdminApprovalsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     const pendingBadge = page.locator('[data-testid="status-badge"], .status-badge, .badge').filter({ hasText: /pending/i }).first();
 
@@ -211,7 +211,7 @@ test.describe('Admin Approvals', () => {
 
   test('multiple approvals can be processed sequentially', async ({ page }) => {
     const adminPage = new AdminApprovalsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     const cardCount = await adminPage.approvalCards.count();
     if (cardCount < 2) {
@@ -254,7 +254,7 @@ test.describe('Admin Approvals', () => {
 
   test('approval cards contain timestamp information', async ({ page }) => {
     const adminPage = new AdminApprovalsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     const cardCount = await adminPage.approvalCards.count();
     if (cardCount === 0) {
@@ -286,7 +286,7 @@ test.describe('Admin Approvals', () => {
 
   test('tab or filter for different approval statuses', async ({ page }) => {
     const adminPage = new AdminApprovalsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Look for status filter tabs or dropdown', async () => {
       const tabs = page.locator('[role="tab"], .tab, [data-testid*="tab"], [data-testid*="filter"]');
@@ -302,7 +302,7 @@ test.describe('Admin Approvals', () => {
 
   test('approval detail can be expanded or viewed', async ({ page }) => {
     const adminPage = new AdminApprovalsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     const cardCount = await adminPage.approvalCards.count();
     if (cardCount === 0) {

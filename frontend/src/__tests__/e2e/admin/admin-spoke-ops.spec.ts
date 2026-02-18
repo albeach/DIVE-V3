@@ -32,7 +32,7 @@ test.describe('Admin Spoke Operations', () => {
 
   test('spoke entries display status information', async ({ page }) => {
     const spokeOpsPage = new AdminSpokeOpsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Spoke entries are visible', async () => {
       const spokeEntries = spokeOpsPage.spokeEntries;
@@ -52,7 +52,7 @@ test.describe('Admin Spoke Operations', () => {
 
   test('maintenance mode toggle enable works', async ({ page }) => {
     const spokeOpsPage = new AdminSpokeOpsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Navigate to maintenance section', async () => {
       await spokeOpsPage.navigateToMaintenance();
@@ -96,7 +96,7 @@ test.describe('Admin Spoke Operations', () => {
 
   test('maintenance mode toggle disable works', async ({ page }) => {
     const spokeOpsPage = new AdminSpokeOpsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Navigate to maintenance section', async () => {
       await spokeOpsPage.navigateToMaintenance();
@@ -141,7 +141,7 @@ test.describe('Admin Spoke Operations', () => {
 
   test('maintenance status indicator reflects current state', async ({ page }) => {
     const spokeOpsPage = new AdminSpokeOpsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Navigate to maintenance section', async () => {
       await spokeOpsPage.navigateToMaintenance();
@@ -169,7 +169,7 @@ test.describe('Admin Spoke Operations', () => {
 
   test('failover page shows event log', async ({ page }) => {
     const spokeOpsPage = new AdminSpokeOpsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Navigate to failover section', async () => {
       await spokeOpsPage.navigateToFailover();
@@ -190,7 +190,7 @@ test.describe('Admin Spoke Operations', () => {
 
   test('failover events have timestamps and descriptions', async ({ page }) => {
     const spokeOpsPage = new AdminSpokeOpsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Navigate to failover section', async () => {
       await spokeOpsPage.navigateToFailover();
@@ -219,7 +219,7 @@ test.describe('Admin Spoke Operations', () => {
 
   test('audit page shows queue status', async ({ page }) => {
     const spokeOpsPage = new AdminSpokeOpsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Navigate to audit section', async () => {
       await spokeOpsPage.navigateToAudit();
@@ -240,7 +240,7 @@ test.describe('Admin Spoke Operations', () => {
 
   test('policy sync status is visible', async ({ page }) => {
     const spokeOpsPage = new AdminSpokeOpsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Check for policy sync status indicator', async () => {
       const syncStatus = page.locator('[data-testid="policy-sync"], [data-testid*="sync"], .sync-status');
@@ -262,7 +262,7 @@ test.describe('Admin Spoke Operations', () => {
 
   test('navigate between maintenance, failover, and audit sub-routes', async ({ page }) => {
     const spokeOpsPage = new AdminSpokeOpsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Navigate to maintenance', async () => {
       await spokeOpsPage.navigateToMaintenance();
@@ -285,7 +285,7 @@ test.describe('Admin Spoke Operations', () => {
 
   test('maintenance mode confirmation dialog appears', async ({ page }) => {
     const spokeOpsPage = new AdminSpokeOpsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Navigate to maintenance section', async () => {
       await spokeOpsPage.navigateToMaintenance();
@@ -359,7 +359,7 @@ test.describe('Admin Spoke Operations', () => {
 
   test('spoke health indicators are color-coded', async ({ page }) => {
     const spokeOpsPage = new AdminSpokeOpsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Check for health status indicators', async () => {
       const healthIndicators = page.locator('[data-testid*="health"], .health-indicator, .status-dot, .status-icon');
@@ -397,7 +397,7 @@ test.describe('Admin Spoke Operations', () => {
 
   test('spoke list shows country or instance identifiers', async ({ page }) => {
     const spokeOpsPage = new AdminSpokeOpsPage(page);
-    await page.waitForLoadState('networkidle', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
+    await page.waitForLoadState('domcontentloaded', { timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION });
 
     await test.step('Spoke entries contain identifying information', async () => {
       const spokeEntries = spokeOpsPage.spokeEntries;

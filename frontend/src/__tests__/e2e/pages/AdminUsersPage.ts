@@ -75,14 +75,14 @@ export class AdminUsersPage {
     await this.page.goto('/admin/users', {
       timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
     });
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async gotoProvision() {
     await this.page.goto('/admin/users/provision', {
       timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
     });
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async verifyLoaded() {
@@ -94,7 +94,7 @@ export class AdminUsersPage {
   async searchUsers(query: string) {
     await this.searchInput.click({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
     await this.searchInput.fill(query);
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async filterByRole(role: string) {
@@ -103,7 +103,7 @@ export class AdminUsersPage {
       .getByRole('option', { name: new RegExp(role, 'i') })
       .or(this.page.locator(`[data-value="${role}"]`))
       .click({ timeout: TEST_CONFIG.TIMEOUTS.ACTION });
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async selectUser(index: number) {
@@ -128,7 +128,7 @@ export class AdminUsersPage {
     await this.resetPasswordButton.click({
       timeout: TEST_CONFIG.TIMEOUTS.ACTION,
     });
-    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForLoadState('domcontentloaded');
   }
 
   async verifyUserCount(expected: number) {
