@@ -20,8 +20,8 @@ hub_preflight() {
     # Detect stale instances/usa/.env (passwords from a previous deploy cycle)
     if [ -f "${DIVE_ROOT}/instances/usa/.env" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
         local env_hub_pw usa_env_pw
-        env_hub_pw=$(grep "^KEYCLOAK_ADMIN_PASSWORD_USA=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2-)
-        usa_env_pw=$(grep "^KEYCLOAK_ADMIN_PASSWORD_USA=" "${DIVE_ROOT}/instances/usa/.env" 2>/dev/null | cut -d= -f2-)
+        env_hub_pw=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | tail -1 | cut -d= -f2-)
+        usa_env_pw=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" "${DIVE_ROOT}/instances/usa/.env" 2>/dev/null | tail -1 | cut -d= -f2-)
         if [ -n "$env_hub_pw" ] && [ -n "$usa_env_pw" ] && [ "$env_hub_pw" != "$usa_env_pw" ]; then
             log_warn "instances/usa/.env has stale secrets — removing (will be regenerated)"
             rm -f "${DIVE_ROOT}/instances/usa/.env"

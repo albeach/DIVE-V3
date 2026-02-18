@@ -580,17 +580,7 @@ lower() {
 ##
 get_keycloak_password() {
     local container="${1:?Container name required}"
-    local password=""
-
-    # Try KC_BOOTSTRAP_ADMIN_PASSWORD first (Keycloak 26+)
-    password=$(docker exec "$container" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
-
-    # Fallback to legacy KEYCLOAK_ADMIN_PASSWORD
-    if [ -z "$password" ]; then
-        password=$(docker exec "$container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
-    fi
-
-    echo "$password"
+    docker exec "$container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r'
 }
 
 # Resolve container name based on environment/prefix, with override support.

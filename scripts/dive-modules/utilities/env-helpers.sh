@@ -161,7 +161,7 @@ wait_for_keycloak_admin_api_ready() {
     if [ -z "$admin_password" ]; then
         if [ "$instance_type" = "hub" ]; then
             # Hub: Try suffixed _USA variants first (normalized), then unsuffixed (backward compat)
-            admin_password="${KC_ADMIN_PASSWORD_USA:-${KC_BOOTSTRAP_ADMIN_PASSWORD_USA:-${KEYCLOAK_ADMIN_PASSWORD_USA:-${KC_BOOTSTRAP_ADMIN_PASSWORD:-${KEYCLOAK_ADMIN_PASSWORD:-}}}}}"
+            admin_password="${KEYCLOAK_ADMIN_PASSWORD:-}"
 
             # Try to get from GCP if still empty
             if [ -z "$admin_password" ] && command -v gcloud &>/dev/null; then

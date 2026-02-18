@@ -118,20 +118,15 @@ spoke_federation_setup() {
     log_step "Setting up federation for $code_upper"
 
     # ==========================================================================
-    # CRITICAL: Load Hub (USA) Keycloak admin password for readiness checks
+    # CRITICAL: Load Hub Keycloak admin password for readiness checks
     # ==========================================================================
-    # KEYCLOAK_ADMIN_PASSWORD (unsuffixed) may contain the SPOKE password from
-    # secrets_load_for_instance(). Always resolve Hub password explicitly via _USA.
-    local _hub_kc_pass="${KC_ADMIN_PASSWORD_USA:-${KC_BOOTSTRAP_ADMIN_PASSWORD_USA:-${KEYCLOAK_ADMIN_PASSWORD_USA:-}}}"
-    if [ -z "$_hub_kc_pass" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
-        _hub_kc_pass=$(grep "^KC_ADMIN_PASSWORD_USA=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
-        [ -z "$_hub_kc_pass" ] && _hub_kc_pass=$(grep "^KEYCLOAK_ADMIN_PASSWORD_USA=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+    if [ -z "${KEYCLOAK_ADMIN_PASSWORD:-}" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
+        local _hub_kc_pass
+        _hub_kc_pass=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" "${DIVE_ROOT}/.env.hub" | tail -1 | cut -d'=' -f2- | tr -d '"' | tr -d "'")
+        [ -n "$_hub_kc_pass" ] && export KEYCLOAK_ADMIN_PASSWORD="$_hub_kc_pass"
     fi
-    if [ -n "$_hub_kc_pass" ]; then
-        export KC_ADMIN_PASSWORD_USA="$_hub_kc_pass"
-        export KC_BOOTSTRAP_ADMIN_PASSWORD="$_hub_kc_pass"
-        export KEYCLOAK_ADMIN_PASSWORD="$_hub_kc_pass"
-        log_verbose "Hub Keycloak admin password resolved (USA)"
+    if [ -n "${KEYCLOAK_ADMIN_PASSWORD:-}" ]; then
+        log_verbose "Hub Keycloak admin password resolved"
     else
         log_warn "Hub Keycloak admin password not found — federation readiness check may fail"
     fi
