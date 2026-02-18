@@ -746,7 +746,7 @@ services:
         condition: service_healthy
     healthcheck:
       # Production standalone Next.js serves HTTP (Caddy handles TLS termination)
-      test: ["CMD-SHELL", "curl -sf http://localhost:3000/ >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/ >/dev/null || exit 1"]
       interval: 5s
       timeout: 8s
       retries: 10
