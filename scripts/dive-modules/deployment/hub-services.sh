@@ -606,17 +606,14 @@ hub_configure_keycloak() {
             # Apply with performance optimizations
             log_verbose "Applying Terraform configuration (optimized for performance)..."
 
-            # Build extra -var overrides for proxy mode (port offsets)
+            # Build extra -var overrides for EC2 external access
             # -var flags override -var-file (highest precedence)
             local tf_extra_vars=""
-            if [ -n "${KEYCLOAK_HTTPS_PORT:-}" ] && [ "${KEYCLOAK_HTTPS_PORT}" != "8443" ]; then
-                # Terraform provider: connect directly to Keycloak (bypass nginx)
-                tf_extra_vars="-var keycloak_url=https://localhost:${KEYCLOAK_HTTPS_PORT}"
-                # Realm config: use external URLs (what browsers will see)
-                local ext="${HUB_EXTERNAL_ADDRESS:-localhost}"
-                tf_extra_vars="$tf_extra_vars -var idp_url=https://${ext}:8443"
-                tf_extra_vars="$tf_extra_vars -var app_url=https://${ext}:3000"
-                tf_extra_vars="$tf_extra_vars -var api_url=https://${ext}:4000"
+            if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost" ]; then
+                local ext="$HUB_EXTERNAL_ADDRESS"
+                tf_extra_vars="-var idp_url=https://${ext}:${KEYCLOAK_HTTPS_PORT:-8443}"
+                tf_extra_vars="$tf_extra_vars -var app_url=https://${ext}:${FRONTEND_PORT:-3000}"
+                tf_extra_vars="$tf_extra_vars -var api_url=https://${ext}:${BACKEND_PORT:-4000}"
             fi
 
             # shellcheck disable=SC2086
