@@ -54,8 +54,16 @@ hub_phase_database_init() {
             if generate_hub_certificate_vault; then
                 log_success "Hub certificates issued from Vault PKI"
             else
-                log_warn "Vault PKI cert generation failed — trying mkcert fallback"
-                if command -v mkcert >/dev/null 2>&1; then
+                log_warn "Vault PKI cert generation failed — trying fallback"
+                # On EC2/cloud: use OpenSSL self-signed. Local: use mkcert.
+                if [ -n "${INSTANCE_PRIVATE_IP:-}" ] || [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "${HUB_EXTERNAL_ADDRESS:-localhost}" != "localhost" ]; then
+                    log_info "EC2: generating self-signed hub certificate with OpenSSL..."
+                    openssl req -x509 -newkey rsa:2048 -nodes -days 30 \
+                        -keyout "${cert_dir}/key.pem" -out "${cert_dir}/certificate.pem" \
+                        -subj "/CN=hub.dive-v3.local" \
+                        -addext "subjectAltName=DNS:localhost,DNS:backend,DNS:keycloak,DNS:frontend,DNS:opal-server,DNS:kas,DNS:postgres,DNS:mongodb,DNS:redis,IP:127.0.0.1${INSTANCE_PRIVATE_IP:+,IP:${INSTANCE_PRIVATE_IP}}${INSTANCE_PUBLIC_IP:+,IP:${INSTANCE_PUBLIC_IP}}" \
+                        2>/dev/null
+                elif command -v mkcert >/dev/null 2>&1; then
                     cd "$cert_dir"
                     mkcert -cert-file certificate.pem -key-file key.pem \
                         localhost "*.localhost" 127.0.0.1 \
@@ -64,6 +72,13 @@ hub_phase_database_init() {
                     cd "$DIVE_ROOT"
                 fi
             fi
+        elif [ -n "${INSTANCE_PRIVATE_IP:-}" ] || { [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "${HUB_EXTERNAL_ADDRESS:-localhost}" != "localhost" ]; }; then
+            log_info "EC2: generating self-signed hub certificate with OpenSSL..."
+            openssl req -x509 -newkey rsa:2048 -nodes -days 30 \
+                -keyout "${cert_dir}/key.pem" -out "${cert_dir}/certificate.pem" \
+                -subj "/CN=hub.dive-v3.local" \
+                -addext "subjectAltName=DNS:localhost,DNS:backend,DNS:keycloak,DNS:frontend,DNS:opal-server,DNS:kas,DNS:postgres,DNS:mongodb,DNS:redis,IP:127.0.0.1${INSTANCE_PRIVATE_IP:+,IP:${INSTANCE_PRIVATE_IP}}${INSTANCE_PUBLIC_IP:+,IP:${INSTANCE_PUBLIC_IP}}" \
+                2>/dev/null
         elif command -v mkcert >/dev/null 2>&1; then
             cd "$cert_dir"
             mkcert -cert-file certificate.pem -key-file key.pem \

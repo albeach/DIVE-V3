@@ -473,9 +473,21 @@ generate_vault_node_certs() {
 
     local vault_certs_dir="${DIVE_ROOT}/certs/vault"
 
-    # ── Production mode: use OpenSSL bootstrap CA ──
+    # ── Bootstrap CA mode: production, EC2, or any non-local environment ──
+    # mkcert is a development-only tool and should NEVER be used on EC2/cloud
+    local use_bootstrap_ca=false
     if is_production_mode; then
-        log_info "Production mode: generating Vault node TLS via bootstrap CA..."
+        use_bootstrap_ca=true
+    elif [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost" ]; then
+        use_bootstrap_ca=true
+    elif [ -n "${INSTANCE_PRIVATE_IP:-}" ]; then
+        use_bootstrap_ca=true
+    elif curl -sf -m 1 http://169.254.169.254/latest/meta-data/ >/dev/null 2>&1; then
+        use_bootstrap_ca=true
+    fi
+
+    if [ "$use_bootstrap_ca" = "true" ]; then
+        log_info "Non-local environment: generating Vault node TLS via bootstrap CA..."
 
         if ! _generate_bootstrap_ca; then
             log_error "Failed to generate bootstrap CA"
