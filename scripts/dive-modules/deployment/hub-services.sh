@@ -610,10 +610,18 @@ hub_configure_keycloak() {
             # -var flags override -var-file (highest precedence)
             local tf_extra_vars=""
             if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost" ]; then
-                local ext="$HUB_EXTERNAL_ADDRESS"
-                tf_extra_vars="-var idp_url=https://${ext}:${KEYCLOAK_HTTPS_PORT:-8443}"
-                tf_extra_vars="$tf_extra_vars -var app_url=https://${ext}:${FRONTEND_PORT:-3000}"
-                tf_extra_vars="$tf_extra_vars -var api_url=https://${ext}:${BACKEND_PORT:-4000}"
+                if [ -n "${CADDY_DOMAIN_IDP:-}" ]; then
+                    # Caddy mode: domain-based URLs (standard HTTPS port)
+                    tf_extra_vars="-var idp_url=https://${CADDY_DOMAIN_IDP}"
+                    tf_extra_vars="$tf_extra_vars -var app_url=https://${CADDY_DOMAIN_APP}"
+                    tf_extra_vars="$tf_extra_vars -var api_url=https://${CADDY_DOMAIN_API}"
+                else
+                    # IP mode: port-based URLs
+                    local ext="$HUB_EXTERNAL_ADDRESS"
+                    tf_extra_vars="-var idp_url=https://${ext}:${KEYCLOAK_HTTPS_PORT:-8443}"
+                    tf_extra_vars="$tf_extra_vars -var app_url=https://${ext}:${FRONTEND_PORT:-3000}"
+                    tf_extra_vars="$tf_extra_vars -var api_url=https://${ext}:${BACKEND_PORT:-4000}"
+                fi
             fi
 
             # shellcheck disable=SC2086

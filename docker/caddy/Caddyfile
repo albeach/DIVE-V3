@@ -1,0 +1,115 @@
+# =============================================================================
+# DIVE V3 Caddy Reverse Proxy — Auto Let's Encrypt via Cloudflare DNS-01
+# =============================================================================
+# Subdomain routing with env-parameterized domains.
+# Services use Vault PKI TLS internally; Caddy terminates public Let's Encrypt TLS.
+#
+# Required env vars:
+#   CADDY_DOMAIN_APP    e.g. dev-usa-app.dive25.com
+#   CADDY_DOMAIN_API    e.g. dev-usa-api.dive25.com
+#   CADDY_DOMAIN_IDP    e.g. dev-usa-idp.dive25.com
+#   CADDY_DOMAIN_OPAL   e.g. dev-usa-opal.dive25.com
+#   CADDY_DOMAIN_VAULT  e.g. dev-usa-vault.dive25.com
+#   CLOUDFLARE_API_TOKEN
+# =============================================================================
+
+{
+	email admin@dive25.com
+	acme_dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+}
+
+# =============================================================================
+# Frontend
+# =============================================================================
+{$CADDY_DOMAIN_APP} {
+	reverse_proxy https://frontend:3000 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Frame-Options "SAMEORIGIN"
+		X-Content-Type-Options "nosniff"
+		X-XSS-Protection "1; mode=block"
+		Referrer-Policy "no-referrer-when-downgrade"
+	}
+}
+
+# =============================================================================
+# Backend API
+# =============================================================================
+{$CADDY_DOMAIN_API} {
+	reverse_proxy https://backend:4000 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+	}
+}
+
+# =============================================================================
+# Keycloak IdP
+# =============================================================================
+{$CADDY_DOMAIN_IDP} {
+	reverse_proxy https://keycloak:8443 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+		# Keycloak needs large buffers for SAML/OIDC tokens
+		flush_interval -1
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+	}
+}
+
+# =============================================================================
+# OPAL Server (spoke federation — WebSocket pub/sub)
+# =============================================================================
+{$CADDY_DOMAIN_OPAL} {
+	reverse_proxy https://opal-server:7002 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+	}
+}
+
+# =============================================================================
+# Vault PKI CA (restricted — only CA + health endpoints)
+# =============================================================================
+{$CADDY_DOMAIN_VAULT} {
+	# PKI root CA
+	@pki_root path /v1/pki/ca /v1/pki/ca/pem
+	reverse_proxy @pki_root https://vault-1:8200 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+	}
+
+	# PKI intermediate CA
+	@pki_int path /v1/pki_int/ca /v1/pki_int/ca/pem
+	reverse_proxy @pki_int https://vault-1:8200 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+	}
+
+	# Vault health (monitoring)
+	@health path /v1/sys/health
+	reverse_proxy @health https://vault-1:8200 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+	}
+
+	# Block everything else
+	respond "Forbidden" 403
+}

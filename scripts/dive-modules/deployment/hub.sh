@@ -63,6 +63,10 @@ HUB_DATA_DIR="${DIVE_ROOT}/data/hub"
 # Compose command args
 # yq commands use $HUB_COMPOSE_FILE (single file); docker compose uses $HUB_COMPOSE_FILES
 HUB_COMPOSE_FILES="-f ${HUB_COMPOSE_FILE}"
+if [ "${DIVE_CADDY_ENABLED:-}" = "true" ]; then
+    HUB_COMPOSE_FILES="$HUB_COMPOSE_FILES --profile caddy"
+    log_info "Caddy mode: Let's Encrypt TLS via Cloudflare DNS-01"
+fi
 
 # =============================================================================
 # HUB PIPELINE EXECUTION (Phase 3: Hub Pipeline Enhancement)
