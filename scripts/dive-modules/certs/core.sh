@@ -524,6 +524,15 @@ source "$(dirname "${BASH_SOURCE[0]}")/validation.sh"
 # Output: "--cacert /path/to/ca.pem" or empty string
 ##
 _vault_curl_cacert_flag() {
+    local vault_addr="${VAULT_CLI_ADDR:-${VAULT_ADDR:-https://localhost:8200}}"
+
+    # For localhost connections, use --insecure (no MITM risk, avoids CA mismatch
+    # during bootstrap→Vault PKI cert rotation transitions)
+    if [[ "$vault_addr" =~ (localhost|127\.0\.0\.1) ]]; then
+        echo "--insecure"
+        return 0
+    fi
+
     local cacert_path="${VAULT_CACERT:-}"
 
     # Auto-detect from node1 CA if not set
