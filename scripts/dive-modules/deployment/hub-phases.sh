@@ -55,9 +55,8 @@ hub_phase_database_init() {
                 log_success "Hub certificates issued from Vault PKI"
             else
                 log_warn "Vault PKI cert generation failed — trying fallback"
-                # On EC2/cloud: use OpenSSL self-signed. Local: use mkcert.
-                if [ -n "${INSTANCE_PRIVATE_IP:-}" ] || [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "${HUB_EXTERNAL_ADDRESS:-localhost}" != "localhost" ]; then
-                    log_info "EC2: generating self-signed hub certificate with OpenSSL..."
+                if is_cloud_environment 2>/dev/null; then
+                    log_info "Cloud: generating self-signed hub certificate with OpenSSL..."
                     openssl req -x509 -newkey rsa:2048 -nodes -days 30 \
                         -keyout "${cert_dir}/key.pem" -out "${cert_dir}/certificate.pem" \
                         -subj "/CN=hub.dive-v3.local" \
@@ -72,8 +71,8 @@ hub_phase_database_init() {
                     cd "$DIVE_ROOT"
                 fi
             fi
-        elif [ -n "${INSTANCE_PRIVATE_IP:-}" ] || { [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "${HUB_EXTERNAL_ADDRESS:-localhost}" != "localhost" ]; }; then
-            log_info "EC2: generating self-signed hub certificate with OpenSSL..."
+        elif is_cloud_environment 2>/dev/null; then
+            log_info "Cloud: generating self-signed hub certificate with OpenSSL..."
             openssl req -x509 -newkey rsa:2048 -nodes -days 30 \
                 -keyout "${cert_dir}/key.pem" -out "${cert_dir}/certificate.pem" \
                 -subj "/CN=hub.dive-v3.local" \
@@ -92,7 +91,7 @@ hub_phase_database_init() {
         chmod 644 "${cert_dir}/key.pem" 2>/dev/null || true
         chmod 644 "${cert_dir}/certificate.pem" 2>/dev/null || true
 
-        # Build SSOT CA bundle (mkcert + Vault PKI)
+        # Build SSOT CA bundle
         _rebuild_ca_bundle
         log_verbose "CA bundle built at ${DIVE_ROOT}/certs/ca-bundle/rootCA.pem"
     fi

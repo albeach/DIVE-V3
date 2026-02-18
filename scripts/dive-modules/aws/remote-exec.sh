@@ -81,21 +81,37 @@ remote_sync() {
     log_info "Syncing code to ${target_ip}..."
 
     if [ "$sync_method" = "git" ]; then
-        # Fast path: git pull on remote
-        ssh -i "$DIVE_AWS_SSH_KEY" $SSH_OPTS \
-            "${REMOTE_USER}@${target_ip}" \
-            "cd ${REMOTE_DIVE_DIR} && git fetch origin && git reset --hard origin/$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo main)" \
-            2>/dev/null
+        # Get the LOCAL commit hash we want to deploy
+        local local_commit
+        local_commit=$(git -C "${DIVE_ROOT}" rev-parse HEAD 2>/dev/null || echo "")
+        local branch
+        branch=$(git -C "${DIVE_ROOT}" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "main")
 
-        if [ $? -eq 0 ]; then
-            log_success "Code synced via git pull."
-            return 0
+        if [ -n "$local_commit" ]; then
+            # Check if the commit is pushed to origin
+            local remote_has_commit
+            remote_has_commit=$(git -C "${DIVE_ROOT}" branch -r --contains "$local_commit" 2>/dev/null | grep -c "origin/" || echo "0")
+
+            if [ "$remote_has_commit" -gt 0 ]; then
+                # Remote has this commit — tell EC2 to fetch and reset to it
+                log_info "Syncing to commit ${local_commit:0:8} via git..."
+                if ssh -i "$DIVE_AWS_SSH_KEY" $SSH_OPTS \
+                    "${REMOTE_USER}@${target_ip}" \
+                    "cd ${REMOTE_DIVE_DIR} && git fetch origin && git reset --hard ${local_commit}" \
+                    2>/dev/null; then
+                    log_success "Code synced via git (commit ${local_commit:0:8})."
+                    return 0
+                fi
+                log_warn "Git sync failed, falling back to rsync..."
+            else
+                log_warn "Local commit ${local_commit:0:8} not pushed to origin — using rsync..."
+            fi
         fi
-        log_warn "Git pull failed, falling back to rsync..."
     fi
 
-    # Fallback: rsync (COPYFILE_DISABLE prevents macOS resource fork ._* files)
-    COPYFILE_DISABLE=1 rsync -avz --delete \
+    # rsync: copies local working tree (includes uncommitted changes)
+    # COPYFILE_DISABLE prevents macOS resource fork ._* files
+    COPYFILE_DISABLE=1 rsync -az --delete \
         --exclude '.git' \
         --exclude 'node_modules' \
         --exclude 'instances/*/data' \
@@ -110,6 +126,8 @@ remote_sync() {
         --exclude 'data/' \
         --exclude '.terraform' \
         --exclude 'backend/logs' \
+        --exclude 'backend/dist' \
+        --exclude 'frontend/.next' \
         --exclude 'coverage' \
         --exclude 'backend/policies/uploads' \
         --exclude '._*' \
@@ -134,9 +152,11 @@ remote_run() {
 
     log_info "Executing on ${target_ip}: $*"
 
+    # Use login shell (-t) to ensure Docker group membership is effective
+    # and set DOCKER_HOST explicitly in case the default socket has permission issues
     ssh -i "$DIVE_AWS_SSH_KEY" $SSH_OPTS \
         -t "${REMOTE_USER}@${target_ip}" \
-        "cd ${REMOTE_DIVE_DIR} && $*"
+        "cd ${REMOTE_DIVE_DIR} && export PATH=\"/usr/local/bin:/usr/bin:/bin:\$PATH\" && $*"
 }
 
 ##

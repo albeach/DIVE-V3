@@ -15,7 +15,7 @@
 #                          yet available (initial cluster startup).
 #   Phase B (steady state): After module_vault_pki_setup(), re-issue node certs
 #                          from Vault PKI Intermediate CA via rolling restart.
-#   Dev/mkcert fallback:   In non-production mode, mkcert is still used.
+#   Local dev fallback:    mkcert used only on local macOS/Linux workstations.
 # =============================================================================
 
 ## Bootstrap CA directory (one-time, 7-day TTL, OpenSSL self-signed)
@@ -28,9 +28,9 @@ VAULT_BOOTSTRAP_CERT_DAYS="${VAULT_BOOTSTRAP_CERT_DAYS:-7}"
 # Get the path to the CA certificate that should be used for CLI→Vault TLS.
 #
 # Priority:
-#   1. Vault PKI ca.pem (if node1 cert issued by Vault PKI Intermediate CA)
-#   2. Bootstrap CA ca.pem (if node1 cert issued by bootstrap CA)
-#   3. mkcert CA (dev/local mode)
+#   1. node1/ca.pem (Vault PKI or bootstrap CA — matches current node cert issuer)
+#   2. Bootstrap CA ca.pem (from certs/vault/bootstrap-ca/)
+#   3. mkcert CA (local dev only — never on cloud/EC2)
 #   4. Empty string (Vault TLS disabled / HTTP mode)
 #
 # Output: absolute path to CA PEM file (or empty string)
@@ -44,8 +44,15 @@ _vault_cacert_path() {
         return 0
     fi
 
-    # mkcert fallback for dev/local mode
-    if command -v mkcert &>/dev/null; then
+    # Bootstrap CA fallback
+    local bootstrap_ca="${DIVE_ROOT:-$(pwd)}/certs/vault/bootstrap-ca/ca.pem"
+    if [ -f "$bootstrap_ca" ]; then
+        echo "$bootstrap_ca"
+        return 0
+    fi
+
+    # mkcert fallback (local dev only — cloud uses bootstrap CA or Vault PKI)
+    if ! is_cloud_environment 2>/dev/null && command -v mkcert &>/dev/null; then
         local mkcert_ca
         mkcert_ca="$(mkcert -CAROOT 2>/dev/null)/rootCA.pem"
         if [ -f "$mkcert_ca" ]; then

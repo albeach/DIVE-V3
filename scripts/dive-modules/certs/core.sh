@@ -31,6 +31,11 @@ MKCERT_CA_FILENAME="mkcert-rootCA.pem"
 #   2 - root CA not found
 ##
 check_mkcert_ready() {
+    # Cloud/EC2: mkcert is irrelevant — always return failure silently
+    if is_cloud_environment 2>/dev/null; then
+        return 1
+    fi
+
     if ! command -v mkcert &> /dev/null; then
         log_error "mkcert is not installed"
         echo ""
@@ -91,11 +96,11 @@ _rebuild_ca_bundle() {
     mkdir -p "$(dirname "$output_file")"
     : > "$output_file"
 
-    # 1. Include mkcert CA (development trust provider)
-    if command -v mkcert &>/dev/null; then
+    # 1. Include mkcert CA (local dev only — cloud uses bootstrap CA / Vault PKI)
+    if ! is_cloud_environment 2>/dev/null && command -v mkcert &>/dev/null; then
         local mkcert_ca
         mkcert_ca=$(get_mkcert_ca_path 2>/dev/null) || true
-        if [ -f "$mkcert_ca" ]; then
+        if [ -f "${mkcert_ca:-}" ]; then
             cat "$mkcert_ca" >> "$output_file"
         fi
     fi
@@ -270,33 +275,34 @@ generate_java_truststore() {
         return 1
     fi
 
-    # Check mkcert CA
-    if ! check_mkcert_ready; then
+    # Determine CA source: SSOT bundle > mkcert CA
+    local ca_path=""
+    local ca_bundle="${DIVE_ROOT}/certs/ca-bundle/rootCA.pem"
+    if [ -f "$ca_bundle" ] && [ -s "$ca_bundle" ]; then
+        ca_path="$ca_bundle"
+    elif [ -f "$target_dir/ca/rootCA.pem" ] && [ -s "$target_dir/ca/rootCA.pem" ]; then
+        ca_path="$target_dir/ca/rootCA.pem"
+    elif [ -f "$target_dir/mkcert-rootCA.pem" ] && [ -s "$target_dir/mkcert-rootCA.pem" ]; then
+        ca_path="$target_dir/mkcert-rootCA.pem"
+    elif ! is_cloud_environment 2>/dev/null && check_mkcert_ready 2>/dev/null; then
+        ca_path=$(get_mkcert_ca_path)
+    fi
+
+    if [ -z "$ca_path" ] || [ ! -f "$ca_path" ]; then
+        log_warn "No CA certificate found for truststore generation"
         return 2
     fi
 
-    local ca_path
-    ca_path=$(get_mkcert_ca_path)
-
-    if [ ! -f "$ca_path" ]; then
-        log_error "mkcert root CA not found at: $ca_path"
-        return 2
-    fi
-
-    # Create directory if needed
     mkdir -p "$target_dir"
-
-    # Remove existing truststore to avoid "alias already exists" error
     rm -f "$truststore_file"
 
-    # Generate PKCS12 truststore
     if keytool -importcert -noprompt -trustcacerts \
-        -alias mkcert-ca \
+        -alias dive-v3-ca \
         -file "$ca_path" \
         -keystore "$truststore_file" \
         -storepass "$truststore_password" \
         -storetype PKCS12 2>/dev/null; then
-        
+
         chmod 644 "$truststore_file"
         log_verbose "Generated Java truststore: $truststore_file"
         return 0
@@ -335,14 +341,18 @@ generate_spoke_truststore() {
         cp "$ca_bundle" "$certs_dir/ca/rootCA.pem"
         chmod 644 "$certs_dir/ca/rootCA.pem"
     else
-        # Fallback to mkcert CA if SSOT bundle not yet built
-        local ca_path
-        ca_path=$(get_mkcert_ca_path 2>/dev/null) || true
-        if [ -f "$ca_path" ]; then
-            cp "$ca_path" "$certs_dir/ca/rootCA.pem"
-            chmod 644 "$certs_dir/ca/rootCA.pem"
+        # Fallback to mkcert CA (local dev only)
+        if ! is_cloud_environment 2>/dev/null; then
+            local ca_path
+            ca_path=$(get_mkcert_ca_path 2>/dev/null) || true
+            if [ -f "${ca_path:-}" ]; then
+                cp "$ca_path" "$certs_dir/ca/rootCA.pem"
+                chmod 644 "$certs_dir/ca/rootCA.pem"
+            else
+                log_warn "No CA bundle found, truststore will be incomplete"
+            fi
         else
-            log_warn "No CA bundle or mkcert CA found, truststore will be incomplete"
+            log_warn "No CA bundle found, truststore will be incomplete"
         fi
     fi
 
@@ -374,16 +384,15 @@ generate_hub_truststore() {
     # Ensure CA directory exists
     mkdir -p "$certs_dir/ca"
 
-    # Use SSOT CA bundle for truststore (includes mkcert + Vault PKI)
+    # Use SSOT CA bundle for truststore
     local ca_bundle="${DIVE_ROOT}/certs/ca-bundle/rootCA.pem"
     if [ -f "$ca_bundle" ] && [ -s "$ca_bundle" ]; then
         cp "$ca_bundle" "$certs_dir/mkcert-rootCA.pem"
         chmod 644 "$certs_dir/mkcert-rootCA.pem"
-    else
-        # Fallback to mkcert CA if SSOT bundle not yet built
+    elif ! is_cloud_environment 2>/dev/null; then
         local ca_path
         ca_path=$(get_mkcert_ca_path 2>/dev/null) || true
-        if [ -f "$ca_path" ]; then
+        if [ -f "${ca_path:-}" ]; then
             cp "$ca_path" "$certs_dir/mkcert-rootCA.pem"
             chmod 644 "$certs_dir/mkcert-rootCA.pem"
         fi

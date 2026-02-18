@@ -399,8 +399,8 @@ orch_validate_dependencies() {
         validation_failed=true
     fi
 
-    # 5. Check mkcert
-    if ! command -v mkcert >/dev/null 2>&1; then
+    # 5. Check mkcert (local dev only — cloud/EC2 uses OpenSSL/Vault PKI)
+    if ! is_cloud_environment 2>/dev/null && ! command -v mkcert >/dev/null 2>&1; then
         log_warn "mkcert not found - certificate generation may fail"
         ((warnings++))
     fi

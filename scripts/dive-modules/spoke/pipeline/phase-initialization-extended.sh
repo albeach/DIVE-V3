@@ -120,15 +120,14 @@ spoke_init_prepare_certificates() {
     if type use_vault_pki &>/dev/null && use_vault_pki; then
         log_info "CERT_PROVIDER=vault — using Vault PKI for spoke certificates"
         if type generate_spoke_certificate_vault &>/dev/null && generate_spoke_certificate_vault "$code_lower"; then
-            # Rebuild CA bundle: Vault PKI chain + mkcert CA (backward compat)
             if type _rebuild_spoke_ca_bundle &>/dev/null; then
                 _rebuild_spoke_ca_bundle "$code_lower"
-                log_verbose "Spoke CA bundle rebuilt (Vault PKI + mkcert)"
+                log_verbose "Spoke CA bundle rebuilt"
             fi
             log_success "Federation certificates prepared via Vault PKI"
             return 0
         fi
-        log_warn "Vault PKI failed — falling back to mkcert"
+        log_warn "Vault PKI failed — falling back to OpenSSL"
     fi
 
     # Check if certificates already exist
@@ -140,11 +139,9 @@ spoke_init_prepare_certificates() {
         if openssl x509 -in "$spoke_dir/certs/certificate.pem" -text -noout 2>/dev/null | grep -q "$required_san"; then
             log_info "TLS certificates exist and have required SANs - skipping generation"
 
-            # Build CA bundle with ALL trusted CAs (mkcert + Vault PKI)
-            # This ensures spoke services trust both CA providers for cross-instance TLS
             if type _rebuild_spoke_ca_bundle &>/dev/null; then
                 _rebuild_spoke_ca_bundle "$code_lower"
-                log_verbose "Spoke CA bundle rebuilt (mkcert + Vault PKI)"
+                log_verbose "Spoke CA bundle rebuilt"
             fi
 
             return 0
@@ -172,11 +169,10 @@ spoke_init_prepare_certificates() {
         if generate_spoke_certificate "$code_lower"; then
             log_success "Federation certificates prepared via SSOT"
 
-            # Build CA bundle with ALL trusted CAs (mkcert + Vault PKI)
             if type _rebuild_spoke_ca_bundle &>/dev/null; then
                 _rebuild_spoke_ca_bundle "$code_lower"
-                log_verbose "Spoke CA bundle rebuilt (mkcert + Vault PKI)"
-            elif type install_mkcert_ca_in_spoke &>/dev/null; then
+                log_verbose "Spoke CA bundle rebuilt"
+            elif ! is_cloud_environment 2>/dev/null && type install_mkcert_ca_in_spoke &>/dev/null; then
                 install_mkcert_ca_in_spoke "$code_lower" 2>/dev/null || true
             fi
 
@@ -222,22 +218,29 @@ spoke_init_prepare_certificates() {
     log_warn "certificates.sh module not found - using minimal fallback"
     log_warn "This is NOT recommended - ensure certificates.sh is available"
 
-    if ! command -v mkcert &>/dev/null; then
-        log_error "mkcert required but not installed"
-        log_error "Install: brew install mkcert && mkcert -install"
+    # Fallback: minimal certificate generation
+    if is_cloud_environment 2>/dev/null; then
+        log_warn "Cloud: generating spoke certificate with OpenSSL (incomplete SANs)"
+        local san_str="DNS:localhost,DNS:dive-spoke-${code_lower}-keycloak,DNS:keycloak-${code_lower},IP:127.0.0.1"
+        [ -n "${INSTANCE_PRIVATE_IP:-}" ] && san_str="${san_str},IP:${INSTANCE_PRIVATE_IP}"
+        openssl req -x509 -newkey rsa:2048 -nodes -days 30 \
+            -keyout "$spoke_dir/certs/key.pem" -out "$spoke_dir/certs/certificate.pem" \
+            -subj "/CN=spoke-${code_lower}.dive-v3.local" \
+            -addext "subjectAltName=${san_str}" 2>/dev/null || return 1
+    elif command -v mkcert &>/dev/null; then
+        log_warn "Generating certificate with INCOMPLETE SANs (Hub SANs missing)"
+        mkcert -key-file "$spoke_dir/certs/key.pem" \
+               -cert-file "$spoke_dir/certs/certificate.pem" \
+               localhost 127.0.0.1 ::1 host.docker.internal \
+               "dive-spoke-${code_lower}-keycloak" \
+               "keycloak-${code_lower}" 2>/dev/null || return 1
+    else
+        log_error "No certificate generation method available"
         return 1
     fi
 
-    # Minimal certificate generation (missing Hub SANs - federation may fail!)
-    log_warn "Generating certificate with INCOMPLETE SANs (Hub SANs missing)"
-    mkcert -key-file "$spoke_dir/certs/key.pem" \
-           -cert-file "$spoke_dir/certs/certificate.pem" \
-           localhost 127.0.0.1 ::1 host.docker.internal \
-           "dive-spoke-${code_lower}-keycloak" \
-           "keycloak-${code_lower}" 2>/dev/null || return 1
-
-    chmod 644 "$spoke_dir/certs/key.pem"   # 644: Docker containers run as non-owner UIDs
-    chmod 644 "$spoke_dir/certs/certificate.pem"
+    chmod 644 "$spoke_dir/certs/key.pem" 2>/dev/null || true
+    chmod 644 "$spoke_dir/certs/certificate.pem" 2>/dev/null || true
 
     # Generate spoke mTLS certificates
     spoke_init_generate_mtls_certs "$instance_code"

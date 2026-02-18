@@ -36,8 +36,8 @@ source "${SCRIPT_DIR}/rotation.sh"
 
 # CLI runs on host — prefer VAULT_CLI_ADDR (host-accessible) over VAULT_ADDR (Docker-internal)
 if [ -z "${VAULT_CLI_ADDR:-}" ] && [ -f "${DIVE_ROOT}/.env.hub" ]; then
-    _vault_cli_addr=$(grep '^VAULT_CLI_ADDR=' "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2-)
-    [ -n "$_vault_cli_addr" ] && VAULT_CLI_ADDR="$_vault_cli_addr"
+    _vault_cli_addr=$(grep '^VAULT_CLI_ADDR=' "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2- || true)
+    [ -n "${_vault_cli_addr:-}" ] && VAULT_CLI_ADDR="$_vault_cli_addr"
 fi
 VAULT_ADDR="${VAULT_CLI_ADDR:-${VAULT_ADDR:-https://localhost:8200}}"
 VAULT_TOKEN_FILE="${DIVE_ROOT}/.vault-token"
@@ -50,8 +50,19 @@ if [ -z "${VAULT_CACERT:-}" ] && [[ "$VAULT_ADDR" == https://* ]]; then
     _auto_cacert="${DIVE_ROOT}/certs/vault/node1/ca.pem"
     if [ -f "$_auto_cacert" ]; then
         export VAULT_CACERT="$_auto_cacert"
+    else
+        # Bootstrap CA fallback
+        _auto_cacert="${DIVE_ROOT}/certs/vault/bootstrap-ca/ca.pem"
+        if [ -f "$_auto_cacert" ]; then
+            export VAULT_CACERT="$_auto_cacert"
+        fi
     fi
     unset _auto_cacert
+fi
+
+# Cloud/EC2 safety: if no CACERT found, skip TLS verify so vault CLI still works
+if [ -z "${VAULT_CACERT:-}" ] && [[ "$VAULT_ADDR" == https://* ]]; then
+    export VAULT_SKIP_VERIFY=1
 fi
 
 # Scheme for per-node CLI calls (derived from VAULT_ADDR)

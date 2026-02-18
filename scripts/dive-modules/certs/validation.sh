@@ -59,6 +59,15 @@ update_hub_certificate_sans() {
     ensure_dive_root
     local hub_certs_dir="${DIVE_ROOT}/instances/hub/certs"
 
+    # Cloud: use Vault PKI if available, otherwise skip (OpenSSL certs have static SANs)
+    if is_cloud_environment 2>/dev/null; then
+        if type use_vault_pki &>/dev/null && use_vault_pki && type generate_hub_certificate_vault &>/dev/null; then
+            generate_hub_certificate_vault && return 0
+        fi
+        log_verbose "Cloud: hub cert SAN update skipped (use Vault PKI for dynamic SANs)"
+        return 0
+    fi
+
     if ! check_mkcert_ready; then
         return 1
     fi
@@ -166,6 +175,36 @@ generate_spoke_certificate() {
         return 1
     fi
 
+    # Cloud: generate with OpenSSL (no mkcert dependency)
+    if is_cloud_environment 2>/dev/null; then
+        log_step "Cloud: generating spoke certificate for $(upper "$spoke_code") with OpenSSL..."
+        mkdir -p "$certs_dir"
+        local hostnames san_str=""
+        hostnames=$(_spoke_service_sans "$code_lower" 2>/dev/null || echo "localhost")
+        for h in $hostnames; do
+            [ -n "$san_str" ] && san_str="${san_str},"
+            # Detect IP vs DNS
+            if [[ "$h" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ "$h" =~ ^::1$ ]]; then
+                san_str="${san_str}IP:${h}"
+            else
+                san_str="${san_str}DNS:${h}"
+            fi
+        done
+        san_str="${san_str},IP:127.0.0.1"
+        [ -n "${INSTANCE_PRIVATE_IP:-}" ] && san_str="${san_str},IP:${INSTANCE_PRIVATE_IP}"
+        if openssl req -x509 -newkey rsa:2048 -nodes -days 30 \
+            -keyout "$certs_dir/key.pem" -out "$certs_dir/certificate.pem" \
+            -subj "/CN=spoke-${code_lower}.dive-v3.local" \
+            -addext "subjectAltName=${san_str}" 2>/dev/null; then
+            chmod 644 "$certs_dir/key.pem" "$certs_dir/certificate.pem"
+            cp "$certs_dir/certificate.pem" "$certs_dir/fullchain.pem" 2>/dev/null || true
+            log_success "Spoke certificate generated for: $(upper "$spoke_code") (OpenSSL)"
+            return 0
+        fi
+        log_error "OpenSSL spoke certificate generation failed"
+        return 1
+    fi
+
     if ! check_mkcert_ready; then
         return 1
     fi
@@ -250,18 +289,27 @@ prepare_federation_certificates() {
     local failed=0
 
     # Step 1: Check prerequisites
-    log_step "Step 1/4: Checking mkcert prerequisites..."
-    if ! check_mkcert_ready; then
-        log_error "Prerequisites not met"
-        return 1
+    if is_cloud_environment 2>/dev/null; then
+        log_step "Step 1/4: Cloud environment — using OpenSSL/Vault PKI"
+    else
+        log_step "Step 1/4: Checking mkcert prerequisites..."
+        if ! check_mkcert_ready; then
+            log_error "Prerequisites not met"
+            return 1
+        fi
     fi
     log_success "Prerequisites OK"
 
-    # Step 2: Install mkcert CA in Hub
-    log_step "Step 2/4: Installing mkcert root CA in Hub truststore..."
-    if ! install_mkcert_ca_in_hub; then
-        log_warn "Hub CA installation had issues (continuing)"
-        failed=$((failed + 1))
+    # Step 2: Install CA in Hub truststore
+    if is_cloud_environment 2>/dev/null; then
+        log_step "Step 2/4: Building CA bundle for Hub..."
+        _rebuild_ca_bundle 2>/dev/null || true
+    else
+        log_step "Step 2/4: Installing mkcert root CA in Hub truststore..."
+        if ! install_mkcert_ca_in_hub; then
+            log_warn "Hub CA installation had issues (continuing)"
+            failed=$((failed + 1))
+        fi
     fi
 
     # Step 3: Update Hub certificate with spoke SANs
@@ -278,7 +326,11 @@ prepare_federation_certificates() {
         failed=$((failed + 1))
     fi
 
-    if ! install_mkcert_ca_in_spoke "$spoke_code"; then
+    if is_cloud_environment 2>/dev/null; then
+        if type _rebuild_spoke_ca_bundle &>/dev/null; then
+            _rebuild_spoke_ca_bundle "$spoke_code" 2>/dev/null || true
+        fi
+    elif ! install_mkcert_ca_in_spoke "$spoke_code"; then
         log_warn "Spoke CA installation had issues (continuing)"
         failed=$((failed + 1))
     fi
@@ -288,10 +340,10 @@ prepare_federation_certificates() {
     if [ $failed -eq 0 ]; then
         log_success "Federation certificates prepared successfully!"
         echo ""
-        echo "  ✓ mkcert root CA installed in Hub truststore"
+        echo "  ✓ CA trust chain configured"
         echo "  ✓ Hub certificate updated with spoke SANs"
         echo "  ✓ Spoke certificate generated"
-        echo "  ✓ mkcert root CA installed in spoke truststore"
+        echo "  ✓ CA installed in spoke truststore"
         echo ""
         return 0
     else

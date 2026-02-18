@@ -64,7 +64,7 @@ cmd_up() {
     if [ "$ENVIRONMENT" = "local" ] || [ "$ENVIRONMENT" = "dev" ]; then
         check_certs || exit 1
     else
-        log_verbose "Skipping mkcert generation for env ${ENVIRONMENT}"
+        log_verbose "Skipping local cert generation for env ${ENVIRONMENT}"
     fi
 
     log_step "Starting DIVE V3 Hub..."
