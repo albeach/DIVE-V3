@@ -75,16 +75,42 @@ if _vault_is_dev_mode; then
 fi
 
 ##
+# Run a command with timeout (portable: uses `timeout` on Linux, plain exec on macOS)
+##
+_vault_run_with_timeout() {
+    local secs=$1; shift
+    if command -v timeout &>/dev/null; then
+        timeout "$secs" "$@"
+    else
+        "$@"
+    fi
+}
+
+##
 # Check if Vault is unsealed (with retry for post-deploy timing)
 # Retries up to 3 times with 2s sleep to handle Raft cluster formation
+# Falls back to VAULT_SKIP_VERIFY=1 if CACERT-based TLS fails
 ##
 _vault_check_unsealed() {
     local retries=3
     local delay=2
+    local cacert_fallback=false
+
     for ((i=1; i<=retries; i++)); do
-        if vault status 2>/dev/null | grep -q "Sealed.*false"; then
+        if _vault_run_with_timeout 5 vault status 2>/dev/null | grep -q "Sealed.*false"; then
             return 0
         fi
+
+        # If VAULT_CACERT is set but vault can't respond, the CA cert may be
+        # stale/mismatched — fall back to VAULT_SKIP_VERIFY=1 before retrying
+        if [ -n "${VAULT_CACERT:-}" ] && [ "$cacert_fallback" = "false" ]; then
+            log_verbose "Vault unreachable with CACERT ($VAULT_CACERT) — retrying with VAULT_SKIP_VERIFY=1"
+            unset VAULT_CACERT
+            export VAULT_SKIP_VERIFY=1
+            cacert_fallback=true
+            continue
+        fi
+
         if [ "$i" -lt "$retries" ]; then
             log_verbose "Vault not yet responding (attempt $i/$retries) — retrying in ${delay}s..."
             sleep "$delay"
