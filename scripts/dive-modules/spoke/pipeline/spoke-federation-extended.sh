@@ -53,6 +53,16 @@ spoke_federation_register_in_hub() {
     local idp_url="https://localhost:${spoke_keycloak_port}"
     local frontend_url="https://localhost:${spoke_frontend_port}"
 
+    # When DIVE_DOMAIN_SUFFIX is set (EC2/Caddy mode), use external domain URLs
+    if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+        local _env_prefix _base_domain
+        _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
+        _base_domain="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"
+        idp_url="https://${_env_prefix}-${code_lower}-idp.${_base_domain}"
+        frontend_url="https://${_env_prefix}-${code_lower}-app.${_base_domain}"
+        log_verbose "Using external domain URLs for federation: ${idp_url}"
+    fi
+
     # Check if already in auto.tfvars (specifically in federation_partners block)
     if [ -f "$hub_auto_tfvars" ] && grep -E "^\s*${code_lower}\s*=" "$hub_auto_tfvars" 2>/dev/null | grep -v "^#" | head -1 | grep -q .; then
         log_info "$code_upper already in hub.auto.tfvars (federation_partners)"
@@ -208,6 +218,20 @@ PYTHON_EOF
         set +a
     else
         log_warn "Hub .env.hub not found — Hub Terraform may fail"
+    fi
+
+    # CRITICAL: .env.hub sets KEYCLOAK_REALM=dive-v3-broker-usa, but Terraform's
+    # Keycloak provider must authenticate via the master realm (admin-cli lives there).
+    # Override to master before Terraform picks it up.
+    export KEYCLOAK_REALM="master"
+
+    # On EC2 with Caddy, use external domain for Hub Keycloak (Terraform provider URL)
+    if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+        local _env_prefix _base_domain
+        _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
+        _base_domain="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"
+        export TF_VAR_keycloak_url="https://${_env_prefix}-usa-idp.${_base_domain}"
+        log_verbose "Hub Keycloak URL for Terraform: ${TF_VAR_keycloak_url}"
     fi
 
     # Export TF_VAR environment variables
