@@ -1,0 +1,65 @@
+# =============================================================================
+# DIVE V3 Spoke Caddy Reverse Proxy — Auto Let's Encrypt via Cloudflare DNS-01
+# =============================================================================
+# Generated for spoke {{INSTANCE_CODE_UPPER}} during deployment.
+# Routes spoke domains to internal Docker containers.
+#
+# Required env vars:
+#   CADDY_DOMAIN_APP    e.g. dev-gbr-app.dive25.com
+#   CADDY_DOMAIN_API    e.g. dev-gbr-api.dive25.com
+#   CADDY_DOMAIN_IDP    e.g. dev-gbr-idp.dive25.com
+#   CLOUDFLARE_API_TOKEN
+# =============================================================================
+
+{
+	email admin@dive25.com
+	acme_dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+}
+
+# =============================================================================
+# Frontend
+# =============================================================================
+{$CADDY_DOMAIN_APP} {
+	reverse_proxy http://frontend-{{INSTANCE_CODE_LOWER}}:3000
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Frame-Options "SAMEORIGIN"
+		X-Content-Type-Options "nosniff"
+		X-XSS-Protection "1; mode=block"
+		Referrer-Policy "no-referrer-when-downgrade"
+	}
+}
+
+# =============================================================================
+# Backend API
+# =============================================================================
+{$CADDY_DOMAIN_API} {
+	reverse_proxy https://backend-{{INSTANCE_CODE_LOWER}}:4000 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+	}
+}
+
+# =============================================================================
+# Keycloak IdP
+# =============================================================================
+{$CADDY_DOMAIN_IDP} {
+	reverse_proxy https://keycloak-{{INSTANCE_CODE_LOWER}}:8443 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+		flush_interval -1
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+	}
+}

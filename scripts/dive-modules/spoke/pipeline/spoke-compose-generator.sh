@@ -406,6 +406,19 @@ spoke_compose_render_template() {
     #   Step 2: Docker Compose loads POSTGRES_PASSWORD_FRA=value from .env at runtime ✅
     #   [REMOVED Step 3: Don't substitute ${POSTGRES_PASSWORD_FRA} with hardcoded value ❌]
 
+    # Remote mode: strip dive-shared network references (cross-instance uses HTTPS)
+    if [ "${DEPLOYMENT_MODE:-local}" = "remote" ]; then
+        # Remove dive-shared network declaration (external: true block)
+        template_content=$(echo "$template_content" | sed '/^  dive-shared:$/,/^    external: true$/d')
+        # Remove dive-shared from service network lists and associated aliases
+        template_content=$(echo "$template_content" | sed '/^      dive-shared:$/,/^        aliases:$/{ /dive-shared:/d; /aliases:/d; }')
+        template_content=$(echo "$template_content" | sed '/^      dive-shared:/d')
+        template_content=$(echo "$template_content" | sed '/- dive-shared/d')
+        # Remove alias lines that were under dive-shared (e.g., keycloak-{code} alias)
+        template_content=$(echo "$template_content" | sed '/^          - keycloak-/d')
+        log_verbose "Remote mode: stripped dive-shared network references from compose"
+    fi
+
     # Write output
     echo "$template_content" > "$output_file"
 

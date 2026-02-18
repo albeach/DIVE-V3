@@ -196,15 +196,33 @@ remote_dive_exec() {
         return 1
     }
 
-    # For spoke deploys, look up the hub's public IP so the spoke knows
-    # how to reach the hub (cross-EC2 federation)
+    # For spoke deploys, inject hub address and deployment mode
     local env_prefix=""
     if [ "$role" = "spoke" ]; then
         local hub_ip
         hub_ip=$(aws_get_instance_ip "hub" "" 2>/dev/null || echo "")
         if [ -n "$hub_ip" ] && [ "$hub_ip" != "None" ]; then
-            env_prefix="HUB_EXTERNAL_ADDRESS=${hub_ip} "
+            env_prefix="HUB_EXTERNAL_ADDRESS=${hub_ip} DEPLOYMENT_MODE=remote "
             log_info "Injecting hub address: HUB_EXTERNAL_ADDRESS=${hub_ip}"
+
+            # Inject domain suffix and Cloudflare token for Caddy setup
+            if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+                env_prefix="${env_prefix}DIVE_DOMAIN_SUFFIX=${DIVE_DOMAIN_SUFFIX} "
+                log_info "Injecting domain suffix: ${DIVE_DOMAIN_SUFFIX}"
+            fi
+            if [ -n "${CLOUDFLARE_API_TOKEN:-}" ]; then
+                env_prefix="${env_prefix}CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN} "
+            fi
+            # Inject OPAL master token for token provisioning
+            if [ -n "${OPAL_AUTH_MASTER_TOKEN:-}" ]; then
+                env_prefix="${env_prefix}OPAL_AUTH_MASTER_TOKEN=${OPAL_AUTH_MASTER_TOKEN} "
+            elif [ -f "${DIVE_ROOT}/.env.hub" ]; then
+                local _mt
+                _mt=$(grep "^OPAL_AUTH_MASTER_TOKEN=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2- || true)
+                if [ -n "$_mt" ]; then
+                    env_prefix="${env_prefix}OPAL_AUTH_MASTER_TOKEN=${_mt} "
+                fi
+            fi
         else
             log_warn "Could not discover hub IP — spoke may not be able to reach hub"
         fi

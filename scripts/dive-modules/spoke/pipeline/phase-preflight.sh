@@ -397,47 +397,76 @@ spoke_preflight_check_hub() {
     log_step "Auto-discovering Hub infrastructure..."
 
     # =========================================================================
-    # Step 1: Detect Hub containers
+    # Step 1: Detect Hub — local containers OR remote via HUB_EXTERNAL_ADDRESS
     # =========================================================================
     local hub_containers
     hub_containers=$(docker ps -q --filter "name=dive-hub" 2>/dev/null | wc -l | tr -d ' ')
 
     if [ "$hub_containers" -eq 0 ]; then
-        log_error "No Hub infrastructure detected"
-        echo ""
-        echo "  SOLUTION:"
-        echo "    1. Deploy the Hub first: ./dive hub deploy"
-        echo "    2. Wait for Hub to be healthy: ./dive hub status"
-        echo "    3. Then deploy spokes: ./dive spoke deploy $instance_code"
-        echo ""
+        # No local hub — check if we have a remote hub address
+        if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost" ]; then
+            log_info "No local Hub containers — using remote Hub at ${HUB_EXTERNAL_ADDRESS}"
+            export DEPLOYMENT_MODE="remote"
 
-        if type orch_record_error &>/dev/null; then
-            orch_record_error "$SPOKE_ERROR_HUB_NOT_FOUND" "$ORCH_SEVERITY_CRITICAL" \
-                "Hub infrastructure not detected" "preflight" \
-                "$(spoke_error_get_remediation $SPOKE_ERROR_HUB_NOT_FOUND $instance_code)"
+            # Derive hub URLs for remote mode
+            if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+                local _ep _bd
+                _ep="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
+                _bd="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"
+                export HUB_API_URL="${HUB_API_URL:-https://${_ep}-usa-api.${_bd}}"
+                export HUB_KC_URL="${HUB_KC_URL:-https://${_ep}-usa-idp.${_bd}}"
+                export HUB_OPAL_URL="${HUB_OPAL_URL:-https://${_ep}-usa-opal.${_bd}}"
+                export HUB_VAULT_URL="${HUB_VAULT_URL:-https://${_ep}-usa-vault.${_bd}}"
+            else
+                export HUB_API_URL="${HUB_API_URL:-https://${HUB_EXTERNAL_ADDRESS}:4000}"
+                export HUB_KC_URL="${HUB_KC_URL:-https://${HUB_EXTERNAL_ADDRESS}:8443}"
+                export HUB_OPAL_URL="${HUB_OPAL_URL:-https://${HUB_EXTERNAL_ADDRESS}:7002}"
+                export HUB_VAULT_URL="${HUB_VAULT_URL:-https://${HUB_EXTERNAL_ADDRESS}:8200}"
+            fi
+        else
+            log_error "No Hub infrastructure detected (local or remote)"
+            echo ""
+            echo "  SOLUTION:"
+            echo "    1. Deploy the Hub first: ./dive hub deploy"
+            echo "    2. Wait for Hub to be healthy: ./dive hub status"
+            echo "    3. Then deploy spokes: ./dive spoke deploy $instance_code"
+            echo "    OR: Set HUB_EXTERNAL_ADDRESS=<hub-ip> for remote Hub"
+            echo ""
+
+            if type orch_record_error &>/dev/null; then
+                orch_record_error "$SPOKE_ERROR_HUB_NOT_FOUND" "$ORCH_SEVERITY_CRITICAL" \
+                    "Hub infrastructure not detected" "preflight" \
+                    "$(spoke_error_get_remediation $SPOKE_ERROR_HUB_NOT_FOUND $instance_code)"
+            fi
+            return 1
         fi
-        return 1
+    else
+        export DEPLOYMENT_MODE="${DEPLOYMENT_MODE:-local}"
+        log_success "Hub infrastructure detected ($hub_containers containers)"
     fi
 
-    log_success "Hub infrastructure detected ($hub_containers containers)"
-
     # =========================================================================
-    # Step 2: Load Hub configuration from .env.hub
+    # Step 2: Load Hub configuration
     # =========================================================================
-    local env_hub="${DIVE_ROOT}/.env.hub"
-    if [ -f "$env_hub" ]; then
-        log_verbose "Loading Hub configuration from .env.hub"
-        # Export key Hub config for downstream use (only if not already set)
-        local _val
-        for _key in KEYCLOAK_ADMIN_PASSWORD VAULT_ROLE_ID VAULT_SECRET_ID CERT_PROVIDER SECRETS_PROVIDER DIVE_DOMAIN_SUFFIX; do
-            _val=$(grep "^${_key}=" "$env_hub" 2>/dev/null | cut -d= -f2- || true)
-            if [ -n "$_val" ] && [ -z "${!_key:-}" ]; then
-                export "$_key=$_val"
-                log_verbose "  Auto-discovered $_key from .env.hub"
-            fi
-        done
+    if [ "${DEPLOYMENT_MODE}" = "remote" ]; then
+        # Remote mode: Hub config comes from env vars injected by remote-exec
+        log_verbose "Remote mode — Hub config from environment (HUB_API_URL=${HUB_API_URL:-unset})"
     else
-        log_warn "No .env.hub found — Hub configuration may be incomplete"
+        # Local mode: Load from .env.hub on same machine
+        local env_hub="${DIVE_ROOT}/.env.hub"
+        if [ -f "$env_hub" ]; then
+            log_verbose "Loading Hub configuration from .env.hub"
+            local _val
+            for _key in KEYCLOAK_ADMIN_PASSWORD VAULT_ROLE_ID VAULT_SECRET_ID CERT_PROVIDER SECRETS_PROVIDER DIVE_DOMAIN_SUFFIX OPAL_AUTH_MASTER_TOKEN; do
+                _val=$(grep "^${_key}=" "$env_hub" 2>/dev/null | cut -d= -f2- || true)
+                if [ -n "$_val" ] && [ -z "${!_key:-}" ]; then
+                    export "$_key=$_val"
+                    log_verbose "  Auto-discovered $_key from .env.hub"
+                fi
+            done
+        else
+            log_warn "No .env.hub found — Hub configuration may be incomplete"
+        fi
     fi
 
     # =========================================================================
@@ -445,98 +474,133 @@ spoke_preflight_check_hub() {
     # =========================================================================
     log_verbose "Checking Vault health..."
 
-    # Load vault module to get VAULT_ADDR, token, etc.
-    if [ -z "${VAULT_ADDR:-}" ]; then
-        if [ -f "${DIVE_ROOT}/scripts/dive-modules/vault/module.sh" ]; then
-            source "${DIVE_ROOT}/scripts/dive-modules/vault/module.sh" 2>/dev/null || true
-        fi
-    fi
-
-    # Load token
-    local vault_token_file="${DIVE_ROOT}/.vault-token"
-    if [ -f "$vault_token_file" ]; then
-        VAULT_TOKEN=$(cat "$vault_token_file")
-        export VAULT_TOKEN
-        log_verbose "  Loaded Vault token from .vault-token"
-    fi
-
-    # Health check with TLS fallback (vault module may set VAULT_CACERT to stale cert)
-    local vault_healthy=false
-    if type _vault_check_unsealed &>/dev/null; then
-        if _vault_check_unsealed; then
-            vault_healthy=true
+    if [ "${DEPLOYMENT_MODE}" = "remote" ]; then
+        # Remote mode: check Vault via public URL
+        local vault_url="${HUB_VAULT_URL:-}"
+        if [ -n "$vault_url" ]; then
+            if curl -skf --max-time 5 "${vault_url}/v1/sys/health" >/dev/null 2>&1; then
+                log_success "Hub Vault healthy (via ${vault_url})"
+            else
+                log_warn "Hub Vault at ${vault_url} not responding (certs may use alternative source)"
+            fi
+        else
+            log_warn "No HUB_VAULT_URL set — skipping remote Vault check"
         fi
     else
-        # Fallback: direct check
-        if command -v vault &>/dev/null; then
-            local _old_cacert="${VAULT_CACERT:-}"
-            for _try in 1 2; do
-                if vault status 2>/dev/null | grep -q "Sealed.*false"; then
-                    vault_healthy=true
-                    break
-                fi
-                # First attempt with CACERT may hang/fail — try with SKIP_VERIFY
-                if [ "$_try" -eq 1 ] && [ -n "${VAULT_CACERT:-}" ]; then
-                    unset VAULT_CACERT
-                    export VAULT_SKIP_VERIFY=1
-                fi
-            done
+        # Local mode: use vault CLI
+        if [ -z "${VAULT_ADDR:-}" ]; then
+            if [ -f "${DIVE_ROOT}/scripts/dive-modules/vault/module.sh" ]; then
+                source "${DIVE_ROOT}/scripts/dive-modules/vault/module.sh" 2>/dev/null || true
+            fi
         fi
-    fi
 
-    if [ "$vault_healthy" = "true" ]; then
-        log_success "Hub Vault unsealed and healthy"
-    else
-        log_error "Hub Vault is sealed or unreachable"
-        echo ""
-        echo "  SOLUTION:"
-        echo "    1. Check Vault status: ./dive vault status"
-        echo "    2. Unseal if needed:   ./dive vault unseal"
-        echo "    3. Then retry:         ./dive spoke deploy $instance_code"
-        echo ""
-        return 1
+        local vault_token_file="${DIVE_ROOT}/.vault-token"
+        if [ -f "$vault_token_file" ]; then
+            VAULT_TOKEN=$(cat "$vault_token_file")
+            export VAULT_TOKEN
+            log_verbose "  Loaded Vault token from .vault-token"
+        fi
+
+        local vault_healthy=false
+        if type _vault_check_unsealed &>/dev/null; then
+            if _vault_check_unsealed; then
+                vault_healthy=true
+            fi
+        else
+            if command -v vault &>/dev/null; then
+                for _try in 1 2; do
+                    if vault status 2>/dev/null | grep -q "Sealed.*false"; then
+                        vault_healthy=true
+                        break
+                    fi
+                    if [ "$_try" -eq 1 ] && [ -n "${VAULT_CACERT:-}" ]; then
+                        unset VAULT_CACERT
+                        export VAULT_SKIP_VERIFY=1
+                    fi
+                done
+            fi
+        fi
+
+        if [ "$vault_healthy" = "true" ]; then
+            log_success "Hub Vault unsealed and healthy"
+        else
+            log_error "Hub Vault is sealed or unreachable"
+            echo ""
+            echo "  SOLUTION:"
+            echo "    1. Check Vault status: ./dive vault status"
+            echo "    2. Unseal if needed:   ./dive vault unseal"
+            echo "    3. Then retry:         ./dive spoke deploy $instance_code"
+            echo ""
+            return 1
+        fi
     fi
 
     # =========================================================================
     # Step 4: Verify Keycloak health
     # =========================================================================
-    local hub_kc_container="${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}"
-    if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${hub_kc_container}$"; then
-        # Actually test the health endpoint (not just that the container exists)
-        if curl -skf --max-time 5 "https://localhost:8443/health/ready" >/dev/null 2>&1; then
-            log_success "Hub Keycloak healthy"
+    if [ "${DEPLOYMENT_MODE}" = "remote" ]; then
+        local kc_url="${HUB_KC_URL:-}"
+        if [ -n "$kc_url" ] && curl -skf --max-time 5 "${kc_url}/health/ready" >/dev/null 2>&1; then
+            log_success "Hub Keycloak healthy (via ${kc_url})"
         else
-            log_warn "Hub Keycloak container running but health check failed (may still be starting)"
+            log_warn "Hub Keycloak at ${kc_url} not responding (may still be starting)"
         fi
     else
-        log_warn "Hub Keycloak not detected - federation setup may fail"
+        local hub_kc_container="${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}"
+        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${hub_kc_container}$"; then
+            if curl -skf --max-time 5 "https://localhost:8443/health/ready" >/dev/null 2>&1; then
+                log_success "Hub Keycloak healthy"
+            else
+                log_warn "Hub Keycloak container running but health check failed (may still be starting)"
+            fi
+        else
+            log_warn "Hub Keycloak not detected - federation setup may fail"
+        fi
     fi
 
     # =========================================================================
     # Step 5: Verify Backend API health
     # =========================================================================
-    if curl -skf --max-time 5 "https://localhost:4000/api/health" >/dev/null 2>&1; then
-        log_success "Hub Backend API healthy"
+    if [ "${DEPLOYMENT_MODE}" = "remote" ]; then
+        local api_url="${HUB_API_URL:-}"
+        if [ -n "$api_url" ] && curl -skf --max-time 5 "${api_url}/api/health" >/dev/null 2>&1; then
+            log_success "Hub Backend API healthy (via ${api_url})"
+        else
+            log_warn "Hub Backend API at ${api_url} not responding (may still be starting)"
+        fi
     else
-        log_warn "Hub Backend API not responding (may still be starting)"
+        if curl -skf --max-time 5 "https://localhost:4000/api/health" >/dev/null 2>&1; then
+            log_success "Hub Backend API healthy"
+        else
+            log_warn "Hub Backend API not responding (may still be starting)"
+        fi
     fi
 
     # =========================================================================
     # Step 6: Verify OPAL server
     # =========================================================================
-    if ! docker ps -q --filter "name=dive-hub-opal-server" 2>/dev/null | grep -q .; then
-        log_error "Hub OPAL server not running - required for spoke federation"
-
-        if type orch_record_error &>/dev/null; then
-            orch_record_error "$SPOKE_ERROR_HUB_UNHEALTHY" "$ORCH_SEVERITY_CRITICAL" \
-                "Hub OPAL server not running" "preflight" \
-                "$(spoke_error_get_remediation $SPOKE_ERROR_HUB_UNHEALTHY $instance_code)"
+    if [ "${DEPLOYMENT_MODE}" = "remote" ]; then
+        local opal_url="${HUB_OPAL_URL:-}"
+        if [ -n "$opal_url" ]; then
+            log_success "Hub OPAL server configured (${opal_url})"
+        else
+            log_warn "HUB_OPAL_URL not set — OPAL sync may not work"
         fi
-        return 1
+    else
+        if ! docker ps -q --filter "name=dive-hub-opal-server" 2>/dev/null | grep -q .; then
+            log_error "Hub OPAL server not running - required for spoke federation"
+
+            if type orch_record_error &>/dev/null; then
+                orch_record_error "$SPOKE_ERROR_HUB_UNHEALTHY" "$ORCH_SEVERITY_CRITICAL" \
+                    "Hub OPAL server not running" "preflight" \
+                    "$(spoke_error_get_remediation $SPOKE_ERROR_HUB_UNHEALTHY $instance_code)"
+            fi
+            return 1
+        fi
+        log_success "Hub OPAL server available"
     fi
 
-    log_success "Hub OPAL server available"
-    log_success "Hub auto-discovery complete — all critical services healthy"
+    log_success "Hub auto-discovery complete (mode: ${DEPLOYMENT_MODE}) — all critical services healthy"
     return 0
 }
 
@@ -553,6 +617,12 @@ spoke_preflight_check_hub() {
 ##
 spoke_preflight_ensure_network() {
     log_step "Ensuring federation network exists..."
+
+    # Remote mode: no dive-shared network needed (all traffic via HTTPS)
+    if [ "${DEPLOYMENT_MODE:-local}" = "remote" ]; then
+        log_info "Remote deployment — skipping dive-shared network (cross-instance via HTTPS)"
+        return 0
+    fi
 
     local network_name="dive-shared"
 

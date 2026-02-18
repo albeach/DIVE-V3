@@ -34,8 +34,15 @@ spoke_caddy_setup() {
     log_info "Setting up Caddy reverse proxy for spoke ${code}..."
 
     spoke_caddy_create_dns "$code"
-    spoke_caddy_generate_snippet "$code"
-    spoke_caddy_reload
+
+    if [ "${DEPLOYMENT_MODE:-local}" = "remote" ]; then
+        # Remote mode: generate spoke-local Caddyfile from template
+        spoke_caddy_generate_local "$code"
+    else
+        # Local mode: add snippet to Hub Caddy (same Docker host)
+        spoke_caddy_generate_snippet "$code"
+        spoke_caddy_reload
+    fi
 
     log_success "Caddy configured for spoke ${code}"
 }
@@ -146,8 +153,15 @@ spoke_caddy_create_dns() {
     _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
     _base_domain="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"
 
-    # Get public IP
-    local public_ip="${HUB_EXTERNAL_ADDRESS:-}"
+    # Get public IP: for remote spokes, use the SPOKE's own IP (not the hub)
+    local public_ip=""
+    if [ "${DEPLOYMENT_MODE:-local}" = "remote" ]; then
+        # Remote mode: use this instance's own public IP (from EC2 metadata)
+        public_ip="${INSTANCE_PUBLIC_IP:-}"
+    fi
+    if [ -z "$public_ip" ]; then
+        public_ip="${HUB_EXTERNAL_ADDRESS:-}"
+    fi
     if [ -z "$public_ip" ]; then
         # Try EC2 metadata
         local imds_token
@@ -239,7 +253,75 @@ spoke_caddy_reload() {
     fi
 }
 
+##
+# Generate spoke-local Caddy configuration for remote deployments
+#
+# Creates a Caddyfile in instances/{code}/caddy/ from the spoke Caddy template.
+# Also adds CADDY_DOMAIN_* vars to the spoke .env for docker-compose.
+# The spoke's own Caddy container (profile: caddy) handles TLS termination.
+#
+# Arguments:
+#   $1 - Instance code (e.g., GBR)
+##
+spoke_caddy_generate_local() {
+    local code="$1"
+    local code_lower
+    code_lower="$(echo "$code" | tr '[:upper:]' '[:lower:]')"
+    local code_upper
+    code_upper="$(echo "$code" | tr '[:lower:]' '[:upper:]')"
+
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    local caddy_dir="${spoke_dir}/caddy"
+    local template_file="${DIVE_ROOT}/templates/spoke/caddy/Caddyfile.template"
+
+    if [ ! -f "$template_file" ]; then
+        log_warn "Spoke Caddy template not found: ${template_file}"
+        return 0
+    fi
+
+    mkdir -p "$caddy_dir"
+
+    # Render Caddyfile template
+    local content
+    content=$(cat "$template_file")
+    content="${content//\{\{INSTANCE_CODE_UPPER\}\}/${code_upper}}"
+    content="${content//\{\{INSTANCE_CODE_LOWER\}\}/${code_lower}}"
+    echo "$content" > "${caddy_dir}/Caddyfile"
+
+    # Add Caddy domain env vars to spoke .env
+    local _env_prefix _base_domain
+    _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
+    _base_domain="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"
+
+    local domain_app="${_env_prefix}-${code_lower}-app.${_base_domain}"
+    local domain_api="${_env_prefix}-${code_lower}-api.${_base_domain}"
+    local domain_idp="${_env_prefix}-${code_lower}-idp.${_base_domain}"
+
+    local env_file="${spoke_dir}/.env"
+    if [ -f "$env_file" ]; then
+        # Remove old Caddy vars if present, then add fresh
+        sed -i.bak '/^CADDY_DOMAIN_/d; /^SPOKE_CADDY_ENABLED/d; /^CLOUDFLARE_API_TOKEN/d' "$env_file"
+        rm -f "${env_file}.bak"
+
+        cat >> "$env_file" << CADDY_ENV
+
+# Caddy reverse proxy domains (remote mode)
+SPOKE_CADDY_ENABLED=true
+CADDY_DOMAIN_APP=${domain_app}
+CADDY_DOMAIN_API=${domain_api}
+CADDY_DOMAIN_IDP=${domain_idp}
+CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN:-}
+CADDY_ENV
+    fi
+
+    log_success "Spoke-local Caddy configured: ${caddy_dir}/Caddyfile"
+    log_info "  ${domain_app} → frontend-${code_lower}:3000"
+    log_info "  ${domain_api} → backend-${code_lower}:4000"
+    log_info "  ${domain_idp} → keycloak-${code_lower}:8443"
+}
+
 export -f spoke_caddy_setup
 export -f spoke_caddy_generate_snippet
+export -f spoke_caddy_generate_local
 export -f spoke_caddy_create_dns
 export -f spoke_caddy_reload
