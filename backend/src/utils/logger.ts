@@ -31,30 +31,30 @@ export const logger = winston.createLogger({
         // File output - general logs
         new winston.transports.File({
             filename: path.join(process.cwd(), 'logs', 'app.log'),
-            maxsize: 10485760, // 10MB
-            maxFiles: 5,
-            tailable: true, // Enable log rotation cleanup
-            zippedArchive: false // Don't compress (saves CPU, but uses more space)
+            maxsize: 5242880, // 5MB
+            maxFiles: 3,
+            tailable: true,
+            zippedArchive: true
         }),
 
         // File output - error logs
         new winston.transports.File({
             filename: path.join(process.cwd(), 'logs', 'error.log'),
             level: 'error',
-            maxsize: 10485760,
-            maxFiles: 5,
-            tailable: true, // Enable log rotation cleanup
-            zippedArchive: false
+            maxsize: 5242880, // 5MB
+            maxFiles: 3,
+            tailable: true,
+            zippedArchive: true
         }),
 
         // File output - authorization decisions (audit trail)
         new winston.transports.File({
             filename: path.join(process.cwd(), 'logs', 'authz.log'),
             level: 'info',
-            maxsize: 52428800, // 50MB (larger for compliance)
-            maxFiles: 10,
-            tailable: true, // Enable log rotation cleanup
-            zippedArchive: false,
+            maxsize: 10485760, // 10MB
+            maxFiles: 5,
+            tailable: true,
+            zippedArchive: true,
             format: winston.format.combine(
                 winston.format.timestamp(),
                 winston.format.json()

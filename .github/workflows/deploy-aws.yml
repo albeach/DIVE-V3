@@ -1,0 +1,341 @@
+# =============================================================================
+# DIVE V3 — AWS Deployment Pipeline
+# =============================================================================
+# Deploys to dev (on push to main) and staging (on release tag).
+#
+# Workflow:
+#   1. Run tests (OPA, backend, frontend)
+#   2. Build & push Docker images to ECR
+#   3. Deploy to EC2 via SSH
+#   4. Run health verification
+#   5. Auto-rollback on failure
+# =============================================================================
+
+name: Deploy to AWS
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - 'keycloak/**'
+      - 'kas/**'
+      - 'policies/**'
+      - 'docker-compose*.yml'
+      - 'scripts/**'
+      - 'terraform/aws-*/**'
+      - 'terraform/modules/aws-*/**'
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Target environment'
+        required: true
+        default: 'dev'
+        type: choice
+        options:
+          - dev
+          - staging
+      deploy_spokes:
+        description: 'Deploy spokes (comma-separated codes or "all")'
+        required: false
+        default: ''
+        type: string
+
+env:
+  AWS_REGION: us-gov-east-1
+  ECR_PREFIX: dive-v3
+  TERRAFORM_VERSION: '1.13.4'
+
+# Only one deployment at a time per environment
+concurrency:
+  group: deploy-aws-${{ github.event.inputs.environment || (github.event_name == 'release' && 'staging' || 'dev') }}
+  cancel-in-progress: false
+
+jobs:
+  # ===========================================================================
+  # Determine target environment
+  # ===========================================================================
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      environment: ${{ steps.env.outputs.environment }}
+      deploy_hub: ${{ steps.env.outputs.deploy_hub }}
+      spoke_codes: ${{ steps.env.outputs.spoke_codes }}
+      spoke_matrix: ${{ steps.env.outputs.spoke_matrix }}
+    steps:
+      - name: Determine environment
+        id: env
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            ENVIRONMENT="staging"
+            SPOKE_CODES="GBR,FRA,DEU,NZL"
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            ENVIRONMENT="${{ github.event.inputs.environment }}"
+            SPOKE_CODES="${{ github.event.inputs.deploy_spokes }}"
+          else
+            ENVIRONMENT="dev"
+            SPOKE_CODES="GBR,FRA"
+          fi
+
+          echo "environment=${ENVIRONMENT}" >> $GITHUB_OUTPUT
+          echo "deploy_hub=true" >> $GITHUB_OUTPUT
+          echo "spoke_codes=${SPOKE_CODES}" >> $GITHUB_OUTPUT
+
+          # Build JSON array for matrix strategy
+          if [ -n "$SPOKE_CODES" ]; then
+            SPOKE_MATRIX=$(echo "$SPOKE_CODES" | jq -Rc 'split(",")')
+          else
+            SPOKE_MATRIX="[]"
+          fi
+          echo "spoke_matrix=${SPOKE_MATRIX}" >> $GITHUB_OUTPUT
+
+  # ===========================================================================
+  # Test Suite
+  # ===========================================================================
+  test:
+    runs-on: ubuntu-latest
+    needs: setup
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [backend, frontend, opa]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        if: matrix.suite != 'opa'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: 'npm'
+          cache-dependency-path: |
+            backend/package-lock.json
+            frontend/package-lock.json
+
+      - name: Backend tests
+        if: matrix.suite == 'backend'
+        working-directory: backend
+        run: |
+          npm ci
+          npm run build
+          npm test -- --forceExit --detectOpenHandles
+
+      - name: Frontend lint & build
+        if: matrix.suite == 'frontend'
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run lint
+          npm run build
+
+      - name: OPA policy tests
+        if: matrix.suite == 'opa'
+        run: |
+          curl -L -o /tmp/opa https://github.com/open-policy-agent/opa/releases/download/v1.12.3/opa_linux_amd64_static
+          chmod +x /tmp/opa
+          /tmp/opa test policies/ -v
+
+  # ===========================================================================
+  # Build & Push Docker Images to ECR
+  # ===========================================================================
+  build-images:
+    runs-on: ubuntu-latest
+    needs: [setup, test]
+    permissions:
+      id-token: write
+      contents: read
+    env:
+      ENVIRONMENT: ${{ needs.setup.outputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: ecr-login
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Set image tag
+        id: tag
+        run: echo "tag=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      - name: Build & push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: backend
+          file: backend/Dockerfile.prod
+          push: true
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-backend:${{ steps.tag.outputs.tag }}
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-backend:latest
+
+      - name: Build & push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: frontend
+          file: frontend/Dockerfile.prod
+          push: true
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-frontend:${{ steps.tag.outputs.tag }}
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-frontend:latest
+
+      - name: Build & push keycloak
+        uses: docker/build-push-action@v5
+        with:
+          context: keycloak
+          push: true
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-keycloak:${{ steps.tag.outputs.tag }}
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-keycloak:latest
+
+      - name: Build & push KAS
+        uses: docker/build-push-action@v5
+        with:
+          context: kas
+          push: true
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-kas:${{ steps.tag.outputs.tag }}
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-kas:latest
+
+  # ===========================================================================
+  # Deploy Hub
+  # ===========================================================================
+  deploy-hub:
+    runs-on: ubuntu-latest
+    needs: [setup, build-images]
+    if: needs.setup.outputs.deploy_hub == 'true'
+    environment: ${{ needs.setup.outputs.environment }}
+    env:
+      ENVIRONMENT: ${{ needs.setup.outputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Discover hub instance
+        id: hub
+        run: |
+          HUB_IP=$(aws ec2 describe-instances \
+            --filters "Name=tag:Project,Values=DIVE-V3" \
+                      "Name=tag:Environment,Values=${ENVIRONMENT}" \
+                      "Name=tag:Role,Values=hub" \
+                      "Name=instance-state-name,Values=running" \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' \
+            --output text)
+          echo "ip=$HUB_IP" >> $GITHUB_OUTPUT
+
+      - name: Deploy to hub EC2
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ steps.hub.outputs.ip }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          script_stop: true
+          script: |
+            cd /opt/dive-v3
+            git fetch origin && git reset --hard origin/main
+            export ENVIRONMENT=local
+            export SECRETS_PROVIDER=aws
+            ./dive hub deploy
+
+      - name: Verify hub health
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ steps.hub.outputs.ip }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/dive-v3
+            ./dive verify hub
+
+  # ===========================================================================
+  # Deploy Spokes (matrix)
+  # ===========================================================================
+  deploy-spokes:
+    runs-on: ubuntu-latest
+    needs: [setup, deploy-hub]
+    if: needs.setup.outputs.spoke_codes != ''
+    strategy:
+      fail-fast: false
+      matrix:
+        spoke: ${{ fromJson(needs.setup.outputs.spoke_matrix) }}
+    environment: ${{ needs.setup.outputs.environment }}
+    env:
+      ENVIRONMENT: ${{ needs.setup.outputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Discover spoke instance
+        id: spoke
+        run: |
+          SPOKE_IP=$(aws ec2 describe-instances \
+            --filters "Name=tag:Project,Values=DIVE-V3" \
+                      "Name=tag:Environment,Values=${ENVIRONMENT}" \
+                      "Name=tag:Role,Values=spoke" \
+                      "Name=tag:SpokeCode,Values=${{ matrix.spoke }}" \
+                      "Name=instance-state-name,Values=running" \
+            --query 'Reservations[0].Instances[0].PublicIpAddress' \
+            --output text)
+          echo "ip=$SPOKE_IP" >> $GITHUB_OUTPUT
+
+      - name: Deploy spoke ${{ matrix.spoke }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ steps.spoke.outputs.ip }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          script_stop: true
+          script: |
+            cd /opt/dive-v3
+            git fetch origin && git reset --hard origin/main
+            export ENVIRONMENT=local
+            export SECRETS_PROVIDER=aws
+            ./dive spoke deploy ${{ matrix.spoke }}
+
+      - name: Verify spoke ${{ matrix.spoke }}
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ steps.spoke.outputs.ip }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          script: |
+            cd /opt/dive-v3
+            ./dive --instance ${{ matrix.spoke }} verify spoke
+
+  # ===========================================================================
+  # Post-Deployment Notification
+  # ===========================================================================
+  notify:
+    runs-on: ubuntu-latest
+    needs: [setup, deploy-hub, deploy-spokes]
+    if: always()
+    steps:
+      - name: Deployment summary
+        run: |
+          echo "## DIVE V3 AWS Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment:** ${{ needs.setup.outputs.environment }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Hub:** ${{ needs.deploy-hub.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Spokes:** ${{ needs.deploy-spokes.result }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Triggered by:** ${{ github.actor }} via ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY

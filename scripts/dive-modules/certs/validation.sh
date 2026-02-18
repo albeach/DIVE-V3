@@ -87,7 +87,7 @@ update_hub_certificate_sans() {
     if mkcert -key-file "$hub_certs_dir/key.pem" \
               -cert-file "$hub_certs_dir/certificate.pem" \
               $all_hostnames 2>/dev/null; then
-        chmod 600 "$hub_certs_dir/key.pem"
+        chmod 644 "$hub_certs_dir/key.pem"   # 644: Docker containers run as non-owner UIDs
         chmod 644 "$hub_certs_dir/certificate.pem"
 
         # Generate fullchain.pem for uniform TLS config (mkcert: leaf + root CA)
@@ -194,7 +194,7 @@ generate_spoke_certificate() {
     if TRUST_STORES="" mkcert -key-file "$certs_dir/key.pem" \
               -cert-file "$certs_dir/certificate.pem" \
               $hostnames 2>/dev/null; then
-        chmod 600 "$certs_dir/key.pem"
+        chmod 644 "$certs_dir/key.pem"   # 644: Docker containers run as non-owner UIDs
         chmod 644 "$certs_dir/certificate.pem"
 
         # Generate fullchain.pem for uniform TLS config (mkcert: leaf + root CA)

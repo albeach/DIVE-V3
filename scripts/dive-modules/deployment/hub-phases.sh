@@ -8,6 +8,30 @@
 #   seeding, kas_init, vault_db_engine
 # =============================================================================
 
+##
+# Idempotently set a key=value in .env.hub (add or update).
+# Also exports to current shell for immediate use.
+##
+_hub_set_env() {
+    local key="$1" value="$2"
+    local env_file="${DIVE_ROOT}/.env.hub"
+
+    export "$key=$value"
+
+    [ ! -f "$env_file" ] && return 0
+
+    if grep -q "^${key}=" "$env_file" 2>/dev/null; then
+        # Update existing (portable sed: macOS + Linux)
+        if [[ "$(uname)" == "Darwin" ]]; then
+            sed -i '' "s|^${key}=.*|${key}=${value}|" "$env_file"
+        else
+            sed -i "s|^${key}=.*|${key}=${value}|" "$env_file"
+        fi
+    else
+        echo "${key}=${value}" >> "$env_file"
+    fi
+}
+
 hub_phase_database_init() {
     local instance_code="$1"
     local pipeline_mode="$2"
@@ -195,13 +219,32 @@ hub_phase_vault_bootstrap() {
     fi
 
     # -------------------------------------------------------------------------
-    # Step 2: Start Vault containers
+    # Step 2: Start Vault containers (skip if already running + healthy)
     # -------------------------------------------------------------------------
     # Ensure dive-shared network exists (compose declares it as external: true)
     if ! ${DOCKER_CMD:-docker} network inspect dive-shared >/dev/null 2>&1; then
         ${DOCKER_CMD:-docker} network create dive-shared 2>/dev/null || true
     fi
 
+    # Check if Vault is already running and healthy (idempotent re-deploy)
+    local vault_already_running=false
+    if [ "$vault_profile" = "vault-ha" ]; then
+        local v1_health
+        v1_health=$(${DOCKER_CMD:-docker} inspect "${COMPOSE_PROJECT_NAME:-dive-hub}-vault-1" --format='{{.State.Health.Status}}' 2>/dev/null || echo "none")
+        if [ "$v1_health" = "healthy" ]; then
+            vault_already_running=true
+            log_success "Vault cluster already running and healthy — skipping container startup"
+        fi
+    else
+        local vd_health
+        vd_health=$(${DOCKER_CMD:-docker} inspect "${COMPOSE_PROJECT_NAME:-dive-hub}-vault-dev" --format='{{.State.Health.Status}}' 2>/dev/null || echo "none")
+        if [ "$vd_health" = "healthy" ]; then
+            vault_already_running=true
+            log_success "Vault dev already running and healthy — skipping container startup"
+        fi
+    fi
+
+    if [ "$vault_already_running" = "false" ]; then
     log_info "Starting Vault services (profile: ${vault_profile})..."
 
     # Start ONLY Vault-specific services — not all services in the compose file.
@@ -279,6 +322,8 @@ hub_phase_vault_bootstrap() {
         return 1
     fi
 
+    fi  # end: vault_already_running=false
+
     # -------------------------------------------------------------------------
     # Step 3: Initialize Vault if not yet initialized
     # -------------------------------------------------------------------------
@@ -341,6 +386,8 @@ hub_phase_vault_bootstrap() {
         if type module_vault_pki_setup &>/dev/null; then
             if module_vault_pki_setup; then
                 log_success "Vault PKI setup complete (Root CA + Intermediate CA)"
+                # Auto-set CERT_PROVIDER=vault so subsequent phases use Vault PKI
+                _hub_set_env "CERT_PROVIDER" "vault"
             else
                 log_warn "Vault PKI setup failed — spoke certs will use mkcert fallback"
             fi
@@ -349,6 +396,8 @@ hub_phase_vault_bootstrap() {
         fi
     else
         log_verbose "Vault PKI engines already configured"
+        # Ensure CERT_PROVIDER=vault is set even on resume
+        _hub_set_env "CERT_PROVIDER" "vault"
     fi
 
     # -------------------------------------------------------------------------
@@ -560,6 +609,30 @@ hub_phase_build() {
     fi
 }
 
+##
+# Ensure OPAL JWT signing keys exist before starting services.
+# Generates keys if missing (idempotent).
+##
+_hub_ensure_opal_keys() {
+    local opal_dir="${DIVE_ROOT}/certs/opal"
+    if [ -f "$opal_dir/jwt-signing-key.pem" ]; then
+        log_verbose "OPAL JWT signing keys already exist"
+        return 0
+    fi
+
+    log_info "Generating OPAL JWT signing keys..."
+    mkdir -p "$opal_dir"
+
+    openssl genrsa -out "$opal_dir/jwt-signing-key.pem" 4096 2>/dev/null
+    openssl rsa -in "$opal_dir/jwt-signing-key.pem" \
+        -pubout -out "$opal_dir/jwt-signing-key.pub.pem" 2>/dev/null
+
+    chmod 644 "$opal_dir/jwt-signing-key.pem"
+    chmod 644 "$opal_dir/jwt-signing-key.pub.pem"
+
+    log_success "OPAL JWT signing keys generated at $opal_dir"
+}
+
 hub_phase_services() {
     local instance_code="$1"
     local pipeline_mode="$2"
@@ -578,6 +651,9 @@ hub_phase_services() {
         log_error "Failed to change to DIVE_ROOT=$DIVE_ROOT"
         return 1
     }
+
+    # Ensure OPAL JWT signing keys exist (required by opal-server entrypoint)
+    _hub_ensure_opal_keys
 
     # Ensure dive-shared network exists
     if ! ${DOCKER_CMD:-docker} network inspect dive-shared >/dev/null 2>&1; then

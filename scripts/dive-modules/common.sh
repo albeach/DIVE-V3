@@ -221,6 +221,7 @@ export BOLD='\033[1m'
 export NC='\033[0m'
 
 # Defaults (can be overridden by environment)
+# Valid environments: local, dev, staging, pilot, hub
 export ENVIRONMENT="${DIVE_ENV:-local}"
 export INSTANCE="${INSTANCE:-${DIVE_INSTANCE:-usa}}"
 export GCP_PROJECT="${GCP_PROJECT:-dive25}"
@@ -229,6 +230,32 @@ export PILOT_ZONE="${PILOT_ZONE:-us-east4-c}"
 export DRY_RUN="${DRY_RUN:-false}"
 export VERBOSE="${VERBOSE:-false}"
 export QUIET="${QUIET:-false}"
+
+# =============================================================================
+# AWS CONFIGURATION (used by dev/staging environments)
+# =============================================================================
+export AWS_REGION="${AWS_REGION:-us-gov-east-1}"
+export AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-}"
+export DIVE_AWS_KEY_PAIR="${DIVE_AWS_KEY_PAIR:-ABeach-SSH-Key}"
+export DIVE_AWS_SSH_KEY="${DIVE_AWS_SSH_KEY:-${HOME}/.ssh/ABeach-SSH-Key.pem}"
+
+# Environment-specific AWS defaults
+case "$ENVIRONMENT" in
+    dev)
+        export DIVE_AWS_INSTANCE_TYPE="${DIVE_AWS_INSTANCE_TYPE:-t3.xlarge}"
+        export DIVE_AWS_VOLUME_SIZE="${DIVE_AWS_VOLUME_SIZE:-100}"
+        export SECRETS_PROVIDER="${SECRETS_PROVIDER:-vault}"
+        export DIVE_DOCKER_BUILD_MODE="${DIVE_DOCKER_BUILD_MODE:-source}"
+        export DIVE_DOMAIN_SUFFIX="${DIVE_DOMAIN_SUFFIX:-dev.dive25.com}"
+        ;;
+    staging)
+        export DIVE_AWS_INSTANCE_TYPE="${DIVE_AWS_INSTANCE_TYPE:-t3.2xlarge}"
+        export DIVE_AWS_VOLUME_SIZE="${DIVE_AWS_VOLUME_SIZE:-200}"
+        export SECRETS_PROVIDER="${SECRETS_PROVIDER:-vault}"
+        export DIVE_DOCKER_BUILD_MODE="${DIVE_DOCKER_BUILD_MODE:-source}"
+        export DIVE_DOMAIN_SUFFIX="${DIVE_DOMAIN_SUFFIX:-staging.dive25.com}"
+        ;;
+esac
 
 # Configurable timeouts (override via environment variables)
 export DIVE_TIMEOUT_KEYCLOAK_READY="${DIVE_TIMEOUT_KEYCLOAK_READY:-30}"  # Reduced from 180s - containers already healthy by federation phase
@@ -320,13 +347,23 @@ export HUB_FRONTEND_CONTAINER="${HUB_PROJECT_NAME}-frontend"
 export HUB_REALM
 
 # Hub API URL - Environment aware
-# - LOCAL/DEV: Use localhost hub
+# - LOCAL: Use localhost hub
+# - DEV/STAGING: Use environment-specific domain or localhost (single-instance)
 # - GCP/PILOT: Use production hub
-if [ "$ENVIRONMENT" = "local" ] || [ "$ENVIRONMENT" = "dev" ]; then
-    export HUB_API_URL="${DIVE_HUB_URL:-https://localhost:4000}"
-else
-    export HUB_API_URL="${DIVE_HUB_URL:-https://usa-api.dive25.com}"
-fi
+case "$ENVIRONMENT" in
+    local)
+        export HUB_API_URL="${DIVE_HUB_URL:-https://localhost:4000}"
+        ;;
+    dev)
+        export HUB_API_URL="${DIVE_HUB_URL:-https://hub-api.dev.dive25.com:4000}"
+        ;;
+    staging)
+        export HUB_API_URL="${DIVE_HUB_URL:-https://hub-api.staging.dive25.com:4000}"
+        ;;
+    *)
+        export HUB_API_URL="${DIVE_HUB_URL:-https://usa-api.dive25.com}"
+        ;;
+esac
 
 # =============================================================================
 # NETWORK MANAGEMENT (LOCAL DEV ONLY)
@@ -336,11 +373,12 @@ fi
 # Only used when hub + spokes run on same server (development)
 # In production, instances use external domains (no shared network needed)
 ensure_shared_network() {
-    # Only create shared network in local/dev environment
-    if [ "$ENVIRONMENT" != "local" ] && [ "$ENVIRONMENT" != "dev" ]; then
-        # Skipping shared network (production uses external domains)
-        return 0
-    fi
+    # Create shared network in local/dev/staging environments (hub+spoke on same host)
+    # In production, instances use external domains (no shared network needed)
+    case "$ENVIRONMENT" in
+        local|dev|staging) ;;
+        *) return 0 ;;
+    esac
 
     # SSOT: Use "dive-shared" as the canonical network name
     # This matches docker-compose.hub.yml and spoke docker-compose files
@@ -667,7 +705,7 @@ check_certs() {
     if mkcert -key-file "$cert_dir/key.pem" \
               -cert-file "$cert_dir/certificate.pem" \
               $hostnames 2>/dev/null; then
-        chmod 600 "$cert_dir/key.pem"
+        chmod 644 "$cert_dir/key.pem"   # 644: Docker containers run as non-owner UIDs
         chmod 644 "$cert_dir/certificate.pem"
         log_success "Hub certificates generated to $cert_dir"
 

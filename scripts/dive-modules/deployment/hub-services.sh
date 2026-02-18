@@ -24,6 +24,11 @@ hub_parallel_startup() {
 
     # DYNAMIC SERVICE CLASSIFICATION (from docker-compose.hub.yml labels)
     # Uses yq to directly query service labels - more reliable than helper functions
+    if ! command -v yq >/dev/null 2>&1; then
+        log_warn "yq not found — falling back to sequential startup"
+        ${DOCKER_CMD:-docker} compose -f "$HUB_COMPOSE_FILE" up -d 2>&1
+        return $?
+    fi
     local all_services_raw=$(yq eval '.services | keys | .[]' "$HUB_COMPOSE_FILE" 2>/dev/null | xargs)
 
     # Filter out profile-only services (e.g., authzforce with profiles: ["xacml"])

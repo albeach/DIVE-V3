@@ -178,7 +178,7 @@ _generate_bootstrap_node_cert() {
         rm -f "$ext_file"
         return 1
     fi
-    chmod 600 "$node_dir/key.pem"
+    chmod 644 "$node_dir/key.pem"  # 644: Vault container runs as uid 100 (vault), needs read access
 
     # Generate CSR
     if ! openssl req -new \
@@ -401,7 +401,7 @@ _rotate_vault_node_certs_to_pki() {
             fi
         } > "$node_dir/ca.pem"
 
-        chmod 600 "$node_dir/key.pem"
+        chmod 644 "$node_dir/key.pem"  # 644: Vault container runs as uid 100 (vault), needs read access
         chmod 644 "$node_dir/certificate.pem" "$node_dir/ca.pem"
 
         log_success "  ${node}: Vault PKI cert issued (90-day TTL)"
@@ -562,7 +562,7 @@ generate_vault_node_certs() {
         if TRUST_STORES="" mkcert -key-file "$node_dir/key.pem" \
                   -cert-file "$node_dir/certificate.pem" \
                   $sans 2>/dev/null; then
-            chmod 600 "$node_dir/key.pem"
+            chmod 644 "$node_dir/key.pem"  # 644: Vault container runs as uid 100 (vault), needs read access
             chmod 644 "$node_dir/certificate.pem"
 
             # Copy mkcert Root CA for retry_join TLS verification

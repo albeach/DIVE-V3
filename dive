@@ -88,6 +88,26 @@ for arg in "$@"; do
     fi
 done
 
+# Re-apply environment-specific defaults after --env parsing
+# (common.sh is sourced before args are parsed, so we re-evaluate here)
+export ENVIRONMENT
+case "$ENVIRONMENT" in
+    dev)
+        export DIVE_AWS_INSTANCE_TYPE="${DIVE_AWS_INSTANCE_TYPE:-t3.xlarge}"
+        export DIVE_AWS_VOLUME_SIZE="${DIVE_AWS_VOLUME_SIZE:-100}"
+        export SECRETS_PROVIDER="${SECRETS_PROVIDER:-vault}"
+        export DIVE_DOCKER_BUILD_MODE="${DIVE_DOCKER_BUILD_MODE:-source}"
+        export DIVE_DOMAIN_SUFFIX="${DIVE_DOMAIN_SUFFIX:-dev.dive25.com}"
+        ;;
+    staging)
+        export DIVE_AWS_INSTANCE_TYPE="${DIVE_AWS_INSTANCE_TYPE:-t3.2xlarge}"
+        export DIVE_AWS_VOLUME_SIZE="${DIVE_AWS_VOLUME_SIZE:-200}"
+        export SECRETS_PROVIDER="${SECRETS_PROVIDER:-vault}"
+        export DIVE_DOCKER_BUILD_MODE="${DIVE_DOCKER_BUILD_MODE:-source}"
+        export DIVE_DOMAIN_SUFFIX="${DIVE_DOMAIN_SUFFIX:-staging.dive25.com}"
+        ;;
+esac
+
 # =============================================================================
 # MAIN COMMAND DISPATCH
 # =============================================================================
@@ -492,6 +512,12 @@ case "$COMMAND" in
                 echo ""
                 ;;
         esac
+        ;;
+
+    # AWS commands (aws/module.sh) - dev/staging environment management
+    aws)
+        source "${MODULES_DIR}/aws/module.sh"
+        module_aws "$@"
         ;;
 
     # Redis commands (hub/redis.sh)

@@ -61,7 +61,7 @@ GCP_PROJECT_ID="${GCP_PROJECT_ID:-dive25}"
 USE_GCP_SECRETS="${USE_GCP_SECRETS:-true}"
 
 # AWS Configuration
-AWS_REGION="${AWS_REGION:-us-east-1}"
+AWS_REGION="${AWS_REGION:-us-gov-east-1}"
 USE_AWS_SECRETS="${USE_AWS_SECRETS:-false}"
 
 # Secret naming convention: dive-v3-<type>-<instance>
@@ -677,6 +677,21 @@ module_secrets() {
             local instance="${3:-}"
             set_secret "$name" "$value" "$instance"
             ;;
+        seed)
+            # Seed secrets for a fresh environment
+            local seed_provider="${1:-}"
+            shift || true
+            case "$seed_provider" in
+                aws)
+                    source "${CONFIG_DIR}/secrets-aws.sh"
+                    aws_seed_environment "$@"
+                    ;;
+                *)
+                    log_error "Usage: ./dive secrets seed aws [--spokes 'GBR FRA DEU'] [--force]"
+                    return 1
+                    ;;
+            esac
+            ;;
         help|*)
             echo "Usage: ./dive secrets <command> [args]"
             echo ""
@@ -691,13 +706,14 @@ module_secrets() {
             echo "  provider [vault|gcp|aws]  Get/set secrets provider"
             echo "  get <name> [CODE]     Get specific secret"
             echo "  set <name> <value> [CODE]  Set specific secret"
+            echo "  seed aws [opts]       Generate & store all secrets in AWS SM"
             echo ""
             echo "Current provider: $SECRETS_PROVIDER"
             echo ""
             echo "Environment Variables:"
             echo "  SECRETS_PROVIDER      Provider to use (vault, gcp, aws, auto)"
             echo "  GCP_PROJECT_ID        GCP project ID (default: dive25)"
-            echo "  AWS_REGION            AWS region (default: us-east-1)"
+            echo "  AWS_REGION            AWS region (default: us-gov-east-1)"
             ;;
     esac
 }
