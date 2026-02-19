@@ -330,9 +330,12 @@ if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost
         # External domains list for CORS and CSP
         export NEXT_PUBLIC_EXTERNAL_DOMAINS="https://${CADDY_DOMAIN_APP},https://${CADDY_DOMAIN_API},https://${CADDY_DOMAIN_IDP}"
         # Host-accessible URLs for scripts (localhost, standard ports)
-        export HUB_KC_URL="https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}"
-        export HUB_BACKEND_URL="https://localhost:${BACKEND_PORT:-4000}"
-        export HUB_OPAL_URL="https://localhost:${OPAL_PORT:-7002}"
+        # Only set when running on the Hub itself — remote spokes set these externally
+        if [ "${DEPLOYMENT_MODE:-local}" != "remote" ]; then
+            export HUB_KC_URL="https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}"
+            export HUB_BACKEND_URL="https://localhost:${BACKEND_PORT:-4000}"
+            export HUB_OPAL_URL="https://localhost:${OPAL_PORT:-7002}"
+        fi
 
         # Terraform Keycloak provider (runs on host, connects via localhost)
         export TF_VAR_keycloak_url="https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}"
@@ -383,9 +386,12 @@ if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost
         export AUTH_KEYCLOAK_ISSUER="https://${HUB_EXTERNAL_ADDRESS}:${KEYCLOAK_HTTPS_PORT:-8443}/realms/${HUB_REALM:-dive-v3-broker-usa}"
         export KEYCLOAK_URL="https://${HUB_EXTERNAL_ADDRESS}:${KEYCLOAK_HTTPS_PORT:-8443}"
 
-        export HUB_KC_URL="https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}"
-        export HUB_BACKEND_URL="https://localhost:${BACKEND_PORT:-4000}"
-        export HUB_OPAL_URL="https://localhost:${OPAL_PORT:-7002}"
+        # Only set when running on the Hub itself — remote spokes set these externally
+        if [ "${DEPLOYMENT_MODE:-local}" != "remote" ]; then
+            export HUB_KC_URL="https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}"
+            export HUB_BACKEND_URL="https://localhost:${BACKEND_PORT:-4000}"
+            export HUB_OPAL_URL="https://localhost:${OPAL_PORT:-7002}"
+        fi
 
         export TF_VAR_keycloak_url="https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}"
     fi
