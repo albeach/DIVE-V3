@@ -28,7 +28,6 @@ import { policySyncService } from '../services/policy-sync.service';
 import { idpValidationService } from '../services/idp-validation.service';
 import { SPManagementService } from '../services/sp-management.service';
 import { logger } from '../utils/logger';
-import { getVaultConnection } from '../utils/vault-secrets';
 import { z } from 'zod';
 import { requireSPAuth, requireSPScope } from '../middleware/sp-auth.middleware';
 import { requireAdmin, requireSuperAdmin } from '../middleware/admin.middleware';
@@ -36,6 +35,42 @@ import { getResourcesByQuery } from '../services/resource.service';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import https from 'https';
+
+// Simple Vault HTTP client for auth-code validation (handles self-signed TLS)
+async function vaultRequest(method: string, url: string, token: string, body?: object): Promise<{ ok: boolean; status: number; data: unknown }> {
+    return new Promise((resolve) => {
+        const parsedUrl = new URL(url);
+        const options: https.RequestOptions = {
+            hostname: parsedUrl.hostname,
+            port: parsedUrl.port,
+            path: parsedUrl.pathname,
+            method,
+            headers: {
+                'X-Vault-Token': token,
+                ...(body ? { 'Content-Type': 'application/json' } : {}),
+            },
+            rejectUnauthorized: false,
+            timeout: 5000,
+        };
+
+        const req = https.request(options, (res) => {
+            let data = '';
+            res.on('data', (chunk: Buffer) => { data += chunk; });
+            res.on('end', () => {
+                try {
+                    resolve({ ok: res.statusCode === 200, status: res.statusCode || 0, data: JSON.parse(data) });
+                } catch {
+                    resolve({ ok: false, status: res.statusCode || 0, data: null });
+                }
+            });
+        });
+        req.on('error', () => resolve({ ok: false, status: 0, data: null }));
+        req.on('timeout', () => { req.destroy(); resolve({ ok: false, status: 0, data: null }); });
+        if (body) req.write(JSON.stringify(body));
+        req.end();
+    });
+}
 
 // Initialize SP Management Service
 const spManagement = new SPManagementService();
@@ -761,22 +796,31 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
         // AUTH-CODE VALIDATION: Validate against Vault KV if provided
         let isAuthCodeApproved = false;
         if (request.authCode) {
-            const vault = await getVaultConnection();
+            const vaultAddr = process.env.VAULT_ADDR || 'https://dive-hub-vault:8200';
             const codeLower = request.instanceCode.toLowerCase();
 
-            if (vault) {
+            // Get Vault token: env var → AppRole auth
+            let vaultToken = process.env.VAULT_TOKEN || '';
+            if (!vaultToken && process.env.VAULT_ROLE_ID && process.env.VAULT_SECRET_ID) {
+                const loginRes = await vaultRequest('POST', `${vaultAddr}/v1/auth/approle/login`, '', {
+                    role_id: process.env.VAULT_ROLE_ID,
+                    secret_id: process.env.VAULT_SECRET_ID,
+                });
+                if (loginRes.ok) {
+                    vaultToken = (loginRes.data as { auth: { client_token: string } }).auth.client_token;
+                }
+            }
+
+            if (vaultToken) {
                 try {
-                    const vaultRes = await fetch(
-                        `${vault.addr}/v1/dive-v3/auth/data/spoke-auth/${codeLower}`,
-                        {
-                            headers: { 'X-Vault-Token': vault.token },
-                            signal: AbortSignal.timeout(5000),
-                            redirect: 'follow',
-                        }
+                    const vaultRes = await vaultRequest(
+                        'GET',
+                        `${vaultAddr}/v1/dive-v3/auth/data/spoke-auth/${codeLower}`,
+                        vaultToken,
                     );
 
                     if (vaultRes.ok) {
-                        const vaultData = await vaultRes.json() as {
+                        const vaultData = vaultRes.data as {
                             data: { data: Record<string, string> };
                         };
                         const authRecord = vaultData.data.data;
@@ -796,25 +840,18 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
                                 });
 
                                 // Mark as consumed in Vault
-                                await fetch(
-                                    `${vault.addr}/v1/dive-v3/auth/data/spoke-auth/${codeLower}`,
+                                vaultRequest(
+                                    'POST',
+                                    `${vaultAddr}/v1/dive-v3/auth/data/spoke-auth/${codeLower}`,
+                                    vaultToken,
                                     {
-                                        method: 'POST',
-                                        headers: {
-                                            'X-Vault-Token': vault.token,
-                                            'Content-Type': 'application/json',
+                                        data: {
+                                            ...authRecord,
+                                            status: 'consumed',
+                                            consumed_at: new Date().toISOString(),
+                                            consumed_by_spoke: spoke.spokeId,
                                         },
-                                        body: JSON.stringify({
-                                            data: {
-                                                ...authRecord,
-                                                status: 'consumed',
-                                                consumed_at: new Date().toISOString(),
-                                                consumed_by_spoke: spoke.spokeId,
-                                            },
-                                        }),
-                                        signal: AbortSignal.timeout(5000),
-                                        redirect: 'follow',
-                                    }
+                                    },
                                 ).catch(err => {
                                     logger.warn('Failed to mark auth code as consumed', { error: String(err) });
                                 });
@@ -843,7 +880,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
                     });
                 }
             } else {
-                logger.debug('Vault not available — skipping auth-code validation');
+                logger.debug('No Vault token available — skipping auth-code validation');
             }
         }
 
