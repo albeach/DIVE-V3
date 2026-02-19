@@ -198,6 +198,17 @@ _spoke_pipeline_execute_internal() {
 
     log_verbose "Starting phase execution (mode: $pipeline_mode, resume: $resume_mode)"
 
+    # Pre-deployment summary + confirmation
+    if ! type deployment_pre_summary_spoke &>/dev/null; then
+        local _summary="${DIVE_ROOT}/scripts/dive-modules/utilities/deployment-summary.sh"
+        [ -f "$_summary" ] && source "$_summary"
+    fi
+    if type deployment_pre_summary_spoke &>/dev/null; then
+        if ! deployment_pre_summary_spoke "$code_upper"; then
+            return 1
+        fi
+    fi
+
     # Phase 1: Preflight (always runs) - MUST run BEFORE setting state
     # This validates no other deployment is in progress
     log_verbose "Executing phase 1: PREFLIGHT"
@@ -324,6 +335,12 @@ _spoke_pipeline_execute_internal() {
         fi
 
         spoke_pipeline_print_success "$code_upper" "$instance_name" "$duration" "$pipeline_mode"
+
+        # Post-deployment summary with URLs and next steps
+        if type deployment_post_summary &>/dev/null; then
+            deployment_post_summary "spoke" "$code_upper" "$duration"
+        fi
+
         return 0
     else
         orch_db_set_state "$code_upper" "FAILED" "Pipeline failed" \
