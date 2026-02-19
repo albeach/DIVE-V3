@@ -269,6 +269,18 @@ BOOTSTRAP_EOF
         log_verbose "Bootstrap .env.hub created with placeholder values"
     fi
 
+    # Persist ENVIRONMENT from --env flag (bootstrap defaults to 'local')
+    if [ "${ENVIRONMENT:-local}" != "local" ]; then
+        _hub_set_env "ENVIRONMENT" "$ENVIRONMENT"
+        log_verbose "Persisted ENVIRONMENT=$ENVIRONMENT to .env.hub"
+    fi
+
+    # Persist DIVE_DOMAIN_SUFFIX for Caddy domain auto-computation
+    if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+        _hub_set_env "DIVE_DOMAIN_SUFFIX" "$DIVE_DOMAIN_SUFFIX"
+        log_verbose "Persisted DIVE_DOMAIN_SUFFIX=$DIVE_DOMAIN_SUFFIX to .env.hub"
+    fi
+
     # Ensure .env symlink exists (docker compose reads .env for variable substitution)
     if [ ! -e "${DIVE_ROOT}/.env" ] || [ "$(readlink "${DIVE_ROOT}/.env" 2>/dev/null)" != ".env.hub" ]; then
         ln -sf .env.hub "${DIVE_ROOT}/.env"

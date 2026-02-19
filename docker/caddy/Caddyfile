@@ -1,8 +1,11 @@
 # =============================================================================
-# DIVE V3 Caddy Reverse Proxy — Auto Let's Encrypt via Cloudflare DNS-01
+# DIVE V3 Caddy Reverse Proxy — Auto Let's Encrypt
 # =============================================================================
 # Subdomain routing with env-parameterized domains.
 # Services use Vault PKI TLS internally; Caddy terminates public Let's Encrypt TLS.
+#
+# ACME challenge: HTTP-01 by default (DNS A records must point to this server).
+# For DNS-01 (wildcard certs), set CLOUDFLARE_API_TOKEN and uncomment acme_dns.
 #
 # Required env vars:
 #   CADDY_DOMAIN_APP    e.g. dev-usa-app.dive25.com
@@ -10,12 +13,10 @@
 #   CADDY_DOMAIN_IDP    e.g. dev-usa-idp.dive25.com
 #   CADDY_DOMAIN_OPAL   e.g. dev-usa-opal.dive25.com
 #   CADDY_DOMAIN_VAULT  e.g. dev-usa-vault.dive25.com
-#   CLOUDFLARE_API_TOKEN
 # =============================================================================
 
 {
 	email admin@dive25.com
-	acme_dns cloudflare {env.CLOUDFLARE_API_TOKEN}
 }
 
 # =============================================================================
