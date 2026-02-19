@@ -410,6 +410,75 @@ test_cli_config_loader() {
 }
 
 ##
+# Test config validator (Phase 3)
+#
+test_cli_config_validator() {
+    log_verbose "Testing config validator..."
+
+    # Source the validator
+    local validator="${DIVE_ROOT}/scripts/dive-modules/configuration/config-validator.sh"
+    if [ ! -f "$validator" ]; then
+        log_error "config-validator.sh not found"
+        return 1
+    fi
+
+    source "$validator"
+
+    # Verify config_validate function exists
+    if ! type config_validate &>/dev/null; then
+        log_error "config_validate function not found"
+        return 1
+    fi
+
+    # Test _config_check_enum with valid value
+    _cv_reset 2>/dev/null || { _CV_ERRORS=(); _CV_WARNINGS=(); }
+    export TEST_ENUM_VAR="vault"
+    _config_check_enum "TEST_ENUM_VAR" "vault,gcp,aws,local" "Test enum"
+    if [ ${#_CV_ERRORS[@]} -ne 0 ]; then
+        log_error "Enum check failed for valid value 'vault'"
+        unset TEST_ENUM_VAR
+        return 1
+    fi
+
+    # Test _config_check_enum with invalid value
+    _CV_ERRORS=(); _CV_WARNINGS=()
+    export TEST_ENUM_VAR="invalid"
+    _config_check_enum "TEST_ENUM_VAR" "vault,gcp,aws,local" "Test enum"
+    if [ ${#_CV_ERRORS[@]} -eq 0 ]; then
+        log_error "Enum check should fail for invalid value"
+        unset TEST_ENUM_VAR
+        return 1
+    fi
+    unset TEST_ENUM_VAR
+
+    # Test _config_check_required with missing var
+    _CV_ERRORS=(); _CV_WARNINGS=()
+    unset TEST_REQUIRED_VAR 2>/dev/null
+    _config_check_required "TEST_REQUIRED_VAR" "Test required"
+    if [ ${#_CV_ERRORS[@]} -eq 0 ]; then
+        log_error "Required check should fail for missing var"
+        return 1
+    fi
+
+    # Test _config_check_required with set var
+    _CV_ERRORS=(); _CV_WARNINGS=()
+    export TEST_REQUIRED_VAR="something"
+    _config_check_required "TEST_REQUIRED_VAR" "Test required"
+    if [ ${#_CV_ERRORS[@]} -ne 0 ]; then
+        log_error "Required check should pass for set var"
+        unset TEST_REQUIRED_VAR
+        return 1
+    fi
+    unset TEST_REQUIRED_VAR
+
+    # Test full hub validation runs without crashing (Docker may or may not be running)
+    config_validate "hub" "" 2>/dev/null
+    # We don't check the return code — just that it doesn't crash
+
+    return 0
+}
+
+##
 # Run all CLI module tests
 #
 test_run_cli_module_tests() {
@@ -420,6 +489,7 @@ test_run_cli_module_tests() {
         "test_cli_interactive_mode"
         "test_cli_flags_parsing"
         "test_cli_config_loader"
+        "test_cli_config_validator"
         "test_cli_federation_module"
         "test_cli_hub_module"
         "test_cli_spoke_module"

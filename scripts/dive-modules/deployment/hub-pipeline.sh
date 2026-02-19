@@ -96,6 +96,26 @@ _hub_pipeline_execute_internal() {
     fi
 
     # =========================================================================
+    # Pre-flight config validation
+    # =========================================================================
+    if type config_validate &>/dev/null; then
+        if ! config_validate "hub"; then
+            log_error "Hub deployment aborted: configuration validation failed"
+            return 1
+        fi
+    else
+        # Auto-source validator if available
+        local _validator="${DIVE_ROOT}/scripts/dive-modules/configuration/config-validator.sh"
+        if [ -f "$_validator" ]; then
+            source "$_validator"
+            if ! config_validate "hub"; then
+                log_error "Hub deployment aborted: configuration validation failed"
+                return 1
+            fi
+        fi
+    fi
+
+    # =========================================================================
     # Phase 1: Vault Bootstrap (start, init, setup, seed)
     # =========================================================================
     # Vault MUST be first — all other phases depend on secrets from Vault
