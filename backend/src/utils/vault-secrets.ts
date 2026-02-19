@@ -245,6 +245,17 @@ export async function isVaultAvailable(): Promise<boolean> {
 }
 
 /**
+ * Get the current Vault connection details (authenticates via AppRole if needed).
+ * Returns null if Vault is not available.
+ */
+export async function getVaultConnection(): Promise<{ addr: string; token: string } | null> {
+    if (!(await checkVaultAvailability())) {
+        return null;
+    }
+    return { addr: VAULT_ADDR, token: VAULT_TOKEN };
+}
+
+/**
  * Reset Vault availability cache (for testing or reconnection)
  */
 export function resetVaultCache(): void {

@@ -28,6 +28,7 @@ import { policySyncService } from '../services/policy-sync.service';
 import { idpValidationService } from '../services/idp-validation.service';
 import { SPManagementService } from '../services/sp-management.service';
 import { logger } from '../utils/logger';
+import { getVaultConnection } from '../utils/vault-secrets';
 import { z } from 'zod';
 import { requireSPAuth, requireSPScope } from '../middleware/sp-auth.middleware';
 import { requireAdmin, requireSuperAdmin } from '../middleware/admin.middleware';
@@ -760,16 +761,15 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
         // AUTH-CODE VALIDATION: Validate against Vault KV if provided
         let isAuthCodeApproved = false;
         if (request.authCode) {
-            const vaultAddr = process.env.VAULT_ADDR || 'http://dive-hub-vault:8200';
-            const vaultToken = process.env.VAULT_TOKEN || '';
+            const vault = await getVaultConnection();
             const codeLower = request.instanceCode.toLowerCase();
 
-            if (vaultToken) {
+            if (vault) {
                 try {
                     const vaultRes = await fetch(
-                        `${vaultAddr}/v1/dive-v3/auth/data/spoke-auth/${codeLower}`,
+                        `${vault.addr}/v1/dive-v3/auth/data/spoke-auth/${codeLower}`,
                         {
-                            headers: { 'X-Vault-Token': vaultToken },
+                            headers: { 'X-Vault-Token': vault.token },
                             signal: AbortSignal.timeout(5000),
                             redirect: 'follow',
                         }
@@ -797,11 +797,11 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
 
                                 // Mark as consumed in Vault
                                 await fetch(
-                                    `${vaultAddr}/v1/dive-v3/auth/data/spoke-auth/${codeLower}`,
+                                    `${vault.addr}/v1/dive-v3/auth/data/spoke-auth/${codeLower}`,
                                     {
                                         method: 'POST',
                                         headers: {
-                                            'X-Vault-Token': vaultToken,
+                                            'X-Vault-Token': vault.token,
                                             'Content-Type': 'application/json',
                                         },
                                         body: JSON.stringify({
@@ -843,7 +843,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
                     });
                 }
             } else {
-                logger.debug('No VAULT_TOKEN — skipping auth-code validation');
+                logger.debug('Vault not available — skipping auth-code validation');
             }
         }
 
