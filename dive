@@ -532,6 +532,12 @@ case "$COMMAND" in
         module_kas "$@"
         ;;
 
+    # Bootstrap (auto-install dependencies)
+    bootstrap|setup)
+        source "${MODULES_DIR}/bootstrap.sh"
+        cmd_bootstrap "$@"
+        ;;
+
     # Help
     help|--help|-h)
         source "${MODULES_DIR}/utilities/help.sh"

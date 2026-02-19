@@ -130,44 +130,87 @@ preflight_run_all() {
 }
 
 ##
-# Check Docker daemon
+# Check Docker daemon — auto-installs if missing
 ##
 preflight_check_docker() {
     log_verbose "Checking Docker daemon..."
 
-    if ! docker info >/dev/null 2>&1; then
-        log_error "Docker daemon is not running"
-        log_error "Start Docker and try again"
+    if docker info >/dev/null 2>&1; then
+        log_verbose "Docker daemon is running"
+        return 0
+    fi
+
+    # Docker not available — try auto-install
+    if command -v docker >/dev/null 2>&1; then
+        # Docker installed but daemon not running
+        log_warn "Docker installed but daemon not running — attempting to start..."
+        sudo systemctl start docker 2>/dev/null || true
+        sleep 2
+        if docker info >/dev/null 2>&1; then
+            log_success "Docker daemon started"
+            return 0
+        fi
+        log_error "Docker daemon failed to start"
         return 1
     fi
 
-    log_verbose "Docker daemon is running"
-    return 0
+    # Docker not installed — auto-install
+    log_warn "Docker not found — auto-installing..."
+    source "${MODULES_DIR}/bootstrap.sh"
+    _bootstrap_docker
+    _bootstrap_compose
+    _bootstrap_docker_storage
+
+    # Verify — may need newgrp for group membership
+    if docker info >/dev/null 2>&1; then
+        log_success "Docker auto-installed and running"
+        return 0
+    fi
+
+    # Docker installed but current user not in docker group yet (needs re-login)
+    if sg docker -c "docker info" >/dev/null 2>&1; then
+        log_success "Docker auto-installed (using sg docker for current session)"
+        # Re-export DOCKER_CMD to use sg
+        export DOCKER_CMD="sg docker -c docker"
+        return 0
+    fi
+
+    log_error "Docker installed but requires re-login for group membership. Run: newgrp docker"
+    return 1
 }
 
 ##
-# Check Docker Compose
+# Check Docker Compose — auto-installs if missing
 ##
 preflight_check_compose() {
     log_verbose "Checking Docker Compose..."
 
-    if ! docker compose version >/dev/null 2>&1; then
-        log_error "Docker Compose v2 is not available"
-        log_error "Install Docker Compose v2 plugin"
-        return 1
+    if docker compose version >/dev/null 2>&1; then
+        log_verbose "Docker Compose is available"
+        return 0
     fi
 
-    log_verbose "Docker Compose is available"
-    return 0
+    # Try auto-install
+    log_warn "Docker Compose v2 not found — auto-installing..."
+    source "${MODULES_DIR}/bootstrap.sh"
+    _bootstrap_compose
+
+    if docker compose version >/dev/null 2>&1; then
+        log_success "Docker Compose v2 auto-installed"
+        return 0
+    fi
+
+    log_error "Docker Compose v2 install failed"
+    return 1
 }
 
 ##
-# Check required tools
+# Check required tools — auto-installs if missing
 ##
 preflight_check_tools() {
     log_verbose "Checking required tools..."
 
-    local required=("jq" "curl" "openssl")
+    local required=("jq" "curl" "openssl" "rsync" "git" "terraform" "vault" "yq")
     local missing=()
 
     for tool in "${required[@]}"; do
@@ -177,17 +220,39 @@ preflight_check_tools() {
     done
 
     if [ ${#missing[@]} -gt 0 ]; then
-        log_error "Missing required tools: ${missing[*]}"
-        return 1
+        log_warn "Missing tools: ${missing[*]} — auto-installing..."
+        source "${MODULES_DIR}/bootstrap.sh"
+
+        # Install each missing tool via its specific bootstrap function
+        local need_sys_packages=false
+        for tool in "${missing[@]}"; do
+            case "$tool" in
+                jq|curl|openssl|rsync|git|wget|unzip) need_sys_packages=true ;;
+                terraform)  _bootstrap_terraform ;;
+                vault)      _bootstrap_vault ;;
+                yq)         _bootstrap_yq ;;
+            esac
+        done
+        $need_sys_packages && _bootstrap_system_packages
+
+        # Re-check
+        local still_missing=()
+        for tool in "${required[@]}"; do
+            command -v "$tool" >/dev/null 2>&1 || still_missing+=("$tool")
+        done
+
+        if [ ${#still_missing[@]} -gt 0 ]; then
+            log_error "Failed to install: ${still_missing[*]}"
+            return 1
+        fi
+        log_success "Auto-installed: ${missing[*]}"
     fi
 
-    # Check optional but recommended tools (mkcert only needed for local dev)
+    # Check optional tools (warn but don't fail)
     if ! is_cloud_environment 2>/dev/null && ! command -v mkcert >/dev/null 2>&1; then
-        log_warn "mkcert not found - using openssl for certificates"
-    fi
-
-    if ! command -v terraform >/dev/null 2>&1; then
-        log_warn "Terraform not found - configuration may be limited"
+        log_warn "mkcert not found — auto-installing..."
+        source "${MODULES_DIR}/bootstrap.sh"
+        _bootstrap_mkcert
     fi
 
     log_verbose "All required tools available"
