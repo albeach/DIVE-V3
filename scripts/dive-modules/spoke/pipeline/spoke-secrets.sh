@@ -658,10 +658,20 @@ spoke_secrets_load_from_env() {
 
     log_verbose "Loading secrets from: $env_file"
 
-    # Source the .env file
+    # Source the .env file (preserve Hub URL vars from being clobbered by stale .env)
+    local _save_hub_api="${HUB_API_URL:-}" _save_hub_kc="${HUB_KC_URL:-}"
+    local _save_hub_opal="${HUB_OPAL_URL:-}" _save_hub_vault="${HUB_VAULT_URL:-}"
+    local _save_hub_ext="${HUB_EXTERNAL_ADDRESS:-}" _save_deploy_mode="${DEPLOYMENT_MODE:-}"
     set -a
     source "$env_file"
     set +a
+    # Restore Hub URL vars (env exports take priority over stale .env values)
+    [ -n "$_save_hub_api" ] && export HUB_API_URL="$_save_hub_api"
+    [ -n "$_save_hub_kc" ] && export HUB_KC_URL="$_save_hub_kc"
+    [ -n "$_save_hub_opal" ] && export HUB_OPAL_URL="$_save_hub_opal"
+    [ -n "$_save_hub_vault" ] && export HUB_VAULT_URL="$_save_hub_vault"
+    [ -n "$_save_hub_ext" ] && export HUB_EXTERNAL_ADDRESS="$_save_hub_ext"
+    [ -n "$_save_deploy_mode" ] && export DEPLOYMENT_MODE="$_save_deploy_mode"
 
     # Check if required secrets are loaded
     local missing_secrets=()

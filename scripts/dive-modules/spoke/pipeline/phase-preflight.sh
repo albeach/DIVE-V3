@@ -670,21 +670,10 @@ spoke_preflight_configure_hub_connectivity() {
     # Hub connectivity is handled through Docker networks (dive-shared)
     # Containers communicate using container names
 
-    if [ -f "$env_file" ]; then
-        # Ensure HUB_IDP_URL is set
-        if ! grep -q "^HUB_IDP_URL=" "$env_file"; then
-            echo "HUB_IDP_URL=https://hub.dive25.com:8443" >> "$env_file"
-            log_verbose "Added HUB_IDP_URL to .env"
-        fi
+    # Hub URLs are set by environment vars (remote mode) or phase-initialization (local mode)
+    # The .env template in phase-initialization.sh is the SSOT — no hardcoded defaults here
 
-        # Ensure HUB_OPAL_URL is set
-        if ! grep -q "^HUB_OPAL_URL=" "$env_file"; then
-            echo "HUB_OPAL_URL=https://hub.dive25.com:8080" >> "$env_file"
-            log_verbose "Added HUB_OPAL_URL to .env"
-        fi
-    fi
-
-    log_verbose "Hub connectivity configured via dive-shared network"
+    log_verbose "Hub connectivity configured (mode: ${DEPLOYMENT_MODE:-local})"
 }
 
 # =============================================================================
