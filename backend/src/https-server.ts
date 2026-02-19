@@ -19,7 +19,7 @@ import { spokeIdentityService } from './services/spoke-identity.service';
 import { logger } from './utils/logger';
 
 const PORT = parseInt(process.env.PORT || '4000', 10);
-const certPath = process.env.SSL_CERT_PATH || '/opt/keycloak/certs';
+const certPath = process.env.SSL_CERT_PATH || process.env.CERT_PATH || '/app/certs';
 
 /**
  * Fetch dynamic MongoDB credentials from Vault database secrets engine.

@@ -484,12 +484,11 @@ services:
       NODE_ENV: production
       KAS_PORT: 8080
       HTTPS_ENABLED: "true"
-      CERT_PATH: /opt/app/certs
+      CERT_PATH: /app/certs
       KEY_FILE: key.pem
       CERT_FILE: fullchain.pem
       BACKEND_URL: https://backend-{{INSTANCE_CODE_LOWER}}:4000
       NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
-      SSL_CERT_PATH: /app/certs
       OPA_URL: https://opa-{{INSTANCE_CODE_LOWER}}:8181
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/?authSource=admin&directConnection=true&tls=true
       MONGODB_HOST: mongodb-{{INSTANCE_CODE_LOWER}}:27017
@@ -514,7 +513,7 @@ services:
     networks:
       - dive-internal
     volumes:
-      - ./certs:/opt/app/certs:ro
+      - ./certs:/app/certs:ro  # SSOT: /app/certs for all Node.js services
       - ./ca-bundle:/app/certs/ca:ro
       - kas_logs:/app/logs
     healthcheck:
@@ -563,11 +562,11 @@ services:
       AUTH_POST_LOGOUT_REDIRECT: {{BASE_URL}}
       NODE_OPTIONS: "--use-openssl-ca"
       NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
-      SSL_CERT_PATH: /app/certs
+      CERT_PATH: /app/certs
     ports:
       - "127.0.0.1:{{FRONTEND_HOST_PORT}}:3000"
     volumes:
-      - ./certs:/opt/app/certs:ro
+      - ./certs:/app/certs:ro  # SSOT: /app/certs for all Node.js services
       - ./ca-bundle:/app/certs/ca:ro
     extra_hosts:
       - "localhost:host-gateway"
@@ -577,7 +576,7 @@ services:
       backend-{{INSTANCE_CODE_LOWER}}:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ >/dev/null || exit 1"]
+      test: ["CMD-SHELL", "wget --no-check-certificate -qO- https://127.0.0.1:3000/ >/dev/null || exit 1"]
       interval: 5s
       timeout: 8s
       retries: 10

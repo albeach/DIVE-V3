@@ -20,7 +20,11 @@
 # Frontend
 # =============================================================================
 {$CADDY_DOMAIN_APP} {
-	reverse_proxy http://frontend-{{INSTANCE_CODE_LOWER}}:3000
+	reverse_proxy https://frontend-{{INSTANCE_CODE_LOWER}}:3000 {
+		transport http {
+			tls_insecure_skip_verify
+		}
+	}
 
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains"

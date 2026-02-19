@@ -1,9 +1,18 @@
 #!/bin/sh
 # =============================================================================
-# DIVE V3 Frontend - Docker Entrypoint
+# DIVE V3 Frontend - Production Docker Entrypoint
 # =============================================================================
-# Handles runtime CA trust store configuration for mkcert certificates
-# This is the 2026 best practice for proper TLS verification in development
+# 1. Replaces build-time __NEXT_PUBLIC_*__ placeholders with runtime env vars
+#    (enables single ECR image to serve any spoke: USA, GBR, FRA, etc.)
+# 2. Validates security configuration
+#
+# CA trust: Handled via NODE_EXTRA_CA_CERTS env var (no root access needed)
+#
+# Standard cert layout (SSOT):
+#   /app/certs/key.pem          - TLS private key
+#   /app/certs/certificate.pem  - TLS certificate
+#   /app/certs/fullchain.pem    - TLS certificate chain
+#   /app/certs/ca/rootCA.pem    - CA certificate (via NODE_EXTRA_CA_CERTS)
 # =============================================================================
 
 set -e
@@ -11,76 +20,45 @@ set -e
 echo "[Entrypoint] DIVE V3 Frontend starting..."
 
 # =============================================================================
-# Install mkcert CA into System Trust Store (Runtime)
+# Step 1: Replace NEXT_PUBLIC_ Placeholders with Runtime Values
 # =============================================================================
-# Why runtime instead of build-time:
-#   - Certificates are mounted as volumes (not in build context)
-#   - Allows different CAs for different environments
-#   - Production can use different CA without rebuild
-#
-# How it works:
-#   1. mkcert CA mounted to /app/certs/ca/rootCA.pem
-#   2. Copy to system CA directory (must be .crt extension)
-#   3. Run update-ca-certificates to add to system bundle
-#   4. Node.js fetch() (with --use-openssl-ca) now trusts mkcert certs
-#
+# Next.js compiles NEXT_PUBLIC_* vars into client-side JS at build time.
+# For multi-tenant ECR images, we build with __NEXT_PUBLIC_FOO__ placeholders
+# and sed-replace them at container startup with actual runtime values.
+# =============================================================================
 
-# Standardized CA location: /app/certs/ca/rootCA.pem
-# This is the single source of truth for mkcert CA in all containers
-CA_PATH="/app/certs/ca/rootCA.pem"
-
-if [ -f "$CA_PATH" ]; then
-    echo "[Entrypoint] Installing mkcert CA into system trust store..."
-    echo "[Entrypoint] Found CA at: $CA_PATH"
-
-    # Copy CA to system directory (must be .crt extension for Alpine)
-    cp "$CA_PATH" /usr/local/share/ca-certificates/mkcert-dev-ca.crt
-
-    # Update system CA bundle
-    update-ca-certificates
-
-    echo "[Entrypoint] ✓ mkcert CA installed successfully"
-    echo "[Entrypoint] Node.js fetch() will now trust self-signed certificates"
-else
-    echo "[Entrypoint] ⚠️  mkcert CA not found at: $CA_PATH"
-    echo "[Entrypoint] TLS verification may fail for self-signed certificates"
-    echo "[Entrypoint] Expected mount: ./certs/mkcert:/app/certs/ca:ro"
-fi
+REPLACED=0
+for var in $(env | grep '^NEXT_PUBLIC_' | cut -d= -f1); do
+    placeholder="__${var}__"
+    value=$(eval echo "\$$var")
+    if [ -n "$value" ] && [ "$value" != "$placeholder" ]; then
+        # Replace in all compiled JS and HTML files (standalone output + static chunks)
+        find /app/.next -name '*.js' -exec sed -i "s|${placeholder}|${value}|g" {} + 2>/dev/null || true
+        find /app/.next -name '*.html' -exec sed -i "s|${placeholder}|${value}|g" {} + 2>/dev/null || true
+        REPLACED=$((REPLACED + 1))
+    fi
+done
+echo "[Entrypoint] Replaced ${REPLACED} NEXT_PUBLIC_ variables"
 
 # =============================================================================
-# Validate TLS Configuration
+# Step 2: Security Validation
 # =============================================================================
-echo "[Entrypoint] TLS Configuration:"
-echo "  NODE_ENV: ${NODE_ENV:-not set}"
-echo "  NODE_OPTIONS: ${NODE_OPTIONS:-not set}"
-echo "  System CA bundle: /etc/ssl/certs/ca-certificates.crt"
 
-# Check if --use-openssl-ca is set
-if echo "${NODE_OPTIONS:-}" | grep -q "use-openssl-ca"; then
-    echo "  ✓ Node.js will use system CA trust store (CORRECT)"
-else
-    echo "  ⚠️  --use-openssl-ca not set, fetch() may not trust mkcert"
-    echo "  Recommended: ENV NODE_OPTIONS=\"--use-openssl-ca\""
-fi
-
-# CRITICAL: Prevent TLS bypass in production
 if [ "${NODE_ENV}" = "production" ] && [ "${NODE_TLS_REJECT_UNAUTHORIZED}" = "0" ]; then
-    echo ""
-    echo "🔴🔴🔴 CRITICAL SECURITY ERROR 🔴🔴🔴"
-    echo ""
-    echo "NODE_TLS_REJECT_UNAUTHORIZED=0 in production!"
-    echo "This disables ALL certificate verification."
-    echo ""
-    echo "Fix: Remove NODE_TLS_REJECT_UNAUTHORIZED from production environment"
-    echo ""
+    echo "[Entrypoint] CRITICAL: NODE_TLS_REJECT_UNAUTHORIZED=0 in production! Aborting."
     exit 1
 fi
 
-# =============================================================================
-# Start Application
-# =============================================================================
-echo "[Entrypoint] Starting Next.js development server..."
-echo ""
+# Verify TLS cert availability
+CERT_DIR="${CERT_PATH:-/app/certs}"
+if [ ! -f "${CERT_DIR}/key.pem" ]; then
+    echo "[Entrypoint] WARNING: TLS key not found at ${CERT_DIR}/key.pem"
+    echo "[Entrypoint] HTTPS server will fail to start"
+fi
 
-# Execute the CMD from Dockerfile (npm run dev)
+# =============================================================================
+# Step 3: Start Application
+# =============================================================================
+
+echo "[Entrypoint] Instance: ${NEXT_PUBLIC_INSTANCE:-unknown} | Certs: ${CERT_DIR}"
 exec "$@"

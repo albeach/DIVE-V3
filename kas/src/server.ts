@@ -1519,7 +1519,7 @@ async function initializeKASService(): Promise<void> {
 // ============================================
 if (HTTPS_ENABLED) {
     try {
-        const certPath = process.env.CERT_PATH || '/opt/app/certs';
+        const certPath = process.env.CERT_PATH || process.env.SSL_CERT_PATH || '/app/certs';
         const httpsOptions = {
             key: fs.readFileSync(path.join(certPath, process.env.KEY_FILE || 'key.pem')),
             cert: fs.readFileSync(path.join(certPath, process.env.CERT_FILE || 'certificate.pem')),
