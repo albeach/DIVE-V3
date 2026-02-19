@@ -628,8 +628,9 @@ spoke_config_update_redirect_uris() {
     local frontend_port="${SPOKE_FRONTEND_PORT:-3000}"
 
     # Build redirect URIs
-    local redirect_uris='["http://localhost:'$frontend_port'/*","https://localhost:'$frontend_port'/*","http://host.docker.internal:'$frontend_port'/*","https://'$code_lower'.dive25.com/*"]'
-    local web_origins='["http://localhost:'$frontend_port'","https://localhost:'$frontend_port'","http://host.docker.internal:'$frontend_port'","https://'$code_lower'.dive25.com"]'
+    local _dom="${DIVE_DEFAULT_DOMAIN:-dive25.com}"
+    local redirect_uris='["http://localhost:'$frontend_port'/*","https://localhost:'$frontend_port'/*","http://host.docker.internal:'$frontend_port'/*","https://'$code_lower'.'$_dom'/*"]'
+    local web_origins='["http://localhost:'$frontend_port'","https://localhost:'$frontend_port'","http://host.docker.internal:'$frontend_port'","https://'$code_lower'.'$_dom'"]'
 
     # Update client
     docker exec "$kc_container" curl -sf \

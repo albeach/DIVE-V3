@@ -44,7 +44,8 @@ if [ -z "${SECRETS_PROVIDER:-}" ] && [ "${DEPLOYMENT_MODE:-local}" != "remote" ]
         esac
     done < "${DIVE_ROOT}/.env.hub"
 fi
-SECRETS_PROVIDER="${SECRETS_PROVIDER:-gcp}"
+# Default to vault (was gcp, fixed to match config/dive-defaults.env SSOT)
+SECRETS_PROVIDER="${SECRETS_PROVIDER:-vault}"
 
 # Source secrets module for vault functions when using Vault provider
 if [ "$SECRETS_PROVIDER" = "vault" ] && [ -z "${DIVE_CONFIGURATION_SECRETS_LOADED:-}" ]; then
