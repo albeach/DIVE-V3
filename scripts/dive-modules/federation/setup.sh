@@ -190,6 +190,23 @@ federation_link() {
 
     local idp_alias="${code_lower}-idp"
 
+    # Detect Simple Post-Broker OTP flow in Hub realm (created by Terraform realm-mfa module)
+    local _hub_otp_flow=""
+    local _hub_fed_flows
+    _hub_fed_flows=$(docker exec "${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}" curl -sf --max-time 5 \
+        -H "Authorization: Bearer $hub_token" \
+        "http://localhost:8080/admin/realms/dive-v3-broker-usa/authentication/flows" 2>/dev/null || echo "[]")
+    _hub_otp_flow=$(echo "$_hub_fed_flows" | python3 -c "
+import json,sys
+try:
+    flows = json.load(sys.stdin)
+    for f in flows:
+        if f.get('alias','') == 'Simple Post-Broker OTP' and not f.get('builtIn',False):
+            print(f['alias']); break
+except: pass
+" 2>/dev/null)
+    [ -n "$_hub_otp_flow" ] && log_verbose "Using Hub post-broker OTP flow: ${_hub_otp_flow}"
+
     local idp_config=$(cat << EOF
 {
   "alias": "${idp_alias}",
@@ -200,6 +217,7 @@ federation_link() {
   "storeToken": true,
   "linkOnly": false,
   "firstBrokerLoginFlowAlias": "first broker login",
+  "postBrokerLoginFlowAlias": "${_hub_otp_flow}",
   "config": {
     "issuer": "${spoke_url}/realms/${spoke_realm}",
     "authorizationUrl": "${spoke_url}/realms/${spoke_realm}/protocol/openid-connect/auth",
@@ -739,8 +757,24 @@ _federation_link_direct() {
         source_internal_url="https://dive-spoke-${source_lower}-keycloak:8443"
     fi
 
+    # Detect Simple Post-Broker OTP flow in target realm (created by Terraform realm-mfa module)
+    local _target_otp_flow=""
+    local _target_all_flows
+    _target_all_flows=$(docker exec "$target_kc_container" curl -sf --max-time 5 \
+        -H "Authorization: Bearer $target_token" \
+        "http://localhost:8080/admin/realms/${target_realm}/authentication/flows" 2>/dev/null || echo "[]")
+    _target_otp_flow=$(echo "$_target_all_flows" | python3 -c "
+import json,sys
+try:
+    flows = json.load(sys.stdin)
+    for f in flows:
+        if f.get('alias','') == 'Simple Post-Broker OTP' and not f.get('builtIn',False):
+            print(f['alias']); break
+except: pass
+" 2>/dev/null)
+    [ -n "$_target_otp_flow" ] && log_verbose "Using target post-broker OTP flow: ${_target_otp_flow}"
+
     # IdP configuration
-    # Spoke handles MFA - Hub trusts spoke's authentication
     local idp_config="{
         \"alias\": \"${idp_alias}\",
         \"displayName\": \"${source_upper} Federation\",
@@ -751,7 +785,7 @@ _federation_link_direct() {
         \"linkOnly\": false,
         \"firstBrokerLoginFlowAlias\": \"first broker login\",
         \"updateProfileFirstLoginMode\": \"off\",
-        \"postBrokerLoginFlowAlias\": \"\",
+        \"postBrokerLoginFlowAlias\": \"${_target_otp_flow}\",
         \"config\": {
             \"clientId\": \"${federation_client_id}\",
             \"clientSecret\": \"${client_secret}\",

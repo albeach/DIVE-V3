@@ -342,28 +342,28 @@ _configure_remote_spoke_idp() {
         url="${spoke_idp_url}/admin/realms/${spoke_realm}/identity-provider/instances/${idp_alias}"
     fi
 
-    # Detect the custom Post Broker MFA flow (created by Terraform)
-    # Falls back to stock "first broker login" if custom flow not found
-    local spoke_post_broker_flow="first broker login"
+    # Detect the Simple Post-Broker OTP flow (created by Terraform realm-mfa module)
+    # This is the Keycloak-recommended way to enforce MFA after federated login
+    local spoke_post_broker_otp=""
     local _flows
     _flows=$(curl -sk --max-time 5 \
         -H "Authorization: Bearer $admin_token" \
         "${spoke_idp_url}/admin/realms/${spoke_realm}/authentication/flows" 2>/dev/null)
-    local _custom_flow
-    _custom_flow=$(echo "$_flows" | python3 -c "
+    local _otp_flow
+    _otp_flow=$(echo "$_flows" | python3 -c "
 import json,sys
 try:
     flows = json.load(sys.stdin)
     for f in flows:
-        if f.get('alias','').startswith('Post Broker MFA') and not f.get('builtIn',False):
+        if f.get('alias','') == 'Simple Post-Broker OTP' and not f.get('builtIn',False):
             print(f['alias']); break
 except: pass
 " 2>/dev/null)
-    if [ -n "$_custom_flow" ]; then
-        spoke_post_broker_flow="$_custom_flow"
-        log_verbose "Using custom flow: ${spoke_post_broker_flow}"
+    if [ -n "$_otp_flow" ]; then
+        spoke_post_broker_otp="$_otp_flow"
+        log_verbose "Using post-broker OTP flow: ${spoke_post_broker_otp}"
     else
-        log_warn "Custom Post Broker MFA flow not found in spoke — using stock first broker login"
+        log_warn "Simple Post-Broker OTP flow not found in spoke — post-broker MFA disabled"
     fi
 
     # Build IdP config (Hub OIDC provider in spoke)
@@ -376,7 +376,8 @@ except: pass
     "enabled": true,
     "trustEmail": true,
     "storeToken": true,
-    "firstBrokerLoginFlowAlias": "${spoke_post_broker_flow}",
+    "firstBrokerLoginFlowAlias": "first broker login",
+    "postBrokerLoginFlowAlias": "${spoke_post_broker_otp}",
     "config": {
         "clientId": "dive-v3-broker-usa",
         "clientSecret": "${hub_client_secret}",
@@ -506,27 +507,27 @@ _configure_remote_hub_idp() {
         url="http://localhost:8080/admin/realms/${HUB_REALM}/identity-provider/instances/${idp_alias}"
     fi
 
-    # Detect the custom Post Broker MFA flow in Hub realm
-    local hub_post_broker_flow="first broker login"
+    # Detect the Simple Post-Broker OTP flow in Hub realm (created by Terraform realm-mfa module)
+    local hub_post_broker_otp=""
     local _hub_flows
     _hub_flows=$(docker exec "$HUB_KEYCLOAK_CONTAINER" curl -sf --max-time 5 \
         -H "Authorization: Bearer $hub_admin_token" \
         "http://localhost:8080/admin/realms/${HUB_REALM}/authentication/flows" 2>/dev/null)
-    local _hub_custom_flow
-    _hub_custom_flow=$(echo "$_hub_flows" | python3 -c "
+    local _hub_otp_flow
+    _hub_otp_flow=$(echo "$_hub_flows" | python3 -c "
 import json,sys
 try:
     flows = json.load(sys.stdin)
     for f in flows:
-        if f.get('alias','').startswith('Post Broker MFA') and not f.get('builtIn',False):
+        if f.get('alias','') == 'Simple Post-Broker OTP' and not f.get('builtIn',False):
             print(f['alias']); break
 except: pass
 " 2>/dev/null)
-    if [ -n "$_hub_custom_flow" ]; then
-        hub_post_broker_flow="$_hub_custom_flow"
-        log_verbose "Using Hub custom flow: ${hub_post_broker_flow}"
+    if [ -n "$_hub_otp_flow" ]; then
+        hub_post_broker_otp="$_hub_otp_flow"
+        log_verbose "Using Hub post-broker OTP flow: ${hub_post_broker_otp}"
     else
-        log_warn "Custom Post Broker MFA flow not found in Hub — using stock first broker login"
+        log_warn "Simple Post-Broker OTP flow not found in Hub — post-broker MFA disabled"
     fi
 
     # Build IdP config (spoke OIDC provider in Hub)
@@ -539,7 +540,8 @@ except: pass
     "enabled": true,
     "trustEmail": true,
     "storeToken": true,
-    "firstBrokerLoginFlowAlias": "${hub_post_broker_flow}",
+    "firstBrokerLoginFlowAlias": "first broker login",
+    "postBrokerLoginFlowAlias": "${hub_post_broker_otp}",
     "config": {
         "clientId": "dive-v3-broker-${code_lower}",
         "clientSecret": "${spoke_client_secret}",

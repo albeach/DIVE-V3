@@ -868,19 +868,9 @@ _hub_ensure_opal_data_token() {
         fi
     fi
 
-    # Write to .env.hub
-    if grep -q "^OPAL_DATA_SOURCE_TOKEN=" "$DIVE_ROOT/.env.hub" 2>/dev/null; then
-        sed -i '' "s|^OPAL_DATA_SOURCE_TOKEN=.*|OPAL_DATA_SOURCE_TOKEN=${token}|" "$DIVE_ROOT/.env.hub"
-    else
-        echo "OPAL_DATA_SOURCE_TOKEN=${token}" >> "$DIVE_ROOT/.env.hub"
-    fi
-
-    # Write to .env (Docker Compose variable substitution source)
-    if grep -q "^OPAL_DATA_SOURCE_TOKEN=" "$DIVE_ROOT/.env" 2>/dev/null; then
-        sed -i '' "s|^OPAL_DATA_SOURCE_TOKEN=.*|OPAL_DATA_SOURCE_TOKEN=${token}|" "$DIVE_ROOT/.env"
-    else
-        echo "OPAL_DATA_SOURCE_TOKEN=${token}" >> "$DIVE_ROOT/.env"
-    fi
+    # Write to .env.hub (cross-platform via _hub_set_env)
+    # .env is a symlink to .env.hub, so this updates both
+    _hub_set_env "OPAL_DATA_SOURCE_TOKEN" "$token"
 
     export OPAL_DATA_SOURCE_TOKEN="$token"
     log_success "OPAL data source token ready"
@@ -1016,12 +1006,8 @@ _hub_provision_opal_client_token() {
             -d '{"type": "client"}' 2>/dev/null | jq -r '.token // empty')
 
         if [ -n "$token" ]; then
-            # Store in .env.hub
-            if grep -q "^HUB_OPAL_TOKEN=" "$DIVE_ROOT/.env.hub" 2>/dev/null; then
-                sed -i '' "s|^HUB_OPAL_TOKEN=.*|HUB_OPAL_TOKEN=${token}|" "$DIVE_ROOT/.env.hub"
-            else
-                echo "HUB_OPAL_TOKEN=${token}" >> "$DIVE_ROOT/.env.hub"
-            fi
+            # Store in .env.hub (cross-platform via _hub_set_env)
+            _hub_set_env "HUB_OPAL_TOKEN" "$token"
 
             # Start OPAL client with real token (profile: opal)
             log_info "Starting OPAL client with real token..."
