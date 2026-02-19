@@ -409,7 +409,7 @@ spoke_containers_start() {
 
     # Wait for OPAL Client to be healthy (may take longer due to policy sync)
     log_info "OPAL Client container started — waiting for health check (up to 120s)..."
-    log_info "  (Health check: curl http://localhost:7000/healthcheck, interval=10s, start_period=30s)"
+    log_info "  (Health check: curl http://127.0.0.1:7000/healthcheck, interval=10s, start_period=30s)"
     if ! spoke_containers_wait_for_services "$instance_code" "opal-client-${code_lower}" 120; then
         log_warn "OPAL Client did not become healthy — deployment will continue"
         log_warn "This is expected in remote mode (token provisioned in CONFIGURATION phase)"
