@@ -46,7 +46,8 @@ spoke_preflight_validation() {
     local warning_checks=0
 
     # Check 0: Vault Provisioning — auto-provision if needed
-    if [ "${SECRETS_PROVIDER:-}" = "vault" ]; then
+    # Skip for remote/standalone: Vault lives on the Hub, not the spoke
+    if [ "${SECRETS_PROVIDER:-}" = "vault" ] && [ "${DEPLOYMENT_MODE:-local}" != "remote" ] && [ "${DEPLOYMENT_MODE:-local}" != "standalone" ]; then
         log_verbose "Check 0: Vault provisioning..."
         if ! type vault_spoke_is_provisioned &>/dev/null; then
             source "$(dirname "${BASH_SOURCE[0]}")/../../vault/module.sh" 2>/dev/null || true
@@ -160,11 +161,25 @@ spoke_preflight_validation() {
 #   1 - Hub not accessible
 ##
 preflight_check_hub_reachable() {
-    local hub_url="${HUB_URL:-https://localhost:4000}"
+    # Standalone mode: no Hub needed
+    if [ "${DEPLOYMENT_MODE:-local}" = "standalone" ]; then
+        log_verbose "Standalone mode — skipping Hub reachability check"
+        return 0
+    fi
+
+    # Remote mode: use the Hub API URL discovered from domain prompt
+    local hub_url="${HUB_API_URL:-${HUB_URL:-https://localhost:4000}}"
 
     # Try health endpoint with 5s timeout (HTTPS only - Zero Trust)
     if curl -skf --max-time 5 "$hub_url/api/health" >/dev/null 2>&1; then
         return 0
+    fi
+
+    # Remote mode: also try the external address directly
+    if [ "${DEPLOYMENT_MODE:-local}" = "remote" ] && [ -n "${HUB_EXTERNAL_ADDRESS:-}" ]; then
+        if curl -skf --max-time 5 "https://${HUB_EXTERNAL_ADDRESS}/api/health" >/dev/null 2>&1; then
+            return 0
+        fi
     fi
 
     log_error "Hub not accessible at $hub_url/api/health (HTTPS)"
