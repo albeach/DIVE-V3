@@ -275,10 +275,40 @@ BOOTSTRAP_EOF
         log_verbose "Persisted ENVIRONMENT=$ENVIRONMENT to .env.hub"
     fi
 
+    # Persist HUB_EXTERNAL_ADDRESS (detected from EC2 metadata by common.sh)
+    if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost" ]; then
+        _hub_set_env "HUB_EXTERNAL_ADDRESS" "$HUB_EXTERNAL_ADDRESS"
+    fi
+
     # Persist DIVE_DOMAIN_SUFFIX for Caddy domain auto-computation
     if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
         _hub_set_env "DIVE_DOMAIN_SUFFIX" "$DIVE_DOMAIN_SUFFIX"
         log_verbose "Persisted DIVE_DOMAIN_SUFFIX=$DIVE_DOMAIN_SUFFIX to .env.hub"
+    fi
+
+    # Persist Caddy domain vars and derived URLs computed by common.sh.
+    # On fresh deploy, common.sh runs BEFORE .env.hub exists, so _caddy_set()
+    # in common.sh can't persist them. We do it here now that .env.hub exists.
+    if [ -n "${CADDY_DOMAIN_IDP:-}" ]; then
+        for _var in CADDY_DOMAIN_APP CADDY_DOMAIN_API CADDY_DOMAIN_IDP CADDY_DOMAIN_OPAL CADDY_DOMAIN_VAULT; do
+            eval "_val=\${${_var}:-}"
+            [ -n "$_val" ] && _hub_set_env "$_var" "$_val"
+        done
+        # Derived URLs that Docker Compose and Terraform need from .env.hub
+        _hub_set_env "KEYCLOAK_HOSTNAME" "${CADDY_DOMAIN_IDP}"
+        _hub_set_env "NEXT_PUBLIC_API_URL" "https://${CADDY_DOMAIN_API}"
+        _hub_set_env "NEXT_PUBLIC_BACKEND_URL" "https://${CADDY_DOMAIN_API}"
+        _hub_set_env "NEXT_PUBLIC_BASE_URL" "https://${CADDY_DOMAIN_APP}"
+        _hub_set_env "NEXT_PUBLIC_KEYCLOAK_URL" "https://${CADDY_DOMAIN_IDP}"
+        _hub_set_env "NEXTAUTH_URL" "https://${CADDY_DOMAIN_APP}"
+        _hub_set_env "AUTH_URL" "https://${CADDY_DOMAIN_APP}"
+        _hub_set_env "KEYCLOAK_ISSUER" "https://${CADDY_DOMAIN_IDP}/realms/${HUB_REALM:-dive-v3-broker-usa}"
+        _hub_set_env "AUTH_KEYCLOAK_ISSUER" "https://${CADDY_DOMAIN_IDP}/realms/${HUB_REALM:-dive-v3-broker-usa}"
+        _hub_set_env "KEYCLOAK_URL" "https://${CADDY_DOMAIN_IDP}"
+        _hub_set_env "TRUSTED_ISSUERS" "${TRUSTED_ISSUERS:-}"
+        _hub_set_env "NEXT_PUBLIC_EXTERNAL_DOMAINS" "${NEXT_PUBLIC_EXTERNAL_DOMAINS:-}"
+        _hub_set_env "DIVE_CADDY_ENABLED" "true"
+        log_verbose "Persisted Caddy domains and derived URLs to .env.hub"
     fi
 
     # Ensure .env symlink exists (docker compose reads .env for variable substitution)
@@ -978,10 +1008,11 @@ _hub_start_shared_stack() {
     fi
 
     # Start the stack
-    if ${DOCKER_CMD:-docker} compose -f "${shared_dir}/docker-compose.yml" up -d 2>/dev/null; then
+    local _shared_output
+    if _shared_output=$(${DOCKER_CMD:-docker} compose -f "${shared_dir}/docker-compose.yml" up -d 2>&1); then
         log_success "Shared services stack started"
     else
-        log_warn "Shared services stack failed to start (non-fatal)"
+        log_warn "Shared services stack failed to start (non-fatal): ${_shared_output}"
     fi
 
     return 0
