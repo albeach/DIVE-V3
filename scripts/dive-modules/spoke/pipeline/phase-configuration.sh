@@ -508,7 +508,7 @@ spoke_config_register_in_hub_mongodb() {
 
     # Get Keycloak admin password (CRITICAL for bidirectional federation)
     local keycloak_password_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
-    local keycloak_password="${!keycloak_password_var}"
+    local keycloak_password="${!keycloak_password_var:-}"
 
     # Validate password exists
     if [ -z "$keycloak_password" ]; then

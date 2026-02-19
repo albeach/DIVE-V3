@@ -262,6 +262,16 @@ spoke_prepare() {
     log_step "6/8 Caddy configuration + DNS"
 
     if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+        # Resolve spoke EC2 IP for DNS records (not the Hub IP!)
+        if type aws_get_instance_ip &>/dev/null; then
+            local _spoke_ip
+            _spoke_ip=$(aws_get_instance_ip "spoke" "$code_upper" 2>/dev/null || echo "")
+            if [ -n "$_spoke_ip" ] && [ "$_spoke_ip" != "None" ]; then
+                export INSTANCE_PUBLIC_IP="$_spoke_ip"
+                log_verbose "Spoke EC2 IP for DNS: $_spoke_ip"
+            fi
+        fi
+
         if type spoke_caddy_generate_local &>/dev/null; then
             spoke_caddy_generate_local "$code_upper" || log_warn "Caddy config generation had issues"
         fi
@@ -277,6 +287,16 @@ spoke_prepare() {
     # STEP 7: Register spoke in Hub MongoDB
     # =========================================================================
     log_step "7/8 Register spoke in Hub"
+
+    # Export Keycloak admin password for registration (needed by phase-configuration.sh)
+    if [ -f "$spoke_dir/.env" ]; then
+        local _kc_pw
+        _kc_pw=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" "$spoke_dir/.env" 2>/dev/null | cut -d= -f2-)
+        if [ -n "$_kc_pw" ]; then
+            export "KEYCLOAK_ADMIN_PASSWORD_${code_upper}=${_kc_pw}"
+            log_verbose "Loaded Keycloak admin password for $code_upper from spoke .env"
+        fi
+    fi
 
     if type spoke_config_register_in_hub_mongodb &>/dev/null; then
         spoke_config_register_in_hub_mongodb "$instance_code" || log_warn "Hub registration had issues (can retry later)"
