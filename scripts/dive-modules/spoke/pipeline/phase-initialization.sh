@@ -720,6 +720,11 @@ HUB_API_URL=${HUB_API_URL:-}
 SPOKE_OPAL_TOKEN=
 OPAL_LOG_LEVEL=INFO
 
+# OPAL data source token — allows spoke backend to validate OPAL client data fetches
+# Hub OPAL Server pushes data source config with this token in Authorization headers
+# Spoke backend must have the same token to validate requests from local OPAL client
+OPAL_DATA_SOURCE_TOKEN=${OPAL_DATA_SOURCE_TOKEN:-}
+
 # Token blacklist: empty = API-based revocation via HUB_API_URL (remote mode)
 BLACKLIST_REDIS_URL=$([ "${DEPLOYMENT_MODE:-local}" = "remote" ] && echo "" || echo "rediss://:\${REDIS_PASSWORD_BLACKLIST}@dive-hub-redis:6379")
 
