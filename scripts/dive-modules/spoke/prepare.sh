@@ -47,6 +47,11 @@ if [ -f "${MODULES_DIR}/aws/module.sh" ] && [ -z "${DIVE_AWS_MODULE_LOADED:-}" ]
     source "${MODULES_DIR}/aws/module.sh"
 fi
 
+# Load ECR module (for registry URL resolution)
+if [ -f "${MODULES_DIR}/aws/ecr.sh" ] && [ -z "${DIVE_AWS_ECR_LOADED:-}" ]; then
+    source "${MODULES_DIR}/aws/ecr.sh"
+fi
+
 # Load spoke pipeline modules (for reusable functions)
 for _mod in \
     "${PREPARE_DIR}/pipeline/spoke-compose-generator.sh" \
@@ -129,7 +134,7 @@ spoke_prepare() {
         if type _ecr_registry_url &>/dev/null; then
             ECR_REGISTRY=$(_ecr_registry_url 2>/dev/null || echo "")
         fi
-        if [ -z "$ECR_REGISTRY" ]; then
+        if [ -z "${ECR_REGISTRY:-}" ]; then
             log_error "ECR_REGISTRY not set and cannot be auto-detected"
             log_error "Set ECR_REGISTRY or ensure AWS credentials are configured"
             return 1
