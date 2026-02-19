@@ -10,7 +10,7 @@
 #   3. Vault provisions AppRole, PKI role, secrets (idempotent)
 #   4. spoke deploy checks authorization exists before proceeding
 #
-# Authorization record stored at: dive-v3/spoke-auth/{code}
+# Authorization record stored at: dive-v3/auth/spoke-auth/{code}
 # =============================================================================
 
 # Prevent multiple sourcing
@@ -40,7 +40,7 @@ fi
 #   --ttl HOURS - Authorization validity in hours (default: 72)
 #
 # Creates:
-#   - Vault KV: dive-v3/spoke-auth/{code} (authorization record)
+#   - Vault KV: dive-v3/auth/spoke-auth/{code} (authorization record)
 #   - Vault AppRole: spoke-{code}
 #   - Vault PKI role: spoke-{code}-services
 #   - Vault KV: dive-v3/core/{code}/* (instance secrets)
@@ -161,7 +161,7 @@ spoke_authorize() {
 
     # Step 2: Write authorization record to Vault
     log_info "Step 1/3: Writing authorization record to Vault..."
-    if ! vault kv put "dive-v3/spoke-auth/${code_lower}" \
+    if ! vault kv put "dive-v3/auth/spoke-auth/${code_lower}" \
         code="$code_upper" \
         name="$name" \
         auth_code="$auth_code" \
@@ -208,7 +208,7 @@ spoke_authorize() {
     echo "  Authorized By: $authorized_by"
     echo "  Authorized At: $authorized_at"
     echo "  Expires At:    $expires_at"
-    echo "  Vault Path:    dive-v3/spoke-auth/${code_lower}"
+    echo "  Vault Path:    dive-v3/auth/spoke-auth/${code_lower}"
     echo "============================================"
     echo ""
     echo "Next steps:"
@@ -268,7 +268,7 @@ spoke_verify_authorization() {
 
     # Read authorization record
     local auth_data
-    auth_data=$(vault kv get -format=json "dive-v3/spoke-auth/${code_lower}" 2>/dev/null)
+    auth_data=$(vault kv get -format=json "dive-v3/auth/spoke-auth/${code_lower}" 2>/dev/null)
     if [ $? -ne 0 ] || [ -z "$auth_data" ]; then
         log_error "No authorization record found for $code"
         log_error "Run first: ./dive spoke authorize $code"
@@ -338,7 +338,7 @@ spoke_revoke_authorization() {
         fi
     fi
 
-    vault kv put "dive-v3/spoke-auth/${code_lower}" \
+    vault kv put "dive-v3/auth/spoke-auth/${code_lower}" \
         status="revoked" \
         revoked_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
         revoked_by="${USER:-$(whoami)}" 2>/dev/null
