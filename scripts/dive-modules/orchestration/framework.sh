@@ -366,7 +366,9 @@ orch_validate_dependencies() {
     fi
 
     # 2. Check Hub availability (for spoke deployments)
-    if [ "$code_upper" != "USA" ] && [ "$code_upper" != "HUB" ]; then
+    # Skip for remote/standalone — no local Hub containers expected
+    if [ "$code_upper" != "USA" ] && [ "$code_upper" != "HUB" ] && \
+       [ "${DEPLOYMENT_MODE:-local}" != "remote" ] && [ "${DEPLOYMENT_MODE:-local}" != "standalone" ]; then
         log_verbose "Checking Hub availability..."
         if ! docker ps --filter "name=dive-hub-keycloak" --format '{{.Names}}' | grep -q "dive-hub-keycloak"; then
             log_error "Hub not running (required for spoke deployment)"
@@ -379,6 +381,8 @@ orch_validate_dependencies() {
                 ((warnings++))
             fi
         fi
+    elif [ "${DEPLOYMENT_MODE:-local}" = "remote" ]; then
+        log_verbose "Remote mode — Hub availability checked via HTTPS (not local Docker)"
     fi
 
     # 3. Check required commands
