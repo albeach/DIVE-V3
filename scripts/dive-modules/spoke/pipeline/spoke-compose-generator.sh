@@ -50,9 +50,10 @@ unset _compose_script_dir _nato_db
 SPOKE_TEMPLATE_FILE="${DIVE_ROOT}/templates/spoke/docker-compose.template.yml"
 SPOKE_ECR_TEMPLATE_FILE="${DIVE_ROOT}/templates/spoke/docker-compose.ecr.template.yml"
 
-# Select ECR template when remote mode or ECR_REGISTRY is set
+# Select ECR template only when ECR_REGISTRY is configured
+# Remote mode without ECR builds from source (same as local mode)
 _spoke_get_template_file() {
-    if [ -n "${ECR_REGISTRY:-}" ] || [ "${DEPLOYMENT_MODE:-local}" = "remote" ]; then
+    if [ -n "${ECR_REGISTRY:-}" ]; then
         if [ -f "$SPOKE_ECR_TEMPLATE_FILE" ]; then
             echo "$SPOKE_ECR_TEMPLATE_FILE"
             return
