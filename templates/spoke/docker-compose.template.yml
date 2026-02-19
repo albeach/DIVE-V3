@@ -677,7 +677,7 @@ services:
       opa-{{INSTANCE_CODE_LOWER}}:
         condition: service_healthy
       opal-client-{{INSTANCE_CODE_LOWER}}:
-        condition: service_healthy
+        condition: service_started  # started not healthy: OPAL token provisioned later in config phase; KAS uses OPA (already healthy)
       mongodb-{{INSTANCE_CODE_LOWER}}:
         condition: service_healthy
       redis-{{INSTANCE_CODE_LOWER}}:

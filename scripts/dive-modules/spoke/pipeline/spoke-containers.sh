@@ -479,7 +479,6 @@ spoke_containers_start() {
 
     if [ ${#missing_services[@]} -gt 0 ]; then
         log_error "Application containers failed to start: ${missing_services[*]}"
-        echo "$compose_output" | tail -20
         orch_record_error "$SPOKE_ERROR_COMPOSE_UP" "$ORCH_SEVERITY_CRITICAL" \
             "Missing services: ${missing_services[*]}" "containers" \
             "$(spoke_error_get_remediation $SPOKE_ERROR_COMPOSE_UP $instance_code)"
