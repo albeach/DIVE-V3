@@ -195,7 +195,11 @@ _rebuild_spoke_ca_bundle() {
 ##
 _fetch_hub_ca_bundle() {
     local hub_addr="${HUB_EXTERNAL_ADDRESS:?HUB_EXTERNAL_ADDRESS required}"
-    local hub_vault="https://${hub_addr}:8200"
+    # CRITICAL FIX (2026-02-19): Use HUB_VAULT_URL when available (remote mode).
+    # Previously used https://${hub_addr}:8200 which is wrong when HUB_EXTERNAL_ADDRESS
+    # is normalized to the API hostname (e.g., dev-usa-api.dive25.com).
+    # The Vault is at a different hostname (e.g., dev-usa-vault.dive25.com).
+    local hub_vault="${HUB_VAULT_URL:-https://${hub_addr}:8200}"
     local ca_dir="${DIVE_ROOT}/certs/vault-pki"
 
     mkdir -p "$ca_dir"
