@@ -485,7 +485,8 @@ services:
       - "localhost:host-gateway"
     healthcheck:
       # Check OPAL client API health (port 7000), not inline OPA
-      test: ["CMD", "curl", "-f", "http://localhost:7000/healthcheck"]
+      # CRITICAL: Use 127.0.0.1 NOT localhost — extra_hosts remaps localhost to host-gateway
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:7000/healthcheck"]
       interval: 10s
       timeout: 5s
       retries: 10
