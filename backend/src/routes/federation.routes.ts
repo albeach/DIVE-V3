@@ -890,6 +890,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
         const autoApprove = isDevelopment || process.env.AUTO_APPROVE_SPOKES === 'true' || isPartnerPreApproved || isAuthCodeApproved;
 
         let token = null;
+        let opalToken: { token: string; expiresAt: Date; type: string } | null = null;
         if (autoApprove) {
             // Use partner trust config when available, fall back to development defaults
             const trustLevel = (isPartnerPreApproved && request.partnerTrustLevel)
@@ -930,6 +931,28 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
                     expiresAt: spokeToken.expiresAt,
                     scopes: spokeToken.scopes,
                 };
+
+                // Generate OPAL client token for spoke's policy sync
+                try {
+                    const { opalTokenService } = await import('../services/opal-token.service');
+                    if (opalTokenService.isConfigured()) {
+                        const opalClientToken = await opalTokenService.generateClientToken(spoke.spokeId, spoke.instanceCode);
+                        opalToken = {
+                            token: opalClientToken.token,
+                            expiresAt: opalClientToken.expiresAt,
+                            type: 'opal_client',
+                        };
+                        logger.info('OPAL client token generated during auto-approval', {
+                            spokeId: spoke.spokeId,
+                            opalTokenExpires: opalClientToken.expiresAt,
+                        });
+                    }
+                } catch (opalError) {
+                    logger.warn('Failed to generate OPAL client token during auto-approval', {
+                        spokeId: spoke.spokeId,
+                        error: opalError instanceof Error ? opalError.message : 'Unknown',
+                    });
+                }
 
                 logger.info('Spoke auto-approved with bidirectional federation', {
                     spokeId: spoke.spokeId,
@@ -1020,6 +1043,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
                 message: statusMessage,
             },
             token: finalToken,  // Always include token when status is approved (new or re-registration)
+            opalToken: opalToken,  // OPAL client token for policy sync (null if not configured)
         });
 
     } catch (error) {

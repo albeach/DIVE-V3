@@ -657,6 +657,18 @@ EOF
 
                 log_success "✓ SPOKE_ID and SPOKE_TOKEN configured in .env"
 
+                # Extract OPAL client token from registration response (for remote policy sync)
+                local opal_token=$(echo "$response" | jq -r '.opalToken.token // empty' 2>/dev/null)
+                if [ -n "$opal_token" ]; then
+                    if grep -q "^SPOKE_OPAL_TOKEN=" "$spoke_dir/.env" 2>/dev/null; then
+                        sed -i.bak "s|^SPOKE_OPAL_TOKEN=.*|SPOKE_OPAL_TOKEN=$opal_token|" "$spoke_dir/.env"
+                    else
+                        echo "SPOKE_OPAL_TOKEN=$opal_token" >> "$spoke_dir/.env"
+                    fi
+                    rm -f "$spoke_dir/.env.bak"
+                    log_success "✓ SPOKE_OPAL_TOKEN configured in .env"
+                fi
+
                 # ==========================================================================
                 # CRITICAL FIX (2026-01-22): Also update docker-compose.yml fallback value
                 # ==========================================================================
@@ -727,6 +739,17 @@ EOF
                         fi
                     else
                         log_warn "docker-compose.yml not found at $compose_dir"
+                    fi
+                fi
+
+                # Recreate OPAL Client to pick up SPOKE_OPAL_TOKEN
+                if [ -n "$opal_token" ]; then
+                    local opal_container="dive-spoke-${code_lower}-opal-client"
+                    local compose_dir="${DIVE_ROOT}/instances/${code_lower}"
+                    if docker ps -a --format '{{.Names}}' | grep -q "^${opal_container}$" && [ -f "$compose_dir/docker-compose.yml" ]; then
+                        log_step "Recreating OPAL Client with provisioned token..."
+                        docker compose -f "$compose_dir/docker-compose.yml" --env-file "$compose_dir/.env" up -d --force-recreate "opal-client-${code_lower}" 2>&1 || true
+                        log_success "✓ OPAL Client recreated with token"
                     fi
                 fi
 
