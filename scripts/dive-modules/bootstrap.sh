@@ -445,6 +445,81 @@ _bootstrap_awscli() {
     log_success "AWS CLI installed"
 }
 
+_bootstrap_gcloud() {
+    if command -v gcloud >/dev/null 2>&1; then
+        log_verbose "gcloud CLI already installed"
+        return 0
+    fi
+
+    _bootstrap_detect_os
+
+    case "$BOOTSTRAP_OS" in
+        darwin)
+            brew install --cask google-cloud-sdk
+            ;;
+        ubuntu)
+            log_info "Installing Google Cloud CLI..."
+            _bs_sudo apt-get update -qq
+            _bs_sudo apt-get install -y -qq apt-transport-https ca-certificates gnupg curl
+            curl -fsSL https://packages.cloud.google.com/apt/doc/apt-key.gpg | _bs_sudo gpg --dearmor -o /usr/share/keyrings/cloud.google.gpg 2>/dev/null
+            echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | _bs_sudo tee /etc/apt/sources.list.d/google-cloud-sdk.list >/dev/null
+            _bs_sudo apt-get update -qq
+            _bs_sudo apt-get install -y -qq google-cloud-cli
+            ;;
+        amzn)
+            log_info "Installing Google Cloud CLI..."
+            _bs_sudo dnf install -y -q google-cloud-cli || {
+                log_warn "google-cloud-cli package unavailable via dnf; attempting bundled installer"
+                local tmpdir
+                tmpdir=$(mktemp -d)
+                local gcloud_ver="google-cloud-cli-543.0.0-linux-x86_64.tar.gz"
+                curl -sSL "https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/${gcloud_ver}" -o "${tmpdir}/gcloud.tar.gz"
+                _bs_sudo mkdir -p /opt
+                _bs_sudo tar -C /opt -xzf "${tmpdir}/gcloud.tar.gz"
+                _bs_sudo /opt/google-cloud-sdk/install.sh --quiet --usage-reporting=false --path-update=true --command-completion=true
+                _bs_sudo ln -sf /opt/google-cloud-sdk/bin/gcloud /usr/local/bin/gcloud
+                rm -rf "$tmpdir"
+            }
+            ;;
+        *)
+            log_error "Unsupported OS for gcloud auto-install: ${BOOTSTRAP_OS}"
+            return 1
+            ;;
+    esac
+
+    log_success "gcloud CLI installed"
+}
+
+_bootstrap_jdk() {
+    if command -v keytool >/dev/null 2>&1 && command -v java >/dev/null 2>&1; then
+        log_verbose "Java JDK already installed"
+        return 0
+    fi
+
+    _bootstrap_detect_os
+
+    case "$BOOTSTRAP_OS" in
+        darwin)
+            brew install openjdk
+            ;;
+        ubuntu)
+            log_info "Installing Java JDK..."
+            _bs_sudo apt-get update -qq
+            _bs_sudo apt-get install -y -qq default-jdk
+            ;;
+        amzn)
+            log_info "Installing Java JDK..."
+            _bs_sudo dnf install -y -q java-21-amazon-corretto-devel
+            ;;
+        *)
+            log_error "Unsupported OS for Java JDK auto-install: ${BOOTSTRAP_OS}"
+            return 1
+            ;;
+    esac
+
+    log_success "Java JDK installed"
+}
+
 # =============================================================================
 # SYSTEM TUNING (--full mode only)
 # =============================================================================
@@ -551,7 +626,7 @@ _bootstrap_verify() {
     log_info "Verifying dependencies..."
     local failed=0 total=0
 
-    for cmd in docker git jq curl rsync openssl terraform vault yq; do
+    for cmd in docker git jq curl rsync openssl terraform vault yq aws gcloud mkcert keytool java; do
         total=$((total + 1))
         if command -v "$cmd" >/dev/null 2>&1; then
             log_verbose "  $cmd: OK"
@@ -571,7 +646,7 @@ _bootstrap_verify() {
     fi
 
     # Optional tools (warn but don't fail)
-    for cmd in node npm mkcert opa aws; do
+    for cmd in node npm opa javac; do
         if command -v "$cmd" >/dev/null 2>&1; then
             log_verbose "  $cmd: OK"
         else
@@ -599,7 +674,7 @@ _bootstrap_check() {
     local missing=()
     local present=()
 
-    for cmd in docker jq curl openssl rsync git terraform vault yq; do
+    for cmd in docker jq curl openssl rsync git terraform vault yq aws gcloud mkcert keytool java; do
         if command -v "$cmd" >/dev/null 2>&1; then
             present+=("$cmd")
         else
@@ -616,7 +691,7 @@ _bootstrap_check() {
 
     # Optional
     local optional_missing=()
-    for cmd in node npm mkcert opa aws; do
+    for cmd in node npm opa javac; do
         if ! command -v "$cmd" >/dev/null 2>&1; then
             optional_missing+=("$cmd")
         fi
@@ -673,6 +748,9 @@ cmd_bootstrap() {
     _bootstrap_docker_storage
     _bootstrap_node
     _bootstrap_mkcert
+    _bootstrap_awscli
+    _bootstrap_gcloud
+    _bootstrap_jdk
     _bootstrap_terraform
     _bootstrap_vault
     _bootstrap_opa
@@ -681,7 +759,6 @@ cmd_bootstrap() {
 
     # Full mode: system tuning, swap, firewall (typically for cloud instances)
     if $full_mode; then
-        _bootstrap_awscli
         _bootstrap_system_tuning
         _bootstrap_swap
         _bootstrap_firewall
