@@ -117,6 +117,17 @@ _rebuild_ca_bundle() {
         cat "$bootstrap_ca" >> "$output_file"
     fi
 
+    # 4. Include spoke instance self-signed certs (cloud/remote without Vault PKI)
+    # Services mount the project-root ca-bundle, not the spoke instance certs
+    if [ ! -s "$output_file" ]; then
+        for cert_dir in "${DIVE_ROOT}"/instances/*/certs; do
+            local cert="$cert_dir/certificate.pem"
+            if [ -f "$cert" ] && [ -s "$cert" ]; then
+                cat "$cert" >> "$output_file"
+            fi
+        done
+    fi
+
     chmod 644 "$output_file"
 }
 
