@@ -1,12 +1,9 @@
 # =============================================================================
 # OPTIMIZED Production Dockerfile for DIVE V3 Frontend (Next.js)
 # =============================================================================
-# Size Reduction: 5.7GB → ~400MB (93% reduction)
-# Strategy:
-#   - Multi-stage build with production-only dependencies
-#   - Next.js standalone output (minimal node_modules)
-#   - Remove test frameworks, dev tools, source maps
-#   - Alpine-based minimal runtime
+# Zero Trust: Frontend serves HTTPS internally (custom server.js)
+# Multi-tenant: NEXT_PUBLIC_ vars replaced at container startup via entrypoint
+# Size: ~400MB (93% reduction from dev image)
 # =============================================================================
 
 FROM node:24-alpine AS base
@@ -18,12 +15,8 @@ WORKDIR /app
 # =============================================================================
 FROM base AS deps
 WORKDIR /app
-
-# Copy dependency manifests
 COPY package.json package-lock.json* ./
-
-# Install ONLY production dependencies (no test/dev tools)
-RUN npm ci --only=production --ignore-scripts --no-audit --no-fund && \
+RUN npm ci --omit=dev --no-audit --no-fund && \
     npm cache clean --force
 
 # =============================================================================
@@ -31,21 +24,25 @@ RUN npm ci --only=production --ignore-scripts --no-audit --no-fund && \
 # =============================================================================
 FROM base AS builder
 WORKDIR /app
-
-# Copy dependency manifests
 COPY package.json package-lock.json* ./
-
-# Install ALL dependencies (including devDependencies for build)
 RUN npm ci --no-audit --no-fund
 
-# Copy source code
 COPY . .
 
-# Build for production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
-# Build with standalone output (generates minimal server bundle)
+# Build with placeholder NEXT_PUBLIC_ values — replaced at runtime by entrypoint
+# This allows a single ECR image to serve any spoke (GBR, FRA, DEU, etc.)
+ENV NEXT_PUBLIC_INSTANCE=__NEXT_PUBLIC_INSTANCE__
+ENV NEXT_PUBLIC_INSTANCE_NAME="__NEXT_PUBLIC_INSTANCE_NAME__"
+ENV NEXT_PUBLIC_API_URL=__NEXT_PUBLIC_API_URL__
+ENV NEXT_PUBLIC_KEYCLOAK_URL=__NEXT_PUBLIC_KEYCLOAK_URL__
+ENV NEXT_PUBLIC_KEYCLOAK_REALM=__NEXT_PUBLIC_KEYCLOAK_REALM__
+ENV NEXT_PUBLIC_BACKEND_URL=__NEXT_PUBLIC_BACKEND_URL__
+ENV NEXT_PUBLIC_BASE_URL=__NEXT_PUBLIC_BASE_URL__
+ENV NEXT_PUBLIC_EXTERNAL_DOMAINS=__NEXT_PUBLIC_EXTERNAL_DOMAINS__
+
 RUN npm run build
 
 # =============================================================================
@@ -61,13 +58,19 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs
 
-# Copy standalone output (includes only necessary dependencies)
+# Copy standalone output (includes Next.js minimal node_modules)
 COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 
-# Copy certificates for mkcert TLS (if needed)
-# COPY --from=builder --chown=nextjs:nodejs /app/certs ./certs
+# Override Next.js standalone HTTP server.js with custom HTTPS server.js
+# Uses NextServer (standalone-compatible) — not require('next') (needs webpack)
+# Zero Trust: ALL internal traffic must be TLS-encrypted
+COPY --from=builder --chown=nextjs:nodejs /app/server.standalone.js ./server.js
+
+# Runtime NEXT_PUBLIC_ entrypoint: replaces __PLACEHOLDER__ values in compiled JS
+COPY --chown=nextjs:nodejs docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 
 USER nextjs
 
@@ -76,16 +79,5 @@ EXPOSE 3000
 ENV PORT=3000
 ENV HOSTNAME="0.0.0.0"
 
-# Standalone output generates server.js at root
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["node", "server.js"]
-
-# =============================================================================
-# Expected Image Size: 300-500MB (vs 5.7GB original)
-# =============================================================================
-# Components:
-#   - Base alpine image: ~50MB
-#   - Node.js runtime: ~150MB
-#   - Standalone app bundle: ~100MB
-#   - Static assets: ~50MB
-#   - Total: ~350MB
-# =============================================================================

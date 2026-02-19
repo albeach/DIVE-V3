@@ -90,6 +90,31 @@ module_spoke() {
     fi
 
     case "$action" in
+        # === Spoke Authorization (Vault-based) ===
+        authorize)
+            if [ -f "${SPOKE_DIR}/authorize.sh" ]; then
+                source "${SPOKE_DIR}/authorize.sh"
+            fi
+            if type -t spoke_authorize &>/dev/null; then
+                spoke_authorize "$@"
+            else
+                log_error "spoke_authorize not available - spoke/authorize.sh not loaded"
+                return 1
+            fi
+            ;;
+
+        revoke)
+            if [ -f "${SPOKE_DIR}/authorize.sh" ]; then
+                source "${SPOKE_DIR}/authorize.sh"
+            fi
+            if type -t spoke_revoke_authorization &>/dev/null; then
+                spoke_revoke_authorization "$@"
+            else
+                log_error "spoke_revoke_authorization not available"
+                return 1
+            fi
+            ;;
+
         # === Remote Spoke Deployment (ECR-based, Hub-side operations) ===
         prepare)
             if [ -f "${SPOKE_DIR}/prepare.sh" ]; then
@@ -129,6 +154,16 @@ module_spoke() {
 
         # === Deployment Operations ===
         deploy)
+            # Check authorization before deployment
+            if [ -f "${SPOKE_DIR}/authorize.sh" ]; then
+                source "${SPOKE_DIR}/authorize.sh"
+            fi
+            if type -t spoke_verify_authorization &>/dev/null; then
+                if ! spoke_verify_authorization "${1:-}"; then
+                    return 1
+                fi
+            fi
+
             # Remote environment: use ECR-based prepare → start → configure chain
             if is_remote_environment 2>/dev/null; then
                 local _spoke_code="${1:?Instance code required}"
@@ -328,7 +363,8 @@ _spoke_help() {
 Usage: ./dive spoke <command> [args]
 
 Commands:
-  deploy <CODE> [name]        Full spoke deployment (local pipeline)
+  deploy <CODE> [name]        Full spoke deployment (auto-detects local vs remote)
+  authorize <CODE> [name]     Pre-authorize a spoke for federation (Vault-based)
   prepare <CODE>              Generate config package on Hub (ECR-based remote)
   configure <CODE>            Run Terraform + federation from Hub (remote)
   start-remote <CODE>         SSH to spoke EC2 and run deploy.sh
@@ -347,7 +383,10 @@ Repair Commands:
   reload-secrets <CODE>       Reload secrets from GCP and restart services
   repair <CODE>               Auto-diagnose and fix common issues
 
-Remote Spoke Deployment (ECR):
+Remote Spoke Deployment (single command):
+  ./dive --env dev spoke deploy GBR  # Auto: prepare → start → configure (all 3 phases)
+
+  Or manually (advanced):
   ./dive spoke prepare GBR           # 1. Generate config package on Hub
   ./dive spoke start-remote GBR      # 2. SSH + pull ECR images + start
   ./dive spoke configure GBR         # 3. Terraform + federation from Hub
