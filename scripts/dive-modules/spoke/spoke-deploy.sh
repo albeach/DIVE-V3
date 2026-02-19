@@ -57,6 +57,61 @@ export DIVE_SPOKE_DEPLOY_LOADED=1
 # =============================================================================
 
 ##
+# Normalize Hub endpoints for remote spoke deployment
+#
+# Accepts HUB_EXTERNAL_ADDRESS in any hub service form:
+#   dev-usa-api.dive25.com / dev-usa-app.dive25.com / dev-usa-idp.dive25.com / ...
+# and derives HUB_API_URL, HUB_OPAL_URL, HUB_KC_URL, HUB_VAULT_URL consistently.
+##
+spoke_remote_normalize_hub_endpoints() {
+    # Determine source host (prefer explicit HUB_EXTERNAL_ADDRESS)
+    local hub_host="${HUB_EXTERNAL_ADDRESS:-}"
+
+    # Fallback: derive host from HUB_API_URL when provided
+    if [ -z "$hub_host" ] && [ -n "${HUB_API_URL:-}" ]; then
+        hub_host="${HUB_API_URL#https://}"
+        hub_host="${hub_host#http://}"
+        hub_host="${hub_host%%/*}"
+    fi
+
+    [ -z "$hub_host" ] && return 0
+
+    # Strip protocol/path if caller passed full URL by mistake
+    hub_host="${hub_host#https://}"
+    hub_host="${hub_host#http://}"
+    hub_host="${hub_host%%/*}"
+
+    local _prefix="${hub_host%%.*}"
+    local _base="${hub_host#*.}"
+    local _env_prefix="$_prefix"
+
+    # Accept any service suffix and normalize to env prefix
+    # Example: dev-usa-app -> dev-usa
+    _env_prefix="${_env_prefix%-api}"
+    _env_prefix="${_env_prefix%-app}"
+    _env_prefix="${_env_prefix%-idp}"
+    _env_prefix="${_env_prefix%-opal}"
+    _env_prefix="${_env_prefix%-vault}"
+
+    # Guard against invalid input like bare domain without env/service prefix
+    if [ -z "$_env_prefix" ] || [ "$_env_prefix" = "$_base" ]; then
+        log_warn "Could not normalize Hub endpoints from HUB_EXTERNAL_ADDRESS=${hub_host}"
+        return 0
+    fi
+
+    export HUB_EXTERNAL_ADDRESS="${_env_prefix}-api.${_base}"
+    export HUB_API_URL="https://${_env_prefix}-api.${_base}"
+    export HUB_KC_URL="https://${_env_prefix}-idp.${_base}"
+    export HUB_OPAL_URL="https://${_env_prefix}-opal.${_base}"
+    export HUB_VAULT_URL="https://${_env_prefix}-vault.${_base}"
+
+    log_info "Remote mode: normalized Hub endpoints from ${hub_host}"
+    log_info "  API:  ${HUB_API_URL}"
+    log_info "  IdP:  ${HUB_KC_URL}"
+    log_info "  OPAL: ${HUB_OPAL_URL}"
+}
+
+##
 # Deploy a spoke instance using the unified pipeline
 #
 # Arguments:
@@ -131,6 +186,13 @@ spoke_deploy() {
         echo "  --domain <base>     Custom domain (e.g. gbr.mod.uk)"
         echo ""
         return 1
+    fi
+
+    # If remote mode/environment variables are pre-set, normalize hub endpoints now.
+    # This covers non-interactive usage like:
+    #   HUB_EXTERNAL_ADDRESS=dev-usa-app.dive25.com DEPLOYMENT_MODE=remote ./dive spoke deploy FRA
+    if [ "${DEPLOYMENT_MODE:-local}" = "remote" ] || [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] || [ -n "${HUB_API_URL:-}" ]; then
+        spoke_remote_normalize_hub_endpoints
     fi
 
     # GUARDRAIL: Prevent USA from being deployed as a spoke (2026-02-07)
