@@ -398,6 +398,7 @@ services:
     environment:
       NODE_ENV: production
       NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
+      SSL_CERT_PATH: /app/certs
       PORT: "4000"
       SECRETS_PROVIDER: ${SECRETS_PROVIDER:-env}
       INSTANCE_CODE: {{INSTANCE_CODE_UPPER}}
@@ -488,6 +489,7 @@ services:
       CERT_FILE: fullchain.pem
       BACKEND_URL: https://backend-{{INSTANCE_CODE_LOWER}}:4000
       NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
+      SSL_CERT_PATH: /app/certs
       OPA_URL: https://opa-{{INSTANCE_CODE_LOWER}}:8181
       MONGODB_URL: mongodb://admin:${MONGO_PASSWORD_{{INSTANCE_CODE_UPPER}}}@mongodb-{{INSTANCE_CODE_LOWER}}:27017/?authSource=admin&directConnection=true&tls=true
       MONGODB_HOST: mongodb-{{INSTANCE_CODE_LOWER}}:27017
@@ -561,6 +563,7 @@ services:
       AUTH_POST_LOGOUT_REDIRECT: {{BASE_URL}}
       NODE_OPTIONS: "--use-openssl-ca"
       NODE_EXTRA_CA_CERTS: /app/certs/ca/rootCA.pem
+      SSL_CERT_PATH: /app/certs
     ports:
       - "127.0.0.1:{{FRONTEND_HOST_PORT}}:3000"
     volumes:
