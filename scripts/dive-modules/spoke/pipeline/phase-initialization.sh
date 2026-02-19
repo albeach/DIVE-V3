@@ -690,6 +690,14 @@ spoke_init_generate_env() {
         _saved_client_secret=$(grep "^KEYCLOAK_CLIENT_SECRET_${code_upper}=" "$env_file" 2>/dev/null | cut -d= -f2-)
     fi
 
+    # Pre-compute blacklist Redis URL (resolve password now, not via variable reference)
+    local _blacklist_redis_url=""
+    if [ "${DEPLOYMENT_MODE:-local}" != "remote" ]; then
+        local _bl_pw=""
+        [ -f "${DIVE_ROOT}/.env.hub" ] && _bl_pw=$(grep "^REDIS_PASSWORD_BLACKLIST=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2-)
+        [ -n "$_bl_pw" ] && _blacklist_redis_url="rediss://:${_bl_pw}@dive-hub-redis:6379"
+    fi
+
     # Create .env file
     # NOTE: NO SPOKE_ID - backend queries Hub at startup (SSOT architecture)
     cat > "$env_file" << EOF
@@ -726,7 +734,7 @@ OPAL_LOG_LEVEL=INFO
 OPAL_DATA_SOURCE_TOKEN=${OPAL_DATA_SOURCE_TOKEN:-}
 
 # Token blacklist: empty = API-based revocation via HUB_API_URL (remote mode)
-BLACKLIST_REDIS_URL=$([ "${DEPLOYMENT_MODE:-local}" = "remote" ] && echo "" || echo "rediss://:\${REDIS_PASSWORD_BLACKLIST}@dive-hub-redis:6379")
+BLACKLIST_REDIS_URL=${_blacklist_redis_url:-}
 
 # Deployment mode (local = same Docker host as Hub, remote = separate instance)
 DEPLOYMENT_MODE=${DEPLOYMENT_MODE:-local}
