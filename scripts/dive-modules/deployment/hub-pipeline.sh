@@ -116,6 +116,19 @@ _hub_pipeline_execute_internal() {
     fi
 
     # =========================================================================
+    # Pre-deployment summary + confirmation
+    # =========================================================================
+    if ! type deployment_pre_summary_hub &>/dev/null; then
+        local _summary="${DIVE_ROOT}/scripts/dive-modules/utilities/deployment-summary.sh"
+        [ -f "$_summary" ] && source "$_summary"
+    fi
+    if type deployment_pre_summary_hub &>/dev/null; then
+        if ! deployment_pre_summary_hub; then
+            return 1
+        fi
+    fi
+
+    # =========================================================================
     # Phase 1: Vault Bootstrap (start, init, setup, seed)
     # =========================================================================
     # Vault MUST be first — all other phases depend on secrets from Vault
@@ -465,6 +478,11 @@ _hub_pipeline_execute_internal() {
         # Print success banner and timing summary
         _hub_print_performance_summary "${phase_times[@]}" "$duration"
         deployment_print_success "$instance_code" "Hub" "$duration" "$pipeline_mode" "hub"
+
+        # Post-deployment summary with URLs and next steps
+        if type deployment_post_summary &>/dev/null; then
+            deployment_post_summary "hub" "$instance_code" "$duration"
+        fi
 
         return 0
     else
