@@ -204,6 +204,19 @@ spoke_containers_start() {
 
     if [ "$force_rebuild" = "true" ]; then
         compose_args_base="$compose_args_base --build --force-recreate"
+
+        # CRITICAL FIX (2026-02-19): Fix Docker buildx lock file permissions.
+        # Docker Compose v2 uses BuildKit/buildx by default. On EC2 instances,
+        # the ~/.docker/buildx/ directory is often created by root during Docker
+        # installation, but the deploy user (ubuntu) runs `docker compose --build`.
+        # This causes: "open /home/ubuntu/.docker/buildx/.lock: permission denied"
+        local docker_dir="${HOME}/.docker"
+        if [ -d "$docker_dir" ] && [ ! -w "${docker_dir}/buildx" ] 2>/dev/null; then
+            log_verbose "Fixing Docker buildx directory permissions..."
+            sudo chown -R "$(id -u):$(id -g)" "$docker_dir" 2>/dev/null || true
+        fi
+        # Ensure buildx directory exists and is writable
+        mkdir -p "${docker_dir}/buildx" 2>/dev/null || true
     fi
 
     # =============================================================================
