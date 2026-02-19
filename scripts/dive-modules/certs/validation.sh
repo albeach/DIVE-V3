@@ -198,6 +198,10 @@ generate_spoke_certificate() {
             -addext "subjectAltName=${san_str}" 2>/dev/null; then
             chmod 644 "$certs_dir/key.pem" "$certs_dir/certificate.pem"
             cp "$certs_dir/certificate.pem" "$certs_dir/fullchain.pem" 2>/dev/null || true
+            # Self-signed cert is its own CA — create ca/rootCA.pem for services that verify TLS
+            mkdir -p "$certs_dir/ca"
+            cp "$certs_dir/certificate.pem" "$certs_dir/ca/rootCA.pem"
+            chmod 644 "$certs_dir/ca/rootCA.pem"
             log_success "Spoke certificate generated for: $(upper "$spoke_code") (OpenSSL)"
             return 0
         fi
