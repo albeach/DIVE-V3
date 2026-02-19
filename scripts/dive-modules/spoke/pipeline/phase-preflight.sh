@@ -66,8 +66,10 @@ spoke_phase_preflight() {
     local instance_code="$1"
     local pipeline_mode="${2:-deploy}"
 
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    local code_lower
+    code_upper=$(upper "$instance_code")
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     # =============================================================================
@@ -259,7 +261,8 @@ spoke_phase_preflight() {
 ##
 spoke_preflight_check_conflicts() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     # Check orchestration database availability (skip for remote deployments)
     if [ "${DEPLOYMENT_MODE:-local}" = "remote" ] || [ "${ORCH_DB_ENABLED:-true}" = "false" ]; then
@@ -362,8 +365,10 @@ spoke_preflight_check_conflicts() {
 ##
 spoke_preflight_cleanup_failed_state() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    local code_lower
+    code_upper=$(upper "$instance_code")
+    code_lower=$(lower "$instance_code")
 
     log_verbose "Cleaning up failed deployment state for $code_upper"
 
@@ -417,6 +422,22 @@ spoke_preflight_check_hub() {
             export DEPLOYMENT_MODE="remote"
 
             # Derive hub URLs for remote mode
+            # Accept HUB_EXTERNAL_ADDRESS in any service-host form
+            # (e.g., dev-usa-app.example.com, dev-usa-api.example.com).
+            local _hub_host="${HUB_EXTERNAL_ADDRESS}"
+            _hub_host="${_hub_host#https://}"
+            _hub_host="${_hub_host#http://}"
+            _hub_host="${_hub_host%%/*}"
+
+            local _hub_prefix="${_hub_host%%.*}"
+            local _hub_base="${_hub_host#*.}"
+            local _hub_env_prefix="$_hub_prefix"
+            _hub_env_prefix="${_hub_env_prefix%-api}"
+            _hub_env_prefix="${_hub_env_prefix%-app}"
+            _hub_env_prefix="${_hub_env_prefix%-idp}"
+            _hub_env_prefix="${_hub_env_prefix%-opal}"
+            _hub_env_prefix="${_hub_env_prefix%-vault}"
+
             if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
                 local _ep _bd
                 _ep="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
@@ -426,11 +447,20 @@ spoke_preflight_check_hub() {
                 export HUB_OPAL_URL="${HUB_OPAL_URL:-https://${_ep}-usa-opal.${_bd}}"
                 export HUB_VAULT_URL="${HUB_VAULT_URL:-https://${_ep}-usa-vault.${_bd}}"
             else
-                export HUB_API_URL="${HUB_API_URL:-https://${HUB_EXTERNAL_ADDRESS}:4000}"
-                export HUB_KC_URL="${HUB_KC_URL:-https://${HUB_EXTERNAL_ADDRESS}:8443}"
-                export HUB_OPAL_URL="${HUB_OPAL_URL:-https://${HUB_EXTERNAL_ADDRESS}:7002}"
-                export HUB_VAULT_URL="${HUB_VAULT_URL:-https://${HUB_EXTERNAL_ADDRESS}:8200}"
+                if [ -n "$_hub_env_prefix" ] && [ "$_hub_env_prefix" != "$_hub_base" ] && [ "$_hub_base" != "$_hub_host" ]; then
+                    export HUB_API_URL="${HUB_API_URL:-https://${_hub_env_prefix}-api.${_hub_base}}"
+                    export HUB_KC_URL="${HUB_KC_URL:-https://${_hub_env_prefix}-idp.${_hub_base}}"
+                    export HUB_OPAL_URL="${HUB_OPAL_URL:-https://${_hub_env_prefix}-opal.${_hub_base}}"
+                    export HUB_VAULT_URL="${HUB_VAULT_URL:-https://${_hub_env_prefix}-vault.${_hub_base}}"
+                else
+                    export HUB_API_URL="${HUB_API_URL:-https://${HUB_EXTERNAL_ADDRESS}:4000}"
+                    export HUB_KC_URL="${HUB_KC_URL:-https://${HUB_EXTERNAL_ADDRESS}:8443}"
+                    export HUB_OPAL_URL="${HUB_OPAL_URL:-https://${HUB_EXTERNAL_ADDRESS}:7002}"
+                    export HUB_VAULT_URL="${HUB_VAULT_URL:-https://${HUB_EXTERNAL_ADDRESS}:8200}"
+                fi
             fi
+
+            log_verbose "Remote Hub endpoints: API=${HUB_API_URL}, IdP=${HUB_KC_URL}, OPAL=${HUB_OPAL_URL}, Vault=${HUB_VAULT_URL}"
         else
             log_error "No Hub infrastructure detected (local or remote)"
             echo ""
@@ -664,8 +694,8 @@ spoke_preflight_ensure_network() {
 ##
 spoke_preflight_configure_hub_connectivity() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
-    local env_file="${DIVE_ROOT}/instances/${code_lower}/.env"
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # Hub connectivity is handled through Docker networks (dive-shared)
     # Containers communicate using container names
@@ -673,7 +703,7 @@ spoke_preflight_configure_hub_connectivity() {
     # Hub URLs are set by environment vars (remote mode) or phase-initialization (local mode)
     # The .env template in phase-initialization.sh is the SSOT — no hardcoded defaults here
 
-    log_verbose "Hub connectivity configured (mode: ${DEPLOYMENT_MODE:-local})"
+    log_verbose "Hub connectivity configured for ${code_lower} (mode: ${DEPLOYMENT_MODE:-local})"
 }
 
 # =============================================================================
@@ -688,7 +718,8 @@ spoke_preflight_configure_hub_connectivity() {
 ##
 spoke_preflight_cleanup_stale_containers() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_verbose "Cleaning up stale containers for $code_lower..."
 
@@ -728,8 +759,9 @@ spoke_preflight_cleanup_stale_containers() {
 
     # Clean up containers stuck in "Created" state
     # Phase 1 Sprint 1.2: Use dynamic service discovery
-    local services=($(spoke_get_service_order "$instance_code" 2>/dev/null || echo "frontend backend redis keycloak postgres mongodb opa kas opal-client"))
-    for service in ${services[@]}; do
+    local services=()
+    mapfile -t services < <(spoke_get_service_order "$instance_code" 2>/dev/null || printf '%s\n' frontend backend redis keycloak postgres mongodb opa kas opal-client)
+    for service in "${services[@]}"; do
         local container="dive-spoke-${code_lower}-${service}"
         if docker ps -a --format '{{.Names}}' | grep -q "^${container}$"; then
             local status
@@ -761,8 +793,10 @@ spoke_preflight_cleanup_stale_containers() {
 ##
 spoke_preflight_check_secret_changes() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    local code_lower
+    code_upper=$(upper "$instance_code")
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     # Check if secret hash file exists
@@ -798,7 +832,8 @@ spoke_preflight_check_secret_changes() {
 ##
 spoke_preflight_calculate_secret_hash() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     # Concatenate all secret values and hash
     local secrets_concat=""
@@ -823,7 +858,8 @@ spoke_preflight_calculate_secret_hash() {
 ##
 spoke_preflight_save_secret_hash() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     mkdir -p "$spoke_dir"
@@ -838,7 +874,8 @@ spoke_preflight_save_secret_hash() {
 ##
 spoke_preflight_clean_database_volumes() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Cleaning database volumes due to secret change..."
 

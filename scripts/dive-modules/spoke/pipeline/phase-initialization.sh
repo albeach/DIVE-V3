@@ -64,8 +64,10 @@ spoke_phase_initialization() {
     local instance_code="$1"
     local pipeline_mode="${2:-deploy}"
 
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    local code_lower
+    code_upper=$(upper "$instance_code")
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     # =============================================================================
@@ -94,12 +96,12 @@ spoke_phase_initialization() {
     # =============================================================================
     # PERFORMANCE TRACKING: Phase timing metrics
     # =============================================================================
-    local PHASE_START=$(date +%s)
+    local phase_start
+    phase_start=$(date +%s)
 
-    log_info "→ Executing INITIALIZATION phase for $code_upper"
+    log_info "→ Executing INITIALIZATION phase for $code_upper (mode: $pipeline_mode)"
 
     # Step 1: Check if already initialized (redeploy mode skips some steps)
-    local init_marker="${spoke_dir}/.initialized"
     local needs_full_init=true
 
     if [ -f "$spoke_dir/docker-compose.yml" ]; then
@@ -193,15 +195,17 @@ spoke_phase_initialization() {
     fi
 
     # Calculate and log phase duration
-    local PHASE_END=$(date +%s)
-    local PHASE_DURATION=$((PHASE_END - PHASE_START))
+    local phase_end
+    local phase_duration
+    phase_end=$(date +%s)
+    phase_duration=$((phase_end - phase_start))
 
     # Mark phase complete (checkpoint system)
     if type spoke_phase_mark_complete &>/dev/null; then
-        spoke_phase_mark_complete "$instance_code" "INITIALIZATION" "$PHASE_DURATION" '{}' || true
+        spoke_phase_mark_complete "$instance_code" "INITIALIZATION" "$phase_duration" '{}' || true
     fi
 
-    log_success "✅ INITIALIZATION phase complete in ${PHASE_DURATION}s"
+    log_success "✅ INITIALIZATION phase complete in ${phase_duration}s"
     return 0
 }
 
@@ -221,7 +225,8 @@ spoke_phase_initialization() {
 ##
 spoke_init_setup_directories() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     log_step "Creating instance directory structure"
@@ -283,7 +288,8 @@ spoke_init_setup_directories() {
     fi
 
     # Validate keyfile size (MongoDB requires 6-1024 bytes)
-    local keyfile_size=$(wc -c < "$keyfile_path" | tr -d ' ')
+    local keyfile_size
+    keyfile_size=$(wc -c < "$keyfile_path" | tr -d ' ')
     if [ "$keyfile_size" -lt 6 ] || [ "$keyfile_size" -gt 1024 ]; then
         log_error "MongoDB keyfile size invalid: $keyfile_size bytes (must be 6-1024)"
         if type orch_record_error &>/dev/null; then
@@ -314,7 +320,8 @@ spoke_init_setup_directories() {
 ##
 spoke_init_ensure_mongo_keyfile() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local keyfile_path="$spoke_dir/mongo-keyfile"
 
@@ -347,7 +354,8 @@ spoke_init_ensure_mongo_keyfile() {
     fi
 
     # Validate keyfile size (MongoDB requires 6-1024 bytes)
-    local keyfile_size=$(wc -c < "$keyfile_path" | tr -d ' ')
+    local keyfile_size
+    keyfile_size=$(wc -c < "$keyfile_path" | tr -d ' ')
     if [ "$keyfile_size" -lt 6 ] || [ "$keyfile_size" -gt 1024 ]; then
         log_error "MongoDB keyfile size invalid: $keyfile_size bytes (must be 6-1024)"
         if type orch_record_error &>/dev/null; then
@@ -381,8 +389,10 @@ spoke_init_ensure_mongo_keyfile() {
 ##
 spoke_init_generate_config() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    local code_lower
+    code_upper=$(upper "$instance_code")
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     log_step "Generating instance configuration"
@@ -620,6 +630,7 @@ spoke_get_hub_opal_public_key() {
         local vault_pub_ssh=""
         vault_pub_ssh=$(vault_get_secret "opal" "jwt-signing" "public_key_ssh" 2>/dev/null || true)
         if [ -n "$vault_pub_ssh" ]; then
+            log_verbose "OPAL public key source: Vault (opal/jwt-signing/public_key_ssh)"
             echo "$vault_pub_ssh"
             return 0
         fi
@@ -628,6 +639,7 @@ spoke_get_hub_opal_public_key() {
     # Strategy 2: Read SSH file on disk
     local ssh_file="${DIVE_ROOT}/certs/opal/jwt-signing-key.pub.ssh"
     if [ -f "$ssh_file" ]; then
+        log_verbose "OPAL public key source: local file $ssh_file"
         cat "$ssh_file"
         return 0
     fi
@@ -637,9 +649,48 @@ spoke_get_hub_opal_public_key() {
         local public_key
         public_key=$(docker exec dive-hub-opal-server printenv OPAL_AUTH_PUBLIC_KEY 2>/dev/null | tr -d '\n\r' || echo "")
         if [ -n "$public_key" ] && [ "$public_key" != "# NOT_CONFIGURED" ]; then
+            log_verbose "OPAL public key source: local Hub container env"
             echo "$public_key"
             return 0
         fi
+    fi
+
+    # Strategy 4: Explicitly provided key for remote deployments
+    if [ -n "${HUB_OPAL_PUBLIC_KEY:-}" ] && [[ "${HUB_OPAL_PUBLIC_KEY}" =~ ^ssh-(rsa|ed25519|ecdsa)[[:space:]] ]]; then
+        log_verbose "OPAL public key source: HUB_OPAL_PUBLIC_KEY environment variable"
+        echo "${HUB_OPAL_PUBLIC_KEY}"
+        return 0
+    fi
+
+    # Strategy 5: Try Hub OPAL public endpoint(s) in remote mode (best-effort)
+    if [ "${DEPLOYMENT_MODE:-local}" = "remote" ] && [ -n "${HUB_OPAL_URL:-}" ]; then
+        local key_endpoint key_resp first_line
+        for key_endpoint in \
+            "${HUB_OPAL_URL}/public-key" \
+            "${HUB_OPAL_URL}/public_key" \
+            "${HUB_OPAL_URL}/pubkey" \
+            "${HUB_OPAL_URL}/.well-known/opal-public-key"; do
+            log_verbose "Attempting OPAL public key fetch from: ${key_endpoint}"
+            key_resp=$(curl -sk --max-time 3 "$key_endpoint" 2>/dev/null || true)
+            [ -z "$key_resp" ] && continue
+
+            # Support plain text key or JSON payload with {"public_key":"ssh-rsa ..."}
+            first_line=$(printf "%s" "$key_resp" | head -n 1)
+            if [[ "$first_line" =~ ^ssh-(rsa|ed25519|ecdsa)[[:space:]] ]]; then
+                log_verbose "OPAL public key source: ${key_endpoint} (plain text)"
+                echo "$first_line"
+                return 0
+            fi
+
+            if command -v jq >/dev/null 2>&1; then
+                first_line=$(printf "%s" "$key_resp" | jq -r '.public_key // .publicKey // empty' 2>/dev/null || true)
+                if [[ "$first_line" =~ ^ssh-(rsa|ed25519|ecdsa)[[:space:]] ]]; then
+                    log_verbose "OPAL public key source: ${key_endpoint} (JSON)"
+                    echo "$first_line"
+                    return 0
+                fi
+            fi
+        done
     fi
 
     log_verbose "OPAL public key not available (OPAL client will use no-auth mode)"
@@ -660,8 +711,10 @@ spoke_init_generate_env() {
     local hub_url="$7"
     local hub_opal_url="${8:-https://dive-hub-opal-server:7002}"
 
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    local code_lower
+    code_upper=$(upper "$instance_code")
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local env_file="$spoke_dir/.env"
 

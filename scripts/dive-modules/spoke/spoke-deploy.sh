@@ -76,6 +76,8 @@ spoke_remote_normalize_hub_endpoints() {
 
     [ -z "$hub_host" ] && return 0
 
+    log_verbose "Remote endpoint normalization input: HUB_EXTERNAL_ADDRESS='${HUB_EXTERNAL_ADDRESS:-}', HUB_API_URL='${HUB_API_URL:-}'"
+
     # Strip protocol/path if caller passed full URL by mistake
     hub_host="${hub_host#https://}"
     hub_host="${hub_host#http://}"
@@ -294,15 +296,18 @@ spoke_deploy() {
     fi
 
     # Normalize inputs
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    local code_lower
+    code_upper=$(upper "$instance_code")
+    code_lower=$(lower "$instance_code")
     instance_code="$code_upper"
 
     # Set default name from NATO database or parameter
     if [ -z "$instance_name" ]; then
         # Use get_country_name to extract just the name, not full data string
         if type -t get_country_name &>/dev/null; then
-            local country_name=$(get_country_name "$code_upper" 2>/dev/null)
+            local country_name
+            country_name=$(get_country_name "$code_upper" 2>/dev/null)
             if [ -n "$country_name" ]; then
                 instance_name="$country_name"
             else
@@ -340,8 +345,10 @@ spoke_deploy() {
 spoke_up() {
     # FIXED (2026-02-08): Accept instance code as $1, fall back to $INSTANCE, default to usa
     local instance_code="${1:-${INSTANCE:-usa}}"
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    local code_upper
+    code_lower=$(lower "$instance_code")
+    code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     # GUARDRAIL: Prevent USA from being deployed as a spoke (2026-02-07)
