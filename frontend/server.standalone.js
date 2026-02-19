@@ -4,6 +4,9 @@
  * Uses NextServer from next/dist/server/next-server (standalone-compatible)
  * instead of require('next') which pulls in webpack and other build dependencies.
  *
+ * Serves _next/static/* files directly (standalone mode does not serve them
+ * when customServer is true — they must be handled here or by a CDN).
+ *
  * Zero Trust: ALL internal traffic must be TLS-encrypted.
  */
 
@@ -11,11 +14,28 @@ const https = require('https');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const url = require('url');
 
 const hostname = process.env.HOSTNAME || '0.0.0.0';
 const port = parseInt(process.env.PORT || '3000', 10);
 const certPath = process.env.CERT_PATH || process.env.SSL_CERT_PATH || path.join(__dirname, 'certs');
+
+// MIME types for static assets
+const MIME_TYPES = {
+  '.js': 'application/javascript',
+  '.css': 'text/css',
+  '.json': 'application/json',
+  '.map': 'application/json',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.ttf': 'font/ttf',
+  '.eot': 'application/vnd.ms-fontobject',
+};
 
 // Try to load TLS certificates
 let httpsOptions = null;
@@ -23,7 +43,6 @@ try {
   const keyFile = process.env.KEY_FILE || 'key.pem';
   const certFile = process.env.CERT_FILE || 'certificate.pem';
 
-  // Try certificate.pem first, fallback to fullchain.pem
   let certFilePath = path.join(certPath, certFile);
   if (!fs.existsSync(certFilePath)) {
     certFilePath = path.join(certPath, 'fullchain.pem');
@@ -51,7 +70,58 @@ const nextServer = new NextServer({
   conf: require(path.join(__dirname, '.next/required-server-files.json')).config,
 });
 
-const handler = nextServer.getRequestHandler();
+const nextHandler = nextServer.getRequestHandler();
+
+/**
+ * Serve static files from .next/static/ and public/ directories.
+ * Returns true if the request was handled, false otherwise.
+ */
+function serveStatic(req, res) {
+  const parsedUrl = new URL(req.url, `http://${req.headers.host}`);
+  const pathname = parsedUrl.pathname;
+
+  let filePath = null;
+
+  if (pathname.startsWith('/_next/static/')) {
+    // Map /_next/static/* → .next/static/*
+    filePath = path.join(__dirname, '.next', 'static', pathname.slice('/_next/static/'.length));
+  } else if (!pathname.startsWith('/_next/') && !pathname.startsWith('/api/')) {
+    // Try public/ directory for non-API, non-_next routes
+    const publicPath = path.join(__dirname, 'public', pathname);
+    if (fs.existsSync(publicPath) && fs.statSync(publicPath).isFile()) {
+      filePath = publicPath;
+    }
+  }
+
+  if (!filePath) return false;
+
+  // Prevent directory traversal
+  const resolved = path.resolve(filePath);
+  if (!resolved.startsWith(path.resolve(__dirname))) return false;
+
+  try {
+    if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) return false;
+
+    const ext = path.extname(resolved).toLowerCase();
+    const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+
+    const stream = fs.createReadStream(resolved);
+    stream.pipe(res);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Request handler: static files first, then Next.js
+function handler(req, res) {
+  if (serveStatic(req, res)) return;
+  nextHandler(req, res);
+}
 
 // Create HTTPS or HTTP server
 const server = httpsOptions
