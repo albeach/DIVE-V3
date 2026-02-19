@@ -141,9 +141,30 @@ _rebuild_spoke_ca_bundle() {
     fi
 
     mkdir -p "$spoke_dir/certs/ca" "$spoke_dir/truststores"
-    cp "$ca_bundle" "$spoke_dir/certs/ca/rootCA.pem" 2>/dev/null || true
-    cp "$ca_bundle" "$spoke_dir/certs/rootCA.pem" 2>/dev/null || true
-    cp "$ca_bundle" "$spoke_dir/truststores/mkcert-rootCA.pem" 2>/dev/null || true
+
+    # Start with SSOT CA bundle (Vault PKI, mkcert, bootstrap CAs)
+    if [ -f "$ca_bundle" ] && [ -s "$ca_bundle" ]; then
+        cp "$ca_bundle" "$spoke_dir/certs/ca/rootCA.pem"
+    else
+        : > "$spoke_dir/certs/ca/rootCA.pem"
+    fi
+
+    # Cloud/remote: append spoke's own self-signed cert as CA
+    # Self-signed certs are their own root — infra services need this to verify TLS
+    if [ -f "$spoke_dir/certs/certificate.pem" ] && [ -s "$spoke_dir/certs/certificate.pem" ]; then
+        if ! grep -qF "$(head -2 "$spoke_dir/certs/certificate.pem")" "$spoke_dir/certs/ca/rootCA.pem" 2>/dev/null; then
+            cat "$spoke_dir/certs/certificate.pem" >> "$spoke_dir/certs/ca/rootCA.pem"
+        fi
+    fi
+
+    # Ensure rootCA.pem is not empty — fail loudly if so
+    if [ ! -s "$spoke_dir/certs/ca/rootCA.pem" ]; then
+        log_warn "CA bundle is empty — PostgreSQL/Redis/MongoDB TLS will fail"
+    fi
+
+    cp "$spoke_dir/certs/ca/rootCA.pem" "$spoke_dir/certs/rootCA.pem" 2>/dev/null || true
+    cp "$spoke_dir/certs/ca/rootCA.pem" "$spoke_dir/truststores/mkcert-rootCA.pem" 2>/dev/null || true
+    chmod 644 "$spoke_dir/certs/ca/rootCA.pem" "$spoke_dir/certs/rootCA.pem" "$spoke_dir/truststores/mkcert-rootCA.pem" 2>/dev/null || true
 }
 
 ##
