@@ -387,12 +387,12 @@ spoke_containers_start() {
     compose_args="$compose_args_base opal-client-${code_lower}"
     log_verbose "Running: $compose_cmd $compose_args"
 
-    # CRITICAL FIX (2026-02-19): Capture compose output instead of suppressing it.
-    # Previous code used >/dev/null 2>&1 which hid the actual error message,
-    # making remote deployment failures impossible to diagnose.
-    local opal_compose_output
+    # CRITICAL FIX (2026-02-19): Stream compose output instead of suppressing it.
+    # Previous code used >/dev/null 2>&1 which hid errors, then $(...) which
+    # captured output but appeared to hang during long image builds.
+    # Now: stream output to terminal in real-time, capture only the exit code.
     local opal_compose_exit=0
-    opal_compose_output=$($compose_cmd $compose_args 2>&1) || opal_compose_exit=$?
+    $compose_cmd $compose_args 2>&1 || opal_compose_exit=$?
 
     if [ $opal_compose_exit -ne 0 ]; then
         # CRITICAL FIX (2026-02-19): OPAL Client startup failure is NON-BLOCKING.
@@ -402,8 +402,6 @@ spoke_containers_start() {
         #   - Hub OPAL server may not be reachable yet
         # The OPAL Client will be restarted with a real token after federation setup.
         log_warn "OPAL Client startup returned exit code $opal_compose_exit (non-blocking)"
-        log_warn "Compose output:"
-        echo "$opal_compose_output" | tail -10
         log_warn "OPAL Client will be configured in the CONFIGURATION phase"
         log_warn "Deployment will continue — OPAL is not required for core infrastructure"
         # Do NOT return 1 — OPAL client failure should not block spoke deployment
