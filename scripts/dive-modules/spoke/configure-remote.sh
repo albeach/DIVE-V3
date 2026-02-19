@@ -255,13 +255,15 @@ _configure_remote_terraform() {
     fi
 
     # Apply with spoke's public HTTPS URL
+    # NOTE: -var-file MUST come before -var flags (Terraform last-value-wins)
     log_info "Terraform apply → ${spoke_idp_url}"
     terraform apply -auto-approve -parallelism=20 -compact-warnings \
+        $tfvars_arg \
         -var="keycloak_url=${spoke_idp_url}" \
         -var="app_url=${spoke_app_url}" \
         -var="api_url=${spoke_api_url}" \
         -var="idp_url=${spoke_idp_url}" \
-        $tfvars_arg 2>&1 | while IFS= read -r line; do
+        2>&1 | while IFS= read -r line; do
             echo "  [TF] $line"
         done
 
