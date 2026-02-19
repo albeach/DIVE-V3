@@ -222,7 +222,7 @@ export NC='\033[0m'
 
 # Defaults (can be overridden by environment)
 # Valid environments: local, dev, staging, pilot, hub
-export ENVIRONMENT="${DIVE_ENV:-local}"
+export ENVIRONMENT="${ENVIRONMENT:-${DIVE_ENV:-local}}"
 export INSTANCE="${INSTANCE:-${DIVE_INSTANCE:-usa}}"
 export GCP_PROJECT="${GCP_PROJECT:-dive25}"
 export PILOT_VM="${PILOT_VM:-dive-v3-pilot}"
