@@ -241,6 +241,40 @@ hub_phase_vault_bootstrap() {
         return 1
     }
 
+    # -------------------------------------------------------------------------
+    # Step 0: Ensure .env.hub exists (required by docker-compose.hub.yml)
+    # -------------------------------------------------------------------------
+    # Docker Compose validates ALL service env vars even when starting only
+    # vault-seal. On a fresh clone, .env.hub doesn't exist yet — create it
+    # with bootstrap values so compose can parse the file.
+    if [ ! -f "${DIVE_ROOT}/.env.hub" ]; then
+        log_info "Creating bootstrap .env.hub (first-time deployment)"
+        cat > "${DIVE_ROOT}/.env.hub" << 'BOOTSTRAP_EOF'
+# Auto-generated bootstrap .env.hub — values replaced by Vault seed phase
+INSTANCE=USA
+INSTANCE_NAME=United States (Hub)
+COMPOSE_PROJECT_NAME=dive-hub
+ENVIRONMENT=local
+PORT=4000
+KEYCLOAK_CLIENT_SECRET_USA=bootstrap-will-be-replaced
+KEYCLOAK_ADMIN_PASSWORD=bootstrap-will-be-replaced
+POSTGRES_PASSWORD_USA=bootstrap-will-be-replaced
+MONGO_PASSWORD_USA=bootstrap-will-be-replaced
+REDIS_PASSWORD_USA=bootstrap-will-be-replaced
+REDIS_PASSWORD_BLACKLIST=bootstrap-will-be-replaced
+OPAL_DATA_SOURCE_TOKEN=bootstrap-will-be-replaced
+OPAL_AUTH_MASTER_TOKEN=bootstrap-will-be-replaced
+HUB_OPAL_TOKEN=bootstrap-will-be-replaced
+BOOTSTRAP_EOF
+        log_verbose "Bootstrap .env.hub created with placeholder values"
+    fi
+
+    # Ensure .env symlink exists (docker compose reads .env for variable substitution)
+    if [ ! -e "${DIVE_ROOT}/.env" ] || [ "$(readlink "${DIVE_ROOT}/.env" 2>/dev/null)" != ".env.hub" ]; then
+        ln -sf .env.hub "${DIVE_ROOT}/.env"
+        log_verbose "Created .env -> .env.hub symlink"
+    fi
+
     # Ensure vault CLI is in PATH (macOS: /usr/local/bin, Homebrew ARM: /opt/homebrew/bin)
     if ! command -v vault &>/dev/null; then
         for _vp in /usr/local/bin /opt/homebrew/bin; do
@@ -401,18 +435,20 @@ hub_phase_vault_bootstrap() {
     # Source vault module for init/setup/seed functions
     source "${DIVE_ROOT}/scripts/dive-modules/vault/module.sh"
 
-    # Load token if it exists
-    if [ -f "$VAULT_TOKEN_FILE" ]; then
-        VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
-        export VAULT_TOKEN
-    fi
-
+    # Check Vault initialization status BEFORE loading stale tokens
     local status_json
     status_json=$(vault status -format=json 2>/dev/null || true)
     local is_initialized
     is_initialized=$(echo "$status_json" | grep -o '"initialized": *[a-z]*' | sed 's/.*: *//')
 
     if [ "$is_initialized" != "true" ]; then
+        # Vault is NOT initialized — remove any stale credential files from a previous
+        # deployment. These contain tokens for a now-destroyed Vault instance.
+        if [ -f "$VAULT_TOKEN_FILE" ] || [ -f "$VAULT_INIT_FILE" ]; then
+            log_warn "Vault uninitialized but stale credentials found — removing"
+            rm -f "$VAULT_TOKEN_FILE" "$VAULT_INIT_FILE" 2>/dev/null || true
+            unset VAULT_TOKEN
+        fi
         log_info "Vault not initialized — running vault init..."
         if ! module_vault_init; then
             log_error "Vault initialization failed"
@@ -421,8 +457,8 @@ hub_phase_vault_bootstrap() {
         log_success "Vault initialized"
     else
         log_verbose "Vault already initialized"
-        # Ensure we have the token
-        if [ -z "${VAULT_TOKEN:-}" ] && [ -f "$VAULT_TOKEN_FILE" ]; then
+        # Load token if it exists (Vault IS initialized, so token should be valid)
+        if [ -f "$VAULT_TOKEN_FILE" ]; then
             VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
             export VAULT_TOKEN
         fi

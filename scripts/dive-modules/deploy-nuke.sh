@@ -353,10 +353,12 @@ _nuke_confirm_destruction() {
 ##
 _nuke_stop_compose_projects() {
     if [ "$target_type" = "hub" ]; then
-        # Stop only hub
+        # Stop only hub — include ALL profiles so Vault HA volumes are also removed
         if [ -f "docker-compose.hub.yml" ]; then
-            log_verbose "  Stopping hub"
-            if ! ${DOCKER_CMD:-docker} compose -f docker-compose.hub.yml -p dive-hub down -v --remove-orphans --timeout 5 2>&1 | grep -v "^$"; then
+            log_verbose "  Stopping hub (all profiles including vault-ha)"
+            if ! ${DOCKER_CMD:-docker} compose -f docker-compose.hub.yml -p dive-hub \
+                --profile vault-ha --profile vault-dev --profile caddy \
+                down -v --remove-orphans --timeout 5 2>&1 | grep -v "^$"; then
                 log_warn "Hub compose down returned errors (continuing cleanup)"
             fi
         fi
@@ -377,12 +379,16 @@ _nuke_stop_compose_projects() {
             if [ -f "$compose_file" ]; then
                 local project_name=$(grep -m 1 '^name:' "$compose_file" 2>/dev/null | sed 's/name: *//' | tr -d ' "'"'"'')
                 if [ -n "$project_name" ]; then
-                    log_verbose "  Stopping project: $project_name"
-                    if ! ${DOCKER_CMD:-docker} compose -f "$compose_file" -p "$project_name" down -v --remove-orphans --timeout 5 2>&1 | grep -v "^$"; then
+                    log_verbose "  Stopping project: $project_name (all profiles)"
+                    if ! ${DOCKER_CMD:-docker} compose -f "$compose_file" -p "$project_name" \
+                        --profile vault-ha --profile vault-dev --profile caddy \
+                        down -v --remove-orphans --timeout 5 2>&1 | grep -v "^$"; then
                         log_warn "Compose down for $project_name returned errors (continuing cleanup)"
                     fi
                 else
-                    if ! ${DOCKER_CMD:-docker} compose -f "$compose_file" down -v --remove-orphans --timeout 5 2>&1 | grep -v "^$"; then
+                    if ! ${DOCKER_CMD:-docker} compose -f "$compose_file" \
+                        --profile vault-ha --profile vault-dev --profile caddy \
+                        down -v --remove-orphans --timeout 5 2>&1 | grep -v "^$"; then
                         log_warn "Compose down for $compose_file returned errors (continuing cleanup)"
                     fi
                 fi

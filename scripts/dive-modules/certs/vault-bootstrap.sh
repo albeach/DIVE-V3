@@ -544,6 +544,8 @@ generate_vault_node_certs() {
                 local days_left
                 days_left=$(_cert_days_remaining "$cert_file")
                 if [ "$days_left" -gt 1 ] 2>/dev/null; then
+                    # Ensure permissions are 644 even on existing certs (may be 600 from older deploys)
+                    chmod 644 "$node_dir/key.pem" "$node_dir/certificate.pem" "$node_dir/ca.pem" 2>/dev/null || true
                     log_verbose "Vault ${node} cert valid for ${days_left} days — skipping"
                     skipped=$((skipped + 1))
                     continue
@@ -582,6 +584,8 @@ generate_vault_node_certs() {
                 local days_left
                 days_left=$(_cert_days_remaining "$cert_file")
                 if [ "$days_left" -gt 1 ] 2>/dev/null; then
+                    # Ensure permissions are 644 even on existing certs (may be 600 from older deploys)
+                    chmod 644 "$node_dir/key.pem" "$node_dir/certificate.pem" "$node_dir/ca.pem" 2>/dev/null || true
                     log_verbose "Vault ${node} cert valid for ${days_left} days — skipping"
                     skipped=$((skipped + 1))
                     continue
@@ -619,6 +623,8 @@ generate_vault_node_certs() {
             local days_left
             days_left=$(_cert_days_remaining "$cert_file")
             if [ "$days_left" -gt 30 ] 2>/dev/null; then
+                # Ensure permissions are 644 even on existing certs (may be 600 from older deploys)
+                chmod 644 "$node_dir/key.pem" "$node_dir/certificate.pem" "$node_dir/ca.pem" 2>/dev/null || true
                 log_verbose "Vault ${node} cert valid for ${days_left} days — skipping"
                 skipped=$((skipped + 1))
                 continue
