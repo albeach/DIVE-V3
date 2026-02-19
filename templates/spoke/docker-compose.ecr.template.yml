@@ -342,7 +342,7 @@ services:
 
   opal-client-{{INSTANCE_CODE_LOWER}}:
     labels:
-      dive.service.class: "core"
+      dive.service.class: "optional"
       dive.service.description: "OPAL client for real-time policy sync with hub"
     image: {{ECR_REGISTRY}}/dive-v3-opal-client:{{IMAGE_TAG}}
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-opal-client
