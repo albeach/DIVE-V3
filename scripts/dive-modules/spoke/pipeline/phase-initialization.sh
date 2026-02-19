@@ -106,9 +106,15 @@ spoke_phase_initialization() {
         needs_full_init=false
         log_info "Instance already initialized at: $spoke_dir"
 
-        # BEST PRACTICE: Always regenerate docker-compose.yml from template (SSOT)
-        # This eliminates drift entirely - template is always authoritative
-        log_step "Regenerating docker-compose.yml from template (SSOT)"
+        # BEST PRACTICE: Always regenerate config and compose from template (SSOT)
+        # This eliminates drift entirely - templates are always authoritative
+        log_step "Regenerating .env and docker-compose.yml from template (SSOT)"
+
+        if ! spoke_init_generate_config "$instance_code"; then
+            log_warn "Failed to regenerate .env (continuing with existing)"
+        else
+            log_success "✓ .env regenerated from template"
+        fi
 
         if ! spoke_init_generate_compose "$instance_code"; then
             log_warn "Failed to regenerate docker-compose.yml (continuing with existing)"
