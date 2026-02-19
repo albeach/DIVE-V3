@@ -408,7 +408,8 @@ spoke_containers_start() {
     fi
 
     # Wait for OPAL Client to be healthy (may take longer due to policy sync)
-    log_verbose "Waiting for OPAL Client to be healthy..."
+    log_info "OPAL Client container started — waiting for health check (up to 120s)..."
+    log_info "  (Health check: curl http://localhost:7000/healthcheck, interval=10s, start_period=30s)"
     if ! spoke_containers_wait_for_services "$instance_code" "opal-client-${code_lower}" 120; then
         log_warn "OPAL Client did not become healthy — deployment will continue"
         log_warn "This is expected in remote mode (token provisioned in CONFIGURATION phase)"
@@ -1013,10 +1014,12 @@ spoke_containers_wait_for_services() {
     local timeout="${3:-60}"
     local code_lower=$(lower "$instance_code")
 
-    log_verbose "Waiting up to ${timeout}s for services: $services"
+    log_info "Waiting up to ${timeout}s for services to become healthy: $services"
 
     local start_time=$(date +%s)
+    local last_progress=0
     while [ $(($(date +%s) - start_time)) -lt $timeout ]; do
+        local elapsed=$(($(date +%s) - start_time))
         local all_healthy=true
 
         for service in $services; do
@@ -1033,8 +1036,14 @@ spoke_containers_wait_for_services() {
         done
 
         if [ "$all_healthy" = true ]; then
-            log_verbose "All services are healthy"
+            log_info "All services are healthy after ${elapsed}s"
             return 0
+        fi
+
+        # Show progress every 15 seconds so the user knows we're still working
+        if [ $((elapsed - last_progress)) -ge 15 ]; then
+            log_info "  Still waiting for $services to become healthy... (${elapsed}/${timeout}s)"
+            last_progress=$elapsed
         fi
 
         sleep 2
