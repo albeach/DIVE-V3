@@ -418,12 +418,14 @@ spoke_containers_start() {
     fi
 
     # Stage 3: Start Keycloak (depends on postgres)
-    log_verbose "Stage 3: Starting Keycloak..."
+    log_info "Stage 3: Starting Keycloak..."
     compose_args="$compose_args_base keycloak-${code_lower}"
 
     log_verbose "Running: $compose_cmd $compose_args"
-    if ! $compose_cmd $compose_args >/dev/null 2>&1; then
-        log_error "Failed to start Keycloak"
+    local keycloak_exit=0
+    $compose_cmd $compose_args 2>&1 || keycloak_exit=$?
+    if [ $keycloak_exit -ne 0 ]; then
+        log_error "Failed to start Keycloak (exit code: $keycloak_exit)"
         orch_record_error "$SPOKE_ERROR_COMPOSE_UP" "$ORCH_SEVERITY_CRITICAL" \
             "Keycloak startup failed" "containers" \
             "$(spoke_error_get_remediation $SPOKE_ERROR_COMPOSE_UP $instance_code)"
@@ -431,12 +433,12 @@ spoke_containers_start() {
     fi
 
     # Wait for Keycloak to be running (not necessarily healthy - realm created later)
-    log_verbose "Waiting for Keycloak to be running..."
+    log_info "Waiting for Keycloak container to be running..."
     local max_wait=60
     local wait_count=0
     while [ $wait_count -lt $max_wait ]; do
         if docker ps --filter "name=dive-spoke-${code_lower}-keycloak" --format '{{.Names}}' | grep -q .; then
-            log_verbose "Keycloak container is running"
+            log_success "Keycloak container is running"
             break
         fi
         sleep 2
@@ -449,19 +451,18 @@ spoke_containers_start() {
     fi
 
     # Stage 4: Start application containers (backend, kas, frontend)
-    log_verbose "Stage 4: Starting application containers..."
+    log_info "Stage 4: Starting application containers (backend, kas, frontend)..."
     local app_services="backend-${code_lower} kas-${code_lower} frontend-${code_lower}"
     compose_args="$compose_args_base $app_services"
 
     log_verbose "Running: $compose_cmd $compose_args"
-    local compose_output
     local compose_exit_code=0
 
-    compose_output=$($compose_cmd $compose_args 2>&1) || compose_exit_code=$?
+    # Stream compose output instead of capturing in subshell (prevents hang during builds)
+    $compose_cmd $compose_args 2>&1 || compose_exit_code=$?
 
     if [ $compose_exit_code -ne 0 ]; then
         log_warn "Docker compose returned non-zero exit code: $compose_exit_code"
-        log_verbose "Compose output:\n$compose_output"
     fi
 
     # CRITICAL FIX (2026-02-07): Verify ALL application services started
