@@ -646,7 +646,7 @@ services:
       # Bootstrap realm for Terraform provider authentication
       SKIP_REALM_IMPORT: "true"  # Terraform SSOT: Start empty, configure via Terraform
       # Legacy realm import variables (kept for compatibility, but not used)
-      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_USA:?KEYCLOAK_CLIENT_SECRET_USA required}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET_USA:-bootstrap-will-be-replaced}
       APP_URL: ${NEXT_PUBLIC_BASE_URL:-https://localhost:3000}
       API_URL: ${NEXT_PUBLIC_API_URL:-https://localhost:4000}
       USA_IDP_URL: ${USA_IDP_URL:-https://keycloak:8443}
