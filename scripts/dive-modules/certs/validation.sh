@@ -81,7 +81,7 @@ update_hub_certificate_sans() {
     dns_sans=$(_hub_service_sans)
 
     # mkcert supports IP literals inline and wildcards for future-proofing
-    local all_hostnames="$dns_sans 127.0.0.1 ::1 *.localhost *.dive25.com *.dive25.local"
+    local all_hostnames="$dns_sans 127.0.0.1 ::1 *.localhost *.${DIVE_DEFAULT_DOMAIN:-dive25.com} *.dive25.local"
 
     log_verbose "Hub certificate SANs (wildcard mode): $all_hostnames"
 
@@ -404,8 +404,8 @@ _hub_service_sans() {
     sans="$sans hub-keycloak"
 
     # External DNS names
-    sans="$sans hub.dive.local hub.dive25.com"
-    sans="$sans usa-idp.dive25.com usa-api.dive25.com usa-app.dive25.com"
+    sans="$sans hub.dive.local hub.${DIVE_DEFAULT_DOMAIN:-dive25.com}"
+    sans="$sans usa-idp.${DIVE_DEFAULT_DOMAIN:-dive25.com} usa-api.${DIVE_DEFAULT_DOMAIN:-dive25.com} usa-app.${DIVE_DEFAULT_DOMAIN:-dive25.com}"
 
     # Cross-EC2 external address (IP or hostname for remote spoke access)
     if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost" ]; then
@@ -465,15 +465,15 @@ _spoke_service_sans() {
     sans="$sans ${code_lower}-keycloak-${code_lower}-1"
 
     # Spoke public DNS names
-    sans="$sans ${code_lower}-idp.dive25.com"
-    sans="$sans ${code_lower}-api.dive25.com"
-    sans="$sans ${code_lower}-app.dive25.com"
+    sans="$sans ${code_lower}-idp.${DIVE_DEFAULT_DOMAIN:-dive25.com}"
+    sans="$sans ${code_lower}-api.${DIVE_DEFAULT_DOMAIN:-dive25.com}"
+    sans="$sans ${code_lower}-app.${DIVE_DEFAULT_DOMAIN:-dive25.com}"
 
     # Hub container names (CRITICAL for spoke → hub SSL connections)
     sans="$sans dive-hub-keycloak dive-hub-backend dive-hub-frontend"
     sans="$sans dive-hub-opa dive-hub-opal-server"
     sans="$sans hub-keycloak keycloak backend frontend opa opal-server"
-    sans="$sans hub.dive25.com usa-idp.dive25.com usa-api.dive25.com usa-app.dive25.com"
+    sans="$sans hub.${DIVE_DEFAULT_DOMAIN:-dive25.com} usa-idp.${DIVE_DEFAULT_DOMAIN:-dive25.com} usa-api.${DIVE_DEFAULT_DOMAIN:-dive25.com} usa-app.${DIVE_DEFAULT_DOMAIN:-dive25.com}"
 
     # Cross-EC2 external addresses (spoke and hub)
     if [ -n "${SPOKE_EXTERNAL_ADDRESS:-}" ] && [ "$SPOKE_EXTERNAL_ADDRESS" != "localhost" ]; then

@@ -286,7 +286,7 @@ _spoke_init_legacy() {
     [ -z "$client_secret" ] && client_secret=$(openssl rand -base64 24 | tr -d '/+=')
 
     # Generate default contact email based on instance code
-    local contact_email="admin@${code_lower}.dive25.com"
+    local contact_email="admin@${code_lower}.${DIVE_DEFAULT_DOMAIN:-dive25.com}"
 
     print_header
     echo -e "${BOLD}Initializing DIVE V3 Spoke Instance:${NC} $code_upper"
@@ -446,9 +446,9 @@ EOF
     "https://localhost:3000",
     "https://localhost:3000/*",
     "https://localhost:3000/api/auth/callback/keycloak",
-    "https://${code_lower}-app.dive25.com",
-    "https://${code_lower}-app.dive25.com/*",
-    "https://${code_lower}-app.dive25.com/api/auth/callback/keycloak",
+    "https://${code_lower}-app.${DIVE_DEFAULT_DOMAIN:-dive25.com}",
+    "https://${code_lower}-app.${DIVE_DEFAULT_DOMAIN:-dive25.com}/*",
+    "https://${code_lower}-app.${DIVE_DEFAULT_DOMAIN:-dive25.com}/api/auth/callback/keycloak",
     "*"
 ]
 EOF

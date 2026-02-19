@@ -220,13 +220,41 @@ export GRAY='\033[0;90m'
 export BOLD='\033[1m'
 export NC='\033[0m'
 
-# Defaults (can be overridden by environment)
+# =============================================================================
+# LOAD CONFIGURATION DEFAULTS
+# =============================================================================
+# Load config/dive-defaults.env and config/dive-local.env (if present).
+# Values are only set if not already defined (env vars take priority).
+
+_load_dive_config_file() {
+    local config_file="$1"
+    [ -f "$config_file" ] || return 0
+    while IFS='=' read -r key value; do
+        # Skip comments, empty lines, and lines without =
+        [[ "$key" =~ ^[[:space:]]*# ]] && continue
+        [[ -z "$key" ]] && continue
+        # Trim whitespace
+        key="$(echo "$key" | xargs)"
+        value="${value%%#*}"       # Strip inline comments
+        value="$(echo "$value" | xargs)"  # Trim whitespace
+        # Only set if not already defined (env vars take priority)
+        if [ -z "${!key:-}" ]; then
+            export "$key=$value"
+        fi
+    done < "$config_file"
+}
+
+# Load project defaults first, then user overrides (higher precedence)
+_load_dive_config_file "${DIVE_ROOT}/config/dive-defaults.env"
+_load_dive_config_file "${DIVE_ROOT}/config/dive-local.env"
+
+# Defaults (can be overridden by environment or dive-defaults.env)
 # Valid environments: local, dev, staging, pilot, hub
-export ENVIRONMENT="${ENVIRONMENT:-${DIVE_ENV:-local}}"
-export INSTANCE="${INSTANCE:-${DIVE_INSTANCE:-usa}}"
+export ENVIRONMENT="${ENVIRONMENT:-${DIVE_ENV:-${DIVE_DEFAULT_ENVIRONMENT:-local}}}"
+export INSTANCE="${INSTANCE:-${DIVE_INSTANCE:-${DIVE_DEFAULT_INSTANCE:-usa}}}"
 export GCP_PROJECT="${GCP_PROJECT:-dive25}"
 export PILOT_VM="${PILOT_VM:-dive-v3-pilot}"
-export PILOT_ZONE="${PILOT_ZONE:-us-east4-c}"
+export PILOT_ZONE="${PILOT_ZONE:-${PILOT_ZONE:-us-east4-c}}"
 export DRY_RUN="${DRY_RUN:-false}"
 export VERBOSE="${VERBOSE:-false}"
 export QUIET="${QUIET:-false}"
@@ -294,8 +322,8 @@ fi
 # for when ./dive --env dev is run locally without remote-exec.
 if [ -z "${DIVE_DOMAIN_SUFFIX:-}" ]; then
     case "${ENVIRONMENT:-local}" in
-        dev)     export DIVE_DOMAIN_SUFFIX="dev.dive25.com" ;;
-        staging) export DIVE_DOMAIN_SUFFIX="staging.dive25.com" ;;
+        dev)     export DIVE_DOMAIN_SUFFIX="dev.${DIVE_DEFAULT_DOMAIN:-dive25.com}" ;;
+        staging) export DIVE_DOMAIN_SUFFIX="staging.${DIVE_DEFAULT_DOMAIN:-dive25.com}" ;;
     esac
 fi
 
@@ -442,7 +470,7 @@ case "$ENVIRONMENT" in
         export DIVE_AWS_VOLUME_SIZE="${DIVE_AWS_VOLUME_SIZE:-100}"
         export SECRETS_PROVIDER="${SECRETS_PROVIDER:-vault}"
         export DIVE_DOCKER_BUILD_MODE="${DIVE_DOCKER_BUILD_MODE:-source}"
-        export DIVE_DOMAIN_SUFFIX="${DIVE_DOMAIN_SUFFIX:-dev.dive25.com}"
+        export DIVE_DOMAIN_SUFFIX="${DIVE_DOMAIN_SUFFIX:-dev.${DIVE_DEFAULT_DOMAIN:-dive25.com}}"
         export HUB_EXTERNAL_ADDRESS="${HUB_EXTERNAL_ADDRESS:-${INSTANCE_PUBLIC_IP:-localhost}}"
         ;;
     staging)
@@ -450,7 +478,7 @@ case "$ENVIRONMENT" in
         export DIVE_AWS_VOLUME_SIZE="${DIVE_AWS_VOLUME_SIZE:-200}"
         export SECRETS_PROVIDER="${SECRETS_PROVIDER:-vault}"
         export DIVE_DOCKER_BUILD_MODE="${DIVE_DOCKER_BUILD_MODE:-source}"
-        export DIVE_DOMAIN_SUFFIX="${DIVE_DOMAIN_SUFFIX:-staging.dive25.com}"
+        export DIVE_DOMAIN_SUFFIX="${DIVE_DOMAIN_SUFFIX:-staging.${DIVE_DEFAULT_DOMAIN:-dive25.com}}"
         export HUB_EXTERNAL_ADDRESS="${HUB_EXTERNAL_ADDRESS:-${INSTANCE_PUBLIC_IP:-localhost}}"
         ;;
 esac
@@ -561,7 +589,7 @@ if [ -z "${HUB_API_URL:-}" ]; then
             export HUB_API_URL="${DIVE_HUB_URL:-https://${HUB_EXTERNAL_ADDRESS:-localhost}:4000}"
             ;;
         *)
-            export HUB_API_URL="${DIVE_HUB_URL:-https://usa-api.dive25.com}"
+            export HUB_API_URL="${DIVE_HUB_URL:-${HUB_FALLBACK_URL:-https://usa-api.dive25.com}}"
             ;;
     esac
 fi
@@ -911,7 +939,7 @@ check_certs() {
 
     local hostnames
     if type _hub_service_sans &>/dev/null; then
-        hostnames="$(_hub_service_sans) 127.0.0.1 ::1 *.dive25.com"
+        hostnames="$(_hub_service_sans) 127.0.0.1 ::1 *.${DIVE_DEFAULT_DOMAIN:-dive25.com}"
     else
         hostnames="localhost 127.0.0.1 ::1 host.docker.internal"
         hostnames="$hostnames dive-hub-keycloak dive-hub-backend dive-hub-frontend"
@@ -920,7 +948,7 @@ check_certs() {
         hostnames="$hostnames dive-hub-redis-blacklist dive-hub-authzforce"
         hostnames="$hostnames keycloak backend frontend opa opal-server kas"
         hostnames="$hostnames mongodb postgres redis redis-blacklist authzforce"
-        hostnames="$hostnames *.dive25.com usa-idp.dive25.com usa-api.dive25.com usa-app.dive25.com"
+        hostnames="$hostnames *.${DIVE_DEFAULT_DOMAIN:-dive25.com} usa-idp.${DIVE_DEFAULT_DOMAIN:-dive25.com} usa-api.${DIVE_DEFAULT_DOMAIN:-dive25.com} usa-app.${DIVE_DEFAULT_DOMAIN:-dive25.com}"
     fi
 
     # shellcheck disable=SC2086
@@ -980,33 +1008,35 @@ apply_environment_config() {
         export COMPOSE_PROJECT_NAME="dive-v3-${inst_lc}"
     fi
 
+    local _dom="${DIVE_DEFAULT_DOMAIN:-dive25.com}"
+
     case "$ENVIRONMENT" in
         local|dev)
             # Dev defaults to tunnel hosts; local still works via overrides/env.
-            export NEXTAUTH_URL="${NEXTAUTH_URL:-https://${inst_lc}-app.dive25.com}"
+            export NEXTAUTH_URL="${NEXTAUTH_URL:-https://${inst_lc}-app.${_dom}}"
             # FIX (2026-01-15): Realm name includes instance code suffix (dive-v3-broker-{code})
-            export KEYCLOAK_ISSUER="${KEYCLOAK_ISSUER:-https://${inst_lc}-idp.dive25.com/realms/dive-v3-broker-${inst_lc}}"
-            export KEYCLOAK_URL_PUBLIC="${KEYCLOAK_URL_PUBLIC:-https://${inst_lc}-idp.dive25.com}"
+            export KEYCLOAK_ISSUER="${KEYCLOAK_ISSUER:-https://${inst_lc}-idp.${_dom}/realms/dive-v3-broker-${inst_lc}}"
+            export KEYCLOAK_URL_PUBLIC="${KEYCLOAK_URL_PUBLIC:-https://${inst_lc}-idp.${_dom}}"
             export KEYCLOAK_URL_INTERNAL="${KEYCLOAK_URL_INTERNAL:-https://keycloak:8443}"
             export KEYCLOAK_URL="${KEYCLOAK_URL_INTERNAL}"
             export CERT_HOST_SCOPE="${CERT_HOST_SCOPE:-local_minimal}"
             export SKIP_CERT_REGEN_IF_PRESENT="${SKIP_CERT_REGEN_IF_PRESENT:-true}"
-            export NEXT_PUBLIC_BACKEND_URL="${NEXT_PUBLIC_BACKEND_URL:-https://${inst_lc}-api.dive25.com}"
-            export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-https://${inst_lc}-api.dive25.com}"
-            export NEXT_PUBLIC_BASE_URL="${NEXT_PUBLIC_BASE_URL:-https://${inst_lc}-app.dive25.com}"
-            export NEXT_PUBLIC_KEYCLOAK_URL="${NEXT_PUBLIC_KEYCLOAK_URL:-https://${inst_lc}-idp.dive25.com}"
-            export CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS:-https://${inst_lc}-app.dive25.com,https://${inst_lc}-api.dive25.com,https://${inst_lc}-idp.dive25.com,http://localhost:3000,https://localhost:3000,http://localhost:4000,https://localhost:4000}"
+            export NEXT_PUBLIC_BACKEND_URL="${NEXT_PUBLIC_BACKEND_URL:-https://${inst_lc}-api.${_dom}}"
+            export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-https://${inst_lc}-api.${_dom}}"
+            export NEXT_PUBLIC_BASE_URL="${NEXT_PUBLIC_BASE_URL:-https://${inst_lc}-app.${_dom}}"
+            export NEXT_PUBLIC_KEYCLOAK_URL="${NEXT_PUBLIC_KEYCLOAK_URL:-https://${inst_lc}-idp.${_dom}}"
+            export CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS:-https://${inst_lc}-app.${_dom},https://${inst_lc}-api.${_dom},https://${inst_lc}-idp.${_dom},http://localhost:3000,https://localhost:3000,http://localhost:4000,https://localhost:4000}"
             ;;
         gcp|pilot|prod|staging)
-            export KEYCLOAK_HOSTNAME="${KEYCLOAK_HOSTNAME:-${inst_lc}-idp.dive25.com}"
-            export NEXTAUTH_URL="${NEXTAUTH_URL:-https://${inst_lc}-app.dive25.com}"
+            export KEYCLOAK_HOSTNAME="${KEYCLOAK_HOSTNAME:-${inst_lc}-idp.${_dom}}"
+            export NEXTAUTH_URL="${NEXTAUTH_URL:-https://${inst_lc}-app.${_dom}}"
             # FIX (2026-01-15): Realm name includes instance code suffix (dive-v3-broker-{code})
-            export KEYCLOAK_ISSUER="${KEYCLOAK_ISSUER:-https://${inst_lc}-idp.dive25.com/realms/dive-v3-broker-${inst_lc}}"
-            export NEXT_PUBLIC_BACKEND_URL="${NEXT_PUBLIC_BACKEND_URL:-https://${inst_lc}-api.dive25.com}"
-            export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-https://${inst_lc}-api.dive25.com}"
-            export NEXT_PUBLIC_BASE_URL="${NEXT_PUBLIC_BASE_URL:-https://${inst_lc}-app.dive25.com}"
-            export NEXT_PUBLIC_KEYCLOAK_URL="${NEXT_PUBLIC_KEYCLOAK_URL:-https://${inst_lc}-idp.dive25.com}"
-            export CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS:-https://${inst_lc}-app.dive25.com,https://${inst_lc}-api.dive25.com,https://${inst_lc}-idp.dive25.com}"
+            export KEYCLOAK_ISSUER="${KEYCLOAK_ISSUER:-https://${inst_lc}-idp.${_dom}/realms/dive-v3-broker-${inst_lc}}"
+            export NEXT_PUBLIC_BACKEND_URL="${NEXT_PUBLIC_BACKEND_URL:-https://${inst_lc}-api.${_dom}}"
+            export NEXT_PUBLIC_API_URL="${NEXT_PUBLIC_API_URL:-https://${inst_lc}-api.${_dom}}"
+            export NEXT_PUBLIC_BASE_URL="${NEXT_PUBLIC_BASE_URL:-https://${inst_lc}-app.${_dom}}"
+            export NEXT_PUBLIC_KEYCLOAK_URL="${NEXT_PUBLIC_KEYCLOAK_URL:-https://${inst_lc}-idp.${_dom}}"
+            export CORS_ALLOWED_ORIGINS="${CORS_ALLOWED_ORIGINS:-https://${inst_lc}-app.${_dom},https://${inst_lc}-api.${_dom},https://${inst_lc}-idp.${_dom}}"
             ;;
         *)
             log_warn "Unknown environment '$ENVIRONMENT' for env config; skipping config application"
@@ -1163,7 +1193,7 @@ spoke_config_get() {
                 email=$(grep "^CONTACT_EMAIL=" "$env_file" 2>/dev/null | cut -d= -f2-)
                 [ -n "$email" ] && echo "$email" && return 0
             fi
-            echo "${CONTACT_EMAIL:-admin@${code_lower}.dive25.com}" ;;
+            echo "${CONTACT_EMAIL:-admin@${code_lower}.${DIVE_DEFAULT_DOMAIN:-dive25.com}}" ;;
         identity.spokeId|spokeId)
             if [ -f "$env_file" ]; then
                 local sid
