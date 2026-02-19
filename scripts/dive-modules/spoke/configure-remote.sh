@@ -114,7 +114,7 @@ spoke_configure_remote() {
     # =========================================================================
     # STEP 1: Verify spoke Keycloak is accessible
     # =========================================================================
-    log_step "1/5 Verify spoke Keycloak is accessible"
+    log_step "1/6 Verify spoke Keycloak is accessible"
 
     local max_attempts=12
     local attempt=0
@@ -136,7 +136,7 @@ spoke_configure_remote() {
     # =========================================================================
     # STEP 2: Apply Terraform (spoke realm + client)
     # =========================================================================
-    log_step "2/5 Apply Terraform (spoke Keycloak realm)"
+    log_step "2/6 Apply Terraform (spoke Keycloak realm)"
 
     _configure_remote_terraform "$code_upper" "$code_lower" \
         "$spoke_idp_url" "$spoke_api_url" "$spoke_app_url" || {
@@ -149,7 +149,7 @@ spoke_configure_remote() {
     # =========================================================================
     # STEP 3: Create usa-idp in Spoke Keycloak (via HTTPS REST API)
     # =========================================================================
-    log_step "3/5 Create usa-idp in Spoke Keycloak"
+    log_step "3/6 Create usa-idp in Spoke Keycloak"
 
     _configure_remote_spoke_idp "$code_upper" "$code_lower" "$spoke_idp_url" || {
         log_warn "usa-idp creation in spoke had issues (non-fatal, can retry)"
@@ -158,16 +158,25 @@ spoke_configure_remote() {
     # =========================================================================
     # STEP 4: Create ${code_lower}-idp in Hub Keycloak (docker exec, Hub-local)
     # =========================================================================
-    log_step "4/5 Create ${code_lower}-idp in Hub Keycloak"
+    log_step "4/6 Create ${code_lower}-idp in Hub Keycloak"
 
     _configure_remote_hub_idp "$code_upper" "$code_lower" "$spoke_idp_url" || {
         log_warn "Hub-side IdP creation had issues (non-fatal, can retry)"
     }
 
     # =========================================================================
-    # STEP 5: Verify bidirectional federation
+    # STEP 5: Seed spoke users (via Keycloak HTTPS API)
     # =========================================================================
-    log_step "5/5 Verify bidirectional federation"
+    log_step "5/6 Seed spoke users"
+
+    _configure_remote_seed_users "$code_upper" "$code_lower" "$spoke_idp_url" || {
+        log_warn "User seeding had issues — may need manual seeding"
+    }
+
+    # =========================================================================
+    # STEP 6: Verify bidirectional federation
+    # =========================================================================
+    log_step "6/6 Verify bidirectional federation"
 
     _configure_remote_verify "$code_upper" "$code_lower" "$spoke_idp_url" || {
         log_warn "Federation verification had issues"
@@ -333,6 +342,30 @@ _configure_remote_spoke_idp() {
         url="${spoke_idp_url}/admin/realms/${spoke_realm}/identity-provider/instances/${idp_alias}"
     fi
 
+    # Detect the custom Post Broker MFA flow (created by Terraform)
+    # Falls back to stock "first broker login" if custom flow not found
+    local spoke_post_broker_flow="first broker login"
+    local _flows
+    _flows=$(curl -sk --max-time 5 \
+        -H "Authorization: Bearer $admin_token" \
+        "${spoke_idp_url}/admin/realms/${spoke_realm}/authentication/flows" 2>/dev/null)
+    local _custom_flow
+    _custom_flow=$(echo "$_flows" | python3 -c "
+import json,sys
+try:
+    flows = json.load(sys.stdin)
+    for f in flows:
+        if f.get('alias','').startswith('Post Broker MFA') and not f.get('builtIn',False):
+            print(f['alias']); break
+except: pass
+" 2>/dev/null)
+    if [ -n "$_custom_flow" ]; then
+        spoke_post_broker_flow="$_custom_flow"
+        log_verbose "Using custom flow: ${spoke_post_broker_flow}"
+    else
+        log_warn "Custom Post Broker MFA flow not found in spoke — using stock first broker login"
+    fi
+
     # Build IdP config (Hub OIDC provider in spoke)
     local idp_config
     idp_config=$(cat <<IDPEOF
@@ -343,7 +376,7 @@ _configure_remote_spoke_idp() {
     "enabled": true,
     "trustEmail": true,
     "storeToken": true,
-    "firstBrokerLoginFlowAlias": "first broker login",
+    "firstBrokerLoginFlowAlias": "${spoke_post_broker_flow}",
     "config": {
         "clientId": "dive-v3-broker-usa",
         "clientSecret": "${hub_client_secret}",
@@ -353,8 +386,8 @@ _configure_remote_spoke_idp() {
         "jwksUrl": "${hub_idp_url}/realms/${HUB_REALM}/protocol/openid-connect/certs",
         "logoutUrl": "${hub_idp_url}/realms/${HUB_REALM}/protocol/openid-connect/logout",
         "issuer": "${hub_idp_url}/realms/${HUB_REALM}",
-        "defaultScope": "openid profile email",
-        "syncMode": "INHERIT",
+        "defaultScope": "openid profile email clearance countryOfAffiliation acpCOI uniqueID user_amr user_acr",
+        "syncMode": "FORCE",
         "validateSignature": "true",
         "useJwksUrl": "true",
         "pkceEnabled": "false",
@@ -473,6 +506,29 @@ _configure_remote_hub_idp() {
         url="http://localhost:8080/admin/realms/${HUB_REALM}/identity-provider/instances/${idp_alias}"
     fi
 
+    # Detect the custom Post Broker MFA flow in Hub realm
+    local hub_post_broker_flow="first broker login"
+    local _hub_flows
+    _hub_flows=$(docker exec "$HUB_KEYCLOAK_CONTAINER" curl -sf --max-time 5 \
+        -H "Authorization: Bearer $hub_admin_token" \
+        "http://localhost:8080/admin/realms/${HUB_REALM}/authentication/flows" 2>/dev/null)
+    local _hub_custom_flow
+    _hub_custom_flow=$(echo "$_hub_flows" | python3 -c "
+import json,sys
+try:
+    flows = json.load(sys.stdin)
+    for f in flows:
+        if f.get('alias','').startswith('Post Broker MFA') and not f.get('builtIn',False):
+            print(f['alias']); break
+except: pass
+" 2>/dev/null)
+    if [ -n "$_hub_custom_flow" ]; then
+        hub_post_broker_flow="$_hub_custom_flow"
+        log_verbose "Using Hub custom flow: ${hub_post_broker_flow}"
+    else
+        log_warn "Custom Post Broker MFA flow not found in Hub — using stock first broker login"
+    fi
+
     # Build IdP config (spoke OIDC provider in Hub)
     local idp_config
     idp_config=$(cat <<IDPEOF
@@ -483,7 +539,7 @@ _configure_remote_hub_idp() {
     "enabled": true,
     "trustEmail": true,
     "storeToken": true,
-    "firstBrokerLoginFlowAlias": "first broker login",
+    "firstBrokerLoginFlowAlias": "${hub_post_broker_flow}",
     "config": {
         "clientId": "dive-v3-broker-${code_lower}",
         "clientSecret": "${spoke_client_secret}",
@@ -493,8 +549,8 @@ _configure_remote_hub_idp() {
         "jwksUrl": "${spoke_idp_url}/realms/${spoke_realm}/protocol/openid-connect/certs",
         "logoutUrl": "${spoke_idp_url}/realms/${spoke_realm}/protocol/openid-connect/logout",
         "issuer": "${spoke_idp_url}/realms/${spoke_realm}",
-        "defaultScope": "openid profile email",
-        "syncMode": "INHERIT",
+        "defaultScope": "openid profile email clearance countryOfAffiliation acpCOI uniqueID user_amr user_acr",
+        "syncMode": "FORCE",
         "validateSignature": "true",
         "useJwksUrl": "true",
         "pkceEnabled": "false",
@@ -671,16 +727,22 @@ _configure_remote_idp_mappers() {
     local idp_alias="$3"
     local admin_token="$4"
 
-    local mappers=(
-        '{"name":"unique-id-mapper","identityProviderAlias":"'${idp_alias}'","identityProviderMapper":"oidc-user-attribute-idp-mapper","config":{"syncMode":"INHERIT","claim":"uniqueID","user.attribute":"uniqueID"}}'
-        '{"name":"clearance-mapper","identityProviderAlias":"'${idp_alias}'","identityProviderMapper":"oidc-user-attribute-idp-mapper","config":{"syncMode":"INHERIT","claim":"clearance","user.attribute":"clearance"}}'
-        '{"name":"country-mapper","identityProviderAlias":"'${idp_alias}'","identityProviderMapper":"oidc-user-attribute-idp-mapper","config":{"syncMode":"INHERIT","claim":"countryOfAffiliation","user.attribute":"countryOfAffiliation"}}'
-        '{"name":"coi-mapper","identityProviderAlias":"'${idp_alias}'","identityProviderMapper":"oidc-user-attribute-idp-mapper","config":{"syncMode":"INHERIT","claim":"acpCOI","user.attribute":"acpCOI"}}'
+    # All DIVE-V3 security-critical attribute mappers
+    # syncMode: FORCE ensures attributes are updated on every login
+    local _mapper_defs=(
+        "unique-id-mapper:uniqueID:uniqueID"
+        "clearance-mapper:clearance:clearance"
+        "country-mapper:countryOfAffiliation:countryOfAffiliation"
+        "coi-mapper:acpCOI:acpCOI"
+        "nationality-mapper:nationality:nationality"
+        "organization-mapper:organization:organization"
+        "amr-mapper:amr:amr"
+        "acr-mapper:acr:acr"
     )
 
-    for mapper_json in "${mappers[@]}"; do
-        local mapper_name
-        mapper_name=$(echo "$mapper_json" | jq -r '.name')
+    for def in "${_mapper_defs[@]}"; do
+        IFS=":" read -r name claim attr <<< "$def"
+        local mapper_json="{\"name\":\"$name\",\"identityProviderAlias\":\"${idp_alias}\",\"identityProviderMapper\":\"oidc-user-attribute-idp-mapper\",\"config\":{\"syncMode\":\"FORCE\",\"claim\":\"$claim\",\"user.attribute\":\"$attr\"}}"
 
         curl -sk --max-time 10 \
             -X POST "${kc_url}/admin/realms/${realm}/identity-provider/instances/${idp_alias}/mappers" \
@@ -688,9 +750,9 @@ _configure_remote_idp_mappers() {
             -H "Content-Type: application/json" \
             -d "$mapper_json" >/dev/null 2>&1 || true
 
-        log_verbose "Mapper: ${mapper_name}"
+        log_verbose "Mapper: ${name} (${claim} → ${attr})"
     done
-    log_verbose "IdP mappers configured for ${idp_alias}"
+    log_verbose "IdP mappers configured for ${idp_alias} (8 DIVE-V3 attributes)"
 }
 
 ##
@@ -702,21 +764,118 @@ _configure_remote_idp_mappers_docker() {
     local idp_alias="$3"
     local admin_token="$4"
 
-    local mappers=(
-        '{"name":"unique-id-mapper","identityProviderAlias":"'${idp_alias}'","identityProviderMapper":"oidc-user-attribute-idp-mapper","config":{"syncMode":"INHERIT","claim":"uniqueID","user.attribute":"uniqueID"}}'
-        '{"name":"clearance-mapper","identityProviderAlias":"'${idp_alias}'","identityProviderMapper":"oidc-user-attribute-idp-mapper","config":{"syncMode":"INHERIT","claim":"clearance","user.attribute":"clearance"}}'
-        '{"name":"country-mapper","identityProviderAlias":"'${idp_alias}'","identityProviderMapper":"oidc-user-attribute-idp-mapper","config":{"syncMode":"INHERIT","claim":"countryOfAffiliation","user.attribute":"countryOfAffiliation"}}'
-        '{"name":"coi-mapper","identityProviderAlias":"'${idp_alias}'","identityProviderMapper":"oidc-user-attribute-idp-mapper","config":{"syncMode":"INHERIT","claim":"acpCOI","user.attribute":"acpCOI"}}'
+    # All DIVE-V3 security-critical attribute mappers
+    local _mapper_defs=(
+        "unique-id-mapper:uniqueID:uniqueID"
+        "clearance-mapper:clearance:clearance"
+        "country-mapper:countryOfAffiliation:countryOfAffiliation"
+        "coi-mapper:acpCOI:acpCOI"
+        "nationality-mapper:nationality:nationality"
+        "organization-mapper:organization:organization"
+        "amr-mapper:amr:amr"
+        "acr-mapper:acr:acr"
     )
 
-    for mapper_json in "${mappers[@]}"; do
+    for def in "${_mapper_defs[@]}"; do
+        IFS=":" read -r name claim attr <<< "$def"
+        local mapper_json="{\"name\":\"$name\",\"identityProviderAlias\":\"${idp_alias}\",\"identityProviderMapper\":\"oidc-user-attribute-idp-mapper\",\"config\":{\"syncMode\":\"FORCE\",\"claim\":\"$claim\",\"user.attribute\":\"$attr\"}}"
+
         docker exec "$container" curl -sf --max-time 10 \
             -X POST "http://localhost:8080/admin/realms/${realm}/identity-provider/instances/${idp_alias}/mappers" \
             -H "Authorization: Bearer $admin_token" \
             -H "Content-Type: application/json" \
             -d "$mapper_json" >/dev/null 2>&1 || true
+
+        log_verbose "Mapper: ${name} (${claim} → ${attr})"
     done
-    log_verbose "IdP mappers configured for ${idp_alias} (docker exec)"
+    log_verbose "IdP mappers configured for ${idp_alias} (docker exec, 8 DIVE-V3 attributes)"
+}
+
+# =============================================================================
+# USER SEEDING (via HTTPS Keycloak API — Hub cannot docker exec into spoke)
+# =============================================================================
+
+##
+# Seed test users in spoke Keycloak via HTTPS Admin REST API
+##
+_configure_remote_seed_users() {
+    local code_upper="$1"
+    local code_lower="$2"
+    local spoke_idp_url="$3"
+
+    local spoke_realm="dive-v3-broker-${code_lower}"
+
+    # Get admin token from spoke Keycloak
+    local kc_pass_var="KEYCLOAK_ADMIN_PASSWORD_${code_upper}"
+    local admin_token
+    admin_token=$(_kc_get_admin_token_https "$spoke_idp_url" "${!kc_pass_var}") || {
+        log_error "Failed to get spoke admin token for user seeding"
+        return 1
+    }
+
+    local test_pwd="${TEST_USER_PASSWORD:-TestUser2025!Pilot}"
+    local admin_pwd="${ADMIN_PASSWORD:-DiveAdminSecure2025!}"
+    local seed_count=0
+
+    _seed_user() {
+        local username="$1" first="$2" last="$3" email="$4"
+        local clearance="$5" country="$6" coi="$7" password="$8"
+
+        local uid_hash
+        uid_hash=$(echo -n "$username" | sha256sum | cut -c1-16)
+
+        local user_json="{
+            \"username\": \"$username\",
+            \"enabled\": true,
+            \"emailVerified\": true,
+            \"firstName\": \"$first\",
+            \"lastName\": \"$last\",
+            \"email\": \"$email\",
+            \"credentials\": [{\"type\": \"password\", \"value\": \"$password\", \"temporary\": false}],
+            \"attributes\": {
+                \"clearance\": [\"$clearance\"],
+                \"countryOfAffiliation\": [\"$country\"],
+                \"nationality\": [\"$country\"],
+                \"acpCOI\": [\"$coi\"],
+                \"uniqueID\": [\"$uid_hash\"]
+            }
+        }"
+
+        local code
+        code=$(curl -sk -o /dev/null -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer $admin_token" \
+            -H "Content-Type: application/json" \
+            -d "$user_json" \
+            "${spoke_idp_url}/admin/realms/${spoke_realm}/users")
+
+        case "$code" in
+            201) log_verbose "Created $username"; seed_count=$((seed_count + 1)) ;;
+            409) log_verbose "$username already exists" ;;
+            *)   log_warn "Failed to create $username: HTTP $code" ;;
+        esac
+    }
+
+    log_info "Seeding test users in spoke ${code_upper}..."
+
+    # Standard test users with country-appropriate clearances
+    _seed_user "testuser-${code_lower}-1" "Test" "User1" "testuser1@${code_lower}.test" \
+        "OFFICIAL"           "$code_upper" ""          "$test_pwd"
+    _seed_user "testuser-${code_lower}-2" "Test" "User2" "testuser2@${code_lower}.test" \
+        "OFFICIAL-SENSITIVE" "$code_upper" ""          "$test_pwd"
+    _seed_user "testuser-${code_lower}-3" "Test" "User3" "testuser3@${code_lower}.test" \
+        "SECRET"             "$code_upper" "NATO"      "$test_pwd"
+    _seed_user "testuser-${code_lower}-4" "Test" "User4" "testuser4@${code_lower}.test" \
+        "SECRET"             "$code_upper" "NATO,FVEY" "$test_pwd"
+    _seed_user "testuser-${code_lower}-5" "Test" "User5" "testuser5@${code_lower}.test" \
+        "TOP SECRET"         "$code_upper" "NATO,FVEY" "$test_pwd"
+    _seed_user "admin-${code_lower}"      "Admin" "$code_upper" "admin@${code_lower}.test" \
+        "TOP SECRET"         "$code_upper" "NATO,FVEY" "$admin_pwd"
+
+    if [ $seed_count -gt 0 ]; then
+        log_success "Seeded ${seed_count} new users in spoke ${code_upper}"
+    else
+        log_info "All spoke ${code_upper} users already exist"
+    fi
 }
 
 # =============================================================================
@@ -796,6 +955,7 @@ export -f spoke_configure_remote
 export -f _configure_remote_terraform
 export -f _configure_remote_spoke_idp
 export -f _configure_remote_hub_idp
+export -f _configure_remote_seed_users
 export -f _configure_remote_verify
 export -f _kc_get_admin_token_https
 export -f _kc_get_admin_token_docker
