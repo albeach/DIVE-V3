@@ -76,6 +76,17 @@ _bs_sudo() {
     fi
 }
 
+# Helper: get the real (non-root) user — handles sudo, su, SSH
+_bs_real_user() {
+    if [ -n "${SUDO_USER:-}" ]; then
+        echo "$SUDO_USER"
+    elif [ -n "${LOGNAME:-}" ] && [ "$LOGNAME" != "root" ]; then
+        echo "$LOGNAME"
+    else
+        whoami
+    fi
+}
+
 # =============================================================================
 # INDIVIDUAL INSTALL FUNCTIONS (all idempotent)
 # =============================================================================
@@ -171,8 +182,20 @@ DAEMON
         _bs_sudo systemctl enable docker
         _bs_sudo systemctl start docker
 
-        # Add current user to docker group
-        _bs_sudo usermod -aG docker "$(whoami)" 2>/dev/null || true
+        # Add the real user (not root) to docker group
+        local _real_user
+        _real_user="$(_bs_real_user)"
+        _bs_sudo usermod -aG docker "$_real_user" 2>/dev/null || true
+        # Also add root if running under sudo (so docker works in this session)
+        if [ "$(id -u)" -eq 0 ] && [ "$_real_user" != "root" ]; then
+            _bs_sudo usermod -aG docker root 2>/dev/null || true
+        fi
+    fi
+
+    # Make socket accessible for current session (group membership takes effect on next login)
+    if [ -S /var/run/docker.sock ] && ! docker info >/dev/null 2>&1; then
+        _bs_sudo chmod 666 /var/run/docker.sock
+        log_verbose "Docker socket opened for current session (group membership applies on next login)"
     fi
 
     log_success "Docker installed: $(docker --version 2>/dev/null || echo 'pending group refresh')"
@@ -266,7 +289,7 @@ _bootstrap_node() {
     log_info "Installing Node.js ${BOOTSTRAP_NODE_MAJOR} via nvm..."
     export NVM_DIR="${NVM_DIR:-/opt/nvm}"
     _bs_sudo mkdir -p "$NVM_DIR"
-    _bs_sudo chown "$(whoami)" "$NVM_DIR"
+    _bs_sudo chown "$(_bs_real_user)" "$NVM_DIR"
     curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
     # shellcheck source=/dev/null
     . "$NVM_DIR/nvm.sh"
@@ -494,19 +517,31 @@ _bootstrap_firewall() {
 }
 
 _bootstrap_user_and_dirs() {
-    # Add current user to docker group
+    local _real_user
+    _real_user="$(_bs_real_user)"
+
+    # Add the real user (not root) to docker group
     if [ "$BOOTSTRAP_OS" != "darwin" ]; then
-        _bs_sudo usermod -aG docker "$(whoami)" 2>/dev/null || true
+        _bs_sudo usermod -aG docker "$_real_user" 2>/dev/null || true
     fi
 
     # Create required directories
-    mkdir -p \
-        "${DIVE_ROOT}/instances" \
-        "${DIVE_ROOT}/data" \
-        "${DIVE_ROOT}/certs" \
-        "${DIVE_ROOT}/.dive-state" \
-        "${DIVE_ROOT}/.dive-locks" \
-        "${DIVE_ROOT}/.dive-checkpoint" 2>/dev/null || true
+    local _dirs=(
+        "${DIVE_ROOT}/instances"
+        "${DIVE_ROOT}/data"
+        "${DIVE_ROOT}/certs"
+        "${DIVE_ROOT}/.dive-state"
+        "${DIVE_ROOT}/.dive-locks"
+        "${DIVE_ROOT}/.dive-checkpoint"
+    )
+    for _dir in "${_dirs[@]}"; do
+        _bs_sudo mkdir -p "$_dir" 2>/dev/null || true
+    done
+
+    # Ensure the real user owns the DIVE_ROOT tree (not root)
+    if [ "$_real_user" != "root" ]; then
+        _bs_sudo chown -R "$_real_user" "${DIVE_ROOT}" 2>/dev/null || true
+    fi
 }
 
 # =============================================================================

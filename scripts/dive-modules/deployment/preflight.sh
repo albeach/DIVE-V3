@@ -150,6 +150,14 @@ preflight_check_docker() {
             log_success "Docker daemon started"
             return 0
         fi
+        # May be a socket permission issue — try opening for current session
+        if [ -S /var/run/docker.sock ]; then
+            sudo chmod 666 /var/run/docker.sock 2>/dev/null || true
+            if docker info >/dev/null 2>&1; then
+                log_success "Docker daemon started (socket opened for current session)"
+                return 0
+            fi
+        fi
         log_error "Docker daemon failed to start"
         return 1
     fi
@@ -161,18 +169,20 @@ preflight_check_docker() {
     _bootstrap_compose
     _bootstrap_docker_storage
 
-    # Verify — may need newgrp for group membership
+    # Verify — may need socket permission fix for current session
     if docker info >/dev/null 2>&1; then
         log_success "Docker auto-installed and running"
         return 0
     fi
 
     # Docker installed but current user not in docker group yet (needs re-login)
-    if sg docker -c "docker info" >/dev/null 2>&1; then
-        log_success "Docker auto-installed (using sg docker for current session)"
-        # Re-export DOCKER_CMD to use sg
-        export DOCKER_CMD="sg docker -c docker"
-        return 0
+    # Temporarily open socket for current session — group membership applies on next login
+    if [ -S /var/run/docker.sock ]; then
+        sudo chmod 666 /var/run/docker.sock 2>/dev/null || true
+        if docker info >/dev/null 2>&1; then
+            log_success "Docker auto-installed (socket opened for current session)"
+            return 0
+        fi
     fi
 
     log_error "Docker installed but requires re-login for group membership. Run: newgrp docker"
