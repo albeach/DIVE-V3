@@ -27,7 +27,8 @@
 # Date: 2026-01-13
 # =============================================================================
 
-# Mark as loaded (but continue to allow re-exports)
+# Prevent multiple sourcing (readonly vars would error on re-source)
+[ -n "${SPOKE_COMPOSE_GENERATOR_LOADED:-}" ] && return 0
 export SPOKE_COMPOSE_GENERATOR_LOADED=1
 
 # =============================================================================

@@ -16,7 +16,7 @@
 #
 # What gets installed:
 #   Docker Engine + Compose v2, Node.js 24 (via nvm), mkcert, jq, curl, git,
-#   AWS CLI v2, Terraform 1.13.4, Vault CLI 1.21.0, OPA CLI 1.12.3
+#   rsync, AWS CLI v2, Terraform 1.13.4, Vault CLI 1.21.0, OPA CLI 1.12.3
 # =============================================================================
 set -euo pipefail
 
@@ -72,7 +72,7 @@ install_system_packages() {
     if [ "$OS" = "amzn" ]; then
         sudo dnf update -y -q
         sudo dnf install -y -q \
-            git jq curl wget unzip tar gzip openssl \
+            git jq curl wget unzip tar gzip openssl rsync \
             gcc-c++ make nss-tools \
             iptables-services
     else
@@ -82,7 +82,7 @@ install_system_packages() {
         echo iptables-persistent iptables-persistent/autosave_v6 boolean true | sudo debconf-set-selections
         sudo apt-get update -qq
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-            git jq curl wget unzip tar gzip openssl \
+            git jq curl wget unzip tar gzip openssl rsync \
             build-essential libnss3-tools \
             apt-transport-https ca-certificates gnupg lsb-release \
             iptables-persistent
@@ -413,6 +413,10 @@ configure_firewall() {
     # Allow SSH
     sudo iptables -A INPUT -p tcp --dport 22 -j ACCEPT 2>/dev/null || true
 
+    # Caddy reverse proxy (HTTP + HTTPS)
+    sudo iptables -A INPUT -p tcp --dport 80 -j ACCEPT 2>/dev/null || true
+    sudo iptables -A INPUT -p tcp --dport 443 -j ACCEPT 2>/dev/null || true
+
     # Hub services
     for port in 3000 4000 8080 8443 9000 7002 8181 8200 8085; do
         sudo iptables -A INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null || true
@@ -434,7 +438,7 @@ verify_installation() {
     log "Verifying installation..."
     local failed=0
 
-    for cmd in docker git jq curl node npm terraform vault opa mkcert aws yq; do
+    for cmd in docker git jq curl rsync node npm terraform vault opa mkcert aws yq; do
         if command -v "$cmd" >/dev/null 2>&1; then
             log "  $cmd: OK"
         else
