@@ -155,6 +155,74 @@ install_compose() {
 }
 
 # =============================================================================
+# 2b. DOCKER + CONTAINERD STORAGE (redirect to /data partition if available)
+# =============================================================================
+configure_docker_storage() {
+    # EC2 instances often have a small root fs (~7GB) with a large /data partition
+    # Docker 29+ uses containerd's snapshotter, which stores image layers at
+    # containerd's root (/var/lib/containerd), NOT Docker's data-root.
+    # Without this fix, pulling images fills the root fs → "no space left on device"
+    local data_mount=""
+    if mountpoint -q /data 2>/dev/null; then
+        data_mount="/data"
+    elif [ -d /data ] && [ "$(df /data --output=target 2>/dev/null | tail -1)" != "/" ]; then
+        data_mount="/data"
+    fi
+
+    [ -z "$data_mount" ] && { log "No /data partition found — using default storage paths."; return 0; }
+
+    log "Configuring Docker + containerd storage on ${data_mount}..."
+    local changed=0
+
+    # --- Docker data-root ---
+    local docker_data="${data_mount}/docker"
+    if ! grep -q '"data-root"' /etc/docker/daemon.json 2>/dev/null; then
+        sudo mkdir -p "$docker_data"
+        # Insert data-root as first key in daemon.json
+        sudo sed -i 's|^{|{\n  "data-root": "'"$docker_data"'",|' /etc/docker/daemon.json
+        changed=1
+        log "  Docker data-root → ${docker_data}"
+    fi
+
+    # --- Containerd root ---
+    local ctrd_data="${data_mount}/containerd"
+    local ctrd_conf="/etc/containerd/config.toml"
+    sudo mkdir -p "$ctrd_data"
+
+    if [ ! -f "$ctrd_conf" ] || ! grep -q "root = \"${ctrd_data}\"" "$ctrd_conf" 2>/dev/null; then
+        # Generate default config if absent, then patch root
+        sudo mkdir -p /etc/containerd
+        if [ ! -f "$ctrd_conf" ]; then
+            if command -v containerd >/dev/null 2>&1; then
+                containerd config default | sudo tee "$ctrd_conf" > /dev/null
+            else
+                # Minimal config — containerd from Docker package may not be in PATH yet
+                sudo tee "$ctrd_conf" > /dev/null <<CTRD
+version = 2
+root = "${ctrd_data}"
+CTRD
+            fi
+        fi
+        # Patch root directive
+        sudo sed -i "s|^root = .*|root = \"${ctrd_data}\"|" "$ctrd_conf"
+        changed=1
+        log "  Containerd root → ${ctrd_data}"
+    fi
+
+    if [ "$changed" -eq 1 ]; then
+        # Move existing data if present
+        if [ -d /var/lib/containerd ] && [ ! -L /var/lib/containerd ]; then
+            sudo systemctl stop docker containerd 2>/dev/null || true
+            sudo rsync -a /var/lib/containerd/ "$ctrd_data/" 2>/dev/null || true
+            sudo rm -rf /var/lib/containerd
+            sudo ln -sf "$ctrd_data" /var/lib/containerd
+        fi
+        sudo systemctl restart containerd docker 2>/dev/null || true
+        log "Docker + containerd storage relocated to ${data_mount}."
+    fi
+}
+
+# =============================================================================
 # 3. NODE.JS (via nvm, for tooling — apps run inside Docker)
 # =============================================================================
 install_node() {
@@ -487,6 +555,7 @@ main() {
     install_system_packages
     install_docker
     install_compose
+    configure_docker_storage
     install_node
     install_mkcert
     install_awscli

@@ -353,7 +353,7 @@ _configure_remote_spoke_idp() {
         "jwksUrl": "${hub_idp_url}/realms/${HUB_REALM}/protocol/openid-connect/certs",
         "logoutUrl": "${hub_idp_url}/realms/${HUB_REALM}/protocol/openid-connect/logout",
         "issuer": "${hub_idp_url}/realms/${HUB_REALM}",
-        "defaultScope": "openid profile email dive-v3-scope",
+        "defaultScope": "openid profile email",
         "syncMode": "INHERIT",
         "validateSignature": "true",
         "useJwksUrl": "true",
@@ -381,6 +381,46 @@ IDPEOF
 
     # Create attribute mappers
     _configure_remote_idp_mappers "$spoke_idp_url" "$spoke_realm" "$idp_alias" "$admin_token"
+
+    # =========================================================================
+    # Ensure dive-v3-broker-usa client exists in spoke realm
+    # This client is needed for Hub→Spoke federation (Hub redirects to spoke,
+    # spoke needs this client to accept the redirect back to Hub's broker)
+    # =========================================================================
+    local hub_broker_client_id="dive-v3-broker-usa"
+    log_verbose "Ensuring ${hub_broker_client_id} client exists in spoke realm"
+
+    local existing_client
+    existing_client=$(curl -sk --max-time 5 \
+        -H "Authorization: Bearer $admin_token" \
+        "${spoke_idp_url}/admin/realms/${spoke_realm}/clients?clientId=${hub_broker_client_id}" 2>/dev/null || echo "[]")
+
+    local client_uuid=""
+    client_uuid=$(echo "$existing_client" | jq -r '.[0].id // empty' 2>/dev/null)
+
+    if [ -n "$client_uuid" ]; then
+        # Client exists (likely from Terraform) — ensure redirect URIs include Hub broker endpoint
+        local spoke_broker_uri="${spoke_idp_url}/realms/${spoke_realm}/broker/${idp_alias}/endpoint"
+        local hub_broker_uri="${hub_idp_url}/realms/${HUB_REALM}/broker/${code_lower}-idp/endpoint"
+
+        # Get current redirectUris and add broker endpoints
+        local current_uris
+        current_uris=$(echo "$existing_client" | jq -r '.[0].redirectUris // []' 2>/dev/null)
+
+        # Add Hub broker redirect URIs if not present
+        local updated_uris
+        updated_uris=$(echo "$current_uris" | jq --arg uri1 "$hub_broker_uri" --arg uri2 "${hub_broker_uri}/*" \
+            'if (. | index($uri1)) then . else . + [$uri1, $uri2] end' 2>/dev/null)
+
+        if [ -n "$updated_uris" ] && [ "$updated_uris" != "$current_uris" ]; then
+            curl -sk --max-time 10 \
+                -X PUT "${spoke_idp_url}/admin/realms/${spoke_realm}/clients/${client_uuid}" \
+                -H "Authorization: Bearer $admin_token" \
+                -H "Content-Type: application/json" \
+                -d "{\"clientId\":\"${hub_broker_client_id}\",\"redirectUris\":${updated_uris}}" >/dev/null 2>&1
+            log_verbose "Updated ${hub_broker_client_id} redirect URIs in spoke realm"
+        fi
+    fi
 
     return 0
 }
@@ -453,7 +493,7 @@ _configure_remote_hub_idp() {
         "jwksUrl": "${spoke_idp_url}/realms/${spoke_realm}/protocol/openid-connect/certs",
         "logoutUrl": "${spoke_idp_url}/realms/${spoke_realm}/protocol/openid-connect/logout",
         "issuer": "${spoke_idp_url}/realms/${spoke_realm}",
-        "defaultScope": "openid profile email dive-v3-scope",
+        "defaultScope": "openid profile email",
         "syncMode": "INHERIT",
         "validateSignature": "true",
         "useJwksUrl": "true",
@@ -481,6 +521,72 @@ IDPEOF
 
     # Create attribute mappers in Hub
     _configure_remote_idp_mappers_docker "$HUB_KEYCLOAK_CONTAINER" "$HUB_REALM" "$idp_alias" "$hub_admin_token"
+
+    # =========================================================================
+    # Create dive-v3-broker-${code} client in Hub realm
+    # This client is required for spoke→Hub federation (the spoke IdP redirects
+    # back to Hub's broker endpoint, which needs a registered client to accept it)
+    # =========================================================================
+    local broker_client_id="dive-v3-broker-${code_lower}"
+    log_verbose "Ensuring ${broker_client_id} client exists in Hub realm"
+
+    # Get Hub's public IdP URL for redirect URIs
+    local hub_idp_url=""
+    if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+        local _env_prefix _base_domain
+        _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
+        _base_domain="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"
+        hub_idp_url="https://${_env_prefix}-usa-idp.${_base_domain}"
+    fi
+
+    local existing_client
+    existing_client=$(docker exec "$HUB_KEYCLOAK_CONTAINER" curl -sf --max-time 5 \
+        -H "Authorization: Bearer $hub_admin_token" \
+        "http://localhost:8080/admin/realms/${HUB_REALM}/clients?clientId=${broker_client_id}" 2>/dev/null || echo "[]")
+
+    local client_uuid=""
+    client_uuid=$(echo "$existing_client" | jq -r '.[0].id // empty' 2>/dev/null)
+
+    local client_method="POST"
+    local client_url="http://localhost:8080/admin/realms/${HUB_REALM}/clients"
+
+    if [ -n "$client_uuid" ]; then
+        log_verbose "${broker_client_id} client already exists in Hub (id: ${client_uuid}) — updating"
+        client_method="PUT"
+        client_url="http://localhost:8080/admin/realms/${HUB_REALM}/clients/${client_uuid}"
+    fi
+
+    local broker_redirect_uris="[\"${hub_idp_url}/realms/${HUB_REALM}/broker/${idp_alias}/endpoint\", \"${hub_idp_url}/realms/${HUB_REALM}/broker/${idp_alias}/endpoint/*\"]"
+    local client_config
+    client_config=$(cat <<CLIENTEOF
+{
+    "clientId": "${broker_client_id}",
+    "name": "${code_upper} Broker Client",
+    "enabled": true,
+    "protocol": "openid-connect",
+    "publicClient": false,
+    "clientAuthenticatorType": "client-secret",
+    "secret": "${spoke_client_secret}",
+    "standardFlowEnabled": true,
+    "directAccessGrantsEnabled": true,
+    "serviceAccountsEnabled": false,
+    "redirectUris": ${broker_redirect_uris},
+    "webOrigins": ["*"],
+    "attributes": {
+        "post.logout.redirect.uris": "+"
+    }
+}
+CLIENTEOF
+)
+
+    docker exec "$HUB_KEYCLOAK_CONTAINER" curl -sf --max-time 10 \
+        -X "$client_method" \
+        -H "Authorization: Bearer $hub_admin_token" \
+        -H "Content-Type: application/json" \
+        -d "$client_config" \
+        "$client_url" >/dev/null 2>&1 && \
+        log_success "${broker_client_id} client registered in Hub realm" || \
+        log_warn "Failed to register ${broker_client_id} client in Hub — may need manual creation"
 
     return 0
 }
