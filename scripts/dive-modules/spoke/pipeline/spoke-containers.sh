@@ -207,13 +207,21 @@ spoke_containers_start() {
 
         # CRITICAL FIX (2026-02-19): Fix Docker buildx lock file permissions.
         # Docker Compose v2 uses BuildKit/buildx by default. On EC2 instances,
-        # the ~/.docker/buildx/ directory is often created by root during Docker
-        # installation, but the deploy user (ubuntu) runs `docker compose --build`.
+        # the ~/.docker/buildx/ directory and its .lock file are often created by
+        # root during Docker installation, but the deploy user (ubuntu) runs
+        # `docker compose --build`.
         # This causes: "open /home/ubuntu/.docker/buildx/.lock: permission denied"
+        # Fix: Check the .lock FILE specifically (directory may be writable while
+        # the file inside is root-owned), and also fix any other root-owned files.
         local docker_dir="${HOME}/.docker"
-        if [ -d "$docker_dir" ] && [ ! -w "${docker_dir}/buildx" ] 2>/dev/null; then
-            log_verbose "Fixing Docker buildx directory permissions..."
-            sudo chown -R "$(id -u):$(id -g)" "$docker_dir" 2>/dev/null || true
+        if [ -d "${docker_dir}/buildx" ]; then
+            # Check for any root-owned files inside buildx directory
+            local root_owned
+            root_owned=$(find "${docker_dir}/buildx" -not -user "$(id -u)" 2>/dev/null | head -1)
+            if [ -n "$root_owned" ]; then
+                log_verbose "Fixing Docker buildx directory permissions (root-owned files detected)..."
+                sudo chown -R "$(id -u):$(id -g)" "${docker_dir}/buildx" 2>/dev/null || true
+            fi
         fi
         # Ensure buildx directory exists and is writable
         mkdir -p "${docker_dir}/buildx" 2>/dev/null || true
