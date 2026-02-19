@@ -444,6 +444,28 @@ spoke_federation_create_bidirectional() {
 
     # IdP configuration
     local idp_alias="${code_lower}-idp"
+
+    # Detect Simple Post-Broker OTP flow in Hub realm (created by Terraform realm-mfa module)
+    local hub_post_broker_otp=""
+    local _hub_ext_flows
+    _hub_ext_flows=$(docker exec "$hub_container" curl -sf --max-time 5 \
+        -H "Authorization: Bearer $hub_admin_token" \
+        "http://localhost:8080/admin/realms/${hub_realm}/authentication/flows" 2>/dev/null || echo "[]")
+    local _hub_ext_otp_flow
+    _hub_ext_otp_flow=$(echo "$_hub_ext_flows" | python3 -c "
+import json,sys
+try:
+    flows = json.load(sys.stdin)
+    for f in flows:
+        if f.get('alias','') == 'Simple Post-Broker OTP' and not f.get('builtIn',False):
+            print(f['alias']); break
+except: pass
+" 2>/dev/null)
+    if [ -n "$_hub_ext_otp_flow" ]; then
+        hub_post_broker_otp="$_hub_ext_otp_flow"
+        log_verbose "Using Hub post-broker OTP flow: ${hub_post_broker_otp}"
+    fi
+
     local idp_config="{
         \"alias\": \"${idp_alias}\",
         \"displayName\": \"${code_upper} Federation\",
@@ -454,7 +476,7 @@ spoke_federation_create_bidirectional() {
         \"linkOnly\": false,
         \"firstBrokerLoginFlowAlias\": \"first broker login\",
         \"updateProfileFirstLoginMode\": \"off\",
-        \"postBrokerLoginFlowAlias\": \"\",
+        \"postBrokerLoginFlowAlias\": \"${hub_post_broker_otp}\",
         \"config\": {
             \"clientId\": \"dive-v3-broker-usa\",
             \"clientSecret\": \"${client_secret}\",

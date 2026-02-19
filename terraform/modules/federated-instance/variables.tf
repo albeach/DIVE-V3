@@ -134,9 +134,9 @@ variable "post_broker_mfa_flow_alias" {
 #  For example, when requesting OTP, the flow can look like this with only a single
 #  authenticator configured."
 variable "simple_post_broker_otp_flow_alias" {
-  description = "Alias of the Simple Post-Broker OTP flow. Contains only OTP Form (REQUIRED). This is what makes MFA work for federated users."
+  description = "Alias of the Simple Post-Broker OTP flow. Contains only OTP Form (REQUIRED). This is what makes MFA work for federated users. Set to null to disable post-broker MFA."
   type        = string
-  default     = "Simple Post-Broker OTP"
+  default     = null
 }
 
 # ============================================

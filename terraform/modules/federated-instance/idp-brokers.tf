@@ -76,10 +76,11 @@ resource "keycloak_oidc_identity_provider" "federation_partner" {
   gui_order          = lookup(local.federation_order, each.value.instance_code, 99)
   hide_on_login_page = false
 
-  # MFA Flow Binding - DISABLED for Federation (Trust Partner MFA)
-  # Partner IdPs already enforce MFA (ACR/AMR claims in token)
-  # Re-requiring MFA enrollment breaks UX and ignores partner security
-  post_broker_login_flow_alias = "" # Empty = no post-broker flow
+  # Post-Broker MFA Flow Binding
+  # When set, this flow runs AFTER every broker login to enforce MFA
+  # Uses the Simple Post-Broker OTP flow (just OTP REQUIRED — Keycloak-recommended)
+  # When null/empty, no post-broker MFA is enforced (trust partner MFA only)
+  post_broker_login_flow_alias = var.simple_post_broker_otp_flow_alias != null ? var.simple_post_broker_otp_flow_alias : ""
 
   # Extra config for attribute mapping
   extra_config = {

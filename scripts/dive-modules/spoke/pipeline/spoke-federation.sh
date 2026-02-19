@@ -600,6 +600,29 @@ spoke_federation_configure_upstream_idp() {
         log_verbose "IdP ${idp_alias} already exists - updating"
     fi
 
+    # Detect Simple Post-Broker OTP flow (created by Terraform realm-mfa module)
+    local post_broker_otp=""
+    local _spoke_flows
+    _spoke_flows=$(docker exec "$kc_container" curl -sf --max-time 5 \
+        -H "Authorization: Bearer $admin_token" \
+        "http://localhost:8080/admin/realms/${realm_name}/authentication/flows" 2>/dev/null || echo "[]")
+    local _otp_flow
+    _otp_flow=$(echo "$_spoke_flows" | python3 -c "
+import json,sys
+try:
+    flows = json.load(sys.stdin)
+    for f in flows:
+        if f.get('alias','') == 'Simple Post-Broker OTP' and not f.get('builtIn',False):
+            print(f['alias']); break
+except: pass
+" 2>/dev/null)
+    if [ -n "$_otp_flow" ]; then
+        post_broker_otp="$_otp_flow"
+        log_verbose "Using post-broker OTP flow: ${post_broker_otp}"
+    else
+        log_verbose "Simple Post-Broker OTP flow not found — post-broker MFA disabled"
+    fi
+
     # Build IdP configuration JSON with client secret and proper URLs
     local idp_config
     idp_config=$(cat << EOF
@@ -613,7 +636,7 @@ spoke_federation_configure_upstream_idp() {
     "linkOnly": false,
     "firstBrokerLoginFlowAlias": "first broker login",
     "updateProfileFirstLoginMode": "off",
-    "postBrokerLoginFlowAlias": "",
+    "postBrokerLoginFlowAlias": "${post_broker_otp}",
     "config": {
         "clientId": "${federation_client_id}",
         "clientSecret": "${client_secret}",
