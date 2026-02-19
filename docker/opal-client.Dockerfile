@@ -84,24 +84,35 @@ fi\n\
 # =============================================================================\n\
 # Setup CA certificates for SSL trust\n\
 # =============================================================================\n\
-if [ -f /var/opal/hub-certs/ca/rootCA.pem ]; then\n\
-    # Combine Hub and local CA certificates\n\
-    cat /var/opal/hub-certs/ca/rootCA.pem > /tmp/dive-combined-ca.pem\n\
-    if [ -f /var/opal/certs/ca/rootCA.pem ]; then\n\
-        cat /var/opal/certs/ca/rootCA.pem >> /tmp/dive-combined-ca.pem\n\
-    fi\n\
-    export SSL_CERT_FILE=/tmp/dive-combined-ca.pem\n\
-    export REQUESTS_CA_BUNDLE=/tmp/dive-combined-ca.pem\n\
-    export WEBSOCKET_SSL_CERT=/tmp/dive-combined-ca.pem\n\
-    echo "Combined CA bundle created with Hub and local certificates"\n\
-elif [ -f /var/opal/certs/ca/rootCA.pem ]; then\n\
-    export SSL_CERT_FILE=/var/opal/certs/ca/rootCA.pem\n\
-    export REQUESTS_CA_BUNDLE=/var/opal/certs/ca/rootCA.pem\n\
-    export WEBSOCKET_SSL_CERT=/var/opal/certs/ca/rootCA.pem\n\
-    echo "Using local CA certificate"\n\
-else\n\
-    echo "No CA certificates found, using system defaults"\n\
+# CRITICAL: Always start with system CAs (includes Let'"'"'s Encrypt, DigiCert, etc.)\n\
+# Then append DIVE custom CAs (mkcert, Vault PKI, spoke self-signed)\n\
+# This ensures OPAL client trusts BOTH public CAs (Hub behind Caddy/LE)\n\
+# AND internal CAs (local dev with mkcert, enterprise with Vault PKI)\n\
+# =============================================================================\n\
+cp /etc/ssl/certs/ca-certificates.crt /tmp/dive-combined-ca.pem 2>/dev/null || true\n\
+\n\
+# Append project-root CA bundle (mkcert, Vault PKI, spoke self-signed)\n\
+if [ -f /var/opal/ca-bundle/rootCA.pem ] && [ -s /var/opal/ca-bundle/rootCA.pem ]; then\n\
+    cat /var/opal/ca-bundle/rootCA.pem >> /tmp/dive-combined-ca.pem\n\
+    echo "Added project CA bundle to trust store"\n\
 fi\n\
+\n\
+# Append Hub-specific certs if available (local dev federation)\n\
+if [ -f /var/opal/hub-certs/ca/rootCA.pem ]; then\n\
+    cat /var/opal/hub-certs/ca/rootCA.pem >> /tmp/dive-combined-ca.pem\n\
+    echo "Added Hub CA certificate to trust store"\n\
+fi\n\
+\n\
+# Append spoke instance certs if available\n\
+if [ -f /var/opal/certs/ca/rootCA.pem ]; then\n\
+    cat /var/opal/certs/ca/rootCA.pem >> /tmp/dive-combined-ca.pem\n\
+    echo "Added spoke CA certificate to trust store"\n\
+fi\n\
+\n\
+export SSL_CERT_FILE=/tmp/dive-combined-ca.pem\n\
+export REQUESTS_CA_BUNDLE=/tmp/dive-combined-ca.pem\n\
+export WEBSOCKET_SSL_CERT=/tmp/dive-combined-ca.pem\n\
+echo "Combined CA bundle created (system + DIVE custom CAs)"\n\
 \n\
 # Execute the OPAL client\n\
 echo "Starting OPAL client..."\n\
