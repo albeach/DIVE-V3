@@ -22,7 +22,7 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 
 # Install ONLY production dependencies
-RUN npm ci --only=production --ignore-scripts --no-audit --no-fund && \
+RUN npm ci --omit=dev --no-audit --no-fund && \
     npm cache clean --force
 
 # =============================================================================

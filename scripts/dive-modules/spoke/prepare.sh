@@ -204,6 +204,18 @@ spoke_prepare() {
         sed -i.bak "s|^VAULT_ADDR=https://dive-hub-vault:8200|VAULT_ADDR=|" "$env_file"
         rm -f "$env_file.bak"
 
+        # Fix Hub URLs for remote spoke (use Caddy public URLs, not Docker-internal addresses)
+        if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+            local _hub_env_prefix="${ENVIRONMENT%%[0-9]*}"  # dev, staging, etc.
+            local _hub_api_url="https://${_hub_env_prefix}-usa-api.${DIVE_DOMAIN_SUFFIX#*.}"
+            local _hub_opal_url="https://${_hub_env_prefix}-usa-opal.${DIVE_DOMAIN_SUFFIX#*.}"
+            sed -i.bak "s|^HUB_URL=.*|HUB_URL=${_hub_api_url}|" "$env_file"
+            sed -i.bak "s|^HUB_API_URL=.*|HUB_API_URL=${_hub_api_url}|" "$env_file"
+            sed -i.bak "s|^HUB_OPAL_URL=.*|HUB_OPAL_URL=${_hub_opal_url}|" "$env_file"
+            rm -f "$env_file.bak"
+            log_verbose "Hub URLs set for remote: API=${_hub_api_url}, OPAL=${_hub_opal_url}"
+        fi
+
         # Ensure Caddy profile is active
         if ! grep -q "^COMPOSE_PROFILES=" "$env_file"; then
             echo "COMPOSE_PROFILES=caddy" >> "$env_file"
