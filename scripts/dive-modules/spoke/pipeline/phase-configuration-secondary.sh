@@ -502,27 +502,34 @@ spoke_config_provision_opal() {
 
     log_step "Provisioning OPAL token for $code_upper..."
 
+    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    local env_file="$spoke_dir/.env"
+
+    # Check if token already exists (e.g. from registration auto-approval response)
+    local existing_token
+    existing_token=$(grep "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null | cut -d= -f2)
+
+    if [ -n "$existing_token" ] && [ "$existing_token" != "" ]; then
+        log_success "OPAL token already provisioned (from registration)"
+        return 0
+    fi
+
     # Use deployment module if available
     if type spoke_deployment_provision_opal_token &>/dev/null; then
         spoke_deployment_provision_opal_token "$instance_code"
         return $?
     fi
 
-    # Check if Hub OPAL server is running
-    if ! docker ps --format '{{.Names}}' | grep -q "dive-hub-opal-server"; then
-        log_verbose "Hub OPAL server not running - skipping token provision"
+    # Remote/standalone mode: Hub OPAL server is not local
+    if [ "${DEPLOYMENT_MODE:-local}" = "remote" ] || [ "${DEPLOYMENT_MODE:-local}" = "standalone" ]; then
+        log_warn "OPAL token not in registration response — policy sync will be delayed"
+        log_warn "OPAL Client will retry once Hub provisions a token"
         return 0
     fi
 
-    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
-    local env_file="$spoke_dir/.env"
-
-    # Check if token already exists
-    local existing_token
-    existing_token=$(grep "^SPOKE_OPAL_TOKEN=" "$env_file" 2>/dev/null | cut -d= -f2)
-
-    if [ -n "$existing_token" ] && [ "$existing_token" != "" ]; then
-        log_verbose "OPAL token already exists"
+    # Check if Hub OPAL server is running locally
+    if ! docker ps --format '{{.Names}}' | grep -q "dive-hub-opal-server"; then
+        log_verbose "Hub OPAL server not running - skipping token provision"
         return 0
     fi
 
