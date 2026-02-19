@@ -117,10 +117,14 @@ module_vault_restore_pki() {
     log_warn "  Snapshot: $snapshot_path"
     log_warn "================================================================="
     echo ""
-    read -rp "Type 'RESTORE' to confirm: " confirm
-    if [ "$confirm" != "RESTORE" ]; then
-        log_info "Aborted"
-        return 0
+    if is_interactive; then
+        read -rp "Type 'RESTORE' to confirm: " confirm
+        if [ "$confirm" != "RESTORE" ]; then
+            log_info "Aborted"
+            return 0
+        fi
+    else
+        log_warn "Non-interactive mode: auto-confirming PKI restore"
     fi
 
     # Step 1: Restore snapshot

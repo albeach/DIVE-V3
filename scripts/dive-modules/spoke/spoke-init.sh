@@ -171,18 +171,26 @@ spoke_setup_wizard() {
 
     # Step 1: Basic Information
     if [ -z "$instance_code" ]; then
-        echo -e "${CYAN}Step 1: Instance Information${NC}"
-        echo ""
-        read -p "  Enter 3-letter instance code (e.g., NZL, HOM): " instance_code
+        if is_interactive; then
+            echo -e "${CYAN}Step 1: Instance Information${NC}"
+            echo ""
+            read -p "  Enter 3-letter instance code (e.g., NZL, HOM): " instance_code
+        else
+            instance_code="${DIVE_INSTANCE_CODE:-}"
+        fi
         if [ -z "$instance_code" ]; then
-            log_error "Instance code is required"
-        return 1
+            log_error "Instance code is required (set DIVE_INSTANCE_CODE in non-interactive mode)"
+            return 1
         fi
     fi
 
     if [ -z "$instance_name" ]; then
         local default_name="${instance_code} Instance"
-        read -p "  Enter instance name [$default_name]: " instance_name
+        if is_interactive; then
+            read -p "  Enter instance name [$default_name]: " instance_name
+        else
+            instance_name="${DIVE_INSTANCE_NAME:-}"
+        fi
         instance_name="${instance_name:-$default_name}"
     fi
 
@@ -195,15 +203,21 @@ spoke_setup_wizard() {
     echo ""
 
     # Step 2: Hostname Configuration
-    echo -e "${CYAN}Step 2: Hostname Configuration${NC}"
-    echo ""
-    echo "  How will your spoke be accessed?"
-    echo ""
-    echo "  1) Use dive25.com subdomains (${code_lower}-app.dive25.com, etc.)"
-    echo "  2) Use custom domain names"
-    echo "  3) Use IP address (local/development only)"
-    echo ""
-    read -p "  Select option [1-3]: " hostname_option
+    local hostname_option=""
+    if is_interactive; then
+        echo -e "${CYAN}Step 2: Hostname Configuration${NC}"
+        echo ""
+        echo "  How will your spoke be accessed?"
+        echo ""
+        echo "  1) Use dive25.com subdomains (${code_lower}-app.dive25.com, etc.)"
+        echo "  2) Use custom domain names"
+        echo "  3) Use IP address (local/development only)"
+        echo ""
+        read -p "  Select option [1-3]: " hostname_option
+    else
+        hostname_option="${DIVE_HOSTNAME_OPTION:-3}"
+        log_info "Using hostname option: $hostname_option"
+    fi
 
     local base_url=""
     local api_url=""
@@ -223,10 +237,15 @@ spoke_setup_wizard() {
             needs_tunnel=true
             ;;
         2)
-            echo ""
-            read -p "  Enter base domain (e.g., myorg.com): " custom_domain
+            local custom_domain=""
+            if is_interactive; then
+                echo ""
+                read -p "  Enter base domain (e.g., myorg.com): " custom_domain
+            else
+                custom_domain="${DIVE_CUSTOM_DOMAIN:-}"
+            fi
             if [ -z "$custom_domain" ]; then
-                log_error "Domain is required"
+                log_error "Domain is required (set DIVE_CUSTOM_DOMAIN in non-interactive mode)"
                 return 1
             fi
             base_url="https://${code_lower}-app.${custom_domain}"
@@ -237,8 +256,13 @@ spoke_setup_wizard() {
             kas_url="https://${code_lower}-kas.${custom_domain}"
             ;;
         3)
-            echo ""
-            read -p "  Enter IP address or hostname: " ip_or_host
+            local ip_or_host=""
+            if is_interactive; then
+                echo ""
+                read -p "  Enter IP address or hostname: " ip_or_host
+            else
+                ip_or_host="${DIVE_IP_OR_HOST:-localhost}"
+            fi
             if [ -z "$ip_or_host" ]; then
                 ip_or_host="localhost"
             fi
@@ -281,18 +305,27 @@ spoke_setup_wizard() {
     local tunnel_id=""
 
     if [ "$needs_tunnel" = true ]; then
-        echo -e "${CYAN}Step 3: Cloudflare Tunnel Setup${NC}"
-        echo ""
-        echo "  To make your spoke accessible at ${code_lower}-*.dive25.com,"
-        echo "  you need a Cloudflare tunnel."
-        echo ""
-        echo "  Options:"
-        echo "  1) 🚀 Auto-create tunnel (recommended - uses cloudflared CLI)"
-        echo "  2) I have a Cloudflare tunnel token (paste it now)"
-        echo "  3) Help me create a tunnel manually (opens dashboard)"
-        echo "  4) Skip tunnel setup (configure manually later)"
-        echo ""
-        read -p "  Select option [1-4]: " tunnel_option
+        local tunnel_option=""
+        if is_interactive; then
+            echo -e "${CYAN}Step 3: Cloudflare Tunnel Setup${NC}"
+            echo ""
+            echo "  To make your spoke accessible at ${code_lower}-*.dive25.com,"
+            echo "  you need a Cloudflare tunnel."
+            echo ""
+            echo "  Options:"
+            echo "  1) 🚀 Auto-create tunnel (recommended - uses cloudflared CLI)"
+            echo "  2) I have a Cloudflare tunnel token (paste it now)"
+            echo "  3) Help me create a tunnel manually (opens dashboard)"
+            echo "  4) Skip tunnel setup (configure manually later)"
+            echo ""
+            read -p "  Select option [1-4]: " tunnel_option
+        else
+            tunnel_option="${DIVE_TUNNEL_OPTION:-4}"
+            if [ -n "${DIVE_TUNNEL_TOKEN:-}" ]; then
+                tunnel_option=2
+            fi
+            log_info "Using tunnel option: $tunnel_option"
+        fi
 
         case "$tunnel_option" in
             1)
@@ -310,8 +343,12 @@ spoke_setup_wizard() {
                 fi
                 ;;
             2)
-                echo ""
-                read -p "  Paste your Cloudflare tunnel token: " tunnel_token
+                if is_interactive; then
+                    echo ""
+                    read -p "  Paste your Cloudflare tunnel token: " tunnel_token
+                else
+                    tunnel_token="${DIVE_TUNNEL_TOKEN:-}"
+                fi
                 if [ -n "$tunnel_token" ]; then
                     setup_tunnel=true
                     echo -e "  ${GREEN}✓ Tunnel token saved${NC}"
@@ -339,7 +376,11 @@ spoke_setup_wizard() {
                 elif command -v open &> /dev/null; then
                     open "https://one.dash.cloudflare.com" 2>/dev/null &
                 fi
-                read -p "  Press Enter after creating the tunnel, then paste token: " tunnel_token
+                if is_interactive; then
+                    read -p "  Press Enter after creating the tunnel, then paste token: " tunnel_token
+                else
+                    tunnel_token="${DIVE_TUNNEL_TOKEN:-}"
+                fi
                 if [ -n "$tunnel_token" ]; then
                     setup_tunnel=true
                 fi
@@ -352,24 +393,33 @@ spoke_setup_wizard() {
     fi
 
     # Step 4: Contact Information
-    echo ""
-    echo -e "${CYAN}Step 4: Contact Information${NC}"
-    echo ""
-    read -p "  Contact email (for Hub notifications): " contact_email
+    local contact_email=""
+    if is_interactive; then
+        echo ""
+        echo -e "${CYAN}Step 4: Contact Information${NC}"
+        echo ""
+        read -p "  Contact email (for Hub notifications): " contact_email
+    else
+        contact_email="${DIVE_CONTACT_EMAIL:-}"
+    fi
     if [ -z "$contact_email" ]; then
         contact_email="admin@${code_lower}.local"
     fi
 
     # Step 5: Hub Configuration
-    echo ""
-    echo -e "${CYAN}Step 5: Hub Connection${NC}"
-    echo ""
-    # Environment-aware default
+    local hub_url=""
     local default_hub="https://localhost:4000"
     if [ "$ENVIRONMENT" != "local" ] && [ "$ENVIRONMENT" != "dev" ]; then
         default_hub="https://usa-api.dive25.com"
     fi
-    read -p "  Hub URL [$default_hub]: " hub_url
+    if is_interactive; then
+        echo ""
+        echo -e "${CYAN}Step 5: Hub Connection${NC}"
+        echo ""
+        read -p "  Hub URL [$default_hub]: " hub_url
+    else
+        hub_url="${DIVE_HUB_URL:-}"
+    fi
     hub_url="${hub_url:-$default_hub}"
 
     # Step 6: Generate Secure Passwords
@@ -398,10 +448,15 @@ spoke_setup_wizard() {
     echo "  Contact:      $contact_email"
     echo "  Tunnel:       $([ "$setup_tunnel" = true ] && echo "Configured" || echo "Not configured")"
     echo ""
-    read -p "  Proceed with setup? (yes/no): " confirm
+    if is_interactive; then
+        local confirm=""
+        read -p "  Proceed with setup? (yes/no): " confirm
         if [ "$confirm" != "yes" ]; then
             log_info "Cancelled"
             return 1
+        fi
+    else
+        log_info "Non-interactive mode: proceeding with setup"
     fi
 
     # Now call spoke_init with all the collected information

@@ -92,15 +92,19 @@ enhanced_nuke() {
         echo ""
     fi
 
-    # Confirmation prompt (unless forced)
+    # Confirmation prompt (unless forced or non-interactive)
     if [ "$force" != true ] && [ "$dry_run" != true ]; then
-        log_warn "⚠️  This will permanently remove ALL DIVE resources!"
-        read -p "Are you sure you want to continue? (yes/no): " -r
-        if [[ ! $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
-            log_info "Cleanup cancelled"
-            return 1
+        if is_interactive; then
+            log_warn "⚠️  This will permanently remove ALL DIVE resources!"
+            read -p "Are you sure you want to continue? (yes/no): " -r
+            if [[ ! $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
+                log_info "Cleanup cancelled"
+                return 1
+            fi
+            echo ""
+        else
+            log_warn "Non-interactive mode: auto-confirming cleanup"
         fi
-        echo ""
     fi
 
     if [ "$dry_run" = true ]; then
@@ -207,12 +211,18 @@ enhanced_nuke() {
         done
         echo ""
 
-        read -p "Remove $orphaned_count orphaned volumes? (yes/no): " -r
-        if [[ $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
+        if is_interactive; then
+            read -p "Remove $orphaned_count orphaned volumes? (yes/no): " -r
+            if [[ $REPLY =~ ^[Yy][Ee][Ss]$ ]]; then
+                docker volume prune -f >/dev/null 2>&1
+                log_success "✓ Removed $orphaned_count orphaned volume(s)"
+            else
+                log_verbose "✓ Skipped orphaned volumes"
+            fi
+        else
+            log_warn "Non-interactive mode: auto-removing orphaned volumes"
             docker volume prune -f >/dev/null 2>&1
             log_success "✓ Removed $orphaned_count orphaned volume(s)"
-        else
-            log_verbose "✓ Skipped orphaned volumes"
         fi
     else
         log_verbose "✓ No orphaned volumes found"
