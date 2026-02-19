@@ -506,10 +506,14 @@ backup_restore() {
     log_warn "Restoring from backup: $backup_file"
     log_warn "This will overwrite existing data!"
 
-    read -p "Continue? (yes/no): " confirm
-    if [ "$confirm" != "yes" ]; then
-        log_info "Restore cancelled"
-        return 0
+    if is_interactive; then
+        read -p "Continue? (yes/no): " confirm
+        if [ "$confirm" != "yes" ]; then
+            log_info "Restore cancelled"
+            return 0
+        fi
+    else
+        log_warn "Non-interactive mode: auto-confirming restore"
     fi
 
     local temp_dir=$(mktemp -d)

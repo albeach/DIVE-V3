@@ -1171,7 +1171,7 @@ cmd_federation_revoke() {
         return 1
     fi
 
-    if [ "$confirmed" = false ]; then
+    if [ "$confirmed" = false ] && is_interactive; then
         log_warn "This will PERMANENTLY revoke ${code} from the federation."
         log_warn "The spoke's certificates and tokens will be invalidated."
         read -rp "  Type 'yes' to confirm: " answer
@@ -1179,6 +1179,8 @@ cmd_federation_revoke() {
             log_info "Cancelled."
             return 0
         fi
+    elif [ "$confirmed" = false ]; then
+        log_warn "Non-interactive mode: auto-confirming spoke revocation"
     fi
 
     log_warn "Revoking spoke ${code} (${spoke_id})..."

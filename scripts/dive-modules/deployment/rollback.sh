@@ -157,13 +157,15 @@ cmd_cleanup() {
 cleanup_all() {
     local force="$1"
 
-    if [ "$force" != "--force" ]; then
+    if [ "$force" != "--force" ] && is_interactive; then
         log_warn "This will remove ALL DIVE deployments including data!"
         read -p "Are you sure? (yes/no): " confirm
         if [ "$confirm" != "yes" ]; then
             log_info "Cleanup cancelled"
             return 0
         fi
+    elif [ "$force" != "--force" ] && ! is_interactive; then
+        log_warn "Non-interactive mode: auto-confirming cleanup all"
     fi
 
     log_warn "Cleaning ALL DIVE deployments..."
@@ -196,10 +198,12 @@ cleanup_all() {
 cleanup_hub() {
     local force="$1"
 
-    if [ "$force" != "--force" ]; then
+    if [ "$force" != "--force" ] && is_interactive; then
         log_warn "This will remove Hub deployment!"
         read -p "Continue? (y/n): " confirm
         [ "$confirm" != "y" ] && return 0
+    elif [ "$force" != "--force" ] && ! is_interactive; then
+        log_warn "Non-interactive mode: auto-confirming hub cleanup"
     fi
 
     log_info "Cleaning Hub deployment..."
@@ -228,10 +232,12 @@ cleanup_spoke() {
     local code_lower=$(lower "$instance_code")
     local code_upper=$(upper "$instance_code")
 
-    if [ "$force" != "--force" ]; then
+    if [ "$force" != "--force" ] && is_interactive; then
         log_warn "This will remove Spoke $code_upper deployment!"
         read -p "Continue? (y/n): " confirm
         [ "$confirm" != "y" ] && return 0
+    elif [ "$force" != "--force" ] && ! is_interactive; then
+        log_warn "Non-interactive mode: auto-confirming spoke $code_upper cleanup"
     fi
 
     log_info "Cleaning Spoke $code_upper deployment..."

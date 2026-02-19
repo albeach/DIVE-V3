@@ -298,7 +298,7 @@ vault_partner_delete() {
         return 1
     fi
 
-    if [ "$confirmed" = false ]; then
+    if [ "$confirmed" = false ] && is_interactive; then
         log_warn "This will remove partner ${code_upper} from Vault KV."
         log_warn "It does NOT revoke existing federation or certificates."
         read -rp "  Type 'yes' to confirm: " answer
@@ -306,6 +306,8 @@ vault_partner_delete() {
             log_info "Cancelled."
             return 0
         fi
+    elif [ "$confirmed" = false ]; then
+        log_warn "Non-interactive mode: auto-confirming partner removal"
     fi
 
     if vault kv delete "${VAULT_PARTNER_PREFIX}/${code_upper}" >/dev/null 2>&1; then
