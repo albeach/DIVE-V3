@@ -239,14 +239,26 @@ export AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-}"
 export DIVE_AWS_KEY_PAIR="${DIVE_AWS_KEY_PAIR:-ABeach-SSH-Key}"
 export DIVE_AWS_SSH_KEY="${DIVE_AWS_SSH_KEY:-${HOME}/.ssh/ABeach-SSH-Key.pem}"
 
-# Source Caddy/domain vars from .env.hub early (before EC2 auto-config needs them).
-# Only pulls specific vars to avoid overriding unrelated settings.
+# Source key vars from .env.hub early (before EC2 auto-config and Caddy domain computation).
+# Only pulls specific vars to avoid overriding unrelated shell settings.
+# NOTE: ENVIRONMENT is NOT read here — remote-exec deliberately passes --env local
+# to prevent SSH recursion, and we must respect that.
 if [ -f "${DIVE_ROOT}/.env.hub" ]; then
     _hub_val() { grep "^${1}=" "${DIVE_ROOT}/.env.hub" 2>/dev/null | head -1 | cut -d= -f2-; }
     [ -z "${DIVE_DOMAIN_SUFFIX:-}" ]    && { _v=$(_hub_val DIVE_DOMAIN_SUFFIX);    [ -n "$_v" ] && export DIVE_DOMAIN_SUFFIX="$_v"; }
     [ -z "${CLOUDFLARE_API_TOKEN:-}" ]  && { _v=$(_hub_val CLOUDFLARE_API_TOKEN);  [ -n "$_v" ] && export CLOUDFLARE_API_TOKEN="$_v"; }
     [ -z "${HUB_EXTERNAL_ADDRESS:-}" ]  && { _v=$(_hub_val HUB_EXTERNAL_ADDRESS);  [ -n "$_v" ] && export HUB_EXTERNAL_ADDRESS="$_v"; }
     unset -f _hub_val; unset _v
+fi
+
+# Derive DIVE_DOMAIN_SUFFIX from ENVIRONMENT early (before Caddy domain computation at line ~290).
+# remote-exec passes DIVE_DOMAIN_SUFFIX directly for EC2 deploys, so this is a fallback
+# for when ./dive --env dev is run locally without remote-exec.
+if [ -z "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+    case "${ENVIRONMENT:-local}" in
+        dev)     export DIVE_DOMAIN_SUFFIX="dev.dive25.com" ;;
+        staging) export DIVE_DOMAIN_SUFFIX="staging.dive25.com" ;;
+    esac
 fi
 
 # EC2 instance metadata auto-detection (IMDSv2 first, then v1 fallback)
@@ -328,10 +340,15 @@ if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost
         # Enable Caddy compose profile
         export DIVE_CADDY_ENABLED="true"
 
-        # Persist Caddy-derived URLs to .env.hub so Docker Compose picks them up
+        # Persist Caddy domains and derived URLs to .env.hub so Docker Compose picks them up
         # (shell exports don't survive container recreation / reboot)
         if [ -f "${DIVE_ROOT}/.env.hub" ]; then
             _caddy_set() { local k="$1" v="$2"; if grep -q "^${k}=" "${DIVE_ROOT}/.env.hub" 2>/dev/null; then sed -i "s|^${k}=.*|${k}=${v}|" "${DIVE_ROOT}/.env.hub" 2>/dev/null || sed -i '' "s|^${k}=.*|${k}=${v}|" "${DIVE_ROOT}/.env.hub"; else echo "${k}=${v}" >> "${DIVE_ROOT}/.env.hub"; fi; }
+            _caddy_set "CADDY_DOMAIN_APP" "${CADDY_DOMAIN_APP}"
+            _caddy_set "CADDY_DOMAIN_API" "${CADDY_DOMAIN_API}"
+            _caddy_set "CADDY_DOMAIN_IDP" "${CADDY_DOMAIN_IDP}"
+            _caddy_set "CADDY_DOMAIN_OPAL" "${CADDY_DOMAIN_OPAL}"
+            _caddy_set "CADDY_DOMAIN_VAULT" "${CADDY_DOMAIN_VAULT}"
             _caddy_set "KEYCLOAK_HOSTNAME" "${CADDY_DOMAIN_IDP}"
             _caddy_set "NEXT_PUBLIC_API_URL" "https://${CADDY_DOMAIN_API}"
             _caddy_set "NEXT_PUBLIC_BACKEND_URL" "https://${CADDY_DOMAIN_API}"

@@ -1,15 +1,7 @@
 # =============================================================================
-# DIVE V3 Caddy — Custom build with Cloudflare DNS module
+# DIVE V3 Caddy — Reverse proxy with auto Let's Encrypt
 # =============================================================================
-# Enables DNS-01 ACME challenge for Let's Encrypt cert provisioning
-# without requiring inbound port 80.
+# Uses HTTP-01 ACME challenge by default (port 80 must be accessible).
 # =============================================================================
-
-FROM caddy:2-builder AS builder
-
-RUN xcaddy build \
-    --with github.com/caddy-dns/cloudflare
 
 FROM caddy:2
-
-COPY --from=builder /usr/bin/caddy /usr/bin/caddy
