@@ -417,6 +417,22 @@ spoke_preflight_check_hub() {
             export DEPLOYMENT_MODE="remote"
 
             # Derive hub URLs for remote mode
+            # Accept HUB_EXTERNAL_ADDRESS in any service-host form
+            # (e.g., dev-usa-app.example.com, dev-usa-api.example.com).
+            local _hub_host="${HUB_EXTERNAL_ADDRESS}"
+            _hub_host="${_hub_host#https://}"
+            _hub_host="${_hub_host#http://}"
+            _hub_host="${_hub_host%%/*}"
+
+            local _hub_prefix="${_hub_host%%.*}"
+            local _hub_base="${_hub_host#*.}"
+            local _hub_env_prefix="$_hub_prefix"
+            _hub_env_prefix="${_hub_env_prefix%-api}"
+            _hub_env_prefix="${_hub_env_prefix%-app}"
+            _hub_env_prefix="${_hub_env_prefix%-idp}"
+            _hub_env_prefix="${_hub_env_prefix%-opal}"
+            _hub_env_prefix="${_hub_env_prefix%-vault}"
+
             if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
                 local _ep _bd
                 _ep="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
@@ -426,10 +442,17 @@ spoke_preflight_check_hub() {
                 export HUB_OPAL_URL="${HUB_OPAL_URL:-https://${_ep}-usa-opal.${_bd}}"
                 export HUB_VAULT_URL="${HUB_VAULT_URL:-https://${_ep}-usa-vault.${_bd}}"
             else
-                export HUB_API_URL="${HUB_API_URL:-https://${HUB_EXTERNAL_ADDRESS}:4000}"
-                export HUB_KC_URL="${HUB_KC_URL:-https://${HUB_EXTERNAL_ADDRESS}:8443}"
-                export HUB_OPAL_URL="${HUB_OPAL_URL:-https://${HUB_EXTERNAL_ADDRESS}:7002}"
-                export HUB_VAULT_URL="${HUB_VAULT_URL:-https://${HUB_EXTERNAL_ADDRESS}:8200}"
+                if [ -n "$_hub_env_prefix" ] && [ "$_hub_env_prefix" != "$_hub_base" ] && [ "$_hub_base" != "$_hub_host" ]; then
+                    export HUB_API_URL="${HUB_API_URL:-https://${_hub_env_prefix}-api.${_hub_base}}"
+                    export HUB_KC_URL="${HUB_KC_URL:-https://${_hub_env_prefix}-idp.${_hub_base}}"
+                    export HUB_OPAL_URL="${HUB_OPAL_URL:-https://${_hub_env_prefix}-opal.${_hub_base}}"
+                    export HUB_VAULT_URL="${HUB_VAULT_URL:-https://${_hub_env_prefix}-vault.${_hub_base}}"
+                else
+                    export HUB_API_URL="${HUB_API_URL:-https://${HUB_EXTERNAL_ADDRESS}:4000}"
+                    export HUB_KC_URL="${HUB_KC_URL:-https://${HUB_EXTERNAL_ADDRESS}:8443}"
+                    export HUB_OPAL_URL="${HUB_OPAL_URL:-https://${HUB_EXTERNAL_ADDRESS}:7002}"
+                    export HUB_VAULT_URL="${HUB_VAULT_URL:-https://${HUB_EXTERNAL_ADDRESS}:8200}"
+                fi
             fi
         else
             log_error "No Hub infrastructure detected (local or remote)"

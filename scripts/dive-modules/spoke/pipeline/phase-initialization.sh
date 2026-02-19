@@ -642,6 +642,40 @@ spoke_get_hub_opal_public_key() {
         fi
     fi
 
+    # Strategy 4: Explicitly provided key for remote deployments
+    if [ -n "${HUB_OPAL_PUBLIC_KEY:-}" ] && [[ "${HUB_OPAL_PUBLIC_KEY}" =~ ^ssh-(rsa|ed25519|ecdsa)[[:space:]] ]]; then
+        echo "${HUB_OPAL_PUBLIC_KEY}"
+        return 0
+    fi
+
+    # Strategy 5: Try Hub OPAL public endpoint(s) in remote mode (best-effort)
+    if [ "${DEPLOYMENT_MODE:-local}" = "remote" ] && [ -n "${HUB_OPAL_URL:-}" ]; then
+        local key_endpoint key_resp first_line
+        for key_endpoint in \
+            "${HUB_OPAL_URL}/public-key" \
+            "${HUB_OPAL_URL}/public_key" \
+            "${HUB_OPAL_URL}/pubkey" \
+            "${HUB_OPAL_URL}/.well-known/opal-public-key"; do
+            key_resp=$(curl -sk --max-time 3 "$key_endpoint" 2>/dev/null || true)
+            [ -z "$key_resp" ] && continue
+
+            # Support plain text key or JSON payload with {"public_key":"ssh-rsa ..."}
+            first_line=$(printf "%s" "$key_resp" | head -n 1)
+            if [[ "$first_line" =~ ^ssh-(rsa|ed25519|ecdsa)[[:space:]] ]]; then
+                echo "$first_line"
+                return 0
+            fi
+
+            if command -v jq >/dev/null 2>&1; then
+                first_line=$(printf "%s" "$key_resp" | jq -r '.public_key // .publicKey // empty' 2>/dev/null || true)
+                if [[ "$first_line" =~ ^ssh-(rsa|ed25519|ecdsa)[[:space:]] ]]; then
+                    echo "$first_line"
+                    return 0
+                fi
+            fi
+        done
+    fi
+
     log_verbose "OPAL public key not available (OPAL client will use no-auth mode)"
     return 1
 }
