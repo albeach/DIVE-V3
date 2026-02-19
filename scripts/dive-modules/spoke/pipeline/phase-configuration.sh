@@ -227,46 +227,48 @@ spoke_phase_configuration() {
     # Hub API auto-approval triggers createBidirectionalFederation() which creates IdP links.
     # Running this first avoids conflict with CLI federation setup (Step 2.5) creating
     # the same links and causing invalid_grant errors from Keycloak processing overlap.
-    if [ "$pipeline_mode" = "deploy" ]; then
+    if [ "${DEPLOYMENT_MODE:-local}" = "standalone" ]; then
+        log_warn "Standalone mode — skipping federation registration and setup"
+    elif [ "$pipeline_mode" = "deploy" ]; then
         if ! spoke_config_register_in_registries "$instance_code"; then
             log_error "CRITICAL: Registry registration failed - spoke heartbeat will not work"
             log_error "To retry: ./dive spoke register $code_upper"
             return 1
         fi
-    fi
 
-    # NOTE: Federation client scopes are now configured in Terraform
-    # terraform/modules/federated-instance/main.tf: keycloak_openid_client_default_scopes.incoming_federation_defaults
-    # This ensures dive-v3-broker-usa clients have uniqueID, countryOfAffiliation, clearance, acpCOI scopes
+        # NOTE: Federation client scopes are now configured in Terraform
+        # terraform/modules/federated-instance/main.tf: keycloak_openid_client_default_scopes.incoming_federation_defaults
+        # This ensures dive-v3-broker-usa clients have uniqueID, countryOfAffiliation, clearance, acpCOI scopes
 
-    # Step 2.5: Federation setup (CRITICAL - required for SSO)
-    # This runs AFTER registration so Hub API has already attempted bidirectional IdP creation.
-    # CRITICAL FIX (2026-02-11): Wait for Hub API to complete IdP creation before CLI attempts
-    # Previous issue: Both Hub API and CLI creating IdPs simultaneously caused Keycloak conflicts
-    log_step "Waiting for Hub federation API to complete IdP creation..."
-    local _fed_wait=0
-    local _fed_max_wait=15
-    while [ $_fed_wait -lt $_fed_max_wait ]; do
-        # Check if Hub Keycloak already has the spoke IdP (means API finished)
-        local _hub_kc="${HUB_KC_CONTAINER:-dive-hub-keycloak}"
-        if docker exec "$_hub_kc" curl -sf "http://localhost:8080/admin/realms/dive-v3-broker-usa/identity-provider/instances/${code_lower}-idp" \
-            -H "Authorization: Bearer $(spoke_federation_get_admin_token "$_hub_kc" 2>/dev/null)" 2>/dev/null | grep -q '"alias"'; then
-            log_verbose "Hub IdP for $code_lower already exists — proceeding"
-            break
+        # Step 2.5: Federation setup (CRITICAL - required for SSO)
+        # This runs AFTER registration so Hub API has already attempted bidirectional IdP creation.
+        # CRITICAL FIX (2026-02-11): Wait for Hub API to complete IdP creation before CLI attempts
+        # Previous issue: Both Hub API and CLI creating IdPs simultaneously caused Keycloak conflicts
+        log_step "Waiting for Hub federation API to complete IdP creation..."
+        local _fed_wait=0
+        local _fed_max_wait=15
+        while [ $_fed_wait -lt $_fed_max_wait ]; do
+            # Check if Hub Keycloak already has the spoke IdP (means API finished)
+            local _hub_kc="${HUB_KC_CONTAINER:-dive-hub-keycloak}"
+            if docker exec "$_hub_kc" curl -sf "http://localhost:8080/admin/realms/dive-v3-broker-usa/identity-provider/instances/${code_lower}-idp" \
+                -H "Authorization: Bearer $(spoke_federation_get_admin_token "$_hub_kc" 2>/dev/null)" 2>/dev/null | grep -q '"alias"'; then
+                log_verbose "Hub IdP for $code_lower already exists — proceeding"
+                break
+            fi
+            sleep 2
+            _fed_wait=$((_fed_wait + 2))
+        done
+        if [ $_fed_wait -ge $_fed_max_wait ]; then
+            log_verbose "Hub IdP not yet detected after ${_fed_max_wait}s — proceeding anyway (federation setup is idempotent)"
         fi
-        sleep 2
-        _fed_wait=$((_fed_wait + 2))
-    done
-    if [ $_fed_wait -ge $_fed_max_wait ]; then
-        log_verbose "Hub IdP not yet detected after ${_fed_max_wait}s — proceeding anyway (federation setup is idempotent)"
-    fi
 
-    # spoke_federation_setup() is idempotent and will skip links that already exist
-    # It checks if IdPs exist before attempting creation to avoid race conditions
-    if ! spoke_config_setup_federation "$instance_code" "$pipeline_mode"; then
-        log_error "CRITICAL: Federation setup failed - SSO will not work"
-        log_error "To retry: ./dive federation link $code_upper"
-        return 1
+        # spoke_federation_setup() is idempotent and will skip links that already exist
+        # It checks if IdPs exist before attempting creation to avoid race conditions
+        if ! spoke_config_setup_federation "$instance_code" "$pipeline_mode"; then
+            log_error "CRITICAL: Federation setup failed - SSO will not work"
+            log_error "To retry: ./dive federation link $code_upper"
+            return 1
+        fi
     fi
 
     # ==========================================================================
@@ -446,9 +448,10 @@ spoke_config_register_in_hub_mongodb() {
     # Try multiple URLs since scripts run on host but containers use Docker hostnames
     local hub_url=""
     local hub_urls=(
-        "https://localhost:${BACKEND_PORT:-4000}"           # Host access
-        "https://host.docker.internal:4000" # Docker Desktop host access  
-        "https://dive-hub-backend:4000"     # Docker network access (if running in container)
+        "${HUB_API_URL:-}"                                  # Remote: from hub-domain prompt
+        "https://localhost:${BACKEND_PORT:-4000}"            # Host access
+        "https://host.docker.internal:4000"                  # Docker Desktop host access
+        "https://dive-hub-backend:4000"                      # Docker network access (if running in container)
     )
 
     if [ "${SKIP_FEDERATION:-false}" = "false" ]; then
@@ -456,6 +459,7 @@ spoke_config_register_in_hub_mongodb() {
 
         local hub_reachable=false
         for url in "${hub_urls[@]}"; do
+            [ -z "$url" ] && continue
             # Zero Trust: HTTPS only, correct endpoint path
             if curl -skf --max-time 3 "$url/api/health" >/dev/null 2>&1; then
                 hub_url="$url"
@@ -553,6 +557,12 @@ PARTNER
 )
     fi
 
+    # Auth code for zero-config remote federation
+    local auth_code_field=""
+    if [ -n "${SPOKE_AUTH_CODE:-}" ]; then
+        auth_code_field="\"authCode\": \"${SPOKE_AUTH_CODE}\","
+    fi
+
     local payload=$(cat <<EOF
 {
   "instanceCode": "$code_upper",
@@ -565,6 +575,7 @@ PARTNER
   "contactEmail": "$contact_email",
   "keycloakAdminPassword": "$keycloak_password",
   ${partner_fields}
+  ${auth_code_field}
   "skipValidation": true
 }
 EOF

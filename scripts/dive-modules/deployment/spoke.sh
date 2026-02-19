@@ -155,12 +155,20 @@ module_spoke() {
         # === Deployment Operations ===
         deploy)
             # Check authorization before deployment
-            if [ -f "${SPOKE_DIR}/authorize.sh" ]; then
-                source "${SPOKE_DIR}/authorize.sh"
-            fi
-            if type -t spoke_verify_authorization &>/dev/null; then
-                if ! spoke_verify_authorization "${1:-}"; then
-                    return 1
+            # Strategy:
+            #   1. If --auth-code provided: defer to Hub API validation during registration
+            #   2. If no auth code AND Vault accessible: check Vault directly (local mode)
+            #   3. If no auth code AND no Vault: skip (standalone/dev mode)
+            if [ -n "${SPOKE_AUTH_CODE:-}" ]; then
+                log_info "Auth code provided — will validate against Hub API during registration"
+            else
+                if [ -f "${SPOKE_DIR}/authorize.sh" ]; then
+                    source "${SPOKE_DIR}/authorize.sh"
+                fi
+                if type -t spoke_verify_authorization &>/dev/null; then
+                    if ! spoke_verify_authorization "${1:-}"; then
+                        return 1
+                    fi
                 fi
             fi
 
@@ -365,6 +373,7 @@ Usage: ./dive spoke <command> [args]
 Commands:
   deploy <CODE> [name]        Full spoke deployment (auto-detects local vs remote)
   authorize <CODE> [name]     Pre-authorize a spoke for federation (Vault-based)
+  revoke <CODE>               Revoke a spoke's federation authorization
   prepare <CODE>              Generate config package on Hub (ECR-based remote)
   configure <CODE>            Run Terraform + federation from Hub (remote)
   start-remote <CODE>         SSH to spoke EC2 and run deploy.sh
@@ -383,20 +392,28 @@ Repair Commands:
   reload-secrets <CODE>       Reload secrets from GCP and restart services
   repair <CODE>               Auto-diagnose and fix common issues
 
-Remote Spoke Deployment (single command):
-  ./dive --env dev spoke deploy GBR  # Auto: prepare → start → configure (all 3 phases)
+Zero-Config Remote Deployment (fresh instance):
+  # On the Hub:
+  ./dive spoke authorize GBR "United Kingdom"   # Get auth code UUID
+  # On the Spoke (any fresh Ubuntu instance):
+  ./dive spoke deploy GBR "United Kingdom" --auth-code <UUID>
+  # → Prompted for Hub domain (30s timeout → standalone mode)
+  # → Auth code validated by Hub API → auto-federated bidirectional SSO
 
-  Or manually (advanced):
-  ./dive spoke prepare GBR           # 1. Generate config package on Hub
-  ./dive spoke start-remote GBR      # 2. SSH + pull ECR images + start
-  ./dive spoke configure GBR         # 3. Terraform + federation from Hub
+ECR-Based Remote Deployment (AWS):
+  ./dive --env dev spoke deploy GBR  # Auto: prepare → start → configure
 
 Local Spoke Deployment:
   ./dive spoke deploy ALB "Albania"  # Full local pipeline (build from source)
 
+Standalone Mode (no federation):
+  ./dive spoke deploy GBR            # Skip Hub domain prompt → standalone
+
 Options:
+  --auth-code <UUID>          Pre-authorized federation code (from Hub)
   --force                     Force deployment even if already deployed
   --skip-federation           Skip federation setup
+  --domain <base>             Custom domain (e.g. gbr.mod.uk)
   --dry-run                   Generate package without shipping (prepare only)
 
 For more help: ./dive help spoke

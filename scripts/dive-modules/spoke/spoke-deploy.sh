@@ -74,6 +74,7 @@ spoke_deploy() {
     # Export flags for use by pipeline phases
     export SKIP_FEDERATION=false
     export SPOKE_CUSTOM_DOMAIN=""
+    export SPOKE_AUTH_CODE=""
 
     # Parse options (handle both --key value and positional args)
     local skip_next=false
@@ -102,6 +103,14 @@ spoke_deploy() {
                     log_info "Custom domain: $SPOKE_CUSTOM_DOMAIN"
                 fi
                 ;;
+            --auth-code)
+                local next=$((i + 1))
+                export SPOKE_AUTH_CODE="${!next:-}"
+                skip_next=true
+                if [ -n "$SPOKE_AUTH_CODE" ]; then
+                    log_info "Auth code provided: ${SPOKE_AUTH_CODE:0:8}..."
+                fi
+                ;;
         esac
     done
 
@@ -109,17 +118,17 @@ spoke_deploy() {
     if [ -z "$instance_code" ]; then
         log_error "Instance code required"
         echo ""
-        echo "Usage: ./dive spoke deploy CODE [NAME]"
+        echo "Usage: ./dive spoke deploy CODE [NAME] [OPTIONS]"
         echo ""
         echo "Examples:"
         echo "  ./dive spoke deploy FRA \"France Defence\""
-        echo "  ./dive spoke deploy DEU \"Germany Defence\""
-        echo "  ./dive spoke deploy GBR \"United Kingdom\""
+        echo "  ./dive spoke deploy GBR \"United Kingdom\" --auth-code <UUID>"
         echo ""
         echo "Options:"
+        echo "  --auth-code <UUID>  Pre-authorized federation code (from Hub: ./dive spoke authorize)"
         echo "  --force             Clean and redeploy"
-        echo "  --skip-federation   Skip federation setup (spoke will be non-functional)"
-        echo "  --domain <base>     Custom domain (e.g. gbr.mod.uk → app.gbr.mod.uk)"
+        echo "  --skip-federation   Skip federation setup (standalone mode)"
+        echo "  --domain <base>     Custom domain (e.g. gbr.mod.uk)"
         echo ""
         return 1
     fi
@@ -131,9 +140,75 @@ spoke_deploy() {
         fi
     fi
 
+    # =========================================================================
+    # HUB DOMAIN PROMPT (zero-config remote/standalone deployment)
+    # =========================================================================
+    # If no Hub is detectable locally, prompt for Hub domain (30s timeout).
+    # Input → federated mode (derive Hub URLs, set DEPLOYMENT_MODE=remote)
+    # No input → standalone mode (SKIP_FEDERATION=true, fully local)
+    # =========================================================================
+    if [ -z "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "${SKIP_FEDERATION:-false}" = "false" ]; then
+        local _hub_containers=0
+        _hub_containers=$(docker ps -q --filter "name=dive-hub" 2>/dev/null | wc -l | tr -d ' ')
+        if [ "$_hub_containers" -eq 0 ]; then
+            echo ""
+            echo "============================================"
+            echo "  NO HUB DETECTED"
+            echo "============================================"
+            echo "  Enter the Hub's base API domain to federate"
+            echo "  (e.g., dev-usa-api.dive25.com)"
+            echo ""
+            echo "  Press Enter or wait 30s for standalone mode."
+            echo "============================================"
+            echo -n "  Hub domain: "
+
+            local _hub_domain=""
+            read -t 30 _hub_domain || true
+            echo ""
+
+            if [ -n "$_hub_domain" ]; then
+                # Strip protocol prefix if accidentally included
+                _hub_domain="${_hub_domain#https://}"
+                _hub_domain="${_hub_domain#http://}"
+                _hub_domain="${_hub_domain%%/*}"
+
+                export HUB_EXTERNAL_ADDRESS="$_hub_domain"
+                export DEPLOYMENT_MODE="remote"
+
+                # Derive Hub service URLs from domain pattern
+                # e.g., "dev-usa-api.dive25.com" → prefix="dev-usa-api", base="dive25.com", env="dev-usa"
+                local _prefix="${_hub_domain%%.*}"
+                local _base="${_hub_domain#*.}"
+                local _env_prefix="${_prefix%-api}"
+
+                export HUB_API_URL="https://${_env_prefix}-api.${_base}"
+                export HUB_KC_URL="https://${_env_prefix}-idp.${_base}"
+                export HUB_OPAL_URL="https://${_env_prefix}-opal.${_base}"
+                export HUB_VAULT_URL="https://${_env_prefix}-vault.${_base}"
+
+                log_success "Hub domain set: $_hub_domain"
+                log_info "  API:  $HUB_API_URL"
+                log_info "  IdP:  $HUB_KC_URL"
+                log_info "  OPAL: $HUB_OPAL_URL"
+            else
+                log_warn "No Hub domain provided — deploying in STANDALONE mode"
+                log_warn "Spoke will be fully functional but NOT federated with any Hub"
+                export SKIP_FEDERATION=true
+                export DEPLOYMENT_MODE="standalone"
+            fi
+        fi
+    fi
+
+    # Standalone mode: disable orchestration DB (no Hub PostgreSQL)
+    if [ "${DEPLOYMENT_MODE:-local}" = "standalone" ]; then
+        export ORCH_DB_ENABLED=false
+        export ORCH_DB_DUAL_WRITE=false
+        export ORCH_DB_SOURCE_OF_TRUTH="file"
+    fi
+
     # AUTO-PROVISION: Ensure Vault provisioning before spoke deployment
-    # Skip for remote deployments — Vault lives on the Hub, not the spoke
-    if [ "${SECRETS_PROVIDER:-}" = "vault" ] && [ "${DEPLOYMENT_MODE:-local}" != "remote" ]; then
+    # Skip for remote/standalone deployments — Vault lives on the Hub, not the spoke
+    if [ "${SECRETS_PROVIDER:-}" = "vault" ] && [ "${DEPLOYMENT_MODE:-local}" != "remote" ] && [ "${DEPLOYMENT_MODE:-local}" != "standalone" ]; then
         # Load vault module if not already available
         if ! type vault_spoke_is_provisioned &>/dev/null; then
             source "$(dirname "${BASH_SOURCE[0]}")/../vault/module.sh" 2>/dev/null || true

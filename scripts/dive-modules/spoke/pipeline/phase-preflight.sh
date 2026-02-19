@@ -396,6 +396,12 @@ spoke_preflight_cleanup_failed_state() {
 spoke_preflight_check_hub() {
     local instance_code="$1"
 
+    # Standalone mode: no Hub needed, skip all checks
+    if [ "${DEPLOYMENT_MODE:-local}" = "standalone" ]; then
+        log_warn "Standalone mode — skipping Hub infrastructure checks"
+        return 0
+    fi
+
     log_step "Auto-discovering Hub infrastructure..."
 
     # =========================================================================

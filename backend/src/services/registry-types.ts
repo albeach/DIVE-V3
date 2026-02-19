@@ -152,6 +152,9 @@ export interface IRegistrationRequest {
   partnerPreApproved?: boolean;
   partnerTrustLevel?: 'development' | 'partner' | 'bilateral' | 'national';
   partnerMaxClassification?: 'UNCLASSIFIED' | 'CONFIDENTIAL' | 'SECRET' | 'TOP_SECRET';
+
+  // Auth code for zero-config remote spoke deployment
+  authCode?: string;
 }
 
 export interface IHubStatistics {

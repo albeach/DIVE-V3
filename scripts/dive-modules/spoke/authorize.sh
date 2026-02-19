@@ -211,8 +211,11 @@ spoke_authorize() {
     echo "  Vault Path:    dive-v3/auth/spoke-auth/${code_lower}"
     echo "============================================"
     echo ""
-    echo "Next steps:"
-    echo "  ./dive --env dev spoke deploy $code_upper"
+    echo "Next steps (on the spoke machine):"
+    echo "  ./dive spoke deploy $code_upper \"$name\" --auth-code $auth_code"
+    echo ""
+    echo "  The spoke operator will be prompted for this Hub's domain."
+    echo "  Auth code is validated by Hub API → auto-federated bidirectional SSO."
     echo ""
 
     return 0
