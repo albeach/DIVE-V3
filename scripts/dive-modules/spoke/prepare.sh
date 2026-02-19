@@ -229,6 +229,23 @@ spoke_prepare() {
             echo "SPOKE_CADDY_ENABLED=true" >> "$env_file"
         fi
 
+        # Propagate Hub's OPAL_DATA_SOURCE_TOKEN to spoke
+        # Hub OPAL Server pushes data source config with this token in Authorization headers
+        # The spoke's backend validates data fetch requests using the same token
+        local _opal_ds_token=""
+        _opal_ds_token=$(grep "^OPAL_DATA_SOURCE_TOKEN=" "$DIVE_ROOT/.env.hub" 2>/dev/null | cut -d= -f2-)
+        if [ -n "$_opal_ds_token" ]; then
+            if grep -q "^OPAL_DATA_SOURCE_TOKEN=" "$env_file" 2>/dev/null; then
+                sed -i.bak "s|^OPAL_DATA_SOURCE_TOKEN=.*|OPAL_DATA_SOURCE_TOKEN=${_opal_ds_token}|" "$env_file"
+                rm -f "$env_file.bak"
+            else
+                echo "OPAL_DATA_SOURCE_TOKEN=${_opal_ds_token}" >> "$env_file"
+            fi
+            log_verbose "Propagated Hub OPAL_DATA_SOURCE_TOKEN to spoke .env"
+        else
+            log_warn "Hub OPAL_DATA_SOURCE_TOKEN not found — spoke OPAL data auth will be unauthenticated"
+        fi
+
         # Add ECR registry and AWS region for deploy.sh bootstrap
         if ! grep -q "^ECR_REGISTRY=" "$env_file"; then
             echo "ECR_REGISTRY=${ECR_REGISTRY}" >> "$env_file"
@@ -497,18 +514,8 @@ _spoke_ship_package() {
 
     log_info "Shipping to spoke EC2: ${spoke_ip}"
 
-    # Resolve SSH key
-    local ssh_key="${DIVE_AWS_SSH_KEY:-}"
-    if [ -z "$ssh_key" ]; then
-        for _k in ~/.ssh/ABeach-SSH-Key.pem ~/.ssh/dive-ec2-key.pem; do
-            if [ -f "$_k" ]; then ssh_key="$_k"; break; fi
-        done
-    fi
-
-    if [ -z "$ssh_key" ]; then
-        log_error "SSH key not found. Set DIVE_AWS_SSH_KEY or place key in ~/.ssh/"
-        return 1
-    fi
+    # SSH key — set by common.sh from DIVE_AWS_SSH_KEY (default: ~/.ssh/${DIVE_AWS_KEY_PAIR}.pem)
+    local ssh_key="${DIVE_AWS_SSH_KEY:?DIVE_AWS_SSH_KEY not set — run from DIVE CLI or export manually}"
 
     # Create target directory on spoke
     ssh -i "$ssh_key" $SSH_OPTS \
@@ -564,18 +571,8 @@ _spoke_start_remote() {
         return 1
     fi
 
-    # Resolve SSH key
-    local ssh_key="${DIVE_AWS_SSH_KEY:-}"
-    if [ -z "$ssh_key" ]; then
-        for _k in ~/.ssh/ABeach-SSH-Key.pem ~/.ssh/dive-ec2-key.pem; do
-            if [ -f "$_k" ]; then ssh_key="$_k"; break; fi
-        done
-    fi
-
-    if [ -z "$ssh_key" ]; then
-        log_error "SSH key not found. Set DIVE_AWS_SSH_KEY or place key in ~/.ssh/"
-        return 1
-    fi
+    # SSH key — set by common.sh from DIVE_AWS_SSH_KEY (default: ~/.ssh/${DIVE_AWS_KEY_PAIR}.pem)
+    local ssh_key="${DIVE_AWS_SSH_KEY:?DIVE_AWS_SSH_KEY not set — run from DIVE CLI or export manually}"
 
     log_info "Executing deploy.sh on ${spoke_ip}..."
 

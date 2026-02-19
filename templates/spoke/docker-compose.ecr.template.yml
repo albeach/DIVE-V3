@@ -342,7 +342,7 @@ services:
 
   opal-client-{{INSTANCE_CODE_LOWER}}:
     labels:
-      dive.service.class: "optional"
+      dive.service.class: "core"
       dive.service.description: "OPAL client for real-time policy sync with hub"
     image: {{ECR_REGISTRY}}/dive-v3-opal-client:{{IMAGE_TAG}}
     container_name: dive-spoke-{{INSTANCE_CODE_LOWER}}-opal-client
@@ -365,22 +365,23 @@ services:
       SSL_CERT_FILE: /var/opal/ca-bundle/rootCA.pem
       REQUESTS_CA_BUNDLE: /var/opal/ca-bundle/rootCA.pem
       WEBSOCKET_SSL_CERT: /var/opal/ca-bundle/rootCA.pem
-    ports:
-      - "{{OPAL_OPA_PORT}}:8181"
     volumes:
       - opal_cache:/var/opal/cache
       - opal_backup:/opal/backup
       - ./certs:/var/opal/certs:ro
       - ./ca-bundle:/var/opal/ca-bundle:ro
+    depends_on:
+      opa-{{INSTANCE_CODE_LOWER}}:
+        condition: service_healthy
     networks:
       - dive-internal
     extra_hosts:
       - "localhost:host-gateway"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7000/healthcheck"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
+      interval: 10s
+      timeout: 5s
+      retries: 10
       start_period: 30s
     restart: unless-stopped
 
@@ -441,6 +442,9 @@ services:
       FFMPEG_PATH: /usr/bin/ffmpeg
       MAX_MULTIMEDIA_UPLOAD_SIZE_MB: "500"
       MAX_UPLOAD_SIZE_MB: "100"
+      # OPAL data source token — validates OPAL client data fetch requests
+      # Propagated from Hub's OPAL_DATA_SOURCE_TOKEN during spoke_prepare()
+      OPAL_DATA_SOURCE_TOKEN: ${OPAL_DATA_SOURCE_TOKEN:-}
     ports:
       - "127.0.0.1:{{BACKEND_HOST_PORT}}:4000"
     volumes:
@@ -462,7 +466,9 @@ services:
       opal-client-{{INSTANCE_CODE_LOWER}}:
         condition: service_started
     networks:
-      - dive-internal
+      dive-internal:
+        aliases:
+          - backend
     healthcheck:
       test: ["CMD", "curl", "-k", "-f", "https://localhost:4000/api/health"]
       interval: 30s
