@@ -291,7 +291,11 @@ spoke_prepare() {
     # Export Keycloak admin password for registration (needed by phase-configuration.sh)
     if [ -f "$spoke_dir/.env" ]; then
         local _kc_pw
-        _kc_pw=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" "$spoke_dir/.env" 2>/dev/null | cut -d= -f2-)
+        # Try suffixed name first (e.g., KEYCLOAK_ADMIN_PASSWORD_GBR), then unsuffixed
+        _kc_pw=$(grep "^KEYCLOAK_ADMIN_PASSWORD_${code_upper}=" "$spoke_dir/.env" 2>/dev/null | cut -d= -f2-)
+        if [ -z "$_kc_pw" ]; then
+            _kc_pw=$(grep "^KEYCLOAK_ADMIN_PASSWORD=" "$spoke_dir/.env" 2>/dev/null | cut -d= -f2-)
+        fi
         if [ -n "$_kc_pw" ]; then
             export "KEYCLOAK_ADMIN_PASSWORD_${code_upper}=${_kc_pw}"
             log_verbose "Loaded Keycloak admin password for $code_upper from spoke .env"
