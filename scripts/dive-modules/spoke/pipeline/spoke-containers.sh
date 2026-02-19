@@ -337,23 +337,63 @@ spoke_containers_start() {
     fi
 
     # Stage 2: Start OPAL Client (depends on infrastructure)
-    log_verbose "Stage 2: Starting OPAL Client..."
-    compose_args="$compose_args_base opal-client-${code_lower}"
+    # CRITICAL FIX (2026-02-19): Wait for OPA to be healthy BEFORE starting OPAL client.
+    # Docker compose depends_on:service_healthy blocks indefinitely if OPA hasn't passed
+    # its first health check (30s start_period). By waiting here, we avoid docker compose
+    # blocking or timing out.
+    log_info "Stage 2: Waiting for OPA to be healthy before starting OPAL Client..."
+    local opa_healthy=false
+    local opa_wait=0
+    local opa_max_wait=90  # OPA start_period(30s) + retries(5) * interval(15s) = 105s; 90s is generous
+    while [ $opa_wait -lt $opa_max_wait ]; do
+        local opa_health
+        opa_health=$(docker inspect --format='{{.State.Health.Status}}' "dive-spoke-${code_lower}-opa" 2>/dev/null || echo "unknown")
+        if [ "$opa_health" = "healthy" ]; then
+            opa_healthy=true
+            log_info "OPA is healthy after ${opa_wait}s — starting OPAL Client"
+            break
+        fi
+        log_verbose "OPA health: ${opa_health}, waiting... (${opa_wait}/${opa_max_wait}s)"
+        sleep 3
+        opa_wait=$((opa_wait + 3))
+    done
 
+    if [ "$opa_healthy" != "true" ]; then
+        log_warn "OPA did not become healthy within ${opa_max_wait}s — starting OPAL Client anyway"
+        log_warn "OPAL Client may fail to start if OPA dependency is not met"
+    fi
+
+    compose_args="$compose_args_base opal-client-${code_lower}"
     log_verbose "Running: $compose_cmd $compose_args"
-    if ! $compose_cmd $compose_args >/dev/null 2>&1; then
-        log_error "Failed to start OPAL Client"
-        orch_record_error "$SPOKE_ERROR_COMPOSE_UP" "$ORCH_SEVERITY_CRITICAL" \
-            "OPAL Client startup failed" "containers" \
-            "$(spoke_error_get_remediation $SPOKE_ERROR_COMPOSE_UP $instance_code)"
-        return 1
+
+    # CRITICAL FIX (2026-02-19): Capture compose output instead of suppressing it.
+    # Previous code used >/dev/null 2>&1 which hid the actual error message,
+    # making remote deployment failures impossible to diagnose.
+    local opal_compose_output
+    local opal_compose_exit=0
+    opal_compose_output=$($compose_cmd $compose_args 2>&1) || opal_compose_exit=$?
+
+    if [ $opal_compose_exit -ne 0 ]; then
+        # CRITICAL FIX (2026-02-19): OPAL Client startup failure is NON-BLOCKING.
+        # In remote mode, OPAL Client often fails during deployment because:
+        #   - OPA may not be healthy yet (depends_on condition)
+        #   - Token is placeholder (real token provisioned in CONFIGURATION phase)
+        #   - Hub OPAL server may not be reachable yet
+        # The OPAL Client will be restarted with a real token after federation setup.
+        log_warn "OPAL Client startup returned exit code $opal_compose_exit (non-blocking)"
+        log_warn "Compose output:"
+        echo "$opal_compose_output" | tail -10
+        log_warn "OPAL Client will be configured in the CONFIGURATION phase"
+        log_warn "Deployment will continue — OPAL is not required for core infrastructure"
+        # Do NOT return 1 — OPAL client failure should not block spoke deployment
     fi
 
     # Wait for OPAL Client to be healthy (may take longer due to policy sync)
     log_verbose "Waiting for OPAL Client to be healthy..."
     if ! spoke_containers_wait_for_services "$instance_code" "opal-client-${code_lower}" 120; then
-        log_warn "OPAL Client did not become healthy - deployment will continue but policy enforcement may not work"
-        log_warn "Check OPAL logs: ./dive spoke logs FRA opal-client"
+        log_warn "OPAL Client did not become healthy — deployment will continue"
+        log_warn "This is expected in remote mode (token provisioned in CONFIGURATION phase)"
+        log_warn "Check OPAL logs: ./dive --instance ${code_lower} spoke logs opal-client"
         # Non-blocking: OPAL is important but spoke can function without it initially
     fi
 
@@ -607,6 +647,14 @@ spoke_containers_wait_for_healthy() {
     # Get services dynamically from compose file
     local service_order=($(spoke_get_service_order "$instance_code"))
 
+    # CRITICAL FIX (2026-02-19): Get optional services so we don't block on them.
+    # OPAL client is "optional" — it often isn't healthy during DEPLOYMENT phase
+    # because the real token is provisioned in the CONFIGURATION phase.
+    local optional_services=""
+    if type compose_get_spoke_services_by_class &>/dev/null; then
+        optional_services=$(compose_get_spoke_services_by_class "$instance_code" "optional" 2>/dev/null || echo "")
+    fi
+
     # Wait for each service in order
     for service in "${service_order[@]}"; do
         local container="dive-spoke-${code_lower}-${service}"
@@ -622,8 +670,20 @@ spoke_containers_wait_for_healthy() {
             return 1
         fi
 
+        # CRITICAL FIX (2026-02-19): Optional services are non-blocking
+        # OPAL client health failure should not prevent deployment from proceeding
+        local is_optional=false
+        if echo " $optional_services " | grep -q " $service "; then
+            is_optional=true
+        fi
+
         # Wait for this service
         if ! spoke_containers_wait_for_service "$container" "$timeout"; then
+            if [ "$is_optional" = "true" ]; then
+                log_warn "Optional service $service did not become healthy (non-blocking)"
+                log_warn "This is expected — $service will be configured in a later phase"
+                continue
+            fi
             orch_record_error "$SPOKE_ERROR_CONTAINER_UNHEALTHY" "$ORCH_SEVERITY_HIGH" \
                 "Service $service failed health check" "containers" \
                 "$(spoke_error_get_remediation $SPOKE_ERROR_CONTAINER_UNHEALTHY $instance_code)"
