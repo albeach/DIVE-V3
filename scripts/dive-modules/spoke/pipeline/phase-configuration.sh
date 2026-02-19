@@ -437,6 +437,7 @@ spoke_config_register_in_hub_mongodb() {
     local instance_code="$1"
     local code_upper=$(upper "$instance_code")
     local code_lower=$(lower "$instance_code")
+    local spoke_dir="${spoke_dir:-${DIVE_ROOT}/instances/${code_lower}}"
 
     log_verbose "Registering spoke in Hub MongoDB spoke registry..."
 
