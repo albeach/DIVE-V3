@@ -263,6 +263,12 @@ case "$COMMAND" in
         module_federation "$@"
         ;;
 
+    # Setup wizard (first-time configuration)
+    setup)
+        source "${MODULES_DIR}/configuration/setup-wizard.sh"
+        cmd_setup "$@"
+        ;;
+
     # Hub commands (deployment/hub.sh - Phase 3 enhanced spoke management)
     hub)
         source "${MODULES_DIR}/deployment/hub.sh"

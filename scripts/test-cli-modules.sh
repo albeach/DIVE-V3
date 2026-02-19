@@ -531,6 +531,42 @@ test_cli_deploy_summary() {
 }
 
 ##
+# Test setup wizard module (Phase 5)
+#
+test_cli_setup_wizard() {
+    log_verbose "Testing setup wizard module..."
+
+    local wizard="${DIVE_ROOT}/scripts/dive-modules/configuration/setup-wizard.sh"
+    if [ ! -f "$wizard" ]; then
+        log_error "setup-wizard.sh not found"
+        return 1
+    fi
+
+    source "$wizard"
+
+    # Verify cmd_setup function exists
+    if ! type cmd_setup &>/dev/null; then
+        log_error "cmd_setup function not found"
+        return 1
+    fi
+
+    # Non-interactive mode should fail gracefully
+    local output
+    output=$(DIVE_NON_INTERACTIVE=true cmd_setup 2>&1)
+    local rc=$?
+    if [ $rc -eq 0 ]; then
+        log_error "cmd_setup should fail in non-interactive mode"
+        return 1
+    fi
+    if ! echo "$output" | grep -q "requires interactive"; then
+        log_error "Missing 'requires interactive' error message"
+        return 1
+    fi
+
+    return 0
+}
+
+##
 # Run all CLI module tests
 #
 test_run_cli_module_tests() {
@@ -543,6 +579,7 @@ test_run_cli_module_tests() {
         "test_cli_config_loader"
         "test_cli_config_validator"
         "test_cli_deploy_summary"
+        "test_cli_setup_wizard"
         "test_cli_federation_module"
         "test_cli_hub_module"
         "test_cli_spoke_module"
