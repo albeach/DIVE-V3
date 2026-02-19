@@ -46,7 +46,20 @@ unset _compose_script_dir _nato_db
 # TEMPLATE CONFIGURATION
 # =============================================================================
 
-readonly SPOKE_TEMPLATE_FILE="${DIVE_ROOT}/templates/spoke/docker-compose.template.yml"
+SPOKE_TEMPLATE_FILE="${DIVE_ROOT}/templates/spoke/docker-compose.template.yml"
+SPOKE_ECR_TEMPLATE_FILE="${DIVE_ROOT}/templates/spoke/docker-compose.ecr.template.yml"
+
+# Select ECR template when remote mode or ECR_REGISTRY is set
+_spoke_get_template_file() {
+    if [ -n "${ECR_REGISTRY:-}" ] || [ "${DEPLOYMENT_MODE:-local}" = "remote" ]; then
+        if [ -f "$SPOKE_ECR_TEMPLATE_FILE" ]; then
+            echo "$SPOKE_ECR_TEMPLATE_FILE"
+            return
+        fi
+        log_warn "ECR template not found, falling back to local template"
+    fi
+    echo "$SPOKE_TEMPLATE_FILE"
+}
 
 # Port offset for spoke instances (to avoid Hub port conflicts)
 # Use a function to calculate instead of readonly constant
@@ -94,13 +107,21 @@ spoke_compose_generate() {
 
     log_step "Generating docker-compose.yml for $code_upper"
 
+    # Select template (ECR for remote, local for local dev)
+    local active_template
+    active_template=$(_spoke_get_template_file)
+
     # Verify template exists
-    if [ ! -f "$SPOKE_TEMPLATE_FILE" ]; then
-        log_error "Template not found: $SPOKE_TEMPLATE_FILE"
+    if [ ! -f "$active_template" ]; then
+        log_error "Template not found: $active_template"
         orch_record_error "$SPOKE_ERROR_COMPOSE_GENERATE" "$ORCH_SEVERITY_CRITICAL" \
             "Docker compose template not found" "compose" \
             "Ensure templates/spoke/docker-compose.template.yml exists"
         return 1
+    fi
+
+    if [ "$active_template" = "$SPOKE_ECR_TEMPLATE_FILE" ]; then
+        log_info "Using ECR template (pre-built images from registry)"
     fi
 
     # Ensure target directory exists
@@ -190,6 +211,10 @@ spoke_compose_get_placeholders() {
         log_verbose "Caddy mode: spoke URLs use domain ${_base_domain}"
     fi
 
+    # ECR registry and image tag (for ECR template)
+    local ecr_registry="${ECR_REGISTRY:-}"
+    local image_tag="${IMAGE_TAG:-latest}"
+
     # Output placeholders for rendering
     cat << EOF
 INSTANCE_CODE_UPPER="${code_upper}"
@@ -211,6 +236,8 @@ TIMESTAMP="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 TEMPLATE_HASH="${template_hash}"
 TEMPLATE_LAST_UPDATED="${template_date}"
 IDP_BASE_URL="${idp_base_url}"
+ECR_REGISTRY="${ecr_registry}"
+IMAGE_TAG="${image_tag}"
 EOF
 }
 
@@ -368,9 +395,13 @@ spoke_compose_render_template() {
     # Evaluate placeholders
     eval "$placeholders"
 
+    # Select the active template
+    local active_template
+    active_template=$(_spoke_get_template_file)
+
     # Read template and substitute
     local template_content
-    template_content=$(cat "$SPOKE_TEMPLATE_FILE")
+    template_content=$(cat "$active_template")
 
     # Perform substitutions
     template_content="${template_content//\{\{INSTANCE_CODE_UPPER\}\}/${INSTANCE_CODE_UPPER}}"
@@ -392,6 +423,10 @@ spoke_compose_render_template() {
     template_content="${template_content//\{\{TIMESTAMP\}\}/${TIMESTAMP}}"
     template_content="${template_content//\{\{TEMPLATE_HASH\}\}/${TEMPLATE_HASH}}"
     template_content="${template_content//\{\{TEMPLATE_LAST_UPDATED\}\}/${TEMPLATE_LAST_UPDATED}}"
+
+    # ECR placeholders (only meaningful for ECR template, harmless for local)
+    template_content="${template_content//\{\{ECR_REGISTRY\}\}/${ECR_REGISTRY:-}}"
+    template_content="${template_content//\{\{IMAGE_TAG\}\}/${IMAGE_TAG:-latest}}"
 
     # CRITICAL FIX (2026-01-18): Do NOT substitute environment variable values
     # Docker Compose loads ${VAR_NAME} from .env file at runtime
@@ -501,8 +536,10 @@ spoke_compose_check_drift() {
     fi
 
     # Get current template hash
+    local active_template
+    active_template=$(_spoke_get_template_file)
     local template_hash
-    template_hash=$(md5sum "$SPOKE_TEMPLATE_FILE" 2>/dev/null | cut -d' ' -f1)
+    template_hash=$(md5sum "$active_template" 2>/dev/null | cut -d' ' -f1)
 
     # Get hash from generated file
     local current_hash

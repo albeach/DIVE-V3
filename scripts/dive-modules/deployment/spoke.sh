@@ -69,24 +69,109 @@ module_spoke() {
     shift || true
 
     # Remote execution: if env is dev/staging, delegate to remote EC2
+    # EXCEPTION: prepare, configure, deploy, start-remote run ON the Hub
     if [ -f "${MODULES_DIR}/aws/remote-exec.sh" ]; then
         source "${MODULES_DIR}/aws/remote-exec.sh"
         if is_remote_environment 2>/dev/null; then
-            local spoke_code="${1:-${INSTANCE}}"
-            log_info "Remote environment detected (${ENVIRONMENT}). Delegating to spoke EC2..."
-            remote_spoke_exec "$spoke_code" "$action" "$@"
-            return $?
+            case "$action" in
+                prepare|configure|deploy|start-remote)
+                    # These run on the Hub — do NOT delegate to spoke EC2
+                    # deploy in remote env triggers the ECR-based prepare→start→configure chain
+                    log_info "Remote environment: ${action} runs on Hub (ECR-based)"
+                    ;;
+                *)
+                    local spoke_code="${1:-${INSTANCE}}"
+                    log_info "Remote environment detected (${ENVIRONMENT}). Delegating to spoke EC2..."
+                    remote_spoke_exec "$spoke_code" "$action" "$@"
+                    return $?
+                    ;;
+            esac
         fi
     fi
 
     case "$action" in
-        # === Deployment Operations (delegate to spoke-deploy.sh) ===
-        deploy)
-            if type -t spoke_deploy &>/dev/null; then
-                spoke_deploy "$@"
+        # === Remote Spoke Deployment (ECR-based, Hub-side operations) ===
+        prepare)
+            if [ -f "${SPOKE_DIR}/prepare.sh" ]; then
+                source "${SPOKE_DIR}/prepare.sh"
+            fi
+            if type -t spoke_prepare &>/dev/null; then
+                spoke_prepare "$@"
             else
-                log_error "spoke_deploy not available - spoke-deploy.sh not loaded"
+                log_error "spoke_prepare not available - spoke/prepare.sh not loaded"
                 return 1
+            fi
+            ;;
+
+        configure)
+            if [ -f "${SPOKE_DIR}/configure-remote.sh" ]; then
+                source "${SPOKE_DIR}/configure-remote.sh"
+            fi
+            if type -t spoke_configure_remote &>/dev/null; then
+                spoke_configure_remote "$@"
+            else
+                log_error "spoke_configure_remote not available - spoke/configure-remote.sh not loaded"
+                return 1
+            fi
+            ;;
+
+        start-remote)
+            if [ -f "${SPOKE_DIR}/prepare.sh" ]; then
+                source "${SPOKE_DIR}/prepare.sh"
+            fi
+            if type -t _spoke_start_remote &>/dev/null; then
+                _spoke_start_remote "$@"
+            else
+                log_error "_spoke_start_remote not available"
+                return 1
+            fi
+            ;;
+
+        # === Deployment Operations ===
+        deploy)
+            # Remote environment: use ECR-based prepare → start → configure chain
+            if is_remote_environment 2>/dev/null; then
+                local _spoke_code="${1:?Instance code required}"
+                log_info "Remote deployment: ECR-based prepare → start → configure"
+
+                # Load prepare module
+                if [ -f "${SPOKE_DIR}/prepare.sh" ]; then
+                    source "${SPOKE_DIR}/prepare.sh"
+                fi
+
+                # Phase 1: Prepare (Hub-side config package generation)
+                if type -t spoke_prepare &>/dev/null; then
+                    spoke_prepare "$@" || { log_error "Prepare phase failed"; return 1; }
+                else
+                    log_error "spoke_prepare not available"; return 1
+                fi
+
+                # Phase 2: Start (SSH to spoke EC2, pull images, compose up)
+                if type -t _spoke_start_remote &>/dev/null; then
+                    _spoke_start_remote "$_spoke_code" || { log_error "Start phase failed"; return 1; }
+                else
+                    log_error "_spoke_start_remote not available"; return 1
+                fi
+
+                # Phase 3: Configure (Terraform + federation from Hub)
+                if [ -f "${SPOKE_DIR}/configure-remote.sh" ]; then
+                    source "${SPOKE_DIR}/configure-remote.sh"
+                fi
+                if type -t spoke_configure_remote &>/dev/null; then
+                    spoke_configure_remote "$_spoke_code" || { log_warn "Configure phase had issues"; }
+                else
+                    log_warn "spoke_configure_remote not available — run manually: ./dive spoke configure $_spoke_code"
+                fi
+
+                log_success "Remote deployment of $_spoke_code complete!"
+            else
+                # Local environment: use existing pipeline
+                if type -t spoke_deploy &>/dev/null; then
+                    spoke_deploy "$@"
+                else
+                    log_error "spoke_deploy not available - spoke-deploy.sh not loaded"
+                    return 1
+                fi
             fi
             ;;
 
@@ -243,10 +328,13 @@ _spoke_help() {
 Usage: ./dive spoke <command> [args]
 
 Commands:
-  deploy <CODE> [name]        Full spoke deployment using pipeline
+  deploy <CODE> [name]        Full spoke deployment (local pipeline)
+  prepare <CODE>              Generate config package on Hub (ECR-based remote)
+  configure <CODE>            Run Terraform + federation from Hub (remote)
+  start-remote <CODE>         SSH to spoke EC2 and run deploy.sh
   init <CODE> [name]          Initialize spoke directory only
   setup-wizard                Interactive spoke setup wizard
-  up <CODE>                   Start spoke services
+  up <CODE>                   Start spoke services (local)
   down <CODE>                 Stop spoke services
   status [CODE]               Show spoke status
   verify <CODE>               Verify spoke deployment
@@ -259,19 +347,18 @@ Repair Commands:
   reload-secrets <CODE>       Reload secrets from GCP and restart services
   repair <CODE>               Auto-diagnose and fix common issues
 
-Deployment Options:
-  --force                     Force deployment even if already deployed
-  --legacy                    Use legacy deployment (skip pipeline)
-  --skip-federation           Skip federation setup
+Remote Spoke Deployment (ECR):
+  ./dive spoke prepare GBR           # 1. Generate config package on Hub
+  ./dive spoke start-remote GBR      # 2. SSH + pull ECR images + start
+  ./dive spoke configure GBR         # 3. Terraform + federation from Hub
 
-Examples:
-  ./dive spoke deploy ALB "Albania Defence"
-  ./dive spoke status FRA
-  ./dive spoke logs DEU keycloak
-  ./dive spoke verify GBR
-  ./dive spoke restart FRA backend
-  ./dive spoke reload-secrets FRA
-  ./dive spoke repair FRA
+Local Spoke Deployment:
+  ./dive spoke deploy ALB "Albania"  # Full local pipeline (build from source)
+
+Options:
+  --force                     Force deployment even if already deployed
+  --skip-federation           Skip federation setup
+  --dry-run                   Generate package without shipping (prepare only)
 
 For more help: ./dive help spoke
 EOF
