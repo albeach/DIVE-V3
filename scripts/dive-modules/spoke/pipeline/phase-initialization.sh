@@ -419,9 +419,16 @@ spoke_init_generate_config() {
     fi
 
     # Hub OPAL URL: Docker container name (local) or external Caddy URL (remote)
+    # In remote mode, derive from HUB_API_URL if HUB_OPAL_URL not explicitly set
+    # (e.g., https://dev-usa-api.dive25.com → https://dev-usa-opal.dive25.com)
     local hub_opal_url="https://dive-hub-opal-server:7002"
     if [ "${DEPLOYMENT_MODE:-local}" = "remote" ]; then
-        hub_opal_url="${HUB_OPAL_URL:-https://dive-hub-opal-server:7002}"
+        if [ -n "${HUB_OPAL_URL:-}" ]; then
+            hub_opal_url="$HUB_OPAL_URL"
+        elif [[ "${hub_url_internal}" =~ ^https://([^-]+-[^-]+)-api\.(.+)$ ]]; then
+            hub_opal_url="https://${BASH_REMATCH[1]}-opal.${BASH_REMATCH[2]}"
+            export HUB_OPAL_URL="$hub_opal_url"
+        fi
         log_info "Remote mode: Hub OPAL URL → ${hub_opal_url}"
     fi
 
