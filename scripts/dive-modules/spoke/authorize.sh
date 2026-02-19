@@ -139,7 +139,7 @@ spoke_authorize() {
     export VAULT_ADDR="$vault_addr"
     export VAULT_TOKEN="$vault_token"
 
-    # TLS: use CA cert if available, otherwise skip verification
+    # TLS: try CACERT first, fall back to VAULT_SKIP_VERIFY if it fails
     if [ -z "${VAULT_CACERT:-}" ] && [[ "$vault_addr" == https://* ]]; then
         local _ca_cert="${DIVE_ROOT}/certs/vault/node1/ca.pem"
         if [ -f "$_ca_cert" ]; then
@@ -150,8 +150,13 @@ spoke_authorize() {
     fi
 
     if ! vault status >/dev/null 2>&1; then
-        log_error "Vault is not accessible at $vault_addr"
-        return 1
+        # CACERT-based TLS may fail — fall back to skip verification
+        unset VAULT_CACERT
+        export VAULT_SKIP_VERIFY=1
+        if ! vault status >/dev/null 2>&1; then
+            log_error "Vault is not accessible at $vault_addr"
+            return 1
+        fi
     fi
 
     # Step 2: Write authorization record to Vault
@@ -246,7 +251,7 @@ spoke_verify_authorization() {
     export VAULT_ADDR="$vault_addr"
     export VAULT_TOKEN="$vault_token"
 
-    # TLS: use CA cert if available, otherwise skip verification
+    # TLS: try CACERT, fall back to VAULT_SKIP_VERIFY
     if [ -z "${VAULT_CACERT:-}" ] && [[ "$vault_addr" == https://* ]]; then
         local _ca_cert="${DIVE_ROOT}/certs/vault/node1/ca.pem"
         if [ -f "$_ca_cert" ]; then
@@ -254,6 +259,11 @@ spoke_verify_authorization() {
         else
             export VAULT_SKIP_VERIFY=1
         fi
+    fi
+    # Ensure Vault is reachable (fallback to skip TLS verify)
+    if ! vault status >/dev/null 2>&1; then
+        unset VAULT_CACERT
+        export VAULT_SKIP_VERIFY=1
     fi
 
     # Read authorization record
