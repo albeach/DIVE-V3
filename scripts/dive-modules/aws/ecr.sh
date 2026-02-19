@@ -42,7 +42,7 @@ fi
 ECR_PREFIX="dive-v3"
 
 # Services that need custom Docker images (the rest use public images)
-ECR_SERVICES=(frontend backend keycloak kas opal-server opal-client)
+ECR_SERVICES=(frontend backend keycloak kas opal-server opal-client caddy)
 
 # Resolve ECR registry URL
 _ecr_registry_url() {
@@ -167,7 +167,7 @@ ecr_push() {
 
         case "$service" in
             frontend)
-                dockerfile="${DIVE_ROOT}/frontend/Dockerfile.prod"
+                dockerfile="${DIVE_ROOT}/frontend/Dockerfile.prod.optimized"
                 context="${DIVE_ROOT}/frontend"
                 ;;
             backend)
@@ -183,12 +183,16 @@ ecr_push() {
                 context="${DIVE_ROOT}/kas"
                 ;;
             opal-server)
-                dockerfile="${DIVE_ROOT}/docker/opal-server/Dockerfile"
-                context="${DIVE_ROOT}/docker/opal-server"
+                dockerfile="${DIVE_ROOT}/docker/opal-server.Dockerfile"
+                context="${DIVE_ROOT}/docker"
                 ;;
             opal-client)
-                dockerfile="${DIVE_ROOT}/docker/opal-client/Dockerfile"
-                context="${DIVE_ROOT}/docker/opal-client"
+                dockerfile="${DIVE_ROOT}/docker/opal-client.Dockerfile"
+                context="${DIVE_ROOT}/docker"
+                ;;
+            caddy)
+                dockerfile="${DIVE_ROOT}/docker/caddy/Dockerfile"
+                context="${DIVE_ROOT}/docker/caddy"
                 ;;
         esac
 

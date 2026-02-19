@@ -181,7 +181,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: frontend
-          file: frontend/Dockerfile.prod
+          file: frontend/Dockerfile.prod.optimized
           push: true
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-frontend:${{ steps.tag.outputs.tag }}
@@ -204,6 +204,35 @@ jobs:
           tags: |
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-kas:${{ steps.tag.outputs.tag }}
             ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-kas:latest
+
+      - name: Build & push OPAL Server
+        uses: docker/build-push-action@v5
+        with:
+          context: docker
+          file: docker/opal-server.Dockerfile
+          push: true
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-opal-server:${{ steps.tag.outputs.tag }}
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-opal-server:latest
+
+      - name: Build & push OPAL Client
+        uses: docker/build-push-action@v5
+        with:
+          context: docker
+          file: docker/opal-client.Dockerfile
+          push: true
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-opal-client:${{ steps.tag.outputs.tag }}
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-opal-client:latest
+
+      - name: Build & push Caddy
+        uses: docker/build-push-action@v5
+        with:
+          context: docker/caddy
+          push: true
+          tags: |
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-caddy:${{ steps.tag.outputs.tag }}
+            ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_PREFIX }}-caddy:latest
 
   # ===========================================================================
   # Deploy Hub
