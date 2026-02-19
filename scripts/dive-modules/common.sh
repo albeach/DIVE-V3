@@ -500,24 +500,27 @@ export HUB_FRONTEND_CONTAINER="${HUB_PROJECT_NAME}-frontend"
 : "${HUB_REALM:=dive-v3-broker-usa}"
 export HUB_REALM
 
-# Hub API URL - Environment aware
+# Hub API URL - Environment aware (only set defaults if not already specified)
+# Pre-set HUB_API_URL (e.g., from spoke deploy --auth-code flow) takes priority.
 # - LOCAL: Use localhost hub
 # - DEV/STAGING: Use HUB_EXTERNAL_ADDRESS (auto-detected on EC2, or set manually)
 # - GCP/PILOT: Use production hub
-case "$ENVIRONMENT" in
-    local)
-        export HUB_API_URL="${DIVE_HUB_URL:-https://localhost:4000}"
-        ;;
-    dev)
-        export HUB_API_URL="${DIVE_HUB_URL:-https://${HUB_EXTERNAL_ADDRESS:-localhost}:4000}"
-        ;;
-    staging)
-        export HUB_API_URL="${DIVE_HUB_URL:-https://${HUB_EXTERNAL_ADDRESS:-localhost}:4000}"
-        ;;
-    *)
-        export HUB_API_URL="${DIVE_HUB_URL:-https://usa-api.dive25.com}"
-        ;;
-esac
+if [ -z "${HUB_API_URL:-}" ]; then
+    case "$ENVIRONMENT" in
+        local)
+            export HUB_API_URL="${DIVE_HUB_URL:-https://localhost:4000}"
+            ;;
+        dev)
+            export HUB_API_URL="${DIVE_HUB_URL:-https://${HUB_EXTERNAL_ADDRESS:-localhost}:4000}"
+            ;;
+        staging)
+            export HUB_API_URL="${DIVE_HUB_URL:-https://${HUB_EXTERNAL_ADDRESS:-localhost}:4000}"
+            ;;
+        *)
+            export HUB_API_URL="${DIVE_HUB_URL:-https://usa-api.dive25.com}"
+            ;;
+    esac
+fi
 
 # Derived hub URLs for cross-instance communication (set when hub is remote)
 if [ -n "${HUB_EXTERNAL_ADDRESS:-}" ] && [ "$HUB_EXTERNAL_ADDRESS" != "localhost" ]; then
