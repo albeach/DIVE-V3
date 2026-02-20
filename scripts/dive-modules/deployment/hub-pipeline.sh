@@ -600,6 +600,23 @@ _hub_run_phase_with_circuit_breaker() {
             orch_db_record_step "$instance_code" "$phase_name" "FAILED" "Phase execution failed"
         fi
 
+        # Guided error recovery
+        if type error_recovery_suggest &>/dev/null; then
+            error_recovery_suggest "$phase_name" "hub" "$instance_code"
+            local recovery_action=$?
+            if [ $recovery_action -eq 0 ]; then
+                # Retry: recurse into this function
+                log_info "Retrying phase $phase_name..."
+                _hub_run_phase_with_circuit_breaker "$instance_code" "$phase_name" "$phase_function" "$pipeline_mode" "$resume_mode"
+                return $?
+            elif [ $recovery_action -eq 2 ]; then
+                # Skip: return success
+                log_warn "Skipping phase $phase_name (user chose to skip)"
+                return 0
+            fi
+            # Abort: fall through to return 1
+        fi
+
         return 1
     fi
 }
