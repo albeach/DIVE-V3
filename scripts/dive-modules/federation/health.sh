@@ -658,23 +658,22 @@ verify_federation_state() {
     ensure_dive_root
     log_step "Verifying federation state for $code_upper..."
 
+    # Load keycloak-api.sh for cross-network support
+    local _api_module="${FEDERATION_DIR}/keycloak-api.sh"
+    if [ -f "$_api_module" ] && [ -z "${KEYCLOAK_API_LOADED:-}" ]; then
+        source "$_api_module"
+    fi
+
     local checks_passed=0 checks_failed=0
     local issues=()
+    local realm="dive-v3-broker-${code_lower}"
 
     # Check 1: Hub IdP exists in spoke Keycloak
     echo -n "  Hub IdP in Spoke:          "
-    local spoke_token=""
-    if type -t get_spoke_admin_token &>/dev/null; then
-        spoke_token=$(get_spoke_admin_token "$spoke_code" 2>/dev/null)
-    fi
-    local realm="dive-v3-broker-${code_lower}"
-    local kc_container="dive-spoke-${code_lower}-keycloak"
-
-    if [ -n "$spoke_token" ]; then
+    if type keycloak_admin_api &>/dev/null; then
         local hub_idp_check
-        hub_idp_check=$(docker exec "$kc_container" curl -sf \
-            -H "Authorization: Bearer $spoke_token" \
-            "http://localhost:8080/admin/realms/${realm}/identity-provider/instances/usa-idp" 2>/dev/null)
+        hub_idp_check=$(keycloak_admin_api "$code_upper" "GET" \
+            "realms/${realm}/identity-provider/instances/usa-idp" 2>/dev/null)
         if echo "$hub_idp_check" | grep -q '"alias"'; then
             echo -e "${GREEN}✓${NC}"; checks_passed=$((checks_passed + 1))
         else
@@ -682,39 +681,71 @@ verify_federation_state() {
             issues+=("Hub IdP (usa-idp) missing in ${code_upper} Keycloak")
         fi
     else
-        echo -e "${RED}✗${NC} (cannot authenticate)"; checks_failed=$((checks_failed + 1))
-        issues+=("Cannot authenticate to ${code_upper} Keycloak")
+        # Legacy fallback: direct docker exec
+        local spoke_token=""
+        if type -t get_spoke_admin_token &>/dev/null; then
+            spoke_token=$(get_spoke_admin_token "$spoke_code" 2>/dev/null)
+        fi
+        local kc_container="dive-spoke-${code_lower}-keycloak"
+        if [ -n "$spoke_token" ]; then
+            local hub_idp_check
+            hub_idp_check=$(docker exec "$kc_container" curl -sf \
+                -H "Authorization: Bearer $spoke_token" \
+                "http://localhost:8080/admin/realms/${realm}/identity-provider/instances/usa-idp" 2>/dev/null)
+            if echo "$hub_idp_check" | grep -q '"alias"'; then
+                echo -e "${GREEN}✓${NC}"; checks_passed=$((checks_passed + 1))
+            else
+                echo -e "${RED}✗${NC}"; checks_failed=$((checks_failed + 1))
+                issues+=("Hub IdP (usa-idp) missing in ${code_upper} Keycloak")
+            fi
+        else
+            echo -e "${RED}✗${NC} (cannot authenticate)"; checks_failed=$((checks_failed + 1))
+            issues+=("Cannot authenticate to ${code_upper} Keycloak")
+        fi
     fi
 
     # Check 2: Spoke IdP exists in Hub Keycloak
     echo -n "  Spoke IdP in Hub:          "
-    local hub_kc_container="${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}"
-    local hub_pass
-    hub_pass=$(docker exec "$hub_kc_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
-    if [ -n "$hub_pass" ]; then
-        local hub_token
-        hub_token=$(docker exec "$hub_kc_container" curl -sf \
-            -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
-            -d "grant_type=password" -d "username=admin" -d "password=${hub_pass}" \
-            -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
-        if [ -n "$hub_token" ]; then
-            local spoke_idp_check
-            spoke_idp_check=$(docker exec "$hub_kc_container" curl -sf \
-                -H "Authorization: Bearer $hub_token" \
-                "http://localhost:8080/admin/realms/${HUB_REALM:-dive-v3-broker-usa}/identity-provider/instances/${code_lower}-idp" 2>/dev/null)
-            if echo "$spoke_idp_check" | grep -q '"alias"'; then
-                echo -e "${GREEN}✓${NC}"; checks_passed=$((checks_passed + 1))
-            else
-                echo -e "${RED}✗${NC}"; checks_failed=$((checks_failed + 1))
-                issues+=("Spoke IdP (${code_lower}-idp) missing in Hub Keycloak")
-            fi
+    if type keycloak_admin_api &>/dev/null; then
+        local spoke_idp_check
+        spoke_idp_check=$(keycloak_admin_api "USA" "GET" \
+            "realms/${HUB_REALM:-dive-v3-broker-usa}/identity-provider/instances/${code_lower}-idp" 2>/dev/null)
+        if echo "$spoke_idp_check" | grep -q '"alias"'; then
+            echo -e "${GREEN}✓${NC}"; checks_passed=$((checks_passed + 1))
         else
-            echo -e "${RED}✗${NC} (cannot authenticate)"; checks_failed=$((checks_failed + 1))
-            issues+=("Cannot authenticate to Hub Keycloak")
+            echo -e "${RED}✗${NC}"; checks_failed=$((checks_failed + 1))
+            issues+=("Spoke IdP (${code_lower}-idp) missing in Hub Keycloak")
         fi
     else
-        echo -e "${RED}✗${NC} (password not found)"; checks_failed=$((checks_failed + 1))
-        issues+=("Hub Keycloak password not found")
+        # Legacy fallback
+        local hub_kc_container="${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}"
+        local hub_pass
+        hub_pass=$(docker exec "$hub_kc_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+        if [ -n "$hub_pass" ]; then
+            local hub_token
+            hub_token=$(docker exec "$hub_kc_container" curl -sf \
+                -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
+                -d "grant_type=password" -d "username=admin" -d "password=${hub_pass}" \
+                -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+            if [ -n "$hub_token" ]; then
+                local spoke_idp_check
+                spoke_idp_check=$(docker exec "$hub_kc_container" curl -sf \
+                    -H "Authorization: Bearer $hub_token" \
+                    "http://localhost:8080/admin/realms/${HUB_REALM:-dive-v3-broker-usa}/identity-provider/instances/${code_lower}-idp" 2>/dev/null)
+                if echo "$spoke_idp_check" | grep -q '"alias"'; then
+                    echo -e "${GREEN}✓${NC}"; checks_passed=$((checks_passed + 1))
+                else
+                    echo -e "${RED}✗${NC}"; checks_failed=$((checks_failed + 1))
+                    issues+=("Spoke IdP (${code_lower}-idp) missing in Hub Keycloak")
+                fi
+            else
+                echo -e "${RED}✗${NC} (cannot authenticate)"; checks_failed=$((checks_failed + 1))
+                issues+=("Cannot authenticate to Hub Keycloak")
+            fi
+        else
+            echo -e "${RED}✗${NC} (password not found)"; checks_failed=$((checks_failed + 1))
+            issues+=("Hub Keycloak password not found")
+        fi
     fi
 
     # Check 3: Client secrets match
@@ -728,18 +759,17 @@ verify_federation_state() {
 
     # Check 4: Redirect URIs
     echo -n "  Redirect URIs configured:  "
-    if [ -n "$spoke_token" ]; then
+    if type keycloak_admin_api &>/dev/null; then
         local client_check
-        client_check=$(docker exec "$kc_container" curl -sf \
-            -H "Authorization: Bearer $spoke_token" \
-            "http://localhost:8080/admin/realms/${realm}/clients?clientId=dive-v3-broker-${code_lower}" 2>/dev/null)
+        client_check=$(keycloak_admin_api "$code_upper" "GET" \
+            "realms/${realm}/clients?clientId=dive-v3-broker-${code_lower}" 2>/dev/null)
         if echo "$client_check" | grep -q '"redirectUris"'; then
             echo -e "${GREEN}✓${NC}"; checks_passed=$((checks_passed + 1))
         else
             echo -e "${YELLOW}⚠${NC}"; issues+=("Redirect URIs may not be configured")
         fi
     else
-        echo -e "${YELLOW}⚠${NC} (cannot verify)"
+        echo -e "${YELLOW}⚠${NC} (keycloak_admin_api not available)"
     fi
 
     echo ""
@@ -750,6 +780,7 @@ verify_federation_state() {
         log_warn "Federation checks: $checks_passed passed, $checks_failed failed"
         if [ ${#issues[@]} -gt 0 ]; then
             echo "  Issues found:"
+            local issue
             for issue in "${issues[@]}"; do echo "    - $issue"; done
         fi
         return 1
