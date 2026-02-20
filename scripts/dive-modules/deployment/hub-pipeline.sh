@@ -474,7 +474,8 @@ _hub_run_phase_with_circuit_breaker() {
         fi
 
         # Capture diagnostic snapshot for post-mortem analysis
-        local diag_dir="${DIVE_ROOT}/logs/diagnostics/hub-$(date +%Y%m%d-%H%M%S)-${phase_name}"
+        local diag_dir
+        diag_dir="${DIVE_ROOT}/logs/diagnostics/hub-$(date +%Y%m%d-%H%M%S)-${phase_name}"
         if mkdir -p "$diag_dir" 2>/dev/null; then
             log_info "Capturing diagnostic snapshot → $diag_dir"
             ${DOCKER_CMD:-docker} ps -a --filter "name=dive-hub" --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}" > "$diag_dir/containers.txt" 2>/dev/null || true
