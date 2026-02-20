@@ -9,6 +9,11 @@
 #   seeding, kas_init, vault_db_engine
 # =============================================================================
 
+# Load shared pipeline utilities (health checks, service SSOT, secret loading)
+if [ -z "${PIPELINE_UTILS_LOADED:-}" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/pipeline-utils.sh"
+fi
+
 ##
 # Idempotently set a key=value in .env.hub (add or update).
 # Also exports to current shell for immediate use.
@@ -358,16 +363,16 @@ BOOTSTRAP_EOF
     # Check if Vault is already running and healthy (idempotent re-deploy)
     local vault_already_running=false
     if [ "$vault_profile" = "vault-ha" ]; then
-        local v1_health
-        v1_health=$(${DOCKER_CMD:-docker} inspect "${COMPOSE_PROJECT_NAME:-dive-hub}-vault-1" --format='{{.State.Health.Status}}' 2>/dev/null || echo "none")
-        if [ "$v1_health" = "healthy" ]; then
+        local v1_container
+        v1_container=$(pipeline_container_name "hub" "vault-1")
+        if [ "$(pipeline_get_container_health "$v1_container")" = "healthy" ]; then
             vault_already_running=true
             log_success "Vault cluster already running and healthy — skipping container startup"
         fi
     else
-        local vd_health
-        vd_health=$(${DOCKER_CMD:-docker} inspect "${COMPOSE_PROJECT_NAME:-dive-hub}-vault-dev" --format='{{.State.Health.Status}}' 2>/dev/null || echo "none")
-        if [ "$vd_health" = "healthy" ]; then
+        local vd_container
+        vd_container=$(pipeline_container_name "hub" "vault-dev")
+        if [ "$(pipeline_get_container_health "$vd_container")" = "healthy" ]; then
             vault_already_running=true
             log_success "Vault dev already running and healthy — skipping container startup"
         fi
@@ -391,25 +396,15 @@ BOOTSTRAP_EOF
         fi
 
         # Wait for vault-seal to be healthy
-        local seal_container="${COMPOSE_PROJECT_NAME:-dive-hub}-vault-seal"
-        local seal_wait=0
+        local seal_container
+        seal_container=$(pipeline_container_name "hub" "vault-seal")
         log_info "Waiting for vault-seal to become healthy..."
-        while [ $seal_wait -lt 30 ]; do
-            local seal_health
-            seal_health=$(${DOCKER_CMD:-docker} inspect "$seal_container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
-            if [ "$seal_health" = "healthy" ]; then
-                log_success "vault-seal healthy (${seal_wait}s)"
-                break
-            fi
-            sleep 1  # OPTIMIZATION: Faster polling for responsiveness
-            seal_wait=$((seal_wait + 1))
-        done
-
-        if [ $seal_wait -ge 30 ]; then
+        if ! pipeline_wait_for_healthy "$seal_container" 30 1; then
             log_error "vault-seal did not become healthy within 30s"
             log_info "Check logs: docker logs ${seal_container}"
             return 1
         fi
+        log_success "vault-seal healthy"
 
         # Now start cluster nodes (vault-seal is healthy, dependency satisfied)
         log_info "Starting Vault cluster nodes (vault-1, vault-2, vault-3)..."
@@ -425,31 +420,22 @@ BOOTSTRAP_EOF
     fi
 
     # Wait for Vault to be healthy
-    local vault_container="${COMPOSE_PROJECT_NAME:-dive-hub}-vault-1"
-    local vault_timeout=60
+    local vault_container vault_timeout
     if [ "$vault_profile" = "vault-dev" ]; then
-        vault_container="${COMPOSE_PROJECT_NAME:-dive-hub}-vault-dev"
+        vault_container=$(pipeline_container_name "hub" "vault-dev")
         vault_timeout=15
+    else
+        vault_container=$(pipeline_container_name "hub" "vault-1")
+        vault_timeout=60
     fi
 
     log_info "Waiting for Vault to become healthy (timeout: ${vault_timeout}s)..."
-    local vault_wait=0
-    while [ $vault_wait -lt $vault_timeout ]; do
-        local health
-        health=$(${DOCKER_CMD:-docker} inspect "$vault_container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
-        if [ "$health" = "healthy" ]; then
-            log_success "Vault healthy (${vault_wait}s)"
-            break
-        fi
-        sleep 1  # OPTIMIZATION: Faster polling for responsiveness
-        vault_wait=$((vault_wait + 1))
-    done
-
-    if [ $vault_wait -ge $vault_timeout ]; then
+    if ! pipeline_wait_for_healthy "$vault_container" "$vault_timeout" 1; then
         log_error "Vault did not become healthy within ${vault_timeout}s"
         log_info "Check logs: docker logs ${vault_container}"
         return 1
     fi
+    log_success "Vault healthy"
 
     # Wait for Raft leader election (required after container restart/recreation)
     # Docker health check passes before Raft cluster elects a leader, which causes
@@ -1118,24 +1104,14 @@ _hub_provision_opal_client_token() {
             ${DOCKER_CMD:-docker} compose --profile opal -f "$HUB_COMPOSE_FILE" up -d opal-client
 
             # Wait for OPAL client to become healthy
-            local opal_container="${COMPOSE_PROJECT_NAME:-dive-hub}-opal-client"
-            local opal_timeout=60
-            local opal_elapsed=0
-            while [ $opal_elapsed -lt $opal_timeout ]; do
-                local health
-                health=$(${DOCKER_CMD:-docker} inspect "$opal_container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "not_found")
-                if [ "$health" = "healthy" ]; then
-                    log_success "Hub OPAL client started and healthy"
-                    return 0
-                elif [ "$health" = "not_found" ]; then
-                    log_error "OPAL client container not found"
-                    return 1
-                fi
-                sleep 3
-                opal_elapsed=$((opal_elapsed + 3))
-            done
+            local opal_container
+            opal_container=$(pipeline_container_name "hub" "opal-client")
+            if pipeline_wait_for_healthy "$opal_container" 60 3; then
+                log_success "Hub OPAL client started and healthy"
+                return 0
+            fi
 
-            log_warn "OPAL client started but not yet healthy after ${opal_timeout}s (non-blocking)"
+            log_warn "OPAL client started but not yet healthy after 60s (non-blocking)"
             return 0
         fi
 
@@ -1230,19 +1206,13 @@ hub_phase_vault_db_engine() {
     log_info "Recreating services with updated Vault credentials..."
     if ${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES --env-file "${DIVE_ROOT}/.env.hub" up -d --force-recreate --no-build backend keycloak frontend >/dev/null 2>&1; then
         # Wait for Keycloak to become healthy (longest startup)
-        local kc_wait=0
-        local kc_max=90
-        while [ $kc_wait -lt $kc_max ]; do
-            local kc_health
-            kc_health=$(${DOCKER_CMD:-docker} inspect dive-hub-keycloak --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
-            if [ "$kc_health" = "healthy" ]; then
-                log_success "Services recreated with Vault credentials (${kc_wait}s)"
-                return 0
-            fi
-            sleep 1
-            kc_wait=$((kc_wait + 1))
-        done
-        log_warn "Keycloak health timeout (${kc_max}s) — check: docker logs dive-hub-keycloak"
+        local kc_container
+        kc_container=$(pipeline_container_name "hub" "keycloak")
+        if pipeline_wait_for_healthy "$kc_container" 90 1; then
+            log_success "Services recreated with Vault credentials"
+            return 0
+        fi
+        log_warn "Keycloak health timeout (90s) — check: docker logs ${kc_container}"
     else
         log_warn "Service recreation failed — some credentials may be stale"
     fi
@@ -1269,20 +1239,11 @@ _hub_init_mongodb_replica_set() {
     fi
 
     # Wait for MongoDB container to be healthy
+    local mongo_container
+    mongo_container=$(pipeline_container_name "hub" "mongodb")
     log_verbose "Waiting for MongoDB container to be healthy..."
-    local mongo_wait=0
-    local mongo_max_wait=60
-    while [ $mongo_wait -lt $mongo_max_wait ]; do
-        if ${DOCKER_CMD:-docker} ps --filter "name=dive-hub-mongodb" --filter "health=healthy" --format "{{.Names}}" | grep -q "dive-hub-mongodb"; then
-            log_verbose "MongoDB container is healthy (${mongo_wait}s)"
-            break
-        fi
-        sleep 1  # OPTIMIZATION: Reduced from 2s to 1s for faster detection
-        mongo_wait=$((mongo_wait + 1))
-    done
-
-    if [ $mongo_wait -ge $mongo_max_wait ]; then
-        log_warn "MongoDB container not healthy after ${mongo_max_wait}s, attempting replica set init anyway..."
+    if ! pipeline_wait_for_healthy "$mongo_container" 60 1; then
+        log_warn "MongoDB container not healthy after 60s, attempting replica set init anyway..."
     fi
 
     # Initialize replica set
@@ -1291,7 +1252,7 @@ _hub_init_mongodb_replica_set() {
         return 1
     fi
 
-    if ! bash "${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh" dive-hub-mongodb admin "$MONGO_PASSWORD"; then
+    if ! bash "${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh" "$mongo_container" admin "$MONGO_PASSWORD"; then
         log_error "MongoDB replica set initialization FAILED"
         return 1
     fi
@@ -1311,29 +1272,15 @@ _hub_init_mongodb_replica_set() {
 # Extracted from hub_deploy() for circuit breaker wrapping
 ##
 _hub_init_kas() {
-    if docker ps --format '{{.Names}}' | grep -q "${HUB_COMPOSE_PROJECT:-dive-hub}-kas"; then
+    local kas_container
+    kas_container=$(pipeline_container_name "hub" "kas")
+    if pipeline_container_running "$kas_container"; then
         log_info "Waiting for KAS to be healthy..."
-        local kas_wait=0
-        local kas_max_wait=60
-
-        while [ $kas_wait -lt $kas_max_wait ]; do
-            local kas_health
-            kas_health=$(docker inspect "${HUB_COMPOSE_PROJECT:-dive-hub}-kas" \
-                --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
-
-            if [ "$kas_health" = "healthy" ]; then
-                log_success "KAS is healthy"
-                break
-            fi
-
-            sleep 2
-            ((kas_wait += 2))
-        done
-
-        if [ $kas_wait -ge $kas_max_wait ]; then
-            log_warn "KAS health check timeout after ${kas_max_wait}s"
+        if ! pipeline_wait_for_healthy "$kas_container" 60 2; then
+            log_warn "KAS health check timeout after 60s"
             return 1
         fi
+        log_success "KAS is healthy"
 
         # Verify health endpoint
         local kas_port="${KAS_HOST_PORT:-8085}"

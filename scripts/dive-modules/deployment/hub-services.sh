@@ -8,6 +8,11 @@
 # AMR mapper, verification, status, reset, logs, seed, spokes list
 # =============================================================================
 
+# Load shared pipeline utilities (health checks, service SSOT, secret loading)
+if [ -z "${PIPELINE_UTILS_LOADED:-}" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/pipeline-utils.sh"
+fi
+
 hub_parallel_startup() {
     log_info "Starting hub services with dependency-aware parallel orchestration"
 
@@ -209,10 +214,8 @@ hub_parallel_startup() {
                 local container="${COMPOSE_PROJECT_NAME:-dive-hub}-${service}"
 
                 # Check if already running and healthy
-                if ${DOCKER_CMD:-docker} ps --format '{{.Names}}' | grep -q "^${container}$"; then
-                    local health
-                    health=$(${DOCKER_CMD:-docker} inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
-                    if [ "$health" = "healthy" ]; then
+                if pipeline_container_running "$container"; then
+                    if [ "$(pipeline_get_container_health "$container")" = "healthy" ]; then
                         log_verbose "Service $service already running and healthy"
                         exit 0
                     fi
@@ -223,78 +226,21 @@ hub_parallel_startup() {
                 local start_output
                 if ! start_output=$(${DOCKER_CMD:-docker} compose $HUB_COMPOSE_FILES up -d "$service" 2>&1); then
                     log_error "Failed to start $service container"
-                    # FIX: Provide detailed error information for debugging
                     log_error "Docker compose output: $start_output"
                     log_error "Check service definition in $HUB_COMPOSE_FILE"
-                    # FIXED (2026-01-28): Escape brackets in grep pattern to prevent "brackets not balanced" error
                     local deps_pattern
                     deps_pattern=$(echo "${current_level_services[@]}" | tr ' ' '|')
                     log_error "Verify dependencies are running: docker ps | grep -E '($deps_pattern)'"
                     exit 1
                 fi
 
-                # Wait for health with timeout
-                local elapsed=0
-                local interval=3
+                # Wait for health with timeout (using shared utility)
+                if pipeline_wait_for_healthy_or_running "$container" "$timeout" 3 10; then
+                    log_success "$service is healthy (container: $container)"
+                    exit 0
+                fi
 
-                while [ $elapsed -lt $timeout ]; do
-                    # Check container state
-                    local state
-                    state=$(${DOCKER_CMD:-docker} inspect "$container" --format='{{.State.Status}}' 2>/dev/null || echo "not_found")
-
-                    if [ "$state" = "not_found" ]; then
-                        log_error "Container $container not found"
-                        exit 1
-                    elif [ "$state" != "running" ]; then
-                        log_verbose "$service: Container state=$state (waiting...)"
-                        sleep $interval
-                        elapsed=$((elapsed + interval))
-                        continue
-                    fi
-
-                    # Check health status
-                    local health
-                    health=$(${DOCKER_CMD:-docker} inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "none")
-
-                    # Trim whitespace and handle empty/none cases
-                    health=$(echo "$health" | tr -d '[:space:]')
-
-                    if [ "$health" = "healthy" ]; then
-                        log_success "$service is healthy (${elapsed}s)"
-                        exit 0
-                    elif [ "$health" = "none" ] || [ -z "$health" ] || [ "$health" = "" ]; then
-                        # During start_period, health status may be empty string
-                        # If container is running, wait a bit more for health check to initialize
-                        if [ "$state" = "running" ]; then
-                            # Health check might be in start_period - wait a bit more
-                            if [ $elapsed -lt 10 ]; then
-                                log_verbose "$service: Container running, waiting for health check to initialize ($elapsed/${timeout}s)"
-                                sleep $interval
-                                elapsed=$((elapsed + interval))
-                                continue
-                            else
-                                # After 10s, if still no health status and container is running, assume healthy
-                                log_verbose "$service is running (health check not yet initialized, assuming healthy)"
-                                exit 0
-                            fi
-                        else
-                            # Container not running - continue waiting
-                            sleep $interval
-                            elapsed=$((elapsed + interval))
-                            continue
-                        fi
-                    fi
-
-                    # Progress indicator
-                    if [ $((elapsed % 15)) -eq 0 ] && [ $elapsed -gt 0 ]; then
-                        log_verbose "$service: Still waiting for healthy state ($elapsed/${timeout}s)"
-                    fi
-
-                    sleep $interval
-                    elapsed=$((elapsed + interval))
-                done
-
-                log_error "$service: Timeout after ${timeout}s (health: $health)"
+                log_error "$service: Timeout after ${timeout}s"
                 exit 1
             ) &
 
@@ -424,34 +370,37 @@ hub_parallel_startup() {
 hub_wait_healthy() {
     log_info "Waiting for hub services to become healthy..."
 
-    local services=("dive-hub-postgres" "dive-hub-keycloak" "dive-hub-backend")
-    local max_wait=300
-    local elapsed=0
+    # Use SSOT service list — check all core services, not just 3
+    local services
+    read -r -a services <<< "$PIPELINE_HUB_INFRA_SERVICES $PIPELINE_HUB_CORE_SERVICES $PIPELINE_HUB_APP_SERVICES"
 
+    local failed=0
     for service in "${services[@]}"; do
-        log_verbose "Waiting for $service..."
+        local container
+        container=$(pipeline_container_name "hub" "$service")
 
-        while [ $elapsed -lt $max_wait ]; do
-            local status
-            status=$(${DOCKER_CMD:-docker} inspect "$service" --format='{{.State.Health.Status}}' 2>/dev/null || echo "not_found")
+        # Skip services that aren't running (optional/not deployed)
+        if ! pipeline_container_running "$container"; then
+            log_verbose "$service not running — skipping"
+            continue
+        fi
 
-            if [ "$status" = "healthy" ]; then
-                log_success "$service is healthy"
-                break
-            elif [ "$status" = "not_found" ]; then
-                log_error "$service not found"
-                return 1
-            fi
+        local timeout
+        timeout=$(pipeline_get_service_timeout "$service")
+        log_verbose "Waiting for $service (timeout: ${timeout}s)..."
 
-            sleep 5
-            ((elapsed += 5))
-        done
-
-        if [ $elapsed -ge $max_wait ]; then
-            log_error "Timeout waiting for $service"
-            return 1
+        if pipeline_wait_for_healthy "$container" "$timeout" 5; then
+            log_success "$service is healthy"
+        else
+            log_error "$service did not become healthy within ${timeout}s"
+            failed=$((failed + 1))
         fi
     done
+
+    if [ $failed -gt 0 ]; then
+        log_error "$failed service(s) failed health check"
+        return 1
+    fi
 
     log_success "All hub services healthy"
     return 0
@@ -836,10 +785,14 @@ hub_status() {
 
     echo ""
     echo "Health:"
-    for container in dive-hub-postgres dive-hub-keycloak dive-hub-backend dive-hub-frontend; do
+    local _status_services
+    read -r -a _status_services <<< "$PIPELINE_HUB_ALL_SERVICES"
+    for service in "${_status_services[@]}"; do
+        local container
+        container=$(pipeline_container_name "hub" "$service")
         local health
-        health=$(${DOCKER_CMD:-docker} inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "not_found")
-        printf "  %-25s %s\n" "$container" "$health"
+        health=$(pipeline_get_container_health "$container")
+        printf "  %-30s %s\n" "$container" "$health"
     done
 
     # Database state

@@ -21,6 +21,11 @@ if type spoke_phase_deployment &>/dev/null; then
 fi
 # Module loaded marker will be set at end after functions defined
 
+# Load shared pipeline utilities (health checks, service SSOT, secret loading)
+if [ -z "${PIPELINE_UTILS_LOADED:-}" ]; then
+    source "${DIVE_ROOT}/scripts/dive-modules/deployment/pipeline-utils.sh"
+fi
+
 # Load validation functions for idempotent deployments
 if [ -z "${SPOKE_VALIDATION_LOADED:-}" ]; then
     if [ -f "$(dirname "${BASH_SOURCE[0]}")/spoke-validation.sh" ]; then
@@ -375,39 +380,36 @@ spoke_deployment_verify_mongodb_ready() {
     local code_lower
     code_lower=$(lower "$instance_code")
 
-    local mongo_container="dive-spoke-${code_lower}-mongodb"
+    local mongo_container
+    mongo_container=$(pipeline_container_name "spoke" "mongodb" "$instance_code")
 
     log_step "Verifying MongoDB readiness ($code_upper)..."
 
     # Check if container is healthy (healthcheck passed)
     local health_status
-    health_status=$(docker inspect --format='{{.State.Health.Status}}' "$mongo_container" 2>/dev/null || echo "unknown")
+    health_status=$(pipeline_get_container_health "$mongo_container")
 
     if [ "$health_status" = "healthy" ]; then
         log_success "MongoDB is ready (healthcheck: healthy, replica set: PRIMARY)"
 
         # Optional: Double-check PRIMARY status for logging
-        local mongo_pass_var="MONGO_PASSWORD_${code_upper}"
-        local mongo_pass="${!mongo_pass_var}"
-        # CRITICAL FIX (2026-02-11): mongosh doesn't support MONGOSH_PASSWORD env var
-        # Use -p flag instead (password exposure in ps aux is mitigated by Docker exec isolation)
-        local state
-        state=$(docker exec "$mongo_container" \
-            mongosh admin -u admin -p "$mongo_pass" --authenticationDatabase admin --tls --tlsAllowInvalidCertificates --quiet \
-            --eval "rs.status().members[0].stateStr" 2>/dev/null || echo "UNKNOWN")
-        log_verbose "MongoDB replica set state: $state"
+        local mongo_pass
+        mongo_pass=$(pipeline_load_secret "MONGO_PASSWORD" "$instance_code" || echo "")
+        if [ -n "$mongo_pass" ]; then
+            local state
+            state=$(docker exec "$mongo_container" \
+                mongosh admin -u admin -p "$mongo_pass" --authenticationDatabase admin --tls --tlsAllowInvalidCertificates --quiet \
+                --eval "rs.status().members[0].stateStr" 2>/dev/null || echo "UNKNOWN")
+            log_verbose "MongoDB replica set state: $state"
+        fi
 
         return 0
     else
         log_warn "MongoDB container health status: $health_status"
         log_warn "Expected: healthy (healthcheck ensures PRIMARY before marking healthy)"
-        
-        # If not healthy yet, wait a bit more
-        log_info "Waiting 10s for MongoDB healthcheck to complete..."
-        sleep 10
-        
-        health_status=$(docker inspect --format='{{.State.Health.Status}}' "$mongo_container" 2>/dev/null || echo "unknown")
-        if [ "$health_status" = "healthy" ]; then
+
+        # Wait for MongoDB to become healthy using shared utility
+        if pipeline_wait_for_healthy "$mongo_container" 30 2; then
             log_success "MongoDB is now ready"
             return 0
         else
@@ -874,19 +876,19 @@ spoke_deployment_provision_opal_token() {
 ##
 spoke_deployment_restart_services() {
     local instance_code="$1"
-    local services="$2"
+    local service_list="$2"
 
     local code_lower
     code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
-    log_verbose "Restarting services: $services"
+    log_verbose "Restarting services: $service_list"
 
     export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
     local _saved_dir="$PWD"
     cd "$spoke_dir" || return 1
 
-    for service in $services; do
+    for service in $service_list; do
         local container="dive-spoke-${code_lower}-${service}"
 
         if docker ps --format '{{.Names}}' | grep -q "^${container}$"; then
@@ -960,9 +962,10 @@ spoke_checkpoint_deployment() {
 
     # Check each CORE service individually
     for service in "${core_services[@]}"; do
-        local container="dive-spoke-${code_lower}-${service}"
+        local container
+        container=$(pipeline_container_name "spoke" "$service" "$instance_code")
         local health_status
-        health_status=$(docker inspect "$container" --format '{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+        health_status=$(pipeline_get_container_health "$container")
 
         if [ "$health_status" != "healthy" ]; then
             ((unhealthy_core++))
@@ -974,9 +977,10 @@ spoke_checkpoint_deployment() {
     local -a optional_services=()
     read -r -a optional_services <<<"$(compose_get_spoke_services_by_class "$instance_code" "optional" 2>/dev/null || echo "")"
     for service in "${optional_services[@]}"; do
-        local container="dive-spoke-${code_lower}-${service}"
+        local container
+        container=$(pipeline_container_name "spoke" "$service" "$instance_code")
         local health_status
-        health_status=$(docker inspect "$container" --format '{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+        health_status=$(pipeline_get_container_health "$container")
 
         if [ "$health_status" != "healthy" ]; then
             ((unhealthy_optional++))
