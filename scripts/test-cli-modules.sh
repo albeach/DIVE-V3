@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC1090  # Dynamic source paths are intentional in test harness
 # =============================================================================
 # DIVE V3 - CLI Modules Unit Tests
 # =============================================================================
@@ -855,7 +856,8 @@ test_run_cli_module_tests() {
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
     # Script is being run directly — bootstrap DIVE_ROOT and common.sh
     if [ -z "${DIVE_ROOT:-}" ]; then
-        export DIVE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+        DIVE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+        export DIVE_ROOT
     fi
     if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
         source "${DIVE_ROOT}/scripts/dive-modules/common.sh"

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC1090,SC2034  # Dynamic sources intentional; exported vars used by test suites
 # =============================================================================
 # DIVE V3 - Comprehensive Testing Framework
 # =============================================================================
@@ -751,7 +752,8 @@ test_rate_limiting() {
 test_generate_report() {
     log_step "Generating Test Report"
 
-    local report_file="${TEST_REPORTS}/test-summary-$(date +%Y%m%d-%H%M%S).md"
+    local report_file
+    report_file="${TEST_REPORTS}/test-summary-$(date +%Y%m%d-%H%M%S).md"
 
     cat > "$report_file" << EOF
 # DIVE V3 Test Execution Report
