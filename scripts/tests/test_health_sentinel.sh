@@ -92,15 +92,15 @@ if type _sentinel_container_name &>/dev/null; then
 
     # Test 10: Hub container name format
     result=$(_sentinel_container_name "dive-hub" "backend")
-    assert_eq "dive-hub-backend-1" "$result" "container name: hub backend"
+    assert_eq "dive-hub-backend" "$result" "container name: hub backend"
 
     # Test 11: Spoke container name format
     result=$(_sentinel_container_name "dive-spoke-gbr" "keycloak")
-    assert_eq "dive-spoke-gbr-keycloak-1" "$result" "container name: spoke keycloak"
+    assert_eq "dive-spoke-gbr-keycloak" "$result" "container name: spoke keycloak"
 
     # Test 12: Custom project name
     result=$(_sentinel_container_name "myproject" "redis")
-    assert_eq "myproject-redis-1" "$result" "container name: custom project"
+    assert_eq "myproject-redis" "$result" "container name: custom project"
 
 else
     echo -e "  ${YELLOW:-}SKIP${NC:-} container name tests (function not loadable)"
@@ -184,8 +184,8 @@ fi
 if type health_sentinel_report &>/dev/null; then
 
     # Test 19: Alerts → report shows them
-    echo "2025-01-01 12:00:00|backend|UNHEALTHY|Container dive-hub-backend-1 is unhealthy" > "$HEALTH_SENTINEL_ALERT_FILE"
-    echo "2025-01-01 12:00:10|keycloak|DOWN|Container dive-hub-keycloak-1 is exited" >> "$HEALTH_SENTINEL_ALERT_FILE"
+    echo "2025-01-01 12:00:00|backend|UNHEALTHY|Container dive-hub-backend is unhealthy" > "$HEALTH_SENTINEL_ALERT_FILE"
+    echo "2025-01-01 12:00:10|keycloak|DOWN|Container dive-hub-keycloak is exited" >> "$HEALTH_SENTINEL_ALERT_FILE"
 
     result=$(health_sentinel_report || true)
     assert_contains "$result" "2 alert" "report: shows alert count"

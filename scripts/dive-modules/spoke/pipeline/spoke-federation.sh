@@ -255,6 +255,7 @@ spoke_federation_setup() {
     local verification_passed=false
     local verification_result=""
 
+    local i
     for ((i=1; i<=max_verify_retries; i++)); do
         local delay=$((base_delay * (2 ** (i - 1))))  # Exponential backoff: 2, 4, 8, 16, 32
 

@@ -45,7 +45,12 @@ _sentinel_get_services() {
     local compose_project="${2:-dive-hub}"
 
     if [ "$deploy_type" = "hub" ]; then
-        echo "postgres mongodb redis vault keycloak backend frontend kas opal-server"
+        # Detect Vault naming: HA mode uses vault-1, dev mode uses vault-dev
+        local vault_svc="vault-1"
+        if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "${compose_project}-vault-dev"; then
+            vault_svc="vault-dev"
+        fi
+        echo "postgres mongodb redis ${vault_svc} keycloak backend frontend kas opal-server"
     else
         echo "keycloak backend frontend"
     fi
@@ -55,7 +60,7 @@ _sentinel_get_services() {
 _sentinel_container_name() {
     local compose_project="${1:-dive-hub}"
     local service="$2"
-    echo "${compose_project}-${service}-1"
+    echo "${compose_project}-${service}"
 }
 
 # =============================================================================

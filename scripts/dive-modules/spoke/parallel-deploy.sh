@@ -240,6 +240,7 @@ _pd_print_results() {
     local success_count=0
     local fail_count=0
 
+    local i
     for (( i = 0; i < count; i++ )); do
         if [ "${_PD_RESULTS[$i]}" = "0" ]; then
             success_count=$((success_count + 1))
@@ -255,7 +256,7 @@ _pd_print_results() {
     printf "  %-6s %-25s %10s %10s %s\n" "Code" "Name" "Duration" "Status" "Log"
     echo "  ────── ───────────────────────── ────────── ────────── ────────────────────"
 
-    for (( i = 0; i < count; i++ )); do
+    for (( i = 0; i < count; i++ )); do  # i is already local from above
         local status_text="OK"
         if [ "${_PD_RESULTS[$i]}" != "0" ]; then
             status_text="FAILED"
@@ -451,6 +452,7 @@ spoke_parallel_deploy() {
     # Wait for all remaining processes and collect results
     log_info "Waiting for ${#_PD_PIDS[@]} spoke deployments to complete..."
 
+    local i
     for (( i = 0; i < ${#_PD_PIDS[@]}; i++ )); do
         local pid="${_PD_PIDS[$i]}"
         local _spoke_start_time
@@ -472,7 +474,7 @@ spoke_parallel_deploy() {
     local total_duration=$((total_end - total_start))
 
     # Calculate per-spoke durations from log files (look for duration in log footer)
-    for (( i = 0; i < ${#_PD_CODES[@]}; i++ )); do
+    for (( i = 0; i < ${#_PD_CODES[@]}; i++ )); do  # i is already local from above
         local log="${_PD_LOG_FILES[$i]}"
         if [ -f "$log" ]; then
             local duration_line

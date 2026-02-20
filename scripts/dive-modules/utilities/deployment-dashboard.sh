@@ -198,6 +198,7 @@ deployment_print_timing_dashboard() {
     local bottleneck_secs=0
     local active_total=0
 
+    local i
     for i in "${!entries[@]}"; do
         _dashboard_parse_timing "${entries[$i]}"
         names+=("$_parsed_name")

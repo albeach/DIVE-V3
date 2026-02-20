@@ -66,6 +66,7 @@ vault_ha_status() {
     local leader_addr=""
     local healthy_count=0
 
+    local i
     for i in 0 1 2; do
         local node_num=$((i + 1))
         local container="${VAULT_NODES[$i]}"

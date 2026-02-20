@@ -53,6 +53,7 @@ get_hub_admin_token() {
     local max_retries=15
     local retry_delay=5
 
+    local i
     for ((i=1; i<=max_retries; i++)); do
         # Get admin password from GCP or environment
         local admin_pass="${KEYCLOAK_ADMIN_PASSWORD:-}"

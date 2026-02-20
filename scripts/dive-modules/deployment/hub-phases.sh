@@ -163,8 +163,10 @@ hub_phase_database_init() {
     local pg_password
     pg_password=$(grep '^POSTGRES_PASSWORD_USA=' "${DIVE_ROOT}/.env.hub" 2>/dev/null | cut -d= -f2-)
     if [ -n "$pg_password" ]; then
+        # Escape single quotes to prevent SQL injection
+        local escaped_pw="${pg_password//\'/\'\'}"
         ${DOCKER_CMD:-docker} exec dive-hub-postgres psql -U postgres -c \
-            "ALTER USER postgres WITH PASSWORD '${pg_password}';" >/dev/null 2>&1 || true
+            "ALTER USER postgres WITH PASSWORD '${escaped_pw}';" >/dev/null 2>&1 || true
     fi
 
     # Create and initialize orchestration database
@@ -275,6 +277,15 @@ BOOTSTRAP_EOF
         log_verbose "Bootstrap .env.hub created with placeholder values"
     fi
 
+    # Ensure critical compose variables exist in .env.hub (prevents Docker Compose
+    # "variable is not set" warnings when starting individual services).
+    # These are populated with real values by later phases (SERVICES, OPAL provisioning).
+    for _required_var in OPAL_DATA_SOURCE_TOKEN OPAL_AUTH_MASTER_TOKEN HUB_OPAL_TOKEN; do
+        if ! grep -q "^${_required_var}=" "${DIVE_ROOT}/.env.hub" 2>/dev/null; then
+            echo "${_required_var}=bootstrap-will-be-replaced" >> "${DIVE_ROOT}/.env.hub"
+        fi
+    done
+
     # Persist ENVIRONMENT from --env flag (bootstrap defaults to 'local')
     if [ "${ENVIRONMENT:-local}" != "local" ]; then
         _hub_set_env "ENVIRONMENT" "$ENVIRONMENT"
@@ -357,7 +368,15 @@ BOOTSTRAP_EOF
     # -------------------------------------------------------------------------
     # Ensure dive-shared network exists (compose declares it as external: true)
     if ! ${DOCKER_CMD:-docker} network inspect dive-shared >/dev/null 2>&1; then
-        ${DOCKER_CMD:-docker} network create dive-shared 2>/dev/null || true
+        log_verbose "Creating dive-shared network..."
+        # Race condition: another process may create it between inspect and create
+        if ! ${DOCKER_CMD:-docker} network create dive-shared 2>/dev/null; then
+            # Verify it exists (created by concurrent process)
+            if ! ${DOCKER_CMD:-docker} network inspect dive-shared >/dev/null 2>&1; then
+                log_error "Failed to create dive-shared Docker network"
+                return 1
+            fi
+        fi
     fi
 
     # Check if Vault is already running and healthy (idempotent re-deploy)
@@ -441,18 +460,35 @@ BOOTSTRAP_EOF
     # Docker health check passes before Raft cluster elects a leader, which causes
     # "local node not active but active cluster node not found" errors.
     if [ "$vault_profile" = "vault-ha" ]; then
-        log_verbose "Waiting for Vault Raft leader election..."
+        log_info "Waiting for Vault Raft leader election..."
+        local leader_elected=false
         local leader_wait=0
-        while [ $leader_wait -lt 30 ]; do
+        local leader_timeout=60  # Total timeout: 60s (two 30s rounds)
+
+        while [ $leader_wait -lt $leader_timeout ]; do
             if VAULT_SKIP_VERIFY=1 vault status 2>/dev/null | grep -q "HA Mode.*active"; then
-                log_verbose "Vault Raft leader elected (${leader_wait}s)"
+                log_success "Vault Raft leader elected (${leader_wait}s)"
+                leader_elected=true
                 break
             fi
+
+            # At the halfway mark, log a warning so operators know it's slow
+            if [ $leader_wait -eq 30 ]; then
+                log_warn "Vault leader not elected after 30s — retrying (timeout: ${leader_timeout}s)..."
+            fi
+
             sleep 2
             leader_wait=$((leader_wait + 2))
         done
-        if [ $leader_wait -ge 30 ]; then
-            log_warn "Vault leader election timeout — proceeding (may retry)"
+
+        if [ "$leader_elected" = false ]; then
+            log_error "Vault Raft leader election failed after ${leader_timeout}s"
+            log_error "Diagnostics:"
+            log_error "  vault status:  $(VAULT_SKIP_VERIFY=1 vault status 2>&1 | head -5)"
+            log_error "  vault-1 logs:  docker logs dive-hub-vault-1 --tail 20"
+            log_error "  vault-2 logs:  docker logs dive-hub-vault-2 --tail 20"
+            log_error "  vault-3 logs:  docker logs dive-hub-vault-3 --tail 20"
+            return 1
         fi
     fi
 
@@ -837,7 +873,7 @@ _hub_ensure_opal_keys() {
                 echo "$vault_priv" > "$opal_dir/jwt-signing-key.pem"
                 echo "$vault_pub_ssh" > "$opal_dir/jwt-signing-key.pub.ssh"
                 [ -n "$vault_pub_pem" ] && echo "$vault_pub_pem" > "$opal_dir/jwt-signing-key.pub.pem"
-                chmod 644 "$opal_dir/jwt-signing-key.pem"
+                chmod 600 "$opal_dir/jwt-signing-key.pem"
                 chmod 644 "$opal_dir/jwt-signing-key.pub.ssh"
                 chmod 644 "$opal_dir/jwt-signing-key.pub.pem" 2>/dev/null || true
                 log_success "OPAL JWT signing keys restored from Vault"
@@ -884,7 +920,7 @@ _hub_ensure_opal_keys() {
         return 1
     }
 
-    chmod 644 "$opal_dir/jwt-signing-key.pem"
+    chmod 600 "$opal_dir/jwt-signing-key.pem"
     chmod 644 "$opal_dir/jwt-signing-key.pub.ssh"
     chmod 644 "$opal_dir/jwt-signing-key.pub.pem"
 
@@ -994,8 +1030,11 @@ hub_phase_services() {
     if ! ${DOCKER_CMD:-docker} network inspect dive-shared >/dev/null 2>&1; then
         log_verbose "Creating dive-shared network..."
         if ! ${DOCKER_CMD:-docker} network create dive-shared 2>/dev/null; then
-            log_error "Failed to create dive-shared network"
-            return 1
+            # Race condition: verify it was created by concurrent process
+            if ! ${DOCKER_CMD:-docker} network inspect dive-shared >/dev/null 2>&1; then
+                log_error "Failed to create dive-shared Docker network"
+                return 1
+            fi
         fi
     fi
 
@@ -1085,41 +1124,54 @@ _hub_provision_opal_client_token() {
     fi
 
     local opal_url="https://localhost:${OPAL_PORT:-7002}"
-    local max_attempts=10
+    local max_attempts=15
 
     for attempt in $(seq 1 $max_attempts); do
         local token
-        token=$(curl -sk --max-time 5 \
+        token=$(curl -sk --max-time 10 \
             -X POST "${opal_url}/token" \
             -H "Authorization: Bearer ${master_token}" \
             -H "Content-Type: application/json" \
             -d '{"type": "client"}' 2>/dev/null | jq -r '.token // empty')
 
         if [ -n "$token" ]; then
-            # Store in .env.hub (cross-platform via _hub_set_env)
-            _hub_set_env "HUB_OPAL_TOKEN" "$token"
+            # Validate JWT format: 3 dot-separated base64 segments
+            local dot_count
+            dot_count=$(echo "$token" | tr -cd '.' | wc -c | tr -d ' ')
+            if [ "$dot_count" -ne 2 ]; then
+                log_warn "OPAL returned invalid token format (expected JWT with 3 segments, got ${dot_count} dots) — retrying..."
+                # Fall through to retry
+            else
+                # Store in .env.hub (cross-platform via _hub_set_env)
+                _hub_set_env "HUB_OPAL_TOKEN" "$token"
 
-            # Start OPAL client with real token (profile: opal)
-            log_info "Starting OPAL client with real token..."
-            ${DOCKER_CMD:-docker} compose --profile opal -f "$HUB_COMPOSE_FILE" up -d opal-client
+                # Start OPAL client with real token (profile: opal)
+                log_info "Starting OPAL client with real token..."
+                ${DOCKER_CMD:-docker} compose --profile opal -f "$HUB_COMPOSE_FILE" up -d opal-client
 
-            # Wait for OPAL client to become healthy
-            local opal_container
-            opal_container=$(pipeline_container_name "hub" "opal-client")
-            if pipeline_wait_for_healthy "$opal_container" 60 3; then
-                log_success "Hub OPAL client started and healthy"
+                # Wait for OPAL client to become healthy
+                local opal_container
+                opal_container=$(pipeline_container_name "hub" "opal-client")
+                if pipeline_wait_for_healthy "$opal_container" 60 3; then
+                    log_success "Hub OPAL client started and healthy"
+                    return 0
+                fi
+
+                log_warn "OPAL client started but not yet healthy after 60s (non-blocking)"
                 return 0
             fi
-
-            log_warn "OPAL client started but not yet healthy after 60s (non-blocking)"
-            return 0
         fi
 
         log_verbose "OPAL token attempt $attempt/$max_attempts..."
-        sleep 2
+        # Progressive backoff: 2s for first 5 attempts, 4s thereafter
+        if [ "$attempt" -le 5 ]; then
+            sleep 2
+        else
+            sleep 4
+        fi
     done
 
-    log_warn "Could not provision OPAL client token (OPAL server may not be ready)"
+    log_warn "Could not provision OPAL client token after $max_attempts attempts (OPAL server may not be ready)"
     return 0  # Non-fatal
 }
 

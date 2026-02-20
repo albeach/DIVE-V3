@@ -1157,6 +1157,7 @@ spoke_phases() {
 
     # Determine resume point
     local resume_phase=""
+    local i
     for (( i = 0; i < total; i++ )); do
         local name="${phase_names[$i]}"
         if type spoke_checkpoint_is_complete &>/dev/null && ! spoke_checkpoint_is_complete "$code_upper" "$name"; then

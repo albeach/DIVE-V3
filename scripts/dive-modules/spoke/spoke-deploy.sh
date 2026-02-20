@@ -140,6 +140,7 @@ spoke_deploy() {
 
     # Parse options (handle both --key value and positional args)
     local skip_next=false
+    local i
     for i in $(seq 1 $#); do
         if [ "$skip_next" = true ]; then
             skip_next=false

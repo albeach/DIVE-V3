@@ -80,7 +80,6 @@ deployment_log_start() {
     # Start tee capture: duplicate stdout+stderr to log file
     # Uses process substitution to avoid subshell issues
     exec > >(tee -a "$DEPLOYMENT_LOG_FILE") 2>&1
-    DEPLOYMENT_LOG_TEE_PID=$!
 
     export DEPLOYMENT_LOG_FILE
 
