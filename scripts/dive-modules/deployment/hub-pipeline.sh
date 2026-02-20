@@ -160,7 +160,8 @@ _hub_pipeline_execute_internal() {
     # =========================================================================
     # Phase 1: Vault Bootstrap (start, init, setup, seed)
     # =========================================================================
-    # Vault MUST be first — all other phases depend on secrets from Vault
+    # Pre-validation gate (Docker, tools, disk, ports) runs before this point.
+    # Vault MUST be first infra phase — all other phases depend on secrets from Vault.
     if _hub_should_skip_phase "VAULT_BOOTSTRAP"; then
         phase_times+=("Phase 1 (Vault Bootstrap): skipped")
     else
@@ -230,8 +231,10 @@ _hub_pipeline_execute_internal() {
     fi
 
     # =========================================================================
-    # Phase 3: Preflight
+    # Phase 3: Preflight (infrastructure-dependent checks)
     # =========================================================================
+    # Basic checks (Docker, tools, disk, ports) handled by pre-validation gate.
+    # This phase runs Vault/cert-dependent validation that requires infra up.
     if [ $phase_result -eq 0 ]; then
         if _hub_should_skip_phase "PREFLIGHT"; then
             phase_times+=("Phase 3 (Preflight): skipped")
