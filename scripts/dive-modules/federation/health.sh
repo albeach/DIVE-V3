@@ -135,58 +135,280 @@ federation_health_dashboard() {
     echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
     echo ""
 
-    if ! type orch_db_check_connection &>/dev/null || ! orch_db_check_connection; then
-        echo "Database not available - cannot show federation health"
-        return 1
+    local db_available=false
+    if type orch_db_check_connection &>/dev/null && orch_db_check_connection 2>/dev/null; then
+        db_available=true
     fi
 
-    printf "%-10s %-15s %-20s %-10s\n" "SPOKE" "STATUS" "LAST HEARTBEAT" "AGE"
-    printf "%-10s %-15s %-20s %-10s\n" "─────" "──────" "──────────────" "───"
+    printf "%-8s %-12s %-10s %-20s %-8s %-25s\n" "SPOKE" "STATUS" "MODE" "LAST HEARTBEAT" "AGE" "DOMAIN"
+    printf "%-8s %-12s %-10s %-20s %-8s %-25s\n" "─────" "──────" "────" "──────────────" "───" "──────"
 
-    # Get all federation links
-    local spokes
-    spokes=$(orch_db_exec "
-        SELECT DISTINCT spoke_code FROM federation_links WHERE status='ACTIVE'
-    " 2>/dev/null)
+    local spoke_count=0
 
-    for spoke in $spokes; do
-        spoke=$(echo "$spoke" | xargs)
-        [ -z "$spoke" ] && continue
+    # Source 1: Database (for spokes with DB-tracked federation links)
+    if [ "$db_available" = true ]; then
+        local spokes
+        spokes=$(orch_db_exec "
+            SELECT DISTINCT spoke_code FROM federation_links WHERE status='ACTIVE'
+        " 2>/dev/null)
 
-        local last_hb
-        last_hb=$(federation_get_last_heartbeat "$spoke")
-        local alive="UNKNOWN"
-        local age=""
+        for spoke in $spokes; do
+            spoke=$(echo "$spoke" | xargs)
+            [ -z "$spoke" ] && continue
 
-        if federation_is_spoke_alive "$spoke"; then
-            alive="HEALTHY"
-        else
-            alive="STALE"
-        fi
+            local last_hb alive age mode domain
+            last_hb=$(federation_get_last_heartbeat "$spoke")
+            alive="UNKNOWN"
+            federation_is_spoke_alive "$spoke" && alive="HEALTHY" || alive="STALE"
 
-        # Calculate age
-        if [ "$last_hb" != "never" ] && [ "$last_hb" != "unknown" ]; then
-            local hb_epoch
-            hb_epoch=$(date -d "$last_hb" +%s 2>/dev/null || date -j -f "%Y-%m-%d %H:%M:%S" "$last_hb" +%s 2>/dev/null)
-            local now_epoch
-            now_epoch=$(date +%s)
-            local age_secs=$((now_epoch - hb_epoch))
-
-            if [ $age_secs -lt 60 ]; then
-                age="${age_secs}s"
-            elif [ $age_secs -lt 3600 ]; then
-                age="$((age_secs / 60))m"
+            # Detect mode (local vs external)
+            local _domain_var="SPOKE_$(echo "$spoke" | tr '[:lower:]' '[:upper:]')_DOMAIN"
+            domain="${!_domain_var:-}"
+            if [ -n "$domain" ]; then
+                mode="external"
+            elif type is_spoke_local &>/dev/null && is_spoke_local "$spoke" 2>/dev/null; then
+                mode="local"
             else
-                age="$((age_secs / 3600))h"
+                mode="remote"
             fi
-        else
-            age="N/A"
-        fi
 
-        printf "%-10s %-15s %-20s %-10s\n" "$spoke" "$alive" "${last_hb:0:19}" "$age"
-    done
+            # Calculate age
+            age="N/A"
+            if [ "$last_hb" != "never" ] && [ "$last_hb" != "unknown" ]; then
+                local hb_epoch now_epoch age_secs
+                hb_epoch=$(date -d "$last_hb" +%s 2>/dev/null || date -j -f "%Y-%m-%d %H:%M:%S" "$last_hb" +%s 2>/dev/null || echo 0)
+                now_epoch=$(date +%s)
+                age_secs=$((now_epoch - hb_epoch))
+                if [ $age_secs -lt 60 ]; then
+                    age="${age_secs}s"
+                elif [ $age_secs -lt 3600 ]; then
+                    age="$((age_secs / 60))m"
+                else
+                    age="$((age_secs / 3600))h"
+                fi
+            fi
+
+            printf "%-8s %-12s %-10s %-20s %-8s %-25s\n" "$spoke" "$alive" "$mode" "${last_hb:0:19}" "$age" "${domain:---}"
+            spoke_count=$((spoke_count + 1))
+        done
+    fi
+
+    # Source 2: IdP aliases on Hub (catches spokes not in DB, e.g., external)
+    if type keycloak_admin_api &>/dev/null; then
+        local hub_idps
+        hub_idps=$(keycloak_admin_api "USA" "GET" \
+            "realms/${HUB_REALM:-dive-v3-broker-usa}/identity-provider/instances" 2>/dev/null | \
+            jq -r '.[].alias' 2>/dev/null)
+
+        for idp_alias in $hub_idps; do
+            # Extract spoke code from alias (e.g., "gbr-idp" → "GBR")
+            local _spoke_code
+            _spoke_code=$(echo "$idp_alias" | sed 's/-idp$//' | tr '[:lower:]' '[:upper:]')
+            [ "$_spoke_code" = "USA" ] && continue
+
+            # Skip if already listed from DB
+            if [ "$db_available" = true ]; then
+                local _already_listed=false
+                local _db_check
+                _db_check=$(orch_db_exec "SELECT 1 FROM federation_links WHERE spoke_code='$_spoke_code' AND status='ACTIVE' LIMIT 1" 2>/dev/null)
+                [ -n "$_db_check" ] && _already_listed=true
+                [ "$_already_listed" = true ] && continue
+            fi
+
+            # External spoke detected via IdP alias but not in DB
+            local _ext_domain_var="SPOKE_${_spoke_code}_DOMAIN"
+            local _ext_domain="${!_ext_domain_var:-}"
+            local _ext_mode="external"
+
+            # Quick HTTPS health probe
+            local _ext_status="UNKNOWN"
+            if [ -n "$_ext_domain" ]; then
+                if curl -skf --max-time 5 "https://api.${_ext_domain}/api/health" >/dev/null 2>&1; then
+                    _ext_status="HEALTHY"
+                else
+                    _ext_status="UNREACHABLE"
+                fi
+            fi
+
+            printf "%-8s %-12s %-10s %-20s %-8s %-25s\n" "$_spoke_code" "$_ext_status" "$_ext_mode" "N/A" "N/A" "${_ext_domain:---}"
+            spoke_count=$((spoke_count + 1))
+        done
+    fi
+
+    if [ $spoke_count -eq 0 ]; then
+        echo "  No federation links found"
+    fi
 
     echo ""
+    echo "Total federated spokes: $spoke_count"
+    echo ""
+}
+
+##
+# Deep diagnostic for a single federation link
+#
+# Arguments:
+#   $1 - Spoke instance code
+##
+federation_diagnose() {
+    local spoke_code="${1:?Spoke code required}"
+    local code_upper code_lower
+    code_upper=$(upper "$spoke_code")
+    code_lower=$(lower "$spoke_code")
+
+    echo "=== Federation Diagnostic: ${code_upper} ==="
+    echo ""
+    echo "Timestamp: $(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+    echo ""
+
+    local checks_passed=0 checks_total=0
+
+    # Detect mode
+    local _domain_var="SPOKE_${code_upper}_DOMAIN"
+    local _spoke_domain="${!_domain_var:-${SPOKE_CUSTOM_DOMAIN:-}}"
+    local mode="local"
+    if [ -n "$_spoke_domain" ]; then
+        mode="external (${_spoke_domain})"
+    elif type is_spoke_local &>/dev/null && ! is_spoke_local "$code_upper" 2>/dev/null; then
+        mode="remote"
+    fi
+    echo "  Mode: ${mode}"
+    echo ""
+
+    # Check 1: DNS (for external spokes)
+    if [ -n "$_spoke_domain" ]; then
+        checks_total=$((checks_total + 1))
+        printf "  %-30s" "1. DNS Resolution:"
+        local _dns_ok=true
+        local _svc
+        for _svc in app api idp; do
+            local _result=""
+            if command -v dig &>/dev/null; then
+                _result=$(dig +short "${_svc}.${_spoke_domain}" A 2>/dev/null | head -1)
+            fi
+            [ -z "$_result" ] && _dns_ok=false
+        done
+        if [ "$_dns_ok" = true ]; then
+            echo -e "${GREEN}PASS${NC} All subdomains resolve"
+            checks_passed=$((checks_passed + 1))
+        else
+            echo -e "${RED}FAIL${NC} Some subdomains don't resolve"
+            echo "    Fix: Create A records for app/api/idp.${_spoke_domain}"
+        fi
+    fi
+
+    # Check 2: TLS
+    if [ -n "$_spoke_domain" ]; then
+        checks_total=$((checks_total + 1))
+        printf "  %-30s" "2. TLS Certificate:"
+        if echo | openssl s_client -connect "app.${_spoke_domain}:443" -servername "app.${_spoke_domain}" 2>/dev/null | \
+           openssl x509 -noout -dates 2>/dev/null | grep -q "notAfter"; then
+            echo -e "${GREEN}PASS${NC} TLS valid"
+            checks_passed=$((checks_passed + 1))
+        else
+            echo -e "${YELLOW}WARN${NC} Cannot verify TLS"
+            echo "    Fix: Check certificate for app.${_spoke_domain}"
+            checks_passed=$((checks_passed + 1))
+        fi
+    fi
+
+    # Check 3: OIDC Discovery
+    checks_total=$((checks_total + 1))
+    printf "  %-30s" "3. OIDC Discovery:"
+    local _idp_url
+    if [ -n "$_spoke_domain" ]; then
+        _idp_url="https://idp.${_spoke_domain}"
+    else
+        _idp_url=$(resolve_spoke_public_url "$code_upper" "idp" 2>/dev/null || echo "https://localhost:8443")
+    fi
+    local _discovery_url="${_idp_url}/realms/dive-v3-broker-${code_lower}/.well-known/openid-configuration"
+    local _discovery
+    _discovery=$(curl -sf --max-time 10 --insecure "$_discovery_url" 2>/dev/null)
+    if [ -n "$_discovery" ] && echo "$_discovery" | jq -e '.issuer' >/dev/null 2>&1; then
+        echo -e "${GREEN}PASS${NC} $(echo "$_discovery" | jq -r '.issuer')"
+        checks_passed=$((checks_passed + 1))
+    else
+        echo -e "${RED}FAIL${NC} Unreachable: ${_discovery_url}"
+        echo "    Fix: Check Keycloak is running and accessible at ${_idp_url}"
+    fi
+
+    # Check 4: Keycloak Admin API
+    checks_total=$((checks_total + 1))
+    printf "  %-30s" "4. Admin API:"
+    if type keycloak_admin_api_available &>/dev/null && keycloak_admin_api_available "$code_upper" 2>/dev/null; then
+        echo -e "${GREEN}PASS${NC} Reachable"
+        checks_passed=$((checks_passed + 1))
+    else
+        echo -e "${RED}FAIL${NC} Keycloak admin API unreachable"
+        echo "    Fix: Verify Keycloak container is healthy"
+    fi
+
+    # Check 5: Hub IdP on Spoke
+    checks_total=$((checks_total + 1))
+    printf "  %-30s" "5. Hub IdP on Spoke:"
+    if type keycloak_admin_api &>/dev/null; then
+        local _hub_idp
+        _hub_idp=$(keycloak_admin_api "$code_upper" "GET" \
+            "realms/dive-v3-broker-${code_lower}/identity-provider/instances/usa-idp" 2>/dev/null)
+        if echo "$_hub_idp" | grep -q '"alias"'; then
+            echo -e "${GREEN}PASS${NC} usa-idp exists"
+            checks_passed=$((checks_passed + 1))
+        else
+            echo -e "${RED}FAIL${NC} usa-idp not found"
+            echo "    Fix: ./dive federation link ${code_upper}"
+        fi
+    else
+        echo -e "${YELLOW}WARN${NC} Cannot check (API not available)"
+        checks_passed=$((checks_passed + 1))
+    fi
+
+    # Check 6: Spoke IdP on Hub
+    checks_total=$((checks_total + 1))
+    printf "  %-30s" "6. Spoke IdP on Hub:"
+    if type keycloak_admin_api &>/dev/null; then
+        local _spoke_idp
+        _spoke_idp=$(keycloak_admin_api "USA" "GET" \
+            "realms/${HUB_REALM:-dive-v3-broker-usa}/identity-provider/instances/${code_lower}-idp" 2>/dev/null)
+        if echo "$_spoke_idp" | grep -q '"alias"'; then
+            echo -e "${GREEN}PASS${NC} ${code_lower}-idp exists"
+            checks_passed=$((checks_passed + 1))
+        else
+            echo -e "${RED}FAIL${NC} ${code_lower}-idp not found"
+            echo "    Fix: ./dive federation register-spoke ${code_upper} --idp-url URL --secret SECRET"
+        fi
+    else
+        echo -e "${YELLOW}WARN${NC} Cannot check (API not available)"
+        checks_passed=$((checks_passed + 1))
+    fi
+
+    # Check 7: Policy Sync
+    checks_total=$((checks_total + 1))
+    printf "  %-30s" "7. Policy Sync:"
+    local _opa_url
+    if [ -n "$_spoke_domain" ]; then
+        _opa_url="https://api.${_spoke_domain}"
+    else
+        local _opa_port
+        eval "$(get_instance_ports "$code_upper" 2>/dev/null)" 2>/dev/null || true
+        _opa_port="${SPOKE_OPA_PORT:-8181}"
+        _opa_url="https://localhost:${_opa_port}"
+    fi
+    local _policy_count
+    _policy_count=$(curl -skf "${_opa_url}/v1/policies" --max-time 5 2>/dev/null | grep -o '"id"' | wc -l | tr -d ' ')
+    if [ "${_policy_count:-0}" -gt 0 ]; then
+        echo -e "${GREEN}PASS${NC} ${_policy_count} policies loaded"
+        checks_passed=$((checks_passed + 1))
+    else
+        echo -e "${YELLOW}WARN${NC} No policies loaded"
+        echo "    Fix: Check OPAL client connectivity to Hub OPAL server"
+    fi
+
+    # Summary
+    echo ""
+    echo "  Results: ${checks_passed}/${checks_total} checks passed"
+    echo ""
+
+    [ $checks_passed -eq $checks_total ] && return 0 || return 1
 }
 
 ##
@@ -361,6 +583,121 @@ federation_mark_stale() {
     " 2>/dev/null | wc -l | xargs)
 
     log_info "Marked ${marked:-0} federation links as DEGRADED"
+}
+
+##
+# Escalate DEGRADED links to FAILED after sustained heartbeat failure
+#
+# State machine: ACTIVE → DEGRADED (2 missed) → FAILED (5 missed)
+#
+# Arguments:
+#   $1 - Missed heartbeat threshold for FAILED (default: 5 * HEARTBEAT_TIMEOUT)
+##
+federation_escalate_degraded() {
+    local failed_threshold="${1:-$((HEARTBEAT_TIMEOUT * 5))}"
+
+    if ! type orch_db_check_connection &>/dev/null || ! orch_db_check_connection; then
+        return 1
+    fi
+
+    log_info "Escalating long-degraded links to FAILED (threshold: ${failed_threshold}s)..."
+
+    local escalated
+    escalated=$(orch_db_exec "
+        UPDATE federation_links fl
+        SET status='FAILED', updated_at=NOW(),
+            metadata=jsonb_set(COALESCE(metadata,'{}'), '{failed_reason}', '\"sustained_heartbeat_failure\"')
+        WHERE fl.status = 'DEGRADED'
+        AND fl.spoke_code IN (
+            SELECT fl2.spoke_code
+            FROM federation_links fl2
+            LEFT JOIN federation_heartbeats fh ON fl2.spoke_code = fh.spoke_code
+            WHERE fl2.status = 'DEGRADED'
+            GROUP BY fl2.spoke_code
+            HAVING MAX(fh.timestamp) IS NULL
+               OR MAX(fh.timestamp) < NOW() - INTERVAL '${failed_threshold} seconds'
+        )
+        RETURNING spoke_code
+    " 2>/dev/null | wc -l | xargs)
+
+    if [ "${escalated:-0}" -gt 0 ]; then
+        log_warn "Escalated ${escalated} federation links from DEGRADED to FAILED"
+    fi
+}
+
+##
+# Attempt auto-recovery for DEGRADED federation links
+#
+# For each DEGRADED link:
+#   1. Checks if spoke is now alive (heartbeat resumed)
+#   2. Validates OIDC discovery endpoint
+#   3. If healthy: transitions back to ACTIVE
+#
+# Arguments:
+#   None
+##
+federation_auto_recover() {
+    if ! type orch_db_check_connection &>/dev/null || ! orch_db_check_connection; then
+        return 1
+    fi
+
+    # Get all DEGRADED links
+    local degraded_spokes
+    degraded_spokes=$(orch_db_exec "
+        SELECT DISTINCT spoke_code FROM federation_links WHERE status='DEGRADED'
+    " 2>/dev/null | xargs)
+
+    if [ -z "$degraded_spokes" ]; then
+        log_verbose "No degraded federation links to recover"
+        return 0
+    fi
+
+    log_info "Attempting auto-recovery for degraded links: ${degraded_spokes}"
+
+    local recovered=0
+    local code
+    for code in $degraded_spokes; do
+        local code_upper
+        code_upper=$(echo "$code" | tr '[:lower:]' '[:upper:]')
+        local code_lower
+        code_lower=$(echo "$code" | tr '[:upper:]' '[:lower:]')
+
+        # Check 1: Is spoke alive (recent heartbeat)?
+        if federation_is_spoke_alive "$code_upper" 2>/dev/null; then
+            log_info "  ${code_upper}: Heartbeat resumed — recovering..."
+
+            # Check 2: Validate OIDC discovery
+            local spoke_url
+            spoke_url=$(resolve_spoke_public_url "$code_upper" "idp" 2>/dev/null || echo "")
+            local spoke_realm="dive-v3-broker-${code_lower}"
+
+            if [ -n "$spoke_url" ]; then
+                local discovery
+                discovery=$(_federation_oidc_discover "${spoke_url}/realms/${spoke_realm}" "no-cache" 2>/dev/null || echo "")
+                if [ -n "$discovery" ]; then
+                    # OIDC healthy + heartbeat alive → transition to ACTIVE
+                    federation_set_link_state "$code_upper" "ACTIVE" "Auto-recovered: heartbeat and OIDC restored"
+                    recovered=$((recovered + 1))
+                    log_success "  ${code_upper}: Recovered → ACTIVE"
+
+                    if type fed_db_record_operation &>/dev/null; then
+                        fed_db_record_operation "$code_lower" "AUTO_RECOVER" "SUCCESS" "system" \
+                            "{\"trigger\": \"heartbeat_resumed\"}" 2>/dev/null || true
+                    fi
+                    continue
+                fi
+            fi
+
+            # Heartbeat alive but OIDC still failing — stay DEGRADED
+            log_verbose "  ${code_upper}: Heartbeat alive but OIDC still failing — remains DEGRADED"
+        else
+            log_verbose "  ${code_upper}: Still no heartbeat — remains DEGRADED"
+        fi
+    done
+
+    if [ "$recovered" -gt 0 ]; then
+        log_success "Auto-recovered ${recovered} federation link(s)"
+    fi
 }
 
 # =============================================================================
@@ -658,23 +995,22 @@ verify_federation_state() {
     ensure_dive_root
     log_step "Verifying federation state for $code_upper..."
 
+    # Load keycloak-api.sh for cross-network support
+    local _api_module="${FEDERATION_DIR}/keycloak-api.sh"
+    if [ -f "$_api_module" ] && [ -z "${KEYCLOAK_API_LOADED:-}" ]; then
+        source "$_api_module"
+    fi
+
     local checks_passed=0 checks_failed=0
     local issues=()
+    local realm="dive-v3-broker-${code_lower}"
 
     # Check 1: Hub IdP exists in spoke Keycloak
     echo -n "  Hub IdP in Spoke:          "
-    local spoke_token=""
-    if type -t get_spoke_admin_token &>/dev/null; then
-        spoke_token=$(get_spoke_admin_token "$spoke_code" 2>/dev/null)
-    fi
-    local realm="dive-v3-broker-${code_lower}"
-    local kc_container="dive-spoke-${code_lower}-keycloak"
-
-    if [ -n "$spoke_token" ]; then
+    if type keycloak_admin_api &>/dev/null; then
         local hub_idp_check
-        hub_idp_check=$(docker exec "$kc_container" curl -sf \
-            -H "Authorization: Bearer $spoke_token" \
-            "http://localhost:8080/admin/realms/${realm}/identity-provider/instances/usa-idp" 2>/dev/null)
+        hub_idp_check=$(keycloak_admin_api "$code_upper" "GET" \
+            "realms/${realm}/identity-provider/instances/usa-idp" 2>/dev/null)
         if echo "$hub_idp_check" | grep -q '"alias"'; then
             echo -e "${GREEN}✓${NC}"; checks_passed=$((checks_passed + 1))
         else
@@ -682,39 +1018,71 @@ verify_federation_state() {
             issues+=("Hub IdP (usa-idp) missing in ${code_upper} Keycloak")
         fi
     else
-        echo -e "${RED}✗${NC} (cannot authenticate)"; checks_failed=$((checks_failed + 1))
-        issues+=("Cannot authenticate to ${code_upper} Keycloak")
+        # Legacy fallback: direct docker exec
+        local spoke_token=""
+        if type -t get_spoke_admin_token &>/dev/null; then
+            spoke_token=$(get_spoke_admin_token "$spoke_code" 2>/dev/null)
+        fi
+        local kc_container="dive-spoke-${code_lower}-keycloak"
+        if [ -n "$spoke_token" ]; then
+            local hub_idp_check
+            hub_idp_check=$(docker exec "$kc_container" curl -sf \
+                -H "Authorization: Bearer $spoke_token" \
+                "http://localhost:8080/admin/realms/${realm}/identity-provider/instances/usa-idp" 2>/dev/null)
+            if echo "$hub_idp_check" | grep -q '"alias"'; then
+                echo -e "${GREEN}✓${NC}"; checks_passed=$((checks_passed + 1))
+            else
+                echo -e "${RED}✗${NC}"; checks_failed=$((checks_failed + 1))
+                issues+=("Hub IdP (usa-idp) missing in ${code_upper} Keycloak")
+            fi
+        else
+            echo -e "${RED}✗${NC} (cannot authenticate)"; checks_failed=$((checks_failed + 1))
+            issues+=("Cannot authenticate to ${code_upper} Keycloak")
+        fi
     fi
 
     # Check 2: Spoke IdP exists in Hub Keycloak
     echo -n "  Spoke IdP in Hub:          "
-    local hub_kc_container="${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}"
-    local hub_pass
-    hub_pass=$(docker exec "$hub_kc_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
-    if [ -n "$hub_pass" ]; then
-        local hub_token
-        hub_token=$(docker exec "$hub_kc_container" curl -sf \
-            -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
-            -d "grant_type=password" -d "username=admin" -d "password=${hub_pass}" \
-            -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
-        if [ -n "$hub_token" ]; then
-            local spoke_idp_check
-            spoke_idp_check=$(docker exec "$hub_kc_container" curl -sf \
-                -H "Authorization: Bearer $hub_token" \
-                "http://localhost:8080/admin/realms/${HUB_REALM:-dive-v3-broker-usa}/identity-provider/instances/${code_lower}-idp" 2>/dev/null)
-            if echo "$spoke_idp_check" | grep -q '"alias"'; then
-                echo -e "${GREEN}✓${NC}"; checks_passed=$((checks_passed + 1))
-            else
-                echo -e "${RED}✗${NC}"; checks_failed=$((checks_failed + 1))
-                issues+=("Spoke IdP (${code_lower}-idp) missing in Hub Keycloak")
-            fi
+    if type keycloak_admin_api &>/dev/null; then
+        local spoke_idp_check
+        spoke_idp_check=$(keycloak_admin_api "USA" "GET" \
+            "realms/${HUB_REALM:-dive-v3-broker-usa}/identity-provider/instances/${code_lower}-idp" 2>/dev/null)
+        if echo "$spoke_idp_check" | grep -q '"alias"'; then
+            echo -e "${GREEN}✓${NC}"; checks_passed=$((checks_passed + 1))
         else
-            echo -e "${RED}✗${NC} (cannot authenticate)"; checks_failed=$((checks_failed + 1))
-            issues+=("Cannot authenticate to Hub Keycloak")
+            echo -e "${RED}✗${NC}"; checks_failed=$((checks_failed + 1))
+            issues+=("Spoke IdP (${code_lower}-idp) missing in Hub Keycloak")
         fi
     else
-        echo -e "${RED}✗${NC} (password not found)"; checks_failed=$((checks_failed + 1))
-        issues+=("Hub Keycloak password not found")
+        # Legacy fallback
+        local hub_kc_container="${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}"
+        local hub_pass
+        hub_pass=$(docker exec "$hub_kc_container" printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null | tr -d '\n\r')
+        if [ -n "$hub_pass" ]; then
+            local hub_token
+            hub_token=$(docker exec "$hub_kc_container" curl -sf \
+                -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
+                -d "grant_type=password" -d "username=admin" -d "password=${hub_pass}" \
+                -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+            if [ -n "$hub_token" ]; then
+                local spoke_idp_check
+                spoke_idp_check=$(docker exec "$hub_kc_container" curl -sf \
+                    -H "Authorization: Bearer $hub_token" \
+                    "http://localhost:8080/admin/realms/${HUB_REALM:-dive-v3-broker-usa}/identity-provider/instances/${code_lower}-idp" 2>/dev/null)
+                if echo "$spoke_idp_check" | grep -q '"alias"'; then
+                    echo -e "${GREEN}✓${NC}"; checks_passed=$((checks_passed + 1))
+                else
+                    echo -e "${RED}✗${NC}"; checks_failed=$((checks_failed + 1))
+                    issues+=("Spoke IdP (${code_lower}-idp) missing in Hub Keycloak")
+                fi
+            else
+                echo -e "${RED}✗${NC} (cannot authenticate)"; checks_failed=$((checks_failed + 1))
+                issues+=("Cannot authenticate to Hub Keycloak")
+            fi
+        else
+            echo -e "${RED}✗${NC} (password not found)"; checks_failed=$((checks_failed + 1))
+            issues+=("Hub Keycloak password not found")
+        fi
     fi
 
     # Check 3: Client secrets match
@@ -728,18 +1096,17 @@ verify_federation_state() {
 
     # Check 4: Redirect URIs
     echo -n "  Redirect URIs configured:  "
-    if [ -n "$spoke_token" ]; then
+    if type keycloak_admin_api &>/dev/null; then
         local client_check
-        client_check=$(docker exec "$kc_container" curl -sf \
-            -H "Authorization: Bearer $spoke_token" \
-            "http://localhost:8080/admin/realms/${realm}/clients?clientId=dive-v3-broker-${code_lower}" 2>/dev/null)
+        client_check=$(keycloak_admin_api "$code_upper" "GET" \
+            "realms/${realm}/clients?clientId=dive-v3-broker-${code_lower}" 2>/dev/null)
         if echo "$client_check" | grep -q '"redirectUris"'; then
             echo -e "${GREEN}✓${NC}"; checks_passed=$((checks_passed + 1))
         else
             echo -e "${YELLOW}⚠${NC}"; issues+=("Redirect URIs may not be configured")
         fi
     else
-        echo -e "${YELLOW}⚠${NC} (cannot verify)"
+        echo -e "${YELLOW}⚠${NC} (keycloak_admin_api not available)"
     fi
 
     echo ""
@@ -750,6 +1117,7 @@ verify_federation_state() {
         log_warn "Federation checks: $checks_passed passed, $checks_failed failed"
         if [ ${#issues[@]} -gt 0 ]; then
             echo "  Issues found:"
+            local issue
             for issue in "${issues[@]}"; do echo "    - $issue"; done
         fi
         return 1
@@ -764,11 +1132,14 @@ export -f federation_record_heartbeat
 export -f federation_get_last_heartbeat
 export -f federation_is_spoke_alive
 export -f federation_health_dashboard
+export -f federation_diagnose
 export -f federation_health_json
 export -f federation_get_link_state
 export -f federation_set_link_state
 export -f federation_find_stale
 export -f federation_mark_stale
+export -f federation_escalate_degraded
+export -f federation_auto_recover
 export -f fed_db_init_schema
 export -f fed_db_schema_exists
 export -f fed_db_upsert_link

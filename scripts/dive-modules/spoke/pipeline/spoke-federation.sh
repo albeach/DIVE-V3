@@ -144,20 +144,47 @@ spoke_federation_setup() {
     # ==========================================================================
     log_info "Verifying Keycloak admin APIs are ready..."
 
-    # Wait for Hub Keycloak admin API (short timeout — already healthy from DEPLOYMENT phase)
-    if type wait_for_keycloak_admin_api_ready &>/dev/null; then
+    # Wait for Hub Keycloak admin API (uses abstraction — works local or remote)
+    if type keycloak_admin_api_available &>/dev/null; then
+        if ! keycloak_admin_api_available "USA"; then
+            # Fallback: try legacy wait for local containers
+            if is_spoke_local "USA" && type wait_for_keycloak_admin_api_ready &>/dev/null; then
+                if ! wait_for_keycloak_admin_api_ready "dive-hub-keycloak" 30; then
+                    log_error "Hub Keycloak admin API not ready - cannot proceed with federation"
+                    return 1
+                fi
+            else
+                log_error "Hub Keycloak admin API not reachable - cannot proceed with federation"
+                return 1
+            fi
+        fi
+        log_info "✓ Hub Keycloak admin API ready"
+    elif type wait_for_keycloak_admin_api_ready &>/dev/null; then
         if ! wait_for_keycloak_admin_api_ready "dive-hub-keycloak" 30; then
             log_error "Hub Keycloak admin API not ready - cannot proceed with federation"
             return 1
         fi
         log_info "✓ Hub Keycloak admin API ready"
     else
-        log_warn "wait_for_keycloak_admin_api_ready not available - skipping readiness check"
+        log_warn "Keycloak readiness check not available - skipping"
     fi
 
-    # Wait for Spoke Keycloak admin API (short timeout — already healthy from DEPLOYMENT phase)
+    # Wait for Spoke Keycloak admin API
     local spoke_kc_container="dive-spoke-${code_lower}-keycloak"
-    if type wait_for_keycloak_admin_api_ready &>/dev/null; then
+    if type keycloak_admin_api_available &>/dev/null; then
+        if ! keycloak_admin_api_available "$instance_code"; then
+            if is_spoke_local "$instance_code" && type wait_for_keycloak_admin_api_ready &>/dev/null; then
+                if ! wait_for_keycloak_admin_api_ready "$spoke_kc_container" 30; then
+                    log_error "Spoke Keycloak admin API not ready - cannot proceed with federation"
+                    return 1
+                fi
+            else
+                log_error "Spoke Keycloak admin API not reachable - cannot proceed with federation"
+                return 1
+            fi
+        fi
+        log_info "✓ Spoke Keycloak admin API ready"
+    elif type wait_for_keycloak_admin_api_ready &>/dev/null; then
         if ! wait_for_keycloak_admin_api_ready "$spoke_kc_container" 30; then
             log_error "Spoke Keycloak admin API not ready - cannot proceed with federation"
             return 1

@@ -487,6 +487,27 @@ _spoke_service_sans() {
         sans="$sans ${HUB_EXTERNAL_ADDRESS}"
     fi
 
+    # Custom domain SANs (for spokes with their own external domain, e.g. gbr.mod.uk)
+    local code_upper
+    code_upper="$(echo "$code_lower" | tr '[:lower:]' '[:upper:]')"
+    local _spoke_domain_var="SPOKE_${code_upper}_DOMAIN"
+    local _spoke_custom_domain="${!_spoke_domain_var:-${SPOKE_CUSTOM_DOMAIN:-}}"
+    if [ -n "$_spoke_custom_domain" ]; then
+        sans="$sans app.${_spoke_custom_domain} api.${_spoke_custom_domain} idp.${_spoke_custom_domain}"
+        sans="$sans opal.${_spoke_custom_domain} vault.${_spoke_custom_domain}"
+        sans="$sans ${_spoke_custom_domain}"
+    fi
+
+    # DIVE_DOMAIN_SUFFIX SANs (env-prefixed domain names from Caddy)
+    if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
+        local _env_prefix _base_domain
+        _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
+        _base_domain="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"
+        sans="$sans ${_env_prefix}-${code_lower}-idp.${_base_domain}"
+        sans="$sans ${_env_prefix}-${code_lower}-api.${_base_domain}"
+        sans="$sans ${_env_prefix}-${code_lower}-app.${_base_domain}"
+    fi
+
     printf '%s' "$sans"
 }
 

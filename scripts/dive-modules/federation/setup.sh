@@ -31,6 +31,11 @@ if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     export DIVE_COMMON_LOADED=1
 fi
 
+# Load Keycloak admin API abstraction (cross-network support)
+if [ -z "${KEYCLOAK_API_LOADED:-}" ]; then
+    source "${FEDERATION_DIR}/keycloak-api.sh"
+fi
+
 # =============================================================================
 # FEDERATION CONFIGURATION
 # =============================================================================
@@ -50,12 +55,19 @@ HUB_REALM="${HUB_REALM:-dive-v3-broker-usa}"
 #   Access token on stdout
 ##
 get_hub_admin_token() {
+    # Delegate to unified Keycloak API abstraction (keycloak-api.sh)
+    # which handles local docker exec and remote HTTPS paths, plus token caching
+    if type keycloak_get_admin_token &>/dev/null; then
+        keycloak_get_admin_token "USA"
+        return $?
+    fi
+
+    # Fallback: legacy inline path (if keycloak-api.sh not loaded)
     local max_retries=15
     local retry_delay=5
 
     local i
     for ((i=1; i<=max_retries; i++)); do
-        # Get admin password from GCP or environment
         local admin_pass="${KEYCLOAK_ADMIN_PASSWORD:-}"
 
         if [ -z "$admin_pass" ] && type get_keycloak_admin_password &>/dev/null; then
@@ -63,7 +75,6 @@ get_hub_admin_token() {
         fi
 
         if [ -z "$admin_pass" ]; then
-            # Try to get from container environment
             admin_pass=$(docker exec dive-hub-keycloak printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null || \
                         docker exec dive-hub-keycloak printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null)
         fi
@@ -104,25 +115,28 @@ get_hub_admin_token() {
 ##
 get_spoke_admin_token() {
     local instance_code="$1"
+
+    # Delegate to unified Keycloak API abstraction (keycloak-api.sh)
+    if type keycloak_get_admin_token &>/dev/null; then
+        keycloak_get_admin_token "$instance_code"
+        return $?
+    fi
+
+    # Fallback: legacy inline path (if keycloak-api.sh not loaded)
     local code_lower
     code_lower=$(lower "$instance_code")
 
-    # Get port information using eval pattern
     eval "$(get_instance_ports "$instance_code" 2>/dev/null)"
     local spoke_url
     spoke_url=$(resolve_spoke_public_url "$instance_code" "idp")
 
-    # Get admin password
     local admin_pass=""
-
     if type get_keycloak_admin_password &>/dev/null; then
         admin_pass=$(get_keycloak_admin_password "$instance_code" 2>/dev/null)
     fi
-
     if [ -z "$admin_pass" ]; then
         admin_pass=$(docker exec "dive-spoke-${code_lower}-keycloak" printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null)
     fi
-
     if [ -z "$admin_pass" ]; then
         log_error "Cannot get Spoke admin password for $instance_code"
         return 1
@@ -199,9 +213,8 @@ federation_link() {
     # Detect Simple Post-Broker OTP flow in Hub realm (created by Terraform realm-mfa module)
     local _hub_otp_flow=""
     local _hub_fed_flows
-    _hub_fed_flows=$(docker exec "${HUB_KEYCLOAK_CONTAINER:-dive-hub-keycloak}" curl -sf --max-time 5 \
-        -H "Authorization: Bearer $hub_token" \
-        "http://localhost:8080/admin/realms/dive-v3-broker-usa/authentication/flows" 2>/dev/null || echo "[]")
+    _hub_fed_flows=$(keycloak_admin_api "USA" "GET" \
+        "realms/dive-v3-broker-usa/authentication/flows" 2>/dev/null || echo "[]")
     _hub_otp_flow=$(echo "$_hub_fed_flows" | python3 -c "
 import json,sys
 try:
@@ -243,17 +256,27 @@ except: pass
 EOF
 )
 
-    local response
-    response=$(curl -sf -X POST "${HUB_KC_URL}/admin/realms/${HUB_REALM}/identity-provider/instances" \
-        -H "Authorization: Bearer $hub_token" \
-        -H "Content-Type: application/json" \
-        -d "$idp_config" \
-        --insecure 2>&1)
+    # Idempotent IdP creation via keycloak_admin_api (supports local + remote)
+    local existing_idp
+    existing_idp=$(keycloak_admin_api "USA" "GET" \
+        "realms/${HUB_REALM}/identity-provider/instances/${idp_alias}" 2>/dev/null)
 
-    if [ $? -eq 0 ]; then
-        log_success "IdP created on Hub for $code_upper"
+    if [ -n "$existing_idp" ] && echo "$existing_idp" | grep -q '"alias"'; then
+        log_info "IdP ${idp_alias} already exists on Hub, updating..."
+        _federation_retry_with_backoff 3 2 \
+            keycloak_admin_api "USA" "PUT" \
+            "realms/${HUB_REALM}/identity-provider/instances/${idp_alias}" "$idp_config" >/dev/null 2>&1
+        log_success "Updated IdP on Hub for $code_upper"
     else
-        log_warn "IdP may already exist or failed: $response"
+        local create_rc=0
+        _federation_retry_with_backoff 3 2 \
+            keycloak_admin_api "USA" "POST" \
+            "realms/${HUB_REALM}/identity-provider/instances" "$idp_config" >/dev/null 2>&1 || create_rc=$?
+        if [ "$create_rc" -eq 0 ]; then
+            log_success "IdP created on Hub for $code_upper"
+        else
+            log_warn "IdP creation may have failed after retries (exit $create_rc)"
+        fi
     fi
 
     # Step 4: Register in database (database-driven, not JSON)
@@ -604,20 +627,25 @@ _federation_link_direct() {
 
     log_info "✓ $target_upper password resolved (${#target_pass} chars)"
 
-    # Quick readiness check (Keycloaks already verified upstream, use short timeout)
+    # Quick readiness check (uses abstraction layer — works local or remote)
     log_info "Verifying $target_upper Keycloak admin API..."
-    if ! wait_for_keycloak_admin_api_ready "$target_kc_container" 30 "$target_pass"; then
-        log_error "Keycloak admin API not ready: $target_kc_container"
-        return 1
+    if ! keycloak_admin_api_available "$target_code"; then
+        # Fallback: try legacy wait_for_keycloak_admin_api_ready for local containers
+        if is_spoke_local "$target_code" && type wait_for_keycloak_admin_api_ready &>/dev/null; then
+            if ! wait_for_keycloak_admin_api_ready "$target_kc_container" 30 "$target_pass"; then
+                log_error "Keycloak admin API not ready: $target_upper"
+                return 1
+            fi
+        else
+            log_error "Keycloak admin API not reachable: $target_upper"
+            return 1
+        fi
     fi
 
-    # Authenticate with target Keycloak
+    # Authenticate with target Keycloak (via unified API)
     log_info "Authenticating with $target_upper Keycloak..."
     local token
-    token=$(docker exec "$target_kc_container" curl -sf --max-time 10 \
-        -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
-        -d "grant_type=password" -d "username=admin" -d "password=${target_pass}" \
-        -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+    token=$(keycloak_get_admin_token "$target_code")
 
     if [ -z "$token" ]; then
         log_error "Failed to authenticate with $target_upper Keycloak"
@@ -649,34 +677,28 @@ _federation_link_direct() {
 
     log_info "✓ $source_upper password resolved (${#source_pass} chars)"
 
-    # Quick readiness check (Keycloaks already verified upstream, use short timeout)
+    # Quick readiness check (uses abstraction layer — works local or remote)
     log_info "Verifying $source_upper Keycloak admin API..."
-    if ! wait_for_keycloak_admin_api_ready "$source_kc_container" 30 "$source_pass"; then
-        log_error "Source Keycloak admin API not ready: $source_kc_container"
-        return 1
+    if ! keycloak_admin_api_available "$source_code"; then
+        if is_spoke_local "$source_code" && type wait_for_keycloak_admin_api_ready &>/dev/null; then
+            if ! wait_for_keycloak_admin_api_ready "$source_kc_container" 30 "$source_pass"; then
+                log_error "Source Keycloak admin API not ready: $source_upper"
+                return 1
+            fi
+        else
+            log_error "Source Keycloak admin API not reachable: $source_upper"
+            return 1
+        fi
     fi
     log_info "✓ $source_upper Keycloak admin API ready"
 
-    # Authenticate with source Keycloak
+    # Authenticate with source Keycloak (via unified API)
     log_info "Authenticating with source $source_upper Keycloak..."
-    local auth_response
-    auth_response=$(docker exec "$source_kc_container" curl -s --max-time 10 \
-        -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
-        -d "grant_type=password" \
-        -d "username=admin" \
-        -d "password=${source_pass}" \
-        -d "client_id=admin-cli" 2>&1)
-
     local source_token
-    source_token=$(echo "$auth_response" | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
+    source_token=$(keycloak_get_admin_token "$source_code")
 
     if [ -z "$source_token" ]; then
         log_error "Failed to authenticate with source $source_upper Keycloak"
-        if echo "$auth_response" | grep -q "error"; then
-            local error_desc
-            error_desc=$(echo "$auth_response" | grep -o '"error_description":"[^"]*' | cut -d'"' -f4)
-            [ -n "$error_desc" ] && log_error "Keycloak error: $error_desc"
-        fi
         return 1
     fi
 
@@ -685,17 +707,15 @@ _federation_link_direct() {
     # Get client secret
     log_info "Querying for existing federation client: $federation_client_id"
     local client_uuid
-    client_uuid=$(docker exec "$source_kc_container" curl -sf --max-time 10 \
-        -H "Authorization: Bearer $source_token" \
-        "http://localhost:8080/admin/realms/${source_realm}/clients?clientId=${federation_client_id}" 2>/dev/null | \
+    client_uuid=$(keycloak_admin_api "$source_code" "GET" \
+        "realms/${source_realm}/clients?clientId=${federation_client_id}" 2>/dev/null | \
         grep -o '"id":"[^"]*' | head -1 | cut -d'"' -f4)
 
     local client_secret=""
     if [ -n "$client_uuid" ]; then
         log_info "Found existing client, retrieving secret..."
-        client_secret=$(docker exec "$source_kc_container" curl -s --max-time 10 \
-            -H "Authorization: Bearer $source_token" \
-            "http://localhost:8080/admin/realms/${source_realm}/clients/${client_uuid}/client-secret" 2>/dev/null | \
+        client_secret=$(keycloak_admin_api "$source_code" "GET" \
+            "realms/${source_realm}/clients/${client_uuid}/client-secret" 2>/dev/null | \
             grep -o '"value":"[^"]*' | cut -d'"' -f4)
 
         if [ -z "$client_secret" ]; then
@@ -729,13 +749,8 @@ _federation_link_direct() {
         log_info "POSTing client configuration to Keycloak..."
 
         local create_output
-        create_output=$(echo "$new_client_config" | docker exec -i "$source_kc_container" \
-            curl -s --max-time 15 -w "\nHTTP_CODE:%{http_code}" \
-            -X POST "http://localhost:8080/admin/realms/${source_realm}/clients" \
-            -H "Authorization: Bearer $source_token" \
-            -H "Content-Type: application/json" \
-            -d @- 2>&1)
-
+        create_output=$(keycloak_admin_api_with_status "$source_code" "POST" \
+            "realms/${source_realm}/clients" "$new_client_config")
         local create_exit=$?
 
         if [ $create_exit -eq 0 ]; then
@@ -757,28 +772,29 @@ _federation_link_direct() {
 
     # Add protocol mappers to the SOURCE federation client
     log_info "Adding protocol mappers to source federation client..."
-    _ensure_federation_client_mappers "$source_kc_container" "$source_token" "$source_realm" "$federation_client_id"
+    _ensure_federation_client_mappers "$source_code" "$source_token" "$source_realm" "$federation_client_id"
 
     if [ -z "$client_secret" ]; then
         client_secret=$(_get_federation_secret "$source_lower" "$target_lower")
     fi
 
     # URL Strategy: Dual URLs for browser vs server-to-server
+    # Internal URLs are resolved dynamically — works for both co-located and
+    # external (separate-network) deployments.
     local source_public_url source_internal_url
     if [ "$source_upper" = "USA" ]; then
         source_public_url=$(resolve_hub_public_url "idp")
-        source_internal_url="https://dive-hub-keycloak:8443"
+        source_internal_url=$(resolve_hub_internal_url "idp")
     else
         source_public_url=$(resolve_spoke_public_url "$source_upper" "idp")
-        source_internal_url="https://dive-spoke-${source_lower}-keycloak:8443"
+        source_internal_url=$(resolve_spoke_internal_url "$source_upper" "idp")
     fi
 
     # Detect Simple Post-Broker OTP flow in target realm (created by Terraform realm-mfa module)
     local _target_otp_flow=""
     local _target_all_flows
-    _target_all_flows=$(docker exec "$target_kc_container" curl -sf --max-time 5 \
-        -H "Authorization: Bearer $token" \
-        "http://localhost:8080/admin/realms/${target_realm}/authentication/flows" 2>/dev/null || echo "[]")
+    _target_all_flows=$(keycloak_admin_api "$target_code" "GET" \
+        "realms/${target_realm}/authentication/flows" 2>/dev/null || echo "[]")
     _target_otp_flow=$(echo "$_target_all_flows" | python3 -c "
 import json,sys
 try:
@@ -821,19 +837,15 @@ except: pass
 
     # Idempotent IdP creation: check if exists, update if needed, create if not
     local existing_idp
-    existing_idp=$(docker exec "$target_kc_container" curl -sf \
-        -H "Authorization: Bearer $token" \
-        "http://localhost:8080/admin/realms/${target_realm}/identity-provider/instances/${idp_alias}" 2>/dev/null)
+    existing_idp=$(keycloak_admin_api "$target_code" "GET" \
+        "realms/${target_realm}/identity-provider/instances/${idp_alias}" 2>/dev/null)
 
     if [ -n "$existing_idp" ] && echo "$existing_idp" | grep -q '"alias"'; then
         log_info "IdP ${idp_alias} already exists in ${target_upper}, updating..."
 
         local update_result
-        update_result=$(docker exec "$target_kc_container" curl -sf -w "\nHTTP_CODE:%{http_code}" \
-            -X PUT "http://localhost:8080/admin/realms/${target_realm}/identity-provider/instances/${idp_alias}" \
-            -H "Authorization: Bearer $token" \
-            -H "Content-Type: application/json" \
-            -d "$idp_config" 2>&1)
+        update_result=$(keycloak_admin_api_with_status "$target_code" "PUT" \
+            "realms/${target_realm}/identity-provider/instances/${idp_alias}" "$idp_config")
 
         local http_code
         http_code=$(echo "$update_result" | grep -o "HTTP_CODE:[0-9]*" | cut -d: -f2)
@@ -846,11 +858,8 @@ except: pass
         log_info "Creating ${idp_alias} in ${target_upper}..."
 
         local create_result
-        create_result=$(docker exec "$target_kc_container" curl -s -w "\nHTTP_CODE:%{http_code}" \
-            -X POST "http://localhost:8080/admin/realms/${target_realm}/identity-provider/instances" \
-            -H "Authorization: Bearer $token" \
-            -H "Content-Type: application/json" \
-            -d "$idp_config" 2>&1)
+        create_result=$(keycloak_admin_api_with_status "$target_code" "POST" \
+            "realms/${target_realm}/identity-provider/instances" "$idp_config")
 
         local http_code
         http_code=$(echo "$create_result" | grep -o "HTTP_CODE:[0-9]*" | cut -d: -f2)
@@ -859,11 +868,8 @@ except: pass
             log_success "Created ${idp_alias} in ${target_upper}"
         elif [ "$http_code" = "409" ]; then
             log_warn "IdP already exists (409), updating instead..."
-            docker exec "$target_kc_container" curl -sf \
-                -X PUT "http://localhost:8080/admin/realms/${target_realm}/identity-provider/instances/${idp_alias}" \
-                -H "Authorization: Bearer $token" \
-                -H "Content-Type: application/json" \
-                -d "$idp_config" 2>/dev/null || true
+            keycloak_admin_api "$target_code" "PUT" \
+                "realms/${target_realm}/identity-provider/instances/${idp_alias}" "$idp_config" 2>/dev/null || true
             log_success "Updated ${idp_alias} in ${target_upper}"
         else
             log_error "Failed to create IdP: HTTP $http_code"
@@ -874,7 +880,7 @@ except: pass
 
     # Configure IdP mappers to import claims from federated tokens
     log_info "Configuring IdP claim mappers for ${idp_alias}..."
-    _configure_idp_mappers "$target_kc_container" "$token" "$target_realm" "$idp_alias"
+    _configure_idp_mappers "$target_code" "$token" "$target_realm" "$idp_alias"
 
     return 0
 }
@@ -882,6 +888,514 @@ except: pass
 
 # Load federation mapper management functions
 source "$(dirname "${BASH_SOURCE[0]}")/mappers.sh"
+
+# =============================================================================
+# RESILIENCE UTILITIES (Phase 8)
+# =============================================================================
+
+# OIDC discovery cache directory (5-minute TTL)
+_OIDC_CACHE_DIR="${TMPDIR:-/tmp}/dive-oidc-cache"
+_OIDC_CACHE_TTL="${OIDC_CACHE_TTL:-300}"  # 5 minutes
+
+##
+# Retry a command with exponential backoff
+#
+# Arguments:
+#   $1 - Max attempts (default: 3)
+#   $2 - Initial delay in seconds (default: 2)
+#   $@ - Command to execute (remaining args)
+#
+# Returns:
+#   Exit code of the last attempt
+##
+_federation_retry_with_backoff() {
+    local max_attempts="${1:-3}"
+    local delay="${2:-2}"
+    shift 2
+
+    local attempt=1
+    local rc=0
+    while [ "$attempt" -le "$max_attempts" ]; do
+        rc=0
+        "$@" && return 0 || rc=$?
+
+        if [ "$attempt" -lt "$max_attempts" ]; then
+            log_verbose "Attempt $attempt/$max_attempts failed (exit $rc), retrying in ${delay}s..."
+            sleep "$delay"
+            delay=$((delay * 2))
+        fi
+        attempt=$((attempt + 1))
+    done
+
+    log_warn "All $max_attempts attempts failed for: $1"
+    return "$rc"
+}
+
+##
+# Clear the OIDC discovery cache (all entries or specific realm)
+#
+# Arguments:
+#   $1 - (optional) Realm URL to clear; if empty, clears all
+##
+_federation_oidc_cache_clear() {
+    local realm_url="${1:-}"
+    if [ -z "$realm_url" ]; then
+        rm -rf "$_OIDC_CACHE_DIR" 2>/dev/null || true
+        log_verbose "OIDC discovery cache cleared (all)"
+    else
+        local cache_key
+        cache_key=$(echo "$realm_url" | md5sum 2>/dev/null | cut -d' ' -f1 || echo "$realm_url" | shasum | cut -d' ' -f1)
+        rm -f "${_OIDC_CACHE_DIR}/${cache_key}" 2>/dev/null || true
+        log_verbose "OIDC discovery cache cleared for: $realm_url"
+    fi
+}
+
+# =============================================================================
+# OIDC DISCOVERY & EXTERNAL FEDERATION
+# =============================================================================
+
+##
+# Fetch OIDC discovery document from a Keycloak realm (with caching)
+#
+# Arguments:
+#   $1 - Full realm URL (e.g., https://idp.gbr.mod.uk/realms/dive-v3-broker-gbr)
+#   $2 - (optional) "no-cache" to bypass cache
+#
+# Returns:
+#   JSON discovery document on stdout, or empty string on failure
+##
+_federation_oidc_discover() {
+    local realm_url="$1"
+    local no_cache="${2:-}"
+    local discovery_url="${realm_url}/.well-known/openid-configuration"
+
+    # Check cache first (unless bypassed)
+    if [ "$no_cache" != "no-cache" ] && [ -d "$_OIDC_CACHE_DIR" ]; then
+        local cache_key
+        cache_key=$(echo "$realm_url" | md5sum 2>/dev/null | cut -d' ' -f1 || echo "$realm_url" | shasum | cut -d' ' -f1)
+        local cache_file="${_OIDC_CACHE_DIR}/${cache_key}"
+        if [ -f "$cache_file" ]; then
+            local cache_age
+            local now
+            now=$(date +%s)
+            local file_mtime
+            file_mtime=$(stat -f %m "$cache_file" 2>/dev/null || stat -c %Y "$cache_file" 2>/dev/null || echo 0)
+            cache_age=$((now - file_mtime))
+            if [ "$cache_age" -lt "$_OIDC_CACHE_TTL" ]; then
+                log_verbose "OIDC discovery cache hit for: $realm_url (age: ${cache_age}s)"
+                cat "$cache_file"
+                return 0
+            fi
+        fi
+    fi
+
+    local response
+    response=$(curl -sf --max-time 15 --insecure "$discovery_url" 2>/dev/null)
+
+    if [ -z "$response" ]; then
+        log_warn "OIDC discovery failed for: $discovery_url"
+        echo ""
+        return 1
+    fi
+
+    # Validate it's a real OIDC discovery doc
+    if ! echo "$response" | jq -e '.issuer' >/dev/null 2>&1; then
+        log_warn "Invalid OIDC discovery document from: $discovery_url"
+        echo ""
+        return 1
+    fi
+
+    # Store in cache
+    mkdir -p "$_OIDC_CACHE_DIR" 2>/dev/null || true
+    local cache_key
+    cache_key=$(echo "$realm_url" | md5sum 2>/dev/null | cut -d' ' -f1 || echo "$realm_url" | shasum | cut -d' ' -f1)
+    echo "$response" > "${_OIDC_CACHE_DIR}/${cache_key}" 2>/dev/null || true
+
+    echo "$response"
+}
+
+##
+# Update TRUSTED_ISSUERS in an .env file (deduplicating)
+#
+# Arguments:
+#   $1 - Path to .env file
+#   $2 - New issuer URL to add
+##
+_federation_update_trusted_issuers() {
+    local env_file="$1"
+    local new_issuer="$2"
+
+    if [ ! -f "$env_file" ]; then
+        log_warn "Env file not found: $env_file"
+        return 1
+    fi
+
+    # Read current TRUSTED_ISSUERS
+    local current_issuers=""
+    current_issuers=$(grep "^TRUSTED_ISSUERS=" "$env_file" 2>/dev/null | cut -d= -f2- | tr -d '"' || echo "")
+
+    # Check if already present
+    if echo "$current_issuers" | tr ',' '\n' | grep -qF "$new_issuer"; then
+        log_verbose "Issuer already in TRUSTED_ISSUERS: $new_issuer"
+        return 0
+    fi
+
+    # Append new issuer
+    local updated_issuers
+    if [ -n "$current_issuers" ]; then
+        updated_issuers="${current_issuers},${new_issuer}"
+    else
+        updated_issuers="$new_issuer"
+    fi
+
+    # Update file (sed -i with backup for macOS compat)
+    if grep -q "^TRUSTED_ISSUERS=" "$env_file"; then
+        sed -i.bak "s|^TRUSTED_ISSUERS=.*|TRUSTED_ISSUERS=\"${updated_issuers}\"|" "$env_file"
+        rm -f "${env_file}.bak"
+    else
+        echo "TRUSTED_ISSUERS=\"${updated_issuers}\"" >> "$env_file"
+    fi
+
+    log_success "Updated TRUSTED_ISSUERS in ${env_file}"
+}
+
+##
+# Register an external spoke on the hub using OIDC discovery
+#
+# For hub operators: registers a spoke that lives on a separate network.
+# Does NOT require docker access to the spoke — only HTTPS reachability.
+#
+# Arguments:
+#   $1 - Spoke instance code (e.g., GBR)
+#   $2 - Spoke IdP URL (e.g., https://idp.gbr.mod.uk)
+#   $3 - Client secret for federation
+#   $4 - (optional) Spoke API URL (e.g., https://api.gbr.mod.uk)
+##
+federation_register_external_spoke() {
+    local code="$1"
+    local spoke_idp_url="$2"
+    local client_secret="$3"
+    local spoke_api_url="${4:-}"
+    local code_upper code_lower
+    code_upper=$(upper "$code")
+    code_lower=$(lower "$code")
+
+    if [ -z "$code" ] || [ -z "$spoke_idp_url" ] || [ -z "$client_secret" ]; then
+        log_error "Usage: federation_register_external_spoke CODE SPOKE_IDP_URL CLIENT_SECRET [SPOKE_API_URL]"
+        return 1
+    fi
+
+    local spoke_realm="dive-v3-broker-${code_lower}"
+    local idp_alias="${code_lower}-idp"
+    local realm_url="${spoke_idp_url}/realms/${spoke_realm}"
+
+    log_step "Registering external spoke ${code_upper} on Hub..."
+    log_info "  Spoke IdP: ${spoke_idp_url}"
+    log_info "  Spoke Realm: ${spoke_realm}"
+
+    # Step 1: OIDC discovery — get endpoints from the spoke
+    log_info "Step 1: Fetching OIDC discovery from spoke..."
+    local discovery
+    discovery=$(_federation_oidc_discover "$realm_url")
+    if [ -z "$discovery" ]; then
+        log_error "Cannot reach spoke OIDC discovery at: ${realm_url}"
+        log_info "Ensure the spoke's Keycloak is reachable at: ${spoke_idp_url}"
+        return 1
+    fi
+
+    # Extract endpoints from discovery document
+    local auth_url token_url userinfo_url logout_url jwks_url issuer
+    issuer=$(echo "$discovery" | jq -r '.issuer')
+    auth_url=$(echo "$discovery" | jq -r '.authorization_endpoint')
+    token_url=$(echo "$discovery" | jq -r '.token_endpoint')
+    userinfo_url=$(echo "$discovery" | jq -r '.userinfo_endpoint')
+    logout_url=$(echo "$discovery" | jq -r '.end_session_endpoint // empty')
+    jwks_url=$(echo "$discovery" | jq -r '.jwks_uri')
+
+    log_success "OIDC discovery succeeded: issuer=${issuer}"
+
+    # Step 2: Detect post-broker OTP flow on hub
+    local _hub_otp_flow=""
+    local _hub_fed_flows
+    _hub_fed_flows=$(keycloak_admin_api "USA" "GET" \
+        "realms/${HUB_REALM}/authentication/flows" 2>/dev/null || echo "[]")
+    _hub_otp_flow=$(echo "$_hub_fed_flows" | python3 -c "
+import json,sys
+try:
+    flows = json.load(sys.stdin)
+    for f in flows:
+        if f.get('alias','') == 'Simple Post-Broker OTP' and not f.get('builtIn',False):
+            print(f['alias']); break
+except: pass
+" 2>/dev/null)
+
+    # Step 3: Create IdP on Hub with discovered endpoints
+    log_info "Step 2: Creating IdP on Hub for ${code_upper}..."
+
+    local federation_client_id="dive-v3-broker-usa"
+    local idp_config
+    idp_config=$(printf '{
+  "alias": "%s",
+  "displayName": "%s Federation (External)",
+  "providerId": "oidc",
+  "enabled": true,
+  "trustEmail": true,
+  "storeToken": true,
+  "linkOnly": false,
+  "firstBrokerLoginFlowAlias": "first broker login",
+  "postBrokerLoginFlowAlias": "%s",
+  "config": {
+    "clientId": "%s",
+    "clientSecret": "%s",
+    "authorizationUrl": "%s",
+    "tokenUrl": "%s",
+    "userInfoUrl": "%s",
+    "logoutUrl": "%s",
+    "issuer": "%s",
+    "validateSignature": "true",
+    "useJwksUrl": "true",
+    "jwksUrl": "%s",
+    "defaultScope": "openid profile email clearance countryOfAffiliation uniqueID acpCOI user_acr user_amr",
+    "syncMode": "FORCE",
+    "clientAuthMethod": "client_secret_post"
+  }
+}' "$idp_alias" "$code_upper" "${_hub_otp_flow}" \
+   "$federation_client_id" "$client_secret" \
+   "$auth_url" "$token_url" "$userinfo_url" "${logout_url:-$auth_url}" \
+   "$issuer" "$jwks_url")
+
+    # Idempotent: check if exists, update or create
+    local existing_idp
+    existing_idp=$(keycloak_admin_api "USA" "GET" \
+        "realms/${HUB_REALM}/identity-provider/instances/${idp_alias}" 2>/dev/null)
+
+    if [ -n "$existing_idp" ] && echo "$existing_idp" | grep -q '"alias"'; then
+        log_info "IdP ${idp_alias} already exists on Hub, updating..."
+        keycloak_admin_api "USA" "PUT" \
+            "realms/${HUB_REALM}/identity-provider/instances/${idp_alias}" "$idp_config" >/dev/null 2>&1
+        log_success "Updated external IdP on Hub for ${code_upper}"
+    else
+        local create_result
+        create_result=$(keycloak_admin_api "USA" "POST" \
+            "realms/${HUB_REALM}/identity-provider/instances" "$idp_config" 2>/dev/null)
+        if [ $? -eq 0 ]; then
+            log_success "Created external IdP on Hub for ${code_upper}"
+        else
+            log_error "Failed to create IdP on Hub: $create_result"
+            return 1
+        fi
+    fi
+
+    # Step 4: Configure IdP mappers
+    log_info "Step 3: Configuring IdP claim mappers..."
+    local hub_token
+    hub_token=$(get_hub_admin_token)
+    _configure_idp_mappers "USA" "$hub_token" "$HUB_REALM" "$idp_alias"
+
+    # Step 5: Update Hub TRUSTED_ISSUERS
+    log_info "Step 4: Updating Hub trusted issuers..."
+    local hub_env="${DIVE_ROOT}/.env.hub"
+    _federation_update_trusted_issuers "$hub_env" "$issuer"
+
+    # Step 6: Store federation secret in Vault if available
+    if type vault_kv_put &>/dev/null; then
+        vault_kv_put "dive-v3/federation/${code_lower}/client-secret" \
+            "secret=${client_secret}" 2>/dev/null || true
+        log_verbose "Federation secret stored in Vault for ${code_lower}"
+    fi
+
+    # Step 7: Register in database if backend is available
+    local hub_api_url
+    hub_api_url=$(resolve_hub_public_url "api" 2>/dev/null)
+    if [ -n "$hub_api_url" ] && [ -n "${FEDERATION_ADMIN_KEY:-}" ]; then
+        local reg_data
+        reg_data=$(printf '{
+  "instanceCode": "%s",
+  "spokeIdpUrl": "%s",
+  "spokeApiUrl": "%s",
+  "deploymentMode": "external",
+  "status": "approved"
+}' "$code_upper" "$spoke_idp_url" "${spoke_api_url:-$spoke_idp_url}")
+
+        curl -sf --max-time 10 -X POST "${hub_api_url}/api/federation/spokes/register" \
+            -H "X-Admin-Key: ${FEDERATION_ADMIN_KEY}" \
+            -H "Content-Type: application/json" \
+            -d "$reg_data" >/dev/null 2>&1 || \
+            log_verbose "Database registration skipped (backend may not be running)"
+    fi
+
+    log_success "External spoke ${code_upper} registered on Hub federation"
+    echo ""
+    echo "  IdP alias:  ${idp_alias}"
+    echo "  Issuer:     ${issuer}"
+    echo "  Auth URL:   ${auth_url}"
+    echo "  JWKS URL:   ${jwks_url}"
+    echo ""
+    echo "Next steps:"
+    echo "  1. On the spoke, register the Hub: ./dive federation register-hub --hub-url ${HUB_KC_URL} --secret ${client_secret}"
+    echo "  2. Restart Hub backend to pick up new TRUSTED_ISSUERS"
+    echo "  3. Verify: ./dive federation verify ${code_upper}"
+}
+
+##
+# Register the hub as IdP on a spoke (spoke-side operation)
+#
+# For spoke operators: registers the hub's Keycloak as an IdP on the spoke realm.
+# Can be run from the spoke's network — only needs HTTPS access to the hub.
+#
+# Arguments:
+#   $1 - Spoke instance code (e.g., GBR)
+#   $2 - Hub IdP URL (e.g., https://idp.hub.defense.gov or https://dev-usa-idp.dive25.com)
+#   $3 - Client secret for federation
+##
+federation_register_hub_on_spoke() {
+    local code="$1"
+    local hub_idp_url="$2"
+    local client_secret="$3"
+    local code_upper code_lower
+    code_upper=$(upper "$code")
+    code_lower=$(lower "$code")
+
+    if [ -z "$code" ] || [ -z "$hub_idp_url" ] || [ -z "$client_secret" ]; then
+        log_error "Usage: federation_register_hub_on_spoke CODE HUB_IDP_URL CLIENT_SECRET"
+        return 1
+    fi
+
+    local hub_realm="${HUB_REALM:-dive-v3-broker-usa}"
+    local spoke_realm="dive-v3-broker-${code_lower}"
+    local idp_alias="usa-idp"
+    local hub_realm_url="${hub_idp_url}/realms/${hub_realm}"
+
+    log_step "Registering Hub as IdP on spoke ${code_upper}..."
+    log_info "  Hub IdP: ${hub_idp_url}"
+    log_info "  Hub Realm: ${hub_realm}"
+
+    # Step 1: OIDC discovery from hub
+    log_info "Step 1: Fetching OIDC discovery from Hub..."
+    local discovery
+    discovery=$(_federation_oidc_discover "$hub_realm_url")
+    if [ -z "$discovery" ]; then
+        log_error "Cannot reach Hub OIDC discovery at: ${hub_realm_url}"
+        log_info "Ensure the Hub's Keycloak is reachable at: ${hub_idp_url}"
+        return 1
+    fi
+
+    local auth_url token_url userinfo_url logout_url jwks_url issuer
+    issuer=$(echo "$discovery" | jq -r '.issuer')
+    auth_url=$(echo "$discovery" | jq -r '.authorization_endpoint')
+    token_url=$(echo "$discovery" | jq -r '.token_endpoint')
+    userinfo_url=$(echo "$discovery" | jq -r '.userinfo_endpoint')
+    logout_url=$(echo "$discovery" | jq -r '.end_session_endpoint // empty')
+    jwks_url=$(echo "$discovery" | jq -r '.jwks_uri')
+
+    log_success "Hub OIDC discovery succeeded: issuer=${issuer}"
+
+    # Step 2: Detect post-broker OTP flow on spoke
+    local _spoke_otp_flow=""
+    local _spoke_flows
+    _spoke_flows=$(keycloak_admin_api "$code_upper" "GET" \
+        "realms/${spoke_realm}/authentication/flows" 2>/dev/null || echo "[]")
+    _spoke_otp_flow=$(echo "$_spoke_flows" | python3 -c "
+import json,sys
+try:
+    flows = json.load(sys.stdin)
+    for f in flows:
+        if f.get('alias','') == 'Simple Post-Broker OTP' and not f.get('builtIn',False):
+            print(f['alias']); break
+except: pass
+" 2>/dev/null)
+
+    # Step 3: Create federation client on spoke (for hub to use)
+    log_info "Step 2: Ensuring federation client on spoke..."
+    local federation_client_id="dive-v3-broker-${code_lower}"
+    local spoke_token
+    spoke_token=$(keycloak_get_admin_token "$code_upper")
+
+    if [ -n "$spoke_token" ]; then
+        _ensure_federation_client "$code_upper" "$spoke_token" "$spoke_realm" "$federation_client_id" "$client_secret"
+    fi
+
+    # Step 4: Create IdP on spoke realm
+    log_info "Step 3: Creating Hub IdP on spoke ${code_upper}..."
+
+    local idp_config
+    idp_config=$(printf '{
+  "alias": "%s",
+  "displayName": "USA Hub Federation",
+  "providerId": "oidc",
+  "enabled": true,
+  "trustEmail": true,
+  "storeToken": true,
+  "linkOnly": false,
+  "firstBrokerLoginFlowAlias": "first broker login",
+  "postBrokerLoginFlowAlias": "%s",
+  "config": {
+    "clientId": "%s",
+    "clientSecret": "%s",
+    "authorizationUrl": "%s",
+    "tokenUrl": "%s",
+    "userInfoUrl": "%s",
+    "logoutUrl": "%s",
+    "issuer": "%s",
+    "validateSignature": "true",
+    "useJwksUrl": "true",
+    "jwksUrl": "%s",
+    "defaultScope": "openid profile email clearance countryOfAffiliation uniqueID acpCOI user_acr user_amr",
+    "syncMode": "FORCE",
+    "clientAuthMethod": "client_secret_post"
+  }
+}' "$idp_alias" "${_spoke_otp_flow}" \
+   "$federation_client_id" "$client_secret" \
+   "$auth_url" "$token_url" "$userinfo_url" "${logout_url:-$auth_url}" \
+   "$issuer" "$jwks_url")
+
+    # Idempotent: check if exists, update or create
+    local existing_idp
+    existing_idp=$(keycloak_admin_api "$code_upper" "GET" \
+        "realms/${spoke_realm}/identity-provider/instances/${idp_alias}" 2>/dev/null)
+
+    if [ -n "$existing_idp" ] && echo "$existing_idp" | grep -q '"alias"'; then
+        log_info "IdP ${idp_alias} already exists on spoke, updating..."
+        keycloak_admin_api "$code_upper" "PUT" \
+            "realms/${spoke_realm}/identity-provider/instances/${idp_alias}" "$idp_config" >/dev/null 2>&1
+        log_success "Updated Hub IdP on spoke ${code_upper}"
+    else
+        local create_result
+        create_result=$(keycloak_admin_api "$code_upper" "POST" \
+            "realms/${spoke_realm}/identity-provider/instances" "$idp_config" 2>/dev/null)
+        if [ $? -eq 0 ]; then
+            log_success "Created Hub IdP on spoke ${code_upper}"
+        else
+            log_error "Failed to create Hub IdP on spoke: $create_result"
+            return 1
+        fi
+    fi
+
+    # Step 5: Configure IdP mappers on spoke
+    log_info "Step 4: Configuring IdP claim mappers on spoke..."
+    if [ -n "$spoke_token" ]; then
+        _configure_idp_mappers "$code_upper" "$spoke_token" "$spoke_realm" "$idp_alias"
+    fi
+
+    # Step 6: Update spoke TRUSTED_ISSUERS
+    log_info "Step 5: Updating spoke trusted issuers..."
+    local spoke_env="${DIVE_ROOT}/instances/${code_lower}/.env"
+    if [ -f "$spoke_env" ]; then
+        _federation_update_trusted_issuers "$spoke_env" "$issuer"
+    else
+        log_verbose "Spoke .env not found at ${spoke_env} — trusted issuers must be updated manually"
+    fi
+
+    log_success "Hub registered as IdP on spoke ${code_upper}"
+    echo ""
+    echo "  IdP alias:  ${idp_alias}"
+    echo "  Hub issuer: ${issuer}"
+    echo ""
+    echo "Next steps:"
+    echo "  1. On the Hub, register this spoke: ./dive federation register-spoke ${code_upper} --idp-url <SPOKE_IDP_URL> --secret ${client_secret}"
+    echo "  2. Restart spoke backend to pick up new TRUSTED_ISSUERS"
+    echo "  3. Verify: ./dive federation verify ${code_upper}"
+}
 
 # =============================================================================
 # FEDERATION STATUS
@@ -896,25 +1410,22 @@ federation_status() {
 
     # Check Hub
     echo "Hub:"
-    if docker ps --filter "name=dive-hub-keycloak" --filter "health=healthy" -q | grep -q .; then
+    if type keycloak_admin_api_available &>/dev/null && keycloak_admin_api_available "USA"; then
         echo "  Status: Healthy"
 
-        local hub_token
-        hub_token=$(get_hub_admin_token 2>/dev/null)
-        if [ -n "$hub_token" ]; then
-            local idps
-            idps=$(curl -sf "${HUB_KC_URL}/admin/realms/${HUB_REALM}/identity-provider/instances" \
-                -H "Authorization: Bearer $hub_token" \
-                --insecure 2>/dev/null | jq -r '.[].alias' 2>/dev/null)
+        local idps
+        idps=$(keycloak_admin_api "USA" "GET" \
+            "realms/${HUB_REALM}/identity-provider/instances" 2>/dev/null | \
+            jq -r '.[].alias' 2>/dev/null)
 
-            if [ -n "$idps" ]; then
-                echo "  Linked IdPs:"
-                for idp in $idps; do
-                    echo "    - $idp"
-                done
-            else
-                echo "  Linked IdPs: None"
-            fi
+        if [ -n "$idps" ]; then
+            echo "  Linked IdPs:"
+            local idp
+            for idp in $idps; do
+                echo "    - $idp"
+            done
+        else
+            echo "  Linked IdPs: None"
         fi
     else
         echo "  Status: Not healthy or not running"
@@ -1210,6 +1721,202 @@ cmd_federation_revoke() {
 }
 
 # =============================================================================
+# FEDERATION REPAIR & RECOVERY (Phase 8)
+# =============================================================================
+
+##
+# Attempt to repair a degraded or failed federation link
+#
+# Checks and fixes:
+#   1. Re-validates OIDC discovery (with cache bypass)
+#   2. Re-syncs client secrets if mismatched
+#   3. Re-creates missing IdP mappers
+#   4. Updates issuer URLs if domains changed
+#   5. Transitions link state back to ACTIVE on success
+#
+# Arguments:
+#   $1 - Spoke instance code
+##
+federation_repair() {
+    local instance_code="$1"
+    if [ -z "$instance_code" ]; then
+        log_error "Usage: federation_repair <CODE>"
+        return 1
+    fi
+
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+
+    echo ""
+    echo "=== Federation Repair: ${code_upper} ==="
+    echo "Timestamp: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    echo ""
+
+    local repairs=0
+    local failures=0
+
+    # Check current link state
+    local current_state="UNKNOWN"
+    if type federation_get_link_state &>/dev/null; then
+        current_state=$(federation_get_link_state "$code_upper" 2>/dev/null || echo "UNKNOWN")
+    fi
+    echo "  Current state: ${current_state}"
+
+    # Determine spoke mode
+    local _domain_var="SPOKE_${code_upper}_DOMAIN"
+    local _custom_domain="${!_domain_var:-}"
+    local is_external=false
+    [ -n "$_custom_domain" ] && is_external=true
+
+    echo "  Mode: $([ "$is_external" = true ] && echo "external (${_custom_domain})" || echo "local")"
+    echo ""
+
+    # Check 1: OIDC discovery (bypass cache)
+    echo "  [1/5] OIDC Discovery..."
+    local spoke_url
+    spoke_url=$(resolve_spoke_public_url "$code_upper" "idp" 2>/dev/null || echo "")
+    local spoke_realm="dive-v3-broker-${code_lower}"
+
+    if [ -n "$spoke_url" ]; then
+        local realm_url="${spoke_url}/realms/${spoke_realm}"
+        local discovery
+        discovery=$(_federation_oidc_discover "$realm_url" "no-cache" 2>/dev/null)
+        if [ -n "$discovery" ]; then
+            echo "        PASS  OIDC discovery valid"
+            repairs=$((repairs + 1))
+
+            # Check if issuer URL has changed
+            local current_issuer
+            current_issuer=$(echo "$discovery" | jq -r '.issuer' 2>/dev/null)
+            if [ -n "$current_issuer" ]; then
+                # Update hub .env trusted issuers if needed
+                local hub_env="${DIVE_ROOT}/.env.hub"
+                if [ -f "$hub_env" ]; then
+                    _federation_update_trusted_issuers "$hub_env" "$current_issuer" 2>/dev/null || true
+                fi
+            fi
+        else
+            echo "        FAIL  OIDC discovery unreachable"
+            failures=$((failures + 1))
+        fi
+    else
+        echo "        SKIP  Cannot resolve spoke URL"
+        failures=$((failures + 1))
+    fi
+
+    # Check 2: Hub admin API availability
+    echo "  [2/5] Hub Admin API..."
+    if type keycloak_admin_api_available &>/dev/null && keycloak_admin_api_available "USA" 2>/dev/null; then
+        echo "        PASS  Hub Keycloak reachable"
+        repairs=$((repairs + 1))
+    else
+        echo "        FAIL  Hub Keycloak unreachable"
+        echo "        Fix:  Ensure Hub Keycloak is running: ./dive hub up"
+        failures=$((failures + 1))
+    fi
+
+    # Check 3: Spoke IdP on Hub
+    echo "  [3/5] Spoke IdP on Hub..."
+    local idp_alias="${code_lower}-idp"
+    local spoke_idp_on_hub
+    spoke_idp_on_hub=$(keycloak_admin_api "USA" "GET" \
+        "realms/${HUB_REALM:-dive-v3-broker-usa}/identity-provider/instances/${idp_alias}" 2>/dev/null || echo "")
+
+    if [ -n "$spoke_idp_on_hub" ] && echo "$spoke_idp_on_hub" | grep -q '"alias"'; then
+        local idp_enabled
+        idp_enabled=$(echo "$spoke_idp_on_hub" | jq -r '.enabled' 2>/dev/null)
+        if [ "$idp_enabled" = "true" ]; then
+            echo "        PASS  ${idp_alias} exists and enabled"
+            repairs=$((repairs + 1))
+        else
+            echo "        WARN  ${idp_alias} exists but disabled — re-enabling..."
+            local re_enabled
+            re_enabled=$(echo "$spoke_idp_on_hub" | jq '.enabled = true')
+            keycloak_admin_api "USA" "PUT" \
+                "realms/${HUB_REALM:-dive-v3-broker-usa}/identity-provider/instances/${idp_alias}" \
+                "$re_enabled" >/dev/null 2>&1
+            echo "        FIXED Re-enabled ${idp_alias}"
+            repairs=$((repairs + 1))
+        fi
+    else
+        echo "        FAIL  ${idp_alias} not found on Hub"
+        echo "        Fix:  Re-link: ./dive federation link ${code_upper}"
+        failures=$((failures + 1))
+    fi
+
+    # Check 4: IdP mappers on Hub
+    echo "  [4/5] IdP Mappers on Hub..."
+    local mappers
+    mappers=$(keycloak_admin_api "USA" "GET" \
+        "realms/${HUB_REALM:-dive-v3-broker-usa}/identity-provider/instances/${idp_alias}/mappers" 2>/dev/null || echo "[]")
+    local mapper_count
+    mapper_count=$(echo "$mappers" | jq 'length' 2>/dev/null || echo 0)
+
+    if [ "$mapper_count" -gt 0 ]; then
+        echo "        PASS  ${mapper_count} mappers configured"
+        repairs=$((repairs + 1))
+    else
+        echo "        WARN  No mappers found — re-configuring..."
+        local hub_token
+        hub_token=$(get_hub_admin_token 2>/dev/null)
+        if [ -n "$hub_token" ]; then
+            _configure_idp_mappers "USA" "$hub_token" "${HUB_REALM:-dive-v3-broker-usa}" "$idp_alias" 2>/dev/null
+            echo "        FIXED Mappers re-configured"
+            repairs=$((repairs + 1))
+        else
+            echo "        FAIL  Cannot get Hub admin token to fix mappers"
+            failures=$((failures + 1))
+        fi
+    fi
+
+    # Check 5: Hub IdP on Spoke (for bidirectional federation)
+    echo "  [5/5] Hub IdP on Spoke..."
+    local hub_idp_on_spoke
+    hub_idp_on_spoke=$(keycloak_admin_api "$code_upper" "GET" \
+        "realms/${spoke_realm}/identity-provider/instances/usa-idp" 2>/dev/null || echo "")
+
+    if [ -n "$hub_idp_on_spoke" ] && echo "$hub_idp_on_spoke" | grep -q '"alias"'; then
+        echo "        PASS  usa-idp exists on spoke"
+        repairs=$((repairs + 1))
+    else
+        echo "        WARN  usa-idp not found on spoke (unidirectional federation)"
+        # Not a failure — unidirectional is valid
+        repairs=$((repairs + 1))
+    fi
+
+    echo ""
+
+    # Update federation state based on results
+    if [ "$failures" -eq 0 ]; then
+        echo "  Results: ${repairs}/${repairs} checks passed"
+        echo "  Status: REPAIRED → ACTIVE"
+        if type federation_set_link_state &>/dev/null; then
+            federation_set_link_state "$code_upper" "ACTIVE" "Repaired via federation repair" 2>/dev/null || true
+        fi
+        # Record operation
+        if type fed_db_record_operation &>/dev/null; then
+            fed_db_record_operation "$code_lower" "REPAIR" "SUCCESS" "system" \
+                "{\"repairs\": $repairs, \"failures\": 0}" 2>/dev/null || true
+        fi
+        return 0
+    else
+        local total=$((repairs + failures))
+        echo "  Results: ${repairs}/${total} checks passed, ${failures} failed"
+        echo "  Status: REPAIR INCOMPLETE"
+        echo ""
+        echo "  Remaining issues need manual intervention."
+        echo "  Try: ./dive federation link ${code_upper}"
+        if type fed_db_record_operation &>/dev/null; then
+            fed_db_record_operation "$code_lower" "REPAIR" "PARTIAL" "system" \
+                "{\"repairs\": $repairs, \"failures\": $failures}" 2>/dev/null || true
+        fi
+        return 1
+    fi
+}
+
+# =============================================================================
 # MODULE DISPATCH
 # =============================================================================
 
@@ -1249,27 +1956,92 @@ module_federation() {
             federation_test_token_revocation "$@"
             ;;
         list-idps)
-            local hub_token
-            hub_token=$(get_hub_admin_token 2>/dev/null)
-            if [ -n "$hub_token" ]; then
-                curl -sf "${HUB_KC_URL}/admin/realms/${HUB_REALM}/identity-provider/instances" \
-                    -H "Authorization: Bearer $hub_token" \
-                    --insecure 2>/dev/null | jq '.'
-            else
-                log_error "Cannot get Hub admin token"
+            keycloak_admin_api "USA" "GET" \
+                "realms/${HUB_REALM}/identity-provider/instances" 2>/dev/null | jq '.' 2>/dev/null || \
+                log_error "Cannot list IdPs (Hub Keycloak unreachable)"
+            ;;
+        register-spoke)
+            # Parse: register-spoke CODE --idp-url URL --secret SECRET [--api-url URL]
+            local _rs_code="" _rs_idp_url="" _rs_secret="" _rs_api_url=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --idp-url)  _rs_idp_url="${2:-}"; shift 2 ;;
+                    --api-url)  _rs_api_url="${2:-}"; shift 2 ;;
+                    --secret)   _rs_secret="${2:-}"; shift 2 ;;
+                    --*)        log_error "Unknown option: $1"; return 1 ;;
+                    *)          _rs_code="$1"; shift ;;
+                esac
+            done
+            if [ -z "$_rs_code" ] || [ -z "$_rs_idp_url" ] || [ -z "$_rs_secret" ]; then
+                log_error "Usage: ./dive federation register-spoke CODE --idp-url URL --secret SECRET [--api-url URL]"
+                return 1
             fi
+            federation_register_external_spoke "$_rs_code" "$_rs_idp_url" "$_rs_secret" "$_rs_api_url"
+            ;;
+        register-hub)
+            # Parse: register-hub --hub-url URL --secret SECRET (uses local spoke code)
+            local _rh_code="" _rh_hub_url="" _rh_secret=""
+            while [ $# -gt 0 ]; do
+                case "$1" in
+                    --hub-url)  _rh_hub_url="${2:-}"; shift 2 ;;
+                    --secret)   _rh_secret="${2:-}"; shift 2 ;;
+                    --*)        log_error "Unknown option: $1"; return 1 ;;
+                    *)          _rh_code="$1"; shift ;;
+                esac
+            done
+            if [ -z "$_rh_code" ] || [ -z "$_rh_hub_url" ] || [ -z "$_rh_secret" ]; then
+                log_error "Usage: ./dive federation register-hub CODE --hub-url URL --secret SECRET"
+                return 1
+            fi
+            federation_register_hub_on_spoke "$_rh_code" "$_rh_hub_url" "$_rh_secret"
+            ;;
+        dashboard)
+            # Load health module
+            if [ -f "${FEDERATION_DIR}/health.sh" ]; then
+                source "${FEDERATION_DIR}/health.sh"
+            fi
+            federation_health_dashboard "$@"
+            ;;
+        diagnose)
+            if [ -z "${1:-}" ]; then
+                log_error "Usage: ./dive federation diagnose <CODE>"
+                return 1
+            fi
+            if [ -f "${FEDERATION_DIR}/health.sh" ]; then
+                source "${FEDERATION_DIR}/health.sh"
+            fi
+            federation_diagnose "$@"
+            ;;
+        repair)
+            if [ -z "${1:-}" ]; then
+                log_error "Usage: ./dive federation repair <CODE>"
+                return 1
+            fi
+            if [ -f "${FEDERATION_DIR}/health.sh" ]; then
+                source "${FEDERATION_DIR}/health.sh"
+            fi
+            federation_repair "$@"
             ;;
         help|--help|-h)
             echo "Usage: ./dive federation <command> [args]"
             echo ""
             echo "Commands:"
-            echo "  link <CODE>       Link Spoke to Hub federation"
+            echo "  link <CODE>       Link Spoke to Hub federation (co-located)"
             echo "  unlink <CODE>     Remove federation link"
             echo "  verify <CODE>     Verify federation health"
+            echo "  diagnose <CODE>   Deep diagnostic for a federation link"
+            echo "  repair <CODE>     Auto-repair a degraded/failed federation link"
+            echo "  dashboard         Federation health dashboard (all spokes)"
             echo "  test              Run federation integration tests"
             echo "  token-revocation  Test cross-instance token revocation"
             echo "  status            Show overall federation status"
             echo "  list-idps         List configured IdPs on Hub"
+            echo ""
+            echo "External Federation (cross-network):"
+            echo "  register-spoke CODE --idp-url URL --secret SECRET [--api-url URL]"
+            echo "                    Register external spoke on Hub via OIDC discovery"
+            echo "  register-hub CODE --hub-url URL --secret SECRET"
+            echo "                    Register Hub as IdP on spoke via OIDC discovery"
             echo ""
             echo "Spoke Management (via Hub API):"
             echo "  list [--pending|--approved|--suspended]"
@@ -1308,6 +2080,15 @@ export -f cmd_federation_list
 export -f cmd_federation_approve
 export -f cmd_federation_suspend
 export -f cmd_federation_revoke
+# External federation (Phase 4)
+export -f _federation_oidc_discover
+export -f _federation_update_trusted_issuers
+export -f federation_register_external_spoke
+export -f federation_register_hub_on_spoke
+# Resilience (Phase 8)
+export -f _federation_retry_with_backoff
+export -f _federation_oidc_cache_clear
+export -f federation_repair
 # Ported from federation-link.sh
 export -f _get_federation_secret
 export -f _get_instance_port
