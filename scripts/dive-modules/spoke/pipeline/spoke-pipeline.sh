@@ -198,19 +198,24 @@ spoke_pipeline_execute() {
         fi
     fi
 
-    # GAP-001 FIX: Acquire deployment lock to prevent concurrent deployments
+    # Skip lock and SIGINT handler in dry-run mode
     local lock_acquired=false
-    if type orch_acquire_deployment_lock &>/dev/null; then
-        if ! orch_acquire_deployment_lock "$code_upper"; then
-            log_error "Cannot start deployment for $code_upper - lock acquisition failed"
-            log_error "Another deployment is in progress"
-            return 1
+    if pipeline_is_dry_run 2>/dev/null; then
+        log_verbose "Dry-run mode: skipping deployment lock acquisition"
+    else
+        # GAP-001 FIX: Acquire deployment lock to prevent concurrent deployments
+        if type orch_acquire_deployment_lock &>/dev/null; then
+            if ! orch_acquire_deployment_lock "$code_upper"; then
+                log_error "Cannot start deployment for $code_upper - lock acquisition failed"
+                log_error "Another deployment is in progress"
+                return 1
+            fi
+            lock_acquired=true
         fi
-        lock_acquired=true
     fi
 
-    # Install SIGINT handler for graceful interrupt
-    if type pipeline_install_sigint_handler &>/dev/null; then
+    # Install SIGINT handler for graceful interrupt (skip in dry-run)
+    if ! pipeline_is_dry_run 2>/dev/null && type pipeline_install_sigint_handler &>/dev/null; then
         pipeline_install_sigint_handler "$code_upper"
     fi
 
@@ -219,8 +224,8 @@ spoke_pipeline_execute() {
     local pipeline_result=0
     _spoke_pipeline_execute_internal "$code_upper" "$instance_name" "$pipeline_mode" "$start_time" "$resume_mode" || pipeline_result=$?
 
-    # Uninstall SIGINT handler
-    if type pipeline_uninstall_sigint_handler &>/dev/null; then
+    # Uninstall SIGINT handler (skip in dry-run)
+    if ! pipeline_is_dry_run 2>/dev/null && type pipeline_uninstall_sigint_handler &>/dev/null; then
         pipeline_uninstall_sigint_handler
     fi
 
@@ -273,21 +278,37 @@ _spoke_pipeline_execute_internal() {
         fi
     fi
 
-    # Initialize orchestration context
-    orch_init_context "$code_upper" "$instance_name"
-    if type orch_init_metrics &>/dev/null; then
-        orch_init_metrics "$code_upper"
+    local _is_dry_run=false
+    if pipeline_is_dry_run 2>/dev/null; then
+        _is_dry_run=true
+    fi
+
+    # Skip orchestration init in dry-run mode
+    if [ "$_is_dry_run" = "false" ]; then
+        # Initialize orchestration context
+        orch_init_context "$code_upper" "$instance_name"
+        if type orch_init_metrics &>/dev/null; then
+            orch_init_metrics "$code_upper"
+        fi
     fi
 
     log_info "Starting spoke pipeline: $code_upper ($pipeline_mode mode)"
-    if [ "$lock_acquired" = true ]; then
+    if [ "$_is_dry_run" = "true" ]; then
+        pipeline_dry_run_reset 2>/dev/null || true
+        echo ""
+        echo "==============================================================================="
+        echo "  DRY-RUN: Spoke Deployment Plan — ${code_upper}"
+        echo "==============================================================================="
+    elif [ "$lock_acquired" = true ]; then
         log_info "Deployment lock acquired - concurrent-safe deployment"
     fi
 
     # Check current state for logging
-    local current_state
-    current_state=$(get_deployment_state "$code_upper" 2>/dev/null || echo "UNKNOWN")
-    log_verbose "Current state before preflight: $current_state"
+    if [ "$_is_dry_run" = "false" ]; then
+        local current_state
+        current_state=$(get_deployment_state "$code_upper" 2>/dev/null || echo "UNKNOWN")
+        log_verbose "Current state before preflight: $current_state"
+    fi
 
     # Execute phases based on mode
     local phase_result=0
@@ -325,8 +346,8 @@ _spoke_pipeline_execute_internal() {
         spoke_phase_times+=("Phase 1 (Preflight): $(($(date +%s) - _ps))s")
     fi
 
-    # Set initial state AFTER preflight passes (not before)
-    if [ $phase_result -eq 0 ]; then
+    # Set initial state AFTER preflight passes (not before) — skip in dry-run
+    if [ $phase_result -eq 0 ] && [ "$_is_dry_run" = "false" ]; then
         log_verbose "Preflight passed, setting state to INITIALIZING..."
         if orch_db_set_state "$code_upper" "INITIALIZING" "" \
             "{\"mode\":\"$pipeline_mode\",\"instance_name\":\"$instance_name\"}"; then
@@ -386,8 +407,8 @@ _spoke_pipeline_execute_internal() {
         fi
     fi
 
-    # Health Sentinel: Start monitoring during configuration phases (4-6)
-    if [ $phase_result -eq 0 ] && type health_sentinel_start &>/dev/null; then
+    # Health Sentinel: Start monitoring during configuration phases (4-6) — skip in dry-run
+    if [ $phase_result -eq 0 ] && [ "$_is_dry_run" = "false" ] && type health_sentinel_start &>/dev/null; then
         health_sentinel_start "spoke" "dive-spoke-${code_lower}" || true
     fi
 
@@ -467,6 +488,12 @@ _spoke_pipeline_execute_internal() {
     fi
 
     log_verbose "Phase execution complete (result: $phase_result)"
+
+    # Dry-run: print summary and return
+    if [ "$_is_dry_run" = "true" ]; then
+        pipeline_dry_run_summary "spoke" "$code_upper" 2>/dev/null || true
+        return 0
+    fi
 
     # Stop Health Sentinel
     if type health_sentinel_stop &>/dev/null; then
@@ -591,6 +618,42 @@ spoke_pipeline_run_phase() {
     local phase_name="$2"
     local pipeline_mode="$3"
     local resume_mode="${4:-false}"
+
+    # === DRY-RUN MODE ===
+    if pipeline_is_dry_run 2>/dev/null; then
+        local phase_function="spoke_phase_${phase_name,,}"
+
+        # Validation phases execute even in dry-run
+        if pipeline_is_validation_phase "$phase_name" 2>/dev/null; then
+            echo ""
+            echo "  [DRY-RUN VALIDATION] Phase: ${phase_name}"
+            echo "    Executing validation checks..."
+
+            local _dry_rc=0
+            if type "$phase_function" &>/dev/null; then
+                "$phase_function" "$instance_code" "$pipeline_mode" || _dry_rc=$?
+            fi
+
+            if [ $_dry_rc -eq 0 ]; then
+                echo "    Result: PASSED"
+                pipeline_dry_run_record_validation "$phase_name: passed" 2>/dev/null || true
+            else
+                echo "    Result: FAILED"
+                pipeline_dry_run_record_warning "$phase_name validation failed" 2>/dev/null || true
+            fi
+        else
+            echo ""
+            echo "  [DRY-RUN] Phase: ${phase_name}"
+            echo "    Function:  ${phase_function}()"
+            if type "$phase_function" &>/dev/null; then
+                echo "    Status:    function available"
+            else
+                echo "    Status:    function not found (would be skipped)"
+            fi
+            pipeline_dry_run_record_execute "$phase_name" 2>/dev/null || true
+        fi
+        return 0
+    fi
 
     # Check if pipeline was interrupted
     if pipeline_check_sigint 2>/dev/null; then
