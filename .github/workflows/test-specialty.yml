@@ -1,65 +1,67 @@
 name: Specialty Tests
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  schedule:
+    - cron: '0 3 * * 1'
   workflow_dispatch:
+    inputs:
+      run_keycloak:
+        description: 'Run Keycloak integration suite'
+        required: false
+        type: boolean
+        default: true
+      run_policies_lab:
+        description: 'Run policies-lab/XACML suite'
+        required: false
+        type: boolean
+        default: true
+      run_spain_saml:
+        description: 'Run Spain SAML suite'
+        required: false
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: specialty-tests-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   federation-tests:
     name: Federation Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    if: |
-      contains(github.event.head_commit.message, 'federation') ||
-      github.event_name == 'workflow_dispatch'
-    
+    timeout-minutes: 15
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-      
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
       - name: Setup Node.js 20
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: npm
           cache-dependency-path: backend/package-lock.json
-      
-      - name: Install Dependencies
+
+      - name: Install dependencies
         run: cd backend && npm ci
-      
-      - name: Cache MongoDB Binary
-        uses: actions/cache@v4
-        with:
-          path: ~/.cache/mongodb-binaries
-          key: ${{ runner.os }}-mongodb-binary-7.0.0
-      
-      - name: Run Federation Tests
+
+      - name: Run federation and security tests
         run: |
           cd backend
           npm test -- --testPathPattern=federation --testTimeout=30000
+          npm test -- --testPathPattern=security --testTimeout=30000
         env:
           NODE_ENV: test
-          MONGODB_BINARY_CACHE: ~/.cache/mongodb-binaries
-      
-      - name: OWASP Security Tests
-        run: |
-          cd backend
-          npm test -- --testPathPattern=security --testTimeout=30000 || true
-        env:
-          NODE_ENV: test
-          MONGODB_BINARY_CACHE: ~/.cache/mongodb-binaries
 
   keycloak-tests:
     name: Keycloak Integration Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 25
-    if: |
-      contains(github.event.head_commit.message, 'keycloak') ||
-      github.event_name == 'workflow_dispatch'
-    
+    timeout-minutes: 30
+    if: github.event_name == 'schedule' || inputs.run_keycloak == true
     services:
       postgres:
         image: postgres:15-alpine
@@ -68,50 +70,39 @@ jobs:
           POSTGRES_USER: keycloak
           POSTGRES_PASSWORD: password
         options: >-
-          --health-cmd "pg_isready -U keycloak"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+          --health-cmd "pg_isready -U keycloak" --health-interval 10s --health-timeout 5s --health-retries 5
         ports:
           - 5432:5432
-    
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-      
-      - name: Generate Keycloak SSL Certificates
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
+      - name: Generate Keycloak SSL certificates
         run: |
-          mkdir -p ${{ github.workspace }}/keycloak-certs
+          mkdir -p "$GITHUB_WORKSPACE/keycloak-certs"
           openssl req -x509 -newkey rsa:4096 -nodes \
-            -keyout ${{ github.workspace }}/keycloak-certs/key.pem \
-            -out ${{ github.workspace }}/keycloak-certs/cert.pem \
+            -keyout "$GITHUB_WORKSPACE/keycloak-certs/key.pem" \
+            -out "$GITHUB_WORKSPACE/keycloak-certs/cert.pem" \
             -days 1 \
-            -subj "/C=US/ST=Test/L=Test/O=DIVE V3 CI/CN=keycloak" \
-            -addext "subjectAltName=DNS:localhost,DNS:keycloak,IP:127.0.0.1"
-          
-          # Make certificates readable by Keycloak container (runs as uid 1000)
-          chmod 644 ${{ github.workspace }}/keycloak-certs/cert.pem
-          chmod 644 ${{ github.workspace }}/keycloak-certs/key.pem
-          
-          echo "✅ Generated SSL certificates for Keycloak"
-          ls -la ${{ github.workspace }}/keycloak-certs/
-      
+            -subj '/C=US/ST=Test/L=Test/O=DIVE V3 CI/CN=keycloak' \
+            -addext 'subjectAltName=DNS:localhost,DNS:keycloak,IP:127.0.0.1'
+          chmod 644 "$GITHUB_WORKSPACE/keycloak-certs/cert.pem" "$GITHUB_WORKSPACE/keycloak-certs/key.pem"
+
       - name: Start Keycloak 26.4.2 with HTTPS
         run: |
-          echo "🚀 Starting Keycloak 26.4.2 with HTTPS..."
-          
-          # Get the service network ID
-          SERVICE_NETWORK=$(docker network ls -q -f name=github_network_)
+          SERVICE_NETWORK=$(docker network ls -q -f name=github_network_ | head -1)
           if [ -z "$SERVICE_NETWORK" ]; then
-            SERVICE_NETWORK=$(docker network ls -q | head -1)
+            echo "Unable to locate GitHub Actions service network"
+            exit 1
           fi
-          echo "Using network: $SERVICE_NETWORK"
-          
+
           docker run -d \
             --name keycloak \
             --network "$SERVICE_NETWORK" \
             -p 9000:9000 \
-            -v ${{ github.workspace }}/keycloak-certs:/opt/keycloak/certs:ro \
+            -v "$GITHUB_WORKSPACE/keycloak-certs:/opt/keycloak/certs:ro" \
             -e KC_DB=postgres \
             -e KC_DB_URL=jdbc:postgresql://postgres:5432/keycloak \
             -e KC_DB_USERNAME=keycloak \
@@ -125,244 +116,178 @@ jobs:
             -e KC_HTTP_ENABLED=false \
             quay.io/keycloak/keycloak:26.4.2 \
             start-dev --https-port=8443
-          
-          # Get Keycloak container IP for health checks
-          KEYCLOAK_IP=$(docker inspect keycloak --format='{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}')
-          echo "KEYCLOAK_IP=$KEYCLOAK_IP" >> $GITHUB_ENV
-          echo "✅ Keycloak container started on network: $SERVICE_NETWORK with IP: $KEYCLOAK_IP on HTTPS port 8443"
-      
-      - name: Wait for Keycloak to be Ready
-        run: |
-          echo "⏳ Waiting for Keycloak HTTPS to be ready..."
-          echo "Using Keycloak IP: $KEYCLOAK_IP"
 
-          # Wait for Keycloak management port to be accessible (simplified health check)
+      - name: Wait for Keycloak readiness
+        run: |
           for i in {1..60}; do
-            if nc -z localhost 9000 2>/dev/null; then
-              echo "✅ Keycloak management port (9000) is accessible"
-              # Additional check: try to access health endpoint if available
-              if curl -k --max-time 5 https://localhost:9000/health/ready 2>/dev/null | grep -q "status.*UP\|true"; then
-                echo "✅ Keycloak health check passed"
-                break
-              else
-                echo "⚠️  Port accessible but health check inconclusive, continuing..."
-                break
-              fi
+            if nc -z localhost 9000 >/dev/null 2>&1; then
+              exit 0
             fi
-            if [ $i -eq 60 ]; then
-              echo "❌ Keycloak failed to start after 5 minutes"
-              echo "Checking container logs..."
-              docker logs keycloak
-              echo "Checking container status..."
-              docker ps -a
-              echo "Checking network connectivity..."
-              docker exec keycloak curl -k -v https://localhost:8443/health/ready || true
-              exit 1
-            fi
-            echo "Waiting for Keycloak... ($i/60)"
             sleep 5
           done
-      
-      - name: Setup Node.js 20
-        uses: actions/setup-node@v4
+          docker logs keycloak
+          exit 1
+
+      - name: Setup Node.js and Terraform
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '20'
-      
+
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd
         with:
           terraform_version: 1.13.4
-      
-      - name: Apply Terraform Configuration
+
+      - name: Apply Terraform configuration
         run: |
           cd terraform
           terraform init -backend=false
-          TF_VAR_keycloak_url="https://$KEYCLOAK_IP:8443" \
-          TF_VAR_keycloak_admin_username="admin" \
-          TF_VAR_keycloak_admin_password="admin" \
-          TF_VAR_keycloak_insecure_skip_verify="true" \
+          TF_VAR_keycloak_url='https://localhost:8443' \
+          TF_VAR_keycloak_admin_username='admin' \
+          TF_VAR_keycloak_admin_password='admin' \
+          TF_VAR_keycloak_insecure_skip_verify='true' \
           terraform apply -auto-approve
-      
-      - name: Validate Realms Created
-        run: |
-          echo "⏳ Validating Keycloak realms..."
-          KEYCLOAK_URL="https://$KEYCLOAK_IP:8443"
-          
-          # Check that dive-v3-broker-usa realm exists
-          if docker exec keycloak curl -k -f "$KEYCLOAK_URL/realms/dive-v3-broker-usa/.well-known/openid-configuration" 2>/dev/null; then
-            echo "✅ dive-v3-broker-usa realm exists"
-          else
-            echo "❌ dive-v3-broker-usa realm not found"
-            exit 1
-          fi
-          
-          # Check USA realm
-          if docker exec keycloak curl -k -f "$KEYCLOAK_URL/realms/dive-v3-usa/.well-known/openid-configuration" 2>/dev/null; then
-            echo "✅ dive-v3-usa realm exists"
-          else
-            echo "⚠️ dive-v3-usa realm not found (may be expected)"
-          fi
-          
-          # Check France realm
-          if docker exec keycloak curl -k -f "$KEYCLOAK_URL/realms/dive-v3-fra/.well-known/openid-configuration" 2>/dev/null; then
-            echo "✅ dive-v3-fra realm exists"
-          else
-            echo "⚠️ dive-v3-fra realm not found (may be expected)"
-          fi
-          
-          echo "✅ Realm validation complete"
-      
-      - name: Test Authentication Flows
+
+      - name: Run keycloak tests
         run: |
           cd backend
           npm ci
-          npm test -- --testPathPattern=keycloak --testTimeout=30000 || echo "⚠️ Some Keycloak tests failed (non-blocking)"
+          npm test -- --testPathPattern=keycloak --testTimeout=30000
         env:
           NODE_ENV: test
-          KEYCLOAK_URL: https://${{ env.KEYCLOAK_IP }}:8443
+          KEYCLOAK_URL: https://localhost:8443
           KEYCLOAK_REALM: dive-v3-broker-usa
           KEYCLOAK_CLIENT_ID: dive-v3-broker-usa
-          KEYCLOAK_INSECURE_SKIP_VERIFY: "true"
+          KEYCLOAK_INSECURE_SKIP_VERIFY: 'true'
+
+      - name: Cleanup keycloak container
+        if: always()
+        run: |
+          if docker ps -a --format '{{.Names}}' | grep -q '^keycloak$'; then
+            docker stop keycloak
+            docker rm keycloak
+          fi
 
   policies-lab-tests:
     name: Policies Lab Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    if: |
-      contains(github.event.head_commit.message, 'policies-lab') ||
-      contains(github.event.head_commit.message, 'xacml') ||
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'push'
-    
+    timeout-minutes: 20
+    if: github.event_name == 'schedule' || inputs.run_policies_lab == true
     services:
       mongodb:
         image: mongo:7.0
         ports:
           - 27017:27017
         options: >-
-          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-    
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok' | grep 1" --health-interval 10s --health-timeout 5s --health-retries 5
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-      
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
       - name: Setup Node.js 20
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: npm
           cache-dependency-path: backend/package-lock.json
-      
-      - name: Install Dependencies
-        run: cd backend && npm ci
-      
-      - name: Setup OPA
-        uses: open-policy-agent/setup-opa@v2
-        with:
-          version: 0.68.0
 
-      - name: Start OPA Server
+      - name: Install dependencies
+        run: cd backend && npm ci
+
+      - name: Setup OPA
+        uses: open-policy-agent/setup-opa@34a30e8a924d1b03ce2cf7abe97250bbb1f332b5
+        with:
+          version: 1.12.3
+
+      - name: Start OPA server
         run: |
           nohup opa run --server --addr=:8181 --log-level=error > opa.log 2>&1 &
           sleep 5
-          curl -f http://localhost:8181/health || (cat opa.log && exit 1)
-      
-      - name: Run Policies Lab Tests
+          curl -f http://localhost:8181/health
+
+      - name: Run policies lab tests
         run: |
           cd backend
-          npm test -- --testPathPattern="policies-lab|xacml" --testTimeout=30000 || true
+          npm test -- --testPathPattern='policies-lab|xacml' --testTimeout=30000
         env:
           NODE_ENV: test
           MONGODB_URL: mongodb://localhost:27017/dive-v3-test
           OPA_URL: http://localhost:8181
-      
-      - name: Validate XACML Adapter
-        run: |
-          cd backend
-          # Test XACML to OPA conversion if exists
-          npm test -- --testPathPattern=xacml --testTimeout=15000 || echo "No XACML tests found"
-        env:
-          NODE_ENV: test
 
   spain-saml-tests:
     name: Spain SAML Integration Tests
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-    if: |
-      contains(github.event.head_commit.message, 'spain') ||
-      contains(github.event.head_commit.message, 'saml') ||
-      contains(github.event.head_commit.message, 'esp') ||
-      github.event_name == 'workflow_dispatch' ||
-      github.event_name == 'push'
-    
+    timeout-minutes: 20
+    if: github.event_name == 'schedule' || inputs.run_spain_saml == true
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-      
+      - name: Checkout code
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+
       - name: Setup Node.js 20
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
         with:
           node-version: '20'
-          cache: 'npm'
+          cache: npm
           cache-dependency-path: backend/package-lock.json
-      
-      - name: Install Dependencies
+
+      - name: Install dependencies
         run: cd backend && npm ci
-      
-      - name: Start SimpleSAMLphp (Mock Spain IdP)
+
+      - name: Start SimpleSAMLphp mock IdP
         run: |
-          # Using kristophjunge/test-saml-idp which is actively maintained
           docker run -d \
             --name simplesamlphp \
             -p 8088:8080 \
             -p 8443:8443 \
             -e SIMPLESAMLPHP_SP_ENTITY_ID=dive-v3-spain \
             -e SIMPLESAMLPHP_SP_ASSERTION_CONSUMER_SERVICE=http://localhost:3000/api/auth/callback/spain \
-            kristophjunge/test-saml-idp:latest
-          
-          # Wait for SimpleSAMLphp to start
-          echo "Waiting for SimpleSAMLphp to start..."
-          timeout 60 bash -c 'until curl -f http://localhost:8088/simplesaml 2>/dev/null; do echo "Waiting..."; sleep 5; done' || echo "⚠️ SimpleSAMLphp may not be fully ready but continuing..."
-          echo "✅ SimpleSAMLphp started"
-      
-      - name: Validate SAML Metadata
-        run: |
-          # Download SP metadata
-          curl -f http://localhost:8088/simplesaml/module.php/saml/sp/metadata.php/default-sp || true
-          echo "✅ SAML metadata accessible"
-      
-      - name: Test Spanish Clearance Normalization
+            kristophjunge/test-saml-idp:1.15
+
+          timeout 90 bash -c 'until curl -fsS http://localhost:8088/simplesaml >/dev/null; do sleep 5; done'
+
+      - name: Validate SAML metadata
+        run: curl -fsS http://localhost:8088/simplesaml/module.php/saml/sp/metadata.php/default-sp >/dev/null
+
+      - name: Run spanish clearance normalization tests
         run: |
           cd backend
-          # Test Spanish clearance mapping: RESERVADO → CONFIDENTIAL, SECRETO → SECRET
-          npm test -- --testPathPattern=spanish --testTimeout=15000 || true
+          npm test -- --testPathPattern=spanish --testTimeout=15000
         env:
           NODE_ENV: test
-      
-      - name: Cleanup
+
+      - name: Cleanup SAML container
         if: always()
-        run: docker stop simplesamlphp && docker rm simplesamlphp || true
+        run: |
+          if docker ps -a --format '{{.Names}}' | grep -q '^simplesamlphp$'; then
+            docker stop simplesamlphp
+            docker rm simplesamlphp
+          fi
 
   specialty-summary:
     name: Specialty Tests Summary
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs: [federation-tests, keycloak-tests, policies-lab-tests, spain-saml-tests]
     if: always()
-    
     steps:
-      - name: Generate Summary
+      - name: Generate summary
         run: |
-          echo "## 🔬 Specialty Test Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Test Suite | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|------------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Federation | ${{ needs.federation-tests.result == 'success' && '✅ Pass' || needs.federation-tests.result == 'skipped' && '⏭️ Skipped' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Keycloak Integration | ${{ needs.keycloak-tests.result == 'success' && '✅ Pass' || needs.keycloak-tests.result == 'skipped' && '⏭️ Skipped' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Policies Lab | ${{ needs.policies-lab-tests.result == 'success' && '✅ Pass' || needs.policies-lab-tests.result == 'skipped' && '⏭️ Skipped' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Spain SAML | ${{ needs.spain-saml-tests.result == 'success' && '✅ Pass' || needs.spain-saml-tests.result == 'skipped' && '⏭️ Skipped' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "_Some tests may be skipped based on path filters and commit messages_" >> $GITHUB_STEP_SUMMARY
+          echo '## Specialty Test Results' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '| Test Suite | Status |' >> "$GITHUB_STEP_SUMMARY"
+          echo '|------------|--------|' >> "$GITHUB_STEP_SUMMARY"
+          echo "| Federation | ${{ needs.federation-tests.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Keycloak Integration | ${{ needs.keycloak-tests.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Policies Lab | ${{ needs.policies-lab-tests.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Spain SAML | ${{ needs.spain-saml-tests.result }} |" >> "$GITHUB_STEP_SUMMARY"
 
+          if [[ "${{ needs.federation-tests.result }}" != 'success' ]] ||
+             [[ "${{ needs.keycloak-tests.result }}" != 'success' && "${{ needs.keycloak-tests.result }}" != 'skipped' ]] ||
+             [[ "${{ needs.policies-lab-tests.result }}" != 'success' && "${{ needs.policies-lab-tests.result }}" != 'skipped' ]] ||
+             [[ "${{ needs.spain-saml-tests.result }}" != 'success' && "${{ needs.spain-saml-tests.result }}" != 'skipped' ]]; then
+            exit 1
+          fi

@@ -1,57 +1,22 @@
-name: Federation E2E Tests
+name: Federation E2E Tests (Deprecated)
 
 on:
-  push:
-    branches: [main]
-    paths: ['scripts/dive-modules/**', 'tests/federation/**']
-  pull_request:
-    branches: [main]
   workflow_dispatch:
 
+permissions:
+  contents: read
+
+concurrency:
+  group: federation-e2e-deprecated-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  validate:
+  deprecated:
+    name: Deprecated Workflow Notice
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
-      - run: |
-          rm -f .env
-          cp .env.example .env
-          cp .env .env.hub
-          cat >> .env <<'EOF'
-          POSTGRES_PASSWORD_USA=test
-          MONGO_PASSWORD_USA=test
-          REDIS_PASSWORD_USA=test
-          KEYCLOAK_ADMIN_PASSWORD=test
-          KEYCLOAK_CLIENT_SECRET_USA=test
-          EOF
-      - run: docker compose -f docker-compose.hub.yml config --quiet
-      - run: for s in scripts/dive-modules/*.sh; do bash -n "$s"; done
-
-  policy-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: open-policy-agent/setup-opa@v2
-        with:
-          version: 1.12.3
-      - run: cd policies && opa test . -v
-
-  hub-test:
-    runs-on: ubuntu-latest
-    needs: validate
-    steps:
-      - uses: actions/checkout@v4
-      - run: |
-          rm -f .env
-          cp .env.example .env
-          cp .env .env.hub
-          echo "POSTGRES_PASSWORD_USA=test" >> .env
-          echo "KEYCLOAK_ADMIN_PASSWORD=test" >> .env
-          echo "MONGO_PASSWORD_USA=test" >> .env
-          echo "REDIS_PASSWORD_USA=test" >> .env
-          echo "NEXTAUTH_SECRET_USA=testsecret123456789012" >> .env
-          echo "KEYCLOAK_CLIENT_SECRET_USA=test" >> .env
-      - run: docker compose -f docker-compose.hub.yml up -d postgres mongodb
-      - run: sleep 15 && docker compose -f docker-compose.hub.yml ps
-      - if: always()
-        run: docker compose -f docker-compose.hub.yml down -v
+      - name: Notice
+        run: |
+          echo "Federation E2E coverage has been consolidated into test-e2e.yml." >> "$GITHUB_STEP_SUMMARY"
+          echo "Use the 'E2E Tests' workflow for canonical federation and E2E validation." >> "$GITHUB_STEP_SUMMARY"

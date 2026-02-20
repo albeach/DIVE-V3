@@ -1,5 +1,4 @@
 name: Security Scanning
-
 on:
   push:
     branches: [main, develop]
@@ -7,122 +6,112 @@ on:
     branches: [main, develop]
   schedule:
     # Run daily at 2 AM UTC
-    - cron: '0 2 * * *'
-
+  - cron: '0 2 * * *'
 concurrency:
   group: security-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
-
 jobs:
   npm-audit:
     name: NPM Security Audit
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     strategy:
       matrix:
         workspace: [backend, frontend, kas]
-    
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-      
-      - name: Setup Node.js 20
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      
-      - name: Run npm audit
-        working-directory: ./${{ matrix.workspace }}
-        run: |
-          set -euo pipefail
-          npm ci --ignore-scripts
-          npm audit --omit=dev --audit-level=high --json > audit-report.json
-      
-      - name: Upload audit report
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.workspace }}-audit-report
-          path: ${{ matrix.workspace }}/audit-report.json
-
+    - name: Checkout Code
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Setup Node.js 20
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: '20'
+    - name: Run npm audit
+      working-directory: ./${{ matrix.workspace }}
+      run: |
+        set -euo pipefail
+        npm ci --ignore-scripts
+        npm audit --omit=dev --audit-level=high --json > audit-report.json
+    - name: Upload audit report
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: ${{ matrix.workspace }}-audit-report
+        path: ${{ matrix.workspace }}/audit-report.json
   dependency-check:
     name: OWASP Dependency Check
     runs-on: ubuntu-latest
-
+    timeout-minutes: 20
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install dependencies for audit
-        run: |
-          cd backend && npm ci --ignore-scripts && cd ..
-          cd frontend && npm ci --ignore-scripts && cd ..
-          cd kas && npm ci --ignore-scripts && cd ..
-
-      - name: Run OWASP Dependency-Check
-        uses: dependency-check/Dependency-Check_Action@1e54355a8b4c8abaa8cc7d0b70aa655a3bb15a6c # main
-        with:
-          project: 'DIVE-V3'
-          path: '.'
-          format: 'HTML'
-          out: 'reports'
-          args: '--failOnCVSS 7'
-
-      - name: Upload Results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: dependency-check-report
-          path: reports
-
+    - name: Checkout Code
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Setup Node.js
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: '20'
+    - name: Install dependencies for audit
+      run: |
+        cd backend && npm ci --ignore-scripts && cd ..
+        cd frontend && npm ci --ignore-scripts && cd ..
+        cd kas && npm ci --ignore-scripts && cd ..
+    - name: Run OWASP Dependency-Check
+      uses: dependency-check/Dependency-Check_Action@1e54355a8b4c8abaa8cc7d0b70aa655a3bb15a6c
+      with:
+        project: 'DIVE-V3'
+        path: '.'
+        format: 'HTML'
+        out: 'reports'
+        args: '--failOnCVSS 7'
+    - name: Upload Results
+      if: always()
+      uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      with:
+        name: dependency-check-report
+        path: reports
   secret-scan:
     name: Secret Scanning
     runs-on: ubuntu-latest
-    
+    timeout-minutes: 15
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Fetch all history for secret scanning
-      
-      - name: TruffleHog Secret Scan (pull requests)
-        if: github.event_name == 'pull_request'
-        uses: trufflesecurity/trufflehog@7c0734f987ad0bb30ee8da210773b800ee2016d3 # v3.93.4
-        with:
-          path: ./
-          base: ${{ github.event.pull_request.base.sha }}
-          head: ${{ github.event.pull_request.head.sha }}
-          extra_args: --debug --only-verified
-
-      - name: TruffleHog Secret Scan (push diff)
-        if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
-        uses: trufflesecurity/trufflehog@7c0734f987ad0bb30ee8da210773b800ee2016d3 # v3.93.4
-        with:
-          path: ./
-          base: ${{ github.event.before }}
-          head: ${{ github.sha }}
-          extra_args: --debug --only-verified
-
-      - name: TruffleHog Secret Scan (push initial full repository)
-        if: github.event_name == 'push' && github.event.before == '0000000000000000000000000000000000000000'
-        uses: trufflesecurity/trufflehog@7c0734f987ad0bb30ee8da210773b800ee2016d3 # v3.93.4
-        with:
-          path: ./
-          extra_args: --debug --only-verified
-
-      - name: TruffleHog Secret Scan (scheduled full repository)
-        if: github.event_name == 'schedule'
-        uses: trufflesecurity/trufflehog@7c0734f987ad0bb30ee8da210773b800ee2016d3 # v3.93.4
-        with:
-          path: ./
-          extra_args: --debug --only-verified
-
+    - name: Checkout Code
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        fetch-depth: 0   # Fetch all history for secret scanning
+        persist-credentials: false
+    - name: TruffleHog Secret Scan (pull requests)
+      if: github.event_name == 'pull_request'
+      uses: trufflesecurity/trufflehog@7c0734f987ad0bb30ee8da210773b800ee2016d3   # v3.93.4
+      with:
+        path: ./
+        base: ${{ github.event.pull_request.base.sha }}
+        head: ${{ github.event.pull_request.head.sha }}
+        extra_args: --debug --only-verified
+    - name: TruffleHog Secret Scan (push diff)
+      if: github.event_name == 'push' && github.event.before != '0000000000000000000000000000000000000000'
+      uses: trufflesecurity/trufflehog@7c0734f987ad0bb30ee8da210773b800ee2016d3   # v3.93.4
+      with:
+        path: ./
+        base: ${{ github.event.before }}
+        head: ${{ github.sha }}
+        extra_args: --debug --only-verified
+    - name: TruffleHog Secret Scan (push initial full repository)
+      if: github.event_name == 'push' && github.event.before == '0000000000000000000000000000000000000000'
+      uses: trufflesecurity/trufflehog@7c0734f987ad0bb30ee8da210773b800ee2016d3   # v3.93.4
+      with:
+        path: ./
+        extra_args: --debug --only-verified
+    - name: TruffleHog Secret Scan (scheduled full repository)
+      if: github.event_name == 'schedule'
+      uses: trufflesecurity/trufflehog@7c0734f987ad0bb30ee8da210773b800ee2016d3   # v3.93.4
+      with:
+        path: ./
+        extra_args: --debug --only-verified
   docker-scan:
     name: Docker Image Scanning
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       security-events: write
       contents: read
@@ -130,161 +119,144 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - service: backend
-            sarif_category: .github/workflows/security.yml:docker-scan/service:backend
-          - service: frontend
-            sarif_category: .github/workflows/security.yml:docker-scan/service:frontend
-          - service: kas
-            sarif_category: .github/workflows/security.yml:docker-scan/service:kas
-    
+        - service: backend
+          sarif_category: .github/workflows/security.yml:docker-scan/service:backend
+        - service: frontend
+          sarif_category: .github/workflows/security.yml:docker-scan/service:frontend
+        - service: kas
+          sarif_category: .github/workflows/security.yml:docker-scan/service:kas
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-      
-      - name: Build Docker Image
-        run: |
-          docker build -t dive-v3-${{ matrix.service }}:test ./${{ matrix.service }}
-      
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@c1824fd6edce30d7ab345a9989de00bbd46ef284 # 0.34.0
-        with:
-          image-ref: dive-v3-${{ matrix.service }}:test
-          format: 'sarif'
-          output: 'trivy-results.sarif'
-          trivyignores: '.trivyignore'
-      
-      - name: Ensure Trivy SARIF exists
-        if: always()
-        run: |
-          if [ ! -f trivy-results.sarif ]; then
-            echo '{"version":"2.1.0","runs":[]}' > trivy-results.sarif
-          fi
-
-      - name: Upload Trivy results to GitHub Security tab
-        if: always()
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: 'trivy-results.sarif'
-          category: ${{ matrix.sarif_category }}
-
+    - name: Checkout Code
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Build Docker Image
+      run: |
+        docker build -t dive-v3-${{ matrix.service }}:test ./${{ matrix.service }}
+    - name: Run Trivy vulnerability scanner
+      uses: aquasecurity/trivy-action@c1824fd6edce30d7ab345a9989de00bbd46ef284   # 0.34.0
+      with:
+        image-ref: dive-v3-${{ matrix.service }}:test
+        format: 'sarif'
+        output: 'trivy-results.sarif'
+        trivyignores: '.trivyignore'
+    - name: Ensure Trivy SARIF exists
+      if: always()
+      run: |
+        if [ ! -f trivy-results.sarif ]; then
+          echo '{"version":"2.1.0","runs":[]}' > trivy-results.sarif
+        fi
+    - name: Upload Trivy results to GitHub Security tab
+      if: always()
+      uses: github/codeql-action/upload-sarif@9e907b5e64f6b83e7804b09294d44122997950d6
+      with:
+        sarif_file: 'trivy-results.sarif'
+        category: ${{ matrix.sarif_category }}
   terraform-security:
     name: Terraform Security Scan
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       security-events: write
       contents: read
-
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Run tfsec
-        uses: aquasecurity/tfsec-action@v1.0.0
-        with:
-          working_directory: terraform
-          soft_fail: false
-
-      - name: Run Checkov
-        id: checkov
-        uses: bridgecrewio/checkov-action@f93e43550d669f41ed6fcfa423a3fcb7484a36cd # v9
-        with:
-          directory: terraform
-          framework: terraform
-          output_format: sarif
-          output_file_path: checkov-report.sarif
-          soft_fail: false
-          skip_check: CKV2_AWS_23,CKV_AWS_88,CKV_AWS_130
-      
-      - name: Normalize Checkov SARIF output
-        if: always()
-        run: |
-          if [ -f checkov-report.sarif ]; then
-            cp checkov-report.sarif checkov-report-upload.sarif
-          elif [ -d checkov-report.sarif ]; then
-            FOUND_SARIF=$(find checkov-report.sarif -type f -name '*.sarif' | head -n 1)
-            if [ -n "$FOUND_SARIF" ]; then
-              cp "$FOUND_SARIF" checkov-report-upload.sarif
-            else
-              echo '{"version":"2.1.0","runs":[]}' > checkov-report-upload.sarif
-            fi
+    - name: Checkout Code
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        persist-credentials: false
+    - name: Run tfsec
+      uses: aquasecurity/tfsec-action@a73ebc46fba54691e25cbe901656e7b205fb9bf2
+      with:
+        working_directory: terraform
+        soft_fail: false
+    - name: Run Checkov
+      id: checkov
+      uses: bridgecrewio/checkov-action@f93e43550d669f41ed6fcfa423a3fcb7484a36cd   # v9
+      with:
+        directory: terraform
+        framework: terraform
+        output_format: sarif
+        output_file_path: checkov-report.sarif
+        soft_fail: false
+        skip_check: CKV2_AWS_23,CKV_AWS_88,CKV_AWS_130
+    - name: Normalize Checkov SARIF output
+      if: always()
+      run: |
+        if [ -f checkov-report.sarif ]; then
+          cp checkov-report.sarif checkov-report-upload.sarif
+        elif [ -d checkov-report.sarif ]; then
+          FOUND_SARIF=$(find checkov-report.sarif -type f -name '*.sarif' | head -n 1)
+          if [ -n "$FOUND_SARIF" ]; then
+            cp "$FOUND_SARIF" checkov-report-upload.sarif
           else
             echo '{"version":"2.1.0","runs":[]}' > checkov-report-upload.sarif
           fi
-
-      - name: Upload Checkov results
-        if: always()
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: checkov-report-upload.sarif
-          category: .github/workflows/security.yml:terraform-security
-
-      - name: Report Checkov Outcome
-        if: always()
-        run: |
-          if [ "${{ steps.checkov.outcome }}" = "success" ]; then
-            echo "✅ Checkov scan passed with no findings" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "❌ Checkov reported findings. Review the SARIF report for details." >> $GITHUB_STEP_SUMMARY
-          fi
-
+        else
+          echo '{"version":"2.1.0","runs":[]}' > checkov-report-upload.sarif
+        fi
+    - name: Upload Checkov results
+      if: always()
+      uses: github/codeql-action/upload-sarif@9e907b5e64f6b83e7804b09294d44122997950d6
+      with:
+        sarif_file: checkov-report-upload.sarif
+        category: .github/workflows/security.yml:terraform-security
+    - name: Report Checkov Outcome
+      if: always()
+      run: |
+        if [ "${{ steps.checkov.outcome }}" = "success" ]; then
+          echo "✅ Checkov scan passed with no findings" >> $GITHUB_STEP_SUMMARY
+        else
+          echo "❌ Checkov reported findings. Review the SARIF report for details." >> $GITHUB_STEP_SUMMARY
+        fi
   code-quality:
     name: Code Quality Analysis
     runs-on: ubuntu-latest
-    continue-on-error: true
-
+    timeout-minutes: 25
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Shallow clones should be disabled for better analysis
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-
-      - name: Install backend dependencies
-        run: cd backend && npm ci
-
-      - name: Run backend tests with coverage
-        run: cd backend && npm run test:unit -- --coverage --passWithNoTests
-        continue-on-error: true
-        env:
-          NODE_ENV: test
-
-      - name: SonarCloud Scan
-        uses: SonarSource/sonarcloud-github-action@v5
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        with:
-          args: >
-            -Dsonar.projectKey=albeach_DIVE-V3
-            -Dsonar.organization=albeach
-            -Dsonar.sources=backend/src,frontend/src,kas/src
-            -Dsonar.tests=backend/src/__tests__,frontend/src/__tests__
-            -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/*.test.ts,**/__tests__/**,**/__mocks__/**
-            -Dsonar.typescript.lcov.reportPaths=backend/coverage/lcov.info
-        continue-on-error: true
+    - name: Checkout Code
+      uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+      with:
+        fetch-depth: 0   # Shallow clones should be disabled for better analysis
+        persist-credentials: false
+    - name: Setup Node.js
+      uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+      with:
+        node-version: '20'
+    - name: Install backend dependencies
+      run: cd backend && npm ci
+    - name: Run backend tests with coverage
+      run: cd backend && npm run test:unit -- --coverage --passWithNoTests
+      env:
+        NODE_ENV: test
+    - name: SonarCloud Scan
+      uses: SonarSource/sonarcloud-github-action@ffc3010689be73b8e5ae0c57ce35968afd7909e8
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      with:
+        args: >
+          -Dsonar.projectKey=albeach_DIVE-V3 -Dsonar.organization=albeach -Dsonar.sources=backend/src,frontend/src,kas/src -Dsonar.tests=backend/src/__tests__,frontend/src/__tests__ -Dsonar.exclusions=**/node_modules/**,**/dist/**,**/*.test.ts,**/__tests__/**,**/__mocks__/** -Dsonar.typescript.lcov.reportPaths=backend/coverage/lcov.info
 
   security-summary:
     name: Security Summary
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs: [npm-audit, dependency-check, secret-scan, docker-scan, terraform-security, code-quality]
     if: always()
-    
     steps:
-      - name: Generate Summary
-        run: |
-          echo "## 🔒 Security Scan Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Scan Type | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| NPM Audit | ${{ needs.npm-audit.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| OWASP Dependency Check | ${{ needs.dependency-check.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Secret Scanning | ${{ needs.secret-scan.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Docker Image Scanning | ${{ needs.docker-scan.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Terraform Security | ${{ needs.terraform-security.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| SonarCloud Analysis | ${{ needs.code-quality.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "View detailed reports in workflow artifacts and GitHub Security tab" >> $GITHUB_STEP_SUMMARY
+    - name: Generate Summary
+      run: |
+        echo "## 🔒 Security Scan Results" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "| Scan Type | Status |" >> $GITHUB_STEP_SUMMARY
+        echo "|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+        echo "| NPM Audit | ${{ needs.npm-audit.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| OWASP Dependency Check | ${{ needs.dependency-check.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Secret Scanning | ${{ needs.secret-scan.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Docker Image Scanning | ${{ needs.docker-scan.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| Terraform Security | ${{ needs.terraform-security.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "| SonarCloud Analysis | ${{ needs.code-quality.result == 'success' && '✅ Pass' || '❌ Fail' }} |" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "View detailed reports in workflow artifacts and GitHub Security tab" >> $GITHUB_STEP_SUMMARY
+permissions:
+  contents: read
