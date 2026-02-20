@@ -78,26 +78,18 @@ deployment_acquire_lock() {
     local timeout="${2:-30}"
     local code_upper=$(upper "$instance_code")
 
-    echo "DEBUG [deployment_acquire_lock]: Starting for $code_upper" >&2
     log_verbose "Acquiring deployment lock for $code_upper..."
 
     # Try orchestration framework lock first
     if type orch_acquire_deployment_lock &>/dev/null; then
-        echo "DEBUG: orch_acquire_deployment_lock function exists, calling it..." >&2
         if orch_acquire_deployment_lock "$code_upper" "$timeout"; then
-            echo "DEBUG: orch_acquire_deployment_lock succeeded!" >&2
             log_verbose "Deployment lock acquired via orchestration framework"
             return 0
-        else
-            echo "DEBUG: orch_acquire_deployment_lock FAILED" >&2
         fi
-    else
-        echo "DEBUG: orch_acquire_deployment_lock function NOT FOUND" >&2
     fi
 
     # Fallback to database advisory lock
     if type orch_db_acquire_lock &>/dev/null; then
-        echo "DEBUG: Trying fallback orch_db_acquire_lock..." >&2
         if orch_db_acquire_lock "$code_upper" "$timeout"; then
             log_verbose "Deployment lock acquired via database advisory lock"
             return 0

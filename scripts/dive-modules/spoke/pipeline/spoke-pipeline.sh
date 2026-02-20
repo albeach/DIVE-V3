@@ -99,6 +99,42 @@ _spoke_pipeline_load_modules
 #   0 - Success
 #   1 - Failure
 ##
+##
+# Check if a spoke phase should be skipped based on DIVE_SKIP_PHASES or DIVE_ONLY_PHASE
+#
+# Arguments:
+#   $1 - Phase name (e.g., PREFLIGHT, CONFIGURATION)
+#
+# Returns:
+#   0 - Phase should be skipped
+#   1 - Phase should run
+##
+_spoke_should_skip_phase() {
+    local phase_name="$1"
+
+    # --only-phase: if set, skip everything except the specified phase
+    if [ -n "${DIVE_ONLY_PHASE:-}" ]; then
+        if [ "$phase_name" != "$DIVE_ONLY_PHASE" ]; then
+            log_info "Skipping $phase_name (--only-phase ${DIVE_ONLY_PHASE})"
+            return 0
+        fi
+        return 1
+    fi
+
+    # --skip-phase: check if this phase is in the skip list
+    if [ -n "${DIVE_SKIP_PHASES:-}" ]; then
+        local skip_phase
+        for skip_phase in ${DIVE_SKIP_PHASES}; do
+            if [ "$skip_phase" = "$phase_name" ]; then
+                log_info "Skipping $phase_name (--skip-phase)"
+                return 0
+            fi
+        done
+    fi
+
+    return 1
+}
+
 spoke_pipeline_execute() {
     local instance_code="$1"
     local instance_name="${2:-$instance_code Instance}"
@@ -178,6 +214,17 @@ _spoke_pipeline_execute_internal() {
     local start_time="$4"
     local resume_mode="${5:-false}"
 
+    # Start deployment log capture
+    if ! type deployment_log_start &>/dev/null; then
+        local _logging="${DIVE_ROOT}/scripts/dive-modules/utilities/deployment-logging.sh"
+        [ -f "$_logging" ] && source "$_logging"
+    fi
+    if type deployment_log_start &>/dev/null; then
+        if deployment_log_start "spoke" "$code_upper"; then
+            log_verbose "Deployment log: $(deployment_log_path)"
+        fi
+    fi
+
     # Initialize orchestration context
     orch_init_context "$code_upper" "$instance_name"
     if type orch_init_metrics &>/dev/null; then
@@ -195,6 +242,7 @@ _spoke_pipeline_execute_internal() {
 
     # Execute phases based on mode
     local phase_result=0
+    local spoke_phase_times=()
 
     log_verbose "Starting phase execution (mode: $pipeline_mode, resume: $resume_mode)"
 
@@ -211,10 +259,16 @@ _spoke_pipeline_execute_internal() {
 
     # Phase 1: Preflight (always runs) - MUST run BEFORE setting state
     # This validates no other deployment is in progress
-    log_verbose "Executing phase 1: PREFLIGHT"
-    if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_PREFLIGHT" "$pipeline_mode" "$resume_mode"; then
-        log_warn "Preflight phase failed, stopping pipeline"
-        phase_result=1
+    if _spoke_should_skip_phase "$PIPELINE_PHASE_PREFLIGHT"; then
+        spoke_phase_times+=("Phase 1 (Preflight): skipped")
+    else
+        log_verbose "Executing phase 1: PREFLIGHT"
+        local _ps=$(date +%s)
+        if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_PREFLIGHT" "$pipeline_mode" "$resume_mode"; then
+            log_warn "Preflight phase failed, stopping pipeline"
+            phase_result=1
+        fi
+        spoke_phase_times+=("Phase 1 (Preflight): $(($(date +%s) - _ps))s")
     fi
 
     # Set initial state AFTER preflight passes (not before)
@@ -230,17 +284,23 @@ _spoke_pipeline_execute_internal() {
 
     # Phase 2: Initialization (skip for 'up' mode)
     if [ $phase_result -eq 0 ] && [ "$pipeline_mode" != "$PIPELINE_MODE_UP" ]; then
-        log_verbose "Executing phase 2: INITIALIZATION"
-        if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_INITIALIZATION" "$pipeline_mode" "$resume_mode"; then
-            log_warn "Initialization phase failed, stopping pipeline"
-            phase_result=1
-        fi
-
-        # Check failure threshold after INITIALIZATION
-        if [ $phase_result -eq 0 ] && type orch_check_failure_threshold &>/dev/null; then
-            if ! orch_check_failure_threshold "$code_upper"; then
-                log_error "Failure threshold exceeded after INITIALIZATION - aborting deployment"
+        if _spoke_should_skip_phase "$PIPELINE_PHASE_INITIALIZATION"; then
+            spoke_phase_times+=("Phase 2 (Initialization): skipped")
+        else
+            log_verbose "Executing phase 2: INITIALIZATION"
+            local _ps=$(date +%s)
+            if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_INITIALIZATION" "$pipeline_mode" "$resume_mode"; then
+                log_warn "Initialization phase failed, stopping pipeline"
                 phase_result=1
+            fi
+            spoke_phase_times+=("Phase 2 (Initialization): $(($(date +%s) - _ps))s")
+
+            # Check failure threshold after INITIALIZATION
+            if [ $phase_result -eq 0 ] && type orch_check_failure_threshold &>/dev/null; then
+                if ! orch_check_failure_threshold "$code_upper"; then
+                    log_error "Failure threshold exceeded after INITIALIZATION - aborting deployment"
+                    phase_result=1
+                fi
             fi
         fi
     else
@@ -249,51 +309,69 @@ _spoke_pipeline_execute_internal() {
 
     # Phase 3: Deployment (always runs)
     if [ $phase_result -eq 0 ]; then
-        log_verbose "Executing phase 3: DEPLOYMENT"
-        if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_DEPLOYMENT" "$pipeline_mode" "$resume_mode"; then
-            log_warn "Deployment phase failed, stopping pipeline"
-            phase_result=1
-        fi
-
-        # Check failure threshold after DEPLOYMENT
-        if [ $phase_result -eq 0 ] && type orch_check_failure_threshold &>/dev/null; then
-            if ! orch_check_failure_threshold "$code_upper"; then
-                log_error "Failure threshold exceeded after DEPLOYMENT - aborting deployment"
+        if _spoke_should_skip_phase "$PIPELINE_PHASE_DEPLOYMENT"; then
+            spoke_phase_times+=("Phase 3 (Deployment): skipped")
+        else
+            log_verbose "Executing phase 3: DEPLOYMENT"
+            local _ps=$(date +%s)
+            if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_DEPLOYMENT" "$pipeline_mode" "$resume_mode"; then
+                log_warn "Deployment phase failed, stopping pipeline"
                 phase_result=1
+            fi
+            spoke_phase_times+=("Phase 3 (Deployment): $(($(date +%s) - _ps))s")
+
+            # Check failure threshold after DEPLOYMENT
+            if [ $phase_result -eq 0 ] && type orch_check_failure_threshold &>/dev/null; then
+                if ! orch_check_failure_threshold "$code_upper"; then
+                    log_error "Failure threshold exceeded after DEPLOYMENT - aborting deployment"
+                    phase_result=1
+                fi
             fi
         fi
     fi
 
     # Phase 4: Configuration (always runs)
     if [ $phase_result -eq 0 ]; then
-        log_verbose "Executing phase 4: CONFIGURATION"
-        if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_CONFIGURATION" "$pipeline_mode" "$resume_mode"; then
-            log_warn "Configuration phase failed, stopping pipeline"
-            phase_result=1
-        fi
-
-        # Check failure threshold after CONFIGURATION
-        if [ $phase_result -eq 0 ] && type orch_check_failure_threshold &>/dev/null; then
-            if ! orch_check_failure_threshold "$code_upper"; then
-                log_error "Failure threshold exceeded after CONFIGURATION - aborting deployment"
+        if _spoke_should_skip_phase "$PIPELINE_PHASE_CONFIGURATION"; then
+            spoke_phase_times+=("Phase 4 (Configuration): skipped")
+        else
+            log_verbose "Executing phase 4: CONFIGURATION"
+            local _ps=$(date +%s)
+            if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_CONFIGURATION" "$pipeline_mode" "$resume_mode"; then
+                log_warn "Configuration phase failed, stopping pipeline"
                 phase_result=1
+            fi
+            spoke_phase_times+=("Phase 4 (Configuration): $(($(date +%s) - _ps))s")
+
+            # Check failure threshold after CONFIGURATION
+            if [ $phase_result -eq 0 ] && type orch_check_failure_threshold &>/dev/null; then
+                if ! orch_check_failure_threshold "$code_upper"; then
+                    log_error "Failure threshold exceeded after CONFIGURATION - aborting deployment"
+                    phase_result=1
+                fi
             fi
         fi
     fi
 
     # Phase 5: Seeding (deploy mode only)
     if [ $phase_result -eq 0 ] && [ "$pipeline_mode" = "$PIPELINE_MODE_DEPLOY" ]; then
-        log_verbose "Executing phase 5: SEEDING"
-        if ! spoke_pipeline_run_phase "$code_upper" "SEEDING" "$pipeline_mode" "$resume_mode"; then
-            log_warn "Seeding phase failed, stopping pipeline"
-            phase_result=1
-        fi
-
-        # Check failure threshold after SEEDING
-        if [ $phase_result -eq 0 ] && type orch_check_failure_threshold &>/dev/null; then
-            if ! orch_check_failure_threshold "$code_upper"; then
-                log_error "Failure threshold exceeded after SEEDING - aborting deployment"
+        if _spoke_should_skip_phase "SEEDING"; then
+            spoke_phase_times+=("Phase 5 (Seeding): skipped")
+        else
+            log_verbose "Executing phase 5: SEEDING"
+            local _ps=$(date +%s)
+            if ! spoke_pipeline_run_phase "$code_upper" "SEEDING" "$pipeline_mode" "$resume_mode"; then
+                log_warn "Seeding phase failed, stopping pipeline"
                 phase_result=1
+            fi
+            spoke_phase_times+=("Phase 5 (Seeding): $(($(date +%s) - _ps))s")
+
+            # Check failure threshold after SEEDING
+            if [ $phase_result -eq 0 ] && type orch_check_failure_threshold &>/dev/null; then
+                if ! orch_check_failure_threshold "$code_upper"; then
+                    log_error "Failure threshold exceeded after SEEDING - aborting deployment"
+                    phase_result=1
+                fi
             fi
         fi
     else
@@ -302,18 +380,24 @@ _spoke_pipeline_execute_internal() {
 
     # Phase 6: Verification (always runs)
     if [ $phase_result -eq 0 ]; then
-        log_verbose "Executing phase 6: VERIFICATION"
-        if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_VERIFICATION" "$pipeline_mode" "$resume_mode"; then
-            log_warn "Verification phase failed, stopping pipeline"
-            phase_result=1
-        fi
+        if _spoke_should_skip_phase "$PIPELINE_PHASE_VERIFICATION"; then
+            spoke_phase_times+=("Phase 6 (Verification): skipped")
+        else
+            log_verbose "Executing phase 6: VERIFICATION"
+            local _ps=$(date +%s)
+            if ! spoke_pipeline_run_phase "$code_upper" "$PIPELINE_PHASE_VERIFICATION" "$pipeline_mode" "$resume_mode"; then
+                log_warn "Verification phase failed, stopping pipeline"
+                phase_result=1
+            fi
+            spoke_phase_times+=("Phase 6 (Verification): $(($(date +%s) - _ps))s")
 
-        # Check failure threshold after VERIFICATION
-        if [ $phase_result -eq 0 ] && type orch_check_failure_threshold &>/dev/null; then
-            if ! orch_check_failure_threshold "$code_upper"; then
-                log_error "Failure threshold exceeded after VERIFICATION - marking deployment degraded"
-                # Don't fail here - verification complete, just warn
-                log_warn "Deployment may have accumulated errors - review logs"
+            # Check failure threshold after VERIFICATION
+            if [ $phase_result -eq 0 ] && type orch_check_failure_threshold &>/dev/null; then
+                if ! orch_check_failure_threshold "$code_upper"; then
+                    log_error "Failure threshold exceeded after VERIFICATION - marking deployment degraded"
+                    # Don't fail here - verification complete, just warn
+                    log_warn "Deployment may have accumulated errors - review logs"
+                fi
             fi
         fi
     fi
@@ -334,11 +418,37 @@ _spoke_pipeline_execute_internal() {
             orch_create_checkpoint "$code_upper" "COMPLETE" "Pipeline completed successfully"
         fi
 
+        # Print timing summary
+        if [ ${#spoke_phase_times[@]} -gt 0 ]; then
+            echo ""
+            echo "==============================================================================="
+            echo "  Spoke Deployment Performance Summary"
+            echo "==============================================================================="
+            for timing in "${spoke_phase_times[@]}"; do
+                echo "  $timing"
+            done
+            echo "  -------------------------------------------------------------------------------"
+            echo "  Total Duration: ${duration}s"
+            echo "==============================================================================="
+        fi
+
         spoke_pipeline_print_success "$code_upper" "$instance_name" "$duration" "$pipeline_mode"
 
         # Post-deployment summary with URLs and next steps
         if type deployment_post_summary &>/dev/null; then
             deployment_post_summary "spoke" "$code_upper" "$duration"
+        fi
+
+        # Show log file location
+        if type deployment_log_path &>/dev/null; then
+            local _log
+            _log=$(deployment_log_path)
+            [ -n "$_log" ] && log_info "Full deployment log: $_log"
+        fi
+
+        # Finalize log file
+        if type deployment_log_stop &>/dev/null; then
+            deployment_log_stop 0 "$duration"
         fi
 
         return 0
@@ -352,6 +462,19 @@ _spoke_pipeline_execute_internal() {
         fi
 
         spoke_pipeline_print_failure "$code_upper" "$instance_name" "$duration"
+
+        # Show log file location
+        if type deployment_log_path &>/dev/null; then
+            local _log
+            _log=$(deployment_log_path)
+            [ -n "$_log" ] && log_info "Full deployment log: $_log"
+        fi
+
+        # Finalize log file
+        if type deployment_log_stop &>/dev/null; then
+            deployment_log_stop 1 "$duration"
+        fi
+
         return 1
     fi
 }
