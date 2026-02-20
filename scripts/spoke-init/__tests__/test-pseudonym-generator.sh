@@ -54,7 +54,8 @@ generate_ocean_pseudonym() {
     
     local hash=0
     for (( i=0; i<${#unique_id}; i++ )); do
-        local char_code=$(printf '%d' "'${unique_id:$i:1}")
+        local char_code
+        char_code=$(printf '%d' "'${unique_id:$i:1}")
         hash=$(( ((hash * 31) + char_code) & 0x7FFFFFFF ))
     done
     
@@ -258,3 +259,6 @@ else
     echo -e "${RED}❌ Some tests failed${NC}"
     exit 1
 fi
+
+# sc2034-anchor
+: "${YELLOW:-}"

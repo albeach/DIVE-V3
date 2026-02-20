@@ -105,7 +105,8 @@ orch_retry_with_backoff() {
     log_verbose "Retry loop for: $operation_name (max: $ORCH_MAX_RETRIES attempts)"
 
     while [ $attempt -le $ORCH_MAX_RETRIES ]; do
-        local start_time=$(date +%s)
+        local start_time
+        start_time=$(date +%s)
 
         if [ $attempt -eq 1 ]; then
             log_info "Executing: $operation_name"
@@ -137,7 +138,8 @@ orch_retry_with_backoff() {
 
         # Exponential backoff with jitter
         local jitter=$((RANDOM % 1000))
-        local sleep_time=$(awk "BEGIN {printf \"%.3f\", $delay + ($jitter / 1000)}")
+        local sleep_time
+        sleep_time=$(awk "BEGIN {printf \"%.3f\", $delay + ($jitter / 1000)}")
         log_info "Waiting ${sleep_time}s before retry..."
         sleep "$sleep_time"
 
@@ -171,7 +173,8 @@ orch_auto_recover() {
     local instance_code="$1"
     local error_code="$2"
     local error_context="${3:-{}}"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_info "Attempting auto-recovery for $instance_code (error: $error_code)"
 
@@ -192,12 +195,14 @@ orch_auto_recover() {
 
         1202)  # Container unhealthy
             log_info "Auto-recovering: Restarting unhealthy container..."
-            local service=$(echo "$error_context" | jq -r '.service // "keycloak"' 2>/dev/null)
+            local service
+            service=$(echo "$error_context" | jq -r '.service // "keycloak"' 2>/dev/null)
             local container="dive-spoke-${code_lower}-${service}"
 
             if docker restart "$container" >/dev/null 2>&1; then
                 sleep 30
-                local health=$(docker inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null)
+                local health
+                health=$(docker inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null)
                 [ "$health" = "healthy" ] && return 0
             fi
             return 2
@@ -287,20 +292,23 @@ orch_record_recovery() {
 ##
 orch_check_failure_threshold() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     if ! type orch_db_check_connection &>/dev/null || ! orch_db_check_connection; then
         return 0  # Don't block if DB unavailable
     fi
 
-    local deployment_start=$(orch_db_exec "
+    local deployment_start
+    deployment_start=$(orch_db_exec "
         SELECT MAX(timestamp) FROM deployment_states
         WHERE instance_code='$code_lower' AND state='INITIALIZING'
     " 2>/dev/null | xargs)
 
     [ -z "$deployment_start" ] && return 0
 
-    local error_counts=$(orch_db_exec "
+    local error_counts
+    error_counts=$(orch_db_exec "
         SELECT
             SUM(CASE WHEN severity = 1 THEN 1 ELSE 0 END) as critical,
             SUM(CASE WHEN severity = 2 THEN 1 ELSE 0 END) as high,
@@ -314,8 +322,10 @@ orch_check_failure_threshold() {
 
     [ -z "$error_counts" ] && return 0
 
-    local critical=$(echo "$error_counts" | cut -d'|' -f1)
-    local high=$(echo "$error_counts" | cut -d'|' -f2)
+    local critical
+    critical=$(echo "$error_counts" | cut -d'|' -f1)
+    local high
+    high=$(echo "$error_counts" | cut -d'|' -f2)
 
     critical=${critical:-0}
     high=${high:-0}
@@ -364,7 +374,8 @@ handle_error_with_recovery() {
     fi
 
     # Classify error
-    local error_type=$(classify_error "$error_code")
+    local error_type
+    error_type=$(classify_error "$error_code")
     log_verbose "Error classified as: $error_type"
 
     # Attempt auto-recovery for recoverable errors
@@ -403,7 +414,8 @@ handle_error_with_recovery() {
 orch_error_summary() {
     local instance_code="$1"
     local hours="${2:-24}"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     if ! type orch_db_check_connection &>/dev/null || ! orch_db_check_connection; then
         log_error "Database not available"

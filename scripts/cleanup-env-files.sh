@@ -222,7 +222,7 @@ fi
 INSTANCE_COUNT=0
 for instance_dir in instances/*/; do
     if [ -d "$instance_dir" ]; then
-        code=$(basename "$instance_dir")
+        _code=$(basename "$instance_dir")
         if [ -f "${instance_dir}.env" ]; then
             INSTANCE_COUNT=$((INSTANCE_COUNT + 1))
         fi

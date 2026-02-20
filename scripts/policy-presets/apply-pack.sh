@@ -90,7 +90,7 @@ if [ ! -f "$PACK_FILE" ]; then
   echo -e "${RED}ERROR: Pack file not found: $PACK_FILE${NC}"
   echo ""
   echo "Available packs:"
-  ls -1 "${SCRIPT_DIR}/packs/"*.json 2>/dev/null | xargs -n 1 basename | sed 's/.json$//' || echo "  (none found)"
+  find "${SCRIPT_DIR}/packs" -maxdepth 1 -type f -name '*.json' -exec basename {} .json \; 2>/dev/null || echo "  (none found)"
   exit 1
 fi
 

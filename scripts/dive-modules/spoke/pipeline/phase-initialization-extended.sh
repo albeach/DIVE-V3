@@ -25,8 +25,10 @@
 ##
 spoke_init_generate_compose() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     log_step "Generating docker-compose.yml"
@@ -45,7 +47,8 @@ spoke_init_generate_compose() {
         fi
 
         local instance_name="$code_upper Instance"
-        local spoke_id=$(spoke_config_get "$code_upper" "identity.spokeId" "spoke-${code_lower}")
+        local spoke_id
+        spoke_id=$(spoke_config_get "$code_upper" "identity.spokeId" "spoke-${code_lower}")
         local idp_hostname="dive-spoke-${code_lower}-keycloak"
         local api_url="https://localhost:${SPOKE_BACKEND_PORT:-4000}"
         local base_url="https://localhost:${SPOKE_FRONTEND_PORT:-3000}"
@@ -87,7 +90,8 @@ spoke_init_generate_compose() {
 ##
 spoke_init_prepare_certificates() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     log_step "Preparing federation certificates"
@@ -254,8 +258,10 @@ spoke_init_prepare_certificates() {
 ##
 spoke_init_generate_mtls_certs() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     # Generate unique spoke ID from spoke_config_get (SSOT)
@@ -295,8 +301,10 @@ spoke_init_generate_mtls_certs() {
 ##
 spoke_init_apply_terraform() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Applying Terraform configuration"
 
@@ -384,8 +392,10 @@ spoke_init_apply_terraform() {
 ##
 spoke_init_check_drift() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # Load drift detection module if available
     if [ -f "${DIVE_ROOT}/scripts/dive-modules/spoke/spoke-drift.sh" ]; then
@@ -433,7 +443,8 @@ spoke_init_check_drift() {
 ##
 spoke_checkpoint_initialization() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     log_verbose "Validating initialization checkpoint for $instance_code"
@@ -461,7 +472,8 @@ spoke_checkpoint_initialization() {
     fi
 
     # Check keyfile size
-    local keyfile_size=$(wc -c < "$spoke_dir/mongo-keyfile" | tr -d ' ')
+    local keyfile_size
+    keyfile_size=$(wc -c < "$spoke_dir/mongo-keyfile" | tr -d ' ')
     if [ "$keyfile_size" -lt 6 ] || [ "$keyfile_size" -gt 1024 ]; then
         log_error "Checkpoint FAILED: MongoDB keyfile size invalid: ${keyfile_size} bytes"
         return 1

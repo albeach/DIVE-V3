@@ -78,7 +78,7 @@ done
 
 # If --all, populate with all countries
 if [ "$ALL" = true ]; then
-    COUNTRIES=($(echo "${!NATO_COUNTRIES[@]}" | tr ' ' '\n' | sort))
+    mapfile -t COUNTRIES < <(printf '%s\n' "${!NATO_COUNTRIES[@]}" | sort)
 fi
 
 if [ ${#COUNTRIES[@]} -eq 0 ]; then
@@ -108,8 +108,10 @@ check_spoke_running() {
 
 deploy_spoke() {
     local code="$1"
-    local name=$(get_country_name "$code")
-    local flag=$(get_country_flag "$code")
+    local name
+    name=$(get_country_name "$code")
+    local flag
+    flag=$(get_country_flag "$code")
     local code_lower="${code,,}"
 
     echo ""
@@ -134,8 +136,8 @@ deploy_spoke() {
         echo "    1. DIVE_PILOT_MODE=false ./dive spoke init $code \"$name\""
         echo "    2. ./dive --instance $code_lower spoke up"
         echo "    3. Wait for Keycloak health check..."
-        echo "    4. ./dive spoke init-keycloak $code_upper"
-        echo "    5. ./dive spoke register $code_upper"
+        echo "    4. ./dive spoke init-keycloak $code"
+        echo "    5. ./dive spoke register $code"
         echo "    6. ./dive hub approve $code"
         return 0
     fi

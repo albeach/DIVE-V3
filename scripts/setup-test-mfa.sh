@@ -74,11 +74,16 @@ setup_user() {
     local container="$4"
 
     # Get configuration
-    local config=$(get_user_config "$username" "$country")
-    local clearance=$(echo "$config" | cut -d' ' -f1)
-    local acr=$(echo "$config" | cut -d' ' -f2)
-    local amr_raw=$(echo "$config" | cut -d' ' -f3)
-    local coi=$(get_user_coi "$username")
+    local config
+    config=$(get_user_config "$username" "$country")
+    local clearance
+    clearance=$(echo "$config" | cut -d' ' -f1)
+    local acr
+    acr=$(echo "$config" | cut -d' ' -f2)
+    local amr_raw
+    amr_raw=$(echo "$config" | cut -d' ' -f3)
+    local coi
+    coi=$(get_user_coi "$username")
 
     # Build AMR array
     local amr_json=""
@@ -165,7 +170,8 @@ configure_instance() {
         fi
     else
         # Spokes use GCP secrets
-        local secret_name="dive-v3-keycloak-$(echo $instance_code | tr '[:upper:]' '[:lower:]')"
+        local secret_name
+        secret_name="dive-v3-keycloak-$(echo $instance_code | tr '[:upper:]' '[:lower:]')"
         admin_pass=$(gcloud secrets versions access latest --secret="$secret_name" --project=dive25 2>/dev/null | tr -d '\r\n')
 
         # Fallback to container env
@@ -225,7 +231,8 @@ main() {
         exit 1
     fi
 
-    local container_count=$(echo "$keycloak_containers" | wc -l | tr -d ' ')
+    local container_count
+    container_count=$(echo "$keycloak_containers" | wc -l | tr -d ' ')
     echo -e "  Found ${GREEN}${container_count}${NC} instance(s)"
     echo ""
 

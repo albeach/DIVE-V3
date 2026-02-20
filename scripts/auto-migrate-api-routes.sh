@@ -28,7 +28,9 @@ for file in $API_ROUTES; do
     # Check if already has the import
     if ! grep -q "from '@/lib/api-utils'" "$file" 2>/dev/null; then
 
-      echo "  📝 Migrating: $(basename $(dirname $file))/$(basename $file)"
+      route_dir=$(basename "$(dirname "$file")")
+      route_file=$(basename "$file")
+      echo "  📝 Migrating: ${route_dir}/${route_file}"
 
       # Create backup
       cp "$file" "$file.bak"

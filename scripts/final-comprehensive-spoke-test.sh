@@ -8,7 +8,8 @@
 set -e
 
 # Set environment
-export DIVE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DIVE_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+export DIVE_ROOT
 cd "$DIVE_ROOT"
 
 # Colors

@@ -59,7 +59,8 @@ metrics_record_deployment_duration() {
     local component="$2"
     local phase="$3"
     local duration="$4"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # Record to database
     if type orch_db_check_connection &>/dev/null && orch_db_check_connection; then
@@ -90,7 +91,8 @@ metrics_record_deployment_error() {
     local instance_code="$1"
     local component="$2"
     local error_type="$3"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # Record to database
     if type orch_db_check_connection &>/dev/null && orch_db_check_connection; then
@@ -148,7 +150,8 @@ metrics_record_circuit_breaker_state() {
 metrics_record_lock_status() {
     local instance_code="$1"
     local status="$2"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     echo "# HELP dive_orchestration_locks Current lock status" >> "$METRICS_FILE.tmp"
     echo "# TYPE dive_orchestration_locks gauge" >> "$METRICS_FILE.tmp"
@@ -166,7 +169,7 @@ metrics_collect_all() {
     log_info "Collecting all orchestration metrics..."
 
     # Start fresh metrics file
-    > "$METRICS_FILE.tmp"
+    : > "$METRICS_FILE.tmp"
 
     # Add metadata
     echo "# DIVE V3 Orchestration Metrics" >> "$METRICS_FILE.tmp"
@@ -178,7 +181,8 @@ metrics_collect_all() {
         echo "# HELP dive_deployment_state Current deployment state (enum)" >> "$METRICS_FILE.tmp"
         echo "# TYPE dive_deployment_state gauge" >> "$METRICS_FILE.tmp"
 
-        local states=$(orch_db_exec "
+        local states
+        states=$(orch_db_exec "
             SELECT DISTINCT ON (instance_code) instance_code, state
             FROM deployment_states
             ORDER BY instance_code, timestamp DESC
@@ -211,7 +215,8 @@ metrics_collect_all() {
         echo "# HELP dive_circuit_breaker_state Circuit breaker state" >> "$METRICS_FILE.tmp"
         echo "# TYPE dive_circuit_breaker_state gauge" >> "$METRICS_FILE.tmp"
 
-        local circuits=$(orch_db_exec "
+        local circuits
+        circuits=$(orch_db_exec "
             SELECT operation_name, state, failure_count
             FROM circuit_breakers
         " 2>/dev/null)
@@ -238,7 +243,8 @@ metrics_collect_all() {
         echo "# HELP dive_active_locks Number of active deployment locks" >> "$METRICS_FILE.tmp"
         echo "# TYPE dive_active_locks gauge" >> "$METRICS_FILE.tmp"
 
-        local active_locks=$(orch_db_exec "
+        local active_locks
+        active_locks=$(orch_db_exec "
             SELECT COUNT(*) FROM deployment_locks WHERE released_at IS NULL
         " 2>/dev/null | xargs)
 
@@ -249,7 +255,8 @@ metrics_collect_all() {
         echo "# HELP dive_errors_hourly Errors in the last hour" >> "$METRICS_FILE.tmp"
         echo "# TYPE dive_errors_hourly gauge" >> "$METRICS_FILE.tmp"
 
-        local hourly_errors=$(orch_db_exec "
+        local hourly_errors
+        hourly_errors=$(orch_db_exec "
             SELECT instance_code, COUNT(*) as count
             FROM orchestration_errors
             WHERE timestamp > NOW() - INTERVAL '1 hour'

@@ -133,3 +133,6 @@ elif [ "$UNHEALTHY" -gt 0 ]; then
     log_error "Some spokes are unhealthy - manual investigation required"
     exit 1
 fi
+
+# sc2034-anchor
+: "${DIVE_ROOT:-}"

@@ -441,3 +441,5 @@ main() {
 
 # Run main function with all arguments
 main "$@"
+# sc2034-anchor
+: "${LOG_RETENTION_DAYS:-}" "${MAX_DISK_USAGE_PERCENT:-}"

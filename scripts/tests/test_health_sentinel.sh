@@ -167,7 +167,7 @@ if type health_sentinel_report &>/dev/null; then
     assert_contains "$result" "No issues" "report: no alerts → no issues"
 
     # Test 18: No alerts → return 0
-    local _rc_val=0
+    _rc_val=0
     health_sentinel_report &>/dev/null || _rc_val=$?
     assert_eq "0" "$_rc_val" "report: no alerts → return 0"
 
@@ -203,7 +203,7 @@ if type health_sentinel_report &>/dev/null; then
     assert_contains "$result" "Services affected" "report: shows services affected"
 
     # Test 24: Alerts → return 1
-    local _rc_val2=0
+    _rc_val2=0
     health_sentinel_report &>/dev/null || _rc_val2=$?
     assert_eq "1" "$_rc_val2" "report: alerts → return 1"
 
@@ -223,7 +223,7 @@ if type health_sentinel_start &>/dev/null && type health_sentinel_stop &>/dev/nu
 
     # Test 25: Sentinel not running initially
     rm -f "$HEALTH_SENTINEL_PID_FILE"
-    local _running_rc=0
+    _running_rc=0
     health_sentinel_is_running || _running_rc=$?
     assert_eq "1" "$_running_rc" "sentinel: not running initially"
 
@@ -238,20 +238,20 @@ if type health_sentinel_start &>/dev/null && type health_sentinel_stop &>/dev/nu
     fi
 
     # Test 27: Sentinel is running after start
-    local _running_rc2=0
+    _running_rc2=0
     health_sentinel_is_running || _running_rc2=$?
     assert_eq "0" "$_running_rc2" "sentinel: running after start"
 
     # Test 28: Stop removes PID file
     health_sentinel_stop || true
     sleep 0.3
-    local _running_rc3=0
+    _running_rc3=0
     health_sentinel_is_running || _running_rc3=$?
     assert_eq "1" "$_running_rc3" "sentinel: not running after stop"
 
     # Test 29: Disabled sentinel doesn't start
     HEALTH_SENTINEL_ENABLED="false"
-    local _start_rc=0
+    _start_rc=0
     health_sentinel_start "hub" "dive-hub" || _start_rc=$?
     assert_eq "1" "$_start_rc" "sentinel: disabled → doesn't start"
     HEALTH_SENTINEL_ENABLED="true"
@@ -273,13 +273,13 @@ if type health_sentinel_check_alerts &>/dev/null; then
 
     # Test 30: No alerts → return 0
     rm -f "$HEALTH_SENTINEL_ALERT_FILE"
-    local _check_rc=0
+    _check_rc=0
     health_sentinel_check_alerts 2>/dev/null || _check_rc=$?
     assert_eq "0" "$_check_rc" "check_alerts: no alerts → return 0"
 
     # Test 31: With alerts → return 1
     echo "2025-01-01 12:00:00|backend|DOWN|Container down" > "$HEALTH_SENTINEL_ALERT_FILE"
-    local _check_rc2=0
+    _check_rc2=0
     health_sentinel_check_alerts 2>/dev/null || _check_rc2=$?
     assert_eq "1" "$_check_rc2" "check_alerts: with alerts → return 1"
 
@@ -328,7 +328,7 @@ if type _sentinel_check_cycle &>/dev/null; then
     : > "$HEALTH_SENTINEL_ALERT_FILE"
     _sentinel_check_cycle "nonexistent-project-$$" "backend keycloak" || true
 
-    local _alert_count
+    _alert_count
     _alert_count=$(health_sentinel_alert_count)
     if [ "$_alert_count" -gt 0 ]; then
         assert_eq "0" "0" "check cycle: missing containers → alerts recorded ($_alert_count)"
@@ -425,9 +425,9 @@ fi
 
 # Test 42: Spoke pipeline starts sentinel before Phase 4
 if [ -f "$spoke_pipeline_file" ]; then
-    local _spoke_start_line
+    _spoke_start_line
     _spoke_start_line=$(grep -n 'health_sentinel_start' "$spoke_pipeline_file" | head -1 | cut -d: -f1)
-    local _spoke_phase4_line
+    _spoke_phase4_line
     _spoke_phase4_line=$(grep -n 'Phase 4.*Configuration' "$spoke_pipeline_file" | head -1 | cut -d: -f1)
     if [ -n "$_spoke_start_line" ] && [ -n "$_spoke_phase4_line" ]; then
         if [ "$_spoke_start_line" -lt "$_spoke_phase4_line" ]; then

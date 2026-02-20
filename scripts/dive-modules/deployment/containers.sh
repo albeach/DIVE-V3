@@ -50,7 +50,8 @@ containers_start() {
     docker compose -f "$compose_file" up -d
 
     # Wait for containers to be healthy
-    local services=$(docker compose -f "$compose_file" config --services)
+    local services
+    services=$(docker compose -f "$compose_file" config --services)
 
     for service in $services; do
         local container="${container_prefix}-${service}"
@@ -59,7 +60,8 @@ containers_start() {
 
         local elapsed=0
         while [ $elapsed -lt $max_wait ]; do
-            local status=$(docker inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "not_found")
+            local status
+            status=$(docker inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "not_found")
 
             case "$status" in
                 "healthy")
@@ -68,7 +70,8 @@ containers_start() {
                     ;;
                 "not_found")
                     log_verbose "$container does not have health check, checking running state"
-                    local running=$(docker inspect "$container" --format='{{.State.Running}}' 2>/dev/null || echo "false")
+                    local running
+                    running=$(docker inspect "$container" --format='{{.State.Running}}' 2>/dev/null || echo "false")
                     if [ "$running" = "true" ]; then
                         break
                     fi
@@ -141,7 +144,8 @@ containers_status() {
     echo "Health Status:"
 
     for container in $(docker ps -a --filter "name=$container_prefix" --format '{{.Names}}'); do
-        local health=$(docker inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "no_healthcheck")
+        local health
+        health=$(docker inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "no_healthcheck")
         printf "  %-40s %s\n" "$container" "$health"
     done
 }
@@ -196,7 +200,8 @@ containers_exec() {
 container_is_healthy() {
     local container="$1"
 
-    local health=$(docker inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+    local health
+    health=$(docker inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
 
     [ "$health" = "healthy" ]
 }
@@ -272,7 +277,8 @@ containers_cleanup_stale() {
     log_info "Cleaning stale containers for $container_prefix..."
 
     # Remove stopped containers
-    local removed=$(docker ps -a --filter "name=$container_prefix" --filter "status=exited" -q | wc -l)
+    local removed
+    removed=$(docker ps -a --filter "name=$container_prefix" --filter "status=exited" -q | wc -l)
     docker ps -a --filter "name=$container_prefix" --filter "status=exited" -q | grep . | xargs docker rm 2>/dev/null || true
 
     log_info "Removed $removed stale containers"

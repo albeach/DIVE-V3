@@ -46,7 +46,7 @@ echo -e "${YELLOW}All failures and warnings will be captured in debug logs${NC}"
 echo ""
 
 # Confirm
-read -p "Press ENTER to continue or Ctrl+C to cancel: " confirm
+read -p "Press ENTER to continue or Ctrl+C to cancel: " _confirm
 
 # =============================================================================
 # STEP 1: NUKE EVERYTHING
@@ -268,3 +268,6 @@ echo "{\"location\":\"test-full-deployment.sh:277\",\"message\":\"Deployment wor
 
 echo -e "${GREEN}${BOLD}✓ Full deployment test completed successfully!${NC}"
 echo ""
+
+# sc2034-anchor
+: "${SPOKE_2_LOWER:-}"

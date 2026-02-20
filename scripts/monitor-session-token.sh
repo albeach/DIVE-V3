@@ -2,7 +2,7 @@
 # Real-time monitoring for session token validation
 # Run this while testing in the browser
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 echo "========================================="
 echo "Monitoring Session Token Validation"

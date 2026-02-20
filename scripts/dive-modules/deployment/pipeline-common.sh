@@ -76,7 +76,8 @@ readonly PIPELINE_PHASE_COMPLETE="COMPLETE"
 deployment_acquire_lock() {
     local instance_code="$1"
     local timeout="${2:-30}"
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     log_verbose "Acquiring deployment lock for $code_upper..."
 
@@ -112,7 +113,8 @@ deployment_acquire_lock() {
 ##
 deployment_release_lock() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     log_verbose "Releasing deployment lock for $code_upper..."
 
@@ -162,7 +164,8 @@ deployment_run_phase() {
     local pipeline_mode="${4:-deploy}"
     local resume_mode="${5:-false}"
 
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
     local circuit_name="${code_upper}_phase_${phase_name}"
 
     # Check if phase should be skipped (resume mode + already complete)
@@ -176,7 +179,8 @@ deployment_run_phase() {
     fi
 
     log_step "Phase: $phase_name"
-    local phase_start=$(date +%s)
+    local phase_start
+    phase_start=$(date +%s)
 
     # Initialize circuit breaker for this phase
     if type orch_circuit_breaker_init &>/dev/null; then
@@ -202,7 +206,8 @@ deployment_run_phase() {
         fi
     fi
 
-    local phase_end=$(date +%s)
+    local phase_end
+    phase_end=$(date +%s)
     local phase_duration=$((phase_end - phase_start))
 
     if [ $phase_result -eq 0 ]; then
@@ -252,7 +257,8 @@ deployment_run_phase() {
 deployment_check_threshold() {
     local instance_code="$1"
     local phase_name="$2"
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     if type orch_check_failure_threshold &>/dev/null; then
         if ! orch_check_failure_threshold "$code_upper"; then
@@ -286,7 +292,8 @@ deployment_set_state() {
     local new_state="$2"
     local reason="${3:-}"
     local metadata="${4:-}"
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     if type orch_db_set_state &>/dev/null; then
         orch_db_set_state "$code_upper" "$new_state" "$reason" "$metadata"
@@ -308,7 +315,8 @@ deployment_set_state() {
 ##
 deployment_get_state() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     if type orch_db_get_state &>/dev/null; then
         orch_db_get_state "$code_upper"
@@ -339,8 +347,10 @@ deployment_rollback() {
     local instance_code="$1"
     local failed_phase="$2"
     local deployment_type="${3:-spoke}"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_warn "Attempting rollback for $code_upper after $failed_phase failure"
 
@@ -391,7 +401,8 @@ deployment_print_success() {
     local duration="$3"
     local mode="$4"
     local deployment_type="${5:-spoke}"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     echo ""
     if [ "$deployment_type" = "hub" ]; then
@@ -443,7 +454,8 @@ deployment_print_failure() {
     local instance_name="$2"
     local duration="$3"
     local deployment_type="${4:-spoke}"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     echo ""
     if [ "$deployment_type" = "hub" ]; then
@@ -569,3 +581,7 @@ export -f deployment_print_success
 export -f deployment_print_failure
 
 log_verbose "Pipeline common module loaded"
+
+# sc2034-anchor
+: "${PIPELINE_MODE_DEPLOY:-}" "${PIPELINE_MODE_REDEPLOY:-}" "${PIPELINE_MODE_UP:-}" "${PIPELINE_PHASE_COMPLETE:-}" "${PIPELINE_PHASE_CONFIGURATION:-}" "${PIPELINE_PHASE_DEPLOYMENT:-}"
+: "${PIPELINE_PHASE_INITIALIZATION:-}" "${PIPELINE_PHASE_PREFLIGHT:-}" "${PIPELINE_PHASE_VERIFICATION:-}"

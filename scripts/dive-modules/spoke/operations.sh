@@ -22,8 +22,10 @@ fi
 spoke_clean() {
     ensure_dive_root
     local instance_code="${INSTANCE:-usa}"
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     print_header
@@ -59,7 +61,8 @@ spoke_clean() {
     cd "$DIVE_ROOT"
 
     local volumes_removed=0
-    local all_volumes=$(docker volume ls --format '{{.Name}}' 2>/dev/null | grep "^dive-spoke-${code_lower}" || true)
+    local all_volumes
+    all_volumes=$(docker volume ls --format '{{.Name}}' 2>/dev/null | grep "^dive-spoke-${code_lower}" || true)
 
     if [ -z "$all_volumes" ]; then
         log_info "No volumes to remove"
@@ -108,8 +111,10 @@ spoke_clean() {
 spoke_down() {
     ensure_dive_root
     local instance_code="${1:-${INSTANCE:-usa}}"
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     print_header
@@ -150,8 +155,10 @@ spoke_down() {
 spoke_reset() {
     ensure_dive_root
     local instance_code="${INSTANCE:-usa}"
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     print_header
@@ -226,8 +233,10 @@ spoke_teardown() {
     fi
 
     ensure_dive_root
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     print_header
@@ -259,8 +268,10 @@ spoke_teardown() {
     if [ "$notify_hub" = "--notify-hub" ] && [ -d "$spoke_dir" ]; then
         echo -e "${CYAN}Notifying Hub of teardown...${NC}"
         # Extract hub URL and spoke ID from spoke_config_get (SSOT)
-        local hub_url=$(spoke_config_get "$instance_code" "endpoints.hubUrl")
-        local spoke_id=$(spoke_config_get "$instance_code" "identity.spokeId")
+        local hub_url
+        hub_url=$(spoke_config_get "$instance_code" "endpoints.hubUrl")
+        local spoke_id
+        spoke_id=$(spoke_config_get "$instance_code" "identity.spokeId")
 
         if [ -n "$hub_url" ] && [ -n "$spoke_id" ]; then
             # Try to notify hub (best effort)
@@ -352,8 +363,10 @@ spoke_restart() {
     # Disable exit-on-error for this function to handle errors gracefully
     set +e
     
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     if [ ! -d "$spoke_dir" ]; then
@@ -368,7 +381,8 @@ spoke_restart() {
     case "$service" in
         all)
             # Restart all spoke containers
-            local containers=$(docker ps -a --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null)
+            local containers
+            containers=$(docker ps -a --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null)
             if [ -z "$containers" ]; then
                 log_error "No containers found for spoke: $code_lower"
                 set -e
@@ -424,8 +438,10 @@ spoke_restart() {
     sleep 5
 
     # Quick health check
-    local running_count=$(docker ps --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
-    local total_count=$(docker ps -a --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
+    local running_count
+    running_count=$(docker ps --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
+    local total_count
+    total_count=$(docker ps -a --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
 
     if [ "$running_count" -eq "$total_count" ]; then
         log_success "All services healthy ($running_count/$total_count running)"
@@ -457,8 +473,10 @@ spoke_reload_secrets() {
     # Disable exit-on-error for this function to handle errors gracefully
     set +e
     
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     if [ ! -d "$spoke_dir" ]; then
@@ -556,8 +574,10 @@ spoke_repair() {
     # Disable exit-on-error for this function to handle errors gracefully
     set +e
     
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     if [ ! -d "$spoke_dir" ]; then
@@ -572,8 +592,10 @@ spoke_repair() {
     local issues_fixed=0
 
     # Check 1: Services not running
-    local running_count=$(docker ps --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
-    local total_count=$(docker ps -a --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
+    local running_count
+    running_count=$(docker ps --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
+    local total_count
+    total_count=$(docker ps -a --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
 
     if [ "$running_count" -lt "$total_count" ]; then
         ((issues_found++)) || true
@@ -636,10 +658,12 @@ spoke_repair() {
     # Check 3: Phase state inconsistency (query orchestration DB)
     if type orch_db_check_connection &>/dev/null; then
         if orch_db_check_connection; then
-            local code_lower=$(lower "$instance_code")
+            local code_lower
+            code_lower=$(lower "$instance_code")
             # Check for failed steps in DB
             # CRITICAL FIX (2026-02-07): Use instance_code not instance_id (matches spoke-validation.sh fix)
-            local failed_steps=$(orch_db_exec "SELECT COUNT(*) FROM deployment_steps WHERE instance_code = '${code_lower}' AND status = 'FAILED';" 2>/dev/null | tr -d ' \n')
+            local failed_steps
+            failed_steps=$(orch_db_exec "SELECT COUNT(*) FROM deployment_steps WHERE instance_code = '${code_lower}' AND status = 'FAILED';" 2>/dev/null | tr -d ' \n')
             if [ "$failed_steps" -gt 0 ] 2>/dev/null; then
                 ((issues_found++)) || true
                 log_info "Issue detected: $failed_steps failed steps in database"

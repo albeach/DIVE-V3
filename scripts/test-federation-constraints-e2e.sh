@@ -247,3 +247,6 @@ else
   echo "  - Verify tokens are valid"
   exit 1
 fi
+
+# sc2034-anchor
+: "${SUPER_ADMIN_TOKEN:-}"

@@ -83,7 +83,7 @@ if [ -z "$TOKEN" ] || [ "$TOKEN" == "null" ]; then
     log_error "  URL: ${KEYCLOAK_URL}/realms/master/protocol/openid-connect/token"
     log_error "  User: ${ADMIN_USER}"
     log_error "  Password length: ${#ADMIN_PASSWORD}"
-    local err_desc
+    err_desc
     err_desc=$(echo "$AUTH_RESPONSE" | jq -r '.error_description // .error // empty' 2>/dev/null)
     [ -n "$err_desc" ] && log_error "  Keycloak error: $err_desc"
     exit 1
@@ -288,16 +288,21 @@ create_user() {
     fi
 
     # Check if user exists
-    local user_id=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users?username=${username}" \
+    local user_id
+    user_id=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users?username=${username}" \
         -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id // empty')
 
     if [ -n "$user_id" ]; then
         # Get user's credentials to determine AMR
-        local creds=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${user_id}/credentials" \
+        local creds
+        creds=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${user_id}/credentials" \
             -H "Authorization: Bearer $TOKEN")
-        local has_pwd=$(echo "$creds" | jq 'any(.[]; .type == "password")')
-        local has_otp=$(echo "$creds" | jq 'any(.[]; .type == "otp")')
-        local has_webauthn=$(echo "$creds" | jq 'any(.[]; .type == "webauthn" or .type == "webauthn-passwordless")')
+        local _has_pwd
+        _has_pwd=$(echo "$creds" | jq 'any(.[]; .type == "password")')
+        local has_otp
+        has_otp=$(echo "$creds" | jq 'any(.[]; .type == "otp")')
+        local has_webauthn
+        has_webauthn=$(echo "$creds" | jq 'any(.[]; .type == "webauthn" or .type == "webauthn-passwordless")')
 
         # Build AMR array based on credentials AND clearance requirements
         # TOP_SECRET requires AAL3 (WebAuthn), CONFIDENTIAL/SECRET require AAL2 (TOTP)
@@ -375,7 +380,8 @@ create_user() {
 
         # Create new user
         # FIX: uniqueID = username (no -001 suffix) for ACP-240 PII minimization
-        local http_code=$(curl -sk -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users" \
+        local http_code
+        http_code=$(curl -sk -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users" \
             -H "Authorization: Bearer $TOKEN" \
             -H "Content-Type: application/json" \
             -d "{
@@ -408,7 +414,8 @@ create_user() {
                 -H "Authorization: Bearer $TOKEN" | jq -r '.[0].id')
 
             # Assign dive-user role
-            local role_id=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/roles/dive-user" \
+            local role_id
+            role_id=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/roles/dive-user" \
                 -H "Authorization: Bearer $TOKEN" | jq -r '.id')
             if [ -n "$role_id" ] && [ "$role_id" != "null" ]; then
                 curl -sk -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${user_id}/role-mappings/realm" \
@@ -420,7 +427,8 @@ create_user() {
             # Assign admin roles if admin (hub gets hub_admin + dive-admin for backwards compat)
             if [ "$is_admin" == "true" ]; then
                 # Assign hub_admin role (new role for hub administrators)
-                local hub_admin_role_id=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/roles/hub_admin" \
+                local hub_admin_role_id
+                hub_admin_role_id=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/roles/hub_admin" \
                     -H "Authorization: Bearer $TOKEN" | jq -r '.id')
                 if [ -n "$hub_admin_role_id" ] && [ "$hub_admin_role_id" != "null" ]; then
                     curl -sk -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${user_id}/role-mappings/realm" \
@@ -430,7 +438,8 @@ create_user() {
                 fi
 
                 # Also assign dive-admin for backwards compatibility
-                local admin_role_id=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/roles/dive-admin" \
+                local admin_role_id
+                admin_role_id=$(curl -sk "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/roles/dive-admin" \
                     -H "Authorization: Bearer $TOKEN" | jq -r '.id')
                 if [ -n "$admin_role_id" ] && [ "$admin_role_id" != "null" ]; then
                     curl -sk -X POST "${KEYCLOAK_URL}/admin/realms/${REALM_NAME}/users/${user_id}/role-mappings/realm" \
@@ -463,7 +472,8 @@ OCEAN_NOUNS=("Whale" "Dolphin" "Orca" "Marlin" "Shark" "Ray" "Reef" "Current" "W
 # Generate deterministic pseudonym from username
 generate_pseudonym() {
     local username="$1"
-    local hash=$(echo -n "$username" | md5sum | cut -c1-8)
+    local hash
+    hash=$(echo -n "$username" | md5sum | cut -c1-8)
     local adj_idx=$((16#${hash:0:4} % ${#OCEAN_ADJECTIVES[@]}))
     local noun_idx=$((16#${hash:4:4} % ${#OCEAN_NOUNS[@]}))
     echo "${OCEAN_ADJECTIVES[$adj_idx]}:${OCEAN_NOUNS[$noun_idx]}"
@@ -538,3 +548,6 @@ echo ""
 echo "  Note: Users must configure TOTP/WebAuthn to access classified resources."
 echo "        AMR claim is populated by Keycloak based on actual auth methods used."
 echo ""
+
+# sc2034-anchor
+: "${PSEUDO_ADMIN:-}"

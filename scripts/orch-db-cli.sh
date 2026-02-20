@@ -466,7 +466,8 @@ cmd_cleanup() {
     fi
 
     # Archive state files
-    local archive_dir="${DIVE_ROOT}/.dive-state.archive.$(date +%Y%m%d_%H%M%S)"
+    local archive_dir
+    archive_dir="${DIVE_ROOT}/.dive-state.archive.$(date +%Y%m%d_%H%M%S)"
     mkdir -p "$archive_dir"
 
     log_info "Archiving state files to: $archive_dir"

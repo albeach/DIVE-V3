@@ -30,8 +30,10 @@
 ##
 spoke_verify_federation() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Verifying federation configuration..."
 
@@ -174,8 +176,10 @@ _spoke_verify_opal_sync_check() {
     local sync_start_time="$4"
     local stabilization_time="${5:-0}"  # Optional parameter for error reporting
 
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local verification_passed=false
 
     # CRITICAL FIX (2026-02-07): Always use localhost for API calls from host
@@ -286,7 +290,7 @@ _spoke_verify_opal_sync_check() {
     else
         # OPAL sync FAILED - return error code with timing info
         local sync_duration=$(($(date +%s) - sync_start_time))
-        local total_check_time=$((max_retries * retry_delay))
+        local _total_check_time=$((max_retries * retry_delay))
 
         log_error "❌ OPAL sync verification failed (${sync_duration}s elapsed, ${max_retries} attempts)"
 
@@ -316,7 +320,8 @@ spoke_verify_opal_sync() {
     local instance_code="$1"
 
     # Track timing for performance analysis
-    local sync_start_time=$(date +%s)
+    local sync_start_time
+    sync_start_time=$(date +%s)
 
     log_step "Verifying OPAL data sync to Hub OPA..."
 
@@ -375,7 +380,8 @@ spoke_verify_opal_sync() {
 ##
 _spoke_verify_federation_oidc_endpoints() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     local spoke_realm="dive-v3-broker-${code_lower}"
     local hub_realm="dive-v3-broker-usa"
@@ -408,7 +414,8 @@ _spoke_verify_federation_oidc_endpoints() {
 ##
 _spoke_verify_federation_fallback() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     local kc_container="dive-spoke-${code_lower}-keycloak"
     local realm_name="dive-v3-broker-${code_lower}"
@@ -448,7 +455,8 @@ _spoke_verify_federation_fallback() {
 ##
 spoke_verify_api_health() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Verifying API health..."
 

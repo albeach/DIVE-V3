@@ -278,7 +278,7 @@ assert_eq "FORCE=false|SKIP=|ONLY=" "$result" "parse: no --force-build → DIVE_
 if [ "${#BUILD_CACHE_SERVICES[@]}" -gt 0 ]; then
 
     # Test 19: All expected services defined
-    local found_backend=false found_frontend=false found_kas=false found_keycloak=false found_caddy=false
+    found_backend=false found_frontend=false found_kas=false found_keycloak=false found_caddy=false
     for entry in "${BUILD_CACHE_SERVICES[@]}"; do
         case "${entry%%:*}" in
             backend) found_backend=true ;;

@@ -67,7 +67,7 @@ for i in $(seq 1 $TOTAL_CHECKS); do
             --quiet \
             --eval "db.serverStatus().connections.totalCreated" 2>/dev/null || echo "0")
         
-        MONGO_CONNECTIONS+=($mongo_connections)
+        MONGO_CONNECTIONS+=("$mongo_connections")
         
         echo "  MongoDB Connections:"
         echo "    Current: $mongo_connections (should be ~20-30 with singleton)"
@@ -95,13 +95,13 @@ for i in $(seq 1 $TOTAL_CHECKS); do
     # Check 2: Hub Memory Usage
     if docker ps --format '{{.Names}}' | grep -q 'hub-keycloak'; then
         hub_kc_mem=$(docker stats --no-stream --format "{{.MemUsage}}" dive-hub-keycloak | awk '{print $1}')
-        HUB_KEYCLOAK_MEMORY+=($hub_kc_mem)
+        HUB_KEYCLOAK_MEMORY+=("$hub_kc_mem")
         echo "  Hub Keycloak Memory: $hub_kc_mem (limit: 1.5GB)"
     fi
     
     if docker ps --format '{{.Names}}' | grep -q 'hub-mongodb'; then
         hub_mongo_mem=$(docker stats --no-stream --format "{{.MemUsage}}" dive-hub-mongodb | awk '{print $1}')
-        HUB_MONGODB_MEMORY+=($hub_mongo_mem)
+        HUB_MONGODB_MEMORY+=("$hub_mongo_mem")
         echo "  Hub MongoDB Memory: $hub_mongo_mem (limit: 2GB)"
     fi
     

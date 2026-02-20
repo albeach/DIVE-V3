@@ -47,7 +47,8 @@ get_master_token() {
 request_opal_jwt() {
     local master_token="$1"
 
-    local response=$(curl -sk --max-time 10 \
+    local response
+    response=$(curl -sk --max-time 10 \
         -X POST "${OPAL_SERVER_URL}/token" \
         -H "Authorization: Bearer ${master_token}" \
         -H "Content-Type: application/json" \
@@ -58,8 +59,10 @@ request_opal_jwt() {
         return 1
     fi
 
-    local token=$(echo "$response" | jq -r '.token // empty' 2>/dev/null)
-    local expires=$(echo "$response" | jq -r '.details.expired // empty' 2>/dev/null)
+    local token
+    token=$(echo "$response" | jq -r '.token // empty' 2>/dev/null)
+    local _expires
+    _expires=$(echo "$response" | jq -r '.details.expired // empty' 2>/dev/null)
 
     if [ -z "$token" ]; then
         log_error "Failed to get token: $(echo "$response" | jq -r '.error // .detail // "Unknown error"')"
@@ -80,7 +83,8 @@ get_opal_public_key() {
     fi
 
     # Extract the public key from the running OPAL server
-    local public_key=$(docker exec "$container_name" cat /opal-keys/opal_private_key.pem.pub 2>/dev/null)
+    local public_key
+    public_key=$(docker exec "$container_name" cat /opal-keys/opal_private_key.pem.pub 2>/dev/null)
     if [ -z "$public_key" ]; then
         log_warn "Could not extract public key from OPAL server container"
         return 1
@@ -97,7 +101,8 @@ get_opal_public_key() {
     else
         # Convert PEM to SSH format
         log_verbose "Converting PEM key to SSH format..."
-        local temp_pem=$(mktemp)
+        local temp_pem
+        temp_pem=$(mktemp)
         echo "$public_key" > "$temp_pem"
 
         ssh_key=$(ssh-keygen -i -m PKCS8 -f "$temp_pem" 2>/dev/null)
@@ -127,14 +132,16 @@ provision_spoke() {
     log_info "Provisioning OPAL token for ${spoke_code^^}..."
 
     # Get master token
-    local master_token=$(get_master_token)
+    local master_token
+    master_token=$(get_master_token)
     if [ -z "$master_token" ]; then
         log_error "Could not get master token"
         return 1
     fi
 
     # Request JWT from OPAL server
-    local jwt=$(request_opal_jwt "$master_token")
+    local jwt
+    jwt=$(request_opal_jwt "$master_token")
     if [ -z "$jwt" ]; then
         return 1
     fi
@@ -194,7 +201,8 @@ verify_spoke() {
     fi
 
     # Check logs for connection status
-    local logs=$(docker logs "$container" 2>&1 | tail -20)
+    local logs
+    logs=$(docker logs "$container" 2>&1 | tail -20)
 
     if echo "$logs" | grep -q "Connected to PubSub server"; then
         log_success "${spoke_code^^}: OPAL client connected ✓"

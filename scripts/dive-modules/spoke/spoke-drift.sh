@@ -23,8 +23,10 @@ fi
 # =============================================================================
 spoke_check_drift() {
     local code="${1:?Instance code required}"
-    local code_lower=$(lower "$code")
-    local code_upper=$(upper "$code")
+    local code_lower
+    code_lower=$(lower "$code")
+    local code_upper
+    code_upper=$(upper "$code")
 
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local spoke_compose="${spoke_dir}/docker-compose.yml"
@@ -41,16 +43,20 @@ spoke_check_drift() {
     fi
 
     # Extract template version from template file
-    local template_version=$(grep "^# Template Version:" "$template_file" | awk '{print $4}')
+    local template_version
+    template_version=$(grep "^# Template Version:" "$template_file" | awk '{print $4}')
 
     # Extract template version from spoke file
-    local spoke_version=$(grep "^# Template Version:" "$spoke_compose" | awk '{print $4}')
+    local spoke_version
+    spoke_version=$(grep "^# Template Version:" "$spoke_compose" | awk '{print $4}')
 
     # Extract template hash from template file
-    local template_hash=$(md5sum "$template_file" | awk '{print $1}')
+    local template_hash
+    template_hash=$(md5sum "$template_file" | awk '{print $1}')
 
     # Extract template hash from spoke file (strip "# Template Hash: " prefix)
-    local spoke_hash=$(grep "^# Template Hash:" "$spoke_compose" | sed 's/^# Template Hash: //')
+    local spoke_hash
+    spoke_hash=$(grep "^# Template Hash:" "$spoke_compose" | sed 's/^# Template Hash: //')
 
     echo ""
     log_info "Drift Check: ${code_upper}"
@@ -103,7 +109,8 @@ spoke_check_all_drift() {
     if [ -d "${DIVE_ROOT}/instances" ]; then
         for spoke_dir in "${DIVE_ROOT}/instances"/*; do
             if [ -d "$spoke_dir" ] && [ -f "$spoke_dir/docker-compose.yml" ]; then
-                local code=$(basename "$spoke_dir" | tr '[:lower:]' '[:upper:]')
+                local code
+                code=$(basename "$spoke_dir" | tr '[:lower:]' '[:upper:]')
 
                 spoke_check_drift "$code" >/dev/null 2>&1
                 local exit_code=$?
@@ -165,8 +172,10 @@ spoke_update_compose() {
         dry_run=true
     fi
 
-    local code_lower=$(lower "$code")
-    local code_upper=$(upper "$code")
+    local code_lower
+    code_lower=$(lower "$code")
+    local code_upper
+    code_upper=$(upper "$code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     if [ ! -d "$spoke_dir" ]; then
@@ -179,7 +188,8 @@ spoke_update_compose() {
     echo ""
 
     # Backup existing file
-    local backup_file="${spoke_dir}/docker-compose.yml.backup-$(date +%Y%m%d-%H%M%S)"
+    local backup_file
+    backup_file="${spoke_dir}/docker-compose.yml.backup-$(date +%Y%m%d-%H%M%S)"
     cp "${spoke_dir}/docker-compose.yml" "$backup_file"
     log_success "✅ Backup created: $(basename "$backup_file")"
 
@@ -189,8 +199,10 @@ spoke_update_compose() {
         spoke_compose_generate "$code_upper" "$spoke_dir"
     else
         # Fallback to legacy generator
-        local instance_name=$(grep "^# DIVE V3 - ${code_upper} Instance" "${spoke_dir}/docker-compose.yml" | sed "s/.*(\(.*\))/\1/")
-        local spoke_id=$(grep "^# Spoke ID:" "${spoke_dir}/docker-compose.yml" | awk '{print $4}')
+        local instance_name
+        instance_name=$(grep "^# DIVE V3 - ${code_upper} Instance" "${spoke_dir}/docker-compose.yml" | sed "s/.*(\(.*\))/\1/")
+        local spoke_id
+        spoke_id=$(grep "^# Spoke ID:" "${spoke_dir}/docker-compose.yml" | awk '{print $4}')
 
         # Get port assignments (preserve existing)
         eval "$(get_instance_ports "$code_upper")"

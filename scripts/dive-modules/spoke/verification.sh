@@ -34,8 +34,10 @@ spoke_verify() {
     fi
 
     ensure_dive_root
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     print_header
@@ -178,9 +180,11 @@ spoke_verify() {
     # Check 7: OPAL Client Status (unique to spoke verify)
     # ------------------------------------------------------------------
     printf "  %-35s" "7. OPAL Client:"
-    local opal_container=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E "opal-client.*${code_lower}|${code_lower}.*opal-client" | head -1)
+    local opal_container
+    opal_container=$(docker ps --format '{{.Names}}' 2>/dev/null | grep -E "opal-client.*${code_lower}|${code_lower}.*opal-client" | head -1)
     if [ -n "$opal_container" ]; then
-        local opal_logs=$(docker logs "$opal_container" 2>&1 | tail -50)
+        local opal_logs
+        opal_logs=$(docker logs "$opal_container" 2>&1 | tail -50)
         if echo "$opal_logs" | grep -q "Connected to PubSub server"; then
             echo -e "${GREEN}PASS Connected${NC}"
             checks_passed=$((checks_passed + 1))
@@ -215,7 +219,8 @@ spoke_verify() {
     # Check 9: Policy Bundle (unique to spoke verify)
     # ------------------------------------------------------------------
     printf "  %-35s" "9. Policy Bundle:"
-    local policy_count=$(curl -skf "https://localhost:${opa_port}/v1/policies" --max-time 5 2>/dev/null | grep -o '"id"' | wc -l | tr -d ' ')
+    local policy_count
+    policy_count=$(curl -skf "https://localhost:${opa_port}/v1/policies" --max-time 5 2>/dev/null | grep -o '"id"' | wc -l | tr -d ' ')
     if [ "$policy_count" -gt 0 ]; then
         echo -e "${GREEN}PASS Loaded ($policy_count policies)${NC}"
         checks_passed=$((checks_passed + 1))
@@ -234,9 +239,11 @@ spoke_verify() {
             token_payload=$(echo "$spoke_token" | cut -d. -f2 | base64 -d 2>/dev/null || echo "")
         fi
         if [ -n "$token_payload" ]; then
-            local exp=$(echo "$token_payload" | grep -o '"exp"[[:space:]]*:[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
+            local exp
+            exp=$(echo "$token_payload" | grep -o '"exp"[[:space:]]*:[[:space:]]*[0-9]*' | cut -d: -f2 | tr -d ' ')
             if [ -n "$exp" ]; then
-                local now=$(date +%s)
+                local now
+                now=$(date +%s)
                 if [ "$exp" -gt "$now" ]; then
                     local days_left=$(( (exp - now) / 86400 ))
                     echo -e "${GREEN}PASS Valid (${days_left} days left)${NC}"
@@ -263,7 +270,8 @@ spoke_verify() {
     # ------------------------------------------------------------------
     printf "  %-35s" "11. Hub Heartbeat:"
     if [ -n "$spoke_token" ] && [ -n "$spoke_id" ]; then
-        local heartbeat_response=$(curl -kfs --max-time 5 \
+        local heartbeat_response
+        heartbeat_response=$(curl -kfs --max-time 5 \
             -X POST \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${spoke_token}" \
@@ -290,9 +298,12 @@ spoke_verify() {
     local cert_file="$cert_dir/certificate.pem"
 
     if [ -f "$cert_file" ]; then
-        local expiry=$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | cut -d= -f2)
-        local expiry_epoch=$(date -d "$expiry" +%s 2>/dev/null || date -j -f "%b %d %H:%M:%S %Y %Z" "$expiry" +%s 2>/dev/null || echo 0)
-        local now_epoch=$(date +%s)
+        local expiry
+        expiry=$(openssl x509 -enddate -noout -in "$cert_file" 2>/dev/null | cut -d= -f2)
+        local expiry_epoch
+        expiry_epoch=$(date -d "$expiry" +%s 2>/dev/null || date -j -f "%b %d %H:%M:%S %Y %Z" "$expiry" +%s 2>/dev/null || echo 0)
+        local now_epoch
+        now_epoch=$(date +%s)
         local days_left=$(( (expiry_epoch - now_epoch) / 86400 ))
 
         if [ $days_left -gt 30 ]; then

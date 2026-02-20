@@ -117,6 +117,7 @@ profile_load() {
     else
         # Fallback: source directly
         set -a
+        # shellcheck source=/dev/null
         source "$profile_file"
         set +a
     fi

@@ -22,7 +22,7 @@ export DIVE_DEPLOY_NUKE_LOADED=1
 ##
 _nuke_parse_arguments() {
     confirm_flag=false
-    force_flag=false
+    _force_flag=false
     keep_images=false
     reset_spokes=false
     deep_clean=false
@@ -37,7 +37,7 @@ _nuke_parse_arguments() {
                 shift
                 ;;
             --force|-f)
-                force_flag=true
+                _force_flag=true
                 confirm_flag=true
                 shift
                 ;;
@@ -152,7 +152,8 @@ _nuke_discover_resources() {
             scope_description="Hub resources only"
             ;;
         spoke)
-            local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
+            local instance_lower
+            instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
             container_patterns="dive-spoke-${instance_lower}-"
             volume_patterns="^dive-spoke-${instance_lower}_"
             network_patterns="^dive-spoke-${instance_lower}_"
@@ -222,7 +223,8 @@ _nuke_discover_resources() {
     dive_volumes=""
     volume_count=0
     if [ -n "$volume_patterns" ] || [ "$target_type" = "volumes" ] || [ "$target_type" = "all" ] || [ "$target_type" = "orphans" ]; then
-        local all_volumes=$(docker volume ls -q 2>/dev/null)
+        local all_volumes
+        all_volumes=$(docker volume ls -q 2>/dev/null)
         for v in $all_volumes; do
             if [ "$target_type" = "orphans" ]; then
                 # Check if dangling
@@ -240,7 +242,8 @@ _nuke_discover_resources() {
     dive_networks=""
     network_count=0
     if [ -n "$network_patterns" ] || [ "$target_type" = "networks" ] || [ "$target_type" = "all" ]; then
-        local all_networks=$(docker network ls --format '{{.Name}}' 2>/dev/null)
+        local all_networks
+        all_networks=$(docker network ls --format '{{.Name}}' 2>/dev/null)
         for n in $all_networks; do
             # Skip default networks
             if [[ "$n" == "bridge" || "$n" == "host" || "$n" == "none" || "$n" == "ingress" || "$n" == "docker_gwbridge" ]]; then
@@ -368,7 +371,8 @@ _nuke_stop_compose_projects() {
         fi
     elif [ "$target_type" = "spoke" ]; then
         # Stop only specific spoke
-        local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
+        local instance_lower
+        instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
         local instance_dir="instances/${instance_lower}"
         if [ -f "${instance_dir}/docker-compose.yml" ]; then
             log_verbose "  Stopping spoke: ${target_instance^^}"
@@ -381,7 +385,8 @@ _nuke_stop_compose_projects() {
         # Main compose files
         for compose_file in docker-compose.yml docker-compose.hub.yml docker-compose.pilot.yml docker-compose.prod.yml; do
             if [ -f "$compose_file" ]; then
-                local project_name=$(grep -m 1 '^name:' "$compose_file" 2>/dev/null | sed 's/name: *//' | tr -d ' "'"'"'')
+                local project_name
+                project_name=$(grep -m 1 '^name:' "$compose_file" 2>/dev/null | sed 's/name: *//' | tr -d ' "'"'"'')
                 if [ -n "$project_name" ]; then
                     log_verbose "  Stopping project: $project_name (all profiles)"
                     if ! ${DOCKER_CMD:-docker} compose -f "$compose_file" -p "$project_name" \
@@ -403,8 +408,10 @@ _nuke_stop_compose_projects() {
         # CRITICAL FIX: Use explicit project name to ensure all containers are stopped
         for instance_dir in instances/*/; do
             if [ -f "${instance_dir}docker-compose.yml" ]; then
-                local instance_code=$(basename "$instance_dir")
-                local instance_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
+                local instance_code
+                instance_code=$(basename "$instance_dir")
+                local instance_lower
+                instance_lower=$(echo "$instance_code" | tr '[:upper:]' '[:lower:]')
                 log_verbose "  Stopping spoke: ${instance_code^^} (project: dive-spoke-${instance_lower})"
                 # Use explicit project name to match container labels
                 if ! (cd "$instance_dir" && ${DOCKER_CMD:-docker} compose -p "dive-spoke-${instance_lower}" down -v --remove-orphans --timeout 5 2>&1); then
@@ -446,7 +453,8 @@ _nuke_remove_containers() {
             done
             ;;
         spoke)
-            local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
+            local instance_lower
+            instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
             for c in $(docker ps -aq --filter "label=com.docker.compose.project=dive-spoke-${instance_lower}" 2>/dev/null); do
                 if ${DOCKER_CMD:-docker} rm -f "$c" 2>/dev/null; then
                     removed_containers=$((removed_containers + 1))
@@ -462,7 +470,8 @@ _nuke_remove_containers() {
                 done
             done
             for c in $(docker ps -aq --filter "label=com.docker.compose.project" 2>/dev/null); do
-                local project_label=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$c" 2>/dev/null)
+                local project_label
+                project_label=$(docker inspect --format '{{index .Config.Labels "com.docker.compose.project"}}' "$c" 2>/dev/null)
                 if echo "$project_label" | grep -qE "^dive-spoke-|^dive-hub$"; then
                     if ${DOCKER_CMD:-docker} rm -f "$c" 2>/dev/null; then
                         removed_containers=$((removed_containers + 1))
@@ -477,8 +486,10 @@ _nuke_remove_containers() {
     if [ "$target_type" = "spoke" ] || [ "$target_type" = "all" ]; then
         if [ "$target_type" = "spoke" ]; then
             # Spoke-specific: Determine ports from get_instance_ports (SSOT)
-            local instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
-            local instance_upper=$(echo "$target_instance" | tr '[:lower:]' '[:upper:]')
+            local instance_lower
+            instance_lower=$(echo "$target_instance" | tr '[:upper:]' '[:lower:]')
+            local instance_upper
+            instance_upper=$(echo "$target_instance" | tr '[:lower:]' '[:upper:]')
 
             local spoke_ports=()
             eval "$(get_instance_ports "$instance_upper")"
@@ -491,7 +502,8 @@ _nuke_remove_containers() {
                 log_verbose "  Force-stopping containers using spoke ${target_instance^^} ports: ${spoke_ports[*]}..."
                 for port in "${spoke_ports[@]}"; do
                     for c in $(docker ps --format '{{.ID}}\t{{.Names}}\t{{.Ports}}' 2>/dev/null | grep -E ":$port->|:$port/" | awk '{print $1}'); do
-                        local container_name=$(docker inspect --format '{{.Name}}' "$c" 2>/dev/null | sed 's/^\///')
+                        local container_name
+                        container_name=$(docker inspect --format '{{.Name}}' "$c" 2>/dev/null | sed 's/^\///')
                         if echo "$container_name" | grep -qE "dive-spoke-${instance_lower}"; then
                             log_verbose "    Force-stopping container on port $port: $container_name"
                             ${DOCKER_CMD:-docker} stop "$c" 2>/dev/null || true
@@ -580,7 +592,7 @@ cmd_nuke() {
 
     # Load naming utilities if available
     if [ -f "${DIVE_ROOT}/scripts/dive-modules/utilities/naming.sh" ]; then
-        # shellcheck source=utilities/naming.sh disable=SC1091
+        # shellcheck source=./utilities/naming.sh
         source "${DIVE_ROOT}/scripts/dive-modules/utilities/naming.sh"
     fi
 
@@ -615,15 +627,18 @@ cmd_nuke() {
     _nuke_stop_compose_projects
 
     log_step "Phase 2/7: Force-removing DIVE containers (${scope_description})..."
-    local removed_containers=$(_nuke_remove_containers)
+    local removed_containers
+    removed_containers=$(_nuke_remove_containers)
     log_verbose "  Removed $removed_containers containers total"
 
     log_step "Phase 3/7: Force-removing DIVE volumes (${scope_description})..."
-    local removed_volumes=$(_nuke_remove_volumes)
+    local removed_volumes
+    removed_volumes=$(_nuke_remove_volumes)
     log_verbose "  Removed $removed_volumes volumes"
 
     log_step "Phase 4/7: Force-removing DIVE networks (${scope_description})..."
-    local removed_networks=$(_nuke_remove_networks)
+    local removed_networks
+    removed_networks=$(_nuke_remove_networks)
     log_verbose "  Removed $removed_networks networks"
 
     if [ "$keep_images" = false ]; then

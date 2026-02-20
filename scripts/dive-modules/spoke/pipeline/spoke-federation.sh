@@ -37,6 +37,7 @@ export SPOKE_FEDERATION_LOADED=1
 if [ -z "${DIVE_COMMON_LOADED:-}" ]; then
     _common_path="${BASH_SOURCE[0]%/*}/../../common.sh"
     if [ -f "$_common_path" ]; then
+        # shellcheck source=../../common.sh
         source "$_common_path"
     elif [ -f "${DIVE_ROOT}/scripts/dive-modules/common.sh" ]; then
         source "${DIVE_ROOT}/scripts/dive-modules/common.sh"
@@ -52,6 +53,7 @@ fi
 if [ -z "${DIVE_FEDERATION_SETUP_LOADED:-}" ]; then
     _fed_setup_path="${BASH_SOURCE[0]%/*}/../../federation/setup.sh"
     if [ -f "$_fed_setup_path" ]; then
+        # shellcheck source=../../federation/setup.sh
         source "$_fed_setup_path"
     elif [ -f "${DIVE_ROOT}/scripts/dive-modules/federation/setup.sh" ]; then
         source "${DIVE_ROOT}/scripts/dive-modules/federation/setup.sh"
@@ -70,6 +72,7 @@ if [ -z "${FEDERATION_STATE_DB_LOADED:-}" ]; then
     # Load federation health (includes fed_db_* functions)
     _fed_health_path="${BASH_SOURCE[0]%/*}/../../federation/health.sh"
     if [ -f "$_fed_health_path" ]; then
+        # shellcheck source=../../federation/health.sh
         source "$_fed_health_path"
     elif [ -f "${DIVE_ROOT}/scripts/dive-modules/federation/health.sh" ]; then
         source "${DIVE_ROOT}/scripts/dive-modules/federation/health.sh"
@@ -112,8 +115,10 @@ readonly FED_STATUS_ERROR="error"
 ##
 spoke_federation_setup() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Setting up federation for $code_upper"
 
@@ -263,7 +268,8 @@ spoke_federation_setup() {
 
         # Parse JSON properly instead of fragile grep pattern
         # spoke_federation_verify outputs "bidirectional": true (with space), not "bidirectional":true
-        local is_bidirectional=$(echo "$verification_result" | jq -r '.bidirectional // false' 2>/dev/null)
+        local is_bidirectional
+        is_bidirectional=$(echo "$verification_result" | jq -r '.bidirectional // false' 2>/dev/null)
 
         if [ "$is_bidirectional" = "true" ]; then
             # Bidirectional flag is set - IdPs are configured correctly
@@ -336,7 +342,8 @@ spoke_federation_setup() {
 ##
 _spoke_federation_clear_keycloak_cache() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # Clear spoke Keycloak cache
     local spoke_kc_container="dive-spoke-${code_lower}-keycloak"
@@ -400,7 +407,8 @@ _spoke_federation_clear_keycloak_cache() {
 ##
 _spoke_federation_verify_oidc_endpoints() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     local spoke_realm="dive-v3-broker-${code_lower}"
     local hub_realm="${HUB_REALM:-dive-v3-broker-usa}"
@@ -433,7 +441,8 @@ _spoke_federation_verify_oidc_endpoints() {
         
         if [ $spoke_curl_exit -eq 0 ] && echo "$spoke_curl_result" | grep -q '"issuer"'; then
             spoke_oidc_ok=true
-            local spoke_issuer=$(echo "$spoke_curl_result" | grep -o '"issuer":"[^"]*"' | cut -d'"' -f4)
+            local spoke_issuer
+            spoke_issuer=$(echo "$spoke_curl_result" | grep -o '"issuer":"[^"]*"' | cut -d'"' -f4)
             log_verbose "✓ Spoke OIDC discovery: ${spoke_realm} (port ${spoke_kc_port}, issuer: ${spoke_issuer})"
         else
             log_verbose "✗ Spoke OIDC discovery not ready (exit: $spoke_curl_exit, length: ${#spoke_curl_result})"
@@ -450,7 +459,8 @@ _spoke_federation_verify_oidc_endpoints() {
         
         if [ $hub_curl_exit -eq 0 ] && echo "$hub_curl_result" | grep -q '"issuer"'; then
             hub_oidc_ok=true
-            local hub_issuer=$(echo "$hub_curl_result" | grep -o '"issuer":"[^"]*"' | cut -d'"' -f4)
+            local hub_issuer
+            hub_issuer=$(echo "$hub_curl_result" | grep -o '"issuer":"[^"]*"' | cut -d'"' -f4)
             log_verbose "✓ Hub OIDC discovery: ${hub_realm} (issuer: ${hub_issuer})"
         else
             log_verbose "✗ Hub OIDC discovery not ready (exit: $hub_curl_exit, length: ${#hub_curl_result})"
@@ -495,8 +505,10 @@ spoke_federation_configure_upstream_idp() {
     local instance_code="$1"
     local upstream_code="${2:-usa}"
 
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_verbose "Configuring ${upstream_code}-idp in spoke Keycloak..."
 
@@ -705,7 +717,8 @@ spoke_federation_configure_idp_mappers() {
     local instance_code="$1"
     local idp_alias="$2"
 
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local kc_container="dive-spoke-${code_lower}-keycloak"
     local realm_name="dive-v3-broker-${code_lower}"
 
@@ -743,7 +756,8 @@ spoke_federation_configure_idp_mappers() {
         fi
 
         # Create mapper
-        local mapper_json=$(cat <<EOF
+        local mapper_json
+        mapper_json=$(cat <<EOF
 {
   "name": "${mapper_name}",
   "identityProviderMapper": "oidc-user-attribute-idp-mapper",
@@ -780,3 +794,6 @@ EOF
 
 # Load extended federation functions
 source "$(dirname "${BASH_SOURCE[0]}")/spoke-federation-extended.sh"
+
+# sc2034-anchor
+: "${FED_STATUS_ACTIVE:-}" "${FED_STATUS_ERROR:-}" "${FED_STATUS_PENDING:-}" "${FED_STATUS_UNREGISTERED:-}"

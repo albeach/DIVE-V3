@@ -34,7 +34,8 @@ log_header() { echo -e "\n${CYAN}═══ $1 ═══${NC}"; }
 # Get admin token for a Keycloak container
 get_token() {
     local container=$1
-    local pass=$(docker exec $container printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null || docker exec $container printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null)
+    local pass
+    pass=$(docker exec $container printenv KC_BOOTSTRAP_ADMIN_PASSWORD 2>/dev/null || docker exec $container printenv KEYCLOAK_ADMIN_PASSWORD 2>/dev/null)
     docker exec $container curl -sf -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
         -d "grant_type=password" -d "username=admin" -d "password=${pass}" -d "client_id=admin-cli" 2>/dev/null | \
         grep -o '"access_token":"[^"]*' | cut -d'"' -f4
@@ -58,14 +59,16 @@ verify_hub() {
         return 1
     fi
 
-    local token=$(get_token $container)
+    local token
+    token=$(get_token $container)
     if [ -z "$token" ]; then
         log_fail "Cannot authenticate to Hub Keycloak"
         return 1
     fi
 
     # Get broker client UUID
-    local client_uuid=$(docker exec $container curl -sf "http://localhost:8080/admin/realms/dive-v3-broker-usa/clients?clientId=dive-v3-broker-usa" \
+    local client_uuid
+    client_uuid=$(docker exec $container curl -sf "http://localhost:8080/admin/realms/dive-v3-broker-usa/clients?clientId=dive-v3-broker-usa" \
         -H "Authorization: Bearer $token" | jq -r '.[0].id // empty')
 
     if [ -z "$client_uuid" ]; then
@@ -76,13 +79,16 @@ verify_hub() {
     log_pass "dive-v3-broker-usa client exists"
 
     # Check mappers
-    local mappers=$(docker exec $container curl -sf "http://localhost:8080/admin/realms/dive-v3-broker-usa/clients/${client_uuid}/protocol-mappers/models" \
+    local mappers
+    mappers=$(docker exec $container curl -sf "http://localhost:8080/admin/realms/dive-v3-broker-usa/clients/${client_uuid}/protocol-mappers/models" \
         -H "Authorization: Bearer $token")
 
     # Check for AMR fallback mapper with correct type
-    local amr_fallback=$(echo "$mappers" | jq -r '.[] | select(.name == "amr-user-attribute-fallback")')
+    local amr_fallback
+    amr_fallback=$(echo "$mappers" | jq -r '.[] | select(.name == "amr-user-attribute-fallback")')
     if [ -n "$amr_fallback" ]; then
-        local json_type=$(echo "$amr_fallback" | jq -r '.config["jsonType.label"] // "not set"')
+        local json_type
+        json_type=$(echo "$amr_fallback" | jq -r '.config["jsonType.label"] // "not set"')
         if [ "$json_type" == "String" ]; then
             log_pass "amr-user-attribute-fallback mapper: jsonType=String (correct)"
         else
@@ -93,9 +99,11 @@ verify_hub() {
     fi
 
     # Check for ACR fallback mapper with correct type
-    local acr_fallback=$(echo "$mappers" | jq -r '.[] | select(.name == "acr-user-attribute-fallback")')
+    local acr_fallback
+    acr_fallback=$(echo "$mappers" | jq -r '.[] | select(.name == "acr-user-attribute-fallback")')
     if [ -n "$acr_fallback" ]; then
-        local json_type=$(echo "$acr_fallback" | jq -r '.config["jsonType.label"] // "not set"')
+        local json_type
+        json_type=$(echo "$acr_fallback" | jq -r '.config["jsonType.label"] // "not set"')
         if [ "$json_type" == "String" ]; then
             log_pass "acr-user-attribute-fallback mapper: jsonType=String (correct)"
         else
@@ -106,7 +114,8 @@ verify_hub() {
     fi
 
     # Check for native session mappers
-    local native_amr=$(echo "$mappers" | jq -r '.[] | select(.protocolMapper == "oidc-amr-mapper") | .name')
+    local native_amr
+    native_amr=$(echo "$mappers" | jq -r '.[] | select(.protocolMapper == "oidc-amr-mapper") | .name')
     if [ -n "$native_amr" ]; then
         log_pass "Native oidc-amr-mapper present"
     else
@@ -120,8 +129,10 @@ verify_hub() {
 
 verify_spoke() {
     local code=$1
-    local code_lower=$(echo "$code" | tr '[:upper:]' '[:lower:]')
-    local code_upper=$(echo "$code" | tr '[:lower:]' '[:upper:]')
+    local code_lower
+    code_lower=$(echo "$code" | tr '[:upper:]' '[:lower:]')
+    local code_upper
+    code_upper=$(echo "$code" | tr '[:lower:]' '[:upper:]')
 
     log_header "SPOKE ($code_upper) Verification"
 
@@ -131,14 +142,16 @@ verify_spoke() {
         return 0
     fi
 
-    local token=$(get_token $container)
+    local token
+    token=$(get_token $container)
     if [ -z "$token" ]; then
         log_fail "Cannot authenticate to $code_upper Keycloak"
         return 1
     fi
 
     # Get dive-v3-broker-usa client UUID (the client Hub uses to federate TO this spoke)
-    local usa_client=$(docker exec $container curl -sf "http://localhost:8080/admin/realms/dive-v3-broker-${code_lower}/clients?clientId=dive-v3-broker-usa" \
+    local usa_client
+    usa_client=$(docker exec $container curl -sf "http://localhost:8080/admin/realms/dive-v3-broker-${code_lower}/clients?clientId=dive-v3-broker-usa" \
         -H "Authorization: Bearer $token" | jq -r '.[0].id // empty')
 
     if [ -z "$usa_client" ]; then
@@ -149,14 +162,18 @@ verify_spoke() {
     log_pass "dive-v3-broker-usa client exists"
 
     # Check mappers
-    local mappers=$(docker exec $container curl -sf "http://localhost:8080/admin/realms/dive-v3-broker-${code_lower}/clients/${usa_client}/protocol-mappers/models" \
+    local mappers
+    mappers=$(docker exec $container curl -sf "http://localhost:8080/admin/realms/dive-v3-broker-${code_lower}/clients/${usa_client}/protocol-mappers/models" \
         -H "Authorization: Bearer $token")
 
     # Check for AMR user-attribute mapper with correct type
-    local amr_mapper=$(echo "$mappers" | jq -r '.[] | select(.protocolMapper == "oidc-usermodel-attribute-mapper" and (.name | test("amr"; "i")))')
+    local amr_mapper
+    amr_mapper=$(echo "$mappers" | jq -r '.[] | select(.protocolMapper == "oidc-usermodel-attribute-mapper" and (.name | test("amr"; "i")))')
     if [ -n "$amr_mapper" ]; then
-        local json_type=$(echo "$amr_mapper" | jq -r '.config["jsonType.label"] // "not set"')
-        local multivalued=$(echo "$amr_mapper" | jq -r '.config["multivalued"] // "not set"')
+        local json_type
+        json_type=$(echo "$amr_mapper" | jq -r '.config["jsonType.label"] // "not set"')
+        local multivalued
+        multivalued=$(echo "$amr_mapper" | jq -r '.config["multivalued"] // "not set"')
         if [ "$json_type" == "String" ] && [ "$multivalued" == "true" ]; then
             log_pass "AMR user-attribute mapper: jsonType=String, multivalued=true (correct)"
         else
@@ -167,9 +184,11 @@ verify_spoke() {
     fi
 
     # Check frontendUrl matches exposed port
-    local frontend_url=$(docker exec $container curl -sf "http://localhost:8080/admin/realms/dive-v3-broker-${code_lower}" \
+    local frontend_url
+    frontend_url=$(docker exec $container curl -sf "http://localhost:8080/admin/realms/dive-v3-broker-${code_lower}" \
         -H "Authorization: Bearer $token" | jq -r '.attributes.frontendUrl // "not set"')
-    local exposed_port=$(docker port "$container" 8443 2>/dev/null | cut -d: -f2 || echo "unknown")
+    local exposed_port
+    exposed_port=$(docker port "$container" 8443 2>/dev/null | cut -d: -f2 || echo "unknown")
 
     if [[ "$frontend_url" == *":$exposed_port"* ]]; then
         log_pass "frontendUrl ($frontend_url) matches exposed port ($exposed_port)"

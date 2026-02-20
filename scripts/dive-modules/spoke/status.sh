@@ -55,7 +55,8 @@ spoke_status() {
     fi
 
     # Original simple status display
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     print_header
@@ -70,9 +71,12 @@ spoke_status() {
     fi
 
     # Parse config from spoke_config_get (SSOT)
-    local spoke_id=$(spoke_config_get "$instance_code" "identity.spokeId")
-    local instance_code_config=$(spoke_config_get "$instance_code" "identity.instanceCode")
-    local name=$(spoke_config_get "$instance_code" "identity.name")
+    local spoke_id
+    spoke_id=$(spoke_config_get "$instance_code" "identity.spokeId")
+    local instance_code_config
+    instance_code_config=$(spoke_config_get "$instance_code" "identity.instanceCode")
+    local name
+    name=$(spoke_config_get "$instance_code" "identity.name")
     local status=""
     local created=""
 
@@ -104,7 +108,8 @@ spoke_status() {
 
     # Check token
     if [ -f "$spoke_dir/.env" ] && grep -q "SPOKE_OPAL_TOKEN" "$spoke_dir/.env"; then
-        local token_set=$(grep "SPOKE_OPAL_TOKEN" "$spoke_dir/.env" | cut -d= -f2)
+        local token_set
+        token_set=$(grep "SPOKE_OPAL_TOKEN" "$spoke_dir/.env" | cut -d= -f2)
         if [ -n "$token_set" ] && [ "$token_set" != "" ]; then
             echo -e "  Token:           ${GREEN}Configured${NC}"
         else
@@ -118,8 +123,10 @@ spoke_status() {
     echo ""
     echo -e "${CYAN}Certificates:${NC}"
     if [ -f "$spoke_dir/certs/spoke.crt" ]; then
-        local cert_expiry=$(openssl x509 -in "$spoke_dir/certs/spoke.crt" -noout -enddate 2>/dev/null | cut -d= -f2)
-        local fingerprint=$(openssl x509 -in "$spoke_dir/certs/spoke.crt" -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2 | head -c 23)
+        local cert_expiry
+        cert_expiry=$(openssl x509 -in "$spoke_dir/certs/spoke.crt" -noout -enddate 2>/dev/null | cut -d= -f2)
+        local fingerprint
+        fingerprint=$(openssl x509 -in "$spoke_dir/certs/spoke.crt" -noout -fingerprint -sha256 2>/dev/null | cut -d= -f2 | head -c 23)
         echo -e "  Certificate:     ${GREEN}Present${NC}"
         echo "  Expires:         $cert_expiry"
         echo "  Fingerprint:     ${fingerprint}..."
@@ -137,8 +144,10 @@ spoke_status() {
 
 spoke_status_detailed() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     print_header
@@ -157,8 +166,10 @@ spoke_status_detailed() {
 
     # Section 1: Container Health
     echo -e "${CYAN}┌─ Container Health${NC}"
-    local running_count=$(docker ps --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
-    local total_count=$(docker ps -a --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
+    local running_count
+    running_count=$(docker ps --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
+    local total_count
+    total_count=$(docker ps -a --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
     
     if [ "$running_count" -eq "$total_count" ] && [ "$total_count" -gt 0 ]; then
         echo -e "${GREEN}✅ All containers running${NC} ($running_count/$total_count)"
@@ -175,8 +186,10 @@ spoke_status_detailed() {
     for service in "${services[@]}"; do
         local container="dive-spoke-${code_lower}-${service}"
         if docker ps -a --format '{{.Names}}' | grep -q "^${container}$"; then
-            local status=$(docker inspect --format='{{.State.Status}}' "$container" 2>/dev/null || echo "missing")
-            local health=$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo "none")
+            local status
+            status=$(docker inspect --format='{{.State.Status}}' "$container" 2>/dev/null || echo "missing")
+            local health
+            health=$(docker inspect --format='{{.State.Health.Status}}' "$container" 2>/dev/null || echo "none")
             
             if [ "$status" = "running" ]; then
                 if [ "$health" = "healthy" ] || [ "$health" = "none" ]; then
@@ -199,13 +212,17 @@ spoke_status_detailed() {
     # Check if federation module available
     if type spoke_federation_verify &>/dev/null; then
         set +e  # Don't let federation check kill the script
-        local fed_json=$(spoke_federation_verify "$code_upper" 2>/dev/null | head -20)
+        local fed_json
+        fed_json=$(spoke_federation_verify "$code_upper" 2>/dev/null | head -20)
         set -e
         
         if [ -n "$fed_json" ]; then
-            local bidirectional=$(echo "$fed_json" | grep -o '"bidirectional":[^,}]*' | cut -d: -f2 | tr -d ' ')
-            local spoke_to_hub=$(echo "$fed_json" | grep -o '"spoke_to_hub":[^,}]*' | cut -d: -f2 | tr -d ' ')
-            local hub_to_spoke=$(echo "$fed_json" | grep -o '"hub_to_spoke":[^,}]*' | cut -d: -f2 | tr -d ' ')
+            local bidirectional
+            bidirectional=$(echo "$fed_json" | grep -o '"bidirectional":[^,}]*' | cut -d: -f2 | tr -d ' ')
+            local spoke_to_hub
+            spoke_to_hub=$(echo "$fed_json" | grep -o '"spoke_to_hub":[^,}]*' | cut -d: -f2 | tr -d ' ')
+            local hub_to_spoke
+            hub_to_spoke=$(echo "$fed_json" | grep -o '"hub_to_spoke":[^,}]*' | cut -d: -f2 | tr -d ' ')
             
             if [ "$bidirectional" = "true" ]; then
                 echo -e "${GREEN}✅ Bidirectional federation active${NC}"
@@ -259,10 +276,13 @@ spoke_status_detailed() {
     # Section 4: Deployment State
     echo -e "${CYAN}┌─ Deployment State${NC}"
     if type orch_db_check_connection &>/dev/null && orch_db_check_connection 2>/dev/null; then
-        local last_deployment=$(orch_db_exec "SELECT state, timestamp FROM deployment_states WHERE instance_code = '${code_lower}' ORDER BY timestamp DESC LIMIT 1;" 2>/dev/null || echo "")
+        local last_deployment
+        last_deployment=$(orch_db_exec "SELECT state, timestamp FROM deployment_states WHERE instance_code = '${code_lower}' ORDER BY timestamp DESC LIMIT 1;" 2>/dev/null || echo "")
         if [ -n "$last_deployment" ]; then
-            local deploy_state=$(echo "$last_deployment" | awk 'NR==3 {print $1}')
-            local deploy_time=$(echo "$last_deployment" | awk 'NR==3 {print $3}')
+            local deploy_state
+            deploy_state=$(echo "$last_deployment" | awk 'NR==3 {print $1}')
+            local deploy_time
+            deploy_time=$(echo "$last_deployment" | awk 'NR==3 {print $3}')
             echo -e "${CYAN}│${NC}   Last deployment: ${deploy_state} (${deploy_time})"
         else
             echo -e "${CYAN}│${NC}   No deployment history found"
@@ -315,8 +335,10 @@ spoke_health() {
     fi
 
     ensure_dive_root
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     print_header
@@ -361,8 +383,10 @@ spoke_health() {
         local url="${protocol}://localhost:${endpoint}"
 
         # First check Docker health status (most reliable)
-        local container_name="dive-spoke-${code_lower}-$(echo "$name" | tr '[:upper:]' '[:lower:]')"
-        local docker_health=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null || echo "")
+        local container_name
+        container_name="dive-spoke-${code_lower}-$(echo "$name" | tr '[:upper:]' '[:lower:]')"
+        local docker_health
+        docker_health=$(docker inspect --format='{{.State.Health.Status}}' "$container_name" 2>/dev/null || echo "")
 
         if [ "$docker_health" = "healthy" ]; then
             printf "  %-14s ${GREEN}✓ Healthy${NC}\n" "$name:"
@@ -370,7 +394,8 @@ spoke_health() {
         fi
 
         # Fallback to HTTP health check
-        local status_code=$(curl -k -s -o /dev/null -w '%{http_code}' "$url" --max-time 5 2>/dev/null || echo "000")
+        local status_code
+        status_code=$(curl -k -s -o /dev/null -w '%{http_code}' "$url" --max-time 5 2>/dev/null || echo "000")
 
         if [ "$status_code" = "200" ] || [ "$status_code" = "204" ]; then
             printf "  %-14s ${GREEN}✓ Healthy${NC}\n" "$name:"
@@ -446,7 +471,8 @@ spoke_logs() {
     fi
 
     ensure_dive_root
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     if [ ! -f "$spoke_dir/docker-compose.yml" ]; then

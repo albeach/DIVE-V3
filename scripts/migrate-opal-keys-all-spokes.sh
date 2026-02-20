@@ -94,7 +94,7 @@ for spoke_dir in $spoke_dirs; do
         ((updated_count++))
 
         # Restart OPAL client if container is running
-        local container="dive-spoke-${instance}-opal-client"
+        container="dive-spoke-${instance}-opal-client"
         if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${container}$"; then
             log_info "  Restarting OPAL client container..."
             cd "$spoke_dir"
@@ -113,7 +113,7 @@ for spoke_dir in $spoke_dirs; do
         ((updated_count++))
 
         # Restart OPAL client if container is running
-        local container="dive-spoke-${instance}-opal-client"
+        container="dive-spoke-${instance}-opal-client"
         if docker ps --format '{{.Names}}' 2>/dev/null | grep -q "^${container}$"; then
             log_info "  Recreating OPAL client container to pick up new env var..."
             cd "$spoke_dir"

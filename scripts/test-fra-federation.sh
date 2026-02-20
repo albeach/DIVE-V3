@@ -275,3 +275,6 @@ else
     echo ""
     exit 1
 fi
+
+# sc2034-anchor
+: "${FRA_USA_SECRET:-}" "${HUB_FRA_SECRET:-}" "${YELLOW:-}"

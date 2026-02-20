@@ -28,7 +28,8 @@ _ensure_federation_client() {
 
     echo -n "  Checking ${client_id} in ${realm}... "
 
-    local existing=$(docker exec "$kc_container" curl -sf \
+    local existing
+    existing=$(docker exec "$kc_container" curl -sf \
         -H "Authorization: Bearer $token" \
         "http://localhost:8080/admin/realms/${realm}/clients?clientId=${client_id}" 2>/dev/null | \
         grep -o '"id":"[^"]*' | head -1 | cut -d'"' -f4)
@@ -38,7 +39,8 @@ _ensure_federation_client() {
     else
         echo -n "creating... "
 
-        local client_secret=$(_get_federation_secret "$realm" "$partner_lower")
+        local client_secret
+        client_secret=$(_get_federation_secret "$realm" "$partner_lower")
 
         local client_config="{
             \"clientId\": \"${client_id}\",
@@ -91,7 +93,8 @@ _ensure_federation_client_mappers() {
     local client_id="$4"
 
     # Get client UUID
-    local client_uuid=$(docker exec "$kc_container" curl -sf \
+    local client_uuid
+    client_uuid=$(docker exec "$kc_container" curl -sf \
         -H "Authorization: Bearer $token" \
         "http://localhost:8080/admin/realms/${realm}/clients?clientId=${client_id}" 2>/dev/null | \
         jq -r '.[0].id // empty' 2>/dev/null)
@@ -109,7 +112,8 @@ _ensure_federation_client_mappers() {
     # Country-specific localized attribute mappings (source_attribute:claim_name)
     # Driven by config/locale-mappings.conf — add new countries there, no code changes needed
     local localized_attrs=()
-    local realm_code=$(upper "${realm##*-}")
+    local realm_code
+    realm_code=$(upper "${realm##*-}")
     local locale_config="${DIVE_ROOT}/config/locale-mappings.conf"
     if [ -f "$locale_config" ]; then
         local mapping_line
@@ -175,7 +179,8 @@ _create_amr_acr_mappers() {
         }
     }"
 
-    local existing_amr=$(docker exec "$kc_container" curl -sf \
+    local existing_amr
+    existing_amr=$(docker exec "$kc_container" curl -sf \
         -H "Authorization: Bearer $token" \
         "http://localhost:8080/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" 2>/dev/null | \
         jq -r --arg name "$amr_mapper_name" '.[] | select(.name==$name) | .id // empty' 2>/dev/null)
@@ -209,7 +214,8 @@ _create_amr_acr_mappers() {
         }
     }"
 
-    local existing_acr=$(docker exec "$kc_container" curl -sf \
+    local existing_acr
+    existing_acr=$(docker exec "$kc_container" curl -sf \
         -H "Authorization: Bearer $token" \
         "http://localhost:8080/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" 2>/dev/null | \
         jq -r --arg name "$acr_mapper_name" '.[] | select(.name==$name) | .id // empty' 2>/dev/null)
@@ -243,7 +249,8 @@ _create_protocol_mapper() {
     local mapper_name="$7"
     local multivalued="${8:-false}"
 
-    local existing=$(docker exec "$kc_container" curl -sf \
+    local existing
+    existing=$(docker exec "$kc_container" curl -sf \
         -H "Authorization: Bearer $token" \
         "http://localhost:8080/admin/realms/${realm}/clients/${client_uuid}/protocol-mappers/models" 2>/dev/null | \
         jq -r --arg name "$mapper_name" '.[] | select(.name==$name) | .id // empty' 2>/dev/null)
@@ -315,7 +322,8 @@ _create_idp_mapper() {
     local user_attr="$6"
     local mapper_name="$7"
 
-    local existing=$(docker exec "$kc_container" curl -sf \
+    local existing
+    existing=$(docker exec "$kc_container" curl -sf \
         -H "Authorization: Bearer $token" \
         "http://localhost:8080/admin/realms/${realm}/identity-provider/instances/${idp_alias}/mappers" 2>/dev/null | \
         jq -r --arg name "$mapper_name" '.[] | select(.name==$name) | .id // empty' 2>/dev/null)

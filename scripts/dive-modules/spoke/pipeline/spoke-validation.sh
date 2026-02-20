@@ -35,7 +35,8 @@ export SPOKE_VALIDATION_LOADED=1
 ##
 spoke_validate_instance_code() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
     
     # GUARDRAIL: USA is the Hub - it cannot be deployed as a spoke
     if [ "$code_upper" = "USA" ] || [ "$code_upper" = "HUB" ]; then
@@ -79,9 +80,11 @@ spoke_phase_is_complete() {
     # Query orchestration DB for step status
     if type orch_db_check_connection &>/dev/null; then
         if orch_db_check_connection; then
-            local code_lower=$(lower "$instance_code")
+            local code_lower
+            code_lower=$(lower "$instance_code")
             # CRITICAL FIX: Use instance_code not instance_id (table column name)
-            local status=$(orch_db_exec "SELECT status FROM deployment_steps WHERE instance_code = '${code_lower}' AND step_name = '${phase}' ORDER BY started_at DESC LIMIT 1;" 2>/dev/null | tr -d ' \n')
+            local status
+            status=$(orch_db_exec "SELECT status FROM deployment_steps WHERE instance_code = '${code_lower}' AND step_name = '${phase}' ORDER BY started_at DESC LIMIT 1;" 2>/dev/null | tr -d ' \n')
             
             if [ "$status" = "COMPLETED" ]; then
                 return 0
@@ -107,7 +110,7 @@ spoke_phase_is_complete() {
 spoke_phase_mark_complete() {
     local instance_code="$1"
     local phase="$2"
-    local duration="${3:-0}"
+    local _duration="${3:-0}"
     
     # Record in orchestration DB
     if type orch_db_record_step &>/dev/null; then
@@ -151,7 +154,8 @@ spoke_phase_get_timestamp() {
     local phase="$2"
 
     if type orch_db_check_connection &>/dev/null && orch_db_check_connection 2>/dev/null; then
-        local code_lower=$(lower "$instance_code")
+        local code_lower
+        code_lower=$(lower "$instance_code")
         local ts
         ts=$(orch_db_exec "SELECT TO_CHAR(completed_at AT TIME ZONE 'UTC', 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') FROM deployment_steps WHERE instance_code = '${code_lower}' AND step_name = '${phase}' AND status = 'COMPLETED' ORDER BY completed_at DESC LIMIT 1;" 2>/dev/null | tr -d ' \n')
         if [ -n "$ts" ] && [ "$ts" != "" ]; then
@@ -185,8 +189,10 @@ spoke_phase_get_timestamp() {
 ##
 _validate_preflight_state() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     log_verbose "Validating PREFLIGHT state for $code_upper..."
@@ -242,8 +248,10 @@ _validate_preflight_state() {
 ##
 _validate_initialization_state() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     log_verbose "Validating INITIALIZATION state for $code_upper..."
@@ -274,7 +282,8 @@ _validate_initialization_state() {
     done
     
     # Validate instance-specific secrets exist (flexible check for both formats)
-    local code_upper=$(upper "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
     local secret_found=false
     for pattern in "POSTGRES_PASSWORD_${code_upper}" "POSTGRES_PASSWORD"; do
         if grep -q "^${pattern}=" "$env_file" 2>/dev/null; then
@@ -307,13 +316,16 @@ _validate_initialization_state() {
 ##
 _validate_deployment_state() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     log_verbose "Validating DEPLOYMENT state for $code_upper..."
 
     # Check containers exist (running or stopped)
-    local container_count=$(docker ps -a --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
+    local container_count
+    container_count=$(docker ps -a --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
 
     if [ "$container_count" -eq 0 ]; then
         log_warn "No containers found for spoke: $code_lower"
@@ -358,8 +370,10 @@ _validate_deployment_state() {
 ##
 _validate_configuration_state() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     log_verbose "Validating CONFIGURATION state for $code_upper..."
 
@@ -402,7 +416,8 @@ _validate_configuration_state() {
     # ==========================================================================
     if docker ps --format '{{.Names}}' | grep -q "^${kc_container}$"; then
         local realm="dive-v3-broker-${code_lower}"
-        local realm_check=$(docker exec "$kc_container" curl -sf \
+        local realm_check
+        realm_check=$(docker exec "$kc_container" curl -sf \
             "http://localhost:8080/realms/${realm}" 2>/dev/null | \
             jq -r '.realm // empty' 2>/dev/null || echo "")
 
@@ -414,7 +429,8 @@ _validate_configuration_state() {
         log_verbose "Realm verified: $realm"
 
         # CRITICAL: Verify clearance client scope exists (created by Terraform)
-        local scope_check=$(docker exec "$kc_container" curl -sf \
+        local scope_check
+        scope_check=$(docker exec "$kc_container" curl -sf \
             "http://localhost:8080/admin/realms/${realm}/client-scopes" 2>/dev/null | \
             jq -r '.[] | select(.name == "clearance") | .name' 2>/dev/null || echo "")
 
@@ -456,8 +472,10 @@ _validate_configuration_state() {
 ##
 _validate_seeding_state() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     log_verbose "Validating SEEDING state for $code_upper..."
 
@@ -608,14 +626,18 @@ _validate_seeding_state() {
 ##
 _validate_verification_state() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
-    local code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
 
     log_verbose "Validating VERIFICATION state for $code_upper..."
 
     # Check all containers are running
-    local running_count=$(docker ps --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
-    local total_count=$(docker ps -a --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
+    local running_count
+    running_count=$(docker ps --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
+    local total_count
+    total_count=$(docker ps -a --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}" 2>/dev/null | wc -l | tr -d ' ')
 
     if [ "$running_count" -lt "$total_count" ]; then
         log_warn "Not all containers running: $running_count/$total_count"
@@ -645,7 +667,8 @@ _validate_verification_state() {
         # Check if critical services are healthy (best-effort)
         local unhealthy_count=0
         for container in $(docker ps --filter "name=dive-spoke-${code_lower}-" --format "{{.Names}}"); do
-            local health=$(docker inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "none")
+            local health
+            health=$(docker inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "none")
             if [ "$health" = "unhealthy" ]; then
                 log_warn "Container unhealthy: $container"
                 ((unhealthy_count++))

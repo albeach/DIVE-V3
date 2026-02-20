@@ -96,7 +96,8 @@ log_verbose() {
 audit_log() {
     local level="$1"
     local message="$2"
-    local timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    local timestamp
+    timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
     # Ensure audit log directory exists
     mkdir -p "$AUDIT_LOG_DIR"
@@ -169,7 +170,8 @@ rotate_secret() {
         --project="$GCP_PROJECT" \
         --data-file=- 2>/dev/null; then
 
-        local version_count=$(get_secret_version_count "$name")
+        local version_count
+        version_count=$(get_secret_version_count "$name")
         log_success "Rotated: $name (version $version_count)"
         log_verbose "New value length: ${#new_value} characters"
         ((ROTATED_COUNT++))
@@ -345,7 +347,8 @@ verify_rotation() {
 
     for secret_name in "${secrets_to_verify[@]}"; do
         if secret_exists "$secret_name"; then
-            local version_count=$(get_secret_version_count "$secret_name")
+            local version_count
+            version_count=$(get_secret_version_count "$secret_name")
             log_verbose "$secret_name: $version_count version(s)"
         else
             log_warn "$secret_name: NOT FOUND"

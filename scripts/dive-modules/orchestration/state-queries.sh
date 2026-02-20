@@ -266,7 +266,8 @@ orch_db_cleanup_checkpoints() {
 
     local sql_filter="created_at < NOW() - INTERVAL '$days_to_keep days'"
     if [ "$instance_code" != "all" ]; then
-        local code_lower=$(lower "$instance_code")
+        local code_lower
+        code_lower=$(lower "$instance_code")
         sql_filter="$sql_filter AND instance_code='$code_lower'"
     fi
 
@@ -484,7 +485,8 @@ orch_db_init_schema() {
 
     if [ "$lock_acquired" != "t" ]; then
         log_warn "Another process is initializing schema - waiting up to ${lock_timeout}s..."
-        local start_time=$(date +%s)
+        local start_time
+        start_time=$(date +%s)
         while [ $(($(date +%s) - start_time)) -lt $lock_timeout ]; do
             lock_acquired=$(docker exec dive-hub-postgres psql -U postgres -d orchestration -t -c \
                 "SELECT pg_try_advisory_lock($schema_lock_id);" 2>/dev/null | xargs)
@@ -526,7 +528,7 @@ orch_db_init_schema() {
     # ==========================================================================
     log_verbose "Step 4: Applying schema migration ($existing_tables/8 tables exist)..."
     local migration_output
-    local migration_exit_code=0
+    local _migration_exit_code=0
 
     # Copy migration file to container and execute
     ${DOCKER_CMD:-docker} cp "$migration_file" dive-hub-postgres:/tmp/migration.sql 2>/dev/null || {
@@ -536,7 +538,7 @@ orch_db_init_schema() {
         return 1
     }
 
-    migration_output=$(docker exec dive-hub-postgres psql -U postgres -d orchestration -f /tmp/migration.sql 2>&1) || migration_exit_code=$?
+    migration_output=$(docker exec dive-hub-postgres psql -U postgres -d orchestration -f /tmp/migration.sql 2>&1) || _migration_exit_code=$?
 
     # Cleanup temp file
     ${DOCKER_CMD:-docker} exec dive-hub-postgres rm -f /tmp/migration.sql 2>/dev/null || true

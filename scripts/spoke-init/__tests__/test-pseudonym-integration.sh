@@ -340,3 +340,6 @@ else
     echo ""
     exit 0
 fi
+
+# sc2034-anchor
+: "${BLUE:-}"

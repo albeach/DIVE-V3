@@ -142,7 +142,7 @@ EOFOPA
   TOTAL_MS=0
   RUNS=100
 
-  for i in $(seq 1 $RUNS); do
+  for _i in $(seq 1 $RUNS); do
     START=$(date +%s%N)
     curl -s -k https://localhost:8181/v1/data/dive/authz/decision \
       -H "Content-Type: application/json" \

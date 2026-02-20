@@ -103,7 +103,8 @@ get_hub_admin_token() {
 ##
 get_spoke_admin_token() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # Get port information using eval pattern
     eval "$(get_instance_ports "$instance_code" 2>/dev/null)"
@@ -156,21 +157,25 @@ get_spoke_admin_token() {
 ##
 federation_link() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Linking $code_upper to Hub federation..."
 
     # Step 1: Get tokens
     log_info "Step 1: Getting admin tokens..."
 
-    local hub_token=$(get_hub_admin_token)
+    local hub_token
+    hub_token=$(get_hub_admin_token)
     if [ -z "$hub_token" ]; then
         log_error "Failed to get Hub admin token"
         return 1
     fi
 
-    local spoke_token=$(get_spoke_admin_token "$instance_code")
+    local spoke_token
+    spoke_token=$(get_spoke_admin_token "$instance_code")
     if [ -z "$spoke_token" ]; then
         log_error "Failed to get Spoke admin token"
         return 1
@@ -207,7 +212,8 @@ except: pass
 " 2>/dev/null)
     [ -n "$_hub_otp_flow" ] && log_verbose "Using Hub post-broker OTP flow: ${_hub_otp_flow}"
 
-    local idp_config=$(cat << EOF
+    local idp_config
+    idp_config=$(cat << EOF
 {
   "alias": "${idp_alias}",
   "displayName": "${code_upper} Identity Provider",
@@ -291,12 +297,15 @@ EOF
 ##
 federation_unlink() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_warn "Unlinking $code_upper from Hub federation..."
 
-    local hub_token=$(get_hub_admin_token)
+    local hub_token
+    hub_token=$(get_hub_admin_token)
     if [ -z "$hub_token" ]; then
         log_error "Failed to get Hub admin token"
         return 1
@@ -334,7 +343,8 @@ federation_unlink() {
 federation_configure_mappers() {
     local instance_code="$1"
     local token="$2"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # Get port information using eval pattern
     eval "$(get_instance_ports "$instance_code" 2>/dev/null)"
@@ -345,7 +355,8 @@ federation_configure_mappers() {
     # Get client ID
     # The spoke should have an incoming federation client named dive-v3-broker-usa
     # This is the client the Hub uses to authenticate to the spoke
-    local client_id=$(curl -sf "${spoke_url}/admin/realms/${spoke_realm}/clients" \
+    local client_id
+    client_id=$(curl -sf "${spoke_url}/admin/realms/${spoke_realm}/clients" \
         -H "Authorization: Bearer $token" \
         --insecure 2>/dev/null | jq -r '.[] | select(.clientId=="dive-v3-broker-usa") | .id')
 
@@ -407,7 +418,8 @@ _get_federation_secret() {
         fi
 
         # Generate new secret and store in GCP
-        local new_secret=$(openssl rand -base64 24 | tr -d '/+=')
+        local new_secret
+        new_secret=$(openssl rand -base64 24 | tr -d '/+=')
 
         if echo -n "$new_secret" | gcloud secrets create "$secret_name" \
             --data-file=- \
@@ -600,7 +612,8 @@ _federation_link_direct() {
 
     # Authenticate with target Keycloak
     log_info "Authenticating with $target_upper Keycloak..."
-    local token=$(docker exec "$target_kc_container" curl -sf --max-time 10 \
+    local token
+    token=$(docker exec "$target_kc_container" curl -sf --max-time 10 \
         -X POST "http://localhost:8080/realms/master/protocol/openid-connect/token" \
         -d "grant_type=password" -d "username=admin" -d "password=${target_pass}" \
         -d "client_id=admin-cli" 2>/dev/null | grep -o '"access_token":"[^"]*' | cut -d'"' -f4)
@@ -659,7 +672,8 @@ _federation_link_direct() {
     if [ -z "$source_token" ]; then
         log_error "Failed to authenticate with source $source_upper Keycloak"
         if echo "$auth_response" | grep -q "error"; then
-            local error_desc=$(echo "$auth_response" | grep -o '"error_description":"[^"]*' | cut -d'"' -f4)
+            local error_desc
+            error_desc=$(echo "$auth_response" | grep -o '"error_description":"[^"]*' | cut -d'"' -f4)
             [ -n "$error_desc" ] && log_error "Keycloak error: $error_desc"
         fi
         return 1
@@ -669,7 +683,8 @@ _federation_link_direct() {
 
     # Get client secret
     log_info "Querying for existing federation client: $federation_client_id"
-    local client_uuid=$(docker exec "$source_kc_container" curl -sf --max-time 10 \
+    local client_uuid
+    client_uuid=$(docker exec "$source_kc_container" curl -sf --max-time 10 \
         -H "Authorization: Bearer $source_token" \
         "http://localhost:8080/admin/realms/${source_realm}/clients?clientId=${federation_client_id}" 2>/dev/null | \
         grep -o '"id":"[^"]*' | head -1 | cut -d'"' -f4)
@@ -723,7 +738,8 @@ _federation_link_direct() {
         local create_exit=$?
 
         if [ $create_exit -eq 0 ]; then
-            local http_code=$(echo "$create_output" | grep -o "HTTP_CODE:[0-9]*" | cut -d: -f2)
+            local http_code
+            http_code=$(echo "$create_output" | grep -o "HTTP_CODE:[0-9]*" | cut -d: -f2)
             if [ "$http_code" = "201" ] || [ "$http_code" = "204" ] || [ -z "$http_code" ]; then
                 log_success "Created federation client: ${federation_client_id}"
             else
@@ -752,7 +768,8 @@ _federation_link_direct() {
         source_public_url="${HUB_KC_URL:-https://localhost:${KEYCLOAK_HTTPS_PORT:-8443}}"
         source_internal_url="https://dive-hub-keycloak:8443"
     else
-        local _kc_port=$(_get_keycloak_port "$source_upper")
+        local _kc_port
+        _kc_port=$(_get_keycloak_port "$source_upper")
         source_public_url="https://localhost:${_kc_port}"
         source_internal_url="https://dive-spoke-${source_lower}-keycloak:8443"
     fi
@@ -761,7 +778,7 @@ _federation_link_direct() {
     local _target_otp_flow=""
     local _target_all_flows
     _target_all_flows=$(docker exec "$target_kc_container" curl -sf --max-time 5 \
-        -H "Authorization: Bearer $target_token" \
+        -H "Authorization: Bearer $token" \
         "http://localhost:8080/admin/realms/${target_realm}/authentication/flows" 2>/dev/null || echo "[]")
     _target_otp_flow=$(echo "$_target_all_flows" | python3 -c "
 import json,sys
@@ -819,7 +836,8 @@ except: pass
             -H "Content-Type: application/json" \
             -d "$idp_config" 2>&1)
 
-        local http_code=$(echo "$update_result" | grep -o "HTTP_CODE:[0-9]*" | cut -d: -f2)
+        local http_code
+        http_code=$(echo "$update_result" | grep -o "HTTP_CODE:[0-9]*" | cut -d: -f2)
         if [ "$http_code" = "204" ] || [ "$http_code" = "200" ] || [ -z "$http_code" ]; then
             log_success "Updated ${idp_alias} in ${target_upper}"
         else
@@ -835,7 +853,8 @@ except: pass
             -H "Content-Type: application/json" \
             -d "$idp_config" 2>&1)
 
-        local http_code=$(echo "$create_result" | grep -o "HTTP_CODE:[0-9]*" | cut -d: -f2)
+        local http_code
+        http_code=$(echo "$create_result" | grep -o "HTTP_CODE:[0-9]*" | cut -d: -f2)
 
         if [ "$http_code" = "201" ] || [ "$http_code" = "204" ]; then
             log_success "Created ${idp_alias} in ${target_upper}"
@@ -881,9 +900,11 @@ federation_status() {
     if docker ps --filter "name=dive-hub-keycloak" --filter "health=healthy" -q | grep -q .; then
         echo "  Status: Healthy"
 
-        local hub_token=$(get_hub_admin_token 2>/dev/null)
+        local hub_token
+        hub_token=$(get_hub_admin_token 2>/dev/null)
         if [ -n "$hub_token" ]; then
-            local idps=$(curl -sf "${HUB_KC_URL}/admin/realms/${HUB_REALM}/identity-provider/instances" \
+            local idps
+            idps=$(curl -sf "${HUB_KC_URL}/admin/realms/${HUB_REALM}/identity-provider/instances" \
                 -H "Authorization: Bearer $hub_token" \
                 --insecure 2>/dev/null | jq -r '.[].alias' 2>/dev/null)
 
@@ -1238,7 +1259,8 @@ module_federation() {
             federation_test_token_revocation "$@"
             ;;
         list-idps)
-            local hub_token=$(get_hub_admin_token 2>/dev/null)
+            local hub_token
+            hub_token=$(get_hub_admin_token 2>/dev/null)
             if [ -n "$hub_token" ]; then
                 curl -sf "${HUB_KC_URL}/admin/realms/${HUB_REALM}/identity-provider/instances" \
                     -H "Authorization: Bearer $hub_token" \

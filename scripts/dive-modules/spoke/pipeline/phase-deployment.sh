@@ -51,7 +51,8 @@ fi
 ##
 spoke_ensure_opal_key_configured() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local env_file="${DIVE_ROOT}/instances/${code_lower}/.env"
 
     # Skip if .env doesn't exist (new deployment will create it)
@@ -81,7 +82,8 @@ spoke_ensure_opal_key_configured() {
         # Update existing entry
         # CRITICAL FIX (2026-02-07): Escape special characters in SSH key to prevent sed injection
         # SSH keys contain slashes and other characters that break sed's | delimiter
-        local escaped_key=$(echo "$opal_public_key" | sed 's/[\/&]/\\&/g')
+        local escaped_key
+        escaped_key=$(echo "$opal_public_key" | sed 's/[\/&]/\\&/g')
         sed -i.bak "s|^OPAL_AUTH_PUBLIC_KEY=.*|OPAL_AUTH_PUBLIC_KEY=\"$escaped_key\"|" "$env_file"
         rm -f "${env_file}.bak"
         log_success "Updated OPAL_AUTH_PUBLIC_KEY (auto-fix for existing spoke)"
@@ -100,8 +102,10 @@ spoke_phase_deployment() {
     local instance_code="$1"
     local pipeline_mode="${2:-deploy}"
 
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     # =============================================================================
@@ -130,7 +134,8 @@ spoke_phase_deployment() {
     # =============================================================================
     # PERFORMANCE TRACKING: Phase timing metrics
     # =============================================================================
-    local PHASE_START=$(date +%s)
+    local PHASE_START
+    PHASE_START=$(date +%s)
 
     log_info "→ Executing DEPLOYMENT phase for $code_upper"
 
@@ -228,7 +233,8 @@ spoke_phase_deployment() {
     fi
 
     # Calculate and log phase duration
-    local PHASE_END=$(date +%s)
+    local PHASE_END
+    PHASE_END=$(date +%s)
     local PHASE_DURATION=$((PHASE_END - PHASE_START))
 
     # Mark phase complete (checkpoint system)
@@ -256,13 +262,15 @@ spoke_phase_deployment() {
 ##
 spoke_deployment_wait_for_core_services() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Waiting for core services..."
 
     # Get core services dynamically from compose file labels
     # Phase 1 Sprint 1.2: Replace hardcoded array with dynamic discovery
-    local core_services=($(compose_get_spoke_services_by_class "$instance_code" "core"))
+    local -a core_services=()
+    read -r -a core_services <<<"$(compose_get_spoke_services_by_class "$instance_code" "core")"
 
     for service in "${core_services[@]}"; do
         local container="dive-spoke-${code_lower}-${service}"
@@ -307,8 +315,10 @@ spoke_deployment_wait_for_core_services() {
 ##
 spoke_deployment_init_mongodb_replica_set() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     local mongo_container="dive-spoke-${code_lower}-mongodb"
     local init_script="${DIVE_ROOT}/scripts/init-mongo-replica-set-post-start.sh"
@@ -360,15 +370,18 @@ spoke_deployment_init_mongodb_replica_set() {
 ##
 spoke_deployment_verify_mongodb_ready() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     local mongo_container="dive-spoke-${code_lower}-mongodb"
 
     log_step "Verifying MongoDB readiness ($code_upper)..."
 
     # Check if container is healthy (healthcheck passed)
-    local health_status=$(docker inspect --format='{{.State.Health.Status}}' "$mongo_container" 2>/dev/null || echo "unknown")
+    local health_status
+    health_status=$(docker inspect --format='{{.State.Health.Status}}' "$mongo_container" 2>/dev/null || echo "unknown")
 
     if [ "$health_status" = "healthy" ]; then
         log_success "MongoDB is ready (healthcheck: healthy, replica set: PRIMARY)"
@@ -378,7 +391,8 @@ spoke_deployment_verify_mongodb_ready() {
         local mongo_pass="${!mongo_pass_var}"
         # CRITICAL FIX (2026-02-11): mongosh doesn't support MONGOSH_PASSWORD env var
         # Use -p flag instead (password exposure in ps aux is mitigated by Docker exec isolation)
-        local state=$(docker exec "$mongo_container" \
+        local state
+        state=$(docker exec "$mongo_container" \
             mongosh admin -u admin -p "$mongo_pass" --authenticationDatabase admin --tls --tlsAllowInvalidCertificates --quiet \
             --eval "rs.status().members[0].stateStr" 2>/dev/null || echo "UNKNOWN")
         log_verbose "MongoDB replica set state: $state"
@@ -416,8 +430,10 @@ spoke_deployment_verify_mongodb_ready() {
 ##
 spoke_deployment_ensure_admin_user() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Ensuring Keycloak admin user exists..."
 
@@ -483,7 +499,8 @@ spoke_deployment_ensure_admin_user() {
 ##
 spoke_deployment_run_init_scripts() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local init_marker="$spoke_dir/.initialized"
 
@@ -546,8 +563,10 @@ spoke_deployment_run_init_scripts() {
 ##
 spoke_deployment_verify_env() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Verifying container environment for $code_upper..."
 
@@ -760,8 +779,10 @@ LEGACY_CODE_BLOCK
 ##
 spoke_deployment_provision_opal_token() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local env_file="$spoke_dir/.env"
 
@@ -777,7 +798,7 @@ spoke_deployment_provision_opal_token() {
     fi
 
     # Try to get token from Hub OPAL server
-    local hub_opal_url="${HUB_OPAL_URL:-http://dive-hub-opal-server:7002}"
+    local _hub_opal_url="${HUB_OPAL_URL:-http://dive-hub-opal-server:7002}"
 
     # Check if Hub OPAL server is running
     if ! docker ps --format '{{.Names}}' | grep -q "dive-hub-opal-server"; then
@@ -793,7 +814,8 @@ spoke_deployment_provision_opal_token() {
     local master_token="opal_master_token"  # fallback
 
     if [ -f "$hub_env_file" ]; then
-        local env_master_token=$(grep "^OPAL_AUTH_MASTER_TOKEN=" "$hub_env_file" | cut -d= -f2 | tr -d '"')
+        local env_master_token
+        env_master_token=$(grep "^OPAL_AUTH_MASTER_TOKEN=" "$hub_env_file" | cut -d= -f2 | tr -d '"')
         if [ -n "$env_master_token" ]; then
             master_token="$env_master_token"
         fi
@@ -854,14 +876,15 @@ spoke_deployment_restart_services() {
     local instance_code="$1"
     local services="$2"
 
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
     log_verbose "Restarting services: $services"
 
     export COMPOSE_PROJECT_NAME="dive-spoke-${code_lower}"
     local _saved_dir="$PWD"
-    cd "$spoke_dir"
+    cd "$spoke_dir" || return 1
 
     for service in $services; do
         local container="dive-spoke-${code_lower}-${service}"
@@ -873,7 +896,7 @@ spoke_deployment_restart_services() {
         fi
     done
 
-    cd "$_saved_dir"
+    cd "$_saved_dir" || return 1
 }
 
 # =============================================================================
@@ -892,12 +915,14 @@ spoke_deployment_restart_services() {
 ##
 spoke_checkpoint_deployment() {
     local instance_code="$1"
-    local code_lower=$(lower "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_verbose "Validating deployment checkpoint for $instance_code"
 
     # Load secrets if needed for MongoDB password
-    local code_upper_ckpt=$(upper "$instance_code")
+    local code_upper_ckpt
+    code_upper_ckpt=$(upper "$instance_code")
     local mongo_password_var="MONGO_PASSWORD_${code_upper_ckpt}"
     local mongo_password="${!mongo_password_var}"
 
@@ -913,7 +938,8 @@ spoke_checkpoint_deployment() {
     if [ -n "$mongo_password" ]; then
         # CRITICAL FIX (2026-02-11): mongosh doesn't support MONGOSH_PASSWORD env var
         # Use -p flag instead (password exposure in ps aux is mitigated by Docker exec isolation)
-        local mongo_state=$(docker exec "dive-spoke-${code_lower}-mongodb" \
+        local mongo_state
+        mongo_state=$(docker exec "dive-spoke-${code_lower}-mongodb" \
             mongosh admin -u admin -p "$mongo_password" --authenticationDatabase admin --tls --tlsAllowInvalidCertificates --quiet \
             --eval "rs.status().members[0].stateStr" 2>/dev/null || echo "ERROR")
 
@@ -927,14 +953,16 @@ spoke_checkpoint_deployment() {
 
     # Check CORE containers healthy (OPTIONAL services like OPAL client can be unhealthy)
     # Phase 1 Sprint 1.2: Use dynamic service discovery instead of hardcoded list
-    local core_services=($(compose_get_spoke_services_by_class "$instance_code" "core" 2>/dev/null || echo ""))
+    local -a core_services=()
+    read -r -a core_services <<<"$(compose_get_spoke_services_by_class "$instance_code" "core" 2>/dev/null || echo "")"
     local unhealthy_core=0
     local unhealthy_optional=0
 
     # Check each CORE service individually
     for service in "${core_services[@]}"; do
         local container="dive-spoke-${code_lower}-${service}"
-        local health_status=$(docker inspect "$container" --format '{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+        local health_status
+        health_status=$(docker inspect "$container" --format '{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
 
         if [ "$health_status" != "healthy" ]; then
             ((unhealthy_core++))
@@ -943,10 +971,12 @@ spoke_checkpoint_deployment() {
     done
 
     # Count OPTIONAL services that are unhealthy (for logging only)
-    local optional_services=($(compose_get_spoke_services_by_class "$instance_code" "optional" 2>/dev/null || echo ""))
+    local -a optional_services=()
+    read -r -a optional_services <<<"$(compose_get_spoke_services_by_class "$instance_code" "optional" 2>/dev/null || echo "")"
     for service in "${optional_services[@]}"; do
         local container="dive-spoke-${code_lower}-${service}"
-        local health_status=$(docker inspect "$container" --format '{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+        local health_status
+        health_status=$(docker inspect "$container" --format '{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
 
         if [ "$health_status" != "healthy" ]; then
             ((unhealthy_optional++))

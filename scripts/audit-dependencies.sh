@@ -174,3 +174,6 @@ fetch 'http://127.0.0.1:7243/ingest/84b84b04-5661-4074-af82-a6f395f1c783' -X POS
 {"location":"audit-dependencies.sh:182","message":"Audit script completed","data":{},"timestamp":$(date +%s%3N),"sessionId":"debug-session","hypothesisId":"COMPLETE"}
 EOF
 # #endregion
+
+# sc2034-anchor
+: "${LOG_FILE:-}"

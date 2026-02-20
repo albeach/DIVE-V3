@@ -56,8 +56,10 @@ spoke_phase_seeding() {
     local instance_code="$1"
     local pipeline_mode="${2:-deploy}"
 
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # =============================================================================
     # IDEMPOTENT DEPLOYMENT: Check if phase already complete
@@ -83,7 +85,7 @@ spoke_phase_seeding() {
     fi
 
     log_info "→ Executing SEEDING phase for $code_upper"
-    local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    local _spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local backend_container="dive-spoke-${code_lower}-backend"
 
     log_info "Seeding phase for $code_upper"
@@ -134,7 +136,8 @@ spoke_phase_seeding() {
 
         # Log issuer details for verification
         if echo "$issuer_seed_output" | grep -q "Issuer URL:"; then
-            local issuer_url=$(echo "$issuer_seed_output" | grep "Issuer URL:" | head -1 | awk '{print $3}')
+            local issuer_url
+            issuer_url=$(echo "$issuer_seed_output" | grep "Issuer URL:" | head -1 | awk '{print $3}')
             log_verbose "  Issuer URL: $issuer_url"
         fi
     else
@@ -288,8 +291,10 @@ spoke_phase_seeding() {
 ##
 spoke_seed_users() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_step "Seeding test users for $code_upper..."
 
@@ -383,8 +388,10 @@ spoke_seed_resources() {
     local instance_code="$1"
     local resource_count="${2:-5000}"
     local file_type_mode="${3:-multi}"   # NEW: text or multi (default: multi)
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # File type mode description for logging
     local file_type_desc
@@ -535,8 +542,10 @@ spoke_seed_resources() {
 spoke_seed_resources_legacy() {
     local instance_code="$1"
     local resource_count="${2:-5000}"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_verbose "Using legacy plaintext resource seeding"
 
@@ -591,8 +600,10 @@ spoke_seed() {
         return 1
     fi
 
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     log_info "Seeding spoke $code_upper"
 

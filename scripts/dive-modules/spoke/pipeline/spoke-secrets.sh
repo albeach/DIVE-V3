@@ -40,8 +40,13 @@ if [ -z "${SECRETS_PROVIDER:-}" ] && [ "${DEPLOYMENT_MODE:-local}" != "remote" ]
     while IFS= read -r _line; do
         case "$_line" in
             SECRETS_PROVIDER=*|VAULT_CLI_ADDR=*|VAULT_ADDR=*)
-                # shellcheck disable=SC2163
-                export "$_line" ;;
+                _key="${_line%%=*}"
+                _value="${_line#*=}"
+                if [ -n "$_key" ]; then
+                    printf -v "$_key" '%s' "$_value"
+                    export "${_key?}"
+                fi
+                ;;
         esac
     done < "${DIVE_ROOT}/.env.hub"
 fi
@@ -101,8 +106,10 @@ spoke_secrets_load() {
     local instance_code="$1"
     local mode="${2:-load}"
 
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     local ssot_name="GCP Secret Manager"
     [ "$SECRETS_PROVIDER" = "vault" ] && ssot_name="HashiCorp Vault"
@@ -230,8 +237,10 @@ _map_env_to_gcp_secret() {
 
 spoke_secrets_load_from_gcp() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # Check GCP availability
     if ! check_gcloud 2>/dev/null; then
@@ -249,7 +258,8 @@ spoke_secrets_load_from_gcp() {
     # Load each required secret using SSOT naming convention
     for base_secret in "${SPOKE_REQUIRED_SECRETS[@]}"; do
         # Use SSOT mapping function instead of naive transformation
-        local gcp_secret_name=$(_map_env_to_gcp_secret "$base_secret" "$code_lower")
+        local gcp_secret_name
+        gcp_secret_name=$(_map_env_to_gcp_secret "$base_secret" "$code_lower")
         local env_var_name="${base_secret}_${code_upper}"
 
         # Try to fetch from GCP
@@ -262,7 +272,8 @@ spoke_secrets_load_from_gcp() {
             log_verbose "Loaded $env_var_name from GCP ($gcp_secret_name)"
         else
             # Try shared secret (for instance-agnostic secrets like redis-blacklist)
-            local shared_secret_name="dive-v3-$(echo "$base_secret" | tr '[:upper:]' '[:lower:]' | tr '_' '-')"
+            local shared_secret_name
+            shared_secret_name="dive-v3-$(echo "$base_secret" | tr '[:upper:]' '[:lower:]' | tr '_' '-')"
             secret_value=$(gcloud secrets versions access latest --secret="$shared_secret_name" --project="$project" 2>/dev/null)
 
             if [ -n "$secret_value" ]; then
@@ -280,7 +291,8 @@ spoke_secrets_load_from_gcp() {
     # Also load optional secrets (don't fail if missing)
     for base_secret in "${SPOKE_OPTIONAL_SECRETS[@]}"; do
         # Use SSOT mapping function
-        local gcp_secret_name=$(_map_env_to_gcp_secret "$base_secret" "$code_lower")
+        local gcp_secret_name
+        gcp_secret_name=$(_map_env_to_gcp_secret "$base_secret" "$code_lower")
         local env_var_name="${base_secret}_${code_upper}"
 
         local secret_value
@@ -342,7 +354,8 @@ spoke_secrets_load_from_gcp() {
         if [ ${#failed_secrets[@]} -gt 0 ]; then
             local missing_gcp_names=()
             for secret in "${failed_secrets[@]}"; do
-                local gcp_name=$(_map_env_to_gcp_secret "$secret" "$code_lower")
+                local gcp_name
+                gcp_name=$(_map_env_to_gcp_secret "$secret" "$code_lower")
                 missing_gcp_names+=("$gcp_name")
             done
 
@@ -370,8 +383,10 @@ spoke_secrets_load_from_gcp() {
 ##
 spoke_secrets_upload_to_gcp() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local project="${GCP_PROJECT:-dive25}"
 
     if ! check_gcloud 2>/dev/null; then
@@ -386,7 +401,8 @@ spoke_secrets_upload_to_gcp() {
         local secret_value="${!env_var_name}"
 
         if [ -n "$secret_value" ]; then
-            local gcp_secret_name="dive-v3-$(echo "$base_secret" | tr '[:upper:]' '[:lower:]' | tr '_' '-')-${code_lower}"
+            local gcp_secret_name
+            gcp_secret_name="dive-v3-$(echo "$base_secret" | tr '[:upper:]' '[:lower:]' | tr '_' '-')-${code_lower}"
 
             # Create secret if it doesn't exist
             if ! gcloud secrets describe "$gcp_secret_name" --project="$project" &>/dev/null; then
@@ -445,8 +461,10 @@ _map_env_to_vault_path() {
 ##
 spoke_secrets_load_from_vault() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     # CLI runs on host — use VAULT_CLI_ADDR (host-accessible) over VAULT_ADDR (Docker-internal)
     if [ -n "${VAULT_CLI_ADDR:-}" ]; then
@@ -472,7 +490,8 @@ spoke_secrets_load_from_vault() {
 
     # Load each required secret
     for base_secret in "${SPOKE_REQUIRED_SECRETS[@]}"; do
-        local vault_mapping=$(_map_env_to_vault_path "$base_secret" "$code_lower")
+        local vault_mapping
+        vault_mapping=$(_map_env_to_vault_path "$base_secret" "$code_lower")
         local env_var_name="${base_secret}_${code_upper}"
 
         if [ -z "$vault_mapping" ]; then
@@ -513,7 +532,8 @@ spoke_secrets_load_from_vault() {
 
     # Load optional secrets (don't fail if missing)
     for base_secret in "${SPOKE_OPTIONAL_SECRETS[@]}"; do
-        local vault_mapping=$(_map_env_to_vault_path "$base_secret" "$code_lower")
+        local vault_mapping
+        vault_mapping=$(_map_env_to_vault_path "$base_secret" "$code_lower")
         local env_var_name="${base_secret}_${code_upper}"
 
         if [ -z "$vault_mapping" ]; then
@@ -591,8 +611,10 @@ spoke_secrets_load_from_vault() {
 ##
 spoke_secrets_upload_to_vault() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
 
     if ! vault_is_authenticated; then
         log_warn "Vault not available for secret upload"
@@ -606,7 +628,8 @@ spoke_secrets_upload_to_vault() {
         local secret_value="${!env_var_name}"
 
         if [ -n "$secret_value" ]; then
-            local vault_mapping=$(_map_env_to_vault_path "$base_secret" "$code_lower")
+            local vault_mapping
+            vault_mapping=$(_map_env_to_vault_path "$base_secret" "$code_lower")
             if [ -z "$vault_mapping" ]; then
                 continue
             fi
@@ -642,8 +665,10 @@ spoke_secrets_upload_to_vault() {
 ##
 spoke_secrets_load_from_env() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local env_file="$spoke_dir/.env"
 
@@ -665,6 +690,7 @@ spoke_secrets_load_from_env() {
     local _save_hub_opal="${HUB_OPAL_URL:-}" _save_hub_vault="${HUB_VAULT_URL:-}"
     local _save_hub_ext="${HUB_EXTERNAL_ADDRESS:-}" _save_deploy_mode="${DEPLOYMENT_MODE:-}"
     set -a
+    # shellcheck source=/dev/null
     source "$env_file"
     set +a
     # Restore Hub URL vars (env exports take priority over stale .env values)
@@ -715,8 +741,10 @@ spoke_secrets_load_from_env() {
 ##
 spoke_secrets_sync_to_env() {
     local instance_code="$1"
-    local code_upper=$(upper "$instance_code")
-    local code_lower=$(lower "$instance_code")
+    local code_upper
+    code_upper=$(upper "$instance_code")
+    local code_lower
+    code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
     local env_file="$spoke_dir/.env"
 
@@ -828,10 +856,14 @@ spoke_secrets_sync_to_env() {
     # Compute CORS_ALLOWED_ORIGINS from SSOT (dynamic, not hardcoded)
     if ! grep -q "^CORS_ALLOWED_ORIGINS=" "$env_file" 2>/dev/null; then
         # Extract all endpoint URLs from spoke_config_get
-        local base_url=$(spoke_config_get "$instance_code" "endpoints.baseUrl" "https://localhost:3000")
-        local api_url=$(spoke_config_get "$instance_code" "endpoints.apiUrl" "https://localhost:4000")
-        local idp_url=$(spoke_config_get "$instance_code" "endpoints.idpUrl" "https://localhost:8443")
-        local idp_public_url=$(spoke_config_get "$instance_code" "endpoints.idpPublicUrl")
+        local base_url
+        base_url=$(spoke_config_get "$instance_code" "endpoints.baseUrl" "https://localhost:3000")
+        local api_url
+        api_url=$(spoke_config_get "$instance_code" "endpoints.apiUrl" "https://localhost:4000")
+        local idp_url
+        idp_url=$(spoke_config_get "$instance_code" "endpoints.idpUrl" "https://localhost:8443")
+        local idp_public_url
+        idp_public_url=$(spoke_config_get "$instance_code" "endpoints.idpPublicUrl")
 
         # Build CORS origins list (unique values only)
         local cors_origins="$base_url,$api_url,$idp_url"
@@ -874,3 +906,6 @@ spoke_secrets_sync_to_env() {
 
 # Load secret generation, validation & sync functions
 source "$(dirname "${BASH_SOURCE[0]}")/spoke-secrets-sync.sh"
+
+# sc2034-anchor
+: "${SPOKE_AUTH_SECRET_MIN_LENGTH:-}" "${SPOKE_SECRET_MIN_LENGTH:-}"

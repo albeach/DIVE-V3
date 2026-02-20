@@ -188,6 +188,7 @@ spoke_caddy_create_dns() {
     # Source shared DNS helpers (dns.sh provides _dns_get_token, _dns_create_or_update)
     local _dns_module="${DIVE_ROOT}/scripts/dive-modules/configuration/dns.sh"
     if [ -f "$_dns_module" ]; then
+        # shellcheck source=../../configuration/dns.sh
         source "$_dns_module"
     fi
 

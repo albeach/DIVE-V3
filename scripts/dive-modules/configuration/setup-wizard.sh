@@ -175,6 +175,7 @@ _setup_step_cloudflare() {
     # Source DNS module for validation helpers
     local _dns_module="${DIVE_ROOT}/scripts/dive-modules/configuration/dns.sh"
     if [ -f "$_dns_module" ]; then
+        # shellcheck source=./dns.sh
         source "$_dns_module"
     fi
 

@@ -81,7 +81,8 @@ policy_build() {
     fi
 
     if [ -f "$bundle_file" ]; then
-        local size=$(du -h "$bundle_file" | cut -f1)
+        local size
+        size=$(du -h "$bundle_file" | cut -f1)
         log_success "Policy bundle built: $bundle_file ($size)"
         return 0
     else
@@ -184,7 +185,8 @@ policy_status() {
     if curl -sf "https://localhost:${OPAL_PORT:-7002}/healthz" >/dev/null 2>&1; then
         echo "  Status: Healthy"
 
-        local stats=$(curl -sf "https://localhost:${OPAL_PORT:-7002}/stats" 2>/dev/null)
+        local stats
+        stats=$(curl -sf "https://localhost:${OPAL_PORT:-7002}/stats" 2>/dev/null)
         if [ -n "$stats" ]; then
             echo "  Connected clients: $(echo "$stats" | jq -r '.clients // "N/A"')"
         fi
@@ -197,7 +199,8 @@ policy_status() {
     # OPA instances
     echo "OPA Instances:"
     for container in $(docker ps --filter "name=opa" --format '{{.Names}}'); do
-        local health=$(docker inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
+        local health
+        health=$(docker inspect "$container" --format='{{.State.Health.Status}}' 2>/dev/null || echo "unknown")
         printf "  %-40s %s\n" "$container" "$health"
     done
 

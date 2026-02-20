@@ -267,8 +267,10 @@ test_module_integrity() {
     run_command_test "Status function available" "bash -c 'source scripts/dive-modules/spoke.sh >/dev/null 2>&1 && type spoke_status >/dev/null 2>&1 && echo FOUND'" "FOUND"
 
     # Test dispatcher function count
-    local dispatcher_funcs=$(grep -E "spoke_[a-zA-Z_]+" scripts/dive-modules/spoke.sh | sed 's/.*spoke_\([a-zA-Z_]*\).*/spoke_\1/' | sort | uniq | grep -v "log_" | grep -v "print_" | wc -l)
-    local module_funcs=$(find scripts/dive-modules/spoke -name "*.sh" -exec grep -E "^[a-zA-Z_][a-zA-Z0-9_]*\(\)" {} \; | wc -l)
+    local dispatcher_funcs
+    dispatcher_funcs=$(grep -E "spoke_[a-zA-Z_]+" scripts/dive-modules/spoke.sh | sed 's/.*spoke_\([a-zA-Z_]*\).*/spoke_\1/' | sort | uniq | grep -v "log_" | grep -v "print_" | wc -l)
+    local module_funcs
+    module_funcs=$(find scripts/dive-modules/spoke -name "*.sh" -exec grep -E "^[a-zA-Z_][a-zA-Z0-9_]*\(\)" {} \; | wc -l)
 
     if [ "$dispatcher_funcs" -le "$module_funcs" ]; then
         log_test "Function coverage validation"

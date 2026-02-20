@@ -99,6 +99,7 @@ log_info "Env file: $ENV_FILE"
 if [[ -f "$ENV_FILE" ]]; then
     log_info "Loading environment variables from $ENV_FILE"
     set -a
+    # shellcheck source=/dev/null
     source "$ENV_FILE"
     set +a
     log_success "Environment variables loaded"
