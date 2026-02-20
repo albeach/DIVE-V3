@@ -18,95 +18,117 @@
 import { Request, Response } from "express";
 import { complianceMetricsService } from "../services/compliance-metrics.service";
 import { logger } from "../utils/logger";
-// import { coiKeyRegistry } from "../services/coi-key-registry"; // Not currently used
-// import { getEquivalencyTable } from "../utils/classification-equivalency"; // Not currently used
-// import { certificateManager } from "../utils/certificate-manager"; // Not currently used
+
+// =============================================================================
+// SECTION DEFINITIONS (ACP-240 requirement counts per specification)
+// =============================================================================
+
+const SECTIONS = [
+    { id: 1, name: "Key Concepts & Terminology", total: 5 },
+    { id: 2, name: "Identity & Federation", total: 11 },
+    { id: 3, name: "ABAC & Enforcement", total: 11 },
+    { id: 4, name: "Data Markings & Interoperability", total: 8 },
+    { id: 5, name: "ZTDF & Cryptography", total: 14 },
+    { id: 6, name: "Logging & Auditing", total: 13 },
+    { id: 7, name: "Standards & Protocols", total: 10 },
+    { id: 8, name: "Best Practices", total: 9 },
+    { id: 9, name: "Implementation Checklist", total: 19 },
+    { id: 10, name: "Glossary", total: 1 },
+] as const;
+
+const TOTAL_REQUIREMENTS = SECTIONS.reduce((sum, s) => sum + s.total, 0); // 101
+
+/**
+ * Compute compliance level from percentage
+ */
+function computeLevel(percentage: number): { level: string; badge: string } {
+    if (percentage >= 100) return { level: "PERFECT", badge: "💎" };
+    if (percentage >= 90) return { level: "HIGH", badge: "🟢" };
+    if (percentage >= 70) return { level: "MODERATE", badge: "🟡" };
+    return { level: "LOW", badge: "🔴" };
+}
+
+/**
+ * Evaluate section compliance using runtime metrics.
+ *
+ * Sections 1 (terminology), 4 (data markings), 7 (standards), 10 (glossary)
+ * are architectural/static — always compliant once implemented.
+ *
+ * Sections 2,3,5,6,8,9 have runtime-verifiable aspects.
+ */
+async function evaluateSections() {
+    const [sla, testMetrics, driftStatus] = await Promise.all([
+        complianceMetricsService.getSLAMetrics(),
+        complianceMetricsService.getTestCoverageMetrics(),
+        complianceMetricsService.getPolicyDriftStatus(),
+    ]);
+
+    const sectionResults = SECTIONS.map((section) => {
+        let compliant: number = section.total; // Default: all compliant
+
+        switch (section.id) {
+            case 2: // Identity & Federation — check availability
+                if (!sla.availability.compliant) compliant = Math.max(0, compliant - 1);
+                break;
+            case 3: // ABAC & Enforcement — check policy drift
+                if (driftStatus.status === "drift_detected") compliant = Math.max(0, compliant - 2);
+                break;
+            case 5: // ZTDF & Cryptography — check SLA latency (crypto overhead)
+                if (!sla.latency.compliant) compliant = Math.max(0, compliant - 1);
+                break;
+            case 6: // Logging & Auditing — check audit operational
+                if (!sla.availability.compliant) compliant = Math.max(0, compliant - 1);
+                break;
+            case 8: // Best Practices — check test coverage target
+                if (!sla.testCoverage.compliant) compliant = Math.max(0, compliant - 1);
+                break;
+            case 9: // Implementation Checklist — check policy sync + overall SLA
+                if (!sla.policySync.compliant) compliant = Math.max(0, compliant - 1);
+                if (!sla.overallCompliant) compliant = Math.max(0, compliant - 1);
+                break;
+        }
+
+        const percentage = section.total > 0
+            ? Math.round((compliant / section.total) * 100)
+            : 100;
+
+        return { id: section.id, name: section.name, total: section.total, compliant, percentage };
+    });
+
+    return { sectionResults, sla, testMetrics, driftStatus };
+}
 
 /**
  * GET /api/compliance/status
  *
- * Returns overall ACP-240 compliance status
+ * Returns overall ACP-240 compliance status computed from runtime metrics.
+ * Replaces the former hardcoded "PERFECT / 100%" with live SLA, policy drift,
+ * and test coverage data from complianceMetricsService.
  */
 export async function getComplianceStatus(
     _req: Request,
     res: Response,
 ): Promise<void> {
     try {
+        const { sectionResults, testMetrics } = await evaluateSections();
+
+        const compliantTotal = sectionResults.reduce((sum, s) => sum + s.compliant, 0);
+        const gapTotal = TOTAL_REQUIREMENTS - compliantTotal;
+        const percentage = Math.round((compliantTotal / TOTAL_REQUIREMENTS) * 100);
+        const { level, badge } = computeLevel(percentage);
+
+        const today = new Date().toISOString().split("T")[0];
+
         const status = {
-            level: "PERFECT",
-            percentage: 100,
-            badge: "💎",
-            totalRequirements: 58,
-            compliantRequirements: 58,
+            level,
+            percentage,
+            badge,
+            totalRequirements: TOTAL_REQUIREMENTS,
+            compliantRequirements: compliantTotal,
             partialRequirements: 0,
-            gapRequirements: 0,
-            certificationDate: "2025-10-18",
-            sections: [
-                {
-                    id: 1,
-                    name: "Key Concepts & Terminology",
-                    total: 5,
-                    compliant: 5,
-                    percentage: 100,
-                },
-                {
-                    id: 2,
-                    name: "Identity & Federation",
-                    total: 11,
-                    compliant: 11,
-                    percentage: 100,
-                },
-                {
-                    id: 3,
-                    name: "ABAC & Enforcement",
-                    total: 11,
-                    compliant: 11,
-                    percentage: 100,
-                },
-                {
-                    id: 4,
-                    name: "Data Markings & Interoperability",
-                    total: 8,
-                    compliant: 8,
-                    percentage: 100,
-                },
-                {
-                    id: 5,
-                    name: "ZTDF & Cryptography",
-                    total: 14,
-                    compliant: 14,
-                    percentage: 100,
-                },
-                {
-                    id: 6,
-                    name: "Logging & Auditing",
-                    total: 13,
-                    compliant: 13,
-                    percentage: 100,
-                },
-                {
-                    id: 7,
-                    name: "Standards & Protocols",
-                    total: 10,
-                    compliant: 10,
-                    percentage: 100,
-                },
-                {
-                    id: 8,
-                    name: "Best Practices",
-                    total: 9,
-                    compliant: 9,
-                    percentage: 100,
-                },
-                {
-                    id: 9,
-                    name: "Implementation Checklist",
-                    total: 19,
-                    compliant: 19,
-                    percentage: 100,
-                },
-                { id: 10, name: "Glossary", total: 1, compliant: 1, percentage: 100 },
-            ],
+            gapRequirements: gapTotal,
+            certificationDate: today,
+            sections: sectionResults,
             keyAchievements: [
                 {
                     id: "multi-kas",
@@ -142,19 +164,19 @@ export async function getComplianceStatus(
                 },
             ],
             testMetrics: {
-                total: 762,
-                passing: 762,
-                failing: 0,
-                passRate: 100,
-                coverage: 95,
-                backendTests: 636,
-                opaTests: 126,
+                total: testMetrics.totalTests,
+                passing: testMetrics.passingTests,
+                failing: testMetrics.failingTests,
+                passRate: Math.round(testMetrics.passRate * 100) / 100,
+                coverage: Math.round(testMetrics.coverage * 100) / 100,
+                backendTests: testMetrics.totalTests - (testMetrics.coverageByPackage?.["dive.compat"]?.tests || 0),
+                opaTests: testMetrics.coverageByPackage?.["dive.compat"]?.tests || 0,
             },
             deploymentStatus: {
-                ready: true,
+                ready: percentage >= 70,
                 classification: "SECRET",
-                environment: "Production Ready",
-                certificateId: "ACP240-DIVE-V3-2025-10-18-PERFECT",
+                environment: percentage >= 100 ? "Production Ready" : "Pre-Production",
+                certificateId: `ACP240-DIVE-V3-${today}-${level}`,
             },
         };
 
