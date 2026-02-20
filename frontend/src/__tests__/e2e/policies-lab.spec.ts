@@ -66,20 +66,20 @@ test.describe('Policies Lab - Basic Navigation (Refactored)', { tag: ['@smoke', 
     });
 
     test('User can navigate to Policies Lab page', async ({ page }) => {
-        test.step('Navigate to Policies Lab', async () => {
+        await test.step('Navigate to Policies Lab', async () => {
             await page.goto('/policies/lab', {
                 timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
             });
         });
 
-        test.step('Verify page loaded', async () => {
+        await test.step('Verify page loaded', async () => {
             const heading = page.getByRole('heading', { name: /policies lab/i });
             await expect(heading).toBeVisible({
                 timeout: TEST_CONFIG.TIMEOUTS.ACTION,
             });
         });
 
-        test.step('Verify upload button exists', async () => {
+        await test.step('Verify upload button exists', async () => {
             const uploadButton = page.getByRole('button', { name: /upload|add.*policy/i });
             await expect(uploadButton).toBeVisible({
                 timeout: TEST_CONFIG.TIMEOUTS.ACTION,
@@ -88,13 +88,13 @@ test.describe('Policies Lab - Basic Navigation (Refactored)', { tag: ['@smoke', 
     });
 
     test('Policies Lab shows list of policies', async ({ page }) => {
-        test.step('Navigate to Policies Lab', async () => {
+        await test.step('Navigate to Policies Lab', async () => {
             await page.goto('/policies/lab', {
                 timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
             });
         });
 
-        test.step('Verify policy list or table visible', async () => {
+        await test.step('Verify policy list or table visible', async () => {
             const policyList = page.getByRole('table')
                 .or(page.getByRole('list'))
                 .or(page.getByTestId('policy-list'));
@@ -107,18 +107,18 @@ test.describe('Policies Lab - Basic Navigation (Refactored)', { tag: ['@smoke', 
     });
 
     test('Upload policy button opens upload form', async ({ page }) => {
-        test.step('Navigate to Policies Lab', async () => {
+        await test.step('Navigate to Policies Lab', async () => {
             await page.goto('/policies/lab', {
                 timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
             });
         });
 
-        test.step('Click upload policy button', async () => {
+        await test.step('Click upload policy button', async () => {
             const uploadButton = page.getByRole('button', { name: /upload|add.*policy/i });
             await uploadButton.click();
         });
 
-        test.step('Verify upload form/modal appeared', async () => {
+        await test.step('Verify upload form/modal appeared', async () => {
             // Look for policy upload form elements
             const policyNameField = page.getByLabel(/policy.*name|name/i);
             const fileInput = page.locator('input[type="file"]');
@@ -146,18 +146,18 @@ test.describe('Policies Lab - Policy Upload (Refactored)', () => {
     });
 
     test('User can upload a Rego policy', async ({ page }) => {
-        test.step('Navigate to Policies Lab', async () => {
+        await test.step('Navigate to Policies Lab', async () => {
             await page.goto('/policies/lab', {
                 timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
             });
         });
 
-        test.step('Click upload policy button', async () => {
+        await test.step('Click upload policy button', async () => {
             const uploadButton = page.getByRole('button', { name: /upload|add.*policy/i });
             await uploadButton.click();
         });
 
-        test.step('Fill in policy details', async () => {
+        await test.step('Fill in policy details', async () => {
             // Create file buffer
             const buffer = Buffer.from(SAMPLE_REGO_POLICY);
             
@@ -180,12 +180,12 @@ test.describe('Policies Lab - Policy Upload (Refactored)', () => {
             }
         });
 
-        test.step('Submit upload', async () => {
+        await test.step('Submit upload', async () => {
             const submitButton = page.getByRole('button', { name: /upload|submit|save/i });
             await submitButton.click();
         });
 
-        test.step('Verify upload success', async () => {
+        await test.step('Verify upload success', async () => {
             // Look for success message or redirect
             const successMessage = page.getByText(/success|uploaded|created/i);
             await expect(successMessage).toBeVisible({
@@ -211,13 +211,13 @@ test.describe('Policies Lab - Policy Evaluation (Refactored)', () => {
     });
 
     test('Policies Lab shows evaluate feature', async ({ page }) => {
-        test.step('Navigate to Policies Lab', async () => {
+        await test.step('Navigate to Policies Lab', async () => {
             await page.goto('/policies/lab', {
                 timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
             });
         });
 
-        test.step('Verify evaluate tab or button exists', async () => {
+        await test.step('Verify evaluate tab or button exists', async () => {
             const evaluateButton = page.getByRole('button', { name: /evaluate|test/i })
                 .or(page.getByRole('tab', { name: /evaluate/i }));
             
@@ -228,13 +228,13 @@ test.describe('Policies Lab - Policy Evaluation (Refactored)', () => {
     });
 
     test('User can navigate to evaluate tab', async ({ page }) => {
-        test.step('Navigate to Policies Lab', async () => {
+        await test.step('Navigate to Policies Lab', async () => {
             await page.goto('/policies/lab', {
                 timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
             });
         });
 
-        test.step('Click evaluate tab', async () => {
+        await test.step('Click evaluate tab', async () => {
             const evaluateTab = page.getByRole('tab', { name: /evaluate/i });
             if (await evaluateTab.isVisible({ timeout: 2000 }).catch(() => false)) {
                 await evaluateTab.click();
@@ -265,13 +265,13 @@ test.describe('Policies Lab - Policy Management (Refactored)', () => {
     });
 
     test('Policies Lab shows policy actions', async ({ page }) => {
-        test.step('Navigate to Policies Lab', async () => {
+        await test.step('Navigate to Policies Lab', async () => {
             await page.goto('/policies/lab', {
                 timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
             });
         });
 
-        test.step('Verify policy actions available', async () => {
+        await test.step('Verify policy actions available', async () => {
             // Look for common policy actions
             const actions = page.getByRole('button', { name: /delete|edit|view|download/i });
             
@@ -287,13 +287,13 @@ test.describe('Policies Lab - Policy Management (Refactored)', () => {
     });
 
     test('Policies Lab supports filtering/search', async ({ page }) => {
-        test.step('Navigate to Policies Lab', async () => {
+        await test.step('Navigate to Policies Lab', async () => {
             await page.goto('/policies/lab', {
                 timeout: TEST_CONFIG.TIMEOUTS.NAVIGATION,
             });
         });
 
-        test.step('Verify search or filter exists', async () => {
+        await test.step('Verify search or filter exists', async () => {
             const searchField = page.getByPlaceholder(/search|filter/i)
                 .or(page.getByRole('searchbox'));
             
