@@ -26,6 +26,7 @@ _nuke_parse_arguments() {
     keep_images=false
     reset_spokes=false
     deep_clean=false
+    preserve_logs=false
     target_type="all"  # New: all, hub, spoke, volumes, networks, orphans
     target_instance=""  # New: specific spoke instance code
 
@@ -51,6 +52,10 @@ _nuke_parse_arguments() {
                 ;;
             --deep|--deep-clean)
                 deep_clean=true
+                shift
+                ;;
+            --preserve-logs)
+                preserve_logs=true
                 shift
                 ;;
             hub)
@@ -113,6 +118,7 @@ _nuke_show_help() {
     echo "    --deep or --deep-clean                       # FULL CLEAN SLATE: removes all images, builder cache,"
     echo "                                                 # and Terraform state (recommended for debugging)"
     echo "    --reset-spokes                               # Clear spoke federation registrations"
+    echo "    --preserve-logs                              # Keep deployment logs during nuke"
     echo ""
     echo "  What gets cleaned (nuke all):"
     echo "    - All DIVE containers, volumes, networks"
