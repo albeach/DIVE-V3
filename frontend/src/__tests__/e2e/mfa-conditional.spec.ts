@@ -32,12 +32,12 @@ test.describe('MFA Conditional Enforcement (Refactored)', { tag: ['@critical', '
     });
 
     test('UNCLASSIFIED user logs in without MFA (AAL1)', async ({ page }) => {
-        test.step('Login as UNCLASSIFIED user (no MFA)', async () => {
+        await test.step('Login as UNCLASSIFIED user (no MFA)', async () => {
             // UNCLASS users should not require MFA
             await loginAs(page, TEST_USERS.USA.UNCLASS);
         });
 
-        test.step('Verify successful login without MFA', async () => {
+        await test.step('Verify successful login without MFA', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.verifyLoggedIn();
             await dashboard.verifyUserInfo(
@@ -47,7 +47,7 @@ test.describe('MFA Conditional Enforcement (Refactored)', { tag: ['@critical', '
             );
         });
 
-        test.step('Verify dashboard accessible', async () => {
+        await test.step('Verify dashboard accessible', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.goto();
             
@@ -59,7 +59,7 @@ test.describe('MFA Conditional Enforcement (Refactored)', { tag: ['@critical', '
     });
 
     test('CONFIDENTIAL user requires MFA (AAL2)', async ({ page }) => {
-        test.step('Attempt login as CONFIDENTIAL user', async () => {
+        await test.step('Attempt login as CONFIDENTIAL user', async () => {
             // This will handle MFA if required
             // May need OTP code - using helper's default for now
             await loginAs(page, TEST_USERS.USA.CONFIDENTIAL, {
@@ -67,7 +67,7 @@ test.describe('MFA Conditional Enforcement (Refactored)', { tag: ['@critical', '
             });
         });
 
-        test.step('Verify successful login after MFA', async () => {
+        await test.step('Verify successful login after MFA', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.verifyLoggedIn();
             await dashboard.verifyUserInfo(
@@ -79,13 +79,13 @@ test.describe('MFA Conditional Enforcement (Refactored)', { tag: ['@critical', '
     });
 
     test('SECRET user requires MFA (AAL2)', async ({ page }) => {
-        test.step('Attempt login as SECRET user', async () => {
+        await test.step('Attempt login as SECRET user', async () => {
             await loginAs(page, TEST_USERS.USA.SECRET, {
                 expectMFASetup: true,
             });
         });
 
-        test.step('Verify successful login after MFA', async () => {
+        await test.step('Verify successful login after MFA', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.verifyLoggedIn();
             await dashboard.verifyUserInfo(
@@ -97,7 +97,7 @@ test.describe('MFA Conditional Enforcement (Refactored)', { tag: ['@critical', '
     });
 
     test('TOP_SECRET user requires MFA (AAL3)', async ({ page }) => {
-        test.step('Attempt login as TOP_SECRET user', async () => {
+        await test.step('Attempt login as TOP_SECRET user', async () => {
             // TOP_SECRET requires WebAuthn (AAL3)
             // This may fail if WebAuthn not implemented
             try {
@@ -110,7 +110,7 @@ test.describe('MFA Conditional Enforcement (Refactored)', { tag: ['@critical', '
             }
         });
 
-        test.step('Verify successful login after MFA', async () => {
+        await test.step('Verify successful login after MFA', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.verifyLoggedIn();
             await dashboard.verifyUserInfo(
@@ -142,7 +142,7 @@ test.describe('MFA Enforcement - Multi-Nation (Refactored)', () => {
         ];
 
         for (const user of secretUsers) {
-            test.step(`${user.countryCode} SECRET user requires MFA`, async () => {
+            await test.step(`${user.countryCode} SECRET user requires MFA`, async () => {
                 await loginAs(page, user, {
                     expectMFASetup: true,
                 });
@@ -164,7 +164,7 @@ test.describe('MFA Enforcement - Multi-Nation (Refactored)', () => {
         ];
 
         for (const user of unclassUsers) {
-            test.step(`${user.countryCode} UNCLASS user no MFA`, async () => {
+            await test.step(`${user.countryCode} UNCLASS user no MFA`, async () => {
                 await loginAs(page, user);
 
                 const dashboard = new DashboardPage(page);
@@ -196,7 +196,7 @@ test.describe('MFA Enforcement - Clearance Hierarchy (Refactored)', () => {
         ];
 
         for (const { user, mfaRequired } of usersByLevel) {
-            test.step(`${user.clearance} user MFA=${mfaRequired}`, async () => {
+            await test.step(`${user.clearance} user MFA=${mfaRequired}`, async () => {
                 if (mfaRequired) {
                     await loginAs(page, user, { expectMFASetup: true });
                 } else {

@@ -394,13 +394,14 @@ assert_eq "0" "$standard_with_warn" "functional: standard phases have no warn me
 # Test: Line count reduction
 # =============================================================================
 
-# Test 35: Hub pipeline is significantly shorter than before
-# Before: ~940 lines (13 phase blocks ~350 lines); After: ~700 (registration + engine)
+# Test 35: Hub pipeline line count within expected range
+# Phase 7 registry refactor: ~700 lines (registration + engine)
+# Growth to ~1100: dry-run mode, SIGINT handling, heartbeat, circuit breakers, observability
 total_lines=$(wc -l < "$hub_pipeline" | tr -d ' ')
-if [ "$total_lines" -lt 750 ]; then
-    assert_eq "0" "0" "line count: hub-pipeline.sh is $total_lines lines (reduced from ~940)"
+if [ "$total_lines" -lt 1150 ]; then
+    assert_eq "0" "0" "line count: hub-pipeline.sh is $total_lines lines (hardened engine)"
 else
-    assert_eq "<750" "$total_lines" "line count: should be reduced from ~940 lines"
+    assert_eq "<1150" "$total_lines" "line count: should be under 1150 lines (registry + hardened engine)"
 fi
 
 # =============================================================================

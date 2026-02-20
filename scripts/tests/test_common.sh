@@ -134,3 +134,6 @@ assert_eq "default-val" "$(json_get_field "$TEST_JSON" "nonExistent" "default-va
 assert_eq "fallback" "$(json_get_field "/nonexistent/file.json" "key" "fallback")" "json_get_field: missing file returns default"
 
 rm -f "$TEST_JSON"
+
+# Cleanup: remove docker stub so subsequent test suites get real docker
+unset -f docker 2>/dev/null || true

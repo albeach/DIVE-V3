@@ -41,11 +41,11 @@ test.describe('External IdP Federation - Spain (Refactored)', { tag: ['@critical
     });
 
     test('Spain SECRET user can log in', async ({ page }) => {
-        test.step('Login via Spain IdP', async () => {
+        await test.step('Login via Spain IdP', async () => {
             await loginAs(page, ESP_SECRET);
         });
 
-        test.step('Verify dashboard shows Spanish user info', async () => {
+        await test.step('Verify dashboard shows Spanish user info', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.verifyLoggedIn();
             await dashboard.verifyUserInfo(
@@ -55,23 +55,23 @@ test.describe('External IdP Federation - Spain (Refactored)', { tag: ['@critical
             );
         });
 
-        test.step('Verify NATO-COSMIC COI', async () => {
+        await test.step('Verify NATO-COSMIC COI', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.verifyCOIBadges(['NATO-COSMIC']);
         });
     });
 
     test('Spain user can access NATO-COSMIC resource', async ({ page }) => {
-        test.step('Login as Spanish SECRET user', async () => {
+        await test.step('Login as Spanish SECRET user', async () => {
             await loginAs(page, ESP_SECRET);
         });
 
-        test.step('Verify access to NATO document', async () => {
+        await test.step('Verify access to NATO document', async () => {
             const resources = new ResourcesPage(page);
             await resources.verifyResourceAccessible(TEST_RESOURCES.SECRET.NATO.resourceId);
         });
 
-        test.step('Verify resource content visible', async () => {
+        await test.step('Verify resource content visible', async () => {
             const content = page.getByText(TEST_RESOURCES.SECRET.NATO.content);
             await expect(content).toBeVisible({
                 timeout: TEST_CONFIG.TIMEOUTS.ACTION,
@@ -80,16 +80,16 @@ test.describe('External IdP Federation - Spain (Refactored)', { tag: ['@critical
     });
 
     test('Spain user denied access to US-ONLY resource', async ({ page }) => {
-        test.step('Login as Spanish SECRET user', async () => {
+        await test.step('Login as Spanish SECRET user', async () => {
             await loginAs(page, ESP_SECRET);
         });
 
-        test.step('Verify US-ONLY document is denied', async () => {
+        await test.step('Verify US-ONLY document is denied', async () => {
             const resources = new ResourcesPage(page);
             await resources.verifyResourceDenied(TEST_RESOURCES.SECRET.USA_ONLY.resourceId);
         });
 
-        test.step('Verify denial reason mentions country/releasability', async () => {
+        await test.step('Verify denial reason mentions country/releasability', async () => {
             const denialReason = page.getByText(/country|releasability|not releasable to/i);
             await expect(denialReason).toBeVisible({
                 timeout: TEST_CONFIG.TIMEOUTS.ACTION,
@@ -98,11 +98,11 @@ test.describe('External IdP Federation - Spain (Refactored)', { tag: ['@critical
     });
 
     test('Spain user denied access to FVEY resource', async ({ page }) => {
-        test.step('Login as Spanish SECRET user', async () => {
+        await test.step('Login as Spanish SECRET user', async () => {
             await loginAs(page, ESP_SECRET);
         });
 
-        test.step('Verify FVEY document is denied (Spain not in FVEY)', async () => {
+        await test.step('Verify FVEY document is denied (Spain not in FVEY)', async () => {
             const resources = new ResourcesPage(page);
             await resources.verifyResourceDenied(TEST_RESOURCES.SECRET.FVEY.resourceId);
         });
@@ -123,11 +123,11 @@ test.describe('External IdP Federation - USA (Refactored)', () => {
     });
 
     test('USA SECRET user can log in', async ({ page }) => {
-        test.step('Login via USA IdP', async () => {
+        await test.step('Login via USA IdP', async () => {
             await loginAs(page, TEST_USERS.USA.SECRET);
         });
 
-        test.step('Verify dashboard shows USA user info', async () => {
+        await test.step('Verify dashboard shows USA user info', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.verifyLoggedIn();
             await dashboard.verifyUserInfo(
@@ -137,23 +137,23 @@ test.describe('External IdP Federation - USA (Refactored)', () => {
             );
         });
 
-        test.step('Verify COI badges', async () => {
+        await test.step('Verify COI badges', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.verifyCOIBadges(['NATO-COSMIC']);
         });
     });
 
     test('USA user can access FVEY resource', async ({ page }) => {
-        test.step('Login as USA SECRET user', async () => {
+        await test.step('Login as USA SECRET user', async () => {
             await loginAs(page, TEST_USERS.USA.SECRET);
         });
 
-        test.step('Verify access to FVEY document', async () => {
+        await test.step('Verify access to FVEY document', async () => {
             const resources = new ResourcesPage(page);
             await resources.verifyResourceAccessible(TEST_RESOURCES.SECRET.FVEY.resourceId);
         });
 
-        test.step('Verify FVEY resource content visible', async () => {
+        await test.step('Verify FVEY resource content visible', async () => {
             const content = page.getByText(TEST_RESOURCES.SECRET.FVEY.content);
             await expect(content).toBeVisible({
                 timeout: TEST_CONFIG.TIMEOUTS.ACTION,
@@ -162,11 +162,11 @@ test.describe('External IdP Federation - USA (Refactored)', () => {
     });
 
     test('USA user can access US-ONLY resource', async ({ page }) => {
-        test.step('Login as USA SECRET user', async () => {
+        await test.step('Login as USA SECRET user', async () => {
             await loginAs(page, TEST_USERS.USA.SECRET);
         });
 
-        test.step('Verify access to US-ONLY document', async () => {
+        await test.step('Verify access to US-ONLY document', async () => {
             const resources = new ResourcesPage(page);
             await resources.verifyResourceAccessible(TEST_RESOURCES.SECRET.USA_ONLY.resourceId);
         });
@@ -187,11 +187,11 @@ test.describe('External IdP Federation - France (Refactored)', () => {
     });
 
     test('France SECRET user can log in', async ({ page }) => {
-        test.step('Login via France IdP', async () => {
+        await test.step('Login via France IdP', async () => {
             await loginAs(page, TEST_USERS.FRA.SECRET);
         });
 
-        test.step('Verify dashboard shows French user info', async () => {
+        await test.step('Verify dashboard shows French user info', async () => {
             const dashboard = new DashboardPage(page);
             await dashboard.verifyLoggedIn();
             await dashboard.verifyUserInfo(
@@ -203,16 +203,16 @@ test.describe('External IdP Federation - France (Refactored)', () => {
     });
 
     test('France user can access NATO but not FVEY', async ({ page }) => {
-        test.step('Login as French SECRET user', async () => {
+        await test.step('Login as French SECRET user', async () => {
             await loginAs(page, TEST_USERS.FRA.SECRET);
         });
 
-        test.step('Verify access to NATO document (ALLOW)', async () => {
+        await test.step('Verify access to NATO document (ALLOW)', async () => {
             const resources = new ResourcesPage(page);
             await resources.verifyResourceAccessible(TEST_RESOURCES.SECRET.NATO.resourceId);
         });
 
-        test.step('Verify FVEY document is denied (France not in FVEY)', async () => {
+        await test.step('Verify FVEY document is denied (France not in FVEY)', async () => {
             const resources = new ResourcesPage(page);
             await resources.verifyResourceDenied(TEST_RESOURCES.SECRET.FVEY.resourceId);
         });
@@ -241,7 +241,7 @@ test.describe('External IdP Federation - Cross-Nation (Refactored)', () => {
         ];
 
         for (const user of natoUsers) {
-            test.step(`${user.countryCode} user can access NATO document`, async () => {
+            await test.step(`${user.countryCode} user can access NATO document`, async () => {
                 await loginAs(page, user);
 
                 const resources = new ResourcesPage(page);
@@ -259,7 +259,7 @@ test.describe('External IdP Federation - Cross-Nation (Refactored)', () => {
         // Non-FVEY members
         const nonFveyUsers = [TEST_USERS.FRA.SECRET, ESP_SECRET];
 
-        test.step('FVEY members can access', async () => {
+        await test.step('FVEY members can access', async () => {
             for (const user of fveyUsers) {
                 await loginAs(page, user);
                 const resources = new ResourcesPage(page);
@@ -268,7 +268,7 @@ test.describe('External IdP Federation - Cross-Nation (Refactored)', () => {
             }
         });
 
-        test.step('Non-FVEY members denied', async () => {
+        await test.step('Non-FVEY members denied', async () => {
             for (const user of nonFveyUsers) {
                 await loginAs(page, user);
                 const resources = new ResourcesPage(page);
@@ -286,7 +286,7 @@ test.describe('External IdP Federation - Cross-Nation (Refactored)', () => {
         ];
 
         for (const user of testUsers) {
-            test.step(`${user.countryCode} user logout`, async () => {
+            await test.step(`${user.countryCode} user logout`, async () => {
                 await loginAs(page, user);
 
                 const dashboard = new DashboardPage(page);

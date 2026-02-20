@@ -160,7 +160,7 @@ Top current blockers are critical security exposure in federation/OPAL endpoints
 | P0 | Repair orchestration state transition flow | Platform | 2-3 days | No invalid transition logs in full hub deploy; deterministic resume | ✅ Done (PR #697) |
 | P0 | Remove localhost production assumptions | Platform/Identity | 3-5 days | Full hub+spoke federation works with public FQDN only | ✅ Done (PR #710) |
 | P0 | Enforce external IdP TLS validation in production | Identity/Security | 2 days | Registration fails for localhost/internal URLs in prod mode | ✅ Done (PR #692 + #710) |
-| P1 | Implement standalone spoke certified path | Platform | 2 days | Spoke works without hub; later federates without rebuild | 🔶 Partial — `--skip-federation` + `spoke federate` + opt-in seeding implemented (PR #715); full non-dry-run certification still pending |
+| P1 | Implement standalone spoke certified path | Platform | 2 days | Spoke works without hub; later federates without rebuild | ✅ Done — PR #715 + 36-test standalone certification suite + 12-point check standalone fix |
 | P1 | Introduce first-class Shared deploy command | CLI/Platform | 1-2 days | `./dive shared deploy/status/down` operational | ✅ Done (PR #704) |
 | P1 | Make Multi-KAS truly multi-endpoint in upload path | Backend/KAS | 3-4 days | KAOs resolve to distinct KAS URLs from registry | ✅ Done (PR #707) |
 | P1 | Replace placeholder compliance status metrics | Backend/Compliance | 2-3 days | `/api/compliance/status` reflects computed runtime values | ✅ Done (PR #700) |

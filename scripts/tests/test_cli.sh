@@ -56,3 +56,6 @@ while IFS= read -r -d '' file; do
 done < <(find "$PROJECT_ROOT/scripts/dive-modules" -name '*.sh' -print0)
 
 assert_eq "0" "$syntax_errors" "syntax check: all dive-modules/*.sh pass bash -n"
+
+# Cleanup: remove docker stub so subsequent test suites get real docker
+unset -f docker 2>/dev/null || true
