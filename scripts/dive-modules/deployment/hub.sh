@@ -131,7 +131,7 @@ module_hub() {
             esac
             ;;
         help|*)
-            echo "Usage: ./dive hub <command>"
+            echo "Usage: ./dive hub <command> [OPTIONS]"
             echo ""
             echo "Commands:"
             echo "  deploy    Full hub deployment"
@@ -143,6 +143,20 @@ module_hub() {
             echo "  logs      View hub logs"
             echo "  seed      Seed database with test data"
             echo "  spokes    Manage registered spokes"
+            echo ""
+            echo "Deploy Options:"
+            echo "  --resume               Resume from last checkpoint"
+            echo "  --skip-phase <PHASE>   Skip specified phase (can be repeated)"
+            echo "  --only-phase <PHASE>   Run only the specified phase"
+            echo ""
+            echo "Phases: VAULT_BOOTSTRAP DATABASE_INIT PREFLIGHT INITIALIZATION"
+            echo "        MONGODB_INIT BUILD SERVICES VAULT_DB_ENGINE KEYCLOAK_CONFIG"
+            echo "        REALM_VERIFY KAS_REGISTER SEEDING KAS_INIT"
+            echo ""
+            echo "Examples:"
+            echo "  ./dive hub deploy --resume"
+            echo "  ./dive hub deploy --skip-phase SEEDING --skip-phase KAS_INIT"
+            echo "  ./dive hub deploy --only-phase KEYCLOAK_CONFIG"
             ;;
     esac
 }

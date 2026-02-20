@@ -132,6 +132,9 @@ spoke_deploy() {
     export SKIP_FEDERATION=false
     export SPOKE_CUSTOM_DOMAIN=""
     export SPOKE_AUTH_CODE=""
+    export DIVE_SKIP_PHASES=""
+    export DIVE_ONLY_PHASE=""
+    local spoke_resume_mode=false
 
     # Parse options (handle both --key value and positional args)
     local skip_next=false
@@ -146,6 +149,34 @@ spoke_deploy() {
                 # Force flag - clean before deploy
                 if [ -n "$instance_code" ]; then
                     spoke_containers_clean "$instance_code" "false" 2>/dev/null || true
+                fi
+                ;;
+            --resume)
+                spoke_resume_mode=true
+                ;;
+            --skip-phase)
+                local next=$((i + 1))
+                local _phase="${!next:-}"
+                if [ -n "$_phase" ]; then
+                    _phase=$(echo "$_phase" | tr '[:lower:]' '[:upper:]')
+                    DIVE_SKIP_PHASES="${DIVE_SKIP_PHASES:+$DIVE_SKIP_PHASES }${_phase}"
+                    skip_next=true
+                else
+                    log_error "--skip-phase requires a phase name"
+                    log_info "Valid phases: PREFLIGHT INITIALIZATION DEPLOYMENT CONFIGURATION SEEDING VERIFICATION"
+                    return 1
+                fi
+                ;;
+            --only-phase)
+                local next=$((i + 1))
+                DIVE_ONLY_PHASE="${!next:-}"
+                if [ -n "$DIVE_ONLY_PHASE" ]; then
+                    DIVE_ONLY_PHASE=$(echo "$DIVE_ONLY_PHASE" | tr '[:lower:]' '[:upper:]')
+                    skip_next=true
+                else
+                    log_error "--only-phase requires a phase name"
+                    log_info "Valid phases: PREFLIGHT INITIALIZATION DEPLOYMENT CONFIGURATION SEEDING VERIFICATION"
+                    return 1
                 fi
                 ;;
             --skip-federation)
@@ -171,6 +202,20 @@ spoke_deploy() {
         esac
     done
 
+    # Validate: --skip-phase and --only-phase are mutually exclusive
+    if [ -n "$DIVE_SKIP_PHASES" ] && [ -n "$DIVE_ONLY_PHASE" ]; then
+        log_error "--skip-phase and --only-phase are mutually exclusive"
+        return 1
+    fi
+
+    # Log phase control flags
+    if [ -n "$DIVE_SKIP_PHASES" ]; then
+        log_info "Skipping phases: $DIVE_SKIP_PHASES"
+    fi
+    if [ -n "$DIVE_ONLY_PHASE" ]; then
+        log_info "Running only phase: $DIVE_ONLY_PHASE"
+    fi
+
     # Validate instance code
     if [ -z "$instance_code" ]; then
         log_error "Instance code required"
@@ -180,12 +225,20 @@ spoke_deploy() {
         echo "Examples:"
         echo "  ./dive spoke deploy FRA \"France Defence\""
         echo "  ./dive spoke deploy GBR \"United Kingdom\" --auth-code <UUID>"
+        echo "  ./dive spoke deploy GBR --resume"
+        echo "  ./dive spoke deploy GBR --skip-phase SEEDING --skip-phase VERIFICATION"
+        echo "  ./dive spoke deploy GBR --only-phase CONFIGURATION"
         echo ""
         echo "Options:"
-        echo "  --auth-code <UUID>  Pre-authorized federation code (from Hub: ./dive spoke authorize)"
-        echo "  --force             Clean and redeploy"
-        echo "  --skip-federation   Skip federation setup (standalone mode)"
-        echo "  --domain <base>     Custom domain (e.g. gbr.mod.uk)"
+        echo "  --auth-code <UUID>     Pre-authorized federation code (from Hub: ./dive spoke authorize)"
+        echo "  --force                Clean and redeploy"
+        echo "  --resume               Resume from last checkpoint"
+        echo "  --skip-phase <PHASE>   Skip specified phase (can be repeated)"
+        echo "  --only-phase <PHASE>   Run only the specified phase"
+        echo "  --skip-federation      Skip federation setup (standalone mode)"
+        echo "  --domain <base>        Custom domain (e.g. gbr.mod.uk)"
+        echo ""
+        echo "Phases: PREFLIGHT INITIALIZATION DEPLOYMENT CONFIGURATION SEEDING VERIFICATION"
         echo ""
         return 1
     fi
@@ -339,7 +392,11 @@ spoke_deploy() {
     fi
 
     log_info "Deploying $code_upper using pipeline architecture"
-    spoke_pipeline_deploy "$instance_code" "$instance_name"
+    if [ "$spoke_resume_mode" = true ]; then
+        spoke_pipeline_execute "$instance_code" "$instance_name" "resume"
+    else
+        spoke_pipeline_deploy "$instance_code" "$instance_name"
+    fi
     return $?
 }
 
