@@ -258,13 +258,18 @@ test_container_module() {
     # Load container module
     source "$PROJECT_ROOT/scripts/dive-modules/spoke/pipeline/spoke-containers.sh"
 
-    # Test service order
-    log_test "Check service order defined"
+    # Test dynamic service order resolution
+    log_test "Check service order resolver"
+    local service_order
+    set +e
+    service_order=$(spoke_get_service_order "$TEST_INSTANCE" 2>/dev/null)
+    local service_order_rc=$?
+    set -e
 
-    if [ ${#SPOKE_SERVICE_ORDER[@]} -gt 0 ]; then
-        log_pass "Service order defined: ${SPOKE_SERVICE_ORDER[*]}"
+    if [ $service_order_rc -eq 0 ] && [ -n "$service_order" ]; then
+        log_pass "Service order resolved: $service_order"
     else
-        log_fail "Service order not defined"
+        log_fail "Service order resolver failed or returned empty list"
     fi
 
     # Test service timeouts function
@@ -347,6 +352,7 @@ test_federation_module() {
     assert_function_exists "spoke_federation_setup" "Federation setup function"
     assert_function_exists "spoke_federation_verify" "Federation verify function"
     assert_function_exists "spoke_federation_get_admin_token" "Admin token function"
+    assert_function_exists "spoke_federate" "Standalone attach federation entry point"
 }
 
 # =============================================================================
@@ -388,6 +394,44 @@ test_phases() {
     assert_function_exists "spoke_phase_verification" "Verification phase"
     assert_function_exists "spoke_verify_service_health" "Service health"
     assert_function_exists "spoke_verify_federation" "Federation verify"
+
+    # Standalone guards (no Hub requirement during standalone deploys)
+    log_test "Check standalone mode skips Hub preflight in configuration phase"
+    if grep -q "Standalone mode — skipping Hub connectivity preflight" "$pipeline_dir/phase-configuration.sh"; then
+        log_pass "Standalone guard present in configuration phase"
+    else
+        log_fail "Standalone guard missing in configuration phase"
+    fi
+
+    log_test "Check standalone mode skips federation verification"
+    if grep -q "Standalone mode — skipping federation verification" "$pipeline_dir/phase-verification.sh"; then
+        log_pass "Standalone guard present in verification phase"
+    else
+        log_fail "Standalone guard missing in verification phase"
+    fi
+
+    log_test "Check seeding is opt-in during deploy"
+    if grep -q 'DIVE_ENABLE_SEEDING="${DIVE_ENABLE_SEEDING:-false}"' "$PROJECT_ROOT/scripts/dive-modules/spoke/spoke-deploy.sh" &&
+        grep -q 'DIVE_SKIP_PHASES="${DIVE_SKIP_PHASES:+\$DIVE_SKIP_PHASES }SEEDING"' "$PROJECT_ROOT/scripts/dive-modules/spoke/spoke-deploy.sh"; then
+        log_pass "Deploy seeding opt-in guard present"
+    else
+        log_fail "Deploy seeding opt-in guard missing"
+    fi
+
+    log_test "Check pipeline gates SEEDING phase behind opt-in flag"
+    if grep -q 'DIVE_ENABLE_SEEDING:-false' "$pipeline_dir/spoke-pipeline.sh"; then
+        log_pass "Pipeline seeding gate present"
+    else
+        log_fail "Pipeline seeding gate missing"
+    fi
+
+    log_test "Check standalone federate supports post-federation seeding"
+    if grep -q 'Running post-federation seeding' "$pipeline_dir/spoke-federation.sh" &&
+        grep -q 'spoke_seed_resources' "$pipeline_dir/spoke-federation.sh"; then
+        log_pass "Post-federation seeding hook present"
+    else
+        log_fail "Post-federation seeding hook missing"
+    fi
 }
 
 # =============================================================================

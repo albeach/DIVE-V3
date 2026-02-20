@@ -126,8 +126,8 @@ spoke_remote_normalize_hub_endpoints() {
 #   1 - Failure
 ##
 spoke_deploy() {
-    local instance_code="${1:-}"
-    local instance_name="${2:-}"
+    local instance_code=""
+    local instance_name=""
     # Export flags for use by pipeline phases
     export SKIP_FEDERATION=false
     export SPOKE_CUSTOM_DOMAIN=""
@@ -136,23 +136,17 @@ spoke_deploy() {
     export DIVE_ONLY_PHASE=""
     export DIVE_FROM_PHASE=""
     export DIVE_DRY_RUN="${DIVE_DRY_RUN:-${DRY_RUN:-false}}"
+    export DIVE_ENABLE_SEEDING="${DIVE_ENABLE_SEEDING:-false}"
+    export DIVE_SEED_COUNT="${DIVE_SEED_COUNT:-5000}"
     local spoke_resume_mode=false
+    local force_redeploy=false
 
-    # Parse options (handle both --key value and positional args)
-    local skip_next=false
-    local i
-    for i in $(seq 1 $#); do
-        if [ "$skip_next" = true ]; then
-            skip_next=false
-            continue
-        fi
-        local arg="${!i}"
+    # Parse options and positional args (CODE [NAME]) in any order.
+    while [ $# -gt 0 ]; do
+        local arg="$1"
         case "$arg" in
             --force)
-                # Force flag - clean before deploy
-                if [ -n "$instance_code" ]; then
-                    spoke_containers_clean "$instance_code" "false" 2>/dev/null || true
-                fi
+                force_redeploy=true
                 ;;
             --resume)
                 spoke_resume_mode=true
@@ -161,63 +155,97 @@ spoke_deploy() {
                 DIVE_DRY_RUN="true"
                 ;;
             --skip-phase)
-                local next=$((i + 1))
-                local _phase="${!next:-}"
-                if [ -n "$_phase" ]; then
-                    _phase=$(echo "$_phase" | tr '[:lower:]' '[:upper:]')
-                    DIVE_SKIP_PHASES="${DIVE_SKIP_PHASES:+$DIVE_SKIP_PHASES }${_phase}"
-                    skip_next=true
-                else
+                if [ -z "${2:-}" ]; then
                     log_error "--skip-phase requires a phase name"
                     log_info "Valid phases: PREFLIGHT INITIALIZATION DEPLOYMENT CONFIGURATION SEEDING VERIFICATION"
                     return 1
                 fi
+                local _phase="${2:-}"
+                if [ -n "$_phase" ]; then
+                    _phase=$(echo "$_phase" | tr '[:lower:]' '[:upper:]')
+                    DIVE_SKIP_PHASES="${DIVE_SKIP_PHASES:+$DIVE_SKIP_PHASES }${_phase}"
+                fi
+                shift
                 ;;
             --only-phase)
-                local next=$((i + 1))
-                DIVE_ONLY_PHASE="${!next:-}"
-                if [ -n "$DIVE_ONLY_PHASE" ]; then
-                    DIVE_ONLY_PHASE=$(echo "$DIVE_ONLY_PHASE" | tr '[:lower:]' '[:upper:]')
-                    skip_next=true
-                else
+                if [ -z "${2:-}" ]; then
                     log_error "--only-phase requires a phase name"
                     log_info "Valid phases: PREFLIGHT INITIALIZATION DEPLOYMENT CONFIGURATION SEEDING VERIFICATION"
                     return 1
                 fi
+                DIVE_ONLY_PHASE="${2:-}"
+                if [ -n "$DIVE_ONLY_PHASE" ]; then
+                    DIVE_ONLY_PHASE=$(echo "$DIVE_ONLY_PHASE" | tr '[:lower:]' '[:upper:]')
+                fi
+                shift
                 ;;
             --from-phase)
-                local next=$((i + 1))
-                DIVE_FROM_PHASE="${!next:-}"
-                if [ -n "$DIVE_FROM_PHASE" ]; then
-                    DIVE_FROM_PHASE=$(echo "$DIVE_FROM_PHASE" | tr '[:lower:]' '[:upper:]')
-                    skip_next=true
-                else
+                if [ -z "${2:-}" ]; then
                     log_error "--from-phase requires a phase name"
                     log_info "Valid phases: PREFLIGHT INITIALIZATION DEPLOYMENT CONFIGURATION SEEDING VERIFICATION"
                     return 1
                 fi
+                DIVE_FROM_PHASE="${2:-}"
+                if [ -n "$DIVE_FROM_PHASE" ]; then
+                    DIVE_FROM_PHASE=$(echo "$DIVE_FROM_PHASE" | tr '[:lower:]' '[:upper:]')
+                fi
+                shift
                 ;;
             --skip-federation)
                 export SKIP_FEDERATION=true
+                export DEPLOYMENT_MODE="standalone"
                 log_warn "Federation setup will be skipped (--skip-federation flag)"
                 ;;
+            --seed)
+                export DIVE_ENABLE_SEEDING="true"
+                ;;
+            --seed-count)
+                if [ -z "${2:-}" ]; then
+                    log_error "--seed-count requires a value"
+                    return 1
+                fi
+                export DIVE_SEED_COUNT="${2:-}"
+                export DIVE_ENABLE_SEEDING="true"
+                shift
+                ;;
             --domain)
-                local next=$((i + 1))
-                export SPOKE_CUSTOM_DOMAIN="${!next:-}"
-                skip_next=true
+                if [ -z "${2:-}" ]; then
+                    log_error "--domain requires a value"
+                    return 1
+                fi
+                export SPOKE_CUSTOM_DOMAIN="${2:-}"
                 if [ -n "$SPOKE_CUSTOM_DOMAIN" ]; then
                     log_info "Custom domain: $SPOKE_CUSTOM_DOMAIN"
                 fi
+                shift
                 ;;
             --auth-code)
-                local next=$((i + 1))
-                export SPOKE_AUTH_CODE="${!next:-}"
-                skip_next=true
+                if [ -z "${2:-}" ]; then
+                    log_error "--auth-code requires a value"
+                    return 1
+                fi
+                export SPOKE_AUTH_CODE="${2:-}"
                 if [ -n "$SPOKE_AUTH_CODE" ]; then
                     log_info "Auth code provided: ${SPOKE_AUTH_CODE:0:8}..."
                 fi
+                shift
+                ;;
+            --*)
+                log_error "Unknown option: $arg"
+                return 1
+                ;;
+            *)
+                if [ -z "$instance_code" ]; then
+                    instance_code="$arg"
+                elif [ -z "$instance_name" ]; then
+                    instance_name="$arg"
+                else
+                    log_error "Unexpected argument: $arg"
+                    return 1
+                fi
                 ;;
         esac
+        shift
     done
 
     # Validate: --skip-phase, --only-phase, --from-phase are mutually exclusive
@@ -230,9 +258,31 @@ spoke_deploy() {
         return 1
     fi
 
+    if ! [[ "${DIVE_SEED_COUNT:-5000}" =~ ^[0-9]+$ ]] || [ "${DIVE_SEED_COUNT:-0}" -le 0 ]; then
+        log_error "--seed-count must be a positive integer"
+        return 1
+    fi
+
+    # Seeding is now opt-in and should run after federation attachment.
+    # Standalone deploys never auto-seed, even when --seed is passed.
+    if [ "${SKIP_FEDERATION:-false}" = "true" ] && [ "${DIVE_ENABLE_SEEDING:-false}" = "true" ]; then
+        log_warn "Seeding requested, but standalone deploy has no federation. Deferring seeding until after './dive spoke federate <CODE> --seed'."
+        export DIVE_ENABLE_SEEDING="false"
+    fi
+
+    # Default behavior: skip SEEDING unless explicitly enabled.
+    if [ "${DIVE_ENABLE_SEEDING:-false}" != "true" ] && [ "${DIVE_ONLY_PHASE:-}" != "SEEDING" ]; then
+        if ! echo " ${DIVE_SKIP_PHASES:-} " | grep -q " SEEDING "; then
+            DIVE_SKIP_PHASES="${DIVE_SKIP_PHASES:+$DIVE_SKIP_PHASES }SEEDING"
+        fi
+    fi
+
     # Log phase control flags
     if [ "$DIVE_DRY_RUN" = "true" ]; then
         log_info "DRY-RUN MODE: simulating spoke deployment (no changes will be made)"
+    fi
+    if [ "${DIVE_ENABLE_SEEDING:-false}" = "true" ]; then
+        log_info "Seeding enabled (opt-in): ${DIVE_SEED_COUNT} resources"
     fi
     if [ -n "$DIVE_SKIP_PHASES" ]; then
         log_info "Skipping phases: $DIVE_SKIP_PHASES"
@@ -256,6 +306,7 @@ spoke_deploy() {
         echo "  ./dive spoke deploy GBR --resume"
         echo "  ./dive spoke deploy GBR --skip-phase SEEDING --skip-phase VERIFICATION"
         echo "  ./dive spoke deploy GBR --only-phase CONFIGURATION"
+        echo "  ./dive spoke deploy GBR --seed --seed-count 5000"
         echo ""
         echo "Options:"
         echo "  --auth-code <UUID>     Pre-authorized federation code (from Hub: ./dive spoke authorize)"
@@ -266,11 +317,17 @@ spoke_deploy() {
         echo "  --skip-phase <PHASE>   Skip specified phase (can be repeated)"
         echo "  --only-phase <PHASE>   Run only the specified phase"
         echo "  --skip-federation      Skip federation setup (standalone mode)"
+        echo "  --seed                 Opt-in seeding during deploy (federated mode only)"
+        echo "  --seed-count <N>       Number of resources to seed when --seed is enabled (default: 5000)"
         echo "  --domain <base>        Custom domain (e.g. gbr.mod.uk)"
         echo ""
         echo "Phases: PREFLIGHT INITIALIZATION DEPLOYMENT CONFIGURATION SEEDING VERIFICATION"
         echo ""
         return 1
+    fi
+
+    if [ "$force_redeploy" = true ]; then
+        spoke_containers_clean "$instance_code" "false" 2>/dev/null || true
     fi
 
     # If remote mode/environment variables are pre-set, normalize hub endpoints now.

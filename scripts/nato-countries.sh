@@ -18,7 +18,7 @@
 # =============================================================================
 
 # Associative array requires Bash 4+
-declare -A NATO_COUNTRIES
+declare -gA NATO_COUNTRIES
 
 # =============================================================================
 # NATO MEMBER COUNTRIES (32 Total - as of 2024)
@@ -90,7 +90,7 @@ NATO_COUNTRIES=(
 #   KAS:       9000 + offset (9000-9031)
 # =============================================================================
 
-declare -A NATO_PORT_OFFSETS
+declare -gA NATO_PORT_OFFSETS
 
 NATO_PORT_OFFSETS=(
     # USA as hub gets offset 0
@@ -139,8 +139,8 @@ NATO_PORT_OFFSETS=(
 get_country_name() {
     local code
     code=$(echo "$1" | tr "[:lower:]" "[:upper:]")
-    if [[ -v NATO_COUNTRIES[$code] ]]; then
-        echo "${NATO_COUNTRIES[$code]}" | cut -d'|' -f1
+    if [[ -n "${NATO_COUNTRIES["$code"]+_}" ]]; then
+        echo "${NATO_COUNTRIES["$code"]}" | cut -d'|' -f1
     else
         echo ""
     fi
@@ -151,8 +151,8 @@ get_country_name() {
 get_country_flag() {
     local code
     code=$(echo "$1" | tr "[:lower:]" "[:upper:]")
-    if [[ -v NATO_COUNTRIES[$code] ]]; then
-        echo "${NATO_COUNTRIES[$code]}" | cut -d'|' -f2
+    if [[ -n "${NATO_COUNTRIES["$code"]+_}" ]]; then
+        echo "${NATO_COUNTRIES["$code"]}" | cut -d'|' -f2
     else
         echo ""
     fi
@@ -163,8 +163,8 @@ get_country_flag() {
 get_country_primary_color() {
     local code
     code=$(echo "$1" | tr "[:lower:]" "[:upper:]")
-    if [[ -v NATO_COUNTRIES[$code] ]]; then
-        echo "${NATO_COUNTRIES[$code]}" | cut -d'|' -f3
+    if [[ -n "${NATO_COUNTRIES["$code"]+_}" ]]; then
+        echo "${NATO_COUNTRIES["$code"]}" | cut -d'|' -f3
     else
         echo ""
     fi
@@ -175,8 +175,8 @@ get_country_primary_color() {
 get_country_secondary_color() {
     local code
     code=$(echo "$1" | tr "[:lower:]" "[:upper:]")
-    if [[ -v NATO_COUNTRIES[$code] ]]; then
-        echo "${NATO_COUNTRIES[$code]}" | cut -d'|' -f4
+    if [[ -n "${NATO_COUNTRIES["$code"]+_}" ]]; then
+        echo "${NATO_COUNTRIES["$code"]}" | cut -d'|' -f4
     else
         echo ""
     fi
@@ -187,8 +187,8 @@ get_country_secondary_color() {
 get_country_timezone() {
     local code
     code=$(echo "$1" | tr "[:lower:]" "[:upper:]")
-    if [[ -v NATO_COUNTRIES[$code] ]]; then
-        echo "${NATO_COUNTRIES[$code]}" | cut -d'|' -f5
+    if [[ -n "${NATO_COUNTRIES["$code"]+_}" ]]; then
+        echo "${NATO_COUNTRIES["$code"]}" | cut -d'|' -f5
     else
         echo ""
     fi
@@ -199,8 +199,8 @@ get_country_timezone() {
 get_country_join_year() {
     local code
     code=$(echo "$1" | tr "[:lower:]" "[:upper:]")
-    if [[ -v NATO_COUNTRIES[$code] ]]; then
-        echo "${NATO_COUNTRIES[$code]}" | cut -d'|' -f6
+    if [[ -n "${NATO_COUNTRIES["$code"]+_}" ]]; then
+        echo "${NATO_COUNTRIES["$code"]}" | cut -d'|' -f6
     else
         echo ""
     fi
@@ -211,8 +211,8 @@ get_country_join_year() {
 get_country_locale() {
     local code
     code=$(echo "$1" | tr "[:lower:]" "[:upper:]")
-    if [[ -v NATO_COUNTRIES[$code] ]]; then
-        echo "${NATO_COUNTRIES[$code]}" | cut -d'|' -f7
+    if [[ -n "${NATO_COUNTRIES["$code"]+_}" ]]; then
+        echo "${NATO_COUNTRIES["$code"]}" | cut -d'|' -f7
     else
         echo "en"  # Default to English if unknown
     fi
@@ -223,8 +223,8 @@ get_country_locale() {
 get_country_offset() {
     local code
     code=$(echo "$1" | tr "[:lower:]" "[:upper:]")
-    if [[ -v NATO_PORT_OFFSETS[$code] ]]; then
-        echo "${NATO_PORT_OFFSETS[$code]}"
+    if [[ -n "${NATO_PORT_OFFSETS["$code"]+_}" ]]; then
+        echo "${NATO_PORT_OFFSETS["$code"]}"
     else
         echo "-1"
     fi
@@ -235,7 +235,7 @@ get_country_offset() {
 is_nato_country() {
     local code
     code=$(echo "$1" | tr "[:lower:]" "[:upper:]")
-    [[ -v NATO_COUNTRIES[$code] ]]
+    [[ -n "${NATO_COUNTRIES["$code"]+_}" ]]
 }
 
 # =============================================================================
@@ -255,7 +255,7 @@ get_country_ports() {
         return 1
     fi
 
-    offset="${NATO_PORT_OFFSETS[$code]}"
+    offset="${NATO_PORT_OFFSETS["$code"]}"
 
     # Export calculated ports
     echo "SPOKE_PORT_OFFSET=$offset"
@@ -321,7 +321,7 @@ list_nato_ports() {
     for code in $(echo "${!NATO_COUNTRIES[@]}" | tr ' ' '\n' | sort); do
         local name
         name=$(get_country_name "$code")
-        local offset=${NATO_PORT_OFFSETS[$code]}
+        local offset=${NATO_PORT_OFFSETS["$code"]}
         local frontend=$((3000 + offset))
         local backend=$((4000 + offset))
         local keycloak=$((8443 + offset))
@@ -426,17 +426,17 @@ check_port_conflicts() {
     local conflicts=0
 
     for code in "${!NATO_COUNTRIES[@]}"; do
-        local offset=${NATO_PORT_OFFSETS[$code]}
+        local offset=${NATO_PORT_OFFSETS["$code"]}
         local frontend=$((3000 + offset))
         local backend=$((4000 + offset))
         local keycloak=$((8443 + offset))
 
         for port in $frontend $backend $keycloak; do
-            if [[ -v seen_ports[$port] ]]; then
-                echo "CONFLICT: Port $port used by both ${seen_ports[$port]} and $code"
+            if [[ -v seen_ports["$port"] ]]; then
+                echo "CONFLICT: Port $port used by both ${seen_ports["$port"]} and $code"
                 ((conflicts++))
             else
-                seen_ports[$port]="$code"
+                seen_ports["$port"]="$code"
             fi
         done
     done
@@ -456,7 +456,7 @@ check_port_conflicts() {
 # These are not NATO members but may participate in exercises/pilots
 # Port offsets 32-39 reserved for partner nations
 
-declare -A PARTNER_NATIONS=(
+declare -gA PARTNER_NATIONS=(
     ["AUS"]="Australia|🇦🇺|#002868|#FFFFFF|Australia/Sydney|PARTNER|en"
     ["NZL"]="New Zealand|🇳🇿|#00247D|#CC142B|Pacific/Auckland|PARTNER|en"
     ["JPN"]="Japan|🇯🇵|#BC002D|#FFFFFF|Asia/Tokyo|PARTNER|ja"
@@ -466,7 +466,7 @@ declare -A PARTNER_NATIONS=(
 )
 
 # Partner nation port offsets (32-39)
-declare -A PARTNER_PORT_OFFSETS=(
+declare -gA PARTNER_PORT_OFFSETS=(
     ["AUS"]=32
     ["NZL"]=33
     ["JPN"]=34
@@ -479,15 +479,15 @@ declare -A PARTNER_PORT_OFFSETS=(
 is_partner_nation() {
     local code
     code=$(echo "$1" | tr "[:lower:]" "[:upper:]")
-    [[ -v PARTNER_NATIONS[$code] ]]
+    [[ -n "${PARTNER_NATIONS["$code"]+_}" ]]
 }
 
 # Get partner nation name
 get_partner_name() {
     local code
     code=$(echo "$1" | tr "[:lower:]" "[:upper:]")
-    if [[ -v PARTNER_NATIONS[$code] ]]; then
-        echo "${PARTNER_NATIONS[$code]}" | cut -d'|' -f1
+    if [[ -n "${PARTNER_NATIONS["$code"]+_}" ]]; then
+        echo "${PARTNER_NATIONS["$code"]}" | cut -d'|' -f1
     fi
 }
 
@@ -495,8 +495,8 @@ get_partner_name() {
 get_partner_flag() {
     local code
     code=$(echo "$1" | tr "[:lower:]" "[:upper:]")
-    if [[ -v PARTNER_NATIONS[$code] ]]; then
-        echo "${PARTNER_NATIONS[$code]}" | cut -d'|' -f2
+    if [[ -n "${PARTNER_NATIONS["$code"]+_}" ]]; then
+        echo "${PARTNER_NATIONS["$code"]}" | cut -d'|' -f2
     fi
 }
 
@@ -504,8 +504,8 @@ get_partner_flag() {
 get_partner_primary_color() {
     local code
     code=$(echo "$1" | tr "[:lower:]" "[:upper:]")
-    if [[ -v PARTNER_NATIONS[$code] ]]; then
-        echo "${PARTNER_NATIONS[$code]}" | cut -d'|' -f3
+    if [[ -n "${PARTNER_NATIONS["$code"]+_}" ]]; then
+        echo "${PARTNER_NATIONS["$code"]}" | cut -d'|' -f3
     fi
 }
 
@@ -513,8 +513,8 @@ get_partner_primary_color() {
 get_partner_secondary_color() {
     local code
     code=$(echo "$1" | tr "[:lower:]" "[:upper:]")
-    if [[ -v PARTNER_NATIONS[$code] ]]; then
-        echo "${PARTNER_NATIONS[$code]}" | cut -d'|' -f4
+    if [[ -n "${PARTNER_NATIONS["$code"]+_}" ]]; then
+        echo "${PARTNER_NATIONS["$code"]}" | cut -d'|' -f4
     fi
 }
 
@@ -522,8 +522,8 @@ get_partner_secondary_color() {
 get_partner_timezone() {
     local code
     code=$(echo "$1" | tr "[:lower:]" "[:upper:]")
-    if [[ -v PARTNER_NATIONS[$code] ]]; then
-        echo "${PARTNER_NATIONS[$code]}" | cut -d'|' -f5
+    if [[ -n "${PARTNER_NATIONS["$code"]+_}" ]]; then
+        echo "${PARTNER_NATIONS["$code"]}" | cut -d'|' -f5
     fi
 }
 
@@ -532,8 +532,8 @@ get_partner_timezone() {
 get_partner_locale() {
     local code
     code=$(echo "$1" | tr "[:lower:]" "[:upper:]")
-    if [[ -v PARTNER_NATIONS[$code] ]]; then
-        echo "${PARTNER_NATIONS[$code]}" | cut -d'|' -f7
+    if [[ -n "${PARTNER_NATIONS["$code"]+_}" ]]; then
+        echo "${PARTNER_NATIONS["$code"]}" | cut -d'|' -f7
     else
         echo "en"  # Default to English
     fi
@@ -543,8 +543,8 @@ get_partner_locale() {
 get_partner_offset() {
     local code
     code=$(echo "$1" | tr "[:lower:]" "[:upper:]")
-    if [[ -v PARTNER_PORT_OFFSETS[$code] ]]; then
-        echo "${PARTNER_PORT_OFFSETS[$code]}"
+    if [[ -n "${PARTNER_PORT_OFFSETS["$code"]+_}" ]]; then
+        echo "${PARTNER_PORT_OFFSETS["$code"]}"
     else
         echo "32"  # Default fallback
     fi
@@ -803,4 +803,3 @@ if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
             ;;
     esac
 fi
-

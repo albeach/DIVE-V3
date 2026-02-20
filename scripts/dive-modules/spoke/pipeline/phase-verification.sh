@@ -73,6 +73,10 @@ spoke_phase_verification() {
     local code_lower
     code_lower=$(lower "$instance_code")
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
+    local standalone_mode=false
+    if [ "${DEPLOYMENT_MODE:-local}" = "standalone" ] || [ "${SKIP_FEDERATION:-false}" = "true" ]; then
+        standalone_mode=true
+    fi
 
     # =============================================================================
     # IDEMPOTENT DEPLOYMENT: Check if phase already complete
@@ -143,16 +147,18 @@ spoke_phase_verification() {
     # BEST PRACTICE: Wait for realistic stabilization time, then verify
     # Either PASS (federation works) or FAIL (actionable remediation)
     # NO false positive warnings like "this is expected"
-    if [ "$pipeline_mode" = "deploy" ]; then
+    if [ "$pipeline_mode" = "deploy" ] && [ "$standalone_mode" = "false" ]; then
         if ! spoke_verify_federation "$instance_code"; then
             log_error "Federation verification failed - deployment incomplete"
             verification_passed=false
             # FAIL FAST - no point continuing if federation is broken
         fi
+    elif [ "$pipeline_mode" = "deploy" ]; then
+        log_info "Standalone mode — skipping federation verification"
     fi
 
     # Step 4.5: Bidirectional SSO endpoint verification (deploy mode) - WARNING ONLY
-    if [ "$pipeline_mode" = "deploy" ] && [ "$verification_passed" = "true" ]; then
+    if [ "$pipeline_mode" = "deploy" ] && [ "$standalone_mode" = "false" ] && [ "$verification_passed" = "true" ]; then
         log_step "Verifying bidirectional SSO endpoints..."
         local sso_ok=true
 
@@ -198,7 +204,7 @@ spoke_phase_verification() {
     # Step 4.6: OPAL data sync verification (deploy mode) - BLOCKING
     # The backend API queries MongoDB directly — data should be available immediately
     # after spoke approval in CONFIGURATION phase.
-    if [ "$pipeline_mode" = "deploy" ] && [ "$verification_passed" = "true" ]; then
+    if [ "$pipeline_mode" = "deploy" ] && [ "$standalone_mode" = "false" ] && [ "$verification_passed" = "true" ]; then
         if ! spoke_verify_opal_sync "$instance_code"; then
             log_error "OPAL sync verification failed - federation data not propagated"
             verification_passed=false
@@ -251,11 +257,16 @@ spoke_verify_service_health() {
     local instance_code="$1"
     local code_lower
     code_lower=$(lower "$instance_code")
+    local standalone_mode=false
+    if [ "${DEPLOYMENT_MODE:-local}" = "standalone" ] || [ "${SKIP_FEDERATION:-false}" = "true" ]; then
+        standalone_mode=true
+    fi
 
     log_step "Verifying service health..."
 
     local unhealthy_count=0
     local total_count=0
+    local non_blocking_services=""
 
     # Get services dynamically from compose file
     # Phase 1 Sprint 1.2: Replace hardcoded array with dynamic discovery
@@ -267,14 +278,33 @@ spoke_verify_service_health() {
         read -r -a services <<< "$PIPELINE_SPOKE_ALL_SERVICES"
     fi
 
+    # Non-core classes are warning-only in verification.
+    if type compose_get_spoke_services_by_class &>/dev/null; then
+        non_blocking_services+=" $(compose_get_spoke_services_by_class "$instance_code" "optional" 2>/dev/null || echo "")"
+        non_blocking_services+=" $(compose_get_spoke_services_by_class "$instance_code" "stretch" 2>/dev/null || echo "")"
+        non_blocking_services+=" $(compose_get_spoke_services_by_class "$instance_code" "infrastructure" 2>/dev/null || echo "")"
+    fi
+
     for service in "${services[@]}"; do
         local container
         container=$(pipeline_container_name "spoke" "$service" "$instance_code")
+        local is_non_blocking=false
+        if echo " ${non_blocking_services} " | grep -q " ${service} "; then
+            is_non_blocking=true
+        fi
+        # Standalone spoke deployments do not require caddy to pass verification.
+        if [ "$service" = "caddy" ] && [ "$standalone_mode" = "true" ]; then
+            is_non_blocking=true
+        fi
         total_count=$((total_count + 1))
 
         if ! pipeline_container_running "$container"; then
-            echo "  ❌ $service: not running"
-            unhealthy_count=$((unhealthy_count + 1))
+            if [ "$is_non_blocking" = "true" ]; then
+                echo "  ⚠️  $service: not running (non-blocking)"
+            else
+                echo "  ❌ $service: not running"
+                unhealthy_count=$((unhealthy_count + 1))
+            fi
             continue
         fi
 
@@ -293,13 +323,21 @@ spoke_verify_service_health() {
                 if [ "$state" = "running" ]; then
                     echo "  ✅ $service: running"
                 else
-                    echo "  ❌ $service: not running"
-                    unhealthy_count=$((unhealthy_count + 1))
+                    if [ "$is_non_blocking" = "true" ]; then
+                        echo "  ⚠️  $service: not running (non-blocking)"
+                    else
+                        echo "  ❌ $service: not running"
+                        unhealthy_count=$((unhealthy_count + 1))
+                    fi
                 fi
                 ;;
             unhealthy|starting)
-                echo "  ⚠️  $service: $health"
-                unhealthy_count=$((unhealthy_count + 1))
+                if [ "$is_non_blocking" = "true" ]; then
+                    echo "  ⚠️  $service: $health (non-blocking)"
+                else
+                    echo "  ⚠️  $service: $health"
+                    unhealthy_count=$((unhealthy_count + 1))
+                fi
                 ;;
             *)
                 echo "  ❓ $service: unknown ($health)"
