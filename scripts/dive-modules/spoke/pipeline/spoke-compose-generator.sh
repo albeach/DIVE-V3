@@ -197,23 +197,26 @@ spoke_compose_get_placeholders() {
     local kas_port="${SPOKE_KAS_PORT:-$((DEFAULT_KAS_PORT + SPOKE_PORT_OFFSET))}"
 
     # Domain-aware URLs: when DIVE_DOMAIN_SUFFIX is set (EC2 with Caddy),
-    # use external domain names instead of localhost:port
+    # use external domain names instead of localhost:port.
+    # For non-local environments, DIVE_DOMAIN_SUFFIX or HUB_EXTERNAL_ADDRESS is required.
     local idp_hostname="dive-spoke-${code_lower}-keycloak"
-    local base_url="https://localhost:${frontend_port}"
-    local api_url="https://localhost:${backend_port}"
-    local idp_url="https://${idp_hostname}:8443"
-    local idp_base_url="https://localhost:${keycloak_port}"
+    local idp_url="https://${idp_hostname}:8443"  # Container-to-container (always internal)
+
+    # Resolve public-facing URLs via the SSOT helpers
+    local base_url api_url idp_base_url
+    base_url=$(resolve_spoke_public_url "$code_upper" "app")
+    api_url=$(resolve_spoke_public_url "$code_upper" "api")
+    idp_base_url=$(resolve_spoke_public_url "$code_upper" "idp")
 
     if [ -n "${DIVE_DOMAIN_SUFFIX:-}" ]; then
         local _env_prefix _base_domain
         _env_prefix="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f1)"
         _base_domain="$(echo "${DIVE_DOMAIN_SUFFIX}" | cut -d. -f2-)"
         idp_hostname="${_env_prefix}-${code_lower}-idp.${_base_domain}"
-        base_url="https://${_env_prefix}-${code_lower}-app.${_base_domain}"
-        api_url="https://${_env_prefix}-${code_lower}-api.${_base_domain}"
-        idp_base_url="https://${_env_prefix}-${code_lower}-idp.${_base_domain}"
-        # idp_url stays as internal Docker name for container-to-container
         log_verbose "Caddy mode: spoke URLs use domain ${_base_domain}"
+    elif [ "${ENVIRONMENT:-local}" != "local" ]; then
+        log_warn "No DIVE_DOMAIN_SUFFIX set for non-local deployment — URLs will use ${HUB_EXTERNAL_ADDRESS:-localhost}:port"
+        log_warn "Set --domain for remote deployment. Example: ./dive spoke deploy ${code_upper} --domain dev.dive25.com"
     fi
 
     # ECR registry and image tag (for ECR template)
@@ -338,7 +341,8 @@ spoke_compose_get_spoke_id() {
     fi
     
     # Priority 3: Query Hub MongoDB via API
-    local hub_api="${HUB_URL:-https://localhost:4000}"
+    local hub_api
+    hub_api=$(resolve_hub_public_url "api")
     local hub_spoke_id
     hub_spoke_id=$(curl -sk --max-time 5 "${hub_api}/api/federation/spokes?instanceCode=${code_upper}" 2>/dev/null | jq -r '.spokes[0].spokeId // empty' 2>/dev/null)
     if [ -n "$hub_spoke_id" ] && [ "$hub_spoke_id" != "null" ]; then

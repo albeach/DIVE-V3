@@ -102,7 +102,10 @@ spoke_phase_configuration() {
     # =============================================================================
     log_step "Verifying Hub connectivity..."
     local hub_backend_url=""
-    for url in "https://localhost:${BACKEND_PORT:-4000}/api/health" "https://dive-hub-backend:4000/api/health"; do
+    local _hub_resolved
+    _hub_resolved=$(resolve_hub_public_url "api")
+    # Try resolved URL first, then Docker internal name, then localhost fallback
+    for url in "${_hub_resolved}/api/health" "https://dive-hub-backend:4000/api/health" "https://localhost:${BACKEND_PORT:-4000}/api/health"; do
         if curl -sk --max-time 5 "$url" 2>/dev/null | grep -q "ok\|healthy"; then
             hub_backend_url="$url"
             break
@@ -874,8 +877,10 @@ spoke_config_approve_and_get_token() {
 
     # Approve spoke
     local approve_payload='{"allowedScopes":["policy:base","policy:org"],"allowedFeatures":["federation","ztdf","audit"]}'
-    # Use hub_url from parent scope (spoke_config_register_in_hub_mongodb), fallback to localhost
-    local hub_approve_api="${hub_url:-https://localhost:${BACKEND_PORT:-4000}}/api/federation/spokes/$spoke_id/approve"
+    # Use hub_url from parent scope, then resolve via SSOT helper
+    local _hub_base
+    _hub_base="${hub_url:-$(resolve_hub_public_url "api")}"
+    local hub_approve_api="${_hub_base}/api/federation/spokes/$spoke_id/approve"
 
     local approve_response
     approve_response=$(curl -sk -X POST "$hub_approve_api" \
@@ -994,7 +999,7 @@ spoke_config_register_in_registries() {
             sleep 2  # Wait for propagation
 
             local hub_registry_check
-            hub_registry_check=$(curl -sk "https://localhost:${BACKEND_PORT:-4000}/api/kas/registry" 2>/dev/null | \
+            hub_registry_check=$(curl -sk "$(resolve_hub_public_url "api")/api/kas/registry" 2>/dev/null | \
                 jq -e ".kasServers[] | select(.instanceCode == \"$code_upper\")" 2>/dev/null)
 
             if [ -n "$hub_registry_check" ]; then
@@ -1037,7 +1042,7 @@ spoke_config_register_in_registries() {
             else
                 log_error "✗ KAS registration API succeeded but entry NOT found in Hub registry!"
                 log_error "This indicates a database consistency issue"
-                log_error "Verification query: curl -sk https://localhost:${BACKEND_PORT:-4000}/api/kas/registry | jq '.kasServers'"
+                log_error "Verification query: curl -sk $(resolve_hub_public_url "api")/api/kas/registry | jq '.kasServers'"
                 kas_exit_code=1
             fi
         else
