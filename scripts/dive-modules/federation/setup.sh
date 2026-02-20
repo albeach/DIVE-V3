@@ -1708,6 +1708,23 @@ module_federation() {
             fi
             federation_register_hub_on_spoke "$_rh_code" "$_rh_hub_url" "$_rh_secret"
             ;;
+        dashboard)
+            # Load health module
+            if [ -f "${FEDERATION_DIR}/health.sh" ]; then
+                source "${FEDERATION_DIR}/health.sh"
+            fi
+            federation_health_dashboard "$@"
+            ;;
+        diagnose)
+            if [ -z "${1:-}" ]; then
+                log_error "Usage: ./dive federation diagnose <CODE>"
+                return 1
+            fi
+            if [ -f "${FEDERATION_DIR}/health.sh" ]; then
+                source "${FEDERATION_DIR}/health.sh"
+            fi
+            federation_diagnose "$@"
+            ;;
         help|--help|-h)
             echo "Usage: ./dive federation <command> [args]"
             echo ""
@@ -1715,6 +1732,8 @@ module_federation() {
             echo "  link <CODE>       Link Spoke to Hub federation (co-located)"
             echo "  unlink <CODE>     Remove federation link"
             echo "  verify <CODE>     Verify federation health"
+            echo "  diagnose <CODE>   Deep diagnostic for a federation link"
+            echo "  dashboard         Federation health dashboard (all spokes)"
             echo "  test              Run federation integration tests"
             echo "  token-revocation  Test cross-instance token revocation"
             echo "  status            Show overall federation status"
