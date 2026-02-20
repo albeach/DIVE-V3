@@ -40,6 +40,11 @@ if [ -f "$(dirname "${BASH_SOURCE[0]}")/../orchestration/errors.sh" ]; then
     source "$(dirname "${BASH_SOURCE[0]}")/../orchestration/errors.sh"
 fi
 
+# Load guided error recovery module (remediation catalog + interactive prompts)
+if [ -f "$(dirname "${BASH_SOURCE[0]}")/../orchestration/error-recovery.sh" ]; then
+    source "$(dirname "${BASH_SOURCE[0]}")/../orchestration/error-recovery.sh"
+fi
+
 # =============================================================================
 # PIPELINE CONSTANTS
 # =============================================================================
@@ -48,6 +53,142 @@ fi
 readonly PIPELINE_MODE_DEPLOY="deploy"      # Full deployment (all phases)
 readonly PIPELINE_MODE_UP="up"              # Quick start (skip initialization)
 readonly PIPELINE_MODE_REDEPLOY="redeploy"  # Redeploy (skip init, full deploy)
+
+# =============================================================================
+# GRACEFUL SIGINT HANDLING
+# =============================================================================
+
+# Pipeline interrupt state — shared across all phase execution
+export _PIPELINE_SIGINT_RECEIVED=false
+export _PIPELINE_CURRENT_PHASE=""
+export _PIPELINE_CURRENT_INSTANCE=""
+
+##
+# SIGINT handler for pipeline execution
+#
+# When Ctrl+C is received during a phase, this handler:
+#   - In interactive mode: offers continue/pause/abort
+#   - In non-interactive mode: saves checkpoint and aborts
+##
+_pipeline_sigint_handler() {
+    export _PIPELINE_SIGINT_RECEIVED=true
+    local phase="${_PIPELINE_CURRENT_PHASE:-unknown}"
+    local instance="${_PIPELINE_CURRENT_INSTANCE:-unknown}"
+
+    echo ""
+    echo ""
+
+    # Non-interactive: save checkpoint and abort
+    if ! is_interactive 2>/dev/null; then
+        log_warn "SIGINT received (non-interactive) — saving checkpoint and aborting"
+        _pipeline_save_interrupt_checkpoint "$instance" "$phase"
+        # Re-raise to allow cleanup traps in calling functions
+        trap - INT
+        kill -INT $$
+        return
+    fi
+
+    echo "==============================================================================="
+    echo "  Deployment interrupted during phase: $phase"
+    echo "==============================================================================="
+    echo ""
+    echo "  Options:"
+    echo "    [c] Continue deployment (resume from current phase)"
+    echo "    [p] Pause and save checkpoint (resume later with --resume)"
+    echo "    [a] Abort immediately"
+    echo ""
+
+    local choice
+    read -r -p "  Choose [c/p/a]: " choice
+    case "$choice" in
+        [Cc])
+            export _PIPELINE_SIGINT_RECEIVED=false
+            log_info "Continuing deployment..."
+            ;;
+        [Pp])
+            log_info "Saving checkpoint and pausing..."
+            _pipeline_save_interrupt_checkpoint "$instance" "$phase"
+            echo ""
+            echo "  Deployment paused. Resume with:"
+            echo "    ./dive hub deploy --resume"
+            echo "    ./dive spoke deploy <CODE> --resume"
+            echo ""
+            # Exit the current phase (caller will see non-zero)
+            return 1
+            ;;
+        *)
+            log_warn "Aborting deployment..."
+            _pipeline_save_interrupt_checkpoint "$instance" "$phase"
+            # Re-raise to allow cleanup traps
+            trap - INT
+            kill -INT $$
+            return
+            ;;
+    esac
+}
+
+##
+# Save checkpoint when pipeline is interrupted
+#
+# Arguments:
+#   $1 - Instance code
+#   $2 - Current phase name (phase that was running when SIGINT arrived)
+##
+_pipeline_save_interrupt_checkpoint() {
+    local instance_code="$1"
+    local current_phase="$2"
+    local code_upper
+    code_upper=$(upper "$instance_code" 2>/dev/null || echo "$instance_code")
+
+    # Record interrupted state
+    if type deployment_set_state &>/dev/null; then
+        deployment_set_state "$code_upper" "INTERRUPTED" \
+            "User interrupted at phase: $current_phase" \
+            "{\"interrupted_phase\":\"$current_phase\"}"
+    fi
+
+    # Record step as interrupted
+    if type orch_db_record_step &>/dev/null; then
+        orch_db_record_step "$code_upper" "$current_phase" "INTERRUPTED" "SIGINT received"
+    fi
+}
+
+##
+# Install SIGINT handler for pipeline execution
+#
+# Call this at the start of a pipeline run.
+# Must be paired with pipeline_uninstall_sigint_handler on exit.
+#
+# Arguments:
+#   $1 - Instance code
+##
+pipeline_install_sigint_handler() {
+    local instance_code="$1"
+    export _PIPELINE_CURRENT_INSTANCE="$instance_code"
+    export _PIPELINE_SIGINT_RECEIVED=false
+    trap '_pipeline_sigint_handler' INT
+}
+
+##
+# Uninstall SIGINT handler (restore default behavior)
+##
+pipeline_uninstall_sigint_handler() {
+    trap - INT
+    export _PIPELINE_SIGINT_RECEIVED=false
+    export _PIPELINE_CURRENT_PHASE=""
+    export _PIPELINE_CURRENT_INSTANCE=""
+}
+
+##
+# Check if SIGINT was received and the user chose to pause
+#
+# Returns:
+#   0 - SIGINT received (should stop pipeline)
+#   1 - No interrupt
+##
+pipeline_check_sigint() {
+    [ "${_PIPELINE_SIGINT_RECEIVED:-false}" = "true" ]
+}
 
 # Common pipeline phases
 readonly PIPELINE_PHASE_PREFLIGHT="PREFLIGHT"
@@ -237,6 +378,25 @@ deployment_run_phase() {
         # Record failed step in database
         if type orch_db_record_step &>/dev/null; then
             orch_db_record_step "$code_upper" "$phase_name" "FAILED" "Phase execution returned error"
+        fi
+
+        # Interactive error recovery: offer retry/skip/abort
+        local deploy_type="hub"
+        [ "$code_upper" != "USA" ] && deploy_type="spoke"
+        if type error_recovery_suggest &>/dev/null; then
+            error_recovery_suggest "$phase_name" "$deploy_type" "$code_upper"
+            local recovery_action=$?
+            if [ $recovery_action -eq 0 ]; then
+                # Retry: recurse
+                log_info "Retrying phase $phase_name..."
+                deployment_run_phase "$instance_code" "$phase_name" "$phase_function" "$pipeline_mode" "$resume_mode"
+                return $?
+            elif [ $recovery_action -eq 2 ]; then
+                # Skip: treat as success
+                log_warn "Skipping phase $phase_name (user chose to skip)"
+                return 0
+            fi
+            # Abort: fall through to return 1
         fi
 
         return 1
@@ -579,6 +739,11 @@ export -f deployment_get_state
 export -f deployment_rollback
 export -f deployment_print_success
 export -f deployment_print_failure
+export -f pipeline_install_sigint_handler
+export -f pipeline_uninstall_sigint_handler
+export -f pipeline_check_sigint
+export -f _pipeline_sigint_handler
+export -f _pipeline_save_interrupt_checkpoint
 
 log_verbose "Pipeline common module loaded"
 
