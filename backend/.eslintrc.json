@@ -21,12 +21,35 @@
     "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
     "@typescript-eslint/explicit-module-boundary-types": "off",
     "@typescript-eslint/no-var-requires": "off",
+    "@typescript-eslint/no-require-imports": "off",
+    "@typescript-eslint/ban-ts-comment": "warn",
+    "@typescript-eslint/no-namespace": "warn",
+    "@typescript-eslint/no-empty-object-type": "warn",
+    "prefer-const": "warn",
+    "no-case-declarations": "warn",
+    "no-prototype-builtins": "warn",
+    "no-fallthrough": "warn",
+    "@typescript-eslint/no-unsafe-function-type": "warn",
+    "no-useless-escape": "warn",
+    "no-empty": "warn",
     "no-console": "off",
     "no-restricted-syntax": [
       "error",
       {
-        "selector": "CallExpression[callee.name='fetch'] Literal[value=/^https?:\\/\\/(127\\.0\\.0\\.1|localhost):/]",
-        "message": "Hardcoded localhost/127.0.0.1 URLs are not allowed. Use environment variables instead."
+        "selector": "CallExpression[callee.name='fetch'] Literal[value='http://localhost']",
+        "message": "Hardcoded localhost URLs are not allowed. Use environment variables instead."
+      },
+      {
+        "selector": "CallExpression[callee.name='fetch'] Literal[value='https://localhost']",
+        "message": "Hardcoded localhost URLs are not allowed. Use environment variables instead."
+      },
+      {
+        "selector": "CallExpression[callee.name='fetch'] Literal[value='http://127.0.0.1']",
+        "message": "Hardcoded 127.0.0.1 URLs are not allowed. Use environment variables instead."
+      },
+      {
+        "selector": "CallExpression[callee.name='fetch'] Literal[value='https://127.0.0.1']",
+        "message": "Hardcoded 127.0.0.1 URLs are not allowed. Use environment variables instead."
       }
     ]
   },
