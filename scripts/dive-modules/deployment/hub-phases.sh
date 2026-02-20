@@ -500,10 +500,15 @@ BOOTSTRAP_EOF
         log_success "Vault initialized"
     else
         log_verbose "Vault already initialized"
-        # Load token if it exists (Vault IS initialized, so token should be valid)
+        # Load and validate token if it exists
         if [ -f "$VAULT_TOKEN_FILE" ]; then
             VAULT_TOKEN=$(cat "$VAULT_TOKEN_FILE")
             export VAULT_TOKEN
+            # Validate token is still valid — stale tokens cause silent failures in later phases
+            if ! docker exec "${COMPOSE_PROJECT_NAME:-dive-hub}-vault-1" vault token lookup >/dev/null 2>&1; then
+                log_warn "Vault token from file is expired or invalid — will re-authenticate"
+                unset VAULT_TOKEN
+            fi
         fi
     fi
 
