@@ -31,8 +31,8 @@ Top current blockers are critical security exposure in federation/OPAL endpoints
 ## 2) Standards Compliance Matrix
 | Requirement | Evidence (file/config/endpoint/log) | Status | Gap + Fix |
 |---|---|---|---|
-| STANAG 4774 marking generation and SPIF parsing | `backend/src/services/spif-parser.service.ts:348`, `backend/src/services/upload.service.ts:201`, test pass in `npm test -- --runTestsByPath src/services/__tests__/spif-parser.service.test.ts` | Partial | Generation exists; add signed artifact verification and prod-only SPIF raw access control. |
-| STANAG 4774 SPIF raw data handling security | `backend/src/routes/spif.routes.ts:615` (“should be restricted to admins”) | Non-compliant | Enforce admin auth middleware and audit access to `/api/spif/raw`. |
+| STANAG 4774 marking generation and SPIF parsing | `backend/src/services/spif-parser.service.ts:348`, `backend/src/services/upload.service.ts:201`, test pass in `npm test -- --runTestsByPath src/services/__tests__/spif-parser.service.test.ts` | Partial | Generation exists; add signed artifact verification. |
+| STANAG 4774 SPIF raw data handling security | `backend/src/routes/spif.routes.ts`, `backend/src/__tests__/routes/spif-auth.test.ts` | Compliant (2026-02-20) | `/api/spif/raw` now enforces `authenticateJWT + requireAdmin`; regression tests cover 401/403/200. |
 | STANAG 4778 BDO extraction/binding/hash | `backend/src/services/upload.service.ts:94`, `backend/src/services/upload.service.ts:680`, `backend/src/services/bdo-parser.service.ts:28` | Partial | Add cross-instance BDO round-trip tests and tamper-detection proofs in CI. |
 | STANAG 5636/XACML interoperability | `backend/src/config/spif.config.ts:107`, `backend/src/adapters/xacml-adapter.ts:4`, `backend/src/services/policy-execution.service.ts:202` | Partial | Require AuthzForce integration tests in deployment gates; no skipped external-engine path in readiness criteria. |
 | ACP-240 ABAC/classification/coi enforcement | `backend/src/services/upload.service.ts:122`, `backend/src/services/coi-validation.service.ts`, `policies/entrypoints/authz.rego` | Partial | Enforcement exists, but unauthenticated federation evaluation/query bypasses trust boundary intent; add spoke-token/mTLS checks. |
@@ -89,7 +89,8 @@ Top current blockers are critical security exposure in federation/OPAL endpoints
 1. Explicit `--skip-federation`.
 2. Local IdP/KAS/OPA fully functional.
 3. Deferred onboarding token and trust setup.
-4. Later federation attach without redeploying core spoke stack.
+4. Later federation attach without redeploying core spoke stack (`./dive spoke federate <CODE> --auth-code <uuid>`).
+5. Seeding is opt-in and should run after federation attach (`--seed --seed-count <N>`).
 
 ### Federation onboarding flow (bidirectional SSO)
 1. Register spoke with external IdP URL and TLS validation required.
@@ -159,7 +160,7 @@ Top current blockers are critical security exposure in federation/OPAL endpoints
 | P0 | Repair orchestration state transition flow | Platform | 2-3 days | No invalid transition logs in full hub deploy; deterministic resume | ✅ Done (PR #697) |
 | P0 | Remove localhost production assumptions | Platform/Identity | 3-5 days | Full hub+spoke federation works with public FQDN only | ✅ Done (PR #710) |
 | P0 | Enforce external IdP TLS validation in production | Identity/Security | 2 days | Registration fails for localhost/internal URLs in prod mode | ✅ Done (PR #692 + #710) |
-| P1 | Implement standalone spoke certified path | Platform | 2 days | Spoke works without hub; later federates without rebuild | 🔶 Partial — `--skip-federation` not yet implemented |
+| P1 | Implement standalone spoke certified path | Platform | 2 days | Spoke works without hub; later federates without rebuild | 🔶 Partial — `--skip-federation` + `spoke federate` implemented; full non-dry-run certification still pending |
 | P1 | Introduce first-class Shared deploy command | CLI/Platform | 1-2 days | `./dive shared deploy/status/down` operational | ✅ Done (PR #704) |
 | P1 | Make Multi-KAS truly multi-endpoint in upload path | Backend/KAS | 3-4 days | KAOs resolve to distinct KAS URLs from registry | ✅ Done (PR #707) |
 | P1 | Replace placeholder compliance status metrics | Backend/Compliance | 2-3 days | `/api/compliance/status` reflects computed runtime values | ✅ Done (PR #700) |

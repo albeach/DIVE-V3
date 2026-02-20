@@ -235,6 +235,8 @@ describeOrSkip('OPAL E2E Integration', () => {
 
       // Publish might fail if OPAL doesn't accept pushes (expected)
       expect(response.data).toHaveProperty('publish');
+      expect(response.data.publish).toHaveProperty('hash');
+      expect(response.data.publish).toHaveProperty('hashAlgorithm', 'sha256');
     });
   });
 

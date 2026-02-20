@@ -172,6 +172,7 @@ orch_has_deployment_lock() {
 orch_cleanup_stale_locks() {
     local instance_code="${1:-}"
     local age_minutes="${2:-60}"
+    local age_seconds=$((age_minutes * 60))
 
     log_info "Cleaning stale deployment locks (age threshold: ${age_minutes} minutes)..."
 
@@ -215,6 +216,32 @@ orch_cleanup_stale_locks() {
         log_success "PostgreSQL advisory locks released"
     fi
 
+    # Clean stale file-based locks (used in remote/no-DB lock mode)
+    local lock_dir="${DIVE_ROOT}/.dive-state"
+    if [ -d "$lock_dir" ]; then
+        local lock_file lock_mtime lock_age removed_file_locks
+        removed_file_locks=0
+
+        for lock_file in "$lock_dir"/*.lock; do
+            [ -e "$lock_file" ] || continue
+
+            if [ -n "$instance_code" ]; then
+                local expected_lock
+                expected_lock="$(upper "$instance_code").lock"
+                [ "$(basename "$lock_file")" = "$expected_lock" ] || continue
+            fi
+
+            lock_mtime=$(stat -f %m "$lock_file" 2>/dev/null || stat -c %Y "$lock_file" 2>/dev/null || echo 0)
+            lock_age=$(( $(date +%s) - lock_mtime ))
+            if [ "$lock_age" -ge "$age_seconds" ]; then
+                rm -f "$lock_file" 2>/dev/null || true
+                removed_file_locks=$((removed_file_locks + 1))
+            fi
+        done
+
+        log_success "File lock records cleaned: $removed_file_locks"
+    fi
+
     return 0
 }
 
@@ -250,6 +277,9 @@ orch_force_unlock() {
     local lock_id
     lock_id=$(echo -n "deployment_${code_lower}" | cksum | cut -d' ' -f1)
     orch_db_exec "SELECT pg_advisory_unlock($lock_id);" >/dev/null 2>&1 || true
+
+    # Release file-based lock (remote/no-DB lock mode)
+    rm -f "${DIVE_ROOT}/.dive-state/${code_upper}.lock" 2>/dev/null || true
 
     log_success "Force unlock complete for $code_upper"
     return 0

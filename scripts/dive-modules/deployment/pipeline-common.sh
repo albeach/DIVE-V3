@@ -50,9 +50,10 @@ fi
 # =============================================================================
 
 # Pipeline execution modes (shared between hub and spoke)
-readonly PIPELINE_MODE_DEPLOY="deploy"      # Full deployment (all phases)
-readonly PIPELINE_MODE_UP="up"              # Quick start (skip initialization)
-readonly PIPELINE_MODE_REDEPLOY="redeploy"  # Redeploy (skip init, full deploy)
+# Use idempotent assignment to avoid readonly collisions when modules are re-sourced.
+: "${PIPELINE_MODE_DEPLOY:=deploy}"      # Full deployment (all phases)
+: "${PIPELINE_MODE_UP:=up}"              # Quick start (skip initialization)
+: "${PIPELINE_MODE_REDEPLOY:=redeploy}"  # Redeploy (skip init, full deploy)
 
 # =============================================================================
 # FLAG TAXONOMY (Phase 7: UX Polish)
@@ -223,12 +224,12 @@ pipeline_check_sigint() {
 }
 
 # Common pipeline phases
-readonly PIPELINE_PHASE_PREFLIGHT="PREFLIGHT"
-readonly PIPELINE_PHASE_INITIALIZATION="INITIALIZATION"
-readonly PIPELINE_PHASE_DEPLOYMENT="DEPLOYMENT"
-readonly PIPELINE_PHASE_CONFIGURATION="CONFIGURATION"
-readonly PIPELINE_PHASE_VERIFICATION="VERIFICATION"
-readonly PIPELINE_PHASE_COMPLETE="COMPLETE"
+: "${PIPELINE_PHASE_PREFLIGHT:=PREFLIGHT}"
+: "${PIPELINE_PHASE_INITIALIZATION:=INITIALIZATION}"
+: "${PIPELINE_PHASE_DEPLOYMENT:=DEPLOYMENT}"
+: "${PIPELINE_PHASE_CONFIGURATION:=CONFIGURATION}"
+: "${PIPELINE_PHASE_VERIFICATION:=VERIFICATION}"
+: "${PIPELINE_PHASE_COMPLETE:=COMPLETE}"
 
 # =============================================================================
 # DEPLOYMENT LOCK MANAGEMENT

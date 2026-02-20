@@ -16,7 +16,9 @@
 
 # Prevent multiple sourcing - but verify arrays are actually loaded
 # The variable might be exported from parent shell without the arrays
-if [ -n "${ISO_COUNTRIES_LOADED:-}" ] && [ "${#CUSTOM_TEST_CODES[@]}" -gt 0 ]; then
+if [ -n "${ISO_COUNTRIES_LOADED:-}" ] && \
+   declare -p ISO_COUNTRIES CUSTOM_TEST_CODES >/dev/null 2>&1 && \
+   [ "${#CUSTOM_TEST_CODES[@]}" -gt 0 ]; then
     return 0
 fi
 export ISO_COUNTRIES_LOADED=1
@@ -29,7 +31,7 @@ export ISO_COUNTRIES_LOADED=1
 # Format: "Full Name|Flag|Timezone|Locale"
 # =============================================================================
 
-declare -A ISO_COUNTRIES=(
+declare -gA ISO_COUNTRIES=(
     # Africa (54 countries)
     ["DZA"]="Algeria|🇩🇿|Africa/Algiers|ar"
     ["AGO"]="Angola|🇦🇴|Africa/Luanda|pt"
@@ -204,7 +206,7 @@ declare -A ISO_COUNTRIES=(
 # Port offsets 200-299 reserved for custom test codes
 # =============================================================================
 
-declare -A CUSTOM_TEST_CODES=(
+declare -gA CUSTOM_TEST_CODES=(
     ["TST"]="Test Instance|🧪|UTC|en"
     ["DEV"]="Development Instance|🔧|UTC|en"
     ["QAA"]="QA Instance A|🔬|UTC|en"
@@ -223,7 +225,7 @@ declare -A CUSTOM_TEST_CODES=(
 )
 
 # Custom test code port offsets (200+)
-declare -A CUSTOM_PORT_OFFSETS=(
+declare -gA CUSTOM_PORT_OFFSETS=(
     ["TST"]=200
     ["DEV"]=201
     ["QAA"]=202
@@ -248,44 +250,44 @@ declare -A CUSTOM_PORT_OFFSETS=(
 # Check if code is a valid ISO country
 is_iso_country() {
     local code="${1^^}"
-    [[ -v ISO_COUNTRIES[$code] ]]
+    [[ -n "${ISO_COUNTRIES["$code"]+_}" ]]
 }
 
 # Check if code is a custom test code
 is_custom_test_code() {
     local code="${1^^}"
-    [[ -v CUSTOM_TEST_CODES[$code] ]]
+    [[ -n "${CUSTOM_TEST_CODES["$code"]+_}" ]]
 }
 
 # Get ISO country name
 get_iso_country_name() {
     local code="${1^^}"
-    if [[ -v ISO_COUNTRIES[$code] ]]; then
-        echo "${ISO_COUNTRIES[$code]}" | cut -d'|' -f1
+    if [[ -n "${ISO_COUNTRIES["$code"]+_}" ]]; then
+        echo "${ISO_COUNTRIES["$code"]}" | cut -d'|' -f1
     fi
 }
 
 # Get ISO country flag
 get_iso_country_flag() {
     local code="${1^^}"
-    if [[ -v ISO_COUNTRIES[$code] ]]; then
-        echo "${ISO_COUNTRIES[$code]}" | cut -d'|' -f2
+    if [[ -n "${ISO_COUNTRIES["$code"]+_}" ]]; then
+        echo "${ISO_COUNTRIES["$code"]}" | cut -d'|' -f2
     fi
 }
 
 # Get ISO country timezone
 get_iso_country_timezone() {
     local code="${1^^}"
-    if [[ -v ISO_COUNTRIES[$code] ]]; then
-        echo "${ISO_COUNTRIES[$code]}" | cut -d'|' -f3
+    if [[ -n "${ISO_COUNTRIES["$code"]+_}" ]]; then
+        echo "${ISO_COUNTRIES["$code"]}" | cut -d'|' -f3
     fi
 }
 
 # Get ISO country locale
 get_iso_country_locale() {
     local code="${1^^}"
-    if [[ -v ISO_COUNTRIES[$code] ]]; then
-        echo "${ISO_COUNTRIES[$code]}" | cut -d'|' -f4
+    if [[ -n "${ISO_COUNTRIES["$code"]+_}" ]]; then
+        echo "${ISO_COUNTRIES["$code"]}" | cut -d'|' -f4
     else
         echo "en"
     fi
@@ -294,16 +296,16 @@ get_iso_country_locale() {
 # Get custom test code name
 get_custom_test_name() {
     local code="${1^^}"
-    if [[ -v CUSTOM_TEST_CODES[$code] ]]; then
-        echo "${CUSTOM_TEST_CODES[$code]}" | cut -d'|' -f1
+    if [[ -n "${CUSTOM_TEST_CODES["$code"]+_}" ]]; then
+        echo "${CUSTOM_TEST_CODES["$code"]}" | cut -d'|' -f1
     fi
 }
 
 # Get custom test code flag/emoji
 get_custom_test_flag() {
     local code="${1^^}"
-    if [[ -v CUSTOM_TEST_CODES[$code] ]]; then
-        echo "${CUSTOM_TEST_CODES[$code]}" | cut -d'|' -f2
+    if [[ -n "${CUSTOM_TEST_CODES["$code"]+_}" ]]; then
+        echo "${CUSTOM_TEST_CODES["$code"]}" | cut -d'|' -f2
     fi
 }
 
@@ -344,8 +346,8 @@ get_iso_country_offset() {
 # Get port offset for custom test code
 get_custom_test_offset() {
     local code="${1^^}"
-    if [[ -v CUSTOM_PORT_OFFSETS[$code] ]]; then
-        echo "${CUSTOM_PORT_OFFSETS[$code]}"
+    if [[ -n "${CUSTOM_PORT_OFFSETS["$code"]+_}" ]]; then
+        echo "${CUSTOM_PORT_OFFSETS["$code"]}"
     else
         echo "200"  # Default fallback
     fi

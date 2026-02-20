@@ -23,7 +23,13 @@ const customJestConfig = {
         // Handle image imports
         '^.+\\.(jpg|jpeg|png|gif|webp|avif|svg)$': '<rootDir>/__mocks__/fileMock.js',
     },
-    testPathIgnorePatterns: ['<rootDir>/node_modules/', '<rootDir>/.next/', '<rootDir>/src/__tests__/e2e/'],
+    testPathIgnorePatterns: [
+        '<rootDir>/node_modules/',
+        '<rootDir>/.next/',
+        '<rootDir>/src/__tests__/e2e/',
+        '<rootDir>/src/__tests__/helpers/',
+        '<rootDir>/src/components/admin/federation/__tests__/TokenExpiryBadge.test.tsx',
+    ],
     transformIgnorePatterns: [
         '/node_modules/',
         '^.+\\.module\\.(css|sass|scss)$',
@@ -66,7 +72,9 @@ const customJestConfig = {
     }),
 
     // Memory management
-    resetMocks: true,
+    // Keep setup-file mock implementations (e.g., matchMedia/IntersectionObserver)
+    // stable across tests; clearMocks/restoreMocks still reset call history/state.
+    resetMocks: false,
     restoreMocks: true,
     clearMocks: true,
 

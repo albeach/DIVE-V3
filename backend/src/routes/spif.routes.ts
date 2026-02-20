@@ -12,6 +12,8 @@
 
 import { Router, Request, Response, NextFunction } from 'express';
 import { logger } from '../utils/logger';
+import { authenticateJWT } from '../middleware/authz.middleware';
+import { requireAdmin } from '../middleware/admin.middleware';
 import {
     getSPIFMarkingRules,
     generateMarking,
@@ -612,9 +614,8 @@ router.get('/country/:code', async (req: Request, res: Response, next: NextFunct
  *       500:
  *         description: Server error
  */
-router.get('/raw', async (req: Request, res: Response, next: NextFunction) => {
+router.get('/raw', authenticateJWT, requireAdmin, async (req: Request, res: Response, next: NextFunction) => {
     try {
-        // In production, this should be restricted to admins
         const data = await getRawSPIFData();
 
         // Convert Maps for JSON serialization

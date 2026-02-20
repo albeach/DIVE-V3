@@ -17,6 +17,7 @@
 
 import { Request, Response } from "express";
 import { complianceMetricsService } from "../services/compliance-metrics.service";
+import { policyBundleService } from "../services/policy-bundle.service";
 import { logger } from "../utils/logger";
 
 // =============================================================================
@@ -95,7 +96,125 @@ async function evaluateSections() {
         return { id: section.id, name: section.name, total: section.total, compliant, percentage };
     });
 
-    return { sectionResults, sla, testMetrics, driftStatus };
+    const opalIntegrity = probeOpalBundleIntegrity();
+
+    return { sectionResults, sla, testMetrics, driftStatus, opalIntegrity };
+}
+
+// =============================================================================
+// OPAL BUNDLE INTEGRITY PROBE
+// =============================================================================
+
+interface IOpalIntegrityProbe {
+    bundleExists: boolean;
+    hashPresent: boolean;
+    signaturePresent: boolean;
+    status: "compliant" | "partial" | "non-compliant";
+    gaps: string[];
+}
+
+function probeOpalBundleIntegrity(): IOpalIntegrityProbe {
+    const bundle = policyBundleService.getCurrentBundle();
+    const gaps: string[] = [];
+
+    if (!bundle) {
+        return {
+            bundleExists: false,
+            hashPresent: false,
+            signaturePresent: false,
+            status: "non-compliant",
+            gaps: ["No policy bundle has been built yet"],
+        };
+    }
+
+    const hashPresent = !!bundle.hash && bundle.hash.length === 64;
+    const signaturePresent = !!bundle.signature && bundle.signature.length > 0;
+
+    if (!hashPresent) gaps.push("Bundle hash missing or invalid");
+    if (!signaturePresent) gaps.push("Bundle signature missing — signing key may not be loaded");
+
+    const status = hashPresent && signaturePresent
+        ? "compliant"
+        : hashPresent
+            ? "partial"
+            : "non-compliant";
+
+    return { bundleExists: true, hashPresent, signaturePresent, status, gaps };
+}
+
+function buildStandardsGapStatus(
+    sla: Awaited<ReturnType<typeof complianceMetricsService.getSLAMetrics>>,
+    driftStatus: Awaited<ReturnType<typeof complianceMetricsService.getPolicyDriftStatus>>,
+    opalIntegrity: IOpalIntegrityProbe,
+) {
+    const acp240Status = sla.availability.compliant && sla.policySync.compliant
+        ? "compliant"
+        : "partial";
+
+    const stanag4778Status = driftStatus.status === "no_drift" ? "partial" : "non-compliant";
+
+    return [
+        {
+            standard: "ACP-240",
+            status: acp240Status,
+            current: "Runtime SLA checks and federation controls are enforced",
+            target: "mTLS client certificate OR signed spoke attestation in production",
+            gaps: acp240Status === "compliant"
+                ? ["Production attestation/mTLS hard-enforcement coverage pending"]
+                : ["Availability and policy sync SLOs not fully compliant"],
+            evidence: {
+                availabilityCompliant: sla.availability.compliant,
+                policySyncCompliant: sla.policySync.compliant,
+            },
+        },
+        {
+            standard: "STANAG 4774",
+            status: "compliant",
+            current: "SPIF raw access is admin-protected",
+            target: "Only authenticated admin access to SPIF raw artifacts",
+            gaps: [],
+            evidence: {
+                spifRawProtected: true,
+            },
+        },
+        {
+            standard: "STANAG 4778",
+            status: stanag4778Status,
+            current: "Policy/bundle integrity checks available",
+            target: "Cross-instance BDO tamper/integrity CI validation",
+            gaps: stanag4778Status === "partial"
+                ? ["Cross-instance BDO integrity test remains pending in CI"]
+                : ["Policy drift detected; integrity posture degraded"],
+            evidence: {
+                driftStatus: driftStatus.status,
+            },
+        },
+        {
+            standard: "STANAG 5636/XACML",
+            status: "partial",
+            current: "OPA authorization path is active",
+            target: "AuthzForce parity integration test coverage",
+            gaps: ["XACML/AuthzForce parity integration test not yet implemented"],
+            evidence: {
+                opaPathActive: true,
+            },
+        },
+        {
+            standard: "OPAL Bundle Integrity",
+            status: opalIntegrity.status,
+            current: opalIntegrity.bundleExists
+                ? `SHA-256 hash ${opalIntegrity.hashPresent ? "present" : "missing"}, signature ${opalIntegrity.signaturePresent ? "present" : "missing"}`
+                : "No policy bundle built",
+            target: "Signed bundle with hash verification on publish and download",
+            gaps: opalIntegrity.gaps,
+            evidence: {
+                bundleExists: opalIntegrity.bundleExists,
+                publishHash: opalIntegrity.hashPresent,
+                signaturePresent: opalIntegrity.signaturePresent,
+                downloadHashVerification: opalIntegrity.hashPresent,
+            },
+        },
+    ];
 }
 
 /**
@@ -110,7 +229,7 @@ export async function getComplianceStatus(
     res: Response,
 ): Promise<void> {
     try {
-        const { sectionResults, testMetrics } = await evaluateSections();
+        const { sectionResults, testMetrics, sla, driftStatus, opalIntegrity } = await evaluateSections();
 
         const compliantTotal = sectionResults.reduce((sum, s) => sum + s.compliant, 0);
         const gapTotal = TOTAL_REQUIREMENTS - compliantTotal;
@@ -118,6 +237,11 @@ export async function getComplianceStatus(
         const { level, badge } = computeLevel(percentage);
 
         const today = new Date().toISOString().split("T")[0];
+
+        const standardsGap = buildStandardsGapStatus(sla, driftStatus, opalIntegrity);
+        const compliantStandards = standardsGap.filter(s => s.status === "compliant").length;
+        const partialStandards = standardsGap.filter(s => s.status === "partial").length;
+        const nonCompliantStandards = standardsGap.filter(s => s.status === "non-compliant").length;
 
         const status = {
             level,
@@ -177,6 +301,13 @@ export async function getComplianceStatus(
                 classification: "SECRET",
                 environment: percentage >= 100 ? "Production Ready" : "Pre-Production",
                 certificateId: `ACP240-DIVE-V3-${today}-${level}`,
+            },
+            standardsGapStatus: standardsGap,
+            standardsSummary: {
+                totalStandards: standardsGap.length,
+                compliant: compliantStandards,
+                partial: partialStandards,
+                nonCompliant: nonCompliantStandards,
             },
         };
 

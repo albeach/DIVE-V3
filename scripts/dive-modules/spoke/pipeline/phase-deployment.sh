@@ -65,6 +65,11 @@ spoke_ensure_opal_key_configured() {
         return 0
     fi
 
+    # Cleanup malformed orphan SSH key lines from prior buggy writes.
+    # These lines break shell/compose env parsing (e.g., "ssh-rsa ...").
+    sed -i.bak '/^ssh-\(rsa\|ed25519\|ecdsa\)[[:space:]]/d' "$env_file" 2>/dev/null || true
+    rm -f "${env_file}.bak" 2>/dev/null || true
+
     # Check if OPAL key is already valid
     if grep -q "^OPAL_AUTH_PUBLIC_KEY=\"ssh-" "$env_file" 2>/dev/null; then
         log_verbose "OPAL_AUTH_PUBLIC_KEY already configured"
@@ -74,7 +79,7 @@ spoke_ensure_opal_key_configured() {
     # Get OPAL public key (best-effort)
     local opal_public_key=""
     if [ -f "$HOME/.ssh/id_rsa.pub" ]; then
-        opal_public_key=$(cat "$HOME/.ssh/id_rsa.pub" 2>/dev/null | tr -d '\n\r')
+        opal_public_key=$(awk '/^ssh-(rsa|ed25519|ecdsa)[[:space:]]/ { print; exit }' "$HOME/.ssh/id_rsa.pub" 2>/dev/null | tr -d '\r')
     fi
 
     if [ -z "$opal_public_key" ]; then

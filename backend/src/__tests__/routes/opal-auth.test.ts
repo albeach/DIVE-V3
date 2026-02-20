@@ -41,8 +41,11 @@ jest.mock('../../services/policy-bundle.service', () => ({
     publishBundle: jest.fn().mockImplementation(() =>
       Promise.resolve({
         success: true,
-        transactionId: 'tx-123',
-        clientsNotified: 3,
+        bundleId: 'test-bundle-1',
+        version: '1.0.0',
+        hash: 'abc123',
+        publishedAt: new Date().toISOString(),
+        opalTransactionId: 'tx-123',
       })
     ),
     buildAndPublish: jest.fn().mockImplementation(() =>
@@ -57,6 +60,7 @@ jest.mock('../../services/policy-bundle.service', () => ({
         },
         publishResult: {
           success: true,
+          hash: 'abc123',
           publishedAt: new Date().toISOString(),
           opalTransactionId: 'tx-123',
         },
@@ -292,6 +296,8 @@ describe('OPAL Routes - Authentication & Authorization', () => {
 
       expect(response.status).toBe(200);
       expect(response.body.success).toBe(true);
+      expect(response.body.hash).toBe('abc123');
+      expect(response.body.hashAlgorithm).toBe('sha256');
     });
   });
 
@@ -323,6 +329,8 @@ describe('OPAL Routes - Authentication & Authorization', () => {
         .send({ scopes: ['base'] });
 
       expect(response.status).toBe(200);
+      expect(response.body.publish.hash).toBe('abc123');
+      expect(response.body.publish.hashAlgorithm).toBe('sha256');
     });
   });
 

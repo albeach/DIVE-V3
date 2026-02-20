@@ -97,26 +97,35 @@ spoke_phase_configuration() {
     log_info "→ Executing CONFIGURATION phase for $code_upper"
     local spoke_dir="${DIVE_ROOT}/instances/${code_lower}"
 
+    local standalone_mode=false
+    if [ "${DEPLOYMENT_MODE:-local}" = "standalone" ] || [ "${SKIP_FEDERATION:-false}" = "true" ]; then
+        standalone_mode=true
+    fi
+
     # =============================================================================
     # PRE-FLIGHT: Verify Hub is accessible before attempting configuration
     # =============================================================================
-    log_step "Verifying Hub connectivity..."
-    local hub_backend_url=""
-    local _hub_resolved
-    _hub_resolved=$(resolve_hub_public_url "api")
-    # Try resolved URL first, then Docker internal name, then localhost fallback
-    for url in "${_hub_resolved}/api/health" "https://dive-hub-backend:4000/api/health" "https://localhost:${BACKEND_PORT:-4000}/api/health"; do
-        if curl -sk --max-time 5 "$url" 2>/dev/null | grep -q "ok\|healthy"; then
-            hub_backend_url="$url"
-            break
+    if [ "$standalone_mode" = "true" ]; then
+        log_warn "Standalone mode — skipping Hub connectivity preflight"
+    else
+        log_step "Verifying Hub connectivity..."
+        local hub_backend_url=""
+        local _hub_resolved
+        _hub_resolved=$(resolve_hub_public_url "api")
+        # Try resolved URL first, then Docker internal name, then localhost fallback
+        for url in "${_hub_resolved}/api/health" "https://dive-hub-backend:4000/api/health" "https://localhost:${BACKEND_PORT:-4000}/api/health"; do
+            if curl -sk --max-time 5 "$url" 2>/dev/null | grep -q "ok\|healthy"; then
+                hub_backend_url="$url"
+                break
+            fi
+        done
+        if [ -z "$hub_backend_url" ]; then
+            log_error "Hub backend not accessible — hub must be running before spoke deployment"
+            log_error "Fix: ./dive hub deploy"
+            return 1
         fi
-    done
-    if [ -z "$hub_backend_url" ]; then
-        log_error "Hub backend not accessible — hub must be running before spoke deployment"
-        log_error "Fix: ./dive hub deploy"
-        return 1
+        log_success "Hub accessible at $hub_backend_url"
     fi
-    log_success "Hub accessible at $hub_backend_url"
 
     # =============================================================================
     # PERFORMANCE TRACKING: Phase timing metrics
@@ -234,7 +243,7 @@ spoke_phase_configuration() {
     # Hub API auto-approval triggers createBidirectionalFederation() which creates IdP links.
     # Running this first avoids conflict with CLI federation setup (Step 2.5) creating
     # the same links and causing invalid_grant errors from Keycloak processing overlap.
-    if [ "${DEPLOYMENT_MODE:-local}" = "standalone" ]; then
+    if [ "$standalone_mode" = "true" ]; then
         log_warn "Standalone mode — skipping federation registration and setup"
     elif [ "$pipeline_mode" = "deploy" ]; then
         if ! spoke_config_register_in_registries "$instance_code"; then
