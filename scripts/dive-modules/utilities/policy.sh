@@ -133,19 +133,19 @@ policy_test() {
     log_info "Running OPA policy tests..."
 
     if ! command -v opa >/dev/null 2>&1; then
-        log_error "OPA not found"
+        log_error "OPA not found. Install from https://www.openpolicyagent.org/docs/latest/#running-opa"
         return 1
     fi
 
-    local test_cmd="opa test -v"
+    local -a test_args=("test" "-v" "--bundle")
 
     if [ -n "$pattern" ]; then
-        test_cmd="$test_cmd --run '$pattern'"
+        test_args+=("--run" "$pattern")
     fi
 
-    test_cmd="$test_cmd ${POLICIES_DIR}"
+    test_args+=("${POLICIES_DIR}")
 
-    eval $test_cmd
+    opa "${test_args[@]}"
 }
 
 ##
