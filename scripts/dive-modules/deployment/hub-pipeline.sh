@@ -77,19 +77,24 @@ hub_pipeline_execute() {
         fi
     fi
 
-    # Acquire deployment lock
+    # Skip lock, SIGINT handler, and state writes in dry-run mode
     local lock_acquired=false
-    if type deployment_acquire_lock &>/dev/null; then
-        if ! deployment_acquire_lock "$instance_code"; then
-            log_error "Cannot start hub deployment - lock acquisition failed"
-            log_error "Another deployment may be in progress"
-            return 1
+    if pipeline_is_dry_run 2>/dev/null; then
+        log_verbose "Dry-run mode: skipping deployment lock acquisition"
+    else
+        # Acquire deployment lock
+        if type deployment_acquire_lock &>/dev/null; then
+            if ! deployment_acquire_lock "$instance_code"; then
+                log_error "Cannot start hub deployment - lock acquisition failed"
+                log_error "Another deployment may be in progress"
+                return 1
+            fi
+            lock_acquired=true
         fi
-        lock_acquired=true
     fi
 
-    # Install SIGINT handler for graceful interrupt
-    if type pipeline_install_sigint_handler &>/dev/null; then
+    # Install SIGINT handler for graceful interrupt (skip in dry-run)
+    if ! pipeline_is_dry_run 2>/dev/null && type pipeline_install_sigint_handler &>/dev/null; then
         pipeline_install_sigint_handler "$instance_code"
     fi
 
@@ -97,8 +102,8 @@ hub_pipeline_execute() {
     local pipeline_result=0
     _hub_pipeline_execute_internal "$instance_code" "$pipeline_mode" "$start_time" "$resume_mode" || pipeline_result=$?
 
-    # Uninstall SIGINT handler
-    if type pipeline_uninstall_sigint_handler &>/dev/null; then
+    # Uninstall SIGINT handler (skip in dry-run)
+    if ! pipeline_is_dry_run 2>/dev/null && type pipeline_uninstall_sigint_handler &>/dev/null; then
         pipeline_uninstall_sigint_handler
     fi
 
@@ -123,19 +128,27 @@ _hub_pipeline_execute_internal() {
     local phase_result=0
     local phase_times=()
 
-    # Initialize orchestration context
-    if type orch_init_context &>/dev/null; then
-        orch_init_context "$instance_code" "Hub Deployment"
+    local _is_dry_run=false
+    if pipeline_is_dry_run 2>/dev/null; then
+        _is_dry_run=true
     fi
 
-    # Initialize metrics
-    if type orch_init_metrics &>/dev/null; then
-        orch_init_metrics "$instance_code"
-    fi
+    # Skip orchestration init and progress tracking in dry-run mode
+    if [ "$_is_dry_run" = "false" ]; then
+        # Initialize orchestration context
+        if type orch_init_context &>/dev/null; then
+            orch_init_context "$instance_code" "Hub Deployment"
+        fi
 
-    # Initialize progress tracking (13 phases: 1-13)
-    if type progress_init &>/dev/null; then
-        progress_init "hub" "USA" 13
+        # Initialize metrics
+        if type orch_init_metrics &>/dev/null; then
+            orch_init_metrics "$instance_code"
+        fi
+
+        # Initialize progress tracking (13 phases: 1-13)
+        if type progress_init &>/dev/null; then
+            progress_init "hub" "USA" 13
+        fi
     fi
 
     # =========================================================================
@@ -206,6 +219,13 @@ _hub_pipeline_execute_internal() {
     # EXECUTE REGISTERED PHASES
     # =========================================================================
     _hub_execute_registered_phases "$instance_code" "$pipeline_mode" "$resume_mode" phase_result phase_times
+
+    # =========================================================================
+    # Dry-run: summary already printed in _hub_execute_registered_phases
+    # =========================================================================
+    if [ "$_is_dry_run" = "true" ]; then
+        return 0
+    fi
 
     # =========================================================================
     # Stop Health Sentinel
@@ -537,6 +557,16 @@ _hub_execute_registered_phases() {
     local _phase_count
     _phase_count=$(pipeline_get_phase_count)
 
+    local _is_dry_run=false
+    if pipeline_is_dry_run 2>/dev/null; then
+        _is_dry_run=true
+        pipeline_dry_run_reset 2>/dev/null || true
+        echo ""
+        echo "==============================================================================="
+        echo "  DRY-RUN: Hub Deployment Plan — ${instance_code}"
+        echo "==============================================================================="
+    fi
+
     # Reset --from-phase tracking state
     export _DIVE_FROM_PHASE_REACHED=false
 
@@ -555,6 +585,44 @@ _hub_execute_registered_phases() {
         eval "_current_result=\${$_result_var}"
         if [ "$_current_result" -ne 0 ]; then
             break
+        fi
+
+        # Skip check (--skip-phase / --only-phase / --from-phase)
+        if _hub_should_skip_phase "$_name"; then
+            eval "${_times_var}+=(\"Phase $_num ($_label): skipped\")"
+            if [ "$_is_dry_run" = "true" ]; then
+                pipeline_dry_run_record_skip "$_label" "phase control flag" 2>/dev/null || true
+            fi
+            continue
+        fi
+
+        # === DRY-RUN MODE ===
+        if [ "$_is_dry_run" = "true" ]; then
+            # Validation phases execute even in dry-run
+            if pipeline_is_validation_phase "$_name" 2>/dev/null; then
+                echo ""
+                echo "  [DRY-RUN VALIDATION] Phase ${_num}: ${_label} (${_name})"
+                echo "    Executing validation checks..."
+
+                local _phase_rc=0
+                "$_func" "$instance_code" "$pipeline_mode" || _phase_rc=$?
+
+                if [ $_phase_rc -eq 0 ]; then
+                    echo "    Result: PASSED"
+                    pipeline_dry_run_record_validation "$_label: passed" 2>/dev/null || true
+                else
+                    echo "    Result: FAILED"
+                    pipeline_dry_run_record_warning "$_label validation failed" 2>/dev/null || true
+                    # In dry-run, validation failures are warnings, not fatal
+                fi
+            else
+                # Simulate phase
+                pipeline_dry_run_phase "$_num" "$_name" "$_label" "$_func" "$_mode" "$_state" 2>/dev/null || true
+                pipeline_dry_run_record_execute "$_label" 2>/dev/null || true
+            fi
+
+            eval "${_times_var}+=(\"Phase $_num ($_label): dry-run\")"
+            continue
         fi
 
         # === Between-phase hooks (BEFORE this phase) ===
@@ -576,12 +644,6 @@ _hub_execute_registered_phases() {
         # State transition before phase (if specified in registry)
         if [ -n "$_state" ] && type deployment_set_state &>/dev/null; then
             deployment_set_state "$instance_code" "$_state" "" "{\"phase\":\"$_name\"}"
-        fi
-
-        # Skip check (--skip-phase / --only-phase)
-        if _hub_should_skip_phase "$_name"; then
-            eval "${_times_var}+=(\"Phase $_num ($_label): skipped\")"
-            continue
         fi
 
         # === Phase execution ===
@@ -648,6 +710,11 @@ _hub_execute_registered_phases() {
             fi
         fi
     done
+
+    # Print dry-run summary
+    if [ "$_is_dry_run" = "true" ]; then
+        pipeline_dry_run_summary "hub" "$instance_code" 2>/dev/null || true
+    fi
 }
 
 ##
@@ -697,12 +764,17 @@ hub_deploy() {
     export DIVE_ONLY_PHASE=""
     export DIVE_FROM_PHASE=""
     export DIVE_FORCE_BUILD="false"
+    export DIVE_DRY_RUN="false"
 
     # Parse arguments
     while [[ $# -gt 0 ]]; do
         case "$1" in
             --resume)
                 resume_mode=true
+                shift
+                ;;
+            --dry-run)
+                DIVE_DRY_RUN="true"
                 shift
                 ;;
             --force-build)
@@ -758,6 +830,9 @@ hub_deploy() {
     fi
 
     # Log phase control flags
+    if [ "$DIVE_DRY_RUN" = "true" ]; then
+        log_info "DRY-RUN MODE: simulating hub deployment (no changes will be made)"
+    fi
     if [ -n "$DIVE_SKIP_PHASES" ]; then
         log_info "Skipping phases: $DIVE_SKIP_PHASES"
     fi
