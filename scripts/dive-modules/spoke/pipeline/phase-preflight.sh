@@ -142,6 +142,23 @@ spoke_phase_preflight() {
         fi
     fi
 
+    # Config validation pre-flight
+    if type config_validate &>/dev/null; then
+        if ! config_validate "spoke" "$code_upper"; then
+            log_error "Spoke deployment aborted: configuration validation failed"
+            return 1
+        fi
+    else
+        local _validator="${DIVE_ROOT}/scripts/dive-modules/configuration/config-validator.sh"
+        if [ -f "$_validator" ]; then
+            source "$_validator"
+            if ! config_validate "spoke" "$code_upper"; then
+                log_error "Spoke deployment aborted: configuration validation failed"
+                return 1
+            fi
+        fi
+    fi
+
     log_info "→ Executing PREFLIGHT phase for $code_upper (mode: $pipeline_mode)"
 
     # Step 1: Hub auto-discovery (MUST run first — discovers Vault, Keycloak, backend health)
