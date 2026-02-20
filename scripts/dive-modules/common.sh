@@ -230,6 +230,44 @@ export PILOT_ZONE="${PILOT_ZONE:-us-east4-c}"
 export DRY_RUN="${DRY_RUN:-false}"
 export VERBOSE="${VERBOSE:-false}"
 export QUIET="${QUIET:-false}"
+export DIVE_NON_INTERACTIVE="${DIVE_NON_INTERACTIVE:-false}"
+
+# =============================================================================
+# INTERACTIVE MODE HELPERS
+# =============================================================================
+
+# Returns 0 (true) if running interactively, 1 (false) otherwise.
+# Non-interactive when: --non-interactive flag, DIVE_NON_INTERACTIVE=true, or no TTY.
+is_interactive() {
+    [ "${DIVE_NON_INTERACTIVE:-false}" = "false" ] && [ -t 0 ] && [ -t 1 ]
+}
+
+# Prompt user with a default value. In non-interactive mode, uses env var or default silently.
+# Usage: value=$(prompt_with_default "Enter domain" "DIVE_CUSTOM_DOMAIN" "dive25.com")
+prompt_with_default() {
+    local prompt="$1" var_name="$2" default="$3"
+    if is_interactive; then
+        local value
+        read -p "  ${prompt} [${default}]: " value
+        echo "${value:-$default}"
+    else
+        echo "${!var_name:-$default}"
+    fi
+}
+
+# Confirm destructive action. Auto-confirms in non-interactive mode.
+# Usage: confirm_destructive "Type 'yes' to confirm deletion" || return 0
+confirm_destructive() {
+    local prompt="$1"
+    if is_interactive; then
+        local answer
+        read -r -p "  ${prompt}: " answer
+        [[ "$answer" == "yes" || "$answer" == "YES" || "$answer" == "RESTORE" || "$answer" == "ROTATE" ]]
+    else
+        log_warn "Non-interactive mode: auto-confirming"
+        return 0
+    fi
+}
 
 # =============================================================================
 # AWS CONFIGURATION (used by dev/staging environments)

@@ -124,8 +124,13 @@ spoke_register() {
 
     # Validate contact email
     if [ -z "$contact_email" ]; then
-        log_warn "Contact email not configured"
-        read -p "  Enter contact email: " contact_email
+        if is_interactive; then
+            log_warn "Contact email not configured"
+            read -p "  Enter contact email: " contact_email
+        else
+            contact_email="${DIVE_CONTACT_EMAIL:-admin@${instance_code_config}.local}"
+            log_info "Non-interactive mode: using contact email $contact_email"
+        fi
         if [ -z "$contact_email" ]; then
             log_error "Contact email is required for registration"
             return 1

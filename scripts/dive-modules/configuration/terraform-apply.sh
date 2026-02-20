@@ -317,15 +317,19 @@ terraform_apply_acr_amr_ssot() {
     echo "  • Add native oidc-acr-mapper, oidc-amr-mapper to all clients"
     echo ""
 
-    # Confirm with user unless in quiet mode or dry-run
+    # Confirm with user unless in quiet mode, dry-run, or non-interactive
     if [ "$QUIET" != true ] && [ "$DRY_RUN" != true ]; then
-        log_warn "This will modify Keycloak ACR/AMR mappers for ALL instances (Hub + Spokes)."
-        read -rp "Continue? (yes/no): " confirm
-        if [[ "$confirm" != "yes" ]]; then
-            log_error "Aborted by user"
-            return 1
+        if is_interactive; then
+            log_warn "This will modify Keycloak ACR/AMR mappers for ALL instances (Hub + Spokes)."
+            read -rp "Continue? (yes/no): " confirm
+            if [[ "$confirm" != "yes" ]]; then
+                log_error "Aborted by user"
+                return 1
+            fi
+            echo ""
+        else
+            log_warn "Non-interactive mode: auto-confirming ACR/AMR mapper changes"
         fi
-        echo ""
     fi
 
     # Apply to Hub first
