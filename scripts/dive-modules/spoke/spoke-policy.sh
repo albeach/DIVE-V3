@@ -212,6 +212,23 @@ spoke_policy_sync() {
         file_count=$(echo "$response" | grep -o '"fileCount"[[:space:]]*:[[:space:]]*[0-9]*' | head -1 | cut -d: -f2 | tr -d ' ')
         local signed
         signed=$(echo "$response" | grep -o '"signed"[[:space:]]*:[[:space:]]*[a-z]*' | head -1 | cut -d: -f2 | tr -d ' ')
+        local bundle_content
+        bundle_content=$(echo "$response" | grep -o '"bundleContent"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | cut -d'"' -f4)
+
+        # Verify bundle hash against downloaded payload (SHA-256 integrity check)
+        if [ -n "$bundle_content" ] && [ -n "$hash" ]; then
+            local computed_hash
+            computed_hash=$(printf '%s' "$bundle_content" | openssl base64 -d -A 2>/dev/null | openssl dgst -sha256 2>/dev/null | awk '{print $2}')
+            if [ -z "$computed_hash" ] || [ "$computed_hash" != "$hash" ]; then
+                log_error "Bundle hash verification failed"
+                echo "  Expected: ${hash:0:16}..."
+                echo "  Actual:   ${computed_hash:0:16}..."
+                return 1
+            fi
+            log_success "Bundle hash verified (SHA-256)"
+        else
+            log_warn "Bundle content/hash missing in response - skipping hash verification"
+        fi
 
         log_success "Policy bundle fetched from hub!"
         echo ""
@@ -378,4 +395,3 @@ spoke_policy_version() {
 
 # Mark module as loaded
 export DIVE_SPOKE_POLICY_LOADED=1
-

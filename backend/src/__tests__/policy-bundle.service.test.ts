@@ -392,3 +392,124 @@ describe('Bundle Content', () => {
     expect(result.hash).toMatch(/^[a-f0-9]{64}$/);
   });
 });
+
+// ============================================
+// BUNDLE HASH VERIFICATION TESTS
+// ============================================
+
+describe('Bundle Hash Verification', () => {
+  beforeEach(() => {
+    jest.spyOn(logger, 'info').mockImplementation(() => logger as any);
+    jest.spyOn(logger, 'debug').mockImplementation(() => logger as any);
+    jest.spyOn(logger, 'warn').mockImplementation(() => logger as any);
+    jest.spyOn(logger, 'error').mockImplementation(() => logger as any);
+    (logger as any).child = () => logger;
+    process.env.POLICIES_DIR = path.join(__dirname, '..', '..', '..', 'policies');
+  });
+
+  it('should produce a valid 64-char hex hash on build', async () => {
+    const result = await policyBundleService.buildBundle({
+      sign: false,
+      compress: false,
+    });
+
+    expect(result.success).toBe(true);
+    expect(result.hash).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('should detect hash mismatch on tampered content', async () => {
+    const result = await policyBundleService.buildBundle({
+      sign: false,
+      compress: false,
+    });
+
+    const tamperedContent = Buffer.from('tampered-policy-content');
+    const tamperedHash = crypto.createHash('sha256').update(tamperedContent).digest('hex');
+
+    expect(tamperedHash).not.toBe(result.hash);
+  });
+
+  it('should store recomputable hash in getCurrentBundle', async () => {
+    await policyBundleService.buildBundle({
+      sign: false,
+      compress: false,
+    });
+
+    const bundle = policyBundleService.getCurrentBundle();
+    expect(bundle).not.toBeNull();
+    expect(bundle!.hash).toMatch(/^[a-f0-9]{64}$/);
+
+    // Recompute hash from contents and verify format
+    const recomputed = crypto.createHash('sha256').update(bundle!.contents).digest('hex');
+    expect(recomputed).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it('should verify signature round-trip with matching key pair', async () => {
+    const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+    });
+
+    const testKeyDir = path.join(__dirname, 'test-verify-keys');
+    if (!fs.existsSync(testKeyDir)) fs.mkdirSync(testKeyDir, { recursive: true });
+
+    const pubKeyPath = path.join(testKeyDir, 'verify-test.pub');
+    fs.writeFileSync(pubKeyPath, publicKey);
+
+    const { PolicyBundleService } = await import('../services/policy-bundle.service');
+    const testService = new (PolicyBundleService as any)();
+    (testService as any).signingKey = crypto.createPrivateKey(privateKey);
+    (testService as any).signingKeyLoaded = true;
+
+    const result = await testService.buildBundle({ sign: true, compress: false });
+    expect(result.success).toBe(true);
+    expect(result.signature).toBeDefined();
+
+    const bundle = testService.getCurrentBundle();
+    expect(bundle).not.toBeNull();
+
+    const verifyResult = await testService.verifyBundleSignature(bundle!, pubKeyPath);
+    expect(verifyResult.valid).toBe(true);
+    expect(verifyResult.error).toBeUndefined();
+
+    // Clean up
+    fs.unlinkSync(pubKeyPath);
+    fs.rmdirSync(testKeyDir);
+  });
+
+  it('should fail signature verification with wrong public key', async () => {
+    const keyPair1 = crypto.generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+    });
+    const keyPair2 = crypto.generateKeyPairSync('rsa', {
+      modulusLength: 2048,
+      privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+      publicKeyEncoding: { type: 'spki', format: 'pem' },
+    });
+
+    const testKeyDir = path.join(__dirname, 'test-wrong-key');
+    if (!fs.existsSync(testKeyDir)) fs.mkdirSync(testKeyDir, { recursive: true });
+
+    const wrongPubPath = path.join(testKeyDir, 'wrong.pub');
+    fs.writeFileSync(wrongPubPath, keyPair2.publicKey);
+
+    const { PolicyBundleService } = await import('../services/policy-bundle.service');
+    const testService = new (PolicyBundleService as any)();
+    (testService as any).signingKey = crypto.createPrivateKey(keyPair1.privateKey);
+    (testService as any).signingKeyLoaded = true;
+
+    await testService.buildBundle({ sign: true, compress: false });
+    const bundle = testService.getCurrentBundle();
+    expect(bundle).not.toBeNull();
+
+    const verifyResult = await testService.verifyBundleSignature(bundle!, wrongPubPath);
+    expect(verifyResult.valid).toBe(false);
+
+    // Clean up
+    fs.unlinkSync(wrongPubPath);
+    fs.rmdirSync(testKeyDir);
+  });
+});

@@ -295,14 +295,10 @@ orch_db_set_state() {
     fi
 
     # Input validation: new_state must be a recognized state
-    case ",$VALID_STATES," in
-        *" $new_state "*)
-            ;;
-        *)
-            log_error "Invalid state: '$new_state' (valid: $VALID_STATES)"
-            return 1
-            ;;
-    esac
+    if [[ " $VALID_STATES " != *" $new_state "* ]]; then
+        log_error "Invalid state: '$new_state' (valid: $VALID_STATES)"
+        return 1
+    fi
 
     local code_lower
     code_lower=$(lower "$instance_code")
@@ -327,6 +323,10 @@ orch_db_set_state() {
             if [ -f "$state_file" ]; then
                 prev_file_state=$(tail -1 "$state_file" | cut -d'|' -f1)
                 prev_file_state="${prev_file_state:-UNKNOWN}"
+            fi
+            if [ "$prev_file_state" = "$new_state" ]; then
+                log_verbose "State unchanged for $instance_code (already $new_state)"
+                return 0
             fi
             if ! orch_validate_state_transition "$prev_file_state" "$new_state"; then
                 log_error "State transition blocked (remote mode): $prev_file_state → $new_state"
@@ -365,6 +365,10 @@ orch_db_set_state() {
         local prev_state
         prev_state=$(orch_db_exec "SELECT state FROM deployment_states WHERE instance_code='$safe_code_lower' ORDER BY timestamp DESC LIMIT 1" 2>/dev/null | xargs)
         prev_state="${prev_state:-UNKNOWN}"
+        if [ "$prev_state" = "$new_state" ]; then
+            log_verbose "State unchanged for $instance_code (already $new_state)"
+            return 0
+        fi
 
         # ==========================================================================
         # STATE MACHINE VALIDATION

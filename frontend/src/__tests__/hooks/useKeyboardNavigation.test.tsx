@@ -23,12 +23,12 @@ import { fireEvent } from '@testing-library/react';
 
 // Helper to simulate keyboard events
 function simulateKeyDown(key: string, options: Partial<KeyboardEventInit> = {}) {
-  const event = new KeyboardEvent('keydown', {
+  const target = (document.activeElement as HTMLElement | null) ?? document.body;
+  fireEvent.keyDown(target, {
     key,
     bubbles: true,
     ...options,
   });
-  document.dispatchEvent(event);
 }
 
 describe('useKeyboardNavigation', () => {
@@ -813,4 +813,3 @@ describe('useKeyboardNavigation', () => {
     });
   });
 });
-

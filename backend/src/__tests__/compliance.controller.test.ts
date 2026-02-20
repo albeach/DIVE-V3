@@ -46,6 +46,14 @@ jest.mock('../services/compliance-metrics.service', () => ({
     },
 }));
 
+// Mock policy bundle service (runtime OPAL integrity probe)
+const mockGetCurrentBundle = jest.fn();
+jest.mock('../services/policy-bundle.service', () => ({
+    policyBundleService: {
+        getCurrentBundle: (...args: unknown[]) => mockGetCurrentBundle(...args),
+    },
+}));
+
 // Default mock values: all SLA targets met, no drift
 function setupAllGreenMocks() {
     mockGetSLAMetrics.mockResolvedValue({
@@ -80,6 +88,17 @@ function setupAllGreenMocks() {
         bundleRevisions: {},
         driftDetails: [],
         recommendations: [],
+    });
+    mockGetCurrentBundle.mockReturnValue({
+        bundleId: 'bundle-test123',
+        version: '2026.02.20-001',
+        hash: 'a'.repeat(64),
+        signature: 'base64signaturedata==',
+        signedAt: new Date(),
+        signedBy: 'dive-v3-bundle-signer',
+        scopes: ['all'],
+        contents: Buffer.from('test-content'),
+        manifest: { revision: '2026.02.20-001', roots: ['dive'], files: [] },
     });
 }
 
@@ -268,6 +287,29 @@ describe('Compliance Controller', () => {
             expect(response.testMetrics.coverage).toBe(78.61);
         });
 
+        it('should include per-standard gap status details', async () => {
+            await getComplianceStatus(mockReq as Request, mockRes as Response);
+
+            const response = (mockRes.json as jest.Mock).mock.calls[0][0];
+            expect(Array.isArray(response.standardsGapStatus)).toBe(true);
+            expect(response.standardsGapStatus).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({
+                        standard: 'ACP-240',
+                        status: expect.any(String),
+                        target: expect.any(String),
+                        gaps: expect.any(Array),
+                    }),
+                    expect.objectContaining({
+                        standard: 'STANAG 4774',
+                    }),
+                    expect.objectContaining({
+                        standard: 'OPAL Bundle Integrity',
+                    }),
+                ]),
+            );
+        });
+
         it('should include dynamic deployment status with certificate ID', async () => {
             await getComplianceStatus(mockReq as Request, mockRes as Response);
 
@@ -318,6 +360,78 @@ describe('Compliance Controller', () => {
             // Identity (2): -1, ZTDF (5): -1, Logging (6): -1, Best Practices (8): -1, Checklist (9): -2
             expect(response.gapRequirements).toBe(6);
             expect(response.deploymentStatus.environment).toBe('Pre-Production');
+        });
+
+        it('should include standardsSummary with aggregated counts', async () => {
+            await getComplianceStatus(mockReq as Request, mockRes as Response);
+
+            const response = (mockRes.json as jest.Mock).mock.calls[0][0];
+            expect(response.standardsSummary).toBeDefined();
+            expect(response.standardsSummary.totalStandards).toBe(5);
+            expect(typeof response.standardsSummary.compliant).toBe('number');
+            expect(typeof response.standardsSummary.partial).toBe('number');
+            expect(typeof response.standardsSummary.nonCompliant).toBe('number');
+            expect(
+                response.standardsSummary.compliant +
+                response.standardsSummary.partial +
+                response.standardsSummary.nonCompliant
+            ).toBe(5);
+        });
+
+        it('should report OPAL Bundle Integrity as compliant when bundle has hash and signature', async () => {
+            await getComplianceStatus(mockReq as Request, mockRes as Response);
+
+            const response = (mockRes.json as jest.Mock).mock.calls[0][0];
+            const opalStandard = response.standardsGapStatus.find(
+                (s: { standard: string }) => s.standard === 'OPAL Bundle Integrity'
+            );
+            expect(opalStandard).toBeDefined();
+            expect(opalStandard.status).toBe('compliant');
+            expect(opalStandard.evidence.bundleExists).toBe(true);
+            expect(opalStandard.evidence.publishHash).toBe(true);
+            expect(opalStandard.evidence.signaturePresent).toBe(true);
+            expect(opalStandard.gaps).toHaveLength(0);
+        });
+
+        it('should report OPAL Bundle Integrity as non-compliant when no bundle exists', async () => {
+            mockGetCurrentBundle.mockReturnValue(null);
+
+            await getComplianceStatus(mockReq as Request, mockRes as Response);
+
+            const response = (mockRes.json as jest.Mock).mock.calls[0][0];
+            const opalStandard = response.standardsGapStatus.find(
+                (s: { standard: string }) => s.standard === 'OPAL Bundle Integrity'
+            );
+            expect(opalStandard.status).toBe('non-compliant');
+            expect(opalStandard.evidence.bundleExists).toBe(false);
+            expect(opalStandard.gaps.length).toBeGreaterThan(0);
+        });
+
+        it('should report OPAL Bundle Integrity as partial when hash present but no signature', async () => {
+            mockGetCurrentBundle.mockReturnValue({
+                bundleId: 'bundle-nosig',
+                version: '2026.02.20-002',
+                hash: 'b'.repeat(64),
+                signature: '',
+                signedAt: new Date(),
+                signedBy: '',
+                scopes: ['all'],
+                contents: Buffer.from('test'),
+                manifest: { revision: '1', roots: ['dive'], files: [] },
+            });
+
+            await getComplianceStatus(mockReq as Request, mockRes as Response);
+
+            const response = (mockRes.json as jest.Mock).mock.calls[0][0];
+            const opalStandard = response.standardsGapStatus.find(
+                (s: { standard: string }) => s.standard === 'OPAL Bundle Integrity'
+            );
+            expect(opalStandard.status).toBe('partial');
+            expect(opalStandard.evidence.publishHash).toBe(true);
+            expect(opalStandard.evidence.signaturePresent).toBe(false);
+            expect(opalStandard.gaps).toEqual(
+                expect.arrayContaining([expect.stringContaining('signature')])
+            );
         });
 
         it('should set level to HIGH when percentage >= 90', async () => {

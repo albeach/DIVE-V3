@@ -84,6 +84,7 @@ export interface IBundlePublishResult {
   success: boolean;
   bundleId: string;
   version: string;
+  hash?: string;
   publishedAt: Date;
   opalTransactionId?: string;
   error?: string;
@@ -493,6 +494,7 @@ export class PolicyBundleService {
         success: false,
         bundleId: '',
         version: '',
+        hash: '',
         publishedAt: new Date(),
         error: 'No bundle to publish. Call buildBundle first.',
       };
@@ -511,6 +513,7 @@ export class PolicyBundleService {
           success: true,
           bundleId: bundleToPublish.bundleId,
           version: bundleToPublish.version,
+          hash: bundleToPublish.hash,
           publishedAt: new Date(),
         };
       }
@@ -558,6 +561,7 @@ export class PolicyBundleService {
         success,
         bundleId: bundleToPublish.bundleId,
         version: bundleToPublish.version,
+        hash: bundleToPublish.hash,
         publishedAt: new Date(),
         opalTransactionId: dataResult.transactionId,
         error: success ? undefined : refreshResult.error || dataResult.error,
@@ -574,6 +578,7 @@ export class PolicyBundleService {
         success: false,
         bundleId: bundleToPublish.bundleId,
         version: bundleToPublish.version,
+        hash: bundleToPublish.hash,
         publishedAt: new Date(),
         error: errorMessage,
       };
