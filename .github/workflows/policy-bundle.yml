@@ -99,7 +99,7 @@ jobs:
           version: ${{ env.OPA_VERSION }}
 
       - name: Run policy tests with coverage
-        run: opa test policies/ -v --coverage --format=json > test-results.json
+        run: opa test policies/ -v --bundle --coverage --format=json > test-results.json
 
       - name: Enforce coverage threshold
         run: |
