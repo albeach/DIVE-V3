@@ -31,6 +31,7 @@ import { logger } from '../utils/logger';
 import { z } from 'zod';
 import { requireSPAuth, requireSPScope } from '../middleware/sp-auth.middleware';
 import { requireAdmin, requireSuperAdmin } from '../middleware/admin.middleware';
+import { authenticateJWT } from '../middleware/authz.middleware';
 import { getResourcesByQuery } from '../services/resource.service';
 import crypto from 'crypto';
 import fs from 'fs';
@@ -745,14 +746,8 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
             }
         }
 
-        // Check if IdP validation should be skipped (for testing or dev environments)
-        const skipValidation = req.body.skipValidation === true ||
-            process.env.SKIP_IDP_VALIDATION === 'true' ||
-            process.env.NODE_ENV === 'test' ||
-            process.env.NODE_ENV === 'development' ||
-            request.idpUrl.includes('dive-spoke-') ||  // Internal container names
-            request.idpUrl.includes('localhost') ||
-            request.idpUrl.includes('host.docker.internal');
+        // Skip IdP validation only in test environments
+        const skipValidation = process.env.NODE_ENV === 'test';
 
         if (!skipValidation) {
             // Validate IdP endpoint before registration
@@ -777,11 +772,7 @@ router.post('/register', async (req: Request, res: Response): Promise<void> => {
             logger.info('Skipping IdP validation for spoke registration', {
                 instanceCode: request.instanceCode,
                 idpUrl: request.idpUrl,
-                reason: skipValidation === true ? 'skipValidation flag' :
-                    request.idpUrl.includes('dive-spoke-') ? 'internal container URL' :
-                        request.idpUrl.includes('localhost') ? 'localhost URL' :
-                            request.idpUrl.includes('host.docker.internal') ? 'docker internal URL' :
-                                'environment setting'
+                reason: 'test environment'
             });
         }
 
@@ -4051,7 +4042,7 @@ async function getCrossInstanceService() {
  *       500:
  *         description: Evaluation failed
  */
-router.post('/evaluate-policy', async (req: Request, res: Response): Promise<void> => {
+router.post('/evaluate-policy', authenticateJWT, async (req: Request, res: Response): Promise<void> => {
     try {
         const { subject, resource, action, requestId } = req.body;
         const federatedFrom = req.headers['x-federated-from'] as string;
@@ -4142,7 +4133,7 @@ router.post('/evaluate-policy', async (req: Request, res: Response): Promise<voi
  *       500:
  *         description: Query failed
  */
-router.post('/query-resources', async (req: Request, res: Response): Promise<void> => {
+router.post('/query-resources', authenticateJWT, async (req: Request, res: Response): Promise<void> => {
     try {
         const { query, requestId } = req.body;
 
@@ -4259,7 +4250,7 @@ router.post('/query-resources', async (req: Request, res: Response): Promise<voi
  *       500:
  *         description: Authorization failed
  */
-router.post('/cross-instance/authorize', async (req: Request, res: Response): Promise<void> => {
+router.post('/cross-instance/authorize', authenticateJWT, async (req: Request, res: Response): Promise<void> => {
     try {
         const { subject, resource, action, requestId } = req.body;
         const bearerToken = req.headers.authorization?.replace('Bearer ', '') || '';
@@ -4346,7 +4337,7 @@ router.post('/cross-instance/authorize', async (req: Request, res: Response): Pr
  *       500:
  *         description: Query failed
  */
-router.post('/cross-instance/query', async (req: Request, res: Response): Promise<void> => {
+router.post('/cross-instance/query', authenticateJWT, async (req: Request, res: Response): Promise<void> => {
     try {
         const { query, subject, targetInstances, requestId } = req.body;
         const bearerToken = req.headers.authorization?.replace('Bearer ', '') || '';
